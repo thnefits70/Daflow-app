@@ -9,9 +9,9 @@ export default async function WorkspacePage() {
   if (!session?.user.deptId) redirect("/login");
 
   const dept = await prisma.department.findUnique({ where: { id: session.user.deptId } });
-  if (!dept) redirect("/login");
+  if (!dept) redirect("/api/auth/force-logout");
 
-  const [processes, documents, exams, kpiRecords] = await Promise.all([
+  const [processes, documents, exams, kpiRecords, currentUser] = await Promise.all([
     prisma.process.findMany({
       where: { deptId: dept.id },
       orderBy: { createdAt: "asc" },
@@ -26,7 +26,10 @@ export default async function WorkspacePage() {
     dept.trackKpis
       ? prisma.financeKpiRecord.findMany({ where: { deptId: dept.id }, orderBy: { period: "asc" } })
       : Promise.resolve([]),
+    prisma.user.findUnique({ where: { id: session.user.id }, select: { isLeader: true, leadsDeptId: true } }),
   ]);
+
+  const kpisEditable = !!currentUser?.isLeader && currentUser.leadsDeptId === dept.id;
 
   return (
     <div>
@@ -62,6 +65,7 @@ export default async function WorkspacePage() {
           fileName: k.fileName,
         }))}
         editable={false}
+        kpisEditable={kpisEditable}
       />
     </div>
   );

@@ -29,6 +29,7 @@ export function DeptWorkspaceTabs({
   trackKpis = false,
   kpiRecords = [],
   editable,
+  kpisEditable,
 }: {
   deptId: string;
   processesBaseHref: string;
@@ -38,6 +39,7 @@ export function DeptWorkspaceTabs({
   trackKpis?: boolean;
   kpiRecords?: FinanceKpiDTO[];
   editable: boolean;
+  kpisEditable?: boolean;
 }) {
   const [tab, setTab] = useState<TabKey>("procesos");
   const tabs = ALL_TABS.filter((t) => (t.key === "kpis" ? trackKpis : true));
@@ -64,7 +66,9 @@ export function DeptWorkspaceTabs({
       )}
       {tab === "documentos" && <DocumentsPanel deptId={deptId} documents={documents} editable={editable} />}
       {tab === "examenes" && <ExamsPanel deptId={deptId} exams={exams} editable={editable} />}
-      {tab === "kpis" && trackKpis && <FinanceKpiPanel deptId={deptId} records={kpiRecords} editable={editable} />}
+      {tab === "kpis" && trackKpis && (
+        <FinanceKpiPanel deptId={deptId} records={kpiRecords} editable={kpisEditable ?? editable} />
+      )}
     </div>
   );
 }

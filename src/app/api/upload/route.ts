@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireAdminSession } from "@/lib/guards";
+import { auth } from "@/auth";
+import { prisma } from "@/lib/prisma";
 import { supabaseAdmin } from "@/lib/supabase";
 
 const BUCKET = "daflow-files";
@@ -13,12 +14,21 @@ async function ensureBucket() {
 }
 
 export async function POST(req: NextRequest) {
-  const session = await requireAdminSession();
-  if (!session) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
-
   const formData = await req.formData().catch(() => null);
   const file = formData?.get("file");
   const folder = (formData?.get("folder") as string) || "misc";
+
+  const session = await auth();
+  let allowed = session?.user.role === "admin";
+  if (!allowed && session?.user.role === "employee" && folder === "finance-kpis") {
+    const user = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { isLeader: true, leadsDeptId: true },
+    });
+    allowed = !!user?.isLeader && user.leadsDeptId === session.user.deptId;
+  }
+  if (!allowed) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+
   if (!file || typeof file === "string") {
     return NextResponse.json({ error: "No se recibió ningún archivo." }, { status: 400 });
   }

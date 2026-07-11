@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { requireAdminSession } from "@/lib/guards";
+import { canEditDeptKpis } from "@/lib/guards";
 
 const updateSchema = z.object({
   roi: z.number().nullable().optional(),
@@ -13,10 +13,13 @@ const updateSchema = z.object({
 });
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const session = await requireAdminSession();
-  if (!session) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
-
   const { id } = await params;
+  const existing = await prisma.financeKpiRecord.findUnique({ where: { id }, select: { deptId: true } });
+  if (!existing) return NextResponse.json({ error: "No encontrado." }, { status: 404 });
+  if (!(await canEditDeptKpis(existing.deptId))) {
+    return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+  }
+
   const body = await req.json().catch(() => null);
   const parsed = updateSchema.safeParse(body);
   if (!parsed.success) {
@@ -28,10 +31,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 }
 
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const session = await requireAdminSession();
-  if (!session) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
-
   const { id } = await params;
+  const existing = await prisma.financeKpiRecord.findUnique({ where: { id }, select: { deptId: true } });
+  if (!existing) return NextResponse.json({ ok: true });
+  if (!(await canEditDeptKpis(existing.deptId))) {
+    return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+  }
+
   await prisma.financeKpiRecord.delete({ where: { id } }).catch(() => null);
   return NextResponse.json({ ok: true });
 }
