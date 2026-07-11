@@ -66,7 +66,7 @@ export function AreaGateShell({
             </button>
           </div>
         </div>
-        <main className="flex-1 overflow-y-auto bg-cloud p-9">
+        <main className="flex-1 overflow-y-auto bg-bg p-9">
           <UpdateGate
             updateId={activeUpdate.id}
             processTitle={activeUpdate.processTitle}
@@ -85,7 +85,7 @@ export function AreaGateShell({
   return (
     <div className="flex h-screen min-h-0">
       <EmployeeSidebar deptName={deptName} userName={userName} logoUrl={logoUrl} />
-      <main className="flex-1 overflow-y-auto bg-cloud p-9">
+      <main className="flex-1 overflow-y-auto bg-bg p-9">
         {ledDeptName && <LeaderBanner deptName={ledDeptName} alerts={leaderAlerts} />}
         {children}
       </main>

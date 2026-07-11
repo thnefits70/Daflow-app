@@ -55,7 +55,7 @@ export function Dashboard({ data }: { data: DashboardData }) {
             {rowsSorted.map((r, i) => (
               <div key={r.dept.id} className="flex flex-col items-center relative">
                 <div className="absolute -top-5 left-1/2 -translate-x-1/2 w-[3px] h-5 bg-teal" />
-                <div className="bg-white border border-rule rounded w-full text-center p-3" style={{ borderTop: `3px solid ${r.avg !== null ? barColor(r.avg) : "#D3DCE8"}` }}>
+                <div className="bg-surface border border-rule rounded w-full text-center p-3" style={{ borderTop: `3px solid ${r.avg !== null ? barColor(r.avg) : "#D3DCE8"}` }}>
                   <div className="flex items-center justify-between mb-1.5">
                     <span className="font-mono text-[10px] text-steel">#{i + 1}</span>
                     <span className="font-mono text-[9.5px] bg-cloud border border-rule rounded-full px-2 py-0.5">
@@ -84,7 +84,7 @@ export function Dashboard({ data }: { data: DashboardData }) {
         </div>
       )}
       {rowsSorted.map((r, i) => (
-        <div key={r.dept.id} className="bg-white border border-rule rounded p-4.5 mb-3">
+        <div key={r.dept.id} className="bg-surface border border-rule rounded p-4.5 mb-3">
           <div className="flex items-center justify-between mb-2">
             <span className="font-semibold text-[13.5px] flex items-center gap-2">
               <span className="font-mono text-steel">#{i + 1}</span>

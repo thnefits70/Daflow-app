@@ -46,19 +46,19 @@ export function ManageDepartments({ departments }: { departments: Department[] }
 
   return (
     <div>
-      <div className="bg-white border border-rule rounded p-4.5 mb-5.5">
+      <div className="bg-surface border border-rule rounded p-4.5 mb-5.5">
         <label className="block mb-3 text-[11px] font-semibold tracking-wide uppercase text-steel">
           Crear nueva área
         </label>
         <div className="grid grid-cols-2 gap-3 items-end">
           <input
-            className="rounded border border-rule bg-white px-2.5 py-2 text-[13.5px]"
+            className="rounded border border-rule bg-surface px-2.5 py-2 text-[13.5px]"
             placeholder="Nombre del área (ej. Ventas)"
             value={name}
             onChange={(e) => setName(e.target.value)}
           />
           <input
-            className="rounded border border-rule bg-white px-2.5 py-2 text-[13.5px]"
+            className="rounded border border-rule bg-surface px-2.5 py-2 text-[13.5px]"
             placeholder="Código corto (ej. VEN)"
             value={code}
             onChange={(e) => setCode(e.target.value)}
@@ -67,7 +67,7 @@ export function ManageDepartments({ departments }: { departments: Department[] }
         <button
           type="button"
           disabled={busy}
-          className="mt-2.5 inline-flex items-center gap-1.5 rounded border border-navy bg-navy px-4 py-2 text-[13px] font-semibold text-white cursor-pointer disabled:opacity-60"
+          className="mt-2.5 inline-flex items-center gap-1.5 rounded border border-blue bg-blue px-4 py-2 text-[13px] font-semibold text-white cursor-pointer disabled:opacity-60"
           onClick={add}
         >
           <Plus size={14} /> Crear área
@@ -86,7 +86,7 @@ export function ManageDepartments({ departments }: { departments: Department[] }
       )}
 
       {departments.map((d) => (
-        <div key={d.id} className="bg-white border border-rule rounded p-4.5 mb-3 flex items-center justify-between gap-3">
+        <div key={d.id} className="bg-surface border border-rule rounded p-4.5 mb-3 flex items-center justify-between gap-3">
           <Link href={`/admin/dept/${d.id}`} className="font-semibold flex items-center gap-1.5 hover:underline">
             <Building2 size={14} /> {d.name}
             <span className="font-mono text-[10px] font-normal bg-cloud border border-rule rounded-full px-2 py-0.5 uppercase text-steel ml-1">

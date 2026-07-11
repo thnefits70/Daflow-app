@@ -59,7 +59,7 @@ export function ProcessListPanel({
           <button
             type="button"
             disabled={busy}
-            className="inline-flex items-center gap-1.5 rounded border border-navy bg-navy px-3.5 py-2 text-[12.5px] font-semibold text-white cursor-pointer disabled:opacity-60"
+            className="inline-flex items-center gap-1.5 rounded border border-blue bg-blue px-3.5 py-2 text-[12.5px] font-semibold text-white cursor-pointer disabled:opacity-60"
             onClick={createProcess}
           >
             <Plus size={14} /> Nuevo proceso
@@ -77,7 +77,7 @@ export function ProcessListPanel({
         <Link
           key={p.id}
           href={`${baseHref}/${p.id}`}
-          className="bg-white border border-rule rounded p-4.5 mb-2.5 flex items-center justify-between gap-3 hover:border-navy"
+          className="bg-surface border border-rule rounded p-4.5 mb-2.5 flex items-center justify-between gap-3 hover:border-blue"
         >
           <div>
             <div className="font-semibold text-[14.5px] mb-0.5 flex items-center gap-1.5">

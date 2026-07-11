@@ -59,7 +59,7 @@ export function PositionPicker({
         <button
           type="button"
           disabled={busy}
-          className="rounded border border-navy bg-navy px-2.5 py-2 text-[12px] font-semibold text-white cursor-pointer shrink-0"
+          className="rounded border border-blue bg-blue px-2.5 py-2 text-[12px] font-semibold text-white cursor-pointer shrink-0"
           onClick={create}
         >
           Guardar
@@ -81,7 +81,7 @@ export function PositionPicker({
 
   return (
     <select
-      className="rounded border border-rule px-2.5 py-2 text-[13.5px] bg-white"
+      className="rounded border border-rule px-2.5 py-2 text-[13.5px] bg-surface"
       value={value}
       onChange={(e) => {
         if (e.target.value === NEW_OPTION) {

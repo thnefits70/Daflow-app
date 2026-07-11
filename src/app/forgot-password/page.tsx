@@ -30,7 +30,7 @@ export default function ForgotPasswordPage() {
               Si hay un correo de administrador configurado, te enviamos un enlace para restablecer la contraseña.
               Revisa tu bandeja de entrada (y spam). El enlace expira en 30 minutos.
             </div>
-            <Link href="/login" className="inline-flex items-center gap-1.5 text-[13px] text-steel hover:text-navy">
+            <Link href="/login" className="inline-flex items-center gap-1.5 text-[13px] text-steel hover:text-ink">
               <ArrowLeft size={14} /> Volver al inicio de sesión
             </Link>
           </>
@@ -47,7 +47,7 @@ export default function ForgotPasswordPage() {
             >
               <Mail size={14} /> {loading ? "Enviando…" : "Enviar enlace de recuperación"}
             </button>
-            <Link href="/login" className="inline-flex items-center gap-1.5 text-[12.5px] text-steel hover:text-navy mt-4">
+            <Link href="/login" className="inline-flex items-center gap-1.5 text-[12.5px] text-steel hover:text-ink mt-4">
               <ArrowLeft size={13} /> Volver al inicio de sesión
             </Link>
           </>

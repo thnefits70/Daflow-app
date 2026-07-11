@@ -107,7 +107,7 @@ export function DocumentsPanel({
           <button
             type="button"
             disabled={busy}
-            className="inline-flex items-center gap-1.5 rounded border border-navy bg-navy px-3.5 py-2 text-[12.5px] font-semibold text-white cursor-pointer disabled:opacity-60"
+            className="inline-flex items-center gap-1.5 rounded border border-blue bg-blue px-3.5 py-2 text-[12.5px] font-semibold text-white cursor-pointer disabled:opacity-60"
             onClick={create}
           >
             <Plus size={14} /> Nuevo documento
@@ -122,7 +122,7 @@ export function DocumentsPanel({
       )}
 
       {documents.map((d) => (
-        <div key={d.id} className="bg-white border border-rule rounded p-4.5 mb-2.5">
+        <div key={d.id} className="bg-surface border border-rule rounded p-4.5 mb-2.5">
           {editingId === d.id && draft ? (
             <div>
               <div className="mb-2.5">
@@ -181,7 +181,7 @@ export function DocumentsPanel({
                 {err && <div className="text-red text-[12px] mt-1.5">{err}</div>}
               </div>
               <div className="flex items-center gap-2.5">
-                <button type="button" disabled={busy} className="rounded border border-navy bg-navy px-4 py-2 text-[13px] font-semibold text-white cursor-pointer" onClick={save}>
+                <button type="button" disabled={busy} className="rounded border border-blue bg-blue px-4 py-2 text-[13px] font-semibold text-white cursor-pointer" onClick={save}>
                   Guardar
                 </button>
                 <button type="button" className="text-steel text-[13px] cursor-pointer" onClick={() => { setEditingId(null); setDraft(null); }}>
@@ -211,14 +211,14 @@ export function DocumentsPanel({
                       >
                         {openId === d.id ? "Ocultar" : "Ver PDF"}
                       </button>
-                      <a href={d.fileUrl} download={d.fileName || "documento.pdf"} className="text-steel hover:text-navy">
+                      <a href={d.fileUrl} download={d.fileName || "documento.pdf"} className="text-steel hover:text-ink">
                         <Download size={15} />
                       </a>
                     </>
                   )}
                   {editable && (
                     <>
-                      <button type="button" className="text-steel hover:text-navy cursor-pointer" onClick={() => startEdit(d)}>
+                      <button type="button" className="text-steel hover:text-ink cursor-pointer" onClick={() => startEdit(d)}>
                         <Pencil size={15} />
                       </button>
                       <button type="button" className="text-steel hover:text-red cursor-pointer" onClick={() => remove(d.id)}>

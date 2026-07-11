@@ -1,4 +1,4 @@
-export function DaflowMark({ size = 34, light = false }: { size?: number; light?: boolean }) {
+export function DaflowMark({ size = 34, light = true }: { size?: number; light?: boolean }) {
   const step1 = light ? "#FFFFFF" : "#0B1F3A";
   return (
     <svg width={size} height={size} viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -9,7 +9,7 @@ export function DaflowMark({ size = 34, light = false }: { size?: number; light?
   );
 }
 
-export function DaflowWordmark({ light = false, showTag = true }: { light?: boolean; showTag?: boolean }) {
+export function DaflowWordmark({ light = true, showTag = true }: { light?: boolean; showTag?: boolean }) {
   return (
     <div>
       <div
@@ -30,7 +30,7 @@ export function DaflowWordmark({ light = false, showTag = true }: { light?: bool
 export function BrandMark({
   logoUrl,
   size = 34,
-  light = false,
+  light = true,
   chip = false,
 }: {
   logoUrl?: string | null;

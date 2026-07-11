@@ -71,7 +71,7 @@ function ResetPasswordForm() {
               </label>
               <input
                 type="password"
-                className="w-full rounded border border-rule bg-white px-2.5 py-2 text-[13.5px]"
+                className="w-full rounded border border-rule bg-surface px-2.5 py-2 text-[13.5px]"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
               />
@@ -82,7 +82,7 @@ function ResetPasswordForm() {
               </label>
               <input
                 type="password"
-                className="w-full rounded border border-rule bg-white px-2.5 py-2 text-[13.5px]"
+                className="w-full rounded border border-rule bg-surface px-2.5 py-2 text-[13.5px]"
                 value={confirm}
                 onChange={(e) => setConfirm(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && submit()}

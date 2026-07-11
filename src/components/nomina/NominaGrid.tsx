@@ -61,7 +61,7 @@ export function NominaGrid({ users, departments }: { users: NominaUser[]; depart
         entrar.
       </div>
 
-      <div className="bg-white border border-rule rounded p-4.5 mb-6">
+      <div className="bg-surface border border-rule rounded p-4.5 mb-6">
         <label className="block mb-3 text-[11px] font-semibold tracking-wide uppercase text-steel">
           Añadir persona directamente
         </label>
@@ -69,7 +69,7 @@ export function NominaGrid({ users, departments }: { users: NominaUser[]; depart
           <input className="rounded border border-rule px-2.5 py-2 text-[13.5px]" placeholder="Nombre (ej. Ana Pérez)" value={name} onChange={(e) => setName(e.target.value)} />
           <input className="rounded border border-rule px-2.5 py-2 text-[13.5px]" placeholder="Usuario (ej. ana.perez)" value={username} onChange={(e) => setUsername(e.target.value)} />
           <input className="rounded border border-rule px-2.5 py-2 text-[13.5px]" placeholder="Contraseña" value={password} onChange={(e) => setPassword(e.target.value)} />
-          <select className="rounded border border-rule px-2.5 py-2 text-[13.5px] bg-white" value={deptId} onChange={(e) => setDeptId(e.target.value)}>
+          <select className="rounded border border-rule px-2.5 py-2 text-[13.5px] bg-surface" value={deptId} onChange={(e) => setDeptId(e.target.value)}>
             {departments.length === 0 && <option value="">Crea un área primero</option>}
             {departments.map((d) => (
               <option key={d.id} value={d.id}>{d.name}</option>
@@ -79,7 +79,7 @@ export function NominaGrid({ users, departments }: { users: NominaUser[]; depart
         <button
           type="button"
           disabled={busy}
-          className="inline-flex items-center gap-1.5 rounded border border-navy bg-navy px-4 py-2 text-[13px] font-semibold text-white cursor-pointer disabled:opacity-60"
+          className="inline-flex items-center gap-1.5 rounded border border-blue bg-blue px-4 py-2 text-[13px] font-semibold text-white cursor-pointer disabled:opacity-60"
           onClick={create}
         >
           <Plus size={14} /> Crear acceso
@@ -98,7 +98,7 @@ export function NominaGrid({ users, departments }: { users: NominaUser[]; depart
           <Link
             key={u.id}
             href={`/admin/nomina/${u.id}`}
-            className="bg-white border border-rule rounded p-4.5 text-center hover:border-navy"
+            className="bg-surface border border-rule rounded p-4.5 text-center hover:border-blue"
           >
             <div className="w-14 h-14 rounded-full overflow-hidden bg-cloud border border-rule flex items-center justify-center mx-auto mb-2.5">
               {u.photoUrl ? (

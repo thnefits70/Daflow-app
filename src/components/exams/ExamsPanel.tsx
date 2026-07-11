@@ -67,7 +67,7 @@ function ExamEditor({ examId, onBack }: { examId: string; onBack: () => void }) 
 
   return (
     <div>
-      <button type="button" className="inline-flex items-center gap-1.5 text-[13px] text-steel hover:text-navy mb-4.5 cursor-pointer" onClick={onBack}>
+      <button type="button" className="inline-flex items-center gap-1.5 text-[13px] text-steel hover:text-ink mb-4.5 cursor-pointer" onClick={onBack}>
         <ArrowLeft size={14} /> Volver
       </button>
       <div className="mb-4">
@@ -76,7 +76,7 @@ function ExamEditor({ examId, onBack }: { examId: string; onBack: () => void }) 
       </div>
 
       {draft.questions.map((q, i) => (
-        <div key={q.id} className="bg-white border border-rule rounded p-4 mb-3">
+        <div key={q.id} className="bg-surface border border-rule rounded p-4 mb-3">
           <div className="flex items-center justify-between mb-2">
             <span className="font-mono text-[11px] text-steel">PREGUNTA {i + 1}</span>
             <button type="button" className="text-steel hover:text-red cursor-pointer" onClick={() => rmQ(q.id)}>
@@ -106,7 +106,7 @@ function ExamEditor({ examId, onBack }: { examId: string; onBack: () => void }) 
         <button type="button" className="border border-rule rounded px-3.5 py-2 text-[12.5px] font-semibold cursor-pointer inline-flex items-center gap-1.5" onClick={addQ}>
           <Plus size={13} /> Añadir pregunta
         </button>
-        <button type="button" disabled={saving} className="rounded border border-navy bg-navy px-4 py-2 text-[13px] font-semibold text-white cursor-pointer disabled:opacity-60" onClick={save}>
+        <button type="button" disabled={saving} className="rounded border border-blue bg-blue px-4 py-2 text-[13px] font-semibold text-white cursor-pointer disabled:opacity-60" onClick={save}>
           {saving ? "Guardando…" : "Guardar examen"}
         </button>
       </div>
@@ -143,13 +143,13 @@ function ExamTaker({ examId, onFinish, onBack }: { examId: string; onFinish: () 
 
   return (
     <div>
-      <button type="button" className="inline-flex items-center gap-1.5 text-[13px] text-steel hover:text-navy mb-4.5 cursor-pointer" onClick={onBack}>
+      <button type="button" className="inline-flex items-center gap-1.5 text-[13px] text-steel hover:text-ink mb-4.5 cursor-pointer" onClick={onBack}>
         <ArrowLeft size={14} /> Volver
       </button>
       <h2 className="font-display text-[18px] font-bold mb-4">{exam.title}</h2>
 
       {exam.questions.map((q, i) => (
-        <div key={q.id} className="bg-white border border-rule rounded p-4 mb-3">
+        <div key={q.id} className="bg-surface border border-rule rounded p-4 mb-3">
           <div className="font-semibold text-[14px] mb-2.5">{i + 1}. {q.text}</div>
           {q.options.map((op, oi) => (
             <div
@@ -166,15 +166,15 @@ function ExamTaker({ examId, onFinish, onBack }: { examId: string; onFinish: () 
       ))}
 
       {!result ? (
-        <button type="button" className="rounded border border-navy bg-navy px-5 py-2.5 text-[13px] font-semibold text-white cursor-pointer" onClick={submit}>
+        <button type="button" className="rounded border border-blue bg-blue px-5 py-2.5 text-[13px] font-semibold text-white cursor-pointer" onClick={submit}>
           Enviar examen
         </button>
       ) : (
-        <div className="bg-white border border-rule rounded p-4">
+        <div className="bg-surface border border-rule rounded p-4">
           <div className="font-bold text-[16px] mb-2.5">
             Resultado: {result.score} / {result.total} ({pct(result.score, result.total)}%)
           </div>
-          <button type="button" className="rounded border border-navy bg-navy px-4 py-2 text-[13px] font-semibold text-white cursor-pointer" onClick={onFinish}>
+          <button type="button" className="rounded border border-blue bg-blue px-4 py-2 text-[13px] font-semibold text-white cursor-pointer" onClick={onFinish}>
             Guardar y volver
           </button>
         </div>
@@ -230,7 +230,7 @@ export function ExamsPanel({ deptId, exams, editable }: { deptId: string; exams:
           <button
             type="button"
             disabled={busy}
-            className="inline-flex items-center gap-1.5 rounded border border-navy bg-navy px-3.5 py-2 text-[12.5px] font-semibold text-white cursor-pointer disabled:opacity-60"
+            className="inline-flex items-center gap-1.5 rounded border border-blue bg-blue px-3.5 py-2 text-[12.5px] font-semibold text-white cursor-pointer disabled:opacity-60"
             onClick={create}
           >
             <Plus size={14} /> Nuevo examen
@@ -245,20 +245,20 @@ export function ExamsPanel({ deptId, exams, editable }: { deptId: string; exams:
       )}
 
       {exams.map((e) => (
-        <div key={e.id} className="bg-white border border-rule rounded p-4 mb-2.5 flex items-center justify-between">
+        <div key={e.id} className="bg-surface border border-rule rounded p-4 mb-2.5 flex items-center justify-between">
           <div>
             <div className="font-semibold text-[14.5px] flex items-center gap-1.5"><GraduationCap size={14} /> {e.title}</div>
             <div className="text-[12.5px] text-steel mt-0.5">{e.questionCount} preguntas</div>
           </div>
           <div className="flex items-center gap-2">
             {!editable && e.questionCount > 0 && (
-              <button type="button" className="rounded border border-navy bg-navy px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer" onClick={() => setMode({ type: "take", id: e.id })}>
+              <button type="button" className="rounded border border-blue bg-blue px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer" onClick={() => setMode({ type: "take", id: e.id })}>
                 Rendir examen
               </button>
             )}
             {editable && (
               <>
-                <button type="button" className="text-steel hover:text-navy cursor-pointer" onClick={() => setMode({ type: "edit", id: e.id })}>
+                <button type="button" className="text-steel hover:text-ink cursor-pointer" onClick={() => setMode({ type: "edit", id: e.id })}>
                   <Pencil size={15} />
                 </button>
                 <button type="button" className="text-steel hover:text-red cursor-pointer" onClick={() => remove(e.id)}>

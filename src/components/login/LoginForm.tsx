@@ -50,7 +50,7 @@ export function LoginForm({ logoUrl }: { logoUrl: string | null }) {
           <button
             type="button"
             className={`flex-1 text-center py-2.5 text-[12.5px] font-semibold cursor-pointer ${
-              mode === "team" ? "bg-navy text-white" : "text-steel"
+              mode === "team" ? "bg-blue text-white" : "text-steel"
             }`}
             onClick={() => {
               setMode("team");
@@ -62,7 +62,7 @@ export function LoginForm({ logoUrl }: { logoUrl: string | null }) {
           <button
             type="button"
             className={`flex-1 text-center py-2.5 text-[12.5px] font-semibold cursor-pointer ${
-              mode === "admin" ? "bg-navy text-white" : "text-steel"
+              mode === "admin" ? "bg-blue text-white" : "text-steel"
             }`}
             onClick={() => {
               setMode("admin");
@@ -79,7 +79,7 @@ export function LoginForm({ logoUrl }: { logoUrl: string | null }) {
               Usuario
             </label>
             <input
-              className="w-full rounded border border-rule bg-white px-2.5 py-2 text-[13.5px] text-navy outline-none focus:ring-2 focus:ring-blue"
+              className="w-full rounded border border-rule bg-surface px-2.5 py-2 text-[13.5px] text-ink outline-none focus:ring-2 focus:ring-blue"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && submit()}
@@ -94,7 +94,7 @@ export function LoginForm({ logoUrl }: { logoUrl: string | null }) {
           </label>
           <input
             type="password"
-            className="w-full rounded border border-rule bg-white px-2.5 py-2 text-[13.5px] text-navy outline-none focus:ring-2 focus:ring-blue"
+            className="w-full rounded border border-rule bg-surface px-2.5 py-2 text-[13.5px] text-ink outline-none focus:ring-2 focus:ring-blue"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && submit()}
@@ -115,7 +115,7 @@ export function LoginForm({ logoUrl }: { logoUrl: string | null }) {
 
         {mode === "admin" && (
           <div className="mt-3.5 text-center">
-            <Link href="/forgot-password" className="text-[12px] text-steel hover:text-navy underline underline-offset-2">
+            <Link href="/forgot-password" className="text-[12px] text-steel hover:text-ink underline underline-offset-2">
               ¿Olvidaste tu contraseña?
             </Link>
           </div>

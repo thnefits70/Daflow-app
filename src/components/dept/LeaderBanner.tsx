@@ -10,7 +10,7 @@ export function LeaderBanner({ deptName, alerts }: { deptName: string; alerts: A
   if (hidden || alerts.length === 0) return null;
 
   return (
-    <div className="bg-white border border-rule rounded p-4.5 mb-5" style={{ borderLeft: "4px solid #1E5EFF", background: "#FFF7EA" }}>
+    <div className="bg-surface border border-rule rounded p-4.5 mb-5" style={{ borderLeft: "4px solid #1E5EFF", background: "#FFF7EA" }}>
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="font-bold text-[13.5px] flex items-center gap-1.5 mb-1">
@@ -23,7 +23,7 @@ export function LeaderBanner({ deptName, alerts }: { deptName: string; alerts: A
             </div>
           ))}
         </div>
-        <button type="button" className="text-steel hover:text-navy cursor-pointer shrink-0" onClick={() => setHidden(true)}>
+        <button type="button" className="text-steel hover:text-ink cursor-pointer shrink-0" onClick={() => setHidden(true)}>
           <X size={16} />
         </button>
       </div>

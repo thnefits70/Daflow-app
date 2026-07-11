@@ -39,8 +39,13 @@ const SHAPE_LABEL: Record<IsoShapeType, string> = {
 
 export { SHAPE_LABEL };
 
+// The canvas stays a light "paper" surface (standard for ISO flowchart symbols), so every
+// shape here uses its own literal light colors instead of the app-wide dark-mode tokens.
+const LINE = "border-[#D6DEEA]";
+const MUTED = "text-[#6B7A90]";
+
 function ShapeBody({ shapeType, label, detail, fileUrl, checklistItems }: IsoNodeData) {
-  const base = "px-4 py-2.5 text-[12.5px] font-semibold text-center min-w-[130px] max-w-[220px]";
+  const base = "px-4 py-2.5 text-[12.5px] font-semibold text-center min-w-[130px] max-w-[220px] text-navy";
 
   if (shapeType === "START" || shapeType === "END") {
     return (
@@ -52,7 +57,7 @@ function ShapeBody({ shapeType, label, detail, fileUrl, checklistItems }: IsoNod
   if (shapeType === "DECISION") {
     return (
       <div
-        className="bg-white border-2 border-teal flex items-center justify-center text-center px-6 py-7 min-w-[140px] max-w-[170px] text-[12px] font-semibold"
+        className="bg-white text-navy border-2 border-teal flex items-center justify-center text-center px-6 py-7 min-w-[140px] max-w-[170px] text-[12px] font-semibold"
         style={{ clipPath: "polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%)" }}
       >
         {label}
@@ -62,7 +67,7 @@ function ShapeBody({ shapeType, label, detail, fileUrl, checklistItems }: IsoNod
   if (shapeType === "IO") {
     return (
       <div
-        className={`${base} bg-white border border-rule border-l-[3px] border-l-blue`}
+        className={`${base} bg-white border ${LINE} border-l-[3px] border-l-blue`}
         style={{ clipPath: "polygon(8% 0%, 100% 0%, 92% 100%, 0% 100%)" }}
       >
         {label}
@@ -72,7 +77,7 @@ function ShapeBody({ shapeType, label, detail, fileUrl, checklistItems }: IsoNod
   if (shapeType === "SUBPROCESS") {
     return (
       <div
-        className={`${base} bg-white border-t border-b border-rule`}
+        className={`${base} bg-white border-t border-b ${LINE}`}
         style={{ borderLeft: "5px double #0B1F3A", borderRight: "5px double #0B1F3A" }}
       >
         {label}
@@ -82,7 +87,7 @@ function ShapeBody({ shapeType, label, detail, fileUrl, checklistItems }: IsoNod
   if (shapeType === "DOCUMENT") {
     return (
       <div
-        className={`${base} bg-white border border-rule border-l-[3px] border-l-blue`}
+        className={`${base} bg-white border ${LINE} border-l-[3px] border-l-blue`}
         style={{ clipPath: "polygon(0 0, 100% 0, 100% 78%, 75% 100%, 50% 82%, 25% 100%, 0 78%)", paddingBottom: 14 }}
       >
         <div className="flex items-center justify-center gap-1.5">
@@ -95,7 +100,7 @@ function ShapeBody({ shapeType, label, detail, fileUrl, checklistItems }: IsoNod
   if (shapeType === "PREPARE") {
     return (
       <div
-        className={`${base} bg-white border border-rule`}
+        className={`${base} bg-white border ${LINE}`}
         style={{ clipPath: "polygon(16% 0%, 84% 0%, 100% 50%, 84% 100%, 16% 100%, 0% 50%)" }}
       >
         {label}
@@ -105,7 +110,7 @@ function ShapeBody({ shapeType, label, detail, fileUrl, checklistItems }: IsoNod
   if (shapeType === "STORAGE") {
     return (
       <div
-        className={`${base} bg-white border border-rule`}
+        className={`${base} bg-white border ${LINE}`}
         style={{ borderRadius: "50% 50% 6px 6px / 18% 18% 6px 6px" }}
       >
         {label}
@@ -121,11 +126,11 @@ function ShapeBody({ shapeType, label, detail, fileUrl, checklistItems }: IsoNod
   }
   if (shapeType === "CHECKLIST") {
     return (
-      <div className={`${base} bg-white border border-rule border-l-[3px] border-l-teal rounded text-left`}>
+      <div className={`${base} bg-white border ${LINE} border-l-[3px] border-l-teal rounded text-left`}>
         <div className="font-display flex items-center gap-1.5">
           <CheckSquare size={13} className="text-teal shrink-0" /> {label}
         </div>
-        <div className="text-[11px] font-normal text-steel mt-1">
+        <div className={`text-[11px] font-normal ${MUTED} mt-1`}>
           {(checklistItems?.length ?? 0)} punto{(checklistItems?.length ?? 0) === 1 ? "" : "s"}
         </div>
       </div>
@@ -133,9 +138,9 @@ function ShapeBody({ shapeType, label, detail, fileUrl, checklistItems }: IsoNod
   }
   // PROCESS (default rectangle)
   return (
-    <div className={`${base} bg-white border border-rule border-l-[3px] border-l-blue rounded text-left`}>
+    <div className={`${base} bg-white border ${LINE} border-l-[3px] border-l-blue rounded text-left`}>
       <div className="font-display">{label}</div>
-      {detail && <div className="text-[11px] font-normal text-steel mt-1">{detail}</div>}
+      {detail && <div className={`text-[11px] font-normal ${MUTED} mt-1`}>{detail}</div>}
     </div>
   );
 }

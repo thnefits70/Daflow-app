@@ -50,7 +50,7 @@ export function DeptWorkspaceTabs({
             key={t.key}
             type="button"
             className={`pb-2.5 text-[13px] font-semibold flex items-center gap-1.5 border-b-2 cursor-pointer ${
-              tab === t.key ? "text-navy border-teal" : "text-steel border-transparent hover:text-navy"
+              tab === t.key ? "text-ink border-teal" : "text-steel border-transparent hover:text-ink"
             }`}
             onClick={() => setTab(t.key)}
           >

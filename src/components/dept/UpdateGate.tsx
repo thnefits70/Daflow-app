@@ -45,7 +45,7 @@ export function UpdateGate({
 
   return (
     <div className="max-w-3xl mx-auto py-2.5">
-      <div className="bg-white border border-rule rounded" style={{ borderLeft: "4px solid #14C7C7" }}>
+      <div className="bg-surface border border-rule rounded" style={{ borderLeft: "4px solid #14C7C7" }}>
         <div className="p-6 pb-0">
           <div className="font-mono text-[10.5px] text-teal tracking-[.08em] mb-1">ACTUALIZACIÓN OBLIGATORIA</div>
           <h2 className="font-display text-[20px] font-bold mb-1">{processTitle}</h2>
@@ -69,7 +69,7 @@ export function UpdateGate({
           <button
             type="button"
             disabled={busy}
-            className="w-full flex items-center justify-center gap-1.5 rounded border border-navy bg-navy px-5 py-3 text-[13.5px] font-semibold text-white cursor-pointer disabled:opacity-60"
+            className="w-full flex items-center justify-center gap-1.5 rounded border border-blue bg-blue px-5 py-3 text-[13.5px] font-semibold text-white cursor-pointer disabled:opacity-60"
             onClick={ack}
           >
             <CheckCircle2 size={15} /> Ya lo revisé, marcar como leído

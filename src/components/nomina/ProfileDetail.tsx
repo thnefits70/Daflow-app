@@ -168,7 +168,7 @@ export function ProfileDetail({
   return (
     <div>
       <div className="flex items-center justify-between mb-4.5">
-        <Link href="/admin/nomina" className="inline-flex items-center gap-1.5 text-[13px] text-steel hover:text-navy">
+        <Link href="/admin/nomina" className="inline-flex items-center gap-1.5 text-[13px] text-steel hover:text-ink">
           <ArrowLeft size={14} /> Volver a nómina
         </Link>
         {confirmingDelete ? (
@@ -201,7 +201,7 @@ export function ProfileDetail({
         )}
       </div>
 
-      <div className="bg-white border border-rule rounded p-5 flex gap-6 flex-wrap items-start">
+      <div className="bg-surface border border-rule rounded p-5 flex gap-6 flex-wrap items-start">
         <div className="text-center">
           <div className="w-24 h-24 rounded-full overflow-hidden bg-cloud border border-rule flex items-center justify-center mb-2">
             {p.photoUrl ? (
@@ -242,7 +242,7 @@ export function ProfileDetail({
                 <Building2 size={11} /> Área
               </label>
               <select
-                className="w-full rounded border border-rule px-2.5 py-2 text-[13px] bg-white"
+                className="w-full rounded border border-rule px-2.5 py-2 text-[13px] bg-surface"
                 value={p.deptId ?? ""}
                 onChange={(e) => save({ deptId: e.target.value, position: null })}
               >
@@ -266,7 +266,7 @@ export function ProfileDetail({
               )}
               <button
                 type="button"
-                className="mt-1 text-[11px] text-steel hover:text-navy cursor-pointer underline underline-offset-2"
+                className="mt-1 text-[11px] text-steel hover:text-ink cursor-pointer underline underline-offset-2"
                 onClick={() => setShowCatalog((v) => !v)}
               >
                 {showCatalog ? "Ocultar" : "Administrar"} catálogo de puestos ({deptPositions.length})
@@ -342,12 +342,12 @@ export function ProfileDetail({
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
                   />
-                  <button type="button" disabled={busy} className="rounded border border-navy bg-navy px-3 py-2 text-[12px] font-semibold text-white cursor-pointer" onClick={savePassword}>
+                  <button type="button" disabled={busy} className="rounded border border-blue bg-blue px-3 py-2 text-[12px] font-semibold text-white cursor-pointer" onClick={savePassword}>
                     Guardar
                   </button>
                 </div>
               ) : (
-                <button type="button" className="text-[12.5px] text-steel hover:text-navy cursor-pointer underline underline-offset-2" onClick={() => setResetting(true)}>
+                <button type="button" className="text-[12.5px] text-steel hover:text-ink cursor-pointer underline underline-offset-2" onClick={() => setResetting(true)}>
                   Restablecer contraseña
                 </button>
               )}
@@ -361,14 +361,14 @@ export function ProfileDetail({
             <div className="flex border border-rule rounded overflow-hidden max-w-[220px] mb-2.5">
               <button
                 type="button"
-                className={`flex-1 py-1.5 text-[12.5px] font-semibold cursor-pointer ${p.isLeader ? "bg-navy text-white" : "bg-white text-steel"}`}
+                className={`flex-1 py-1.5 text-[12.5px] font-semibold cursor-pointer ${p.isLeader ? "bg-blue text-white" : "bg-surface text-steel"}`}
                 onClick={() => save({ isLeader: true })}
               >
                 Sí
               </button>
               <button
                 type="button"
-                className={`flex-1 py-1.5 text-[12.5px] font-semibold cursor-pointer ${!p.isLeader ? "bg-navy text-white" : "bg-white text-steel"}`}
+                className={`flex-1 py-1.5 text-[12.5px] font-semibold cursor-pointer ${!p.isLeader ? "bg-blue text-white" : "bg-surface text-steel"}`}
                 onClick={() => save({ isLeader: false, leadsDeptId: null })}
               >
                 No
@@ -376,7 +376,7 @@ export function ProfileDetail({
             </div>
             {p.isLeader && (
               <select
-                className="w-full rounded border border-rule px-2.5 py-2 text-[13px] bg-white"
+                className="w-full rounded border border-rule px-2.5 py-2 text-[13px] bg-surface"
                 value={p.leadsDeptId ?? ""}
                 onChange={(e) => save({ leadsDeptId: e.target.value || null })}
               >
@@ -393,7 +393,7 @@ export function ProfileDetail({
       <div className="grid grid-cols-2 gap-4 mt-4 items-start">
         <div>
           <h3 className="text-[14px] font-semibold mb-2.5">Habilidades y conocimientos</h3>
-          <div className="bg-white border border-rule rounded p-3.5">
+          <div className="bg-surface border border-rule rounded p-3.5">
             <div className="flex flex-wrap gap-1.5 mb-2.5">
               {p.skills.map((s) => (
                 <span key={s} className="inline-flex items-center gap-1 text-[12px] bg-cloud border border-rule rounded-full px-2.5 py-1">
@@ -418,17 +418,17 @@ export function ProfileDetail({
           </div>
 
           <h3 className="text-[14px] font-semibold mt-4.5 mb-2.5">Currículum (CV)</h3>
-          <div className="bg-white border border-rule rounded p-3.5">
+          <div className="bg-surface border border-rule rounded p-3.5">
             {p.cvUrl ? (
               <div className="flex items-center justify-between gap-2">
                 <span className="text-[13px] flex items-center gap-1.5"><FileText size={14} /> {p.cvName || "CV cargado"}</span>
                 <div className="flex items-center gap-2">
-                  <a href={p.cvUrl} download={p.cvName || "CV.pdf"} className="text-steel hover:text-navy"><Download size={14} /></a>
+                  <a href={p.cvUrl} download={p.cvName || "CV.pdf"} className="text-steel hover:text-ink"><Download size={14} /></a>
                   <button type="button" className="text-steel hover:text-red cursor-pointer" onClick={() => save({ cvUrl: null, cvName: null })}><Trash2 size={14} /></button>
                 </div>
               </div>
             ) : (
-              <label className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold border border-navy bg-navy text-white rounded px-3 py-2 cursor-pointer">
+              <label className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold border border-blue bg-blue text-white rounded px-3 py-2 cursor-pointer">
                 <Upload size={13} /> Subir CV
                 <input type="file" accept=".pdf,.doc,.docx,image/*" className="hidden" onChange={(e) => e.target.files?.[0] && handleCv(e.target.files[0])} />
               </label>
@@ -439,7 +439,7 @@ export function ProfileDetail({
 
         <div>
           <h3 className="text-[14px] font-semibold mb-2.5">Añadir hito de carrera</h3>
-          <div className="bg-white border border-rule rounded p-3.5">
+          <div className="bg-surface border border-rule rounded p-3.5">
             <input
               className="w-full rounded border border-rule px-2.5 py-2 text-[13px] mb-2"
               placeholder="Ej. Completó capacitación de Excel avanzado"
@@ -464,7 +464,7 @@ export function ProfileDetail({
             </div>
           )}
           {timeline.map((t) => (
-            <div key={t.kind + t.id} className="bg-white border border-rule rounded p-3 mb-2">
+            <div key={t.kind + t.id} className="bg-surface border border-rule rounded p-3 mb-2">
               <div className="flex items-center justify-between">
                 <span className="font-semibold text-[13px]">{t.kind === "examen" ? "🎓 " : "★ "}{t.title}</span>
                 {t.kind === "hito" && (

@@ -287,7 +287,7 @@ export function ProcessEditor({
   return (
     <div>
       {!hideBackLink && (
-        <Link href={backHref} className="inline-flex items-center gap-1.5 text-[13px] text-steel hover:text-navy mb-4.5">
+        <Link href={backHref} className="inline-flex items-center gap-1.5 text-[13px] text-steel hover:text-ink mb-4.5">
           <ArrowLeft size={14} /> Volver
         </Link>
       )}
@@ -300,7 +300,7 @@ export function ProcessEditor({
             onChange={(e) => setTitle(e.target.value)}
           />
           <textarea
-            className="w-full rounded border border-rule bg-white px-2.5 py-2 text-[13px] text-steel"
+            className="w-full rounded border border-rule bg-surface px-2.5 py-2 text-[13px] text-steel"
             rows={2}
             value={description}
             onChange={(e) => setDescription(e.target.value)}
@@ -319,7 +319,7 @@ export function ProcessEditor({
             <button
               key={t}
               type="button"
-              className="text-[11.5px] font-semibold border border-rule bg-white rounded px-2.5 py-1.5 hover:border-navy cursor-pointer"
+              className="text-[11.5px] font-semibold border border-rule bg-surface rounded px-2.5 py-1.5 hover:border-blue cursor-pointer"
               onClick={() => addNode(t)}
             >
               + {SHAPE_LABEL[t]}
@@ -329,7 +329,7 @@ export function ProcessEditor({
       )}
 
       <div className="grid grid-cols-[1fr_280px] gap-3 min-w-0">
-        <div className="bg-white border border-rule rounded min-w-0" style={{ height: 480, width: "100%" }}>
+        <div className="bg-white border border-[#D6DEEA] rounded min-w-0" style={{ height: 480, width: "100%" }}>
           <ReactFlow
             nodes={nodes}
             edges={edges}
@@ -351,7 +351,7 @@ export function ProcessEditor({
           </ReactFlow>
         </div>
 
-        <div className="bg-white border border-rule rounded p-3.5">
+        <div className="bg-surface border border-rule rounded p-3.5">
           {!editable && selectedNode ? (
             <div>
               <div className="text-[11px] font-semibold uppercase tracking-wide text-steel mb-2">
@@ -484,7 +484,7 @@ export function ProcessEditor({
                       <div className="flex items-center justify-between gap-2 border border-rule rounded px-2 py-1.5">
                         <span className="text-[12px] truncate">{selectedNode.data.fileName || "Archivo cargado"}</span>
                         <div className="flex items-center gap-1.5 shrink-0">
-                          <a href={selectedNode.data.fileUrl} target="_blank" rel="noreferrer" className="text-steel hover:text-navy">
+                          <a href={selectedNode.data.fileUrl} target="_blank" rel="noreferrer" className="text-steel hover:text-ink">
                             <Download size={13} />
                           </a>
                           <button
@@ -566,7 +566,7 @@ export function ProcessEditor({
             </button>
           )}
         </div>
-        <div className="bg-white border border-rule rounded p-1">
+        <div className="bg-surface border border-rule rounded p-1">
           {checklist.length === 0 && (
             <div className="text-steel text-[13px] p-4 text-center">Sin checklist para este proceso.</div>
           )}
@@ -610,7 +610,7 @@ export function ProcessEditor({
           <button
             type="button"
             disabled={saving}
-            className="rounded border border-navy bg-navy px-5 py-2.5 text-[13px] font-semibold text-white cursor-pointer disabled:opacity-60"
+            className="rounded border border-blue bg-blue px-5 py-2.5 text-[13px] font-semibold text-white cursor-pointer disabled:opacity-60"
             onClick={() => save(false)}
           >
             {saving ? "Guardando…" : "Guardar cambios"}

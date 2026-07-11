@@ -104,7 +104,7 @@ export function SettingsPanel({
 
   return (
     <div className="space-y-5 max-w-lg">
-      <div className="bg-white border border-rule rounded p-4.5">
+      <div className="bg-surface border border-rule rounded p-4.5">
         <label className="block mb-3 text-[11px] font-semibold tracking-wide uppercase text-steel">
           Logo principal
         </label>
@@ -116,7 +116,7 @@ export function SettingsPanel({
             Así se verá tu logo en el inicio de sesión y en el menú lateral, en fondo claro y oscuro.
           </div>
         </div>
-        <label className="inline-flex items-center gap-1.5 text-[13px] font-semibold border border-navy bg-navy text-white rounded px-3.5 py-2 cursor-pointer">
+        <label className="inline-flex items-center gap-1.5 text-[13px] font-semibold border border-blue bg-blue text-white rounded px-3.5 py-2 cursor-pointer">
           <Upload size={14} /> {logo ? "Cambiar logo" : "Subir logo"}
           <input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && handleLogoFile(e.target.files[0])} />
         </label>
@@ -131,7 +131,7 @@ export function SettingsPanel({
         </div>
       </div>
 
-      <div className="bg-white border border-rule rounded p-4.5">
+      <div className="bg-surface border border-rule rounded p-4.5">
         <label className="flex items-center gap-1.5 mb-3 text-[11px] font-semibold tracking-wide uppercase text-steel">
           <Mail size={12} /> Correo de recuperación de administrador
         </label>
@@ -145,14 +145,14 @@ export function SettingsPanel({
             value={email}
             onChange={(e) => setEmail(e.target.value)}
           />
-          <button type="button" disabled={busy} className="rounded border border-navy bg-navy px-4 py-2 text-[13px] font-semibold text-white cursor-pointer disabled:opacity-60" onClick={saveEmail}>
+          <button type="button" disabled={busy} className="rounded border border-blue bg-blue px-4 py-2 text-[13px] font-semibold text-white cursor-pointer disabled:opacity-60" onClick={saveEmail}>
             Guardar
           </button>
         </div>
         {emailSaved && <div className="text-green text-[12px] mt-2">Correo guardado.</div>}
       </div>
 
-      <div className="bg-white border border-rule rounded p-4.5">
+      <div className="bg-surface border border-rule rounded p-4.5">
         <label className="flex items-center gap-1.5 mb-3 text-[11px] font-semibold tracking-wide uppercase text-steel">
           <KeyRound size={12} /> Cambiar contraseña de administrador
         </label>
@@ -172,7 +172,7 @@ export function SettingsPanel({
             onChange={(e) => setConfirmPassword(e.target.value)}
           />
         </div>
-        <button type="button" disabled={busy} className="rounded border border-navy bg-navy px-4 py-2 text-[13px] font-semibold text-white cursor-pointer disabled:opacity-60" onClick={savePassword}>
+        <button type="button" disabled={busy} className="rounded border border-blue bg-blue px-4 py-2 text-[13px] font-semibold text-white cursor-pointer disabled:opacity-60" onClick={savePassword}>
           Guardar contraseña
         </button>
         {passwordErr && <div className="text-red text-[12px] mt-2">{passwordErr}</div>}

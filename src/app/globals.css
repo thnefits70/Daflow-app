@@ -1,14 +1,20 @@
 @import "tailwindcss";
 
 :root {
+  /* Brand / accent */
   --color-navy: #0b1f3a;
   --color-blue: #1e5eff;
   --color-teal: #14c7c7;
-  --color-steel: #6b7a90;
-  --color-cloud: #e9eef5;
-  --color-rule: #d3dce8;
-  --color-green: #1e8a6b;
-  --color-red: #c4453a;
+  --color-green: #22a67e;
+  --color-red: #e0574a;
+
+  /* Dark UI surfaces (professional / tech dashboard look) */
+  --color-bg: #0a1526;
+  --color-surface: #101f3b;
+  --color-cloud: #1a2e4d;
+  --color-rule: #24365a;
+  --color-steel: #92a3c0;
+  --color-ink: #f1f5fb;
 }
 
 @theme inline {
@@ -20,13 +26,16 @@
   --color-rule: var(--color-rule);
   --color-green: var(--color-green);
   --color-red: var(--color-red);
+  --color-bg: var(--color-bg);
+  --color-surface: var(--color-surface);
+  --color-ink: var(--color-ink);
   --font-display: var(--font-space-grotesk);
   --font-sans: var(--font-inter);
   --font-mono: var(--font-plex-mono);
 }
 
 body {
-  background: var(--color-cloud);
-  color: var(--color-navy);
+  background: var(--color-bg);
+  color: var(--color-ink);
   font-family: var(--font-sans);
 }

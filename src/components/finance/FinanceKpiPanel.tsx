@@ -161,7 +161,7 @@ export function FinanceKpiPanel({
           <button
             type="button"
             disabled={busy}
-            className="inline-flex items-center gap-1.5 rounded border border-navy bg-navy px-3.5 py-2 text-[12.5px] font-semibold text-white cursor-pointer disabled:opacity-60 shrink-0"
+            className="inline-flex items-center gap-1.5 rounded border border-blue bg-blue px-3.5 py-2 text-[12.5px] font-semibold text-white cursor-pointer disabled:opacity-60 shrink-0"
             onClick={startNew}
           >
             <Plus size={14} /> Nuevo registro
@@ -170,7 +170,7 @@ export function FinanceKpiPanel({
       </div>
 
       {chartData.length > 0 && (
-        <div className="bg-white border border-rule rounded-md p-4.5 mb-4">
+        <div className="bg-surface border border-rule rounded-md p-4.5 mb-4">
           <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-steel mb-3">
             <TrendingUp size={13} /> Ventas mensuales
           </div>
@@ -195,7 +195,7 @@ export function FinanceKpiPanel({
       )}
 
       {formOpen && (
-        <div className="bg-white border border-rule rounded-md p-4.5 mb-4">
+        <div className="bg-surface border border-rule rounded-md p-4.5 mb-4">
           <div className="grid grid-cols-2 gap-3 mb-3">
             <div>
               <label className="block mb-1 text-[10.5px] font-semibold uppercase tracking-wide text-steel">Mes</label>
@@ -285,7 +285,7 @@ export function FinanceKpiPanel({
             <button
               type="button"
               disabled={busy}
-              className="rounded border border-navy bg-navy px-4 py-2 text-[13px] font-semibold text-white cursor-pointer disabled:opacity-60"
+              className="rounded border border-blue bg-blue px-4 py-2 text-[13px] font-semibold text-white cursor-pointer disabled:opacity-60"
               onClick={save}
             >
               Guardar
@@ -311,7 +311,7 @@ export function FinanceKpiPanel({
       )}
 
       {sorted.map((r) => (
-        <div key={r.id} className="bg-white border border-rule rounded p-4 mb-2.5 flex items-center justify-between gap-3">
+        <div key={r.id} className="bg-surface border border-rule rounded p-4 mb-2.5 flex items-center justify-between gap-3">
           <div className="flex items-center gap-5 flex-wrap">
             <div className="font-semibold text-[14px] w-20">{formatPeriod(r.period)}</div>
             <div>
@@ -341,7 +341,7 @@ export function FinanceKpiPanel({
             )}
             {editable && (
               <>
-                <button type="button" className="text-steel hover:text-navy cursor-pointer" onClick={() => startEdit(r)}>
+                <button type="button" className="text-steel hover:text-ink cursor-pointer" onClick={() => startEdit(r)}>
                   <Pencil size={15} />
                 </button>
                 <button type="button" className="text-steel hover:text-red cursor-pointer" onClick={() => remove(r.id)}>
