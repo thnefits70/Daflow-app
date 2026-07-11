@@ -30,11 +30,14 @@ model PasswordResetToken {
 
 /* ---------------- Áreas del negocio ---------------- */
 model Department {
-  id        String   @id @default(cuid())
-  name      String
-  code      String   @unique
-  order     Int      @default(0)
-  createdAt DateTime @default(now())
+  id         String   @id @default(cuid())
+  name       String
+  code       String   @unique
+  order      Int      @default(0)
+  // Áreas especiales (ej. proyectos confidenciales) se anclan aparte en el menú,
+  // no se mezclan con la lista arrastrable de áreas normales del negocio.
+  isSpecial  Boolean  @default(false)
+  createdAt  DateTime @default(now())
 
   users        User[]
   processes    Process[]

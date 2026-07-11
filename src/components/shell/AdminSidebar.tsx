@@ -13,6 +13,7 @@ import {
   Building2,
   GripVertical,
   LogOut,
+  Sparkles,
 } from "lucide-react";
 import { BrandMark } from "@/components/brand/DaflowMark";
 
@@ -25,9 +26,11 @@ const NAV_INACTIVE = "text-[#C9CFC5] hover:bg-white/[.06] hover:text-white";
 
 export function AdminSidebar({
   departments,
+  specialDepartments,
   logoUrl,
 }: {
   departments: Department[];
+  specialDepartments: Department[];
   logoUrl?: string | null;
 }) {
   const pathname = usePathname();
@@ -78,6 +81,18 @@ export function AdminSidebar({
         <Link href="/admin/areas" className={`${NAV_ITEM} ${pathname.startsWith("/admin/areas") ? NAV_ACTIVE : NAV_INACTIVE}`}>
           <ShieldCheck size={15} /> Áreas del negocio
         </Link>
+
+        {specialDepartments.map((d) => (
+          <Link
+            key={d.id}
+            href={`/admin/dept/${d.id}`}
+            className={`${NAV_ITEM} ${pathname.startsWith(`/admin/dept/${d.id}`) ? NAV_ACTIVE : NAV_INACTIVE}`}
+          >
+            <Sparkles size={15} className="shrink-0" />
+            <span className="overflow-hidden text-ellipsis">{d.name}</span>
+          </Link>
+        ))}
+
         <Link href="/admin/nomina" className={`${NAV_ITEM} ${pathname.startsWith("/admin/nomina") ? NAV_ACTIVE : NAV_INACTIVE}`}>
           <UsersIcon size={15} /> Nómina
         </Link>

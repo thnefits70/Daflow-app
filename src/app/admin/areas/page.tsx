@@ -3,7 +3,10 @@ import { TopLine } from "@/components/ui/TopLine";
 import { ManageDepartments } from "./ManageDepartments";
 
 export default async function AreasPage() {
-  const departments = await prisma.department.findMany({ orderBy: { order: "asc" } });
+  const departments = await prisma.department.findMany({
+    where: { isSpecial: false },
+    orderBy: { order: "asc" },
+  });
 
   return (
     <div>
