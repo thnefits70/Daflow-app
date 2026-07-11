@@ -1,0 +1,277 @@
+// DAFLOW — schema de base de datos
+// Ver daflow-especificacion.md para el modelo de negocio completo.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+/* ---------------- Configuración global de la plataforma ---------------- */
+model PlatformSettings {
+  id                String   @id @default("singleton")
+  adminPasswordHash String
+  adminEmail        String?
+  logoUrl           String?
+  updatedAt         DateTime @updatedAt
+}
+
+// Token temporal para el flujo de "olvidé mi contraseña" del administrador
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+}
+
+/* ---------------- Áreas del negocio ---------------- */
+model Department {
+  id        String   @id @default(cuid())
+  name      String
+  code      String   @unique
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+
+  users        User[]
+  processes    Process[]
+  documents    Document[]
+  exams        Exam[]
+  leaders      User[]      @relation("DeptLeader")
+  positions    Position[]
+
+  @@index([order])
+}
+
+// Catálogo de puestos/cargos que el admin arma por área, para elegir al dar de alta a alguien
+model Position {
+  id     String     @id @default(cuid())
+  deptId String
+  dept   Department @relation(fields: [deptId], references: [id], onDelete: Cascade)
+  name   String
+
+  @@unique([deptId, name])
+  @@index([deptId])
+}
+
+/* ---------------- Personas (nómina + acceso) ---------------- */
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  username     String   @unique
+  passwordHash String
+  deptId       String?
+  department   Department? @relation(fields: [deptId], references: [id], onDelete: SetNull)
+
+  photoUrl  String?
+  position  String?
+  email     String?
+  phone     String?
+  startDate DateTime?
+  skills    String[] @default([])
+  cvUrl     String?
+  cvName    String?
+
+  isLeader    Boolean     @default(false)
+  leadsDeptId String?
+  leadsDept   Department? @relation("DeptLeader", fields: [leadsDeptId], references: [id], onDelete: SetNull)
+
+  snoozeUntil DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  examScores    ExamScore[]
+  milestones    Milestone[]
+  ackUpdates    UserAckUpdate[]
+
+  @@index([deptId])
+  @@index([leadsDeptId])
+}
+
+model Milestone {
+  id     String   @id @default(cuid())
+  userId String
+  user   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title  String
+  note   String?
+  date   DateTime @default(now())
+
+  @@index([userId])
+}
+
+/* ---------------- Procesos (flujograma + checklist) ---------------- */
+model Process {
+  id          String  @id @default(cuid())
+  deptId      String
+  department  Department @relation(fields: [deptId], references: [id], onDelete: Cascade)
+  title       String
+  description String  @default("")
+  sketchUrl   String?
+  sketchName  String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  flowSteps      FlowStep[]
+  checklistItems ChecklistItem[]
+  updates        ProcessUpdate[]
+
+  @@index([deptId])
+}
+
+enum FlowStepType {
+  START
+  END
+  PROCESS
+  DECISION
+  IO
+  SUBPROCESS
+  DOCUMENT
+  PREPARE
+  STORAGE
+  CONNECTOR
+  CHECKLIST
+}
+
+model FlowStep {
+  id        String       @id @default(cuid())
+  processId String
+  process   Process      @relation(fields: [processId], references: [id], onDelete: Cascade)
+  order     Int          @default(0)
+  type      FlowStepType @default(PROCESS)
+  label     String
+  detail    String       @default("")
+
+  // Solo para type = DOCUMENT: PDF adjunto al bloque
+  fileUrl  String?
+  fileName String?
+
+  // React Flow canvas position, saved so the editor restores exact layout
+  positionX Float @default(0)
+  positionY Float @default(0)
+
+  branches        FlowBranch[]            @relation("StepBranches")
+  incomingBranch  FlowBranch[]            @relation("StepTarget")
+  checklistItems  FlowStepChecklistItem[]
+
+  @@index([processId])
+}
+
+// Solo para type = CHECKLIST: puntos de verificación propios de ese bloque del flujo
+model FlowStepChecklistItem {
+  id     String   @id @default(cuid())
+  stepId String
+  step   FlowStep @relation(fields: [stepId], references: [id], onDelete: Cascade)
+  text   String
+  order  Int      @default(0)
+
+  @@index([stepId])
+}
+
+model FlowBranch {
+  id           String   @id @default(cuid())
+  stepId       String
+  step         FlowStep @relation("StepBranches", fields: [stepId], references: [id], onDelete: Cascade)
+  label        String   @default("")
+  targetStepId String?
+  targetStep   FlowStep? @relation("StepTarget", fields: [targetStepId], references: [id], onDelete: SetNull)
+
+  // Qué lado del símbolo se usó para dibujar la conexión (top/right/bottom/left)
+  sourceHandle String?
+  targetHandle String?
+
+  @@index([stepId])
+}
+
+model ChecklistItem {
+  id        String  @id @default(cuid())
+  processId String
+  process   Process @relation(fields: [processId], references: [id], onDelete: Cascade)
+  text      String
+  order     Int     @default(0)
+
+  @@index([processId])
+}
+
+model ProcessUpdate {
+  id        String   @id @default(cuid())
+  processId String
+  process   Process  @relation(fields: [processId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  acks UserAckUpdate[]
+
+  @@index([processId])
+}
+
+model UserAckUpdate {
+  userId   String
+  user     User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  updateId String
+  update   ProcessUpdate @relation(fields: [updateId], references: [id], onDelete: Cascade)
+  ackedAt  DateTime      @default(now())
+
+  @@id([userId, updateId])
+}
+
+/* ---------------- Documentos (por área, y Leyes y Reglamentos con deptId nulo) ---------------- */
+model Document {
+  id        String      @id @default(cuid())
+  deptId    String?
+  department Department? @relation(fields: [deptId], references: [id], onDelete: Cascade)
+  isLaw     Boolean     @default(false)
+  title     String
+  content   String      @default("")
+  link      String      @default("")
+  fileUrl   String?
+  fileName  String?
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  @@index([deptId])
+  @@index([isLaw])
+}
+
+/* ---------------- Exámenes ---------------- */
+model Exam {
+  id        String   @id @default(cuid())
+  deptId    String
+  department Department @relation(fields: [deptId], references: [id], onDelete: Cascade)
+  title     String
+  createdAt DateTime @default(now())
+
+  questions ExamQuestion[]
+  scores    ExamScore[]
+
+  @@index([deptId])
+}
+
+model ExamQuestion {
+  id           String @id @default(cuid())
+  examId       String
+  exam         Exam   @relation(fields: [examId], references: [id], onDelete: Cascade)
+  text         String
+  options      String[]
+  correctIndex Int
+  order        Int    @default(0)
+
+  @@index([examId])
+}
+
+model ExamScore {
+  id        String   @id @default(cuid())
+  examId    String
+  exam      Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  userName  String
+  score     Int
+  total     Int
+  createdAt DateTime @default(now())
+
+  @@index([examId])
+  @@index([userId])
+}

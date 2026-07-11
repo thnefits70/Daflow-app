@@ -1,0 +1,56 @@
+import { redirect } from "next/navigation";
+import { auth } from "@/auth";
+import { prisma } from "@/lib/prisma";
+import { TopLine } from "@/components/ui/TopLine";
+import { DeptWorkspaceTabs } from "@/components/dept/DeptWorkspaceTabs";
+
+export default async function WorkspacePage() {
+  const session = await auth();
+  if (!session?.user.deptId) redirect("/login");
+
+  const dept = await prisma.department.findUnique({ where: { id: session.user.deptId } });
+  if (!dept) redirect("/login");
+
+  const [processes, documents, exams] = await Promise.all([
+    prisma.process.findMany({
+      where: { deptId: dept.id },
+      orderBy: { createdAt: "asc" },
+      include: { _count: { select: { flowSteps: true, checklistItems: true } } },
+    }),
+    prisma.document.findMany({ where: { deptId: dept.id }, orderBy: { createdAt: "asc" } }),
+    prisma.exam.findMany({
+      where: { deptId: dept.id },
+      orderBy: { createdAt: "asc" },
+      include: { _count: { select: { questions: true } } },
+    }),
+  ]);
+
+  return (
+    <div>
+      <TopLine eyebrow={`Área · ${dept.code}`} title={dept.name} />
+      <DeptWorkspaceTabs
+        deptId={dept.id}
+        processesBaseHref="/area/workspace/processes"
+        processes={processes.map((p) => ({
+          id: p.id,
+          title: p.title,
+          description: p.description,
+          stepCount: p._count.flowSteps,
+          checklistCount: p._count.checklistItems,
+        }))}
+        users={[]}
+        positions={[]}
+        documents={documents.map((d) => ({
+          id: d.id,
+          title: d.title,
+          content: d.content,
+          link: d.link,
+          fileUrl: d.fileUrl,
+          fileName: d.fileName,
+        }))}
+        exams={exams.map((e) => ({ id: e.id, title: e.title, questionCount: e._count.questions }))}
+        editable={false}
+      />
+    </div>
+  );
+}
