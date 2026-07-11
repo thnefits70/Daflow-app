@@ -12,6 +12,7 @@ export type DashboardRow = {
   attempts: number;
   avg: number | null;
   ranking: { user: string; avg: number; attempts: number }[];
+  leader: { name: string; photoUrl: string | null } | null;
 };
 
 export type DashboardData = {
@@ -23,7 +24,11 @@ export type DashboardData = {
 
 export async function getDashboardData(): Promise<DashboardData> {
   const [departments, processes, documents, exams, scores] = await Promise.all([
-    prisma.department.findMany({ where: { isSpecial: false }, orderBy: { order: "asc" } }),
+    prisma.department.findMany({
+      where: { isSpecial: false },
+      orderBy: { order: "asc" },
+      include: { leaders: { select: { name: true, photoUrl: true }, take: 1 } },
+    }),
     prisma.process.findMany({ select: { deptId: true } }),
     prisma.document.findMany({ where: { deptId: { not: null } }, select: { deptId: true } }),
     prisma.exam.findMany({ select: { id: true, deptId: true } }),
@@ -56,7 +61,9 @@ export async function getDashboardData(): Promise<DashboardData> {
       }))
       .sort((a, b) => b.avg - a.avg);
 
-    return { dept: { id: dept.id, name: dept.name, code: dept.code }, procs, docs, examCount, attempts: deptScores.length, avg, ranking };
+    const leader = dept.leaders[0] ? { name: dept.leaders[0].name, photoUrl: dept.leaders[0].photoUrl } : null;
+
+    return { dept: { id: dept.id, name: dept.name, code: dept.code }, procs, docs, examCount, attempts: deptScores.length, avg, ranking, leader };
   });
 
   const rowsSorted = [...rows].sort((a, b) => (b.avg ?? -1) - (a.avg ?? -1));

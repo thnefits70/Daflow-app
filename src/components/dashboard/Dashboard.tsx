@@ -59,7 +59,7 @@ export function Dashboard({ data, bannerUrl }: { data: DashboardData; bannerUrl?
         {rowsSorted.length > 0 && (
           <div className="grid gap-4 w-full max-w-4xl pt-5 mt-0.5" style={{ gridTemplateColumns: `repeat(auto-fit, minmax(150px, 1fr))`, borderTop: "1.5px dashed #D3DCE8" }}>
             {rowsSorted.map((r, i) => (
-              <div key={r.dept.id} className="flex flex-col items-center relative">
+              <div key={r.dept.id} className="flex flex-col items-center relative group">
                 <div className="absolute -top-5 left-1/2 -translate-x-1/2 w-[3px] h-5 bg-teal" />
                 <div className="bg-surface border border-rule rounded w-full text-center p-3" style={{ borderTop: `3px solid ${r.avg !== null ? barColor(r.avg) : "#D3DCE8"}` }}>
                   <div className="flex items-center justify-between mb-1.5">
@@ -77,6 +77,20 @@ export function Dashboard({ data, bannerUrl }: { data: DashboardData; bannerUrl?
                     </div>
                   )}
                 </div>
+
+                {r.leader?.photoUrl && (
+                  <div className="absolute -top-2 -right-2 z-10">
+                    <div className="w-7 h-7 rounded-full overflow-hidden border-2 border-navy bg-cloud cursor-pointer">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={r.leader.photoUrl} alt={r.leader.name} className="w-full h-full object-cover" />
+                    </div>
+                    <div className="hidden group-hover:flex absolute top-8 right-0 z-20 flex-col items-center bg-surface border border-rule rounded-md p-2 shadow-lg">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={r.leader.photoUrl} alt={r.leader.name} className="w-24 h-24 rounded-md object-cover mb-1.5" />
+                      <span className="text-[11px] font-semibold whitespace-nowrap">{r.leader.name}</span>
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
           </div>
