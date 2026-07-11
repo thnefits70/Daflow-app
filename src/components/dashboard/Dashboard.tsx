@@ -84,9 +84,9 @@ export function Dashboard({ data, bannerUrl }: { data: DashboardData; bannerUrl?
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img src={r.leader.photoUrl} alt={r.leader.name} className="w-full h-full object-cover" />
                     </div>
-                    <div className="hidden group-hover:flex absolute top-8 right-0 z-20 flex-col items-center bg-surface border border-rule rounded-md p-2 shadow-lg">
+                    <div className="hidden group-hover:flex absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-20 flex-col items-center bg-surface border border-rule rounded-md p-2 shadow-lg">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={r.leader.photoUrl} alt={r.leader.name} className="w-24 h-24 rounded-md object-cover mb-1.5" />
+                      <img src={r.leader.photoUrl} alt={r.leader.name} className="w-20 h-20 rounded-md object-cover mb-1.5" />
                       <span className="text-[11px] font-semibold whitespace-nowrap">{r.leader.name}</span>
                     </div>
                   </div>
