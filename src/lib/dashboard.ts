@@ -23,7 +23,7 @@ export type DashboardData = {
 
 export async function getDashboardData(): Promise<DashboardData> {
   const [departments, processes, documents, exams, scores] = await Promise.all([
-    prisma.department.findMany({ orderBy: { order: "asc" } }),
+    prisma.department.findMany({ where: { isSpecial: false }, orderBy: { order: "asc" } }),
     prisma.process.findMany({ select: { deptId: true } }),
     prisma.document.findMany({ where: { deptId: { not: null } }, select: { deptId: true } }),
     prisma.exam.findMany({ select: { id: true, deptId: true } }),
