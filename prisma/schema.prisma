@@ -37,6 +37,8 @@ model Department {
   // Áreas especiales (ej. proyectos confidenciales) se anclan aparte en el menú,
   // no se mezclan con la lista arrastrable de áreas normales del negocio.
   isSpecial  Boolean  @default(false)
+  // Habilita la pestaña de KPIs financieros (ROI, ventas y ganancia mensual) para esta área.
+  trackKpis  Boolean  @default(false)
   createdAt  DateTime @default(now())
 
   users        User[]
@@ -45,6 +47,7 @@ model Department {
   exams        Exam[]
   leaders      User[]      @relation("DeptLeader")
   positions    Position[]
+  financeKpis  FinanceKpiRecord[]
 
   @@index([order])
 }
@@ -277,4 +280,28 @@ model ExamScore {
 
   @@index([examId])
   @@index([userId])
+}
+
+/* ---------------- KPIs financieros (histórico mensual por área) ---------------- */
+model FinanceKpiRecord {
+  id         String     @id @default(cuid())
+  deptId     String
+  department Department @relation(fields: [deptId], references: [id], onDelete: Cascade)
+
+  // Mes al que corresponde el registro, formato "YYYY-MM"
+  period        String
+  roi           Float?
+  monthlySales  Float?
+  monthlyProfit Float?
+  notes         String   @default("")
+
+  // Reporte financiero de respaldo (PDF/imagen), opcional
+  fileUrl  String?
+  fileName String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([deptId, period])
+  @@index([deptId])
 }

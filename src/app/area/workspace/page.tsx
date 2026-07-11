@@ -11,7 +11,7 @@ export default async function WorkspacePage() {
   const dept = await prisma.department.findUnique({ where: { id: session.user.deptId } });
   if (!dept) redirect("/login");
 
-  const [processes, documents, exams] = await Promise.all([
+  const [processes, documents, exams, kpiRecords] = await Promise.all([
     prisma.process.findMany({
       where: { deptId: dept.id },
       orderBy: { createdAt: "asc" },
@@ -23,6 +23,9 @@ export default async function WorkspacePage() {
       orderBy: { createdAt: "asc" },
       include: { _count: { select: { questions: true } } },
     }),
+    dept.trackKpis
+      ? prisma.financeKpiRecord.findMany({ where: { deptId: dept.id }, orderBy: { period: "asc" } })
+      : Promise.resolve([]),
   ]);
 
   return (
@@ -38,8 +41,6 @@ export default async function WorkspacePage() {
           stepCount: p._count.flowSteps,
           checklistCount: p._count.checklistItems,
         }))}
-        users={[]}
-        positions={[]}
         documents={documents.map((d) => ({
           id: d.id,
           title: d.title,
@@ -49,6 +50,17 @@ export default async function WorkspacePage() {
           fileName: d.fileName,
         }))}
         exams={exams.map((e) => ({ id: e.id, title: e.title, questionCount: e._count.questions }))}
+        trackKpis={dept.trackKpis}
+        kpiRecords={kpiRecords.map((k) => ({
+          id: k.id,
+          period: k.period,
+          roi: k.roi,
+          monthlySales: k.monthlySales,
+          monthlyProfit: k.monthlyProfit,
+          notes: k.notes,
+          fileUrl: k.fileUrl,
+          fileName: k.fileName,
+        }))}
         editable={false}
       />
     </div>

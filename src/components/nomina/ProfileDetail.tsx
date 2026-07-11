@@ -65,6 +65,23 @@ export function ProfileDetail({
   const [newPassword, setNewPassword] = useState("");
   const [mTitle, setMTitle] = useState("");
   const [mNote, setMNote] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [showCatalog, setShowCatalog] = useState(false);
+
+  const removePosition = async (id: string) => {
+    setBusy(true);
+    await fetch(`/api/positions/${id}`, { method: "DELETE" });
+    setBusy(false);
+    router.refresh();
+  };
+
+  const removeUser = async () => {
+    setDeleting(true);
+    await fetch(`/api/users/${p.id}`, { method: "DELETE" });
+    router.push("/admin/nomina");
+    router.refresh();
+  };
 
   const save = async (patch: Partial<UserProfile>) => {
     const next = { ...p, ...patch };
@@ -150,9 +167,39 @@ export function ProfileDetail({
 
   return (
     <div>
-      <Link href="/admin/nomina" className="inline-flex items-center gap-1.5 text-[13px] text-steel hover:text-navy mb-4.5">
-        <ArrowLeft size={14} /> Volver a nómina
-      </Link>
+      <div className="flex items-center justify-between mb-4.5">
+        <Link href="/admin/nomina" className="inline-flex items-center gap-1.5 text-[13px] text-steel hover:text-navy">
+          <ArrowLeft size={14} /> Volver a nómina
+        </Link>
+        {confirmingDelete ? (
+          <div className="flex items-center gap-2.5">
+            <span className="text-[12.5px] text-steel">¿Eliminar a {p.name}? Se borra su acceso, ficha e historial.</span>
+            <button
+              type="button"
+              disabled={deleting}
+              className="rounded border border-red bg-red px-3 py-1.5 text-[12px] font-semibold text-white cursor-pointer disabled:opacity-60"
+              onClick={removeUser}
+            >
+              {deleting ? "Eliminando…" : "Sí, eliminar"}
+            </button>
+            <button
+              type="button"
+              className="text-[12px] text-steel cursor-pointer"
+              onClick={() => setConfirmingDelete(false)}
+            >
+              Cancelar
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-red hover:opacity-80 cursor-pointer"
+            onClick={() => setConfirmingDelete(true)}
+          >
+            <Trash2 size={14} /> Eliminar usuario
+          </button>
+        )}
+      </div>
 
       <div className="bg-white border border-rule rounded p-5 flex gap-6 flex-wrap items-start">
         <div className="text-center">
@@ -216,6 +263,36 @@ export function ProfileDetail({
                   onChange={(v) => save({ position: v })}
                   onPositionCreated={() => router.refresh()}
                 />
+              )}
+              <button
+                type="button"
+                className="mt-1 text-[11px] text-steel hover:text-navy cursor-pointer underline underline-offset-2"
+                onClick={() => setShowCatalog((v) => !v)}
+              >
+                {showCatalog ? "Ocultar" : "Administrar"} catálogo de puestos ({deptPositions.length})
+              </button>
+              {showCatalog && (
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {deptPositions.length === 0 && (
+                    <span className="text-[11.5px] text-steel">Aún no hay puestos para esta área.</span>
+                  )}
+                  {deptPositions.map((pos) => (
+                    <span
+                      key={pos.id}
+                      className="inline-flex items-center gap-1 text-[11.5px] bg-cloud border border-rule rounded-full px-2.5 py-1"
+                    >
+                      {pos.name}
+                      <button
+                        type="button"
+                        disabled={busy}
+                        className="text-steel hover:text-red cursor-pointer"
+                        onClick={() => removePosition(pos.id)}
+                      >
+                        <X size={10} />
+                      </button>
+                    </span>
+                  ))}
+                </div>
               )}
             </div>
             <div>

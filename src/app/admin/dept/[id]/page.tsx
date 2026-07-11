@@ -8,24 +8,21 @@ export default async function DeptWorkspacePage({ params }: { params: Promise<{ 
   const dept = await prisma.department.findUnique({ where: { id } });
   if (!dept) notFound();
 
-  const [processes, users, positions, documents, exams] = await Promise.all([
+  const [processes, documents, exams, kpiRecords] = await Promise.all([
     prisma.process.findMany({
       where: { deptId: id },
       orderBy: { createdAt: "asc" },
       include: { _count: { select: { flowSteps: true, checklistItems: true } } },
     }),
-    prisma.user.findMany({
-      where: { deptId: id },
-      orderBy: { name: "asc" },
-      select: { id: true, name: true, username: true, position: true },
-    }),
-    prisma.position.findMany({ where: { deptId: id }, orderBy: { name: "asc" } }),
     prisma.document.findMany({ where: { deptId: id }, orderBy: { createdAt: "asc" } }),
     prisma.exam.findMany({
       where: { deptId: id },
       orderBy: { createdAt: "asc" },
       include: { _count: { select: { questions: true } } },
     }),
+    dept.trackKpis
+      ? prisma.financeKpiRecord.findMany({ where: { deptId: id }, orderBy: { period: "asc" } })
+      : Promise.resolve([]),
   ]);
 
   return (
@@ -41,8 +38,6 @@ export default async function DeptWorkspacePage({ params }: { params: Promise<{ 
           stepCount: p._count.flowSteps,
           checklistCount: p._count.checklistItems,
         }))}
-        users={users}
-        positions={positions.map((p) => ({ id: p.id, name: p.name }))}
         documents={documents.map((d) => ({
           id: d.id,
           title: d.title,
@@ -52,6 +47,17 @@ export default async function DeptWorkspacePage({ params }: { params: Promise<{ 
           fileName: d.fileName,
         }))}
         exams={exams.map((e) => ({ id: e.id, title: e.title, questionCount: e._count.questions }))}
+        trackKpis={dept.trackKpis}
+        kpiRecords={kpiRecords.map((k) => ({
+          id: k.id,
+          period: k.period,
+          roi: k.roi,
+          monthlySales: k.monthlySales,
+          monthlyProfit: k.monthlyProfit,
+          notes: k.notes,
+          fileUrl: k.fileUrl,
+          fileName: k.fileName,
+        }))}
         editable
       />
     </div>

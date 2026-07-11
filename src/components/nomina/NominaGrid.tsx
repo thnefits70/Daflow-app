@@ -56,8 +56,9 @@ export function NominaGrid({ users, departments }: { users: NominaUser[]; depart
   return (
     <div>
       <div className="text-[13px] text-steel mb-4.5 max-w-2xl">
-        Ficha técnica de cada persona: foto, datos de contacto, CV, habilidades e historial de avance. Se llena sola
-        con lo que agregues desde &quot;Usuarios&quot; en cada área, o puedes crear a alguien directamente aquí.
+        Aquí se crea y gestiona a cada persona: acceso a la plataforma, área asignada, foto, datos de contacto, CV,
+        habilidades e historial de avance. El área que le asignes es la que determina a qué información puede
+        entrar.
       </div>
 
       <div className="bg-white border border-rule rounded p-4.5 mb-6">

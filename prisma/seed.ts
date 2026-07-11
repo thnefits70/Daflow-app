@@ -29,10 +29,11 @@ async function main() {
 
   for (let i = 0; i < DEFAULT_DEPARTMENTS.length; i++) {
     const d = DEFAULT_DEPARTMENTS[i];
+    const trackKpis = d.code === "FIN";
     await prisma.department.upsert({
       where: { code: d.code },
-      update: {},
-      create: { name: d.name, code: d.code, order: i },
+      update: { trackKpis },
+      create: { name: d.name, code: d.code, order: i, trackKpis },
     });
   }
 

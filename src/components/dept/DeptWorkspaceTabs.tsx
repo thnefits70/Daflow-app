@@ -1,15 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { GitBranch, FileText, GraduationCap, ShieldCheck } from "lucide-react";
+import { GitBranch, FileText, GraduationCap, LineChart } from "lucide-react";
 import { ProcessListPanel } from "@/components/process/ProcessListPanel";
-import { DeptUsersPanel } from "@/components/users/DeptUsersPanel";
 import { DocumentsPanel } from "@/components/documents/DocumentsPanel";
 import { ExamsPanel } from "@/components/exams/ExamsPanel";
+import { FinanceKpiPanel, type FinanceKpiDTO } from "@/components/finance/FinanceKpiPanel";
 
 type ProcessSummary = { id: string; title: string; description: string; stepCount: number; checklistCount: number };
-type DeptUser = { id: string; name: string; username: string; position: string | null };
-type Position = { id: string; name: string };
 type DocumentDTO = { id: string; title: string; content: string; link: string; fileUrl: string | null; fileName: string | null };
 type ExamSummary = { id: string; title: string; questionCount: number };
 
@@ -17,7 +15,7 @@ const ALL_TABS = [
   { key: "procesos", label: "Procesos", icon: GitBranch },
   { key: "documentos", label: "Documentos", icon: FileText },
   { key: "examenes", label: "Exámenes", icon: GraduationCap },
-  { key: "usuarios", label: "Usuarios", icon: ShieldCheck },
+  { key: "kpis", label: "KPIs financieros", icon: LineChart },
 ] as const;
 
 type TabKey = (typeof ALL_TABS)[number]["key"];
@@ -26,23 +24,23 @@ export function DeptWorkspaceTabs({
   deptId,
   processesBaseHref,
   processes,
-  users,
-  positions,
   documents,
   exams,
+  trackKpis = false,
+  kpiRecords = [],
   editable,
 }: {
   deptId: string;
   processesBaseHref: string;
   processes: ProcessSummary[];
-  users: DeptUser[];
-  positions: Position[];
   documents: DocumentDTO[];
   exams: ExamSummary[];
+  trackKpis?: boolean;
+  kpiRecords?: FinanceKpiDTO[];
   editable: boolean;
 }) {
   const [tab, setTab] = useState<TabKey>("procesos");
-  const tabs = editable ? ALL_TABS : ALL_TABS.filter((t) => t.key !== "usuarios");
+  const tabs = ALL_TABS.filter((t) => (t.key === "kpis" ? trackKpis : true));
 
   return (
     <div>
@@ -66,7 +64,7 @@ export function DeptWorkspaceTabs({
       )}
       {tab === "documentos" && <DocumentsPanel deptId={deptId} documents={documents} editable={editable} />}
       {tab === "examenes" && <ExamsPanel deptId={deptId} exams={exams} editable={editable} />}
-      {tab === "usuarios" && editable && <DeptUsersPanel deptId={deptId} users={users} positions={positions} />}
+      {tab === "kpis" && trackKpis && <FinanceKpiPanel deptId={deptId} records={kpiRecords} editable={editable} />}
     </div>
   );
 }
