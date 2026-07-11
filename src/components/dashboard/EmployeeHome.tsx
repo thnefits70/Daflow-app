@@ -22,6 +22,7 @@ export function EmployeeHome({
   examCount,
   trackKpis,
   scores,
+  bannerUrl,
 }: {
   userName: string;
   deptName: string;
@@ -30,6 +31,7 @@ export function EmployeeHome({
   examCount: number;
   trackKpis: boolean;
   scores: ScoreRow[];
+  bannerUrl?: string | null;
 }) {
   const avg = scores.length
     ? Math.round(scores.reduce((a, s) => a + pct(s.score, s.total), 0) / scores.length)
@@ -43,7 +45,13 @@ export function EmployeeHome({
         {firstName ? `Hola, ${firstName}` : "Inicio"}
       </h2>
 
-      <div className="bg-navy rounded-lg p-6 mb-7 flex flex-wrap items-center gap-8">
+      <div className="relative overflow-hidden bg-navy rounded-lg p-6 mb-7 flex flex-wrap items-center gap-8">
+        {bannerUrl && (
+          <div className="absolute bottom-3.5 right-4 bg-white/95 rounded-md px-3 py-2 shadow-sm">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={bannerUrl} alt="" className="h-7 w-auto object-contain" />
+          </div>
+        )}
         <div>
           <div className="text-[11px] font-semibold tracking-wide uppercase text-[#B9C2CC] mb-2 text-center">
             Tu nivel de conocimiento

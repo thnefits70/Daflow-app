@@ -16,6 +16,8 @@ model PlatformSettings {
   adminPasswordHash String
   adminEmail        String?
   logoUrl           String?
+  // Marca de agua opcional (logo + wordmark) mostrada discretamente en la tarjeta de Inicio.
+  bannerUrl         String?
   updatedAt         DateTime @updatedAt
 }
 

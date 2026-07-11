@@ -8,7 +8,11 @@ export default async function SettingsPage() {
   return (
     <div>
       <TopLine eyebrow="Configuración" title="Marca de la plataforma" />
-      <SettingsPanel logoUrl={settings?.logoUrl ?? null} adminEmail={settings?.adminEmail ?? null} />
+      <SettingsPanel
+        logoUrl={settings?.logoUrl ?? null}
+        bannerUrl={settings?.bannerUrl ?? null}
+        adminEmail={settings?.adminEmail ?? null}
+      />
     </div>
   );
 }

@@ -8,7 +8,7 @@ function barColor(score: number) {
   return "#C4453A";
 }
 
-export function Dashboard({ data }: { data: DashboardData }) {
+export function Dashboard({ data, bannerUrl }: { data: DashboardData; bannerUrl?: string | null }) {
   const { rows, rowsSorted, totalAttempts, overallAvg } = data;
 
   return (
@@ -16,7 +16,13 @@ export function Dashboard({ data }: { data: DashboardData }) {
       <div className="font-mono text-[10.5px] tracking-[.14em] uppercase text-steel">Resumen general</div>
       <h2 className="font-display text-[24px] mt-0.5 mb-6">Inicio</h2>
 
-      <div className="bg-navy rounded-lg p-6 mb-7 flex flex-wrap items-center gap-8">
+      <div className="relative overflow-hidden bg-navy rounded-lg p-6 mb-7 flex flex-wrap items-center gap-8">
+        {bannerUrl && (
+          <div className="absolute bottom-3.5 right-4 bg-white/95 rounded-md px-3 py-2 shadow-sm">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={bannerUrl} alt="" className="h-7 w-auto object-contain" />
+          </div>
+        )}
         <div>
           <div className="text-[11px] font-semibold tracking-wide uppercase text-[#B9C2CC] mb-2 text-center">
             Nivel de conocimiento

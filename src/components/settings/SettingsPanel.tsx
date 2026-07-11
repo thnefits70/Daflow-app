@@ -7,15 +7,19 @@ import { BrandMark } from "@/components/brand/DaflowMark";
 
 export function SettingsPanel({
   logoUrl,
+  bannerUrl,
   adminEmail,
 }: {
   logoUrl: string | null;
+  bannerUrl: string | null;
   adminEmail: string | null;
 }) {
   const router = useRouter();
   const [logo, setLogo] = useState(logoUrl);
+  const [banner, setBanner] = useState(bannerUrl);
   const [email, setEmail] = useState(adminEmail ?? "");
   const [logoErr, setLogoErr] = useState("");
+  const [bannerErr, setBannerErr] = useState("");
   const [emailSaved, setEmailSaved] = useState(false);
 
   const [newPassword, setNewPassword] = useState("");
@@ -59,6 +63,44 @@ export function SettingsPanel({
       body: JSON.stringify({ logoUrl: null }),
     });
     setLogo(null);
+    router.refresh();
+  };
+
+  const handleBannerFile = async (file: File) => {
+    setBannerErr("");
+    if (!file.type.startsWith("image/")) {
+      setBannerErr("Solo se aceptan archivos de imagen (PNG, JPG, SVG).");
+      return;
+    }
+    if (file.size > 2.5 * 1024 * 1024) {
+      setBannerErr("La imagen es muy pesada. Usa un banner de menos de 2.5 MB.");
+      return;
+    }
+    const fd = new FormData();
+    fd.append("file", file);
+    fd.append("folder", "branding");
+    const res = await fetch("/api/upload", { method: "POST", body: fd });
+    if (!res.ok) {
+      setBannerErr("No se pudo subir el banner.");
+      return;
+    }
+    const data = await res.json();
+    await fetch("/api/settings", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ bannerUrl: data.url }),
+    });
+    setBanner(data.url);
+    router.refresh();
+  };
+
+  const removeBanner = async () => {
+    await fetch("/api/settings", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ bannerUrl: null }),
+    });
+    setBanner(null);
     router.refresh();
   };
 
@@ -128,6 +170,39 @@ export function SettingsPanel({
         {logoErr && <div className="text-red text-[12px] mt-2">{logoErr}</div>}
         <div className="text-[11px] text-steel mt-3.5">
           Recomendado: PNG con fondo transparente, cuadrado o poco alargado, menos de 1.5 MB.
+        </div>
+      </div>
+
+      <div className="bg-surface border border-rule rounded p-4.5">
+        <label className="block mb-3 text-[11px] font-semibold tracking-wide uppercase text-steel">
+          Banner de Inicio
+        </label>
+        <div className="mb-4">
+          <div className="w-full h-24 border-[1.5px] border-dashed border-rule rounded-md flex items-center justify-center bg-cloud overflow-hidden mb-3">
+            {banner ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={banner} alt="Banner" className="max-w-full max-h-full object-contain opacity-70" />
+            ) : (
+              <span className="text-[12px] text-steel">Sin banner</span>
+            )}
+          </div>
+          <div className="text-[12px] text-steel leading-relaxed">
+            Se muestra como marca de agua discreta en la esquina de la tarjeta de Inicio, tanto para
+            administrador como para el equipo.
+          </div>
+        </div>
+        <label className="inline-flex items-center gap-1.5 text-[13px] font-semibold border border-blue bg-blue text-white rounded px-3.5 py-2 cursor-pointer">
+          <Upload size={14} /> {banner ? "Cambiar banner" : "Subir banner"}
+          <input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && handleBannerFile(e.target.files[0])} />
+        </label>
+        {banner && (
+          <button type="button" className="ml-2.5 inline-flex items-center gap-1.5 text-[13px] border border-rule rounded px-3.5 py-2 cursor-pointer" onClick={removeBanner}>
+            <X size={13} /> Quitar banner
+          </button>
+        )}
+        {bannerErr && <div className="text-red text-[12px] mt-2">{bannerErr}</div>}
+        <div className="text-[11px] text-steel mt-3.5">
+          Recomendado: logo + nombre horizontal, fondo transparente, menos de 2.5 MB.
         </div>
       </div>
 

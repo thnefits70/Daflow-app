@@ -8,7 +8,7 @@ export default async function AreaHomePage() {
   if (!session?.user.deptId) redirect("/login");
 
   const deptId = session.user.deptId;
-  const [dept, procs, docs, examCount, scores] = await Promise.all([
+  const [dept, procs, docs, examCount, scores, settings] = await Promise.all([
     prisma.department.findUnique({ where: { id: deptId } }),
     prisma.process.count({ where: { deptId } }),
     prisma.document.count({ where: { deptId } }),
@@ -18,6 +18,7 @@ export default async function AreaHomePage() {
       include: { exam: { select: { title: true } } },
       orderBy: { createdAt: "desc" },
     }),
+    prisma.platformSettings.findUnique({ where: { id: "singleton" } }),
   ]);
   if (!dept) redirect("/api/auth/force-logout");
 
@@ -29,6 +30,7 @@ export default async function AreaHomePage() {
       docs={docs}
       examCount={examCount}
       trackKpis={dept.trackKpis}
+      bannerUrl={settings?.bannerUrl}
       scores={scores.map((s) => ({
         id: s.id,
         examTitle: s.exam.title,
