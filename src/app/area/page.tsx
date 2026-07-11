@@ -1,7 +1,41 @@
-import { getDashboardData } from "@/lib/dashboard";
-import { Dashboard } from "@/components/dashboard/Dashboard";
+import { redirect } from "next/navigation";
+import { auth } from "@/auth";
+import { prisma } from "@/lib/prisma";
+import { EmployeeHome } from "@/components/dashboard/EmployeeHome";
 
 export default async function AreaHomePage() {
-  const data = await getDashboardData();
-  return <Dashboard data={data} />;
+  const session = await auth();
+  if (!session?.user.deptId) redirect("/login");
+
+  const deptId = session.user.deptId;
+  const [dept, procs, docs, examCount, scores] = await Promise.all([
+    prisma.department.findUnique({ where: { id: deptId } }),
+    prisma.process.count({ where: { deptId } }),
+    prisma.document.count({ where: { deptId } }),
+    prisma.exam.count({ where: { deptId } }),
+    prisma.examScore.findMany({
+      where: { userId: session.user.id },
+      include: { exam: { select: { title: true } } },
+      orderBy: { createdAt: "desc" },
+    }),
+  ]);
+  if (!dept) redirect("/api/auth/force-logout");
+
+  return (
+    <EmployeeHome
+      userName={session.user.name ?? ""}
+      deptName={dept.name}
+      procs={procs}
+      docs={docs}
+      examCount={examCount}
+      trackKpis={dept.trackKpis}
+      scores={scores.map((s) => ({
+        id: s.id,
+        examTitle: s.exam.title,
+        score: s.score,
+        total: s.total,
+        createdAt: s.createdAt.toISOString(),
+      }))}
+    />
+  );
 }
