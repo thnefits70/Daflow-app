@@ -47,9 +47,9 @@ export function EmployeeHome({
 
       <div className="relative overflow-hidden bg-navy rounded-lg p-6 mb-7 flex flex-wrap items-center gap-8">
         {bannerUrl && (
-          <div className="absolute bottom-3.5 right-4 bg-white/95 rounded-md px-3 py-2 shadow-sm">
+          <div className="absolute bottom-3.5 right-4 bg-white/95 rounded-md px-3 py-2.5 shadow-sm">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={bannerUrl} alt="" className="h-7 w-auto object-contain" />
+            <img src={bannerUrl} alt="" className="h-9 w-auto object-contain" />
           </div>
         )}
         <div>
