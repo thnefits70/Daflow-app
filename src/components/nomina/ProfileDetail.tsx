@@ -37,6 +37,13 @@ function pct(a: number, b: number) {
   return b === 0 ? 0 : Math.round((a / b) * 100);
 }
 
+function cvKind(cvUrl: string | null, cvName: string | null): "pdf" | "image" | "other" {
+  const name = (cvName || cvUrl || "").toLowerCase();
+  if (name.endsWith(".pdf")) return "pdf";
+  if (/\.(png|jpe?g|gif|webp)$/.test(name)) return "image";
+  return "other";
+}
+
 async function uploadFile(file: File, folder: string): Promise<{ url: string; name: string } | null> {
   const fd = new FormData();
   fd.append("file", file);
@@ -68,6 +75,7 @@ export function ProfileDetail({
   const [deleting, setDeleting] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [showCatalog, setShowCatalog] = useState(false);
+  const [showCv, setShowCv] = useState(false);
 
   const removePosition = async (id: string) => {
     setBusy(true);
@@ -420,13 +428,31 @@ export function ProfileDetail({
           <h3 className="text-[14px] font-semibold mt-4.5 mb-2.5">Currículum (CV)</h3>
           <div className="bg-surface border border-rule rounded p-3.5">
             {p.cvUrl ? (
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-[13px] flex items-center gap-1.5"><FileText size={14} /> {p.cvName || "CV cargado"}</span>
-                <div className="flex items-center gap-2">
-                  <a href={p.cvUrl} download={p.cvName || "CV.pdf"} className="text-steel hover:text-ink"><Download size={14} /></a>
-                  <button type="button" className="text-steel hover:text-red cursor-pointer" onClick={() => save({ cvUrl: null, cvName: null })}><Trash2 size={14} /></button>
+              <>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[13px] flex items-center gap-1.5"><FileText size={14} /> {p.cvName || "CV cargado"}</span>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {cvKind(p.cvUrl, p.cvName) !== "other" && (
+                      <button
+                        type="button"
+                        className="text-[12px] font-semibold border border-rule rounded px-2.5 py-1.5 cursor-pointer"
+                        onClick={() => setShowCv((v) => !v)}
+                      >
+                        {showCv ? "Ocultar" : "Ver CV"}
+                      </button>
+                    )}
+                    <a href={p.cvUrl} download={p.cvName || "CV.pdf"} className="text-steel hover:text-ink"><Download size={14} /></a>
+                    <button type="button" className="text-steel hover:text-red cursor-pointer" onClick={() => { save({ cvUrl: null, cvName: null }); setShowCv(false); }}><Trash2 size={14} /></button>
+                  </div>
                 </div>
-              </div>
+                {showCv && cvKind(p.cvUrl, p.cvName) === "pdf" && (
+                  <iframe src={p.cvUrl} title={p.cvName || "CV"} className="w-full border border-rule rounded mt-3" style={{ height: 520 }} />
+                )}
+                {showCv && cvKind(p.cvUrl, p.cvName) === "image" && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={p.cvUrl} alt={p.cvName || "CV"} className="w-full rounded mt-3 border border-rule" />
+                )}
+              </>
             ) : (
               <label className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold border border-blue bg-blue text-white rounded px-3 py-2 cursor-pointer">
                 <Upload size={13} /> Subir CV
