@@ -82,11 +82,11 @@ export function Dashboard({ data, bannerUrl }: { data: DashboardData; bannerUrl?
                   <div className="absolute -top-2 -right-2 z-10">
                     <div className="w-7 h-7 rounded-full overflow-hidden border-2 border-navy bg-cloud cursor-pointer">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={r.leader.photoUrl} alt={r.leader.name} className="w-full h-full object-cover" />
+                      <img src={r.leader.photoUrl} alt={r.leader.name} className="w-full h-full object-cover object-top" />
                     </div>
                     <div className="hidden group-hover:flex absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-20 flex-col items-center bg-surface border border-rule rounded-md p-2 shadow-lg">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={r.leader.photoUrl} alt={r.leader.name} className="w-20 h-20 rounded-md object-cover mb-1.5" />
+                      <img src={r.leader.photoUrl} alt={r.leader.name} className="w-20 h-20 rounded-md object-cover object-top mb-1.5" />
                       <span className="text-[11px] font-semibold whitespace-nowrap">{r.leader.name}</span>
                     </div>
                   </div>
