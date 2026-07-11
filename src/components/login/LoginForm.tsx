@@ -6,6 +6,7 @@ import { signIn } from "next-auth/react";
 import Link from "next/link";
 import { Lock } from "lucide-react";
 import { BrandMark, DaflowWordmark } from "@/components/brand/DaflowMark";
+import { LoginBackground } from "./LoginBackground";
 
 export function LoginForm({ logoUrl }: { logoUrl: string | null }) {
   const router = useRouter();
@@ -39,8 +40,9 @@ export function LoginForm({ logoUrl }: { logoUrl: string | null }) {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-navy p-8">
-      <div className="w-full max-w-sm rounded-md bg-cloud p-9">
+    <div className="relative min-h-screen flex items-center justify-center bg-navy p-8">
+      <LoginBackground />
+      <div className="relative w-full max-w-sm rounded-md bg-cloud p-9">
         <div className="flex items-center gap-2.5 mb-6">
           <BrandMark logoUrl={logoUrl} size={40} />
           <DaflowWordmark />

@@ -16,7 +16,7 @@ export default async function AreaLayout({ children }: { children: React.ReactNo
     prisma.user.findUnique({ where: { id: session.user.id } }),
   ]);
 
-  if (!dept || !currentUser) redirect("/login");
+  if (!dept || !currentUser) redirect("/api/auth/force-logout");
 
   const pendingUpdatesRaw = await prisma.processUpdate.findMany({
     where: { process: { deptId: dept.id }, acks: { none: { userId: session.user.id } } },
