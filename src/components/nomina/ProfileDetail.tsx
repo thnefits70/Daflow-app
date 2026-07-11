@@ -29,6 +29,7 @@ type UserProfile = {
   cvName: string | null;
   isLeader: boolean;
   leadsDeptId: string | null;
+  canManageLaws: boolean;
   milestones: Milestone[];
   examScores: ExamScore[];
 };
@@ -394,6 +395,32 @@ export function ProfileDetail({
                 ))}
               </select>
             )}
+          </div>
+
+          <div className="bg-cloud border border-rule rounded p-3.5 mt-3.5">
+            <label className="flex items-center gap-1 mb-2 text-[10.5px] font-semibold uppercase tracking-wide text-steel">
+              <FileText size={11} /> ¿Puede subir Leyes y Reglamentos?
+            </label>
+            <div className="text-[11px] text-steel mb-2">
+              Puede crear y editar documentos visibles para toda la empresa, pero no eliminarlos — eso solo lo
+              puedes hacer tú.
+            </div>
+            <div className="flex border border-rule rounded overflow-hidden max-w-[220px]">
+              <button
+                type="button"
+                className={`flex-1 py-1.5 text-[12.5px] font-semibold cursor-pointer ${p.canManageLaws ? "bg-blue text-white" : "bg-surface text-steel"}`}
+                onClick={() => save({ canManageLaws: true })}
+              >
+                Sí
+              </button>
+              <button
+                type="button"
+                className={`flex-1 py-1.5 text-[12.5px] font-semibold cursor-pointer ${!p.canManageLaws ? "bg-blue text-white" : "bg-surface text-steel"}`}
+                onClick={() => save({ canManageLaws: false })}
+              >
+                No
+              </button>
+            </div>
           </div>
         </div>
       </div>

@@ -22,3 +22,17 @@ export async function canEditDeptKpis(deptId: string) {
   }
   return false;
 }
+
+// Admin can always write to "Leyes y Reglamentos" (company-wide); an employee
+// only if explicitly granted via User.canManageLaws. Neither can delete —
+// that stays admin-only, checked separately.
+export async function canWriteLaws() {
+  const session = await auth();
+  if (!session) return false;
+  if (session.user.role === "admin") return true;
+  const user = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { canManageLaws: true },
+  });
+  return !!user?.canManageLaws;
+}

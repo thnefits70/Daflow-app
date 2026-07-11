@@ -42,6 +42,7 @@ const updateSchema = z.object({
   cvName: z.string().nullable().optional(),
   isLeader: z.boolean().optional(),
   leadsDeptId: z.string().nullable().optional(),
+  canManageLaws: z.boolean().optional(),
 });
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -71,6 +72,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (d.cvName !== undefined) data.cvName = d.cvName;
   if (d.isLeader !== undefined) data.isLeader = d.isLeader;
   if (d.leadsDeptId !== undefined) data.leadsDeptId = d.leadsDeptId;
+  if (d.canManageLaws !== undefined) data.canManageLaws = d.canManageLaws;
 
   try {
     const user = await prisma.user.update({ where: { id }, data });

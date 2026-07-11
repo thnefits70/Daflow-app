@@ -18,12 +18,15 @@ export function DocumentsPanel({
   isLaw,
   documents,
   editable,
+  canDelete,
 }: {
   deptId?: string;
   isLaw?: boolean;
   documents: DocumentDTO[];
   editable: boolean;
+  canDelete?: boolean;
 }) {
+  const allowDelete = canDelete ?? editable;
   const router = useRouter();
   const [openId, setOpenId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -217,14 +220,14 @@ export function DocumentsPanel({
                     </>
                   )}
                   {editable && (
-                    <>
-                      <button type="button" className="text-steel hover:text-ink cursor-pointer" onClick={() => startEdit(d)}>
-                        <Pencil size={15} />
-                      </button>
-                      <button type="button" className="text-steel hover:text-red cursor-pointer" onClick={() => remove(d.id)}>
-                        <Trash2 size={15} />
-                      </button>
-                    </>
+                    <button type="button" className="text-steel hover:text-ink cursor-pointer" onClick={() => startEdit(d)}>
+                      <Pencil size={15} />
+                    </button>
+                  )}
+                  {allowDelete && (
+                    <button type="button" className="text-steel hover:text-red cursor-pointer" onClick={() => remove(d.id)}>
+                      <Trash2 size={15} />
+                    </button>
                   )}
                 </div>
               </div>

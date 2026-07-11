@@ -27,6 +27,13 @@ export async function POST(req: NextRequest) {
     });
     allowed = !!user?.isLeader && user.leadsDeptId === session.user.deptId;
   }
+  if (!allowed && session?.user.role === "employee" && folder === "documents") {
+    const user = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { canManageLaws: true },
+    });
+    allowed = !!user?.canManageLaws;
+  }
   if (!allowed) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
   if (!file || typeof file === "string") {

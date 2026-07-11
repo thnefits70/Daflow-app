@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { requireAdminSession } from "@/lib/guards";
+import { requireAdminSession, canWriteLaws } from "@/lib/guards";
 
 const updateSchema = z.object({
   title: z.string().trim().min(1).optional(),
@@ -12,10 +12,13 @@ const updateSchema = z.object({
 });
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const session = await requireAdminSession();
-  if (!session) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
-
   const { id } = await params;
+  const existing = await prisma.document.findUnique({ where: { id }, select: { isLaw: true } });
+  if (!existing) return NextResponse.json({ error: "No encontrado." }, { status: 404 });
+
+  const allowed = existing.isLaw ? await canWriteLaws() : !!(await requireAdminSession());
+  if (!allowed) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+
   const body = await req.json().catch(() => null);
   const parsed = updateSchema.safeParse(body);
   if (!parsed.success) {

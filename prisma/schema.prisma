@@ -87,6 +87,9 @@ model User {
   leadsDeptId String?
   leadsDept   Department? @relation("DeptLeader", fields: [leadsDeptId], references: [id], onDelete: SetNull)
 
+  // Puede crear/editar documentos en "Leyes y Reglamentos" (visibles para toda la empresa), pero no eliminarlos.
+  canManageLaws Boolean @default(false)
+
   snoozeUntil DateTime?
 
   createdAt DateTime @default(now())
