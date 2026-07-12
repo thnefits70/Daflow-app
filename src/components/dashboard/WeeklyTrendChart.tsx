@@ -1,3 +1,7 @@
+"use client";
+
+import { useState } from "react";
+
 export type WeeklyPoint = { week: string; value: number };
 
 function formatWeekShort(week: string) {
@@ -48,6 +52,8 @@ export function WeeklyTrendChart({
   points: WeeklyPoint[];
   weeklyGoal?: number;
 }) {
+  const [hoverIndex, setHoverIndex] = useState<number | null>(null);
+
   if (points.length === 0) return null;
 
   const latest = points[points.length - 1];
@@ -81,6 +87,7 @@ export function WeeklyTrendChart({
   const goalY = goalYRaw !== null && goalYRaw > padT + 4 ? goalYRaw : null;
 
   const tickEvery = Math.max(1, Math.ceil(points.length / 12));
+  const hitR = Math.max(4, Math.min(14, stepX / 2 - 1));
 
   return (
     <div>
@@ -111,7 +118,14 @@ export function WeeklyTrendChart({
         )}
       </div>
 
-      <svg viewBox={`0 0 ${width} ${height}`} width="100%" height={height} preserveAspectRatio="none" className="block">
+      <svg
+        viewBox={`0 0 ${width} ${height}`}
+        width="100%"
+        height={height}
+        preserveAspectRatio="none"
+        className="block"
+        onMouseLeave={() => setHoverIndex(null)}
+      >
         <defs>
           <linearGradient id="weekly-trend-fill" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="#14C7C7" stopOpacity="0.32" />
@@ -151,13 +165,70 @@ export function WeeklyTrendChart({
 
         <path d={areaPath} fill="url(#weekly-trend-fill)" />
         <path d={linePath} fill="none" stroke="#14C7C7" strokeWidth="2.25" strokeLinejoin="round" strokeLinecap="round" />
-        {coords.map((c, i) =>
-          i === coords.length - 1 ? (
-            <circle key={i} cx={c.x} cy={c.y} r="4" fill="#14C7C7" />
-          ) : (
-            <circle key={i} cx={c.x} cy={c.y} r="2" fill="#0a1526" stroke="#14C7C7" strokeWidth="1.5" />
-          )
+
+        {hoverIndex !== null && (
+          <line
+            x1={coords[hoverIndex].x}
+            x2={coords[hoverIndex].x}
+            y1={padT}
+            y2={padT + innerH}
+            stroke="#92A3C0"
+            strokeWidth="1"
+            strokeDasharray="3 3"
+            opacity="0.5"
+            pointerEvents="none"
+          />
         )}
+
+        {coords.map((c, i) => {
+          const isLast = i === coords.length - 1;
+          const isHover = i === hoverIndex;
+          return (
+            <circle
+              key={i}
+              cx={c.x}
+              cy={c.y}
+              r={isHover ? 5 : isLast ? 4 : 2}
+              fill={isHover || isLast ? "#14C7C7" : "#0a1526"}
+              stroke={isHover ? "#0a1526" : isLast ? "none" : "#14C7C7"}
+              strokeWidth={isHover ? 2 : isLast ? 0 : 1.5}
+              pointerEvents="none"
+            />
+          );
+        })}
+
+        {coords.map((c, i) => (
+          <circle
+            key={`hit-${i}`}
+            cx={c.x}
+            cy={c.y}
+            r={hitR}
+            fill="transparent"
+            onMouseEnter={() => setHoverIndex(i)}
+            style={{ cursor: "pointer" }}
+          />
+        ))}
+
+        {hoverIndex !== null &&
+          (() => {
+            const c = coords[hoverIndex];
+            const p = points[hoverIndex];
+            const boxW = 128;
+            const boxH = 42;
+            const boxX = Math.max(padL, Math.min(c.x - boxW / 2, width - padR - boxW));
+            const boxY = Math.max(4, c.y - boxH - 12);
+            return (
+              <g pointerEvents="none">
+                <rect x={boxX} y={boxY} width={boxW} height={boxH} rx="6" fill="#101f3b" stroke="#24365a" strokeWidth="1" />
+                <text x={boxX + boxW / 2} y={boxY + 17} textAnchor="middle" fontSize="10.5" fill="#92a3c0">
+                  {formatWeekShort(p.week)}
+                </text>
+                <text x={boxX + boxW / 2} y={boxY + 33} textAnchor="middle" fontSize="14" fontWeight="700" fill="#f1f5fb">
+                  {p.value.toLocaleString("es-MX")} pedidos
+                </text>
+              </g>
+            );
+          })()}
       </svg>
     </div>
   );
