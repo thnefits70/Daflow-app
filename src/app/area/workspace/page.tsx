@@ -72,14 +72,18 @@ export default async function WorkspacePage() {
         }))}
         trackWeeklyMetric={dept.trackWeeklyMetric}
         weeklyMetricRecords={weeklyMetricRecords.map((w) => ({ id: w.id, week: w.week, value: w.value }))}
-        trackWeeklyReview={dept.trackWeeklyReview}
-        weeklyReviewRecords={weeklyReviewRecords.map((w) => ({
-          id: w.id,
-          week: w.week,
-          problem: w.problem,
-          actionPlan: w.actionPlan,
-          status: w.status,
-        }))}
+        trackWeeklyReview={dept.trackWeeklyReview && kpisEditable}
+        weeklyReviewRecords={
+          kpisEditable
+            ? weeklyReviewRecords.map((w) => ({
+                id: w.id,
+                week: w.week,
+                problem: w.problem,
+                actionPlan: w.actionPlan,
+                status: w.status,
+              }))
+            : []
+        }
         editable={false}
         kpisEditable={kpisEditable}
       />
