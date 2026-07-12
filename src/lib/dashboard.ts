@@ -73,3 +73,23 @@ export async function getDashboardData(): Promise<DashboardData> {
 
   return { rows, rowsSorted, totalAttempts, overallAvg };
 }
+
+export type WeeklyTrend = { deptName: string; points: { week: string; value: number }[] } | null;
+
+// Shared by both the admin dashboard and every employee's Inicio — whichever
+// department has trackWeeklyMetric on (currently just Fulfillment).
+export async function getWeeklyTrend(): Promise<WeeklyTrend> {
+  const dept = await prisma.department.findFirst({ where: { trackWeeklyMetric: true } });
+  if (!dept) return null;
+
+  const records = await prisma.weeklyMetricRecord.findMany({
+    where: { deptId: dept.id },
+    orderBy: { week: "asc" },
+  });
+  if (records.length === 0) return null;
+
+  return {
+    deptName: dept.name,
+    points: records.map((r) => ({ week: r.week, value: r.value })),
+  };
+}

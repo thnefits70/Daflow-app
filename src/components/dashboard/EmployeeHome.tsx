@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { GitBranch, FileText, GraduationCap, Scale, ClipboardList, LineChart } from "lucide-react";
 import { ScoreGauge } from "./ScoreGauge";
+import { WeeklyTrendChart } from "./WeeklyTrendChart";
+import type { WeeklyTrend } from "@/lib/dashboard";
 
 type ScoreRow = { id: string; examTitle: string; score: number; total: number; createdAt: string };
 
@@ -23,6 +25,7 @@ export function EmployeeHome({
   trackKpis,
   scores,
   bannerUrl,
+  weeklyTrend,
 }: {
   userName: string;
   deptName: string;
@@ -32,6 +35,7 @@ export function EmployeeHome({
   trackKpis: boolean;
   scores: ScoreRow[];
   bannerUrl?: string | null;
+  weeklyTrend?: WeeklyTrend;
 }) {
   const avg = scores.length
     ? Math.round(scores.reduce((a, s) => a + pct(s.score, s.total), 0) / scores.length)
@@ -72,6 +76,9 @@ export function EmployeeHome({
             <div className="text-[11.5px] text-[#B9C2CC] mt-0.5">Exámenes que has rendido</div>
           </div>
         </div>
+        {weeklyTrend && (
+          <WeeklyTrendChart label="Pedidos despachados" deptName={weeklyTrend.deptName} points={weeklyTrend.points} />
+        )}
       </div>
 
       <h3 className="text-[14px] font-semibold mb-2.5">Accesos rápidos</h3>

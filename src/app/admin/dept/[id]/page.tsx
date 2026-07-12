@@ -8,7 +8,7 @@ export default async function DeptWorkspacePage({ params }: { params: Promise<{ 
   const dept = await prisma.department.findUnique({ where: { id } });
   if (!dept) notFound();
 
-  const [processes, documents, exams, kpiRecords] = await Promise.all([
+  const [processes, documents, exams, kpiRecords, weeklyMetricRecords] = await Promise.all([
     prisma.process.findMany({
       where: { deptId: id },
       orderBy: { createdAt: "asc" },
@@ -22,6 +22,9 @@ export default async function DeptWorkspacePage({ params }: { params: Promise<{ 
     }),
     dept.trackKpis
       ? prisma.financeKpiRecord.findMany({ where: { deptId: id }, orderBy: { period: "asc" } })
+      : Promise.resolve([]),
+    dept.trackWeeklyMetric
+      ? prisma.weeklyMetricRecord.findMany({ where: { deptId: id }, orderBy: { week: "asc" } })
       : Promise.resolve([]),
   ]);
 
@@ -58,6 +61,8 @@ export default async function DeptWorkspacePage({ params }: { params: Promise<{ 
           fileUrl: k.fileUrl,
           fileName: k.fileName,
         }))}
+        trackWeeklyMetric={dept.trackWeeklyMetric}
+        weeklyMetricRecords={weeklyMetricRecords.map((w) => ({ id: w.id, week: w.week, value: w.value }))}
         editable
       />
     </div>

@@ -1,11 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { GitBranch, FileText, GraduationCap, LineChart } from "lucide-react";
+import { GitBranch, FileText, GraduationCap, LineChart, TrendingUp } from "lucide-react";
 import { ProcessListPanel } from "@/components/process/ProcessListPanel";
 import { DocumentsPanel } from "@/components/documents/DocumentsPanel";
 import { ExamsPanel } from "@/components/exams/ExamsPanel";
 import { FinanceKpiPanel, type FinanceKpiDTO } from "@/components/finance/FinanceKpiPanel";
+import { WeeklyMetricPanel, type WeeklyMetricDTO } from "@/components/fulfillment/WeeklyMetricPanel";
 
 type ProcessSummary = { id: string; title: string; description: string; stepCount: number; checklistCount: number };
 type DocumentDTO = { id: string; title: string; content: string; link: string; fileUrl: string | null; fileName: string | null };
@@ -16,6 +17,7 @@ const ALL_TABS = [
   { key: "documentos", label: "Documentos", icon: FileText },
   { key: "examenes", label: "Exámenes", icon: GraduationCap },
   { key: "kpis", label: "KPIs financieros", icon: LineChart },
+  { key: "semanal", label: "Pedidos despachados", icon: TrendingUp },
 ] as const;
 
 type TabKey = (typeof ALL_TABS)[number]["key"];
@@ -28,6 +30,8 @@ export function DeptWorkspaceTabs({
   exams,
   trackKpis = false,
   kpiRecords = [],
+  trackWeeklyMetric = false,
+  weeklyMetricRecords = [],
   editable,
   kpisEditable,
 }: {
@@ -38,11 +42,17 @@ export function DeptWorkspaceTabs({
   exams: ExamSummary[];
   trackKpis?: boolean;
   kpiRecords?: FinanceKpiDTO[];
+  trackWeeklyMetric?: boolean;
+  weeklyMetricRecords?: WeeklyMetricDTO[];
   editable: boolean;
   kpisEditable?: boolean;
 }) {
   const [tab, setTab] = useState<TabKey>("procesos");
-  const tabs = ALL_TABS.filter((t) => (t.key === "kpis" ? trackKpis : true));
+  const tabs = ALL_TABS.filter((t) => {
+    if (t.key === "kpis") return trackKpis;
+    if (t.key === "semanal") return trackWeeklyMetric;
+    return true;
+  });
 
   return (
     <div>
@@ -68,6 +78,14 @@ export function DeptWorkspaceTabs({
       {tab === "examenes" && <ExamsPanel deptId={deptId} exams={exams} editable={editable} />}
       {tab === "kpis" && trackKpis && (
         <FinanceKpiPanel deptId={deptId} records={kpiRecords} editable={kpisEditable ?? editable} />
+      )}
+      {tab === "semanal" && trackWeeklyMetric && (
+        <WeeklyMetricPanel
+          deptId={deptId}
+          records={weeklyMetricRecords}
+          editable={kpisEditable ?? editable}
+          label="Pedidos despachados"
+        />
       )}
     </div>
   );

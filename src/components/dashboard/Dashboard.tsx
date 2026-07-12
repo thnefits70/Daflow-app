@@ -1,6 +1,7 @@
 import { Building2 } from "lucide-react";
 import { ScoreGauge } from "./ScoreGauge";
-import type { DashboardData } from "@/lib/dashboard";
+import { WeeklyTrendChart } from "./WeeklyTrendChart";
+import type { DashboardData, WeeklyTrend } from "@/lib/dashboard";
 
 function barColor(score: number) {
   if (score >= 75) return "#14C7C7";
@@ -8,7 +9,15 @@ function barColor(score: number) {
   return "#C4453A";
 }
 
-export function Dashboard({ data, bannerUrl }: { data: DashboardData; bannerUrl?: string | null }) {
+export function Dashboard({
+  data,
+  bannerUrl,
+  weeklyTrend,
+}: {
+  data: DashboardData;
+  bannerUrl?: string | null;
+  weeklyTrend?: WeeklyTrend;
+}) {
   const { rows, rowsSorted, totalAttempts, overallAvg } = data;
 
   return (
@@ -45,6 +54,9 @@ export function Dashboard({ data, bannerUrl }: { data: DashboardData; bannerUrl?
             <div className="text-[11.5px] text-[#B9C2CC] mt-0.5">Área líder en conocimiento</div>
           </div>
         </div>
+        {weeklyTrend && (
+          <WeeklyTrendChart label="Pedidos despachados" deptName={weeklyTrend.deptName} points={weeklyTrend.points} />
+        )}
       </div>
 
       <h3 className="text-[14px] font-semibold mb-1">Organigrama general</h3>

@@ -11,7 +11,7 @@ export default async function WorkspacePage() {
   const dept = await prisma.department.findUnique({ where: { id: session.user.deptId } });
   if (!dept) redirect("/api/auth/force-logout");
 
-  const [processes, documents, exams, kpiRecords, currentUser] = await Promise.all([
+  const [processes, documents, exams, kpiRecords, weeklyMetricRecords, currentUser] = await Promise.all([
     prisma.process.findMany({
       where: { deptId: dept.id },
       orderBy: { createdAt: "asc" },
@@ -25,6 +25,9 @@ export default async function WorkspacePage() {
     }),
     dept.trackKpis
       ? prisma.financeKpiRecord.findMany({ where: { deptId: dept.id }, orderBy: { period: "asc" } })
+      : Promise.resolve([]),
+    dept.trackWeeklyMetric
+      ? prisma.weeklyMetricRecord.findMany({ where: { deptId: dept.id }, orderBy: { week: "asc" } })
       : Promise.resolve([]),
     prisma.user.findUnique({ where: { id: session.user.id }, select: { isLeader: true, leadsDeptId: true } }),
   ]);
@@ -64,6 +67,8 @@ export default async function WorkspacePage() {
           fileUrl: k.fileUrl,
           fileName: k.fileName,
         }))}
+        trackWeeklyMetric={dept.trackWeeklyMetric}
+        weeklyMetricRecords={weeklyMetricRecords.map((w) => ({ id: w.id, week: w.week, value: w.value }))}
         editable={false}
         kpisEditable={kpisEditable}
       />

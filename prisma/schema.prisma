@@ -41,6 +41,8 @@ model Department {
   isSpecial  Boolean  @default(false)
   // Habilita la pestaña de KPIs financieros (ROI, ventas y ganancia mensual) para esta área.
   trackKpis  Boolean  @default(false)
+  // Habilita el registro semanal (ej. pedidos despachados) que se muestra en el Inicio para todos.
+  trackWeeklyMetric Boolean @default(false)
   createdAt  DateTime @default(now())
 
   users        User[]
@@ -50,6 +52,7 @@ model Department {
   leaders      User[]      @relation("DeptLeader")
   positions    Position[]
   financeKpis  FinanceKpiRecord[]
+  weeklyMetrics WeeklyMetricRecord[]
 
   @@index([order])
 }
@@ -308,5 +311,22 @@ model FinanceKpiRecord {
   updatedAt DateTime @updatedAt
 
   @@unique([deptId, period])
+  @@index([deptId])
+}
+
+/* ---------------- Métrica semanal (ej. pedidos despachados de Fulfillment) ---------------- */
+model WeeklyMetricRecord {
+  id         String     @id @default(cuid())
+  deptId     String
+  department Department @relation(fields: [deptId], references: [id], onDelete: Cascade)
+
+  // Semana ISO, formato "YYYY-Www" (lo que entrega <input type="week">)
+  week  String
+  value Int
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([deptId, week])
   @@index([deptId])
 }
