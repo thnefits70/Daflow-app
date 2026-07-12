@@ -68,15 +68,18 @@ export function EmployeeHome({
             <div className="text-[11.5px] text-[#B9C2CC] mt-0.5">Exámenes que has rendido</div>
           </div>
         </div>
-        {weeklyTrend && (
+      </div>
+
+      {weeklyTrend && (
+        <div className="bg-surface border border-rule rounded-lg p-6 mb-7">
           <WeeklyTrendChart
             label="Pedidos despachados"
             deptName={weeklyTrend.deptName}
             points={weeklyTrend.points}
             weeklyGoal={6000}
           />
-        )}
-      </div>
+        </div>
+      )}
 
       <h3 className="text-[14px] font-semibold mb-2.5">Accesos rápidos</h3>
       <div className="grid grid-cols-2 gap-3 mb-7">
