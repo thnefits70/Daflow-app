@@ -8,7 +8,7 @@ export default async function DeptWorkspacePage({ params }: { params: Promise<{ 
   const dept = await prisma.department.findUnique({ where: { id } });
   if (!dept) notFound();
 
-  const [processes, documents, exams, kpiRecords, weeklyMetricRecords] = await Promise.all([
+  const [processes, documents, exams, kpiRecords, weeklyMetricRecords, weeklyReviewRecords] = await Promise.all([
     prisma.process.findMany({
       where: { deptId: id },
       orderBy: { createdAt: "asc" },
@@ -25,6 +25,9 @@ export default async function DeptWorkspacePage({ params }: { params: Promise<{ 
       : Promise.resolve([]),
     dept.trackWeeklyMetric
       ? prisma.weeklyMetricRecord.findMany({ where: { deptId: id }, orderBy: { week: "asc" } })
+      : Promise.resolve([]),
+    dept.trackWeeklyReview
+      ? prisma.weeklyReviewRecord.findMany({ where: { deptId: id }, orderBy: { week: "asc" } })
       : Promise.resolve([]),
   ]);
 
@@ -63,6 +66,14 @@ export default async function DeptWorkspacePage({ params }: { params: Promise<{ 
         }))}
         trackWeeklyMetric={dept.trackWeeklyMetric}
         weeklyMetricRecords={weeklyMetricRecords.map((w) => ({ id: w.id, week: w.week, value: w.value }))}
+        trackWeeklyReview={dept.trackWeeklyReview}
+        weeklyReviewRecords={weeklyReviewRecords.map((w) => ({
+          id: w.id,
+          week: w.week,
+          problem: w.problem,
+          actionPlan: w.actionPlan,
+          status: w.status,
+        }))}
         editable
       />
     </div>

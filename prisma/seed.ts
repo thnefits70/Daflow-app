@@ -31,10 +31,11 @@ async function main() {
     const d = DEFAULT_DEPARTMENTS[i];
     const trackKpis = d.code === "FIN";
     const trackWeeklyMetric = d.code === "FUL";
+    const trackWeeklyReview = d.code === "MKT";
     await prisma.department.upsert({
       where: { code: d.code },
-      update: { trackKpis, trackWeeklyMetric },
-      create: { name: d.name, code: d.code, order: i, trackKpis, trackWeeklyMetric },
+      update: { trackKpis, trackWeeklyMetric, trackWeeklyReview },
+      create: { name: d.name, code: d.code, order: i, trackKpis, trackWeeklyMetric, trackWeeklyReview },
     });
   }
 

@@ -11,7 +11,7 @@ export default async function WorkspacePage() {
   const dept = await prisma.department.findUnique({ where: { id: session.user.deptId } });
   if (!dept) redirect("/api/auth/force-logout");
 
-  const [processes, documents, exams, kpiRecords, weeklyMetricRecords, currentUser] = await Promise.all([
+  const [processes, documents, exams, kpiRecords, weeklyMetricRecords, weeklyReviewRecords, currentUser] = await Promise.all([
     prisma.process.findMany({
       where: { deptId: dept.id },
       orderBy: { createdAt: "asc" },
@@ -28,6 +28,9 @@ export default async function WorkspacePage() {
       : Promise.resolve([]),
     dept.trackWeeklyMetric
       ? prisma.weeklyMetricRecord.findMany({ where: { deptId: dept.id }, orderBy: { week: "asc" } })
+      : Promise.resolve([]),
+    dept.trackWeeklyReview
+      ? prisma.weeklyReviewRecord.findMany({ where: { deptId: dept.id }, orderBy: { week: "asc" } })
       : Promise.resolve([]),
     prisma.user.findUnique({ where: { id: session.user.id }, select: { isLeader: true, leadsDeptId: true } }),
   ]);
@@ -69,6 +72,14 @@ export default async function WorkspacePage() {
         }))}
         trackWeeklyMetric={dept.trackWeeklyMetric}
         weeklyMetricRecords={weeklyMetricRecords.map((w) => ({ id: w.id, week: w.week, value: w.value }))}
+        trackWeeklyReview={dept.trackWeeklyReview}
+        weeklyReviewRecords={weeklyReviewRecords.map((w) => ({
+          id: w.id,
+          week: w.week,
+          problem: w.problem,
+          actionPlan: w.actionPlan,
+          status: w.status,
+        }))}
         editable={false}
         kpisEditable={kpisEditable}
       />

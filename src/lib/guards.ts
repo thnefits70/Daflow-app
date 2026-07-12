@@ -23,6 +23,16 @@ export async function canEditDeptKpis(deptId: string) {
   return false;
 }
 
+// The weekly review log (admin-leader meeting notes) can be viewed by admin
+// or anyone in that specific department, but only admin can write to it —
+// checked separately at the route level with requireAdminSession().
+export async function canViewDeptReview(deptId: string) {
+  const session = await auth();
+  if (!session) return false;
+  if (session.user.role === "admin") return true;
+  return session.user.deptId === deptId;
+}
+
 // Admin can always write to "Leyes y Reglamentos" (company-wide); an employee
 // only if explicitly granted via User.canManageLaws. Neither can delete —
 // that stays admin-only, checked separately.

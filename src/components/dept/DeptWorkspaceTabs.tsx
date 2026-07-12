@@ -1,12 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { GitBranch, FileText, GraduationCap, LineChart, TrendingUp } from "lucide-react";
+import { GitBranch, FileText, GraduationCap, LineChart, TrendingUp, MessageSquare } from "lucide-react";
 import { ProcessListPanel } from "@/components/process/ProcessListPanel";
 import { DocumentsPanel } from "@/components/documents/DocumentsPanel";
 import { ExamsPanel } from "@/components/exams/ExamsPanel";
 import { FinanceKpiPanel, type FinanceKpiDTO } from "@/components/finance/FinanceKpiPanel";
 import { WeeklyMetricPanel, type WeeklyMetricDTO } from "@/components/fulfillment/WeeklyMetricPanel";
+import { WeeklyReviewPanel, type WeeklyReviewDTO } from "@/components/marketanalysis/WeeklyReviewPanel";
 
 type ProcessSummary = { id: string; title: string; description: string; stepCount: number; checklistCount: number };
 type DocumentDTO = { id: string; title: string; content: string; link: string; fileUrl: string | null; fileName: string | null };
@@ -18,6 +19,7 @@ const ALL_TABS = [
   { key: "examenes", label: "Exámenes", icon: GraduationCap },
   { key: "kpis", label: "KPIs financieros", icon: LineChart },
   { key: "semanal", label: "Pedidos despachados", icon: TrendingUp },
+  { key: "feedback", label: "Feedback semanal", icon: MessageSquare },
 ] as const;
 
 type TabKey = (typeof ALL_TABS)[number]["key"];
@@ -32,6 +34,8 @@ export function DeptWorkspaceTabs({
   kpiRecords = [],
   trackWeeklyMetric = false,
   weeklyMetricRecords = [],
+  trackWeeklyReview = false,
+  weeklyReviewRecords = [],
   editable,
   kpisEditable,
 }: {
@@ -44,6 +48,8 @@ export function DeptWorkspaceTabs({
   kpiRecords?: FinanceKpiDTO[];
   trackWeeklyMetric?: boolean;
   weeklyMetricRecords?: WeeklyMetricDTO[];
+  trackWeeklyReview?: boolean;
+  weeklyReviewRecords?: WeeklyReviewDTO[];
   editable: boolean;
   kpisEditable?: boolean;
 }) {
@@ -51,6 +57,7 @@ export function DeptWorkspaceTabs({
   const tabs = ALL_TABS.filter((t) => {
     if (t.key === "kpis") return trackKpis;
     if (t.key === "semanal") return trackWeeklyMetric;
+    if (t.key === "feedback") return trackWeeklyReview;
     return true;
   });
 
@@ -86,6 +93,9 @@ export function DeptWorkspaceTabs({
           editable={kpisEditable ?? editable}
           label="Pedidos despachados"
         />
+      )}
+      {tab === "feedback" && trackWeeklyReview && (
+        <WeeklyReviewPanel deptId={deptId} records={weeklyReviewRecords} editable={editable} />
       )}
     </div>
   );

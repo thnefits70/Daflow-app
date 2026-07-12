@@ -43,6 +43,9 @@ model Department {
   trackKpis  Boolean  @default(false)
   // Habilita el registro semanal (ej. pedidos despachados) que se muestra en el Inicio para todos.
   trackWeeklyMetric Boolean @default(false)
+  // Habilita la bitácora de feedback semanal (reunión admin-líder): problemas y plan de acción.
+  // Solo el admin puede escribir en ella; el área solo puede verla.
+  trackWeeklyReview Boolean @default(false)
   createdAt  DateTime @default(now())
 
   users        User[]
@@ -53,6 +56,7 @@ model Department {
   positions    Position[]
   financeKpis  FinanceKpiRecord[]
   weeklyMetrics WeeklyMetricRecord[]
+  weeklyReviews WeeklyReviewRecord[]
 
   @@index([order])
 }
@@ -328,5 +332,29 @@ model WeeklyMetricRecord {
   updatedAt DateTime @updatedAt
 
   @@unique([deptId, week])
+  @@index([deptId])
+}
+
+enum ReviewStatus {
+  PENDING
+  RESOLVED
+  REJECTED
+}
+
+/* ---------------- Feedback semanal (reunión admin-líder: problemas y plan de acción) ---------------- */
+model WeeklyReviewRecord {
+  id         String     @id @default(cuid())
+  deptId     String
+  department Department @relation(fields: [deptId], references: [id], onDelete: Cascade)
+
+  // Semana ISO, formato "YYYY-Www" (lo que entrega <input type="week">)
+  week       String
+  problem    String
+  actionPlan String
+  status     ReviewStatus @default(PENDING)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@index([deptId])
 }
