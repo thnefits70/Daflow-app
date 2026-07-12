@@ -60,8 +60,9 @@ export function WeeklyTrendChart({
   const innerW = width - padL - padR;
   const innerH = height - padT - padB;
 
-  const dataMax = Math.max(...points.map((p) => p.value), weeklyGoal ?? 0);
-  const yMax = niceMax(dataMax * 1.08);
+  const rawMax = Math.max(...points.map((p) => p.value), 0);
+  const yMax =
+    weeklyGoal && rawMax <= weeklyGoal ? weeklyGoal : niceMax(Math.max(rawMax, weeklyGoal ?? 0) * 1.08);
   const yTicks = 4;
 
   const stepX = points.length > 1 ? innerW / (points.length - 1) : 0;
@@ -76,7 +77,8 @@ export function WeeklyTrendChart({
 
   const goalPct = weeklyGoal ? Math.round((latest.value / weeklyGoal) * 100) : null;
   const status = goalPct !== null ? goalStatus(goalPct) : null;
-  const goalY = weeklyGoal ? padT + innerH - (weeklyGoal / yMax) * innerH : null;
+  const goalYRaw = weeklyGoal ? padT + innerH - (weeklyGoal / yMax) * innerH : null;
+  const goalY = goalYRaw !== null && goalYRaw > padT + 4 ? goalYRaw : null;
 
   const tickEvery = Math.max(1, Math.ceil(points.length / 12));
 
