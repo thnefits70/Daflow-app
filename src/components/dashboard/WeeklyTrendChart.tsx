@@ -5,14 +5,22 @@ function formatWeekShort(week: string) {
   return `S${Number(w)}`;
 }
 
+function goalStatus(pct: number) {
+  if (pct >= 100) return { label: "Excelente", color: "#14C7C7" };
+  if (pct >= 80) return { label: "Eficiente", color: "#1E5EFF" };
+  return { label: "No eficiente", color: "#C4453A" };
+}
+
 export function WeeklyTrendChart({
   label,
   deptName,
   points,
+  weeklyGoal,
 }: {
   label: string;
   deptName: string;
   points: WeeklyPoint[];
+  weeklyGoal?: number;
 }) {
   if (points.length === 0) return null;
 
@@ -32,6 +40,9 @@ export function WeeklyTrendChart({
 
   const linePath = coords.map((c, i) => `${i === 0 ? "M" : "L"}${c.x.toFixed(1)},${c.y.toFixed(1)}`).join(" ");
   const areaPath = `${linePath} L${width},${height} L0,${height} Z`;
+
+  const goalPct = weeklyGoal ? Math.round((latest.value / weeklyGoal) * 100) : null;
+  const status = goalPct !== null ? goalStatus(goalPct) : null;
 
   return (
     <div>
@@ -59,6 +70,19 @@ export function WeeklyTrendChart({
           )}
         </svg>
       </div>
+      {status && goalPct !== null && (
+        <div className="mt-2.5 flex items-center gap-2">
+          <span
+            className="font-mono text-[10px] font-semibold tracking-wider px-2.5 py-0.5 rounded-full"
+            style={{ color: status.color, border: `1px solid ${status.color}`, background: `${status.color}1a` }}
+          >
+            {status.label}
+          </span>
+          <span className="text-[11px] text-[#B9C2CC]">
+            {goalPct}% de la meta semanal ({weeklyGoal!.toLocaleString("es-MX")})
+          </span>
+        </div>
+      )}
     </div>
   );
 }
