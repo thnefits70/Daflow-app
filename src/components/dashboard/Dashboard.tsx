@@ -22,16 +22,14 @@ export function Dashboard({
 
   return (
     <div>
+      {bannerUrl && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={bannerUrl} alt="" className="h-10 w-auto object-contain mb-4" />
+      )}
       <div className="font-mono text-[10.5px] tracking-[.14em] uppercase text-steel">Resumen general</div>
       <h2 className="font-display text-[24px] mt-0.5 mb-6">Inicio</h2>
 
       <div className="relative overflow-hidden bg-navy rounded-lg p-6 mb-7 flex flex-wrap items-center gap-8">
-        {bannerUrl && (
-          <div className="absolute top-3.5 right-4 bg-white/95 rounded-md px-3 py-2.5 shadow-sm">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={bannerUrl} alt="" className="h-9 w-auto object-contain" />
-          </div>
-        )}
         <div>
           <div className="text-[11px] font-semibold tracking-wide uppercase text-[#B9C2CC] mb-2 text-center">
             Nivel de conocimiento
