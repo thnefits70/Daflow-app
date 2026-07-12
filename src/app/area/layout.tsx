@@ -99,6 +99,7 @@ export default async function AreaLayout({ children }: { children: React.ReactNo
       deptName={dept.name}
       userName={session.user.name ?? ""}
       logoUrl={settings?.logoUrl}
+      bannerUrl={settings?.bannerUrl}
       pendingUpdates={pendingUpdates}
       activeProcess={activeProcess}
       snoozeUntil={snoozeUntil}

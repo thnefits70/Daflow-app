@@ -187,8 +187,8 @@ export function SettingsPanel({
             )}
           </div>
           <div className="text-[12px] text-steel leading-relaxed">
-            Se muestra como marca de agua discreta en la esquina de la tarjeta de Inicio, tanto para
-            administrador como para el equipo.
+            Se muestra centrado en la parte superior de todas las secciones de la plataforma (Inicio, áreas,
+            nómina, leyes, etc.), tanto para administrador como para el equipo. No aparece en Configuración.
           </div>
         </div>
         <label className="inline-flex items-center gap-1.5 text-[13px] font-semibold border border-blue bg-blue text-white rounded px-3.5 py-2 cursor-pointer">

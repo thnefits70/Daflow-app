@@ -11,21 +11,15 @@ function barColor(score: number) {
 
 export function Dashboard({
   data,
-  bannerUrl,
   weeklyTrend,
 }: {
   data: DashboardData;
-  bannerUrl?: string | null;
   weeklyTrend?: WeeklyTrend;
 }) {
   const { rows, rowsSorted, totalAttempts, overallAvg } = data;
 
   return (
     <div>
-      {bannerUrl && (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={bannerUrl} alt="" className="h-10 w-auto object-contain mb-4" />
-      )}
       <div className="font-mono text-[10.5px] tracking-[.14em] uppercase text-steel">Resumen general</div>
       <h2 className="font-display text-[24px] mt-0.5 mb-6">Inicio</h2>
 

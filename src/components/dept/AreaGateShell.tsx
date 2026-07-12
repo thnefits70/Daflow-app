@@ -5,6 +5,7 @@ import { useState } from "react";
 import { LogOut } from "lucide-react";
 import { BrandMark } from "@/components/brand/DaflowMark";
 import { EmployeeSidebar } from "@/components/shell/EmployeeSidebar";
+import { TopBanner } from "@/components/shell/TopBanner";
 import { UpdateGate } from "@/components/dept/UpdateGate";
 import { LeaderBanner } from "@/components/dept/LeaderBanner";
 import { signOut } from "next-auth/react";
@@ -18,6 +19,7 @@ export function AreaGateShell({
   deptName,
   userName,
   logoUrl,
+  bannerUrl,
   pendingUpdates,
   activeProcess,
   snoozeUntil,
@@ -28,6 +30,7 @@ export function AreaGateShell({
   deptName: string;
   userName: string;
   logoUrl: string | null | undefined;
+  bannerUrl?: string | null;
   pendingUpdates: PendingUpdate[];
   activeProcess: ProcessDTO | null;
   snoozeUntil: string | null;
@@ -86,6 +89,7 @@ export function AreaGateShell({
     <div className="flex h-screen min-h-0">
       <EmployeeSidebar deptName={deptName} userName={userName} logoUrl={logoUrl} />
       <main className="flex-1 overflow-y-auto bg-bg p-9">
+        <TopBanner bannerUrl={bannerUrl} />
         {ledDeptName && <LeaderBanner deptName={ledDeptName} alerts={leaderAlerts} />}
         {children}
       </main>
