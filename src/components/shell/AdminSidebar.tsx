@@ -21,6 +21,10 @@ type Department = { id: string; name: string; code: string };
 
 const NAV_ITEM =
   "flex items-center gap-2.5 px-4.5 py-2.5 text-[13.5px] rounded-none border-l-[3px] border-transparent cursor-pointer overflow-hidden whitespace-nowrap text-ellipsis";
+// Department rows can have long names, so they wrap onto up to two lines instead of
+// truncating — laid out top-aligned since the row height now varies.
+const NAV_ITEM_DEPT =
+  "flex items-start gap-2.5 px-4.5 py-2.5 text-[13.5px] rounded-none border-l-[3px] border-transparent cursor-pointer";
 const NAV_ACTIVE = "bg-blue/15 border-blue text-white";
 const NAV_INACTIVE = "text-[#C9CFC5] hover:bg-white/[.06] hover:text-white";
 
@@ -86,10 +90,10 @@ export function AdminSidebar({
           <Link
             key={d.id}
             href={`/admin/dept/${d.id}`}
-            className={`${NAV_ITEM} ${pathname.startsWith(`/admin/dept/${d.id}`) ? NAV_ACTIVE : NAV_INACTIVE}`}
+            className={`${NAV_ITEM_DEPT} ${pathname.startsWith(`/admin/dept/${d.id}`) ? NAV_ACTIVE : NAV_INACTIVE}`}
           >
-            <Sparkles size={15} className="shrink-0" />
-            <span className="overflow-hidden text-ellipsis">{d.name}</span>
+            <Sparkles size={15} className="shrink-0 mt-0.5" />
+            <span className="leading-snug line-clamp-2 break-words">{d.name}</span>
           </Link>
         ))}
 
@@ -116,12 +120,14 @@ export function AdminSidebar({
           >
             <Link
               href={`/admin/dept/${d.id}`}
-              className={`${NAV_ITEM} cursor-grab ${pathname.startsWith(`/admin/dept/${d.id}`) ? NAV_ACTIVE : NAV_INACTIVE}`}
+              className={`${NAV_ITEM_DEPT} cursor-grab ${pathname.startsWith(`/admin/dept/${d.id}`) ? NAV_ACTIVE : NAV_INACTIVE}`}
             >
-              <GripVertical size={13} className="opacity-50 shrink-0" />
-              <Building2 size={15} className="shrink-0" />
-              <span className="overflow-hidden text-ellipsis">{d.name}</span>
-              <span className="font-mono text-[10px] opacity-65 shrink-0">· {d.code}</span>
+              <GripVertical size={13} className="opacity-50 shrink-0 mt-1" />
+              <Building2 size={15} className="shrink-0 mt-0.5" />
+              <span className="min-w-0">
+                <span className="block leading-snug line-clamp-2 break-words">{d.name}</span>
+                <span className="block font-mono text-[10px] opacity-65 mt-0.5">{d.code}</span>
+              </span>
             </Link>
           </div>
         ))}
