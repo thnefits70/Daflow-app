@@ -31,7 +31,7 @@ async function main() {
     const d = DEFAULT_DEPARTMENTS[i];
     const trackKpis = d.code === "FIN";
     const trackWeeklyMetric = d.code === "FUL";
-    const trackWeeklyReview = d.code === "MKT";
+    const trackWeeklyReview = ["MKT", "COM", "DIS", "INV", "FIN"].includes(d.code);
     await prisma.department.upsert({
       where: { code: d.code },
       update: { trackKpis, trackWeeklyMetric, trackWeeklyReview },
