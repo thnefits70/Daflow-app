@@ -6,6 +6,7 @@ import Link from "next/link";
 import {
   ArrowLeft, Upload, X, Download, Plus, Trash2, KeyRound,
   User, Building2, Briefcase, Mail, Phone, Calendar, Award, FileText, Truck,
+  Copy, Check, RefreshCw,
 } from "lucide-react";
 import { PositionPicker } from "@/components/users/PositionPicker";
 
@@ -37,6 +38,14 @@ type UserProfile = {
 
 function pct(a: number, b: number) {
   return b === 0 ? 0 : Math.round((a / b) * 100);
+}
+
+// Avoids visually ambiguous characters (0/O, 1/l/I) so it's easy to read back over the phone.
+function generatePassword() {
+  const chars = "ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
+  let out = "";
+  for (let i = 0; i < 8; i++) out += chars[Math.floor(Math.random() * chars.length)];
+  return out;
 }
 
 function cvKind(cvUrl: string | null, cvName: string | null): "pdf" | "image" | "other" {
@@ -72,6 +81,8 @@ export function ProfileDetail({
   const [skillInput, setSkillInput] = useState("");
   const [resetting, setResetting] = useState(false);
   const [newPassword, setNewPassword] = useState("");
+  const [passwordSaved, setPasswordSaved] = useState(false);
+  const [copiedField, setCopiedField] = useState<"username" | "password" | null>(null);
   const [mTitle, setMTitle] = useState("");
   const [mNote, setMNote] = useState("");
   const [deleting, setDeleting] = useState(false);
@@ -128,6 +139,12 @@ export function ProfileDetail({
   };
   const removeSkill = (s: string) => save({ skills: p.skills.filter((x) => x !== s) });
 
+  const startResetting = () => {
+    setNewPassword(generatePassword());
+    setResetting(true);
+    setPasswordSaved(false);
+  };
+
   const savePassword = async () => {
     if (!newPassword.trim()) return;
     setBusy(true);
@@ -137,8 +154,20 @@ export function ProfileDetail({
       body: JSON.stringify({ password: newPassword.trim() }),
     });
     setBusy(false);
+    setPasswordSaved(true);
+  };
+
+  const closePasswordReset = () => {
     setResetting(false);
+    setPasswordSaved(false);
     setNewPassword("");
+  };
+
+  const copyToClipboard = (text: string, field: "username" | "password") => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopiedField(field);
+      setTimeout(() => setCopiedField(null), 1500);
+    });
   };
 
   const addMilestone = async () => {
@@ -244,6 +273,14 @@ export function ProfileDetail({
               onChange={(e) => setP({ ...p, username: e.target.value })}
               onBlur={(e) => save({ username: e.target.value.trim().toLowerCase() })}
             />
+            <button
+              type="button"
+              className="text-steel hover:text-ink cursor-pointer"
+              title="Copiar usuario"
+              onClick={() => copyToClipboard(p.username, "username")}
+            >
+              {copiedField === "username" ? <Check size={13} className="text-green" /> : <Copy size={13} />}
+            </button>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -345,19 +382,66 @@ export function ProfileDetail({
                 <KeyRound size={11} /> Contraseña
               </label>
               {resetting ? (
-                <div className="flex items-center gap-1.5">
-                  <input
-                    className="flex-1 rounded border border-rule px-2.5 py-2 text-[13px]"
-                    placeholder="Nueva contraseña"
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                  />
-                  <button type="button" disabled={busy} className="rounded border border-blue bg-blue px-3 py-2 text-[12px] font-semibold text-white cursor-pointer" onClick={savePassword}>
-                    Guardar
-                  </button>
-                </div>
+                passwordSaved ? (
+                  <div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="flex-1 rounded border border-green bg-green/10 px-2.5 py-2 text-[13px] font-mono">
+                        {newPassword}
+                      </span>
+                      <button
+                        type="button"
+                        className="text-steel hover:text-ink cursor-pointer"
+                        title="Copiar contraseña"
+                        onClick={() => copyToClipboard(newPassword, "password")}
+                      >
+                        {copiedField === "password" ? <Check size={15} className="text-green" /> : <Copy size={15} />}
+                      </button>
+                    </div>
+                    <div className="text-[11px] text-steel mt-1.5">
+                      Guardada. Cópiala y entrégasela ahora — no se podrá volver a ver después.
+                    </div>
+                    <button type="button" className="mt-1.5 text-[12px] text-blue font-semibold cursor-pointer" onClick={closePasswordReset}>
+                      Listo
+                    </button>
+                  </div>
+                ) : (
+                  <div>
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        className="flex-1 rounded border border-rule px-2.5 py-2 text-[13px] font-mono"
+                        placeholder="Nueva contraseña"
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                      />
+                      <button
+                        type="button"
+                        className="text-steel hover:text-ink cursor-pointer"
+                        title="Generar otra"
+                        onClick={() => setNewPassword(generatePassword())}
+                      >
+                        <RefreshCw size={15} />
+                      </button>
+                      <button
+                        type="button"
+                        className="text-steel hover:text-ink cursor-pointer"
+                        title="Copiar contraseña"
+                        onClick={() => copyToClipboard(newPassword, "password")}
+                      >
+                        {copiedField === "password" ? <Check size={15} className="text-green" /> : <Copy size={15} />}
+                      </button>
+                    </div>
+                    <div className="flex items-center gap-2.5 mt-1.5">
+                      <button type="button" disabled={busy} className="rounded border border-blue bg-blue px-3 py-1.5 text-[12px] font-semibold text-white cursor-pointer" onClick={savePassword}>
+                        Guardar
+                      </button>
+                      <button type="button" className="text-steel text-[12px] cursor-pointer" onClick={closePasswordReset}>
+                        Cancelar
+                      </button>
+                    </div>
+                  </div>
+                )
               ) : (
-                <button type="button" className="text-[12.5px] text-steel hover:text-ink cursor-pointer underline underline-offset-2" onClick={() => setResetting(true)}>
+                <button type="button" className="text-[12.5px] text-steel hover:text-ink cursor-pointer underline underline-offset-2" onClick={startResetting}>
                   Restablecer contraseña
                 </button>
               )}
