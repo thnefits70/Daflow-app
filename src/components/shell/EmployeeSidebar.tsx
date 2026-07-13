@@ -3,17 +3,21 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
-import { LayoutDashboard, ClipboardList, Scale, LogOut } from "lucide-react";
+import { LayoutDashboard, ClipboardList, Scale, LogOut, Truck } from "lucide-react";
 import { BrandMark } from "@/components/brand/DaflowMark";
 
 export function EmployeeSidebar({
   deptName,
   userName,
   logoUrl,
+  showSuppliers = false,
+  pendingSuppliersCount = 0,
 }: {
   deptName: string;
   userName: string;
   logoUrl?: string | null;
+  showSuppliers?: boolean;
+  pendingSuppliersCount?: number;
 }) {
   const pathname = usePathname();
   const NAV_ITEM =
@@ -43,6 +47,16 @@ export function EmployeeSidebar({
         <Link href="/area/leyes" className={`${NAV_ITEM} ${pathname.startsWith("/area/leyes") ? NAV_ACTIVE : NAV_INACTIVE}`}>
           <Scale size={15} /> Leyes y Reglamentos
         </Link>
+        {showSuppliers && (
+          <Link href="/area/proveedores" className={`${NAV_ITEM} ${pathname.startsWith("/area/proveedores") ? NAV_ACTIVE : NAV_INACTIVE}`}>
+            <Truck size={15} /> Proveedores
+            {pendingSuppliersCount > 0 && (
+              <span className="ml-auto font-mono text-[10px] font-semibold bg-red/20 text-red rounded-full px-1.5 py-0.5">
+                {pendingSuppliersCount}
+              </span>
+            )}
+          </Link>
+        )}
       </div>
 
       <div className="px-4.5 py-3.5 border-t border-white/10">

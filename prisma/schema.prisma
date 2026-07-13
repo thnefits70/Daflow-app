@@ -97,6 +97,9 @@ model User {
   // Puede crear/editar documentos en "Leyes y Reglamentos" (visibles para toda la empresa), pero no eliminarlos.
   canManageLaws Boolean @default(false)
 
+  // Puede proponer proveedores nuevos (quedan "Pendiente" hasta que su líder los apruebe). No puede editar ni eliminar.
+  canAddSuppliers Boolean @default(false)
+
   snoozeUntil DateTime?
 
   createdAt DateTime @default(now())
@@ -105,6 +108,8 @@ model User {
   examScores    ExamScore[]
   milestones    Milestone[]
   ackUpdates    UserAckUpdate[]
+  suppliersCreated  Supplier[] @relation("SupplierCreatedBy")
+  suppliersApproved Supplier[] @relation("SupplierApprovedBy")
 
   @@index([deptId])
   @@index([leadsDeptId])
@@ -357,4 +362,54 @@ model WeeklyReviewRecord {
   updatedAt DateTime @updatedAt
 
   @@index([deptId])
+}
+
+enum SupplierStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+/* ---------------- Proveedores (directorio con aprobación del líder) ---------------- */
+model Supplier {
+  id          String  @id @default(cuid())
+  name        String
+  contactName String?
+  location    String?
+  category    String?
+  notes       String?
+
+  status       SupplierStatus @default(PENDING)
+  rejectReason String?
+
+  // Quién lo propuso y en qué área estaba en ese momento — se guarda aparte del
+  // usuario para que la aprobación siga funcionando aunque luego se elimine o se
+  // cambie de área a quien lo creó. Null cuando lo crea el admin directamente.
+  createdById     String?
+  createdBy       User?   @relation("SupplierCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdByDeptId String?
+
+  approvedById String?
+  approvedBy   User?     @relation("SupplierApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  approvedAt   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  contacts SupplierContact[]
+
+  @@index([status])
+  @@index([createdByDeptId])
+}
+
+model SupplierContact {
+  id         String   @id @default(cuid())
+  supplierId String
+  supplier   Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+
+  // Ej. "Asesor Juan", "Ventas" — a quién corresponde este WhatsApp dentro de la empresa
+  label    String
+  whatsapp String
+
+  @@index([supplierId])
 }

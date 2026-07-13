@@ -54,3 +54,52 @@ export async function canWriteLaws() {
   });
   return !!user?.canManageLaws;
 }
+
+// Departments that work directly with suppliers get to browse the approved
+// directory. Admin always sees it all.
+export const SUPPLIER_VIEW_DEPT_CODES = ["COM", "MKT"];
+
+export async function getSupplierAccess() {
+  const session = await auth();
+  if (!session) return { canView: false, canAdd: false, isLeader: false, leadsDeptId: null as string | null };
+  if (session.user.role === "admin") return { canView: true, canAdd: true, isLeader: false, leadsDeptId: null };
+
+  const user = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { canAddSuppliers: true, isLeader: true, leadsDeptId: true, department: { select: { code: true } } },
+  });
+  if (!user) return { canView: false, canAdd: false, isLeader: false, leadsDeptId: null };
+
+  const inSupplierDept = !!user.department && SUPPLIER_VIEW_DEPT_CODES.includes(user.department.code);
+  return {
+    canView: inSupplierDept || user.canAddSuppliers || user.isLeader,
+    canAdd: user.canAddSuppliers,
+    isLeader: user.isLeader,
+    leadsDeptId: user.leadsDeptId,
+  };
+}
+
+// Admin can add a supplier (auto-approved) or review any pending one; an
+// employee can only propose one (stays "Pendiente") if explicitly granted
+// via User.canAddSuppliers — never edit or delete.
+export async function canAddSupplier() {
+  const session = await auth();
+  if (!session) return false;
+  if (session.user.role === "admin") return true;
+  const user = await prisma.user.findUnique({ where: { id: session.user.id }, select: { canAddSuppliers: true } });
+  return !!user?.canAddSuppliers;
+}
+
+// A pending supplier can be approved/rejected by admin, or by whoever leads
+// the department the submitter belonged to when they proposed it.
+export async function canReviewSupplier(createdByDeptId: string | null) {
+  const session = await auth();
+  if (!session) return false;
+  if (session.user.role === "admin") return true;
+  if (!createdByDeptId) return false;
+  const user = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { isLeader: true, leadsDeptId: true },
+  });
+  return !!user?.isLeader && user.leadsDeptId === createdByDeptId;
+}

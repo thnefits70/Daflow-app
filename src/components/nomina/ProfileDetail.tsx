@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   ArrowLeft, Upload, X, Download, Plus, Trash2, KeyRound,
-  User, Building2, Briefcase, Mail, Phone, Calendar, Award, FileText,
+  User, Building2, Briefcase, Mail, Phone, Calendar, Award, FileText, Truck,
 } from "lucide-react";
 import { PositionPicker } from "@/components/users/PositionPicker";
 
@@ -30,6 +30,7 @@ type UserProfile = {
   isLeader: boolean;
   leadsDeptId: string | null;
   canManageLaws: boolean;
+  canAddSuppliers: boolean;
   milestones: Milestone[];
   examScores: ExamScore[];
 };
@@ -417,6 +418,32 @@ export function ProfileDetail({
                 type="button"
                 className={`flex-1 py-1.5 text-[12.5px] font-semibold cursor-pointer ${!p.canManageLaws ? "bg-blue text-white" : "bg-surface text-steel"}`}
                 onClick={() => save({ canManageLaws: false })}
+              >
+                No
+              </button>
+            </div>
+          </div>
+
+          <div className="bg-cloud border border-rule rounded p-3.5 mt-3.5">
+            <label className="flex items-center gap-1 mb-2 text-[10.5px] font-semibold uppercase tracking-wide text-steel">
+              <Truck size={11} /> ¿Puede agregar proveedores?
+            </label>
+            <div className="text-[11px] text-steel mb-2">
+              Puede proponer proveedores nuevos, que quedan &quot;Pendiente&quot; hasta que su líder los apruebe. No
+              puede editar ni eliminar.
+            </div>
+            <div className="flex border border-rule rounded overflow-hidden max-w-[220px]">
+              <button
+                type="button"
+                className={`flex-1 py-1.5 text-[12.5px] font-semibold cursor-pointer ${p.canAddSuppliers ? "bg-blue text-white" : "bg-surface text-steel"}`}
+                onClick={() => save({ canAddSuppliers: true })}
+              >
+                Sí
+              </button>
+              <button
+                type="button"
+                className={`flex-1 py-1.5 text-[12.5px] font-semibold cursor-pointer ${!p.canAddSuppliers ? "bg-blue text-white" : "bg-surface text-steel"}`}
+                onClick={() => save({ canAddSuppliers: false })}
               >
                 No
               </button>

@@ -37,6 +37,7 @@ export default async function NominaProfilePage({ params }: { params: Promise<{ 
         isLeader: user.isLeader,
         leadsDeptId: user.leadsDeptId,
         canManageLaws: user.canManageLaws,
+        canAddSuppliers: user.canAddSuppliers,
         milestones: user.milestones.map((m) => ({
           id: m.id,
           title: m.title,

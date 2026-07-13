@@ -14,6 +14,7 @@ import {
   GripVertical,
   LogOut,
   Sparkles,
+  Truck,
 } from "lucide-react";
 import { BrandMark } from "@/components/brand/DaflowMark";
 
@@ -32,10 +33,12 @@ export function AdminSidebar({
   departments,
   specialDepartments,
   logoUrl,
+  pendingSuppliersCount = 0,
 }: {
   departments: Department[];
   specialDepartments: Department[];
   logoUrl?: string | null;
+  pendingSuppliersCount?: number;
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -132,6 +135,14 @@ export function AdminSidebar({
           </div>
         ))}
 
+        <Link href="/admin/proveedores" className={`${NAV_ITEM} ${pathname.startsWith("/admin/proveedores") ? NAV_ACTIVE : NAV_INACTIVE}`}>
+          <Truck size={15} /> Proveedores
+          {pendingSuppliersCount > 0 && (
+            <span className="ml-auto font-mono text-[10px] font-semibold bg-red/20 text-red rounded-full px-1.5 py-0.5">
+              {pendingSuppliersCount}
+            </span>
+          )}
+        </Link>
         <Link href="/admin/settings" className={`${NAV_ITEM} ${pathname.startsWith("/admin/settings") ? NAV_ACTIVE : NAV_INACTIVE}`}>
           <Settings size={15} /> Configuración
         </Link>

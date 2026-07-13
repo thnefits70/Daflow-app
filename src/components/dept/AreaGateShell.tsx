@@ -25,6 +25,8 @@ export function AreaGateShell({
   snoozeUntil,
   leaderAlerts,
   ledDeptName,
+  showSuppliers = false,
+  pendingSuppliersCount = 0,
   children,
 }: {
   deptName: string;
@@ -36,6 +38,8 @@ export function AreaGateShell({
   snoozeUntil: string | null;
   leaderAlerts: LeaderAlert[];
   ledDeptName: string | null;
+  showSuppliers?: boolean;
+  pendingSuppliersCount?: number;
   children: React.ReactNode;
 }) {
   const router = useRouter();
@@ -87,7 +91,13 @@ export function AreaGateShell({
 
   return (
     <div className="flex h-screen min-h-0">
-      <EmployeeSidebar deptName={deptName} userName={userName} logoUrl={logoUrl} />
+      <EmployeeSidebar
+        deptName={deptName}
+        userName={userName}
+        logoUrl={logoUrl}
+        showSuppliers={showSuppliers}
+        pendingSuppliersCount={pendingSuppliersCount}
+      />
       <main className="flex-1 overflow-y-auto bg-bg p-9">
         <TopBanner bannerUrl={bannerUrl} />
         {ledDeptName && <LeaderBanner deptName={ledDeptName} alerts={leaderAlerts} />}

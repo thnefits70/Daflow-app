@@ -3,6 +3,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { AreaGateShell } from "@/components/dept/AreaGateShell";
 import type { ProcessDTO } from "@/components/process/ProcessEditor";
+import { SUPPLIER_VIEW_DEPT_CODES } from "@/lib/guards";
 
 export default async function AreaLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
@@ -94,6 +95,13 @@ export default async function AreaLayout({ children }: { children: React.ReactNo
     }
   }
 
+  const showSuppliers =
+    SUPPLIER_VIEW_DEPT_CODES.includes(dept.code) || currentUser.canAddSuppliers || currentUser.isLeader;
+  const pendingSuppliersCount =
+    currentUser.isLeader && currentUser.leadsDeptId
+      ? await prisma.supplier.count({ where: { status: "PENDING", createdByDeptId: currentUser.leadsDeptId } })
+      : 0;
+
   return (
     <AreaGateShell
       deptName={dept.name}
@@ -105,6 +113,8 @@ export default async function AreaLayout({ children }: { children: React.ReactNo
       snoozeUntil={snoozeUntil}
       leaderAlerts={leaderAlerts}
       ledDeptName={ledDeptName}
+      showSuppliers={showSuppliers}
+      pendingSuppliersCount={pendingSuppliersCount}
     >
       {children}
     </AreaGateShell>
