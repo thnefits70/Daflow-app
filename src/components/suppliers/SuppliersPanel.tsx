@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, Trash2, Pencil, MessageCircle, MapPin, Tag, User, Check, X } from "lucide-react";
+import { LocationPicker } from "./LocationPicker";
 
 export type SupplierContactDTO = { id?: string; label: string; whatsapp: string };
 export type SupplierDTO = {
@@ -10,6 +11,8 @@ export type SupplierDTO = {
   name: string;
   contactName: string | null;
   location: string | null;
+  locationLat: number | null;
+  locationLng: number | null;
   category: string | null;
   notes: string | null;
   status: "PENDING" | "APPROVED" | "REJECTED";
@@ -25,7 +28,20 @@ function waLink(raw: string) {
   return `https://wa.me/${digits}`;
 }
 
-const emptyForm = { name: "", contactName: "", location: "", category: "", notes: "", contacts: [{ label: "", whatsapp: "" }] };
+function mapsLink(lat: number, lng: number) {
+  return `https://www.google.com/maps?q=${lat},${lng}`;
+}
+
+const emptyForm = {
+  name: "",
+  contactName: "",
+  location: "",
+  locationLat: null as number | null,
+  locationLng: null as number | null,
+  category: "",
+  notes: "",
+  contacts: [{ label: "", whatsapp: "" }],
+};
 
 export function SuppliersPanel({
   suppliers,
@@ -64,6 +80,8 @@ export function SuppliersPanel({
       name: s.name,
       contactName: s.contactName ?? "",
       location: s.location ?? "",
+      locationLat: s.locationLat,
+      locationLng: s.locationLng,
       category: s.category ?? "",
       notes: s.notes ?? "",
       contacts: s.contacts.length ? s.contacts.map((c) => ({ label: c.label, whatsapp: c.whatsapp })) : [{ label: "", whatsapp: "" }],
@@ -90,6 +108,8 @@ export function SuppliersPanel({
       name: form.name.trim(),
       contactName: form.contactName.trim(),
       location: form.location.trim(),
+      locationLat: form.locationLat,
+      locationLng: form.locationLng,
       category: form.category.trim(),
       notes: form.notes.trim(),
       contacts,
@@ -231,6 +251,16 @@ export function SuppliersPanel({
                   {s.category && <span className="flex items-center gap-1"><Tag size={11} /> {s.category}</span>}
                   {s.location && <span className="flex items-center gap-1"><MapPin size={11} /> {s.location}</span>}
                   {s.contactName && <span className="flex items-center gap-1"><User size={11} /> {s.contactName}</span>}
+                  {s.locationLat !== null && s.locationLng !== null && (
+                    <a
+                      href={mapsLink(s.locationLat, s.locationLng)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1 text-blue hover:underline"
+                    >
+                      <MapPin size={11} /> Ver ubicación
+                    </a>
+                  )}
                 </div>
                 {s.notes && <div className="text-[12.5px] text-ink/85 mb-2.5">{s.notes}</div>}
                 <div className="flex flex-wrap gap-2">
@@ -277,6 +307,16 @@ export function SuppliersPanel({
               <div className="flex flex-wrap gap-x-3 gap-y-1 text-[12px] text-steel mb-2">
                 {s.category && <span className="flex items-center gap-1"><Tag size={11} /> {s.category}</span>}
                 {s.location && <span className="flex items-center gap-1"><MapPin size={11} /> {s.location}</span>}
+                {s.locationLat !== null && s.locationLng !== null && (
+                  <a
+                    href={mapsLink(s.locationLat, s.locationLng)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1 text-blue hover:underline"
+                  >
+                    <MapPin size={11} /> Ver ubicación
+                  </a>
+                )}
                 <span>Propuesto por {s.createdByName ?? "—"}</span>
               </div>
               <div className="flex flex-wrap gap-2 mb-2.5">
@@ -388,11 +428,14 @@ function SupplierForm({
           />
         </div>
         <div>
-          <label className="block mb-1 text-[10.5px] font-semibold uppercase tracking-wide text-steel">Ubicación</label>
+          <label className="block mb-1 text-[10.5px] font-semibold uppercase tracking-wide text-steel">
+            Ubicación (referencia corta)
+          </label>
           <input
             className="w-full rounded border border-rule px-2.5 py-2 text-[13.5px]"
             value={form.location}
             onChange={(e) => setForm((f) => ({ ...f, location: e.target.value }))}
+            placeholder="Ej. Managua, cerca del Mercado Oriental"
           />
         </div>
         <div>
@@ -404,6 +447,17 @@ function SupplierForm({
             placeholder="Ej. empaques, mercadería China…"
           />
         </div>
+      </div>
+
+      <div className="mb-3">
+        <label className="block mb-1 text-[10.5px] font-semibold uppercase tracking-wide text-steel">
+          Marcar en el mapa (para llegar exacto)
+        </label>
+        <LocationPicker
+          lat={form.locationLat}
+          lng={form.locationLng}
+          onChange={({ lat, lng }) => setForm((f) => ({ ...f, locationLat: lat, locationLng: lng }))}
+        />
       </div>
 
       <div className="mb-3">

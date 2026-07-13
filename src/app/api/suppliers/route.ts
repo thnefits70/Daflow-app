@@ -53,6 +53,8 @@ const createSchema = z.object({
   name: z.string().trim().min(1, "El nombre del proveedor es obligatorio."),
   contactName: z.string().trim().optional(),
   location: z.string().trim().optional(),
+  locationLat: z.number().min(-90).max(90).nullable().optional(),
+  locationLng: z.number().min(-180).max(180).nullable().optional(),
   category: z.string().trim().optional(),
   notes: z.string().trim().optional(),
   contacts: z

@@ -5,6 +5,8 @@ type SupplierRow = {
   name: string;
   contactName: string | null;
   location: string | null;
+  locationLat: number | null;
+  locationLng: number | null;
   category: string | null;
   notes: string | null;
   status: "PENDING" | "APPROVED" | "REJECTED";
@@ -25,6 +27,8 @@ export function toSupplierDTO(s: SupplierRow): SupplierDTO {
     name: s.name,
     contactName: s.contactName,
     location: s.location,
+    locationLat: s.locationLat,
+    locationLng: s.locationLng,
     category: s.category,
     notes: s.notes,
     status: s.status,

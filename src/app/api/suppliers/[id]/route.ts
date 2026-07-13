@@ -12,6 +12,8 @@ const updateSchema = z.object({
   name: z.string().trim().min(1).optional(),
   contactName: z.string().trim().nullable().optional(),
   location: z.string().trim().nullable().optional(),
+  locationLat: z.number().min(-90).max(90).nullable().optional(),
+  locationLng: z.number().min(-180).max(180).nullable().optional(),
   category: z.string().trim().nullable().optional(),
   notes: z.string().trim().nullable().optional(),
   contacts: z.array(contactSchema).min(1, "Agrega al menos un contacto de WhatsApp.").optional(),
