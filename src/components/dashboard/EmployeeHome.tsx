@@ -25,6 +25,7 @@ export function EmployeeHome({
   trackKpis,
   scores,
   weeklyTrend,
+  fillRateTrend,
 }: {
   userName: string;
   deptName: string;
@@ -34,6 +35,7 @@ export function EmployeeHome({
   trackKpis: boolean;
   scores: ScoreRow[];
   weeklyTrend?: WeeklyTrend;
+  fillRateTrend?: WeeklyTrend;
 }) {
   const avg = scores.length
     ? Math.round(scores.reduce((a, s) => a + pct(s.score, s.total), 0) / scores.length)
@@ -77,6 +79,18 @@ export function EmployeeHome({
             deptName={weeklyTrend.deptName}
             points={weeklyTrend.points}
             weeklyGoal={6000}
+          />
+        </div>
+      )}
+
+      {fillRateTrend && (
+        <div className="bg-surface border border-rule rounded-lg p-6 mb-7">
+          <WeeklyTrendChart
+            label="Fill Rate"
+            deptName={fillRateTrend.deptName}
+            points={fillRateTrend.points}
+            weeklyGoal={100}
+            format="percent"
           />
         </div>
       )}

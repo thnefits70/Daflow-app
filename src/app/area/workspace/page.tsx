@@ -71,7 +71,7 @@ export default async function WorkspacePage() {
           fileName: k.fileName,
         }))}
         trackWeeklyMetric={dept.trackWeeklyMetric}
-        weeklyMetricRecords={weeklyMetricRecords.map((w) => ({ id: w.id, week: w.week, value: w.value }))}
+        weeklyMetricRecords={weeklyMetricRecords.map((w) => ({ id: w.id, week: w.week, value: w.value, notDispatched: w.notDispatched }))}
         trackWeeklyReview={dept.trackWeeklyReview && kpisEditable}
         weeklyReviewRecords={
           kpisEditable

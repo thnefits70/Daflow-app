@@ -5,6 +5,7 @@ import { canEditDeptKpis } from "@/lib/guards";
 
 const updateSchema = z.object({
   value: z.number().int().min(0),
+  notDispatched: z.number().int().min(0).nullable().optional(),
 });
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {

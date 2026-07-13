@@ -24,6 +24,7 @@ const createSchema = z.object({
   deptId: z.string().min(1),
   week: z.string().regex(weekRegex, "Formato de semana inválido."),
   value: z.number().int().min(0),
+  notDispatched: z.number().int().min(0).nullable().optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -33,15 +34,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Datos inválidos." }, { status: 400 });
   }
 
-  const { deptId, week, value } = parsed.data;
+  const { deptId, week, value, notDispatched } = parsed.data;
   if (!(await canEditDeptKpis(deptId))) {
     return NextResponse.json({ error: "No autorizado." }, { status: 403 });
   }
 
   const record = await prisma.weeklyMetricRecord.upsert({
     where: { deptId_week: { deptId, week } },
-    update: { value },
-    create: { deptId, week, value },
+    update: { value, notDispatched },
+    create: { deptId, week, value, notDispatched },
   });
   return NextResponse.json(record, { status: 201 });
 }

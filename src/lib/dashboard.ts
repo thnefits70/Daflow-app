@@ -93,3 +93,26 @@ export async function getWeeklyTrend(): Promise<WeeklyTrend> {
     points: records.map((r) => ({ week: r.week, value: r.value })),
   };
 }
+
+// Fill Rate = pedidos despachados / (despachados + no despachados) * 100 — only
+// computed for weeks where "no despachados" was actually entered.
+export async function getFillRateTrend(): Promise<WeeklyTrend> {
+  const dept = await prisma.department.findFirst({ where: { trackWeeklyMetric: true } });
+  if (!dept) return null;
+
+  const records = await prisma.weeklyMetricRecord.findMany({
+    where: { deptId: dept.id, notDispatched: { not: null } },
+    orderBy: { week: "asc" },
+  });
+  if (records.length === 0) return null;
+
+  const points = records
+    .map((r) => {
+      const total = r.value + (r.notDispatched ?? 0);
+      return total === 0 ? null : { week: r.week, value: Math.round((r.value / total) * 100) };
+    })
+    .filter((p): p is { week: string; value: number } => p !== null);
+  if (points.length === 0) return null;
+
+  return { deptName: dept.name, points };
+}

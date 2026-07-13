@@ -333,6 +333,10 @@ model WeeklyMetricRecord {
   week  String
   value Int
 
+  // Pedidos que quedaron sin despachar esa semana (opcional), usado para
+  // calcular el Fill Rate: value / (value + notDispatched) * 100.
+  notDispatched Int?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

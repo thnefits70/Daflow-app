@@ -46,15 +46,19 @@ export function WeeklyTrendChart({
   deptName,
   points,
   weeklyGoal,
+  format = "count",
 }: {
   label: string;
   deptName: string;
   points: WeeklyPoint[];
   weeklyGoal?: number;
+  format?: "count" | "percent";
 }) {
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
 
   if (points.length === 0) return null;
+
+  const fmt = (v: number) => (format === "percent" ? `${Math.round(v)}%` : v.toLocaleString("es-MX"));
 
   const latest = points[points.length - 1];
   const width = 1000;
@@ -97,9 +101,7 @@ export function WeeklyTrendChart({
             {label} · {deptName}
           </div>
           <div className="flex items-baseline gap-2.5">
-            <span className="font-display text-[32px] font-bold text-ink leading-none">
-              {latest.value.toLocaleString("es-MX")}
-            </span>
+            <span className="font-display text-[32px] font-bold text-ink leading-none">{fmt(latest.value)}</span>
             <span className="text-[12px] text-steel">{formatWeekShort(latest.week)} (última semana)</span>
           </div>
         </div>
@@ -111,9 +113,11 @@ export function WeeklyTrendChart({
             >
               {status.label}
             </span>
-            <span className="text-[12px] text-steel">
-              {goalPct}% de la meta semanal ({weeklyGoal!.toLocaleString("es-MX")})
-            </span>
+            {format !== "percent" && (
+              <span className="text-[12px] text-steel">
+                {goalPct}% de la meta semanal ({weeklyGoal!.toLocaleString("es-MX")})
+              </span>
+            )}
           </div>
         )}
       </div>
@@ -140,7 +144,7 @@ export function WeeklyTrendChart({
             <g key={i}>
               <line x1={padL} x2={width - padR} y1={y} y2={y} stroke="#24365a" strokeWidth="1" />
               <text x={padL - 10} y={y + 3} textAnchor="end" fontSize="11" fill="#92a3c0">
-                {Math.round(v).toLocaleString("es-MX")}
+                {fmt(v)}
               </text>
             </g>
           );
@@ -150,7 +154,7 @@ export function WeeklyTrendChart({
           <>
             <line x1={padL} x2={width - padR} y1={goalY} y2={goalY} stroke="#C4453A" strokeWidth="1.25" strokeDasharray="5 4" opacity="0.75" />
             <text x={width - padR} y={goalY - 6} textAnchor="end" fontSize="10.5" fill="#C4453A">
-              Meta {weeklyGoal!.toLocaleString("es-MX")}
+              Meta {fmt(weeklyGoal!)}
             </text>
           </>
         )}
@@ -224,7 +228,7 @@ export function WeeklyTrendChart({
                   {formatWeekShort(p.week)}
                 </text>
                 <text x={boxX + boxW / 2} y={boxY + 33} textAnchor="middle" fontSize="14" fontWeight="700" fill="#f1f5fb">
-                  {p.value.toLocaleString("es-MX")} pedidos
+                  {fmt(p.value)}{format !== "percent" && " pedidos"}
                 </text>
               </g>
             );

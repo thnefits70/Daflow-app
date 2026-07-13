@@ -12,9 +12,11 @@ function barColor(score: number) {
 export function Dashboard({
   data,
   weeklyTrend,
+  fillRateTrend,
 }: {
   data: DashboardData;
   weeklyTrend?: WeeklyTrend;
+  fillRateTrend?: WeeklyTrend;
 }) {
   const { rows, rowsSorted, totalAttempts, overallAvg } = data;
 
@@ -55,6 +57,18 @@ export function Dashboard({
             deptName={weeklyTrend.deptName}
             points={weeklyTrend.points}
             weeklyGoal={6000}
+          />
+        </div>
+      )}
+
+      {fillRateTrend && (
+        <div className="bg-surface border border-rule rounded-lg p-6 mb-7">
+          <WeeklyTrendChart
+            label="Fill Rate"
+            deptName={fillRateTrend.deptName}
+            points={fillRateTrend.points}
+            weeklyGoal={100}
+            format="percent"
           />
         </div>
       )}

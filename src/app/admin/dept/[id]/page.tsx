@@ -65,7 +65,7 @@ export default async function DeptWorkspacePage({ params }: { params: Promise<{ 
           fileName: k.fileName,
         }))}
         trackWeeklyMetric={dept.trackWeeklyMetric}
-        weeklyMetricRecords={weeklyMetricRecords.map((w) => ({ id: w.id, week: w.week, value: w.value }))}
+        weeklyMetricRecords={weeklyMetricRecords.map((w) => ({ id: w.id, week: w.week, value: w.value, notDispatched: w.notDispatched }))}
         trackWeeklyReview={dept.trackWeeklyReview}
         weeklyReviewRecords={weeklyReviewRecords.map((w) => ({
           id: w.id,
