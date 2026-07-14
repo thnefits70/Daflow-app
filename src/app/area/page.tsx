@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { getWeeklyTrend, getFillRateTrend } from "@/lib/dashboard";
+import { getWeeklyTrend, getFillRateTrend, getDashboardData } from "@/lib/dashboard";
 import { EmployeeHome } from "@/components/dashboard/EmployeeHome";
 
 export default async function AreaHomePage() {
@@ -9,7 +9,7 @@ export default async function AreaHomePage() {
   if (!session?.user.deptId) redirect("/login");
 
   const deptId = session.user.deptId;
-  const [dept, procs, docs, examCount, scores, weeklyTrend, fillRateTrend] = await Promise.all([
+  const [dept, procs, docs, examCount, scores, weeklyTrend, fillRateTrend, dashboardData] = await Promise.all([
     prisma.department.findUnique({ where: { id: deptId } }),
     prisma.process.count({ where: { deptId } }),
     prisma.document.count({ where: { deptId } }),
@@ -21,6 +21,7 @@ export default async function AreaHomePage() {
     }),
     getWeeklyTrend(),
     getFillRateTrend(),
+    getDashboardData(),
   ]);
   if (!dept) redirect("/api/auth/force-logout");
 
@@ -34,6 +35,7 @@ export default async function AreaHomePage() {
       trackKpis={dept.trackKpis}
       weeklyTrend={weeklyTrend}
       fillRateTrend={fillRateTrend}
+      rowsSorted={dashboardData.rowsSorted}
       scores={scores.map((s) => ({
         id: s.id,
         examTitle: s.exam.title,

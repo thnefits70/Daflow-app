@@ -2,7 +2,8 @@ import Link from "next/link";
 import { GitBranch, FileText, GraduationCap, Scale, ClipboardList, LineChart } from "lucide-react";
 import { ScoreGauge } from "./ScoreGauge";
 import { WeeklyTrendChart } from "./WeeklyTrendChart";
-import type { WeeklyTrend } from "@/lib/dashboard";
+import { OrgChart } from "./OrgChart";
+import type { DashboardRow, WeeklyTrend } from "@/lib/dashboard";
 
 type ScoreRow = { id: string; examTitle: string; score: number; total: number; createdAt: string };
 
@@ -26,6 +27,7 @@ export function EmployeeHome({
   scores,
   weeklyTrend,
   fillRateTrend,
+  rowsSorted,
 }: {
   userName: string;
   deptName: string;
@@ -36,6 +38,7 @@ export function EmployeeHome({
   scores: ScoreRow[];
   weeklyTrend?: WeeklyTrend;
   fillRateTrend?: WeeklyTrend;
+  rowsSorted: DashboardRow[];
 }) {
   const avg = scores.length
     ? Math.round(scores.reduce((a, s) => a + pct(s.score, s.total), 0) / scores.length)
@@ -94,6 +97,8 @@ export function EmployeeHome({
           />
         </div>
       )}
+
+      <OrgChart rowsSorted={rowsSorted} />
 
       <h3 className="text-[14px] font-semibold mb-2.5">Accesos rápidos</h3>
       <div className="grid grid-cols-2 gap-3 mb-7">

@@ -13,6 +13,7 @@ export type DashboardRow = {
   avg: number | null;
   ranking: { user: string; avg: number; attempts: number }[];
   leader: { name: string; photoUrl: string | null } | null;
+  members: { id: string; name: string; photoUrl: string | null; position: string | null; isLeader: boolean }[];
 };
 
 export type DashboardData = {
@@ -23,7 +24,7 @@ export type DashboardData = {
 };
 
 export async function getDashboardData(): Promise<DashboardData> {
-  const [departments, processes, documents, exams, scores] = await Promise.all([
+  const [departments, processes, documents, exams, scores, users] = await Promise.all([
     prisma.department.findMany({
       where: { isSpecial: false },
       orderBy: { order: "asc" },
@@ -33,6 +34,11 @@ export async function getDashboardData(): Promise<DashboardData> {
     prisma.document.findMany({ where: { deptId: { not: null } }, select: { deptId: true } }),
     prisma.exam.findMany({ select: { id: true, deptId: true } }),
     prisma.examScore.findMany({ select: { examId: true, userName: true, score: true, total: true } }),
+    prisma.user.findMany({
+      where: { deptId: { not: null } },
+      select: { id: true, name: true, photoUrl: true, position: true, isLeader: true, deptId: true },
+      orderBy: { name: "asc" },
+    }),
   ]);
 
   const examToDept = new Map(exams.map((e) => [e.id, e.deptId]));
@@ -63,7 +69,12 @@ export async function getDashboardData(): Promise<DashboardData> {
 
     const leader = dept.leaders[0] ? { name: dept.leaders[0].name, photoUrl: dept.leaders[0].photoUrl } : null;
 
-    return { dept: { id: dept.id, name: dept.name, code: dept.code }, procs, docs, examCount, attempts: deptScores.length, avg, ranking, leader };
+    const members = users
+      .filter((u) => u.deptId === dept.id)
+      .map((u) => ({ id: u.id, name: u.name, photoUrl: u.photoUrl, position: u.position, isLeader: u.isLeader }))
+      .sort((a, b) => (a.isLeader === b.isLeader ? 0 : a.isLeader ? -1 : 1));
+
+    return { dept: { id: dept.id, name: dept.name, code: dept.code }, procs, docs, examCount, attempts: deptScores.length, avg, ranking, leader, members };
   });
 
   const rowsSorted = [...rows].sort((a, b) => (b.avg ?? -1) - (a.avg ?? -1));
