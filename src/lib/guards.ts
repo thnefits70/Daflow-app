@@ -119,3 +119,31 @@ export async function getUnseenFeedbackCount() {
     where: { deptId: user.leadsDeptId, updatedAt: { gt: user.lastSeenFeedbackAt ?? new Date(0) } },
   });
 }
+
+// Only admin or whoever leads Finanzas - Contabilidad can upload/edit pay
+// stubs for the whole company — everyone else can only view their own.
+export async function canManagePayroll() {
+  const session = await auth();
+  if (!session) return false;
+  if (session.user.role === "admin") return true;
+  const user = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { isLeader: true, leadsDept: { select: { code: true } } },
+  });
+  return !!user?.isLeader && user.leadsDept?.code === "FIN";
+}
+
+// How many of the current user's own pay stubs were uploaded/updated since
+// they last opened "Roles de pago" — drives the sidebar badge.
+export async function getUnseenPayStubCount() {
+  const session = await auth();
+  if (!session || session.user.role !== "employee") return 0;
+  const user = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { lastSeenPayStubAt: true },
+  });
+  if (!user) return 0;
+  return prisma.payStub.count({
+    where: { userId: session.user.id, updatedAt: { gt: user.lastSeenPayStubAt ?? new Date(0) } },
+  });
+}

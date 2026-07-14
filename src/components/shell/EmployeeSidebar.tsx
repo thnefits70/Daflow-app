@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
-import { LayoutDashboard, ClipboardList, Scale, LogOut, Truck, Rocket, Menu, X } from "lucide-react";
+import { LayoutDashboard, ClipboardList, Scale, LogOut, Truck, Rocket, Wallet, Menu, X } from "lucide-react";
 import { BrandMark } from "@/components/brand/DaflowMark";
 
 export function EmployeeSidebar({
@@ -15,6 +15,7 @@ export function EmployeeSidebar({
   showSuppliers = false,
   pendingSuppliersCount = 0,
   unseenFeedbackCount = 0,
+  unseenPayStubCount = 0,
 }: {
   deptName: string;
   userName: string;
@@ -23,6 +24,7 @@ export function EmployeeSidebar({
   showSuppliers?: boolean;
   pendingSuppliersCount?: number;
   unseenFeedbackCount?: number;
+  unseenPayStubCount?: number;
 }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
@@ -92,6 +94,14 @@ export function EmployeeSidebar({
         </Link>
         <Link href="/area/carreras" className={`${NAV_ITEM} ${pathname.startsWith("/area/carreras") ? NAV_ACTIVE : NAV_INACTIVE}`}>
           <Rocket size={15} /> Carreras y Habilidades
+        </Link>
+        <Link href="/area/roles-de-pago" className={`${NAV_ITEM} ${pathname.startsWith("/area/roles-de-pago") ? NAV_ACTIVE : NAV_INACTIVE}`}>
+          <Wallet size={15} /> Roles de pago
+          {unseenPayStubCount > 0 && (
+            <span className="ml-auto font-mono text-[10px] font-semibold bg-red/20 text-red rounded-full px-1.5 py-0.5">
+              {unseenPayStubCount}
+            </span>
+          )}
         </Link>
         {showSuppliers && (
           <Link href="/area/proveedores" className={`${NAV_ITEM} ${pathname.startsWith("/area/proveedores") ? NAV_ACTIVE : NAV_INACTIVE}`}>

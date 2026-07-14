@@ -104,6 +104,10 @@ model User {
   // contador de "sin leer" en el sidebar. Null = nunca lo ha visto.
   lastSeenFeedbackAt DateTime?
 
+  // Última vez que este usuario revisó sus propios roles de pago — usado para el
+  // contador de "sin leer" en el sidebar. Null = nunca lo ha visto.
+  lastSeenPayStubAt DateTime?
+
   snoozeUntil DateTime?
 
   createdAt DateTime @default(now())
@@ -114,6 +118,8 @@ model User {
   ackUpdates    UserAckUpdate[]
   suppliersCreated  Supplier[] @relation("SupplierCreatedBy")
   suppliersApproved Supplier[] @relation("SupplierApprovedBy")
+  payStubs         PayStub[] @relation("PayStubOwner")
+  payStubsUploaded PayStub[] @relation("PayStubUploadedBy")
 
   @@index([deptId])
   @@index([leadsDeptId])
@@ -425,4 +431,34 @@ model SupplierContact {
   whatsapp String
 
   @@index([supplierId])
+}
+
+// Comprobante de pago (PDF o imagen) de un empleado para un mes/año — solo lo
+// sube/edita la líder de Finanzas o el admin; cada empleado solo ve el suyo.
+model PayStub {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation("PayStubOwner", fields: [userId], references: [id], onDelete: Cascade)
+
+  // Área del empleado al momento de subir el comprobante — se guarda aparte
+  // para que el filtro por departamento siga funcionando aunque luego cambie
+  // de área, igual que Supplier.createdByDeptId.
+  deptId String?
+
+  month Int // 1-12
+  year  Int
+
+  fileUrl  String
+  fileName String
+
+  // Null cuando lo sube el admin directamente (su sesión no tiene un User real).
+  uploadedById String?
+  uploadedBy   User?   @relation("PayStubUploadedBy", fields: [uploadedById], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, month, year])
+  @@index([userId])
+  @@index([deptId])
 }

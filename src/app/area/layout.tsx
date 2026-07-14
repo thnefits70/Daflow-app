@@ -111,6 +111,9 @@ export default async function AreaLayout({ children }: { children: React.ReactNo
           where: { deptId: currentUser.leadsDeptId, updatedAt: { gt: currentUser.lastSeenFeedbackAt ?? new Date(0) } },
         })
       : 0;
+  const unseenPayStubCount = await prisma.payStub.count({
+    where: { userId: session.user.id, updatedAt: { gt: currentUser.lastSeenPayStubAt ?? new Date(0) } },
+  });
 
   return (
     <AreaGateShell
@@ -127,6 +130,7 @@ export default async function AreaLayout({ children }: { children: React.ReactNo
       showSuppliers={showSuppliers}
       pendingSuppliersCount={pendingSuppliersCount}
       unseenFeedbackCount={unseenFeedbackCount}
+      unseenPayStubCount={unseenPayStubCount}
     >
       {children}
     </AreaGateShell>
