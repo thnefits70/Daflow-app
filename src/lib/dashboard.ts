@@ -114,7 +114,7 @@ export async function getFillRateTrend(): Promise<WeeklyTrend> {
       return {
         week: r.week,
         value: Math.round((r.value / total) * 100),
-        detail: `${r.value.toLocaleString("es-MX")} despachados · ${notDispatched.toLocaleString("es-MX")} no despachados`,
+        detail: `${notDispatched.toLocaleString("es-MX")} no despachados`,
       };
     })
     .filter((p): p is { week: string; value: number; detail: string } => p !== null);
