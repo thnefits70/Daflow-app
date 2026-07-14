@@ -12,7 +12,7 @@ import { signOut } from "next-auth/react";
 import type { ProcessDTO } from "@/components/process/ProcessEditor";
 import { isFutureDate } from "@/lib/time";
 
-type PendingUpdate = { id: string; processId: string; processTitle: string; createdAt: string };
+type PendingUpdate = { id: string; processId: string; processTitle: string; note: string; createdAt: string };
 type LeaderAlert = { id: string; processTitle: string; pendingCount: number; teamSize: number };
 
 export function AreaGateShell({
@@ -89,6 +89,7 @@ export function AreaGateShell({
           <UpdateGate
             updateId={activeUpdate.id}
             processTitle={activeUpdate.processTitle}
+            note={activeUpdate.note}
             createdAt={activeUpdate.createdAt}
             process={activeProcess}
             remaining={pendingUpdates.length}

@@ -223,6 +223,8 @@ model ProcessUpdate {
   id        String   @id @default(cuid())
   processId String
   process   Process  @relation(fields: [processId], references: [id], onDelete: Cascade)
+  // Qué cambió, para el historial visible del proceso — obligatorio al notificar.
+  note      String   @default("")
   createdAt DateTime @default(now())
 
   acks UserAckUpdate[]

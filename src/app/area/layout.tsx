@@ -28,6 +28,7 @@ export default async function AreaLayout({ children }: { children: React.ReactNo
     id: u.id,
     processId: u.processId,
     processTitle: u.process.title,
+    note: u.note,
     createdAt: u.createdAt.toISOString(),
   }));
 

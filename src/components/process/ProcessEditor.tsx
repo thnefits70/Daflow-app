@@ -124,6 +124,9 @@ export function ProcessEditor({
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<number | null>(null);
+  const [showNotifyForm, setShowNotifyForm] = useState(false);
+  const [notifyNote, setNotifyNote] = useState("");
+  const [notifyErr, setNotifyErr] = useState("");
 
   const selectedNode = useMemo(() => nodes.find((n) => n.id === selectedNodeId) ?? null, [nodes, selectedNodeId]);
   const selectedEdge = useMemo(() => edges.find((e) => e.id === selectedEdgeId) ?? null, [edges, selectedEdgeId]);
@@ -236,6 +239,11 @@ export function ProcessEditor({
   };
 
   const save = async (notify = false) => {
+    if (notify && !notifyNote.trim()) {
+      setNotifyErr("Describe qué cambió para el historial.");
+      return;
+    }
+    setNotifyErr("");
     setSaving(true);
     const res = await fetch(`/api/processes/${process.id}`, {
       method: "PATCH",
@@ -270,7 +278,13 @@ export function ProcessEditor({
     if (!res.ok) return;
 
     if (notify) {
-      await fetch(`/api/processes/${process.id}/notify`, { method: "POST" });
+      await fetch(`/api/processes/${process.id}/notify`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ note: notifyNote.trim() }),
+      });
+      setShowNotifyForm(false);
+      setNotifyNote("");
     }
 
     // Refetch so local node/edge ids match the freshly persisted rows.
@@ -619,16 +633,52 @@ export function ProcessEditor({
             type="button"
             disabled={saving}
             className="rounded border border-teal bg-teal px-5 py-2.5 text-[13px] font-semibold text-navy cursor-pointer disabled:opacity-60"
-            onClick={() => save(true)}
+            onClick={() => setShowNotifyForm(true)}
           >
             Guardar y notificar actualización obligatoria
           </button>
           {savedAt && <span className="text-[12px] text-steel">Guardado.</span>}
         </div>
       )}
-      {editable && (
+      {editable && !showNotifyForm && (
         <div className="text-[11.5px] text-steel mt-2">
           Esto avisará a todo el equipo de esta área que debe revisar el proceso actualizado.
+        </div>
+      )}
+      {editable && showNotifyForm && (
+        <div className="mt-3 bg-surface border border-rule rounded-md p-4 max-w-xl">
+          <label className="block mb-1 text-[10.5px] font-semibold uppercase tracking-wide text-steel">
+            ¿Qué cambió? (queda en el historial del proceso)
+          </label>
+          <textarea
+            className="w-full rounded border border-rule px-2.5 py-2 text-[13px]"
+            rows={2}
+            value={notifyNote}
+            onChange={(e) => setNotifyNote(e.target.value)}
+            placeholder="Ej. Se agregó el paso de verificación de calidad antes del empaque."
+            autoFocus
+          />
+          {notifyErr && <div className="text-red text-[12px] mt-1.5">{notifyErr}</div>}
+          <div className="flex items-center gap-2.5 mt-2.5">
+            <button
+              type="button"
+              disabled={saving}
+              className="rounded border border-teal bg-teal px-4 py-2 text-[13px] font-semibold text-navy cursor-pointer disabled:opacity-60"
+              onClick={() => save(true)}
+            >
+              {saving ? "Guardando…" : "Confirmar y notificar"}
+            </button>
+            <button
+              type="button"
+              className="text-steel text-[13px] cursor-pointer"
+              onClick={() => {
+                setShowNotifyForm(false);
+                setNotifyErr("");
+              }}
+            >
+              Cancelar
+            </button>
+          </div>
         </div>
       )}
     </div>

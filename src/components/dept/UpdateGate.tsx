@@ -7,6 +7,7 @@ import { ProcessEditor, type ProcessDTO } from "@/components/process/ProcessEdit
 export function UpdateGate({
   updateId,
   processTitle,
+  note,
   createdAt,
   process,
   remaining,
@@ -16,6 +17,7 @@ export function UpdateGate({
 }: {
   updateId: string;
   processTitle: string;
+  note: string;
   createdAt: string;
   process: ProcessDTO | null;
   remaining: number;
@@ -49,10 +51,16 @@ export function UpdateGate({
         <div className="p-6 pb-0">
           <div className="font-mono text-[10.5px] text-teal tracking-[.08em] mb-1">ACTUALIZACIÓN OBLIGATORIA</div>
           <h2 className="font-display text-[20px] font-bold mb-1">{processTitle}</h2>
-          <div className="text-[12px] text-steel mb-4">
+          <div className="text-[12px] text-steel mb-3">
             Actualizado el {new Date(createdAt).toLocaleDateString()} · Debes revisarlo para continuar
             {remaining > 1 ? ` (quedan ${remaining} actualizaciones pendientes)` : ""}
           </div>
+          {note && (
+            <div className="bg-cloud border border-rule rounded p-3 text-[13px] text-ink/90 mb-4">
+              <span className="font-semibold">Qué cambió: </span>
+              {note}
+            </div>
+          )}
         </div>
 
         {process ? (
