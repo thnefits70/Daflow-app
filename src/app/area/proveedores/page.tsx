@@ -13,9 +13,8 @@ const supplierInclude = {
 
 export default async function AreaProveedoresPage() {
   const access = await getSupplierAccess();
-  if (!access.canView && !access.canAdd) redirect("/area");
-
   const canReview = access.isLeader && !!access.leadsDeptId;
+  if (!access.canView && !access.canAdd && !canReview) redirect("/area");
 
   const [suppliers, pending] = await Promise.all([
     access.canView

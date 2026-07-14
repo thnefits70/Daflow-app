@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
-import { LayoutDashboard, ClipboardList, Scale, LogOut, Truck } from "lucide-react";
+import { LayoutDashboard, ClipboardList, Scale, LogOut, Truck, Rocket } from "lucide-react";
 import { BrandMark } from "@/components/brand/DaflowMark";
 
 export function EmployeeSidebar({
@@ -65,6 +65,9 @@ export function EmployeeSidebar({
         </Link>
         <Link href="/area/leyes" className={`${NAV_ITEM} ${pathname.startsWith("/area/leyes") ? NAV_ACTIVE : NAV_INACTIVE}`}>
           <Scale size={15} /> Leyes y Reglamentos
+        </Link>
+        <Link href="/area/carreras" className={`${NAV_ITEM} ${pathname.startsWith("/area/carreras") ? NAV_ACTIVE : NAV_INACTIVE}`}>
+          <Rocket size={15} /> Carreras y Habilidades
         </Link>
         {showSuppliers && (
           <Link href="/area/proveedores" className={`${NAV_ITEM} ${pathname.startsWith("/area/proveedores") ? NAV_ACTIVE : NAV_INACTIVE}`}>

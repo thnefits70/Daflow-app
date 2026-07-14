@@ -15,6 +15,7 @@ import {
   LogOut,
   Sparkles,
   Truck,
+  Rocket,
 } from "lucide-react";
 import { BrandMark } from "@/components/brand/DaflowMark";
 
@@ -105,6 +106,9 @@ export function AdminSidebar({
         </Link>
         <Link href="/admin/leyes" className={`${NAV_ITEM} ${pathname.startsWith("/admin/leyes") ? NAV_ACTIVE : NAV_INACTIVE}`}>
           <Scale size={15} /> Leyes y Reglamentos
+        </Link>
+        <Link href="/admin/carreras" className={`${NAV_ITEM} ${pathname.startsWith("/admin/carreras") ? NAV_ACTIVE : NAV_INACTIVE}`}>
+          <Rocket size={15} /> Carreras y Habilidades
         </Link>
 
         {list.map((d, idx) => (

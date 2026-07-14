@@ -70,9 +70,13 @@ export async function getSupplierAccess() {
   });
   if (!user) return { canView: false, canAdd: false, isLeader: false, leadsDeptId: null };
 
+  // Directorio access is Compras/Análisis de Mercado (or whoever was granted
+  // canAddSuppliers directly) — not every department leader company-wide.
+  // A leader still reaches the page via canReview (below) to approve/reject
+  // their own team's submissions even if their área can't see the directory.
   const inSupplierDept = !!user.department && SUPPLIER_VIEW_DEPT_CODES.includes(user.department.code);
   return {
-    canView: inSupplierDept || user.canAddSuppliers || user.isLeader,
+    canView: inSupplierDept || user.canAddSuppliers,
     canAdd: user.canAddSuppliers,
     isLeader: user.isLeader,
     leadsDeptId: user.leadsDeptId,
