@@ -14,7 +14,7 @@ const updateSchema = z.object({
   locationLat: z.number().min(-90).max(90).nullable().optional(),
   locationLng: z.number().min(-180).max(180).nullable().optional(),
   category: z.string().trim().nullable().optional(),
-  notes: z.string().trim().nullable().optional(),
+  notes: z.string().trim().min(1, "Agrega una descripción del proveedor en Notas.").optional(),
   contacts: z.array(contactSchema).min(1, "Agrega al menos un contacto de WhatsApp.").optional(),
 });
 

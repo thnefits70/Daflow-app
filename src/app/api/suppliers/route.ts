@@ -55,7 +55,7 @@ const createSchema = z.object({
   locationLat: z.number().min(-90).max(90).nullable().optional(),
   locationLng: z.number().min(-180).max(180).nullable().optional(),
   category: z.string().trim().optional(),
-  notes: z.string().trim().optional(),
+  notes: z.string().trim().min(1, "Agrega una descripción del proveedor en Notas."),
   contacts: z
     .array(
       z.object({

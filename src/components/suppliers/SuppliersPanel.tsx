@@ -38,16 +38,18 @@ function normalize(text: string) {
 }
 
 // Ranks by how well a supplier matches the search — never hides anyone, just
-// reorders so the most likely match (by "qué provee", then name, then notes)
-// rises to the top, since suppliers are only ever tagged with free text.
+// reorders so the most likely match rises to the top. Notes carries the most
+// weight after category since that's meant to hold the full product
+// description (e.g. copied from a Telegram chat with the supplier), so it's
+// usually the richest source of matches for a specific product search.
 function relevanceScore(s: SupplierDTO, query: string) {
   const q = normalize(query.trim());
   if (!q) return 0;
   const words = q.split(/\s+/).filter(Boolean);
   const fields: [string, number][] = [
     [normalize(s.category ?? ""), 3],
-    [normalize(s.name), 2],
-    [normalize(s.notes ?? ""), 1],
+    [normalize(s.notes ?? ""), 2],
+    [normalize(s.name), 1],
   ];
   let score = 0;
   for (const [text, weight] of fields) {
@@ -129,8 +131,8 @@ export function SuppliersPanel({
 
   const save = async () => {
     const contacts = form.contacts.filter((c) => c.label.trim() && c.whatsapp.trim());
-    if (!form.name.trim() || contacts.length === 0) {
-      setErr("Completa el nombre del proveedor y al menos un contacto de WhatsApp.");
+    if (!form.name.trim() || !form.notes.trim() || contacts.length === 0) {
+      setErr("Completa el nombre del proveedor, la descripción en Notas, y al menos un contacto de WhatsApp.");
       return;
     }
     setErr("");
@@ -466,7 +468,7 @@ function SupplierForm({
             className="w-full rounded border border-rule px-2.5 py-2 text-[13.5px]"
             value={form.category}
             onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}
-            placeholder="Ej. empaques, mercadería China…"
+            placeholder="Ej. mercadería por bulto, productos para el hogar, artículos de salud…"
           />
         </div>
       </div>
@@ -495,12 +497,20 @@ function SupplierForm({
       </div>
 
       <div className="mb-3">
-        <label className="block mb-1 text-[10.5px] font-semibold uppercase tracking-wide text-steel">Notas</label>
+        <label className="block mb-1 text-[10.5px] font-semibold uppercase tracking-wide text-steel">
+          Notas — descripción del catálogo (obligatorio)
+        </label>
+        <div className="text-[11px] text-steel mb-1.5">
+          Pon la mayor cantidad de información posible sobre qué vende este proveedor — por ejemplo, copia y pega
+          aquí la lista de productos desde tu chat de Telegram con ellos. El buscador usa este texto para
+          encontrarlo cuando alguien busque un producto específico.
+        </div>
         <textarea
-          rows={2}
+          rows={5}
           className="w-full rounded border border-rule px-2.5 py-2 text-[13.5px]"
           value={form.notes}
           onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
+          placeholder="Ej. Ropa y juguetes para niños, artículos escolares, bisutería, productos de limpieza para el hogar…"
         />
       </div>
 
