@@ -59,6 +59,12 @@ export async function canWriteLaws() {
 // directory. Admin always sees it all.
 export const SUPPLIER_VIEW_DEPT_CODES = ["COM", "MKT"];
 
+// Análisis de Mercado is the team that actually sources suppliers, so
+// everyone there can propose one — not just whoever was individually granted
+// canAddSuppliers. That flag stays as an escape hatch for granting the
+// ability to someone outside this department.
+export const SUPPLIER_ADD_DEPT_CODES = ["MKT"];
+
 export async function getSupplierAccess() {
   const session = await auth();
   if (!session) return { canView: false, canAdd: false, isLeader: false, leadsDeptId: null as string | null };
@@ -75,23 +81,13 @@ export async function getSupplierAccess() {
   // A leader still reaches the page via canReview (below) to approve/reject
   // their own team's submissions even if their área can't see the directory.
   const inSupplierDept = !!user.department && SUPPLIER_VIEW_DEPT_CODES.includes(user.department.code);
+  const canAddByDept = !!user.department && SUPPLIER_ADD_DEPT_CODES.includes(user.department.code);
   return {
     canView: inSupplierDept || user.canAddSuppliers,
-    canAdd: user.canAddSuppliers,
+    canAdd: canAddByDept || user.canAddSuppliers,
     isLeader: user.isLeader,
     leadsDeptId: user.leadsDeptId,
   };
-}
-
-// Admin can add a supplier (auto-approved) or review any pending one; an
-// employee can only propose one (stays "Pendiente") if explicitly granted
-// via User.canAddSuppliers — never edit or delete.
-export async function canAddSupplier() {
-  const session = await auth();
-  if (!session) return false;
-  if (session.user.role === "admin") return true;
-  const user = await prisma.user.findUnique({ where: { id: session.user.id }, select: { canAddSuppliers: true } });
-  return !!user?.canAddSuppliers;
 }
 
 // A pending supplier can be approved/rejected by admin, or by whoever leads

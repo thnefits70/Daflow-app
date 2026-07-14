@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
-import { canAddSupplier, getSupplierAccess } from "@/lib/guards";
+import { getSupplierAccess } from "@/lib/guards";
 
 const supplierInclude = {
   contacts: { orderBy: { id: "asc" as const } },
@@ -70,8 +70,8 @@ export async function POST(req: NextRequest) {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "No autorizado." }, { status: 401 });
 
-  const canAdd = await canAddSupplier();
-  if (!canAdd) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+  const access = await getSupplierAccess();
+  if (!access.canAdd) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
   const body = await req.json().catch(() => null);
   const parsed = createSchema.safeParse(body);
@@ -85,14 +85,19 @@ export async function POST(req: NextRequest) {
   // employee-authored ones do. The UI falls back to "Administrador" when
   // approved/created with no linked user.
   const isAdmin = session.user.role === "admin";
+  // A leader creating a supplier for their own área would just approve it
+  // themselves anyway, so skip the round trip and save it approved directly.
+  const isSelfApproving = access.isLeader && access.leadsDeptId === session.user.deptId;
+  const autoApproved = isAdmin || isSelfApproving;
 
   const supplier = await prisma.supplier.create({
     data: {
       ...rest,
-      status: isAdmin ? "APPROVED" : "PENDING",
+      status: autoApproved ? "APPROVED" : "PENDING",
       createdById: isAdmin ? null : session.user.id,
       createdByDeptId: isAdmin ? null : session.user.deptId,
-      approvedAt: isAdmin ? new Date() : null,
+      approvedById: isSelfApproving ? session.user.id : null,
+      approvedAt: autoApproved ? new Date() : null,
       contacts: { create: contacts },
     },
     include: supplierInclude,
