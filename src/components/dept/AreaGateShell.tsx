@@ -18,6 +18,7 @@ type LeaderAlert = { id: string; processTitle: string; pendingCount: number; tea
 export function AreaGateShell({
   deptName,
   userName,
+  userPhotoUrl,
   logoUrl,
   bannerUrl,
   pendingUpdates,
@@ -31,6 +32,7 @@ export function AreaGateShell({
 }: {
   deptName: string;
   userName: string;
+  userPhotoUrl?: string | null;
   logoUrl: string | null | undefined;
   bannerUrl?: string | null;
   pendingUpdates: PendingUpdate[];
@@ -59,9 +61,19 @@ export function AreaGateShell({
               <BrandMark logoUrl={logoUrl} size={26} light chip={!!logoUrl} />
               <span className="font-display font-bold text-[15px] text-white">DAFLOW</span>
             </div>
-            <div className="text-[10px] tracking-[.14em] uppercase text-teal">Área</div>
-            <h1 className="text-[17px] font-bold mt-1">{deptName}</h1>
-            {userName && <div className="text-[11.5px] text-[#B9C2CC] mt-1">{userName}</div>}
+            <div className="flex items-center gap-2.5">
+              {userPhotoUrl && (
+                <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-teal/70 shrink-0">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={userPhotoUrl} alt={userName} className="w-full h-full object-cover object-top" />
+                </div>
+              )}
+              <div className="min-w-0">
+                <div className="text-[10px] tracking-[.14em] uppercase text-teal">Área</div>
+                <h1 className="text-[17px] font-bold mt-0.5 truncate">{deptName}</h1>
+                {userName && <div className="text-[11.5px] text-[#B9C2CC] truncate">{userName}</div>}
+              </div>
+            </div>
           </div>
           <div className="px-4.5 py-3.5 border-t border-white/10 mt-auto">
             <button
@@ -94,6 +106,7 @@ export function AreaGateShell({
       <EmployeeSidebar
         deptName={deptName}
         userName={userName}
+        userPhotoUrl={userPhotoUrl}
         logoUrl={logoUrl}
         showSuppliers={showSuppliers}
         pendingSuppliersCount={pendingSuppliersCount}

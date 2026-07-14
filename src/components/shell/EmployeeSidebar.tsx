@@ -9,12 +9,14 @@ import { BrandMark } from "@/components/brand/DaflowMark";
 export function EmployeeSidebar({
   deptName,
   userName,
+  userPhotoUrl,
   logoUrl,
   showSuppliers = false,
   pendingSuppliersCount = 0,
 }: {
   deptName: string;
   userName: string;
+  userPhotoUrl?: string | null;
   logoUrl?: string | null;
   showSuppliers?: boolean;
   pendingSuppliersCount?: number;
@@ -32,9 +34,19 @@ export function EmployeeSidebar({
           <BrandMark logoUrl={logoUrl} size={26} light chip={!!logoUrl} />
           <span className="font-display font-bold text-[15px] text-white">DAFLOW</span>
         </div>
-        <div className="text-[10px] tracking-[.14em] uppercase text-teal">Área</div>
-        <h1 className="text-[17px] font-bold mt-1">{deptName}</h1>
-        {userName && <div className="text-[11.5px] text-[#B9C2CC] mt-1">{userName}</div>}
+        <div className="flex items-center gap-2.5">
+          {userPhotoUrl && (
+            <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-teal/70 shrink-0">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={userPhotoUrl} alt={userName} className="w-full h-full object-cover object-top" />
+            </div>
+          )}
+          <div className="min-w-0">
+            <div className="text-[10px] tracking-[.14em] uppercase text-teal">Área</div>
+            <h1 className="text-[17px] font-bold mt-0.5 truncate">{deptName}</h1>
+            {userName && <div className="text-[11.5px] text-[#B9C2CC] truncate">{userName}</div>}
+          </div>
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto py-2.5 min-h-0">

@@ -106,6 +106,7 @@ export default async function AreaLayout({ children }: { children: React.ReactNo
     <AreaGateShell
       deptName={dept.name}
       userName={session.user.name ?? ""}
+      userPhotoUrl={currentUser.photoUrl}
       logoUrl={settings?.logoUrl}
       bannerUrl={settings?.bannerUrl}
       pendingUpdates={pendingUpdates}
