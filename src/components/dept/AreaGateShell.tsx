@@ -28,6 +28,7 @@ export function AreaGateShell({
   ledDeptName,
   showSuppliers = false,
   pendingSuppliersCount = 0,
+  unseenFeedbackCount = 0,
   children,
 }: {
   deptName: string;
@@ -42,6 +43,7 @@ export function AreaGateShell({
   ledDeptName: string | null;
   showSuppliers?: boolean;
   pendingSuppliersCount?: number;
+  unseenFeedbackCount?: number;
   children: React.ReactNode;
 }) {
   const router = useRouter();
@@ -111,6 +113,7 @@ export function AreaGateShell({
         logoUrl={logoUrl}
         showSuppliers={showSuppliers}
         pendingSuppliersCount={pendingSuppliersCount}
+        unseenFeedbackCount={unseenFeedbackCount}
       />
       <main className="flex-1 overflow-y-auto bg-bg p-9">
         <TopBanner bannerUrl={bannerUrl} />

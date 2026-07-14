@@ -102,6 +102,12 @@ export default async function AreaLayout({ children }: { children: React.ReactNo
     currentUser.isLeader && currentUser.leadsDeptId
       ? await prisma.supplier.count({ where: { status: "PENDING", createdByDeptId: currentUser.leadsDeptId } })
       : 0;
+  const unseenFeedbackCount =
+    currentUser.isLeader && currentUser.leadsDeptId
+      ? await prisma.weeklyReviewRecord.count({
+          where: { deptId: currentUser.leadsDeptId, updatedAt: { gt: currentUser.lastSeenFeedbackAt ?? new Date(0) } },
+        })
+      : 0;
 
   return (
     <AreaGateShell
@@ -117,6 +123,7 @@ export default async function AreaLayout({ children }: { children: React.ReactNo
       ledDeptName={ledDeptName}
       showSuppliers={showSuppliers}
       pendingSuppliersCount={pendingSuppliersCount}
+      unseenFeedbackCount={unseenFeedbackCount}
     >
       {children}
     </AreaGateShell>

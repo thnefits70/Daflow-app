@@ -100,6 +100,10 @@ model User {
   // Puede proponer proveedores nuevos (quedan "Pendiente" hasta que su líder los apruebe). No puede editar ni eliminar.
   canAddSuppliers Boolean @default(false)
 
+  // Última vez que este usuario (como líder) revisó el Feedback semanal de su área — usado para el
+  // contador de "sin leer" en el sidebar. Null = nunca lo ha visto.
+  lastSeenFeedbackAt DateTime?
+
   snoozeUntil DateTime?
 
   createdAt DateTime @default(now())

@@ -103,3 +103,19 @@ export async function canReviewSupplier(createdByDeptId: string | null) {
   });
   return !!user?.isLeader && user.leadsDeptId === createdByDeptId;
 }
+
+// How many Feedback semanal entries the current user (as leader of their
+// área) hasn't seen yet — drives the sidebar/tab badges. Admin authors this
+// content, so it never has anything "unseen" of its own.
+export async function getUnseenFeedbackCount() {
+  const session = await auth();
+  if (!session || session.user.role !== "employee") return 0;
+  const user = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { isLeader: true, leadsDeptId: true, lastSeenFeedbackAt: true },
+  });
+  if (!user?.isLeader || !user.leadsDeptId) return 0;
+  return prisma.weeklyReviewRecord.count({
+    where: { deptId: user.leadsDeptId, updatedAt: { gt: user.lastSeenFeedbackAt ?? new Date(0) } },
+  });
+}

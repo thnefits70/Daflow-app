@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { GitBranch, FileText, GraduationCap, LineChart, TrendingUp, MessageSquare } from "lucide-react";
 import { ProcessListPanel } from "@/components/process/ProcessListPanel";
 import { DocumentsPanel } from "@/components/documents/DocumentsPanel";
@@ -38,6 +39,7 @@ export function DeptWorkspaceTabs({
   weeklyReviewRecords = [],
   editable,
   kpisEditable,
+  unseenFeedbackCount = 0,
 }: {
   deptId: string;
   processesBaseHref: string;
@@ -52,8 +54,11 @@ export function DeptWorkspaceTabs({
   weeklyReviewRecords?: WeeklyReviewDTO[];
   editable: boolean;
   kpisEditable?: boolean;
+  unseenFeedbackCount?: number;
 }) {
+  const router = useRouter();
   const [tab, setTab] = useState<TabKey>("procesos");
+  const [seenFeedback, setSeenFeedback] = useState(false);
   const tabs = ALL_TABS.filter((t) => {
     if (t.key === "kpis") return trackKpis;
     if (t.key === "semanal") return trackWeeklyMetric;
@@ -71,9 +76,20 @@ export function DeptWorkspaceTabs({
             className={`pb-2.5 text-[13px] font-semibold flex items-center gap-1.5 border-b-2 cursor-pointer ${
               tab === t.key ? "text-ink border-teal" : "text-steel border-transparent hover:text-ink"
             }`}
-            onClick={() => setTab(t.key)}
+            onClick={() => {
+              setTab(t.key);
+              if (t.key === "feedback" && unseenFeedbackCount > 0 && !seenFeedback) {
+                setSeenFeedback(true);
+                fetch("/api/me/seen-feedback", { method: "POST" }).then(() => router.refresh());
+              }
+            }}
           >
             <t.icon size={14} /> {t.label}
+            {t.key === "feedback" && unseenFeedbackCount > 0 && !seenFeedback && (
+              <span className="font-mono text-[10px] font-semibold bg-red/20 text-red rounded-full px-1.5 py-0.5">
+                {unseenFeedbackCount}
+              </span>
+            )}
           </button>
         ))}
       </div>

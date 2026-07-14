@@ -13,6 +13,7 @@ export function EmployeeSidebar({
   logoUrl,
   showSuppliers = false,
   pendingSuppliersCount = 0,
+  unseenFeedbackCount = 0,
 }: {
   deptName: string;
   userName: string;
@@ -20,6 +21,7 @@ export function EmployeeSidebar({
   logoUrl?: string | null;
   showSuppliers?: boolean;
   pendingSuppliersCount?: number;
+  unseenFeedbackCount?: number;
 }) {
   const pathname = usePathname();
   const NAV_ITEM =
@@ -55,6 +57,11 @@ export function EmployeeSidebar({
         </Link>
         <Link href="/area/workspace" className={`${NAV_ITEM} ${pathname.startsWith("/area/workspace") ? NAV_ACTIVE : NAV_INACTIVE}`}>
           <ClipboardList size={15} /> Mi área de trabajo
+          {unseenFeedbackCount > 0 && (
+            <span className="ml-auto font-mono text-[10px] font-semibold bg-red/20 text-red rounded-full px-1.5 py-0.5">
+              {unseenFeedbackCount}
+            </span>
+          )}
         </Link>
         <Link href="/area/leyes" className={`${NAV_ITEM} ${pathname.startsWith("/area/leyes") ? NAV_ACTIVE : NAV_INACTIVE}`}>
           <Scale size={15} /> Leyes y Reglamentos

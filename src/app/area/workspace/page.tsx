@@ -3,6 +3,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { TopLine } from "@/components/ui/TopLine";
 import { DeptWorkspaceTabs } from "@/components/dept/DeptWorkspaceTabs";
+import { getUnseenFeedbackCount } from "@/lib/guards";
 
 export default async function WorkspacePage() {
   const session = await auth();
@@ -11,7 +12,7 @@ export default async function WorkspacePage() {
   const dept = await prisma.department.findUnique({ where: { id: session.user.deptId } });
   if (!dept) redirect("/api/auth/force-logout");
 
-  const [processes, documents, exams, kpiRecords, weeklyMetricRecords, weeklyReviewRecords, currentUser] = await Promise.all([
+  const [processes, documents, exams, kpiRecords, weeklyMetricRecords, weeklyReviewRecords, currentUser, unseenFeedbackCount] = await Promise.all([
     prisma.process.findMany({
       where: { deptId: dept.id },
       orderBy: { createdAt: "asc" },
@@ -33,6 +34,7 @@ export default async function WorkspacePage() {
       ? prisma.weeklyReviewRecord.findMany({ where: { deptId: dept.id }, orderBy: { week: "asc" } })
       : Promise.resolve([]),
     prisma.user.findUnique({ where: { id: session.user.id }, select: { isLeader: true, leadsDeptId: true } }),
+    getUnseenFeedbackCount(),
   ]);
 
   const kpisEditable = !!currentUser?.isLeader && currentUser.leadsDeptId === dept.id;
@@ -86,6 +88,7 @@ export default async function WorkspacePage() {
         }
         editable={false}
         kpisEditable={kpisEditable}
+        unseenFeedbackCount={unseenFeedbackCount}
       />
     </div>
   );
