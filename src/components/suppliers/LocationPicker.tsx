@@ -228,7 +228,7 @@ export function LocationPicker({
     <div>
       <div className="flex items-center gap-2 mb-2">
         <input
-          className="flex-1 rounded border border-rule px-2.5 py-2 text-[13px]"
+          className="flex-1 min-w-0 rounded border border-rule px-2.5 py-2 text-[13px]"
           placeholder="Buscar nombre del negocio, dirección, o pegar un enlace de Google Maps…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}

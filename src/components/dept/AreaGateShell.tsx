@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { LogOut } from "lucide-react";
+import { LogOut, Menu, X } from "lucide-react";
 import { BrandMark } from "@/components/brand/DaflowMark";
 import { EmployeeSidebar } from "@/components/shell/EmployeeSidebar";
 import { TopBanner } from "@/components/shell/TopBanner";
@@ -49,6 +49,7 @@ export function AreaGateShell({
   const router = useRouter();
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
   const [snoozedNow, setSnoozedNow] = useState(false);
+  const [gateOpen, setGateOpen] = useState(false);
 
   const isSnoozed = isFutureDate(snoozeUntil);
   const activeUpdate = pendingUpdates.find((u) => !dismissedIds.has(u.id));
@@ -56,12 +57,33 @@ export function AreaGateShell({
 
   if (showGate && activeUpdate) {
     return (
-      <div className="flex h-screen min-h-0">
-        <div className="w-[230px] shrink-0 bg-navy text-[#EDEFE9] flex flex-col min-h-0">
+      <div className="flex flex-col md:flex-row h-screen min-h-0">
+        <div className="md:hidden flex items-center justify-between gap-2 px-4 py-3 bg-navy text-white border-b border-white/10">
+          <div className="flex items-center gap-2">
+            <BrandMark logoUrl={logoUrl} size={22} light chip={!!logoUrl} />
+            <span className="font-display font-bold text-[14px]">DAFLOW</span>
+          </div>
+          <button type="button" onClick={() => setGateOpen(true)} className="p-1.5 text-white cursor-pointer" aria-label="Abrir menú">
+            <Menu size={20} />
+          </button>
+        </div>
+
+        {gateOpen && <div className="fixed inset-0 bg-black/50 z-30 md:hidden" onClick={() => setGateOpen(false)} />}
+
+        <div
+          className={`fixed md:static inset-y-0 left-0 z-40 w-[230px] shrink-0 bg-navy text-[#EDEFE9] flex flex-col min-h-0 transform transition-transform duration-200 md:translate-x-0 ${
+            gateOpen ? "translate-x-0" : "-translate-x-full"
+          }`}
+        >
           <div className="px-4.5 pt-5 pb-3.5 border-b border-white/10">
-            <div className="flex items-center gap-2.5 mb-3">
-              <BrandMark logoUrl={logoUrl} size={26} light chip={!!logoUrl} />
-              <span className="font-display font-bold text-[15px] text-white">DAFLOW</span>
+            <div className="flex items-center justify-between gap-2.5 mb-3">
+              <div className="flex items-center gap-2.5">
+                <BrandMark logoUrl={logoUrl} size={26} light chip={!!logoUrl} />
+                <span className="font-display font-bold text-[15px] text-white">DAFLOW</span>
+              </div>
+              <button type="button" onClick={() => setGateOpen(false)} className="md:hidden p-1 text-white cursor-pointer" aria-label="Cerrar menú">
+                <X size={18} />
+              </button>
             </div>
             <div className="flex items-center gap-2.5">
               {userPhotoUrl && (
@@ -87,7 +109,7 @@ export function AreaGateShell({
             </button>
           </div>
         </div>
-        <main className="flex-1 overflow-y-auto bg-bg p-9">
+        <main className="flex-1 overflow-y-auto bg-bg p-4 md:p-9">
           <UpdateGate
             updateId={activeUpdate.id}
             processTitle={activeUpdate.processTitle}
@@ -105,7 +127,7 @@ export function AreaGateShell({
   }
 
   return (
-    <div className="flex h-screen min-h-0">
+    <div className="flex flex-col md:flex-row h-screen min-h-0">
       <EmployeeSidebar
         deptName={deptName}
         userName={userName}
@@ -115,7 +137,7 @@ export function AreaGateShell({
         pendingSuppliersCount={pendingSuppliersCount}
         unseenFeedbackCount={unseenFeedbackCount}
       />
-      <main className="flex-1 overflow-y-auto bg-bg p-9">
+      <main className="flex-1 overflow-y-auto bg-bg p-4 md:p-9">
         <TopBanner bannerUrl={bannerUrl} />
         {ledDeptName && <LeaderBanner deptName={ledDeptName} alerts={leaderAlerts} />}
         {children}

@@ -21,14 +21,14 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const specialDepartments = allDepartments.filter((d) => d.isSpecial);
 
   return (
-    <div className="flex h-screen min-h-0">
+    <div className="flex flex-col md:flex-row h-screen min-h-0">
       <AdminSidebar
         departments={departments}
         specialDepartments={specialDepartments}
         logoUrl={settings?.logoUrl}
         pendingSuppliersCount={pendingSuppliersCount}
       />
-      <main className="flex-1 overflow-y-auto bg-bg p-9">
+      <main className="flex-1 overflow-y-auto bg-bg p-4 md:p-9">
         <TopBanner bannerUrl={settings?.bannerUrl} />
         {children}
       </main>

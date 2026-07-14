@@ -264,7 +264,7 @@ export function SuppliersPanel({
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-3.5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
             {sortedSuppliers.map((s) => (
               <div key={s.id} className="bg-surface border border-rule rounded-md p-4">
                 <div className="flex items-start justify-between gap-2 mb-1.5">
@@ -452,7 +452,7 @@ function SupplierForm({
 }) {
   return (
     <div className="bg-surface border border-rule rounded-md p-4.5 mb-4">
-      <div className="grid grid-cols-2 gap-3 mb-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
         <div>
           <label className="block mb-1 text-[10.5px] font-semibold uppercase tracking-wide text-steel">Proveedor</label>
           <input
@@ -518,13 +518,13 @@ function SupplierForm({
       {form.contacts.map((c, idx) => (
         <div key={idx} className="flex items-center gap-2 mb-2">
           <input
-            className="flex-1 rounded border border-rule px-2.5 py-2 text-[13px]"
+            className="flex-1 min-w-0 rounded border border-rule px-2.5 py-2 text-[13px]"
             placeholder="Ej. Asesor Juan"
             value={c.label}
             onChange={(e) => updateContact(idx, "label", e.target.value)}
           />
           <input
-            className="flex-1 rounded border border-rule px-2.5 py-2 text-[13px]"
+            className="flex-1 min-w-0 rounded border border-rule px-2.5 py-2 text-[13px]"
             placeholder="Ej. 593987654321"
             value={c.whatsapp}
             onChange={(e) => updateContact(idx, "whatsapp", e.target.value)}
