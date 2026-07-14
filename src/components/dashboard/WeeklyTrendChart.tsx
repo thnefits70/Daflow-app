@@ -15,6 +15,14 @@ function goalStatus(pct: number) {
   return { label: "No eficiente", color: "#C4453A" };
 }
 
+// Fill Rate reads on a much tighter band than a units goal like Pedidos
+// despachados — only above 99% counts as efficient.
+function fillRateStatus(pct: number) {
+  if (pct > 99) return { label: "Eficiente", color: "#14C7C7" };
+  if (pct >= 98) return { label: "Regular", color: "#D9A441" };
+  return { label: "Ineficiente", color: "#C4453A" };
+}
+
 function niceMax(value: number) {
   if (value <= 0) return 10;
   const magnitude = Math.pow(10, Math.floor(Math.log10(value)));
@@ -86,7 +94,7 @@ export function WeeklyTrendChart({
   const areaPath = `${linePath} L${last.x.toFixed(1)},${(padT + innerH).toFixed(1)} L${coords[0].x.toFixed(1)},${(padT + innerH).toFixed(1)} Z`;
 
   const goalPct = weeklyGoal ? Math.round((latest.value / weeklyGoal) * 100) : null;
-  const status = goalPct !== null ? goalStatus(goalPct) : null;
+  const status = goalPct !== null ? (format === "percent" ? fillRateStatus(goalPct) : goalStatus(goalPct)) : null;
   const goalYRaw = weeklyGoal ? padT + innerH - (weeklyGoal / yMax) * innerH : null;
   const goalY = goalYRaw !== null && goalYRaw > padT + 4 ? goalYRaw : null;
 
