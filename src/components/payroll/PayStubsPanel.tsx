@@ -135,6 +135,7 @@ function RosterRow({
 
 export function PayStubsPanel({ mode, departments }: { mode: "manage" | "own"; departments?: Dept[] }) {
   const now = new Date();
+  const yearOptions = Array.from({ length: 7 }, (_, i) => now.getFullYear() + 1 - i);
   const [deptId, setDeptId] = useState(departments?.[0]?.id ?? "");
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [year, setYear] = useState(now.getFullYear());
@@ -144,6 +145,8 @@ export function PayStubsPanel({ mode, departments }: { mode: "manage" | "own"; d
   const [uploadingFor, setUploadingFor] = useState<string | null>(null);
   const [err, setErr] = useState("");
   const [viewingOwnId, setViewingOwnId] = useState<string | null>(null);
+  const [filterMonth, setFilterMonth] = useState(0); // 0 = todos
+  const [filterYear, setFilterYear] = useState(0); // 0 = todos
 
   useEffect(() => {
     fetch("/api/me/seen-pay-stubs", { method: "POST" });
@@ -215,14 +218,49 @@ export function PayStubsPanel({ mode, departments }: { mode: "manage" | "own"; d
   };
 
   if (mode === "own") {
+    const ownYears = Array.from(new Set((ownStubs ?? []).map((s) => s.year))).sort((a, b) => b - a);
+    const filteredStubs = (ownStubs ?? []).filter(
+      (s) => (filterMonth === 0 || s.month === filterMonth) && (filterYear === 0 || s.year === filterYear)
+    );
+
     return (
       <div>
+        {(ownStubs?.length ?? 0) > 0 && (
+          <div className="flex items-center gap-3 flex-wrap mb-4.5">
+            <select
+              className="rounded border border-rule bg-surface px-2.5 py-2 text-[13px]"
+              value={filterMonth}
+              onChange={(e) => setFilterMonth(Number(e.target.value))}
+            >
+              <option value={0}>Todos los meses</option>
+              {MONTHS.map((m, i) => (
+                <option key={m} value={i + 1}>{m}</option>
+              ))}
+            </select>
+            <select
+              className="rounded border border-rule bg-surface px-2.5 py-2 text-[13px]"
+              value={filterYear}
+              onChange={(e) => setFilterYear(Number(e.target.value))}
+            >
+              <option value={0}>Todos los años</option>
+              {ownYears.map((y) => (
+                <option key={y} value={y}>{y}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
         {(ownStubs?.length ?? 0) === 0 && !loading && (
           <div className="border-[1.5px] border-dashed border-rule rounded-md p-8.5 text-center text-steel text-[13.5px]">
             Aún no se ha subido tu rol de pago.
           </div>
         )}
-        {ownStubs?.map((s) => (
+        {(ownStubs?.length ?? 0) > 0 && filteredStubs.length === 0 && (
+          <div className="border-[1.5px] border-dashed border-rule rounded-md p-8.5 text-center text-steel text-[13.5px]">
+            No hay comprobantes para ese filtro.
+          </div>
+        )}
+        {filteredStubs.map((s) => (
           <div key={s.id} className="bg-surface border border-rule rounded p-3.5 mb-2.5">
             <div className="flex items-center justify-between gap-3 flex-wrap">
               <div className="flex items-center gap-2 font-semibold text-[13.5px]">
@@ -266,7 +304,24 @@ export function PayStubsPanel({ mode, departments }: { mode: "manage" | "own"; d
           <button type="button" className="p-1.5 border border-rule rounded cursor-pointer" onClick={() => shiftMonth(-1)}>
             <ChevronLeft size={14} />
           </button>
-          <span className="font-semibold text-[13px] w-32 text-center">{MONTHS[month - 1]} {year}</span>
+          <select
+            className="rounded border border-rule bg-surface px-2.5 py-2 text-[13px]"
+            value={month}
+            onChange={(e) => setMonth(Number(e.target.value))}
+          >
+            {MONTHS.map((m, i) => (
+              <option key={m} value={i + 1}>{m}</option>
+            ))}
+          </select>
+          <select
+            className="rounded border border-rule bg-surface px-2.5 py-2 text-[13px]"
+            value={year}
+            onChange={(e) => setYear(Number(e.target.value))}
+          >
+            {yearOptions.map((y) => (
+              <option key={y} value={y}>{y}</option>
+            ))}
+          </select>
           <button type="button" className="p-1.5 border border-rule rounded cursor-pointer" onClick={() => shiftMonth(1)}>
             <ChevronRight size={14} />
           </button>
