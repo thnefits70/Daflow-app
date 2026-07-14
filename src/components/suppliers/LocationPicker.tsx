@@ -29,9 +29,10 @@ function isShortGoogleMapsLink(input: string) {
 }
 
 // Handles the common full-URL formats Google Maps produces when you copy a
-// link from the address bar or "compartir" a pinned point — not the
-// shortened maps.app.goo.gl links, those need resolving server-side to see
-// where they redirect, which a browser can't do across origins.
+// link from the address bar or "compartir" a pinned point. Shortened
+// maps.app.goo.gl links get resolved server-side first (see
+// isShortGoogleMapsLink below) since a browser can't follow that redirect
+// itself across origins — this only runs on the resulting long URL.
 function parseGoogleMapsUrl(input: string): { lat: number; lng: number } | null {
   const atMatch = input.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
   if (atMatch) return { lat: parseFloat(atMatch[1]), lng: parseFloat(atMatch[2]) };
@@ -148,10 +149,21 @@ export function LocationPicker({
     setResults([]);
 
     if (isShortGoogleMapsLink(trimmed)) {
-      setSearchErr(
-        "Ese enlace corto de Google Maps no se puede leer directamente. Ábrelo, copia la URL completa de la " +
-          "barra de direcciones (la que tiene @-2.17,-79.92...) y pégala aquí."
-      );
+      try {
+        const res = await fetch(`/api/resolve-maps-link?url=${encodeURIComponent(trimmed)}`);
+        const data = await res.json();
+        const coords = data?.resolvedUrl ? parseGoogleMapsUrl(data.resolvedUrl) : null;
+        if (coords) {
+          await applyPoint([coords.lat, coords.lng], 17);
+        } else {
+          setSearchErr(
+            "No se pudo ubicar el punto exacto desde ese enlace. Ábrelo y, en la barra de direcciones, " +
+              "copia la URL completa (la que tiene @-2.17,-79.92...) y pégala aquí, o marca el punto en el mapa."
+          );
+        }
+      } catch {
+        setSearchErr("No se pudo leer ese enlace. Prueba marcando el punto directamente en el mapa.");
+      }
       setSearching(false);
       return;
     }
@@ -168,19 +180,27 @@ export function LocationPicker({
     }
 
     try {
-      const params = new URLSearchParams({
-        format: "json",
-        limit: "5",
-        q: trimmed,
-        viewbox: GUAYAQUIL_VIEWBOX,
-        bounded: "0",
-      });
-      const res = await fetch(`https://nominatim.openstreetmap.org/search?${params.toString()}`);
-      const found = await res.json();
+      const searchOnce = async (query: string) => {
+        const params = new URLSearchParams({
+          format: "json",
+          limit: "5",
+          q: query,
+          viewbox: GUAYAQUIL_VIEWBOX,
+          bounded: "0",
+        });
+        const res = await fetch(`https://nominatim.openstreetmap.org/search?${params.toString()}`);
+        return res.json();
+      };
+
+      let found = await searchOnce(trimmed);
+      if (!found?.length && !/guayaquil|ecuador/i.test(trimmed)) {
+        found = await searchOnce(`${trimmed}, Guayaquil, Ecuador`);
+      }
       if (!found?.length) {
         setSearchErr(
-          "No se encontró nada con ese nombre. Si es un negocio pequeño puede que no esté en el mapa " +
-            "todavía — intenta con la dirección o el sector, o marca el punto directamente en el mapa."
+          "No se encontró nada con ese nombre — muchos negocios pequeños no están mapeados. La forma más " +
+            "confiable es abrir el lugar en la app de Google Maps, tocar «Compartir» y pegar aquí el enlace, " +
+            "o marcar el punto directamente en el mapa."
         );
         return;
       }
