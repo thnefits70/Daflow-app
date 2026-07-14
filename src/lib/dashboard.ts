@@ -74,7 +74,7 @@ export async function getDashboardData(): Promise<DashboardData> {
   return { rows, rowsSorted, totalAttempts, overallAvg };
 }
 
-export type WeeklyTrend = { deptName: string; points: { week: string; value: number }[] } | null;
+export type WeeklyTrend = { deptName: string; points: { week: string; value: number; detail?: string }[] } | null;
 
 // Shared by both the admin dashboard and every employee's Inicio — whichever
 // department has trackWeeklyMetric on (currently just Fulfillment).
@@ -108,10 +108,16 @@ export async function getFillRateTrend(): Promise<WeeklyTrend> {
 
   const points = records
     .map((r) => {
-      const total = r.value + (r.notDispatched ?? 0);
-      return total === 0 ? null : { week: r.week, value: Math.round((r.value / total) * 100) };
+      const notDispatched = r.notDispatched ?? 0;
+      const total = r.value + notDispatched;
+      if (total === 0) return null;
+      return {
+        week: r.week,
+        value: Math.round((r.value / total) * 100),
+        detail: `${r.value.toLocaleString("es-MX")} despachados · ${notDispatched.toLocaleString("es-MX")} no despachados`,
+      };
     })
-    .filter((p): p is { week: string; value: number } => p !== null);
+    .filter((p): p is { week: string; value: number; detail: string } => p !== null);
   if (points.length === 0) return null;
 
   return { deptName: dept.name, points };

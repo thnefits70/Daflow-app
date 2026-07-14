@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-export type WeeklyPoint = { week: string; value: number };
+export type WeeklyPoint = { week: string; value: number; detail?: string };
 
 function formatWeekShort(week: string) {
   const [, w] = week.split("-W");
@@ -217,8 +217,8 @@ export function WeeklyTrendChart({
           (() => {
             const c = coords[hoverIndex];
             const p = points[hoverIndex];
-            const boxW = 128;
-            const boxH = 42;
+            const boxW = p.detail ? 172 : 128;
+            const boxH = p.detail ? 58 : 42;
             const boxX = Math.max(padL, Math.min(c.x - boxW / 2, width - padR - boxW));
             const boxY = Math.max(4, c.y - boxH - 12);
             return (
@@ -230,6 +230,11 @@ export function WeeklyTrendChart({
                 <text x={boxX + boxW / 2} y={boxY + 33} textAnchor="middle" fontSize="14" fontWeight="700" fill="#f1f5fb">
                   {fmt(p.value)}{format !== "percent" && " pedidos"}
                 </text>
+                {p.detail && (
+                  <text x={boxX + boxW / 2} y={boxY + 49} textAnchor="middle" fontSize="10.5" fill="#92a3c0">
+                    {p.detail}
+                  </text>
+                )}
               </g>
             );
           })()}

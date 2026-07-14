@@ -378,7 +378,6 @@ enum SupplierStatus {
 model Supplier {
   id          String  @id @default(cuid())
   name        String
-  contactName String?
   location    String?
   // Pin exacto marcado en el mapa (OpenStreetMap), opcional — más confiable que
   // una dirección escrita para que alguien nuevo pueda llegar.

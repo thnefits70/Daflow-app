@@ -3,7 +3,6 @@ import type { SupplierDTO } from "@/components/suppliers/SuppliersPanel";
 type SupplierRow = {
   id: string;
   name: string;
-  contactName: string | null;
   location: string | null;
   locationLat: number | null;
   locationLng: number | null;
@@ -25,7 +24,6 @@ export function toSupplierDTO(s: SupplierRow): SupplierDTO {
   return {
     id: s.id,
     name: s.name,
-    contactName: s.contactName,
     location: s.location,
     locationLat: s.locationLat,
     locationLng: s.locationLng,
