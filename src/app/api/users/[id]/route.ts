@@ -44,6 +44,10 @@ const updateSchema = z.object({
   leadsDeptId: z.string().nullable().optional(),
   canManageLaws: z.boolean().optional(),
   canAddSuppliers: z.boolean().optional(),
+  // When assigning this user as leader of a department that already has a
+  // different leader, the request is rejected with 409 unless this is set —
+  // it confirms the admin wants to demote the existing leader.
+  replaceLeader: z.boolean().optional(),
 });
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -57,6 +61,25 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Datos inválidos." }, { status: 400 });
   }
   const d = parsed.data;
+
+  // Only one person can lead a given department. If this assigns someone as
+  // leader of a dept that already has a different leader, require explicit
+  // confirmation (replaceLeader) rather than silently ending up with two.
+  if (d.leadsDeptId) {
+    const existingLeader = await prisma.user.findFirst({
+      where: { leadsDeptId: d.leadsDeptId, isLeader: true, id: { not: id } },
+      select: { name: true },
+    });
+    if (existingLeader && !d.replaceLeader) {
+      return NextResponse.json({ error: "leader_exists", existingLeaderName: existingLeader.name }, { status: 409 });
+    }
+    if (existingLeader && d.replaceLeader) {
+      await prisma.user.updateMany({
+        where: { leadsDeptId: d.leadsDeptId, isLeader: true, id: { not: id } },
+        data: { isLeader: false, leadsDeptId: null },
+      });
+    }
+  }
 
   const data: Record<string, unknown> = {};
   if (d.name !== undefined) data.name = d.name;

@@ -89,6 +89,9 @@ export function ProfileDetail({
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [showCatalog, setShowCatalog] = useState(false);
   const [showCv, setShowCv] = useState(false);
+  const [choosingTeam, setChoosingTeam] = useState(false);
+  const [leaderBusy, setLeaderBusy] = useState(false);
+  const [leaderConflict, setLeaderConflict] = useState<{ deptId: string; deptName: string; existingLeaderName: string } | null>(null);
 
   const removePosition = async (id: string) => {
     setBusy(true);
@@ -114,6 +117,30 @@ export function ProfileDetail({
       body: JSON.stringify(patch),
     });
     setBusy(false);
+    router.refresh();
+  };
+
+  // Only one person can lead a given área — if it's already taken, the API
+  // rejects with 409 and we ask for confirmation before reassigning it.
+  const assignLeaderDept = async (deptId: string, replaceLeader = false) => {
+    if (!deptId) return;
+    setLeaderBusy(true);
+    const res = await fetch(`/api/users/${p.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ isLeader: true, leadsDeptId: deptId, replaceLeader }),
+    });
+    setLeaderBusy(false);
+    if (res.status === 409) {
+      const data = await res.json().catch(() => null);
+      const deptName = departments.find((d) => d.id === deptId)?.name ?? "esta área";
+      setLeaderConflict({ deptId, deptName, existingLeaderName: data?.existingLeaderName ?? "otro usuario" });
+      return;
+    }
+    if (!res.ok) return;
+    setLeaderConflict(null);
+    setChoosingTeam(false);
+    setP({ ...p, isLeader: true, leadsDeptId: deptId });
     router.refresh();
   };
 
@@ -455,30 +482,61 @@ export function ProfileDetail({
             <div className="flex border border-rule rounded overflow-hidden max-w-[220px] mb-2.5">
               <button
                 type="button"
-                className={`flex-1 py-1.5 text-[12.5px] font-semibold cursor-pointer ${p.isLeader ? "bg-blue text-white" : "bg-surface text-steel"}`}
-                onClick={() => save({ isLeader: true })}
+                className={`flex-1 py-1.5 text-[12.5px] font-semibold cursor-pointer ${p.isLeader || choosingTeam ? "bg-blue text-white" : "bg-surface text-steel"}`}
+                onClick={() => setChoosingTeam(true)}
               >
                 Sí
               </button>
               <button
                 type="button"
-                className={`flex-1 py-1.5 text-[12.5px] font-semibold cursor-pointer ${!p.isLeader ? "bg-blue text-white" : "bg-surface text-steel"}`}
-                onClick={() => save({ isLeader: false, leadsDeptId: null })}
+                className={`flex-1 py-1.5 text-[12.5px] font-semibold cursor-pointer ${!(p.isLeader || choosingTeam) ? "bg-blue text-white" : "bg-surface text-steel"}`}
+                onClick={() => {
+                  setChoosingTeam(false);
+                  setLeaderConflict(null);
+                  save({ isLeader: false, leadsDeptId: null });
+                }}
               >
                 No
               </button>
             </div>
-            {p.isLeader && (
-              <select
-                className="w-full rounded border border-rule px-2.5 py-2 text-[13px] bg-surface"
-                value={p.leadsDeptId ?? ""}
-                onChange={(e) => save({ leadsDeptId: e.target.value || null })}
-              >
-                <option value="">Selecciona un área…</option>
-                {departments.map((d) => (
-                  <option key={d.id} value={d.id}>{d.name}</option>
-                ))}
-              </select>
+            {(p.isLeader || choosingTeam) && (
+              <div>
+                <select
+                  className="w-full rounded border border-rule px-2.5 py-2 text-[13px] bg-surface"
+                  value={p.isLeader ? (p.leadsDeptId ?? "") : ""}
+                  disabled={leaderBusy}
+                  onChange={(e) => assignLeaderDept(e.target.value)}
+                >
+                  <option value="">Selecciona un área… (obligatorio)</option>
+                  {departments.map((d) => (
+                    <option key={d.id} value={d.id}>{d.name}</option>
+                  ))}
+                </select>
+                {!p.isLeader && !leaderConflict && (
+                  <div className="text-[11px] text-red mt-1.5">Debes elegir el área para completar el liderazgo.</div>
+                )}
+                {leaderConflict && (
+                  <div className="mt-2 bg-red/10 border border-red rounded p-2.5">
+                    <div className="text-[12px] text-ink mb-2">
+                      <strong>{leaderConflict.existingLeaderName}</strong> ya lidera {leaderConflict.deptName}. Solo
+                      puede haber un líder por área — ¿lo reemplazas?
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        disabled={leaderBusy}
+                        className="rounded border border-red bg-red px-3 py-1.5 text-[12px] font-semibold text-white cursor-pointer disabled:opacity-60"
+                        onClick={() => assignLeaderDept(leaderConflict.deptId, true)}
+                      >
+                        Sí, reemplazar
+                      </button>
+                      <button type="button" className="text-steel text-[12px] cursor-pointer" onClick={() => setLeaderConflict(null)}>
+                        Cancelar
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
             )}
           </div>
 
