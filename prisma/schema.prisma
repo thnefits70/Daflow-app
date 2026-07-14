@@ -416,6 +416,7 @@ model Supplier {
   updatedAt DateTime @updatedAt
 
   contacts SupplierContact[]
+  channels SupplierChannel[]
 
   @@index([status])
   @@index([createdByDeptId])
@@ -429,6 +430,20 @@ model SupplierContact {
   // Ej. "Asesor Juan", "Ventas" — a quién corresponde este WhatsApp dentro de la empresa
   label    String
   whatsapp String
+
+  @@index([supplierId])
+}
+
+// Enlace a otro canal del proveedor (Telegram, Instagram, Facebook, etc.) —
+// hacer clic abre el enlace directamente.
+model SupplierChannel {
+  id         String   @id @default(cuid())
+  supplierId String
+  supplier   Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+
+  // "TELEGRAM" | "INSTAGRAM" | "FACEBOOK" | "OTHER"
+  platform String
+  url      String
 
   @@index([supplierId])
 }

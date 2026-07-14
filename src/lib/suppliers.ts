@@ -1,4 +1,4 @@
-import type { SupplierDTO } from "@/components/suppliers/SuppliersPanel";
+import type { SupplierDTO, ChannelPlatform } from "@/components/suppliers/SuppliersPanel";
 
 type SupplierRow = {
   id: string;
@@ -14,6 +14,7 @@ type SupplierRow = {
   approvedById: string | null;
   createdAt: Date;
   contacts: { id: string; label: string; whatsapp: string }[];
+  channels: { id: string; platform: string; url: string }[];
   createdBy: { name: string } | null;
   approvedBy: { name: string } | null;
 };
@@ -35,5 +36,6 @@ export function toSupplierDTO(s: SupplierRow): SupplierDTO {
     approvedByName: s.approvedBy?.name ?? (s.status === "APPROVED" && s.approvedById === null ? "Administrador" : null),
     createdAt: s.createdAt.toISOString(),
     contacts: s.contacts.map((c) => ({ id: c.id, label: c.label, whatsapp: c.whatsapp })),
+    channels: s.channels.map((c) => ({ id: c.id, platform: c.platform as ChannelPlatform, url: c.url })),
   };
 }

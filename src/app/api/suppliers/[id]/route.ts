@@ -8,6 +8,11 @@ const contactSchema = z.object({
   whatsapp: z.string().trim().min(5, "Número de WhatsApp inválido."),
 });
 
+const channelSchema = z.object({
+  platform: z.enum(["TELEGRAM", "INSTAGRAM", "FACEBOOK", "OTHER"]),
+  url: z.string().trim().min(1, "Falta el enlace del canal.").url("Enlace inválido."),
+});
+
 const updateSchema = z.object({
   name: z.string().trim().min(1).optional(),
   location: z.string().trim().nullable().optional(),
@@ -16,6 +21,7 @@ const updateSchema = z.object({
   category: z.string().trim().nullable().optional(),
   notes: z.string().trim().min(1, "Agrega una descripción del proveedor en Notas.").optional(),
   contacts: z.array(contactSchema).min(1, "Agrega al menos un contacto de WhatsApp.").optional(),
+  channels: z.array(channelSchema).optional(),
 });
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -29,7 +35,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Datos inválidos." }, { status: 400 });
   }
-  const { contacts, ...rest } = parsed.data;
+  const { contacts, channels, ...rest } = parsed.data;
 
   const supplier = await prisma.supplier
     .update({
@@ -39,8 +45,16 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         ...(contacts
           ? { contacts: { deleteMany: {}, create: contacts.map((c) => ({ label: c.label, whatsapp: c.whatsapp })) } }
           : {}),
+        ...(channels
+          ? { channels: { deleteMany: {}, create: channels.map((c) => ({ platform: c.platform, url: c.url })) } }
+          : {}),
       },
-      include: { contacts: true, createdBy: { select: { name: true } }, approvedBy: { select: { name: true } } },
+      include: {
+        contacts: true,
+        channels: true,
+        createdBy: { select: { name: true } },
+        approvedBy: { select: { name: true } },
+      },
     })
     .catch(() => null);
   if (!supplier) return NextResponse.json({ error: "No encontrado." }, { status: 404 });

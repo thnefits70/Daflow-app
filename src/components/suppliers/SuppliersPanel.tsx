@@ -2,10 +2,12 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Trash2, Pencil, MessageCircle, MapPin, Tag, Check, X, Search } from "lucide-react";
+import { Plus, Trash2, Pencil, MessageCircle, MapPin, Tag, Check, X, Search, Globe } from "lucide-react";
 import { LocationPicker } from "./LocationPicker";
 
 export type SupplierContactDTO = { id?: string; label: string; whatsapp: string };
+export type ChannelPlatform = "TELEGRAM" | "INSTAGRAM" | "FACEBOOK" | "OTHER";
+export type SupplierChannelDTO = { id?: string; platform: ChannelPlatform; url: string };
 export type SupplierDTO = {
   id: string;
   name: string;
@@ -20,6 +22,14 @@ export type SupplierDTO = {
   approvedByName: string | null;
   createdAt: string;
   contacts: SupplierContactDTO[];
+  channels: SupplierChannelDTO[];
+};
+
+const CHANNEL_LABELS: Record<ChannelPlatform, string> = {
+  TELEGRAM: "Telegram",
+  INSTAGRAM: "Instagram",
+  FACEBOOK: "Facebook",
+  OTHER: "Otro",
 };
 
 function waLink(raw: string) {
@@ -69,6 +79,7 @@ const emptyForm = {
   category: "",
   notes: "",
   contacts: [{ label: "", whatsapp: "" }],
+  channels: [] as SupplierChannelDTO[],
 };
 
 export function SuppliersPanel({
@@ -118,6 +129,7 @@ export function SuppliersPanel({
       category: s.category ?? "",
       notes: s.notes ?? "",
       contacts: s.contacts.length ? s.contacts.map((c) => ({ label: c.label, whatsapp: c.whatsapp })) : [{ label: "", whatsapp: "" }],
+      channels: s.channels.map((c) => ({ platform: c.platform, url: c.url })),
     });
     setFormOpen(true);
     setErr("");
@@ -129,8 +141,15 @@ export function SuppliersPanel({
   const addContactRow = () => setForm((f) => ({ ...f, contacts: [...f.contacts, { label: "", whatsapp: "" }] }));
   const removeContactRow = (idx: number) => setForm((f) => ({ ...f, contacts: f.contacts.filter((_, i) => i !== idx) }));
 
+  const updateChannel = (idx: number, field: "platform" | "url", value: string) => {
+    setForm((f) => ({ ...f, channels: f.channels.map((c, i) => (i === idx ? { ...c, [field]: value } : c)) }));
+  };
+  const addChannelRow = () => setForm((f) => ({ ...f, channels: [...f.channels, { platform: "TELEGRAM", url: "" }] }));
+  const removeChannelRow = (idx: number) => setForm((f) => ({ ...f, channels: f.channels.filter((_, i) => i !== idx) }));
+
   const save = async () => {
     const contacts = form.contacts.filter((c) => c.label.trim() && c.whatsapp.trim());
+    const channels = form.channels.filter((c) => c.url.trim()).map((c) => ({ platform: c.platform, url: c.url.trim() }));
     if (!form.name.trim() || !form.notes.trim() || contacts.length === 0) {
       setErr("Completa el nombre del proveedor, la descripción en Notas, y al menos un contacto de WhatsApp.");
       return;
@@ -145,6 +164,7 @@ export function SuppliersPanel({
       category: form.category.trim(),
       notes: form.notes.trim(),
       contacts,
+      channels,
     };
     const res = editingId
       ? await fetch(`/api/suppliers/${editingId}`, {
@@ -247,6 +267,9 @@ export function SuppliersPanel({
               updateContact={updateContact}
               addContactRow={addContactRow}
               removeContactRow={removeContactRow}
+              updateChannel={updateChannel}
+              addChannelRow={addChannelRow}
+              removeChannelRow={removeChannelRow}
               err={err}
               busy={busy}
               editing={!!editingId}
@@ -318,6 +341,17 @@ export function SuppliersPanel({
                       <MessageCircle size={13} /> {c.label}
                     </a>
                   ))}
+                  {s.channels.map((c, i) => (
+                    <a
+                      key={c.id ?? i}
+                      href={c.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 text-[12px] font-semibold border border-blue bg-blue/10 text-blue rounded-full px-3 py-1.5 hover:bg-blue/20"
+                    >
+                      <Globe size={13} /> {CHANNEL_LABELS[c.platform]}
+                    </a>
+                  ))}
                 </div>
               </div>
             ))}
@@ -366,6 +400,11 @@ export function SuppliersPanel({
                 {s.contacts.map((c, i) => (
                   <span key={c.id ?? i} className="inline-flex items-center gap-1.5 text-[12px] bg-cloud border border-rule rounded-full px-2.5 py-1">
                     <MessageCircle size={12} /> {c.label}: {c.whatsapp}
+                  </span>
+                ))}
+                {s.channels.map((c, i) => (
+                  <span key={c.id ?? i} className="inline-flex items-center gap-1.5 text-[12px] bg-cloud border border-rule rounded-full px-2.5 py-1">
+                    <Globe size={12} /> {CHANNEL_LABELS[c.platform]}
                   </span>
                 ))}
               </div>
@@ -433,6 +472,9 @@ function SupplierForm({
   updateContact,
   addContactRow,
   removeContactRow,
+  updateChannel,
+  addChannelRow,
+  removeChannelRow,
   err,
   busy,
   editing,
@@ -444,6 +486,9 @@ function SupplierForm({
   updateContact: (idx: number, field: "label" | "whatsapp", value: string) => void;
   addContactRow: () => void;
   removeContactRow: (idx: number) => void;
+  updateChannel: (idx: number, field: "platform" | "url", value: string) => void;
+  addChannelRow: () => void;
+  removeChannelRow: (idx: number) => void;
   err: string;
   busy: boolean;
   editing: boolean;
@@ -538,6 +583,35 @@ function SupplierForm({
       ))}
       <button type="button" className="text-[12px] text-blue font-semibold cursor-pointer mb-3" onClick={addContactRow}>
         <Plus size={12} className="inline -mt-0.5" /> Agregar otro WhatsApp
+      </button>
+
+      <label className="block mb-1.5 text-[10.5px] font-semibold uppercase tracking-wide text-steel">
+        Canales (opcional) — Telegram, Instagram, Facebook u otro
+      </label>
+      {form.channels.map((c, idx) => (
+        <div key={idx} className="flex items-center gap-2 mb-2">
+          <select
+            className="rounded border border-rule px-2.5 py-2 text-[13px] bg-surface shrink-0"
+            value={c.platform}
+            onChange={(e) => updateChannel(idx, "platform", e.target.value)}
+          >
+            {(Object.keys(CHANNEL_LABELS) as ChannelPlatform[]).map((p) => (
+              <option key={p} value={p}>{CHANNEL_LABELS[p]}</option>
+            ))}
+          </select>
+          <input
+            className="flex-1 min-w-0 rounded border border-rule px-2.5 py-2 text-[13px]"
+            placeholder="https://t.me/tu-canal"
+            value={c.url}
+            onChange={(e) => updateChannel(idx, "url", e.target.value)}
+          />
+          <button type="button" className="text-steel hover:text-red cursor-pointer" onClick={() => removeChannelRow(idx)}>
+            <X size={15} />
+          </button>
+        </div>
+      ))}
+      <button type="button" className="text-[12px] text-blue font-semibold cursor-pointer mb-3" onClick={addChannelRow}>
+        <Plus size={12} className="inline -mt-0.5" /> Agregar canal
       </button>
 
       {err && <div className="text-red text-[12.5px] mb-2.5">{err}</div>}

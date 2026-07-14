@@ -5,6 +5,7 @@ import { toSupplierDTO } from "@/lib/suppliers";
 
 const supplierInclude = {
   contacts: { orderBy: { id: "asc" as const } },
+  channels: { orderBy: { id: "asc" as const } },
   createdBy: { select: { name: true } },
   approvedBy: { select: { name: true } },
 };

@@ -6,6 +6,7 @@ import { getSupplierAccess } from "@/lib/guards";
 
 const supplierInclude = {
   contacts: { orderBy: { id: "asc" as const } },
+  channels: { orderBy: { id: "asc" as const } },
   createdBy: { select: { name: true } },
   approvedBy: { select: { name: true } },
 };
@@ -49,6 +50,11 @@ export async function GET(req: NextRequest) {
   return NextResponse.json(suppliers);
 }
 
+const channelSchema = z.object({
+  platform: z.enum(["TELEGRAM", "INSTAGRAM", "FACEBOOK", "OTHER"]),
+  url: z.string().trim().min(1, "Falta el enlace del canal.").url("Enlace inválido."),
+});
+
 const createSchema = z.object({
   name: z.string().trim().min(1, "El nombre del proveedor es obligatorio."),
   location: z.string().trim().optional(),
@@ -64,6 +70,7 @@ const createSchema = z.object({
       })
     )
     .min(1, "Agrega al menos un contacto de WhatsApp."),
+  channels: z.array(channelSchema).optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -78,7 +85,7 @@ export async function POST(req: NextRequest) {
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Datos inválidos." }, { status: 400 });
   }
-  const { contacts, ...rest } = parsed.data;
+  const { contacts, channels, ...rest } = parsed.data;
 
   // Admin isn't a real User row (its session id is the literal "admin"), so
   // admin-authored actions never populate the User relations — only the
@@ -99,6 +106,7 @@ export async function POST(req: NextRequest) {
       approvedById: isSelfApproving ? session.user.id : null,
       approvedAt: autoApproved ? new Date() : null,
       contacts: { create: contacts },
+      channels: channels && channels.length > 0 ? { create: channels } : undefined,
     },
     include: supplierInclude,
   });
