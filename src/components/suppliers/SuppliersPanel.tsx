@@ -433,7 +433,7 @@ function SupplierForm({
           className="w-full rounded border border-rule px-2.5 py-2 text-[13.5px]"
           value={form.location}
           onChange={(e) => setForm((f) => ({ ...f, location: e.target.value }))}
-          placeholder="Ej. Managua, cerca del Mercado Oriental"
+          placeholder="Ej. Guayaquil, cerca del Mall del Sol"
         />
       </div>
 
@@ -469,7 +469,7 @@ function SupplierForm({
           />
           <input
             className="flex-1 rounded border border-rule px-2.5 py-2 text-[13px]"
-            placeholder="Ej. 50588887777"
+            placeholder="Ej. 593987654321"
             value={c.whatsapp}
             onChange={(e) => updateContact(idx, "whatsapp", e.target.value)}
           />

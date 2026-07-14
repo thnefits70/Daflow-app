@@ -2,11 +2,17 @@
 
 import "leaflet/dist/leaflet.css";
 import { useEffect, useRef, useState } from "react";
-import { Search } from "lucide-react";
+import { Search, MapPin } from "lucide-react";
 import type * as Leaflet from "leaflet";
 
-const MANAGUA: [number, number] = [12.114, -86.236];
+// Business is based in Guayaquil, Ecuador — center the map there and bias
+// (not restrict) address search toward that area so results elsewhere in
+// the world don't outrank the right one.
+const GUAYAQUIL: [number, number] = [-2.1709, -79.9224];
+const GUAYAQUIL_VIEWBOX = "-80.2,-1.8,-79.5,-2.5"; // lonMin,latMax,lonMax,latMin
 const MARKER_ICON_BASE = "https://unpkg.com/leaflet@1.9.4/dist/images";
+
+type SearchResult = { label: string; lat: number; lng: number };
 
 function buildIcon(L: typeof Leaflet) {
   return L.icon({
@@ -16,6 +22,32 @@ function buildIcon(L: typeof Leaflet) {
     iconSize: [25, 41],
     iconAnchor: [12, 41],
   });
+}
+
+function isShortGoogleMapsLink(input: string) {
+  return /(maps\.app\.goo\.gl|goo\.gl\/maps)/i.test(input);
+}
+
+// Handles the common full-URL formats Google Maps produces when you copy a
+// link from the address bar or "compartir" a pinned point — not the
+// shortened maps.app.goo.gl links, those need resolving server-side to see
+// where they redirect, which a browser can't do across origins.
+function parseGoogleMapsUrl(input: string): { lat: number; lng: number } | null {
+  const atMatch = input.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
+  if (atMatch) return { lat: parseFloat(atMatch[1]), lng: parseFloat(atMatch[2]) };
+
+  const dataMatch = input.match(/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/);
+  if (dataMatch) return { lat: parseFloat(dataMatch[1]), lng: parseFloat(dataMatch[2]) };
+
+  try {
+    const url = new URL(input);
+    const q = url.searchParams.get("q") ?? url.searchParams.get("query");
+    const qMatch = q?.match(/^(-?\d+\.\d+),(-?\d+\.\d+)$/);
+    if (qMatch) return { lat: parseFloat(qMatch[1]), lng: parseFloat(qMatch[2]) };
+  } catch {
+    // not a valid absolute URL
+  }
+  return null;
 }
 
 export function LocationPicker({
@@ -39,6 +71,24 @@ export function LocationPicker({
   const [search, setSearch] = useState("");
   const [searching, setSearching] = useState(false);
   const [searchErr, setSearchErr] = useState("");
+  const [results, setResults] = useState<SearchResult[]>([]);
+
+  const applyPoint = async (point: [number, number], zoom: number) => {
+    const L = await import("leaflet");
+    if (!mapInstance.current) return;
+    mapInstance.current.setView(point, zoom);
+    if (markerInstance.current) {
+      markerInstance.current.setLatLng(point);
+    } else {
+      markerInstance.current = L.marker(point, { icon: buildIcon(L), draggable: true }).addTo(mapInstance.current);
+      markerInstance.current.on("dragend", () => {
+        const pos = markerInstance.current!.getLatLng();
+        onChangeRef.current({ lat: pos.lat, lng: pos.lng });
+      });
+    }
+    setHasPoint(true);
+    onChangeRef.current({ lat: point[0], lng: point[1] });
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -46,7 +96,7 @@ export function LocationPicker({
     import("leaflet").then((L) => {
       if (cancelled || !mapRef.current || mapInstance.current) return;
 
-      const start: [number, number] = lat !== null && lng !== null ? [lat, lng] : MANAGUA;
+      const start: [number, number] = lat !== null && lng !== null ? [lat, lng] : GUAYAQUIL;
       const map = L.map(mapRef.current).setView(start, lat !== null ? 15 : 12);
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
         attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
@@ -91,36 +141,56 @@ export function LocationPicker({
   }, []);
 
   const runSearch = async () => {
-    if (!search.trim()) return;
+    const trimmed = search.trim();
+    if (!trimmed) return;
     setSearching(true);
     setSearchErr("");
-    try {
-      const res = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(search)}`
+    setResults([]);
+
+    if (isShortGoogleMapsLink(trimmed)) {
+      setSearchErr(
+        "Ese enlace corto de Google Maps no se puede leer directamente. Ábrelo, copia la URL completa de la " +
+          "barra de direcciones (la que tiene @-2.17,-79.92...) y pégala aquí."
       );
-      const results = await res.json();
-      const first = results?.[0];
-      if (!first) {
-        setSearchErr("No se encontró esa dirección. Intenta marcar el punto directamente en el mapa.");
+      setSearching(false);
+      return;
+    }
+
+    if (/^https?:\/\//i.test(trimmed)) {
+      const coords = parseGoogleMapsUrl(trimmed);
+      if (coords) {
+        await applyPoint([coords.lat, coords.lng], 17);
+      } else {
+        setSearchErr("No se pudo leer ese enlace. Prueba marcando el punto directamente en el mapa.");
+      }
+      setSearching(false);
+      return;
+    }
+
+    try {
+      const params = new URLSearchParams({
+        format: "json",
+        limit: "5",
+        q: trimmed,
+        viewbox: GUAYAQUIL_VIEWBOX,
+        bounded: "0",
+      });
+      const res = await fetch(`https://nominatim.openstreetmap.org/search?${params.toString()}`);
+      const found = await res.json();
+      if (!found?.length) {
+        setSearchErr(
+          "No se encontró nada con ese nombre. Si es un negocio pequeño puede que no esté en el mapa " +
+            "todavía — intenta con la dirección o el sector, o marca el punto directamente en el mapa."
+        );
         return;
       }
-      const foundLat = parseFloat(first.lat);
-      const foundLng = parseFloat(first.lon);
-      const L = await import("leaflet");
-      mapInstance.current?.setView([foundLat, foundLng], 16);
-      if (markerInstance.current) {
-        markerInstance.current.setLatLng([foundLat, foundLng]);
-      } else if (mapInstance.current) {
-        markerInstance.current = L.marker([foundLat, foundLng], { icon: buildIcon(L), draggable: true }).addTo(
-          mapInstance.current
-        );
-        markerInstance.current.on("dragend", () => {
-          const pos = markerInstance.current!.getLatLng();
-          onChangeRef.current({ lat: pos.lat, lng: pos.lng });
-        });
-      }
-      setHasPoint(true);
-      onChangeRef.current({ lat: foundLat, lng: foundLng });
+      setResults(
+        found.map((r: { display_name: string; lat: string; lon: string }) => ({
+          label: r.display_name,
+          lat: parseFloat(r.lat),
+          lng: parseFloat(r.lon),
+        }))
+      );
     } catch {
       setSearchErr("No se pudo buscar. Intenta marcar el punto directamente en el mapa.");
     } finally {
@@ -128,12 +198,18 @@ export function LocationPicker({
     }
   };
 
+  const pickResult = async (r: SearchResult) => {
+    setResults([]);
+    setSearch(r.label);
+    await applyPoint([r.lat, r.lng], 17);
+  };
+
   return (
     <div>
       <div className="flex items-center gap-2 mb-2">
         <input
           className="flex-1 rounded border border-rule px-2.5 py-2 text-[13px]"
-          placeholder="Buscar una dirección para ubicarla en el mapa…"
+          placeholder="Buscar nombre del negocio, dirección, o pegar un enlace de Google Maps…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           onKeyDown={(e) => {
@@ -153,11 +229,26 @@ export function LocationPicker({
         </button>
       </div>
       {searchErr && <div className="text-red text-[11.5px] mb-2">{searchErr}</div>}
+      {results.length > 0 && (
+        <div className="border border-rule rounded-md mb-2 overflow-hidden">
+          {results.map((r, i) => (
+            <button
+              key={i}
+              type="button"
+              className="w-full text-left flex items-start gap-1.5 px-2.5 py-2 text-[12px] hover:bg-cloud cursor-pointer border-b border-rule last:border-b-0"
+              onClick={() => pickResult(r)}
+            >
+              <MapPin size={12} className="shrink-0 mt-0.5 text-steel" />
+              <span>{r.label}</span>
+            </button>
+          ))}
+        </div>
+      )}
       <div ref={mapRef} className="w-full rounded border border-rule" style={{ height: 260 }} />
       <div className="text-[11px] text-steel mt-1.5">
         {hasPoint
           ? "Punto marcado — haz clic en otro lugar del mapa para moverlo, o arrastra el marcador."
-          : "Busca una dirección o haz clic directamente en el mapa para marcar el punto exacto."}
+          : "Busca el negocio o la dirección, pega un enlace de Google Maps, o haz clic directamente en el mapa."}
       </div>
     </div>
   );
