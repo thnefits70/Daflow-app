@@ -30,7 +30,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 const updateSchema = z.object({
   name: z.string().trim().min(1).optional(),
   username: z.string().trim().min(1).optional(),
-  position: z.string().trim().optional(),
+  position: z.string().trim().nullable().optional(),
   password: z.string().min(4).optional(),
   deptId: z.string().nullable().optional(),
   photoUrl: z.string().nullable().optional(),

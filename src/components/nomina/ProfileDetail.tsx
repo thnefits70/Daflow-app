@@ -78,6 +78,7 @@ export function ProfileDetail({
   const [busy, setBusy] = useState(false);
   const [photoErr, setPhotoErr] = useState("");
   const [cvErr, setCvErr] = useState("");
+  const [saveErr, setSaveErr] = useState("");
   const [skillInput, setSkillInput] = useState("");
   const [resetting, setResetting] = useState(false);
   const [newPassword, setNewPassword] = useState("");
@@ -108,15 +109,26 @@ export function ProfileDetail({
   };
 
   const save = async (patch: Partial<UserProfile>) => {
+    const prev = p;
     const next = { ...p, ...patch };
     setP(next);
     setBusy(true);
-    await fetch(`/api/users/${p.id}`, {
+    setSaveErr("");
+    const res = await fetch(`/api/users/${p.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(patch),
     });
     setBusy(false);
+    if (!res.ok) {
+      // Revert the optimistic update — if we don't, the field keeps showing
+      // the new value even though the database still has the old one, which
+      // is exactly the "it looked saved but wasn't" bug this guards against.
+      setP(prev);
+      const data = await res.json().catch(() => null);
+      setSaveErr(data?.error || "No se pudo guardar el cambio. Intenta de nuevo.");
+      return;
+    }
     router.refresh();
   };
 
@@ -137,7 +149,11 @@ export function ProfileDetail({
       setLeaderConflict({ deptId, deptName, existingLeaderName: data?.existingLeaderName ?? "otro usuario" });
       return;
     }
-    if (!res.ok) return;
+    if (!res.ok) {
+      const data = await res.json().catch(() => null);
+      setSaveErr(data?.error || "No se pudo guardar el cambio de líder.");
+      return;
+    }
     setLeaderConflict(null);
     setChoosingTeam(false);
     setP({ ...p, isLeader: true, leadsDeptId: deptId });
@@ -266,6 +282,12 @@ export function ProfileDetail({
           </button>
         )}
       </div>
+
+      {saveErr && (
+        <div className="bg-red/10 border border-red text-red rounded p-3 mb-3.5 text-[13px]">
+          No se guardó: {saveErr}
+        </div>
+      )}
 
       <div className="bg-surface border border-rule rounded p-5 flex gap-6 flex-wrap items-start">
         <div className="text-center">
