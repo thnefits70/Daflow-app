@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Trash2, Pencil, MessageCircle, MapPin, Tag, Check, X } from "lucide-react";
+import { Plus, Trash2, Pencil, MessageCircle, MapPin, Tag, Check, X, Search } from "lucide-react";
 import { LocationPicker } from "./LocationPicker";
 
 export type SupplierContactDTO = { id?: string; label: string; whatsapp: string };
@@ -29,6 +29,34 @@ function waLink(raw: string) {
 
 function mapsLink(lat: number, lng: number) {
   return `https://www.google.com/maps?q=${lat},${lng}`;
+}
+
+const DIACRITICS_RE = new RegExp("[\\u0300-\\u036f]", "g");
+
+function normalize(text: string) {
+  return text.toLowerCase().normalize("NFD").replace(DIACRITICS_RE, "");
+}
+
+// Ranks by how well a supplier matches the search — never hides anyone, just
+// reorders so the most likely match (by "qué provee", then name, then notes)
+// rises to the top, since suppliers are only ever tagged with free text.
+function relevanceScore(s: SupplierDTO, query: string) {
+  const q = normalize(query.trim());
+  if (!q) return 0;
+  const words = q.split(/\s+/).filter(Boolean);
+  const fields: [string, number][] = [
+    [normalize(s.category ?? ""), 3],
+    [normalize(s.name), 2],
+    [normalize(s.notes ?? ""), 1],
+  ];
+  let score = 0;
+  for (const [text, weight] of fields) {
+    for (const w of words) {
+      if (text.includes(w)) score += weight;
+    }
+    if (words.length > 1 && text.includes(q)) score += weight * 2;
+  }
+  return score;
 }
 
 const emptyForm = {
@@ -64,6 +92,12 @@ export function SuppliersPanel({
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
   const [rejectingId, setRejectingId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState("");
+  const [query, setQuery] = useState("");
+
+  const sortedSuppliers = useMemo(() => {
+    if (!query.trim()) return suppliers;
+    return [...suppliers].sort((a, b) => relevanceScore(b, query) - relevanceScore(a, query));
+  }, [suppliers, query]);
 
   const startNew = () => {
     setEditingId(null);
@@ -192,6 +226,18 @@ export function SuppliersPanel({
             )}
           </div>
 
+          {suppliers.length > 0 && (
+            <div className="relative mb-4">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-steel" />
+              <input
+                className="w-full rounded border border-rule pl-8.5 pr-3 py-2 text-[13px]"
+                placeholder="¿Qué necesitas? Ej. productos de cocina — ordena por probabilidad, no oculta a nadie"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+              />
+            </div>
+          )}
+
           {formOpen && (
             <SupplierForm
               form={form}
@@ -217,7 +263,7 @@ export function SuppliersPanel({
           )}
 
           <div className="grid grid-cols-2 gap-3.5">
-            {suppliers.map((s) => (
+            {sortedSuppliers.map((s) => (
               <div key={s.id} className="bg-surface border border-rule rounded-md p-4">
                 <div className="flex items-start justify-between gap-2 mb-1.5">
                   <span className="font-semibold text-[14px]">{s.name}</span>
