@@ -3,7 +3,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { X } from "lucide-react";
 
-type Celebrant = { id: string; name: string; photoUrl: string | null; isMe: boolean };
+type Celebrant = { id: string; name: string; photoUrl: string | null; isMe: boolean; message?: string };
+
+const MESSAGE_SIGNATURE = "Andrés Damián, CEO de Provedix";
 
 const CONFETTI_COLORS = ["#14C7C7", "#1E5EFF", "#F5C543", "#C4453A", "#8B5CF6", "#22C55E"];
 
@@ -48,7 +50,7 @@ export function BirthdayPopup() {
 
   useEffect(() => {
     if (!current) return;
-    const t = setTimeout(dismiss, 10000);
+    const t = setTimeout(dismiss, current.message ? 16000 : 10000);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [current?.id]);
@@ -87,7 +89,7 @@ export function BirthdayPopup() {
       </div>
 
       <div
-        className="relative bg-surface rounded-xl p-8 text-center max-w-sm w-full shadow-2xl"
+        className={`relative bg-surface rounded-xl p-8 text-center w-full shadow-2xl ${current.message ? "max-w-md" : "max-w-sm"}`}
         style={{ animation: "birthday-pop 0.35s ease-out" }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -118,6 +120,12 @@ export function BirthdayPopup() {
         <div className="text-[13px] text-steel">
           {current.isMe ? "Que tengas un excelente día 🎂" : `Un saludo le alegrará el día a ${firstName}.`}
         </div>
+        {current.message && (
+          <div className="mt-5 pt-4 border-t border-rule text-left">
+            <div className="text-[13.5px] text-ink/85 italic leading-relaxed">“{current.message}”</div>
+            <div className="text-[12px] text-steel font-semibold mt-2 text-right">— {MESSAGE_SIGNATURE}</div>
+          </div>
+        )}
       </div>
     </div>
   );

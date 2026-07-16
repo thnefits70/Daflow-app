@@ -9,7 +9,5 @@ export async function GET() {
   const viewerId = session.user.role === "admin" ? "admin" : session.user.id;
   const celebrants = await getUnseenCelebrantsForViewer(viewerId);
 
-  return NextResponse.json({
-    celebrants: celebrants.map((c) => ({ ...c, isMe: c.id === viewerId })),
-  });
+  return NextResponse.json({ celebrants });
 }

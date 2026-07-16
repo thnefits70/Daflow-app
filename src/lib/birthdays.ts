@@ -1,6 +1,37 @@
 import { prisma } from "@/lib/prisma";
 
-export type Celebrant = { id: string; name: string; photoUrl: string | null };
+export type Celebrant = { id: string; name: string; photoUrl: string | null; message?: string };
+
+export const MESSAGE_SIGNATURE = "Andrés Damián, CEO de Provedix";
+
+// Original messages, not attributed quotes — written to read like they come
+// straight from the CEO, since that's the whole point of signing them.
+const MOTIVATIONAL_MESSAGES = [
+  "Cada año que cumples es una prueba de que sigues avanzando, aunque no siempre lo notes. Sigue así.",
+  "El crecimiento no es cómodo, pero es la única forma de convertirte en quien quieres ser. Vas por buen camino.",
+  "No mides tu valor por lo rápido que llegas, sino por no dejar de caminar. Feliz nuevo año de vida.",
+  "Las personas que más admiro no son las que nunca dudan, sino las que siguen adelante a pesar de la duda. Esa eres tú.",
+  "Que este nuevo año te traiga los retos que necesitas para descubrir de qué estás hecho.",
+  "Tu mentalidad de hoy construye tus resultados de mañana. Sigue eligiendo crecer.",
+  "No hay una versión final de ti — solo la siguiente mejor versión. Ya vas en camino.",
+  "La disciplina que aplicas cuando nadie te ve es la que más habla de tu carácter. Sigue así.",
+  "Celebra lo lejos que has llegado, y ten hambre de lo lejos que aún puedes llegar.",
+  "El éxito no es un destino, es la suma de decisiones pequeñas y constantes. Tú ya las estás tomando.",
+  "Que cada obstáculo de este año se convierta en una lección que te haga más fuerte.",
+  "La superación no grita, se construye en silencio, día a día. Eso es exactamente lo que veo en ti.",
+  "Feliz cumpleaños. Que sigas creyendo en tu propio potencial tanto como yo creo en él.",
+  "No existe el momento perfecto para crecer — solo el que decides aprovechar. Sigue decidiendo bien.",
+  "Gracias por seguir esforzándote, incluso en los días difíciles. Eso es lo que separa a quienes crecen de quienes se quedan.",
+];
+
+// Same celebrant + same day always gets the same message (stable across
+// reloads before they dismiss it), but a fresh pick each new birthday.
+function pickMotivationalMessage(celebrantId: string, dateKey: string) {
+  const seed = celebrantId + dateKey;
+  let hash = 0;
+  for (let i = 0; i < seed.length; i++) hash = (hash * 31 + seed.charCodeAt(i)) >>> 0;
+  return MOTIVATIONAL_MESSAGES[hash % MOTIVATIONAL_MESSAGES.length];
+}
 
 // Server runtime is UTC (Vercel), and an HTML date input round-trips as UTC
 // midnight, so comparing month/day in UTC on both sides keeps them in sync —
@@ -35,7 +66,9 @@ export async function getTodaysCelebrants(): Promise<Celebrant[]> {
   return celebrants;
 }
 
-export async function getUnseenCelebrantsForViewer(viewerId: string): Promise<Celebrant[]> {
+export async function getUnseenCelebrantsForViewer(
+  viewerId: string
+): Promise<(Celebrant & { isMe: boolean })[]> {
   const celebrants = await getTodaysCelebrants();
   if (celebrants.length === 0) return [];
 
@@ -45,7 +78,14 @@ export async function getUnseenCelebrantsForViewer(viewerId: string): Promise<Ce
     select: { celebrantId: true },
   });
   const seenIds = new Set(seen.map((s) => s.celebrantId));
-  return celebrants.filter((c) => !seenIds.has(c.id));
+  const dateKey = celebrationDate.toISOString().slice(0, 10);
+
+  return celebrants
+    .filter((c) => !seenIds.has(c.id))
+    .map((c) => {
+      const isMe = c.id === viewerId;
+      return { ...c, isMe, message: isMe ? pickMotivationalMessage(c.id, dateKey) : undefined };
+    });
 }
 
 export async function markCelebrantSeen(viewerId: string, celebrantId: string) {
