@@ -17,6 +17,7 @@ import {
   Truck,
   Rocket,
   Wallet,
+  FolderLock,
   Menu,
   X,
 } from "lucide-react";
@@ -175,6 +176,9 @@ export function AdminSidebar({
               {pendingSuppliersCount}
             </span>
           )}
+        </Link>
+        <Link href="/admin/documentos-confidenciales" className={`${NAV_ITEM} ${pathname.startsWith("/admin/documentos-confidenciales") ? NAV_ACTIVE : NAV_INACTIVE}`}>
+          <FolderLock size={15} /> Documentos Confidenciales
         </Link>
         <Link href="/admin/settings" className={`${NAV_ITEM} ${pathname.startsWith("/admin/settings") ? NAV_ACTIVE : NAV_INACTIVE}`}>
           <Settings size={15} /> Configuración

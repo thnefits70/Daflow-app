@@ -147,3 +147,20 @@ export async function getUnseenPayStubCount() {
     where: { userId: session.user.id, updatedAt: { gt: user.lastSeenPayStubAt ?? new Date(0) } },
   });
 }
+
+// How many confidential documents were shared with the current user that
+// they haven't opened yet — drives the sidebar badge, and whether the nav
+// link shows at all (an employee with zero grants never sees the section).
+export async function getUnseenConfidentialCount() {
+  const session = await auth();
+  if (!session || session.user.role !== "employee") return 0;
+  return prisma.confidentialDocumentAccess.count({
+    where: { userId: session.user.id, seenAt: null },
+  });
+}
+
+export async function getConfidentialAccessCount() {
+  const session = await auth();
+  if (!session || session.user.role !== "employee") return 0;
+  return prisma.confidentialDocumentAccess.count({ where: { userId: session.user.id } });
+}

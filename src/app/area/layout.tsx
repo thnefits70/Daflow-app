@@ -114,6 +114,12 @@ export default async function AreaLayout({ children }: { children: React.ReactNo
   const unseenPayStubCount = await prisma.payStub.count({
     where: { userId: session.user.id, updatedAt: { gt: currentUser.lastSeenPayStubAt ?? new Date(0) } },
   });
+  const confidentialAccessCount = await prisma.confidentialDocumentAccess.count({
+    where: { userId: session.user.id },
+  });
+  const unseenConfidentialCount = await prisma.confidentialDocumentAccess.count({
+    where: { userId: session.user.id, seenAt: null },
+  });
 
   return (
     <AreaGateShell
@@ -131,6 +137,8 @@ export default async function AreaLayout({ children }: { children: React.ReactNo
       pendingSuppliersCount={pendingSuppliersCount}
       unseenFeedbackCount={unseenFeedbackCount}
       unseenPayStubCount={unseenPayStubCount}
+      showConfidential={confidentialAccessCount > 0}
+      unseenConfidentialCount={unseenConfidentialCount}
     >
       {children}
     </AreaGateShell>

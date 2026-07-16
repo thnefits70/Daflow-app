@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
-import { LayoutDashboard, ClipboardList, Scale, LogOut, Truck, Rocket, Wallet, Menu, X } from "lucide-react";
+import { LayoutDashboard, ClipboardList, Scale, LogOut, Truck, Rocket, Wallet, FolderLock, Menu, X } from "lucide-react";
 import { BrandMark } from "@/components/brand/DaflowMark";
 
 export function EmployeeSidebar({
@@ -16,6 +16,8 @@ export function EmployeeSidebar({
   pendingSuppliersCount = 0,
   unseenFeedbackCount = 0,
   unseenPayStubCount = 0,
+  showConfidential = false,
+  unseenConfidentialCount = 0,
 }: {
   deptName: string;
   userName: string;
@@ -25,6 +27,8 @@ export function EmployeeSidebar({
   pendingSuppliersCount?: number;
   unseenFeedbackCount?: number;
   unseenPayStubCount?: number;
+  showConfidential?: boolean;
+  unseenConfidentialCount?: number;
 }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
@@ -109,6 +113,16 @@ export function EmployeeSidebar({
             {pendingSuppliersCount > 0 && (
               <span className="ml-auto font-mono text-[10px] font-semibold bg-red/20 text-red rounded-full px-1.5 py-0.5">
                 {pendingSuppliersCount}
+              </span>
+            )}
+          </Link>
+        )}
+        {showConfidential && (
+          <Link href="/area/documentos-confidenciales" className={`${NAV_ITEM} ${pathname.startsWith("/area/documentos-confidenciales") ? NAV_ACTIVE : NAV_INACTIVE}`}>
+            <FolderLock size={15} /> Documentos Confidenciales
+            {unseenConfidentialCount > 0 && (
+              <span className="ml-auto font-mono text-[10px] font-semibold bg-red/20 text-red rounded-full px-1.5 py-0.5">
+                {unseenConfidentialCount}
               </span>
             )}
           </Link>

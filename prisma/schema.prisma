@@ -120,6 +120,7 @@ model User {
   suppliersApproved Supplier[] @relation("SupplierApprovedBy")
   payStubs         PayStub[] @relation("PayStubOwner")
   payStubsUploaded PayStub[] @relation("PayStubUploadedBy")
+  confidentialAccess ConfidentialDocumentAccess[]
 
   @@index([deptId])
   @@index([leadsDeptId])
@@ -476,4 +477,45 @@ model PayStub {
   @@unique([userId, month, year])
   @@index([userId])
   @@index([deptId])
+}
+
+// Documento privado del admin (procesos, marketing, branding, patentes...)
+// guardado en un bucket de Storage privado — no tiene una URL pública. Por
+// defecto solo el admin lo ve; se puede compartir con personas puntuales via
+// ConfidentialDocumentAccess. Nunca se sirve directo: siempre a través de una
+// URL firmada de corta duración generada al momento, y nunca hay botón de
+// descarga en la interfaz.
+model ConfidentialDocument {
+  id       String  @id @default(cuid())
+  title    String
+  category String? // libre: "Marketing", "Branding", "Patentes", "Procesos"...
+
+  // Ruta dentro del bucket privado de Supabase Storage (no una URL pública).
+  storagePath String
+  fileName    String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  grants ConfidentialDocumentAccess[]
+
+  @@index([category])
+}
+
+// A quién se le compartió un documento confidencial puntual. seenAt queda
+// null hasta que esa persona lo abre por primera vez — así el aviso en el
+// sidebar refleja shares concretos sin visitar, no solo una fecha de corte.
+model ConfidentialDocumentAccess {
+  id         String               @id @default(cuid())
+  documentId String
+  document   ConfidentialDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  grantedAt DateTime  @default(now())
+  seenAt    DateTime?
+
+  @@unique([documentId, userId])
+  @@index([documentId])
+  @@index([userId])
 }
