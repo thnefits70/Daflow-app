@@ -12,6 +12,7 @@ export default async function SettingsPage() {
         logoUrl={settings?.logoUrl ?? null}
         bannerUrl={settings?.bannerUrl ?? null}
         adminEmail={settings?.adminEmail ?? null}
+        adminBirthDate={settings?.adminBirthDate ? settings.adminBirthDate.toISOString() : null}
       />
     </div>
   );

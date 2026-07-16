@@ -8,6 +8,7 @@ const schema = z.object({
   logoUrl: z.string().nullable().optional(),
   bannerUrl: z.string().nullable().optional(),
   adminEmail: z.string().trim().nullable().optional(),
+  adminBirthDate: z.string().nullable().optional(),
   newPassword: z.string().min(6, "La contraseña debe tener al menos 6 caracteres.").optional(),
 });
 
@@ -26,8 +27,14 @@ export async function PATCH(req: NextRequest) {
   if (d.logoUrl !== undefined) data.logoUrl = d.logoUrl;
   if (d.bannerUrl !== undefined) data.bannerUrl = d.bannerUrl;
   if (d.adminEmail !== undefined) data.adminEmail = d.adminEmail || null;
+  if (d.adminBirthDate !== undefined) data.adminBirthDate = d.adminBirthDate ? new Date(d.adminBirthDate) : null;
   if (d.newPassword) data.adminPasswordHash = await hashPassword(d.newPassword);
 
   const settings = await prisma.platformSettings.update({ where: { id: "singleton" }, data });
-  return NextResponse.json({ logoUrl: settings.logoUrl, bannerUrl: settings.bannerUrl, adminEmail: settings.adminEmail });
+  return NextResponse.json({
+    logoUrl: settings.logoUrl,
+    bannerUrl: settings.bannerUrl,
+    adminEmail: settings.adminEmail,
+    adminBirthDate: settings.adminBirthDate,
+  });
 }

@@ -2,25 +2,29 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Upload, X, Mail, KeyRound } from "lucide-react";
+import { Upload, X, Mail, KeyRound, Cake } from "lucide-react";
 import { BrandMark } from "@/components/brand/DaflowMark";
 
 export function SettingsPanel({
   logoUrl,
   bannerUrl,
   adminEmail,
+  adminBirthDate,
 }: {
   logoUrl: string | null;
   bannerUrl: string | null;
   adminEmail: string | null;
+  adminBirthDate: string | null;
 }) {
   const router = useRouter();
   const [logo, setLogo] = useState(logoUrl);
   const [banner, setBanner] = useState(bannerUrl);
   const [email, setEmail] = useState(adminEmail ?? "");
+  const [birthDate, setBirthDate] = useState(adminBirthDate ? adminBirthDate.slice(0, 10) : "");
   const [logoErr, setLogoErr] = useState("");
   const [bannerErr, setBannerErr] = useState("");
   const [emailSaved, setEmailSaved] = useState(false);
+  const [birthDateSaved, setBirthDateSaved] = useState(false);
 
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -114,6 +118,19 @@ export function SettingsPanel({
     setBusy(false);
     setEmailSaved(true);
     setTimeout(() => setEmailSaved(false), 2500);
+  };
+
+  const saveBirthDate = async (value: string) => {
+    setBirthDate(value);
+    setBusy(true);
+    await fetch("/api/settings", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ adminBirthDate: value || null }),
+    });
+    setBusy(false);
+    setBirthDateSaved(true);
+    setTimeout(() => setBirthDateSaved(false), 2500);
   };
 
   const savePassword = async () => {
@@ -225,6 +242,22 @@ export function SettingsPanel({
           </button>
         </div>
         {emailSaved && <div className="text-green text-[12px] mt-2">Correo guardado.</div>}
+      </div>
+
+      <div className="bg-surface border border-rule rounded p-4.5">
+        <label className="flex items-center gap-1.5 mb-3 text-[11px] font-semibold tracking-wide uppercase text-steel">
+          <Cake size={12} /> Tu fecha de cumpleaños
+        </label>
+        <div className="text-[12px] text-steel mb-3">
+          Para que todo el equipo lo sepa el día que corresponda, igual que con el resto de la nómina.
+        </div>
+        <input
+          type="date"
+          className="rounded border border-rule px-2.5 py-2 text-[13.5px]"
+          value={birthDate}
+          onChange={(e) => saveBirthDate(e.target.value)}
+        />
+        {birthDateSaved && <div className="text-green text-[12px] mt-2">Guardado.</div>}
       </div>
 
       <div className="bg-surface border border-rule rounded p-4.5">

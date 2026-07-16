@@ -31,6 +31,7 @@ export default async function NominaProfilePage({ params }: { params: Promise<{ 
         email: user.email,
         phone: user.phone,
         startDate: user.startDate ? user.startDate.toISOString() : null,
+        birthDate: user.birthDate ? user.birthDate.toISOString() : null,
         skills: user.skills,
         cvUrl: user.cvUrl,
         cvName: user.cvName,

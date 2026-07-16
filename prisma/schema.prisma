@@ -12,13 +12,16 @@ datasource db {
 
 /* ---------------- Configuración global de la plataforma ---------------- */
 model PlatformSettings {
-  id                String   @id @default("singleton")
+  id                String    @id @default("singleton")
   adminPasswordHash String
   adminEmail        String?
   logoUrl           String?
   // Marca de agua opcional (logo + wordmark) mostrada discretamente en la tarjeta de Inicio.
   bannerUrl         String?
-  updatedAt         DateTime @updatedAt
+  // Cumpleaños del admin — el único perfil sin un User real detrás, así que
+  // vive aquí en vez de en la tabla User.
+  adminBirthDate    DateTime?
+  updatedAt         DateTime  @updatedAt
 }
 
 // Token temporal para el flujo de "olvidé mi contraseña" del administrador
@@ -86,6 +89,7 @@ model User {
   email     String?
   phone     String?
   startDate DateTime?
+  birthDate DateTime?
   skills    String[] @default([])
   cvUrl     String?
   cvName    String?
@@ -518,4 +522,20 @@ model ConfidentialDocumentAccess {
   @@unique([documentId, userId])
   @@index([documentId])
   @@index([userId])
+}
+
+// Tracks who has already been shown the birthday popup for whom, on which
+// calendar day — so it shows exactly once per person per occurrence and
+// naturally reappears next year (a new date = a new row). viewerId/
+// celebrantId are plain strings, not foreign keys, because the admin isn't a
+// real User row — its sentinel id is the literal "admin".
+model BirthdayPopupSeen {
+  id              String   @id @default(cuid())
+  viewerId        String
+  celebrantId     String
+  celebrationDate DateTime
+  seenAt          DateTime @default(now())
+
+  @@unique([viewerId, celebrantId, celebrationDate])
+  @@index([viewerId, celebrationDate])
 }

@@ -37,6 +37,7 @@ const updateSchema = z.object({
   email: z.string().trim().nullable().optional(),
   phone: z.string().trim().nullable().optional(),
   startDate: z.string().nullable().optional(),
+  birthDate: z.string().nullable().optional(),
   skills: z.array(z.string()).optional(),
   cvUrl: z.string().nullable().optional(),
   cvName: z.string().nullable().optional(),
@@ -91,6 +92,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (d.email !== undefined) data.email = d.email;
   if (d.phone !== undefined) data.phone = d.phone;
   if (d.startDate !== undefined) data.startDate = d.startDate ? new Date(d.startDate) : null;
+  if (d.birthDate !== undefined) data.birthDate = d.birthDate ? new Date(d.birthDate) : null;
   if (d.skills !== undefined) data.skills = d.skills;
   if (d.cvUrl !== undefined) data.cvUrl = d.cvUrl;
   if (d.cvName !== undefined) data.cvName = d.cvName;

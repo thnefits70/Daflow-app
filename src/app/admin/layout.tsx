@@ -3,6 +3,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { AdminSidebar } from "@/components/shell/AdminSidebar";
 import { TopBanner } from "@/components/shell/TopBanner";
+import { BirthdayPopup } from "@/components/birthday/BirthdayPopup";
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
@@ -32,6 +33,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         <TopBanner bannerUrl={settings?.bannerUrl} />
         {children}
       </main>
+      <BirthdayPopup />
     </div>
   );
 }

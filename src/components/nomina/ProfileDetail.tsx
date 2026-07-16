@@ -6,7 +6,7 @@ import Link from "next/link";
 import {
   ArrowLeft, Upload, X, Download, Plus, Trash2, KeyRound,
   User, Building2, Briefcase, Mail, Phone, Calendar, Award, FileText, Truck,
-  Copy, Check, RefreshCw,
+  Copy, Check, RefreshCw, Cake,
 } from "lucide-react";
 import { PositionPicker } from "@/components/users/PositionPicker";
 
@@ -25,6 +25,7 @@ type UserProfile = {
   email: string | null;
   phone: string | null;
   startDate: string | null;
+  birthDate: string | null;
   skills: string[];
   cvUrl: string | null;
   cvName: string | null;
@@ -400,6 +401,17 @@ export function ProfileDetail({
                 className="w-full rounded border border-rule px-2.5 py-2 text-[13px]"
                 value={p.startDate ? p.startDate.slice(0, 10) : ""}
                 onChange={(e) => save({ startDate: e.target.value || null })}
+              />
+            </div>
+            <div>
+              <label className="flex items-center gap-1 mb-1 text-[10.5px] font-semibold uppercase tracking-wide text-steel">
+                <Cake size={11} /> Fecha de cumpleaños
+              </label>
+              <input
+                type="date"
+                className="w-full rounded border border-rule px-2.5 py-2 text-[13px]"
+                value={p.birthDate ? p.birthDate.slice(0, 10) : ""}
+                onChange={(e) => save({ birthDate: e.target.value || null })}
               />
             </div>
             <div>
