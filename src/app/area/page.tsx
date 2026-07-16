@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { getWeeklyTrend, getFillRateTrend, getDashboardData } from "@/lib/dashboard";
+import { getWeeklyTrend, getFillRateTrend, getReturnRateTrend, getDashboardData } from "@/lib/dashboard";
 import { EmployeeHome } from "@/components/dashboard/EmployeeHome";
 
 export default async function AreaHomePage() {
@@ -9,20 +9,22 @@ export default async function AreaHomePage() {
   if (!session?.user.deptId) redirect("/login");
 
   const deptId = session.user.deptId;
-  const [dept, procs, docs, examCount, scores, weeklyTrend, fillRateTrend, dashboardData] = await Promise.all([
-    prisma.department.findUnique({ where: { id: deptId } }),
-    prisma.process.count({ where: { deptId } }),
-    prisma.document.count({ where: { deptId } }),
-    prisma.exam.count({ where: { deptId } }),
-    prisma.examScore.findMany({
-      where: { userId: session.user.id },
-      include: { exam: { select: { title: true } } },
-      orderBy: { createdAt: "desc" },
-    }),
-    getWeeklyTrend(),
-    getFillRateTrend(),
-    getDashboardData(),
-  ]);
+  const [dept, procs, docs, examCount, scores, weeklyTrend, fillRateTrend, returnRateTrend, dashboardData] =
+    await Promise.all([
+      prisma.department.findUnique({ where: { id: deptId } }),
+      prisma.process.count({ where: { deptId } }),
+      prisma.document.count({ where: { deptId } }),
+      prisma.exam.count({ where: { deptId } }),
+      prisma.examScore.findMany({
+        where: { userId: session.user.id },
+        include: { exam: { select: { title: true } } },
+        orderBy: { createdAt: "desc" },
+      }),
+      getWeeklyTrend(),
+      getFillRateTrend(),
+      getReturnRateTrend(),
+      getDashboardData(),
+    ]);
   if (!dept) redirect("/api/auth/force-logout");
 
   return (
@@ -35,6 +37,7 @@ export default async function AreaHomePage() {
       trackKpis={dept.trackKpis}
       weeklyTrend={weeklyTrend}
       fillRateTrend={fillRateTrend}
+      returnRateTrend={returnRateTrend}
       rowsSorted={dashboardData.rowsSorted}
       scores={scores.map((s) => ({
         id: s.id,

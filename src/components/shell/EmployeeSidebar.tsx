@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
-import { LayoutDashboard, ClipboardList, Scale, LogOut, Truck, Rocket, Wallet, FolderLock, Menu, X } from "lucide-react";
+import { LayoutDashboard, ClipboardList, Scale, LogOut, Truck, Rocket, Wallet, FolderLock, Undo2, Menu, X } from "lucide-react";
 import { BrandMark } from "@/components/brand/DaflowMark";
 
 export function EmployeeSidebar({
@@ -18,6 +18,7 @@ export function EmployeeSidebar({
   unseenPayStubCount = 0,
   showConfidential = false,
   unseenConfidentialCount = 0,
+  showReturnRate = false,
 }: {
   deptName: string;
   userName: string;
@@ -29,6 +30,7 @@ export function EmployeeSidebar({
   unseenPayStubCount?: number;
   showConfidential?: boolean;
   unseenConfidentialCount?: number;
+  showReturnRate?: boolean;
 }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
@@ -125,6 +127,11 @@ export function EmployeeSidebar({
                 {unseenConfidentialCount}
               </span>
             )}
+          </Link>
+        )}
+        {showReturnRate && (
+          <Link href="/area/tasa-devolucion" className={`${NAV_ITEM} ${pathname.startsWith("/area/tasa-devolucion") ? NAV_ACTIVE : NAV_INACTIVE}`}>
+            <Undo2 size={15} /> Tasa de Devolución
           </Link>
         )}
       </div>

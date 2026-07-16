@@ -133,6 +133,20 @@ export async function canManagePayroll() {
   return !!user?.isLeader && user.leadsDept?.code === "FIN";
 }
 
+// Same rule as canManagePayroll (admin or whoever leads Finanzas), applied to
+// a different indicator — kept as its own function since the two features
+// are unrelated even though the permission happens to be identical today.
+export async function canManageReturnRate() {
+  const session = await auth();
+  if (!session) return false;
+  if (session.user.role === "admin") return true;
+  const user = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { isLeader: true, leadsDept: { select: { code: true } } },
+  });
+  return !!user?.isLeader && user.leadsDept?.code === "FIN";
+}
+
 // How many of the current user's own pay stubs were uploaded/updated since
 // they last opened "Roles de pago" — drives the sidebar badge.
 export async function getUnseenPayStubCount() {

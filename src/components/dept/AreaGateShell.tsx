@@ -33,6 +33,7 @@ export function AreaGateShell({
   unseenPayStubCount = 0,
   showConfidential = false,
   unseenConfidentialCount = 0,
+  showReturnRate = false,
   children,
 }: {
   deptName: string;
@@ -51,6 +52,7 @@ export function AreaGateShell({
   unseenPayStubCount?: number;
   showConfidential?: boolean;
   unseenConfidentialCount?: number;
+  showReturnRate?: boolean;
   children: React.ReactNode;
 }) {
   const router = useRouter();
@@ -146,6 +148,7 @@ export function AreaGateShell({
         unseenPayStubCount={unseenPayStubCount}
         showConfidential={showConfidential}
         unseenConfidentialCount={unseenConfidentialCount}
+        showReturnRate={showReturnRate}
       />
       <main className="flex-1 overflow-y-auto bg-bg p-4 md:p-9">
         <TopBanner bannerUrl={bannerUrl} />

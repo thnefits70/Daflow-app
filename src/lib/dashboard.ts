@@ -133,3 +133,16 @@ export async function getFillRateTrend(): Promise<WeeklyTrend> {
 
   return { deptName: dept.name, points };
 }
+
+// Tasa de devolución general — un valor mensual (no semanal) que Nairoby o el
+// admin cargan a mano. No está atada a un departamento, así que el "deptName"
+// del gráfico es solo un rótulo genérico, no un área real.
+export async function getReturnRateTrend(): Promise<WeeklyTrend> {
+  const records = await prisma.returnRateRecord.findMany({ orderBy: { month: "asc" } });
+  if (records.length === 0) return null;
+
+  return {
+    deptName: "General",
+    points: records.map((r) => ({ week: r.month, value: r.value })),
+  };
+}

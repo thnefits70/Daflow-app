@@ -9,6 +9,13 @@ function formatWeekShort(week: string) {
   return `S${Number(w)}`;
 }
 
+const MONTH_ABBR = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
+
+export function formatMonthShort(month: string) {
+  const [y, m] = month.split("-");
+  return `${MONTH_ABBR[Number(m) - 1]} ${y.slice(2)}`;
+}
+
 function goalStatus(pct: number) {
   if (pct >= 100) return { label: "Excelente", color: "#14C7C7" };
   if (pct >= 80) return { label: "Eficiente", color: "#1E5EFF" };
@@ -20,6 +27,14 @@ function goalStatus(pct: number) {
 function fillRateStatus(pct: number) {
   if (pct > 99) return { label: "Eficiente", color: "#14C7C7" };
   if (pct >= 98) return { label: "Regular", color: "#D9A441" };
+  return { label: "Ineficiente", color: "#C4453A" };
+}
+
+// Inverse of the other two metrics — lower is better. Under 20% is the
+// acceptable ceiling; it gets worse the higher it climbs from there.
+export function returnRateStatus(pct: number) {
+  if (pct < 20) return { label: "Eficiente", color: "#14C7C7" };
+  if (pct < 30) return { label: "Regular", color: "#D9A441" };
   return { label: "Ineficiente", color: "#C4453A" };
 }
 
@@ -55,12 +70,18 @@ export function WeeklyTrendChart({
   points,
   weeklyGoal,
   format = "count",
+  periodLabel = formatWeekShort,
+  latestLabel = "última semana",
+  statusFn,
 }: {
   label: string;
   deptName: string;
   points: WeeklyPoint[];
   weeklyGoal?: number;
   format?: "count" | "percent";
+  periodLabel?: (period: string) => string;
+  latestLabel?: string;
+  statusFn?: (value: number) => { label: string; color: string };
 }) {
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
 
@@ -94,7 +115,11 @@ export function WeeklyTrendChart({
   const areaPath = `${linePath} L${last.x.toFixed(1)},${(padT + innerH).toFixed(1)} L${coords[0].x.toFixed(1)},${(padT + innerH).toFixed(1)} Z`;
 
   const goalPct = weeklyGoal ? Math.round((latest.value / weeklyGoal) * 100) : null;
-  const status = goalPct !== null ? (format === "percent" ? fillRateStatus(goalPct) : goalStatus(goalPct)) : null;
+  const status = statusFn
+    ? statusFn(latest.value)
+    : goalPct !== null
+    ? (format === "percent" ? fillRateStatus(goalPct) : goalStatus(goalPct))
+    : null;
   const goalYRaw = weeklyGoal ? padT + innerH - (weeklyGoal / yMax) * innerH : null;
   const goalY = goalYRaw !== null && goalYRaw > padT + 4 ? goalYRaw : null;
 
@@ -110,10 +135,10 @@ export function WeeklyTrendChart({
           </div>
           <div className="flex items-baseline gap-2.5">
             <span className="font-display text-[32px] font-bold text-ink leading-none">{fmt(latest.value)}</span>
-            <span className="text-[12px] text-steel">{formatWeekShort(latest.week)} (última semana)</span>
+            <span className="text-[12px] text-steel">{periodLabel(latest.week)} ({latestLabel})</span>
           </div>
         </div>
-        {status && goalPct !== null && (
+        {status && (
           <div className="flex items-center gap-2.5">
             <span
               className="font-mono text-[10.5px] font-semibold tracking-wider px-2.5 py-1 rounded-full"
@@ -121,7 +146,7 @@ export function WeeklyTrendChart({
             >
               {status.label}
             </span>
-            {format !== "percent" && (
+            {format !== "percent" && goalPct !== null && (
               <span className="text-[12px] text-steel">
                 {goalPct}% de la meta semanal ({weeklyGoal!.toLocaleString("es-MX")})
               </span>
@@ -170,7 +195,7 @@ export function WeeklyTrendChart({
         {coords.map((c, i) =>
           i % tickEvery === 0 || i === coords.length - 1 ? (
             <text key={i} x={c.x} y={height - 8} textAnchor="middle" fontSize="10.5" fill="#92a3c0">
-              {formatWeekShort(points[i].week)}
+              {periodLabel(points[i].week)}
             </text>
           ) : null
         )}
@@ -233,7 +258,7 @@ export function WeeklyTrendChart({
               <g pointerEvents="none">
                 <rect x={boxX} y={boxY} width={boxW} height={boxH} rx="6" fill="#101f3b" stroke="#24365a" strokeWidth="1" />
                 <text x={boxX + boxW / 2} y={boxY + 17} textAnchor="middle" fontSize="10.5" fill="#92a3c0">
-                  {formatWeekShort(p.week)}
+                  {periodLabel(p.week)}
                 </text>
                 <text x={boxX + boxW / 2} y={boxY + 33} textAnchor="middle" fontSize="14" fontWeight="700" fill="#f1f5fb">
                   {fmt(p.value)}{format !== "percent" && " pedidos"}

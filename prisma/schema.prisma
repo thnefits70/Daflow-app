@@ -539,3 +539,16 @@ model BirthdayPopupSeen {
   @@unique([viewerId, celebrantId, celebrationDate])
   @@index([viewerId, celebrationDate])
 }
+
+// Tasa de devolución general de toda la empresa — un valor por mes, copiado
+// a mano de otra plataforma (no se calcula de otros datos). No está atada a
+// un departamento; la sube quien lidera Finanzas (o el admin).
+model ReturnRateRecord {
+  id    String @id @default(cuid())
+  // "YYYY-MM", lo que entrega <input type="month">.
+  month String @unique
+  value Float
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { GitBranch, FileText, GraduationCap, Scale, ClipboardList, LineChart } from "lucide-react";
 import { ScoreGauge } from "./ScoreGauge";
-import { WeeklyTrendChart } from "./WeeklyTrendChart";
+import { WeeklyTrendChart, returnRateStatus, formatMonthShort } from "./WeeklyTrendChart";
 import { OrgChart } from "./OrgChart";
 import type { DashboardRow, WeeklyTrend } from "@/lib/dashboard";
 
@@ -27,6 +27,7 @@ export function EmployeeHome({
   scores,
   weeklyTrend,
   fillRateTrend,
+  returnRateTrend,
   rowsSorted,
 }: {
   userName: string;
@@ -38,6 +39,7 @@ export function EmployeeHome({
   scores: ScoreRow[];
   weeklyTrend?: WeeklyTrend;
   fillRateTrend?: WeeklyTrend;
+  returnRateTrend?: WeeklyTrend;
   rowsSorted: DashboardRow[];
 }) {
   const avg = scores.length
@@ -94,6 +96,21 @@ export function EmployeeHome({
             points={fillRateTrend.points}
             weeklyGoal={100}
             format="percent"
+          />
+        </div>
+      )}
+
+      {returnRateTrend && (
+        <div className="bg-surface border border-rule rounded-lg p-6 mb-7">
+          <WeeklyTrendChart
+            label="Tasa de Devolución"
+            deptName={returnRateTrend.deptName}
+            points={returnRateTrend.points}
+            weeklyGoal={20}
+            format="percent"
+            periodLabel={formatMonthShort}
+            latestLabel="último mes"
+            statusFn={returnRateStatus}
           />
         </div>
       )}

@@ -1,6 +1,6 @@
 import { Building2 } from "lucide-react";
 import { ScoreGauge } from "./ScoreGauge";
-import { WeeklyTrendChart } from "./WeeklyTrendChart";
+import { WeeklyTrendChart, returnRateStatus, formatMonthShort } from "./WeeklyTrendChart";
 import { OrgChart } from "./OrgChart";
 import type { DashboardData, WeeklyTrend } from "@/lib/dashboard";
 
@@ -14,10 +14,12 @@ export function Dashboard({
   data,
   weeklyTrend,
   fillRateTrend,
+  returnRateTrend,
 }: {
   data: DashboardData;
   weeklyTrend?: WeeklyTrend;
   fillRateTrend?: WeeklyTrend;
+  returnRateTrend?: WeeklyTrend;
 }) {
   const { rows, rowsSorted, totalAttempts, overallAvg } = data;
 
@@ -70,6 +72,21 @@ export function Dashboard({
             points={fillRateTrend.points}
             weeklyGoal={100}
             format="percent"
+          />
+        </div>
+      )}
+
+      {returnRateTrend && (
+        <div className="bg-surface border border-rule rounded-lg p-6 mb-7">
+          <WeeklyTrendChart
+            label="Tasa de Devolución"
+            deptName={returnRateTrend.deptName}
+            points={returnRateTrend.points}
+            weeklyGoal={20}
+            format="percent"
+            periodLabel={formatMonthShort}
+            latestLabel="último mes"
+            statusFn={returnRateStatus}
           />
         </div>
       )}
