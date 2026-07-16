@@ -50,7 +50,9 @@ export function BirthdayPopup() {
 
   useEffect(() => {
     if (!current) return;
-    const t = setTimeout(dismiss, current.message ? 16000 : 10000);
+    // A full minute to actually read it — closing early is still just a
+    // click away (the X button or clicking outside the card).
+    const t = setTimeout(dismiss, 60000);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [current?.id]);
