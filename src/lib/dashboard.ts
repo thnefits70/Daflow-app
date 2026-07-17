@@ -146,3 +146,25 @@ export async function getReturnRateTrend(): Promise<WeeklyTrend> {
     points: records.map((r) => ({ week: r.month, value: r.value })),
   };
 }
+
+export type StockoutWeekPoint = { week: string; value: number; products: string[] };
+
+// Ruptura de Stock — a cada semana se le asocian los productos del catálogo
+// que se quedaron sin stock. El valor de la barra es la CANTIDAD de
+// productos distintos esa semana, no una cantidad de unidades ni de veces.
+export async function getStockoutWeeks(): Promise<StockoutWeekPoint[]> {
+  const rows = await prisma.stockoutWeekProduct.findMany({
+    select: { week: true, product: { select: { name: true } } },
+  });
+  if (rows.length === 0) return [];
+
+  const byWeek = new Map<string, string[]>();
+  for (const r of rows) {
+    if (!byWeek.has(r.week)) byWeek.set(r.week, []);
+    byWeek.get(r.week)!.push(r.product.name);
+  }
+
+  return [...byWeek.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([week, products]) => ({ week, value: products.length, products: [...products].sort() }));
+}

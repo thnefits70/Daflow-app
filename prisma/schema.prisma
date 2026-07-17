@@ -552,3 +552,31 @@ model ReturnRateRecord {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
+
+// Catálogo reutilizable de productos para Ruptura de Stock — se crea una vez
+// y luego se elige de la lista, en vez de escribirlo de nuevo cada semana.
+model StockoutProduct {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+
+  weeks StockoutWeekProduct[]
+}
+
+// Marca que un producto tuvo ruptura de stock (no se pudo despachar por
+// falta de stock) en una semana puntual. La barra semanal en el gráfico es
+// la CANTIDAD de productos distintos marcados esa semana — no una cantidad
+// de unidades ni de veces repetido.
+model StockoutWeekProduct {
+  id        String          @id @default(cuid())
+  // Semana ISO "YYYY-Www", igual que WeeklyMetricRecord.
+  week      String
+  productId String
+  product   StockoutProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([week, productId])
+  @@index([week])
+  @@index([productId])
+}

@@ -1,8 +1,9 @@
 import { Building2 } from "lucide-react";
 import { ScoreGauge } from "./ScoreGauge";
 import { WeeklyTrendChart, returnRateStatus, formatMonthShort } from "./WeeklyTrendChart";
+import { StockoutBarChart } from "./StockoutBarChart";
 import { OrgChart } from "./OrgChart";
-import type { DashboardData, WeeklyTrend } from "@/lib/dashboard";
+import type { DashboardData, WeeklyTrend, StockoutWeekPoint } from "@/lib/dashboard";
 
 function barColor(score: number) {
   if (score >= 75) return "#14C7C7";
@@ -15,11 +16,13 @@ export function Dashboard({
   weeklyTrend,
   fillRateTrend,
   returnRateTrend,
+  stockoutWeeks,
 }: {
   data: DashboardData;
   weeklyTrend?: WeeklyTrend;
   fillRateTrend?: WeeklyTrend;
   returnRateTrend?: WeeklyTrend;
+  stockoutWeeks?: StockoutWeekPoint[];
 }) {
   const { rows, rowsSorted, totalAttempts, overallAvg } = data;
 
@@ -88,6 +91,12 @@ export function Dashboard({
             latestLabel="último mes"
             statusFn={returnRateStatus}
           />
+        </div>
+      )}
+
+      {stockoutWeeks && stockoutWeeks.length > 0 && (
+        <div className="bg-surface border border-rule rounded-lg p-6 mb-7">
+          <StockoutBarChart points={stockoutWeeks} />
         </div>
       )}
 

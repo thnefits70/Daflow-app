@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { getWeeklyTrend, getFillRateTrend, getReturnRateTrend, getDashboardData } from "@/lib/dashboard";
+import { getWeeklyTrend, getFillRateTrend, getReturnRateTrend, getStockoutWeeks, getDashboardData } from "@/lib/dashboard";
 import { EmployeeHome } from "@/components/dashboard/EmployeeHome";
 
 export default async function AreaHomePage() {
@@ -9,7 +9,7 @@ export default async function AreaHomePage() {
   if (!session?.user.deptId) redirect("/login");
 
   const deptId = session.user.deptId;
-  const [dept, procs, docs, examCount, scores, weeklyTrend, fillRateTrend, returnRateTrend, dashboardData] =
+  const [dept, procs, docs, examCount, scores, weeklyTrend, fillRateTrend, returnRateTrend, stockoutWeeks, dashboardData] =
     await Promise.all([
       prisma.department.findUnique({ where: { id: deptId } }),
       prisma.process.count({ where: { deptId } }),
@@ -23,6 +23,7 @@ export default async function AreaHomePage() {
       getWeeklyTrend(),
       getFillRateTrend(),
       getReturnRateTrend(),
+      getStockoutWeeks(),
       getDashboardData(),
     ]);
   if (!dept) redirect("/api/auth/force-logout");
@@ -38,6 +39,7 @@ export default async function AreaHomePage() {
       weeklyTrend={weeklyTrend}
       fillRateTrend={fillRateTrend}
       returnRateTrend={returnRateTrend}
+      stockoutWeeks={stockoutWeeks}
       rowsSorted={dashboardData.rowsSorted}
       scores={scores.map((s) => ({
         id: s.id,

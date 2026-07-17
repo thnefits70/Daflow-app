@@ -2,8 +2,9 @@ import Link from "next/link";
 import { GitBranch, FileText, GraduationCap, Scale, ClipboardList, LineChart } from "lucide-react";
 import { ScoreGauge } from "./ScoreGauge";
 import { WeeklyTrendChart, returnRateStatus, formatMonthShort } from "./WeeklyTrendChart";
+import { StockoutBarChart } from "./StockoutBarChart";
 import { OrgChart } from "./OrgChart";
-import type { DashboardRow, WeeklyTrend } from "@/lib/dashboard";
+import type { DashboardRow, WeeklyTrend, StockoutWeekPoint } from "@/lib/dashboard";
 
 type ScoreRow = { id: string; examTitle: string; score: number; total: number; createdAt: string };
 
@@ -28,6 +29,7 @@ export function EmployeeHome({
   weeklyTrend,
   fillRateTrend,
   returnRateTrend,
+  stockoutWeeks,
   rowsSorted,
 }: {
   userName: string;
@@ -40,6 +42,7 @@ export function EmployeeHome({
   weeklyTrend?: WeeklyTrend;
   fillRateTrend?: WeeklyTrend;
   returnRateTrend?: WeeklyTrend;
+  stockoutWeeks?: StockoutWeekPoint[];
   rowsSorted: DashboardRow[];
 }) {
   const avg = scores.length
@@ -112,6 +115,12 @@ export function EmployeeHome({
             latestLabel="último mes"
             statusFn={returnRateStatus}
           />
+        </div>
+      )}
+
+      {stockoutWeeks && stockoutWeeks.length > 0 && (
+        <div className="bg-surface border border-rule rounded-lg p-6 mb-7">
+          <StockoutBarChart points={stockoutWeeks} />
         </div>
       )}
 

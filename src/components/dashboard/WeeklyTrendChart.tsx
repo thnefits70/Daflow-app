@@ -4,7 +4,7 @@ import { useState } from "react";
 
 export type WeeklyPoint = { week: string; value: number; detail?: string };
 
-function formatWeekShort(week: string) {
+export function formatWeekShort(week: string) {
   const [, w] = week.split("-W");
   return `S${Number(w)}`;
 }

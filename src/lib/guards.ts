@@ -147,6 +147,18 @@ export async function canManageReturnRate() {
   return !!user?.isLeader && user.leadsDept?.code === "FIN";
 }
 
+// Ruptura de Stock — admin or whoever leads Inventario (today Daniel Moran).
+export async function canManageStockouts() {
+  const session = await auth();
+  if (!session) return false;
+  if (session.user.role === "admin") return true;
+  const user = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { isLeader: true, leadsDept: { select: { code: true } } },
+  });
+  return !!user?.isLeader && user.leadsDept?.code === "INV";
+}
+
 // How many of the current user's own pay stubs were uploaded/updated since
 // they last opened "Roles de pago" — drives the sidebar badge.
 export async function getUnseenPayStubCount() {

@@ -3,7 +3,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { AreaGateShell } from "@/components/dept/AreaGateShell";
 import type { ProcessDTO } from "@/components/process/ProcessEditor";
-import { SUPPLIER_VIEW_DEPT_CODES, canManageReturnRate } from "@/lib/guards";
+import { SUPPLIER_VIEW_DEPT_CODES, canManageReturnRate, canManageStockouts } from "@/lib/guards";
 
 export default async function AreaLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
@@ -120,7 +120,7 @@ export default async function AreaLayout({ children }: { children: React.ReactNo
   const unseenConfidentialCount = await prisma.confidentialDocumentAccess.count({
     where: { userId: session.user.id, seenAt: null },
   });
-  const showKpis = await canManageReturnRate();
+  const showKpis = (await canManageReturnRate()) || (await canManageStockouts());
 
   return (
     <AreaGateShell
