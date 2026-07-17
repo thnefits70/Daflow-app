@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, ChevronDown, ChevronUp } from "lucide-react";
 import { formatMonthShort, returnRateStatus } from "@/components/dashboard/WeeklyTrendChart";
 
 export type ReturnRateRecordDTO = { id: string; month: string; value: number };
@@ -12,6 +12,18 @@ function currentMonth() {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 }
 
+function StatusBadge({ value }: { value: number }) {
+  const status = returnRateStatus(value);
+  return (
+    <span
+      className="font-mono text-[10px] font-semibold tracking-wider px-2 py-0.5 rounded-full"
+      style={{ color: status.color, border: `1px solid ${status.color}`, background: `${status.color}1a` }}
+    >
+      {status.label}
+    </span>
+  );
+}
+
 export function ReturnRatePanel({ records }: { records: ReturnRateRecordDTO[] }) {
   const router = useRouter();
   const [month, setMonth] = useState(currentMonth());
@@ -19,6 +31,7 @@ export function ReturnRatePanel({ records }: { records: ReturnRateRecordDTO[] })
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState(false);
 
   const save = async () => {
     const num = Number(value);
@@ -40,6 +53,7 @@ export function ReturnRatePanel({ records }: { records: ReturnRateRecordDTO[] })
       return;
     }
     setValue("");
+    setExpanded(false);
     router.refresh();
   };
 
@@ -48,8 +62,11 @@ export function ReturnRatePanel({ records }: { records: ReturnRateRecordDTO[] })
     await fetch(`/api/return-rate/${id}`, { method: "DELETE" });
     setBusy(false);
     setConfirmingDeleteId(null);
+    setExpanded(false);
     router.refresh();
   };
+
+  const latest = records[0] ?? null;
 
   return (
     <div>
@@ -104,37 +121,55 @@ export function ReturnRatePanel({ records }: { records: ReturnRateRecordDTO[] })
         </div>
       )}
 
-      {records.map((r) => {
-        const status = returnRateStatus(r.value);
-        return (
-          <div key={r.id} className="bg-surface border border-rule rounded p-3.5 mb-2.5 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <span className="font-semibold text-[13.5px] w-16">{formatMonthShort(r.month)}</span>
-              <span className="font-mono text-[13px]">{r.value}%</span>
-              <span
-                className="font-mono text-[10px] font-semibold tracking-wider px-2 py-0.5 rounded-full"
-                style={{ color: status.color, border: `1px solid ${status.color}`, background: `${status.color}1a` }}
-              >
-                {status.label}
-              </span>
-            </div>
-            {confirmingDeleteId === r.id ? (
-              <div className="flex items-center gap-1.5">
-                <button type="button" disabled={busy} className="text-red text-[11.5px] font-semibold cursor-pointer" onClick={() => remove(r.id)}>
-                  Sí, eliminar
-                </button>
-                <button type="button" className="text-steel text-[11.5px] cursor-pointer" onClick={() => setConfirmingDeleteId(null)}>
-                  Cancelar
-                </button>
+      {latest && (
+        <div>
+          <button
+            type="button"
+            className="w-full flex items-center justify-between gap-3 bg-surface border border-rule rounded p-3.5 mb-2.5 cursor-pointer"
+            onClick={() => setExpanded((v) => !v)}
+          >
+            {!expanded ? (
+              <div className="flex items-center gap-3">
+                <span className="font-semibold text-[13.5px]">{formatMonthShort(latest.month)}</span>
+                <span className="font-mono text-[13px]">{latest.value}%</span>
+                <StatusBadge value={latest.value} />
+                <span className="text-[11px] text-steel">último mes cargado</span>
               </div>
             ) : (
-              <button type="button" className="text-steel hover:text-red cursor-pointer" onClick={() => setConfirmingDeleteId(r.id)}>
-                <Trash2 size={14} />
-              </button>
+              <span className="text-[13px] font-semibold">{records.length} meses cargados</span>
             )}
-          </div>
-        );
-      })}
+            <span className="inline-flex items-center gap-1 text-[12px] font-semibold text-blue shrink-0">
+              {expanded ? "Ocultar" : `Desplegar todos los meses (${records.length})`}
+              {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+            </span>
+          </button>
+
+          {expanded &&
+            records.map((r) => (
+              <div key={r.id} className="bg-surface border border-rule rounded p-3.5 mb-2.5 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <span className="font-semibold text-[13.5px] w-16">{formatMonthShort(r.month)}</span>
+                  <span className="font-mono text-[13px]">{r.value}%</span>
+                  <StatusBadge value={r.value} />
+                </div>
+                {confirmingDeleteId === r.id ? (
+                  <div className="flex items-center gap-1.5">
+                    <button type="button" disabled={busy} className="text-red text-[11.5px] font-semibold cursor-pointer" onClick={() => remove(r.id)}>
+                      Sí, eliminar
+                    </button>
+                    <button type="button" className="text-steel text-[11.5px] cursor-pointer" onClick={() => setConfirmingDeleteId(null)}>
+                      Cancelar
+                    </button>
+                  </div>
+                ) : (
+                  <button type="button" className="text-steel hover:text-red cursor-pointer" onClick={() => setConfirmingDeleteId(r.id)}>
+                    <Trash2 size={14} />
+                  </button>
+                )}
+              </div>
+            ))}
+        </div>
+      )}
     </div>
   );
 }
