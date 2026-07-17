@@ -37,6 +37,7 @@ export function WarrantyPanel({
   const [err, setErr] = useState("");
   const [expanded, setExpanded] = useState(false);
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
+  const [confirmingDeleteTotalId, setConfirmingDeleteTotalId] = useState<string | null>(null);
 
   const saveTotal = async () => {
     const num = Number(totalValue);
@@ -119,6 +120,14 @@ export function WarrantyPanel({
     router.refresh();
   };
 
+  const removeTotal = async (id: string) => {
+    setBusy(true);
+    await fetch(`/api/warranty-months/${id}`, { method: "DELETE" });
+    setBusy(false);
+    setConfirmingDeleteTotalId(null);
+    router.refresh();
+  };
+
   // Group category counts by month for the compact/expanded history list.
   const countsByMonth = new Map<string, WarrantyCategoryMonthCountDTO[]>();
   for (const c of counts) {
@@ -164,6 +173,9 @@ export function WarrantyPanel({
           >
             <Plus size={14} /> Guardar total
           </button>
+        </div>
+        <div className="text-[11px] text-steel mt-2.5">
+          Si el mes ya tiene un total, guardar uno nuevo lo reemplaza — así puedes corregir un error.
         </div>
       </div>
 
@@ -251,6 +263,31 @@ export function WarrantyPanel({
                   <span className="text-[12px] text-steel">
                     {totalsByMonth.get(m)?.total ?? "—"} ingresadas
                   </span>
+                  {totalsByMonth.get(m) &&
+                    (confirmingDeleteTotalId === totalsByMonth.get(m)!.id ? (
+                      <span className="flex items-center gap-1 text-[11.5px]">
+                        <button
+                          type="button"
+                          disabled={busy}
+                          className="text-red font-semibold cursor-pointer"
+                          onClick={() => removeTotal(totalsByMonth.get(m)!.id)}
+                        >
+                          Sí, eliminar total
+                        </button>
+                        <button type="button" className="text-steel cursor-pointer" onClick={() => setConfirmingDeleteTotalId(null)}>
+                          Cancelar
+                        </button>
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        className="text-steel hover:text-red cursor-pointer"
+                        onClick={() => setConfirmingDeleteTotalId(totalsByMonth.get(m)!.id)}
+                        aria-label="Eliminar total del mes"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    ))}
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {(countsByMonth.get(m) ?? []).map((c) => (
