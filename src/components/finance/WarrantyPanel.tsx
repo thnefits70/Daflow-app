@@ -31,9 +31,7 @@ export function WarrantyPanel({
   const router = useRouter();
   const [month, setMonth] = useState(currentMonth());
   const [totalValue, setTotalValue] = useState("");
-  const [categoryId, setCategoryId] = useState("");
-  const [newCategoryName, setNewCategoryName] = useState("");
-  const [creatingCategory, setCreatingCategory] = useState(false);
+  const [categoryName, setCategoryName] = useState("");
   const [countValue, setCountValue] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
@@ -64,39 +62,38 @@ export function WarrantyPanel({
     router.refresh();
   };
 
-  const createCategory = async () => {
-    if (!newCategoryName.trim()) {
-      setErr("Ponle un nombre a la categoría.");
-      return;
-    }
-    setErr("");
-    setBusy(true);
-    const res = await fetch("/api/warranty-categories", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: newCategoryName.trim() }),
-    });
-    setBusy(false);
-    if (!res.ok) {
-      const data = await res.json().catch(() => null);
-      setErr(data?.error ?? "No se pudo crear la categoría.");
-      return;
-    }
-    const created = await res.json();
-    setNewCategoryName("");
-    setCreatingCategory(false);
-    setCategoryId(created.id);
-    router.refresh();
-  };
-
+  // Single action, same fix as StockoutPanel: identify the category by name
+  // (reused case-insensitively if it already exists) and save its count for
+  // the month in one click, instead of a separate "Crear" step that could
+  // silently lose earlier categories if you created several in a row.
   const saveCount = async () => {
+    const name = categoryName.trim();
     const num = Number(countValue);
-    if (!month || !categoryId || countValue.trim() === "" || Number.isNaN(num) || num < 0) {
-      setErr("Elige un mes, una categoría y un conteo válido.");
+    if (!month || !name || countValue.trim() === "" || Number.isNaN(num) || num < 0) {
+      setErr("Elige un mes, escribe una categoría y un conteo válido.");
       return;
     }
     setErr("");
     setBusy(true);
+
+    const existing = categories.find((c) => c.name.toLowerCase() === name.toLowerCase());
+    let categoryId = existing?.id;
+
+    if (!categoryId) {
+      const createRes = await fetch("/api/warranty-categories", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      if (!createRes.ok) {
+        setBusy(false);
+        const data = await createRes.json().catch(() => null);
+        setErr(data?.error ?? "No se pudo crear la categoría.");
+        return;
+      }
+      categoryId = (await createRes.json()).id;
+    }
+
     const res = await fetch("/api/warranty-counts", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -108,6 +105,7 @@ export function WarrantyPanel({
       setErr(data?.error ?? "No se pudo guardar.");
       return;
     }
+    setCategoryName("");
     setCountValue("");
     setExpanded(false);
     router.refresh();
@@ -176,40 +174,19 @@ export function WarrantyPanel({
         <div className="flex items-end gap-2.5 flex-wrap">
           <div>
             <label className="block mb-1 text-[10px] text-steel">Categoría</label>
-            {!creatingCategory ? (
-              <select
-                className="rounded border border-rule px-2.5 py-2 text-[13px] bg-surface min-w-[180px]"
-                value={categoryId}
-                onChange={(e) => setCategoryId(e.target.value)}
-              >
-                <option value="">Elige una categoría…</option>
-                {categories.map((c) => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
-            ) : (
-              <div className="flex items-center gap-1.5">
-                <input
-                  className="rounded border border-rule px-2.5 py-2 text-[13px]"
-                  placeholder="Ej. Aprobada, Producto roto…"
-                  value={newCategoryName}
-                  onChange={(e) => setNewCategoryName(e.target.value)}
-                />
-                <button type="button" disabled={busy} className="text-[12px] font-semibold text-blue cursor-pointer" onClick={createCategory}>
-                  Crear
-                </button>
-              </div>
-            )}
+            <input
+              list="warranty-categories-datalist"
+              className="rounded border border-rule px-2.5 py-2 text-[13px] bg-surface min-w-[200px]"
+              placeholder="Escribe o elige una categoría…"
+              value={categoryName}
+              onChange={(e) => setCategoryName(e.target.value)}
+            />
+            <datalist id="warranty-categories-datalist">
+              {categories.map((c) => (
+                <option key={c.id} value={c.name} />
+              ))}
+            </datalist>
           </div>
-          {!creatingCategory && (
-            <button
-              type="button"
-              className="text-[12px] text-blue font-semibold cursor-pointer mb-2"
-              onClick={() => setCreatingCategory(true)}
-            >
-              + Categoría nueva
-            </button>
-          )}
           <div>
             <label className="block mb-1 text-[10px] text-steel">Cantidad</label>
             <input
@@ -232,7 +209,7 @@ export function WarrantyPanel({
         </div>
         {err && <div className="text-red text-[12.5px] mt-2.5">{err}</div>}
         <div className="text-[11px] text-steel mt-2.5">
-          Si el mes y la categoría ya tienen un valor, guardar uno nuevo lo reemplaza.
+          Si la categoría ya existe, escribe su nombre igual y se reutiliza. Si el mes y la categoría ya tienen un valor, guardar uno nuevo lo reemplaza.
         </div>
       </div>
 

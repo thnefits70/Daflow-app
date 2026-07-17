@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { PieSlice } from "@/lib/dashboard";
+import { formatMonthShort } from "./WeeklyTrendChart";
 
 // DAFLOW brand-friendly palette, cycles if there are more categories than colors.
 const PALETTE = ["#14C7C7", "#1E5EFF", "#D9A441", "#C4453A", "#8B5CF6", "#22C55E", "#EC4899", "#F97316"];
@@ -9,22 +10,30 @@ const PALETTE = ["#14C7C7", "#1E5EFF", "#D9A441", "#C4453A", "#8B5CF6", "#22C55E
 export function PieChart({
   title,
   subtitle,
+  month,
+  enteredTotal,
   slices,
   emptyMessage,
 }: {
   title: string;
   subtitle?: string;
+  // formatMonthShort() is only exported from a "use client" module, so the
+  // month label is built here (already client-side) instead of by a server
+  // component passing a pre-formatted string as `subtitle`.
+  month?: string;
+  enteredTotal?: number;
   slices: PieSlice[];
   emptyMessage: string;
 }) {
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
 
   const total = slices.reduce((a, s) => a + s.value, 0);
+  const resolvedSubtitle = month ? `${formatMonthShort(month)} · ${enteredTotal ?? 0} ingresadas` : subtitle;
 
   return (
     <div>
       <div className="text-[11px] font-semibold tracking-wide uppercase text-steel mb-1.5">{title}</div>
-      {subtitle && <div className="text-[12px] text-steel mb-4">{subtitle}</div>}
+      {resolvedSubtitle && <div className="text-[12px] text-steel mb-4">{resolvedSubtitle}</div>}
 
       {(slices.length === 0 || total === 0) && (
         <div className="border-[1.5px] border-dashed border-rule rounded-md p-8.5 text-center text-steel text-[13.5px]">

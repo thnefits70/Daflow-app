@@ -23,46 +23,44 @@ export function StockoutPanel({
 }) {
   const router = useRouter();
   const [week, setWeek] = useState("");
-  const [productId, setProductId] = useState("");
-  const [newProductName, setNewProductName] = useState("");
-  const [creatingProduct, setCreatingProduct] = useState(false);
+  const [productName, setProductName] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [expanded, setExpanded] = useState(false);
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
 
-  const createProduct = async () => {
-    if (!newProductName.trim()) {
-      setErr("Ponle un nombre al producto.");
-      return;
-    }
-    setErr("");
-    setBusy(true);
-    const res = await fetch("/api/stockout-products", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: newProductName.trim() }),
-    });
-    setBusy(false);
-    if (!res.ok) {
-      const data = await res.json().catch(() => null);
-      setErr(data?.error ?? "No se pudo crear el producto.");
-      return;
-    }
-    const created = await res.json();
-    setNewProductName("");
-    setCreatingProduct(false);
-    setProductId(created.id);
-    router.refresh();
-  };
-
+  // Single action: identify the product by name (reusing it if it already
+  // exists, case-insensitively — never a second "+ Producto nuevo" step) and
+  // attach it to the chosen week, in one click. Doing this any other way let
+  // someone create several new products in a row and only ever attach the
+  // last one, since creating and attaching used to be two separate buttons.
   const addToWeek = async () => {
-    if (!week || !productId) {
-      setErr("Elige una semana y un producto.");
+    const name = productName.trim();
+    if (!week || !name) {
+      setErr("Elige una semana y escribe un producto.");
       return;
     }
     setErr("");
     setBusy(true);
+
+    const existing = products.find((p) => p.name.toLowerCase() === name.toLowerCase());
+    let productId = existing?.id;
+
+    if (!productId) {
+      const createRes = await fetch("/api/stockout-products", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      if (!createRes.ok) {
+        setBusy(false);
+        const data = await createRes.json().catch(() => null);
+        setErr(data?.error ?? "No se pudo crear el producto.");
+        return;
+      }
+      productId = (await createRes.json()).id;
+    }
+
     const res = await fetch("/api/stockout-weeks", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -74,7 +72,7 @@ export function StockoutPanel({
       setErr(data?.error ?? "No se pudo guardar.");
       return;
     }
-    setProductId("");
+    setProductName("");
     setExpanded(false);
     router.refresh();
   };
@@ -114,40 +112,19 @@ export function StockoutPanel({
           </div>
           <div>
             <label className="block mb-1 text-[10px] text-steel">Producto</label>
-            {!creatingProduct ? (
-              <select
-                className="rounded border border-rule px-2.5 py-2 text-[13px] bg-surface min-w-[180px]"
-                value={productId}
-                onChange={(e) => setProductId(e.target.value)}
-              >
-                <option value="">Elige un producto…</option>
-                {products.map((p) => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-              </select>
-            ) : (
-              <div className="flex items-center gap-1.5">
-                <input
-                  className="rounded border border-rule px-2.5 py-2 text-[13px]"
-                  placeholder="Nombre del producto nuevo"
-                  value={newProductName}
-                  onChange={(e) => setNewProductName(e.target.value)}
-                />
-                <button type="button" disabled={busy} className="text-[12px] font-semibold text-blue cursor-pointer" onClick={createProduct}>
-                  Crear
-                </button>
-              </div>
-            )}
+            <input
+              list="stockout-products-datalist"
+              className="rounded border border-rule px-2.5 py-2 text-[13px] bg-surface min-w-[220px]"
+              placeholder="Escribe o elige un producto…"
+              value={productName}
+              onChange={(e) => setProductName(e.target.value)}
+            />
+            <datalist id="stockout-products-datalist">
+              {products.map((p) => (
+                <option key={p.id} value={p.name} />
+              ))}
+            </datalist>
           </div>
-          {!creatingProduct && (
-            <button
-              type="button"
-              className="text-[12px] text-blue font-semibold cursor-pointer mb-2"
-              onClick={() => setCreatingProduct(true)}
-            >
-              + Producto nuevo
-            </button>
-          )}
           <button
             type="button"
             disabled={busy}
@@ -158,6 +135,9 @@ export function StockoutPanel({
           </button>
         </div>
         {err && <div className="text-red text-[12.5px] mt-2.5">{err}</div>}
+        <div className="text-[11px] text-steel mt-2.5">
+          Si el producto ya existe, escribe su nombre igual y se reutiliza. Para marcar varios productos en la misma semana, repite Guardar uno por uno.
+        </div>
       </div>
 
       {weeks.length === 0 && (

@@ -135,7 +135,8 @@ export function EmployeeHome({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-7">
             <PieChart
               title="Garantías del mes"
-              subtitle={warrantyMonthlyChart ? `${formatMonthShort(warrantyMonthlyChart.month)} · ${warrantyMonthlyChart.total} ingresadas` : undefined}
+              month={warrantyMonthlyChart?.month}
+              enteredTotal={warrantyMonthlyChart?.total}
               slices={warrantyMonthlyChart?.slices ?? []}
               emptyMessage="Aún no hay categorías cargadas este mes."
             />

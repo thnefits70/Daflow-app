@@ -111,6 +111,7 @@ export function StockoutBarChart({ points }: { points: StockoutWeekPoint[] }) {
                 rx="4"
                 fill={isHover ? "#14C7C7" : "#14C7C7cc"}
                 onMouseEnter={() => setHoverIndex(i)}
+                onClick={() => setHoverIndex((v) => (v === i ? null : i))}
                 style={{ cursor: "pointer" }}
               />
               <text x={slotX + slotW / 2} y={barY - 8} textAnchor="middle" fontSize="12" fontWeight="700" fill="#f1f5fb">
