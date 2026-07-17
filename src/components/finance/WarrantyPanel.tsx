@@ -130,6 +130,21 @@ export function WarrantyPanel({
     router.refresh();
   };
 
+  // Permanently removes a catalog category (blocked server-side unless it
+  // has zero month counts) — different from `removeCount` above, which only
+  // removes one month's count.
+  const deleteCategory = async (id: string) => {
+    setBusy(true);
+    const res = await fetch(`/api/warranty-categories/${id}`, { method: "DELETE" });
+    setBusy(false);
+    if (!res.ok) {
+      const data = await res.json().catch(() => null);
+      setErr(data?.error ?? "No se pudo eliminar.");
+      return;
+    }
+    router.refresh();
+  };
+
   // Editing is just prefilling the forms above with the existing values —
   // resaving upserts on [month, categoryId] / [month], so it replaces the
   // old value instead of requiring a delete-then-recreate.
@@ -157,6 +172,13 @@ export function WarrantyPanel({
   const totalsByMonth = new Map(monthTotals.map((t) => [t.month, t]));
   const months = [...new Set([...countsByMonth.keys(), ...totalsByMonth.keys()])].sort().reverse();
   const latestMonth = months[0] ?? null;
+
+  // How many months each catalog category is already anchored to — a
+  // category can only be permanently deleted from the Combobox once this
+  // hits zero.
+  const usageByCategoryId = new Map<string, number>();
+  for (const c of counts) usageByCategoryId.set(c.category.id, (usageByCategoryId.get(c.category.id) ?? 0) + 1);
+  const comboboxOptions = categories.map((c) => ({ id: c.id, name: c.name, usageCount: usageByCategoryId.get(c.id) ?? 0 }));
 
   return (
     <div ref={panelTopRef}>
@@ -211,7 +233,8 @@ export function WarrantyPanel({
               placeholder="Escribe o elige una categoría…"
               value={categoryName}
               onChange={setCategoryName}
-              options={categories.map((c) => c.name)}
+              options={comboboxOptions}
+              onDelete={deleteCategory}
             />
           </div>
           <div>
@@ -236,7 +259,7 @@ export function WarrantyPanel({
         </div>
         {err && <div className="text-red text-[12.5px] mt-2.5">{err}</div>}
         <div className="text-[11px] text-steel mt-2.5">
-          Si la categoría ya existe, escribe su nombre igual y se reutiliza. Si el mes y la categoría ya tienen un valor, guardar uno nuevo lo reemplaza.
+          Si la categoría ya existe, escribe su nombre igual y se reutiliza. Si el mes y la categoría ya tienen un valor, guardar uno nuevo lo reemplaza. En la lista desplegable, el bote de basura elimina una categoría del catálogo para siempre — solo si no tiene historial guardado.
         </div>
       </div>
 

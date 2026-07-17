@@ -28,3 +28,23 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   return NextResponse.json(product);
 }
+
+// Permanently removes a catalog entry — but only if it has zero history.
+// The relation is onDelete: Cascade at the DB level, so this check (not the
+// FK) is what actually prevents silently wiping real week attachments.
+export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const canManage = await canManageStockouts();
+  if (!canManage) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+
+  const { id } = await params;
+  const usageCount = await prisma.stockoutWeekProduct.count({ where: { productId: id } });
+  if (usageCount > 0) {
+    return NextResponse.json(
+      { error: "No se puede eliminar: tiene historial guardado en semanas. Borra ese historial primero." },
+      { status: 409 }
+    );
+  }
+
+  await prisma.stockoutProduct.delete({ where: { id } }).catch(() => null);
+  return NextResponse.json({ ok: true });
+}
