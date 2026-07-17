@@ -45,6 +45,7 @@ const updateSchema = z.object({
   leadsDeptId: z.string().nullable().optional(),
   canManageLaws: z.boolean().optional(),
   canAddSuppliers: z.boolean().optional(),
+  isActive: z.boolean().optional(),
   // When assigning this user as leader of a department that already has a
   // different leader, the request is rejected with 409 unless this is set —
   // it confirms the admin wants to demote the existing leader.
@@ -100,6 +101,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (d.leadsDeptId !== undefined) data.leadsDeptId = d.leadsDeptId;
   if (d.canManageLaws !== undefined) data.canManageLaws = d.canManageLaws;
   if (d.canAddSuppliers !== undefined) data.canAddSuppliers = d.canAddSuppliers;
+  if (d.isActive !== undefined) data.isActive = d.isActive;
 
   try {
     const user = await prisma.user.update({ where: { id }, data });

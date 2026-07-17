@@ -16,6 +16,7 @@ export default async function NominaPage() {
         department: { select: { id: true, name: true, code: true } },
         isLeader: true,
         leadsDeptId: true,
+        isActive: true,
       },
     }),
     prisma.department.findMany({ orderBy: { order: "asc" }, select: { id: true, name: true, code: true } }),

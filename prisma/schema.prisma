@@ -84,6 +84,13 @@ model User {
   deptId       String?
   department   Department? @relation(fields: [deptId], references: [id], onDelete: SetNull)
 
+  // Off = someone left the company: blocked from logging in (checked at
+  // auth time and re-checked on every /area request in case they're already
+  // logged in), and hidden from the org chart. Everything else about them —
+  // Nómina profile, isLeader, historial — stays intact so reactivating them
+  // restores exactly what they had before.
+  isActive Boolean @default(true)
+
   photoUrl  String?
   position  String?
   email     String?

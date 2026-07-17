@@ -28,14 +28,18 @@ export async function getDashboardData(): Promise<DashboardData> {
     prisma.department.findMany({
       where: { isSpecial: false },
       orderBy: { order: "asc" },
-      include: { leaders: { select: { name: true, photoUrl: true }, take: 1 } },
+      // Someone who's isActive:false left the company — the org chart
+      // shouldn't show them as a department's leader anymore.
+      include: { leaders: { where: { isActive: true }, select: { name: true, photoUrl: true }, take: 1 } },
     }),
     prisma.process.findMany({ select: { deptId: true } }),
     prisma.document.findMany({ where: { deptId: { not: null } }, select: { deptId: true } }),
     prisma.exam.findMany({ select: { id: true, deptId: true } }),
     prisma.examScore.findMany({ select: { examId: true, userName: true, score: true, total: true } }),
     prisma.user.findMany({
-      where: { deptId: { not: null } },
+      // Inactive users (left the company) shouldn't appear in the org chart
+      // as a team member either — see isActive in the User model.
+      where: { deptId: { not: null }, isActive: true },
       select: { id: true, name: true, photoUrl: true, position: true, isLeader: true, deptId: true },
       orderBy: { name: "asc" },
     }),

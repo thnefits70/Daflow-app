@@ -6,7 +6,7 @@ import Link from "next/link";
 import {
   ArrowLeft, Upload, X, Download, Plus, Trash2, KeyRound,
   User, Building2, Briefcase, Mail, Phone, Calendar, Award, FileText, Truck,
-  Copy, Check, RefreshCw, Cake,
+  Copy, Check, RefreshCw, Cake, Power,
 } from "lucide-react";
 import { PositionPicker } from "@/components/users/PositionPicker";
 
@@ -33,6 +33,7 @@ type UserProfile = {
   leadsDeptId: string | null;
   canManageLaws: boolean;
   canAddSuppliers: boolean;
+  isActive: boolean;
   milestones: Milestone[];
   examScores: ExamScore[];
 };
@@ -92,6 +93,7 @@ export function ProfileDetail({
   const [showCatalog, setShowCatalog] = useState(false);
   const [showCv, setShowCv] = useState(false);
   const [choosingTeam, setChoosingTeam] = useState(false);
+  const [confirmingDeactivate, setConfirmingDeactivate] = useState(false);
   const [leaderBusy, setLeaderBusy] = useState(false);
   const [leaderConflict, setLeaderConflict] = useState<{ deptId: string; deptName: string; existingLeaderName: string } | null>(null);
 
@@ -289,6 +291,56 @@ export function ProfileDetail({
           No se guardó: {saveErr}
         </div>
       )}
+
+      <div className={`rounded p-3.5 mb-3.5 flex items-center justify-between gap-3 flex-wrap border ${p.isActive ? "bg-teal/10 border-teal" : "bg-red/10 border-red"}`}>
+        <div className="flex items-center gap-2.5">
+          <Power size={16} className={p.isActive ? "text-teal" : "text-red"} />
+          <div>
+            <div className="text-[13px] font-semibold">{p.isActive ? "Activo" : "Inactivo"}</div>
+            <div className="text-[11.5px] text-steel">
+              {p.isActive
+                ? "Tiene acceso a la plataforma y aparece en el organigrama."
+                : "Sin acceso a la plataforma y oculto del organigrama. Su ficha en Nómina se conserva tal cual."}
+            </div>
+          </div>
+        </div>
+        {confirmingDeactivate ? (
+          <div className="flex items-center gap-2.5 shrink-0">
+            <span className="text-[12px] text-steel">¿Desactivar a {p.name}? Perderá acceso de inmediato.</span>
+            <button
+              type="button"
+              disabled={busy}
+              className="rounded border border-red bg-red px-3 py-1.5 text-[12px] font-semibold text-white cursor-pointer disabled:opacity-60"
+              onClick={() => {
+                setConfirmingDeactivate(false);
+                save({ isActive: false });
+              }}
+            >
+              Sí, desactivar
+            </button>
+            <button type="button" className="text-steel text-[12px] cursor-pointer" onClick={() => setConfirmingDeactivate(false)}>
+              Cancelar
+            </button>
+          </div>
+        ) : (
+          <div className="flex border border-rule rounded overflow-hidden shrink-0">
+            <button
+              type="button"
+              className={`px-3.5 py-1.5 text-[12.5px] font-semibold cursor-pointer ${p.isActive ? "bg-blue text-white" : "bg-surface text-steel"}`}
+              onClick={() => save({ isActive: true })}
+            >
+              Activo
+            </button>
+            <button
+              type="button"
+              className={`px-3.5 py-1.5 text-[12.5px] font-semibold cursor-pointer ${!p.isActive ? "bg-blue text-white" : "bg-surface text-steel"}`}
+              onClick={() => setConfirmingDeactivate(true)}
+            >
+              Inactivo
+            </button>
+          </div>
+        )}
+      </div>
 
       <div className="bg-surface border border-rule rounded p-5 flex gap-6 flex-wrap items-start">
         <div className="text-center">

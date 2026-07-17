@@ -16,6 +16,7 @@ type NominaUser = {
   department: Dept | null;
   isLeader: boolean;
   leadsDeptId: string | null;
+  isActive: boolean;
 };
 
 export function NominaGrid({ users, departments }: { users: NominaUser[]; departments: Dept[] }) {
@@ -98,7 +99,7 @@ export function NominaGrid({ users, departments }: { users: NominaUser[]; depart
           <Link
             key={u.id}
             href={`/admin/nomina/${u.id}`}
-            className="bg-surface border border-rule rounded p-4.5 text-center hover:border-blue"
+            className={`bg-surface border rounded p-4.5 text-center hover:border-blue ${u.isActive ? "border-rule" : "border-rule opacity-60"}`}
           >
             <div className="w-14 h-14 rounded-full overflow-hidden bg-cloud border border-rule flex items-center justify-center mx-auto mb-2.5">
               {u.photoUrl ? (
@@ -113,6 +114,11 @@ export function NominaGrid({ users, departments }: { users: NominaUser[]; depart
             {u.isLeader && u.leadsDeptId && (
               <div className="inline-flex items-center gap-1 font-mono text-[9.5px] bg-cloud border border-rule rounded-full px-2 py-0.5 mt-1.5">
                 <Award size={9} /> Líder de {deptById(u.leadsDeptId)?.name || "área"}
+              </div>
+            )}
+            {!u.isActive && (
+              <div className="inline-flex items-center gap-1 font-mono text-[9.5px] bg-red/10 border border-red text-red rounded-full px-2 py-0.5 mt-1.5">
+                Inactivo
               </div>
             )}
           </Link>
