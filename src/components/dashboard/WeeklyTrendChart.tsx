@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 export type WeeklyPoint = { week: string; value: number; detail?: string };
 
@@ -111,6 +111,15 @@ export function WeeklyTrendChart({
 }) {
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const [dateTooltipWeek, setDateTooltipWeek] = useState<string | null>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function onClickOutside(e: MouseEvent) {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setDateTooltipWeek(null);
+    }
+    document.addEventListener("mousedown", onClickOutside);
+    return () => document.removeEventListener("mousedown", onClickOutside);
+  }, []);
 
   if (points.length === 0) return null;
 
@@ -154,7 +163,7 @@ export function WeeklyTrendChart({
   const hitR = Math.max(4, Math.min(14, stepX / 2 - 1));
 
   return (
-    <div>
+    <div ref={rootRef}>
       <div className="flex items-start justify-between flex-wrap gap-4 mb-5">
         <div>
           <div className="text-[11px] font-semibold tracking-wide uppercase text-steel mb-1.5">

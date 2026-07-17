@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { formatWeekShort, formatIsoWeekRangeLabel, smoothPath } from "./WeeklyTrendChart";
 import type { StockoutWeekPoint } from "@/lib/dashboard";
@@ -11,6 +11,15 @@ export function StockoutBarChart({ points }: { points: StockoutWeekPoint[] }) {
   const [offset, setOffset] = useState(0);
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const [dateTooltipWeek, setDateTooltipWeek] = useState<string | null>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function onClickOutside(e: MouseEvent) {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setDateTooltipWeek(null);
+    }
+    document.addEventListener("mousedown", onClickOutside);
+    return () => document.removeEventListener("mousedown", onClickOutside);
+  }, []);
 
   if (points.length === 0) return null;
 
@@ -45,7 +54,7 @@ export function StockoutBarChart({ points }: { points: StockoutWeekPoint[] }) {
   const trendPath = smoothPath(topCoords);
 
   return (
-    <div>
+    <div ref={rootRef}>
       <div className="flex items-start justify-between flex-wrap gap-4 mb-5">
         <div>
           <div className="text-[11px] font-semibold tracking-wide uppercase text-steel mb-1.5">
