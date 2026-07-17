@@ -1,14 +1,25 @@
-import { getDashboardData, getWeeklyTrend, getFillRateTrend, getReturnRateTrend, getStockoutWeeks } from "@/lib/dashboard";
+import {
+  getDashboardData,
+  getWeeklyTrend,
+  getFillRateTrend,
+  getReturnRateTrend,
+  getStockoutWeeks,
+  getWarrantyMonthlyChart,
+  getWarrantyReasonChart,
+} from "@/lib/dashboard";
 import { Dashboard } from "@/components/dashboard/Dashboard";
 
 export default async function AdminHomePage() {
-  const [data, weeklyTrend, fillRateTrend, returnRateTrend, stockoutWeeks] = await Promise.all([
-    getDashboardData(),
-    getWeeklyTrend(),
-    getFillRateTrend(),
-    getReturnRateTrend(),
-    getStockoutWeeks(),
-  ]);
+  const [data, weeklyTrend, fillRateTrend, returnRateTrend, stockoutWeeks, warrantyMonthlyChart, warrantyReasonChart] =
+    await Promise.all([
+      getDashboardData(),
+      getWeeklyTrend(),
+      getFillRateTrend(),
+      getReturnRateTrend(),
+      getStockoutWeeks(),
+      getWarrantyMonthlyChart(),
+      getWarrantyReasonChart(),
+    ]);
   return (
     <Dashboard
       data={data}
@@ -16,6 +27,8 @@ export default async function AdminHomePage() {
       fillRateTrend={fillRateTrend}
       returnRateTrend={returnRateTrend}
       stockoutWeeks={stockoutWeeks}
+      warrantyMonthlyChart={warrantyMonthlyChart}
+      warrantyReasonChart={warrantyReasonChart}
     />
   );
 }

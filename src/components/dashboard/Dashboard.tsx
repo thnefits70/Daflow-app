@@ -2,8 +2,9 @@ import { Building2 } from "lucide-react";
 import { ScoreGauge } from "./ScoreGauge";
 import { WeeklyTrendChart, returnRateStatus, formatMonthShort } from "./WeeklyTrendChart";
 import { StockoutBarChart } from "./StockoutBarChart";
+import { PieChart } from "./PieChart";
 import { OrgChart } from "./OrgChart";
-import type { DashboardData, WeeklyTrend, StockoutWeekPoint } from "@/lib/dashboard";
+import type { DashboardData, WeeklyTrend, StockoutWeekPoint, WarrantyMonthlyChart, PieSlice } from "@/lib/dashboard";
 
 function barColor(score: number) {
   if (score >= 75) return "#14C7C7";
@@ -17,12 +18,16 @@ export function Dashboard({
   fillRateTrend,
   returnRateTrend,
   stockoutWeeks,
+  warrantyMonthlyChart,
+  warrantyReasonChart,
 }: {
   data: DashboardData;
   weeklyTrend?: WeeklyTrend;
   fillRateTrend?: WeeklyTrend;
   returnRateTrend?: WeeklyTrend;
   stockoutWeeks?: StockoutWeekPoint[];
+  warrantyMonthlyChart?: WarrantyMonthlyChart | null;
+  warrantyReasonChart?: PieSlice[];
 }) {
   const { rows, rowsSorted, totalAttempts, overallAvg } = data;
 
@@ -97,6 +102,26 @@ export function Dashboard({
       {stockoutWeeks && stockoutWeeks.length > 0 && (
         <div className="bg-surface border border-rule rounded-lg p-6 mb-7">
           <StockoutBarChart points={stockoutWeeks} />
+        </div>
+      )}
+
+      {(warrantyMonthlyChart || (warrantyReasonChart && warrantyReasonChart.length > 0)) && (
+        <div className="bg-surface border border-rule rounded-lg p-6 mb-7">
+          <div className="text-[11px] font-semibold tracking-wide uppercase text-steel mb-4">KPI de Garantías</div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-7">
+            <PieChart
+              title="Garantías del mes"
+              subtitle={warrantyMonthlyChart ? `${formatMonthShort(warrantyMonthlyChart.month)} · ${warrantyMonthlyChart.total} ingresadas` : undefined}
+              slices={warrantyMonthlyChart?.slices ?? []}
+              emptyMessage="Aún no hay categorías cargadas este mes."
+            />
+            <PieChart
+              title="Motivos que más se repiten"
+              subtitle="Últimos 12 meses"
+              slices={warrantyReasonChart ?? []}
+              emptyMessage="Aún no hay suficiente historial."
+            />
+          </div>
         </div>
       )}
 

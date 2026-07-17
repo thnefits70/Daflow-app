@@ -580,3 +580,42 @@ model StockoutWeekProduct {
   @@index([week])
   @@index([productId])
 }
+
+// Catálogo reutilizable de categorías/motivos de garantía (ej. "Aprobada",
+// "Rechazada - producto roto") — se crea una vez y se reutiliza después.
+model WarrantyCategory {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+
+  monthCounts WarrantyCategoryMonthCount[]
+}
+
+// "Total de garantías ingresadas" ese mes — el denominador para el % del
+// Gráfico 1. Independiente de la suma de categorías (puede haber garantías
+// aún sin categorizar).
+model WarrantyMonthTotal {
+  id        String   @id @default(cuid())
+  month     String   @unique // "YYYY-MM"
+  total     Int
+  updatedAt DateTime @updatedAt
+}
+
+// Cuántas garantías de una categoría se registraron en un mes puntual. El
+// Gráfico 1 (torta mensual) usa el mes más reciente; el Gráfico 2 (torta de
+// "motivos que más se repiten") suma estos conteos de los últimos 12 meses
+// para ver qué categoría acumula más — no se sube por separado, se calcula.
+model WarrantyCategoryMonthCount {
+  id         String           @id @default(cuid())
+  month      String           // "YYYY-MM"
+  categoryId String
+  category   WarrantyCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  count      Int
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([month, categoryId])
+  @@index([month])
+  @@index([categoryId])
+}

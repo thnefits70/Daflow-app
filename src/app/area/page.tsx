@@ -1,7 +1,15 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { getWeeklyTrend, getFillRateTrend, getReturnRateTrend, getStockoutWeeks, getDashboardData } from "@/lib/dashboard";
+import {
+  getWeeklyTrend,
+  getFillRateTrend,
+  getReturnRateTrend,
+  getStockoutWeeks,
+  getDashboardData,
+  getWarrantyMonthlyChart,
+  getWarrantyReasonChart,
+} from "@/lib/dashboard";
 import { EmployeeHome } from "@/components/dashboard/EmployeeHome";
 
 export default async function AreaHomePage() {
@@ -9,23 +17,37 @@ export default async function AreaHomePage() {
   if (!session?.user.deptId) redirect("/login");
 
   const deptId = session.user.deptId;
-  const [dept, procs, docs, examCount, scores, weeklyTrend, fillRateTrend, returnRateTrend, stockoutWeeks, dashboardData] =
-    await Promise.all([
-      prisma.department.findUnique({ where: { id: deptId } }),
-      prisma.process.count({ where: { deptId } }),
-      prisma.document.count({ where: { deptId } }),
-      prisma.exam.count({ where: { deptId } }),
-      prisma.examScore.findMany({
-        where: { userId: session.user.id },
-        include: { exam: { select: { title: true } } },
-        orderBy: { createdAt: "desc" },
-      }),
-      getWeeklyTrend(),
-      getFillRateTrend(),
-      getReturnRateTrend(),
-      getStockoutWeeks(),
-      getDashboardData(),
-    ]);
+  const [
+    dept,
+    procs,
+    docs,
+    examCount,
+    scores,
+    weeklyTrend,
+    fillRateTrend,
+    returnRateTrend,
+    stockoutWeeks,
+    dashboardData,
+    warrantyMonthlyChart,
+    warrantyReasonChart,
+  ] = await Promise.all([
+    prisma.department.findUnique({ where: { id: deptId } }),
+    prisma.process.count({ where: { deptId } }),
+    prisma.document.count({ where: { deptId } }),
+    prisma.exam.count({ where: { deptId } }),
+    prisma.examScore.findMany({
+      where: { userId: session.user.id },
+      include: { exam: { select: { title: true } } },
+      orderBy: { createdAt: "desc" },
+    }),
+    getWeeklyTrend(),
+    getFillRateTrend(),
+    getReturnRateTrend(),
+    getStockoutWeeks(),
+    getDashboardData(),
+    getWarrantyMonthlyChart(),
+    getWarrantyReasonChart(),
+  ]);
   if (!dept) redirect("/api/auth/force-logout");
 
   return (
@@ -40,6 +62,8 @@ export default async function AreaHomePage() {
       fillRateTrend={fillRateTrend}
       returnRateTrend={returnRateTrend}
       stockoutWeeks={stockoutWeeks}
+      warrantyMonthlyChart={warrantyMonthlyChart}
+      warrantyReasonChart={warrantyReasonChart}
       rowsSorted={dashboardData.rowsSorted}
       scores={scores.map((s) => ({
         id: s.id,

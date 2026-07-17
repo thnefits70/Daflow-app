@@ -168,3 +168,53 @@ export async function getStockoutWeeks(): Promise<StockoutWeekPoint[]> {
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([week, products]) => ({ week, value: products.length, products: [...products].sort() }));
 }
+
+export type PieSlice = { label: string; value: number };
+export type WarrantyMonthlyChart = { month: string; total: number; slices: PieSlice[] };
+
+// Gráfico 1 de KPI de Garantías — la torta del mes más reciente cargado por
+// Nairoby: cuántas garantías de cada categoría, sobre el total ingresado ese mes.
+export async function getWarrantyMonthlyChart(): Promise<WarrantyMonthlyChart | null> {
+  const latest = await prisma.warrantyMonthTotal.findFirst({ orderBy: { month: "desc" } });
+  if (!latest) return null;
+
+  const counts = await prisma.warrantyCategoryMonthCount.findMany({
+    where: { month: latest.month },
+    include: { category: { select: { name: true } } },
+  });
+
+  return {
+    month: latest.month,
+    total: latest.total,
+    slices: counts.map((c) => ({ label: c.category.name, value: c.count })),
+  };
+}
+
+function last12Months(): string[] {
+  const now = new Date();
+  const months: string[] = [];
+  for (let i = 0; i < 12; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    months.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+  }
+  return months;
+}
+
+// Gráfico 2 de KPI de Garantías — no se sube por separado. Suma las mismas
+// categorías del Gráfico 1 a lo largo de los últimos 12 meses (aprobadas y
+// rechazadas cuentan por igual) para ver cuál motivo se repite más.
+export async function getWarrantyReasonChart(): Promise<PieSlice[]> {
+  const counts = await prisma.warrantyCategoryMonthCount.findMany({
+    where: { month: { in: last12Months() } },
+    include: { category: { select: { name: true } } },
+  });
+  if (counts.length === 0) return [];
+
+  const byCategory = new Map<string, number>();
+  for (const c of counts) {
+    byCategory.set(c.category.name, (byCategory.get(c.category.name) ?? 0) + c.count);
+  }
+  return [...byCategory.entries()]
+    .map(([label, value]) => ({ label, value }))
+    .sort((a, b) => b.value - a.value);
+}
