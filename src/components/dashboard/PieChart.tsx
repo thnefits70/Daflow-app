@@ -90,13 +90,13 @@ export function PieChart({
                 return (
                   <div
                     key={s.label}
-                    className={`flex items-center gap-2 text-[12.5px] px-1.5 py-1 rounded ${hoverIndex === s.i ? "bg-cloud" : ""}`}
+                    className={`inline-flex w-fit max-w-full items-center gap-2 text-[12.5px] px-1.5 py-1 rounded ${hoverIndex === s.i ? "bg-cloud" : ""}`}
                     onMouseEnter={() => setHoverIndex(s.i)}
                     onMouseLeave={() => setHoverIndex(null)}
                   >
                     <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: PALETTE[s.i % PALETTE.length] }} />
-                    <span className="truncate">{s.label}</span>
-                    <span className="ml-auto font-mono text-steel shrink-0">{p}% · {s.value}</span>
+                    <span className="truncate max-w-[160px]">{s.label}</span>
+                    <span className="font-mono text-steel shrink-0">{p}% · {s.value}</span>
                   </div>
                 );
               })}

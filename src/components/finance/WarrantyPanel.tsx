@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Trash2, ChevronDown, ChevronUp } from "lucide-react";
+import { Plus, Trash2, Pencil, ChevronDown, ChevronUp } from "lucide-react";
 import { formatMonthShort } from "@/components/dashboard/WeeklyTrendChart";
+import { Combobox } from "@/components/ui/Combobox";
 
 export type WarrantyCategoryDTO = { id: string; name: string };
 export type WarrantyMonthTotalDTO = { id: string; month: string; total: number };
@@ -29,6 +30,7 @@ export function WarrantyPanel({
   counts: WarrantyCategoryMonthCountDTO[];
 }) {
   const router = useRouter();
+  const panelTopRef = useRef<HTMLDivElement>(null);
   const [month, setMonth] = useState(currentMonth());
   const [totalValue, setTotalValue] = useState("");
   const [categoryName, setCategoryName] = useState("");
@@ -128,6 +130,24 @@ export function WarrantyPanel({
     router.refresh();
   };
 
+  // Editing is just prefilling the forms above with the existing values —
+  // resaving upserts on [month, categoryId] / [month], so it replaces the
+  // old value instead of requiring a delete-then-recreate.
+  const editTotal = (m: string, t: WarrantyMonthTotalDTO) => {
+    setMonth(m);
+    setTotalValue(String(t.total));
+    setErr("");
+    panelTopRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  const editCount = (m: string, c: WarrantyCategoryMonthCountDTO) => {
+    setMonth(m);
+    setCategoryName(c.category.name);
+    setCountValue(String(c.count));
+    setErr("");
+    panelTopRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
   // Group category counts by month for the compact/expanded history list.
   const countsByMonth = new Map<string, WarrantyCategoryMonthCountDTO[]>();
   for (const c of counts) {
@@ -139,7 +159,7 @@ export function WarrantyPanel({
   const latestMonth = months[0] ?? null;
 
   return (
-    <div>
+    <div ref={panelTopRef}>
       <div className="bg-surface border border-rule rounded-md p-4.5 mb-3">
         <label className="block mb-1.5 text-[10.5px] font-semibold uppercase tracking-wide text-steel">
           Total de garantías ingresadas ese mes
@@ -186,18 +206,13 @@ export function WarrantyPanel({
         <div className="flex items-end gap-2.5 flex-wrap">
           <div>
             <label className="block mb-1 text-[10px] text-steel">Categoría</label>
-            <input
-              list="warranty-categories-datalist"
+            <Combobox
               className="rounded border border-rule px-2.5 py-2 text-[13px] bg-surface min-w-[200px]"
               placeholder="Escribe o elige una categoría…"
               value={categoryName}
-              onChange={(e) => setCategoryName(e.target.value)}
+              onChange={setCategoryName}
+              options={categories.map((c) => c.name)}
             />
-            <datalist id="warranty-categories-datalist">
-              {categories.map((c) => (
-                <option key={c.id} value={c.name} />
-              ))}
-            </datalist>
           </div>
           <div>
             <label className="block mb-1 text-[10px] text-steel">Cantidad</label>
@@ -279,14 +294,24 @@ export function WarrantyPanel({
                         </button>
                       </span>
                     ) : (
-                      <button
-                        type="button"
-                        className="text-steel hover:text-red cursor-pointer"
-                        onClick={() => setConfirmingDeleteTotalId(totalsByMonth.get(m)!.id)}
-                        aria-label="Eliminar total del mes"
-                      >
-                        <Trash2 size={13} />
-                      </button>
+                      <span className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          className="text-steel hover:text-blue cursor-pointer"
+                          onClick={() => editTotal(m, totalsByMonth.get(m)!)}
+                          aria-label="Editar total del mes"
+                        >
+                          <Pencil size={13} />
+                        </button>
+                        <button
+                          type="button"
+                          className="text-steel hover:text-red cursor-pointer"
+                          onClick={() => setConfirmingDeleteTotalId(totalsByMonth.get(m)!.id)}
+                          aria-label="Eliminar total del mes"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </span>
                     ))}
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -303,9 +328,14 @@ export function WarrantyPanel({
                           </button>
                         </span>
                       ) : (
-                        <button type="button" className="text-steel hover:text-red cursor-pointer" onClick={() => setConfirmingDeleteId(c.id)}>
-                          <Trash2 size={11} />
-                        </button>
+                        <span className="flex items-center gap-1">
+                          <button type="button" className="text-steel hover:text-blue cursor-pointer" onClick={() => editCount(m, c)} aria-label="Editar categoría">
+                            <Pencil size={11} />
+                          </button>
+                          <button type="button" className="text-steel hover:text-red cursor-pointer" onClick={() => setConfirmingDeleteId(c.id)} aria-label="Eliminar categoría">
+                            <Trash2 size={11} />
+                          </button>
+                        </span>
                       )}
                     </span>
                   ))}

@@ -2,8 +2,9 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Trash2, ChevronDown, ChevronUp } from "lucide-react";
+import { Plus, Trash2, Pencil, Check, X, ChevronDown, ChevronUp } from "lucide-react";
 import { formatWeekShort } from "@/components/dashboard/WeeklyTrendChart";
+import { Combobox } from "@/components/ui/Combobox";
 
 export type StockoutProductDTO = { id: string; name: string };
 export type StockoutWeekRowDTO = { id: string; week: string; product: { id: string; name: string } };
@@ -28,6 +29,8 @@ export function StockoutPanel({
   const [err, setErr] = useState("");
   const [expanded, setExpanded] = useState(false);
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
+  const [renamingProductId, setRenamingProductId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
 
   // Single action: identify the product by name (reusing it if it already
   // exists, case-insensitively — never a second "+ Producto nuevo" step) and
@@ -85,6 +88,27 @@ export function StockoutPanel({
     router.refresh();
   };
 
+  // Renames the catalog product itself (not just this week's attachment) so
+  // a typo gets corrected everywhere that product already appears.
+  const saveRename = async () => {
+    const name = renameValue.trim();
+    if (!renamingProductId || !name) return;
+    setBusy(true);
+    const res = await fetch(`/api/stockout-products/${renamingProductId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    });
+    setBusy(false);
+    if (!res.ok) {
+      const data = await res.json().catch(() => null);
+      setErr(data?.error ?? "No se pudo renombrar.");
+      return;
+    }
+    setRenamingProductId(null);
+    router.refresh();
+  };
+
   // Group rows by week for the compact/expanded list.
   const byWeek = new Map<string, StockoutWeekRowDTO[]>();
   for (const r of weekRows) {
@@ -112,18 +136,13 @@ export function StockoutPanel({
           </div>
           <div>
             <label className="block mb-1 text-[10px] text-steel">Producto</label>
-            <input
-              list="stockout-products-datalist"
+            <Combobox
               className="rounded border border-rule px-2.5 py-2 text-[13px] bg-surface min-w-[220px]"
               placeholder="Escribe o elige un producto…"
               value={productName}
-              onChange={(e) => setProductName(e.target.value)}
+              onChange={setProductName}
+              options={products.map((p) => p.name)}
             />
-            <datalist id="stockout-products-datalist">
-              {products.map((p) => (
-                <option key={p.id} value={p.name} />
-              ))}
-            </datalist>
           </div>
           <button
             type="button"
@@ -136,7 +155,7 @@ export function StockoutPanel({
         </div>
         {err && <div className="text-red text-[12.5px] mt-2.5">{err}</div>}
         <div className="text-[11px] text-steel mt-2.5">
-          Si el producto ya existe, escribe su nombre igual y se reutiliza. Para marcar varios productos en la misma semana, repite Guardar uno por uno.
+          Si el producto ya existe, escribe su nombre igual y se reutiliza. Para marcar varios productos en la misma semana, repite Guardar uno por uno. El lápiz de cada producto corrige su nombre en todas las semanas donde aparece.
         </div>
       </div>
 
@@ -174,25 +193,57 @@ export function StockoutPanel({
               <div key={w} className="bg-surface border border-rule rounded p-3.5 mb-2.5">
                 <div className="font-semibold text-[13px] mb-2">{formatWeekLabel(w)}</div>
                 <div className="flex flex-wrap gap-2">
-                  {byWeek.get(w)!.map((r) => (
-                    <span key={r.id} className="inline-flex items-center gap-1.5 text-[12px] bg-cloud border border-rule rounded-full px-2.5 py-1">
-                      {r.product.name}
-                      {confirmingDeleteId === r.id ? (
-                        <span className="flex items-center gap-1">
-                          <button type="button" disabled={busy} className="text-red font-semibold cursor-pointer" onClick={() => remove(r.id)}>
-                            Sí
-                          </button>
-                          <button type="button" className="text-steel cursor-pointer" onClick={() => setConfirmingDeleteId(null)}>
-                            No
-                          </button>
-                        </span>
-                      ) : (
-                        <button type="button" className="text-steel hover:text-red cursor-pointer" onClick={() => setConfirmingDeleteId(r.id)}>
-                          <Trash2 size={11} />
+                  {byWeek.get(w)!.map((r) =>
+                    renamingProductId === r.product.id ? (
+                      <span key={r.id} className="inline-flex items-center gap-1.5 text-[12px] bg-cloud border border-blue rounded-full px-2.5 py-1">
+                        <input
+                          autoFocus
+                          className="bg-transparent outline-none w-28"
+                          value={renameValue}
+                          onChange={(e) => setRenameValue(e.target.value)}
+                          onKeyDown={(e) => e.key === "Enter" && saveRename()}
+                        />
+                        <button type="button" disabled={busy} className="text-teal cursor-pointer" onClick={saveRename} aria-label="Guardar nombre">
+                          <Check size={12} />
                         </button>
-                      )}
-                    </span>
-                  ))}
+                        <button type="button" className="text-steel cursor-pointer" onClick={() => setRenamingProductId(null)} aria-label="Cancelar">
+                          <X size={12} />
+                        </button>
+                      </span>
+                    ) : (
+                      <span key={r.id} className="inline-flex items-center gap-1.5 text-[12px] bg-cloud border border-rule rounded-full px-2.5 py-1">
+                        {r.product.name}
+                        {confirmingDeleteId === r.id ? (
+                          <span className="flex items-center gap-1">
+                            <button type="button" disabled={busy} className="text-red font-semibold cursor-pointer" onClick={() => remove(r.id)}>
+                              Sí
+                            </button>
+                            <button type="button" className="text-steel cursor-pointer" onClick={() => setConfirmingDeleteId(null)}>
+                              No
+                            </button>
+                          </span>
+                        ) : (
+                          <span className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              className="text-steel hover:text-blue cursor-pointer"
+                              onClick={() => {
+                                setRenamingProductId(r.product.id);
+                                setRenameValue(r.product.name);
+                                setErr("");
+                              }}
+                              aria-label="Editar nombre del producto"
+                            >
+                              <Pencil size={11} />
+                            </button>
+                            <button type="button" className="text-steel hover:text-red cursor-pointer" onClick={() => setConfirmingDeleteId(r.id)} aria-label="Quitar de esta semana">
+                              <Trash2 size={11} />
+                            </button>
+                          </span>
+                        )}
+                      </span>
+                    )
+                  )}
                 </div>
               </div>
             ))}

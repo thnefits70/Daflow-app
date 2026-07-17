@@ -16,6 +16,32 @@ export function formatMonthShort(month: string) {
   return `${MONTH_ABBR[Number(m) - 1]} ${y.slice(2)}`;
 }
 
+// ISO-8601 week ("YYYY-Www") -> the Monday..Sunday calendar range it covers,
+// so a chart can answer "which actual dates is S28?" on click. Returns null
+// for anything that isn't week-shaped (e.g. a "YYYY-MM" month string), so
+// callers can use it to gate whether a period label is click-worthy at all.
+export function isoWeekDateRange(week: string): { start: Date; end: Date } | null {
+  const match = /^(\d{4})-W(\d{1,2})$/.exec(week);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const weekNum = Number(match[2]);
+  const simple = new Date(Date.UTC(year, 0, 1 + (weekNum - 1) * 7));
+  const dayOfWeek = simple.getUTCDay() || 7;
+  const monday = new Date(simple);
+  monday.setUTCDate(simple.getUTCDate() + (dayOfWeek <= 4 ? 1 - dayOfWeek : 8 - dayOfWeek));
+  const sunday = new Date(monday);
+  sunday.setUTCDate(monday.getUTCDate() + 6);
+  return { start: monday, end: sunday };
+}
+
+export function formatIsoWeekRangeLabel(week: string): string | null {
+  const range = isoWeekDateRange(week);
+  if (!range) return null;
+  const fmt = (d: Date) => `${d.getUTCDate()} ${MONTH_ABBR[d.getUTCMonth()]}`;
+  const year = range.end.getUTCFullYear();
+  return `${fmt(range.start)} – ${fmt(range.end)} ${year}`;
+}
+
 function goalStatus(pct: number) {
   if (pct >= 100) return { label: "Excelente", color: "#14C7C7" };
   if (pct >= 80) return { label: "Eficiente", color: "#1E5EFF" };
@@ -46,7 +72,7 @@ function niceMax(value: number) {
   return niceNormalized * magnitude;
 }
 
-function smoothPath(coords: { x: number; y: number }[]) {
+export function smoothPath(coords: { x: number; y: number }[]) {
   if (coords.length === 0) return "";
   if (coords.length === 1) return `M${coords[0].x},${coords[0].y}`;
   let d = `M${coords[0].x.toFixed(1)},${coords[0].y.toFixed(1)}`;
@@ -84,6 +110,7 @@ export function WeeklyTrendChart({
   statusFn?: (value: number) => { label: string; color: string };
 }) {
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
+  const [dateTooltipWeek, setDateTooltipWeek] = useState<string | null>(null);
 
   if (points.length === 0) return null;
 
@@ -133,9 +160,17 @@ export function WeeklyTrendChart({
           <div className="text-[11px] font-semibold tracking-wide uppercase text-steel mb-1.5">
             {label} · {deptName}
           </div>
-          <div className="flex items-baseline gap-2.5">
+          <div className="flex items-baseline gap-2.5 flex-wrap">
             <span className="font-display text-[32px] font-bold text-ink leading-none">{fmt(latest.value)}</span>
-            <span className="text-[12px] text-steel">{periodLabel(latest.week)} ({latestLabel})</span>
+            <span
+              className={`text-[12px] text-steel ${isoWeekDateRange(latest.week) ? "cursor-pointer hover:underline" : ""}`}
+              onClick={() => isoWeekDateRange(latest.week) && setDateTooltipWeek((v) => (v === latest.week ? null : latest.week))}
+            >
+              {periodLabel(latest.week)} ({latestLabel})
+            </span>
+            {dateTooltipWeek === latest.week && (
+              <span className="text-[11px] text-teal font-mono">{formatIsoWeekRangeLabel(latest.week)}</span>
+            )}
           </div>
         </div>
         {status && (
@@ -194,7 +229,19 @@ export function WeeklyTrendChart({
 
         {coords.map((c, i) =>
           i % tickEvery === 0 || i === coords.length - 1 ? (
-            <text key={i} x={c.x} y={height - 8} textAnchor="middle" fontSize="10.5" fill="#92a3c0">
+            <text
+              key={i}
+              x={c.x}
+              y={height - 8}
+              textAnchor="middle"
+              fontSize="10.5"
+              fill={dateTooltipWeek === points[i].week ? "#14C7C7" : "#92a3c0"}
+              style={isoWeekDateRange(points[i].week) ? { cursor: "pointer" } : undefined}
+              onClick={() =>
+                isoWeekDateRange(points[i].week) &&
+                setDateTooltipWeek((v) => (v === points[i].week ? null : points[i].week))
+              }
+            >
               {periodLabel(points[i].week)}
             </text>
           ) : null
@@ -268,6 +315,24 @@ export function WeeklyTrendChart({
                     {p.detail}
                   </text>
                 )}
+              </g>
+            );
+          })()}
+
+        {dateTooltipWeek !== null &&
+          (() => {
+            const idx = points.findIndex((p) => p.week === dateTooltipWeek);
+            const rangeLabel = formatIsoWeekRangeLabel(dateTooltipWeek);
+            if (idx === -1 || !rangeLabel) return null;
+            const c = coords[idx];
+            const boxW = Math.max(110, rangeLabel.length * 6.2 + 20);
+            const boxX = Math.max(padL, Math.min(c.x - boxW / 2, width - padR - boxW));
+            return (
+              <g pointerEvents="none">
+                <rect x={boxX} y={height - 52} width={boxW} height={20} rx="5" fill="#101f3b" stroke="#14C7C7" strokeWidth="1" />
+                <text x={boxX + boxW / 2} y={height - 38} textAnchor="middle" fontSize="10.5" fill="#f1f5fb">
+                  {rangeLabel}
+                </text>
               </g>
             );
           })()}

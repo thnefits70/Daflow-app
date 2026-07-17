@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { formatWeekShort } from "./WeeklyTrendChart";
+import { formatWeekShort, formatIsoWeekRangeLabel, smoothPath } from "./WeeklyTrendChart";
 import type { StockoutWeekPoint } from "@/lib/dashboard";
 
 const WINDOW_SIZE = 4;
@@ -10,6 +10,7 @@ const WINDOW_SIZE = 4;
 export function StockoutBarChart({ points }: { points: StockoutWeekPoint[] }) {
   const [offset, setOffset] = useState(0);
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
+  const [dateTooltipWeek, setDateTooltipWeek] = useState<string | null>(null);
 
   if (points.length === 0) return null;
 
@@ -37,6 +38,12 @@ export function StockoutBarChart({ points }: { points: StockoutWeekPoint[] }) {
   const slotW = innerW / visible.length;
   const barW = Math.min(64, slotW * 0.5);
 
+  const topCoords = visible.map((p, i) => ({
+    x: padL + i * slotW + slotW / 2,
+    y: padT + innerH - (p.value / yMax) * innerH,
+  }));
+  const trendPath = smoothPath(topCoords);
+
   return (
     <div>
       <div className="flex items-start justify-between flex-wrap gap-4 mb-5">
@@ -44,9 +51,17 @@ export function StockoutBarChart({ points }: { points: StockoutWeekPoint[] }) {
           <div className="text-[11px] font-semibold tracking-wide uppercase text-steel mb-1.5">
             Ruptura de Stock · General
           </div>
-          <div className="flex items-baseline gap-2.5">
+          <div className="flex items-baseline gap-2.5 flex-wrap">
             <span className="font-display text-[32px] font-bold text-ink leading-none">{latest.value}</span>
-            <span className="text-[12px] text-steel">{formatWeekShort(latest.week)} (última semana) · productos distintos</span>
+            <span
+              className="text-[12px] text-steel cursor-pointer hover:underline"
+              onClick={() => setDateTooltipWeek((v) => (v === latest.week ? null : latest.week))}
+            >
+              {formatWeekShort(latest.week)} (última semana) · productos distintos
+            </span>
+            {dateTooltipWeek === latest.week && (
+              <span className="text-[11px] text-teal font-mono">{formatIsoWeekRangeLabel(latest.week)}</span>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-1.5">
@@ -117,12 +132,43 @@ export function StockoutBarChart({ points }: { points: StockoutWeekPoint[] }) {
               <text x={slotX + slotW / 2} y={barY - 8} textAnchor="middle" fontSize="12" fontWeight="700" fill="#f1f5fb">
                 {p.value}
               </text>
-              <text x={slotX + slotW / 2} y={height - 10} textAnchor="middle" fontSize="10.5" fill="#92a3c0">
+              <text
+                x={slotX + slotW / 2}
+                y={height - 10}
+                textAnchor="middle"
+                fontSize="10.5"
+                fill={dateTooltipWeek === p.week ? "#14C7C7" : "#92a3c0"}
+                style={{ cursor: "pointer" }}
+                onClick={() => setDateTooltipWeek((v) => (v === p.week ? null : p.week))}
+              >
                 {formatWeekShort(p.week)}
               </text>
             </g>
           );
         })}
+
+        <path d={trendPath} fill="none" stroke="#1E5EFF" strokeWidth="2.25" strokeLinejoin="round" strokeLinecap="round" opacity="0.85" />
+        {topCoords.map((c, i) => (
+          <circle key={`trend-${i}`} cx={c.x} cy={c.y} r={i === hoverIndex ? 5 : 3} fill="#1E5EFF" stroke="#0a1526" strokeWidth="1.5" pointerEvents="none" />
+        ))}
+
+        {dateTooltipWeek !== null &&
+          (() => {
+            const idx = visible.findIndex((p) => p.week === dateTooltipWeek);
+            const rangeLabel = formatIsoWeekRangeLabel(dateTooltipWeek);
+            if (idx === -1 || !rangeLabel) return null;
+            const slotX = padL + idx * slotW;
+            const boxW = Math.max(110, rangeLabel.length * 6.2 + 20);
+            const boxX = Math.max(padL, Math.min(slotX + slotW / 2 - boxW / 2, width - padR - boxW));
+            return (
+              <g pointerEvents="none">
+                <rect x={boxX} y={height - 52} width={boxW} height={20} rx="5" fill="#101f3b" stroke="#14C7C7" strokeWidth="1" />
+                <text x={boxX + boxW / 2} y={height - 38} textAnchor="middle" fontSize="10.5" fill="#f1f5fb">
+                  {rangeLabel}
+                </text>
+              </g>
+            );
+          })()}
 
         {hoverIndex !== null &&
           (() => {
