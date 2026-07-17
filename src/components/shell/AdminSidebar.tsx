@@ -18,7 +18,7 @@ import {
   Rocket,
   Wallet,
   FolderLock,
-  Undo2,
+  Gauge,
   Menu,
   X,
 } from "lucide-react";
@@ -181,8 +181,8 @@ export function AdminSidebar({
         <Link href="/admin/documentos-confidenciales" className={`${NAV_ITEM} ${pathname.startsWith("/admin/documentos-confidenciales") ? NAV_ACTIVE : NAV_INACTIVE}`}>
           <FolderLock size={15} /> Documentos Confidenciales
         </Link>
-        <Link href="/admin/tasa-devolucion" className={`${NAV_ITEM} ${pathname.startsWith("/admin/tasa-devolucion") ? NAV_ACTIVE : NAV_INACTIVE}`}>
-          <Undo2 size={15} /> Tasa de Devolución
+        <Link href="/admin/kpis-generales" className={`${NAV_ITEM} ${pathname.startsWith("/admin/kpis-generales") ? NAV_ACTIVE : NAV_INACTIVE}`}>
+          <Gauge size={15} /> KPIs Generales
         </Link>
         <Link href="/admin/settings" className={`${NAV_ITEM} ${pathname.startsWith("/admin/settings") ? NAV_ACTIVE : NAV_INACTIVE}`}>
           <Settings size={15} /> Configuración

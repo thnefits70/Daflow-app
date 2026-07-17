@@ -120,7 +120,7 @@ export default async function AreaLayout({ children }: { children: React.ReactNo
   const unseenConfidentialCount = await prisma.confidentialDocumentAccess.count({
     where: { userId: session.user.id, seenAt: null },
   });
-  const showReturnRate = await canManageReturnRate();
+  const showKpis = await canManageReturnRate();
 
   return (
     <AreaGateShell
@@ -140,7 +140,7 @@ export default async function AreaLayout({ children }: { children: React.ReactNo
       unseenPayStubCount={unseenPayStubCount}
       showConfidential={confidentialAccessCount > 0}
       unseenConfidentialCount={unseenConfidentialCount}
-      showReturnRate={showReturnRate}
+      showKpis={showKpis}
     >
       {children}
     </AreaGateShell>

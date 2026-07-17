@@ -4,7 +4,7 @@ import { TopLine } from "@/components/ui/TopLine";
 import { ReturnRatePanel } from "@/components/finance/ReturnRatePanel";
 import { canManageReturnRate } from "@/lib/guards";
 
-export default async function AreaTasaDevolucionPage() {
+export default async function AreaKpisGeneralesPage() {
   const canManage = await canManageReturnRate();
   if (!canManage) redirect("/area");
 
@@ -12,7 +12,8 @@ export default async function AreaTasaDevolucionPage() {
 
   return (
     <div>
-      <TopLine eyebrow="Finanzas" title="Tasa de Devolución General" />
+      <TopLine eyebrow="Finanzas" title="KPIs Generales" />
+      <h3 className="text-[14px] font-semibold mb-3">Tasa de Devolución</h3>
       <ReturnRatePanel records={records} />
     </div>
   );
