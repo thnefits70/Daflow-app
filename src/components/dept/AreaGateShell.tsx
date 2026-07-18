@@ -34,6 +34,7 @@ export function AreaGateShell({
   showConfidential = false,
   unseenConfidentialCount = 0,
   showKpis = false,
+  showRecognition = false,
   children,
 }: {
   deptName: string;
@@ -53,6 +54,7 @@ export function AreaGateShell({
   showConfidential?: boolean;
   unseenConfidentialCount?: number;
   showKpis?: boolean;
+  showRecognition?: boolean;
   children: React.ReactNode;
 }) {
   const router = useRouter();
@@ -149,6 +151,7 @@ export function AreaGateShell({
         showConfidential={showConfidential}
         unseenConfidentialCount={unseenConfidentialCount}
         showKpis={showKpis}
+        showRecognition={showRecognition}
       />
       <main className="flex-1 overflow-y-auto bg-bg p-4 md:p-9">
         <TopBanner bannerUrl={bannerUrl} />

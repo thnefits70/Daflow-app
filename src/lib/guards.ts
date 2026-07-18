@@ -203,3 +203,37 @@ export async function getConfidentialAccessCount() {
   if (!session || session.user.role !== "employee") return 0;
   return prisma.confidentialDocumentAccess.count({ where: { userId: session.user.id } });
 }
+
+// Colaborador Destacado del Mes — only admin and department leaders take
+// part in evaluating (leaders rate their own team, admin rates leaders), so
+// only they get the section in the sidebar at all.
+export async function canAccessRecognition() {
+  const session = await auth();
+  if (!session) return false;
+  if (session.user.role === "admin") return true;
+  const user = await prisma.user.findUnique({ where: { id: session.user.id }, select: { isLeader: true } });
+  return !!user?.isLeader;
+}
+
+// Who is allowed to evaluate a specific person this month: admin evaluates
+// leaders (and can always override), a leader evaluates their own
+// non-leader team members — nobody evaluates admin.
+export async function canEvaluateUser(evaluateeId: string) {
+  const session = await auth();
+  if (!session) return false;
+
+  const evaluatee = await prisma.user.findUnique({
+    where: { id: evaluateeId },
+    select: { deptId: true, isLeader: true },
+  });
+  if (!evaluatee) return false;
+
+  if (session.user.role === "admin") return true;
+  if (evaluatee.isLeader) return false;
+
+  const me = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { isLeader: true, leadsDeptId: true },
+  });
+  return !!me?.isLeader && me.leadsDeptId === evaluatee.deptId;
+}

@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
-import { LayoutDashboard, ClipboardList, Scale, LogOut, Truck, Rocket, Wallet, FolderLock, Gauge, Menu, X } from "lucide-react";
+import { LayoutDashboard, ClipboardList, Scale, LogOut, Truck, Rocket, Wallet, FolderLock, Gauge, Menu, X, Trophy } from "lucide-react";
 import { BrandMark } from "@/components/brand/DaflowMark";
 
 export function EmployeeSidebar({
@@ -19,6 +19,7 @@ export function EmployeeSidebar({
   showConfidential = false,
   unseenConfidentialCount = 0,
   showKpis = false,
+  showRecognition = false,
 }: {
   deptName: string;
   userName: string;
@@ -31,6 +32,7 @@ export function EmployeeSidebar({
   showConfidential?: boolean;
   unseenConfidentialCount?: number;
   showKpis?: boolean;
+  showRecognition?: boolean;
 }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
@@ -132,6 +134,11 @@ export function EmployeeSidebar({
         {showKpis && (
           <Link href="/area/kpis-generales" className={`${NAV_ITEM} ${pathname.startsWith("/area/kpis-generales") ? NAV_ACTIVE : NAV_INACTIVE}`}>
             <Gauge size={15} /> KPIs Generales
+          </Link>
+        )}
+        {showRecognition && (
+          <Link href="/area/colaborador-destacado" className={`${NAV_ITEM} ${pathname.startsWith("/area/colaborador-destacado") ? NAV_ACTIVE : NAV_INACTIVE}`}>
+            <Trophy size={15} /> Colaborador Destacado
           </Link>
         )}
       </div>

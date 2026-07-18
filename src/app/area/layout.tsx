@@ -141,6 +141,7 @@ export default async function AreaLayout({ children }: { children: React.ReactNo
       showConfidential={confidentialAccessCount > 0}
       unseenConfidentialCount={unseenConfidentialCount}
       showKpis={showKpis}
+      showRecognition={currentUser.isLeader}
     >
       {children}
     </AreaGateShell>

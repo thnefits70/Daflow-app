@@ -21,6 +21,7 @@ import {
   Gauge,
   Menu,
   X,
+  Trophy,
 } from "lucide-react";
 import { BrandMark } from "@/components/brand/DaflowMark";
 
@@ -183,6 +184,9 @@ export function AdminSidebar({
         </Link>
         <Link href="/admin/kpis-generales" className={`${NAV_ITEM} ${pathname.startsWith("/admin/kpis-generales") ? NAV_ACTIVE : NAV_INACTIVE}`}>
           <Gauge size={15} /> KPIs Generales
+        </Link>
+        <Link href="/admin/colaborador-destacado" className={`${NAV_ITEM} ${pathname.startsWith("/admin/colaborador-destacado") ? NAV_ACTIVE : NAV_INACTIVE}`}>
+          <Trophy size={15} /> Colaborador Destacado
         </Link>
         <Link href="/admin/settings" className={`${NAV_ITEM} ${pathname.startsWith("/admin/settings") ? NAV_ACTIVE : NAV_INACTIVE}`}>
           <Settings size={15} /> Configuración
