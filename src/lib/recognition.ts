@@ -15,6 +15,18 @@ export type Pillar = {
   why: string;
 };
 
+// Shared brand-accent color per pillar — used anywhere a pillar needs a
+// visual identity (evaluation form, ranking drill-down, pillar reference).
+export const PILLAR_ACCENTS: Record<PillarKey, string> = {
+  resultados: "#14C7C7",
+  excelencia: "#1E5EFF",
+  compromiso: "#D9A441",
+  colaboracion: "#8B5CF6",
+  orientacion_cliente: "#EC4899",
+  innovacion: "#22C55E",
+  liderazgo: "#C4453A",
+};
+
 // Fixed rubric defined by the user (not an editable catalog) — Colaborador
 // Destacado del Mes evaluates every employee/leader against these 7 pillars.
 export const PILLARS: Pillar[] = [

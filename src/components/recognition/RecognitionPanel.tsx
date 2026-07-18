@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { User, CheckCircle2, Circle, ArrowLeft, Clock } from "lucide-react";
-import { evaluationDeadline, formatDeadline, currentMonth } from "@/lib/recognition";
+import { evaluationDeadline, formatDeadline, currentMonth, PILLAR_ACCENTS, type PillarKey } from "@/lib/recognition";
 
 export type RecognitionPersonDTO = {
   id: string;
@@ -20,16 +20,6 @@ export type RecognitionPersonDTO = {
 type QuestionDTO = { id: string; text: string; score: number | null };
 type PillarDTO = { key: string; label: string; tagline: string; description: string; why: string; questions: QuestionDTO[] };
 type EvaluationData = { month: string; pillars: PillarDTO[]; comment: string; questionsPerPillar: number };
-
-const PILLAR_ACCENTS: Record<string, string> = {
-  resultados: "#14C7C7",
-  excelencia: "#1E5EFF",
-  compromiso: "#D9A441",
-  colaboracion: "#8B5CF6",
-  orientacion_cliente: "#EC4899",
-  innovacion: "#22C55E",
-  liderazgo: "#C4453A",
-};
 
 function ScorePicker({ value, onChange }: { value: number | null; onChange: (v: number) => void }) {
   return (
@@ -182,7 +172,7 @@ export function RecognitionPanel({
             ) : (
               <>
                 {data.pillars.map((pillar) => {
-                  const accent = PILLAR_ACCENTS[pillar.key] ?? "#14C7C7";
+                  const accent = PILLAR_ACCENTS[pillar.key as PillarKey] ?? "#14C7C7";
                   return (
                     <div key={pillar.key} className="bg-surface border border-rule rounded-md p-4.5 mb-4" style={{ borderTopColor: accent, borderTopWidth: 3 }}>
                       <div className="mb-3">

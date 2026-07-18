@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { WeeklyTrendChart, formatMonthShort } from "@/components/dashboard/WeeklyTrendChart";
 import { PILLARS, generateAutoFeedback, type PillarKey } from "@/lib/recognition";
+import { RecognitionPillarsInfo } from "@/components/recognition/RecognitionPillarsInfo";
 
 type HistoryEntry = {
   month: string;
@@ -48,8 +49,11 @@ export function RecognitionMyProgress() {
 
   if (history.length === 0) {
     return (
-      <div className="border-[1.5px] border-dashed border-rule rounded-md p-8.5 text-center text-steel text-[13.5px]">
-        Todavía no tienes evaluaciones registradas — aparecerán aquí cuando tu líder evalúe tu desempeño del mes.
+      <div>
+        <RecognitionPillarsInfo />
+        <div className="border-[1.5px] border-dashed border-rule rounded-md p-8.5 text-center text-steel text-[13.5px]">
+          Todavía no tienes evaluaciones registradas — aparecerán aquí cuando tu líder evalúe tu desempeño del mes.
+        </div>
       </div>
     );
   }
@@ -60,6 +64,8 @@ export function RecognitionMyProgress() {
 
   return (
     <div>
+      <RecognitionPillarsInfo />
+
       <div className="bg-surface border border-rule rounded-lg p-6 mb-6">
         <WeeklyTrendChart
           label="Tu puntaje mensual"
