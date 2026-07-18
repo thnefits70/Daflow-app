@@ -41,11 +41,13 @@ export function AdminSidebar({
   specialDepartments,
   logoUrl,
   pendingSuppliersCount = 0,
+  pendingRecognitionMonth = null,
 }: {
   departments: Department[];
   specialDepartments: Department[];
   logoUrl?: string | null;
   pendingSuppliersCount?: number;
+  pendingRecognitionMonth?: string | null;
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -187,6 +189,11 @@ export function AdminSidebar({
         </Link>
         <Link href="/admin/colaborador-destacado" className={`${NAV_ITEM} ${pathname.startsWith("/admin/colaborador-destacado") ? NAV_ACTIVE : NAV_INACTIVE}`}>
           <Trophy size={15} /> Colaborador Destacado
+          {pendingRecognitionMonth && (
+            <span className="ml-auto font-mono text-[10px] font-semibold bg-red/20 text-red rounded-full px-1.5 py-0.5">
+              1
+            </span>
+          )}
         </Link>
         <Link href="/admin/settings" className={`${NAV_ITEM} ${pathname.startsWith("/admin/settings") ? NAV_ACTIVE : NAV_INACTIVE}`}>
           <Settings size={15} /> Configuración

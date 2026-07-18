@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { User, CheckCircle2, Circle, ArrowLeft } from "lucide-react";
+import { User, CheckCircle2, Circle, ArrowLeft, Clock } from "lucide-react";
+import { evaluationDeadline, formatDeadline } from "@/lib/recognition";
 
 export type RecognitionPersonDTO = {
   id: string;
@@ -224,8 +225,20 @@ export function RecognitionPanel({
     );
   }
 
+  const deadline = evaluationDeadline(month);
+  const overdue = new Date() > deadline;
+  const pendingCount = people.filter((p) => !p.done).length;
+
   return (
     <div>
+      {pendingCount > 0 && (
+        <div className={`rounded-md p-3.5 mb-4 flex items-center gap-2.5 text-[12.5px] border ${overdue ? "bg-red/10 border-red text-red" : "bg-cloud border-rule text-steel"}`}>
+          <Clock size={15} className="shrink-0" />
+          {overdue
+            ? `El plazo para evaluar este mes venció el ${formatDeadline(deadline)} — ponte al día cuanto antes.`
+            : `Tienes hasta el ${formatDeadline(deadline)} para evaluar a todo tu equipo este mes.`}
+        </div>
+      )}
       {people.length === 0 && (
         <div className="border-[1.5px] border-dashed border-rule rounded-md p-8.5 text-center text-steel text-[13.5px]">
           {emptyMessage}

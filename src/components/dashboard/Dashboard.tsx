@@ -1,5 +1,6 @@
 import { Building2 } from "lucide-react";
 import { DailyQuoteBanner } from "./DailyQuoteBanner";
+import { RecognitionPodium } from "@/components/recognition/RecognitionPodium";
 import { ScoreGauge } from "./ScoreGauge";
 import { WeeklyTrendChart, returnRateStatus, formatMonthShort } from "./WeeklyTrendChart";
 import { StockoutBarChart } from "./StockoutBarChart";
@@ -35,8 +36,13 @@ export function Dashboard({
   return (
     <div>
       <DailyQuoteBanner />
-      <div className="font-mono text-[10.5px] tracking-[.14em] uppercase text-steel">Resumen general</div>
-      <h2 className="font-display text-[24px] mt-0.5 mb-6">Inicio</h2>
+      <div className="flex items-start justify-between gap-4 flex-wrap mb-6">
+        <div>
+          <div className="font-mono text-[10.5px] tracking-[.14em] uppercase text-steel">Resumen general</div>
+          <h2 className="font-display text-[24px] mt-0.5">Inicio</h2>
+        </div>
+        <RecognitionPodium />
+      </div>
 
       <div className="relative overflow-hidden bg-navy rounded-lg p-6 mb-7 flex flex-wrap items-center gap-8">
         <div>

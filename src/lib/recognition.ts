@@ -414,3 +414,60 @@ export function retentionCutoffMonth(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
+/* ---------------- Deadlines ---------------- */
+
+function isWeekend(date: Date): boolean {
+  const day = date.getUTCDay();
+  return day === 0 || day === 6;
+}
+
+// Fixed-date Ecuadorian national holidays only ("MM-DD"). Movable holidays
+// (Carnaval, Viernes Santo) and the "traslado de feriados" law that shifts
+// some of these to the nearest Monday/Friday aren't modeled — this is a
+// reasonable approximation for a 1-2 day grace extension, not a fully
+// authoritative calendar.
+const FIXED_ECUADOR_HOLIDAYS = ["01-01", "05-01", "05-24", "08-10", "10-09", "11-02", "11-03", "12-25"];
+
+function isFixedHoliday(date: Date): boolean {
+  const md = `${String(date.getUTCMonth() + 1).padStart(2, "0")}-${String(date.getUTCDate()).padStart(2, "0")}`;
+  return FIXED_ECUADOR_HOLIDAYS.includes(md);
+}
+
+export function isBusinessDay(date: Date): boolean {
+  return !isWeekend(date) && !isFixedHoliday(date);
+}
+
+// Leaders' deadline to finish evaluating a month: its last calendar day,
+// pushed forward to the next business day if that falls on a weekend/
+// holiday — the extra day(s) land at the start of the following month.
+export function evaluationDeadline(month: string): Date {
+  const [y, m] = month.split("-").map(Number);
+  let d = new Date(Date.UTC(y, m, 0)); // day 0 of next month = last day of this one
+  while (!isBusinessDay(d)) d = new Date(d.getTime() + 86400000);
+  return d;
+}
+
+// Admin's window to review the ranking and confirm the winner: 5 business
+// days starting the day after the leaders' deadline.
+export function adminConfirmDeadline(month: string): Date {
+  let d = new Date(evaluationDeadline(month).getTime() + 86400000);
+  let remaining = 5;
+  while (remaining > 0) {
+    if (isBusinessDay(d)) {
+      remaining--;
+      if (remaining === 0) return d;
+    }
+    d = new Date(d.getTime() + 86400000);
+  }
+  return d;
+}
+
+function formatDateEs(d: Date): string {
+  const MONTH_NAMES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
+  return `${d.getUTCDate()} de ${MONTH_NAMES[d.getUTCMonth()]}`;
+}
+
+export function formatDeadline(date: Date): string {
+  return formatDateEs(date);
+}
+

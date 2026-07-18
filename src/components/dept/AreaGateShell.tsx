@@ -9,6 +9,7 @@ import { TopBanner } from "@/components/shell/TopBanner";
 import { UpdateGate } from "@/components/dept/UpdateGate";
 import { LeaderBanner } from "@/components/dept/LeaderBanner";
 import { BirthdayPopup } from "@/components/birthday/BirthdayPopup";
+import { MonthlyRecognitionPopup } from "@/components/recognition/MonthlyRecognitionPopup";
 import { signOut } from "next-auth/react";
 import type { ProcessDTO } from "@/components/process/ProcessEditor";
 import { isFutureDate } from "@/lib/time";
@@ -159,6 +160,7 @@ export function AreaGateShell({
         {children}
       </main>
       <BirthdayPopup />
+      <MonthlyRecognitionPopup />
     </div>
   );
 }

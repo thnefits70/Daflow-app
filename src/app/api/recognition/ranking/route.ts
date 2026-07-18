@@ -65,5 +65,21 @@ export async function GET(req: NextRequest) {
   ]);
   const months = [...new Set([...detailedMonths.map((m) => m.month), ...summaryMonths.map((m) => m.month)])].sort().reverse();
 
-  return NextResponse.json({ month, maxTotalScore: MAX_TOTAL_SCORE, ranked, months });
+  // Only admin can confirm, and only in the company-wide view (no deptId
+  // scoping) — a leader's "Ranking de mi equipo" never shows this.
+  const canConfirm = session!.user.role === "admin";
+  const confirmedPodium = await prisma.monthlyRecognitionResult.findMany({
+    where: { month },
+    include: { user: { select: { name: true, photoUrl: true } } },
+    orderBy: { rank: "asc" },
+  });
+
+  return NextResponse.json({
+    month,
+    maxTotalScore: MAX_TOTAL_SCORE,
+    ranked,
+    months,
+    canConfirm,
+    confirmedPodium: confirmedPodium.map((p) => ({ rank: p.rank, userId: p.userId, name: p.user.name, photoUrl: p.user.photoUrl, totalScore: p.totalScore })),
+  });
 }

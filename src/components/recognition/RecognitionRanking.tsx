@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { User, Award, ChevronDown, ChevronUp } from "lucide-react";
+import { User, Award, ChevronDown, ChevronUp, Trophy } from "lucide-react";
 import { PILLARS } from "@/lib/recognition";
 
 type RankedPersonDTO = {
@@ -17,6 +17,8 @@ type RankedPersonDTO = {
   answers: { pillar: string; questionId: string; questionText: string; score: number }[];
   hasDetail: boolean;
 };
+
+type ConfirmedPodiumEntry = { rank: number; userId: string; name: string; photoUrl: string | null; totalScore: number };
 
 const MEDAL = ["🥇", "🥈", "🥉"];
 const MAX_PER_PILLAR = 20; // QUESTIONS_PER_PILLAR (4) * MAX_SCORE_PER_QUESTION (5)
@@ -41,6 +43,26 @@ export function RecognitionRanking({
   const [ranked, setRanked] = useState<RankedPersonDTO[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [canConfirm, setCanConfirm] = useState(false);
+  const [confirmedPodium, setConfirmedPodium] = useState<ConfirmedPodiumEntry[]>([]);
+  const [confirmingWinner, setConfirmingWinner] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  const applyResponse = (d: {
+    month: string;
+    months: string[];
+    maxTotalScore: number;
+    ranked: RankedPersonDTO[];
+    canConfirm: boolean;
+    confirmedPodium: ConfirmedPodiumEntry[];
+  }) => {
+    setMonth(d.month);
+    setMonths(d.months);
+    setMaxTotalScore(d.maxTotalScore);
+    setRanked(d.ranked);
+    setCanConfirm(d.canConfirm);
+    setConfirmedPodium(d.confirmedPodium);
+  };
 
   useEffect(() => {
     setLoading(true);
@@ -49,12 +71,7 @@ export function RecognitionRanking({
     if (deptId) params.set("deptId", deptId);
     fetch(`/api/recognition/ranking?${params.toString()}`)
       .then((res) => res.json())
-      .then((d) => {
-        setMonth(d.month);
-        setMonths(d.months);
-        setMaxTotalScore(d.maxTotalScore);
-        setRanked(d.ranked);
-      })
+      .then(applyResponse)
       .finally(() => setLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [deptId]);
@@ -66,8 +83,27 @@ export function RecognitionRanking({
     if (deptId) params.set("deptId", deptId);
     fetch(`/api/recognition/ranking?${params.toString()}`)
       .then((res) => res.json())
-      .then((d) => setRanked(d.ranked))
+      .then(applyResponse)
       .finally(() => setLoading(false));
+  };
+
+  const confirmWinner = async () => {
+    if (!month) return;
+    setBusy(true);
+    const res = await fetch("/api/recognition/confirm", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ month }),
+    });
+    setBusy(false);
+    setConfirmingWinner(false);
+    if (res.ok) {
+      const data = await res.json();
+      setConfirmedPodium(data.podium.map((p: { rank: number; userId: string; totalScore: number }) => {
+        const person = ranked.find((r) => r.userId === p.userId);
+        return { rank: p.rank, userId: p.userId, name: person?.name ?? "", photoUrl: person?.photoUrl ?? null, totalScore: p.totalScore };
+      }));
+    }
   };
 
   return (
@@ -97,6 +133,59 @@ export function RecognitionRanking({
           </select>
         )}
       </div>
+
+      {!loading && confirmedPodium.length > 0 && (
+        <div className="bg-teal/10 border border-teal rounded-md p-4 mb-5 flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-2.5">
+            <Trophy size={18} className="text-teal shrink-0" />
+            <div>
+              <div className="text-[13px] font-semibold">
+                Podio confirmado — {confirmedPodium.find((p) => p.rank === 1)?.name} es el Colaborador Destacado de {formatMonthLabel(month ?? "")}
+              </div>
+              <div className="text-[11.5px] text-steel">
+                {confirmedPodium.map((p) => `${MEDAL[p.rank - 1]} ${p.name}`).join("  ·  ")}
+              </div>
+            </div>
+          </div>
+          {canConfirm &&
+            (confirmingWinner ? (
+              <span className="flex items-center gap-2 text-[12px] shrink-0">
+                <span className="text-steel">¿Volver a confirmar con el ranking actual?</span>
+                <button type="button" disabled={busy} className="text-teal font-semibold cursor-pointer" onClick={confirmWinner}>Sí</button>
+                <button type="button" className="text-steel cursor-pointer" onClick={() => setConfirmingWinner(false)}>Cancelar</button>
+              </span>
+            ) : (
+              <button type="button" className="text-[12px] text-steel hover:text-ink cursor-pointer underline underline-offset-2 shrink-0" onClick={() => setConfirmingWinner(true)}>
+                Volver a confirmar
+              </button>
+            ))}
+        </div>
+      )}
+
+      {!loading && confirmedPodium.length === 0 && canConfirm && ranked.length > 0 && (
+        <div className="bg-surface border border-rule rounded-md p-4 mb-5 flex items-center justify-between gap-3 flex-wrap">
+          <div className="text-[12.5px] text-steel">
+            Este mes todavía no tiene un Colaborador Destacado confirmado.
+          </div>
+          {confirmingWinner ? (
+            <span className="flex items-center gap-2 text-[12px] shrink-0">
+              <span className="text-steel">¿Confirmar a {ranked[0]?.name} como Colaborador Destacado de {formatMonthLabel(month ?? "")}?</span>
+              <button type="button" disabled={busy} className="rounded border border-teal bg-teal px-3 py-1.5 text-[12px] font-semibold text-white cursor-pointer disabled:opacity-60" onClick={confirmWinner}>
+                Sí, confirmar
+              </button>
+              <button type="button" className="text-steel cursor-pointer" onClick={() => setConfirmingWinner(false)}>Cancelar</button>
+            </span>
+          ) : (
+            <button
+              type="button"
+              className="inline-flex items-center gap-1.5 rounded border border-teal bg-teal px-3.5 py-2 text-[12.5px] font-semibold text-white cursor-pointer shrink-0"
+              onClick={() => setConfirmingWinner(true)}
+            >
+              <Trophy size={14} /> Confirmar Colaborador Destacado
+            </button>
+          )}
+        </div>
+      )}
 
       {loading && <div className="text-[13px] text-steel">Cargando ranking…</div>}
 
