@@ -471,3 +471,46 @@ export function formatDeadline(date: Date): string {
   return formatDateEs(date);
 }
 
+/* ---------------- Automatic feedback ---------------- */
+
+// Deliberately supplements the leader's own manual comment rather than
+// replacing it — a genuine human note (like the one Nairoby/admin already
+// wrote for real) still has real value; this adds a second, consistent
+// layer of structured feedback so every evaluation includes *something*
+// constructive, even when a leader leaves the comment box empty.
+const STRENGTH_TEMPLATES = [
+  (label: string) => `Este mes tu punto más fuerte fue **${label}** — sigue apoyándote en eso, es un pilar que te representa bien.`,
+  (label: string) => `Lo que más se notó este mes fue tu **${label}** — es una fortaleza real, sigue cultivándola.`,
+  (label: string) => `Tu **${label}** fue lo que más destacó este mes. Vas por buen camino en esa área.`,
+];
+const GROWTH_TEMPLATES = [
+  (label: string) => `Un área donde puedes seguir creciendo es **${label}** — no es una debilidad, es simplemente tu próximo paso.`,
+  (label: string) => `Si buscas un enfoque para el próximo mes, **${label}** es un buen lugar para poner atención — con pequeños ajustes puedes notar la diferencia.`,
+  (label: string) => `Vale la pena prestarle un poco más de atención a **${label}** el próximo mes — cada mejora ahí suma.`,
+];
+const BALANCED_TEMPLATES = [
+  () => "Tu desempeño estuvo parejo en todos los pilares este mes — sigue así, esa constancia es justo lo que ayuda a crecer con el tiempo.",
+  () => "No hubo un pilar que destacara más que otro este mes — un desempeño consistente en todas las áreas, que vale la pena mantener.",
+];
+
+export function generateAutoFeedback(evaluateeId: string, month: string, pillarScores: Record<PillarKey, number>): string {
+  const entries = PILLARS.map((p) => ({ label: p.label, score: pillarScores[p.key] ?? 0 }));
+  const maxScore = Math.max(...entries.map((e) => e.score));
+  const minScore = Math.min(...entries.map((e) => e.score));
+  const rand = seededRandom(`${evaluateeId}:${month}:feedback`);
+
+  if (maxScore === minScore) {
+    const pick = BALANCED_TEMPLATES[Math.floor(rand() * BALANCED_TEMPLATES.length)];
+    return pick();
+  }
+
+  const strongest = entries.filter((e) => e.score === maxScore);
+  const weakest = entries.filter((e) => e.score === minScore);
+  const strength = strongest[Math.floor(rand() * strongest.length)];
+  const growth = weakest[Math.floor(rand() * weakest.length)];
+
+  const strengthLine = STRENGTH_TEMPLATES[Math.floor(rand() * STRENGTH_TEMPLATES.length)](strength.label);
+  const growthLine = GROWTH_TEMPLATES[Math.floor(rand() * GROWTH_TEMPLATES.length)](growth.label);
+  return `${strengthLine} ${growthLine}`;
+}
+

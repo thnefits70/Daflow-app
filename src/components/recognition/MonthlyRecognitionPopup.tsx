@@ -14,7 +14,10 @@ type Celebration = {
 };
 
 const CONFETTI_COLORS = ["#14C7C7", "#1E5EFF", "#F5C543", "#C4453A", "#8B5CF6", "#22C55E"];
-const COINS = ["💰", "🪙"];
+// Mix of emoji (money bag, coin, green bill) and a styled gold "$" glyph —
+// emoji alone read as "cookies falling" at a glance, the gold dollar signs
+// make it unambiguously read as money raining down.
+const COIN_EMOJI = ["💰", "🪙", "💵"];
 
 const MONTH_NAMES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
 function formatMonth(month: string) {
@@ -46,9 +49,22 @@ function CoinPiece({ i }: { i: number }) {
     }),
     [i]
   );
+  // Every 4th piece is a bold gold "$" instead of an emoji — emoji render in
+  // whatever color the font gives them, so a real gold dollar sign has to be
+  // a styled glyph, not an emoji character. Uses a different divisor than
+  // the emoji rotation below (%3) on purpose — sharing one would make one of
+  // the three emoji mathematically unreachable (its index would only ever
+  // land on positions already claimed by the "$" branch).
+  if (i % 4 === 0) {
+    return (
+      <span className="coin-piece" style={{ ...style, color: "#D9A441", fontWeight: 800, fontFamily: "var(--font-display)", textShadow: "0 1px 2px rgba(0,0,0,.4)" }}>
+        $
+      </span>
+    );
+  }
   return (
     <span className="coin-piece" style={style}>
-      {COINS[i % COINS.length]}
+      {COIN_EMOJI[i % COIN_EMOJI.length]}
     </span>
   );
 }

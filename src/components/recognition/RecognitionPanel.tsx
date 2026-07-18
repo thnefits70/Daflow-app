@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { User, CheckCircle2, Circle, ArrowLeft, Clock } from "lucide-react";
-import { evaluationDeadline, formatDeadline } from "@/lib/recognition";
+import { evaluationDeadline, formatDeadline, currentMonth } from "@/lib/recognition";
 
 export type RecognitionPersonDTO = {
   id: string;
@@ -11,7 +11,10 @@ export type RecognitionPersonDTO = {
   photoUrl: string | null;
   position: string | null;
   deptName: string | null;
-  done: boolean;
+  // Every month this person already has an evaluation for — lets the "Evaluado
+  // este mes" badge stay correct even when evaluating a past month (see the
+  // month picker below), not just the current one.
+  doneMonths: string[];
 };
 
 type QuestionDTO = { id: string; text: string; score: number | null };
@@ -52,13 +55,19 @@ export function RecognitionPanel({
   maxTotalScore,
   people,
   emptyMessage,
+  allowMonthPicker = false,
 }: {
   month: string;
   maxTotalScore: number;
   people: RecognitionPersonDTO[];
   emptyMessage: string;
+  // Off by default (evaluates only the current month, as always). Turn on
+  // temporarily when catching up a past month that this feature didn't
+  // exist for yet — see the note next to the picker below.
+  allowMonthPicker?: boolean;
 }) {
   const router = useRouter();
+  const [selectedMonth, setSelectedMonth] = useState(month);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [data, setData] = useState<EvaluationData | null>(null);
   const [answers, setAnswers] = useState<Record<string, number>>({});
@@ -75,7 +84,7 @@ export function RecognitionPanel({
     setLoading(true);
     setErr("");
     setSaved(false);
-    fetch(`/api/recognition/evaluation?evaluateeId=${selectedId}`)
+    fetch(`/api/recognition/evaluation?evaluateeId=${selectedId}&month=${selectedMonth}`)
       .then((res) => res.json())
       .then((d: EvaluationData) => {
         setData(d);
@@ -89,7 +98,8 @@ export function RecognitionPanel({
         setAnswers(initial);
       })
       .finally(() => setLoading(false));
-  }, [selectedId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedId, selectedMonth]);
 
   const totalQuestions = data ? data.pillars.reduce((a, p) => a + p.questions.length, 0) : 0;
   const answeredCount = Object.keys(answers).length;
@@ -103,7 +113,7 @@ export function RecognitionPanel({
     const res = await fetch("/api/recognition/evaluation", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ evaluateeId: selectedId, scores, comment: comment.trim() }),
+      body: JSON.stringify({ evaluateeId: selectedId, month: selectedMonth, scores, comment: comment.trim() }),
     });
     setBusy(false);
     if (!res.ok) {
@@ -137,7 +147,7 @@ export function RecognitionPanel({
           </div>
           <div>
             <div className="font-display text-[18px] font-bold">{selectedPerson.name}</div>
-            <div className="text-[12px] text-steel">{selectedPerson.position || selectedPerson.deptName || ""} · {month}</div>
+            <div className="text-[12px] text-steel">{selectedPerson.position || selectedPerson.deptName || ""} · {selectedMonth}</div>
           </div>
         </div>
 
@@ -225,18 +235,35 @@ export function RecognitionPanel({
     );
   }
 
-  const deadline = evaluationDeadline(month);
+  const deadline = evaluationDeadline(selectedMonth);
   const overdue = new Date() > deadline;
-  const pendingCount = people.filter((p) => !p.done).length;
+  const isCurrentMonth = selectedMonth === currentMonth();
+  const pendingCount = people.filter((p) => !p.doneMonths.includes(selectedMonth)).length;
 
   return (
     <div>
+      {allowMonthPicker && (
+        <div className="bg-surface border border-rule rounded-md p-3.5 mb-4 flex items-center gap-3 flex-wrap">
+          <label className="text-[11px] font-semibold uppercase tracking-wide text-steel">Evaluando el mes de</label>
+          <input
+            type="month"
+            className="rounded border border-rule px-2.5 py-1.5 text-[13px] bg-surface"
+            value={selectedMonth}
+            onChange={(e) => setSelectedMonth(e.target.value)}
+          />
+          {!isCurrentMonth && (
+            <span className="text-[11px] font-semibold" style={{ color: "#D9A441" }}>
+              Cargando para un mes distinto al actual — úsalo solo para ponerte al día.
+            </span>
+          )}
+        </div>
+      )}
       {pendingCount > 0 && (
         <div className={`rounded-md p-3.5 mb-4 flex items-center gap-2.5 text-[12.5px] border ${overdue ? "bg-red/10 border-red text-red" : "bg-cloud border-rule text-steel"}`}>
           <Clock size={15} className="shrink-0" />
           {overdue
-            ? `El plazo para evaluar este mes venció el ${formatDeadline(deadline)} — ponte al día cuanto antes.`
-            : `Tienes hasta el ${formatDeadline(deadline)} para evaluar a todo tu equipo este mes.`}
+            ? `El plazo para evaluar ${isCurrentMonth ? "este mes" : "ese mes"} venció el ${formatDeadline(deadline)}${isCurrentMonth ? " — ponte al día cuanto antes." : "."}`
+            : `Tienes hasta el ${formatDeadline(deadline)} para evaluar a todo tu equipo ${isCurrentMonth ? "este mes" : "ese mes"}.`}
         </div>
       )}
       {people.length === 0 && (
@@ -266,10 +293,15 @@ export function RecognitionPanel({
                 <div className="text-[11px] text-steel truncate">{p.position || p.deptName || ""}</div>
               </div>
             </div>
-            <div className={`inline-flex items-center gap-1 text-[11px] font-semibold ${p.done ? "text-teal" : "text-steel"}`}>
-              {p.done ? <CheckCircle2 size={12} /> : <Circle size={12} />}
-              {p.done ? "Evaluado este mes" : "Pendiente este mes"}
-            </div>
+            {(() => {
+              const done = p.doneMonths.includes(selectedMonth);
+              return (
+                <div className={`inline-flex items-center gap-1 text-[11px] font-semibold ${done ? "text-teal" : "text-steel"}`}>
+                  {done ? <CheckCircle2 size={12} /> : <Circle size={12} />}
+                  {done ? "Evaluado ese mes" : "Pendiente ese mes"}
+                </div>
+              );
+            })()}
           </button>
         ))}
       </div>

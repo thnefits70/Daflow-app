@@ -16,11 +16,18 @@ export default async function AdminRecognitionPage() {
     }),
     prisma.department.findMany({ where: { isSpecial: false }, orderBy: { order: "asc" }, select: { id: true, name: true } }),
   ]);
+  // Every month each leader has an evaluation for (not just the current
+  // one) — needed so the "Evaluado ese mes" badge stays correct when the
+  // month picker is used to catch up a past month.
   const evaluations = await prisma.monthlyEvaluation.findMany({
-    where: { month, evaluateeId: { in: leaders.map((u) => u.id) } },
-    select: { evaluateeId: true },
+    where: { evaluateeId: { in: leaders.map((u) => u.id) } },
+    select: { evaluateeId: true, month: true },
   });
-  const doneIds = new Set(evaluations.map((e) => e.evaluateeId));
+  const doneMonthsByUser = new Map<string, string[]>();
+  for (const e of evaluations) {
+    if (!doneMonthsByUser.has(e.evaluateeId)) doneMonthsByUser.set(e.evaluateeId, []);
+    doneMonthsByUser.get(e.evaluateeId)!.push(e.month);
+  }
 
   return (
     <div>
@@ -38,13 +45,14 @@ export default async function AdminRecognitionPage() {
               <RecognitionPanel
                 month={month}
                 maxTotalScore={MAX_TOTAL_SCORE}
+                allowMonthPicker
                 people={leaders.map((u) => ({
                   id: u.id,
                   name: u.name,
                   photoUrl: u.photoUrl,
                   position: u.position,
                   deptName: u.department?.name ?? null,
-                  done: doneIds.has(u.id),
+                  doneMonths: doneMonthsByUser.get(u.id) ?? [],
                 }))}
                 emptyMessage="No hay líderes registrados todavía."
               />

@@ -21,7 +21,11 @@ export async function GET(req: NextRequest) {
   const canEvaluate = await canEvaluateUser(evaluateeId);
   if (!canEvaluate) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
-  const month = currentMonth();
+  // Normally always the current month — a month query param is only used
+  // when catching up a past month (e.g. right after this feature launched
+  // and June never got evaluated), never a future one.
+  const monthParam = req.nextUrl.searchParams.get("month");
+  const month = monthParam && /^\d{4}-\d{2}$/.test(monthParam) && monthParam <= currentMonth() ? monthParam : currentMonth();
   const evaluatorId = session.user.role === "admin" ? "admin" : session.user.id;
 
   const existing = await prisma.monthlyEvaluation.findUnique({
@@ -47,6 +51,7 @@ export async function GET(req: NextRequest) {
 
 const submitSchema = z.object({
   evaluateeId: z.string().min(1),
+  month: z.string().regex(/^\d{4}-\d{2}$/).optional(),
   scores: z
     .array(
       z.object({
@@ -81,7 +86,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Debes responder todas las preguntas antes de guardar." }, { status: 400 });
   }
 
-  const month = currentMonth();
+  // Same "past month only, never future" rule as GET — catching up a month
+  // this feature didn't exist for yet, not backdating around the deadline.
+  const month = parsed.data.month && parsed.data.month <= currentMonth() ? parsed.data.month : currentMonth();
   const evaluatorId = session.user.role === "admin" ? "admin" : session.user.id;
 
   const summaryFields = summaryFieldsFromScores(scores);

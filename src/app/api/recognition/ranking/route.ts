@@ -16,28 +16,38 @@ export async function GET(req: NextRequest) {
   if (!canAccess) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
   const session = await auth();
-  const month = req.nextUrl.searchParams.get("month") ?? currentMonth();
   const deptId = req.nextUrl.searchParams.get("deptId");
 
-  const evaluateeWhere: { deptId: string; isLeader?: boolean } | undefined = (() => {
-    if (session!.user.role === "admin") return deptId ? { deptId } : undefined;
-    return undefined; // set below once we know the leader's own dept
-  })();
-
-  let scopedEvaluateeWhere = evaluateeWhere;
+  let scopedEvaluateeWhere: { deptId: string; isLeader?: boolean } | undefined = deptId ? { deptId } : undefined;
   if (session!.user.role !== "admin") {
     const me = await prisma.user.findUnique({
       where: { id: session!.user.id },
       select: { isLeader: true, leadsDeptId: true },
     });
     if (!me?.isLeader || !me.leadsDeptId) {
-      return NextResponse.json({ month, maxTotalScore: MAX_TOTAL_SCORE, ranked: [], months: [] });
+      return NextResponse.json({ month: currentMonth(), maxTotalScore: MAX_TOTAL_SCORE, ranked: [], months: [], canConfirm: false, confirmedPodium: [] });
     }
     // Only the leader's team, never the leader themselves — their own
     // deptId matches leadsDeptId, so this must be excluded explicitly or
     // they'd show up ranked inside their own team's list.
     scopedEvaluateeWhere = { deptId: me.leadsDeptId, isLeader: false };
   }
+
+  const evaluateeFilter = scopedEvaluateeWhere ? { evaluatee: scopedEvaluateeWhere } : {};
+  const [detailedMonths, summaryMonths] = await Promise.all([
+    prisma.monthlyEvaluation.findMany({ where: evaluateeFilter, distinct: ["month"], select: { month: true } }),
+    prisma.monthlyEvaluationSummary.findMany({ where: evaluateeFilter, distinct: ["month"], select: { month: true } }),
+  ]);
+  const months = [...new Set([...detailedMonths.map((m) => m.month), ...summaryMonths.map((m) => m.month)])].sort().reverse();
+
+  // Respect an explicit choice from the month dropdown as-is. On first load
+  // (no param), default to the most recent month that actually has data
+  // instead of always the calendar's current month — otherwise, right after
+  // this feature launches or whenever the current month hasn't been
+  // evaluated yet, the dropdown would visually show one month while quietly
+  // querying an empty different one.
+  const monthParam = req.nextUrl.searchParams.get("month");
+  const month = monthParam ?? months[0] ?? currentMonth();
 
   const detailedEvaluations = await prisma.monthlyEvaluation.findMany({
     where: { month, ...(scopedEvaluateeWhere ? { evaluatee: scopedEvaluateeWhere } : {}) },
@@ -57,13 +67,6 @@ export async function GET(req: NextRequest) {
     });
     ranked = rankSummaries(summaries.map((s) => ({ ...s, evaluatee: s.evaluatee! })));
   }
-
-  const evaluateeFilter = scopedEvaluateeWhere ? { evaluatee: scopedEvaluateeWhere } : {};
-  const [detailedMonths, summaryMonths] = await Promise.all([
-    prisma.monthlyEvaluation.findMany({ where: evaluateeFilter, distinct: ["month"], select: { month: true } }),
-    prisma.monthlyEvaluationSummary.findMany({ where: evaluateeFilter, distinct: ["month"], select: { month: true } }),
-  ]);
-  const months = [...new Set([...detailedMonths.map((m) => m.month), ...summaryMonths.map((m) => m.month)])].sort().reverse();
 
   // Only admin can confirm, and only in the company-wide view (no deptId
   // scoping) — a leader's "Ranking de mi equipo" never shows this.

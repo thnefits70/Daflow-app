@@ -2,10 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { WeeklyTrendChart, formatMonthShort } from "@/components/dashboard/WeeklyTrendChart";
-import { PILLARS } from "@/lib/recognition";
+import { PILLARS, generateAutoFeedback, type PillarKey } from "@/lib/recognition";
 
 type HistoryEntry = {
   month: string;
+  userId: string;
   rank: number;
   outOf: number;
   totalScore: number;
@@ -20,6 +21,14 @@ function scoreStatus(pct: number) {
   if (pct >= 80) return { label: "Excelente", color: "#14C7C7" };
   if (pct >= 60) return { label: "Bien", color: "#1E5EFF" };
   return { label: "A mejorar", color: "#D9A441" };
+}
+
+// The templates use "**palabra**" for emphasis — render those spans bold
+// instead of showing the raw asterisks.
+function renderBold(text: string) {
+  return text.split(/(\*\*[^*]+\*\*)/g).map((part, i) =>
+    part.startsWith("**") && part.endsWith("**") ? <strong key={i}>{part.slice(2, -2)}</strong> : <span key={i}>{part}</span>
+  );
 }
 
 export function RecognitionMyProgress() {
@@ -92,13 +101,19 @@ export function RecognitionMyProgress() {
           </div>
           {h.hasDetail ? (
             h.comment ? (
-              <div className="text-[12.5px] italic bg-cloud rounded p-2.5">&ldquo;{h.comment}&rdquo;</div>
+              <div className="text-[12.5px] italic bg-cloud rounded p-2.5 mb-2">&ldquo;{h.comment}&rdquo;</div>
             ) : (
-              <div className="text-[12px] text-steel">Sin comentario ese mes.</div>
+              <div className="text-[12px] text-steel mb-2">Sin comentario ese mes.</div>
             )
           ) : (
-            <div className="text-[11.5px] text-steel italic">El comentario de este mes ya no está disponible — solo se conserva el puntaje.</div>
+            <div className="text-[11.5px] text-steel italic mb-2">El comentario de este mes ya no está disponible — solo se conserva el puntaje.</div>
           )}
+          <div className="bg-teal/5 border border-teal/20 rounded p-2.5">
+            <div className="text-[9.5px] font-semibold uppercase tracking-wide text-teal mb-1">🌱 Retroalimentación automática</div>
+            <div className="text-[12px] text-steel leading-relaxed">
+              {renderBold(generateAutoFeedback(h.userId, h.month, h.pillarScores as Record<PillarKey, number>))}
+            </div>
+          </div>
         </div>
       ))}
     </div>

@@ -2,7 +2,15 @@
 
 import { useEffect, useState } from "react";
 import { User, Award, ChevronDown, ChevronUp, Trophy } from "lucide-react";
-import { PILLARS } from "@/lib/recognition";
+import { PILLARS, generateAutoFeedback, type PillarKey } from "@/lib/recognition";
+
+// The templates use "**palabra**" for emphasis — render those spans bold
+// instead of showing the raw asterisks.
+function renderBold(text: string) {
+  return text.split(/(\*\*[^*]+\*\*)/g).map((part, i) =>
+    part.startsWith("**") && part.endsWith("**") ? <strong key={i}>{part.slice(2, -2)}</strong> : <span key={i}>{part}</span>
+  );
+}
 
 type RankedPersonDTO = {
   rank: number;
@@ -250,8 +258,15 @@ export function RecognitionRanking({
                   </div>
 
                   {p.comment && (
-                    <div className="bg-cloud rounded p-3 mb-4 text-[12.5px] italic">&ldquo;{p.comment}&rdquo;</div>
+                    <div className="bg-cloud rounded p-3 mb-3 text-[12.5px] italic">&ldquo;{p.comment}&rdquo;</div>
                   )}
+
+                  <div className="bg-teal/5 border border-teal/20 rounded p-3 mb-4">
+                    <div className="text-[9.5px] font-semibold uppercase tracking-wide text-teal mb-1">🌱 Retroalimentación automática</div>
+                    <div className="text-[12px] text-steel leading-relaxed">
+                      {renderBold(generateAutoFeedback(p.userId, month ?? "", p.pillarScores as Record<PillarKey, number>))}
+                    </div>
+                  </div>
 
                   {p.hasDetail ? (
                     <>
