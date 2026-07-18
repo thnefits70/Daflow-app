@@ -1,4 +1,5 @@
 import { Building2 } from "lucide-react";
+import { DailyQuoteBanner } from "./DailyQuoteBanner";
 import { ScoreGauge } from "./ScoreGauge";
 import { WeeklyTrendChart, returnRateStatus, formatMonthShort } from "./WeeklyTrendChart";
 import { StockoutBarChart } from "./StockoutBarChart";
@@ -33,6 +34,7 @@ export function Dashboard({
 
   return (
     <div>
+      <DailyQuoteBanner />
       <div className="font-mono text-[10.5px] tracking-[.14em] uppercase text-steel">Resumen general</div>
       <h2 className="font-display text-[24px] mt-0.5 mb-6">Inicio</h2>
 

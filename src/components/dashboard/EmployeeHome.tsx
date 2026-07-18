@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { GitBranch, FileText, GraduationCap, Scale, ClipboardList, LineChart } from "lucide-react";
+import { DailyQuoteBanner } from "./DailyQuoteBanner";
 import { ScoreGauge } from "./ScoreGauge";
 import { WeeklyTrendChart, returnRateStatus, formatMonthShort } from "./WeeklyTrendChart";
 import { StockoutBarChart } from "./StockoutBarChart";
@@ -57,6 +58,7 @@ export function EmployeeHome({
 
   return (
     <div>
+      <DailyQuoteBanner />
       <div className="font-mono text-[10.5px] tracking-[.14em] uppercase text-steel">Tu resumen</div>
       <h2 className="font-display text-[24px] mt-0.5 mb-6">
         {firstName ? `Hola, ${firstName}` : "Inicio"}
