@@ -3,6 +3,9 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { TopLine } from "@/components/ui/TopLine";
 import { RecognitionPanel } from "@/components/recognition/RecognitionPanel";
+import { RecognitionRanking } from "@/components/recognition/RecognitionRanking";
+import { RecognitionMyProgress } from "@/components/recognition/RecognitionMyProgress";
+import { RecognitionTabs } from "@/components/recognition/RecognitionTabs";
 import { currentMonth, MAX_TOTAL_SCORE } from "@/lib/recognition";
 
 export default async function AreaRecognitionPage() {
@@ -13,7 +16,20 @@ export default async function AreaRecognitionPage() {
     where: { id: session.user.id },
     select: { isLeader: true, leadsDeptId: true, leadsDept: { select: { name: true } } },
   });
-  if (!me?.isLeader || !me.leadsDeptId) redirect("/area");
+
+  // A regular employee (not a leader) doesn't evaluate anyone — they only
+  // see their own progress, no tabs needed.
+  if (!me?.isLeader || !me.leadsDeptId) {
+    return (
+      <div>
+        <TopLine eyebrow="Reconocimiento" title="Colaborador Destacado del Mes" />
+        <div className="text-[13px] text-steel mb-5 max-w-2xl">
+          Aquí puedes ver tu propio progreso mes a mes, según la evaluación de tu líder.
+        </div>
+        <RecognitionMyProgress />
+      </div>
+    );
+  }
 
   const month = currentMonth();
   const team = await prisma.user.findMany({
@@ -31,21 +47,41 @@ export default async function AreaRecognitionPage() {
     <div>
       <TopLine eyebrow="Reconocimiento" title="Colaborador Destacado del Mes" />
       <div className="text-[13px] text-steel mb-5 max-w-2xl">
-        Evalúa a cada persona de {me.leadsDept?.name ?? "tu equipo"} este mes — tu evaluación ayuda a reconocer el
-        esfuerzo real de cada quien y a elegir al Colaborador Destacado del Mes.
+        Evalúa a cada persona de {me.leadsDept?.name ?? "tu equipo"} este mes, revisa el ranking de tu equipo, y
+        consulta tu propio progreso como líder (a ti te evalúa el admin).
       </div>
-      <RecognitionPanel
-        month={month}
-        maxTotalScore={MAX_TOTAL_SCORE}
-        people={team.map((u) => ({
-          id: u.id,
-          name: u.name,
-          photoUrl: u.photoUrl,
-          position: u.position,
-          deptName: u.department?.name ?? null,
-          done: doneIds.has(u.id),
-        }))}
-        emptyMessage="Aún no tienes personas asignadas a tu equipo."
+      <RecognitionTabs
+        tabs={[
+          {
+            key: "evaluar",
+            label: "Evaluar a mi equipo",
+            content: (
+              <RecognitionPanel
+                month={month}
+                maxTotalScore={MAX_TOTAL_SCORE}
+                people={team.map((u) => ({
+                  id: u.id,
+                  name: u.name,
+                  photoUrl: u.photoUrl,
+                  position: u.position,
+                  deptName: u.department?.name ?? null,
+                  done: doneIds.has(u.id),
+                }))}
+                emptyMessage="Aún no tienes personas asignadas a tu equipo."
+              />
+            ),
+          },
+          {
+            key: "ranking",
+            label: "Ranking de mi equipo",
+            content: <RecognitionRanking scope="leader" />,
+          },
+          {
+            key: "progreso",
+            label: "Mi progreso",
+            content: <RecognitionMyProgress />,
+          },
+        ]}
       />
     </div>
   );

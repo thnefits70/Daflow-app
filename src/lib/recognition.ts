@@ -246,3 +246,71 @@ export function currentMonth(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
+
+export type RawEvaluation = {
+  evaluateeId: string;
+  comment: string | null;
+  scores: { pillar: string; questionId: string; score: number }[];
+  evaluatee: {
+    id: string;
+    name: string;
+    photoUrl: string | null;
+    isLeader: boolean;
+    department: { name: string } | null;
+  };
+};
+
+export type RankedPerson = {
+  rank: number;
+  userId: string;
+  name: string;
+  photoUrl: string | null;
+  deptName: string | null;
+  isLeader: boolean;
+  totalScore: number;
+  pillarScores: Record<PillarKey, number>;
+  comment: string | null;
+  answers: { pillar: string; questionId: string; questionText: string; score: number }[];
+};
+
+// Turns a month's raw evaluations into a strictly-ordered ranking — the user
+// was explicit that the displayed ranking must never show a tie. A pure
+// numeric tie on totalScore is astronomically unlikely with 28 individually
+// scored questions, but not mathematically impossible, so this breaks any
+// remaining tie deterministically: highest "Resultados" pillar score, then
+// highest "Compromiso", then alphabetically — guaranteeing a strict order
+// every time without needing an admin decision for the common case.
+export function rankEvaluations(evaluations: RawEvaluation[]): RankedPerson[] {
+  const rows: Omit<RankedPerson, "rank">[] = evaluations.map((ev) => {
+    const pillarScores = {} as Record<PillarKey, number>;
+    let total = 0;
+    for (const s of ev.scores) {
+      const key = s.pillar as PillarKey;
+      pillarScores[key] = (pillarScores[key] ?? 0) + s.score;
+      total += s.score;
+    }
+    return {
+      userId: ev.evaluateeId,
+      name: ev.evaluatee.name,
+      photoUrl: ev.evaluatee.photoUrl,
+      deptName: ev.evaluatee.department?.name ?? null,
+      isLeader: ev.evaluatee.isLeader,
+      totalScore: total,
+      pillarScores,
+      comment: ev.comment,
+      answers: ev.scores
+        .map((s) => ({ pillar: s.pillar, questionId: s.questionId, questionText: findQuestionText(s.pillar, s.questionId), score: s.score }))
+        .sort((a, b) => a.pillar.localeCompare(b.pillar)),
+    };
+  });
+
+  rows.sort(
+    (a, b) =>
+      b.totalScore - a.totalScore ||
+      (b.pillarScores.resultados ?? 0) - (a.pillarScores.resultados ?? 0) ||
+      (b.pillarScores.compromiso ?? 0) - (a.pillarScores.compromiso ?? 0) ||
+      a.name.localeCompare(b.name)
+  );
+
+  return rows.map((r, i) => ({ ...r, rank: i + 1 }));
+}
