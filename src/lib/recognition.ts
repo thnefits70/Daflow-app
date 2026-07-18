@@ -271,39 +271,21 @@ export type RankedPerson = {
   pillarScores: Record<PillarKey, number>;
   comment: string | null;
   answers: { pillar: string; questionId: string; questionText: string; score: number }[];
+  // False once the month's detailed 28-question breakdown has been purged
+  // (see RETENTION_MONTHS) — the total/pillar/rank still come from the
+  // permanent MonthlyEvaluationSummary, just without the question-by-
+  // question drill-down or the comment.
+  hasDetail: boolean;
 };
 
-// Turns a month's raw evaluations into a strictly-ordered ranking — the user
-// was explicit that the displayed ranking must never show a tie. A pure
-// numeric tie on totalScore is astronomically unlikely with 28 individually
-// scored questions, but not mathematically impossible, so this breaks any
-// remaining tie deterministically: highest "Resultados" pillar score, then
-// highest "Compromiso", then alphabetically — guaranteeing a strict order
-// every time without needing an admin decision for the common case.
-export function rankEvaluations(evaluations: RawEvaluation[]): RankedPerson[] {
-  const rows: Omit<RankedPerson, "rank">[] = evaluations.map((ev) => {
-    const pillarScores = {} as Record<PillarKey, number>;
-    let total = 0;
-    for (const s of ev.scores) {
-      const key = s.pillar as PillarKey;
-      pillarScores[key] = (pillarScores[key] ?? 0) + s.score;
-      total += s.score;
-    }
-    return {
-      userId: ev.evaluateeId,
-      name: ev.evaluatee.name,
-      photoUrl: ev.evaluatee.photoUrl,
-      deptName: ev.evaluatee.department?.name ?? null,
-      isLeader: ev.evaluatee.isLeader,
-      totalScore: total,
-      pillarScores,
-      comment: ev.comment,
-      answers: ev.scores
-        .map((s) => ({ pillar: s.pillar, questionId: s.questionId, questionText: findQuestionText(s.pillar, s.questionId), score: s.score }))
-        .sort((a, b) => a.pillar.localeCompare(b.pillar)),
-    };
-  });
-
+function sortRanked(rows: Omit<RankedPerson, "rank">[]): RankedPerson[] {
+  // The user was explicit that the displayed ranking must never show a tie.
+  // A pure numeric tie on totalScore is astronomically unlikely with 28
+  // individually scored questions, but not mathematically impossible, so
+  // this breaks any remaining tie deterministically: highest "Resultados"
+  // pillar score, then highest "Compromiso", then alphabetically —
+  // guaranteeing a strict order every time without needing an admin
+  // decision for the common case.
   rows.sort(
     (a, b) =>
       b.totalScore - a.totalScore ||
@@ -311,6 +293,124 @@ export function rankEvaluations(evaluations: RawEvaluation[]): RankedPerson[] {
       (b.pillarScores.compromiso ?? 0) - (a.pillarScores.compromiso ?? 0) ||
       a.name.localeCompare(b.name)
   );
-
   return rows.map((r, i) => ({ ...r, rank: i + 1 }));
 }
+
+export function pillarTotalsFromScores(scores: { pillar: string; score: number }[]): Record<PillarKey, number> {
+  const totals = {} as Record<PillarKey, number>;
+  for (const p of PILLARS) totals[p.key] = 0;
+  for (const s of scores) {
+    const key = s.pillar as PillarKey;
+    totals[key] = (totals[key] ?? 0) + s.score;
+  }
+  return totals;
+}
+
+// Turns a month's raw (still-detailed) evaluations into a strictly-ordered
+// ranking — see sortRanked() for the tiebreak rule.
+export function rankEvaluations(evaluations: RawEvaluation[]): RankedPerson[] {
+  const rows: Omit<RankedPerson, "rank">[] = evaluations.map((ev) => ({
+    userId: ev.evaluateeId,
+    name: ev.evaluatee.name,
+    photoUrl: ev.evaluatee.photoUrl,
+    deptName: ev.evaluatee.department?.name ?? null,
+    isLeader: ev.evaluatee.isLeader,
+    totalScore: ev.scores.reduce((a, s) => a + s.score, 0),
+    pillarScores: pillarTotalsFromScores(ev.scores),
+    comment: ev.comment,
+    answers: ev.scores
+      .map((s) => ({ pillar: s.pillar, questionId: s.questionId, questionText: findQuestionText(s.pillar, s.questionId), score: s.score }))
+      .sort((a, b) => a.pillar.localeCompare(b.pillar)),
+    hasDetail: true,
+  }));
+  return sortRanked(rows);
+}
+
+// The permanent, lightweight record of a month's evaluation — no question
+// detail or comment, just enough (total + per-pillar subtotals) to keep the
+// ranking's tiebreak exact and the trend chart accurate forever, even after
+// the detailed MonthlyEvaluation for that month has been purged.
+export type RawSummary = {
+  evaluateeId: string;
+  totalScore: number;
+  resultadosScore: number;
+  excelenciaScore: number;
+  compromisoScore: number;
+  colaboracionScore: number;
+  clienteScore: number;
+  innovacionScore: number;
+  liderazgoScore: number;
+  evaluatee: {
+    id: string;
+    name: string;
+    photoUrl: string | null;
+    isLeader: boolean;
+    department: { name: string } | null;
+  };
+};
+
+function pillarScoresFromSummary(s: RawSummary): Record<PillarKey, number> {
+  return {
+    resultados: s.resultadosScore,
+    excelencia: s.excelenciaScore,
+    compromiso: s.compromisoScore,
+    colaboracion: s.colaboracionScore,
+    orientacion_cliente: s.clienteScore,
+    innovacion: s.innovacionScore,
+    liderazgo: s.liderazgoScore,
+  };
+}
+
+// Ranks a month using only the permanent summary rows — used once that
+// month's detailed evaluations have aged past RETENTION_MONTHS and been
+// purged. Same strict-order guarantee as rankEvaluations(), just without a
+// drill-down (answers/comment come back empty).
+export function rankSummaries(summaries: RawSummary[]): RankedPerson[] {
+  const rows: Omit<RankedPerson, "rank">[] = summaries.map((s) => ({
+    userId: s.evaluateeId,
+    name: s.evaluatee.name,
+    photoUrl: s.evaluatee.photoUrl,
+    deptName: s.evaluatee.department?.name ?? null,
+    isLeader: s.evaluatee.isLeader,
+    totalScore: s.totalScore,
+    pillarScores: pillarScoresFromSummary(s),
+    comment: null,
+    answers: [],
+    hasDetail: false,
+  }));
+  return sortRanked(rows);
+}
+
+// Data to upsert into MonthlyEvaluationSummary — written alongside every
+// MonthlyEvaluation submission (not just at purge time) so the summary is
+// always in sync and the trend/ranking never depends on the detailed row
+// still existing.
+export function summaryFieldsFromScores(scores: { pillar: string; score: number }[]) {
+  const totals = pillarTotalsFromScores(scores);
+  return {
+    totalScore: Object.values(totals).reduce((a, b) => a + b, 0),
+    resultadosScore: totals.resultados,
+    excelenciaScore: totals.excelencia,
+    compromisoScore: totals.compromiso,
+    colaboracionScore: totals.colaboracion,
+    clienteScore: totals.orientacion_cliente,
+    innovacionScore: totals.innovacion,
+    liderazgoScore: totals.liderazgo,
+  };
+}
+
+// How many months of question-by-question detail (28 answers + comment) to
+// keep before purging it down to just the permanent summary — explicit user
+// request: keep the ranking/trend history forever, but don't let the
+// detailed data pile up past the last 3 months.
+export const RETENTION_MONTHS = 3;
+
+// The earliest month (inclusive) whose detailed evaluations are still kept.
+// Anything strictly older than this gets purged to summary-only on the next
+// call to purgeOldEvaluationDetail().
+export function retentionCutoffMonth(): string {
+  const d = new Date();
+  d.setMonth(d.getMonth() - (RETENTION_MONTHS - 1));
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+

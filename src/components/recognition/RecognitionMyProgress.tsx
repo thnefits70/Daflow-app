@@ -11,6 +11,7 @@ type HistoryEntry = {
   totalScore: number;
   pillarScores: Record<string, number>;
   comment: string | null;
+  hasDetail: boolean;
 };
 
 const MAX_PER_PILLAR = 20;
@@ -89,10 +90,14 @@ export function RecognitionMyProgress() {
               </div>
             ))}
           </div>
-          {h.comment ? (
-            <div className="text-[12.5px] italic bg-cloud rounded p-2.5">&ldquo;{h.comment}&rdquo;</div>
+          {h.hasDetail ? (
+            h.comment ? (
+              <div className="text-[12.5px] italic bg-cloud rounded p-2.5">&ldquo;{h.comment}&rdquo;</div>
+            ) : (
+              <div className="text-[12px] text-steel">Sin comentario ese mes.</div>
+            )
           ) : (
-            <div className="text-[12px] text-steel">Sin comentario ese mes.</div>
+            <div className="text-[11.5px] text-steel italic">El comentario de este mes ya no está disponible — solo se conserva el puntaje.</div>
           )}
         </div>
       ))}

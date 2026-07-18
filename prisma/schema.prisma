@@ -134,6 +134,7 @@ model User {
   confidentialAccess ConfidentialDocumentAccess[]
   monthlyEvaluationsReceived MonthlyEvaluation[]
   monthlyRecognitionResults  MonthlyRecognitionResult[]
+  monthlyEvaluationSummaries MonthlyEvaluationSummary[]
 
   @@index([deptId])
   @@index([leadsDeptId])
@@ -665,6 +666,36 @@ model MonthlyEvaluationScore {
 
   @@unique([evaluationId, questionId])
   @@index([evaluationId])
+}
+
+// Resumen liviano de una evaluación — puntaje total + subtotal por cada uno
+// de los 7 pilares, SIN el detalle de las 28 preguntas ni el comentario. Se
+// escribe siempre junto con el MonthlyEvaluation detallado, y a diferencia
+// de ese, NUNCA se borra — es lo que alimenta el ranking histórico y las
+// gráficas de tendencia para siempre, incluso después de que el detalle
+// pregunta-por-pregunta de un mes viejo se purga (ver RETENTION_MONTHS en
+// src/lib/recognition.ts). El desempate sigue siendo exacto porque conserva
+// los mismos subtotales por pilar que usa rankEvaluations().
+model MonthlyEvaluationSummary {
+  id          String @id @default(cuid())
+  month       String // "YYYY-MM"
+  evaluateeId String
+  evaluatee   User   @relation(fields: [evaluateeId], references: [id], onDelete: Cascade)
+
+  totalScore          Float
+  resultadosScore     Int
+  excelenciaScore     Int
+  compromisoScore     Int
+  colaboracionScore   Int
+  clienteScore        Int
+  innovacionScore     Int
+  liderazgoScore      Int
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([month, evaluateeId])
+  @@index([month])
 }
 
 // El podio (1°-3°) de un mes, confirmado por el admin con un clic. Queda

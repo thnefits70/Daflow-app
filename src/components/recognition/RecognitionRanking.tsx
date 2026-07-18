@@ -15,6 +15,7 @@ type RankedPersonDTO = {
   pillarScores: Record<string, number>;
   comment: string | null;
   answers: { pillar: string; questionId: string; questionText: string; score: number }[];
+  hasDetail: boolean;
 };
 
 const MEDAL = ["🥇", "🥈", "🥉"];
@@ -163,15 +164,23 @@ export function RecognitionRanking({
                     <div className="bg-cloud rounded p-3 mb-4 text-[12.5px] italic">&ldquo;{p.comment}&rdquo;</div>
                   )}
 
-                  <div className="text-[10.5px] font-semibold uppercase tracking-wide text-steel mb-2">Detalle por pregunta</div>
-                  <div className="space-y-1.5">
-                    {p.answers.map((a) => (
-                      <div key={a.questionId} className="flex items-center justify-between gap-3 text-[12px]">
-                        <span className="text-steel flex-1">{a.questionText}</span>
-                        <span className="font-mono font-semibold shrink-0">{a.score}/5</span>
+                  {p.hasDetail ? (
+                    <>
+                      <div className="text-[10.5px] font-semibold uppercase tracking-wide text-steel mb-2">Detalle por pregunta</div>
+                      <div className="space-y-1.5">
+                        {p.answers.map((a) => (
+                          <div key={a.questionId} className="flex items-center justify-between gap-3 text-[12px]">
+                            <span className="text-steel flex-1">{a.questionText}</span>
+                            <span className="font-mono font-semibold shrink-0">{a.score}/5</span>
+                          </div>
+                        ))}
                       </div>
-                    ))}
-                  </div>
+                    </>
+                  ) : (
+                    <div className="text-[11.5px] text-steel italic">
+                      El detalle pregunta por pregunta y el comentario de este mes ya no están disponibles — solo se conserva el puntaje.
+                    </div>
+                  )}
                 </div>
               )}
             </div>

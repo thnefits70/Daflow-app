@@ -3,7 +3,8 @@ import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { canEvaluateUser } from "@/lib/guards";
-import { PILLARS, pickQuestions, currentMonth, QUESTIONS_PER_PILLAR } from "@/lib/recognition";
+import { PILLARS, pickQuestions, currentMonth, QUESTIONS_PER_PILLAR, summaryFieldsFromScores } from "@/lib/recognition";
+import { purgeOldEvaluationDetail } from "@/lib/recognitionPurge";
 
 // Returns this month's randomized question set for (evaluator, evaluatee),
 // grouped by pillar, plus any scores/comment already saved (so reopening a
@@ -83,6 +84,8 @@ export async function POST(req: NextRequest) {
   const month = currentMonth();
   const evaluatorId = session.user.role === "admin" ? "admin" : session.user.id;
 
+  const summaryFields = summaryFieldsFromScores(scores);
+
   const evaluation = await prisma.$transaction(async (tx) => {
     const ev = await tx.monthlyEvaluation.upsert({
       where: { month_evaluateeId: { month, evaluateeId } },
@@ -93,8 +96,19 @@ export async function POST(req: NextRequest) {
     await tx.monthlyEvaluationScore.createMany({
       data: scores.map((s) => ({ evaluationId: ev.id, pillar: s.pillar, questionId: s.questionId, score: s.score })),
     });
+    // Written alongside the detailed evaluation, not just at purge time, so
+    // the ranking/trend never depend on the detailed row still existing.
+    await tx.monthlyEvaluationSummary.upsert({
+      where: { month_evaluateeId: { month, evaluateeId } },
+      create: { month, evaluateeId, ...summaryFields },
+      update: summaryFields,
+    });
     return ev;
   });
+
+  // No cron in this app — piggyback the retention cleanup on the natural
+  // write cadence (a handful of evaluations per month) instead.
+  await purgeOldEvaluationDetail();
 
   return NextResponse.json({ ok: true, id: evaluation.id });
 }
