@@ -128,26 +128,35 @@ export function RecognitionPanel({
   if (selectedId && selectedPerson) {
     return (
       <div>
-        <button
-          type="button"
-          className="inline-flex items-center gap-1.5 text-[13px] text-steel hover:text-ink cursor-pointer mb-4"
-          onClick={() => setSelectedId(null)}
-        >
-          <ArrowLeft size={14} /> Volver a la lista
-        </button>
+        {/* Stays pinned while scrolling through the 28 questions, so who
+            you're evaluating is always visible. Bleeds horizontally out to
+            the edges of <main>'s padding so it reads as a full-width bar —
+            deliberately NOT bleeding vertically too: a negative top margin
+            throws off sticky's own offset math (it's measured from the
+            margin edge), so the bar would stick 36px below top:0 instead of
+            flush against it. */}
+        <div className="sticky top-0 z-10 bg-bg -mx-4 md:-mx-9 px-4 md:px-9 pt-3 pb-4 mb-2 border-b border-rule">
+          <button
+            type="button"
+            className="inline-flex items-center gap-1.5 text-[13px] text-steel hover:text-ink cursor-pointer mb-4"
+            onClick={() => setSelectedId(null)}
+          >
+            <ArrowLeft size={14} /> Volver a la lista
+          </button>
 
-        <div className="flex items-center gap-3 mb-6">
-          <div className="w-12 h-12 rounded-full overflow-hidden bg-cloud border border-rule flex items-center justify-center shrink-0">
-            {selectedPerson.photoUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={selectedPerson.photoUrl} alt={selectedPerson.name} className="w-full h-full object-cover" />
-            ) : (
-              <User size={20} className="text-steel" />
-            )}
-          </div>
-          <div>
-            <div className="font-display text-[18px] font-bold">{selectedPerson.name}</div>
-            <div className="text-[12px] text-steel">{selectedPerson.position || selectedPerson.deptName || ""} · {selectedMonth}</div>
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-full overflow-hidden bg-cloud border border-rule flex items-center justify-center shrink-0">
+              {selectedPerson.photoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={selectedPerson.photoUrl} alt={selectedPerson.name} className="w-full h-full object-cover" />
+              ) : (
+                <User size={20} className="text-steel" />
+              )}
+            </div>
+            <div>
+              <div className="font-display text-[18px] font-bold">{selectedPerson.name}</div>
+              <div className="text-[12px] text-steel">{selectedPerson.position || selectedPerson.deptName || ""} · {selectedMonth}</div>
+            </div>
           </div>
         </div>
 
