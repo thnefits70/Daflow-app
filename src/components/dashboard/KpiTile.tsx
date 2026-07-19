@@ -3,7 +3,7 @@
 import { useId } from "react";
 import { smoothPath, formatWeekShort, formatMonthShort, fillRateStatus, returnRateStatus } from "./WeeklyTrendChart";
 import { PieChart } from "./PieChart";
-import type { WeeklyTrend, StockoutWeekPoint, WarrantyMonthlyChart } from "@/lib/dashboard";
+import type { WeeklyTrend, WarrantyMonthlyChart } from "@/lib/dashboard";
 
 export function KpiTile({
   kicker,
@@ -112,36 +112,3 @@ export function WarrantyMonthTile({ chart, emptyMessage }: { chart: WarrantyMont
   );
 }
 
-export function StockoutTile({ points, className }: { points: StockoutWeekPoint[]; className?: string }) {
-  const latest = points[points.length - 1];
-  return (
-    <KpiTile
-      kicker="Ruptura de Stock · General"
-      value={String(latest.value)}
-      period={`${formatWeekShort(latest.week)} · productos distintos`}
-      className={className}
-    >
-      <MiniBars values={points.slice(-7).map((p) => p.value)} color="#14C7C7" />
-    </KpiTile>
-  );
-}
-
-export function MiniBars({ values, color }: { values: number[]; color: string }) {
-  const w = 220;
-  const h = 40;
-  const max = Math.max(...values) || 1;
-  const gap = 5;
-  const barW = (w - gap * (values.length - 1)) / values.length;
-
-  return (
-    <svg viewBox={`0 0 ${w} ${h}`} width="100%" height={h} preserveAspectRatio="none" className="block -mx-1 -mb-0.5">
-      {values.map((v, i) => {
-        const bh = Math.max(3, (v / max) * (h - 4));
-        const x = i * (barW + gap);
-        const y = h - bh;
-        const isLast = i === values.length - 1;
-        return <rect key={i} x={x} y={y} width={barW} height={bh} rx="2" fill={color} opacity={isLast ? 1 : 0.55} />;
-      })}
-    </svg>
-  );
-}

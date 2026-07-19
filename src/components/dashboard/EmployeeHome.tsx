@@ -4,7 +4,8 @@ import { DailyQuoteBanner } from "./DailyQuoteBanner";
 import { RecognitionPodium } from "@/components/recognition/RecognitionPodium";
 import { ScoreGauge } from "./ScoreGauge";
 import { WeeklyTrendChart } from "./WeeklyTrendChart";
-import { KpiTile, FillRateTile, ReturnRateTile, StockoutTile, WarrantyMonthTile } from "./KpiTile";
+import { KpiTile, FillRateTile, ReturnRateTile, WarrantyMonthTile } from "./KpiTile";
+import { StockoutBarChart } from "./StockoutBarChart";
 import { PieChart } from "./PieChart";
 import { OrgChart } from "./OrgChart";
 import type { DashboardRow, WeeklyTrend, StockoutWeekPoint, WarrantyMonthlyChart, PieSlice } from "@/lib/dashboard";
@@ -126,7 +127,12 @@ export function EmployeeHome({
 
           {fillRateTrend && <FillRateTile trend={fillRateTrend} />}
           {returnRateTrend && <ReturnRateTile trend={returnRateTrend} />}
-          {stockoutWeeks && stockoutWeeks.length > 0 && <StockoutTile points={stockoutWeeks} className="sm:col-span-2" />}
+
+          {stockoutWeeks && stockoutWeeks.length > 0 && (
+            <div className="bg-surface border border-rule rounded-lg p-6 sm:col-span-2">
+              <StockoutBarChart points={stockoutWeeks} />
+            </div>
+          )}
         </div>
       )}
 
