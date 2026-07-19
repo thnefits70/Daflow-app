@@ -3,8 +3,8 @@ import { GitBranch, FileText, GraduationCap, Scale, ClipboardList, LineChart } f
 import { DailyQuoteBanner } from "./DailyQuoteBanner";
 import { RecognitionPodium } from "@/components/recognition/RecognitionPodium";
 import { ScoreGauge } from "./ScoreGauge";
-import { WeeklyTrendChart, returnRateStatus, formatMonthShort } from "./WeeklyTrendChart";
-import { StockoutBarChart } from "./StockoutBarChart";
+import { WeeklyTrendChart } from "./WeeklyTrendChart";
+import { KpiTile, FillRateTile, ReturnRateTile, StockoutTile, WarrantyMonthTile } from "./KpiTile";
 import { PieChart } from "./PieChart";
 import { OrgChart } from "./OrgChart";
 import type { DashboardRow, WeeklyTrend, StockoutWeekPoint, WarrantyMonthlyChart, PieSlice } from "@/lib/dashboard";
@@ -94,7 +94,7 @@ export function EmployeeHome({
       </div>
 
       {weeklyTrend && (
-        <div className="bg-surface border border-rule rounded-lg p-6 mb-7">
+        <div className="bg-surface border border-rule rounded-lg p-6 mb-5">
           <WeeklyTrendChart
             label="Pedidos despachados"
             deptName={weeklyTrend.deptName}
@@ -104,57 +104,29 @@ export function EmployeeHome({
         </div>
       )}
 
-      {fillRateTrend && (
-        <div className="bg-surface border border-rule rounded-lg p-6 mb-7">
-          <WeeklyTrendChart
-            label="Fill Rate"
-            deptName={fillRateTrend.deptName}
-            points={fillRateTrend.points}
-            weeklyGoal={100}
-            format="percent"
-          />
-        </div>
-      )}
+      {(warrantyMonthlyChart ||
+        (warrantyReasonChart && warrantyReasonChart.length > 0) ||
+        fillRateTrend ||
+        returnRateTrend ||
+        (stockoutWeeks && stockoutWeeks.length > 0)) && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-7">
+          {warrantyMonthlyChart && (
+            <WarrantyMonthTile chart={warrantyMonthlyChart} emptyMessage="Aún no hay categorías cargadas este mes." />
+          )}
 
-      {returnRateTrend && (
-        <div className="bg-surface border border-rule rounded-lg p-6 mb-7">
-          <WeeklyTrendChart
-            label="Tasa de Devolución"
-            deptName={returnRateTrend.deptName}
-            points={returnRateTrend.points}
-            weeklyGoal={20}
-            format="percent"
-            periodLabel={formatMonthShort}
-            latestLabel="último mes"
-            statusFn={returnRateStatus}
-          />
-        </div>
-      )}
+          {warrantyReasonChart && warrantyReasonChart.length > 0 && (
+            <KpiTile
+              kicker="Motivos que más se repiten"
+              value={String(warrantyReasonChart.reduce((a, s) => a + s.value, 0))}
+              period="Últimos 12 meses"
+            >
+              <PieChart compact title="Motivos que más se repiten" slices={warrantyReasonChart} emptyMessage="Aún no hay suficiente historial." />
+            </KpiTile>
+          )}
 
-      {stockoutWeeks && stockoutWeeks.length > 0 && (
-        <div className="bg-surface border border-rule rounded-lg p-6 mb-7">
-          <StockoutBarChart points={stockoutWeeks} />
-        </div>
-      )}
-
-      {(warrantyMonthlyChart || (warrantyReasonChart && warrantyReasonChart.length > 0)) && (
-        <div className="bg-surface border border-rule rounded-lg p-6 mb-7">
-          <div className="text-[11px] font-semibold tracking-wide uppercase text-steel mb-4">KPI de Garantías</div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-7">
-            <PieChart
-              title="Garantías del mes"
-              month={warrantyMonthlyChart?.month}
-              enteredTotal={warrantyMonthlyChart?.total}
-              slices={warrantyMonthlyChart?.slices ?? []}
-              emptyMessage="Aún no hay categorías cargadas este mes."
-            />
-            <PieChart
-              title="Motivos que más se repiten"
-              subtitle="Últimos 12 meses"
-              slices={warrantyReasonChart ?? []}
-              emptyMessage="Aún no hay suficiente historial."
-            />
-          </div>
+          {fillRateTrend && <FillRateTile trend={fillRateTrend} />}
+          {returnRateTrend && <ReturnRateTile trend={returnRateTrend} />}
+          {stockoutWeeks && stockoutWeeks.length > 0 && <StockoutTile points={stockoutWeeks} className="sm:col-span-2" />}
         </div>
       )}
 

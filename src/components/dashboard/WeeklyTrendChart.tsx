@@ -42,7 +42,7 @@ export function formatIsoWeekRangeLabel(week: string): string | null {
   return `${fmt(range.start)} – ${fmt(range.end)} ${year}`;
 }
 
-function goalStatus(pct: number) {
+export function goalStatus(pct: number) {
   if (pct >= 100) return { label: "Excelente", color: "#14C7C7" };
   if (pct >= 80) return { label: "Eficiente", color: "#1E5EFF" };
   return { label: "No eficiente", color: "#C4453A" };
@@ -50,7 +50,7 @@ function goalStatus(pct: number) {
 
 // Fill Rate reads on a much tighter band than a units goal like Pedidos
 // despachados — only above 99% counts as efficient.
-function fillRateStatus(pct: number) {
+export function fillRateStatus(pct: number) {
   if (pct > 99) return { label: "Eficiente", color: "#14C7C7" };
   if (pct >= 98) return { label: "Regular", color: "#D9A441" };
   return { label: "Ineficiente", color: "#C4453A" };
