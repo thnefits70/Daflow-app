@@ -71,29 +71,6 @@ export function EmployeeHome({
         <RecognitionPodium />
       </div>
 
-      <div className="relative overflow-hidden bg-navy rounded-lg p-6 mb-7 flex flex-wrap items-center gap-8">
-        <div>
-          <div className="text-[11px] font-semibold tracking-wide uppercase text-[#B9C2CC] mb-2 text-center">
-            Tu nivel de conocimiento
-          </div>
-          <ScoreGauge score={avg} />
-        </div>
-        <div className="flex-1 min-w-[220px] flex flex-wrap gap-8">
-          <div>
-            <div className="font-display text-[30px] font-bold text-white">{procs}</div>
-            <div className="text-[11.5px] text-[#B9C2CC] mt-0.5">Procesos documentados en {deptName}</div>
-          </div>
-          <div>
-            <div className="font-display text-[30px] font-bold text-white">{docs}</div>
-            <div className="text-[11.5px] text-[#B9C2CC] mt-0.5">Documentos de referencia</div>
-          </div>
-          <div>
-            <div className="font-display text-[30px] font-bold text-white">{scores.length}</div>
-            <div className="text-[11.5px] text-[#B9C2CC] mt-0.5">Exámenes que has rendido</div>
-          </div>
-        </div>
-      </div>
-
       {weeklyTrend && (
         <div className="bg-surface border border-rule rounded-lg p-6 mb-5">
           <WeeklyTrendChart
@@ -137,6 +114,29 @@ export function EmployeeHome({
       )}
 
       <OrgChart rowsSorted={rowsSorted} />
+
+      <div className="relative overflow-hidden bg-navy rounded-lg p-6 mb-7 mt-7 flex flex-wrap items-center gap-8">
+        <div>
+          <div className="text-[11px] font-semibold tracking-wide uppercase text-[#B9C2CC] mb-2 text-center">
+            Tu nivel de conocimiento
+          </div>
+          <ScoreGauge score={avg} />
+        </div>
+        <div className="flex-1 min-w-[220px] flex flex-wrap gap-8">
+          <div>
+            <div className="font-display text-[30px] font-bold text-white">{procs}</div>
+            <div className="text-[11.5px] text-[#B9C2CC] mt-0.5">Procesos documentados en {deptName}</div>
+          </div>
+          <div>
+            <div className="font-display text-[30px] font-bold text-white">{docs}</div>
+            <div className="text-[11.5px] text-[#B9C2CC] mt-0.5">Documentos de referencia</div>
+          </div>
+          <div>
+            <div className="font-display text-[30px] font-bold text-white">{scores.length}</div>
+            <div className="text-[11.5px] text-[#B9C2CC] mt-0.5">Exámenes que has rendido</div>
+          </div>
+        </div>
+      </div>
 
       <h3 className="text-[14px] font-semibold mb-2.5">Accesos rápidos</h3>
       <div className="grid grid-cols-2 gap-3 mb-7">

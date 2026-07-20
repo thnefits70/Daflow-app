@@ -45,31 +45,6 @@ export function Dashboard({
         <RecognitionPodium />
       </div>
 
-      <div className="relative overflow-hidden bg-navy rounded-lg p-6 mb-7 flex flex-wrap items-center gap-8">
-        <div>
-          <div className="text-[11px] font-semibold tracking-wide uppercase text-[#B9C2CC] mb-2 text-center">
-            Nivel de conocimiento
-          </div>
-          <ScoreGauge score={overallAvg} />
-        </div>
-        <div className="flex-1 min-w-[220px] flex flex-wrap gap-8">
-          <div>
-            <div className="font-display text-[30px] font-bold text-white">{rows.length}</div>
-            <div className="text-[11.5px] text-[#B9C2CC] mt-0.5">Áreas creadas</div>
-          </div>
-          <div>
-            <div className="font-display text-[30px] font-bold text-white">{totalAttempts}</div>
-            <div className="text-[11.5px] text-[#B9C2CC] mt-0.5">Exámenes rendidos por el equipo</div>
-          </div>
-          <div>
-            <div className="font-display text-[30px] font-bold text-white">
-              {rowsSorted[0]?.avg !== null && rowsSorted[0] ? rowsSorted[0].dept.code : "—"}
-            </div>
-            <div className="text-[11.5px] text-[#B9C2CC] mt-0.5">Área líder en conocimiento</div>
-          </div>
-        </div>
-      </div>
-
       {weeklyTrend && (
         <div className="bg-surface border border-rule rounded-lg p-6 mb-5">
           <WeeklyTrendChart
@@ -114,7 +89,32 @@ export function Dashboard({
 
       <OrgChart rowsSorted={rowsSorted} />
 
-      <h3 className="text-[14px] font-semibold mt-7 mb-2.5">Estado de conocimiento por área (de mejor a peor)</h3>
+      <div className="relative overflow-hidden bg-navy rounded-lg p-6 mb-7 mt-7 flex flex-wrap items-center gap-8">
+        <div>
+          <div className="text-[11px] font-semibold tracking-wide uppercase text-[#B9C2CC] mb-2 text-center">
+            Nivel de conocimiento
+          </div>
+          <ScoreGauge score={overallAvg} />
+        </div>
+        <div className="flex-1 min-w-[220px] flex flex-wrap gap-8">
+          <div>
+            <div className="font-display text-[30px] font-bold text-white">{rows.length}</div>
+            <div className="text-[11.5px] text-[#B9C2CC] mt-0.5">Áreas creadas</div>
+          </div>
+          <div>
+            <div className="font-display text-[30px] font-bold text-white">{totalAttempts}</div>
+            <div className="text-[11.5px] text-[#B9C2CC] mt-0.5">Exámenes rendidos por el equipo</div>
+          </div>
+          <div>
+            <div className="font-display text-[30px] font-bold text-white">
+              {rowsSorted[0]?.avg !== null && rowsSorted[0] ? rowsSorted[0].dept.code : "—"}
+            </div>
+            <div className="text-[11.5px] text-[#B9C2CC] mt-0.5">Área líder en conocimiento</div>
+          </div>
+        </div>
+      </div>
+
+      <h3 className="text-[14px] font-semibold mb-2.5">Estado de conocimiento por área (de mejor a peor)</h3>
       {rowsSorted.length === 0 && (
         <div className="border-[1.5px] border-dashed border-rule rounded-md p-8.5 text-center text-steel text-[13.5px]">
           Crea áreas para ver su progreso aquí.
