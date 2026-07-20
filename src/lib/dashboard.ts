@@ -173,7 +173,11 @@ export async function getStockoutWeeks(): Promise<StockoutWeekPoint[]> {
     .map(([week, products]) => ({ week, value: products.length, products: [...products].sort() }));
 }
 
-export type PieSlice = { label: string; value: number };
+// trend compares this category's share of the total (not its raw count) in
+// the most recent 6 of the 12 months against the prior 6 — a rising share
+// means that reason is becoming relatively more common, not just that
+// overall volume grew. Left undefined when either half has no data yet.
+export type PieSlice = { label: string; value: number; trend?: "up" | "down" };
 export type WarrantyMonthlyChart = { month: string; total: number; slices: PieSlice[] };
 
 // Gráfico 1 de KPI de Garantías — la torta del mes más reciente cargado por
@@ -208,17 +212,44 @@ function last12Months(): string[] {
 // categorías del Gráfico 1 a lo largo de los últimos 12 meses (aprobadas y
 // rechazadas cuentan por igual) para ver cuál motivo se repite más.
 export async function getWarrantyReasonChart(): Promise<PieSlice[]> {
+  const months = last12Months();
+  const recentMonths = new Set(months.slice(0, 6));
+  const priorMonths = new Set(months.slice(6, 12));
+
   const counts = await prisma.warrantyCategoryMonthCount.findMany({
-    where: { month: { in: last12Months() } },
+    where: { month: { in: months } },
     include: { category: { select: { name: true } } },
   });
   if (counts.length === 0) return [];
 
   const byCategory = new Map<string, number>();
+  const recentByCategory = new Map<string, number>();
+  const priorByCategory = new Map<string, number>();
+  let recentTotal = 0;
+  let priorTotal = 0;
+
   for (const c of counts) {
-    byCategory.set(c.category.name, (byCategory.get(c.category.name) ?? 0) + c.count);
+    const name = c.category.name;
+    byCategory.set(name, (byCategory.get(name) ?? 0) + c.count);
+    if (recentMonths.has(c.month)) {
+      recentByCategory.set(name, (recentByCategory.get(name) ?? 0) + c.count);
+      recentTotal += c.count;
+    } else if (priorMonths.has(c.month)) {
+      priorByCategory.set(name, (priorByCategory.get(name) ?? 0) + c.count);
+      priorTotal += c.count;
+    }
   }
+
   return [...byCategory.entries()]
-    .map(([label, value]) => ({ label, value }))
+    .map(([label, value]) => {
+      let trend: "up" | "down" | undefined;
+      if (recentTotal > 0 && priorTotal > 0) {
+        const recentShare = (recentByCategory.get(label) ?? 0) / recentTotal;
+        const priorShare = (priorByCategory.get(label) ?? 0) / priorTotal;
+        if (recentShare > priorShare) trend = "up";
+        else if (recentShare < priorShare) trend = "down";
+      }
+      return { label, value, trend };
+    })
     .sort((a, b) => b.value - a.value);
 }

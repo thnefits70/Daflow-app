@@ -1,11 +1,20 @@
 "use client";
 
 import { useState } from "react";
+import { TrendingUp, TrendingDown } from "lucide-react";
 import type { PieSlice } from "@/lib/dashboard";
 import { formatMonthShort } from "./WeeklyTrendChart";
 
 // DAFLOW brand-friendly palette, cycles if there are more categories than colors.
 const PALETTE = ["#14C7C7", "#1E5EFF", "#D9A441", "#C4453A", "#8B5CF6", "#22C55E", "#EC4899", "#F97316"];
+
+// Compares each category's SHARE of the total (not raw count) between the
+// two halves of the trailing-12-month window — see getWarrantyReasonChart().
+function TrendIcon({ trend, size = 11 }: { trend?: "up" | "down"; size?: number }) {
+  if (trend === "up") return <TrendingUp size={size} className="shrink-0" style={{ color: "#22C55E" }} />;
+  if (trend === "down") return <TrendingDown size={size} className="shrink-0" style={{ color: "#E0574A" }} />;
+  return null;
+}
 
 export function PieChart({
   title,
@@ -105,8 +114,9 @@ export function PieChart({
                 <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: PALETTE[s.i % PALETTE.length] }} />
                 <span className="truncate">{s.label}</span>
               </span>
-              <span className="font-mono text-ink shrink-0">
+              <span className="font-mono text-ink shrink-0 inline-flex items-center gap-1">
                 {s.value} · {Math.round((s.value / total) * 100)}%
+                <TrendIcon trend={s.trend} />
               </span>
             </div>
           ))}
@@ -136,7 +146,10 @@ export function PieChart({
               >
                 <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: PALETTE[s.i % PALETTE.length] }} />
                 <span className="truncate max-w-[160px]">{s.label}</span>
-                <span className="font-mono text-steel shrink-0">{p}% · {s.value}</span>
+                <span className="font-mono text-steel shrink-0 inline-flex items-center gap-1">
+                  {p}% · {s.value}
+                  <TrendIcon trend={s.trend} size={12} />
+                </span>
               </div>
             );
           })}
