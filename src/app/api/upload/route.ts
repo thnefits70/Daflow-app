@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { supabaseAdmin } from "@/lib/supabase";
-import { canManagePayroll } from "@/lib/guards";
+import { canManagePayroll, canManageNomina } from "@/lib/guards";
 
 const BUCKET = "daflow-files";
 const MAX_BYTES = 15 * 1024 * 1024;
@@ -37,6 +37,11 @@ export async function POST(req: NextRequest) {
   }
   if (!allowed && session?.user.role === "employee" && folder === "pay-stubs") {
     allowed = await canManagePayroll();
+  }
+  // Nómina profile photo/CV uploads — same access as editing the rest of
+  // the profile (canManageNomina), not just admin.
+  if (!allowed && session?.user.role === "employee" && (folder === "photos" || folder === "cvs")) {
+    allowed = await canManageNomina();
   }
   if (!allowed) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
