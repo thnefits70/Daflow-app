@@ -160,6 +160,22 @@ export async function canManageReturnRate() {
   return !!user?.isLeader && user.leadsDept?.code === "FIN";
 }
 
+// Nómina — admin or whoever leads Finanzas - Contabilidad (today Nairoby
+// Castro) can create/edit any employee's record company-wide (same
+// company-wide-not-just-own-dept scope as Roles de pago). Deleting a user
+// stays admin-only — checked separately at the route level with
+// requireAdminSession(), never granted here.
+export async function canManageNomina() {
+  const session = await auth();
+  if (!session) return false;
+  if (session.user.role === "admin") return true;
+  const user = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { isLeader: true, leadsDept: { select: { code: true } } },
+  });
+  return !!user?.isLeader && user.leadsDept?.code === "FIN";
+}
+
 // Ruptura de Stock — admin or whoever leads Inventario (today Daniel Moran).
 export async function canManageStockouts() {
   const session = await auth();

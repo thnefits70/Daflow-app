@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { requireAdminSession } from "@/lib/guards";
+import { auth } from "@/auth";
+import { requireAdminSession, canManageNomina } from "@/lib/guards";
 import { hashPassword } from "@/lib/password";
 
 export async function GET() {
@@ -34,8 +35,11 @@ const createSchema = z.object({
 });
 
 export async function POST(req: NextRequest) {
-  const session = await requireAdminSession();
-  if (!session) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+  const session = await auth();
+  if (!session) return NextResponse.json({ error: "No autorizado." }, { status: 401 });
+  if (session.user.role !== "admin" && !(await canManageNomina())) {
+    return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+  }
 
   const body = await req.json().catch(() => null);
   const parsed = createSchema.safeParse(body);

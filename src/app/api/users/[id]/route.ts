@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { requireAdminSession } from "@/lib/guards";
+import { auth } from "@/auth";
+import { requireAdminSession, canManageNomina } from "@/lib/guards";
 import { hashPassword } from "@/lib/password";
 
 function omitPasswordHash<T extends { passwordHash: string }>(user: T): Omit<T, "passwordHash"> {
@@ -53,8 +54,11 @@ const updateSchema = z.object({
 });
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const session = await requireAdminSession();
-  if (!session) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+  const session = await auth();
+  if (!session) return NextResponse.json({ error: "No autorizado." }, { status: 401 });
+  if (session.user.role !== "admin" && !(await canManageNomina())) {
+    return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+  }
 
   const { id } = await params;
   const body = await req.json().catch(() => null);

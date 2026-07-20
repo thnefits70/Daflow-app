@@ -70,10 +70,14 @@ export function ProfileDetail({
   profile,
   departments,
   positions,
+  basePath = "/admin/nomina",
+  canDelete = true,
 }: {
   profile: UserProfile;
   departments: Dept[];
   positions: Position[];
+  basePath?: string;
+  canDelete?: boolean;
 }) {
   const router = useRouter();
   const [p, setP] = useState(profile);
@@ -107,7 +111,7 @@ export function ProfileDetail({
   const removeUser = async () => {
     setDeleting(true);
     await fetch(`/api/users/${p.id}`, { method: "DELETE" });
-    router.push("/admin/nomina");
+    router.push(basePath);
     router.refresh();
   };
 
@@ -253,37 +257,38 @@ export function ProfileDetail({
   return (
     <div>
       <div className="flex items-center justify-between mb-4.5">
-        <Link href="/admin/nomina" className="inline-flex items-center gap-1.5 text-[13px] text-steel hover:text-ink">
+        <Link href={basePath} className="inline-flex items-center gap-1.5 text-[13px] text-steel hover:text-ink">
           <ArrowLeft size={14} /> Volver a nómina
         </Link>
-        {confirmingDelete ? (
-          <div className="flex items-center gap-2.5">
-            <span className="text-[12.5px] text-steel">¿Eliminar a {p.name}? Se borra su acceso, ficha e historial.</span>
+        {canDelete &&
+          (confirmingDelete ? (
+            <div className="flex items-center gap-2.5">
+              <span className="text-[12.5px] text-steel">¿Eliminar a {p.name}? Se borra su acceso, ficha e historial.</span>
+              <button
+                type="button"
+                disabled={deleting}
+                className="rounded border border-red bg-red px-3 py-1.5 text-[12px] font-semibold text-white cursor-pointer disabled:opacity-60"
+                onClick={removeUser}
+              >
+                {deleting ? "Eliminando…" : "Sí, eliminar"}
+              </button>
+              <button
+                type="button"
+                className="text-[12px] text-steel cursor-pointer"
+                onClick={() => setConfirmingDelete(false)}
+              >
+                Cancelar
+              </button>
+            </div>
+          ) : (
             <button
               type="button"
-              disabled={deleting}
-              className="rounded border border-red bg-red px-3 py-1.5 text-[12px] font-semibold text-white cursor-pointer disabled:opacity-60"
-              onClick={removeUser}
+              className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-red hover:opacity-80 cursor-pointer"
+              onClick={() => setConfirmingDelete(true)}
             >
-              {deleting ? "Eliminando…" : "Sí, eliminar"}
+              <Trash2 size={14} /> Eliminar usuario
             </button>
-            <button
-              type="button"
-              className="text-[12px] text-steel cursor-pointer"
-              onClick={() => setConfirmingDelete(false)}
-            >
-              Cancelar
-            </button>
-          </div>
-        ) : (
-          <button
-            type="button"
-            className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-red hover:opacity-80 cursor-pointer"
-            onClick={() => setConfirmingDelete(true)}
-          >
-            <Trash2 size={14} /> Eliminar usuario
-          </button>
-        )}
+          ))}
       </div>
 
       {saveErr && (

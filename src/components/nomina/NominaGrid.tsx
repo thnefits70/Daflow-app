@@ -19,7 +19,15 @@ type NominaUser = {
   isActive: boolean;
 };
 
-export function NominaGrid({ users, departments }: { users: NominaUser[]; departments: Dept[] }) {
+export function NominaGrid({
+  users,
+  departments,
+  basePath = "/admin/nomina",
+}: {
+  users: NominaUser[];
+  departments: Dept[];
+  basePath?: string;
+}) {
   const router = useRouter();
   const [name, setName] = useState("");
   const [username, setUsername] = useState("");
@@ -98,7 +106,7 @@ export function NominaGrid({ users, departments }: { users: NominaUser[]; depart
         {users.map((u) => (
           <Link
             key={u.id}
-            href={`/admin/nomina/${u.id}`}
+            href={`${basePath}/${u.id}`}
             className={`bg-surface border rounded p-4.5 text-center hover:border-blue ${u.isActive ? "border-rule" : "border-rule opacity-60"}`}
           >
             <div className="w-14 h-14 rounded-full overflow-hidden bg-cloud border border-rule flex items-center justify-center mx-auto mb-2.5">

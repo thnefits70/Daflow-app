@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
-import { LayoutDashboard, ClipboardList, Scale, LogOut, Truck, Rocket, Wallet, FolderLock, Gauge, Menu, X, Trophy } from "lucide-react";
+import { LayoutDashboard, ClipboardList, Scale, LogOut, Truck, Rocket, Wallet, FolderLock, Gauge, Menu, X, Trophy, Users } from "lucide-react";
 import { BrandMark } from "@/components/brand/DaflowMark";
 
 export function EmployeeSidebar({
@@ -20,6 +20,7 @@ export function EmployeeSidebar({
   unseenConfidentialCount = 0,
   showKpis = false,
   showRecognition = false,
+  showNomina = false,
 }: {
   deptName: string;
   userName: string;
@@ -33,6 +34,7 @@ export function EmployeeSidebar({
   unseenConfidentialCount?: number;
   showKpis?: boolean;
   showRecognition?: boolean;
+  showNomina?: boolean;
 }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
@@ -111,6 +113,11 @@ export function EmployeeSidebar({
             </span>
           )}
         </Link>
+        {showNomina && (
+          <Link href="/area/nomina" className={`${NAV_ITEM} ${pathname.startsWith("/area/nomina") ? NAV_ACTIVE : NAV_INACTIVE}`}>
+            <Users size={15} /> Nómina
+          </Link>
+        )}
         {showSuppliers && (
           <Link href="/area/proveedores" className={`${NAV_ITEM} ${pathname.startsWith("/area/proveedores") ? NAV_ACTIVE : NAV_INACTIVE}`}>
             <Truck size={15} /> Proveedores
