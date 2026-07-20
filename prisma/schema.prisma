@@ -593,6 +593,17 @@ model StockoutWeekProduct {
   @@index([productId])
 }
 
+// Explicit "revisé esta semana y no hubo productos sin stock" — separate from
+// simply having zero StockoutWeekProduct rows, since silence is ambiguous
+// (genuinely nothing to report vs. the leader just forgot to log it). Used by
+// the pendientes panel to only clear a week when either a product was
+// attached OR this confirmation exists.
+model StockoutWeekConfirmation {
+  id        String   @id @default(cuid())
+  week      String   @unique
+  createdAt DateTime @default(now())
+}
+
 // Catálogo reutilizable de categorías/motivos de garantía (ej. "Aprobada",
 // "Rechazada - producto roto") — se crea una vez y se reutiliza después.
 model WarrantyCategory {

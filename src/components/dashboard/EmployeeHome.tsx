@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { GitBranch, FileText, GraduationCap, Scale, ClipboardList, LineChart } from "lucide-react";
 import { DailyQuoteBanner } from "./DailyQuoteBanner";
+import { PendingTasksCard } from "./PendingTasksCard";
 import { RecognitionPodium } from "@/components/recognition/RecognitionPodium";
 import { ScoreGauge } from "./ScoreGauge";
 import { WeeklyTrendChart } from "./WeeklyTrendChart";
@@ -73,6 +74,8 @@ export function EmployeeHome({
         </div>
         <div />
       </div>
+
+      <PendingTasksCard />
 
       {weeklyTrend && (
         <div className="bg-surface border border-rule rounded-lg p-6 mb-5">

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Trash2, Pencil, Check, X, ChevronDown, ChevronUp } from "lucide-react";
+import { Plus, Trash2, Pencil, Check, X, ChevronDown, ChevronUp, ShieldCheck } from "lucide-react";
 import { formatWeekShort } from "@/components/dashboard/WeeklyTrendChart";
 import { Combobox } from "@/components/ui/Combobox";
 
@@ -18,15 +18,18 @@ function formatWeekLabel(week: string) {
 export function StockoutPanel({
   products,
   weekRows,
+  confirmedWeeks = [],
 }: {
   products: StockoutProductDTO[];
   weekRows: StockoutWeekRowDTO[];
+  confirmedWeeks?: string[];
 }) {
   const router = useRouter();
   const [week, setWeek] = useState("");
   const [productName, setProductName] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  const [confirmedWeek, setConfirmedWeek] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
   const [renamingProductId, setRenamingProductId] = useState<string | null>(null);
@@ -77,6 +80,31 @@ export function StockoutPanel({
     }
     setProductName("");
     setExpanded(false);
+    router.refresh();
+  };
+
+  // Explicit "no hubo productos agotados esa semana" — separate from just
+  // never touching the week, so the pendientes panel can tell "genuinely
+  // nothing to report" apart from "nobody checked yet".
+  const confirmEmpty = async () => {
+    if (!week) {
+      setErr("Elige una semana primero.");
+      return;
+    }
+    setErr("");
+    setBusy(true);
+    const res = await fetch("/api/stockout-weeks/confirm", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ week }),
+    });
+    setBusy(false);
+    if (!res.ok) {
+      const data = await res.json().catch(() => null);
+      setErr(data?.error ?? "No se pudo confirmar.");
+      return;
+    }
+    setConfirmedWeek(week);
     router.refresh();
   };
 
@@ -178,6 +206,24 @@ export function StockoutPanel({
         {err && <div className="text-red text-[12.5px] mt-2.5">{err}</div>}
         <div className="text-[11px] text-steel mt-2.5">
           Si el producto ya existe, escribe su nombre igual y se reutiliza. Para marcar varios productos en la misma semana, repite Guardar uno por uno. El lápiz de cada producto corrige su nombre en todas las semanas donde aparece. En la lista desplegable, el bote de basura elimina un producto del catálogo para siempre — solo si no tiene historial guardado.
+        </div>
+
+        <div className="border-t border-rule mt-3.5 pt-3.5">
+          {week && (byWeek.has(week) || confirmedWeeks.includes(week) || confirmedWeek === week) ? (
+            <div className="inline-flex items-center gap-1.5 text-[12px] text-teal">
+              <ShieldCheck size={13} />
+              {byWeek.has(week) ? "Esa semana ya tiene productos marcados." : "Ya confirmaste que esa semana no hubo productos."}
+            </div>
+          ) : (
+            <button
+              type="button"
+              disabled={busy || !week}
+              className="inline-flex items-center gap-1.5 rounded border border-rule px-3.5 py-2 text-[12.5px] font-semibold text-steel hover:text-ink hover:border-teal cursor-pointer disabled:opacity-60"
+              onClick={confirmEmpty}
+            >
+              <ShieldCheck size={14} /> Confirmar: sin productos agotados esa semana
+            </button>
+          )}
         </div>
       </div>
 

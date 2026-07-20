@@ -5,7 +5,7 @@ import { StockoutPanel } from "@/components/finance/StockoutPanel";
 import { WarrantyPanel } from "@/components/finance/WarrantyPanel";
 
 export default async function AdminKpisGeneralesPage() {
-  const [returnRateRecords, stockoutProducts, stockoutWeekRows, warrantyCategories, warrantyMonthTotals, warrantyCounts] =
+  const [returnRateRecords, stockoutProducts, stockoutWeekRows, stockoutConfirmations, warrantyCategories, warrantyMonthTotals, warrantyCounts] =
     await Promise.all([
       prisma.returnRateRecord.findMany({ orderBy: { month: "desc" } }),
       prisma.stockoutProduct.findMany({ orderBy: { name: "asc" } }),
@@ -13,6 +13,7 @@ export default async function AdminKpisGeneralesPage() {
         include: { product: { select: { id: true, name: true } } },
         orderBy: [{ week: "desc" }, { createdAt: "asc" }],
       }),
+      prisma.stockoutWeekConfirmation.findMany({ select: { week: true } }),
       prisma.warrantyCategory.findMany({ orderBy: { name: "asc" } }),
       prisma.warrantyMonthTotal.findMany({ orderBy: { month: "desc" } }),
       prisma.warrantyCategoryMonthCount.findMany({
@@ -29,7 +30,11 @@ export default async function AdminKpisGeneralesPage() {
       <ReturnRatePanel records={returnRateRecords} />
 
       <h3 className="text-[14px] font-semibold mt-7 mb-3">Ruptura de Stock</h3>
-      <StockoutPanel products={stockoutProducts} weekRows={stockoutWeekRows} />
+      <StockoutPanel
+        products={stockoutProducts}
+        weekRows={stockoutWeekRows}
+        confirmedWeeks={stockoutConfirmations.map((c) => c.week)}
+      />
 
       <h3 className="text-[14px] font-semibold mt-7 mb-3">KPI de Garantías</h3>
       <WarrantyPanel categories={warrantyCategories} monthTotals={warrantyMonthTotals} counts={warrantyCounts} />

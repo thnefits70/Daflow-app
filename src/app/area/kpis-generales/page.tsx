@@ -14,7 +14,7 @@ export default async function AreaKpisGeneralesPage() {
   ]);
   if (!canReturnRate && !canStockouts && !canWarranties) redirect("/area");
 
-  const [returnRateRecords, stockoutProducts, stockoutWeekRows, warrantyCategories, warrantyMonthTotals, warrantyCounts] =
+  const [returnRateRecords, stockoutProducts, stockoutWeekRows, stockoutConfirmations, warrantyCategories, warrantyMonthTotals, warrantyCounts] =
     await Promise.all([
       canReturnRate ? prisma.returnRateRecord.findMany({ orderBy: { month: "desc" } }) : Promise.resolve([]),
       canStockouts ? prisma.stockoutProduct.findMany({ orderBy: { name: "asc" } }) : Promise.resolve([]),
@@ -24,6 +24,7 @@ export default async function AreaKpisGeneralesPage() {
             orderBy: [{ week: "desc" }, { createdAt: "asc" }],
           })
         : Promise.resolve([]),
+      canStockouts ? prisma.stockoutWeekConfirmation.findMany({ select: { week: true } }) : Promise.resolve([]),
       canWarranties ? prisma.warrantyCategory.findMany({ orderBy: { name: "asc" } }) : Promise.resolve([]),
       canWarranties ? prisma.warrantyMonthTotal.findMany({ orderBy: { month: "desc" } }) : Promise.resolve([]),
       canWarranties
@@ -48,7 +49,11 @@ export default async function AreaKpisGeneralesPage() {
       {canStockouts && (
         <>
           <h3 className={`text-[14px] font-semibold mb-3 ${canReturnRate ? "mt-7" : ""}`}>Ruptura de Stock</h3>
-          <StockoutPanel products={stockoutProducts} weekRows={stockoutWeekRows} />
+          <StockoutPanel
+            products={stockoutProducts}
+            weekRows={stockoutWeekRows}
+            confirmedWeeks={stockoutConfirmations.map((c) => c.week)}
+          />
         </>
       )}
 
