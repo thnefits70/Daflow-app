@@ -60,7 +60,7 @@ export function MiniSparkline({
   formatPeriod,
   formatValue,
 }: {
-  points: { week: string; value: number }[];
+  points: { week: string; value: number; detail?: string }[];
   color: string;
   formatPeriod: (period: string) => string;
   formatValue: (value: number) => string;
@@ -142,6 +142,7 @@ export function MiniSparkline({
           {formatIsoWeekRangeLabel(hovered.week) && ` · ${formatIsoWeekRangeLabel(hovered.week)}`}
           {" · "}
           <span className="text-teal">{formatValue(hovered.value)}</span>
+          {hovered.detail && <span className="text-steel"> · {hovered.detail}</span>}
         </div>
       )}
     </div>
