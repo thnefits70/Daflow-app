@@ -8,21 +8,25 @@ import { BrandMark } from "@/components/brand/DaflowMark";
 export function SettingsPanel({
   logoUrl,
   bannerUrl,
+  faviconUrl,
   adminEmail,
   adminBirthDate,
 }: {
   logoUrl: string | null;
   bannerUrl: string | null;
+  faviconUrl: string | null;
   adminEmail: string | null;
   adminBirthDate: string | null;
 }) {
   const router = useRouter();
   const [logo, setLogo] = useState(logoUrl);
   const [banner, setBanner] = useState(bannerUrl);
+  const [favicon, setFavicon] = useState(faviconUrl);
   const [email, setEmail] = useState(adminEmail ?? "");
   const [birthDate, setBirthDate] = useState(adminBirthDate ? adminBirthDate.slice(0, 10) : "");
   const [logoErr, setLogoErr] = useState("");
   const [bannerErr, setBannerErr] = useState("");
+  const [faviconErr, setFaviconErr] = useState("");
   const [emailSaved, setEmailSaved] = useState(false);
   const [birthDateSaved, setBirthDateSaved] = useState(false);
 
@@ -105,6 +109,44 @@ export function SettingsPanel({
       body: JSON.stringify({ bannerUrl: null }),
     });
     setBanner(null);
+    router.refresh();
+  };
+
+  const handleFaviconFile = async (file: File) => {
+    setFaviconErr("");
+    if (!file.type.startsWith("image/")) {
+      setFaviconErr("Solo se aceptan archivos de imagen (PNG, SVG, ICO).");
+      return;
+    }
+    if (file.size > 500 * 1024) {
+      setFaviconErr("La imagen es muy pesada. Usa un ícono de menos de 500 KB.");
+      return;
+    }
+    const fd = new FormData();
+    fd.append("file", file);
+    fd.append("folder", "branding");
+    const res = await fetch("/api/upload", { method: "POST", body: fd });
+    if (!res.ok) {
+      setFaviconErr("No se pudo subir el favicon.");
+      return;
+    }
+    const data = await res.json();
+    await fetch("/api/settings", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ faviconUrl: data.url }),
+    });
+    setFavicon(data.url);
+    router.refresh();
+  };
+
+  const removeFavicon = async () => {
+    await fetch("/api/settings", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ faviconUrl: null }),
+    });
+    setFavicon(null);
     router.refresh();
   };
 
@@ -220,6 +262,40 @@ export function SettingsPanel({
         {bannerErr && <div className="text-red text-[12px] mt-2">{bannerErr}</div>}
         <div className="text-[11px] text-steel mt-3.5">
           Recomendado: logo + nombre horizontal, fondo transparente, menos de 2.5 MB.
+        </div>
+      </div>
+
+      <div className="bg-surface border border-rule rounded p-4.5">
+        <label className="block mb-3 text-[11px] font-semibold tracking-wide uppercase text-steel">
+          Favicon (ícono de la pestaña del navegador)
+        </label>
+        <div className="flex items-center gap-4.5 mb-4">
+          <div className="w-12 h-12 border-[1.5px] border-dashed border-rule rounded-md flex items-center justify-center bg-cloud overflow-hidden">
+            {favicon ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={favicon} alt="Favicon" className="max-w-full max-h-full object-contain" />
+            ) : (
+              <span className="text-[9px] text-steel text-center px-1">Por defecto</span>
+            )}
+          </div>
+          <div className="text-[12px] text-steel leading-relaxed">
+            Es el ícono chiquito que se ve en la pestaña del navegador. Si no subes uno, se usa el ícono genérico de
+            DAFLOW.
+          </div>
+        </div>
+        <label className="inline-flex items-center gap-1.5 text-[13px] font-semibold border border-blue bg-blue text-white rounded px-3.5 py-2 cursor-pointer">
+          <Upload size={14} /> {favicon ? "Cambiar favicon" : "Subir favicon"}
+          <input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && handleFaviconFile(e.target.files[0])} />
+        </label>
+        {favicon && (
+          <button type="button" className="ml-2.5 inline-flex items-center gap-1.5 text-[13px] border border-rule rounded px-3.5 py-2 cursor-pointer" onClick={removeFavicon}>
+            <X size={13} /> Quitar favicon
+          </button>
+        )}
+        {faviconErr && <div className="text-red text-[12px] mt-2">{faviconErr}</div>}
+        <div className="text-[11px] text-steel mt-3.5">
+          Recomendado: imagen cuadrada (ej. 64×64), PNG o SVG, fondo sólido, menos de 500 KB. El cambio puede tardar
+          en verse por el caché del navegador — probar en una pestaña nueva o recargando sin caché.
         </div>
       </div>
 

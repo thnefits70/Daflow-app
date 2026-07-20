@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Space_Grotesk, Inter, IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/components/Providers";
+import { prisma } from "@/lib/prisma";
 
 const spaceGrotesk = Space_Grotesk({
   variable: "--font-space-grotesk",
@@ -21,10 +22,14 @@ const plexMono = IBM_Plex_Mono({
   weight: ["500", "600"],
 });
 
-export const metadata: Metadata = {
-  title: "DAFLOW — Process Standardization Platform",
-  description: "Plataforma interna de gestión de procesos de Provedix.",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const settings = await prisma.platformSettings.findUnique({ where: { id: "singleton" } });
+  return {
+    title: "DAFLOW — Process Standardization Platform",
+    description: "Plataforma interna de gestión de procesos de Provedix.",
+    icons: settings?.faviconUrl ? { icon: settings.faviconUrl } : undefined,
+  };
+}
 
 export default function RootLayout({
   children,

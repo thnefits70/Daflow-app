@@ -11,6 +11,7 @@ export default async function SettingsPage() {
       <SettingsPanel
         logoUrl={settings?.logoUrl ?? null}
         bannerUrl={settings?.bannerUrl ?? null}
+        faviconUrl={settings?.faviconUrl ?? null}
         adminEmail={settings?.adminEmail ?? null}
         adminBirthDate={settings?.adminBirthDate ? settings.adminBirthDate.toISOString() : null}
       />

@@ -7,6 +7,7 @@ import { hashPassword } from "@/lib/password";
 const schema = z.object({
   logoUrl: z.string().nullable().optional(),
   bannerUrl: z.string().nullable().optional(),
+  faviconUrl: z.string().nullable().optional(),
   adminEmail: z.string().trim().nullable().optional(),
   adminBirthDate: z.string().nullable().optional(),
   newPassword: z.string().min(6, "La contraseña debe tener al menos 6 caracteres.").optional(),
@@ -26,6 +27,7 @@ export async function PATCH(req: NextRequest) {
   const data: Record<string, unknown> = {};
   if (d.logoUrl !== undefined) data.logoUrl = d.logoUrl;
   if (d.bannerUrl !== undefined) data.bannerUrl = d.bannerUrl;
+  if (d.faviconUrl !== undefined) data.faviconUrl = d.faviconUrl;
   if (d.adminEmail !== undefined) data.adminEmail = d.adminEmail || null;
   if (d.adminBirthDate !== undefined) data.adminBirthDate = d.adminBirthDate ? new Date(d.adminBirthDate) : null;
   if (d.newPassword) data.adminPasswordHash = await hashPassword(d.newPassword);
@@ -34,6 +36,7 @@ export async function PATCH(req: NextRequest) {
   return NextResponse.json({
     logoUrl: settings.logoUrl,
     bannerUrl: settings.bannerUrl,
+    faviconUrl: settings.faviconUrl,
     adminEmail: settings.adminEmail,
     adminBirthDate: settings.adminBirthDate,
   });

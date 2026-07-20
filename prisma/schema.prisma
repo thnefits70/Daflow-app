@@ -18,6 +18,8 @@ model PlatformSettings {
   logoUrl           String?
   // Marca de agua opcional (logo + wordmark) mostrada discretamente en la tarjeta de Inicio.
   bannerUrl         String?
+  // Ícono de la pestaña del navegador — si no se sube uno, se usa el /icon.svg genérico por defecto.
+  faviconUrl        String?
   // Cumpleaños del admin — el único perfil sin un User real detrás, así que
   // vive aquí en vez de en la tabla User.
   adminBirthDate    DateTime?
