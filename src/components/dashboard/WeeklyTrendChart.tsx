@@ -111,6 +111,7 @@ export function WeeklyTrendChart({
 }) {
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const [dateTooltipWeek, setDateTooltipWeek] = useState<string | null>(null);
+  const [reducedMotion, setReducedMotion] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -119,6 +120,13 @@ export function WeeklyTrendChart({
     }
     document.addEventListener("mousedown", onClickOutside);
     return () => document.removeEventListener("mousedown", onClickOutside);
+  }, []);
+
+  // Starts assuming motion is fine (matches the server-rendered markup, so
+  // there's no hydration mismatch) and only switches off after mount if the
+  // OS actually prefers reduced motion.
+  useEffect(() => {
+    setReducedMotion(window.matchMedia("(prefers-reduced-motion: reduce)").matches);
   }, []);
 
   if (points.length === 0) return null;
@@ -161,6 +169,36 @@ export function WeeklyTrendChart({
 
   const tickEvery = Math.max(1, Math.ceil(points.length / 12));
   const hitR = Math.max(4, Math.min(14, stepX / 2 - 1));
+
+  // Traveling light dot that borders the line left-to-right, looping
+  // forever — teal on segments where the value rose vs. the point before
+  // it, light red where it fell. One continuous <animateMotion> along the
+  // exact same path so it never jumps, paired with a calcMode="discrete"
+  // <animate> on `color` (inherited via currentColor) that switches the
+  // instant it crosses into a new segment.
+  const segCount = points.length - 1;
+  const travelDur = Math.max(8, Math.min(20, segCount * 0.9));
+  let travelDot: React.ReactNode = null;
+  if (segCount > 0 && !reducedMotion) {
+    const segColors: string[] = [];
+    for (let i = 0; i < segCount; i++) segColors.push(points[i + 1].value >= points[i].value ? "#14C7C7" : "#FF9B90");
+    const keyTimes = segColors.map((_, i) => (i / segCount).toFixed(4)).join(";");
+    travelDot = (
+      <g color="#14C7C7">
+        <animateMotion dur={`${travelDur}s`} repeatCount="indefinite" rotate="0" path={linePath} />
+        <animate
+          attributeName="color"
+          dur={`${travelDur}s`}
+          repeatCount="indefinite"
+          calcMode="discrete"
+          keyTimes={keyTimes}
+          values={segColors.join(";")}
+        />
+        <circle r="9" fill="currentColor" opacity="0.3" filter="url(#weekly-trend-dot-glow)" />
+        <circle r="3.2" fill="currentColor" />
+      </g>
+    );
+  }
 
   return (
     <div ref={rootRef}>
@@ -212,6 +250,9 @@ export function WeeklyTrendChart({
             <stop offset="0%" stopColor="#14C7C7" stopOpacity="0.32" />
             <stop offset="100%" stopColor="#14C7C7" stopOpacity="0" />
           </linearGradient>
+          <filter id="weekly-trend-dot-glow" x="-200%" y="-200%" width="500%" height="500%">
+            <feGaussianBlur stdDeviation="3.5" />
+          </filter>
         </defs>
 
         {Array.from({ length: yTicks + 1 }).map((_, i) => {
@@ -345,6 +386,8 @@ export function WeeklyTrendChart({
               </g>
             );
           })()}
+
+        {travelDot}
       </svg>
     </div>
   );
