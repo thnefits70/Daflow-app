@@ -18,7 +18,7 @@ export async function GET() {
 
   if (session!.user.role === "admin") {
     evaluatees = await prisma.user.findMany({
-      where: { isLeader: true },
+      where: { isLeader: true, isActive: true },
       select: { id: true, name: true, photoUrl: true, position: true, department: { select: { name: true } } },
       orderBy: { name: "asc" },
     });
@@ -31,7 +31,7 @@ export async function GET() {
       return NextResponse.json({ month, maxTotalScore: MAX_TOTAL_SCORE, people: [] });
     }
     evaluatees = await prisma.user.findMany({
-      where: { deptId: me.leadsDeptId, isLeader: false },
+      where: { deptId: me.leadsDeptId, isLeader: false, isActive: true },
       select: { id: true, name: true, photoUrl: true, position: true, department: { select: { name: true } } },
       orderBy: { name: "asc" },
     });

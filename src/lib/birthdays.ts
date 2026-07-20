@@ -86,7 +86,7 @@ export async function getTodaysCelebrants(): Promise<Celebrant[]> {
   const day = now.getUTCDate();
 
   const users = await prisma.user.findMany({
-    where: { birthDate: { not: null } },
+    where: { birthDate: { not: null }, isActive: true },
     select: { id: true, name: true, photoUrl: true, birthDate: true },
   });
   const celebrants: Celebrant[] = users

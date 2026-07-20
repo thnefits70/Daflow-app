@@ -33,7 +33,7 @@ export default async function AreaRecognitionPage() {
 
   const month = currentMonth();
   const team = await prisma.user.findMany({
-    where: { deptId: me.leadsDeptId, isLeader: false },
+    where: { deptId: me.leadsDeptId, isLeader: false, isActive: true },
     select: { id: true, name: true, photoUrl: true, position: true, department: { select: { name: true } } },
     orderBy: { name: "asc" },
   });

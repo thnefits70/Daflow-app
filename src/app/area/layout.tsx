@@ -80,7 +80,7 @@ export default async function AreaLayout({ children }: { children: React.ReactNo
     const ledDept = await prisma.department.findUnique({ where: { id: currentUser.leadsDeptId } });
     if (ledDept) {
       ledDeptName = ledDept.name;
-      const teamUsers = await prisma.user.findMany({ where: { deptId: ledDept.id }, select: { id: true } });
+      const teamUsers = await prisma.user.findMany({ where: { deptId: ledDept.id, isActive: true }, select: { id: true } });
       const updates = await prisma.processUpdate.findMany({
         where: { process: { deptId: ledDept.id } },
         include: { process: { select: { title: true } }, acks: { select: { userId: true } } },

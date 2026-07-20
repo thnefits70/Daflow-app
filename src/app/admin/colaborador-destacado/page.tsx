@@ -10,7 +10,7 @@ export default async function AdminRecognitionPage() {
 
   const [leaders, departments] = await Promise.all([
     prisma.user.findMany({
-      where: { isLeader: true },
+      where: { isLeader: true, isActive: true },
       select: { id: true, name: true, photoUrl: true, position: true, department: { select: { name: true } } },
       orderBy: { name: "asc" },
     }),

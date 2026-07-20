@@ -25,7 +25,7 @@ export default async function AdminProcessPage({
       orderBy: { createdAt: "desc" },
       include: { acks: { select: { userId: true } } },
     }),
-    prisma.user.count({ where: { deptId: id } }),
+    prisma.user.count({ where: { deptId: id, isActive: true } }),
   ]);
   if (!process || process.deptId !== id) notFound();
 

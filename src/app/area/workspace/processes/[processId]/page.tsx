@@ -29,7 +29,7 @@ export default async function EmployeeProcessPage({
       orderBy: { createdAt: "desc" },
       include: { acks: { select: { userId: true } } },
     }),
-    prisma.user.count({ where: { deptId: session.user.deptId } }),
+    prisma.user.count({ where: { deptId: session.user.deptId, isActive: true } }),
   ]);
   if (!process || process.deptId !== session.user.deptId) notFound();
 

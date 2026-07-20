@@ -4,6 +4,7 @@ import { ConfidentialDocsPanel } from "@/components/confidential/ConfidentialDoc
 
 export default async function AdminDocumentosConfidencialesPage() {
   const users = await prisma.user.findMany({
+    where: { isActive: true },
     orderBy: { name: "asc" },
     select: { id: true, name: true, department: { select: { name: true } } },
   });
