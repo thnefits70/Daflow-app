@@ -105,7 +105,9 @@ export function PieChart({
                 <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: PALETTE[s.i % PALETTE.length] }} />
                 <span className="truncate">{s.label}</span>
               </span>
-              <span className="font-mono text-ink shrink-0">{Math.round((s.value / total) * 100)}%</span>
+              <span className="font-mono text-ink shrink-0">
+                {s.value} · {Math.round((s.value / total) * 100)}%
+              </span>
             </div>
           ))}
           {restCount > 0 && <div className="text-steel/70">+{restCount} más</div>}
