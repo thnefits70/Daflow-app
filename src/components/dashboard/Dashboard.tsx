@@ -37,11 +37,12 @@ export function Dashboard({
   return (
     <div>
       <DailyQuoteBanner />
-      <div className="flex items-start justify-between gap-4 flex-wrap mb-6">
-        <div>
-          <div className="font-mono text-[10.5px] tracking-[.14em] uppercase text-steel">Resumen general</div>
-          <h2 className="font-display text-[24px] mt-0.5">Inicio</h2>
-        </div>
+      <div className="mb-6">
+        <div className="font-mono text-[10.5px] tracking-[.14em] uppercase text-steel">Resumen general</div>
+        <h2 className="font-display text-[24px] mt-0.5">Inicio</h2>
+      </div>
+
+      <div className="flex justify-center mb-6">
         <RecognitionPodium />
       </div>
 
