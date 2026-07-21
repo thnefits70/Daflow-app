@@ -59,7 +59,11 @@ model Department {
   exams        Exam[]
   leaders      User[]      @relation("DeptLeader")
   positions    Position[]
-  financeKpis  FinanceKpiRecord[]
+  financeOperations     FinanceOperation[]
+  financeKpis           FinanceKpiRecord[]
+  financeSharedBalances FinanceSharedMonthlyBalance[]
+  financeKpiUploads     FinanceKpiUpload[]
+  financeKpiSettings    FinanceKpiSettings?
   weeklyMetrics WeeklyMetricRecord[]
   weeklyReviews WeeklyReviewRecord[]
 
@@ -133,6 +137,8 @@ model User {
   suppliersApproved Supplier[] @relation("SupplierApprovedBy")
   payStubs         PayStub[] @relation("PayStubOwner")
   payStubsUploaded PayStub[] @relation("PayStubUploadedBy")
+  financeKpiRecordsUploaded FinanceKpiRecord[] @relation("FinanceKpiRecordUploadedBy")
+  financeKpiUploadsBy       FinanceKpiUpload[] @relation("FinanceKpiUploadUploadedBy")
   confidentialAccess ConfidentialDocumentAccess[]
   monthlyEvaluationsReceived MonthlyEvaluation[]
   monthlyRecognitionResults  MonthlyRecognitionResult[]
@@ -328,28 +334,136 @@ model ExamScore {
   @@index([userId])
 }
 
-/* ---------------- KPIs financieros (histórico mensual por área) ---------------- */
-model FinanceKpiRecord {
+/* ---------------- KPIs financieros (histórico mensual por operación) ---------------- */
+// Catálogo de operaciones/marcas dentro de un departamento (hoy solo lo usa
+// Finanzas y Contabilidad): Provedix, Importadora Damián, e Importadora
+// Shanghai (todavía inactiva). Activar una operación nueva es un simple
+// UPDATE de isActive, no una migración.
+model FinanceOperation {
   id         String     @id @default(cuid())
   deptId     String
   department Department @relation(fields: [deptId], references: [id], onDelete: Cascade)
 
-  // Mes al que corresponde el registro, formato "YYYY-MM"
-  period        String
-  roi           Float?
-  monthlySales  Float?
-  monthlyProfit Float?
-  notes         String   @default("")
+  name     String
+  isActive Boolean @default(true)
+  order    Int     @default(0)
 
-  // Reporte financiero de respaldo (PDF/imagen), opcional
-  fileUrl  String?
-  fileName String?
+  createdAt DateTime @default(now())
+
+  records FinanceKpiRecord[]
+
+  @@unique([deptId, name])
+  @@index([deptId])
+}
+
+// Un registro por operación por mes: los 7 datos crudos que arman el estado
+// de resultados. Utilidad bruta/operativa/neta y márgenes se calculan
+// siempre en el servidor a partir de estos campos — nunca se guardan acá —
+// para no repetir el problema de fórmulas rotas del Excel original. ROI se
+// captura directo, todavía sin un monto de inversión que lo derive.
+model FinanceKpiRecord {
+  id          String           @id @default(cuid())
+  deptId      String
+  department  Department       @relation(fields: [deptId], references: [id], onDelete: Cascade)
+  operationId String
+  operation   FinanceOperation @relation(fields: [operationId], references: [id], onDelete: Cascade)
+
+  // Mes al que corresponde el registro, formato "YYYY-MM"
+  period String
+
+  ventas            Float
+  costoVentas       Float
+  gastosVenta       Float
+  gastosAdmin       Float
+  otrosIngresos     Float
+  gastosFinancieros Float
+  otrosGastos       Float
+  roi               Float?
+
+  // Quién subió/corrigió este registro por última vez — null si lo hizo el
+  // admin directamente (su sesión no tiene un User real, igual que PayStub).
+  uploadedById String?
+  uploadedBy   User?   @relation("FinanceKpiRecordUploadedBy", fields: [uploadedById], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([operationId, period])
+  @@index([deptId])
+  @@index([operationId])
+}
+
+// Saldos compartidos de TODA la operación al cierre del mes — inventario,
+// cuentas por cobrar y cuentas por pagar son de la empresa completa, no se
+// reparten por marca (Provedix e Importadora Damián comparten bodega,
+// cartera y proveedores). Alimentan días de inventario/cartera/proveedores
+// y el ciclo de conversión de efectivo, siempre calculados en Consolidado.
+model FinanceSharedMonthlyBalance {
+  id         String     @id @default(cuid())
+  deptId     String
+  department Department @relation(fields: [deptId], references: [id], onDelete: Cascade)
+
+  period String // "YYYY-MM"
+
+  inventarioFinal  Float?
+  cuentasPorCobrar Float?
+  cuentasPorPagar  Float?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@unique([deptId, period])
   @@index([deptId])
+}
+
+// Historial de cargas — quién subió qué mes y cuándo, y si reemplazó
+// (corrigió) un mes que ya existía. Alimenta "Cargas recientes".
+model FinanceKpiUpload {
+  id         String     @id @default(cuid())
+  deptId     String
+  department Department @relation(fields: [deptId], references: [id], onDelete: Cascade)
+
+  period String // "YYYY-MM"
+
+  uploadedById String?
+  uploadedBy   User?   @relation("FinanceKpiUploadUploadedBy", fields: [uploadedById], references: [id], onDelete: SetNull)
+
+  fileUrl  String?
+  fileName String?
+
+  // true si este mes ya tenía información y esta carga la reemplazó.
+  isCorrection Boolean @default(false)
+
+  createdAt DateTime @default(now())
+
+  @@index([deptId])
+  @@index([period])
+}
+
+// Metas de margen, bandas de ROI, y tasa de impuesto — un registro por
+// departamento, editable desde el dashboard (ej. el campito de tasa de
+// impuesto). Valores por defecto ya confirmados por el admin para Finanzas
+// y Contabilidad.
+model FinanceKpiSettings {
+  id         String     @id @default(cuid())
+  deptId     String     @unique
+  department Department @relation(fields: [deptId], references: [id], onDelete: Cascade)
+
+  targetMargenBruto     Float @default(35)
+  targetMargenOperativo Float @default(15)
+  // Margen neto usa bandas absolutas propias (no un solo "target" relativo
+  // como bruto/operativo): <targetMargenNeto alerta, hasta excelenteMargenNeto
+  // saludable, por encima excelente.
+  targetMargenNeto      Float @default(20)
+  excelenteMargenNeto   Float @default(30)
+
+  roiBandRed    Float @default(10)
+  roiBandYellow Float @default(18)
+  roiBandTarget Float @default(20)
+
+  taxRatePct Float @default(25)
+
+  updatedAt DateTime @updatedAt
 }
 
 /* ---------------- Métrica semanal (ej. pedidos despachados de Fulfillment) ---------------- */

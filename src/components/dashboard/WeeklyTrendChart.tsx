@@ -99,6 +99,10 @@ export function WeeklyTrendChart({
   periodLabel = formatWeekShort,
   latestLabel = "última semana",
   statusFn,
+  valueFormat,
+  colorDotsByDirection = false,
+  compareIndexA,
+  compareIndexB,
 }: {
   label: string;
   deptName: string;
@@ -108,6 +112,19 @@ export function WeeklyTrendChart({
   periodLabel?: (period: string) => string;
   latestLabel?: string;
   statusFn?: (value: number) => { label: string; color: string };
+  // Full override of value formatting (e.g. money "$84,869") — when given,
+  // it replaces the built-in count/percent formatter entirely, including
+  // dropping the "pedidos" suffix that only makes sense for units.
+  valueFormat?: (value: number) => string;
+  // Colors every point's dot green/red by direction vs. the point before it
+  // (not just the traveling animated dot) — used by the finance charts,
+  // left off by default so Pedidos despachados/Fill Rate/Return Rate don't
+  // change look.
+  colorDotsByDirection?: boolean;
+  // Indices into `points` for the gold "A vs B" comparison bracket (finance
+  // dashboard's Analizar/Comparar contra) — omit either to skip it entirely.
+  compareIndexA?: number;
+  compareIndexB?: number;
 }) {
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const [dateTooltipWeek, setDateTooltipWeek] = useState<string | null>(null);
@@ -131,14 +148,18 @@ export function WeeklyTrendChart({
 
   if (points.length === 0) return null;
 
-  const fmt = (v: number) => (format === "percent" ? `${Math.round(v)}%` : v.toLocaleString("es-MX"));
+  const fmt = valueFormat ?? ((v: number) => (format === "percent" ? `${Math.round(v)}%` : v.toLocaleString("es-MX")));
+
+  const hasCompare = compareIndexA !== undefined && compareIndexB !== undefined && compareIndexA !== compareIndexB;
 
   const latest = points[points.length - 1];
   const width = 1000;
   const height = 300;
   const padL = 52;
   const padR = 20;
-  const padT = 16;
+  // Extra headroom reserved for the A/B comparison bracket lane — only
+  // charts that actually pass compareIndexA/B get the taller top margin.
+  const padT = hasCompare ? 34 : 16;
   const padB = 30;
   const innerW = width - padL - padR;
   const innerH = height - padT - padB;
@@ -317,6 +338,22 @@ export function WeeklyTrendChart({
         {coords.map((c, i) => {
           const isLast = i === coords.length - 1;
           const isHover = i === hoverIndex;
+          if (colorDotsByDirection) {
+            const diff = i > 0 ? points[i].value - points[i - 1].value : 0;
+            const dirColor = i === 0 ? "#92A3C0" : diff >= 0 ? "#14C7C7" : "#FF9B90";
+            return (
+              <circle
+                key={i}
+                cx={c.x}
+                cy={c.y}
+                r={isHover ? 6 : 4}
+                fill={dirColor}
+                stroke="#0a1526"
+                strokeWidth={2}
+                pointerEvents="none"
+              />
+            );
+          }
           return (
             <circle
               key={i}
@@ -358,7 +395,7 @@ export function WeeklyTrendChart({
                   {periodLabel(p.week)}
                 </text>
                 <text x={boxX + boxW / 2} y={boxY + 33} textAnchor="middle" fontSize="14" fontWeight="700" fill="#f1f5fb">
-                  {fmt(p.value)}{format !== "percent" && " pedidos"}
+                  {fmt(p.value)}{!valueFormat && format !== "percent" && " pedidos"}
                 </text>
                 {p.detail && (
                   <text x={boxX + boxW / 2} y={boxY + 49} textAnchor="middle" fontSize="10.5" fill="#92a3c0">
@@ -383,6 +420,44 @@ export function WeeklyTrendChart({
                 <text x={boxX + boxW / 2} y={height - 38} textAnchor="middle" fontSize="10.5" fill="#f1f5fb">
                   {rangeLabel}
                 </text>
+              </g>
+            );
+          })()}
+
+        {hasCompare &&
+          (() => {
+            const cA = coords[compareIndexA!];
+            const cB = coords[compareIndexB!];
+            const pA = points[compareIndexA!];
+            const pB = points[compareIndexB!];
+            const left = Math.min(cA.x, cB.x);
+            const right = Math.max(cA.x, cB.x);
+            const bracketY = 14;
+            // Chronological framing: the earlier period is always the
+            // reference, no matter which one is "A" or "B" on screen.
+            const earlierFirst = pA.week <= pB.week;
+            const earlierVal = earlierFirst ? pA.value : pB.value;
+            const laterVal = earlierFirst ? pB.value : pA.value;
+            const diff = laterVal - earlierVal;
+            const pctDiff = earlierVal !== 0 ? (diff / Math.abs(earlierVal)) * 100 : 0;
+            const deltaColor = Math.abs(pctDiff) < 0.5 ? "#92A3C0" : pctDiff >= 0 ? "#14C7C7" : "#FF9B90";
+            const sign = pctDiff >= 0 ? "+" : "";
+            const deltaLabel = `${sign}${pctDiff.toFixed(1)}% (${diff >= 0 ? "+" : ""}${fmt(diff)})`;
+            const mid = (left + right) / 2;
+            const boxW = 34 + deltaLabel.length * 5.4;
+            return (
+              <g pointerEvents="none">
+                <line x1={left} y1={bracketY} x2={right} y2={bracketY} stroke="#D9A441" strokeWidth="1.5" strokeDasharray="3,3" />
+                <line x1={cA.x} y1={bracketY} x2={cA.x} y2={cA.y} stroke="#D9A441" strokeWidth="1" strokeDasharray="2,3" opacity="0.45" />
+                <line x1={cB.x} y1={bracketY} x2={cB.x} y2={cB.y} stroke="#D9A441" strokeWidth="1" strokeDasharray="2,3" opacity="0.45" />
+                <rect x={mid - boxW / 2} y={bracketY - 9} width={boxW} height="15" rx="4" fill="#0a1526" stroke="#D9A441" strokeWidth="1" />
+                <text x={mid} y={bracketY + 2} textAnchor="middle" fontSize="9.5" fontWeight="700" fill={deltaColor}>{deltaLabel}</text>
+                <circle cx={cA.x} cy={bracketY} r="6.5" fill="#D9A441" />
+                <text x={cA.x} y={bracketY + 3} textAnchor="middle" fontSize="8.5" fontWeight="700" fill="#05131f">A</text>
+                <circle cx={cB.x} cy={bracketY} r="6.5" fill="none" stroke="#D9A441" strokeWidth="1.5" />
+                <text x={cB.x} y={bracketY + 3} textAnchor="middle" fontSize="8.5" fontWeight="700" fill="#D9A441">B</text>
+                <circle cx={cA.x} cy={cA.y} r="6" fill="none" stroke="#D9A441" strokeWidth="2" />
+                <circle cx={cB.x} cy={cB.y} r="6" fill="none" stroke="#D9A441" strokeWidth="2" strokeDasharray="2,2" />
               </g>
             );
           })()}

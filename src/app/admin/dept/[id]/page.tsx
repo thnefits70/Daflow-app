@@ -2,13 +2,14 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { TopLine } from "@/components/ui/TopLine";
 import { DeptWorkspaceTabs } from "@/components/dept/DeptWorkspaceTabs";
+import { getFinanceKpiData } from "@/lib/financeKpis";
 
 export default async function DeptWorkspacePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const dept = await prisma.department.findUnique({ where: { id } });
   if (!dept) notFound();
 
-  const [processes, documents, exams, kpiRecords, weeklyMetricRecords, weeklyReviewRecords] = await Promise.all([
+  const [processes, documents, exams, financeKpiData, weeklyMetricRecords, weeklyReviewRecords] = await Promise.all([
     prisma.process.findMany({
       where: { deptId: id },
       orderBy: { createdAt: "asc" },
@@ -20,9 +21,7 @@ export default async function DeptWorkspacePage({ params }: { params: Promise<{ 
       orderBy: { createdAt: "asc" },
       include: { _count: { select: { questions: true } } },
     }),
-    dept.trackKpis
-      ? prisma.financeKpiRecord.findMany({ where: { deptId: id }, orderBy: { period: "asc" } })
-      : Promise.resolve([]),
+    dept.trackKpis ? getFinanceKpiData(id) : Promise.resolve(undefined),
     dept.trackWeeklyMetric
       ? prisma.weeklyMetricRecord.findMany({ where: { deptId: id }, orderBy: { week: "asc" } })
       : Promise.resolve([]),
@@ -54,16 +53,7 @@ export default async function DeptWorkspacePage({ params }: { params: Promise<{ 
         }))}
         exams={exams.map((e) => ({ id: e.id, title: e.title, questionCount: e._count.questions }))}
         trackKpis={dept.trackKpis}
-        kpiRecords={kpiRecords.map((k) => ({
-          id: k.id,
-          period: k.period,
-          roi: k.roi,
-          monthlySales: k.monthlySales,
-          monthlyProfit: k.monthlyProfit,
-          notes: k.notes,
-          fileUrl: k.fileUrl,
-          fileName: k.fileName,
-        }))}
+        financeKpiData={financeKpiData}
         trackWeeklyMetric={dept.trackWeeklyMetric}
         weeklyMetricRecords={weeklyMetricRecords.map((w) => ({ id: w.id, week: w.week, value: w.value, notDispatched: w.notDispatched }))}
         trackWeeklyReview={dept.trackWeeklyReview}

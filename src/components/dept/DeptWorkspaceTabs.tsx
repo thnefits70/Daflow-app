@@ -6,7 +6,8 @@ import { GitBranch, FileText, GraduationCap, LineChart, TrendingUp, MessageSquar
 import { ProcessListPanel } from "@/components/process/ProcessListPanel";
 import { DocumentsPanel } from "@/components/documents/DocumentsPanel";
 import { ExamsPanel } from "@/components/exams/ExamsPanel";
-import { FinanceKpiPanel, type FinanceKpiDTO } from "@/components/finance/FinanceKpiPanel";
+import { FinanceKpiWorkspace } from "@/components/finance/FinanceKpiWorkspace";
+import type { FinanceKpiDataDTO } from "@/lib/financeKpis";
 import { WeeklyMetricPanel, type WeeklyMetricDTO } from "@/components/fulfillment/WeeklyMetricPanel";
 import { WeeklyReviewPanel, type WeeklyReviewDTO } from "@/components/marketanalysis/WeeklyReviewPanel";
 
@@ -32,7 +33,7 @@ export function DeptWorkspaceTabs({
   documents,
   exams,
   trackKpis = false,
-  kpiRecords = [],
+  financeKpiData,
   trackWeeklyMetric = false,
   weeklyMetricRecords = [],
   trackWeeklyReview = false,
@@ -47,7 +48,7 @@ export function DeptWorkspaceTabs({
   documents: DocumentDTO[];
   exams: ExamSummary[];
   trackKpis?: boolean;
-  kpiRecords?: FinanceKpiDTO[];
+  financeKpiData?: FinanceKpiDataDTO;
   trackWeeklyMetric?: boolean;
   weeklyMetricRecords?: WeeklyMetricDTO[];
   trackWeeklyReview?: boolean;
@@ -99,8 +100,8 @@ export function DeptWorkspaceTabs({
       )}
       {tab === "documentos" && <DocumentsPanel deptId={deptId} documents={documents} editable={editable} />}
       {tab === "examenes" && <ExamsPanel deptId={deptId} exams={exams} editable={editable} />}
-      {tab === "kpis" && trackKpis && (
-        <FinanceKpiPanel deptId={deptId} records={kpiRecords} editable={kpisEditable ?? editable} />
+      {tab === "kpis" && trackKpis && financeKpiData && (
+        <FinanceKpiWorkspace deptId={deptId} data={financeKpiData} editable={kpisEditable ?? editable} />
       )}
       {tab === "semanal" && trackWeeklyMetric && (
         <WeeklyMetricPanel
