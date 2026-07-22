@@ -440,7 +440,7 @@ function isWeekend(date: Date): boolean {
 // authoritative calendar.
 const FIXED_ECUADOR_HOLIDAYS = ["01-01", "05-01", "05-24", "08-10", "10-09", "11-02", "11-03", "12-25"];
 
-function isFixedHoliday(date: Date): boolean {
+export function isFixedHoliday(date: Date): boolean {
   const md = `${String(date.getUTCMonth() + 1).padStart(2, "0")}-${String(date.getUTCDate()).padStart(2, "0")}`;
   return FIXED_ECUADOR_HOLIDAYS.includes(md);
 }

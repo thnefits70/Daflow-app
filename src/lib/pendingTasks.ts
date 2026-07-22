@@ -1,5 +1,6 @@
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { isFixedHoliday } from "@/lib/recognition";
 
 // ---------------- Date helpers ----------------
 // Deadline rule confirmed by the user 2026-07-20: work week is Mon-Sat, and
@@ -101,6 +102,35 @@ function firstMondayOfMonth(month: string): Date {
 function monthDeadlinePassed(month: string): boolean {
   // Deadline for `month`'s data = first Monday of the following month.
   const deadline = firstMondayOfMonth(nextMonthStr(month));
+  return nowInEcuador() >= deadline;
+}
+
+// Company work week is Mon-Sat (confirmed 2026-07-20) — only Sunday and
+// Ecuadorian national holidays (fixed-date list shared with
+// src/lib/recognition.ts) are non-business days here. Deliberately not the
+// same "weekend" definition as recognition.ts's isBusinessDay (which treats
+// Saturday as off, for a different, unrelated deadline).
+function isCompanyBusinessDay(date: Date): boolean {
+  return date.getUTCDay() !== 0 && !isFixedHoliday(date);
+}
+
+function nthDayOfMonth(month: string, day: number): Date {
+  const [y, m] = month.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, day));
+}
+
+function rollToNextBusinessDay(date: Date): Date {
+  let d = date;
+  while (!isCompanyBusinessDay(d)) d = new Date(d.getTime() + 86400000);
+  return d;
+}
+
+// Some monthly items have their own fixed check-in day instead of "first
+// Monday of next month" — e.g. Roles de pago (día 3) and Tasa de Devolución
+// (día 4) for Nairoby, confirmed 2026-07-22. If that day itself isn't a
+// business day, the alert simply starts the next business day instead.
+function fixedDayDeadlinePassed(month: string, day: number): boolean {
+  const deadline = rollToNextBusinessDay(nthDayOfMonth(month, day));
   return nowInEcuador() >= deadline;
 }
 
@@ -289,14 +319,14 @@ async function countMissingPayStubs(month: number, year: number): Promise<number
   return activeUsers.filter((u) => !stubUserIds.has(u.id)).length;
 }
 
-// Same rule as weekly/monthlyPendingStatus: only surfaces once the previous
-// month's deadline has actually passed and people are still missing — no
-// early heads-up for the current, still-in-progress month.
+// Only surfaces once the fixed check-in day for the current month has
+// passed (día 3, confirmed 2026-07-22) and people are still missing — no
+// early heads-up before then.
 async function getPayStubPendingItem(href: string): Promise<PendingItem | null> {
   const today = currentMonthStr();
   const prev = prevMonthStr(today);
 
-  if (monthDeadlinePassed(prev)) {
+  if (fixedDayDeadlinePassed(today, 3)) {
     const [py, pm] = prev.split("-").map(Number);
     const missing = await countMissingPayStubs(pm, py);
     if (missing > 0) {
@@ -312,16 +342,22 @@ async function getPayStubPendingItem(href: string): Promise<PendingItem | null> 
   return null;
 }
 
+// Fixed check-in day for the current month (día 4, confirmed 2026-07-22),
+// same pattern as getPayStubPendingItem — not the generic
+// monthlyPendingStatus ("first Monday of next month") that Warranty still uses.
 async function getReturnRatePendingItem(href: string): Promise<PendingItem | null> {
-  const status = await monthlyPendingStatus(async (month) => !!(await prisma.returnRateRecord.findUnique({ where: { month } })));
-  if (!status) return null;
-  return {
-    icon: "📉",
-    label: "Tasa de Devolución General",
-    meta: `${formatMonthLabel(status.month)} · atrasado`,
-    overdue: status.overdue,
-    href,
-  };
+  const today = currentMonthStr();
+  const prev = prevMonthStr(today);
+  if (fixedDayDeadlinePassed(today, 4) && !(await prisma.returnRateRecord.findUnique({ where: { month: prev } }))) {
+    return {
+      icon: "📉",
+      label: "Tasa de Devolución General",
+      meta: `${formatMonthLabel(prev)} · atrasado`,
+      overdue: true,
+      href,
+    };
+  }
+  return null;
 }
 
 async function getWarrantyPendingItem(href: string): Promise<PendingItem | null> {
