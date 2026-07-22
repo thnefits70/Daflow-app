@@ -99,13 +99,17 @@ function monthDeadlinePassed(month: string): boolean {
 }
 
 // ---------------- Generic period-status resolvers ----------------
+// Only ever surfaces something once it's genuinely overdue (previous
+// period's deadline already passed and still empty) — never a heads-up for
+// the still-in-progress current period. The user explicitly doesn't want to
+// see a reminder at all while they're on time; it should only appear once
+// they're actually behind.
 async function weeklyPendingStatus(
   exists: (week: string) => Promise<boolean>
 ): Promise<{ week: string; overdue: boolean } | null> {
   const today = isoWeekOf(nowInEcuador());
   const prev = prevIsoWeek(today);
   if (!(await exists(prev))) return { week: prev, overdue: true };
-  if (!(await exists(today))) return { week: today, overdue: false };
   return null;
 }
 
@@ -115,7 +119,6 @@ async function monthlyPendingStatus(
   const today = currentMonthStr();
   const prev = prevMonthStr(today);
   if (monthDeadlinePassed(prev) && !(await exists(prev))) return { month: prev, overdue: true };
-  if (!(await exists(today))) return { month: today, overdue: false };
   return null;
 }
 
@@ -152,7 +155,7 @@ async function getFeedbackPendingItems(): Promise<PendingItem[]> {
       items.push({
         icon: "📝",
         label: `Feedback semanal — ${d.name}`,
-        meta: `${formatWeekLabel(status.week)}${status.overdue ? " · atrasado" : " · sin registrar"}`,
+        meta: `${formatWeekLabel(status.week)} · atrasado`,
         overdue: status.overdue,
         href: `/admin/dept/${d.id}`,
       });
@@ -170,7 +173,7 @@ async function getWeeklyMetricPendingItem(deptId: string, href: string): Promise
   return {
     icon: "📦",
     label: "Pedidos despachados / Fill Rate",
-    meta: `${formatWeekLabel(status.week)}${status.overdue ? " · atrasado" : " · sin registrar"}`,
+    meta: `${formatWeekLabel(status.week)} · atrasado`,
     overdue: status.overdue,
     href,
   };
@@ -188,7 +191,7 @@ async function getStockoutPendingItem(href: string): Promise<PendingItem | null>
   return {
     icon: "🗃️",
     label: "Ruptura de Stock",
-    meta: `${formatWeekLabel(status.week)}${status.overdue ? " · atrasado" : " · sin confirmar"}`,
+    meta: `${formatWeekLabel(status.week)} · atrasado`,
     overdue: status.overdue,
     href,
   };
@@ -203,6 +206,9 @@ async function countMissingPayStubs(month: number, year: number): Promise<number
   return activeUsers.filter((u) => !stubUserIds.has(u.id)).length;
 }
 
+// Same rule as weekly/monthlyPendingStatus: only surfaces once the previous
+// month's deadline has actually passed and people are still missing — no
+// early heads-up for the current, still-in-progress month.
 async function getPayStubPendingItem(href: string): Promise<PendingItem | null> {
   const today = currentMonthStr();
   const prev = prevMonthStr(today);
@@ -220,17 +226,6 @@ async function getPayStubPendingItem(href: string): Promise<PendingItem | null> 
       };
     }
   }
-  const [cy, cm] = today.split("-").map(Number);
-  const missingCurrent = await countMissingPayStubs(cm, cy);
-  if (missingCurrent > 0) {
-    return {
-      icon: "💳",
-      label: "Roles de pago",
-      meta: `Faltan ${missingCurrent} persona${missingCurrent === 1 ? "" : "s"} este mes`,
-      overdue: false,
-      href,
-    };
-  }
   return null;
 }
 
@@ -240,7 +235,7 @@ async function getReturnRatePendingItem(href: string): Promise<PendingItem | nul
   return {
     icon: "📉",
     label: "Tasa de Devolución General",
-    meta: `${formatMonthLabel(status.month)}${status.overdue ? " · atrasado" : " · sin registrar"}`,
+    meta: `${formatMonthLabel(status.month)} · atrasado`,
     overdue: status.overdue,
     href,
   };
@@ -252,7 +247,7 @@ async function getWarrantyPendingItem(href: string): Promise<PendingItem | null>
   return {
     icon: "🛡️",
     label: "KPI de Garantías",
-    meta: `${formatMonthLabel(status.month)}${status.overdue ? " · atrasado" : " · sin registrar"}`,
+    meta: `${formatMonthLabel(status.month)} · atrasado`,
     overdue: status.overdue,
     href,
   };
