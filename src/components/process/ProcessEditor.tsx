@@ -16,7 +16,7 @@ import {
   type Connection,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { Plus, Trash2, CheckCircle2, Circle, ArrowLeft, Upload, X, Download } from "lucide-react";
+import { Plus, Trash2, CheckCircle2, Circle, ArrowLeft, Upload, X, Download, Maximize2 } from "lucide-react";
 import Link from "next/link";
 import { IsoNode, SHAPE_LABEL, type IsoShapeType, type IsoNodeData } from "./IsoNode";
 
@@ -114,6 +114,7 @@ export function ProcessEditor({
   const [title, setTitle] = useState(process.title);
   const [description, setDescription] = useState(process.description);
   const [checked, setChecked] = useState<Set<string>>(new Set());
+  const [fullscreen, setFullscreen] = useState(false);
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node<IsoNodeData>>(stepsToNodes(process.flowSteps));
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>(stepsToEdges(process.flowSteps));
@@ -288,8 +289,17 @@ export function ProcessEditor({
   };
 
   return (
-    <div>
-      {!hideBackLink && (
+    <div className={fullscreen ? "fixed inset-0 z-[200] bg-bg overflow-y-auto p-6" : ""}>
+      {fullscreen && (
+        <button
+          type="button"
+          onClick={() => setFullscreen(false)}
+          className="fixed top-4 right-4 z-10 inline-flex items-center gap-1.5 rounded border border-rule bg-surface px-3 py-1.5 text-[12.5px] font-semibold cursor-pointer hover:border-blue"
+        >
+          <X size={14} /> Cerrar
+        </button>
+      )}
+      {!hideBackLink && !fullscreen && (
         <Link href={backHref} className="inline-flex items-center gap-1.5 text-[13px] text-steel hover:text-ink mb-4.5">
           <ArrowLeft size={14} /> Volver
         </Link>
@@ -332,7 +342,17 @@ export function ProcessEditor({
       )}
 
       <div className="grid grid-cols-[1fr_280px] gap-3 min-w-0">
-        <div className="bg-white border border-[#D6DEEA] rounded min-w-0" style={{ height: 480, width: "100%" }}>
+        <div className="relative bg-white border border-[#D6DEEA] rounded min-w-0" style={{ height: fullscreen ? "calc(100vh - 130px)" : 480, width: "100%" }}>
+          {!fullscreen && (
+            <button
+              type="button"
+              onClick={() => setFullscreen(true)}
+              title="Ver a pantalla completa"
+              className="absolute top-2 right-2 z-10 inline-flex items-center justify-center rounded border border-[#D6DEEA] bg-white p-1.5 text-[#0B1F3A] shadow-sm cursor-pointer hover:border-blue"
+            >
+              <Maximize2 size={15} />
+            </button>
+          )}
           <ReactFlow
             nodes={nodes}
             edges={edges}
