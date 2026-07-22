@@ -26,6 +26,12 @@ function pad2(n: number) {
   return String(n).padStart(2, "0");
 }
 
+// ISO weekday of `date` (1=Monday ... 7=Sunday), same UTC-safe conversion
+// `isoWeekOf` already uses.
+function isoWeekdayOf(date: Date): number {
+  return date.getUTCDay() || 7;
+}
+
 function isoWeekOf(date: Date): string {
   const d = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
   const dayNum = d.getUTCDay() || 7;
@@ -104,10 +110,19 @@ function monthDeadlinePassed(month: string): boolean {
 // the still-in-progress current period. The user explicitly doesn't want to
 // see a reminder at all while they're on time; it should only appear once
 // they're actually behind.
+// `reviewWeekday` (1=Monday...7=Sunday) is when THIS particular reminder is
+// allowed to start appearing at all — e.g. the admin's actual meeting day
+// with that department's leader — not just "the new week began". Before
+// that weekday arrives, stays silent even if the previous week is empty.
+// Defaults to Monday, which is the original, still-correct rule for every
+// weekly item that isn't tied to a specific meeting day.
 async function weeklyPendingStatus(
-  exists: (week: string) => Promise<boolean>
+  exists: (week: string) => Promise<boolean>,
+  reviewWeekday: number = 1
 ): Promise<{ week: string; overdue: boolean } | null> {
-  const today = isoWeekOf(nowInEcuador());
+  const now = nowInEcuador();
+  if (isoWeekdayOf(now) < reviewWeekday) return null;
+  const today = isoWeekOf(now);
   const prev = prevIsoWeek(today);
   if (!(await exists(prev))) return { week: prev, overdue: true };
   return null;
@@ -133,6 +148,18 @@ export type PendingItem = {
 
 export type PendingTasks = { title: string; sub: string; items: PendingItem[] };
 
+// Each department's admin-leader feedback meeting falls on a different
+// weekday — confirmed by the user 2026-07-21: Análisis de Mercado (Bryan)
+// martes, Fulfillment/Inventario jueves, Diseño - Marketing (Marcos)
+// viernes. Anything not listed here defaults to Monday in
+// weeklyPendingStatus. Update this map if a meeting day ever changes.
+const FEEDBACK_REVIEW_WEEKDAY: Record<string, number> = {
+  MKT: 2,
+  FUL: 4,
+  INV: 4,
+  DIS: 5,
+};
+
 // ---------------- Per-source checks ----------------
 async function getFeedbackPendingItems(): Promise<PendingItem[]> {
   // A department with no active leader has nobody to have the admin-leader
@@ -141,7 +168,7 @@ async function getFeedbackPendingItems(): Promise<PendingItem[]> {
   // is marked as that department's leader.
   const depts = await prisma.department.findMany({
     where: { trackWeeklyReview: true, leaders: { some: { isLeader: true, isActive: true } } },
-    select: { id: true, name: true },
+    select: { id: true, name: true, code: true },
     orderBy: { order: "asc" },
   });
 
@@ -150,7 +177,7 @@ async function getFeedbackPendingItems(): Promise<PendingItem[]> {
     const status = await weeklyPendingStatus(async (week) => {
       const count = await prisma.weeklyReviewRecord.count({ where: { deptId: d.id, week } });
       return count > 0;
-    });
+    }, FEEDBACK_REVIEW_WEEKDAY[d.code] ?? 1);
     if (status) {
       items.push({
         icon: "📝",
