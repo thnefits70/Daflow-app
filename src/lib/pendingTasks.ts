@@ -137,6 +137,37 @@ async function monthlyPendingStatus(
   return null;
 }
 
+// n-th (1-based) occurrence of `weekday` (1=Monday...7=Sunday) within
+// `month` ("YYYY-MM") — e.g. the 4th Thursday.
+function nthWeekdayOfMonth(month: string, weekday: number, n: number): Date {
+  const [y, m] = month.split("-").map(Number);
+  const first = new Date(Date.UTC(y, m - 1, 1));
+  const firstWeekday = first.getUTCDay() || 7;
+  let offset = weekday - firstWeekday;
+  if (offset < 0) offset += 7;
+  first.setUTCDate(1 + offset + (n - 1) * 7);
+  return first;
+}
+
+// Some departments only meet the admin once a month, not weekly — e.g.
+// Finanzas y Contabilidad with Nairoby, confirmed 2026-07-21: the 4th
+// Thursday of every month. The alert appears starting that day, checks
+// whether that month's review is already filled, and disappears once it
+// is — never a weekly nag for a once-a-month relationship.
+async function monthlyReviewStatus(
+  exists: (week: string) => Promise<boolean>,
+  weekday: number,
+  occurrence: number
+): Promise<{ month: string; overdue: boolean } | null> {
+  const now = nowInEcuador();
+  const month = currentMonthStr();
+  const meetingDate = nthWeekdayOfMonth(month, weekday, occurrence);
+  if (now < meetingDate) return null;
+  const week = isoWeekOf(meetingDate);
+  if (!(await exists(week))) return { month, overdue: true };
+  return null;
+}
+
 // ---------------- Public types ----------------
 export type PendingItem = {
   icon: string;
@@ -160,6 +191,14 @@ const FEEDBACK_REVIEW_WEEKDAY: Record<string, number> = {
   DIS: 5,
 };
 
+// Departments the admin meets only once a month instead of weekly —
+// confirmed by the user 2026-07-21: Finanzas y Contabilidad (Nairoby), the
+// 4th Thursday of every month. Handled via monthlyReviewStatus instead of
+// weeklyPendingStatus/FEEDBACK_REVIEW_WEEKDAY.
+const FEEDBACK_MONTHLY_REVIEW: Record<string, { weekday: number; occurrence: number }> = {
+  FIN: { weekday: 4, occurrence: 4 },
+};
+
 // ---------------- Per-source checks ----------------
 async function getFeedbackPendingItems(): Promise<PendingItem[]> {
   // A department with no active leader has nobody to have the admin-leader
@@ -174,10 +213,27 @@ async function getFeedbackPendingItems(): Promise<PendingItem[]> {
 
   const items: PendingItem[] = [];
   for (const d of depts) {
-    const status = await weeklyPendingStatus(async (week) => {
+    const monthlyCfg = FEEDBACK_MONTHLY_REVIEW[d.code];
+    const existsFn = async (week: string) => {
       const count = await prisma.weeklyReviewRecord.count({ where: { deptId: d.id, week } });
       return count > 0;
-    }, FEEDBACK_REVIEW_WEEKDAY[d.code] ?? 1);
+    };
+
+    if (monthlyCfg) {
+      const status = await monthlyReviewStatus(existsFn, monthlyCfg.weekday, monthlyCfg.occurrence);
+      if (status) {
+        items.push({
+          icon: "📝",
+          label: `Feedback mensual — ${d.name}`,
+          meta: `${formatMonthLabel(status.month)} · atrasado`,
+          overdue: status.overdue,
+          href: `/admin/dept/${d.id}`,
+        });
+      }
+      continue;
+    }
+
+    const status = await weeklyPendingStatus(existsFn, FEEDBACK_REVIEW_WEEKDAY[d.code] ?? 1);
     if (status) {
       items.push({
         icon: "📝",
