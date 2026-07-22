@@ -1,7 +1,8 @@
-// Server-only (prisma). No reference/expected amount is ever stored on the
-// reminder itself — confirmed 2026-07-22: amounts vary every month, so the
-// real amount is entered manually each time it's marked "Realizado"
-// (PaymentReminderRecord.amountPaid), never pre-filled.
+// Server-only (prisma). Each reminder keeps a persistent reference amount
+// (confirmed 2026-07-22) — it stays the same month to month unless someone
+// deliberately edits it (a real price change), and pre-fills the "Realizado"
+// amount without forcing it: the actual PaymentReminderRecord.amountPaid can
+// still be adjusted for a one-off month without touching the reference.
 import { prisma } from "@/lib/prisma";
 
 export type PaymentReminderRecordDTO = {
@@ -14,6 +15,7 @@ export type PaymentReminderRecordDTO = {
 export type PaymentReminderDTO = {
   id: string;
   name: string;
+  amount: number | null;
   paymentMethod: string | null;
   dueDay: number;
   reminderStartDay: number;
@@ -33,6 +35,7 @@ export async function getPaymentRemindersData(deptId: string): Promise<PaymentRe
   return reminders.map((r) => ({
     id: r.id,
     name: r.name,
+    amount: r.amount,
     paymentMethod: r.paymentMethod,
     dueDay: r.dueDay,
     reminderStartDay: r.reminderStartDay,

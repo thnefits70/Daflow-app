@@ -358,9 +358,11 @@ async function getWarrantyPendingItem(href: string): Promise<PendingItem | null>
 }
 
 // Each active payment reminder has its own reminderStartDay (día del mes
-// desde el cual empieza a recordar, confirmed 2026-07-22) — no fixed amount
-// shown here since it's entered manually only when marking "Realizado".
-// Several can be pending at once, unlike the other Finance checks.
+// desde el cual empieza a recordar, confirmed 2026-07-22). Several can be
+// pending at once, unlike the other Finance checks. Shows the reference
+// amount (confirmed 2026-07-22) when one is set, so admin/Nairoby can see
+// how much is owed right from the Inicio pendientes card, not just inside
+// the tab.
 async function getPaymentReminderPendingItems(deptId: string, href: string): Promise<PendingItem[]> {
   const reminders = await prisma.paymentReminder.findMany({ where: { deptId, isActive: true } });
   if (reminders.length === 0) return [];
@@ -376,10 +378,11 @@ async function getPaymentReminderPendingItems(deptId: string, href: string): Pro
       where: { reminderId_period: { reminderId: r.id, period } },
     });
     if (record) continue;
+    const amountLabel = r.amount != null ? ` · $${r.amount.toFixed(2)}` : "";
     items.push({
       icon: "💳",
       label: r.name,
-      meta: `Vence el día ${r.dueDay}${r.paymentMethod ? " · " + r.paymentMethod : ""} · atrasado`,
+      meta: `Vence el día ${r.dueDay}${amountLabel}${r.paymentMethod ? " · " + r.paymentMethod : ""} · atrasado`,
       overdue: true,
       href,
     });

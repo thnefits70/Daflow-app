@@ -462,14 +462,17 @@ model FinanceKpiSettings {
 
 // Pagos mensuales variados (suscripciones, servicios, tarjetas...) que se
 // dan de alta/baja con el tiempo — confirmado 2026-07-22, solo Finanzas y
-// Contabilidad por ahora. Sin monto de referencia a propósito: cada mes se
-// ingresa manualmente el monto real al marcar "Realizado" (PaymentReminderRecord),
-// porque los montos varían mes a mes.
+// Contabilidad por ahora. `amount` es un monto de referencia que se queda
+// fijo mes a mes (editable en cualquier momento si sube/baja de verdad) —
+// distinto del monto real registrado en PaymentReminderRecord.amountPaid,
+// que se precarga con esta referencia pero se puede ajustar sin tocarla,
+// para el mes puntual en que varíe.
 model PaymentReminder {
   id         String     @id @default(cuid())
   deptId     String
   department Department @relation(fields: [deptId], references: [id], onDelete: Cascade)
   name       String // empresa/plataforma a la que se paga
+  amount        Float? // monto de referencia, editable, no cambia solo
   paymentMethod String?
   dueDay           Int // día del mes de vencimiento (1-31, se recorta al último día real del mes)
   reminderStartDay Int // día del mes desde el cual empieza a aparecer en pendientes

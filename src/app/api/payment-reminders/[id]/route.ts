@@ -5,6 +5,7 @@ import { canEditDeptKpis } from "@/lib/guards";
 
 const updateSchema = z.object({
   name: z.string().trim().min(1).optional(),
+  amount: z.number().positive().nullable().optional(),
   paymentMethod: z.string().trim().optional().nullable(),
   dueDay: z.number().int().min(1).max(31).optional(),
   reminderStartDay: z.number().int().min(1).max(31).optional(),
@@ -28,6 +29,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     where: { id },
     data: {
       ...(data.name !== undefined ? { name: data.name } : {}),
+      ...(data.amount !== undefined ? { amount: data.amount } : {}),
       ...(data.paymentMethod !== undefined ? { paymentMethod: data.paymentMethod || null } : {}),
       ...(data.dueDay !== undefined ? { dueDay: data.dueDay } : {}),
       ...(data.reminderStartDay !== undefined ? { reminderStartDay: data.reminderStartDay } : {}),
