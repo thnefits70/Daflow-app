@@ -62,6 +62,11 @@ export function NominaGrid({
 
   const deptById = (id: string | null) => departments.find((d) => d.id === id);
 
+  const [tab, setTab] = useState<"active" | "inactive">("active");
+  const activeUsers = users.filter((u) => u.isActive);
+  const inactiveUsers = users.filter((u) => !u.isActive);
+  const shown = tab === "active" ? activeUsers : inactiveUsers;
+
   return (
     <div>
       <div className="text-[13px] text-steel mb-4.5 max-w-2xl">
@@ -96,14 +101,35 @@ export function NominaGrid({
         {err && <div className="text-red text-[12.5px] mt-2">{err}</div>}
       </div>
 
-      {users.length === 0 && (
+      <div className="flex gap-2 mb-4">
+        <button
+          type="button"
+          onClick={() => setTab("active")}
+          className={`rounded-full px-3.5 py-1.5 text-[12.5px] font-semibold border cursor-pointer ${
+            tab === "active" ? "bg-blue border-blue text-white" : "border-rule text-steel hover:border-blue"
+          }`}
+        >
+          Activos ({activeUsers.length})
+        </button>
+        <button
+          type="button"
+          onClick={() => setTab("inactive")}
+          className={`rounded-full px-3.5 py-1.5 text-[12.5px] font-semibold border cursor-pointer ${
+            tab === "inactive" ? "bg-blue border-blue text-white" : "border-rule text-steel hover:border-blue"
+          }`}
+        >
+          Inactivos ({inactiveUsers.length})
+        </button>
+      </div>
+
+      {shown.length === 0 && (
         <div className="border-[1.5px] border-dashed border-rule rounded-md p-8.5 text-center text-steel text-[13.5px]">
-          Aún no hay personas registradas.
+          {tab === "active" ? "Aún no hay personas registradas." : "No hay personas inactivas."}
         </div>
       )}
 
       <div className="grid grid-cols-4 gap-3">
-        {users.map((u) => (
+        {shown.map((u) => (
           <Link
             key={u.id}
             href={`${basePath}/${u.id}`}
