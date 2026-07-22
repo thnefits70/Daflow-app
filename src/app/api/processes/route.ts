@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
   const processes = await prisma.process.findMany({
     where: { deptId },
     orderBy: { createdAt: "asc" },
-    include: { _count: { select: { flowSteps: true, checklistItems: true } } },
+    include: { _count: { select: { flowSteps: true } } },
   });
 
   return NextResponse.json(
@@ -28,7 +28,6 @@ export async function GET(req: NextRequest) {
       title: p.title,
       description: p.description,
       stepCount: p._count.flowSteps,
-      checklistCount: p._count.checklistItems,
     }))
   );
 }

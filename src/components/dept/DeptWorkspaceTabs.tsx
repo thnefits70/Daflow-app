@@ -3,7 +3,9 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { GitBranch, FileText, GraduationCap, LineChart, TrendingUp, MessageSquare } from "lucide-react";
-import { ProcessListPanel } from "@/components/process/ProcessListPanel";
+import { ProcessEmbeddedPanel } from "@/components/process/ProcessEmbeddedPanel";
+import type { ProcessDTO } from "@/components/process/ProcessEditor";
+import type { ProcessUpdateDTO } from "@/components/process/ProcessHistoryPanel";
 import { DocumentsPanel } from "@/components/documents/DocumentsPanel";
 import { ExamsPanel } from "@/components/exams/ExamsPanel";
 import { FinanceKpiWorkspace } from "@/components/finance/FinanceKpiWorkspace";
@@ -11,7 +13,6 @@ import type { FinanceKpiDataDTO } from "@/lib/financeKpis";
 import { WeeklyMetricPanel, type WeeklyMetricDTO } from "@/components/fulfillment/WeeklyMetricPanel";
 import { WeeklyReviewPanel, type WeeklyReviewDTO } from "@/components/marketanalysis/WeeklyReviewPanel";
 
-type ProcessSummary = { id: string; title: string; description: string; stepCount: number; checklistCount: number };
 type DocumentDTO = { id: string; title: string; content: string; link: string; fileUrl: string | null; fileName: string | null };
 type ExamSummary = { id: string; title: string; questionCount: number };
 
@@ -28,8 +29,8 @@ type TabKey = (typeof ALL_TABS)[number]["key"];
 
 export function DeptWorkspaceTabs({
   deptId,
-  processesBaseHref,
-  processes,
+  activeProcess,
+  processUpdates = [],
   documents,
   exams,
   trackKpis = false,
@@ -43,8 +44,8 @@ export function DeptWorkspaceTabs({
   unseenFeedbackCount = 0,
 }: {
   deptId: string;
-  processesBaseHref: string;
-  processes: ProcessSummary[];
+  activeProcess: ProcessDTO | null;
+  processUpdates?: ProcessUpdateDTO[];
   documents: DocumentDTO[];
   exams: ExamSummary[];
   trackKpis?: boolean;
@@ -96,7 +97,7 @@ export function DeptWorkspaceTabs({
       </div>
 
       {tab === "procesos" && (
-        <ProcessListPanel deptId={deptId} editable={editable} baseHref={processesBaseHref} processes={processes} />
+        <ProcessEmbeddedPanel deptId={deptId} process={activeProcess} updates={processUpdates} editable={editable} />
       )}
       {tab === "documentos" && <DocumentsPanel deptId={deptId} documents={documents} editable={editable} />}
       {tab === "examenes" && <ExamsPanel deptId={deptId} exams={exams} editable={editable} />}

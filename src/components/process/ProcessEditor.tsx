@@ -42,13 +42,11 @@ type FlowStepDTO = {
   branches: Branch[];
   checklistItems?: StepChecklistItemDTO[];
 };
-type ChecklistItemDTO = { id: string; text: string };
 export type ProcessDTO = {
   id: string;
   title: string;
   description: string;
   flowSteps: FlowStepDTO[];
-  checklistItems: ChecklistItemDTO[];
 };
 
 const TOOLBAR_SHAPES: IsoShapeType[] = [
@@ -115,7 +113,6 @@ export function ProcessEditor({
   const router = useRouter();
   const [title, setTitle] = useState(process.title);
   const [description, setDescription] = useState(process.description);
-  const [checklist, setChecklist] = useState<{ id: string; text: string }[]>(process.checklistItems);
   const [checked, setChecked] = useState<Set<string>>(new Set());
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node<IsoNodeData>>(stepsToNodes(process.flowSteps));
@@ -181,12 +178,6 @@ export function ProcessEditor({
     setSelectedEdgeId(null);
   };
 
-  const addChecklistItem = () =>
-    setChecklist((c) => [...c, { id: crypto.randomUUID(), text: "Nuevo punto de verificación" }]);
-  const updateChecklistItem = (id: string, text: string) =>
-    setChecklist((c) => c.map((item) => (item.id === id ? { ...item, text } : item)));
-  const removeChecklistItem = (id: string) => setChecklist((c) => c.filter((item) => item.id !== id));
-
   // --- Checklist items scoped to the currently selected CHECKLIST-type node ---
   const addNodeChecklistItem = () => {
     if (!selectedNodeId) return;
@@ -251,7 +242,6 @@ export function ProcessEditor({
       body: JSON.stringify({
         title,
         description,
-        checklist: checklist.map((c) => ({ text: c.text })),
         flow: {
           nodes: nodes.map((n) => ({
             clientId: n.id,
@@ -291,7 +281,6 @@ export function ProcessEditor({
     const fresh: ProcessDTO = await fetch(`/api/processes/${process.id}`).then((r) => r.json());
     setNodes(stepsToNodes(fresh.flowSteps));
     setEdges(stepsToEdges(fresh.flowSteps));
-    setChecklist(fresh.checklistItems);
     setSelectedNodeId(null);
     setSelectedEdgeId(null);
     setSavedAt(Date.now());
@@ -562,60 +551,6 @@ export function ProcessEditor({
                   : "Haz clic en un símbolo del flujograma para ver su detalle, checklist o documento adjunto."}
               </div>
             )}
-        </div>
-      </div>
-
-      <div className="mt-6">
-        <div className="flex items-center justify-between mb-2.5">
-          <h3 className="text-[14px] font-semibold flex items-center gap-1.5">
-            <CheckCircle2 size={15} /> Checklist
-          </h3>
-          {!editable && checked.size > 0 && (
-            <button
-              type="button"
-              className="text-[11px] border border-rule rounded px-2.5 py-1 text-steel cursor-pointer"
-              onClick={() => setChecked(new Set())}
-            >
-              Reiniciar
-            </button>
-          )}
-        </div>
-        <div className="bg-surface border border-rule rounded p-1">
-          {checklist.length === 0 && (
-            <div className="text-steel text-[13px] p-4 text-center">Sin checklist para este proceso.</div>
-          )}
-          {checklist.map((item) =>
-            editable ? (
-              <div key={item.id} className="flex items-center gap-2 px-2.5 py-1.5">
-                <input
-                  className="flex-1 rounded border border-rule px-2 py-1.5 text-[13px]"
-                  value={item.text}
-                  onChange={(e) => updateChecklistItem(item.id, e.target.value)}
-                />
-                <button type="button" className="text-steel hover:text-red cursor-pointer" onClick={() => removeChecklistItem(item.id)}>
-                  <Trash2 size={14} />
-                </button>
-              </div>
-            ) : (
-              <div
-                key={item.id}
-                className="flex items-center gap-2.5 px-3 py-2.5 border-b border-rule last:border-b-0 cursor-pointer"
-                onClick={() => toggleChecked(item.id)}
-              >
-                {checked.has(item.id) ? <CheckCircle2 size={17} className="text-green" /> : <Circle size={17} className="text-steel" />}
-                <span className={`text-[13.5px] ${checked.has(item.id) ? "line-through text-steel" : ""}`}>{item.text}</span>
-              </div>
-            )
-          )}
-          {editable && (
-            <button
-              type="button"
-              className="m-2 text-[12px] font-semibold text-steel border border-rule rounded px-2.5 py-1.5 inline-flex items-center gap-1.5 cursor-pointer"
-              onClick={addChecklistItem}
-            >
-              <Plus size={12} /> Añadir punto
-            </button>
-          )}
         </div>
       </div>
 

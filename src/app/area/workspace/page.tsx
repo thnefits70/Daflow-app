@@ -5,6 +5,7 @@ import { TopLine } from "@/components/ui/TopLine";
 import { DeptWorkspaceTabs } from "@/components/dept/DeptWorkspaceTabs";
 import { getUnseenFeedbackCount } from "@/lib/guards";
 import { getFinanceKpiData } from "@/lib/financeKpis";
+import { getDeptProcessDetail } from "@/lib/processDetail";
 
 export default async function WorkspacePage() {
   const session = await auth();
@@ -13,12 +14,8 @@ export default async function WorkspacePage() {
   const dept = await prisma.department.findUnique({ where: { id: session.user.deptId } });
   if (!dept) redirect("/api/auth/force-logout");
 
-  const [processes, documents, exams, financeKpiData, weeklyMetricRecords, weeklyReviewRecords, currentUser, unseenFeedbackCount] = await Promise.all([
-    prisma.process.findMany({
-      where: { deptId: dept.id },
-      orderBy: { createdAt: "asc" },
-      include: { _count: { select: { flowSteps: true, checklistItems: true } } },
-    }),
+  const [processDetail, documents, exams, financeKpiData, weeklyMetricRecords, weeklyReviewRecords, currentUser, unseenFeedbackCount] = await Promise.all([
+    getDeptProcessDetail(dept.id),
     prisma.document.findMany({ where: { deptId: dept.id }, orderBy: { createdAt: "asc" } }),
     prisma.exam.findMany({
       where: { deptId: dept.id },
@@ -43,14 +40,8 @@ export default async function WorkspacePage() {
       <TopLine eyebrow={`Área · ${dept.code}`} title={dept.name} />
       <DeptWorkspaceTabs
         deptId={dept.id}
-        processesBaseHref="/area/workspace/processes"
-        processes={processes.map((p) => ({
-          id: p.id,
-          title: p.title,
-          description: p.description,
-          stepCount: p._count.flowSteps,
-          checklistCount: p._count.checklistItems,
-        }))}
+        activeProcess={processDetail?.process ?? null}
+        processUpdates={processDetail?.updates ?? []}
         documents={documents.map((d) => ({
           id: d.id,
           title: d.title,

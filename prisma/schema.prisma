@@ -159,7 +159,7 @@ model Milestone {
   @@index([userId])
 }
 
-/* ---------------- Procesos (flujograma + checklist) ---------------- */
+/* ---------------- Procesos (flujograma) ---------------- */
 model Process {
   id          String  @id @default(cuid())
   deptId      String
@@ -172,7 +172,6 @@ model Process {
   updatedAt   DateTime @updatedAt
 
   flowSteps      FlowStep[]
-  checklistItems ChecklistItem[]
   updates        ProcessUpdate[]
 
   @@index([deptId])
@@ -240,16 +239,6 @@ model FlowBranch {
   targetHandle String?
 
   @@index([stepId])
-}
-
-model ChecklistItem {
-  id        String  @id @default(cuid())
-  processId String
-  process   Process @relation(fields: [processId], references: [id], onDelete: Cascade)
-  text      String
-  order     Int     @default(0)
-
-  @@index([processId])
 }
 
 model ProcessUpdate {

@@ -16,7 +16,6 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
         include: { branches: true, checklistItems: { orderBy: { order: "asc" } } },
         orderBy: { order: "asc" },
       },
-      checklistItems: { orderBy: { order: "asc" } },
     },
   });
   if (!process) return NextResponse.json({ error: "No encontrado." }, { status: 404 });
@@ -60,14 +59,9 @@ const edgeSchema = z.object({
   label: z.string().default(""),
 });
 
-const checklistItemSchema = z.object({
-  text: z.string().trim().min(1),
-});
-
 const updateSchema = z.object({
   title: z.string().trim().min(1).optional(),
   description: z.string().optional(),
-  checklist: z.array(checklistItemSchema).optional(),
   flow: z
     .object({
       nodes: z.array(nodeSchema),
@@ -97,19 +91,6 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
           ...(data.description !== undefined ? { description: data.description } : {}),
         },
       });
-    }
-
-    if (data.checklist !== undefined) {
-      await tx.checklistItem.deleteMany({ where: { processId: id } });
-      if (data.checklist.length > 0) {
-        await tx.checklistItem.createMany({
-          data: data.checklist.map((c, index) => ({
-            processId: id,
-            text: c.text,
-            order: index,
-          })),
-        });
-      }
     }
 
     if (data.flow !== undefined) {

@@ -43,7 +43,6 @@ export default async function AreaLayout({ children }: { children: React.ReactNo
           include: { branches: true, checklistItems: { orderBy: { order: "asc" } } },
           orderBy: { order: "asc" },
         },
-        checklistItems: { orderBy: { order: "asc" } },
       },
     });
     if (proc) {
@@ -69,7 +68,6 @@ export default async function AreaLayout({ children }: { children: React.ReactNo
           })),
           checklistItems: s.checklistItems.map((c) => ({ id: c.id, text: c.text })),
         })),
-        checklistItems: proc.checklistItems.map((c) => ({ id: c.id, text: c.text })),
       };
     }
   }
