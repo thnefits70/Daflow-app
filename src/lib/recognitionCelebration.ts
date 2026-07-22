@@ -1,12 +1,15 @@
-// Server-only (prisma) — mirrors src/lib/birthdays.ts exactly: same
-// "unseen for this viewer" pattern, same personalized-for-the-winner vs
-// generic-for-everyone-else split, just for the monthly recognition winner
-// instead of a birthday.
+// Server-only (prisma) — mirrors src/lib/birthdays.ts's "unseen for this
+// viewer" pattern, same personalized-for-the-celebrant vs
+// generic-for-everyone-else split, just for the monthly recognition podium
+// instead of a birthday. Confirmed 2026-07-22: 2° and 3° lugar get their own
+// separate celebration popups too (no bono/money involved, just
+// recognition+encouragement) — shown one at a time, in rank order.
 import { prisma } from "@/lib/prisma";
-import { pickRecognitionMessage } from "@/lib/recognitionMessages";
+import { pickRecognitionMessage, pickPodiumMessage } from "@/lib/recognitionMessages";
 
 export type RecognitionCelebration = {
   month: string;
+  rank: number;
   winnerId: string;
   winnerName: string;
   winnerPhotoUrl: string | null;
@@ -14,36 +17,44 @@ export type RecognitionCelebration = {
   message?: string;
 };
 
-// The latest confirmed month's #1 — null if nothing has ever been
-// confirmed, or if this viewer already dismissed it.
-export async function getUnseenRecognitionForViewer(viewerId: string): Promise<RecognitionCelebration | null> {
-  const latest = await prisma.monthlyRecognitionResult.findFirst({
-    where: { rank: 1 },
-    orderBy: { month: "desc" },
-    include: { user: { select: { id: true, name: true, photoUrl: true } } },
-  });
-  if (!latest) return null;
+// The latest confirmed month's top 3, in rank order, minus whichever this
+// viewer already dismissed — empty array if nothing's been confirmed yet or
+// they've seen all three.
+export async function getUnseenRecognitionsForViewer(viewerId: string): Promise<RecognitionCelebration[]> {
+  const latestResult = await prisma.monthlyRecognitionResult.findFirst({ orderBy: { month: "desc" } });
+  if (!latestResult) return [];
+  const month = latestResult.month;
 
-  const seen = await prisma.monthlyRecognitionPopupSeen.findUnique({
-    where: { viewerId_month: { viewerId, month: latest.month } },
-  });
-  if (seen) return null;
+  const [podium, seen] = await Promise.all([
+    prisma.monthlyRecognitionResult.findMany({
+      where: { month },
+      include: { user: { select: { id: true, name: true, photoUrl: true } } },
+      orderBy: { rank: "asc" },
+    }),
+    prisma.monthlyRecognitionPopupSeen.findMany({ where: { viewerId, month } }),
+  ]);
+  const seenRanks = new Set(seen.map((s) => s.rank));
 
-  const isMe = latest.userId === viewerId;
-  return {
-    month: latest.month,
-    winnerId: latest.userId,
-    winnerName: latest.user.name,
-    winnerPhotoUrl: latest.user.photoUrl,
-    isMe,
-    message: isMe ? pickRecognitionMessage(latest.userId, latest.month) : undefined,
-  };
+  return podium
+    .filter((p) => !seenRanks.has(p.rank))
+    .map((p) => {
+      const isMe = p.userId === viewerId;
+      return {
+        month,
+        rank: p.rank,
+        winnerId: p.userId,
+        winnerName: p.user.name,
+        winnerPhotoUrl: p.user.photoUrl,
+        isMe,
+        message: isMe ? (p.rank === 1 ? pickRecognitionMessage(p.userId, month) : pickPodiumMessage(p.userId, month)) : undefined,
+      };
+    });
 }
 
-export async function markRecognitionSeen(viewerId: string, month: string) {
+export async function markRecognitionSeen(viewerId: string, month: string, rank: number) {
   await prisma.monthlyRecognitionPopupSeen.upsert({
-    where: { viewerId_month: { viewerId, month } },
-    create: { viewerId, month },
+    where: { viewerId_month_rank: { viewerId, month, rank } },
+    create: { viewerId, month, rank },
     update: {},
   });
 }

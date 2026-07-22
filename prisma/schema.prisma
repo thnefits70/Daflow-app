@@ -840,13 +840,15 @@ model MonthlyRecognitionResult {
   @@index([month])
 }
 
-// Mismo patrón que BirthdayPopupSeen — el popup de celebración (ganador o
-// anuncio general) aparece una sola vez por persona por mes.
+// Mismo patrón que BirthdayPopupSeen — cada popup de celebración (1°, 2° o
+// 3° lugar) aparece una sola vez por persona por mes, y se registran por
+// separado (uno por rank) para poder mostrarlos en secuencia.
 model MonthlyRecognitionPopupSeen {
   id       String   @id @default(cuid())
   viewerId String // User.id o "admin"
   month    String
+  rank     Int      @default(1) // 1, 2 o 3
   seenAt   DateTime @default(now())
 
-  @@unique([viewerId, month])
+  @@unique([viewerId, month, rank])
 }

@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { getUnseenRecognitionForViewer } from "@/lib/recognitionCelebration";
+import { getUnseenRecognitionsForViewer } from "@/lib/recognitionCelebration";
 
 export async function GET() {
   const session = await auth();
-  if (!session) return NextResponse.json({ celebration: null });
+  if (!session) return NextResponse.json({ celebrations: [] });
 
   const viewerId = session.user.role === "admin" ? "admin" : session.user.id;
-  const celebration = await getUnseenRecognitionForViewer(viewerId);
+  const celebrations = await getUnseenRecognitionsForViewer(viewerId);
 
-  return NextResponse.json({ celebration });
+  return NextResponse.json({ celebrations });
 }

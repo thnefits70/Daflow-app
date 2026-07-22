@@ -42,3 +42,29 @@ export function pickRecognitionMessage(userId: string, month: string): string {
   for (let i = 0; i < seed.length; i++) hash = (hash * 31 + seed.charCodeAt(i)) >>> 0;
   return RECOGNITION_MESSAGES[hash % RECOGNITION_MESSAGES.length];
 }
+
+// For 2° y 3° lugar — confirmed 2026-07-22: no bono, no mention of money, a
+// deliberately separate bank from the winner's (that one leans on "ganaste
+// el bono"; this one is pure encouragement/motivation, still signed by
+// Andrés, still genuine recognition — just without implying a prize.
+const PODIUM_MESSAGES = [
+  "Quedar entre los tres mejores de este mes no es casualidad — es la prueba de que vas por buen camino. Sigue así.",
+  "Tu esfuerzo este mes te puso entre los mejores de todo el equipo. Eso también se celebra.",
+  "No hace falta ser el primero para ser ejemplo — tu desempeño este mes lo confirma.",
+  "Estar en el podio este mes es un logro real. Que te impulse a seguir subiendo el nivel.",
+  "Se nota el esfuerzo que pusiste este mes — y los resultados lo respaldan. Vas muy bien.",
+  "Cada mes en el podio es una señal de consistencia. Sigue construyendo sobre eso.",
+  "Tu trabajo este mes no pasó desapercibido — llegaste al podio con méritos propios.",
+  "Este resultado es un gran paso. La próxima meta: seguir subiendo. Confío en que lo vas a lograr.",
+  "Gracias por el nivel que mostraste este mes — el equipo entero se beneficia cuando alguien empuja así.",
+  "Estar entre los mejores tres de Provedix este mes dice mucho de tu compromiso. Felicidades.",
+  "Lo que lograste este mes es una base sólida — sigue así y el primer lugar está más cerca de lo que crees.",
+  "Reconozco tu esfuerzo este mes, con resultados que hablan por sí solos. Sigue adelante.",
+];
+
+export function pickPodiumMessage(userId: string, month: string): string {
+  const seed = userId + month + "podium";
+  let hash = 0;
+  for (let i = 0; i < seed.length; i++) hash = (hash * 31 + seed.charCodeAt(i)) >>> 0;
+  return PODIUM_MESSAGES[hash % PODIUM_MESSAGES.length];
+}
