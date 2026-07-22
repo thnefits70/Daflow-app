@@ -6,6 +6,7 @@ import { DeptWorkspaceTabs } from "@/components/dept/DeptWorkspaceTabs";
 import { getUnseenFeedbackCount } from "@/lib/guards";
 import { getFinanceKpiData } from "@/lib/financeKpis";
 import { getDeptProcessDetail } from "@/lib/processDetail";
+import { getPaymentRemindersData } from "@/lib/paymentReminders";
 
 export default async function WorkspacePage() {
   const session = await auth();
@@ -14,7 +15,7 @@ export default async function WorkspacePage() {
   const dept = await prisma.department.findUnique({ where: { id: session.user.deptId } });
   if (!dept) redirect("/api/auth/force-logout");
 
-  const [processDetail, documents, exams, financeKpiData, weeklyMetricRecords, weeklyReviewRecords, currentUser, unseenFeedbackCount] = await Promise.all([
+  const [processDetail, documents, exams, financeKpiData, paymentReminders, weeklyMetricRecords, weeklyReviewRecords, currentUser, unseenFeedbackCount] = await Promise.all([
     getDeptProcessDetail(dept.id),
     prisma.document.findMany({ where: { deptId: dept.id }, orderBy: { createdAt: "asc" } }),
     prisma.exam.findMany({
@@ -23,6 +24,7 @@ export default async function WorkspacePage() {
       include: { _count: { select: { questions: true } } },
     }),
     dept.trackKpis ? getFinanceKpiData(dept.id) : Promise.resolve(undefined),
+    dept.trackPaymentReminders ? getPaymentRemindersData(dept.id) : Promise.resolve([]),
     dept.trackWeeklyMetric
       ? prisma.weeklyMetricRecord.findMany({ where: { deptId: dept.id }, orderBy: { week: "asc" } })
       : Promise.resolve([]),
@@ -53,6 +55,8 @@ export default async function WorkspacePage() {
         exams={exams.map((e) => ({ id: e.id, title: e.title, questionCount: e._count.questions }))}
         trackKpis={dept.trackKpis}
         financeKpiData={financeKpiData}
+        trackPaymentReminders={dept.trackPaymentReminders}
+        paymentReminders={paymentReminders}
         trackWeeklyMetric={dept.trackWeeklyMetric}
         weeklyMetricRecords={weeklyMetricRecords.map((w) => ({ id: w.id, week: w.week, value: w.value, notDispatched: w.notDispatched }))}
         trackWeeklyReview={dept.trackWeeklyReview && kpisEditable}

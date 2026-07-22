@@ -51,6 +51,9 @@ model Department {
   // Habilita la bitácora de feedback semanal (reunión admin-líder): problemas y plan de acción.
   // Solo el admin puede escribir en ella; el área solo puede verla.
   trackWeeklyReview Boolean @default(false)
+  // Habilita "Pagos recordatorios" (facturas/suscripciones mensuales que vencen en fechas
+  // variables) — confirmado 2026-07-22: solo Finanzas y Contabilidad, por ahora.
+  trackPaymentReminders Boolean @default(false)
   createdAt  DateTime @default(now())
 
   users        User[]
@@ -66,6 +69,7 @@ model Department {
   financeKpiSettings    FinanceKpiSettings?
   weeklyMetrics WeeklyMetricRecord[]
   weeklyReviews WeeklyReviewRecord[]
+  paymentReminders      PaymentReminder[]
 
   @@index([order])
 }
@@ -139,6 +143,7 @@ model User {
   payStubsUploaded PayStub[] @relation("PayStubUploadedBy")
   financeKpiRecordsUploaded FinanceKpiRecord[] @relation("FinanceKpiRecordUploadedBy")
   financeKpiUploadsBy       FinanceKpiUpload[] @relation("FinanceKpiUploadUploadedBy")
+  paymentReminderRecordsCompleted PaymentReminderRecord[] @relation("PaymentReminderCompletedBy")
   confidentialAccess ConfidentialDocumentAccess[]
   monthlyEvaluationsReceived MonthlyEvaluation[]
   monthlyRecognitionResults  MonthlyRecognitionResult[]
@@ -453,6 +458,42 @@ model FinanceKpiSettings {
   taxRatePct Float @default(25)
 
   updatedAt DateTime @updatedAt
+}
+
+// Pagos mensuales variados (suscripciones, servicios, tarjetas...) que se
+// dan de alta/baja con el tiempo — confirmado 2026-07-22, solo Finanzas y
+// Contabilidad por ahora. Sin monto de referencia a propósito: cada mes se
+// ingresa manualmente el monto real al marcar "Realizado" (PaymentReminderRecord),
+// porque los montos varían mes a mes.
+model PaymentReminder {
+  id         String     @id @default(cuid())
+  deptId     String
+  department Department @relation(fields: [deptId], references: [id], onDelete: Cascade)
+  name       String // empresa/plataforma a la que se paga
+  paymentMethod String?
+  dueDay           Int // día del mes de vencimiento (1-31, se recorta al último día real del mes)
+  reminderStartDay Int // día del mes desde el cual empieza a aparecer en pendientes
+  isActive   Boolean  @default(true)
+  order      Int      @default(0)
+  createdAt  DateTime @default(now())
+
+  records PaymentReminderRecord[]
+
+  @@index([deptId])
+}
+
+model PaymentReminderRecord {
+  id            String          @id @default(cuid())
+  reminderId    String
+  reminder      PaymentReminder @relation(fields: [reminderId], references: [id], onDelete: Cascade)
+  period        String // "YYYY-MM"
+  amountPaid    Float
+  completedById String?
+  completedBy   User?           @relation("PaymentReminderCompletedBy", fields: [completedById], references: [id], onDelete: SetNull)
+  completedAt   DateTime        @default(now())
+
+  @@unique([reminderId, period])
+  @@index([reminderId])
 }
 
 /* ---------------- Métrica semanal (ej. pedidos despachados de Fulfillment) ---------------- */

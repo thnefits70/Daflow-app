@@ -113,6 +113,15 @@ function fixedDayDeadlinePassed(month: string, day: number): boolean {
   return nowInEcuador() >= deadline;
 }
 
+// Same as nthDayOfMonth but clamped to the last real day of the month —
+// Pagos recordatorios lets each reminder's día de vencimiento be up to 31,
+// which doesn't exist in every month (e.g. February).
+function nthDayOfMonthClamped(month: string, day: number): Date {
+  const [y, m] = month.split("-").map(Number);
+  const daysInMonth = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  return new Date(Date.UTC(y, m - 1, Math.min(day, daysInMonth)));
+}
+
 // ---------------- Generic period-status resolvers ----------------
 // Only ever surfaces something once it's genuinely overdue (previous
 // period's deadline already passed and still empty) — never a heads-up for
@@ -348,6 +357,36 @@ async function getWarrantyPendingItem(href: string): Promise<PendingItem | null>
   return null;
 }
 
+// Each active payment reminder has its own reminderStartDay (día del mes
+// desde el cual empieza a recordar, confirmed 2026-07-22) — no fixed amount
+// shown here since it's entered manually only when marking "Realizado".
+// Several can be pending at once, unlike the other Finance checks.
+async function getPaymentReminderPendingItems(deptId: string, href: string): Promise<PendingItem[]> {
+  const reminders = await prisma.paymentReminder.findMany({ where: { deptId, isActive: true } });
+  if (reminders.length === 0) return [];
+
+  const period = currentMonthStr();
+  const now = nowInEcuador();
+  const items: PendingItem[] = [];
+
+  for (const r of reminders) {
+    const startDate = nthDayOfMonthClamped(period, r.reminderStartDay);
+    if (now < startDate) continue;
+    const record = await prisma.paymentReminderRecord.findUnique({
+      where: { reminderId_period: { reminderId: r.id, period } },
+    });
+    if (record) continue;
+    items.push({
+      icon: "💳",
+      label: r.name,
+      meta: `Vence el día ${r.dueDay}${r.paymentMethod ? " · " + r.paymentMethod : ""} · atrasado`,
+      overdue: true,
+      href,
+    });
+  }
+  return items;
+}
+
 // ---------------- Entry point ----------------
 // Each person only ever sees what's specifically assigned to them — admin
 // gets Feedback semanal (the one thing only admin can write), a department
@@ -379,14 +418,16 @@ export async function getPendingTasksForCurrentUser(): Promise<PendingTasks | nu
 
   if (me.leadsDept.code === "FIN") {
     monthly = true;
-    const [payStub, returnRate, warranty] = await Promise.all([
+    const [payStub, returnRate, warranty, paymentReminders] = await Promise.all([
       getPayStubPendingItem("/area/roles-de-pago"),
       getReturnRatePendingItem("/area/kpis-generales"),
       getWarrantyPendingItem("/area/kpis-generales"),
+      getPaymentReminderPendingItems(me.leadsDeptId, "/area/workspace"),
     ]);
     if (payStub) items.push(payStub);
     if (returnRate) items.push(returnRate);
     if (warranty) items.push(warranty);
+    items.push(...paymentReminders);
   }
 
   if (me.leadsDept.trackWeeklyMetric) {
