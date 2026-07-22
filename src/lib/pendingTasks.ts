@@ -84,27 +84,6 @@ function prevMonthStr(month: string): string {
   return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}`;
 }
 
-function nextMonthStr(month: string): string {
-  const [y, m] = month.split("-").map(Number);
-  const d = new Date(Date.UTC(y, m, 1));
-  return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}`;
-}
-
-function firstMondayOfMonth(month: string): Date {
-  const [y, m] = month.split("-").map(Number);
-  const d = new Date(Date.UTC(y, m - 1, 1));
-  const day = d.getUTCDay() || 7;
-  const offset = day === 1 ? 0 : 8 - day;
-  d.setUTCDate(d.getUTCDate() + offset);
-  return d;
-}
-
-function monthDeadlinePassed(month: string): boolean {
-  // Deadline for `month`'s data = first Monday of the following month.
-  const deadline = firstMondayOfMonth(nextMonthStr(month));
-  return nowInEcuador() >= deadline;
-}
-
 // Company work week is Mon-Sat (confirmed 2026-07-20) — only Sunday and
 // Ecuadorian national holidays (fixed-date list shared with
 // src/lib/recognition.ts) are non-business days here. Deliberately not the
@@ -155,15 +134,6 @@ async function weeklyPendingStatus(
   const today = isoWeekOf(now);
   const prev = prevIsoWeek(today);
   if (!(await exists(prev))) return { week: prev, overdue: true };
-  return null;
-}
-
-async function monthlyPendingStatus(
-  exists: (month: string) => Promise<boolean>
-): Promise<{ month: string; overdue: boolean } | null> {
-  const today = currentMonthStr();
-  const prev = prevMonthStr(today);
-  if (monthDeadlinePassed(prev) && !(await exists(prev))) return { month: prev, overdue: true };
   return null;
 }
 
@@ -343,8 +313,7 @@ async function getPayStubPendingItem(href: string): Promise<PendingItem | null> 
 }
 
 // Fixed check-in day for the current month (día 4, confirmed 2026-07-22),
-// same pattern as getPayStubPendingItem — not the generic
-// monthlyPendingStatus ("first Monday of next month") that Warranty still uses.
+// same pattern as getPayStubPendingItem.
 async function getReturnRatePendingItem(href: string): Promise<PendingItem | null> {
   const today = currentMonthStr();
   const prev = prevMonthStr(today);
@@ -360,16 +329,23 @@ async function getReturnRatePendingItem(href: string): Promise<PendingItem | nul
   return null;
 }
 
+// Confirmed 2026-07-22: Garantías starts on the first business day of the
+// current month (día 1, rolled forward past Sunday/holidays) — reviewing
+// the previous month's data, same fixedDayDeadlinePassed mechanism as the
+// other two, just anchored to día 1 instead of a later fixed day.
 async function getWarrantyPendingItem(href: string): Promise<PendingItem | null> {
-  const status = await monthlyPendingStatus(async (month) => !!(await prisma.warrantyMonthTotal.findUnique({ where: { month } })));
-  if (!status) return null;
-  return {
-    icon: "🛡️",
-    label: "KPI de Garantías",
-    meta: `${formatMonthLabel(status.month)} · atrasado`,
-    overdue: status.overdue,
-    href,
-  };
+  const today = currentMonthStr();
+  const prev = prevMonthStr(today);
+  if (fixedDayDeadlinePassed(today, 1) && !(await prisma.warrantyMonthTotal.findUnique({ where: { month: prev } }))) {
+    return {
+      icon: "🛡️",
+      label: "KPI de Garantías",
+      meta: `${formatMonthLabel(prev)} · atrasado`,
+      overdue: true,
+      href,
+    };
+  }
+  return null;
 }
 
 // ---------------- Entry point ----------------
