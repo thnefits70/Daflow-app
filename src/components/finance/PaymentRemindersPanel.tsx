@@ -259,16 +259,21 @@ export function PaymentRemindersPanel({
                       </>
                     ) : amountDraftFor === r.id ? (
                       <>
-                        <input
-                          type="number"
-                          step="0.01"
-                          min={0}
-                          autoFocus
-                          placeholder="Ej: 45.00"
-                          className="w-28 rounded border border-rule px-2 py-1.5 text-[13px]"
-                          value={amountValue}
-                          onChange={(e) => setAmountValue(e.target.value)}
-                        />
+                        <div className="relative">
+                          <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-green font-semibold text-[13px]">
+                            $
+                          </span>
+                          <input
+                            type="number"
+                            step="0.01"
+                            min={0}
+                            autoFocus
+                            placeholder="45.00"
+                            className="w-28 rounded border border-green/50 bg-green/5 pl-5 pr-2 py-1.5 text-[13px] font-semibold text-green focus:outline-none focus:border-green"
+                            value={amountValue}
+                            onChange={(e) => setAmountValue(e.target.value)}
+                          />
+                        </div>
                         <button
                           type="button"
                           disabled={busy}
