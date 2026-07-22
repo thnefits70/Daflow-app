@@ -132,8 +132,12 @@ export type PendingTasks = { title: string; sub: string; items: PendingItem[] };
 
 // ---------------- Per-source checks ----------------
 async function getFeedbackPendingItems(): Promise<PendingItem[]> {
+  // A department with no active leader has nobody to have the admin-leader
+  // feedback meeting with — nothing to report, so it shouldn't nag admin
+  // with a reminder either. Starts showing up automatically once someone
+  // is marked as that department's leader.
   const depts = await prisma.department.findMany({
-    where: { trackWeeklyReview: true },
+    where: { trackWeeklyReview: true, leaders: { some: { isLeader: true, isActive: true } } },
     select: { id: true, name: true },
     orderBy: { order: "asc" },
   });

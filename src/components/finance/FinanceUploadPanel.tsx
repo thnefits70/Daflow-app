@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Upload, FileText, X, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { Upload, FileText, X, AlertTriangle, CheckCircle2, Download } from "lucide-react";
 import type { FinanceKpiDataDTO } from "@/lib/financeKpis";
 
 const MONTH_NAMES = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
@@ -223,6 +223,15 @@ export function FinanceUploadPanel({ deptId, data }: { deptId: string; data: Fin
             </div>
           </div>
         )}
+
+        <div className="flex justify-end mb-2.5">
+          <a
+            href={`/api/finance-kpis/template?deptId=${deptId}&period=${targetPeriod}`}
+            className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-teal hover:underline"
+          >
+            <Download size={13} /> Descargar plantilla en blanco — {monthLabel(targetPeriod)}
+          </a>
+        </div>
 
         {phase === "idle" && (
           <label className="flex flex-col items-center justify-center gap-1.5 border-[1.5px] border-dashed border-rule rounded-md py-7 cursor-pointer hover:border-teal transition-colors">
