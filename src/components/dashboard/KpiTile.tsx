@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import {
   smoothPath,
   formatWeekShort,
@@ -111,6 +111,11 @@ export function MiniSparkline({
 }) {
   const uid = useId();
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
+  const [reducedMotion, setReducedMotion] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+    setReducedMotion(mq.matches);
+  }, []);
   const w = 220;
   const h = 40;
   const padY = 5;
@@ -131,6 +136,37 @@ export function MiniSparkline({
   const dangerRuns =
     dangerThreshold !== undefined && coords.length > 1 ? splitDangerRuns(coords, values, isDangerValue, dangerThreshold) : null;
 
+  // Traveling light dot, same technique as WeeklyTrendChart's — one
+  // continuous <animateMotion> along the line so it never jumps, paired
+  // with a calcMode="discrete" color step per segment. Here the color
+  // reflects the danger zone (confirmed 2026-07-22) rather than rise/fall:
+  // red while riding a segment that's past the threshold, normal color
+  // otherwise.
+  const segCount = coords.length - 1;
+  const travelDur = Math.max(6, Math.min(16, segCount * 0.9));
+  let travelDot: React.ReactNode = null;
+  if (segCount > 0 && !reducedMotion) {
+    const segColors = Array.from({ length: segCount }, (_, i) =>
+      dangerThreshold !== undefined && (isDangerValue(values[i]) || isDangerValue(values[i + 1])) ? dangerColor : color
+    );
+    const keyTimes = segColors.map((_, i) => (i / segCount).toFixed(4)).join(";");
+    travelDot = (
+      <g color={color}>
+        <animateMotion dur={`${travelDur}s`} repeatCount="indefinite" rotate="0" path={d} />
+        <animate
+          attributeName="color"
+          dur={`${travelDur}s`}
+          repeatCount="indefinite"
+          calcMode="discrete"
+          keyTimes={keyTimes}
+          values={segColors.join(";")}
+        />
+        <circle r="6" fill="currentColor" opacity="0.3" filter={`url(#kpitile-glow-${uid})`} />
+        <circle r="2.2" fill="currentColor" />
+      </g>
+    );
+  }
+
   const hovered = hoverIndex !== null ? points[hoverIndex] : null;
   const hoverX = hoverIndex !== null ? coords[hoverIndex].x : 0;
   const tooltipLeftPct = Math.max(18, Math.min(82, (hoverX / w) * 100));
@@ -150,6 +186,9 @@ export function MiniSparkline({
             <stop offset="0%" stopColor={color} stopOpacity="0.35" />
             <stop offset="100%" stopColor={color} stopOpacity="0" />
           </linearGradient>
+          <filter id={`kpitile-glow-${uid}`} x="-200%" y="-200%" width="500%" height="500%">
+            <feGaussianBlur stdDeviation="2.2" />
+          </filter>
         </defs>
         <line x1="0" x2={w} y1={h / 2} y2={h / 2} stroke="#24365a" strokeWidth="1" strokeDasharray="2 3" />
         <path d={area} fill={`url(#kpitile-grad-${uid})`} />
@@ -168,6 +207,7 @@ export function MiniSparkline({
         ) : (
           <path d={d} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
         )}
+        {travelDot}
         {coords.map((c, i) => {
           const isLast = i === coords.length - 1;
           const isHover = i === hoverIndex;
