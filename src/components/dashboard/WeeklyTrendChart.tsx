@@ -273,6 +273,7 @@ export function WeeklyTrendChart({
         height={height}
         preserveAspectRatio="none"
         className="block"
+        style={{ overflow: "visible" }}
         onMouseLeave={() => setHoverIndex(null)}
       >
         <defs>
