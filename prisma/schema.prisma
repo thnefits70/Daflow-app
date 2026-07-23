@@ -144,6 +144,7 @@ model User {
   financeKpiRecordsUploaded FinanceKpiRecord[] @relation("FinanceKpiRecordUploadedBy")
   financeKpiUploadsBy       FinanceKpiUpload[] @relation("FinanceKpiUploadUploadedBy")
   paymentReminderRecordsCompleted PaymentReminderRecord[] @relation("PaymentReminderCompletedBy")
+  storeFeedbackEvaluations        StoreFeedbackEvaluation[] @relation("StoreFeedbackEvaluatedBy")
   confidentialAccess ConfidentialDocumentAccess[]
   monthlyEvaluationsReceived MonthlyEvaluation[]
   monthlyRecognitionResults  MonthlyRecognitionResult[]
@@ -497,6 +498,57 @@ model PaymentReminderRecord {
 
   @@unique([reminderId, period])
   @@index([reminderId])
+}
+
+/* ---------------- Servicio Postventa (feedback de tiendas) ---------------- */
+// Confirmado 2026-07-22: Nairoby (líder de Finanzas y Contabilidad) contacta
+// tiendas y registra feedback sin fecha fija — no es un KPI mensual, es un
+// registro por llamada. Fulfillment e Inventario pueden VER los resultados
+// (no editar) porque muchos problemas que reporta una tienda vienen de ahí.
+model Store {
+  id           String   @id @default(cuid())
+  name         String
+  contactName  String?
+  contactPhone String?
+  isActive     Boolean  @default(true)
+  order        Int      @default(0)
+  createdAt    DateTime @default(now())
+
+  evaluations StoreFeedbackEvaluation[]
+
+  @@index([order])
+}
+
+model StoreFeedbackEvaluation {
+  id      String @id @default(cuid())
+  storeId String
+  store   Store  @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  // "YYYY-MM" — el mes que se está evaluando (no la fecha de la llamada).
+  // Confirmado 2026-07-22: se hace la 2da semana del mes, miércoles a
+  // viernes, evaluando el mes anterior — igual patrón que los demás KPIs
+  // mensuales de Finanzas.
+  period String
+
+  // "¿Qué tan probable es que sigas comprándonos?" — 0-10, estilo NPS, es el
+  // resultado/indicador principal de fidelización.
+  loyaltyScore Int
+
+  // KPIs que explican el porqué de ese resultado, 1-5 cada uno.
+  fulfillmentScore     Int
+  qualityScore         Int
+  stockScore           Int
+  responseTimeScore    Int
+  commercialTermsScore Int
+  communicationScore   Int
+
+  comment       String   @default("")
+  evaluatedById String?
+  evaluatedBy   User?    @relation("StoreFeedbackEvaluatedBy", fields: [evaluatedById], references: [id], onDelete: SetNull)
+  evaluatedAt   DateTime @default(now())
+
+  @@index([storeId])
+  @@index([period])
 }
 
 /* ---------------- Métrica semanal (ej. pedidos despachados de Fulfillment) ---------------- */

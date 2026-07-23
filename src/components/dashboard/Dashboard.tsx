@@ -5,10 +5,12 @@ import { RecognitionPodium } from "@/components/recognition/RecognitionPodium";
 import { ScoreGauge } from "./ScoreGauge";
 import { WeeklyTrendChart } from "./WeeklyTrendChart";
 import { KpiTile, FillRateTile, ReturnRateTile, WarrantyMonthTile } from "./KpiTile";
+import { StoreFeedbackTile } from "./StoreFeedbackTile";
 import { StockoutBarChart } from "./StockoutBarChart";
 import { PieChart } from "./PieChart";
 import { OrgChart } from "./OrgChart";
 import type { DashboardData, WeeklyTrend, StockoutWeekPoint, WarrantyMonthlyChart, PieSlice } from "@/lib/dashboard";
+import type { StoreFeedbackAggregate } from "@/lib/storeFeedback";
 
 function barColor(score: number) {
   if (score >= 75) return "#14C7C7";
@@ -24,6 +26,7 @@ export function Dashboard({
   stockoutWeeks,
   warrantyMonthlyChart,
   warrantyReasonChart,
+  storeFeedback,
 }: {
   data: DashboardData;
   weeklyTrend?: WeeklyTrend;
@@ -32,6 +35,7 @@ export function Dashboard({
   stockoutWeeks?: StockoutWeekPoint[];
   warrantyMonthlyChart?: WarrantyMonthlyChart | null;
   warrantyReasonChart?: PieSlice[];
+  storeFeedback?: StoreFeedbackAggregate | null;
 }) {
   const { rows, rowsSorted, totalAttempts, overallAvg } = data;
 
@@ -66,8 +70,11 @@ export function Dashboard({
         (warrantyReasonChart && warrantyReasonChart.length > 0) ||
         fillRateTrend ||
         returnRateTrend ||
+        storeFeedback ||
         (stockoutWeeks && stockoutWeeks.length > 0)) && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-7">
+          {storeFeedback && <StoreFeedbackTile data={storeFeedback} />}
+
           {warrantyMonthlyChart && (
             <WarrantyMonthTile chart={warrantyMonthlyChart} emptyMessage="Aún no hay categorías cargadas este mes." />
           )}

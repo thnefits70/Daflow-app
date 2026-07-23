@@ -7,10 +7,11 @@ import {
   getWarrantyMonthlyChart,
   getWarrantyReasonChart,
 } from "@/lib/dashboard";
+import { getStoreFeedbackAggregate } from "@/lib/storeFeedback";
 import { Dashboard } from "@/components/dashboard/Dashboard";
 
 export default async function AdminHomePage() {
-  const [data, weeklyTrend, fillRateTrend, returnRateTrend, stockoutWeeks, warrantyMonthlyChart, warrantyReasonChart] =
+  const [data, weeklyTrend, fillRateTrend, returnRateTrend, stockoutWeeks, warrantyMonthlyChart, warrantyReasonChart, storeFeedback] =
     await Promise.all([
       getDashboardData(),
       getWeeklyTrend(),
@@ -19,6 +20,7 @@ export default async function AdminHomePage() {
       getStockoutWeeks(),
       getWarrantyMonthlyChart(),
       getWarrantyReasonChart(),
+      getStoreFeedbackAggregate(),
     ]);
   return (
     <Dashboard
@@ -29,6 +31,7 @@ export default async function AdminHomePage() {
       stockoutWeeks={stockoutWeeks}
       warrantyMonthlyChart={warrantyMonthlyChart}
       warrantyReasonChart={warrantyReasonChart}
+      storeFeedback={storeFeedback}
     />
   );
 }

@@ -6,10 +6,12 @@ import { RecognitionPodium } from "@/components/recognition/RecognitionPodium";
 import { ScoreGauge } from "./ScoreGauge";
 import { WeeklyTrendChart } from "./WeeklyTrendChart";
 import { KpiTile, FillRateTile, ReturnRateTile, WarrantyMonthTile } from "./KpiTile";
+import { StoreFeedbackTile } from "./StoreFeedbackTile";
 import { StockoutBarChart } from "./StockoutBarChart";
 import { PieChart } from "./PieChart";
 import { OrgChart } from "./OrgChart";
 import type { DashboardRow, WeeklyTrend, StockoutWeekPoint, WarrantyMonthlyChart, PieSlice } from "@/lib/dashboard";
+import type { StoreFeedbackAggregate } from "@/lib/storeFeedback";
 
 type ScoreRow = { id: string; examTitle: string; score: number; total: number; createdAt: string };
 
@@ -37,6 +39,7 @@ export function EmployeeHome({
   stockoutWeeks,
   warrantyMonthlyChart,
   warrantyReasonChart,
+  storeFeedback,
   rowsSorted,
 }: {
   userName: string;
@@ -52,6 +55,7 @@ export function EmployeeHome({
   stockoutWeeks?: StockoutWeekPoint[];
   warrantyMonthlyChart?: WarrantyMonthlyChart | null;
   warrantyReasonChart?: PieSlice[];
+  storeFeedback?: StoreFeedbackAggregate | null;
   rowsSorted: DashboardRow[];
 }) {
   const avg = scores.length
@@ -92,8 +96,11 @@ export function EmployeeHome({
         (warrantyReasonChart && warrantyReasonChart.length > 0) ||
         fillRateTrend ||
         returnRateTrend ||
+        storeFeedback ||
         (stockoutWeeks && stockoutWeeks.length > 0)) && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-7">
+          {storeFeedback && <StoreFeedbackTile data={storeFeedback} />}
+
           {warrantyMonthlyChart && (
             <WarrantyMonthTile chart={warrantyMonthlyChart} emptyMessage="Aún no hay categorías cargadas este mes." />
           )}

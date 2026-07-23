@@ -3,7 +3,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { AreaGateShell } from "@/components/dept/AreaGateShell";
 import type { ProcessDTO } from "@/components/process/ProcessEditor";
-import { SUPPLIER_VIEW_DEPT_CODES, canManageReturnRate, canManageStockouts, canManageWarranties, canManageNomina } from "@/lib/guards";
+import { SUPPLIER_VIEW_DEPT_CODES, canManageNomina } from "@/lib/guards";
 
 export default async function AreaLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
@@ -118,7 +118,10 @@ export default async function AreaLayout({ children }: { children: React.ReactNo
   const unseenConfidentialCount = await prisma.confidentialDocumentAccess.count({
     where: { userId: session.user.id, seenAt: null },
   });
-  const showKpis = (await canManageReturnRate()) || (await canManageStockouts()) || (await canManageWarranties());
+  // Always true now — confirmed 2026-07-22: Servicio Postventa's company-wide
+  // average is public to every employee, even those with no other KPI edit
+  // rights. The page itself still gates each individual section's edit UI.
+  const showKpis = true;
   const showNomina = await canManageNomina();
 
   return (

@@ -188,6 +188,20 @@ export async function canManageStockouts() {
   return !!user?.isLeader && user.leadsDept?.code === "INV";
 }
 
+// Servicio Postventa (feedback de tiendas) — same rule as canManagePayroll:
+// admin, or whoever leads Finanzas (today Nairoby Castro), can log/edit
+// evaluations and manage the store catalog.
+export async function canManageStoreFeedback() {
+  const session = await auth();
+  if (!session) return false;
+  if (session.user.role === "admin") return true;
+  const user = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { isLeader: true, leadsDept: { select: { code: true } } },
+  });
+  return !!user?.isLeader && user.leadsDept?.code === "FIN";
+}
+
 // How many of the current user's own pay stubs were uploaded/updated since
 // they last opened "Roles de pago" — drives the sidebar badge.
 export async function getUnseenPayStubCount() {

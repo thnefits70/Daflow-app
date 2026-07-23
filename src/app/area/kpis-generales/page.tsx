@@ -1,20 +1,27 @@
 import { redirect } from "next/navigation";
+import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { TopLine } from "@/components/ui/TopLine";
 import { ReturnRatePanel } from "@/components/finance/ReturnRatePanel";
 import { StockoutPanel } from "@/components/finance/StockoutPanel";
 import { WarrantyPanel } from "@/components/finance/WarrantyPanel";
-import { canManageReturnRate, canManageStockouts, canManageWarranties } from "@/lib/guards";
+import { StoreFeedbackPanel } from "@/components/finance/StoreFeedbackPanel";
+import { StoreFeedbackTile } from "@/components/dashboard/StoreFeedbackTile";
+import { canManageReturnRate, canManageStockouts, canManageWarranties, canManageStoreFeedback } from "@/lib/guards";
+import { getStoreFeedbackData, getStoreFeedbackAggregate } from "@/lib/storeFeedback";
 
 export default async function AreaKpisGeneralesPage() {
-  const [canReturnRate, canStockouts, canWarranties] = await Promise.all([
+  const session = await auth();
+  if (!session) redirect("/login");
+
+  const [canReturnRate, canStockouts, canWarranties, canStoreFeedback] = await Promise.all([
     canManageReturnRate(),
     canManageStockouts(),
     canManageWarranties(),
+    canManageStoreFeedback(),
   ]);
-  if (!canReturnRate && !canStockouts && !canWarranties) redirect("/area");
 
-  const [returnRateRecords, stockoutProducts, stockoutWeekRows, stockoutConfirmations, warrantyCategories, warrantyMonthTotals, warrantyCounts] =
+  const [returnRateRecords, stockoutProducts, stockoutWeekRows, stockoutConfirmations, warrantyCategories, warrantyMonthTotals, warrantyCounts, storeFeedbackAggregate, stores] =
     await Promise.all([
       canReturnRate ? prisma.returnRateRecord.findMany({ orderBy: { month: "desc" } }) : Promise.resolve([]),
       canStockouts ? prisma.stockoutProduct.findMany({ orderBy: { name: "asc" } }) : Promise.resolve([]),
@@ -33,15 +40,28 @@ export default async function AreaKpisGeneralesPage() {
             include: { category: { select: { id: true, name: true } } },
           })
         : Promise.resolve([]),
+      // Public — every logged-in employee sees this aggregate, unlike the other sections.
+      getStoreFeedbackAggregate(),
+      canStoreFeedback ? getStoreFeedbackData() : Promise.resolve([]),
     ]);
 
   return (
     <div>
       <TopLine eyebrow="Finanzas" title="KPIs Generales" />
 
+      <h3 className="text-[14px] font-semibold mb-3">Servicio Postventa</h3>
+      {storeFeedbackAggregate ? (
+        <div className="max-w-sm mb-3">
+          <StoreFeedbackTile data={storeFeedbackAggregate} />
+        </div>
+      ) : (
+        <div className="text-steel text-[13px] mb-3">Todavía no hay evaluaciones registradas.</div>
+      )}
+      {canStoreFeedback && <StoreFeedbackPanel stores={stores} />}
+
       {canReturnRate && (
         <>
-          <h3 className="text-[14px] font-semibold mb-3">Tasa de Devolución</h3>
+          <h3 className="text-[14px] font-semibold mb-3 mt-7">Tasa de Devolución</h3>
           <ReturnRatePanel records={returnRateRecords} />
         </>
       )}

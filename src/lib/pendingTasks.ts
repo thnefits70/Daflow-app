@@ -390,6 +390,28 @@ async function getPaymentReminderPendingItems(deptId: string, href: string): Pro
   return items;
 }
 
+// Servicio Postventa — confirmed 2026-07-22: Nairoby evaluates tiendas the
+// 2nd week of the month (starting the 2nd Wednesday), reviewing the previous
+// month. Only needs at least one evaluation logged for that period — she
+// doesn't have to cover every store, just start the round.
+async function getStoreFeedbackPendingItem(href: string): Promise<PendingItem | null> {
+  const today = currentMonthStr();
+  const prev = prevMonthStr(today);
+  const startDate = nthWeekdayOfMonth(today, 3, 2); // 3 = miércoles, 2da ocurrencia
+  if (nowInEcuador() < startDate) return null;
+
+  const hasAny = await prisma.storeFeedbackEvaluation.count({ where: { period: prev } });
+  if (hasAny > 0) return null;
+
+  return {
+    icon: "🏬",
+    label: "Servicio Postventa — feedback de tiendas",
+    meta: `${formatMonthLabel(prev)} · atrasado`,
+    overdue: true,
+    href,
+  };
+}
+
 // ---------------- Entry point ----------------
 // Each person only ever sees what's specifically assigned to them — admin
 // gets Feedback semanal (the one thing only admin can write), a department
@@ -421,16 +443,18 @@ export async function getPendingTasksForCurrentUser(): Promise<PendingTasks | nu
 
   if (me.leadsDept.code === "FIN") {
     monthly = true;
-    const [payStub, returnRate, warranty, paymentReminders] = await Promise.all([
+    const [payStub, returnRate, warranty, paymentReminders, storeFeedback] = await Promise.all([
       getPayStubPendingItem("/area/roles-de-pago"),
       getReturnRatePendingItem("/area/kpis-generales"),
       getWarrantyPendingItem("/area/kpis-generales"),
       getPaymentReminderPendingItems(me.leadsDeptId, "/area/workspace"),
+      getStoreFeedbackPendingItem("/area/kpis-generales"),
     ]);
     if (payStub) items.push(payStub);
     if (returnRate) items.push(returnRate);
     if (warranty) items.push(warranty);
     items.push(...paymentReminders);
+    if (storeFeedback) items.push(storeFeedback);
   }
 
   if (me.leadsDept.trackWeeklyMetric) {
