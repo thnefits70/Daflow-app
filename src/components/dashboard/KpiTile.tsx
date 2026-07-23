@@ -62,9 +62,9 @@ export function KpiTile({
 function splitDangerRuns(
   coords: { x: number; y: number }[],
   values: number[],
-  dangerAbove: number
+  isDanger: (v: number) => boolean,
+  threshold: number
 ): { points: { x: number; y: number }[]; danger: boolean }[] {
-  const isDanger = (v: number) => v >= dangerAbove;
   const runs: { points: { x: number; y: number }[]; danger: boolean }[] = [];
   let current: { x: number; y: number }[] = [coords[0]];
   let currentDanger = isDanger(values[0]);
@@ -76,7 +76,7 @@ function splitDangerRuns(
     }
     const v0 = values[i - 1];
     const v1 = values[i];
-    const t = (dangerAbove - v0) / (v1 - v0);
+    const t = (threshold - v0) / (v1 - v0);
     const crossing = { x: coords[i - 1].x + (coords[i].x - coords[i - 1].x) * t, y: coords[i - 1].y + (coords[i].y - coords[i - 1].y) * t };
     current.push(crossing);
     runs.push({ points: current, danger: currentDanger });
@@ -91,6 +91,7 @@ export function MiniSparkline({
   points,
   color,
   dangerAbove,
+  dangerBelow,
   dangerColor = "#E0574A",
   formatPeriod,
   formatValue,
@@ -99,8 +100,11 @@ export function MiniSparkline({
   color: string;
   // Confirmed 2026-07-22: only the portion of the line that actually
   // crosses this threshold turns red — everything inside range keeps the
-  // normal brand color, not a whole-line status color.
+  // normal brand color, not a whole-line status color. Use whichever
+  // direction matches "worse" for this metric (Tasa de Devolución: above;
+  // Fill Rate: below) — only one of the two should ever be passed.
   dangerAbove?: number;
+  dangerBelow?: number;
   dangerColor?: string;
   formatPeriod: (period: string) => string;
   formatValue: (value: number) => string;
@@ -121,9 +125,11 @@ export function MiniSparkline({
   const last = coords[coords.length - 1];
   const area = `${d} L${last.x.toFixed(1)},${h} L0,${h} Z`;
   const hitR = Math.max(4, Math.min(12, stepX / 2));
-  const lastIsDanger = dangerAbove !== undefined && values[values.length - 1] >= dangerAbove;
+  const dangerThreshold = dangerAbove ?? dangerBelow;
+  const isDangerValue = (v: number) => (dangerAbove !== undefined ? v >= dangerAbove : dangerBelow !== undefined ? v < dangerBelow : false);
+  const lastIsDanger = dangerThreshold !== undefined && isDangerValue(values[values.length - 1]);
   const dangerRuns =
-    dangerAbove !== undefined && coords.length > 1 ? splitDangerRuns(coords, values, dangerAbove) : null;
+    dangerThreshold !== undefined && coords.length > 1 ? splitDangerRuns(coords, values, isDangerValue, dangerThreshold) : null;
 
   const hovered = hoverIndex !== null ? points[hoverIndex] : null;
   const hoverX = hoverIndex !== null ? coords[hoverIndex].x : 0;
@@ -223,6 +229,7 @@ export function FillRateTile({ trend }: { trend: NonNullable<WeeklyTrend> }) {
       <MiniSparkline
         points={trend.points}
         color="#14C7C7"
+        dangerBelow={97}
         formatPeriod={formatWeekShort}
         formatValue={(v) => `${Math.round(v)}%`}
       />
