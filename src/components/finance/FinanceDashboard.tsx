@@ -22,6 +22,8 @@ function pp(v: number) {
   return (v >= 0 ? "+" : "") + v.toFixed(1) + " pp";
 }
 
+const GRANULARITY_MONTHS = { monthly: 1, quarterly: 3, semiannual: 6, annual: 12 } as const;
+
 const FLAGSHIP_DEFS = [
   { key: "ventas" as const, title: "Ventas totales", isPercent: false },
   { key: "utilidadReportada" as const, title: "Utilidad neta", isPercent: false },
@@ -39,10 +41,12 @@ export function FinanceDashboard({
   editable: boolean;
 }) {
   const [brand, setBrand] = useState<string>("consolidado");
-  const [granularity, setGranularity] = useState<"monthly" | "quarterly">("monthly");
+  const [granularity, setGranularity] = useState<"monthly" | "quarterly" | "semiannual" | "annual" | "custom">("monthly");
   const [yearFilter, setYearFilter] = useState<"current" | "prev">("current");
   const [periodA, setPeriodA] = useState<string | null>(null);
   const [periodB, setPeriodB] = useState<string | null>(null);
+  const [customStart, setCustomStart] = useState<string | null>(null);
+  const [customEnd, setCustomEnd] = useState<string | null>(null);
 
   const activeOps = data.operations.filter((o) => o.isActive);
   const todayYear = new Date().getFullYear();
@@ -74,12 +78,22 @@ export function FinanceDashboard({
       otrosGastos: sum("otrosGastos"), roi: null,
     };
   }
+  // "Comparar contra" always groups by the same window as "Ver" — except in
+  // "Personalizado" mode, where only "Analizar" uses the custom date range
+  // (see `curr` below) and this stays a plain single month.
   function getPointByLabel(label: string | null): FinanceMonthDerived | null {
     if (label === null) return null;
-    if (granularity === "monthly") return series.find((r) => r.period === label) ?? null;
+    const months = granularity === "custom" ? 1 : GRANULARITY_MONTHS[granularity];
+    if (months === 1) return series.find((r) => r.period === label) ?? null;
     const idx = series.findIndex((r) => r.period === label);
-    if (idx < 2) return null;
-    return computeDerived(sumRaw(series.slice(idx - 2, idx + 1)));
+    if (idx < months - 1) return null;
+    return computeDerived(sumRaw(series.slice(idx - (months - 1), idx + 1)));
+  }
+  function getRangePoint(start: string | null, end: string | null): FinanceMonthDerived | null {
+    if (!start || !end || start > end) return null;
+    const rows = series.filter((r) => r.period >= start && r.period <= end);
+    if (rows.length === 0) return null;
+    return computeDerived(sumRaw(rows));
   }
 
   const periodAOptionsAll = series.filter((r) => r.period.startsWith(String(yearFilter === "current" ? todayYear : todayYear - 1)));
@@ -91,11 +105,16 @@ export function FinanceDashboard({
     byYear.get(y)!.push(r);
   }
   const years = [...byYear.keys()].sort().reverse();
-  const idxOfA = series.findIndex((r) => r.period === effectivePeriodA);
+  const idxOfA = series.findIndex((r) => r.period === (granularity === "custom" ? customEnd : effectivePeriodA));
   const defaultB = idxOfA > 0 ? series[idxOfA - 1].period : series[series.length - 1]?.period ?? null;
   const effectivePeriodB = periodB && series.some((r) => r.period === periodB) ? periodB : defaultB;
 
-  const curr = getPointByLabel(effectivePeriodA);
+  // In "Personalizado" mode, "Analizar" is the custom Desde/Hasta range
+  // instead of a single labeled period — customEnd still anchors the A/B
+  // bracket's visual position on the chart, same as any other granularity's
+  // ending month.
+  const effectiveLabelA = granularity === "custom" ? customEnd : effectivePeriodA;
+  const curr = granularity === "custom" ? getRangePoint(customStart, customEnd) : getPointByLabel(effectivePeriodA);
   const base = getPointByLabel(effectivePeriodB);
 
   if (series.length === 0) {
@@ -156,25 +175,51 @@ export function FinanceDashboard({
         </div>
         <div>
           <div className="text-[10px] uppercase tracking-wide text-steel font-bold mb-1.5">Ver</div>
-          <div className="flex gap-1 bg-cloud border border-rule rounded-md p-1">
+          <div className="flex gap-1 bg-cloud border border-rule rounded-md p-1 flex-wrap">
             <button type="button" className={`px-3 py-1.5 rounded text-[12px] font-semibold cursor-pointer ${granularity === "monthly" ? "bg-blue text-white" : "text-steel"}`} onClick={() => setGranularity("monthly")}>Mensual</button>
             <button type="button" className={`px-3 py-1.5 rounded text-[12px] font-semibold cursor-pointer ${granularity === "quarterly" ? "bg-blue text-white" : "text-steel"}`} onClick={() => setGranularity("quarterly")}>Trimestral</button>
+            <button type="button" className={`px-3 py-1.5 rounded text-[12px] font-semibold cursor-pointer ${granularity === "semiannual" ? "bg-blue text-white" : "text-steel"}`} onClick={() => setGranularity("semiannual")}>Semestral</button>
+            <button type="button" className={`px-3 py-1.5 rounded text-[12px] font-semibold cursor-pointer ${granularity === "annual" ? "bg-blue text-white" : "text-steel"}`} onClick={() => setGranularity("annual")}>Anual</button>
+            <button type="button" className={`px-3 py-1.5 rounded text-[12px] font-semibold cursor-pointer ${granularity === "custom" ? "bg-teal text-navy" : "text-steel"}`} onClick={() => setGranularity("custom")}>Personalizado</button>
           </div>
         </div>
-        <div>
-          <div className="text-[10px] uppercase tracking-wide text-steel font-bold mb-1.5">Año</div>
-          <div className="flex gap-1 bg-cloud border border-rule rounded-md p-1">
-            <button type="button" className={`px-3 py-1.5 rounded text-[12px] font-semibold cursor-pointer ${yearFilter === "current" ? "bg-blue text-white" : "text-steel"}`} onClick={() => setYearFilter("current")}>Año actual</button>
-            <button type="button" className={`px-3 py-1.5 rounded text-[12px] font-semibold cursor-pointer ${yearFilter === "prev" ? "bg-blue text-white" : "text-steel"}`} onClick={() => setYearFilter("prev")}>Año pasado</button>
+        {granularity !== "custom" && (
+          <div>
+            <div className="text-[10px] uppercase tracking-wide text-steel font-bold mb-1.5">Año</div>
+            <div className="flex gap-1 bg-cloud border border-rule rounded-md p-1">
+              <button type="button" className={`px-3 py-1.5 rounded text-[12px] font-semibold cursor-pointer ${yearFilter === "current" ? "bg-blue text-white" : "text-steel"}`} onClick={() => setYearFilter("current")}>Año actual</button>
+              <button type="button" className={`px-3 py-1.5 rounded text-[12px] font-semibold cursor-pointer ${yearFilter === "prev" ? "bg-blue text-white" : "text-steel"}`} onClick={() => setYearFilter("prev")}>Año pasado</button>
+            </div>
           </div>
-        </div>
-        <div>
-          <div className="text-[10px] uppercase tracking-wide text-steel font-bold mb-1.5">Analizar</div>
-          <select className="rounded border border-rule bg-cloud px-2.5 py-1.5 text-[12px]" value={effectivePeriodA ?? ""} onChange={(e) => setPeriodA(e.target.value)}>
-            {periodAOptionsAll.length === 0 && <option value="">Sin datos para {yearFilter === "current" ? todayYear : todayYear - 1}</option>}
-            {periodAOptionsAll.map((r) => <option key={r.period} value={r.period}>{formatMonthShort(r.period)}</option>)}
-          </select>
-        </div>
+        )}
+        {granularity === "custom" ? (
+          <div>
+            <div className="text-[10px] uppercase tracking-wide text-steel font-bold mb-1.5">Analizar — rango personalizado</div>
+            <div className="flex items-center gap-1.5">
+              <input
+                type="month"
+                className="rounded border border-rule bg-cloud px-2.5 py-1.5 text-[12px]"
+                value={customStart ?? ""}
+                onChange={(e) => setCustomStart(e.target.value || null)}
+              />
+              <span className="text-steel text-[12px]">a</span>
+              <input
+                type="month"
+                className="rounded border border-rule bg-cloud px-2.5 py-1.5 text-[12px]"
+                value={customEnd ?? ""}
+                onChange={(e) => setCustomEnd(e.target.value || null)}
+              />
+            </div>
+          </div>
+        ) : (
+          <div>
+            <div className="text-[10px] uppercase tracking-wide text-steel font-bold mb-1.5">Analizar</div>
+            <select className="rounded border border-rule bg-cloud px-2.5 py-1.5 text-[12px]" value={effectivePeriodA ?? ""} onChange={(e) => setPeriodA(e.target.value)}>
+              {periodAOptionsAll.length === 0 && <option value="">Sin datos para {yearFilter === "current" ? todayYear : todayYear - 1}</option>}
+              {periodAOptionsAll.map((r) => <option key={r.period} value={r.period}>{formatMonthShort(r.period)}</option>)}
+            </select>
+          </div>
+        )}
         <div>
           <div className="text-[10px] uppercase tracking-wide text-steel font-bold mb-1.5">Comparar contra (cualquier mes, cualquier año)</div>
           <select className="rounded border border-rule bg-cloud px-2.5 py-1.5 text-[12px]" value={effectivePeriodB ?? ""} onChange={(e) => setPeriodB(e.target.value)}>
@@ -190,7 +235,7 @@ export function FinanceDashboard({
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 mb-5">
         {FLAGSHIP_DEFS.map((def) => {
           const points = windowed.map((r) => ({ week: r.period, value: r[def.key] as number }));
-          const idxA = effectivePeriodA ? windowed.findIndex((r) => r.period === effectivePeriodA) : -1;
+          const idxA = effectiveLabelA ? windowed.findIndex((r) => r.period === effectiveLabelA) : -1;
           const idxB = effectivePeriodB ? windowed.findIndex((r) => r.period === effectivePeriodB) : -1;
           const valA = curr?.[def.key] as number | undefined;
           const valB = base?.[def.key] as number | undefined;
