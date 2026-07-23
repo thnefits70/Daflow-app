@@ -7,6 +7,7 @@ import { getUnseenFeedbackCount } from "@/lib/guards";
 import { getFinanceKpiData } from "@/lib/financeKpis";
 import { getDeptProcessDetail } from "@/lib/processDetail";
 import { getPaymentRemindersData } from "@/lib/paymentReminders";
+import { getPeriodicReminders } from "@/lib/periodicReminders";
 
 export default async function WorkspacePage() {
   const session = await auth();
@@ -15,8 +16,9 @@ export default async function WorkspacePage() {
   const dept = await prisma.department.findUnique({ where: { id: session.user.deptId } });
   if (!dept) redirect("/api/auth/force-logout");
 
-  const [processDetail, documents, exams, financeKpiData, paymentReminders, weeklyMetricRecords, weeklyReviewRecords, currentUser, unseenFeedbackCount] = await Promise.all([
+  const [processDetail, periodicReminders, documents, exams, financeKpiData, paymentReminders, weeklyMetricRecords, weeklyReviewRecords, currentUser, unseenFeedbackCount] = await Promise.all([
     getDeptProcessDetail(dept.id),
+    getPeriodicReminders(dept.id),
     prisma.document.findMany({ where: { deptId: dept.id }, orderBy: { createdAt: "asc" } }),
     prisma.exam.findMany({
       where: { deptId: dept.id },
@@ -44,6 +46,7 @@ export default async function WorkspacePage() {
         deptId={dept.id}
         activeProcess={processDetail?.process ?? null}
         processUpdates={processDetail?.updates ?? []}
+        periodicReminders={periodicReminders}
         documents={documents.map((d) => ({
           id: d.id,
           title: d.title,

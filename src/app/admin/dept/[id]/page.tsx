@@ -5,14 +5,16 @@ import { DeptWorkspaceTabs } from "@/components/dept/DeptWorkspaceTabs";
 import { getFinanceKpiData } from "@/lib/financeKpis";
 import { getDeptProcessDetail } from "@/lib/processDetail";
 import { getPaymentRemindersData } from "@/lib/paymentReminders";
+import { getPeriodicReminders } from "@/lib/periodicReminders";
 
 export default async function DeptWorkspacePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const dept = await prisma.department.findUnique({ where: { id } });
   if (!dept) notFound();
 
-  const [processDetail, documents, exams, financeKpiData, paymentReminders, weeklyMetricRecords, weeklyReviewRecords] = await Promise.all([
+  const [processDetail, periodicReminders, documents, exams, financeKpiData, paymentReminders, weeklyMetricRecords, weeklyReviewRecords] = await Promise.all([
     getDeptProcessDetail(id),
+    getPeriodicReminders(id),
     prisma.document.findMany({ where: { deptId: id }, orderBy: { createdAt: "asc" } }),
     prisma.exam.findMany({
       where: { deptId: id },
@@ -36,6 +38,7 @@ export default async function DeptWorkspacePage({ params }: { params: Promise<{ 
         deptId={id}
         activeProcess={processDetail?.process ?? null}
         processUpdates={processDetail?.updates ?? []}
+        periodicReminders={periodicReminders}
         documents={documents.map((d) => ({
           id: d.id,
           title: d.title,

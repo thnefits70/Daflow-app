@@ -70,6 +70,7 @@ model Department {
   weeklyMetrics WeeklyMetricRecord[]
   weeklyReviews WeeklyReviewRecord[]
   paymentReminders      PaymentReminder[]
+  periodicReminders     PeriodicReminder[]
 
   @@index([order])
 }
@@ -144,6 +145,7 @@ model User {
   financeKpiRecordsUploaded FinanceKpiRecord[] @relation("FinanceKpiRecordUploadedBy")
   financeKpiUploadsBy       FinanceKpiUpload[] @relation("FinanceKpiUploadUploadedBy")
   paymentReminderRecordsCompleted PaymentReminderRecord[] @relation("PaymentReminderCompletedBy")
+  periodicReminderCompletions     PeriodicReminderCompletion[] @relation("PeriodicReminderCompletedBy")
   storeFeedbackEvaluations        StoreFeedbackEvaluation[] @relation("StoreFeedbackEvaluatedBy")
   confidentialAccess ConfidentialDocumentAccess[]
   monthlyEvaluationsReceived MonthlyEvaluation[]
@@ -163,6 +165,49 @@ model Milestone {
   date   DateTime @default(now())
 
   @@index([userId])
+}
+
+/* ---------------- Recordatorios periódicos ---------------- */
+// Confirmado 2026-07-23: disponible para todas las áreas (no exclusivo de
+// una sola, a diferencia de Pagos recordatorios). Mismo permiso que
+// Procesos/Documentos/Exámenes en esa área — admin edita, el líder solo ve.
+enum PeriodicReminderRecurrence {
+  DAILY
+  WEEKLY
+  ONCE
+}
+
+model PeriodicReminder {
+  id         String                     @id @default(cuid())
+  deptId     String
+  department Department                 @relation(fields: [deptId], references: [id], onDelete: Cascade)
+  title      String
+  detail     String                     @default("")
+  recurrence PeriodicReminderRecurrence
+  weekday    Int? // 1-7 (ISO, lunes=1) — solo para WEEKLY
+  date       DateTime? // fecha exacta — solo para ONCE
+  timeOfDay  String? // "HH:MM" opcional — desde qué hora del día debe aparecer
+  isActive   Boolean                    @default(true)
+  order      Int                        @default(0)
+  createdAt  DateTime                   @default(now())
+
+  completions PeriodicReminderCompletion[]
+
+  @@index([deptId])
+}
+
+model PeriodicReminderCompletion {
+  id            String           @id @default(cuid())
+  reminderId    String
+  reminder      PeriodicReminder @relation(fields: [reminderId], references: [id], onDelete: Cascade)
+  // DAILY: "YYYY-MM-DD" del día · WEEKLY: "YYYY-Www" de esa semana · ONCE: "once" (una sola vez, para siempre)
+  period        String
+  completedAt   DateTime         @default(now())
+  completedById String?
+  completedBy   User?            @relation("PeriodicReminderCompletedBy", fields: [completedById], references: [id], onDelete: SetNull)
+
+  @@unique([reminderId, period])
+  @@index([reminderId])
 }
 
 /* ---------------- Procesos (flujograma) ---------------- */

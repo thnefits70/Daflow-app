@@ -2,10 +2,12 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { GitBranch, FileText, GraduationCap, LineChart, TrendingUp, MessageSquare, CalendarClock } from "lucide-react";
+import { GitBranch, FileText, GraduationCap, LineChart, TrendingUp, MessageSquare, CalendarClock, BellRing } from "lucide-react";
 import { ProcessEmbeddedPanel } from "@/components/process/ProcessEmbeddedPanel";
 import type { ProcessDTO } from "@/components/process/ProcessEditor";
 import type { ProcessUpdateDTO } from "@/components/process/ProcessHistoryPanel";
+import { PeriodicRemindersPanel } from "@/components/process/PeriodicRemindersPanel";
+import type { PeriodicReminderDTO } from "@/lib/periodicReminders";
 import { DocumentsPanel } from "@/components/documents/DocumentsPanel";
 import { ExamsPanel } from "@/components/exams/ExamsPanel";
 import { FinanceKpiWorkspace } from "@/components/finance/FinanceKpiWorkspace";
@@ -22,6 +24,7 @@ const ALL_TABS = [
   { key: "procesos", label: "Procesos", icon: GitBranch },
   { key: "documentos", label: "Documentos", icon: FileText },
   { key: "examenes", label: "Exámenes", icon: GraduationCap },
+  { key: "recordatorios", label: "Recordatorios", icon: BellRing },
   { key: "kpis", label: "KPIs financieros", icon: LineChart },
   { key: "pagos", label: "Pagos recordatorios", icon: CalendarClock },
   { key: "semanal", label: "Pedidos despachados", icon: TrendingUp },
@@ -34,6 +37,7 @@ export function DeptWorkspaceTabs({
   deptId,
   activeProcess,
   processUpdates = [],
+  periodicReminders = [],
   documents,
   exams,
   trackKpis = false,
@@ -51,6 +55,7 @@ export function DeptWorkspaceTabs({
   deptId: string;
   activeProcess: ProcessDTO | null;
   processUpdates?: ProcessUpdateDTO[];
+  periodicReminders?: PeriodicReminderDTO[];
   documents: DocumentDTO[];
   exams: ExamSummary[];
   trackKpis?: boolean;
@@ -106,6 +111,9 @@ export function DeptWorkspaceTabs({
 
       {tab === "procesos" && (
         <ProcessEmbeddedPanel deptId={deptId} process={activeProcess} updates={processUpdates} editable={editable} />
+      )}
+      {tab === "recordatorios" && (
+        <PeriodicRemindersPanel deptId={deptId} reminders={periodicReminders} editable={editable} />
       )}
       {tab === "documentos" && <DocumentsPanel deptId={deptId} documents={documents} editable={editable} />}
       {tab === "examenes" && <ExamsPanel deptId={deptId} exams={exams} editable={editable} />}
