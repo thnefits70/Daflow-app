@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Check, Undo2, Trash2, Pencil } from "lucide-react";
+import { Plus, Check, Undo2, Trash2, Pencil, Search } from "lucide-react";
 
 type RecordDTO = { period: string; amountPaid: number; completedAt: string; completedByName: string | null };
 type ReminderDTO = {
@@ -48,11 +48,25 @@ export function PaymentRemindersPanel({
   const [amountValue, setAmountValue] = useState("");
   const [refDraftFor, setRefDraftFor] = useState<string | null>(null);
   const [refValue, setRefValue] = useState("");
+  const [search, setSearch] = useState("");
+  const [editDraftFor, setEditDraftFor] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editMethod, setEditMethod] = useState("");
+  const [editDueDay, setEditDueDay] = useState("");
+  const [editStartDay, setEditStartDay] = useState("");
 
   const period = currentPeriod();
   const activeReminders = reminders.filter((r) => r.isActive);
   const inactiveReminders = reminders.filter((r) => !r.isActive);
-  const shown = tab === "active" ? activeReminders : inactiveReminders;
+  const byTab = tab === "active" ? activeReminders : inactiveReminders;
+  const searchQuery = search.trim().toLowerCase();
+  const shown = searchQuery
+    ? byTab.filter((r) =>
+        [r.name, r.paymentMethod ?? "", String(r.dueDay), String(r.reminderStartDay)].some((f) =>
+          f.toLowerCase().includes(searchQuery)
+        )
+      )
+    : byTab;
 
   const create = async () => {
     const due = Number(dueDay);
@@ -148,6 +162,45 @@ export function PaymentRemindersPanel({
     router.refresh();
   };
 
+  const openEdit = (r: ReminderDTO) => {
+    setEditDraftFor(r.id);
+    setEditName(r.name);
+    setEditMethod(r.paymentMethod ?? "");
+    setEditDueDay(String(r.dueDay));
+    setEditStartDay(String(r.reminderStartDay));
+    setErr("");
+  };
+
+  // Full edit — name, método, día de vencimiento y día de aviso, todos en
+  // una sola pasada, distinto del editor rápido del monto de referencia.
+  const saveEdit = async (id: string) => {
+    const due = Number(editDueDay);
+    const start = Number(editStartDay);
+    if (!editName.trim()) return setErr("Ponle un nombre (empresa o plataforma a la que se paga).");
+    if (!due || due < 1 || due > 31) return setErr("El día de vencimiento debe estar entre 1 y 31.");
+    if (!start || start < 1 || start > 31) return setErr("El día para empezar a recordar debe estar entre 1 y 31.");
+    setErr("");
+    setBusy(true);
+    const res = await fetch(`/api/payment-reminders/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: editName.trim(),
+        paymentMethod: editMethod.trim() || null,
+        dueDay: due,
+        reminderStartDay: start,
+      }),
+    });
+    setBusy(false);
+    if (!res.ok) {
+      const data = await res.json().catch(() => null);
+      setErr(data?.error ?? "No se pudo guardar el cambio.");
+      return;
+    }
+    setEditDraftFor(null);
+    router.refresh();
+  };
+
   return (
     <div>
       <div className="text-[13px] text-steel mb-4 max-w-2xl">
@@ -187,6 +240,18 @@ export function PaymentRemindersPanel({
           </button>
         )}
       </div>
+
+      {reminders.length > 0 && (
+        <div className="relative mb-4 max-w-sm">
+          <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-steel" />
+          <input
+            className="w-full rounded border border-rule pl-8 pr-2.5 py-2 text-[13px]"
+            placeholder="Buscar por nombre, método o día..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+      )}
 
       {editable && showForm && (
         <div className="bg-surface border border-rule rounded p-4 mb-4">
@@ -258,7 +323,11 @@ export function PaymentRemindersPanel({
 
       {shown.length === 0 && (
         <div className="border-[1.5px] border-dashed border-rule rounded-md p-8.5 text-center text-steel text-[13.5px]">
-          {tab === "active" ? "Aún no hay pagos configurados." : "No hay pagos inactivos."}
+          {searchQuery
+            ? "Ningún recordatorio coincide con tu búsqueda."
+            : tab === "active"
+              ? "Aún no hay pagos configurados."
+              : "No hay pagos inactivos."}
         </div>
       )}
 
@@ -267,14 +336,89 @@ export function PaymentRemindersPanel({
           const rec = r.records.find((x) => x.period === period);
           return (
             <div key={r.id} className="bg-surface border border-rule rounded p-4">
-              <div className="flex items-start justify-between gap-3 flex-wrap">
-                <div>
-                  <div className="font-semibold text-[14px]">{r.name}</div>
-                  <div className="text-[12px] text-steel mt-0.5">
-                    {r.paymentMethod && <>{r.paymentMethod} · </>}
-                    Vence el día {r.dueDay} · recuerda desde el día {r.reminderStartDay}
+              {editDraftFor === r.id ? (
+                <div className="grid grid-cols-2 gap-2.5 mb-3">
+                  <input
+                    className="rounded border border-rule px-2.5 py-1.5 text-[13px] col-span-2"
+                    placeholder="Empresa o plataforma"
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                  />
+                  <input
+                    className="rounded border border-rule px-2.5 py-1.5 text-[13px] col-span-2"
+                    placeholder="Método de pago"
+                    value={editMethod}
+                    onChange={(e) => setEditMethod(e.target.value)}
+                  />
+                  <div>
+                    <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">
+                      Día de vencimiento
+                    </label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={31}
+                      className="w-full rounded border border-rule px-2.5 py-1.5 text-[13px]"
+                      value={editDueDay}
+                      onChange={(e) => setEditDueDay(e.target.value)}
+                    />
                   </div>
+                  <div>
+                    <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">
+                      Recordar desde el día
+                    </label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={31}
+                      className="w-full rounded border border-rule px-2.5 py-1.5 text-[13px]"
+                      value={editStartDay}
+                      onChange={(e) => setEditStartDay(e.target.value)}
+                    />
+                  </div>
+                  <div className="col-span-2 flex items-center gap-2 mt-1">
+                    <button
+                      type="button"
+                      disabled={busy}
+                      className="text-[12px] font-semibold text-white bg-blue border border-blue rounded px-3 py-1.5 cursor-pointer disabled:opacity-60"
+                      onClick={() => saveEdit(r.id)}
+                    >
+                      Guardar
+                    </button>
+                    <button
+                      type="button"
+                      className="text-[12px] text-steel cursor-pointer"
+                      onClick={() => {
+                        setEditDraftFor(null);
+                        setErr("");
+                      }}
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                  {err && <div className="text-red text-[12px] col-span-2">{err}</div>}
                 </div>
+              ) : (
+                <div className="flex items-start justify-between gap-3 flex-wrap mb-0">
+                  <div className="flex items-start gap-1.5 group">
+                    <div>
+                      <div className="font-semibold text-[14px]">{r.name}</div>
+                      <div className="text-[12px] text-steel mt-0.5">
+                        {r.paymentMethod && <>{r.paymentMethod} · </>}
+                        Vence el día {r.dueDay} · recuerda desde el día {r.reminderStartDay}
+                      </div>
+                    </div>
+                    {editable && (
+                      <button
+                        type="button"
+                        className="text-steel opacity-0 group-hover:opacity-100 hover:text-ink cursor-pointer mt-0.5"
+                        title="Editar recordatorio"
+                        onClick={() => openEdit(r)}
+                      >
+                        <Pencil size={12} />
+                      </button>
+                    )}
+                  </div>
 
                 {/* Reference-amount / paid-amount display — editing the reference is
                     independent of this period's "Realizado" state. */}
@@ -341,7 +485,8 @@ export function PaymentRemindersPanel({
                 ) : (
                   <span className="text-steel text-[11.5px]">Sin monto</span>
                 )}
-              </div>
+                </div>
+              )}
 
               <div className="flex items-center justify-end gap-2 mt-3 flex-wrap">
                 {!editable ? (
