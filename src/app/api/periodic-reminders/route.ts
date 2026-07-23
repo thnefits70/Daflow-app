@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { requireAdminSession } from "@/lib/guards";
+import { canEditDeptKpis } from "@/lib/guards";
 
 const createSchema = z
   .object({
@@ -23,15 +23,16 @@ const createSchema = z
   });
 
 export async function POST(req: NextRequest) {
-  const session = await requireAdminSession();
-  if (!session) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
-
   const body = await req.json().catch(() => null);
   const parsed = createSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Datos inválidos." }, { status: 400 });
   }
   const d = parsed.data;
+
+  if (!(await canEditDeptKpis(d.deptId))) {
+    return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+  }
 
   const reminder = await prisma.periodicReminder.create({
     data: {

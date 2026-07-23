@@ -1,6 +1,7 @@
 import { Building2 } from "lucide-react";
 import { DailyQuoteBanner } from "./DailyQuoteBanner";
 import { PendingTasksCard } from "./PendingTasksCard";
+import { PeriodicRemindersCard } from "./PeriodicRemindersCard";
 import { RecognitionPodium } from "@/components/recognition/RecognitionPodium";
 import { ScoreGauge } from "./ScoreGauge";
 import { WeeklyTrendChart } from "./WeeklyTrendChart";
@@ -11,6 +12,7 @@ import { PieChart } from "./PieChart";
 import { OrgChart } from "./OrgChart";
 import type { DashboardData, WeeklyTrend, StockoutWeekPoint, WarrantyMonthlyChart, PieSlice } from "@/lib/dashboard";
 import type { StoreFeedbackAggregate } from "@/lib/storeFeedback";
+import type { DuePeriodicReminderDTO } from "@/lib/periodicReminders";
 
 function barColor(score: number) {
   if (score >= 75) return "#14C7C7";
@@ -27,6 +29,7 @@ export function Dashboard({
   warrantyMonthlyChart,
   warrantyReasonChart,
   storeFeedback,
+  duePeriodicReminders = [],
 }: {
   data: DashboardData;
   weeklyTrend?: WeeklyTrend;
@@ -36,6 +39,7 @@ export function Dashboard({
   warrantyMonthlyChart?: WarrantyMonthlyChart | null;
   warrantyReasonChart?: PieSlice[];
   storeFeedback?: StoreFeedbackAggregate | null;
+  duePeriodicReminders?: DuePeriodicReminderDTO[];
 }) {
   const { rows, rowsSorted, totalAttempts, overallAvg } = data;
 
@@ -54,6 +58,7 @@ export function Dashboard({
       </div>
 
       <PendingTasksCard />
+      <PeriodicRemindersCard items={duePeriodicReminders} showDept />
 
       {weeklyTrend && (
         <div className="bg-surface border border-rule rounded-lg p-6 mb-5">

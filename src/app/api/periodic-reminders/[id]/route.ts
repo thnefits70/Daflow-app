@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { requireAdminSession } from "@/lib/guards";
+import { canEditDeptKpis } from "@/lib/guards";
 
 const updateSchema = z.object({
   title: z.string().trim().min(1).optional(),
@@ -14,10 +14,13 @@ const updateSchema = z.object({
 });
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const session = await requireAdminSession();
-  if (!session) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
-
   const { id } = await params;
+  const reminder = await prisma.periodicReminder.findUnique({ where: { id } });
+  if (!reminder) return NextResponse.json({ error: "No encontrado." }, { status: 404 });
+  if (!(await canEditDeptKpis(reminder.deptId))) {
+    return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+  }
+
   const body = await req.json().catch(() => null);
   const parsed = updateSchema.safeParse(body);
   if (!parsed.success) {
@@ -42,10 +45,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 }
 
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const session = await requireAdminSession();
-  if (!session) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
-
   const { id } = await params;
+  const reminder = await prisma.periodicReminder.findUnique({ where: { id } });
+  if (!reminder) return NextResponse.json({ ok: true });
+  if (!(await canEditDeptKpis(reminder.deptId))) {
+    return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+  }
+
   await prisma.periodicReminder.delete({ where: { id } }).catch(() => null);
   return NextResponse.json({ ok: true });
 }

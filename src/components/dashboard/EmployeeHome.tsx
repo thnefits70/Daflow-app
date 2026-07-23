@@ -2,6 +2,7 @@ import Link from "next/link";
 import { GitBranch, FileText, GraduationCap, Scale, ClipboardList, LineChart } from "lucide-react";
 import { DailyQuoteBanner } from "./DailyQuoteBanner";
 import { PendingTasksCard } from "./PendingTasksCard";
+import { PeriodicRemindersCard } from "./PeriodicRemindersCard";
 import { RecognitionPodium } from "@/components/recognition/RecognitionPodium";
 import { ScoreGauge } from "./ScoreGauge";
 import { WeeklyTrendChart } from "./WeeklyTrendChart";
@@ -12,6 +13,7 @@ import { PieChart } from "./PieChart";
 import { OrgChart } from "./OrgChart";
 import type { DashboardRow, WeeklyTrend, StockoutWeekPoint, WarrantyMonthlyChart, PieSlice } from "@/lib/dashboard";
 import type { StoreFeedbackAggregate } from "@/lib/storeFeedback";
+import type { DuePeriodicReminderDTO } from "@/lib/periodicReminders";
 
 type ScoreRow = { id: string; examTitle: string; score: number; total: number; createdAt: string };
 
@@ -41,6 +43,7 @@ export function EmployeeHome({
   warrantyReasonChart,
   storeFeedback,
   rowsSorted,
+  duePeriodicReminders = [],
 }: {
   userName: string;
   deptName: string;
@@ -57,6 +60,7 @@ export function EmployeeHome({
   warrantyReasonChart?: PieSlice[];
   storeFeedback?: StoreFeedbackAggregate | null;
   rowsSorted: DashboardRow[];
+  duePeriodicReminders?: DuePeriodicReminderDTO[];
 }) {
   const avg = scores.length
     ? Math.round(scores.reduce((a, s) => a + pct(s.score, s.total), 0) / scores.length)
@@ -80,6 +84,7 @@ export function EmployeeHome({
       </div>
 
       <PendingTasksCard />
+      <PeriodicRemindersCard items={duePeriodicReminders} />
 
       {weeklyTrend && (
         <div className="bg-surface border border-rule rounded-lg p-6 mb-5">

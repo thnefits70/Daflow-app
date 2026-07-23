@@ -113,7 +113,7 @@ export function DeptWorkspaceTabs({
         <ProcessEmbeddedPanel deptId={deptId} process={activeProcess} updates={processUpdates} editable={editable} />
       )}
       {tab === "recordatorios" && (
-        <PeriodicRemindersPanel deptId={deptId} reminders={periodicReminders} editable={editable} />
+        <PeriodicRemindersPanel deptId={deptId} reminders={periodicReminders} editable={kpisEditable ?? editable} />
       )}
       {tab === "documentos" && <DocumentsPanel deptId={deptId} documents={documents} editable={editable} />}
       {tab === "examenes" && <ExamsPanel deptId={deptId} exams={exams} editable={editable} />}
