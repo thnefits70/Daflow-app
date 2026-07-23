@@ -99,7 +99,10 @@ export function marginNetoStatus(value: number, bands: { alerta: number; excelen
   return { cls: "crit" as const, label: "Alerta", icon: "🔴" };
 }
 
-export function roiStatus(value: number, bands: { red: number; yellow: number }) {
+// Confirmado 2026-07-22: 4 niveles, mismo patrón que marginNetoStatus —
+// <red malo, hasta yellow regular, hasta excellent saludable, por encima excelente.
+export function roiStatus(value: number, bands: { red: number; yellow: number; excellent: number }) {
+  if (value >= bands.excellent) return { cls: "excelente" as const, label: "Excelente" };
   if (value >= bands.yellow) return { cls: "good" as const, label: "Saludable" };
   if (value >= bands.red) return { cls: "warn" as const, label: "Regular" };
   return { cls: "crit" as const, label: "Bajo / alerta" };

@@ -1,0 +1,4 @@
+-- AlterTable
+ALTER TABLE "FinanceKpiSettings" ADD COLUMN     "roiBandExcellent" DOUBLE PRECISION NOT NULL DEFAULT 45,
+ALTER COLUMN "roiBandRed" SET DEFAULT 15,
+ALTER COLUMN "roiBandYellow" SET DEFAULT 20;

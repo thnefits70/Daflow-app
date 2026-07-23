@@ -12,6 +12,7 @@ const settingsSchema = z.object({
   roiBandRed: z.number().min(0).max(100).optional(),
   roiBandYellow: z.number().min(0).max(100).optional(),
   roiBandTarget: z.number().min(0).max(100).optional(),
+  roiBandExcellent: z.number().min(0).max(100).optional(),
   taxRatePct: z.number().min(0).max(100).optional(),
 });
 

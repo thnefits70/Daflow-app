@@ -452,9 +452,13 @@ model FinanceKpiSettings {
   targetMargenNeto      Float @default(20)
   excelenteMargenNeto   Float @default(30)
 
-  roiBandRed    Float @default(10)
-  roiBandYellow Float @default(18)
-  roiBandTarget Float @default(20)
+  // Confirmado 2026-07-22: <roiBandRed malo, hasta roiBandYellow regular,
+  // hasta roiBandExcellent saludable, por encima excelente — mismo patrón de
+  // 4 niveles que excelenteMargenNeto.
+  roiBandRed       Float @default(15)
+  roiBandYellow    Float @default(20)
+  roiBandTarget    Float @default(20)
+  roiBandExcellent Float @default(45)
 
   taxRatePct Float @default(25)
 

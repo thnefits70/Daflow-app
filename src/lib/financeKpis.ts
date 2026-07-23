@@ -25,6 +25,7 @@ export type FinanceKpiSettingsDTO = {
   roiBandRed: number;
   roiBandYellow: number;
   roiBandTarget: number;
+  roiBandExcellent: number;
   taxRatePct: number;
 };
 
@@ -42,9 +43,10 @@ const DEFAULT_SETTINGS: FinanceKpiSettingsDTO = {
   targetMargenOperativo: 15,
   targetMargenNeto: 20,
   excelenteMargenNeto: 30,
-  roiBandRed: 10,
-  roiBandYellow: 18,
+  roiBandRed: 15,
+  roiBandYellow: 20,
   roiBandTarget: 20,
+  roiBandExcellent: 45,
   taxRatePct: 25,
 };
 
@@ -108,6 +110,7 @@ export async function getFinanceKpiData(deptId: string): Promise<FinanceKpiDataD
           roiBandRed: settings.roiBandRed,
           roiBandYellow: settings.roiBandYellow,
           roiBandTarget: settings.roiBandTarget,
+          roiBandExcellent: settings.roiBandExcellent,
           taxRatePct: settings.taxRatePct,
         }
       : DEFAULT_SETTINGS,

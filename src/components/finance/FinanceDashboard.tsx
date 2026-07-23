@@ -274,7 +274,12 @@ export function FinanceDashboard({
             value={curr.roi}
             compareValue={base?.roi}
             compareLabel={base ? formatMonthShort(base.period) : undefined}
-            bands={{ red: data.settings.roiBandRed, yellow: data.settings.roiBandYellow, target: data.settings.roiBandTarget }}
+            bands={{
+              red: data.settings.roiBandRed,
+              yellow: data.settings.roiBandYellow,
+              target: data.settings.roiBandTarget,
+              excellent: data.settings.roiBandExcellent,
+            }}
           />
         </div>
       )}

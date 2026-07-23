@@ -13,31 +13,38 @@ function describeArc(cx: number, cy: number, r: number, startAngle: number, endA
   return `M ${start.x.toFixed(1)} ${start.y.toFixed(1)} A ${r} ${r} 0 ${largeArcFlag} 1 ${end.x.toFixed(1)} ${end.y.toFixed(1)}`;
 }
 
-const STATUS_COLOR = { good: "#22a67e", warn: "#d9a441", crit: "#e0574a" } as const;
+const STATUS_COLOR = { good: "#22a67e", warn: "#d9a441", crit: "#e0574a", excelente: "#14c7c7" } as const;
 
 export function RoiGauge({
   value,
   compareValue,
   compareLabel,
   bands,
-  max = 30,
+  max: fixedMax = 30,
 }: {
   value: number | null;
   compareValue?: number | null;
   compareLabel?: string;
-  bands: { red: number; yellow: number; target: number };
+  bands: { red: number; yellow: number; target: number; excellent: number };
   max?: number;
 }) {
   if (value === null) {
     return <div className="text-center text-steel text-[12.5px] py-5">Aún no hay ROI cargado para este mes.</div>;
   }
 
+  // Confirmed 2026-07-22: the scale always keeps at least 10 points of
+  // headroom past the actual value, rounded up to a clean multiple of 10 —
+  // so the needle never sits pinned at the end of the dial looking "maxed
+  // out" when ROI genuinely exceeds the usual range.
+  const max = Math.max(fixedMax, Math.ceil((value + 10) / 10) * 10);
+
   const w = 320, h = 195, cx = w / 2, cy = 165, r = 120, thickness = 26;
   const toAngle = (v: number) => 180 - (Math.min(Math.max(v, 0), max) / max) * 180;
   const bandDefs = [
     { from: 0, to: bands.red, color: STATUS_COLOR.crit },
     { from: bands.red, to: bands.yellow, color: STATUS_COLOR.warn },
-    { from: bands.yellow, to: max, color: STATUS_COLOR.good },
+    { from: bands.yellow, to: bands.excellent, color: STATUS_COLOR.good },
+    { from: bands.excellent, to: max, color: STATUS_COLOR.excelente },
   ];
   const arcs = bandDefs.map((b, i) => (
     <path key={i} d={describeArc(cx, cy, r, toAngle(b.from), toAngle(b.to))} fill="none" stroke={b.color} strokeWidth={thickness} />
@@ -93,7 +100,7 @@ export function RoiGauge({
         )}
       </div>
       <div className="text-[11px] text-steel mt-2.5 text-center">
-        🔴 &lt;{bands.red}% bajo/alerta · 🟡 {bands.red}–{bands.yellow}% regular · 🟢 &gt;{bands.yellow}% saludable
+        🔴 &lt;{bands.red}% bajo/alerta · 🟡 {bands.red}–{bands.yellow}% regular · 🟢 {bands.yellow}–{bands.excellent}% saludable · 🌟 &gt;{bands.excellent}% excelente
       </div>
     </div>
   );
