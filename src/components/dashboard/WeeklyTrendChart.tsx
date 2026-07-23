@@ -131,11 +131,18 @@ export function WeeklyTrendChart({
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const [dateTooltipWeek, setDateTooltipWeek] = useState<string | null>(null);
   const [reducedMotion, setReducedMotion] = useState(false);
+  // Confirmed 2026-07-22: the A/B delta badge's number is too small to read
+  // comfortably — click it to zoom in place, click anywhere outside to
+  // revert.
+  const [deltaZoomed, setDeltaZoomed] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     function onClickOutside(e: MouseEvent) {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setDateTooltipWeek(null);
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) {
+        setDateTooltipWeek(null);
+        setDeltaZoomed(false);
+      }
     }
     document.addEventListener("mousedown", onClickOutside);
     return () => document.removeEventListener("mousedown", onClickOutside);
@@ -452,14 +459,31 @@ export function WeeklyTrendChart({
                 <line x1={left} y1={bracketY} x2={right} y2={bracketY} stroke="#D9A441" strokeWidth="1.5" strokeDasharray="3,3" />
                 <line x1={cA.x} y1={bracketY} x2={cA.x} y2={cA.y} stroke="#D9A441" strokeWidth="1" strokeDasharray="2,3" opacity="0.45" />
                 <line x1={cB.x} y1={bracketY} x2={cB.x} y2={cB.y} stroke="#D9A441" strokeWidth="1" strokeDasharray="2,3" opacity="0.45" />
-                <rect x={mid - boxW / 2} y={bracketY - 9} width={boxW} height="15" rx="4" fill="#0a1526" stroke="#D9A441" strokeWidth="1" />
-                <text x={mid} y={bracketY + 2} textAnchor="middle" fontSize="9.5" fontWeight="700" fill={deltaColor}>{deltaLabel}</text>
                 <circle cx={cA.x} cy={bracketY} r="6.5" fill="#D9A441" />
                 <text x={cA.x} y={bracketY + 3} textAnchor="middle" fontSize="8.5" fontWeight="700" fill="#05131f">A</text>
                 <circle cx={cB.x} cy={bracketY} r="6.5" fill="none" stroke="#D9A441" strokeWidth="1.5" />
                 <text x={cB.x} y={bracketY + 3} textAnchor="middle" fontSize="8.5" fontWeight="700" fill="#D9A441">B</text>
                 <circle cx={cA.x} cy={cA.y} r="6" fill="none" stroke="#D9A441" strokeWidth="2" />
                 <circle cx={cB.x} cy={cB.y} r="6" fill="none" stroke="#D9A441" strokeWidth="2" strokeDasharray="2,2" />
+                {/* Rendered last within this group so it paints on top of the
+                    A/B markers once scaled up — confirmed 2026-07-22, the
+                    number was too small to read comfortably. */}
+                <g
+                  pointerEvents="auto"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setDeltaZoomed((z) => !z);
+                  }}
+                  style={{
+                    cursor: "pointer",
+                    transform: deltaZoomed ? "scale(2.2)" : "scale(1)",
+                    transformOrigin: `${mid}px ${bracketY}px`,
+                    transition: "transform 0.15s ease-out",
+                  }}
+                >
+                  <rect x={mid - boxW / 2} y={bracketY - 9} width={boxW} height="15" rx="4" fill="#0a1526" stroke="#D9A441" strokeWidth="1" />
+                  <text x={mid} y={bracketY + 2} textAnchor="middle" fontSize="9.5" fontWeight="700" fill={deltaColor}>{deltaLabel}</text>
+                </g>
               </g>
             );
           })()}
