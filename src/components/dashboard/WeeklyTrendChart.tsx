@@ -56,12 +56,14 @@ export function fillRateStatus(pct: number) {
   return { label: "Ineficiente", color: "#C4453A" };
 }
 
-// Inverse of the other two metrics — lower is better. Under 20% is the
-// acceptable ceiling; it gets worse the higher it climbs from there.
+// Inverse of the other two metrics — lower is better. Confirmed 2026-07-22:
+// under 20% is genuinely healthy; 20-30% is already an alert (not a mild
+// "regular" middle ground); 30%+ is an extremely high rate — both alert
+// tiers are red, just a deeper shade for the more severe one.
 export function returnRateStatus(pct: number) {
-  if (pct < 20) return { label: "Eficiente", color: "#14C7C7" };
-  if (pct < 30) return { label: "Regular", color: "#D9A441" };
-  return { label: "Ineficiente", color: "#C4453A" };
+  if (pct < 20) return { label: "Saludable", color: "#14C7C7" };
+  if (pct < 30) return { label: "Alerta", color: "#C4453A" };
+  return { label: "Extremadamente alta", color: "#8B2A2A" };
 }
 
 function niceMax(value: number) {
