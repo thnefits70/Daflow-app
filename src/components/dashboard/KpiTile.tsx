@@ -54,14 +54,54 @@ export function KpiTile({
 // compact tile for a separate click-to-reveal step. formatIsoWeekRangeLabel()
 // returns null for month-shaped periods (Tasa de Devolución), so it's simply
 // omitted there.
+// Splits a coordinate/value series into runs that are entirely inside vs.
+// entirely past a danger threshold, interpolating the exact crossing point
+// (in value-space, mapped back to screen x/y) so the color change lands
+// precisely where the line actually crosses — not rounded to the nearest
+// data point.
+function splitDangerRuns(
+  coords: { x: number; y: number }[],
+  values: number[],
+  dangerAbove: number
+): { points: { x: number; y: number }[]; danger: boolean }[] {
+  const isDanger = (v: number) => v >= dangerAbove;
+  const runs: { points: { x: number; y: number }[]; danger: boolean }[] = [];
+  let current: { x: number; y: number }[] = [coords[0]];
+  let currentDanger = isDanger(values[0]);
+  for (let i = 1; i < coords.length; i++) {
+    const thisDanger = isDanger(values[i]);
+    if (thisDanger === currentDanger) {
+      current.push(coords[i]);
+      continue;
+    }
+    const v0 = values[i - 1];
+    const v1 = values[i];
+    const t = (dangerAbove - v0) / (v1 - v0);
+    const crossing = { x: coords[i - 1].x + (coords[i].x - coords[i - 1].x) * t, y: coords[i - 1].y + (coords[i].y - coords[i - 1].y) * t };
+    current.push(crossing);
+    runs.push({ points: current, danger: currentDanger });
+    current = [crossing, coords[i]];
+    currentDanger = thisDanger;
+  }
+  runs.push({ points: current, danger: currentDanger });
+  return runs;
+}
+
 export function MiniSparkline({
   points,
   color,
+  dangerAbove,
+  dangerColor = "#E0574A",
   formatPeriod,
   formatValue,
 }: {
   points: { week: string; value: number; detail?: string }[];
   color: string;
+  // Confirmed 2026-07-22: only the portion of the line that actually
+  // crosses this threshold turns red — everything inside range keeps the
+  // normal brand color, not a whole-line status color.
+  dangerAbove?: number;
+  dangerColor?: string;
   formatPeriod: (period: string) => string;
   formatValue: (value: number) => string;
 }) {
@@ -81,6 +121,9 @@ export function MiniSparkline({
   const last = coords[coords.length - 1];
   const area = `${d} L${last.x.toFixed(1)},${h} L0,${h} Z`;
   const hitR = Math.max(4, Math.min(12, stepX / 2));
+  const lastIsDanger = dangerAbove !== undefined && values[values.length - 1] >= dangerAbove;
+  const dangerRuns =
+    dangerAbove !== undefined && coords.length > 1 ? splitDangerRuns(coords, values, dangerAbove) : null;
 
   const hovered = hoverIndex !== null ? points[hoverIndex] : null;
   const hoverX = hoverIndex !== null ? coords[hoverIndex].x : 0;
@@ -104,18 +147,33 @@ export function MiniSparkline({
         </defs>
         <line x1="0" x2={w} y1={h / 2} y2={h / 2} stroke="#24365a" strokeWidth="1" strokeDasharray="2 3" />
         <path d={area} fill={`url(#kpitile-grad-${uid})`} />
-        <path d={d} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        {dangerRuns ? (
+          dangerRuns.map((run, i) => (
+            <path
+              key={i}
+              d={smoothPath(run.points)}
+              fill="none"
+              stroke={run.danger ? dangerColor : color}
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          ))
+        ) : (
+          <path d={d} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        )}
         {coords.map((c, i) => {
           const isLast = i === coords.length - 1;
           const isHover = i === hoverIndex;
           if (!isLast && !isHover) return null;
+          const dotColor = isLast && lastIsDanger ? dangerColor : color;
           return (
             <circle
               key={i}
               cx={c.x}
               cy={c.y}
               r={isHover ? 3.4 : 2.6}
-              fill={color}
+              fill={dotColor}
               opacity={isLast && !isHover ? 0.9 : 1}
               pointerEvents="none"
             />
@@ -184,6 +242,7 @@ export function ReturnRateTile({ trend }: { trend: NonNullable<WeeklyTrend> }) {
       <MiniSparkline
         points={trend.points}
         color="#14C7C7"
+        dangerAbove={30}
         formatPeriod={formatMonthShort}
         formatValue={(v) => `${Math.round(v)}%`}
       />
