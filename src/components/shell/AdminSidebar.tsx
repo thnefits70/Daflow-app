@@ -56,6 +56,10 @@ export function AdminSidebar({
   const [dragIdx, setDragIdx] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [open, setOpen] = useState(false);
+  // Desktop-only collapse (separate from the mobile drawer's `open`, which
+  // defaults closed and overlays content) — defaults expanded, shrinks the
+  // sidebar to 0 width so <main> (flex-1) reflows to fill the freed space.
+  const [desktopCollapsed, setDesktopCollapsed] = useState(false);
 
   if (departments !== prevDepartments) {
     setPrevDepartments(departments);
@@ -94,11 +98,24 @@ export function AdminSidebar({
 
       {open && <div className="fixed inset-0 bg-black/50 z-30 md:hidden" onClick={() => setOpen(false)} />}
 
+      {desktopCollapsed && (
+        <button
+          type="button"
+          onClick={() => setDesktopCollapsed(false)}
+          className="hidden md:flex fixed top-4 left-4 z-50 items-center justify-center w-9 h-9 rounded-md bg-navy border border-white/15 text-white cursor-pointer hover:bg-white/10"
+          aria-label="Mostrar menú"
+          title="Mostrar menú"
+        >
+          <Menu size={18} />
+        </button>
+      )}
+
       <div
-        className={`fixed md:static inset-y-0 left-0 z-40 w-[230px] shrink-0 bg-navy text-[#EDEFE9] flex flex-col min-h-0 transform transition-transform duration-200 md:translate-x-0 ${
+        className={`fixed md:static inset-y-0 left-0 z-40 shrink-0 overflow-hidden bg-navy transition-all duration-200 ${
           open ? "translate-x-0" : "-translate-x-full"
-        }`}
+        } md:translate-x-0 w-[230px] ${desktopCollapsed ? "md:w-0" : "md:w-[230px]"}`}
       >
+      <div className="w-[230px] h-full text-[#EDEFE9] flex flex-col min-h-0">
       <div className="px-4.5 pt-5 pb-3.5 border-b border-white/10">
         <div className="flex items-center justify-between gap-2.5 mb-3">
           <div className="flex items-center gap-2.5">
@@ -107,6 +124,15 @@ export function AdminSidebar({
           </div>
           <button type="button" onClick={() => setOpen(false)} className="md:hidden p-1 text-white cursor-pointer" aria-label="Cerrar menú">
             <X size={18} />
+          </button>
+          <button
+            type="button"
+            onClick={() => setDesktopCollapsed(true)}
+            className="hidden md:flex p-1 text-white/70 hover:text-white cursor-pointer"
+            aria-label="Ocultar menú"
+            title="Ocultar menú"
+          >
+            <X size={16} />
           </button>
         </div>
         <div className="text-[10px] tracking-[.14em] uppercase text-teal">Panel</div>
@@ -209,6 +235,7 @@ export function AdminSidebar({
         >
           <LogOut size={14} /> Cerrar sesión
         </button>
+      </div>
       </div>
       </div>
     </>
