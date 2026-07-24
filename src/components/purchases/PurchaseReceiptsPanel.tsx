@@ -2,13 +2,16 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Trash2, Pencil, Download, Upload, X, FileText, Check, Ban } from "lucide-react";
+import { Plus, Trash2, Pencil, Download, Upload, X, FileText, Check, Ban, Search } from "lucide-react";
+import { Combobox, type ComboboxOption } from "@/components/ui/Combobox";
 
 type ChangeRequestDTO = {
   action: "EDIT" | "DELETE";
   requestedByName: string | null;
   requestedAt: string;
-  proposedProveedor: string | null;
+  proposedSupplierName: string | null;
+  proposedNumeroComprobante: string | null;
+  proposedBankName: string | null;
   proposedMonto: number | null;
   proposedFechaPago: string | null;
   proposedFileUrl: string | null;
@@ -17,7 +20,9 @@ type ChangeRequestDTO = {
 
 type ReceiptDTO = {
   id: string;
-  proveedor: string;
+  supplierName: string;
+  numeroComprobante: string | null;
+  bankName: string | null;
   monto: number;
   fechaPago: string;
   fileUrl: string;
@@ -26,6 +31,8 @@ type ReceiptDTO = {
   createdAt: string;
   changeRequest: ChangeRequestDTO | null;
 };
+
+type CatalogDTO = { id: string; name: string };
 
 function fmtMoney(n: number) {
   return n.toLocaleString("es-EC", { style: "currency", currency: "USD" });
@@ -37,23 +44,31 @@ function toDateInputValue(iso: string) {
   return iso.slice(0, 10);
 }
 
-type Draft = { proveedor: string; monto: string; fechaPago: string; fileUrl: string; fileName: string };
-const EMPTY_DRAFT: Draft = { proveedor: "", monto: "", fechaPago: "", fileUrl: "", fileName: "" };
+type Draft = { supplierName: string; numeroComprobante: string; bankName: string; monto: string; fechaPago: string; fileUrl: string; fileName: string };
+const EMPTY_DRAFT: Draft = { supplierName: "", numeroComprobante: "", bankName: "", monto: "", fechaPago: "", fileUrl: "", fileName: "" };
 
-// Comprobante de pago (Gestión de Compras) — confirmado 2026-07-23: solo el
-// líder de Compras (y admin, o quien admin autorice puntualmente) ve esta
+const COMBO_INPUT_CLASS = "w-full rounded border border-rule px-2.5 py-2 text-[13.5px]";
+
+// Comprobante de pago (Gestión de Compras) — confirmado 2026-07-23/24: solo
+// el líder de Compras (y admin, o quien admin autorice puntualmente) ve esta
 // sección. El líder crea directamente, pero editar/eliminar un comprobante ya
 // creado requiere una solicitud que el admin debe aprobar — ver
 // src/lib/guards.ts canManagePurchaseReceipts y las rutas .../request,
-// .../approve, .../reject.
+// .../approve, .../reject. Proveedor y banco son catálogos "escribe o elige"
+// (mismo patrón que Ruptura de Stock) — se crean sobre la marcha si no
+// existen todavía.
 export function PurchaseReceiptsPanel({
   deptId,
   receipts,
+  suppliers,
+  banks,
   editable,
   isAdmin,
 }: {
   deptId: string;
   receipts: ReceiptDTO[];
+  suppliers: CatalogDTO[];
+  banks: CatalogDTO[];
   editable: boolean;
   isAdmin: boolean;
 }) {
@@ -67,6 +82,25 @@ export function PurchaseReceiptsPanel({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState<Draft>(EMPTY_DRAFT);
   const [editIsRequest, setEditIsRequest] = useState(false);
+
+  const [search, setSearch] = useState("");
+  const [monthFrom, setMonthFrom] = useState("");
+  const [monthTo, setMonthTo] = useState("");
+
+  const supplierOptions: ComboboxOption[] = suppliers.map((s) => ({ id: s.id, name: s.name }));
+  const bankOptions: ComboboxOption[] = banks.map((b) => ({ id: b.id, name: b.name }));
+
+  const searchQuery = search.trim().toLowerCase();
+  const shown = receipts.filter((r) => {
+    if (searchQuery) {
+      const haystack = `${r.supplierName} ${r.bankName ?? ""} ${r.numeroComprobante ?? ""}`.toLowerCase();
+      if (!haystack.includes(searchQuery)) return false;
+    }
+    const period = r.fechaPago.slice(0, 7); // "YYYY-MM"
+    if (monthFrom && period < monthFrom) return false;
+    if (monthTo && period > monthTo) return false;
+    return true;
+  });
 
   async function uploadFile(file: File, onDone: (url: string, name: string) => void) {
     setErr("");
@@ -85,8 +119,34 @@ export function PurchaseReceiptsPanel({
     onDone(data.url, data.name);
   }
 
-  function validate(d: Draft) {
-    if (!d.proveedor.trim()) return "Ingresa el nombre del proveedor.";
+  // Resolves a typed catalog name to an id — reuses an existing entry
+  // (case-insensitive) or creates one on the fly, same pattern as
+  // StockoutPanel's addToWeek. Returns null (and sets `err`) on failure.
+  async function resolveCatalogId(
+    kind: "supplier" | "bank",
+    name: string,
+    options: CatalogDTO[]
+  ): Promise<string | null> {
+    const trimmed = name.trim();
+    const existing = options.find((o) => o.name.toLowerCase() === trimmed.toLowerCase());
+    if (existing) return existing.id;
+
+    const endpoint = kind === "supplier" ? "/api/purchase-receipt-suppliers" : "/api/purchase-receipt-banks";
+    const res = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ deptId, name: trimmed }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => null);
+      setErr(data?.error ?? `No se pudo crear el ${kind === "supplier" ? "proveedor" : "banco"}.`);
+      return null;
+    }
+    return (await res.json()).id;
+  }
+
+  function validateBase(d: Draft) {
+    if (!d.supplierName.trim()) return "Elige o escribe un proveedor.";
     const monto = Number(d.monto);
     if (!monto || monto <= 0) return "Ingresa un monto válido.";
     if (!d.fechaPago) return "Ingresa la fecha de pago.";
@@ -95,16 +155,27 @@ export function PurchaseReceiptsPanel({
   }
 
   async function createReceipt() {
-    const v = validate(newDraft);
+    const v = validateBase(newDraft);
     if (v) return setErr(v);
     setErr("");
     setBusy(true);
+
+    const supplierId = await resolveCatalogId("supplier", newDraft.supplierName, suppliers);
+    if (!supplierId) return setBusy(false);
+    let bankId: string | null = null;
+    if (newDraft.bankName.trim()) {
+      bankId = await resolveCatalogId("bank", newDraft.bankName, banks);
+      if (!bankId) return setBusy(false);
+    }
+
     const res = await fetch("/api/purchase-receipts", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         deptId,
-        proveedor: newDraft.proveedor.trim(),
+        supplierId,
+        bankId: bankId ?? undefined,
+        numeroComprobante: newDraft.numeroComprobante.trim() || undefined,
         monto: Number(newDraft.monto),
         fechaPago: newDraft.fechaPago,
         fileUrl: newDraft.fileUrl,
@@ -126,7 +197,9 @@ export function PurchaseReceiptsPanel({
     setEditingId(r.id);
     setEditIsRequest(asRequest);
     setEditDraft({
-      proveedor: r.proveedor,
+      supplierName: r.supplierName,
+      numeroComprobante: r.numeroComprobante ?? "",
+      bankName: r.bankName ?? "",
       monto: String(r.monto),
       fechaPago: toDateInputValue(r.fechaPago),
       fileUrl: r.fileUrl,
@@ -136,27 +209,46 @@ export function PurchaseReceiptsPanel({
   }
 
   async function saveEdit(id: string) {
-    const v = validate(editDraft);
+    const v = validateBase(editDraft);
     if (v) return setErr(v);
     setErr("");
     setBusy(true);
-    const body = {
-      proveedor: editDraft.proveedor.trim(),
+
+    const supplierId = await resolveCatalogId("supplier", editDraft.supplierName, suppliers);
+    if (!supplierId) return setBusy(false);
+    let bankId: string | null = null;
+    if (editDraft.bankName.trim()) {
+      bankId = await resolveCatalogId("bank", editDraft.bankName, banks);
+      if (!bankId) return setBusy(false);
+    }
+
+    const numeroComprobante = editDraft.numeroComprobante.trim() || null;
+    const common = {
+      supplierId,
       monto: Number(editDraft.monto),
       fechaPago: editDraft.fechaPago,
       fileUrl: editDraft.fileUrl,
       fileName: editDraft.fileName,
     };
+    // The direct-PATCH schema is nullable (explicit null clears the field);
+    // the request-creation schema is only optional (it normalizes a missing
+    // field to null itself) — so the two payloads differ only in whether an
+    // empty bank/número is sent as `null` or simply omitted.
     const res = editIsRequest
       ? await fetch(`/api/purchase-receipts/${id}/request`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "EDIT", ...body }),
+          body: JSON.stringify({
+            action: "EDIT",
+            ...common,
+            bankId: bankId ?? undefined,
+            numeroComprobante: numeroComprobante ?? undefined,
+          }),
         })
       : await fetch(`/api/purchase-receipts/${id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
+          body: JSON.stringify({ ...common, bankId, numeroComprobante }),
         });
     setBusy(false);
     if (!res.ok) {
@@ -222,11 +314,27 @@ export function PurchaseReceiptsPanel({
   function draftForm(draft: Draft, setDraft: (d: Draft) => void) {
     return (
       <div className="grid grid-cols-2 gap-2.5 mb-3">
+        <div className="col-span-2">
+          <Combobox
+            value={draft.supplierName}
+            onChange={(v) => setDraft({ ...draft, supplierName: v })}
+            options={supplierOptions}
+            placeholder="Proveedor — escribe o elige uno existente"
+            className={COMBO_INPUT_CLASS}
+          />
+        </div>
         <input
-          className="rounded border border-rule px-2.5 py-2 text-[13.5px] col-span-2"
-          placeholder="Proveedor"
-          value={draft.proveedor}
-          onChange={(e) => setDraft({ ...draft, proveedor: e.target.value })}
+          className="rounded border border-rule px-2.5 py-2 text-[13.5px]"
+          placeholder="Número de comprobante (opcional)"
+          value={draft.numeroComprobante}
+          onChange={(e) => setDraft({ ...draft, numeroComprobante: e.target.value })}
+        />
+        <Combobox
+          value={draft.bankName}
+          onChange={(v) => setDraft({ ...draft, bankName: v })}
+          options={bankOptions}
+          placeholder="Banco (opcional)"
+          className={COMBO_INPUT_CLASS}
         />
         <div className="relative">
           <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-green font-semibold text-[13.5px]">$</span>
@@ -305,14 +413,54 @@ export function PurchaseReceiptsPanel({
         </div>
       )}
 
+      {receipts.length > 0 && (
+        <div className="flex flex-wrap items-end gap-3 mb-4">
+          <div className="relative flex-1 min-w-[220px] max-w-sm">
+            <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-steel" />
+            <input
+              className="w-full rounded border border-rule pl-8 pr-2.5 py-2 text-[13px]"
+              placeholder="Buscar por proveedor, banco o número..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+          <div>
+            <div className="text-[10px] uppercase tracking-wide text-steel font-bold mb-1">Desde</div>
+            <input type="month" className="rounded border border-rule px-2.5 py-1.5 text-[12.5px]" value={monthFrom} onChange={(e) => setMonthFrom(e.target.value)} />
+          </div>
+          <div>
+            <div className="text-[10px] uppercase tracking-wide text-steel font-bold mb-1">Hasta</div>
+            <input type="month" className="rounded border border-rule px-2.5 py-1.5 text-[12.5px]" value={monthTo} onChange={(e) => setMonthTo(e.target.value)} />
+          </div>
+          {(search || monthFrom || monthTo) && (
+            <button
+              type="button"
+              className="text-[12px] text-steel border border-rule rounded px-2.5 py-1.5 cursor-pointer"
+              onClick={() => {
+                setSearch("");
+                setMonthFrom("");
+                setMonthTo("");
+              }}
+            >
+              Limpiar filtros
+            </button>
+          )}
+        </div>
+      )}
+
       {receipts.length === 0 && (
         <div className="border-[1.5px] border-dashed border-rule rounded-md p-8.5 text-center text-steel text-[13.5px]">
           Aún no hay comprobantes de pago.
         </div>
       )}
+      {receipts.length > 0 && shown.length === 0 && (
+        <div className="border-[1.5px] border-dashed border-rule rounded-md p-8.5 text-center text-steel text-[13.5px]">
+          Ningún comprobante coincide con tu búsqueda o filtro.
+        </div>
+      )}
 
       <div className="space-y-2.5">
-        {receipts.map((r) => {
+        {shown.map((r) => {
           const cr = r.changeRequest;
           const isEditingThis = editingId === r.id;
           return (
@@ -339,9 +487,12 @@ export function PurchaseReceiptsPanel({
                 <>
                   <div className="flex items-start justify-between gap-3 flex-wrap">
                     <div>
-                      <div className="font-semibold text-[14.5px] mb-0.5">{r.proveedor}</div>
+                      <div className="font-semibold text-[14.5px] mb-0.5">{r.supplierName}</div>
                       <div className="text-[12px] text-steel">
-                        {fmtDate(r.fechaPago)} {r.createdByName && <>· subido por {r.createdByName}</>}
+                        {fmtDate(r.fechaPago)}
+                        {r.bankName && <> · {r.bankName}</>}
+                        {r.numeroComprobante && <> · N° {r.numeroComprobante}</>}
+                        {r.createdByName && <> · subido por {r.createdByName}</>}
                       </div>
                     </div>
                     <span className="text-green text-[17px] font-extrabold whitespace-nowrap">{fmtMoney(r.monto)}</span>
@@ -369,9 +520,11 @@ export function PurchaseReceiptsPanel({
                       </div>
                       {cr.action === "EDIT" && (
                         <div className="text-[12px] text-steel mb-2">
-                          Cambiaría a: <b className="text-ink">{cr.proposedProveedor}</b>,{" "}
+                          Cambiaría a: <b className="text-ink">{cr.proposedSupplierName}</b>,{" "}
                           <b className="text-ink">{cr.proposedMonto != null ? fmtMoney(cr.proposedMonto) : ""}</b>,{" "}
                           {cr.proposedFechaPago && fmtDate(cr.proposedFechaPago)}
+                          {cr.proposedBankName && <> · banco: {cr.proposedBankName}</>}
+                          {cr.proposedNumeroComprobante && <> · N° {cr.proposedNumeroComprobante}</>}
                           {cr.proposedFileName && cr.proposedFileName !== r.fileName && <> · nuevo archivo: {cr.proposedFileName}</>}
                         </div>
                       )}

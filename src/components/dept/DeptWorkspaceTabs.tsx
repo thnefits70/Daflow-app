@@ -11,7 +11,7 @@ import type { PeriodicReminderDTO } from "@/lib/periodicReminders";
 import { DocumentsPanel } from "@/components/documents/DocumentsPanel";
 import { ExamsPanel } from "@/components/exams/ExamsPanel";
 import { PurchaseReceiptsPanel } from "@/components/purchases/PurchaseReceiptsPanel";
-import type { PurchaseReceiptDTO } from "@/lib/purchaseReceipts";
+import type { PurchaseReceiptDTO, PurchaseReceiptCatalogDTO } from "@/lib/purchaseReceipts";
 import { FinanceKpiWorkspace } from "@/components/finance/FinanceKpiWorkspace";
 import type { FinanceKpiDataDTO } from "@/lib/financeKpis";
 import { PaymentRemindersPanel } from "@/components/finance/PaymentRemindersPanel";
@@ -55,6 +55,8 @@ export function DeptWorkspaceTabs({
   weeklyReviewRecords = [],
   canViewPurchaseReceipts = false,
   purchaseReceipts = [],
+  purchaseReceiptSuppliers = [],
+  purchaseReceiptBanks = [],
   isAdmin = false,
   editable,
   kpisEditable,
@@ -79,6 +81,8 @@ export function DeptWorkspaceTabs({
   // not per-department, so nobody else on the team even sees it exists.
   canViewPurchaseReceipts?: boolean;
   purchaseReceipts?: PurchaseReceiptDTO[];
+  purchaseReceiptSuppliers?: PurchaseReceiptCatalogDTO[];
+  purchaseReceiptBanks?: PurchaseReceiptCatalogDTO[];
   isAdmin?: boolean;
   editable: boolean;
   kpisEditable?: boolean;
@@ -131,7 +135,14 @@ export function DeptWorkspaceTabs({
         <PeriodicRemindersPanel deptId={deptId} reminders={periodicReminders} editable={kpisEditable ?? editable} />
       )}
       {tab === "comprobante" && canViewPurchaseReceipts && (
-        <PurchaseReceiptsPanel deptId={deptId} receipts={purchaseReceipts} editable={canViewPurchaseReceipts} isAdmin={isAdmin} />
+        <PurchaseReceiptsPanel
+          deptId={deptId}
+          receipts={purchaseReceipts}
+          suppliers={purchaseReceiptSuppliers}
+          banks={purchaseReceiptBanks}
+          editable={canViewPurchaseReceipts}
+          isAdmin={isAdmin}
+        />
       )}
       {tab === "documentos" && <DocumentsPanel deptId={deptId} documents={documents} editable={editable} />}
       {tab === "examenes" && <ExamsPanel deptId={deptId} exams={exams} editable={editable} />}

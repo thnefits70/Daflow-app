@@ -72,6 +72,8 @@ model Department {
   paymentReminders      PaymentReminder[]
   periodicReminders     PeriodicReminder[]
   purchaseReceipts      PurchaseReceipt[]
+  purchaseReceiptSuppliers PurchaseReceiptSupplier[]
+  purchaseReceiptBanks     PurchaseReceiptBank[]
 
   @@index([order])
 }
@@ -732,12 +734,47 @@ enum PurchaseReceiptAction {
   DELETE
 }
 
+// Catálogos "escribe o elige uno existente" (mismo patrón que StockoutProduct
+// / WarrantyCategory + Combobox.tsx) — confirmado 2026-07-24: el líder puede
+// crear proveedores y bancos sobre la marcha al registrar un comprobante.
+model PurchaseReceiptSupplier {
+  id        String     @id @default(cuid())
+  deptId    String
+  dept      Department @relation(fields: [deptId], references: [id], onDelete: Cascade)
+  name      String
+  createdAt DateTime   @default(now())
+
+  receipts PurchaseReceipt[]
+
+  @@unique([deptId, name])
+  @@index([deptId])
+}
+
+model PurchaseReceiptBank {
+  id        String     @id @default(cuid())
+  deptId    String
+  dept      Department @relation(fields: [deptId], references: [id], onDelete: Cascade)
+  name      String
+  createdAt DateTime   @default(now())
+
+  receipts PurchaseReceipt[]
+
+  @@unique([deptId, name])
+  @@index([deptId])
+}
+
 model PurchaseReceipt {
   id     String     @id @default(cuid())
   deptId String
   dept   Department @relation(fields: [deptId], references: [id], onDelete: Cascade)
 
-  proveedor String
+  supplierId String
+  supplier   PurchaseReceiptSupplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  // Opcionales — confirmado 2026-07-24.
+  numeroComprobante String?
+  bankId            String?
+  bank              PurchaseReceiptBank? @relation(fields: [bankId], references: [id], onDelete: SetNull)
+
   monto     Float
   fechaPago DateTime
   fileUrl   String
@@ -752,6 +789,8 @@ model PurchaseReceipt {
   changeRequest PurchaseReceiptChangeRequest?
 
   @@index([deptId])
+  @@index([supplierId])
+  @@index([fechaPago])
 }
 
 // Al menos una fila por comprobante mientras está pendiente — el @unique en
@@ -771,11 +810,13 @@ model PurchaseReceiptChangeRequest {
 
   // Solo poblados cuando action = EDIT — los valores propuestos que se
   // aplicarán al comprobante si el admin aprueba.
-  proposedProveedor String?
-  proposedMonto     Float?
-  proposedFechaPago DateTime?
-  proposedFileUrl   String?
-  proposedFileName  String?
+  proposedSupplierId        String?
+  proposedNumeroComprobante String?
+  proposedBankId            String?
+  proposedMonto             Float?
+  proposedFechaPago         DateTime?
+  proposedFileUrl           String?
+  proposedFileName          String?
 }
 
 // Comprobante de pago (PDF o imagen) de un empleado para un mes/año — solo lo

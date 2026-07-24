@@ -6,7 +6,9 @@ import { canManagePurchaseReceipts } from "@/lib/guards";
 
 const createSchema = z.object({
   deptId: z.string().min(1),
-  proveedor: z.string().trim().min(1, "Ingresa el nombre del proveedor."),
+  supplierId: z.string().min(1, "Elige o crea un proveedor."),
+  numeroComprobante: z.string().trim().optional(),
+  bankId: z.string().min(1).optional(),
   monto: z.number().positive("Ingresa un monto válido."),
   fechaPago: z.string().min(1, "Ingresa la fecha de pago."),
   fileUrl: z.string().min(1, "Sube el comprobante."),
@@ -31,7 +33,9 @@ export async function POST(req: NextRequest) {
   const receipt = await prisma.purchaseReceipt.create({
     data: {
       deptId,
-      proveedor: data.proveedor,
+      supplierId: data.supplierId,
+      numeroComprobante: data.numeroComprobante || null,
+      bankId: data.bankId || null,
       monto: data.monto,
       fechaPago: new Date(data.fechaPago),
       fileUrl: data.fileUrl,

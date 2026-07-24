@@ -9,7 +9,9 @@ import { canManagePurchaseReceipts } from "@/lib/guards";
 // they're the same "propose a change" action, distinguished by `action`.
 const requestSchema = z.object({
   action: z.enum(["EDIT", "DELETE"]),
-  proveedor: z.string().trim().min(1).optional(),
+  supplierId: z.string().min(1).optional(),
+  numeroComprobante: z.string().trim().optional(),
+  bankId: z.string().min(1).optional(),
   monto: z.number().positive().optional(),
   fechaPago: z.string().min(1).optional(),
   fileUrl: z.string().min(1).optional(),
@@ -30,8 +32,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Datos inválidos." }, { status: 400 });
   }
   const data = parsed.data;
-  if (data.action === "EDIT" && !data.proveedor) {
-    return NextResponse.json({ error: "Ingresa el nombre del proveedor." }, { status: 400 });
+  if (data.action === "EDIT" && !data.supplierId) {
+    return NextResponse.json({ error: "Elige o crea un proveedor." }, { status: 400 });
   }
 
   const existing = await prisma.purchaseReceiptChangeRequest.findUnique({ where: { receiptId: id } });
@@ -49,7 +51,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       requestedById,
       ...(data.action === "EDIT"
         ? {
-            proposedProveedor: data.proveedor,
+            proposedSupplierId: data.supplierId,
+            proposedNumeroComprobante: data.numeroComprobante || null,
+            proposedBankId: data.bankId || null,
             proposedMonto: data.monto,
             proposedFechaPago: data.fechaPago ? new Date(data.fechaPago) : undefined,
             proposedFileUrl: data.fileUrl,

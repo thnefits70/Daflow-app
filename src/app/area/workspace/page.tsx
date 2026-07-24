@@ -8,7 +8,7 @@ import { getFinanceKpiData } from "@/lib/financeKpis";
 import { getDeptProcessDetail } from "@/lib/processDetail";
 import { getPaymentRemindersData } from "@/lib/paymentReminders";
 import { getPeriodicReminders } from "@/lib/periodicReminders";
-import { getPurchaseReceipts } from "@/lib/purchaseReceipts";
+import { getPurchaseReceipts, getPurchaseReceiptCatalogs } from "@/lib/purchaseReceipts";
 
 export default async function WorkspacePage() {
   const session = await auth();
@@ -17,7 +17,7 @@ export default async function WorkspacePage() {
   const dept = await prisma.department.findUnique({ where: { id: session.user.deptId } });
   if (!dept) redirect("/api/auth/force-logout");
 
-  const [processDetail, periodicReminders, documents, exams, financeKpiData, paymentReminders, weeklyMetricRecords, weeklyReviewRecords, currentUser, unseenFeedbackCount, purchaseReceipts] = await Promise.all([
+  const [processDetail, periodicReminders, documents, exams, financeKpiData, paymentReminders, weeklyMetricRecords, weeklyReviewRecords, currentUser, unseenFeedbackCount, purchaseReceipts, purchaseReceiptCatalogs] = await Promise.all([
     getDeptProcessDetail(dept.id),
     getPeriodicReminders(dept.id),
     prisma.document.findMany({ where: { deptId: dept.id }, orderBy: { createdAt: "asc" } }),
@@ -40,6 +40,7 @@ export default async function WorkspacePage() {
     }),
     getUnseenFeedbackCount(),
     dept.code === "COM" ? getPurchaseReceipts(dept.id) : Promise.resolve([]),
+    dept.code === "COM" ? getPurchaseReceiptCatalogs(dept.id) : Promise.resolve({ suppliers: [], banks: [] }),
   ]);
 
   const kpisEditable = !!currentUser?.isLeader && currentUser.leadsDeptId === dept.id;
@@ -84,6 +85,8 @@ export default async function WorkspacePage() {
         }
         canViewPurchaseReceipts={canViewPurchaseReceipts}
         purchaseReceipts={purchaseReceipts}
+        purchaseReceiptSuppliers={purchaseReceiptCatalogs.suppliers}
+        purchaseReceiptBanks={purchaseReceiptCatalogs.banks}
         isAdmin={false}
         editable={false}
         kpisEditable={kpisEditable}

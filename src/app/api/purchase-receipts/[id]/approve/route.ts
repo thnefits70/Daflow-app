@@ -20,7 +20,13 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   const updated = await prisma.purchaseReceipt.update({
     where: { id },
     data: {
-      ...(changeRequest.proposedProveedor !== null ? { proveedor: changeRequest.proposedProveedor } : {}),
+      ...(changeRequest.proposedSupplierId !== null ? { supplierId: changeRequest.proposedSupplierId } : {}),
+      // numeroComprobante/bankId are optional fields — a proposed null is a
+      // deliberate "clear it" edit, not "leave unchanged", so both branches
+      // of that distinction need to reach the update once the leader's edit
+      // form can actually clear them (it always resends both today).
+      numeroComprobante: changeRequest.proposedNumeroComprobante,
+      bankId: changeRequest.proposedBankId,
       ...(changeRequest.proposedMonto !== null ? { monto: changeRequest.proposedMonto } : {}),
       ...(changeRequest.proposedFechaPago !== null ? { fechaPago: changeRequest.proposedFechaPago } : {}),
       ...(changeRequest.proposedFileUrl !== null ? { fileUrl: changeRequest.proposedFileUrl } : {}),

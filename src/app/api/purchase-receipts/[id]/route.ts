@@ -6,7 +6,9 @@ import { requireAdminSession } from "@/lib/guards";
 // Direct edit/delete is admin-only — the leader must go through
 // POST .../request instead, which the admin then approves or rejects.
 const updateSchema = z.object({
-  proveedor: z.string().trim().min(1).optional(),
+  supplierId: z.string().min(1).optional(),
+  numeroComprobante: z.string().trim().nullable().optional(),
+  bankId: z.string().min(1).nullable().optional(),
   monto: z.number().positive().optional(),
   fechaPago: z.string().min(1).optional(),
   fileUrl: z.string().min(1).optional(),
@@ -27,7 +29,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const updated = await prisma.purchaseReceipt.update({
     where: { id },
     data: {
-      ...(data.proveedor !== undefined ? { proveedor: data.proveedor } : {}),
+      ...(data.supplierId !== undefined ? { supplierId: data.supplierId } : {}),
+      ...(data.numeroComprobante !== undefined ? { numeroComprobante: data.numeroComprobante || null } : {}),
+      ...(data.bankId !== undefined ? { bankId: data.bankId || null } : {}),
       ...(data.monto !== undefined ? { monto: data.monto } : {}),
       ...(data.fechaPago !== undefined ? { fechaPago: new Date(data.fechaPago) } : {}),
       ...(data.fileUrl !== undefined ? { fileUrl: data.fileUrl } : {}),
