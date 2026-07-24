@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { GitBranch, FileText, GraduationCap, LineChart, TrendingUp, MessageSquare, CalendarClock, BellRing } from "lucide-react";
+import { GitBranch, FileText, GraduationCap, LineChart, TrendingUp, MessageSquare, CalendarClock, BellRing, Receipt } from "lucide-react";
 import { ProcessEmbeddedPanel } from "@/components/process/ProcessEmbeddedPanel";
 import type { ProcessDTO } from "@/components/process/ProcessEditor";
 import type { ProcessUpdateDTO } from "@/components/process/ProcessHistoryPanel";
@@ -10,6 +10,8 @@ import { PeriodicRemindersPanel } from "@/components/process/PeriodicRemindersPa
 import type { PeriodicReminderDTO } from "@/lib/periodicReminders";
 import { DocumentsPanel } from "@/components/documents/DocumentsPanel";
 import { ExamsPanel } from "@/components/exams/ExamsPanel";
+import { PurchaseReceiptsPanel } from "@/components/purchases/PurchaseReceiptsPanel";
+import type { PurchaseReceiptDTO } from "@/lib/purchaseReceipts";
 import { FinanceKpiWorkspace } from "@/components/finance/FinanceKpiWorkspace";
 import type { FinanceKpiDataDTO } from "@/lib/financeKpis";
 import { PaymentRemindersPanel } from "@/components/finance/PaymentRemindersPanel";
@@ -28,6 +30,7 @@ const ALL_TABS = [
   { key: "semanal", label: "Pedidos despachados", icon: TrendingUp },
   { key: "feedback", label: "Feedback semanal", icon: MessageSquare },
   { key: "procesos", label: "Procesos", icon: GitBranch },
+  { key: "comprobante", label: "Comprobante de pago", icon: Receipt },
   { key: "documentos", label: "Documentos", icon: FileText },
   { key: "examenes", label: "Exámenes", icon: GraduationCap },
   { key: "recordatorios", label: "Recordatorios", icon: BellRing },
@@ -50,6 +53,9 @@ export function DeptWorkspaceTabs({
   weeklyMetricRecords = [],
   trackWeeklyReview = false,
   weeklyReviewRecords = [],
+  canViewPurchaseReceipts = false,
+  purchaseReceipts = [],
+  isAdmin = false,
   editable,
   kpisEditable,
   unseenFeedbackCount = 0,
@@ -68,6 +74,12 @@ export function DeptWorkspaceTabs({
   weeklyMetricRecords?: WeeklyMetricDTO[];
   trackWeeklyReview?: boolean;
   weeklyReviewRecords?: WeeklyReviewDTO[];
+  // Comprobante de pago (Gestión de Compras) — unlike the trackXxx flags
+  // above, this gates the tab per-VIEWER (leader/admin/explicitly granted),
+  // not per-department, so nobody else on the team even sees it exists.
+  canViewPurchaseReceipts?: boolean;
+  purchaseReceipts?: PurchaseReceiptDTO[];
+  isAdmin?: boolean;
   editable: boolean;
   kpisEditable?: boolean;
   unseenFeedbackCount?: number;
@@ -80,6 +92,7 @@ export function DeptWorkspaceTabs({
     if (t.key === "pagos") return trackPaymentReminders;
     if (t.key === "semanal") return trackWeeklyMetric;
     if (t.key === "feedback") return trackWeeklyReview;
+    if (t.key === "comprobante") return canViewPurchaseReceipts;
     return true;
   });
 
@@ -116,6 +129,9 @@ export function DeptWorkspaceTabs({
       )}
       {tab === "recordatorios" && (
         <PeriodicRemindersPanel deptId={deptId} reminders={periodicReminders} editable={kpisEditable ?? editable} />
+      )}
+      {tab === "comprobante" && canViewPurchaseReceipts && (
+        <PurchaseReceiptsPanel deptId={deptId} receipts={purchaseReceipts} editable={canViewPurchaseReceipts} isAdmin={isAdmin} />
       )}
       {tab === "documentos" && <DocumentsPanel deptId={deptId} documents={documents} editable={editable} />}
       {tab === "examenes" && <ExamsPanel deptId={deptId} exams={exams} editable={editable} />}

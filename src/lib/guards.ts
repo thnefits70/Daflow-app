@@ -202,6 +202,26 @@ export async function canManageStoreFeedback() {
   return !!user?.isLeader && user.leadsDept?.code === "FIN";
 }
 
+// Comprobante de pago (Gestión de Compras) — confirmado 2026-07-23: admin
+// siempre; el líder de Compras; o quien el admin haya autorizado puntualmente
+// vía User.canViewPurchaseReceipts (sin ser necesariamente el líder). Esta
+// misma función gatilla tanto ver la pestaña como crear/solicitar cambios —
+// aprobar/rechazar solicitudes queda admin-only, chequeado aparte en la ruta.
+export async function canManagePurchaseReceipts(deptId: string) {
+  const session = await auth();
+  if (!session) return false;
+  if (session.user.role === "admin") return true;
+  const dept = await prisma.department.findUnique({ where: { id: deptId }, select: { code: true } });
+  if (dept?.code !== "COM") return false;
+  const user = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { isLeader: true, leadsDeptId: true, canViewPurchaseReceipts: true },
+  });
+  if (!user) return false;
+  if (user.canViewPurchaseReceipts) return true;
+  return !!user.isLeader && user.leadsDeptId === deptId;
+}
+
 // How many of the current user's own pay stubs were uploaded/updated since
 // they last opened "Roles de pago" — drives the sidebar badge.
 export async function getUnseenPayStubCount() {

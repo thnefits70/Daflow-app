@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { supabaseAdmin } from "@/lib/supabase";
-import { canManagePayroll, canManageNomina } from "@/lib/guards";
+import { canManagePayroll, canManageNomina, canManagePurchaseReceipts } from "@/lib/guards";
 
 const BUCKET = "daflow-files";
 const MAX_BYTES = 15 * 1024 * 1024;
@@ -42,6 +42,9 @@ export async function POST(req: NextRequest) {
   // the profile (canManageNomina), not just admin.
   if (!allowed && session?.user.role === "employee" && (folder === "photos" || folder === "cvs")) {
     allowed = await canManageNomina();
+  }
+  if (!allowed && session?.user.role === "employee" && folder === "purchase-receipts" && session.user.deptId) {
+    allowed = await canManagePurchaseReceipts(session.user.deptId);
   }
   if (!allowed) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 

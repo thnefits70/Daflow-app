@@ -8,6 +8,7 @@ import { getFinanceKpiData } from "@/lib/financeKpis";
 import { getDeptProcessDetail } from "@/lib/processDetail";
 import { getPaymentRemindersData } from "@/lib/paymentReminders";
 import { getPeriodicReminders } from "@/lib/periodicReminders";
+import { getPurchaseReceipts } from "@/lib/purchaseReceipts";
 
 export default async function WorkspacePage() {
   const session = await auth();
@@ -16,7 +17,7 @@ export default async function WorkspacePage() {
   const dept = await prisma.department.findUnique({ where: { id: session.user.deptId } });
   if (!dept) redirect("/api/auth/force-logout");
 
-  const [processDetail, periodicReminders, documents, exams, financeKpiData, paymentReminders, weeklyMetricRecords, weeklyReviewRecords, currentUser, unseenFeedbackCount] = await Promise.all([
+  const [processDetail, periodicReminders, documents, exams, financeKpiData, paymentReminders, weeklyMetricRecords, weeklyReviewRecords, currentUser, unseenFeedbackCount, purchaseReceipts] = await Promise.all([
     getDeptProcessDetail(dept.id),
     getPeriodicReminders(dept.id),
     prisma.document.findMany({ where: { deptId: dept.id }, orderBy: { createdAt: "asc" } }),
@@ -33,11 +34,18 @@ export default async function WorkspacePage() {
     dept.trackWeeklyReview
       ? prisma.weeklyReviewRecord.findMany({ where: { deptId: dept.id }, orderBy: { week: "asc" } })
       : Promise.resolve([]),
-    prisma.user.findUnique({ where: { id: session.user.id }, select: { isLeader: true, leadsDeptId: true } }),
+    prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { isLeader: true, leadsDeptId: true, canViewPurchaseReceipts: true },
+    }),
     getUnseenFeedbackCount(),
+    dept.code === "COM" ? getPurchaseReceipts(dept.id) : Promise.resolve([]),
   ]);
 
   const kpisEditable = !!currentUser?.isLeader && currentUser.leadsDeptId === dept.id;
+  // Comprobante de pago — leader of Compras, or anyone the admin has
+  // explicitly granted the escape hatch to, regardless of role.
+  const canViewPurchaseReceipts = dept.code === "COM" && (kpisEditable || !!currentUser?.canViewPurchaseReceipts);
 
   return (
     <div>
@@ -74,6 +82,9 @@ export default async function WorkspacePage() {
               }))
             : []
         }
+        canViewPurchaseReceipts={canViewPurchaseReceipts}
+        purchaseReceipts={purchaseReceipts}
+        isAdmin={false}
         editable={false}
         kpisEditable={kpisEditable}
         unseenFeedbackCount={unseenFeedbackCount}

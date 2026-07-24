@@ -71,6 +71,7 @@ model Department {
   weeklyReviews WeeklyReviewRecord[]
   paymentReminders      PaymentReminder[]
   periodicReminders     PeriodicReminder[]
+  purchaseReceipts      PurchaseReceipt[]
 
   @@index([order])
 }
@@ -122,6 +123,11 @@ model User {
   // Puede proponer proveedores nuevos (quedan "Pendiente" hasta que su líder los apruebe). No puede editar ni eliminar.
   canAddSuppliers Boolean @default(false)
 
+  // Escape hatch para ver "Comprobante de pago" (Gestión de Compras) sin ser
+  // el líder del área — confirmado 2026-07-23: por defecto solo el líder (y
+  // admin) lo ve; el admin puede otorgar esto a alguien más puntualmente.
+  canViewPurchaseReceipts Boolean @default(false)
+
   // Última vez que este usuario (como líder) revisó el Feedback semanal de su área — usado para el
   // contador de "sin leer" en el sidebar. Null = nunca lo ha visto.
   lastSeenFeedbackAt DateTime?
@@ -146,6 +152,8 @@ model User {
   financeKpiUploadsBy       FinanceKpiUpload[] @relation("FinanceKpiUploadUploadedBy")
   paymentReminderRecordsCompleted PaymentReminderRecord[] @relation("PaymentReminderCompletedBy")
   periodicReminderCompletions     PeriodicReminderCompletion[] @relation("PeriodicReminderCompletedBy")
+  purchaseReceiptsCreated         PurchaseReceipt[] @relation("PurchaseReceiptCreatedBy")
+  purchaseReceiptChangeRequests   PurchaseReceiptChangeRequest[] @relation("PurchaseReceiptRequestedBy")
   storeFeedbackEvaluations        StoreFeedbackEvaluation[] @relation("StoreFeedbackEvaluatedBy")
   confidentialAccess ConfidentialDocumentAccess[]
   monthlyEvaluationsReceived MonthlyEvaluation[]
@@ -711,6 +719,63 @@ model SupplierChannel {
   url      String
 
   @@index([supplierId])
+}
+
+/* ---------------- Comprobante de pago (Gestión de Compras) ---------------- */
+// Confirmado 2026-07-23: solo el líder de Compras (y admin, o quien el admin
+// autorice puntualmente vía User.canViewPurchaseReceipts) puede ver esta
+// sección — el resto del equipo del área no la ve en absoluto. El líder crea
+// comprobantes directamente, pero editar o eliminar uno ya creado requiere
+// una solicitud que el admin debe aprobar — ver PurchaseReceiptChangeRequest.
+enum PurchaseReceiptAction {
+  EDIT
+  DELETE
+}
+
+model PurchaseReceipt {
+  id     String     @id @default(cuid())
+  deptId String
+  dept   Department @relation(fields: [deptId], references: [id], onDelete: Cascade)
+
+  proveedor String
+  monto     Float
+  fechaPago DateTime
+  fileUrl   String
+  fileName  String
+
+  createdById String?
+  createdBy   User?   @relation("PurchaseReceiptCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  changeRequest PurchaseReceiptChangeRequest?
+
+  @@index([deptId])
+}
+
+// Al menos una fila por comprobante mientras está pendiente — el @unique en
+// receiptId impide que existan dos solicitudes a la vez sobre el mismo
+// comprobante. Se borra al aprobar (tras aplicar los cambios) o al rechazar;
+// su sola existencia ES el estado "pendiente", sin necesidad de un campo status.
+model PurchaseReceiptChangeRequest {
+  id        String          @id @default(cuid())
+  receiptId String          @unique
+  receipt   PurchaseReceipt @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+
+  action PurchaseReceiptAction
+
+  requestedById String?
+  requestedBy   User?    @relation("PurchaseReceiptRequestedBy", fields: [requestedById], references: [id], onDelete: SetNull)
+  requestedAt   DateTime @default(now())
+
+  // Solo poblados cuando action = EDIT — los valores propuestos que se
+  // aplicarán al comprobante si el admin aprueba.
+  proposedProveedor String?
+  proposedMonto     Float?
+  proposedFechaPago DateTime?
+  proposedFileUrl   String?
+  proposedFileName  String?
 }
 
 // Comprobante de pago (PDF o imagen) de un empleado para un mes/año — solo lo
