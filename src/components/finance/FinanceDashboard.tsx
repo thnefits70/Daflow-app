@@ -25,10 +25,11 @@ function pp(v: number) {
 const GRANULARITY_MONTHS = { monthly: 1, quarterly: 3, semiannual: 6, annual: 12 } as const;
 
 const FLAGSHIP_DEFS = [
-  { key: "ventas" as const, title: "Ventas totales", isPercent: false },
-  { key: "utilidadReportada" as const, title: "Utilidad neta", isPercent: false },
-  { key: "margenNeto" as const, title: "Margen neto", isPercent: true },
-  { key: "gastosOperativos" as const, title: "Gastos operativos", isPercent: false },
+  { key: "ventas" as const, title: "Ventas totales", isPercent: false, invert: false },
+  { key: "utilidadReportada" as const, title: "Utilidad neta", isPercent: false, invert: false },
+  { key: "margenNeto" as const, title: "Margen neto", isPercent: true, invert: false },
+  // Gasto: subir es malo (rojo), bajar es bueno (teal) — al revés que las demás.
+  { key: "gastosOperativos" as const, title: "Gastos operativos", isPercent: false, invert: true },
 ];
 
 export function FinanceDashboard({
@@ -242,7 +243,7 @@ export function FinanceDashboard({
           let deltaNode: React.ReactNode = null;
           if (curr && base) {
             const { pctDiff, moneyDiff } = chronoDelta(curr, curr.period, base, base.period, def.key, def.isPercent);
-            const good = pctDiff >= 0;
+            const good = def.invert ? pctDiff <= 0 : pctDiff >= 0;
             const cls = Math.abs(pctDiff) < 0.05 ? "text-steel" : good ? "text-teal" : "text-red";
             const sign = pctDiff >= 0 ? "+" : "";
             const pctText = def.isPercent ? pp(pctDiff) : `${sign}${pctDiff.toFixed(1)}%`;
@@ -267,6 +268,7 @@ export function FinanceDashboard({
                 periodLabel={formatMonthShort}
                 latestLabel="último mes"
                 colorDotsByDirection
+                invertDirection={def.invert}
                 compareIndexA={idxA >= 0 ? idxA : undefined}
                 compareIndexB={idxB >= 0 ? idxB : undefined}
               />

@@ -103,6 +103,7 @@ export function WeeklyTrendChart({
   statusFn,
   valueFormat,
   colorDotsByDirection = false,
+  invertDirection = false,
   compareIndexA,
   compareIndexB,
 }: {
@@ -123,6 +124,11 @@ export function WeeklyTrendChart({
   // left off by default so Pedidos despachados/Fill Rate/Return Rate don't
   // change look.
   colorDotsByDirection?: boolean;
+  // Flips the green/red direction semantics for "lower is better" metrics
+  // (e.g. Gastos operativos) — rising reads as bad (red), falling as good
+  // (teal). Applies to the traveling dot, per-point direction dots, and the
+  // A/B compare delta badge.
+  invertDirection?: boolean;
   // Indices into `points` for the gold "A vs B" comparison bracket (finance
   // dashboard's Analizar/Comparar contra) — omit either to skip it entirely.
   compareIndexA?: number;
@@ -211,7 +217,10 @@ export function WeeklyTrendChart({
   let travelDot: React.ReactNode = null;
   if (segCount > 0 && !reducedMotion) {
     const segColors: string[] = [];
-    for (let i = 0; i < segCount; i++) segColors.push(points[i + 1].value >= points[i].value ? "#14C7C7" : "#FF9B90");
+    for (let i = 0; i < segCount; i++) {
+      const rose = points[i + 1].value >= points[i].value;
+      segColors.push((invertDirection ? !rose : rose) ? "#14C7C7" : "#FF9B90");
+    }
     const keyTimes = segColors.map((_, i) => (i / segCount).toFixed(4)).join(";");
     travelDot = (
       <g color="#14C7C7">
@@ -350,7 +359,8 @@ export function WeeklyTrendChart({
           const isHover = i === hoverIndex;
           if (colorDotsByDirection) {
             const diff = i > 0 ? points[i].value - points[i - 1].value : 0;
-            const dirColor = i === 0 ? "#92A3C0" : diff >= 0 ? "#14C7C7" : "#FF9B90";
+            const rose = diff >= 0;
+            const dirColor = i === 0 ? "#92A3C0" : (invertDirection ? !rose : rose) ? "#14C7C7" : "#FF9B90";
             return (
               <circle
                 key={i}
@@ -450,7 +460,8 @@ export function WeeklyTrendChart({
             const laterVal = earlierFirst ? pB.value : pA.value;
             const diff = laterVal - earlierVal;
             const pctDiff = earlierVal !== 0 ? (diff / Math.abs(earlierVal)) * 100 : 0;
-            const deltaColor = Math.abs(pctDiff) < 0.5 ? "#92A3C0" : pctDiff >= 0 ? "#14C7C7" : "#FF9B90";
+            const roseAB = pctDiff >= 0;
+            const deltaColor = Math.abs(pctDiff) < 0.5 ? "#92A3C0" : (invertDirection ? !roseAB : roseAB) ? "#14C7C7" : "#FF9B90";
             const sign = pctDiff >= 0 ? "+" : "";
             const deltaLabel = `${sign}${pctDiff.toFixed(1)}% (${diff >= 0 ? "+" : ""}${fmt(diff)})`;
             const mid = (left + right) / 2;

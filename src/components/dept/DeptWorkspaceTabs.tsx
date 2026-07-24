@@ -73,7 +73,7 @@ export function DeptWorkspaceTabs({
   unseenFeedbackCount?: number;
 }) {
   const router = useRouter();
-  const [tab, setTab] = useState<TabKey>("procesos");
+  const [tab, setTab] = useState<TabKey>(trackKpis ? "kpis" : "procesos");
   const [seenFeedback, setSeenFeedback] = useState(false);
   const tabs = ALL_TABS.filter((t) => {
     if (t.key === "kpis") return trackKpis;
