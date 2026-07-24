@@ -20,15 +20,17 @@ import { WeeklyReviewPanel, type WeeklyReviewDTO } from "@/components/marketanal
 type DocumentDTO = { id: string; title: string; content: string; link: string; fileUrl: string | null; fileName: string | null };
 type ExamSummary = { id: string; title: string; questionCount: number };
 
+// Orden confirmado 2026-07-23: financiero/operativo primero, luego lo
+// documental, Recordatorios al final.
 const ALL_TABS = [
-  { key: "procesos", label: "Procesos", icon: GitBranch },
-  { key: "documentos", label: "Documentos", icon: FileText },
-  { key: "examenes", label: "Exámenes", icon: GraduationCap },
-  { key: "recordatorios", label: "Recordatorios", icon: BellRing },
   { key: "kpis", label: "KPIs financieros", icon: LineChart },
   { key: "pagos", label: "Pagos recordatorios", icon: CalendarClock },
   { key: "semanal", label: "Pedidos despachados", icon: TrendingUp },
   { key: "feedback", label: "Feedback semanal", icon: MessageSquare },
+  { key: "procesos", label: "Procesos", icon: GitBranch },
+  { key: "documentos", label: "Documentos", icon: FileText },
+  { key: "examenes", label: "Exámenes", icon: GraduationCap },
+  { key: "recordatorios", label: "Recordatorios", icon: BellRing },
 ] as const;
 
 type TabKey = (typeof ALL_TABS)[number]["key"];
