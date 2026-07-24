@@ -6,6 +6,7 @@ import { RoiGauge } from "./RoiGauge";
 import { EstadoDeResultados } from "./EstadoDeResultados";
 import { OtrosIndicadores } from "./OtrosIndicadores";
 import { FinancialAnalysis } from "./FinancialAnalysis";
+import { NancyPanel } from "./NancyPanel";
 import {
   computeDerived, consolidateMonth, chronoDelta, statusForMargin, marginNetoStatus, buildFinancialAnalysis,
   type FinanceMonthRaw, type FinanceMonthDerived,
@@ -372,10 +373,12 @@ export function FinanceDashboard({
         </div>
       )}
 
-      <div className="bg-surface border border-rule rounded-md p-4.5">
+      <div className="bg-surface border border-rule rounded-md p-4.5 mb-3.5">
         <div className="font-mono text-[10px] uppercase tracking-wide text-steel font-bold mb-3">Análisis financiero</div>
         <FinancialAnalysis good={analysis.good} improve={analysis.improve} />
       </div>
+
+      {editable && <NancyPanel deptId={deptId} brand={brand} />}
     </div>
   );
 }
