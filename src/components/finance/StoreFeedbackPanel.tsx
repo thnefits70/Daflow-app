@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, Trash2, ChevronDown, ChevronUp, PhoneCall, Search } from "lucide-react";
 import { Combobox } from "@/components/ui/Combobox";
@@ -108,6 +108,55 @@ function RateGroup({ value, onChange }: { value: string; onChange: (v: string) =
           {n}
         </button>
       ))}
+    </div>
+  );
+}
+
+// Selector de código de país — no usamos un <select> nativo porque el
+// navegador despliega los 20 países de un jalón, sin límite de alto.
+// Confirmado 2026-07-25: máximo ~6 visibles, con scroll para el resto.
+function CountryCodeDropdown({ value, onChange }: { value: string; onChange: (dial: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const current = COUNTRY_CODES.find((c) => c.dial === value) ?? COUNTRY_CODES[0];
+
+  useEffect(() => {
+    function onClickOutside(e: MouseEvent) {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", onClickOutside);
+    return () => document.removeEventListener("mousedown", onClickOutside);
+  }, []);
+
+  return (
+    <div ref={rootRef} className="relative shrink-0">
+      <button
+        type="button"
+        className="flex items-center gap-1.5 rounded border border-rule px-2.5 py-2 text-[13px] font-semibold bg-surface cursor-pointer whitespace-nowrap"
+        onClick={() => setOpen((v) => !v)}
+      >
+        <span>{current.flag}</span> {current.dial}
+        <ChevronDown size={12} className="text-steel" />
+      </button>
+      {open && (
+        <div className="absolute z-20 top-full left-0 mt-1 w-56 bg-surface border border-rule rounded-md shadow-lg max-h-[216px] overflow-y-auto">
+          {COUNTRY_CODES.map((c) => (
+            <button
+              key={c.name}
+              type="button"
+              className={`flex w-full items-center gap-2 px-2.5 py-2 text-[12.5px] text-left cursor-pointer hover:bg-cloud ${
+                c.dial === value ? "text-teal font-semibold" : "text-ink"
+              }`}
+              onClick={() => {
+                onChange(c.dial);
+                setOpen(false);
+              }}
+            >
+              <span>{c.flag}</span> {c.dial} <span className="text-steel">{c.name}</span>
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -363,7 +412,7 @@ export function StoreFeedbackPanel({ stores, editable = true }: { stores: StoreD
                   onChange={setStoreName}
                   options={activeStores.map((s) => ({ id: s.id, name: s.name }))}
                   placeholder="Escribe el nombre — si no existe, se crea"
-                  className="w-full rounded border border-rule px-2.5 py-2 text-[13.5px]"
+                  className="w-full rounded border border-rule bg-surface px-2.5 py-2 text-[13.5px]"
                 />
               </div>
               <div>
@@ -371,7 +420,7 @@ export function StoreFeedbackPanel({ stores, editable = true }: { stores: StoreD
                   Dueño o administrador
                 </label>
                 <input
-                  className="w-full rounded border border-rule px-2.5 py-2 text-[13.5px]"
+                  className="w-full rounded border border-rule bg-surface px-2.5 py-2 text-[13.5px]"
                   placeholder="Nombre de quien atiende"
                   value={contactName}
                   onChange={(e) => setContactName(e.target.value)}
@@ -385,7 +434,7 @@ export function StoreFeedbackPanel({ stores, editable = true }: { stores: StoreD
                   Bodega / marca
                 </label>
                 <select
-                  className="w-full rounded border border-rule px-2.5 py-2 text-[13.5px] bg-white"
+                  className="w-full rounded border border-rule px-2.5 py-2 text-[13.5px] bg-surface"
                   value={brand}
                   onChange={(e) => setBrand(e.target.value)}
                 >
@@ -402,7 +451,7 @@ export function StoreFeedbackPanel({ stores, editable = true }: { stores: StoreD
                 </label>
                 <input
                   type="month"
-                  className="w-full rounded border border-rule px-2.5 py-2 text-[13.5px]"
+                  className="w-full rounded border border-rule bg-surface px-2.5 py-2 text-[13.5px]"
                   value={period}
                   onChange={(e) => setPeriod(e.target.value)}
                 />
@@ -414,19 +463,9 @@ export function StoreFeedbackPanel({ stores, editable = true }: { stores: StoreD
                 Teléfono de contacto (WhatsApp)
               </label>
               <div className="flex items-center gap-2">
-                <select
-                  className="rounded border border-rule px-2 py-2 text-[13px] font-semibold bg-white shrink-0"
-                  value={countryDial}
-                  onChange={(e) => setCountryDial(e.target.value)}
-                >
-                  {COUNTRY_CODES.map((c) => (
-                    <option key={c.name} value={c.dial}>
-                      {c.flag} {c.dial} {c.name}
-                    </option>
-                  ))}
-                </select>
+                <CountryCodeDropdown value={countryDial} onChange={setCountryDial} />
                 <input
-                  className="flex-1 rounded border border-rule px-2.5 py-2 text-[13.5px]"
+                  className="flex-1 rounded border border-rule bg-surface px-2.5 py-2 text-[13.5px]"
                   placeholder="99 123 4567 — o pega el número completo con +"
                   value={phoneNumber}
                   onChange={(e) => setPhoneNumber(e.target.value)}
@@ -458,7 +497,7 @@ export function StoreFeedbackPanel({ stores, editable = true }: { stores: StoreD
             </div>
 
             <textarea
-              className="w-full rounded border border-rule px-2.5 py-2 text-[13px] mb-3"
+              className="w-full rounded border border-rule bg-surface px-2.5 py-2 text-[13px] mb-3"
               rows={2}
               placeholder="Comentario (opcional) — qué dijo la tienda, qué prometimos mejorar..."
               value={comment}
@@ -471,7 +510,7 @@ export function StoreFeedbackPanel({ stores, editable = true }: { stores: StoreD
                   Plan de acción
                 </label>
                 <textarea
-                  className="w-full rounded border border-rule px-2.5 py-2 text-[13px]"
+                  className="w-full rounded border border-rule bg-surface px-2.5 py-2 text-[13px]"
                   rows={2}
                   placeholder="Resume qué se acordó en la llamada: ¿qué vamos a hacer este mes para fortalecer la relación?"
                   value={actionPlan}
@@ -483,7 +522,7 @@ export function StoreFeedbackPanel({ stores, editable = true }: { stores: StoreD
                   Necesidades de crecimiento
                 </label>
                 <textarea
-                  className="w-full rounded border border-rule px-2.5 py-2 text-[13px]"
+                  className="w-full rounded border border-rule bg-surface px-2.5 py-2 text-[13px]"
                   rows={2}
                   placeholder="Resume qué pidió la tienda: ¿qué necesita de nosotros para crecer? (stock, apoyo creativo, tiempos...)"
                   value={growthNeeds}
@@ -524,7 +563,7 @@ export function StoreFeedbackPanel({ stores, editable = true }: { stores: StoreD
                 <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-steel" />
                 <input
                   type="text"
-                  className="w-full rounded border border-rule pl-8 pr-2.5 py-2 text-[13px]"
+                  className="w-full rounded border border-rule bg-surface pl-8 pr-2.5 py-2 text-[13px]"
                   placeholder="Escribe cualquier dato…"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
@@ -534,7 +573,7 @@ export function StoreFeedbackPanel({ stores, editable = true }: { stores: StoreD
             <div>
               <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Bodega</label>
               <select
-                className="rounded border border-rule px-2.5 py-2 text-[13px] bg-white"
+                className="rounded border border-rule px-2.5 py-2 text-[13px] bg-surface"
                 value={brandFilter}
                 onChange={(e) => setBrandFilter(e.target.value)}
               >
@@ -550,7 +589,7 @@ export function StoreFeedbackPanel({ stores, editable = true }: { stores: StoreD
               <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Desde</label>
               <input
                 type="month"
-                className="rounded border border-rule px-2.5 py-2 text-[13px]"
+                className="rounded border border-rule bg-surface px-2.5 py-2 text-[13px]"
                 value={monthFrom}
                 onChange={(e) => setMonthFrom(e.target.value)}
               />
@@ -559,7 +598,7 @@ export function StoreFeedbackPanel({ stores, editable = true }: { stores: StoreD
               <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Hasta</label>
               <input
                 type="month"
-                className="rounded border border-rule px-2.5 py-2 text-[13px]"
+                className="rounded border border-rule bg-surface px-2.5 py-2 text-[13px]"
                 value={monthTo}
                 onChange={(e) => setMonthTo(e.target.value)}
               />

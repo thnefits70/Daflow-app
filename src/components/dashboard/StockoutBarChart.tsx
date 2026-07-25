@@ -98,6 +98,7 @@ export function StockoutBarChart({ points }: { points: StockoutWeekPoint[] }) {
         </div>
       </div>
 
+      <div className="relative">
       <svg
         viewBox={`0 0 ${width} ${height}`}
         width="100%"
@@ -179,29 +180,42 @@ export function StockoutBarChart({ points }: { points: StockoutWeekPoint[] }) {
             );
           })()}
 
-        {hoverIndex !== null &&
-          (() => {
-            const p = visible[hoverIndex];
-            const slotX = padL + hoverIndex * slotW;
-            const label = p.products.length > 0 ? p.products.join(", ") : "Sin productos";
-            const boxW = Math.min(320, Math.max(140, label.length * 6.2 + 24));
-            const barH = (p.value / yMax) * innerH;
-            const barY = padT + innerH - barH;
-            const boxX = Math.max(padL, Math.min(slotX + slotW / 2 - boxW / 2, width - padR - boxW));
-            const boxY = Math.max(4, barY - 50);
-            return (
-              <g pointerEvents="none">
-                <rect x={boxX} y={boxY} width={boxW} height={40} rx="6" fill="#101f3b" stroke="#24365a" strokeWidth="1" />
-                <text x={boxX + boxW / 2} y={boxY + 16} textAnchor="middle" fontSize="10.5" fill="#92a3c0">
-                  {formatWeekShort(p.week)}
-                </text>
-                <text x={boxX + boxW / 2} y={boxY + 31} textAnchor="middle" fontSize="11" fill="#f1f5fb">
-                  {label}
-                </text>
-              </g>
-            );
-          })()}
       </svg>
+
+      {hoverIndex !== null &&
+        (() => {
+          const p = visible[hoverIndex];
+          const barH = (p.value / yMax) * innerH;
+          const barY = padT + innerH - barH;
+          const rawLeftPct = ((padL + hoverIndex * slotW + slotW / 2) / width) * 100;
+          const leftPct = Math.max(18, Math.min(82, rawLeftPct));
+          const tooltipBottom = height - barY + 10;
+          return (
+            <div
+              className="absolute z-10 pointer-events-none bg-[#101f3b] border border-rule rounded-md px-3 py-2.5 shadow-lg"
+              style={{ left: `${leftPct}%`, transform: "translateX(-50%)", bottom: tooltipBottom, width: 260 }}
+            >
+              <div className="flex items-center justify-between gap-3 mb-1.5">
+                <span className="font-mono text-[10px] text-steel">{formatWeekShort(p.week)} · Ruptura de stock</span>
+                <span className="font-mono text-[10px] font-semibold text-red">
+                  {p.products.length} producto{p.products.length === 1 ? "" : "s"}
+                </span>
+              </div>
+              {p.products.length === 0 ? (
+                <div className="text-steel text-[11px]">Sin productos</div>
+              ) : (
+                <div className="flex flex-wrap gap-1 max-h-[92px] overflow-y-auto pr-0.5">
+                  {p.products.map((name) => (
+                    <span key={name} className="text-[11px] text-ink bg-surface border border-rule rounded px-1.5 py-0.5 leading-tight">
+                      {name}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })()}
+      </div>
     </div>
   );
 }
