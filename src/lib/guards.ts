@@ -188,18 +188,20 @@ export async function canManageStockouts() {
   return !!user?.isLeader && user.leadsDept?.code === "INV";
 }
 
-// Servicio Postventa (feedback de tiendas) — same rule as canManagePayroll:
-// admin, or whoever leads Finanzas (today Nairoby Castro), can log/edit
-// evaluations and manage the store catalog.
+// Servicio Postventa (feedback de tiendas) — confirmado 2026-07-25: vive en
+// Análisis de Mercado (visible a asesores/líder de venta). Admin, quien lidera
+// Análisis de Mercado, o quien el admin delegue puntualmente vía
+// User.canManageStoreFeedback, puede log/editar evaluaciones y el catálogo.
 export async function canManageStoreFeedback() {
   const session = await auth();
   if (!session) return false;
   if (session.user.role === "admin") return true;
   const user = await prisma.user.findUnique({
     where: { id: session.user.id },
-    select: { isLeader: true, leadsDept: { select: { code: true } } },
+    select: { isLeader: true, leadsDept: { select: { code: true } }, canManageStoreFeedback: true },
   });
-  return !!user?.isLeader && user.leadsDept?.code === "FIN";
+  if (user?.canManageStoreFeedback) return true;
+  return !!user?.isLeader && user.leadsDept?.code === "MKT";
 }
 
 // Comprobante de pago (Gestión de Compras) — confirmado 2026-07-23: admin

@@ -7,13 +7,14 @@ import { getDeptProcessDetail } from "@/lib/processDetail";
 import { getPaymentRemindersData } from "@/lib/paymentReminders";
 import { getPeriodicReminders } from "@/lib/periodicReminders";
 import { getPurchaseReceipts, getPurchaseReceiptCatalogs } from "@/lib/purchaseReceipts";
+import { getStoreFeedbackData } from "@/lib/storeFeedback";
 
 export default async function DeptWorkspacePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const dept = await prisma.department.findUnique({ where: { id } });
   if (!dept) notFound();
 
-  const [processDetail, periodicReminders, documents, exams, financeKpiData, paymentReminders, weeklyMetricRecords, weeklyReviewRecords, purchaseReceipts, purchaseReceiptCatalogs] = await Promise.all([
+  const [processDetail, periodicReminders, documents, exams, financeKpiData, paymentReminders, weeklyMetricRecords, weeklyReviewRecords, purchaseReceipts, purchaseReceiptCatalogs, storeFeedbackStores] = await Promise.all([
     getDeptProcessDetail(id),
     getPeriodicReminders(id),
     prisma.document.findMany({ where: { deptId: id }, orderBy: { createdAt: "asc" } }),
@@ -32,6 +33,7 @@ export default async function DeptWorkspacePage({ params }: { params: Promise<{ 
       : Promise.resolve([]),
     dept.code === "COM" ? getPurchaseReceipts(id) : Promise.resolve([]),
     dept.code === "COM" ? getPurchaseReceiptCatalogs(id) : Promise.resolve({ suppliers: [], banks: [] }),
+    dept.code === "MKT" ? getStoreFeedbackData() : Promise.resolve([]),
   ]);
 
   return (
@@ -69,6 +71,8 @@ export default async function DeptWorkspacePage({ params }: { params: Promise<{ 
         purchaseReceipts={purchaseReceipts}
         purchaseReceiptSuppliers={purchaseReceiptCatalogs.suppliers}
         purchaseReceiptBanks={purchaseReceiptCatalogs.banks}
+        canManageStoreFeedback={dept.code === "MKT"}
+        storeFeedbackStores={storeFeedbackStores}
         isAdmin
         editable
       />

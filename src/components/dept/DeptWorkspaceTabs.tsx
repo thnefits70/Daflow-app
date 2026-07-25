@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { GitBranch, FileText, GraduationCap, LineChart, TrendingUp, MessageSquare, CalendarClock, BellRing, Receipt } from "lucide-react";
+import { GitBranch, FileText, GraduationCap, LineChart, TrendingUp, MessageSquare, CalendarClock, BellRing, Receipt, Heart } from "lucide-react";
 import { ProcessEmbeddedPanel } from "@/components/process/ProcessEmbeddedPanel";
 import type { ProcessDTO } from "@/components/process/ProcessEditor";
 import type { ProcessUpdateDTO } from "@/components/process/ProcessHistoryPanel";
@@ -12,6 +12,8 @@ import { DocumentsPanel } from "@/components/documents/DocumentsPanel";
 import { ExamsPanel } from "@/components/exams/ExamsPanel";
 import { PurchaseReceiptsPanel } from "@/components/purchases/PurchaseReceiptsPanel";
 import type { PurchaseReceiptDTO, PurchaseReceiptCatalogDTO } from "@/lib/purchaseReceipts";
+import { StoreFeedbackPanel } from "@/components/finance/StoreFeedbackPanel";
+import type { StoreDTO } from "@/lib/storeFeedback";
 import { FinanceKpiWorkspace } from "@/components/finance/FinanceKpiWorkspace";
 import type { FinanceKpiDataDTO } from "@/lib/financeKpis";
 import { PaymentRemindersPanel } from "@/components/finance/PaymentRemindersPanel";
@@ -31,6 +33,7 @@ const ALL_TABS = [
   { key: "feedback", label: "Feedback semanal", icon: MessageSquare },
   { key: "procesos", label: "Procesos", icon: GitBranch },
   { key: "comprobante", label: "Comprobante de pago", icon: Receipt },
+  { key: "postventa", label: "Servicio Postventa", icon: Heart },
   { key: "documentos", label: "Documentos", icon: FileText },
   { key: "examenes", label: "Exámenes", icon: GraduationCap },
   { key: "recordatorios", label: "Recordatorios", icon: BellRing },
@@ -57,6 +60,8 @@ export function DeptWorkspaceTabs({
   purchaseReceipts = [],
   purchaseReceiptSuppliers = [],
   purchaseReceiptBanks = [],
+  canManageStoreFeedback = false,
+  storeFeedbackStores = [],
   isAdmin = false,
   editable,
   kpisEditable,
@@ -83,6 +88,10 @@ export function DeptWorkspaceTabs({
   purchaseReceipts?: PurchaseReceiptDTO[];
   purchaseReceiptSuppliers?: PurchaseReceiptCatalogDTO[];
   purchaseReceiptBanks?: PurchaseReceiptCatalogDTO[];
+  // Servicio Postventa (Análisis de Mercado) — same per-viewer gate pattern
+  // as canViewPurchaseReceipts, not a per-department trackXxx flag.
+  canManageStoreFeedback?: boolean;
+  storeFeedbackStores?: StoreDTO[];
   isAdmin?: boolean;
   editable: boolean;
   kpisEditable?: boolean;
@@ -97,6 +106,7 @@ export function DeptWorkspaceTabs({
     if (t.key === "semanal") return trackWeeklyMetric;
     if (t.key === "feedback") return trackWeeklyReview;
     if (t.key === "comprobante") return canViewPurchaseReceipts;
+    if (t.key === "postventa") return canManageStoreFeedback;
     return true;
   });
 
@@ -144,6 +154,7 @@ export function DeptWorkspaceTabs({
           isAdmin={isAdmin}
         />
       )}
+      {tab === "postventa" && canManageStoreFeedback && <StoreFeedbackPanel stores={storeFeedbackStores} />}
       {tab === "documentos" && <DocumentsPanel deptId={deptId} documents={documents} editable={editable} />}
       {tab === "examenes" && <ExamsPanel deptId={deptId} exams={exams} editable={editable} />}
       {tab === "kpis" && trackKpis && financeKpiData && (

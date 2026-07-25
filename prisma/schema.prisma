@@ -130,6 +130,11 @@ model User {
   // admin) lo ve; el admin puede otorgar esto a alguien más puntualmente.
   canViewPurchaseReceipts Boolean @default(false)
 
+  // Mismo patrón que canViewPurchaseReceipts, para Servicio Postventa —
+  // confirmado 2026-07-25: por defecto solo el líder de Análisis de Mercado
+  // (y admin) gestiona esto; el admin puede delegarlo a alguien más puntualmente.
+  canManageStoreFeedback Boolean @default(false)
+
   // Última vez que este usuario (como líder) revisó el Feedback semanal de su área — usado para el
   // contador de "sin leer" en el sidebar. Null = nunca lo ha visto.
   lastSeenFeedbackAt DateTime?
