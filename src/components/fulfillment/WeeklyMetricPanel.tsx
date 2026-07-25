@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Trash2, Pencil } from "lucide-react";
+import { Plus, Trash2, Pencil, Search } from "lucide-react";
 
 export type WeeklyMetricDTO = {
   id: string;
@@ -29,6 +29,8 @@ function fillRateColor(pct: number) {
   return "#C4453A";
 }
 
+const RECENT_WEEKS = 8;
+
 export function WeeklyMetricPanel({
   deptId,
   records,
@@ -50,6 +52,13 @@ export function WeeklyMetricPanel({
   const [notDispatched, setNotDispatched] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  const [search, setSearch] = useState("");
+
+  const query = search.trim().toLowerCase();
+  const visible = query
+    ? sorted.filter((r) => formatWeek(r.week).toLowerCase().includes(query) || r.week.toLowerCase().includes(query))
+    : sorted.slice(0, RECENT_WEEKS);
+  const hiddenCount = query ? 0 : Math.max(0, sorted.length - RECENT_WEEKS);
 
   const startNew = () => {
     setEditingId(null);
@@ -203,7 +212,30 @@ export function WeeklyMetricPanel({
         </div>
       )}
 
-      {sorted.map((r) => {
+      {sorted.length > 0 && (
+        <div className="relative mb-3 max-w-xs">
+          <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-steel" />
+          <input
+            type="text"
+            className="w-full rounded border border-rule pl-8 pr-2.5 py-2 text-[13px]"
+            placeholder="Buscar semana (ej. S25, 2026)…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+      )}
+
+      {hiddenCount > 0 && (
+        <div className="text-[11.5px] text-steel mb-2">
+          Mostrando las últimas {RECENT_WEEKS} semanas · {hiddenCount} más — búscalas arriba.
+        </div>
+      )}
+
+      {query && visible.length === 0 && (
+        <div className="text-steel text-[13px] mb-2">Sin resultados para &ldquo;{search}&rdquo;.</div>
+      )}
+
+      {visible.map((r) => {
         const rate = fillRate(r.value, r.notDispatched);
         return (
           <div key={r.id} className="bg-surface border border-rule rounded p-3.5 mb-2 flex items-center justify-between gap-3">
