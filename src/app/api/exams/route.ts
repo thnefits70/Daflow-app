@@ -25,7 +25,8 @@ export async function GET(req: NextRequest) {
 }
 
 const createSchema = z.object({
-  deptId: z.string().min(1),
+  deptId: z.string().min(1).optional(),
+  moduleId: z.string().min(1).optional(),
   title: z.string().trim().min(1, "El título es obligatorio."),
 });
 
@@ -38,7 +39,17 @@ export async function POST(req: NextRequest) {
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Datos inválidos." }, { status: 400 });
   }
+  if (!parsed.data.deptId && !parsed.data.moduleId) {
+    return NextResponse.json({ error: "Falta deptId o moduleId." }, { status: 400 });
+  }
+  // Un módulo tiene a lo sumo un examen (moduleId es @unique en Exam).
+  if (parsed.data.moduleId) {
+    const existing = await prisma.exam.findUnique({ where: { moduleId: parsed.data.moduleId } });
+    if (existing) return NextResponse.json({ error: "Este módulo ya tiene un examen." }, { status: 409 });
+  }
 
-  const exam = await prisma.exam.create({ data: { deptId: parsed.data.deptId, title: parsed.data.title } });
+  const exam = await prisma.exam.create({
+    data: { deptId: parsed.data.deptId ?? null, moduleId: parsed.data.moduleId ?? null, title: parsed.data.title },
+  });
   return NextResponse.json(exam, { status: 201 });
 }

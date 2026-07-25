@@ -22,7 +22,7 @@ import {
   Menu,
   X,
   Trophy,
-  Compass,
+  LayoutGrid,
 } from "lucide-react";
 import { BrandMark } from "@/components/brand/DaflowMark";
 
@@ -144,8 +144,8 @@ export function AdminSidebar({
         <Link href="/admin" className={`${NAV_ITEM} ${isActive("/admin") && pathname === "/admin" ? NAV_ACTIVE : NAV_INACTIVE}`}>
           <LayoutDashboard size={15} /> Inicio
         </Link>
-        <Link href="/admin/mision-vision" className={`${NAV_ITEM} ${pathname.startsWith("/admin/mision-vision") ? NAV_ACTIVE : NAV_INACTIVE}`}>
-          <Compass size={15} /> Misión y Visión
+        <Link href="/admin/modulos" className={`${NAV_ITEM} ${pathname.startsWith("/admin/modulos") ? NAV_ACTIVE : NAV_INACTIVE}`}>
+          <LayoutGrid size={15} /> Módulos
         </Link>
         <Link href="/admin/areas" className={`${NAV_ITEM} ${pathname.startsWith("/admin/areas") ? NAV_ACTIVE : NAV_INACTIVE}`}>
           <ShieldCheck size={15} /> Áreas del negocio

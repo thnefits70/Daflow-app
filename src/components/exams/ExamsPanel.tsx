@@ -12,7 +12,7 @@ function pct(a: number, b: number) {
   return b === 0 ? 0 : Math.round((a / b) * 100);
 }
 
-function ExamEditor({ examId, onBack }: { examId: string; onBack: () => void }) {
+export function ExamEditor({ examId, onBack }: { examId: string; onBack: () => void }) {
   const router = useRouter();
   const [draft, setDraft] = useState<ExamDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -114,7 +114,7 @@ function ExamEditor({ examId, onBack }: { examId: string; onBack: () => void }) 
   );
 }
 
-function ExamTaker({ examId, onFinish, onBack }: { examId: string; onFinish: () => void; onBack: () => void }) {
+export function ExamTaker({ examId, onFinish, onBack }: { examId: string; onFinish: () => void; onBack: () => void }) {
   const [exam, setExam] = useState<{ id: string; title: string; questions: { id: string; text: string; options: string[] }[] } | null>(null);
   const [answers, setAnswers] = useState<Record<string, number>>({});
   const [result, setResult] = useState<{ score: number; total: number } | null>(null);

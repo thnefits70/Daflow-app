@@ -330,16 +330,35 @@ model UserAckUpdate {
   @@id([userId, updateId])
 }
 
-/* ---------------- Documentos (por área, y Leyes y Reglamentos con deptId nulo) ---------------- */
+/* ---------------- Módulos (empresa entera, admin: contenido + examen opcional) ---------------- */
+// Confirmado 2026-07-25: reemplaza el enfoque de sección única "Misión y
+// Visión" — el admin crea tantos módulos como quiera (Misión y Visión,
+// Manual de operaciones, etc.), cada uno con imagen de portada, uno o más
+// documentos/PDFs/enlaces (mismo modelo Document, vía moduleId) y un examen
+// opcional (mismo modelo Exam, vía moduleId) para verificar comprensión.
+model Module {
+  id        String   @id @default(cuid())
+  title     String
+  imageUrl  String?
+  imageName String?
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  documents Document[]
+  exam      Exam?
+
+  @@index([order])
+}
+
+/* ---------------- Documentos (por área, Leyes y Reglamentos con deptId nulo, o dentro de un módulo) ---------------- */
 model Document {
   id        String      @id @default(cuid())
   deptId    String?
   department Department? @relation(fields: [deptId], references: [id], onDelete: Cascade)
   isLaw     Boolean     @default(false)
-  // Misión y Visión — confirmado 2026-07-24: colección aparte, empresa
-  // entera con acceso de solo lectura, admin sube el contenido. Una
-  // evaluación/examen ligado a esto queda pendiente para más adelante.
-  isMissionVision Boolean @default(false)
+  moduleId  String?
+  module    Module?     @relation(fields: [moduleId], references: [id], onDelete: Cascade)
   title     String
   content   String      @default("")
   link      String      @default("")
@@ -350,14 +369,18 @@ model Document {
 
   @@index([deptId])
   @@index([isLaw])
-  @@index([isMissionVision])
+  @@index([moduleId])
 }
 
-/* ---------------- Exámenes ---------------- */
+/* ---------------- Exámenes (por área, o dentro de un módulo) ---------------- */
 model Exam {
   id        String   @id @default(cuid())
-  deptId    String
-  department Department @relation(fields: [deptId], references: [id], onDelete: Cascade)
+  // Exactamente uno de deptId/moduleId está presente — un examen de área
+  // (como antes) o el único examen opcional de un módulo, nunca ambos.
+  deptId    String?
+  department Department? @relation(fields: [deptId], references: [id], onDelete: Cascade)
+  moduleId  String? @unique
+  module    Module? @relation(fields: [moduleId], references: [id], onDelete: Cascade)
   title     String
   createdAt DateTime @default(now())
 
