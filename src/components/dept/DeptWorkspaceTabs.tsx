@@ -61,6 +61,7 @@ export function DeptWorkspaceTabs({
   purchaseReceiptSuppliers = [],
   purchaseReceiptBanks = [],
   canManageStoreFeedback = false,
+  canViewStoreFeedback = false,
   storeFeedbackStores = [],
   isAdmin = false,
   editable,
@@ -89,8 +90,12 @@ export function DeptWorkspaceTabs({
   purchaseReceiptSuppliers?: PurchaseReceiptCatalogDTO[];
   purchaseReceiptBanks?: PurchaseReceiptCatalogDTO[];
   // Servicio Postventa (Análisis de Mercado) — same per-viewer gate pattern
-  // as canViewPurchaseReceipts, not a per-department trackXxx flag.
+  // as canViewPurchaseReceipts, not a per-department trackXxx flag. Two
+  // tiers: canManageStoreFeedback (full edit) or canViewStoreFeedback
+  // (read-only — confirmed 2026-07-25, for leaders like sales who should
+  // see but never touch what Nairoby registered).
   canManageStoreFeedback?: boolean;
+  canViewStoreFeedback?: boolean;
   storeFeedbackStores?: StoreDTO[];
   isAdmin?: boolean;
   editable: boolean;
@@ -106,7 +111,7 @@ export function DeptWorkspaceTabs({
     if (t.key === "semanal") return trackWeeklyMetric;
     if (t.key === "feedback") return trackWeeklyReview;
     if (t.key === "comprobante") return canViewPurchaseReceipts;
-    if (t.key === "postventa") return canManageStoreFeedback;
+    if (t.key === "postventa") return canManageStoreFeedback || canViewStoreFeedback;
     return true;
   });
 
@@ -154,7 +159,9 @@ export function DeptWorkspaceTabs({
           isAdmin={isAdmin}
         />
       )}
-      {tab === "postventa" && canManageStoreFeedback && <StoreFeedbackPanel stores={storeFeedbackStores} />}
+      {tab === "postventa" && (canManageStoreFeedback || canViewStoreFeedback) && (
+        <StoreFeedbackPanel stores={storeFeedbackStores} editable={canManageStoreFeedback} />
+      )}
       {tab === "documentos" && <DocumentsPanel deptId={deptId} documents={documents} editable={editable} />}
       {tab === "examenes" && <ExamsPanel deptId={deptId} exams={exams} editable={editable} />}
       {tab === "kpis" && trackKpis && financeKpiData && (

@@ -7,6 +7,7 @@ const createSchema = z.object({
   name: z.string().trim().min(1, "El nombre de la tienda es obligatorio."),
   contactName: z.string().trim().optional(),
   contactPhone: z.string().trim().optional(),
+  brand: z.string().trim().optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -25,6 +26,7 @@ export async function POST(req: NextRequest) {
       name: parsed.data.name,
       contactName: parsed.data.contactName || null,
       contactPhone: parsed.data.contactPhone || null,
+      brand: parsed.data.brand || null,
     },
   });
 

@@ -48,6 +48,7 @@ const updateSchema = z.object({
   canAddSuppliers: z.boolean().optional(),
   canViewPurchaseReceipts: z.boolean().optional(),
   canManageStoreFeedback: z.boolean().optional(),
+  canViewStoreFeedback: z.boolean().optional(),
   isActive: z.boolean().optional(),
   // When assigning this user as leader of a department that already has a
   // different leader, the request is rejected with 409 unless this is set —
@@ -109,6 +110,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (d.canAddSuppliers !== undefined) data.canAddSuppliers = d.canAddSuppliers;
   if (d.canViewPurchaseReceipts !== undefined) data.canViewPurchaseReceipts = d.canViewPurchaseReceipts;
   if (d.canManageStoreFeedback !== undefined) data.canManageStoreFeedback = d.canManageStoreFeedback;
+  if (d.canViewStoreFeedback !== undefined) data.canViewStoreFeedback = d.canViewStoreFeedback;
   if (d.isActive !== undefined) data.isActive = d.isActive;
 
   try {

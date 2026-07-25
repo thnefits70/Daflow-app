@@ -134,6 +134,10 @@ model User {
   // confirmado 2026-07-25: por defecto solo el líder de Análisis de Mercado
   // (y admin) gestiona esto; el admin puede delegarlo a alguien más puntualmente.
   canManageStoreFeedback Boolean @default(false)
+  // Nivel de acceso separado, solo lectura — confirmado 2026-07-25: para
+  // líderes de otras áreas (ej. líder de ventas) que deben poder ver el
+  // detalle y contactar por WhatsApp, pero nunca crear/editar/eliminar.
+  canViewStoreFeedback Boolean @default(false)
 
   // Última vez que este usuario (como líder) revisó el Feedback semanal de su área — usado para el
   // contador de "sin leer" en el sidebar. Null = nunca lo ha visto.
@@ -602,6 +606,11 @@ model Store {
   name         String
   contactName  String?
   contactPhone String?
+  // Confirmado 2026-07-25: a qué marca/bodega pertenece esta tienda —
+  // mismos 3 nombres que el catálogo de operaciones de Finanzas, pero es un
+  // campo simple aquí (no FK) porque Servicio Postventa vive en Análisis de
+  // Mercado, un dominio distinto. Solo 3 valores conocidos, cambian rara vez.
+  brand        String?
   isActive     Boolean  @default(true)
   order        Int      @default(0)
   createdAt    DateTime @default(now())
@@ -622,14 +631,16 @@ model StoreFeedbackEvaluation {
   // mensuales de Finanzas.
   period String
 
-  // "¿Qué tan probable es que sigas comprándonos?" — 0-10, estilo NPS, es el
-  // resultado/indicador principal de fidelización.
+  // "¿Qué tan probable es que sigas comprándonos?" — 1-5 (confirmado
+  // 2026-07-25: mismo rango que los demás indicadores, 5 = excelente).
   loyaltyScore Int
 
-  // KPIs que explican el porqué de ese resultado, 1-5 cada uno.
+  // Los 5 pilares que explican el porqué de ese resultado, 1-5 cada uno.
+  // "Disponibilidad de stock" se eliminó (confirmado 2026-07-25). El campo
+  // sigue llamándose qualityScore por compatibilidad, pero desde 2026-07-25
+  // representa "Gestión de garantías", no "Calidad del producto".
   fulfillmentScore     Int
   qualityScore         Int
-  stockScore           Int
   responseTimeScore    Int
   commercialTermsScore Int
   communicationScore   Int

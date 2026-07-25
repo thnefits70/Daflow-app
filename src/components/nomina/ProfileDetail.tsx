@@ -35,6 +35,7 @@ type UserProfile = {
   canAddSuppliers: boolean;
   canViewPurchaseReceipts: boolean;
   canManageStoreFeedback: boolean;
+  canViewStoreFeedback: boolean;
   isActive: boolean;
   milestones: Milestone[];
   examScores: ExamScore[];
@@ -729,6 +730,32 @@ export function ProfileDetail({
                 type="button"
                 className={`flex-1 py-1.5 text-[12.5px] font-semibold cursor-pointer ${!p.canManageStoreFeedback ? "bg-blue text-white" : "bg-surface text-steel"}`}
                 onClick={() => save({ canManageStoreFeedback: false })}
+              >
+                No
+              </button>
+            </div>
+          </div>
+
+          <div className="bg-cloud border border-rule rounded p-3.5 mt-3.5">
+            <label className="flex items-center gap-1 mb-2 text-[10.5px] font-semibold uppercase tracking-wide text-steel">
+              <Heart size={11} /> ¿Puede ver Servicio Postventa (solo lectura)?
+            </label>
+            <div className="text-[11px] text-steel mb-2">
+              Ve el detalle completo y puede contactar por WhatsApp, pero no puede crear, editar ni eliminar nada.
+              Se ignora si ya tiene el permiso de gestionar arriba.
+            </div>
+            <div className="flex border border-rule rounded overflow-hidden max-w-[220px]">
+              <button
+                type="button"
+                className={`flex-1 py-1.5 text-[12.5px] font-semibold cursor-pointer ${p.canViewStoreFeedback ? "bg-blue text-white" : "bg-surface text-steel"}`}
+                onClick={() => save({ canViewStoreFeedback: true })}
+              >
+                Sí
+              </button>
+              <button
+                type="button"
+                className={`flex-1 py-1.5 text-[12.5px] font-semibold cursor-pointer ${!p.canViewStoreFeedback ? "bg-blue text-white" : "bg-surface text-steel"}`}
+                onClick={() => save({ canViewStoreFeedback: false })}
               >
                 No
               </button>

@@ -7,6 +7,7 @@ const updateSchema = z.object({
   name: z.string().trim().min(1).optional(),
   contactName: z.string().trim().optional().nullable(),
   contactPhone: z.string().trim().optional().nullable(),
+  brand: z.string().trim().optional().nullable(),
   isActive: z.boolean().optional(),
 });
 
@@ -27,6 +28,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       ...(data.name !== undefined ? { name: data.name } : {}),
       ...(data.contactName !== undefined ? { contactName: data.contactName || null } : {}),
       ...(data.contactPhone !== undefined ? { contactPhone: data.contactPhone || null } : {}),
+      ...(data.brand !== undefined ? { brand: data.brand || null } : {}),
       ...(data.isActive !== undefined ? { isActive: data.isActive } : {}),
     },
   });

@@ -10,7 +10,7 @@ import {
   getWarrantyMonthlyChart,
   getWarrantyReasonChart,
 } from "@/lib/dashboard";
-import { getStoreFeedbackAggregate } from "@/lib/storeFeedback";
+import { getStoreFeedbackAggregate, getStoreFeedbackTrend } from "@/lib/storeFeedback";
 import { getDuePeriodicReminders } from "@/lib/periodicReminders";
 import { EmployeeHome } from "@/components/dashboard/EmployeeHome";
 
@@ -33,6 +33,7 @@ export default async function AreaHomePage() {
     warrantyMonthlyChart,
     warrantyReasonChart,
     storeFeedback,
+    storeFeedbackTrend,
     duePeriodicReminders,
   ] = await Promise.all([
     prisma.department.findUnique({ where: { id: deptId } }),
@@ -52,6 +53,7 @@ export default async function AreaHomePage() {
     getWarrantyMonthlyChart(),
     getWarrantyReasonChart(),
     getStoreFeedbackAggregate(),
+    getStoreFeedbackTrend(),
     getDuePeriodicReminders({ deptId }),
   ]);
   if (!dept) redirect("/api/auth/force-logout");
@@ -71,6 +73,7 @@ export default async function AreaHomePage() {
       warrantyMonthlyChart={warrantyMonthlyChart}
       warrantyReasonChart={warrantyReasonChart}
       storeFeedback={storeFeedback}
+      storeFeedbackTrend={storeFeedbackTrend}
       duePeriodicReminders={duePeriodicReminders}
       rowsSorted={dashboardData.rowsSorted}
       scores={scores.map((s) => ({

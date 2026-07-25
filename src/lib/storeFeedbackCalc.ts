@@ -15,3 +15,14 @@ export function retentionRiskFor(loyaltyScore: number): RetentionRisk {
   if (loyaltyScore >= 3) return { cls: "stable", label: "Estable", icon: "🟡", color: "#D9A441" };
   return { cls: "at_risk", label: "En riesgo", icon: "🔴", color: "#C4453A" };
 }
+
+// Reglas del tile de Inicio (distintas de retentionRiskFor arriba, que es
+// por evaluación individual) — confirmado 2026-07-25: rojo si el promedio
+// del mes cae bajo 4, normal si está entre 4 y 4.7, y con el efecto de
+// "punto viajero con brillo" (mismo que Fill Rate/Devolución) si supera 4.7.
+export type TrendState = { color: string; hot: boolean };
+export function trendStateFor(avgScore: number): TrendState {
+  if (avgScore < 4) return { color: "#C4453A", hot: false };
+  if (avgScore > 4.7) return { color: "#14C7C7", hot: true };
+  return { color: "#14C7C7", hot: false };
+}

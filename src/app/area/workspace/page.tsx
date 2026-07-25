@@ -37,7 +37,13 @@ export default async function WorkspacePage() {
       : Promise.resolve([]),
     prisma.user.findUnique({
       where: { id: session.user.id },
-      select: { isLeader: true, leadsDeptId: true, canViewPurchaseReceipts: true, canManageStoreFeedback: true },
+      select: {
+        isLeader: true,
+        leadsDeptId: true,
+        canViewPurchaseReceipts: true,
+        canManageStoreFeedback: true,
+        canViewStoreFeedback: true,
+      },
     }),
     getUnseenFeedbackCount(),
     dept.code === "COM" ? getPurchaseReceipts(dept.id) : Promise.resolve([]),
@@ -52,6 +58,9 @@ export default async function WorkspacePage() {
   // Servicio Postventa — leader of Análisis de Mercado, or anyone the admin
   // has explicitly granted the escape hatch to, regardless of role.
   const canManageStoreFeedback = dept.code === "MKT" && (kpisEditable || !!currentUser?.canManageStoreFeedback);
+  // Solo lectura — confirmado 2026-07-25: para líderes de otras áreas que
+  // deben poder ver el detalle (y usar WhatsApp) sin editar nada.
+  const canViewStoreFeedback = dept.code === "MKT" && !canManageStoreFeedback && !!currentUser?.canViewStoreFeedback;
 
   return (
     <div>
@@ -93,6 +102,7 @@ export default async function WorkspacePage() {
         purchaseReceiptSuppliers={purchaseReceiptCatalogs.suppliers}
         purchaseReceiptBanks={purchaseReceiptCatalogs.banks}
         canManageStoreFeedback={canManageStoreFeedback}
+        canViewStoreFeedback={canViewStoreFeedback}
         storeFeedbackStores={storeFeedbackStores}
         isAdmin={false}
         editable={false}

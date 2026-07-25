@@ -12,7 +12,7 @@ import { StockoutBarChart } from "./StockoutBarChart";
 import { PieChart } from "./PieChart";
 import { OrgChart } from "./OrgChart";
 import type { DashboardRow, WeeklyTrend, StockoutWeekPoint, WarrantyMonthlyChart, PieSlice } from "@/lib/dashboard";
-import type { StoreFeedbackAggregate } from "@/lib/storeFeedback";
+import type { StoreFeedbackAggregate, StoreFeedbackTrendPoint } from "@/lib/storeFeedback";
 import type { DuePeriodicReminderDTO } from "@/lib/periodicReminders";
 
 type ScoreRow = { id: string; examTitle: string; score: number; total: number; createdAt: string };
@@ -42,6 +42,7 @@ export function EmployeeHome({
   warrantyMonthlyChart,
   warrantyReasonChart,
   storeFeedback,
+  storeFeedbackTrend = [],
   rowsSorted,
   duePeriodicReminders = [],
 }: {
@@ -59,6 +60,7 @@ export function EmployeeHome({
   warrantyMonthlyChart?: WarrantyMonthlyChart | null;
   warrantyReasonChart?: PieSlice[];
   storeFeedback?: StoreFeedbackAggregate | null;
+  storeFeedbackTrend?: StoreFeedbackTrendPoint[];
   rowsSorted: DashboardRow[];
   duePeriodicReminders?: DuePeriodicReminderDTO[];
 }) {
@@ -104,7 +106,7 @@ export function EmployeeHome({
         storeFeedback ||
         (stockoutWeeks && stockoutWeeks.length > 0)) && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-7">
-          {storeFeedback && <StoreFeedbackTile data={storeFeedback} />}
+          {storeFeedback && <StoreFeedbackTile data={storeFeedback} trend={storeFeedbackTrend} />}
 
           {warrantyMonthlyChart && (
             <WarrantyMonthTile chart={warrantyMonthlyChart} emptyMessage="Aún no hay categorías cargadas este mes." />

@@ -11,7 +11,7 @@ import { StockoutBarChart } from "./StockoutBarChart";
 import { PieChart } from "./PieChart";
 import { OrgChart } from "./OrgChart";
 import type { DashboardData, WeeklyTrend, StockoutWeekPoint, WarrantyMonthlyChart, PieSlice } from "@/lib/dashboard";
-import type { StoreFeedbackAggregate } from "@/lib/storeFeedback";
+import type { StoreFeedbackAggregate, StoreFeedbackTrendPoint } from "@/lib/storeFeedback";
 import type { DuePeriodicReminderDTO } from "@/lib/periodicReminders";
 
 function barColor(score: number) {
@@ -29,6 +29,7 @@ export function Dashboard({
   warrantyMonthlyChart,
   warrantyReasonChart,
   storeFeedback,
+  storeFeedbackTrend = [],
   duePeriodicReminders = [],
 }: {
   data: DashboardData;
@@ -39,6 +40,7 @@ export function Dashboard({
   warrantyMonthlyChart?: WarrantyMonthlyChart | null;
   warrantyReasonChart?: PieSlice[];
   storeFeedback?: StoreFeedbackAggregate | null;
+  storeFeedbackTrend?: StoreFeedbackTrendPoint[];
   duePeriodicReminders?: DuePeriodicReminderDTO[];
 }) {
   const { rows, rowsSorted, totalAttempts, overallAvg } = data;
@@ -78,7 +80,7 @@ export function Dashboard({
         storeFeedback ||
         (stockoutWeeks && stockoutWeeks.length > 0)) && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-7">
-          {storeFeedback && <StoreFeedbackTile data={storeFeedback} />}
+          {storeFeedback && <StoreFeedbackTile data={storeFeedback} trend={storeFeedbackTrend} />}
 
           {warrantyMonthlyChart && (
             <WarrantyMonthTile chart={warrantyMonthlyChart} emptyMessage="Aún no hay categorías cargadas este mes." />

@@ -44,6 +44,7 @@ export default async function AreaNominaProfilePage({ params }: { params: Promis
         canAddSuppliers: user.canAddSuppliers,
         canViewPurchaseReceipts: user.canViewPurchaseReceipts,
         canManageStoreFeedback: user.canManageStoreFeedback,
+        canViewStoreFeedback: user.canViewStoreFeedback,
         isActive: user.isActive,
         milestones: user.milestones.map((m) => ({
           id: m.id,

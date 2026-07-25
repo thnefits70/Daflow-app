@@ -1,10 +1,10 @@
-// Server-only (prisma). Servicio Postventa — confirmed 2026-07-22:
+// Server-only (prisma). Servicio Postventa — confirmed 2026-07-25:
 // - Detailed per-store evaluations (name, comments, individual scores) are
-//   only for Nairoby (FIN leader) / admin to manage — real operational/
-//   relationship data, not for company-wide display.
+//   only for whoever manages/views Análisis de Mercado's Servicio Postventa
+//   — real operational/relationship data, not for company-wide display.
 // - The MONTHLY AGGREGATE (average loyalty + driver scores across every
-//   store evaluated that month) is public to everyone — shown in KPIs
-//   Generales and on Inicio, so the whole company can see what's improving.
+//   store evaluated that month) is public to everyone — shown on Inicio,
+//   so the whole company can see what's improving.
 import { prisma } from "@/lib/prisma";
 
 export type StoreFeedbackEvaluationDTO = {
@@ -13,7 +13,6 @@ export type StoreFeedbackEvaluationDTO = {
   loyaltyScore: number;
   fulfillmentScore: number;
   qualityScore: number;
-  stockScore: number;
   responseTimeScore: number;
   commercialTermsScore: number;
   communicationScore: number;
@@ -32,6 +31,7 @@ export type StoreDTO = {
   name: string;
   contactName: string | null;
   contactPhone: string | null;
+  brand: string | null;
   isActive: boolean;
   evaluations: StoreFeedbackEvaluationDTO[];
 };
@@ -49,6 +49,7 @@ export async function getStoreFeedbackData(): Promise<StoreDTO[]> {
     name: s.name,
     contactName: s.contactName,
     contactPhone: s.contactPhone,
+    brand: s.brand,
     isActive: s.isActive,
     evaluations: s.evaluations.map((e) => ({
       id: e.id,
@@ -56,7 +57,6 @@ export async function getStoreFeedbackData(): Promise<StoreDTO[]> {
       loyaltyScore: e.loyaltyScore,
       fulfillmentScore: e.fulfillmentScore,
       qualityScore: e.qualityScore,
-      stockScore: e.stockScore,
       responseTimeScore: e.responseTimeScore,
       commercialTermsScore: e.commercialTermsScore,
       communicationScore: e.communicationScore,
@@ -75,7 +75,6 @@ export type StoreFeedbackAggregate = {
   avgLoyaltyScore: number;
   avgFulfillmentScore: number;
   avgQualityScore: number;
-  avgStockScore: number;
   avgResponseTimeScore: number;
   avgCommercialTermsScore: number;
   avgCommunicationScore: number;
@@ -95,7 +94,6 @@ async function aggregateForPeriod(period: string) {
     avgLoyaltyScore: avg(rows.map((r) => r.loyaltyScore)),
     avgFulfillmentScore: avg(rows.map((r) => r.fulfillmentScore)),
     avgQualityScore: avg(rows.map((r) => r.qualityScore)),
-    avgStockScore: avg(rows.map((r) => r.stockScore)),
     avgResponseTimeScore: avg(rows.map((r) => r.responseTimeScore)),
     avgCommercialTermsScore: avg(rows.map((r) => r.commercialTermsScore)),
     avgCommunicationScore: avg(rows.map((r) => r.communicationScore)),
@@ -117,4 +115,27 @@ export async function getStoreFeedbackAggregate(): Promise<StoreFeedbackAggregat
   const prev = await aggregateForPeriod(prevPeriod);
 
   return { ...current, prevAvgLoyaltyScore: prev?.avgLoyaltyScore ?? null };
+}
+
+export type StoreFeedbackTrendPoint = { period: string; avgLoyaltyScore: number };
+
+// Public — last N periods that actually have data (not calendar months, to
+// avoid showing empty gaps before the feature had any evaluations), oldest
+// to newest, for the rolling trend chart on Inicio. Confirmed 2026-07-25.
+export async function getStoreFeedbackTrend(limit = 6): Promise<StoreFeedbackTrendPoint[]> {
+  const recentPeriods = await prisma.storeFeedbackEvaluation.findMany({
+    distinct: ["period"],
+    orderBy: { period: "desc" },
+    take: limit,
+    select: { period: true },
+  });
+  const ordered = recentPeriods.map((p) => p.period).sort();
+
+  const points = await Promise.all(
+    ordered.map(async (period) => {
+      const agg = await aggregateForPeriod(period);
+      return { period, avgLoyaltyScore: agg?.avgLoyaltyScore ?? 0 };
+    })
+  );
+  return points;
 }
