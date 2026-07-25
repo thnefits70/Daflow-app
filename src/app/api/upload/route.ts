@@ -59,17 +59,32 @@ export async function POST(req: NextRequest) {
   const safeName = file.name.replace(/[^a-z0-9.\-_]/gi, "_");
   const path = `${safeFolder}/${crypto.randomUUID()}-${safeName}`;
 
-  await ensureBucket();
-  const supabase = supabaseAdmin();
-  const bytes = new Uint8Array(await file.arrayBuffer());
-  const { error } = await supabase.storage.from(BUCKET).upload(path, bytes, {
-    contentType: file.type || "application/octet-stream",
-    upsert: false,
-  });
-  if (error) {
-    return NextResponse.json({ error: "No se pudo subir el archivo." }, { status: 500 });
-  }
+  try {
+    await ensureBucket();
+    const supabase = supabaseAdmin();
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const { error } = await supabase.storage.from(BUCKET).upload(path, bytes, {
+      contentType: file.type || "application/octet-stream",
+      upsert: false,
+    });
+    if (error) {
+      // Log the raw Supabase error server-side (Vercel logs) for diagnosis —
+      // the client only gets a short, human reason + suggestion.
+      console.error("[upload] Supabase storage error:", error);
+      return NextResponse.json(
+        { error: `No se pudo subir el archivo: ${error.message}. Intenta de nuevo o con otro archivo.` },
+        { status: 500 }
+      );
+    }
 
-  const { data } = supabase.storage.from(BUCKET).getPublicUrl(path);
-  return NextResponse.json({ url: data.publicUrl, name: file.name });
+    const { data } = supabase.storage.from(BUCKET).getPublicUrl(path);
+    return NextResponse.json({ url: data.publicUrl, name: file.name });
+  } catch (err) {
+    console.error("[upload] unexpected error:", err);
+    const reason = err instanceof Error ? err.message : "error desconocido";
+    return NextResponse.json(
+      { error: `No se pudo subir el archivo: ${reason}. Intenta de nuevo en unos minutos.` },
+      { status: 500 }
+    );
+  }
 }
