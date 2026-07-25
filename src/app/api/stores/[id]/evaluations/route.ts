@@ -14,6 +14,8 @@ const createSchema = z.object({
   commercialTermsScore: z.number().int().min(1).max(5),
   communicationScore: z.number().int().min(1).max(5),
   comment: z.string().trim().optional(),
+  actionPlan: z.string().trim().optional(),
+  growthNeeds: z.string().trim().optional(),
 });
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -46,6 +48,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       commercialTermsScore: d.commercialTermsScore,
       communicationScore: d.communicationScore,
       comment: d.comment ?? "",
+      actionPlan: d.actionPlan ?? "",
+      growthNeeds: d.growthNeeds ?? "",
       evaluatedById,
     },
   });

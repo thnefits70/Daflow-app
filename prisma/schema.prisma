@@ -607,6 +607,13 @@ model StoreFeedbackEvaluation {
   communicationScore   Int
 
   comment       String   @default("")
+  // Confirmado 2026-07-24: enfoque de retención — qué se va a hacer para
+  // fortalecer la relación (no solo el diagnóstico) y qué necesita la tienda
+  // de nosotros para crecer (más stock, apoyo creativo para Meta/TikTok,
+  // mejores tiempos, etc.). El semáforo de riesgo se deriva de loyaltyScore,
+  // no necesita su propio campo.
+  actionPlan   String   @default("")
+  growthNeeds  String   @default("")
   evaluatedById String?
   evaluatedBy   User?    @relation("StoreFeedbackEvaluatedBy", fields: [evaluatedById], references: [id], onDelete: SetNull)
   evaluatedAt   DateTime @default(now())

@@ -18,9 +18,14 @@ export type StoreFeedbackEvaluationDTO = {
   commercialTermsScore: number;
   communicationScore: number;
   comment: string;
+  actionPlan: string;
+  growthNeeds: string;
   evaluatedByName: string | null;
   evaluatedAt: string;
 };
+
+// Retention-risk banding lives in storeFeedbackCalc.ts (no prisma import) so
+// it's importable from client components too — see that file.
 
 export type StoreDTO = {
   id: string;
@@ -56,6 +61,8 @@ export async function getStoreFeedbackData(): Promise<StoreDTO[]> {
       commercialTermsScore: e.commercialTermsScore,
       communicationScore: e.communicationScore,
       comment: e.comment,
+      actionPlan: e.actionPlan,
+      growthNeeds: e.growthNeeds,
       evaluatedByName: e.evaluatedBy?.name ?? null,
       evaluatedAt: e.evaluatedAt.toISOString(),
     })),
