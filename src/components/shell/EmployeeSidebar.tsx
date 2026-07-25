@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
-import { LayoutDashboard, ClipboardList, Scale, LogOut, Truck, Rocket, Wallet, FolderLock, Gauge, Menu, X, Trophy, Users } from "lucide-react";
+import { LayoutDashboard, ClipboardList, Scale, LogOut, Truck, Rocket, Wallet, FolderLock, Gauge, Menu, X, Trophy, Users, Compass } from "lucide-react";
 import { BrandMark } from "@/components/brand/DaflowMark";
 
 export function EmployeeSidebar({
@@ -90,6 +90,9 @@ export function EmployeeSidebar({
       <div className="flex-1 overflow-y-auto py-2.5 min-h-0" onClick={() => setOpen(false)}>
         <Link href="/area" className={`${NAV_ITEM} ${pathname === "/area" ? NAV_ACTIVE : NAV_INACTIVE}`}>
           <LayoutDashboard size={15} /> Inicio
+        </Link>
+        <Link href="/area/mision-vision" className={`${NAV_ITEM} ${pathname.startsWith("/area/mision-vision") ? NAV_ACTIVE : NAV_INACTIVE}`}>
+          <Compass size={15} /> Misión y Visión
         </Link>
         <Link href="/area/workspace" className={`${NAV_ITEM} ${pathname.startsWith("/area/workspace") ? NAV_ACTIVE : NAV_INACTIVE}`}>
           <ClipboardList size={15} /> Mi área de trabajo

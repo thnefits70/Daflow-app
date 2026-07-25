@@ -22,6 +22,7 @@ import {
   Menu,
   X,
   Trophy,
+  Compass,
 } from "lucide-react";
 import { BrandMark } from "@/components/brand/DaflowMark";
 
@@ -142,6 +143,9 @@ export function AdminSidebar({
       <div className="flex-1 overflow-y-auto py-2.5 min-h-0" onClick={() => setOpen(false)}>
         <Link href="/admin" className={`${NAV_ITEM} ${isActive("/admin") && pathname === "/admin" ? NAV_ACTIVE : NAV_INACTIVE}`}>
           <LayoutDashboard size={15} /> Inicio
+        </Link>
+        <Link href="/admin/mision-vision" className={`${NAV_ITEM} ${pathname.startsWith("/admin/mision-vision") ? NAV_ACTIVE : NAV_INACTIVE}`}>
+          <Compass size={15} /> Misión y Visión
         </Link>
         <Link href="/admin/areas" className={`${NAV_ITEM} ${pathname.startsWith("/admin/areas") ? NAV_ACTIVE : NAV_INACTIVE}`}>
           <ShieldCheck size={15} /> Áreas del negocio

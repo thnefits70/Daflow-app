@@ -331,6 +331,10 @@ model Document {
   deptId    String?
   department Department? @relation(fields: [deptId], references: [id], onDelete: Cascade)
   isLaw     Boolean     @default(false)
+  // Misión y Visión — confirmado 2026-07-24: colección aparte, empresa
+  // entera con acceso de solo lectura, admin sube el contenido. Una
+  // evaluación/examen ligado a esto queda pendiente para más adelante.
+  isMissionVision Boolean @default(false)
   title     String
   content   String      @default("")
   link      String      @default("")
@@ -341,6 +345,7 @@ model Document {
 
   @@index([deptId])
   @@index([isLaw])
+  @@index([isMissionVision])
 }
 
 /* ---------------- Exámenes ---------------- */

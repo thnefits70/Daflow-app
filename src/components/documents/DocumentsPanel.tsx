@@ -16,12 +16,14 @@ type DocumentDTO = {
 export function DocumentsPanel({
   deptId,
   isLaw,
+  isMissionVision,
   documents,
   editable,
   canDelete,
 }: {
   deptId?: string;
   isLaw?: boolean;
+  isMissionVision?: boolean;
   documents: DocumentDTO[];
   editable: boolean;
   canDelete?: boolean;
@@ -39,7 +41,7 @@ export function DocumentsPanel({
     const res = await fetch("/api/documents", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title: "Nuevo documento", deptId: deptId ?? null, isLaw: !!isLaw }),
+      body: JSON.stringify({ title: "Nuevo documento", deptId: deptId ?? null, isLaw: !!isLaw, isMissionVision: !!isMissionVision }),
     });
     setBusy(false);
     if (!res.ok) return;
