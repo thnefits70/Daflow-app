@@ -6,15 +6,15 @@ import { formatMonthShort } from "./WeeklyTrendChart";
 import type { StoreFeedbackAggregate } from "@/lib/storeFeedback";
 
 // Public to everyone — confirmed 2026-07-22: the company-wide average is
-// what's shown, never individual store detail (that stays Nairoby/admin-only
-// inside "Servicio Postventa" in KPIs Generales).
+// what's shown, never individual store detail (that stays admin/Análisis de
+// Mercado-only inside la pestaña "Servicio Postventa").
 export function StoreFeedbackTile({ data }: { data: StoreFeedbackAggregate }) {
   const trend = data.prevAvgLoyaltyScore != null ? Math.round((data.avgLoyaltyScore - data.prevAvgLoyaltyScore) * 10) / 10 : null;
 
   return (
     <KpiTile
       kicker="Servicio Postventa · Fidelización"
-      value={`${data.avgLoyaltyScore.toFixed(1)}/10`}
+      value={`${data.avgLoyaltyScore.toFixed(1)}/5`}
       period={`${formatMonthShort(data.period)} · ${data.storeCount} tienda${data.storeCount === 1 ? "" : "s"} evaluada${data.storeCount === 1 ? "" : "s"}`}
     >
       {trend !== null && (

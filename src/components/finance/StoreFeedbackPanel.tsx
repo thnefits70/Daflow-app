@@ -89,7 +89,7 @@ const CALL_SCRIPT_STEPS = [
   {
     time: "~30 seg",
     title: "Fidelización (pregunta general)",
-    body: "“En una escala del 0 al 10, ¿qué tan probable es que sigas comprándonos en los próximos meses?” — esto es la Fidelización del formulario.",
+    body: "“En una escala del 1 al 5, ¿qué tan probable es que sigas comprándonos en los próximos meses?” — esto es la Fidelización del formulario.",
   },
   {
     time: "~2 min",
@@ -112,7 +112,7 @@ export function StoreFeedbackPanel({ stores }: { stores: StoreDTO[] }) {
   const router = useRouter();
   const [storeName, setStoreName] = useState("");
   const [period, setPeriod] = useState(prevMonthStr());
-  const [loyaltyScore, setLoyaltyScore] = useState("8");
+  const [loyaltyScore, setLoyaltyScore] = useState("4");
   const [scores, setScores] = useState<Record<(typeof DRIVER_FIELDS)[number]["key"], string>>({
     fulfillmentScore: "4",
     qualityScore: "4",
@@ -135,11 +135,13 @@ export function StoreFeedbackPanel({ stores }: { stores: StoreDTO[] }) {
     const name = storeName.trim();
     if (!name) return setErr("Escribe o elige el nombre de la tienda.");
     const loyalty = Number(loyaltyScore);
-    if (Number.isNaN(loyalty) || loyalty < 0 || loyalty > 10) return setErr("La fidelización debe ser un número entre 0 y 10.");
+    if (Number.isNaN(loyalty) || loyalty < 1 || loyalty > 5) return setErr("La fidelización debe ser un número entre 1 y 5.");
     for (const f of DRIVER_FIELDS) {
       const v = Number(scores[f.key]);
       if (Number.isNaN(v) || v < 1 || v > 5) return setErr(`${f.label} debe estar entre 1 y 5.`);
     }
+    if (!actionPlan.trim()) return setErr("El plan de acción es obligatorio — resume qué se acordó en la llamada.");
+    if (!growthNeeds.trim()) return setErr("Las necesidades de crecimiento son obligatorias — resume qué pidió la tienda.");
     setErr("");
     setBusy(true);
 
@@ -166,8 +168,8 @@ export function StoreFeedbackPanel({ stores }: { stores: StoreDTO[] }) {
         loyaltyScore: loyalty,
         ...Object.fromEntries(DRIVER_FIELDS.map((f) => [f.key, Number(scores[f.key])])),
         comment: comment.trim() || undefined,
-        actionPlan: actionPlan.trim() || undefined,
-        growthNeeds: growthNeeds.trim() || undefined,
+        actionPlan: actionPlan.trim(),
+        growthNeeds: growthNeeds.trim(),
       }),
     });
     setBusy(false);
@@ -215,9 +217,9 @@ export function StoreFeedbackPanel({ stores }: { stores: StoreDTO[] }) {
   return (
     <div>
       <div className="text-[13px] text-steel mb-2 max-w-2xl">
-        Registra el feedback de cada llamada a una tienda: fidelización (0-10, "¿qué tan probable es que sigas
-        comprándonos?") y los KPIs que explican ese resultado (1-5 cada uno). El promedio de todas las tiendas
-        evaluadas cada mes es lo que se muestra públicamente en KPIs Generales e Inicio.
+        Registra el feedback de cada llamada a una tienda: fidelización ("¿qué tan probable es que sigas
+        comprándonos?") y los KPIs que explican ese resultado — todos del 1 al 5, donde 5 es excelente y 1 es
+        malo. El promedio de todas las tiendas evaluadas cada mes es lo que se muestra públicamente en Inicio.
       </div>
 
       <button
@@ -280,12 +282,12 @@ export function StoreFeedbackPanel({ stores }: { stores: StoreDTO[] }) {
           </div>
           <div>
             <label className="block mb-1 text-[10.5px] font-semibold uppercase tracking-wide text-steel">
-              Fidelización (0-10) — ¿seguirá comprándonos?
+              Fidelización (1-5) — ¿seguirá comprándonos?
             </label>
             <input
               type="number"
-              min={0}
-              max={10}
+              min={1}
+              max={5}
               className="w-full rounded border border-rule px-2.5 py-2 text-[13.5px]"
               value={loyaltyScore}
               onChange={(e) => setLoyaltyScore(e.target.value)}
@@ -322,28 +324,32 @@ export function StoreFeedbackPanel({ stores }: { stores: StoreDTO[] }) {
         <div className="grid grid-cols-2 gap-3 mb-3">
           <div>
             <label className="block mb-1 text-[10.5px] font-semibold uppercase tracking-wide text-steel">
-              Plan de acción (opcional)
+              Plan de acción
             </label>
             <textarea
               className="w-full rounded border border-rule px-2.5 py-2 text-[13px]"
               rows={2}
-              placeholder="¿Qué vamos a hacer este mes para fortalecer la relación?"
+              placeholder="Resume qué se acordó en la llamada: ¿qué vamos a hacer este mes para fortalecer la relación?"
               value={actionPlan}
               onChange={(e) => setActionPlan(e.target.value)}
             />
           </div>
           <div>
             <label className="block mb-1 text-[10.5px] font-semibold uppercase tracking-wide text-steel">
-              Necesidades de crecimiento (opcional)
+              Necesidades de crecimiento
             </label>
             <textarea
               className="w-full rounded border border-rule px-2.5 py-2 text-[13px]"
               rows={2}
-              placeholder="¿Qué necesita esta tienda de nosotros para crecer? (stock, apoyo creativo, tiempos...)"
+              placeholder="Resume qué pidió la tienda: ¿qué necesita de nosotros para crecer? (stock, apoyo creativo, tiempos...)"
               value={growthNeeds}
               onChange={(e) => setGrowthNeeds(e.target.value)}
             />
           </div>
+        </div>
+        <div className="text-[11px] text-steel mb-3 -mt-1.5">
+          Resume la llamada en estos dos campos — es lo que verán quienes gestionan la atención al cliente para
+          ejecutar el plan y fortalecer la relación con la tienda.
         </div>
 
         <button
@@ -379,7 +385,7 @@ export function StoreFeedbackPanel({ stores }: { stores: StoreDTO[] }) {
                       <div className={`font-semibold text-[14px] ${!s.isActive ? "opacity-60" : ""}`}>{s.name}</div>
                       <div className="text-[11.5px] text-steel">
                         {s.evaluations.length} evaluación{s.evaluations.length === 1 ? "" : "es"}
-                        {latest && ` · última: ${monthLabel(latest.period)} · fidelización ${latest.loyaltyScore}/10`}
+                        {latest && ` · última: ${monthLabel(latest.period)} · fidelización ${latest.loyaltyScore}/5`}
                       </div>
                     </div>
                   </button>
@@ -425,8 +431,8 @@ export function StoreFeedbackPanel({ stores }: { stores: StoreDTO[] }) {
                             <div key={e.id} className="flex flex-col items-center gap-1 shrink-0">
                               <div
                                 className="w-4 rounded-t"
-                                style={{ height: `${8 + (e.loyaltyScore / 10) * 40}px`, background: risk.color }}
-                                title={`${monthLabel(e.period)}: ${e.loyaltyScore}/10 (${risk.label})`}
+                                style={{ height: `${8 + (e.loyaltyScore / 5) * 40}px`, background: risk.color }}
+                                title={`${monthLabel(e.period)}: ${e.loyaltyScore}/5 (${risk.label})`}
                               />
                               <div className="font-mono text-[9.5px] text-steel">{monthLabel(e.period).slice(0, 3)}</div>
                             </div>
@@ -445,7 +451,7 @@ export function StoreFeedbackPanel({ stores }: { stores: StoreDTO[] }) {
                                 className="font-mono text-[10px] font-semibold px-1.5 py-0.5 rounded-full whitespace-nowrap"
                                 style={{ color: risk.color, border: `1px solid ${risk.color}`, background: `${risk.color}1a` }}
                               >
-                                {risk.icon} {e.loyaltyScore}/10
+                                {risk.icon} {e.loyaltyScore}/5
                               </span>
                               <button
                                 type="button"

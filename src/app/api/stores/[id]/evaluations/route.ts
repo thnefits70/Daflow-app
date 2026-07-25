@@ -6,7 +6,7 @@ import { canManageStoreFeedback } from "@/lib/guards";
 
 const createSchema = z.object({
   period: z.string().regex(/^\d{4}-\d{2}$/, "Mes inválido."),
-  loyaltyScore: z.number().int().min(0).max(10),
+  loyaltyScore: z.number().int().min(1).max(5),
   fulfillmentScore: z.number().int().min(1).max(5),
   qualityScore: z.number().int().min(1).max(5),
   stockScore: z.number().int().min(1).max(5),
@@ -14,8 +14,8 @@ const createSchema = z.object({
   commercialTermsScore: z.number().int().min(1).max(5),
   communicationScore: z.number().int().min(1).max(5),
   comment: z.string().trim().optional(),
-  actionPlan: z.string().trim().optional(),
-  growthNeeds: z.string().trim().optional(),
+  actionPlan: z.string().trim().min(1, "El plan de acción es obligatorio."),
+  growthNeeds: z.string().trim().min(1, "Las necesidades de crecimiento son obligatorias."),
 });
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
