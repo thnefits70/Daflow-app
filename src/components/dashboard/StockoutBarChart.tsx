@@ -15,7 +15,10 @@ export function StockoutBarChart({ points }: { points: StockoutWeekPoint[] }) {
 
   useEffect(() => {
     function onClickOutside(e: MouseEvent) {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setDateTooltipWeek(null);
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) {
+        setDateTooltipWeek(null);
+        setHoverIndex(null);
+      }
     }
     document.addEventListener("mousedown", onClickOutside);
     return () => document.removeEventListener("mousedown", onClickOutside);
@@ -105,7 +108,6 @@ export function StockoutBarChart({ points }: { points: StockoutWeekPoint[] }) {
         height={height}
         preserveAspectRatio="none"
         className="block"
-        onMouseLeave={() => setHoverIndex(null)}
       >
         {Array.from({ length: yTicks + 1 }).map((_, i) => {
           const v = Math.round((yMax / yTicks) * i);
@@ -135,7 +137,6 @@ export function StockoutBarChart({ points }: { points: StockoutWeekPoint[] }) {
                 height={Math.max(barH, 2)}
                 rx="4"
                 fill={isHover ? "#14C7C7" : "#14C7C7cc"}
-                onMouseEnter={() => setHoverIndex(i)}
                 onClick={() => setHoverIndex((v) => (v === i ? null : i))}
                 style={{ cursor: "pointer" }}
               />
@@ -192,7 +193,7 @@ export function StockoutBarChart({ points }: { points: StockoutWeekPoint[] }) {
           const tooltipBottom = height - barY + 10;
           return (
             <div
-              className="absolute z-10 pointer-events-none bg-[#101f3b] border border-rule rounded-md px-3 py-2.5 shadow-lg"
+              className="absolute z-10 bg-[#101f3b] border border-rule rounded-md px-3 py-2.5 shadow-lg"
               style={{ left: `${leftPct}%`, transform: "translateX(-50%)", bottom: tooltipBottom, width: 260 }}
             >
               <div className="flex items-center justify-between gap-3 mb-1.5">
