@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Upload, FileText, Download, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
+import { uploadFile as uploadToStorage } from "@/lib/uploadFile";
 
 const MONTHS = [
   "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
@@ -16,12 +17,9 @@ function fileKind(name: string): "pdf" | "image" | "other" {
 }
 
 async function uploadFile(file: File): Promise<{ url: string; name: string } | null> {
-  const fd = new FormData();
-  fd.append("file", file);
-  fd.append("folder", "pay-stubs");
-  const res = await fetch("/api/upload", { method: "POST", body: fd });
-  if (!res.ok) return null;
-  return res.json();
+  const result = await uploadToStorage(file, "pay-stubs");
+  if (!result.ok) return null;
+  return { url: result.url, name: result.name };
 }
 
 type Dept = { id: string; name: string; code: string };

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { supabaseAdmin } from "@/lib/supabase";
@@ -14,10 +15,26 @@ async function ensureBucket() {
   await supabase.storage.createBucket(BUCKET, { public: true, fileSizeLimit: MAX_BYTES });
 }
 
+const signSchema = z.object({
+  fileName: z.string().trim().min(1),
+  folder: z.string().trim().min(1).optional().default("misc"),
+  size: z.number().int().nonnegative(),
+});
+
+// Confirmado 2026-07-25: Vercel rechaza cualquier cuerpo de solicitud de más
+// de ~4.5 MB antes de que este código siquiera se ejecute — así que la
+// subida original (navegador -> nuestra función -> Supabase) tenía un techo
+// mucho más bajo que los 15 MB que el código permitía. Esta ruta en cambio
+// solo genera una URL firmada; el navegador sube el archivo directo a
+// Supabase Storage (ver src/lib/uploadFile.ts), sin pasar por esta función,
+// así que el límite real vuelve a ser MAX_BYTES.
 export async function POST(req: NextRequest) {
-  const formData = await req.formData().catch(() => null);
-  const file = formData?.get("file");
-  const folder = (formData?.get("folder") as string) || "misc";
+  const body = await req.json().catch(() => null);
+  const parsed = signSchema.safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json({ error: "Datos inválidos." }, { status: 400 });
+  }
+  const { fileName, folder, size } = parsed.data;
 
   const session = await auth();
   let allowed = session?.user.role === "admin";
@@ -48,43 +65,37 @@ export async function POST(req: NextRequest) {
   }
   if (!allowed) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
-  if (!file || typeof file === "string") {
-    return NextResponse.json({ error: "No se recibió ningún archivo." }, { status: 400 });
-  }
-  if (file.size > MAX_BYTES) {
+  if (size > MAX_BYTES) {
     return NextResponse.json({ error: "El archivo es muy pesado (máximo 15 MB)." }, { status: 400 });
   }
 
   const safeFolder = folder.replace(/[^a-z0-9-]/gi, "_");
-  const safeName = file.name.replace(/[^a-z0-9.\-_]/gi, "_");
+  const safeName = fileName.replace(/[^a-z0-9.\-_]/gi, "_");
   const path = `${safeFolder}/${crypto.randomUUID()}-${safeName}`;
 
   try {
     await ensureBucket();
     const supabase = supabaseAdmin();
-    const bytes = new Uint8Array(await file.arrayBuffer());
-    const { error } = await supabase.storage.from(BUCKET).upload(path, bytes, {
-      contentType: file.type || "application/octet-stream",
-      upsert: false,
-    });
-    if (error) {
-      // Log the raw Supabase error server-side (Vercel logs) for diagnosis —
-      // the client only gets a short, human reason + suggestion.
-      console.error("[upload] Supabase storage error:", error);
+    const { data, error } = await supabase.storage.from(BUCKET).createSignedUploadUrl(path);
+    if (error || !data) {
+      console.error("[upload/sign] Supabase error:", error);
       return NextResponse.json(
-        { error: `No se pudo subir el archivo: ${error.message}. Intenta de nuevo o con otro archivo.` },
+        { error: `No se pudo iniciar la subida: ${error?.message ?? "error desconocido"}.` },
         { status: 500 }
       );
     }
 
-    const { data } = supabase.storage.from(BUCKET).getPublicUrl(path);
-    return NextResponse.json({ url: data.publicUrl, name: file.name });
+    const { data: publicData } = supabase.storage.from(BUCKET).getPublicUrl(path);
+    return NextResponse.json({
+      signedUrl: data.signedUrl,
+      token: data.token,
+      path,
+      publicUrl: publicData.publicUrl,
+      fileName,
+    });
   } catch (err) {
-    console.error("[upload] unexpected error:", err);
+    console.error("[upload/sign] unexpected error:", err);
     const reason = err instanceof Error ? err.message : "error desconocido";
-    return NextResponse.json(
-      { error: `No se pudo subir el archivo: ${reason}. Intenta de nuevo en unos minutos.` },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: `No se pudo iniciar la subida: ${reason}.` }, { status: 500 });
   }
 }

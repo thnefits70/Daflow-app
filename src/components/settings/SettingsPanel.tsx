@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Upload, X, Mail, KeyRound, Cake } from "lucide-react";
 import { BrandMark } from "@/components/brand/DaflowMark";
+import { uploadFile } from "@/lib/uploadFile";
 
 export function SettingsPanel({
   logoUrl,
@@ -46,21 +47,17 @@ export function SettingsPanel({
       setLogoErr("La imagen es muy pesada. Usa un logo de menos de 1.5 MB.");
       return;
     }
-    const fd = new FormData();
-    fd.append("file", file);
-    fd.append("folder", "branding");
-    const res = await fetch("/api/upload", { method: "POST", body: fd });
-    if (!res.ok) {
-      setLogoErr("No se pudo subir el logo.");
+    const result = await uploadFile(file, "branding");
+    if (!result.ok) {
+      setLogoErr(result.error);
       return;
     }
-    const data = await res.json();
     await fetch("/api/settings", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ logoUrl: data.url }),
+      body: JSON.stringify({ logoUrl: result.url }),
     });
-    setLogo(data.url);
+    setLogo(result.url);
     router.refresh();
   };
 
@@ -84,21 +81,17 @@ export function SettingsPanel({
       setBannerErr("La imagen es muy pesada. Usa un banner de menos de 2.5 MB.");
       return;
     }
-    const fd = new FormData();
-    fd.append("file", file);
-    fd.append("folder", "branding");
-    const res = await fetch("/api/upload", { method: "POST", body: fd });
-    if (!res.ok) {
-      setBannerErr("No se pudo subir el banner.");
+    const result = await uploadFile(file, "branding");
+    if (!result.ok) {
+      setBannerErr(result.error);
       return;
     }
-    const data = await res.json();
     await fetch("/api/settings", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ bannerUrl: data.url }),
+      body: JSON.stringify({ bannerUrl: result.url }),
     });
-    setBanner(data.url);
+    setBanner(result.url);
     router.refresh();
   };
 
@@ -122,21 +115,17 @@ export function SettingsPanel({
       setFaviconErr("La imagen es muy pesada. Usa un ícono de menos de 500 KB.");
       return;
     }
-    const fd = new FormData();
-    fd.append("file", file);
-    fd.append("folder", "branding");
-    const res = await fetch("/api/upload", { method: "POST", body: fd });
-    if (!res.ok) {
-      setFaviconErr("No se pudo subir el favicon.");
+    const result = await uploadFile(file, "branding");
+    if (!result.ok) {
+      setFaviconErr(result.error);
       return;
     }
-    const data = await res.json();
     await fetch("/api/settings", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ faviconUrl: data.url }),
+      body: JSON.stringify({ faviconUrl: result.url }),
     });
-    setFavicon(data.url);
+    setFavicon(result.url);
     router.refresh();
   };
 

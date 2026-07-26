@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, Trash2, Pencil, Download, Upload, X, FileText, Check, Ban, Search } from "lucide-react";
 import { Combobox, type ComboboxOption } from "@/components/ui/Combobox";
+import { uploadFile as uploadToStorage } from "@/lib/uploadFile";
 
 type ChangeRequestDTO = {
   action: "EDIT" | "DELETE";
@@ -105,18 +106,13 @@ export function PurchaseReceiptsPanel({
   async function uploadFile(file: File, onDone: (url: string, name: string) => void) {
     setErr("");
     setBusy(true);
-    const fd = new FormData();
-    fd.append("file", file);
-    fd.append("folder", "purchase-receipts");
-    const res = await fetch("/api/upload", { method: "POST", body: fd });
+    const result = await uploadToStorage(file, "purchase-receipts");
     setBusy(false);
-    if (!res.ok) {
-      const data = await res.json().catch(() => null);
-      setErr(data?.error ?? "No se pudo subir el archivo.");
+    if (!result.ok) {
+      setErr(result.error);
       return;
     }
-    const data = await res.json();
-    onDone(data.url, data.name);
+    onDone(result.url, result.name);
   }
 
   // Resolves a typed catalog name to an id — reuses an existing entry

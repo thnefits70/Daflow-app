@@ -9,6 +9,7 @@ import {
   Copy, Check, RefreshCw, Cake, Power, Receipt, Heart,
 } from "lucide-react";
 import { PositionPicker } from "@/components/users/PositionPicker";
+import { uploadFile as uploadToStorage } from "@/lib/uploadFile";
 
 type Dept = { id: string; name: string; code: string };
 type Position = { id: string; deptId: string; name: string };
@@ -60,14 +61,6 @@ function cvKind(cvUrl: string | null, cvName: string | null): "pdf" | "image" | 
   return "other";
 }
 
-async function uploadFile(file: File, folder: string): Promise<{ url: string; name: string } | null> {
-  const fd = new FormData();
-  fd.append("file", file);
-  fd.append("folder", folder);
-  const res = await fetch("/api/upload", { method: "POST", body: fd });
-  if (!res.ok) return null;
-  return res.json();
-}
 
 export function ProfileDetail({
   profile,
@@ -172,15 +165,15 @@ export function ProfileDetail({
 
   const handlePhoto = async (file: File) => {
     setPhotoErr("");
-    const result = await uploadFile(file, "photos");
-    if (!result) { setPhotoErr("No se pudo subir la foto."); return; }
+    const result = await uploadToStorage(file, "photos");
+    if (!result.ok) { setPhotoErr(result.error); return; }
     save({ photoUrl: result.url });
   };
 
   const handleCv = async (file: File) => {
     setCvErr("");
-    const result = await uploadFile(file, "cvs");
-    if (!result) { setCvErr("No se pudo subir el CV."); return; }
+    const result = await uploadToStorage(file, "cvs");
+    if (!result.ok) { setCvErr(result.error); return; }
     save({ cvUrl: result.url, cvName: result.name });
   };
 

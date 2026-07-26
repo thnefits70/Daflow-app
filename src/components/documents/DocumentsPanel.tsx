@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, Trash2, Pencil, Download, Upload, X, FileText } from "lucide-react";
+import { uploadFile } from "@/lib/uploadFile";
 
 type DocumentDTO = {
   id: string;
@@ -88,18 +89,13 @@ export function DocumentsPanel({
     if (!draft) return;
     setErr("");
     setBusy(true);
-    const fd = new FormData();
-    fd.append("file", file);
-    fd.append("folder", "documents");
-    const res = await fetch("/api/upload", { method: "POST", body: fd });
+    const result = await uploadFile(file, "documents");
     setBusy(false);
-    if (!res.ok) {
-      const data = await res.json().catch(() => null);
-      setErr(data?.error ?? "No se pudo subir el archivo.");
+    if (!result.ok) {
+      setErr(result.error);
       return;
     }
-    const data = await res.json();
-    setDraft({ ...draft, fileUrl: data.url, fileName: data.name });
+    setDraft({ ...draft, fileUrl: result.url, fileName: result.name });
   };
 
   return (

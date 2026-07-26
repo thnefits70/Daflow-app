@@ -19,6 +19,7 @@ import "@xyflow/react/dist/style.css";
 import { Plus, Trash2, CheckCircle2, Circle, ArrowLeft, Upload, X, Download, Maximize2 } from "lucide-react";
 import Link from "next/link";
 import { IsoNode, SHAPE_LABEL, type IsoShapeType, type IsoNodeData } from "./IsoNode";
+import { uploadFile } from "@/lib/uploadFile";
 
 const nodeTypes = { iso: IsoNode };
 
@@ -204,18 +205,13 @@ export function ProcessEditor({
   const uploadNodeFile = async (file: File) => {
     setUploadErr("");
     setUploading(true);
-    const fd = new FormData();
-    fd.append("file", file);
-    fd.append("folder", "process-documents");
-    const res = await fetch("/api/upload", { method: "POST", body: fd });
+    const result = await uploadFile(file, "process-documents");
     setUploading(false);
-    if (!res.ok) {
-      const data = await res.json().catch(() => null);
-      setUploadErr(data?.error ?? "No se pudo subir el archivo.");
+    if (!result.ok) {
+      setUploadErr(result.error);
       return;
     }
-    const data = await res.json();
-    updateSelectedNode({ fileUrl: data.url, fileName: data.name });
+    updateSelectedNode({ fileUrl: result.url, fileName: result.name });
   };
 
   const toggleChecked = (id: string) => {

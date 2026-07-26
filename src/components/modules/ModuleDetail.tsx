@@ -6,6 +6,7 @@ import Link from "next/link";
 import { ArrowLeft, Pencil, Check, X, Upload, ImageIcon } from "lucide-react";
 import { DocumentsPanel } from "@/components/documents/DocumentsPanel";
 import { ModuleExamPanel } from "@/components/modules/ModuleExamPanel";
+import { uploadFile } from "@/lib/uploadFile";
 
 type ModuleDocumentDTO = {
   id: string;
@@ -55,21 +56,16 @@ export function ModuleDetail({
   const uploadImage = async (file: File) => {
     setErr("");
     setBusy(true);
-    const fd = new FormData();
-    fd.append("file", file);
-    fd.append("folder", "modules");
-    const res = await fetch("/api/upload", { method: "POST", body: fd });
-    if (!res.ok) {
+    const result = await uploadFile(file, "modules");
+    if (!result.ok) {
       setBusy(false);
-      const data = await res.json().catch(() => null);
-      setErr(data?.error ?? "No se pudo subir la imagen.");
+      setErr(result.error);
       return;
     }
-    const data = await res.json();
     await fetch(`/api/modules/${mod.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ imageUrl: data.url, imageName: data.name }),
+      body: JSON.stringify({ imageUrl: result.url, imageName: result.name }),
     });
     setBusy(false);
     router.refresh();
