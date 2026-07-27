@@ -50,7 +50,8 @@ export function ModulesGrid({
     router.push(`${basePath}/${created.id}`);
   };
 
-  const remove = async (id: string) => {
+  const remove = async (id: string, title: string) => {
+    if (!confirm(`¿Eliminar el módulo "${title}"? Se borrarán también sus documentos y su examen. Esta acción no se puede deshacer.`)) return;
     setBusy(true);
     await fetch(`/api/modules/${id}`, { method: "DELETE" });
     setBusy(false);
@@ -145,7 +146,7 @@ export function ModulesGrid({
                   className="p-1 rounded bg-navy/80 text-white cursor-pointer"
                   onClick={(e) => {
                     e.preventDefault();
-                    remove(m.id);
+                    remove(m.id, m.title);
                   }}
                   title="Eliminar módulo"
                 >

@@ -203,6 +203,7 @@ export function ExamsPanel({ deptId, exams, editable }: { deptId: string; exams:
   };
 
   const remove = async (id: string) => {
+    if (!confirm("¿Eliminar este examen? Se perderán todas sus preguntas y calificaciones registradas.")) return;
     setBusy(true);
     await fetch(`/api/exams/${id}`, { method: "DELETE" });
     setBusy(false);

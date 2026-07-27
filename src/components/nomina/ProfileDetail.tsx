@@ -97,7 +97,8 @@ export function ProfileDetail({
   const [leaderBusy, setLeaderBusy] = useState(false);
   const [leaderConflict, setLeaderConflict] = useState<{ deptId: string; deptName: string; existingLeaderName: string } | null>(null);
 
-  const removePosition = async (id: string) => {
+  const removePosition = async (id: string, name: string) => {
+    if (!confirm(`¿Eliminar el puesto "${name}"?`)) return;
     setBusy(true);
     await fetch(`/api/positions/${id}`, { method: "DELETE" });
     setBusy(false);
@@ -233,6 +234,7 @@ export function ProfileDetail({
   };
 
   const removeMilestone = async (id: string) => {
+    if (!confirm("¿Eliminar este logro?")) return;
     setP({ ...p, milestones: p.milestones.filter((m) => m.id !== id) });
     await fetch(`/api/milestones/${id}`, { method: "DELETE" });
   };
@@ -436,7 +438,7 @@ export function ProfileDetail({
                         type="button"
                         disabled={busy}
                         className="text-steel hover:text-red cursor-pointer"
-                        onClick={() => removePosition(pos.id)}
+                        onClick={() => removePosition(pos.id, pos.name)}
                       >
                         <X size={10} />
                       </button>

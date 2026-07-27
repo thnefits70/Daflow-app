@@ -109,6 +109,7 @@ export function StockoutPanel({
   };
 
   const remove = async (id: string) => {
+    if (!confirm("¿Eliminar esta semana de ruptura de stock?")) return;
     setBusy(true);
     await fetch(`/api/stockout-weeks/${id}`, { method: "DELETE" });
     setBusy(false);
@@ -120,6 +121,7 @@ export function StockoutPanel({
   // zero week attachments) — different from `remove` above, which only
   // detaches one week.
   const deleteProduct = async (id: string) => {
+    if (!confirm("¿Eliminar este producto del catálogo de ruptura de stock?")) return;
     setBusy(true);
     const res = await fetch(`/api/stockout-products/${id}`, { method: "DELETE" });
     setBusy(false);

@@ -58,6 +58,7 @@ export function ReturnRatePanel({ records }: { records: ReturnRateRecordDTO[] })
   };
 
   const remove = async (id: string) => {
+    if (!confirm("¿Eliminar este registro de tasa de devolución?")) return;
     setBusy(true);
     await fetch(`/api/return-rate/${id}`, { method: "DELETE" });
     setBusy(false);

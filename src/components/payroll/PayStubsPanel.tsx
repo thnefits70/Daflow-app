@@ -202,6 +202,7 @@ export function PayStubsPanel({ mode, departments }: { mode: "manage" | "own"; d
   };
 
   const handleDelete = async (id: string) => {
+    if (!confirm("¿Eliminar este rol de pago? Esta acción no se puede deshacer.")) return;
     await fetch(`/api/pay-stubs/${id}`, { method: "DELETE" });
     loadRoster();
   };

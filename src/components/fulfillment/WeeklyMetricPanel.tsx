@@ -115,6 +115,7 @@ export function WeeklyMetricPanel({
   };
 
   const remove = async (id: string) => {
+    if (!confirm("¿Eliminar este registro semanal? Esta acción no se puede deshacer.")) return;
     setBusy(true);
     await fetch(`/api/weekly-metrics/${id}`, { method: "DELETE" });
     setBusy(false);

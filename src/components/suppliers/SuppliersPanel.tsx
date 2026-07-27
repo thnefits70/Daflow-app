@@ -189,6 +189,7 @@ export function SuppliersPanel({
   };
 
   const remove = async (id: string) => {
+    if (!confirm("¿Eliminar este proveedor del directorio?")) return;
     setBusy(true);
     await fetch(`/api/suppliers/${id}`, { method: "DELETE" });
     setBusy(false);

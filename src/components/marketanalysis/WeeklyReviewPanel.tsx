@@ -106,6 +106,7 @@ export function WeeklyReviewPanel({
   };
 
   const remove = async (id: string) => {
+    if (!confirm("¿Eliminar esta nota de la bitácora semanal?")) return;
     setBusy(true);
     await fetch(`/api/weekly-reviews/${id}`, { method: "DELETE" });
     setBusy(false);

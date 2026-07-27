@@ -130,6 +130,7 @@ export function PeriodicRemindersPanel({ deptId, reminders, editable }: { deptId
   };
 
   const remove = async (id: string) => {
+    if (!confirm("¿Eliminar este recordatorio periódico?")) return;
     setBusy(true);
     await fetch(`/api/periodic-reminders/${id}`, { method: "DELETE" });
     setBusy(false);

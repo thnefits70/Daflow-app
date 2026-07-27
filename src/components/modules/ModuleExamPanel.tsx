@@ -41,6 +41,7 @@ export function ModuleExamPanel({
 
   const remove = async () => {
     if (!exam) return;
+    if (!confirm("¿Eliminar este examen? Se perderán todas sus preguntas y calificaciones registradas.")) return;
     setBusy(true);
     await fetch(`/api/exams/${exam.id}`, { method: "DELETE" });
     setBusy(false);

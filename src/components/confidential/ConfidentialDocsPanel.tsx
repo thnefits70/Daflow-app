@@ -142,6 +142,7 @@ export function ConfidentialDocsPanel({
   };
 
   const remove = async (id: string) => {
+    if (!confirm("¿Eliminar este documento confidencial? Se quita el acceso a todos los que lo tenían compartido.")) return;
     setBusy(true);
     await fetch(`/api/confidential-documents/${id}`, { method: "DELETE" });
     setBusy(false);

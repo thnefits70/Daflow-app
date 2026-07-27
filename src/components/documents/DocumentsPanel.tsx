@@ -79,6 +79,7 @@ export function DocumentsPanel({
   };
 
   const remove = async (id: string) => {
+    if (!confirm("¿Eliminar este documento? Esta acción no se puede deshacer.")) return;
     setBusy(true);
     await fetch(`/api/documents/${id}`, { method: "DELETE" });
     setBusy(false);

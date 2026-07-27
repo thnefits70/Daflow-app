@@ -115,6 +115,7 @@ export function PaymentRemindersPanel({
   };
 
   const remove = async (id: string) => {
+    if (!confirm("¿Eliminar este recordatorio de pago?")) return;
     setBusy(true);
     await fetch(`/api/payment-reminders/${id}`, { method: "DELETE" });
     setBusy(false);

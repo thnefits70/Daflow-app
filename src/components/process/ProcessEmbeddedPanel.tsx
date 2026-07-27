@@ -38,6 +38,7 @@ export function ProcessEmbeddedPanel({
 
   const removeProcess = async () => {
     if (!process) return;
+    if (!confirm(`¿Eliminar el proceso "${process.title}"? Se borra todo su flujograma. Esta acción no se puede deshacer.`)) return;
     setBusy(true);
     await fetch(`/api/processes/${process.id}`, { method: "DELETE" });
     setBusy(false);

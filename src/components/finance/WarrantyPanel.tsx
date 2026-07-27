@@ -123,6 +123,7 @@ export function WarrantyPanel({
   };
 
   const removeTotal = async (id: string) => {
+    if (!confirm("¿Eliminar el total de garantías de este mes?")) return;
     setBusy(true);
     await fetch(`/api/warranty-months/${id}`, { method: "DELETE" });
     setBusy(false);
@@ -134,6 +135,7 @@ export function WarrantyPanel({
   // has zero month counts) — different from `removeCount` above, which only
   // removes one month's count.
   const deleteCategory = async (id: string) => {
+    if (!confirm("¿Eliminar esta categoría de garantías del catálogo?")) return;
     setBusy(true);
     const res = await fetch(`/api/warranty-categories/${id}`, { method: "DELETE" });
     setBusy(false);

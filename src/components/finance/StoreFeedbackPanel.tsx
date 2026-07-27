@@ -328,6 +328,7 @@ export function StoreFeedbackPanel({ stores, editable = true }: { stores: StoreD
   };
 
   const deleteEvaluation = async (storeId: string, evalId: string) => {
+    if (!confirm("¿Eliminar esta evaluación mensual de la tienda? Esta acción no se puede deshacer.")) return;
     setBusy(true);
     await fetch(`/api/stores/${storeId}/evaluations/${evalId}`, { method: "DELETE" });
     setBusy(false);
@@ -346,6 +347,7 @@ export function StoreFeedbackPanel({ stores, editable = true }: { stores: StoreD
   };
 
   const deleteStore = async (id: string) => {
+    if (!confirm("¿Eliminar esta tienda? Se borra junto con todo su historial de evaluaciones. Esta acción no se puede deshacer.")) return;
     setBusy(true);
     const res = await fetch(`/api/stores/${id}`, { method: "DELETE" });
     setBusy(false);
