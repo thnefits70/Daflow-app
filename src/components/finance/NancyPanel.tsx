@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Sparkles, Send, Mic, MicOff, Volume2, VolumeX, X } from "lucide-react";
+import { Sparkles, Send, Mic, MicOff, Volume2, VolumeX, X, History, Plus, ArrowLeft, Trash2 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -27,6 +27,7 @@ const MARKDOWN_COMPONENTS = {
 };
 
 type ChatMessage = { role: "user" | "assistant"; content: string };
+type ConversationSummary = { id: string; title: string; updatedAt: string; messageCount: number };
 
 // Minimal local typing for the (non-standard, not in lib.dom.d.ts everywhere)
 // Web Speech API — avoids pulling in a dependency or touching global types.
@@ -57,6 +58,13 @@ type SpeechWindow = Window & {
 // and free, no extra per-use cost beyond the existing Claude token spend.
 export function NancyPanel({ deptId, brand }: { deptId: string; brand: string }) {
   const [open, setOpen] = useState(false);
+  // "list" = elegir/retomar una conversación guardada o empezar una nueva;
+  // "chat" = conversación activa (nueva o retomada). Confirmado 2026-07-27:
+  // antes todo vivía solo en memoria y se perdía al salir de la pantalla.
+  const [view, setView] = useState<"list" | "chat">("list");
+  const [conversations, setConversations] = useState<ConversationSummary[] | null>(null);
+  const [loadingConversations, setLoadingConversations] = useState(false);
+  const [conversationId, setConversationId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -70,6 +78,44 @@ export function NancyPanel({ deptId, brand }: { deptId: string; brand: string })
   const bottomRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const lastSpokenRef = useRef<string | null>(null);
+
+  const loadConversations = async () => {
+    setLoadingConversations(true);
+    const res = await fetch(`/api/finance-kpis/nancy/conversations?deptId=${deptId}`);
+    setLoadingConversations(false);
+    if (res.ok) setConversations(await res.json());
+  };
+
+  useEffect(() => {
+    if (open && view === "list") loadConversations();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, view, deptId]);
+
+  const startNewConversation = () => {
+    setConversationId(null);
+    setMessages([]);
+    setError(null);
+    setView("chat");
+  };
+
+  const resumeConversation = async (id: string) => {
+    setError(null);
+    const res = await fetch(`/api/finance-kpis/nancy/conversations/${id}`);
+    if (!res.ok) {
+      setError("No se pudo abrir esa conversación.");
+      return;
+    }
+    const data = await res.json();
+    setConversationId(data.id);
+    setMessages(data.messages);
+    setView("chat");
+  };
+
+  const deleteConversation = async (id: string) => {
+    if (!confirm("¿Eliminar esta conversación con Nancy? No se puede deshacer.")) return;
+    await fetch(`/api/finance-kpis/nancy/conversations/${id}`, { method: "DELETE" });
+    loadConversations();
+  };
 
   // Same "assume default, flip after mount" pattern used in WeeklyTrendChart
   // — keeps the server-rendered markup identical to the first client render.
@@ -136,12 +182,16 @@ export function NancyPanel({ deptId, brand }: { deptId: string; brand: string })
       const res = await fetch("/api/finance-kpis/nancy", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ deptId, brand, messages: nextMessages }),
+        body: JSON.stringify({ deptId, brand, messages: nextMessages, conversationId: conversationId ?? undefined }),
       });
       if (!res.ok || !res.body) {
         const msg = await res.text().catch(() => "");
         throw new Error(msg || "Error al contactar a Nancy.");
       }
+      // El primer mensaje de una conversación nueva no trae conversationId
+      // todavía — el servidor la crea y la devuelve en este header.
+      const returnedId = res.headers.get("X-Conversation-Id");
+      if (returnedId && returnedId !== conversationId) setConversationId(returnedId);
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let acc = "";
@@ -188,12 +238,42 @@ export function NancyPanel({ deptId, brand }: { deptId: string; brand: string })
           aria-label="Chat con Nancy"
         >
           <div className="flex items-center justify-between gap-2 px-4 py-3 border-b border-rule shrink-0">
-            <div className="flex items-center gap-2">
-              <Sparkles size={15} className="text-teal" />
-              <div className="font-mono text-[10px] uppercase tracking-wide text-steel font-bold">Nancy · asistente financiera</div>
+            <div className="flex items-center gap-2 min-w-0">
+              {view === "chat" && (
+                <button
+                  type="button"
+                  title="Ver conversaciones guardadas"
+                  className="p-1 -ml-1 rounded text-steel hover:text-ink cursor-pointer shrink-0"
+                  onClick={() => setView("list")}
+                >
+                  <ArrowLeft size={15} />
+                </button>
+              )}
+              <Sparkles size={15} className="text-teal shrink-0" />
+              <div className="font-mono text-[10px] uppercase tracking-wide text-steel font-bold truncate">Nancy · asistente financiera</div>
               <LiveDot />
             </div>
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1 shrink-0">
+              {view === "chat" && (
+                <button
+                  type="button"
+                  title="Nueva conversación"
+                  className="p-1.5 rounded text-steel hover:text-ink cursor-pointer"
+                  onClick={startNewConversation}
+                >
+                  <Plus size={15} />
+                </button>
+              )}
+              {view === "chat" && (
+                <button
+                  type="button"
+                  title="Conversaciones guardadas"
+                  className="p-1.5 rounded text-steel hover:text-ink cursor-pointer"
+                  onClick={() => setView("list")}
+                >
+                  <History size={15} />
+                </button>
+              )}
               {speechSupported && (
                 <button
                   type="button"
@@ -218,6 +298,47 @@ export function NancyPanel({ deptId, brand }: { deptId: string; brand: string })
             </div>
           </div>
 
+          {view === "list" ? (
+            <div className="flex-1 overflow-y-auto px-4 py-3 min-h-[160px]">
+              <button
+                type="button"
+                onClick={startNewConversation}
+                className="w-full flex items-center justify-center gap-1.5 rounded-md border-[1.5px] border-dashed border-rule text-teal hover:border-teal text-[12.5px] font-semibold py-2.5 cursor-pointer mb-3"
+              >
+                <Plus size={14} /> Nueva conversación
+              </button>
+
+              {loadingConversations && <div className="text-steel text-[12px]">Cargando…</div>}
+              {!loadingConversations && conversations?.length === 0 && (
+                <div className="text-steel text-[12px] text-center py-4">Aún no tienes conversaciones guardadas con Nancy.</div>
+              )}
+              {conversations?.map((c) => (
+                <div
+                  key={c.id}
+                  className="group flex items-center gap-2 rounded-md border border-rule bg-cloud px-3 py-2.5 mb-2 cursor-pointer hover:border-teal"
+                  onClick={() => resumeConversation(c.id)}
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[12.5px] font-semibold truncate">{c.title}</div>
+                    <div className="text-[10.5px] text-steel">
+                      {new Date(c.updatedAt).toLocaleDateString("es-EC", { day: "2-digit", month: "short" })} · {c.messageCount} mensaje
+                      {c.messageCount === 1 ? "" : "s"}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className="opacity-0 group-hover:opacity-100 p-1 text-steel hover:text-red cursor-pointer shrink-0"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      deleteConversation(c.id);
+                    }}
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : (
           <div className="flex-1 overflow-y-auto px-4 py-3 min-h-[160px]">
             {messages.length === 0 && (
               <div className="text-[12.5px] text-steel">
@@ -251,9 +372,11 @@ export function NancyPanel({ deptId, brand }: { deptId: string; brand: string })
               <div ref={bottomRef} />
             </div>
           </div>
+          )}
 
-          {error && <div className="px-4 text-[11.5px] text-red">{error}</div>}
+          {view === "chat" && error && <div className="px-4 text-[11.5px] text-red">{error}</div>}
 
+          {view === "chat" && (
           <div className="px-4 pt-2.5 pb-3 border-t border-rule shrink-0">
             <div className="flex gap-2">
               <input
@@ -296,6 +419,7 @@ export function NancyPanel({ deptId, brand }: { deptId: string; brand: string })
               💡 Nancy analiza solo los datos ya cargados en este panel — no reemplaza a tu contadora ni a tu asesor legal/financiero.
             </div>
           </div>
+          )}
         </div>
       )}
 

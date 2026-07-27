@@ -2,6 +2,13 @@ import Anthropic from "@anthropic-ai/sdk";
 import { computeDerived, consolidateMonth, type FinanceMonthRaw } from "@/lib/financeKpisCalc";
 import type { FinanceKpiDataDTO } from "@/lib/financeKpis";
 
+// admin no es una fila real de User — mismo patrón sin FK que
+// MonthlyRecognitionPopupSeen.viewerId. Cada quien solo ve sus propias
+// conversaciones con Nancy, no se comparten entre admin y el líder del área.
+export function nancyOwnerId(session: { user: { role: string; id: string } }): string {
+  return session.user.role === "admin" ? "admin" : session.user.id;
+}
+
 let client: Anthropic | null = null;
 
 // Lazily constructed so a missing ANTHROPIC_API_KEY only throws when Nancy is

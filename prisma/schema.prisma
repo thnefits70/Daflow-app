@@ -74,6 +74,7 @@ model Department {
   purchaseReceipts      PurchaseReceipt[]
   purchaseReceiptSuppliers PurchaseReceiptSupplier[]
   purchaseReceiptBanks     PurchaseReceiptBank[]
+  nancyConversations       NancyConversation[]
 
   @@index([order])
 }
@@ -1307,4 +1308,37 @@ model PayrollMessage {
   readAt     DateTime?
 
   @@index([employeeId])
+}
+
+/* ---------------- Historial de conversaciones con Nancy ---------------- */
+// Confirmado 2026-07-27: antes las conversaciones con Nancy solo vivían en
+// memoria del navegador — se perdían al salir de la pantalla. Ahora cada
+// conversación se guarda completa (se auto-crea con el primer mensaje) y se
+// puede retomar después, o dejarla y abrir una nueva. ownerId es User.id o
+// el string "admin" (mismo patrón sin FK que MonthlyRecognitionPopupSeen —
+// el admin no es una fila real de User) — cada quien solo ve sus propias
+// conversaciones, no se comparten entre admin y el líder del área.
+model NancyConversation {
+  id         String        @id @default(cuid())
+  deptId     String
+  department Department    @relation(fields: [deptId], references: [id], onDelete: Cascade)
+  ownerId    String
+  title      String
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+
+  messages NancyMessage[]
+
+  @@index([deptId, ownerId])
+}
+
+model NancyMessage {
+  id             String            @id @default(cuid())
+  conversationId String
+  conversation   NancyConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role           String // "user" | "assistant"
+  content        String
+  createdAt      DateTime          @default(now())
+
+  @@index([conversationId])
 }
