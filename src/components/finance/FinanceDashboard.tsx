@@ -26,12 +26,16 @@ function pp(v: number) {
 
 const GRANULARITY_MONTHS = { monthly: 1, quarterly: 3, semiannual: 6, annual: 12 } as const;
 
+// hasGrowthGoal — confirmado 2026-07-27: la meta de variación mensual solo
+// aplica a Ventas totales y Utilidad neta. Se quitó de Margen neto (ya es un
+// %, no tiene sentido aplicarle otro % de crecimiento) y de Gastos
+// operativos (no queremos una "meta" de gastar más).
 const FLAGSHIP_DEFS = [
-  { key: "ventas" as const, title: "Ventas totales", isPercent: false, invert: false },
-  { key: "utilidadReportada" as const, title: "Utilidad neta", isPercent: false, invert: false },
-  { key: "margenNeto" as const, title: "Margen neto", isPercent: true, invert: false },
+  { key: "ventas" as const, title: "Ventas totales", isPercent: false, invert: false, hasGrowthGoal: true },
+  { key: "utilidadReportada" as const, title: "Utilidad neta", isPercent: false, invert: false, hasGrowthGoal: true },
+  { key: "margenNeto" as const, title: "Margen neto", isPercent: true, invert: false, hasGrowthGoal: false },
   // Gasto: subir es malo (rojo), bajar es bueno (teal) — al revés que las demás.
-  { key: "gastosOperativos" as const, title: "Gastos operativos", isPercent: false, invert: true },
+  { key: "gastosOperativos" as const, title: "Gastos operativos", isPercent: false, invert: true, hasGrowthGoal: false },
 ];
 
 export function FinanceDashboard({
@@ -254,7 +258,7 @@ export function FinanceDashboard({
       {editable && (
         <div className="flex items-center gap-1.5 mb-3">
           <span className="text-[11.5px] text-steel">
-            Meta de variación mensual (se aplica a los 4 indicadores de abajo):
+            Meta de variación mensual (se aplica a Ventas totales y Utilidad neta):
           </span>
           <input
             type="number"
@@ -293,14 +297,13 @@ export function FinanceDashboard({
             deltaNode = <span className={`font-mono text-[11px] font-bold ${cls}`}>{pctText}{moneyText}</span>;
           }
 
-          // Meta de variación mensual — confirmado 2026-07-27: aplica a los 4
-          // indicadores (no solo Ventas totales), con el mismo % compartido.
-          // La meta del mes más reciente es (mes anterior real) × (1 + % /
-          // 100) — no un valor fijo, se recalcula solo cuando cierra un mes
-          // nuevo. Para Gastos operativos (invert: true, menos es mejor), la
-          // meta actúa como techo permitido: cumple si el real quedó IGUAL O
-          // POR DEBAJO, no por encima.
-          const prevReal = windowed.length >= 2 ? (windowed[windowed.length - 2][def.key] as number) : null;
+          // Meta de variación mensual — confirmado 2026-07-27: solo aplica a
+          // Ventas totales y Utilidad neta (no a Margen neto, que ya es un %,
+          // ni a Gastos operativos, donde no queremos una "meta" de gastar
+          // más). La meta del mes más reciente es (mes anterior real) × (1 +
+          // % / 100) — no un valor fijo, se recalcula solo cuando cierra un
+          // mes nuevo.
+          const prevReal = def.hasGrowthGoal && windowed.length >= 2 ? (windowed[windowed.length - 2][def.key] as number) : null;
           const goalValue = prevReal !== null ? prevReal * (1 + data.settings.targetMonthlyGrowthPct / 100) : undefined;
           const latestValue = windowed[windowed.length - 1]?.[def.key] as number | undefined;
           const goalPct = goalValue && latestValue !== undefined ? Math.round((latestValue / goalValue) * 100) : null;
