@@ -204,6 +204,22 @@ export async function canManageStoreFeedback() {
   return !!user?.isLeader && user.leadsDept?.code === "MKT";
 }
 
+// Nivel de acceso separado, solo lectura — confirmado 2026-07-25: para
+// líderes de otras áreas (ej. líder de ventas) que deben poder ver el detalle
+// y contactar por WhatsApp, pero nunca crear/editar/eliminar. Independiente
+// del departamento de la persona (igual que canManageStoreFeedback) — no
+// exige que su propio deptId sea MKT, solo que se le haya delegado el flag.
+export async function canViewStoreFeedback() {
+  if (await canManageStoreFeedback()) return true;
+  const session = await auth();
+  if (!session) return false;
+  const user = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { canViewStoreFeedback: true },
+  });
+  return !!user?.canViewStoreFeedback;
+}
+
 // Comprobante de pago (Gestión de Compras) — confirmado 2026-07-23: admin
 // siempre; el líder de Compras; o quien el admin haya autorizado puntualmente
 // vía User.canViewPurchaseReceipts (sin ser necesariamente el líder). Esta

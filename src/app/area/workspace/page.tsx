@@ -3,7 +3,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { TopLine } from "@/components/ui/TopLine";
 import { DeptWorkspaceTabs } from "@/components/dept/DeptWorkspaceTabs";
-import { getUnseenFeedbackCount } from "@/lib/guards";
+import { getUnseenFeedbackCount, canManageStoreFeedback as checkCanManageStoreFeedback, canViewStoreFeedback as checkCanViewStoreFeedback } from "@/lib/guards";
 import { getFinanceKpiData } from "@/lib/financeKpis";
 import { getDeptProcessDetail } from "@/lib/processDetail";
 import { getPaymentRemindersData } from "@/lib/paymentReminders";
@@ -17,6 +17,15 @@ export default async function WorkspacePage() {
 
   const dept = await prisma.department.findUnique({ where: { id: session.user.deptId } });
   if (!dept) redirect("/api/auth/force-logout");
+
+  // Independiente del departamento propio de la persona (confirmado
+  // 2026-07-27) — alguien delegado puntualmente (ej. Nairoby, de Finanzas)
+  // debe poder gestionar/ver Servicio Postventa desde su propia "Mi área de
+  // trabajo" aunque su departamento no sea Análisis de Mercado.
+  const [canManageStoreFeedback, canViewStoreFeedback] = await Promise.all([
+    checkCanManageStoreFeedback(),
+    checkCanViewStoreFeedback(),
+  ]);
 
   const [processDetail, periodicReminders, documents, exams, financeKpiData, paymentReminders, weeklyMetricRecords, weeklyReviewRecords, currentUser, unseenFeedbackCount, purchaseReceipts, purchaseReceiptCatalogs, storeFeedbackStores] = await Promise.all([
     getDeptProcessDetail(dept.id),
@@ -41,26 +50,18 @@ export default async function WorkspacePage() {
         isLeader: true,
         leadsDeptId: true,
         canViewPurchaseReceipts: true,
-        canManageStoreFeedback: true,
-        canViewStoreFeedback: true,
       },
     }),
     getUnseenFeedbackCount(),
     dept.code === "COM" ? getPurchaseReceipts(dept.id) : Promise.resolve([]),
     dept.code === "COM" ? getPurchaseReceiptCatalogs(dept.id) : Promise.resolve({ suppliers: [], banks: [] }),
-    dept.code === "MKT" ? getStoreFeedbackData() : Promise.resolve([]),
+    canManageStoreFeedback || canViewStoreFeedback ? getStoreFeedbackData() : Promise.resolve([]),
   ]);
 
   const kpisEditable = !!currentUser?.isLeader && currentUser.leadsDeptId === dept.id;
   // Comprobante de pago — leader of Compras, or anyone the admin has
   // explicitly granted the escape hatch to, regardless of role.
   const canViewPurchaseReceipts = dept.code === "COM" && (kpisEditable || !!currentUser?.canViewPurchaseReceipts);
-  // Servicio Postventa — leader of Análisis de Mercado, or anyone the admin
-  // has explicitly granted the escape hatch to, regardless of role.
-  const canManageStoreFeedback = dept.code === "MKT" && (kpisEditable || !!currentUser?.canManageStoreFeedback);
-  // Solo lectura — confirmado 2026-07-25: para líderes de otras áreas que
-  // deben poder ver el detalle (y usar WhatsApp) sin editar nada.
-  const canViewStoreFeedback = dept.code === "MKT" && !canManageStoreFeedback && !!currentUser?.canViewStoreFeedback;
 
   return (
     <div>
