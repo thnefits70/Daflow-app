@@ -1196,6 +1196,13 @@ model ContentQuestionSet {
   module           Module?   @relation(fields: [moduleId], references: [id], onDelete: Cascade)
   aiModel          String // qué modelo de Claude generó estas preguntas (ej. "claude-sonnet-5")
   estimatedMinutes Int       @default(10) // tiempo estimado de lectura + responder, para el medidor 2-8h de cada ruta
+  // Cuántas preguntas del banco ve cada persona en un intento normal — el
+  // resto son variantes de repuesto. Confirmado 2026-07-27: para que dos
+  // personas con la misma ruta no vean exactamente las mismas preguntas (y
+  // por lo tanto no puedan simplemente copiarse las respuestas), se genera un
+  // banco más grande de lo necesario y a cada persona se le muestra una
+  // muestra aleatoria (determinística por persona) de este tamaño.
+  sampleSize       Int       @default(3)
   generatedAt      DateTime  @default(now())
 
   questions LearningPathQuestion[]

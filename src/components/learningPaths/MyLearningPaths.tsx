@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Check, Lock, FileText, Scale, Waypoints, LayoutGrid, Loader2, ChevronLeft, ChevronRight } from "lucide-react";
+import { Check, Lock, FileText, Scale, Waypoints, LayoutGrid, Loader2, ChevronLeft, ChevronRight, Clock } from "lucide-react";
 
 type StepDTO = {
   id: string;
@@ -15,17 +15,28 @@ type StepDTO = {
   correctCount: number | null;
 };
 
-type PathDTO = { id: string; title: string; description: string; totalEstimatedMinutes: number; steps: StepDTO[] };
+type PathDTO = {
+  id: string;
+  title: string;
+  description: string;
+  totalEstimatedMinutes: number;
+  assignedAt: string;
+  dueAt: string;
+  steps: StepDTO[];
+};
+
+type TakeableOption = { id: number; label: string };
 
 type TakeableQuestion = {
   id: string;
   type: "MULTIPLE_CHOICE" | "TRUE_FALSE" | "MATCHING" | "SHORT_ANSWER";
   text: string;
-  options: string[] | { id: number; label: string }[];
+  options: TakeableOption[];
   matchLeft: string[];
 };
 
-type StepPayload = { stepId: string; kind: string; title: string; questions: TakeableQuestion[] };
+type SavedAnswer = { questionId: string; selectedIndex?: number; matchOrder?: number[]; textAnswer?: string };
+type StepPayload = { stepId: string; kind: string; title: string; questions: TakeableQuestion[]; savedAnswers: SavedAnswer[] };
 
 type Answer = { selectedIndex?: number; matchOrder?: number[]; textAnswer?: string };
 
@@ -34,6 +45,10 @@ function KindIcon({ kind }: { kind: StepDTO["kind"] }) {
   if (kind === "law") return <Scale size={15} />;
   if (kind === "process") return <Waypoints size={15} />;
   return <FileText size={15} />;
+}
+
+function daysRemaining(dueAt: string): number {
+  return Math.ceil((new Date(dueAt).getTime() - Date.now()) / 86400000);
 }
 
 export function MyLearningPaths({ initialPaths }: { initialPaths: PathDTO[] }) {
@@ -66,7 +81,9 @@ export function MyLearningPaths({ initialPaths }: { initialPaths: PathDTO[] }) {
     <div className="space-y-6 max-w-2xl">
       {paths.map((path) => {
         const doneCount = path.steps.filter((s) => s.status === "done").length;
+        const allDone = doneCount === path.steps.length;
         const pct = path.steps.length > 0 ? (doneCount / path.steps.length) * 100 : 0;
+        const remaining = daysRemaining(path.dueAt);
         return (
           <div key={path.id} className="bg-surface border border-rule rounded-md p-5">
             <div className="text-[18px] font-bold mb-1">{path.title}</div>
@@ -74,6 +91,18 @@ export function MyLearningPaths({ initialPaths }: { initialPaths: PathDTO[] }) {
               {doneCount} de {path.steps.length} pasos completados · ⏱{" "}
               {Math.round((path.totalEstimatedMinutes / 60) * 10) / 10}h en total
             </div>
+            {!allDone && (
+              <div
+                className={`inline-flex items-center gap-1.5 text-[11.5px] font-semibold rounded-full px-2.5 py-1 mb-3 ${
+                  remaining <= 1 ? "bg-red/15 text-red" : remaining <= 2 ? "bg-gold/15 text-gold" : "bg-cloud text-steel"
+                }`}
+              >
+                <Clock size={12} />
+                {remaining > 0
+                  ? `Te quedan ${remaining} día${remaining === 1 ? "" : "s"} laborable${remaining === 1 ? "" : "s"} para terminarla`
+                  : "El plazo sugerido ya venció — sigue avanzando cuando puedas"}
+              </div>
+            )}
             <div className="h-1.5 rounded-full bg-cloud overflow-hidden mb-4">
               <div
                 className="h-full rounded-full"
@@ -138,9 +167,17 @@ function StepQuiz({ stepId, onExit, onFinished }: { stepId: string; onExit: () =
   useEffect(() => {
     fetch(`/api/my-learning-paths/steps/${stepId}`)
       .then(async (res) => {
-        const json = await res.json();
-        if (!res.ok) throw new Error(json?.error ?? "No se pudo cargar el paso.");
+        const json: StepPayload = await res.json();
+        if (!res.ok) throw new Error((json as unknown as { error?: string })?.error ?? "No se pudo cargar el paso.");
         setData(json);
+
+        const restored: Record<string, Answer> = {};
+        for (const a of json.savedAnswers) {
+          restored[a.questionId] = { selectedIndex: a.selectedIndex, matchOrder: a.matchOrder, textAnswer: a.textAnswer };
+        }
+        setAnswers(restored);
+        const firstUnanswered = json.questions.findIndex((q) => !restored[q.id]);
+        setIdx(firstUnanswered === -1 ? Math.max(0, json.questions.length - 1) : firstUnanswered);
       })
       .catch((e) => setErr(e instanceof Error ? e.message : "No se pudo cargar el paso."));
   }, [stepId]);
@@ -182,6 +219,16 @@ function StepQuiz({ stepId, onExit, onFinished }: { stepId: string; onExit: () =
   const ans = answers[q.id] ?? {};
   const setAns = (a: Answer) => setAnswers((prev) => ({ ...prev, [q.id]: { ...prev[q.id], ...a } }));
 
+  // Guarda de inmediato la respuesta de la pregunta actual — si la persona
+  // tiene que salir a media ruta, ya quedó registrada y retoma justo aquí.
+  const persist = (questionId: string, a: Answer) => {
+    fetch(`/api/my-learning-paths/steps/${stepId}/save`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ questionId, ...a }),
+    }).catch(() => {});
+  };
+
   const canAdvance =
     q.type === "SHORT_ANSWER"
       ? !!ans.textAnswer?.trim()
@@ -189,7 +236,17 @@ function StepQuiz({ stepId, onExit, onFinished }: { stepId: string; onExit: () =
         ? Array.isArray(ans.matchOrder) && ans.matchOrder.length === q.matchLeft.length && ans.matchOrder.every((v) => v !== undefined)
         : typeof ans.selectedIndex === "number";
 
+  const goTo = (nextIdx: number) => {
+    if (ans && (ans.selectedIndex !== undefined || ans.matchOrder !== undefined || ans.textAnswer?.trim())) {
+      persist(q.id, ans);
+    }
+    setIdx(nextIdx);
+  };
+
   const submit = async () => {
+    if (ans && (ans.selectedIndex !== undefined || ans.matchOrder !== undefined || ans.textAnswer?.trim())) {
+      persist(q.id, ans);
+    }
     setSubmitting(true);
     try {
       const payload = Object.entries(answers).map(([questionId, a]) => ({ questionId, ...a }));
@@ -217,15 +274,18 @@ function StepQuiz({ stepId, onExit, onFinished }: { stepId: string; onExit: () =
 
       {(q.type === "MULTIPLE_CHOICE" || q.type === "TRUE_FALSE") && (
         <div className="space-y-2 mb-4">
-          {(q.options as string[]).map((opt, i) => (
+          {q.options.map((opt) => (
             <div
-              key={i}
-              onClick={() => setAns({ selectedIndex: i })}
+              key={opt.id}
+              onClick={() => {
+                setAns({ selectedIndex: opt.id });
+                persist(q.id, { selectedIndex: opt.id });
+              }}
               className={`px-3.5 py-2.5 rounded-md border cursor-pointer text-[13.5px] ${
-                ans.selectedIndex === i ? "border-teal bg-teal/10" : "border-rule hover:border-blue"
+                ans.selectedIndex === opt.id ? "border-teal bg-teal/10" : "border-rule hover:border-blue"
               }`}
             >
-              {opt}
+              {opt.label}
             </div>
           ))}
         </div>
@@ -241,14 +301,16 @@ function StepQuiz({ stepId, onExit, onFinished }: { stepId: string; onExit: () =
                 onChange={(e) => {
                   const next = [...(ans.matchOrder ?? Array(q.matchLeft.length).fill(undefined))];
                   next[i] = Number(e.target.value);
-                  setAns({ matchOrder: next as number[] });
+                  const nextMatch = next as number[];
+                  setAns({ matchOrder: nextMatch });
+                  if (nextMatch.every((v) => v !== undefined)) persist(q.id, { matchOrder: nextMatch });
                 }}
                 className="flex-1 px-3 py-2 rounded border border-rule bg-surface text-[13px]"
               >
                 <option value="" disabled>
                   Elige…
                 </option>
-                {(q.options as { id: number; label: string }[]).map((o) => (
+                {q.options.map((o) => (
                   <option key={o.id} value={o.id}>
                     {o.label}
                   </option>
@@ -263,6 +325,7 @@ function StepQuiz({ stepId, onExit, onFinished }: { stepId: string; onExit: () =
         <textarea
           value={ans.textAnswer ?? ""}
           onChange={(e) => setAns({ textAnswer: e.target.value })}
+          onBlur={() => ans.textAnswer?.trim() && persist(q.id, { textAnswer: ans.textAnswer })}
           placeholder="Escribe tu respuesta…"
           className="w-full min-h-[100px] px-3 py-2.5 rounded-md border border-rule bg-cloud text-[13.5px] mb-4"
         />
@@ -272,7 +335,7 @@ function StepQuiz({ stepId, onExit, onFinished }: { stepId: string; onExit: () =
         <button
           type="button"
           disabled={idx === 0}
-          onClick={() => setIdx((i) => i - 1)}
+          onClick={() => goTo(idx - 1)}
           className="flex items-center gap-1 text-[13px] text-steel disabled:opacity-40 cursor-pointer"
         >
           <ChevronLeft size={15} /> Anterior
@@ -281,7 +344,7 @@ function StepQuiz({ stepId, onExit, onFinished }: { stepId: string; onExit: () =
           <button
             type="button"
             disabled={!canAdvance}
-            onClick={() => setIdx((i) => i + 1)}
+            onClick={() => goTo(idx + 1)}
             className="flex items-center gap-1 px-4 py-2 rounded bg-blue text-white text-[13px] font-semibold cursor-pointer disabled:opacity-40"
           >
             Siguiente <ChevronRight size={15} />

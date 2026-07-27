@@ -13,13 +13,17 @@ export type GeneratedQuestion = {
 export type GenerationResult = {
   questions: GeneratedQuestion[];
   estimatedMinutes: number;
+  sampleSize: number;
 };
 
-const SYSTEM_PROMPT = `Eres un especialista en capacitación y recursos humanos de DAFLOW (Provedix, Guayaquil, Ecuador). Tu tarea es leer contenido interno de la empresa (documentos, reglamentos, procesos o módulos de inducción) y diseñar preguntas de verificación de aprendizaje — como si armaras el examen de un curso corporativo.
+const SYSTEM_PROMPT = `Eres un especialista en capacitación y recursos humanos de DAFLOW (Provedix, Guayaquil, Ecuador). Tu tarea es leer contenido interno de la empresa (documentos, reglamentos, procesos o módulos de inducción) y diseñar un BANCO de preguntas de verificación de aprendizaje — como si armaras el examen de un curso corporativo.
+
+Este banco lo van a responder VARIAS personas distintas de la empresa a lo largo del tiempo. Para que no puedan copiarse las respuestas entre sí (que uno le pase a otro "la pregunta 3 es B"), cada persona ve solo una muestra aleatoria del banco, no el banco completo. Por eso debes generar MÁS preguntas de las que una sola persona respondería en un intento normal — genera aproximadamente el DOBLE.
 
 Reglas para las preguntas:
 - Cubre solo la información que un colaborador SÍ o SÍ debe saber, no detalles triviales.
-- Para contenido corto (una página o menos), 2-3 preguntas basta. Para contenido largo, escala aproximadamente 2 preguntas por página — si notas que el texto equivale a ~10 páginas, genera unas 20 preguntas repartidas a lo largo de todo el contenido (no solo del inicio).
+- Piensa primero cuántas preguntas respondería UNA persona en un intento normal ("sampleSize"): para contenido corto (una página o menos), 2-3. Para contenido largo, escala aproximadamente 2 por página (ej. ~10 páginas → sampleSize ~20).
+- El banco completo ("questions") debe tener aproximadamente el DOBLE de "sampleSize" preguntas distintas entre sí (no repetidas ni parafraseadas de la misma idea), repartidas a lo largo de todo el contenido, para que la muestra que le toque a cada persona pueda variar de verdad.
 - Prioriza SIEMPRE el tipo de pregunta más simple e intuitivo de responder: opción múltiple, verdadero/falso, o unir con líneas (relacionar una columna con otra). Usa "SHORT_ANSWER" (respuesta escrita) únicamente cuando el punto realmente no se pueda reducir a una opción — por ejemplo, pedir que describan un procedimiento con sus propias palabras.
 - Las preguntas de opción múltiple llevan 3-4 alternativas plausibles, solo una correcta.
 - Las preguntas de verdadero/falso llevan options = ["Verdadero","Falso"].
@@ -28,7 +32,8 @@ Reglas para las preguntas:
 
 Responde ÚNICAMENTE con un objeto JSON (sin texto adicional, sin markdown, sin bloques de código) con esta forma exacta:
 {
-  "estimatedMinutes": <entero: minutos totales que le tomaría a una persona leer este contenido y responder todas las preguntas, a ritmo normal de lectura más ~1.5 min de reflexión por pregunta>,
+  "estimatedMinutes": <entero: minutos que le tomaría a UNA persona leer este contenido y responder un intento normal (sampleSize preguntas, no el banco completo), a ritmo normal de lectura más ~1.5 min de reflexión por pregunta>,
+  "sampleSize": <entero: cuántas preguntas ve una persona en un intento normal>,
   "questions": [
     {
       "type": "MULTIPLE_CHOICE" | "TRUE_FALSE" | "MATCHING" | "SHORT_ANSWER",
@@ -62,7 +67,7 @@ function parseGenerationResponse(raw: string): GenerationResult {
     throw new Error("La respuesta de la IA no tiene la forma esperada.");
   }
 
-  const obj = parsed as { questions: unknown[]; estimatedMinutes?: unknown };
+  const obj = parsed as { questions: unknown[]; estimatedMinutes?: unknown; sampleSize?: unknown };
   const questions: GeneratedQuestion[] = obj.questions.map((q) => {
     const item = q as Record<string, unknown>;
     return {
@@ -74,12 +79,17 @@ function parseGenerationResponse(raw: string): GenerationResult {
     };
   });
 
+  const sampleSize =
+    typeof obj.sampleSize === "number" && obj.sampleSize > 0
+      ? Math.min(Math.round(obj.sampleSize), questions.length || 1)
+      : Math.max(1, Math.round(questions.length / 2));
+
   const estimatedMinutes =
     typeof obj.estimatedMinutes === "number" && obj.estimatedMinutes > 0
       ? Math.round(obj.estimatedMinutes)
-      : Math.max(5, questions.length * 4);
+      : Math.max(5, sampleSize * 4);
 
-  return { questions, estimatedMinutes };
+  return { questions, estimatedMinutes, sampleSize };
 }
 
 export type ContentPart = { type: "text"; text: string } | { type: "pdf"; url: string; label: string };

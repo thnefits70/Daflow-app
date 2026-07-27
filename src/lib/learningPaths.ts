@@ -90,6 +90,7 @@ export async function getOrCreateQuestionSet(kind: ContentKind, refId: string) {
       [field]: refId,
       aiModel: LEARNING_PATH_AI_MODEL,
       estimatedMinutes: result.estimatedMinutes,
+      sampleSize: result.sampleSize,
       questions: {
         create: result.questions.map((q, order) => ({
           type: q.type,
@@ -187,6 +188,7 @@ export async function getLearningPathDetail(pathId: string) {
         meta: desc.meta,
         setId: step.questionSetId,
         estimatedMinutes: step.questionSet.estimatedMinutes,
+        sampleSize: step.questionSet.sampleSize,
         questions: step.questionSet.questions,
       };
     }),
@@ -195,6 +197,7 @@ export async function getLearningPathDetail(pathId: string) {
       name: a.user.name,
       position: a.user.position,
       department: a.user.department?.name ?? null,
+      dueAt: addBusinessDays(a.assignedAt, LEARNING_PATH_DEADLINE_BUSINESS_DAYS).toISOString(),
     })),
   };
 }
@@ -238,8 +241,27 @@ export type MyPathDTO = {
   title: string;
   description: string;
   totalEstimatedMinutes: number;
+  assignedAt: string;
+  dueAt: string;
   steps: MyPathStepDTO[];
 };
+
+// Confirmado 2026-07-27: un nuevo ingreso tiene 5 días laborables (fines de
+// semana no cuentan) desde que se le asigna la ruta para completarla, sin
+// necesidad de hacerlo todo de una sola sentada — puede seguir trabajando y
+// avanzar a ratos dentro de ese plazo.
+const LEARNING_PATH_DEADLINE_BUSINESS_DAYS = 5;
+
+function addBusinessDays(start: Date, days: number): Date {
+  const d = new Date(start);
+  let added = 0;
+  while (added < days) {
+    d.setDate(d.getDate() + 1);
+    const day = d.getDay();
+    if (day !== 0 && day !== 6) added++;
+  }
+  return d;
+}
 
 export async function getMyLearningPaths(userId: string): Promise<MyPathDTO[]> {
   const assignments = await prisma.learningPathAssignment.findMany({
@@ -259,7 +281,7 @@ export async function getMyLearningPaths(userId: string): Promise<MyPathDTO[]> {
     },
   });
 
-  return assignments.map(({ path }) => {
+  return assignments.map(({ path, assignedAt }) => {
     let unlockedFound = false;
     const steps: MyPathStepDTO[] = path.steps.map((step) => {
       const progress = step.progress[0];
@@ -279,7 +301,7 @@ export async function getMyLearningPaths(userId: string): Promise<MyPathDTO[]> {
         title: desc.title,
         meta: desc.meta,
         estimatedMinutes: step.questionSet.estimatedMinutes,
-        questionCount: step.questionSet.questions.length,
+        questionCount: Math.min(step.questionSet.sampleSize, step.questionSet.questions.length) || step.questionSet.questions.length,
         status,
         correctCount,
       };
@@ -289,6 +311,8 @@ export async function getMyLearningPaths(userId: string): Promise<MyPathDTO[]> {
       title: path.title,
       description: path.description,
       totalEstimatedMinutes: path.steps.reduce((s, st) => s + st.questionSet.estimatedMinutes, 0),
+      assignedAt: assignedAt.toISOString(),
+      dueAt: addBusinessDays(assignedAt, LEARNING_PATH_DEADLINE_BUSINESS_DAYS).toISOString(),
       steps,
     };
   });
@@ -310,14 +334,48 @@ async function assertStepUnlocked(userId: string, stepId: string) {
   return step;
 }
 
+// PRNG determinístico (mulberry32 sobre un hash FNV-1a del seed) — así cada
+// persona ve una muestra y un orden de opciones distintos y ESTABLES (no
+// cambian si recarga la página a medio intento), sin tener que guardar nada
+// extra: el seed se deriva de userId+stepId(+questionId).
+function hashSeed(s: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+function seededShuffle<T>(arr: T[], seed: string): T[] {
+  let state = hashSeed(seed);
+  const rng = () => {
+    state |= 0;
+    state = (state + 0x6d2b79f5) | 0;
+    let t = Math.imul(state ^ (state >>> 15), 1 | state);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  const copy = [...arr];
+  for (let i = copy.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy;
+}
+
 export type TakeableQuestion = {
   id: string;
   type: string;
   text: string;
-  options: string[] | { id: number; label: string }[];
+  options: { id: number; label: string }[];
   matchLeft: string[];
 };
 
+// Cada persona ve solo una muestra aleatoria (pero estable para ella) del
+// banco de preguntas de este contenido, no el banco completo — así dos
+// personas con la misma ruta no ven necesariamente las mismas preguntas ni en
+// el mismo orden de opciones, y no pueden simplemente copiarse respuestas.
 export async function getStepForTaking(userId: string, stepId: string) {
   const step = await assertStepUnlocked(userId, stepId);
   const questionSet = await prisma.contentQuestionSet.findUniqueOrThrow({
@@ -326,15 +384,39 @@ export async function getStepForTaking(userId: string, stepId: string) {
   });
   const desc = describeQuestionSet(questionSet);
 
-  const questions: TakeableQuestion[] = questionSet.questions.map((q) => {
-    if (q.type === "MATCHING") {
-      const shuffled = q.options.map((label, id) => ({ id, label })).sort(() => Math.random() - 0.5);
-      return { id: q.id, type: q.type, text: q.text, options: shuffled, matchLeft: q.matchLeft };
+  const pool = seededShuffle(questionSet.questions, `${userId}:${stepId}:pool`);
+  const sampleCount = Math.min(questionSet.sampleSize, pool.length) || pool.length;
+  const sample = pool.slice(0, sampleCount);
+
+  const questions: TakeableQuestion[] = sample.map((q) => {
+    if (q.type === "SHORT_ANSWER") {
+      return { id: q.id, type: q.type, text: q.text, options: [], matchLeft: [] };
     }
-    return { id: q.id, type: q.type, text: q.text, options: q.options, matchLeft: [] };
+    const options = seededShuffle(
+      q.options.map((label, id) => ({ id, label })),
+      `${userId}:${stepId}:${q.id}`
+    );
+    return { id: q.id, type: q.type, text: q.text, options, matchLeft: q.type === "MATCHING" ? q.matchLeft : [] };
   });
 
-  return { stepId: step.id, kind: desc.kind, title: desc.title, questions };
+  // Si ya había un intento a medias (la persona salió y volvió), le
+  // devolvemos lo que ya había contestado para que el cliente retome ahí.
+  const existingProgress = await prisma.learningPathStepProgress.findUnique({
+    where: { stepId_userId: { stepId, userId } },
+    include: { answers: true },
+  });
+  const sampleIds = new Set(sample.map((q) => q.id));
+  const savedAnswers =
+    existingProgress?.answers
+      .filter((a) => sampleIds.has(a.questionId))
+      .map((a) => ({
+        questionId: a.questionId,
+        selectedIndex: a.selectedIndex ?? undefined,
+        matchOrder: a.matchOrder.length > 0 ? a.matchOrder : undefined,
+        textAnswer: a.textAnswer ?? undefined,
+      })) ?? [];
+
+  return { stepId: step.id, kind: desc.kind, title: desc.title, questions, savedAnswers };
 }
 
 export type AnswerSubmission = {
@@ -344,6 +426,56 @@ export type AnswerSubmission = {
   textAnswer?: string;
 };
 
+function gradeAnswer(
+  q: { type: string; correctIndex: number | null },
+  ans: AnswerSubmission
+): boolean | null {
+  if (q.type === "MULTIPLE_CHOICE" || q.type === "TRUE_FALSE") {
+    return ans.selectedIndex === q.correctIndex;
+  }
+  if (q.type === "MATCHING") {
+    return Array.isArray(ans.matchOrder) && ans.matchOrder.length > 0 && ans.matchOrder.every((v, i) => v === i);
+  }
+  return null; // SHORT_ANSWER — el admin la revisa manualmente
+}
+
+// Guarda UNA respuesta a medida que el colaborador avanza, sin marcar el paso
+// como terminado — así si tiene que salir a atender algo urgente, al volver
+// (una hora después o al día siguiente) retoma exactamente donde se quedó en
+// vez de perder lo ya contestado.
+export async function saveStepAnswer(userId: string, stepId: string, ans: AnswerSubmission) {
+  await assertStepUnlocked(userId, stepId);
+  const q = await prisma.learningPathQuestion.findUniqueOrThrow({ where: { id: ans.questionId } });
+
+  const progress = await prisma.learningPathStepProgress.upsert({
+    where: { stepId_userId: { stepId, userId } },
+    create: { stepId, userId },
+    update: {},
+  });
+
+  const isCorrect = gradeAnswer(q, ans);
+  await prisma.learningPathAnswer.upsert({
+    where: { progressId_questionId: { progressId: progress.id, questionId: q.id } },
+    create: {
+      progressId: progress.id,
+      questionId: q.id,
+      selectedIndex: ans.selectedIndex ?? null,
+      matchOrder: ans.matchOrder ?? [],
+      textAnswer: ans.textAnswer ?? null,
+      isCorrect,
+    },
+    update: {
+      selectedIndex: ans.selectedIndex ?? null,
+      matchOrder: ans.matchOrder ?? [],
+      textAnswer: ans.textAnswer ?? null,
+      isCorrect,
+    },
+  });
+  return { ok: true };
+}
+
+// Guarda todas las respuestas finales y recién ahí marca el paso como
+// terminado (desbloqueando el siguiente).
 export async function submitStepAnswers(userId: string, stepId: string, answers: AnswerSubmission[]) {
   await assertStepUnlocked(userId, stepId);
   const questions = await prisma.learningPathQuestion.findMany({ where: { set: { steps: { some: { id: stepId } } } } });
@@ -359,12 +491,7 @@ export async function submitStepAnswers(userId: string, stepId: string, answers:
   for (const ans of answers) {
     const q = byId.get(ans.questionId);
     if (!q) continue;
-    let isCorrect: boolean | null = null;
-    if (q.type === "MULTIPLE_CHOICE" || q.type === "TRUE_FALSE") {
-      isCorrect = ans.selectedIndex === q.correctIndex;
-    } else if (q.type === "MATCHING") {
-      isCorrect = Array.isArray(ans.matchOrder) && ans.matchOrder.every((v, i) => v === i);
-    }
+    const isCorrect = gradeAnswer(q, ans);
     if (isCorrect) correctCount++;
 
     await prisma.learningPathAnswer.upsert({
@@ -386,7 +513,7 @@ export async function submitStepAnswers(userId: string, stepId: string, answers:
     });
   }
 
-  return { correctCount, total: questions.length };
+  return { correctCount, total: answers.length };
 }
 
 // Busca en Documentos (área o Leyes y Reglamentos), Procesos y Módulos para

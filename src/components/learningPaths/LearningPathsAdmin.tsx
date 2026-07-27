@@ -33,10 +33,11 @@ type Step = {
   meta: string;
   setId: string;
   estimatedMinutes: number;
+  sampleSize: number;
   questions: Question[];
 };
 
-type Assignment = { userId: string; name: string; position: string | null; department: string | null };
+type Assignment = { userId: string; name: string; position: string | null; department: string | null; dueAt: string };
 
 type PathDetail = {
   id: string;
@@ -191,8 +192,9 @@ export function LearningPathsAdmin({ initialPaths }: { initialPaths: PathSummary
     }
   };
 
-  const removeStep = async (stepId: string) => {
+  const removeStep = async (stepId: string, title: string) => {
     if (!selectedId) return;
+    if (!confirm(`¿Quitar "${title}" de esta ruta? El contenido y sus preguntas no se borran, solo se quitan de aquí.`)) return;
     await fetch(`/api/learning-paths/${selectedId}/steps/${stepId}`, { method: "DELETE" });
     await loadDetail(selectedId);
     await refreshPaths();
@@ -213,6 +215,7 @@ export function LearningPathsAdmin({ initialPaths }: { initialPaths: PathSummary
   };
 
   const deleteQuestion = async (questionId: string) => {
+    if (!confirm("¿Eliminar esta pregunta? Como el banco de preguntas es compartido, se quita de todas las rutas que usan este contenido.")) return;
     await fetch(`/api/learning-paths/questions/${questionId}`, { method: "DELETE" });
     if (selectedId) await loadDetail(selectedId);
   };
@@ -228,8 +231,9 @@ export function LearningPathsAdmin({ initialPaths }: { initialPaths: PathSummary
     await refreshPaths();
   };
 
-  const unassign = async (userId: string) => {
+  const unassign = async (userId: string, name: string) => {
     if (!selectedId) return;
+    if (!confirm(`¿Quitarle esta ruta a ${name}? Perderá acceso y su progreso quedará guardado pero oculto.`)) return;
     await fetch(`/api/learning-paths/${selectedId}/assignments/${userId}`, { method: "DELETE" });
     await loadDetail(selectedId);
     await refreshPaths();
@@ -367,7 +371,8 @@ export function LearningPathsAdmin({ initialPaths }: { initialPaths: PathSummary
                   <div className="flex-1 min-w-0">
                     <div className="font-semibold text-[13.5px]">{step.title}</div>
                     <div className="text-[11.5px] text-steel">
-                      {step.meta} · ⏱ ~{step.estimatedMinutes} min
+                      {step.meta} · ⏱ ~{step.estimatedMinutes} min · banco de {step.questions.length}, muestra de{" "}
+                      {Math.min(step.sampleSize, step.questions.length)} por persona
                     </div>
                     <div className="flex flex-wrap gap-1.5 mt-2 pt-2 border-t border-dashed border-rule">
                       {step.questions.map((q) => (
@@ -415,7 +420,7 @@ export function LearningPathsAdmin({ initialPaths }: { initialPaths: PathSummary
                   <button
                     type="button"
                     className="p-1 text-steel hover:text-red cursor-pointer shrink-0"
-                    onClick={() => removeStep(step.id)}
+                    onClick={() => removeStep(step.id, step.title)}
                     title="Quitar paso"
                   >
                     <Trash2 size={13} />
@@ -485,8 +490,9 @@ export function LearningPathsAdmin({ initialPaths }: { initialPaths: PathSummary
                   <span className="text-steel font-medium text-[10.5px]">
                     {a.position ?? "Sin puesto"}
                     {a.department ? ` · ${a.department}` : ""}
+                    {` · vence ${new Date(a.dueAt).toLocaleDateString("es-EC", { day: "2-digit", month: "short" })}`}
                   </span>
-                  <button type="button" className="text-steel hover:text-red cursor-pointer" onClick={() => unassign(a.userId)}>
+                  <button type="button" className="text-steel hover:text-red cursor-pointer" onClick={() => unassign(a.userId, a.name)}>
                     <X size={12} />
                   </button>
                 </span>
