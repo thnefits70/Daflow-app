@@ -13,6 +13,7 @@ import {
   X,
   Loader2,
 } from "lucide-react";
+import { Combobox } from "@/components/ui/Combobox";
 
 type PathSummary = { id: string; title: string; description: string; stepCount: number; assignmentCount: number };
 
@@ -90,6 +91,7 @@ export function LearningPathsAdmin({ initialPaths }: { initialPaths: PathSummary
   const [newPathOpen, setNewPathOpen] = useState(false);
   const [newPathTitle, setNewPathTitle] = useState("");
   const [createErr, setCreateErr] = useState("");
+  const [positions, setPositions] = useState<{ id: string; name: string }[]>([]);
 
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerQuery, setPickerQuery] = useState("");
@@ -141,6 +143,15 @@ export function LearningPathsAdmin({ initialPaths }: { initialPaths: PathSummary
         .catch(() => setUsers([]));
     }
   }, [assignOpen, users]);
+
+  useEffect(() => {
+    if (newPathOpen && positions.length === 0) {
+      fetch("/api/positions")
+        .then(jsonOrThrow)
+        .then(setPositions)
+        .catch(() => setPositions([]));
+    }
+  }, [newPathOpen, positions.length]);
 
   const createPath = async () => {
     if (!newPathTitle.trim()) return;
@@ -282,14 +293,16 @@ export function LearningPathsAdmin({ initialPaths }: { initialPaths: PathSummary
         ))}
         {newPathOpen ? (
           <div className="p-1">
-            <input
-              autoFocus
+            <Combobox
               value={newPathTitle}
-              onChange={(e) => setNewPathTitle(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && createPath()}
-              placeholder='Título (ej. "Encargada Servicio Postventa")'
+              onChange={setNewPathTitle}
+              options={positions}
+              placeholder='Cargo existente o título nuevo (ej. "Encargada Servicio Postventa")'
               className="w-full px-2.5 py-2 rounded border border-rule bg-cloud text-[12.5px] mb-1.5"
             />
+            <div className="text-[10.5px] text-steel mb-1.5">
+              Elige un cargo ya registrado en Nómina, o escribe uno nuevo si no aplica ninguno.
+            </div>
             {createErr && <div className="text-red text-[11.5px] mb-1.5">{createErr}</div>}
             <div className="flex gap-1.5">
               <button
