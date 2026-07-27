@@ -1,9 +1,14 @@
+import { redirect } from "next/navigation";
+import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { TopLine } from "@/components/ui/TopLine";
 import { PayStubsPanel } from "@/components/payroll/PayStubsPanel";
 import { canManagePayroll } from "@/lib/guards";
 
 export default async function AreaRolesDePagoPage() {
+  const session = await auth();
+  if (!session) redirect("/login");
+
   const canManage = await canManagePayroll();
 
   const departments = canManage
@@ -17,7 +22,11 @@ export default async function AreaRolesDePagoPage() {
   return (
     <div>
       <TopLine eyebrow="Nómina" title="Roles de pago" />
-      <PayStubsPanel mode={canManage ? "manage" : "own"} departments={departments} />
+      <PayStubsPanel
+        mode={canManage ? "manage" : "own"}
+        departments={departments}
+        ownUserId={canManage ? undefined : session.user.id}
+      />
     </div>
   );
 }

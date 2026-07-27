@@ -133,6 +133,30 @@ export async function canManagePayroll() {
   return !!user?.isLeader && user.leadsDept?.code === "FIN";
 }
 
+// Chat interno de Roles de pago — confirmado 2026-07-27: solo el propio
+// colaborador o quien de verdad gestiona la nómina (líder de Finanzas, NO
+// admin) puede escribirle directo a alguien. El admin ve todo (canView...
+// abajo) pero nunca envía — es transparencia, no participación.
+export async function canSendPayrollMessage(employeeId: string) {
+  const session = await auth();
+  if (!session) return false;
+  if (session.user.id === employeeId) return true;
+  const user = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { isLeader: true, leadsDept: { select: { code: true } } },
+  });
+  return !!user?.isLeader && user.leadsDept?.code === "FIN";
+}
+
+// Igual que canSendPayrollMessage pero el admin también puede VER (nunca
+// escribir) cualquier conversación, de cualquier área.
+export async function canViewPayrollMessages(employeeId: string) {
+  const session = await auth();
+  if (!session) return false;
+  if (session.user.role === "admin") return true;
+  return canSendPayrollMessage(employeeId);
+}
+
 // Same rule as canManagePayroll (admin or whoever leads Finanzas), applied to
 // KPI de Garantías too — kept as its own function for the same reason.
 export async function canManageWarranties() {

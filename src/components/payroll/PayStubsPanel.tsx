@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Upload, FileText, Download, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
+import { Upload, FileText, Download, Trash2, ChevronLeft, ChevronRight, MessageSquare } from "lucide-react";
 import { uploadFile as uploadToStorage } from "@/lib/uploadFile";
+import { PayrollChat } from "@/components/payroll/PayrollChat";
 
 const MONTHS = [
   "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
@@ -44,14 +45,19 @@ function RosterRow({
   onUpload,
   onDelete,
   busy,
+  isAdmin,
+  unreadCount,
 }: {
   entry: RosterEntry;
   onUpload: (userId: string, file: File) => void;
   onDelete: (id: string) => void;
   busy: boolean;
+  isAdmin: boolean;
+  unreadCount: number;
 }) {
   const [viewing, setViewing] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
   const { user, stub } = entry;
 
   return (
@@ -124,14 +130,37 @@ function RosterRow({
               />
             </label>
           )}
+          <button
+            type="button"
+            className="relative inline-flex items-center gap-1.5 text-[12px] font-semibold border border-rule rounded px-2.5 py-1.5 cursor-pointer"
+            onClick={() => setChatOpen((v) => !v)}
+          >
+            <MessageSquare size={13} /> Mensajes
+            {unreadCount > 0 && !chatOpen && (
+              <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 rounded-full bg-red text-white text-[9.5px] font-bold flex items-center justify-center px-1">
+                {unreadCount}
+              </span>
+            )}
+          </button>
         </div>
       </div>
       {viewing && stub && <StubPreview url={stub.fileUrl} name={stub.fileName} />}
+      {chatOpen && <PayrollChat employeeId={user.id} canSend={!isAdmin} />}
     </div>
   );
 }
 
-export function PayStubsPanel({ mode, departments }: { mode: "manage" | "own"; departments?: Dept[] }) {
+export function PayStubsPanel({
+  mode,
+  departments,
+  isAdmin = false,
+  ownUserId,
+}: {
+  mode: "manage" | "own";
+  departments?: Dept[];
+  isAdmin?: boolean;
+  ownUserId?: string;
+}) {
   const now = new Date();
   const yearOptions = Array.from({ length: 7 }, (_, i) => now.getFullYear() + 1 - i);
   const [deptId, setDeptId] = useState(departments?.[0]?.id ?? "");
@@ -145,10 +174,16 @@ export function PayStubsPanel({ mode, departments }: { mode: "manage" | "own"; d
   const [viewingOwnId, setViewingOwnId] = useState<string | null>(null);
   const [filterMonth, setFilterMonth] = useState(0); // 0 = todos
   const [filterYear, setFilterYear] = useState(0); // 0 = todos
+  const [unreadByEmployee, setUnreadByEmployee] = useState<Record<string, number>>({});
 
   useEffect(() => {
     fetch("/api/me/seen-pay-stubs", { method: "POST" });
   }, []);
+
+  const loadUnreadSummary = async () => {
+    const res = await fetch("/api/payroll-messages/unread-summary");
+    if (res.ok) setUnreadByEmployee(await res.json());
+  };
 
   const loadRoster = async () => {
     if (!deptId) return;
@@ -162,6 +197,7 @@ export function PayStubsPanel({ mode, departments }: { mode: "manage" | "own"; d
     }
     const data = await res.json();
     setRoster(data.roster);
+    loadUnreadSummary();
   };
 
   const loadOwn = async () => {
@@ -224,6 +260,15 @@ export function PayStubsPanel({ mode, departments }: { mode: "manage" | "own"; d
 
     return (
       <div>
+        {ownUserId && (
+          <div className="mb-4.5">
+            <div className="font-semibold text-[13.5px] mb-1.5 flex items-center gap-1.5">
+              <MessageSquare size={14} className="text-steel" /> Mensajes con Nómina
+            </div>
+            <PayrollChat employeeId={ownUserId} canSend />
+          </div>
+        )}
+
         {(ownStubs?.length ?? 0) > 0 && (
           <div className="flex items-center gap-3 flex-wrap mb-4.5">
             <select
@@ -345,6 +390,8 @@ export function PayStubsPanel({ mode, departments }: { mode: "manage" | "own"; d
             onUpload={handleUpload}
             onDelete={handleDelete}
             busy={uploadingFor === entry.user.id}
+            isAdmin={isAdmin}
+            unreadCount={unreadByEmployee[entry.user.id] ?? 0}
           />
         ))}
     </div>

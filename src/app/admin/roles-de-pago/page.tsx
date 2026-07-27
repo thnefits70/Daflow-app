@@ -12,7 +12,7 @@ export default async function AdminRolesDePagoPage() {
   return (
     <div>
       <TopLine eyebrow="Nómina" title="Roles de pago" />
-      <PayStubsPanel mode="manage" departments={departments} />
+      <PayStubsPanel mode="manage" departments={departments} isAdmin />
     </div>
   );
 }

@@ -172,6 +172,8 @@ model User {
   monthlyEvaluationSummaries MonthlyEvaluationSummary[]
   learningPathsAssigned      LearningPathAssignment[] @relation("LearningPathAssignedTo")
   learningPathStepProgress   LearningPathStepProgress[] @relation("LearningPathStepProgressBy")
+  payrollMessagesReceived    PayrollMessage[] @relation("PayrollMessageEmployee")
+  payrollMessagesSent        PayrollMessage[] @relation("PayrollMessageSender")
 
   @@index([deptId])
   @@index([leadsDeptId])
@@ -1279,4 +1281,25 @@ model LearningPathAnswer {
 
   @@unique([progressId, questionId])
   @@index([questionId])
+}
+
+/* ---------------- Chat interno de Roles de pago ---------------- */
+// Confirmado 2026-07-27: por cada colaborador, un hilo de mensajes directo
+// entre él y quien gestione su nómina (hoy Nairoby, líder de Finanzas, o el
+// admin subiendo directo) — el admin puede ver TODAS las conversaciones de
+// cualquier área, pero no escribe en ellas (transparencia, no participación).
+// senderId es siempre employeeId (el colaborador respondiendo) o quien
+// gestiona la nómina — nunca el admin.
+model PayrollMessage {
+  id         String   @id @default(cuid())
+  employeeId String
+  employee   User     @relation("PayrollMessageEmployee", fields: [employeeId], references: [id], onDelete: Cascade)
+  senderId   String
+  sender     User     @relation("PayrollMessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+  body       String
+  createdAt  DateTime @default(now())
+  // Null hasta que la otra parte del hilo (no el admin, que solo observa) lo lee.
+  readAt     DateTime?
+
+  @@index([employeeId])
 }
