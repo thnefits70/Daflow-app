@@ -86,6 +86,9 @@ export function LearningPathsAdmin({ initialPaths }: { initialPaths: PathSummary
   const [creating, setCreating] = useState(false);
   const [busyStep, setBusyStep] = useState(false);
   const [err, setErr] = useState("");
+  const [newPathOpen, setNewPathOpen] = useState(false);
+  const [newPathTitle, setNewPathTitle] = useState("");
+  const [createErr, setCreateErr] = useState("");
 
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerQuery, setPickerQuery] = useState("");
@@ -139,20 +142,22 @@ export function LearningPathsAdmin({ initialPaths }: { initialPaths: PathSummary
   }, [assignOpen, users]);
 
   const createPath = async () => {
-    const title = prompt("Título de la nueva ruta (ej. \"Encargada Servicio Postventa\"):");
-    if (!title?.trim()) return;
+    if (!newPathTitle.trim()) return;
     setCreating(true);
+    setCreateErr("");
     try {
       const res = await fetch("/api/learning-paths", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: title.trim() }),
+        body: JSON.stringify({ title: newPathTitle.trim() }),
       });
       const created = await jsonOrThrow(res);
       await refreshPaths();
       setSelectedId(created.id);
+      setNewPathOpen(false);
+      setNewPathTitle("");
     } catch (e) {
-      alert(e instanceof Error ? e.message : "No se pudo crear la ruta.");
+      setCreateErr(e instanceof Error ? e.message : "No se pudo crear la ruta.");
     } finally {
       setCreating(false);
     }
@@ -271,14 +276,48 @@ export function LearningPathsAdmin({ initialPaths }: { initialPaths: PathSummary
             </button>
           </div>
         ))}
-        <button
-          type="button"
-          disabled={creating}
-          onClick={createPath}
-          className="w-full flex items-center justify-center gap-1.5 rounded-md border-[1.5px] border-dashed border-rule text-steel hover:border-blue hover:text-blue text-[12.5px] font-semibold py-2.5 cursor-pointer disabled:opacity-60"
-        >
-          <Plus size={14} /> Nueva ruta
-        </button>
+        {newPathOpen ? (
+          <div className="p-1">
+            <input
+              autoFocus
+              value={newPathTitle}
+              onChange={(e) => setNewPathTitle(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && createPath()}
+              placeholder='Título (ej. "Encargada Servicio Postventa")'
+              className="w-full px-2.5 py-2 rounded border border-rule bg-cloud text-[12.5px] mb-1.5"
+            />
+            {createErr && <div className="text-red text-[11.5px] mb-1.5">{createErr}</div>}
+            <div className="flex gap-1.5">
+              <button
+                type="button"
+                disabled={creating}
+                onClick={createPath}
+                className="flex-1 rounded bg-blue text-white text-[12px] font-semibold py-1.5 cursor-pointer disabled:opacity-60"
+              >
+                {creating ? "Creando…" : "Crear"}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setNewPathOpen(false);
+                  setNewPathTitle("");
+                  setCreateErr("");
+                }}
+                className="px-2.5 rounded border border-rule text-steel text-[12px] cursor-pointer"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setNewPathOpen(true)}
+            className="w-full flex items-center justify-center gap-1.5 rounded-md border-[1.5px] border-dashed border-rule text-steel hover:border-blue hover:text-blue text-[12.5px] font-semibold py-2.5 cursor-pointer"
+          >
+            <Plus size={14} /> Nueva ruta
+          </button>
+        )}
       </div>
 
       <div className="bg-surface border border-rule rounded-md p-5 min-h-[300px]">
