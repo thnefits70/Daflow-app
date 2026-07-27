@@ -14,6 +14,7 @@ const settingsSchema = z.object({
   roiBandTarget: z.number().min(0).max(100).optional(),
   roiBandExcellent: z.number().min(0).max(100).optional(),
   taxRatePct: z.number().min(0).max(100).optional(),
+  targetMonthlyGrowthPct: z.number().min(-100).max(1000).optional(),
 });
 
 export async function PATCH(req: NextRequest) {

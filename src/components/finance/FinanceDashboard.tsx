@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { WeeklyTrendChart, formatMonthShort } from "@/components/dashboard/WeeklyTrendChart";
 import { RoiGauge } from "./RoiGauge";
 import { EstadoDeResultados } from "./EstadoDeResultados";
@@ -42,7 +43,23 @@ export function FinanceDashboard({
   data: FinanceKpiDataDTO;
   editable: boolean;
 }) {
+  const router = useRouter();
   const [brand, setBrand] = useState<string>("consolidado");
+  const [growthPct, setGrowthPct] = useState(String(data.settings.targetMonthlyGrowthPct));
+  const [savingGrowth, setSavingGrowth] = useState(false);
+
+  async function saveGrowthPct() {
+    const v = Number(growthPct);
+    if (Number.isNaN(v)) return;
+    setSavingGrowth(true);
+    await fetch("/api/finance-kpis/settings", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ deptId, targetMonthlyGrowthPct: v }),
+    });
+    setSavingGrowth(false);
+    router.refresh();
+  }
   const [granularity, setGranularity] = useState<"monthly" | "quarterly" | "semiannual" | "annual" | "custom">("monthly");
   const [yearFilter, setYearFilter] = useState<"current" | "prev">("current");
   const [periodA, setPeriodA] = useState<string | null>(null);
@@ -234,6 +251,30 @@ export function FinanceDashboard({
         </div>
       </div>
 
+      {editable && (
+        <div className="flex items-center gap-1.5 mb-3">
+          <span className="text-[11.5px] text-steel">
+            Meta de variación mensual (se aplica a los 4 indicadores de abajo):
+          </span>
+          <input
+            type="number"
+            step="0.01"
+            value={growthPct}
+            onChange={(e) => setGrowthPct(e.target.value)}
+            className="w-16 rounded border border-rule bg-cloud px-1.5 py-0.5 text-[11.5px]"
+          />
+          <span className="text-[11.5px] text-steel">%</span>
+          <button
+            type="button"
+            disabled={savingGrowth}
+            onClick={saveGrowthPct}
+            className="text-[11.5px] font-semibold text-blue cursor-pointer disabled:opacity-50"
+          >
+            {savingGrowth ? "Guardando…" : "Guardar"}
+          </button>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 mb-5">
         {FLAGSHIP_DEFS.map((def) => {
           const points = windowed.map((r) => ({ week: r.period, value: r[def.key] as number }));
@@ -251,6 +292,21 @@ export function FinanceDashboard({
             const moneyText = def.isPercent ? "" : ` · ${moneyDiff >= 0 ? "+" : ""}${money(moneyDiff)}`;
             deltaNode = <span className={`font-mono text-[11px] font-bold ${cls}`}>{pctText}{moneyText}</span>;
           }
+
+          // Meta de variación mensual — confirmado 2026-07-27: aplica a los 4
+          // indicadores (no solo Ventas totales), con el mismo % compartido.
+          // La meta del mes más reciente es (mes anterior real) × (1 + % /
+          // 100) — no un valor fijo, se recalcula solo cuando cierra un mes
+          // nuevo. Para Gastos operativos (invert: true, menos es mejor), la
+          // meta actúa como techo permitido: cumple si el real quedó IGUAL O
+          // POR DEBAJO, no por encima.
+          const prevReal = windowed.length >= 2 ? (windowed[windowed.length - 2][def.key] as number) : null;
+          const goalValue = prevReal !== null ? prevReal * (1 + data.settings.targetMonthlyGrowthPct / 100) : undefined;
+          const latestValue = windowed[windowed.length - 1]?.[def.key] as number | undefined;
+          const goalPct = goalValue && latestValue !== undefined ? Math.round((latestValue / goalValue) * 100) : null;
+          const goalMet = goalPct !== null && (def.invert ? goalPct <= 100 : goalPct >= 100);
+          const fmtVal = def.isPercent ? pct : money;
+
           return (
             <div key={def.key} className="bg-surface border border-rule rounded-md p-4.5">
               <div className="font-mono text-[10px] uppercase tracking-wide text-steel font-bold mb-1">{def.title} · últimos 12 meses</div>
@@ -260,10 +316,37 @@ export function FinanceDashboard({
                   {def.title} <b>{formatMonthShort(base.period)}</b>: <b>{def.isPercent ? pct(valB!) : money(valB!)}</b> {deltaNode}
                 </div>
               )}
+
+              {goalValue !== undefined && goalPct !== null && (
+                <div className="text-[11.5px] text-steel mb-2.5">
+                  Meta {formatMonthShort(windowed[windowed.length - 1].period)} ({def.invert ? "máx. +" : "+"}
+                  {data.settings.targetMonthlyGrowthPct}% sobre {formatMonthShort(windowed[windowed.length - 2].period)}):{" "}
+                  <b>{fmtVal(goalValue)}</b> · Real: <b>{fmtVal(latestValue!)}</b> ·{" "}
+                  <span className={`font-bold ${goalMet ? "text-teal" : "text-red"}`}>
+                    {goalMet ? "Meta cumplida" : "No cumplida"} ({goalPct}%)
+                  </span>
+                </div>
+              )}
+
               <WeeklyTrendChart
                 label={def.title}
                 deptName=""
                 points={points}
+                weeklyGoal={goalValue}
+                statusFn={
+                  goalValue
+                    ? (value) => {
+                        const p = (value / goalValue) * 100;
+                        const met = def.invert ? p <= 100 : p >= 100;
+                        const close = def.invert ? p <= 110 : p >= 90;
+                        return met
+                          ? { label: "Meta cumplida", color: "#14C7C7" }
+                          : close
+                            ? { label: "Cerca de la meta", color: "#D9A441" }
+                            : { label: "No cumplida", color: "#C4453A" };
+                      }
+                    : undefined
+                }
                 format={def.isPercent ? "percent" : "count"}
                 valueFormat={def.isPercent ? undefined : money}
                 periodLabel={formatMonthShort}

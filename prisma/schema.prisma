@@ -562,6 +562,11 @@ model FinanceKpiSettings {
 
   taxRatePct Float @default(25)
 
+  // Confirmado 2026-07-27: % de crecimiento esperado mes a mes para Ventas
+  // totales — la meta del mes en curso se calcula como (ventas del mes
+  // anterior real) × (1 + este % / 100), no un valor fijo por mes.
+  targetMonthlyGrowthPct Float @default(10)
+
   updatedAt DateTime @updatedAt
 }
 

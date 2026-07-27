@@ -27,6 +27,7 @@ export type FinanceKpiSettingsDTO = {
   roiBandTarget: number;
   roiBandExcellent: number;
   taxRatePct: number;
+  targetMonthlyGrowthPct: number;
 };
 
 export type FinanceKpiDataDTO = {
@@ -48,6 +49,7 @@ const DEFAULT_SETTINGS: FinanceKpiSettingsDTO = {
   roiBandTarget: 20,
   roiBandExcellent: 45,
   taxRatePct: 25,
+  targetMonthlyGrowthPct: 10,
 };
 
 // Everything the "KPIs financieros" dashboard needs, assembled server-side
@@ -112,6 +114,7 @@ export async function getFinanceKpiData(deptId: string): Promise<FinanceKpiDataD
           roiBandTarget: settings.roiBandTarget,
           roiBandExcellent: settings.roiBandExcellent,
           taxRatePct: settings.taxRatePct,
+          targetMonthlyGrowthPct: settings.targetMonthlyGrowthPct,
         }
       : DEFAULT_SETTINGS,
   };
