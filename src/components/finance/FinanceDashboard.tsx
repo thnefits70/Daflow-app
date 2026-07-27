@@ -323,7 +323,7 @@ export function FinanceDashboard({
                   {data.settings.targetMonthlyGrowthPct}% sobre {formatMonthShort(windowed[windowed.length - 2].period)}):{" "}
                   <b>{fmtVal(goalValue)}</b> · Real: <b>{fmtVal(latestValue!)}</b> ·{" "}
                   <span className={`font-bold ${goalMet ? "text-teal" : "text-red"}`}>
-                    {goalMet ? "Meta cumplida" : "No cumplida"} ({goalPct}%)
+                    {goalMet ? "Meta cumplida" : `${goalPct}% de la meta alcanzada — no cumplida`}
                   </span>
                 </div>
               )}
