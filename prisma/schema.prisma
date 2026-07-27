@@ -170,6 +170,8 @@ model User {
   monthlyEvaluationsReceived MonthlyEvaluation[]
   monthlyRecognitionResults  MonthlyRecognitionResult[]
   monthlyEvaluationSummaries MonthlyEvaluationSummary[]
+  learningPathsAssigned      LearningPathAssignment[] @relation("LearningPathAssignedTo")
+  learningPathStepProgress   LearningPathStepProgress[] @relation("LearningPathStepProgressBy")
 
   @@index([deptId])
   @@index([leadsDeptId])
@@ -243,6 +245,7 @@ model Process {
 
   flowSteps      FlowStep[]
   updates        ProcessUpdate[]
+  questionSet    ContentQuestionSet?
 
   @@index([deptId])
 }
@@ -351,6 +354,7 @@ model Module {
 
   documents Document[]
   exam      Exam?
+  questionSet ContentQuestionSet?
 
   @@index([order])
 }
@@ -370,6 +374,8 @@ model Document {
   fileName  String?
   createdAt DateTime    @default(now())
   updatedAt DateTime    @updatedAt
+
+  questionSet ContentQuestionSet?
 
   @@index([deptId])
   @@index([isLaw])
@@ -1142,4 +1148,128 @@ model MonthlyRecognitionPopupSeen {
   seenAt   DateTime @default(now())
 
   @@unique([viewerId, month, rank])
+}
+
+/* ---------------- Rutas de conocimiento ---------------- */
+// Confirmado 2026-07-27: el admin arma, por persona (no por puesto formal de
+// Nómina), una ruta de pasos ordenados que referencian contenido que ya
+// existe en DAFLOW (un Documento/Ley, un Proceso o un Módulo completo). Cada
+// contenido tiene un único "banco" de preguntas (ContentQuestionSet) generado
+// una vez por IA y reutilizado en cualquier ruta que lo incluya — nunca se
+// regenera solo por agregarlo a una nueva ruta.
+model LearningPath {
+  id          String   @id @default(cuid())
+  title       String
+  description String   @default("")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  steps       LearningPathStep[]
+  assignments LearningPathAssignment[]
+}
+
+model LearningPathStep {
+  id            String             @id @default(cuid())
+  pathId        String
+  path          LearningPath       @relation(fields: [pathId], references: [id], onDelete: Cascade)
+  order         Int                @default(0)
+  questionSetId String
+  questionSet   ContentQuestionSet @relation(fields: [questionSetId], references: [id], onDelete: Cascade)
+
+  progress LearningPathStepProgress[]
+
+  @@index([pathId])
+  @@index([questionSetId])
+}
+
+// El "banco" de preguntas de una pieza de contenido — exactamente uno de
+// documentId/processId/moduleId está presente (mismo patrón que Exam). Único
+// por contenido: si dos rutas distintas incluyen el mismo Documento, comparten
+// este mismo registro en vez de generar (y pagar IA) dos veces.
+model ContentQuestionSet {
+  id               String    @id @default(cuid())
+  documentId       String?   @unique
+  document         Document? @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  processId        String?   @unique
+  process          Process?  @relation(fields: [processId], references: [id], onDelete: Cascade)
+  moduleId         String?   @unique
+  module           Module?   @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  aiModel          String // qué modelo de Claude generó estas preguntas (ej. "claude-sonnet-5")
+  estimatedMinutes Int       @default(10) // tiempo estimado de lectura + responder, para el medidor 2-8h de cada ruta
+  generatedAt      DateTime  @default(now())
+
+  questions LearningPathQuestion[]
+  steps     LearningPathStep[]
+}
+
+enum LearningPathQuestionType {
+  MULTIPLE_CHOICE
+  TRUE_FALSE
+  MATCHING
+  SHORT_ANSWER
+}
+
+model LearningPathQuestion {
+  id    String                   @id @default(cuid())
+  setId String
+  set   ContentQuestionSet       @relation(fields: [setId], references: [id], onDelete: Cascade)
+  type  LearningPathQuestionType
+  text  String
+  order Int                      @default(0)
+
+  // MULTIPLE_CHOICE: options = alternativas, correctIndex = la correcta.
+  // TRUE_FALSE: options = ["Verdadero","Falso"], correctIndex = 0 o 1.
+  // MATCHING: matchLeft[i] se empareja con options[i] (misma posición = par correcto).
+  // SHORT_ANSWER: sin correctIndex — el admin revisa la respuesta escrita manualmente.
+  options      String[] @default([])
+  matchLeft    String[] @default([])
+  correctIndex Int?
+
+  answers LearningPathAnswer[]
+
+  @@index([setId])
+}
+
+// A quién el admin le asignó la ruta — independiente del puesto de Nómina;
+// una persona puede tener varias rutas asignadas.
+model LearningPathAssignment {
+  id         String       @id @default(cuid())
+  pathId     String
+  path       LearningPath @relation(fields: [pathId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User         @relation("LearningPathAssignedTo", fields: [userId], references: [id], onDelete: Cascade)
+  assignedAt DateTime     @default(now())
+
+  @@unique([pathId, userId])
+  @@index([userId])
+}
+
+model LearningPathStepProgress {
+  id          String           @id @default(cuid())
+  stepId      String
+  step        LearningPathStep @relation(fields: [stepId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User             @relation("LearningPathStepProgressBy", fields: [userId], references: [id], onDelete: Cascade)
+  completedAt DateTime?
+
+  answers LearningPathAnswer[]
+
+  @@unique([stepId, userId])
+  @@index([userId])
+}
+
+model LearningPathAnswer {
+  id            String                   @id @default(cuid())
+  progressId    String
+  progress      LearningPathStepProgress @relation(fields: [progressId], references: [id], onDelete: Cascade)
+  questionId    String
+  question      LearningPathQuestion     @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  selectedIndex Int? // MULTIPLE_CHOICE / TRUE_FALSE
+  matchOrder    Int[]                    @default([]) // MATCHING: orden que el colaborador emparejó, por índice de options
+  textAnswer    String? // SHORT_ANSWER — el admin la lee, no se autocalifica
+  isCorrect     Boolean?
+  answeredAt    DateTime                 @default(now())
+
+  @@unique([progressId, questionId])
+  @@index([questionId])
 }

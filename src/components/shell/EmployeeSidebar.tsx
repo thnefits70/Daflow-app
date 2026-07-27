@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
-import { LayoutDashboard, ClipboardList, Scale, LogOut, Truck, Rocket, Wallet, FolderLock, Gauge, Menu, X, Trophy, Users, LayoutGrid } from "lucide-react";
+import { LayoutDashboard, ClipboardList, Scale, LogOut, Truck, Rocket, Wallet, FolderLock, Gauge, Menu, X, Trophy, Users, LayoutGrid, Waypoints } from "lucide-react";
 import { BrandMark } from "@/components/brand/DaflowMark";
 
 export function EmployeeSidebar({
@@ -21,6 +21,7 @@ export function EmployeeSidebar({
   showKpis = false,
   showRecognition = false,
   showNomina = false,
+  showMyLearningPath = false,
 }: {
   deptName: string;
   userName: string;
@@ -35,6 +36,7 @@ export function EmployeeSidebar({
   showKpis?: boolean;
   showRecognition?: boolean;
   showNomina?: boolean;
+  showMyLearningPath?: boolean;
 }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
@@ -94,6 +96,11 @@ export function EmployeeSidebar({
         <Link href="/area/modulos" className={`${NAV_ITEM} ${pathname.startsWith("/area/modulos") ? NAV_ACTIVE : NAV_INACTIVE}`}>
           <LayoutGrid size={15} /> Módulos
         </Link>
+        {showMyLearningPath && (
+          <Link href="/area/mi-ruta" className={`${NAV_ITEM} ${pathname.startsWith("/area/mi-ruta") ? NAV_ACTIVE : NAV_INACTIVE}`}>
+            <Waypoints size={15} /> Mi ruta
+          </Link>
+        )}
         <Link href="/area/workspace" className={`${NAV_ITEM} ${pathname.startsWith("/area/workspace") ? NAV_ACTIVE : NAV_INACTIVE}`}>
           <ClipboardList size={15} /> Mi área de trabajo
           {unseenFeedbackCount > 0 && (

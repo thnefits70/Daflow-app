@@ -23,6 +23,7 @@ import {
   X,
   Trophy,
   LayoutGrid,
+  Waypoints,
 } from "lucide-react";
 import { BrandMark } from "@/components/brand/DaflowMark";
 
@@ -146,6 +147,9 @@ export function AdminSidebar({
         </Link>
         <Link href="/admin/modulos" className={`${NAV_ITEM} ${pathname.startsWith("/admin/modulos") ? NAV_ACTIVE : NAV_INACTIVE}`}>
           <LayoutGrid size={15} /> Módulos
+        </Link>
+        <Link href="/admin/rutas-conocimiento" className={`${NAV_ITEM} ${pathname.startsWith("/admin/rutas-conocimiento") ? NAV_ACTIVE : NAV_INACTIVE}`}>
+          <Waypoints size={15} /> Rutas de conocimiento
         </Link>
         <Link href="/admin/areas" className={`${NAV_ITEM} ${pathname.startsWith("/admin/areas") ? NAV_ACTIVE : NAV_INACTIVE}`}>
           <ShieldCheck size={15} /> Áreas del negocio

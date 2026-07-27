@@ -123,6 +123,7 @@ export default async function AreaLayout({ children }: { children: React.ReactNo
   // rights. The page itself still gates each individual section's edit UI.
   const showKpis = true;
   const showNomina = await canManageNomina();
+  const myLearningPathCount = await prisma.learningPathAssignment.count({ where: { userId: session.user.id } });
 
   return (
     <AreaGateShell
@@ -145,6 +146,7 @@ export default async function AreaLayout({ children }: { children: React.ReactNo
       showKpis={showKpis}
       showRecognition
       showNomina={showNomina}
+      showMyLearningPath={myLearningPathCount > 0}
     >
       {children}
     </AreaGateShell>
