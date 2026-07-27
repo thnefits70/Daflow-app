@@ -1,12 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireAdminSession } from "@/lib/guards";
 import { supabaseAdmin } from "@/lib/supabase";
-import { CONFIDENTIAL_BUCKET, CONFIDENTIAL_MAX_BYTES, ensureConfidentialBucket } from "@/lib/confidentialDocs";
+import { CONFIDENTIAL_BUCKET } from "@/lib/confidentialDocs";
 
 const docInclude = {
   grants: { include: { user: { select: { id: true, name: true } } } },
 };
+
+const updateSchema = z.object({
+  title: z.string().trim().min(1).optional(),
+  category: z.string().trim().optional(),
+  grantedUserIds: z.array(z.string()).optional(),
+  storagePath: z.string().min(1).optional(),
+  fileName: z.string().min(1).optional(),
+});
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await requireAdminSession();
@@ -16,48 +25,28 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const existing = await prisma.confidentialDocument.findUnique({ where: { id } });
   if (!existing) return NextResponse.json({ error: "No encontrado." }, { status: 404 });
 
-  const formData = await req.formData().catch(() => null);
-  if (!formData) return NextResponse.json({ error: "Datos inválidos." }, { status: 400 });
-
-  const title = (formData.get("title") as string | null)?.trim();
-  const categoryRaw = formData.get("category") as string | null;
-  const grantedUserIdsRaw = formData.get("grantedUserIds") as string | null;
-  const file = formData.get("file");
+  const body = await req.json().catch(() => null);
+  const parsed = updateSchema.safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Datos inválidos." }, { status: 400 });
+  }
+  const { title, category, grantedUserIds, storagePath, fileName } = parsed.data;
 
   const data: { title?: string; category?: string | null; storagePath?: string; fileName?: string } = {};
   if (title) data.title = title;
-  if (categoryRaw !== null) data.category = categoryRaw.trim() || null;
+  if (category !== undefined) data.category = category || null;
 
   let oldPathToRemove: string | null = null;
-  if (file && typeof file !== "string") {
-    if (file.size > CONFIDENTIAL_MAX_BYTES) {
-      return NextResponse.json({ error: "El archivo es muy pesado (máximo 15 MB)." }, { status: 400 });
-    }
-    const safeName = file.name.replace(/[^a-z0-9.\-_]/gi, "_");
-    const path = `docs/${crypto.randomUUID()}-${safeName}`;
-    await ensureConfidentialBucket();
-    const supabase = supabaseAdmin();
-    const bytes = new Uint8Array(await file.arrayBuffer());
-    const { error } = await supabase.storage.from(CONFIDENTIAL_BUCKET).upload(path, bytes, {
-      contentType: file.type || "application/octet-stream",
-      upsert: false,
-    });
-    if (error) return NextResponse.json({ error: "No se pudo subir el archivo." }, { status: 500 });
-    data.storagePath = path;
-    data.fileName = file.name;
+  if (storagePath && fileName) {
+    data.storagePath = storagePath;
+    data.fileName = fileName;
     oldPathToRemove = existing.storagePath;
   }
 
   // Diff the grant list instead of replacing wholesale, so someone who
   // already saw the document doesn't get an unread badge again just because
   // an unrelated person was added to (or removed from) the share list.
-  if (grantedUserIdsRaw !== null) {
-    let grantedUserIds: string[];
-    try {
-      grantedUserIds = JSON.parse(grantedUserIdsRaw);
-    } catch {
-      return NextResponse.json({ error: "Lista de personas inválida." }, { status: 400 });
-    }
+  if (grantedUserIds !== undefined) {
     const current = await prisma.confidentialDocumentAccess.findMany({
       where: { documentId: id },
       select: { userId: true },

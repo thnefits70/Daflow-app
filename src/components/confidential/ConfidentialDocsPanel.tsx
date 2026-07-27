@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, Trash2, Pencil, FileText, Eye, Search } from "lucide-react";
+import { uploadConfidentialFile } from "@/lib/uploadConfidentialFile";
 
 function fileKind(name: string): "pdf" | "image" | "other" {
   const n = name.toLowerCase();
@@ -120,15 +121,36 @@ export function ConfidentialDocsPanel({
     }
     setErr("");
     setBusy(true);
-    const fd = new FormData();
-    fd.append("title", form.title.trim());
-    fd.append("category", form.category.trim());
-    fd.append("grantedUserIds", JSON.stringify(form.grantedUserIds));
-    if (file) fd.append("file", file);
+
+    let uploaded: { storagePath: string; fileName: string } | null = null;
+    if (file) {
+      const result = await uploadConfidentialFile(file);
+      if (!result.ok) {
+        setBusy(false);
+        setErr(result.error);
+        return;
+      }
+      uploaded = { storagePath: result.storagePath, fileName: result.fileName };
+    }
+
+    const payload = {
+      title: form.title.trim(),
+      category: form.category.trim(),
+      grantedUserIds: form.grantedUserIds,
+      ...(uploaded ? { storagePath: uploaded.storagePath, fileName: uploaded.fileName } : {}),
+    };
 
     const res = editingId
-      ? await fetch(`/api/confidential-documents/${editingId}`, { method: "PATCH", body: fd })
-      : await fetch("/api/confidential-documents", { method: "POST", body: fd });
+      ? await fetch(`/api/confidential-documents/${editingId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        })
+      : await fetch("/api/confidential-documents", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
     setBusy(false);
     if (!res.ok) {
       const data = await res.json().catch(() => null);
