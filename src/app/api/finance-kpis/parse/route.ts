@@ -1,11 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import * as XLSX from "xlsx";
 import { prisma } from "@/lib/prisma";
-import { supabaseAdmin } from "@/lib/supabase";
 import { canEditDeptKpis } from "@/lib/guards";
 
-const BUCKET = "daflow-files";
-const MAX_BYTES = 15 * 1024 * 1024;
 const PERIOD_REGEX = /^\d{4}-(0[1-9]|1[0-2])$/;
 
 // Column headers exactly as they appear in Plantilla_KPIs_Financieros_DAFLOW.xlsx.
@@ -20,18 +17,16 @@ function num(v: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-async function ensureBucket() {
-  const supabase = supabaseAdmin();
-  const { data: buckets } = await supabase.storage.listBuckets();
-  if (buckets?.some((b) => b.name === BUCKET)) return;
-  await supabase.storage.createBucket(BUCKET, { public: true, fileSizeLimit: MAX_BYTES });
-}
-
+// El navegador ya subió el archivo directo a Supabase vía /api/upload/sign
+// (mismo patrón que el resto de la app) — esta ruta solo recibe la URL
+// resultante y lee los bytes desde ahí, así el cuerpo de esta solicitud es
+// un JSON pequeño y nunca choca con el límite de ~4.5 MB de Vercel.
 export async function POST(req: NextRequest) {
-  const formData = await req.formData().catch(() => null);
-  const file = formData?.get("file");
-  const deptId = formData?.get("deptId") as string | null;
-  const period = formData?.get("period") as string | null;
+  const body = await req.json().catch(() => null);
+  const deptId = body?.deptId as string | undefined;
+  const period = body?.period as string | undefined;
+  const fileUrl = body?.fileUrl as string | undefined;
+  const fileName = body?.fileName as string | undefined;
 
   if (!deptId) return NextResponse.json({ error: "Falta deptId." }, { status: 400 });
   if (!(await canEditDeptKpis(deptId))) {
@@ -40,14 +35,15 @@ export async function POST(req: NextRequest) {
   if (!period || !PERIOD_REGEX.test(period)) {
     return NextResponse.json({ error: "Formato de mes inválido." }, { status: 400 });
   }
-  if (!file || typeof file === "string") {
+  if (!fileUrl || !fileName) {
     return NextResponse.json({ error: "No se recibió ningún archivo." }, { status: 400 });
   }
-  if (file.size > MAX_BYTES) {
-    return NextResponse.json({ error: "El archivo es muy pesado (máximo 15 MB)." }, { status: 400 });
-  }
 
-  const bytes = new Uint8Array(await file.arrayBuffer());
+  const fileRes = await fetch(fileUrl);
+  if (!fileRes.ok) {
+    return NextResponse.json({ error: "No se pudo leer el archivo subido." }, { status: 400 });
+  }
+  const bytes = new Uint8Array(await fileRes.arrayBuffer());
 
   let workbook: XLSX.WorkBook;
   try {
@@ -145,23 +141,6 @@ export async function POST(req: NextRequest) {
     } else {
       warnings.push(`No se encontró el saldo compartido de ${period} en "${SHARED_SHEET}".`);
     }
-  }
-
-  // Store the original file for the upload-history audit trail, same bucket/path
-  // convention as the generic /api/upload route.
-  await ensureBucket();
-  const supabase = supabaseAdmin();
-  const safeName = file.name.replace(/[^a-z0-9.\-_]/gi, "_");
-  const path = `finance-kpis/${crypto.randomUUID()}-${safeName}`;
-  const { error: uploadError } = await supabase.storage.from(BUCKET).upload(path, bytes, {
-    contentType: file.type || "application/octet-stream",
-    upsert: false,
-  });
-  let fileUrl: string | null = null;
-  let fileName: string | null = null;
-  if (!uploadError) {
-    fileUrl = supabase.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
-    fileName = file.name;
   }
 
   return NextResponse.json({

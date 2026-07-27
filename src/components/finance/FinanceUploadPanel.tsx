@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Upload, FileText, X, AlertTriangle, CheckCircle2, Download } from "lucide-react";
 import type { FinanceKpiDataDTO } from "@/lib/financeKpis";
+import { uploadFile } from "@/lib/uploadFile";
 
 const MONTH_NAMES = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
 
@@ -89,11 +90,19 @@ export function FinanceUploadPanel({ deptId, data }: { deptId: string; data: Fin
     setErr("");
     setToast("");
     setPhase("processing");
-    const fd = new FormData();
-    fd.append("file", file);
-    fd.append("deptId", deptId);
-    fd.append("period", targetPeriod);
-    const res = await fetch("/api/finance-kpis/parse", { method: "POST", body: fd });
+
+    const uploaded = await uploadFile(file, "finance-kpis");
+    if (!uploaded.ok) {
+      setErr(uploaded.error);
+      setPhase("idle");
+      return;
+    }
+
+    const res = await fetch("/api/finance-kpis/parse", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ deptId, period: targetPeriod, fileUrl: uploaded.url, fileName: uploaded.name }),
+    });
     const json = await res.json().catch(() => null);
     if (!res.ok) {
       setErr(json?.error ?? "No se pudo leer el archivo.");
