@@ -14,10 +14,16 @@ import type { DashboardData, WeeklyTrend, StockoutWeekPoint, WarrantyMonthlyChar
 import type { StoreFeedbackAggregate, StoreFeedbackTrendPoint } from "@/lib/storeFeedback";
 import type { DuePeriodicReminderDTO } from "@/lib/periodicReminders";
 
+// Mismas bandas que ScoreGauge (confirmado 2026-07-27, escala de 1 a 10):
+// <5 riesgo, 5-8 regular, 8-9 muy bueno, 9-10 excelente.
 function barColor(score: number) {
-  if (score >= 75) return "#14C7C7";
+  if (score >= 90) return "#14C7C7";
+  if (score >= 80) return "#22C55E";
   if (score >= 50) return "#1E5EFF";
   return "#C4453A";
+}
+function note10(score: number) {
+  return (score / 10).toFixed(1);
 }
 
 export function Dashboard({
@@ -148,7 +154,7 @@ export function Dashboard({
               <Building2 size={14} /> {r.dept.name}
             </span>
             <span className="font-mono text-[10.5px] bg-cloud border border-rule rounded-full px-2.5 py-1">
-              {r.avg !== null ? `${r.avg}% promedio` : "sin exámenes aún"}
+              {r.avg !== null ? `${note10(r.avg)}/10 promedio` : "sin exámenes aún"}
             </span>
           </div>
           <div className="w-full h-1.5 bg-cloud rounded-full overflow-hidden">
@@ -167,7 +173,7 @@ export function Dashboard({
                 <div key={p.user} className="flex items-center justify-between py-1 text-[12.5px]">
                   <span>{pi === 0 ? "🥇" : pi === 1 ? "🥈" : pi === 2 ? "🥉" : "•"} {p.user}</span>
                   <span className="font-mono text-steel">
-                    {p.avg}% · {p.attempts} intento{p.attempts !== 1 ? "s" : ""}
+                    {note10(p.avg)}/10 · {p.attempts} intento{p.attempts !== 1 ? "s" : ""}
                   </span>
                 </div>
               ))}

@@ -21,10 +21,21 @@ function pct(a: number, b: number) {
   return b === 0 ? 0 : Math.round((a / b) * 100);
 }
 
+// Mismas bandas que ScoreGauge (confirmado 2026-07-27, escala de 1 a 10):
+// <5 riesgo, 5-8 regular, 8-9 muy bueno, 9-10 excelente.
 function scoreColor(score: number) {
-  if (score >= 75) return "#14C7C7";
+  if (score >= 90) return "#14C7C7";
+  if (score >= 80) return "#22C55E";
   if (score >= 50) return "#1E5EFF";
   return "#C4453A";
+}
+function note10(score: number) {
+  return (score / 10).toFixed(1);
+}
+function formatAttemptDate(iso: string) {
+  const d = new Date(iso);
+  const MONTH_ABBR = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
+  return `${d.getDate()} ${MONTH_ABBR[d.getMonth()]}`;
 }
 
 export function EmployeeHome({
@@ -203,6 +214,21 @@ export function EmployeeHome({
           Aún no has rendido exámenes. Entra a &quot;Mi área de trabajo&quot; para ver los disponibles.
         </div>
       )}
+      {scores.length > 1 && (
+        <div className="bg-surface border border-rule rounded-lg p-5 mb-3.5">
+          <WeeklyTrendChart
+            label="Tu progreso"
+            deptName=""
+            points={[...scores]
+              .reverse()
+              .map((s) => ({ week: s.createdAt, value: pct(s.score, s.total) / 10 }))}
+            periodLabel={formatAttemptDate}
+            latestLabel="último examen"
+            valueFormat={(v) => v.toFixed(1)}
+            colorDotsByDirection
+          />
+        </div>
+      )}
       {scores.slice(0, 6).map((s) => {
         const p = pct(s.score, s.total);
         return (
@@ -219,7 +245,7 @@ export function EmployeeHome({
                 className="font-mono text-[11px] font-semibold px-2.5 py-1 rounded-full"
                 style={{ color: scoreColor(p), border: `1px solid ${scoreColor(p)}`, background: `${scoreColor(p)}1a` }}
               >
-                {s.score}/{s.total} · {p}%
+                {s.score}/{s.total} · {note10(p)}/10
               </span>
             </div>
           </div>
