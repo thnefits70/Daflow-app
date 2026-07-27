@@ -129,12 +129,19 @@ export async function generateQuestionsForContent(source: ContentSource): Promis
 
   const response = await client.messages.create({
     model: LEARNING_PATH_AI_MODEL,
-    max_tokens: 4096,
+    // Generoso a propósito: con el banco ampliado (~2x preguntas) más el
+    // pensamiento adaptativo, 4096 se quedaba corto y cortaba el JSON a
+    // medias (visto en producción con un reglamento largo).
+    max_tokens: 16000,
     system: SYSTEM_PROMPT,
     thinking: { type: "adaptive" },
     output_config: { effort: "medium" },
     messages: [{ role: "user", content: contentBlocks }],
   });
+
+  if (response.stop_reason === "max_tokens") {
+    throw new Error("La IA generó demasiado contenido y se cortó a medias — intenta de nuevo o divide el documento.");
+  }
 
   const textBlock = response.content.find((b) => b.type === "text");
   if (!textBlock || textBlock.type !== "text") throw new Error("La IA no devolvió contenido de texto.");
