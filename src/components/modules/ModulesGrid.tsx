@@ -3,7 +3,8 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Plus, Trash2, GripVertical, BookOpen, GraduationCap, FileText } from "lucide-react";
+import { Plus, Trash2, GripVertical, GraduationCap, FileText } from "lucide-react";
+import { iconForModule } from "@/lib/moduleIcons";
 
 export type ModuleSummaryDTO = {
   id: string;
@@ -117,7 +118,10 @@ export function ModulesGrid({
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={m.imageUrl} alt={m.title} className="w-full h-full object-cover" />
                 ) : (
-                  <BookOpen size={28} className="text-steel/50" />
+                  (() => {
+                    const { Icon, color } = iconForModule(m.title);
+                    return <Icon size={30} style={{ color }} strokeWidth={1.75} />;
+                  })()
                 )}
               </div>
               <div className="p-3">

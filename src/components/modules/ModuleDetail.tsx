@@ -3,10 +3,11 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Pencil, Check, X, Upload, ImageIcon } from "lucide-react";
+import { ArrowLeft, Pencil, Check, X, Upload } from "lucide-react";
 import { DocumentsPanel } from "@/components/documents/DocumentsPanel";
 import { ModuleExamPanel } from "@/components/modules/ModuleExamPanel";
 import { uploadFile } from "@/lib/uploadFile";
+import { iconForModule } from "@/lib/moduleIcons";
 
 type ModuleDocumentDTO = {
   id: string;
@@ -71,6 +72,8 @@ export function ModuleDetail({
     router.refresh();
   };
 
+  const { Icon: ModuleIcon, color: moduleIconColor } = iconForModule(mod.title);
+
   return (
     <div>
       <Link href={basePath} className="inline-flex items-center gap-1.5 text-[13px] text-steel hover:text-ink mb-4.5">
@@ -83,7 +86,7 @@ export function ModuleDetail({
             // eslint-disable-next-line @next/next/no-img-element
             <img src={mod.imageUrl} alt={mod.title} className="w-full h-full object-cover" />
           ) : (
-            <ImageIcon size={22} className="text-steel/50" />
+            <ModuleIcon size={26} style={{ color: moduleIconColor }} strokeWidth={1.75} />
           )}
           {editable && (
             <label className="absolute inset-0 flex items-center justify-center bg-navy/60 text-white opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer text-[11px] gap-1">
