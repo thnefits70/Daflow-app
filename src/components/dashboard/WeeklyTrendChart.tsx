@@ -141,6 +141,10 @@ export function WeeklyTrendChart({
   // comfortably — click it to zoom in place, click anywhere outside to
   // revert.
   const [deltaZoomed, setDeltaZoomed] = useState(false);
+  // Mismo patrón que deltaZoomed (confirmado 2026-07-22) pero con doble clic
+  // en vez de un solo clic — la etiqueta "Meta $X" del gauge de crecimiento
+  // es igual de chica y difícil de leer.
+  const [metaZoomed, setMetaZoomed] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -148,6 +152,7 @@ export function WeeklyTrendChart({
       if (rootRef.current && !rootRef.current.contains(e.target as Node)) {
         setDateTooltipWeek(null);
         setDeltaZoomed(false);
+        setMetaZoomed(false);
       }
     }
     document.addEventListener("mousedown", onClickOutside);
@@ -308,14 +313,45 @@ export function WeeklyTrendChart({
           );
         })}
 
-        {goalY !== null && (
-          <>
-            <line x1={padL} x2={width - padR} y1={goalY} y2={goalY} stroke="#C4453A" strokeWidth="1.25" strokeDasharray="5 4" opacity="0.75" />
-            <text x={width - padR} y={goalY - 6} textAnchor="end" fontSize="10.5" fill="#C4453A">
-              Meta {fmt(weeklyGoal!)}
-            </text>
-          </>
-        )}
+        {goalY !== null && (() => {
+          const metaLabel = `Meta ${fmt(weeklyGoal!)}`;
+          const metaBoxW = 18 + metaLabel.length * 5.3;
+          const metaX = width - padR;
+          const metaY = goalY - 6;
+          return (
+            <>
+              <line x1={padL} x2={width - padR} y1={goalY} y2={goalY} stroke="#C4453A" strokeWidth="1.25" strokeDasharray="5 4" opacity="0.75" />
+              <g
+                onDoubleClick={(e) => {
+                  e.stopPropagation();
+                  setMetaZoomed((z) => !z);
+                }}
+                style={{
+                  cursor: "pointer",
+                  transform: metaZoomed ? "scale(1.9)" : "scale(1)",
+                  transformOrigin: `${metaX}px ${metaY}px`,
+                  transition: "transform 0.15s ease-out",
+                }}
+              >
+                {metaZoomed && (
+                  <rect
+                    x={metaX - metaBoxW}
+                    y={metaY - 12}
+                    width={metaBoxW}
+                    height="16"
+                    rx="4"
+                    fill="#0a1526"
+                    stroke="#C4453A"
+                    strokeWidth="1"
+                  />
+                )}
+                <text x={metaX} y={metaY} textAnchor="end" fontSize="10.5" fill="#C4453A">
+                  {metaLabel}
+                </text>
+              </g>
+            </>
+          );
+        })()}
 
         {coords.map((c, i) =>
           i % tickEvery === 0 || i === coords.length - 1 ? (
