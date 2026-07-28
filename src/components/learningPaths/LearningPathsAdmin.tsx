@@ -12,6 +12,8 @@ import {
   Search,
   X,
   Loader2,
+  ChevronDown,
+  ChevronRight,
 } from "lucide-react";
 import { Combobox } from "@/components/ui/Combobox";
 
@@ -102,6 +104,18 @@ export function LearningPathsAdmin({ initialPaths }: { initialPaths: PathSummary
   const [userQuery, setUserQuery] = useState("");
 
   const [addQuestionForStep, setAddQuestionForStep] = useState<string | null>(null);
+  // Confirmado 2026-07-27: los detalles de cada paso (preguntas, generar más,
+  // agregar manual) quedan ocultos por defecto — se ven solo al expandir ese
+  // paso puntual, así la ruta no se vuelve un muro larguísimo de chips.
+  const [expandedSteps, setExpandedSteps] = useState<Set<string>>(new Set());
+  const toggleStepExpanded = (stepId: string) => {
+    setExpandedSteps((prev) => {
+      const next = new Set(prev);
+      if (next.has(stepId)) next.delete(stepId);
+      else next.add(stepId);
+      return next;
+    });
+  };
 
   const refreshPaths = useCallback(async () => {
     const res = await fetch("/api/learning-paths");
@@ -372,75 +386,90 @@ export function LearningPathsAdmin({ initialPaths }: { initialPaths: PathSummary
               </div>
             )}
 
-            {detail.steps.map((step, idx) => (
-              <div key={step.id} className="border border-rule rounded-md p-3 mb-2 bg-cloud">
-                <div className="flex items-start gap-2.5">
-                  <div className="w-6 h-6 rounded-full bg-surface border border-rule flex items-center justify-center text-[11px] font-bold text-steel shrink-0 mt-0.5">
-                    {idx + 1}
-                  </div>
-                  <div className={`w-7 h-7 rounded-md flex items-center justify-center shrink-0 ${kindBg(step.kind)}`}>
-                    <KindIcon kind={step.kind} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="font-semibold text-[13.5px]">{step.title}</div>
-                    <div className="text-[11.5px] text-steel">
-                      {step.meta} · ⏱ ~{step.estimatedMinutes} min · banco de {step.questions.length}, muestra de{" "}
-                      {Math.min(step.sampleSize, step.questions.length)} por persona
+            {detail.steps.map((step, idx) => {
+              const expanded = expandedSteps.has(step.id);
+              return (
+                <div key={step.id} className="border border-rule rounded-md p-3 mb-2 bg-cloud">
+                  <div className="flex items-start gap-2.5">
+                    <div className="w-6 h-6 rounded-full bg-surface border border-rule flex items-center justify-center text-[11px] font-bold text-steel shrink-0 mt-0.5">
+                      {idx + 1}
                     </div>
-                    <div className="flex flex-wrap gap-1.5 mt-2 pt-2 border-t border-dashed border-rule">
-                      {step.questions.map((q) => (
-                        <span
-                          key={q.id}
-                          className="group/q inline-flex items-center gap-1 text-[10.5px] bg-surface border border-rule rounded px-2 py-1 text-steel"
-                        >
-                          {QUESTION_TYPE_LABEL[q.type]}
-                          <button
-                            type="button"
-                            className="opacity-0 group-hover/q:opacity-100 text-red cursor-pointer"
-                            onClick={() => deleteQuestion(q.id)}
-                            title="Eliminar pregunta"
+                    <div className={`w-7 h-7 rounded-md flex items-center justify-center shrink-0 ${kindBg(step.kind)}`}>
+                      <KindIcon kind={step.kind} />
+                    </div>
+                    <button
+                      type="button"
+                      className="flex-1 min-w-0 text-left cursor-pointer"
+                      onClick={() => toggleStepExpanded(step.id)}
+                    >
+                      <div className="font-semibold text-[13.5px] flex items-center gap-1">
+                        {step.title}
+                        {expanded ? <ChevronDown size={13} className="text-steel shrink-0" /> : <ChevronRight size={13} className="text-steel shrink-0" />}
+                      </div>
+                      <div className="text-[11.5px] text-steel">
+                        {step.meta} · ⏱ ~{step.estimatedMinutes} min · banco de {step.questions.length}, muestra de{" "}
+                        {Math.min(step.sampleSize, step.questions.length)} por persona
+                      </div>
+                    </button>
+                    <button
+                      type="button"
+                      className="p-1 text-steel hover:text-red cursor-pointer shrink-0"
+                      onClick={() => removeStep(step.id, step.title)}
+                      title="Quitar paso"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+
+                  {expanded && (
+                    <div className="pl-16">
+                      <div className="flex flex-wrap gap-1.5 mt-2 pt-2 border-t border-dashed border-rule">
+                        {step.questions.map((q) => (
+                          <span
+                            key={q.id}
+                            className="group/q inline-flex items-center gap-1 text-[10.5px] bg-surface border border-rule rounded px-2 py-1 text-steel"
                           >
-                            <X size={11} />
-                          </button>
-                        </span>
-                      ))}
-                      <button
-                        type="button"
-                        disabled={busyStep}
-                        onClick={() => generateMore(step.setId)}
-                        className="text-[10.5px] font-semibold border border-dashed border-teal text-teal rounded px-2 py-1 cursor-pointer disabled:opacity-50 flex items-center gap-1"
-                      >
-                        <Sparkles size={11} /> Generar más con IA
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setAddQuestionForStep(addQuestionForStep === step.id ? null : step.id)}
-                        className="text-[10.5px] font-semibold border border-dashed border-rule text-steel rounded px-2 py-1 cursor-pointer"
-                      >
-                        + manual
-                      </button>
+                            {QUESTION_TYPE_LABEL[q.type]}
+                            <button
+                              type="button"
+                              className="opacity-0 group-hover/q:opacity-100 text-red cursor-pointer"
+                              onClick={() => deleteQuestion(q.id)}
+                              title="Eliminar pregunta"
+                            >
+                              <X size={11} />
+                            </button>
+                          </span>
+                        ))}
+                        <button
+                          type="button"
+                          disabled={busyStep}
+                          onClick={() => generateMore(step.setId)}
+                          className="text-[10.5px] font-semibold border border-dashed border-teal text-teal rounded px-2 py-1 cursor-pointer disabled:opacity-50 flex items-center gap-1"
+                        >
+                          <Sparkles size={11} /> Generar más con IA
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setAddQuestionForStep(addQuestionForStep === step.id ? null : step.id)}
+                          className="text-[10.5px] font-semibold border border-dashed border-rule text-steel rounded px-2 py-1 cursor-pointer"
+                        >
+                          + manual
+                        </button>
+                      </div>
+                      {addQuestionForStep === step.id && (
+                        <ManualQuestionForm
+                          setId={step.setId}
+                          onDone={() => {
+                            setAddQuestionForStep(null);
+                            if (selectedId) loadDetail(selectedId);
+                          }}
+                        />
+                      )}
                     </div>
-                    {addQuestionForStep === step.id && (
-                      <ManualQuestionForm
-                        setId={step.setId}
-                        onDone={() => {
-                          setAddQuestionForStep(null);
-                          if (selectedId) loadDetail(selectedId);
-                        }}
-                      />
-                    )}
-                  </div>
-                  <button
-                    type="button"
-                    className="p-1 text-steel hover:text-red cursor-pointer shrink-0"
-                    onClick={() => removeStep(step.id, step.title)}
-                    title="Quitar paso"
-                  >
-                    <Trash2 size={13} />
-                  </button>
+                  )}
                 </div>
-              </div>
-            ))}
+              );
+            })}
 
             <div className="relative">
               <button
