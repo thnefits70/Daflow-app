@@ -67,6 +67,7 @@ export function DeptWorkspaceTabs({
   editable,
   kpisEditable,
   unseenFeedbackCount = 0,
+  currentUserId = null,
 }: {
   deptId: string;
   activeProcess: ProcessDTO | null;
@@ -101,6 +102,10 @@ export function DeptWorkspaceTabs({
   editable: boolean;
   kpisEditable?: boolean;
   unseenFeedbackCount?: number;
+  // Confirmado 2026-07-28: "Recordatorios" ahora es personal — cada quien
+  // gestiona los suyos (comparando createdById), sin importar si es líder.
+  // null para admin (no es una fila real de User).
+  currentUserId?: string | null;
 }) {
   const router = useRouter();
   const [tab, setTab] = useState<TabKey>(trackKpis ? "kpis" : "procesos");
@@ -147,7 +152,12 @@ export function DeptWorkspaceTabs({
         <ProcessEmbeddedPanel deptId={deptId} process={activeProcess} updates={processUpdates} editable={editable} />
       )}
       {tab === "recordatorios" && (
-        <PeriodicRemindersPanel deptId={deptId} reminders={periodicReminders} editable={kpisEditable ?? editable} />
+        <PeriodicRemindersPanel
+          deptId={deptId}
+          reminders={periodicReminders}
+          canManageAll={kpisEditable ?? editable}
+          currentUserId={currentUserId}
+        />
       )}
       {tab === "comprobante" && canViewPurchaseReceipts && (
         <PurchaseReceiptsPanel

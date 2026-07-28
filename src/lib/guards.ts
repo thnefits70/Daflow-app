@@ -23,6 +23,28 @@ export async function canEditDeptKpis(deptId: string) {
   return false;
 }
 
+// Confirmado 2026-07-28: Recordatorios pasó de "solo el líder crea para su
+// equipo" a "cada persona crea los suyos propios" — cualquiera puede crear
+// un recordatorio en su propia área (o admin, en cualquiera).
+export async function canCreatePersonalReminder(deptId: string) {
+  const session = await auth();
+  if (!session) return false;
+  if (session.user.role === "admin") return true;
+  return session.user.role === "employee" && session.user.deptId === deptId;
+}
+
+// Gestionar (editar/completar/desactivar/eliminar) un recordatorio puntual:
+// admin, o quien lidera esa área (igual que antes, sin perder esa
+// capacidad), o quien lo creó — para que cada quien controle lo suyo sin
+// depender del líder.
+export async function canManagePeriodicReminder(reminder: { deptId: string; createdById: string | null }) {
+  const session = await auth();
+  if (!session) return false;
+  if (session.user.role === "admin") return true;
+  if (reminder.createdById === session.user.id) return true;
+  return canEditDeptKpis(reminder.deptId);
+}
+
 // The weekly review log (admin-leader meeting notes) can be viewed by admin
 // or only the employee who leads that specific department — not the rest of
 // the team. Only admin can write to it — checked separately at the route

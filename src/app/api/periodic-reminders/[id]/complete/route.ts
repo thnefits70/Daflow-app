@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/auth";
-import { canEditDeptKpis } from "@/lib/guards";
+import { canManagePeriodicReminder } from "@/lib/guards";
 import { prisma } from "@/lib/prisma";
 
 const completeSchema = z.object({ period: z.string().min(1) });
@@ -13,7 +13,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const { id } = await params;
   const reminder = await prisma.periodicReminder.findUnique({ where: { id } });
   if (!reminder) return NextResponse.json({ error: "No encontrado." }, { status: 404 });
-  if (!(await canEditDeptKpis(reminder.deptId))) {
+  if (!(await canManagePeriodicReminder(reminder))) {
     return NextResponse.json({ error: "No autorizado." }, { status: 403 });
   }
 
@@ -35,7 +35,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   const { id } = await params;
   const reminder = await prisma.periodicReminder.findUnique({ where: { id } });
   if (!reminder) return NextResponse.json({ ok: true });
-  if (!(await canEditDeptKpis(reminder.deptId))) {
+  if (!(await canManagePeriodicReminder(reminder))) {
     return NextResponse.json({ error: "No autorizado." }, { status: 403 });
   }
 

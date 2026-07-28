@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAllPendingTasksActors, getPendingTasksForActor } from "@/lib/pendingTasks";
 import { getDisabledTypes } from "@/lib/pushPreferences";
+import { getDuePersonalReminderPushes } from "@/lib/periodicReminders";
 import { sendPushToOwner } from "@/lib/webPush";
 
 // Disparado por Vercel Cron (ver vercel.json) una vez al día. Protegido por
@@ -8,6 +9,12 @@ import { sendPushToOwner } from "@/lib/webPush";
 // notificaciones falsas. Confirmado 2026-07-28: si el pendiente sigue sin
 // resolverse, se vuelve a avisar al día siguiente (no hay "ya te avisé, no
 // insisto más") — mismo espíritu que un recordatorio real, no spam.
+//
+// Limitación conocida del plan Hobby de Vercel: los crons solo corren una
+// vez al día, así que los "Recordatorios" personales con hora específica
+// (timeOfDay) se avisan una sola vez por día si ya están vencidos, sin
+// respetar la hora exacta configurada — para eso haría falta un plan de
+// pago con crons más frecuentes.
 export async function GET(req: NextRequest) {
   const auth = req.headers.get("authorization");
   if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
@@ -41,6 +48,12 @@ export async function GET(req: NextRequest) {
       body,
       url: first.href,
     });
+    notified++;
+  }
+
+  const personalReminders = await getDuePersonalReminderPushes();
+  for (const r of personalReminders) {
+    await sendPushToOwner(r.ownerId, { title: r.title, body: r.body, url: r.url });
     notified++;
   }
 

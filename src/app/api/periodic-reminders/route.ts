@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { canEditDeptKpis } from "@/lib/guards";
+import { canCreatePersonalReminder } from "@/lib/guards";
 
 const createSchema = z
   .object({
@@ -12,6 +13,7 @@ const createSchema = z
     weekday: z.number().int().min(1).max(7).optional(),
     date: z.string().optional(),
     timeOfDay: z.string().regex(/^\d{2}:\d{2}$/).optional(),
+    notifyPush: z.boolean().optional(),
   })
   .refine((v) => v.recurrence !== "WEEKLY" || v.weekday !== undefined, {
     message: "Elige el día de la semana.",
@@ -30,9 +32,11 @@ export async function POST(req: NextRequest) {
   }
   const d = parsed.data;
 
-  if (!(await canEditDeptKpis(d.deptId))) {
+  if (!(await canCreatePersonalReminder(d.deptId))) {
     return NextResponse.json({ error: "No autorizado." }, { status: 403 });
   }
+  const session = await auth();
+  const createdById = session!.user.role === "admin" ? null : session!.user.id;
 
   const reminder = await prisma.periodicReminder.create({
     data: {
@@ -43,6 +47,8 @@ export async function POST(req: NextRequest) {
       weekday: d.recurrence === "WEEKLY" ? d.weekday : null,
       date: d.recurrence === "ONCE" && d.date ? new Date(d.date) : null,
       timeOfDay: d.timeOfDay || null,
+      createdById,
+      notifyPush: d.notifyPush ?? false,
     },
   });
 

@@ -45,6 +45,9 @@ export type PeriodicReminderDTO = {
   date: string | null;
   timeOfDay: string | null;
   isActive: boolean;
+  createdById: string | null;
+  createdByName: string | null;
+  notifyPush: boolean;
   completions: PeriodicReminderCompletionDTO[];
 };
 
@@ -53,6 +56,7 @@ export async function getPeriodicReminders(deptId: string): Promise<PeriodicRemi
     where: { deptId },
     orderBy: { order: "asc" },
     include: {
+      createdBy: { select: { name: true } },
       completions: { orderBy: { completedAt: "desc" }, include: { completedBy: { select: { name: true } } } },
     },
   });
@@ -66,6 +70,9 @@ export async function getPeriodicReminders(deptId: string): Promise<PeriodicRemi
     date: r.date ? r.date.toISOString() : null,
     timeOfDay: r.timeOfDay,
     isActive: r.isActive,
+    createdById: r.createdById,
+    createdByName: r.createdById ? (r.createdBy?.name ?? null) : "Admin",
+    notifyPush: r.notifyPush,
     completions: r.completions.map((c) => ({
       period: c.period,
       completedAt: c.completedAt.toISOString(),
@@ -148,4 +155,32 @@ export async function getDuePeriodicReminders(scope: { deptId: string } | "all")
     });
   }
   return due;
+}
+
+export type PersonalReminderPushDTO = { ownerId: string; title: string; body: string; url: string };
+
+// Confirmado 2026-07-28: notificación push por recordatorio individual — a
+// diferencia de "Pendientes" (categorías fijas), aquí cada persona decide
+// por su propio recordatorio si quiere que le avise (notifyPush). Solo se
+// arma UNA vez al día (ver limitación del cron en el comentario de
+// /api/cron/push-pendientes) — no respeta la hora exacta configurada
+// (timeOfDay), solo si el recordatorio ya está "due" hoy y no se ha
+// marcado como hecho todavía.
+export async function getDuePersonalReminderPushes(): Promise<PersonalReminderPushDTO[]> {
+  const reminders = await prisma.periodicReminder.findMany({
+    where: { isActive: true, notifyPush: true },
+    include: { completions: { select: { period: true } } },
+  });
+
+  const now = nowInEcuador();
+  const out: PersonalReminderPushDTO[] = [];
+  for (const r of reminders) {
+    const period = currentPeriodFor(r.recurrence, now);
+    if (r.completions.some((c) => c.period === period)) continue;
+    if (!isDueNow(r, now)) continue;
+    const ownerId = r.createdById ?? "admin";
+    const url = ownerId === "admin" ? `/admin/dept/${r.deptId}` : "/area/workspace";
+    out.push({ ownerId, title: `DAFLOW · Recordatorio`, body: r.title, url });
+  }
+  return out;
 }

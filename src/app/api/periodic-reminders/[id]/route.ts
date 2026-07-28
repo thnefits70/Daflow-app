@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { canEditDeptKpis } from "@/lib/guards";
+import { canManagePeriodicReminder } from "@/lib/guards";
 
 const updateSchema = z.object({
   title: z.string().trim().min(1).optional(),
@@ -11,13 +11,14 @@ const updateSchema = z.object({
   date: z.string().nullable().optional(),
   timeOfDay: z.string().regex(/^\d{2}:\d{2}$/).nullable().optional(),
   isActive: z.boolean().optional(),
+  notifyPush: z.boolean().optional(),
 });
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const reminder = await prisma.periodicReminder.findUnique({ where: { id } });
   if (!reminder) return NextResponse.json({ error: "No encontrado." }, { status: 404 });
-  if (!(await canEditDeptKpis(reminder.deptId))) {
+  if (!(await canManagePeriodicReminder(reminder))) {
     return NextResponse.json({ error: "No autorizado." }, { status: 403 });
   }
 
@@ -38,6 +39,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       ...(d.date !== undefined ? { date: d.date ? new Date(d.date) : null } : {}),
       ...(d.timeOfDay !== undefined ? { timeOfDay: d.timeOfDay } : {}),
       ...(d.isActive !== undefined ? { isActive: d.isActive } : {}),
+      ...(d.notifyPush !== undefined ? { notifyPush: d.notifyPush } : {}),
     },
   });
 
@@ -48,7 +50,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   const { id } = await params;
   const reminder = await prisma.periodicReminder.findUnique({ where: { id } });
   if (!reminder) return NextResponse.json({ ok: true });
-  if (!(await canEditDeptKpis(reminder.deptId))) {
+  if (!(await canManagePeriodicReminder(reminder))) {
     return NextResponse.json({ error: "No autorizado." }, { status: 403 });
   }
 

@@ -109,6 +109,7 @@ export default async function WorkspacePage() {
         editable={false}
         kpisEditable={kpisEditable}
         unseenFeedbackCount={unseenFeedbackCount}
+        currentUserId={session.user.id}
       />
     </div>
   );

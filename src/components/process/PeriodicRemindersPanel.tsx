@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Check, Undo2, Trash2, Pencil } from "lucide-react";
+import { Plus, Check, Undo2, Trash2, Pencil, Bell } from "lucide-react";
+import { PushOptIn } from "@/components/shared/PushOptIn";
 
 type CompletionDTO = { period: string; completedAt: string; completedByName: string | null };
 type ReminderDTO = {
@@ -14,6 +15,9 @@ type ReminderDTO = {
   date: string | null;
   timeOfDay: string | null;
   isActive: boolean;
+  createdById: string | null;
+  createdByName: string | null;
+  notifyPush: boolean;
   completions: CompletionDTO[];
 };
 
@@ -46,9 +50,32 @@ function recurrenceLabel(r: ReminderDTO): string {
   return `Una vez · ${dateLabel}${r.timeOfDay ? ` · ${r.timeOfDay}` : ""}`;
 }
 
-const emptyForm = { title: "", detail: "", recurrence: "DAILY" as ReminderDTO["recurrence"], weekday: "1", date: "", timeOfDay: "" };
+const emptyForm = {
+  title: "",
+  detail: "",
+  recurrence: "DAILY" as ReminderDTO["recurrence"],
+  weekday: "1",
+  date: "",
+  timeOfDay: "",
+  notifyPush: false,
+};
 
-export function PeriodicRemindersPanel({ deptId, reminders, editable }: { deptId: string; reminders: ReminderDTO[]; editable: boolean }) {
+// Confirmado 2026-07-28: cada persona en Nómina puede crear y gestionar sus
+// propios recordatorios (createdById), sin necesidad de ser líder — el
+// líder/admin (canManageAll) conserva la capacidad de gestionar TODOS los
+// de su área, igual que antes. La lista sigue siendo compartida/visible
+// para todo el equipo, pero cada quien solo edita/completa/elimina lo suyo.
+export function PeriodicRemindersPanel({
+  deptId,
+  reminders,
+  canManageAll,
+  currentUserId,
+}: {
+  deptId: string;
+  reminders: ReminderDTO[];
+  canManageAll: boolean;
+  currentUserId: string | null;
+}) {
   const router = useRouter();
   const [tab, setTab] = useState<"active" | "inactive">("active");
   const [showForm, setShowForm] = useState(false);
@@ -60,6 +87,10 @@ export function PeriodicRemindersPanel({ deptId, reminders, editable }: { deptId
   const activeReminders = reminders.filter((r) => r.isActive);
   const inactiveReminders = reminders.filter((r) => !r.isActive);
   const shown = tab === "active" ? activeReminders : inactiveReminders;
+
+  function canManage(r: ReminderDTO) {
+    return canManageAll || (currentUserId !== null && r.createdById === currentUserId);
+  }
 
   const startNew = () => {
     setEditingId(null);
@@ -77,6 +108,7 @@ export function PeriodicRemindersPanel({ deptId, reminders, editable }: { deptId
       weekday: String(r.weekday ?? 1),
       date: r.date ? r.date.slice(0, 10) : "",
       timeOfDay: r.timeOfDay ?? "",
+      notifyPush: r.notifyPush,
     });
     setShowForm(true);
     setErr("");
@@ -95,6 +127,7 @@ export function PeriodicRemindersPanel({ deptId, reminders, editable }: { deptId
       weekday: form.recurrence === "WEEKLY" ? Number(form.weekday) : undefined,
       date: form.recurrence === "ONCE" ? form.date : undefined,
       timeOfDay: form.timeOfDay || undefined,
+      notifyPush: form.notifyPush,
     };
     const res = editingId
       ? await fetch(`/api/periodic-reminders/${editingId}`, {
@@ -157,10 +190,12 @@ export function PeriodicRemindersPanel({ deptId, reminders, editable }: { deptId
 
   return (
     <div>
+      <PushOptIn />
+
       <div className="text-[13px] text-steel mb-4 max-w-2xl">
         Recordatorios internos con su propia periodicidad — diario, semanal o una fecha específica, con hora
-        opcional. Al marcar "Realizado" desaparece hasta que vuelva a tocar automáticamente (mañana, la próxima
-        semana, o nunca más si es de una sola vez).
+        opcional. Cada quien crea y gestiona los suyos; al marcar "Realizado" desaparece hasta que vuelva a tocar
+        automáticamente (mañana, la próxima semana, o nunca más si es de una sola vez).
       </div>
 
       <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
@@ -180,18 +215,16 @@ export function PeriodicRemindersPanel({ deptId, reminders, editable }: { deptId
             Inactivos ({inactiveReminders.length})
           </button>
         </div>
-        {editable && (
-          <button
-            type="button"
-            className="inline-flex items-center gap-1.5 rounded border border-blue bg-blue px-3.5 py-2 text-[12.5px] font-semibold text-white cursor-pointer"
-            onClick={startNew}
-          >
-            <Plus size={14} /> Agregar recordatorio
-          </button>
-        )}
+        <button
+          type="button"
+          className="inline-flex items-center gap-1.5 rounded border border-blue bg-blue px-3.5 py-2 text-[12.5px] font-semibold text-white cursor-pointer"
+          onClick={startNew}
+        >
+          <Plus size={14} /> Agregar recordatorio
+        </button>
       </div>
 
-      {editable && showForm && (
+      {showForm && (
         <div className="bg-surface border border-rule rounded p-4 mb-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
             <input
@@ -253,6 +286,15 @@ export function PeriodicRemindersPanel({ deptId, reminders, editable }: { deptId
                 />
               </div>
             )}
+            <label className="flex items-center gap-2 text-[12.5px] sm:col-span-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={form.notifyPush}
+                onChange={(e) => setForm((f) => ({ ...f, notifyPush: e.target.checked }))}
+              />
+              <Bell size={13} className="text-teal" />
+              Avisarme por notificación push cuando esté vencido
+            </label>
           </div>
           <div className="flex items-center gap-2.5">
             <button
@@ -288,20 +330,29 @@ export function PeriodicRemindersPanel({ deptId, reminders, editable }: { deptId
         {shown.map((r) => {
           const period = currentPeriodFor(r);
           const rec = r.completions.find((c) => c.period === period);
+          const mine = canManage(r);
           return (
             <div key={r.id} className="bg-surface border border-rule rounded p-4">
               <div className="flex items-start justify-between gap-3 flex-wrap">
                 <div>
                   <div className="font-semibold text-[14px]">{r.title}</div>
                   {r.detail && <div className="text-[12.5px] text-ink/80 mt-0.5 max-w-md">{r.detail}</div>}
-                  <div className="text-[12px] text-steel mt-0.5">{recurrenceLabel(r)}</div>
+                  <div className="text-[12px] text-steel mt-0.5 flex items-center gap-1.5 flex-wrap">
+                    {recurrenceLabel(r)}
+                    {r.notifyPush && (
+                      <span className="inline-flex items-center gap-1 text-teal">
+                        <Bell size={11} /> Push
+                      </span>
+                    )}
+                    <span>· Creado por {r.createdByName ?? "—"}</span>
+                  </div>
                 </div>
                 <span className={`text-[12.5px] font-semibold whitespace-nowrap ${rec ? "text-green" : "text-steel"}`}>
                   {rec ? "Realizado" : "Pendiente"}
                 </span>
               </div>
 
-              {editable && (
+              {mine && (
                 <div className="flex items-center justify-end gap-2 mt-3 flex-wrap">
                   {rec ? (
                     <button
