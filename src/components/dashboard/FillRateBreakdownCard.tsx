@@ -1,3 +1,10 @@
+"use client";
+
+// Confirmado 2026-07-28 (bug real en producción): formatWeekShort vive en
+// WeeklyTrendChart.tsx ("use client") — llamarlo desde un componente de
+// servidor tumba la página entera con "Attempted to call X() from the
+// server but X is on the client". Este archivo tiene que ser client
+// component para poder usarlo, aunque no tenga estado propio.
 import { formatWeekShort } from "./WeeklyTrendChart";
 import type { FillRateBreakdown } from "@/lib/dashboard";
 
