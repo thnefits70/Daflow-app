@@ -7,11 +7,12 @@ import { RecognitionPodium } from "@/components/recognition/RecognitionPodium";
 import { ScoreGauge } from "./ScoreGauge";
 import { WeeklyTrendChart } from "./WeeklyTrendChart";
 import { KpiTile, FillRateTile, ReturnRateTile, WarrantyMonthTile } from "./KpiTile";
+import { FillRateBreakdownCard } from "./FillRateBreakdownCard";
 import { StoreFeedbackTile } from "./StoreFeedbackTile";
 import { StockoutBarChart } from "./StockoutBarChart";
 import { PieChart } from "./PieChart";
 import { OrgChart } from "./OrgChart";
-import type { DashboardData, WeeklyTrend, StockoutWeekPoint, WarrantyMonthlyChart, PieSlice } from "@/lib/dashboard";
+import type { DashboardData, WeeklyTrend, StockoutWeekPoint, WarrantyMonthlyChart, PieSlice, FillRateBreakdown } from "@/lib/dashboard";
 import type { StoreFeedbackAggregate, StoreFeedbackTrendPoint } from "@/lib/storeFeedback";
 import type { DuePeriodicReminderDTO } from "@/lib/periodicReminders";
 import type { TeamLearningPathResultDTO } from "@/lib/learningPaths";
@@ -33,6 +34,7 @@ export function Dashboard({
   data,
   weeklyTrend,
   fillRateTrend,
+  fillRateBreakdown,
   returnRateTrend,
   stockoutWeeks,
   warrantyMonthlyChart,
@@ -45,6 +47,7 @@ export function Dashboard({
   data: DashboardData;
   weeklyTrend?: WeeklyTrend;
   fillRateTrend?: WeeklyTrend;
+  fillRateBreakdown?: FillRateBreakdown;
   returnRateTrend?: WeeklyTrend;
   stockoutWeeks?: StockoutWeekPoint[];
   warrantyMonthlyChart?: WarrantyMonthlyChart | null;
@@ -88,6 +91,7 @@ export function Dashboard({
       {(warrantyMonthlyChart ||
         (warrantyReasonChart && warrantyReasonChart.length > 0) ||
         fillRateTrend ||
+        fillRateBreakdown ||
         returnRateTrend ||
         storeFeedback ||
         (stockoutWeeks && stockoutWeeks.length > 0)) && (
@@ -110,6 +114,12 @@ export function Dashboard({
 
           {fillRateTrend && <FillRateTile trend={fillRateTrend} />}
           {returnRateTrend && <ReturnRateTile trend={returnRateTrend} />}
+
+          {fillRateBreakdown && (
+            <div className="sm:col-span-2">
+              <FillRateBreakdownCard data={fillRateBreakdown} />
+            </div>
+          )}
 
           {stockoutWeeks && stockoutWeeks.length > 0 && (
             <div className="bg-surface border border-rule rounded-lg p-6 sm:col-span-2">

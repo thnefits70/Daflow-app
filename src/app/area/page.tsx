@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import {
   getWeeklyTrend,
   getFillRateTrend,
+  getLatestFillRateBreakdown,
   getReturnRateTrend,
   getStockoutWeeks,
   getDashboardData,
@@ -28,6 +29,7 @@ export default async function AreaHomePage() {
     scores,
     weeklyTrend,
     fillRateTrend,
+    fillRateBreakdown,
     returnRateTrend,
     stockoutWeeks,
     dashboardData,
@@ -49,6 +51,7 @@ export default async function AreaHomePage() {
     }),
     getWeeklyTrend(),
     getFillRateTrend(),
+    getLatestFillRateBreakdown(),
     getReturnRateTrend(),
     getStockoutWeeks(),
     getDashboardData(),
@@ -71,6 +74,7 @@ export default async function AreaHomePage() {
       trackKpis={dept.trackKpis}
       weeklyTrend={weeklyTrend}
       fillRateTrend={fillRateTrend}
+      fillRateBreakdown={fillRateBreakdown}
       returnRateTrend={returnRateTrend}
       stockoutWeeks={stockoutWeeks}
       warrantyMonthlyChart={warrantyMonthlyChart}

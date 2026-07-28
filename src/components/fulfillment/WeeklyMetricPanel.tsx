@@ -10,6 +10,9 @@ export type WeeklyMetricDTO = {
   week: string; // "YYYY-Www"
   value: number;
   notDispatched: number | null;
+  prepared: number | null;
+  generated: number | null;
+  outOfStock: number | null;
 };
 
 function formatWeek(week: string) {
@@ -24,10 +27,12 @@ function fillRate(value: number, notDispatched: number | null) {
   return Math.round((value / total) * 100);
 }
 
+// Confirmado 2026-07-28: bandas del boceto aprobado — ≥98% eficiente,
+// 95-97% regular, <95% alerta.
 function fillRateColor(pct: number) {
-  if (pct >= 100) return "#14C7C7";
-  if (pct >= 80) return "#1E5EFF";
-  return "#C4453A";
+  if (pct >= 98) return "#22C55E";
+  if (pct >= 95) return "#D9A441";
+  return "#E0574A";
 }
 
 const RECENT_WEEKS = 8;
@@ -50,7 +55,9 @@ export function WeeklyMetricPanel({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [week, setWeek] = useState("");
   const [value, setValue] = useState("");
-  const [notDispatched, setNotDispatched] = useState("");
+  const [prepared, setPrepared] = useState("");
+  const [generated, setGenerated] = useState("");
+  const [outOfStock, setOutOfStock] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [search, setSearch] = useState("");
@@ -65,7 +72,9 @@ export function WeeklyMetricPanel({
     setEditingId(null);
     setWeek("");
     setValue("");
-    setNotDispatched("");
+    setPrepared("");
+    setGenerated("");
+    setOutOfStock("");
     setFormOpen(true);
     setErr("");
   };
@@ -74,7 +83,9 @@ export function WeeklyMetricPanel({
     setEditingId(r.id);
     setWeek(r.week);
     setValue(String(r.value));
-    setNotDispatched(r.notDispatched === null ? "" : String(r.notDispatched));
+    setPrepared(r.prepared === null ? "" : String(r.prepared));
+    setGenerated(r.generated === null ? "" : String(r.generated));
+    setOutOfStock(r.outOfStock === null ? "" : String(r.outOfStock));
     setFormOpen(true);
     setErr("");
   };
@@ -88,7 +99,9 @@ export function WeeklyMetricPanel({
     setBusy(true);
     const payload = {
       value: Number(value),
-      notDispatched: notDispatched === "" ? null : Number(notDispatched),
+      prepared: prepared === "" ? null : Number(prepared),
+      generated: generated === "" ? null : Number(generated),
+      outOfStock: outOfStock === "" ? null : Number(outOfStock),
     };
     const res = editingId
       ? await fetch(`/api/weekly-metrics/${editingId}`, {
@@ -111,7 +124,9 @@ export function WeeklyMetricPanel({
     setEditingId(null);
     setWeek("");
     setValue("");
-    setNotDispatched("");
+    setPrepared("");
+    setGenerated("");
+    setOutOfStock("");
     router.refresh();
   };
 
@@ -144,19 +159,22 @@ export function WeeklyMetricPanel({
 
       {formOpen && (
         <div className="bg-surface border border-rule rounded-md p-4.5 mb-4">
-          <div className="grid grid-cols-3 gap-3 mb-3">
+          <div className="mb-3">
+            <label className="block mb-1 text-[10.5px] font-semibold uppercase tracking-wide text-steel">Semana</label>
+            <input
+              type="week"
+              disabled={!!editingId}
+              className="w-full max-w-[200px] rounded border border-rule px-2.5 py-2 text-[13.5px] disabled:bg-cloud disabled:text-steel"
+              value={week}
+              onChange={(e) => setWeek(e.target.value)}
+            />
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
             <div>
-              <label className="block mb-1 text-[10.5px] font-semibold uppercase tracking-wide text-steel">Semana</label>
-              <input
-                type="week"
-                disabled={!!editingId}
-                className="w-full rounded border border-rule px-2.5 py-2 text-[13.5px] disabled:bg-cloud disabled:text-steel"
-                value={week}
-                onChange={(e) => setWeek(e.target.value)}
-              />
-            </div>
-            <div>
-              <label className="block mb-1 text-[10.5px] font-semibold uppercase tracking-wide text-steel">{label}</label>
+              <label className="flex items-center gap-1.5 mb-1 text-[10.5px] font-semibold uppercase tracking-wide text-steel">
+                <span className="w-2 h-2 rounded-sm bg-teal shrink-0" />
+                {label} (despachadas)
+              </label>
               <input
                 type="number"
                 min={0}
@@ -164,26 +182,61 @@ export function WeeklyMetricPanel({
                 className="w-full rounded border border-rule px-2.5 py-2 text-[13.5px]"
                 value={value}
                 onChange={(e) => setValue(e.target.value)}
-                placeholder="ej. 1450"
+                placeholder="ej. 1920"
               />
+              <div className="text-[10.5px] text-steel mt-1">Se preparó, se etiquetó y se entregó al courier — el proceso completo.</div>
             </div>
             <div>
-              <label className="block mb-1 text-[10.5px] font-semibold uppercase tracking-wide text-steel">
-                Pedidos no despachados
+              <label className="flex items-center gap-1.5 mb-1 text-[10.5px] font-semibold uppercase tracking-wide text-steel">
+                <span className="w-2 h-2 rounded-sm bg-blue shrink-0" />
+                Guías preparadas
               </label>
               <input
                 type="number"
                 min={0}
                 step="1"
                 className="w-full rounded border border-rule px-2.5 py-2 text-[13.5px]"
-                value={notDispatched}
-                onChange={(e) => setNotDispatched(e.target.value)}
-                placeholder="ej. 150"
+                value={prepared}
+                onChange={(e) => setPrepared(e.target.value)}
+                placeholder="ej. 30"
               />
+              <div className="text-[10.5px] text-steel mt-1">Empacada y etiquetada, pero no se entregó al courier (ej. ya se había ido).</div>
+            </div>
+            <div>
+              <label className="flex items-center gap-1.5 mb-1 text-[10.5px] font-semibold uppercase tracking-wide text-steel">
+                <span className="w-2 h-2 rounded-sm bg-gold shrink-0" />
+                Guías generadas
+              </label>
+              <input
+                type="number"
+                min={0}
+                step="1"
+                className="w-full rounded border border-rule px-2.5 py-2 text-[13.5px]"
+                value={generated}
+                onChange={(e) => setGenerated(e.target.value)}
+                placeholder="ej. 20"
+              />
+              <div className="text-[10.5px] text-steel mt-1">Ya existe la guía/etiqueta, pero el producto no se empacó — no alcanzó el tiempo.</div>
+            </div>
+            <div>
+              <label className="flex items-center gap-1.5 mb-1 text-[10.5px] font-semibold uppercase tracking-wide text-steel">
+                <span className="w-2 h-2 rounded-sm bg-red shrink-0" />
+                Por falta de stock
+              </label>
+              <input
+                type="number"
+                min={0}
+                step="1"
+                className="w-full rounded border border-rule px-2.5 py-2 text-[13.5px]"
+                value={outOfStock}
+                onChange={(e) => setOutOfStock(e.target.value)}
+                placeholder="ej. 30"
+              />
+              <div className="text-[10.5px] text-steel mt-1">No se pudo ni preparar porque no había la mercadería disponible.</div>
             </div>
           </div>
           <div className="text-[11.5px] text-steel mb-3">
-            Opcional — con este dato calculamos el Fill Rate: pedidos despachados ÷ (despachados + no despachados).
+            Las 3 de la derecha son opcionales — con ellas calculamos el Fill Rate y el desglose que se ve en Inicio: despachadas ÷ (despachadas + preparadas + generadas + falta de stock).
           </div>
           {err && <div className="text-red text-[12.5px] mb-2.5">{err}</div>}
           <div className="flex items-center gap-2.5">
@@ -240,33 +293,43 @@ export function WeeklyMetricPanel({
 
       {visible.map((r) => {
         const rate = fillRate(r.value, r.notDispatched);
+        const hasBreakdown = r.prepared !== null || r.generated !== null || r.outOfStock !== null;
         return (
-          <div key={r.id} className="bg-surface border border-rule rounded p-3.5 mb-2 flex items-center justify-between gap-3">
-            <span className="font-semibold text-[13.5px]">{formatWeek(r.week)}</span>
-            <div className="flex items-center gap-4">
-              <span className="font-mono text-[13.5px]">{r.value.toLocaleString("es-MX")} despachados</span>
-              {r.notDispatched !== null && (
-                <span className="font-mono text-[13.5px] text-steel">{r.notDispatched.toLocaleString("es-MX")} pendientes</span>
-              )}
-              {rate !== null && (
-                <span
-                  className="font-mono text-[11px] font-semibold px-2.5 py-1 rounded-full"
-                  style={{ color: fillRateColor(rate), border: `1px solid ${fillRateColor(rate)}`, background: `${fillRateColor(rate)}1a` }}
-                >
-                  Fill Rate {rate}%
-                </span>
-              )}
-              {editable && (
-                <div className="flex items-center gap-2">
-                  <button type="button" className="text-steel hover:text-ink cursor-pointer" onClick={() => startEdit(r)}>
-                    <Pencil size={14} />
-                  </button>
-                  <button type="button" className="text-steel hover:text-red cursor-pointer" onClick={() => remove(r.id)}>
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-              )}
+          <div key={r.id} className="bg-surface border border-rule rounded p-3.5 mb-2">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <span className="font-semibold text-[13.5px]">{formatWeek(r.week)}</span>
+              <div className="flex items-center gap-3 flex-wrap">
+                <span className="font-mono text-[13.5px]">{r.value.toLocaleString("es-MX")} despachados</span>
+                {!hasBreakdown && r.notDispatched !== null && (
+                  <span className="font-mono text-[13.5px] text-steel">{r.notDispatched.toLocaleString("es-MX")} pendientes</span>
+                )}
+                {rate !== null && (
+                  <span
+                    className="font-mono text-[11px] font-semibold px-2.5 py-1 rounded-full"
+                    style={{ color: fillRateColor(rate), border: `1px solid ${fillRateColor(rate)}`, background: `${fillRateColor(rate)}1a` }}
+                  >
+                    Fill Rate {rate}%
+                  </span>
+                )}
+                {editable && (
+                  <div className="flex items-center gap-2">
+                    <button type="button" className="text-steel hover:text-ink cursor-pointer" onClick={() => startEdit(r)}>
+                      <Pencil size={14} />
+                    </button>
+                    <button type="button" className="text-steel hover:text-red cursor-pointer" onClick={() => remove(r.id)}>
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
+            {hasBreakdown && (
+              <div className="flex items-center gap-3 flex-wrap mt-2 pt-2 border-t border-dashed border-rule text-[11.5px] text-steel">
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-blue" />Preparadas: {(r.prepared ?? 0).toLocaleString("es-MX")}</span>
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-gold" />Generadas: {(r.generated ?? 0).toLocaleString("es-MX")}</span>
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-red" />Falta de stock: {(r.outOfStock ?? 0).toLocaleString("es-MX")}</span>
+              </div>
+            )}
           </div>
         );
       })}

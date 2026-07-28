@@ -706,7 +706,19 @@ model WeeklyMetricRecord {
 
   // Pedidos que quedaron sin despachar esa semana (opcional), usado para
   // calcular el Fill Rate: value / (value + notDispatched) * 100.
+  // Confirmado 2026-07-28: desde que existen las 3 columnas de abajo,
+  // notDispatched pasa a ser la SUMA de esas 3 (se sigue guardando para no
+  // romper el historial viejo, que nunca tuvo el desglose). Las semanas
+  // ya cargadas antes de este cambio se quedan tal cual, sin desglose.
   notDispatched Int?
+
+  // Desglose de Fill Rate — confirmado 2026-07-28, ver boceto aprobado.
+  // prepared: empacada y etiquetada pero no entregada al courier ese día.
+  // generated: la guía/etiqueta ya existe pero el producto no se empacó.
+  // outOfStock: no se pudo ni preparar por falta de mercadería.
+  prepared   Int?
+  generated  Int?
+  outOfStock Int?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

@@ -269,7 +269,7 @@ export function FillRateTile({ trend }: { trend: NonNullable<WeeklyTrend> }) {
       <MiniSparkline
         points={trend.points}
         color="#14C7C7"
-        dangerBelow={97}
+        dangerBelow={95}
         formatPeriod={formatWeekShort}
         formatValue={(v) => `${Math.round(v)}%`}
       />

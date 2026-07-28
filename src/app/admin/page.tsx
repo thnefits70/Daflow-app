@@ -2,6 +2,7 @@ import {
   getDashboardData,
   getWeeklyTrend,
   getFillRateTrend,
+  getLatestFillRateBreakdown,
   getReturnRateTrend,
   getStockoutWeeks,
   getWarrantyMonthlyChart,
@@ -18,11 +19,12 @@ import { Dashboard } from "@/components/dashboard/Dashboard";
 // líder ya ve los suyos en su propio Inicio (`getDuePeriodicReminders({deptId})`
 // en area/page.tsx) — el admin ya no ve ninguno aquí.
 export default async function AdminHomePage() {
-  const [data, weeklyTrend, fillRateTrend, returnRateTrend, stockoutWeeks, warrantyMonthlyChart, warrantyReasonChart, storeFeedback, storeFeedbackTrend, learningPathResults] =
+  const [data, weeklyTrend, fillRateTrend, fillRateBreakdown, returnRateTrend, stockoutWeeks, warrantyMonthlyChart, warrantyReasonChart, storeFeedback, storeFeedbackTrend, learningPathResults] =
     await Promise.all([
       getDashboardData(),
       getWeeklyTrend(),
       getFillRateTrend(),
+      getLatestFillRateBreakdown(),
       getReturnRateTrend(),
       getStockoutWeeks(),
       getWarrantyMonthlyChart(),
@@ -36,6 +38,7 @@ export default async function AdminHomePage() {
       data={data}
       weeklyTrend={weeklyTrend}
       fillRateTrend={fillRateTrend}
+      fillRateBreakdown={fillRateBreakdown}
       returnRateTrend={returnRateTrend}
       stockoutWeeks={stockoutWeeks}
       warrantyMonthlyChart={warrantyMonthlyChart}

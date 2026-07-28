@@ -138,6 +138,50 @@ export async function getFillRateTrend(): Promise<WeeklyTrend> {
   return { deptName: dept.name, points };
 }
 
+export type FillRateBreakdown = {
+  deptName: string;
+  week: string;
+  fillRatePct: number;
+  status: "good" | "regular" | "crit";
+  total: number;
+  dispatched: number;
+  prepared: number;
+  generated: number;
+  outOfStock: number;
+} | null;
+
+// Confirmado 2026-07-28: solo la semana MÁS RECIENTE que ya tenga el
+// desglose de las 4 categorías (no un historial) — se ve como una tarjeta
+// aparte en Inicio, arriba de Ruptura de Stock, SIN reemplazar la
+// tarjetita chiquita de tendencia que ya existe (esa muestra semana a
+// semana; esta muestra el detalle de la última). Semanas cargadas antes de
+// este cambio no tienen desglose, así que la tarjeta simplemente no
+// aparece hasta que exista la primera semana con los 3 campos nuevos.
+export async function getLatestFillRateBreakdown(): Promise<FillRateBreakdown> {
+  const dept = await prisma.department.findFirst({ where: { trackWeeklyMetric: true } });
+  if (!dept) return null;
+
+  const record = await prisma.weeklyMetricRecord.findFirst({
+    where: {
+      deptId: dept.id,
+      OR: [{ prepared: { not: null } }, { generated: { not: null } }, { outOfStock: { not: null } }],
+    },
+    orderBy: { week: "desc" },
+  });
+  if (!record) return null;
+
+  const prepared = record.prepared ?? 0;
+  const generated = record.generated ?? 0;
+  const outOfStock = record.outOfStock ?? 0;
+  const total = record.value + prepared + generated + outOfStock;
+  if (total === 0) return null;
+
+  const fillRatePct = Math.round((record.value / total) * 100);
+  const status = fillRatePct >= 98 ? "good" : fillRatePct >= 95 ? "regular" : "crit";
+
+  return { deptName: dept.name, week: record.week, fillRatePct, status, total, dispatched: record.value, prepared, generated, outOfStock };
+}
+
 // Tasa de devolución general — un valor mensual (no semanal) que Nairoby o el
 // admin cargan a mano. No está atada a un departamento, así que el "deptName"
 // del gráfico es solo un rótulo genérico, no un área real.

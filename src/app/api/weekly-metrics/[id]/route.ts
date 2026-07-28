@@ -5,7 +5,9 @@ import { canEditDeptKpis } from "@/lib/guards";
 
 const updateSchema = z.object({
   value: z.number().int().min(0),
-  notDispatched: z.number().int().min(0).nullable().optional(),
+  prepared: z.number().int().min(0).nullable().optional(),
+  generated: z.number().int().min(0).nullable().optional(),
+  outOfStock: z.number().int().min(0).nullable().optional(),
 });
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -22,7 +24,14 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Datos inválidos." }, { status: 400 });
   }
 
-  const record = await prisma.weeklyMetricRecord.update({ where: { id }, data: parsed.data });
+  const { prepared, generated, outOfStock } = parsed.data;
+  const hasBreakdown = prepared != null || generated != null || outOfStock != null;
+  const notDispatched = hasBreakdown ? (prepared ?? 0) + (generated ?? 0) + (outOfStock ?? 0) : null;
+
+  const record = await prisma.weeklyMetricRecord.update({
+    where: { id },
+    data: { ...parsed.data, notDispatched },
+  });
   return NextResponse.json(record);
 }
 
