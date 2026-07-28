@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Check, Lock, FileText, Scale, Waypoints, LayoutGrid, Loader2, ChevronLeft, ChevronRight, Clock } from "lucide-react";
+import { Check, Lock, FileText, Scale, Waypoints, LayoutGrid, Loader2, ChevronLeft, ChevronRight, Clock, RotateCcw, AlertTriangle } from "lucide-react";
 
 type StepDTO = {
   id: string;
@@ -11,9 +11,22 @@ type StepDTO = {
   meta: string;
   estimatedMinutes: number;
   questionCount: number;
-  status: "done" | "current" | "locked";
+  status: "done" | "current" | "locked" | "failed-cooldown" | "failed-retry-available";
   correctCount: number | null;
+  totalCount: number | null;
+  retryAvailableAt: string | null;
 };
+
+function noteColor(correct: number, total: number) {
+  const p = total > 0 ? correct / total : 0;
+  if (p >= 0.9) return "#14C7C7";
+  if (p >= 0.8) return "#22C55E";
+  return "#C4453A";
+}
+
+function formatDateTime(iso: string) {
+  return new Date(iso).toLocaleString("es-EC", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+}
 
 type PathDTO = {
   id: string;
@@ -110,45 +123,83 @@ export function MyLearningPaths({ initialPaths }: { initialPaths: PathDTO[] }) {
               />
             </div>
 
-            {path.steps.map((step) => (
-              <div
-                key={step.id}
-                className={`flex items-center gap-3 rounded-md border p-3 mb-2 ${
-                  step.status === "current" ? "border-blue bg-blue/5" : "border-rule bg-cloud"
-                } ${step.status === "done" ? "opacity-70" : ""}`}
-              >
+            {path.steps.map((step) => {
+              const isFailed = step.status === "failed-cooldown" || step.status === "failed-retry-available";
+              const note = step.totalCount ? (10 * (step.correctCount ?? 0)) / step.totalCount : null;
+              return (
                 <div
-                  className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
-                    step.status === "done"
-                      ? "bg-teal text-navy"
-                      : step.status === "current"
-                        ? "bg-blue text-white"
-                        : "bg-surface border border-rule text-steel"
-                  }`}
+                  key={step.id}
+                  className={`flex items-center gap-3 rounded-md border p-3 mb-2 ${
+                    step.status === "current"
+                      ? "border-blue bg-blue/5"
+                      : isFailed
+                        ? "border-red bg-red/5"
+                        : "border-rule bg-cloud"
+                  } ${step.status === "done" ? "opacity-70" : ""}`}
                 >
-                  {step.status === "done" ? <Check size={16} /> : step.status === "locked" ? <Lock size={13} /> : <KindIcon kind={step.kind} />}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="font-semibold text-[13.5px]">{step.title}</div>
-                  <div className="text-[11.5px] text-steel">
-                    {step.status === "done"
-                      ? `Completado · ${step.correctCount ?? 0}/${step.questionCount} correctas`
-                      : step.status === "current"
-                        ? `${step.meta} · ⏱ ~${step.estimatedMinutes} min`
-                        : "Se desbloquea al terminar el paso anterior"}
-                  </div>
-                </div>
-                {step.status === "current" && (
-                  <button
-                    type="button"
-                    className="px-3.5 py-1.5 rounded bg-blue text-white text-[12px] font-semibold cursor-pointer shrink-0"
-                    onClick={() => setTakingStepId(step.id)}
+                  <div
+                    className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
+                      step.status === "done"
+                        ? "bg-teal text-navy"
+                        : step.status === "current"
+                          ? "bg-blue text-white"
+                          : isFailed
+                            ? "bg-red text-white"
+                            : "bg-surface border border-rule text-steel"
+                    }`}
                   >
-                    Continuar
-                  </button>
-                )}
-              </div>
-            ))}
+                    {step.status === "done" ? (
+                      <Check size={16} />
+                    ) : step.status === "locked" ? (
+                      <Lock size={13} />
+                    ) : isFailed ? (
+                      <AlertTriangle size={14} />
+                    ) : (
+                      <KindIcon kind={step.kind} />
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-semibold text-[13.5px]">{step.title}</div>
+                    <div className="text-[11.5px] text-steel">
+                      {step.status === "done" && note !== null ? (
+                        <>
+                          Aprobado · <span className="font-bold" style={{ color: noteColor(step.correctCount ?? 0, step.totalCount ?? 1) }}>{note.toFixed(1)}/10</span>
+                        </>
+                      ) : step.status === "current" ? (
+                        `${step.meta} · ⏱ ~${step.estimatedMinutes} min`
+                      ) : step.status === "failed-cooldown" ? (
+                        <>
+                          Reprobado{note !== null ? ` (${note.toFixed(1)}/10)` : ""} · puedes reintentar el{" "}
+                          {step.retryAvailableAt ? formatDateTime(step.retryAvailableAt) : ""}
+                        </>
+                      ) : step.status === "failed-retry-available" ? (
+                        <>Reprobado{note !== null ? ` (${note.toFixed(1)}/10)` : ""} · ya puedes reintentar</>
+                      ) : (
+                        "Se desbloquea al aprobar el paso anterior"
+                      )}
+                    </div>
+                  </div>
+                  {step.status === "current" && (
+                    <button
+                      type="button"
+                      className="px-3.5 py-1.5 rounded bg-blue text-white text-[12px] font-semibold cursor-pointer shrink-0"
+                      onClick={() => setTakingStepId(step.id)}
+                    >
+                      Continuar
+                    </button>
+                  )}
+                  {step.status === "failed-retry-available" && (
+                    <button
+                      type="button"
+                      className="flex items-center gap-1.5 px-3.5 py-1.5 rounded bg-red text-white text-[12px] font-semibold cursor-pointer shrink-0"
+                      onClick={() => setTakingStepId(step.id)}
+                    >
+                      <RotateCcw size={13} /> Reintentar
+                    </button>
+                  )}
+                </div>
+              );
+            })}
           </div>
         );
       })}
@@ -162,7 +213,7 @@ function StepQuiz({ stepId, onExit, onFinished }: { stepId: string; onExit: () =
   const [answers, setAnswers] = useState<Record<string, Answer>>({});
   const [err, setErr] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [result, setResult] = useState<{ correctCount: number; total: number } | null>(null);
+  const [result, setResult] = useState<{ correctCount: number; total: number; passed: boolean; retryAvailableAt: string | null } | null>(null);
 
   useEffect(() => {
     fetch(`/api/my-learning-paths/steps/${stepId}`)
@@ -202,11 +253,19 @@ function StepQuiz({ stepId, onExit, onFinished }: { stepId: string; onExit: () =
   }
 
   if (result) {
+    const note = result.total > 0 ? (10 * result.correctCount) / result.total : 0;
     return (
       <div className="max-w-xl bg-surface border border-rule rounded-md p-6 text-center">
-        <div className="text-[18px] font-bold mb-2">¡Paso completado!</div>
-        <div className="text-[14px] text-steel mb-4">
-          Respondiste correctamente {result.correctCount} de {result.total} preguntas.
+        <div className="text-[18px] font-bold mb-2">{result.passed ? "¡Aprobado!" : "Reprobado"}</div>
+        <div className="text-[14px] text-steel mb-1">
+          Tu nota: <span className="font-bold" style={{ color: result.passed ? "#14C7C7" : "#C4453A" }}>{note.toFixed(1)}/10</span>
+        </div>
+        <div className="text-[13px] text-steel mb-4">
+          {result.passed
+            ? "Ya puedes continuar con el siguiente paso."
+            : `La nota mínima para aprobar es 8/10. Puedes reintentar el ${
+                result.retryAvailableAt ? formatDateTime(result.retryAvailableAt) : "más adelante"
+              } — repasa todo el contenido antes de volver a intentarlo.`}
         </div>
         <button type="button" className="px-4 py-2 rounded bg-blue text-white text-[13px] font-semibold cursor-pointer" onClick={onFinished}>
           Volver a mi ruta

@@ -14,6 +14,7 @@ import { OrgChart } from "./OrgChart";
 import type { DashboardRow, WeeklyTrend, StockoutWeekPoint, WarrantyMonthlyChart, PieSlice } from "@/lib/dashboard";
 import type { StoreFeedbackAggregate, StoreFeedbackTrendPoint } from "@/lib/storeFeedback";
 import type { DuePeriodicReminderDTO } from "@/lib/periodicReminders";
+import type { MyLearningPathSummaryDTO } from "@/lib/learningPaths";
 
 type ScoreRow = { id: string; examTitle: string; score: number; total: number; createdAt: string };
 
@@ -56,6 +57,7 @@ export function EmployeeHome({
   storeFeedbackTrend = [],
   rowsSorted,
   duePeriodicReminders = [],
+  learningPathSummary,
 }: {
   userName: string;
   deptName: string;
@@ -74,6 +76,7 @@ export function EmployeeHome({
   storeFeedbackTrend?: StoreFeedbackTrendPoint[];
   rowsSorted: DashboardRow[];
   duePeriodicReminders?: DuePeriodicReminderDTO[];
+  learningPathSummary?: MyLearningPathSummaryDTO;
 }) {
   const avg = scores.length
     ? Math.round(scores.reduce((a, s) => a + pct(s.score, s.total), 0) / scores.length)
@@ -168,6 +171,51 @@ export function EmployeeHome({
           </div>
         </div>
       </div>
+
+      {learningPathSummary?.hasAssignments && (
+        <Link
+          href="/area/mi-ruta"
+          className="block bg-surface border border-rule rounded-lg p-5 mb-7 hover:border-blue"
+        >
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div>
+              <div className="text-[11px] font-semibold tracking-wide uppercase text-steel mb-1">Tu ruta de conocimiento</div>
+              <div className="text-[13px] text-steel">
+                {learningPathSummary.stepsPassed}/{learningPathSummary.stepsTotal} pasos aprobados
+                {learningPathSummary.hasPendingRetry && (
+                  <span className="ml-2 font-mono text-[10px] font-semibold bg-red/15 text-red rounded-full px-2 py-0.5">
+                    Tienes un reintento pendiente
+                  </span>
+                )}
+              </div>
+            </div>
+            <span
+              className="font-mono text-[16px] font-bold px-3 py-1.5 rounded-full"
+              style={{
+                color:
+                  learningPathSummary.avgNote === null
+                    ? "#8ea0bd"
+                    : learningPathSummary.avgNote >= 9
+                      ? "#14C7C7"
+                      : learningPathSummary.avgNote >= 8
+                        ? "#22C55E"
+                        : "#C4453A",
+                border: `1px solid ${
+                  learningPathSummary.avgNote === null
+                    ? "#8ea0bd"
+                    : learningPathSummary.avgNote >= 9
+                      ? "#14C7C7"
+                      : learningPathSummary.avgNote >= 8
+                        ? "#22C55E"
+                        : "#C4453A"
+                }`,
+              }}
+            >
+              {learningPathSummary.avgNote === null ? "sin intentos aún" : `${learningPathSummary.avgNote.toFixed(1)}/10`}
+            </span>
+          </div>
+        </Link>
+      )}
 
       <h3 className="text-[14px] font-semibold mb-2.5">Accesos rápidos</h3>
       <div className="grid grid-cols-2 gap-3 mb-7">

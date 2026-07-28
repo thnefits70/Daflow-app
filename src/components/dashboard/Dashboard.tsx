@@ -13,6 +13,8 @@ import { OrgChart } from "./OrgChart";
 import type { DashboardData, WeeklyTrend, StockoutWeekPoint, WarrantyMonthlyChart, PieSlice } from "@/lib/dashboard";
 import type { StoreFeedbackAggregate, StoreFeedbackTrendPoint } from "@/lib/storeFeedback";
 import type { DuePeriodicReminderDTO } from "@/lib/periodicReminders";
+import type { TeamLearningPathResultDTO } from "@/lib/learningPaths";
+import { GraduationCap } from "lucide-react";
 
 // Mismas bandas que ScoreGauge (confirmado 2026-07-27, escala de 1 a 10):
 // <5 riesgo, 5-8 regular, 8-9 muy bueno, 9-10 excelente.
@@ -37,6 +39,7 @@ export function Dashboard({
   storeFeedback,
   storeFeedbackTrend = [],
   duePeriodicReminders = [],
+  learningPathResults = [],
 }: {
   data: DashboardData;
   weeklyTrend?: WeeklyTrend;
@@ -48,6 +51,7 @@ export function Dashboard({
   storeFeedback?: StoreFeedbackAggregate | null;
   storeFeedbackTrend?: StoreFeedbackTrendPoint[];
   duePeriodicReminders?: DuePeriodicReminderDTO[];
+  learningPathResults?: TeamLearningPathResultDTO[];
 }) {
   const { rows, rowsSorted, totalAttempts, overallAvg } = data;
 
@@ -139,6 +143,42 @@ export function Dashboard({
           </div>
         </div>
       </div>
+
+      {learningPathResults.length > 0 && (
+        <div className="mb-7">
+          <h3 className="text-[14px] font-semibold mb-2.5 flex items-center gap-1.5">
+            <GraduationCap size={15} className="text-steel" /> Rutas de conocimiento del equipo
+          </h3>
+          {learningPathResults.map((r) => (
+            <div key={r.userId} className="bg-surface border border-rule rounded p-4 mb-2.5 flex items-center justify-between gap-3 flex-wrap">
+              <div className="min-w-0">
+                <div className="font-semibold text-[13.5px]">{r.name}</div>
+                <div className="text-[11.5px] text-steel truncate">
+                  {r.position ?? "Sin puesto"}
+                  {r.department ? ` · ${r.department}` : ""} · {r.pathTitles.join(", ")}
+                </div>
+              </div>
+              <div className="flex items-center gap-3 shrink-0">
+                <span className="font-mono text-[11px] text-steel">
+                  {r.stepsPassed}/{r.stepsTotal} pasos aprobados
+                </span>
+                {r.hasPendingRetry && (
+                  <span className="font-mono text-[10px] font-semibold bg-red/15 text-red rounded-full px-2 py-0.5">Reintento pendiente</span>
+                )}
+                <span
+                  className="font-mono text-[13px] font-bold px-2.5 py-1 rounded-full"
+                  style={{
+                    color: r.avgNote === null ? "#8ea0bd" : r.avgNote >= 9 ? "#14C7C7" : r.avgNote >= 8 ? "#22C55E" : "#C4453A",
+                    border: `1px solid ${r.avgNote === null ? "#8ea0bd" : r.avgNote >= 9 ? "#14C7C7" : r.avgNote >= 8 ? "#22C55E" : "#C4453A"}`,
+                  }}
+                >
+                  {r.avgNote === null ? "sin intentos" : `${r.avgNote.toFixed(1)}/10`}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       <h3 className="text-[14px] font-semibold mb-2.5">Estado de conocimiento por área (de mejor a peor)</h3>
       {rowsSorted.length === 0 && (

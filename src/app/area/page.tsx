@@ -12,6 +12,7 @@ import {
 } from "@/lib/dashboard";
 import { getStoreFeedbackAggregate, getStoreFeedbackTrend } from "@/lib/storeFeedback";
 import { getDuePeriodicReminders } from "@/lib/periodicReminders";
+import { getMyLearningPaths, summarizeMyLearningPaths } from "@/lib/learningPaths";
 import { EmployeeHome } from "@/components/dashboard/EmployeeHome";
 
 export default async function AreaHomePage() {
@@ -35,6 +36,7 @@ export default async function AreaHomePage() {
     storeFeedback,
     storeFeedbackTrend,
     duePeriodicReminders,
+    myLearningPaths,
   ] = await Promise.all([
     prisma.department.findUnique({ where: { id: deptId } }),
     prisma.process.count({ where: { deptId } }),
@@ -55,6 +57,7 @@ export default async function AreaHomePage() {
     getStoreFeedbackAggregate(),
     getStoreFeedbackTrend(),
     getDuePeriodicReminders({ deptId }),
+    getMyLearningPaths(session.user.id),
   ]);
   if (!dept) redirect("/api/auth/force-logout");
 
@@ -76,6 +79,7 @@ export default async function AreaHomePage() {
       storeFeedbackTrend={storeFeedbackTrend}
       duePeriodicReminders={duePeriodicReminders}
       rowsSorted={dashboardData.rowsSorted}
+      learningPathSummary={summarizeMyLearningPaths(myLearningPaths)}
       scores={scores.map((s) => ({
         id: s.id,
         examTitle: s.exam.title,

@@ -1259,17 +1259,26 @@ model LearningPathAssignment {
   @@index([userId])
 }
 
+// Confirmado 2026-07-27: aprobar un paso requiere nota >= 8/10
+// (correctCount/totalCount). Si reprueba, no desbloquea el siguiente paso —
+// puede reintentar recién a las 24 horas laborables (attemptNumber sube en
+// cada intento, así el muestreo anti-copia también cambia entre intentos).
 model LearningPathStepProgress {
-  id          String           @id @default(cuid())
-  stepId      String
-  step        LearningPathStep @relation(fields: [stepId], references: [id], onDelete: Cascade)
-  userId      String
-  user        User             @relation("LearningPathStepProgressBy", fields: [userId], references: [id], onDelete: Cascade)
-  completedAt DateTime?
+  id               String           @id @default(cuid())
+  stepId           String
+  step             LearningPathStep @relation(fields: [stepId], references: [id], onDelete: Cascade)
+  userId           String
+  user             User             @relation("LearningPathStepProgressBy", fields: [userId], references: [id], onDelete: Cascade)
+  attemptNumber    Int              @default(1)
+  completedAt      DateTime?
+  correctCount     Int?
+  totalCount       Int?
+  // Solo si reprobó (correctCount/totalCount < 0.8) — cuándo puede reintentar.
+  retryAvailableAt DateTime?
 
   answers LearningPathAnswer[]
 
-  @@unique([stepId, userId])
+  @@unique([stepId, userId, attemptNumber])
   @@index([userId])
 }
 
