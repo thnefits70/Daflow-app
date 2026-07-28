@@ -420,8 +420,16 @@ async function getPaymentReminderPendingItems(deptId: string, href: string): Pro
 // 2nd week of the month (starting the 2nd Wednesday), reviewing the previous
 // month. Only needs at least one evaluation logged for that period — she
 // doesn't have to cover every store, just start the round.
+//
+// Confirmado 2026-07-28: julio 2026 no cuenta — recién van a empezar a
+// hacer esto en agosto. No debe aparecer ningún pendiente/notificación de
+// este tema (ni en la tarjeta de Pendientes ni por push) antes de ese mes.
+const STORE_FEEDBACK_START_MONTH = "2026-08";
+
 async function getStoreFeedbackPendingItem(href: string): Promise<PendingItem | null> {
   const today = currentMonthStr();
+  if (today < STORE_FEEDBACK_START_MONTH) return null;
+
   const prev = prevMonthStr(today);
   const startDate = nthWeekdayOfMonth(today, 3, 2); // 3 = miércoles, 2da ocurrencia
   if (nowInEcuador() < startDate) return null;
