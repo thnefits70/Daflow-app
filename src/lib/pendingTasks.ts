@@ -418,18 +418,21 @@ async function getStoreFeedbackPendingItem(href: string): Promise<PendingItem | 
 // leader gets whichever of Roles de pago/Devolución/Garantías (Finanzas),
 // Pedidos despachados (whoever leads the trackWeeklyMetric department), or
 // Ruptura de Stock (Inventario) applies to them. Nobody sees anyone else's.
-export async function getPendingTasksForCurrentUser(): Promise<PendingTasks | null> {
-  const session = await auth();
-  if (!session) return null;
+//
+// Split into "for a given actor" (no session dependency, reusable from the
+// push-notification cron sweep, which runs with nobody logged in) and "for
+// the current session" (the original entry point, used by every page).
+export type PendingTasksActor = { isAdmin: true } | { isAdmin: false; userId: string };
 
-  if (session.user.role === "admin") {
+export async function getPendingTasksForActor(actor: PendingTasksActor): Promise<PendingTasks | null> {
+  if (actor.isAdmin) {
     const items = await getFeedbackPendingItems();
     if (items.length === 0) return null;
     return { title: "Pendientes de esta semana", sub: "Como administrador", items };
   }
 
   const me = await prisma.user.findUnique({
-    where: { id: session.user.id },
+    where: { id: actor.userId },
     select: {
       isLeader: true,
       leadsDeptId: true,
@@ -473,4 +476,26 @@ export async function getPendingTasksForCurrentUser(): Promise<PendingTasks | nu
     sub: `Como líder de ${me.leadsDept.name}`,
     items,
   };
+}
+
+export async function getPendingTasksForCurrentUser(): Promise<PendingTasks | null> {
+  const session = await auth();
+  if (!session) return null;
+  return getPendingTasksForActor(
+    session.user.role === "admin" ? { isAdmin: true } : { isAdmin: false, userId: session.user.id }
+  );
+}
+
+// Todo actor que alguna vez podría tener algo en "Pendientes" — admin
+// siempre, más cada líder activo con un área a cargo. Usado por el barrido
+// del cron de notificaciones push (corre sin nadie con sesión iniciada).
+export async function getAllPendingTasksActors(): Promise<{ ownerId: string; actor: PendingTasksActor }[]> {
+  const leaders = await prisma.user.findMany({
+    where: { isLeader: true, isActive: true, leadsDeptId: { not: null } },
+    select: { id: true },
+  });
+  return [
+    { ownerId: "admin", actor: { isAdmin: true } as const },
+    ...leaders.map((l) => ({ ownerId: l.id, actor: { isAdmin: false as const, userId: l.id } })),
+  ];
 }

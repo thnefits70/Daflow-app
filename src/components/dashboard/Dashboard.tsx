@@ -1,5 +1,6 @@
 import { Building2 } from "lucide-react";
 import { DailyQuoteBanner } from "./DailyQuoteBanner";
+import { PushOptIn } from "@/components/shared/PushOptIn";
 import { PendingTasksCard } from "./PendingTasksCard";
 import { PeriodicRemindersCard } from "./PeriodicRemindersCard";
 import { RecognitionPodium } from "@/components/recognition/RecognitionPodium";
@@ -69,6 +70,7 @@ export function Dashboard({
         <div />
       </div>
 
+      <PushOptIn />
       <PendingTasksCard />
       <PeriodicRemindersCard items={duePeriodicReminders} showDept />
 

@@ -26,6 +26,7 @@
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",
     "resend": "^6.17.2",
+    "web-push": "^3.6.7",
     "xlsx": "^0.18.5",
     "zod": "^4.4.3"
   },
@@ -37,6 +38,7 @@
     "@types/pg": "^8.20.0",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/web-push": "^3.6.4",
     "dotenv": "^17.4.2",
     "eslint": "^9",
     "eslint-config-next": "16.2.10",

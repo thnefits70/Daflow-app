@@ -1356,3 +1356,22 @@ model NancyMessage {
 
   @@index([conversationId])
 }
+
+// Confirmado 2026-07-28: notificaciones push (laptop y celular) para avisar
+// de "Pendientes" aunque la persona no tenga DAFLOW abierto. ownerId es
+// User.id o el sentinel "admin" (mismo patrón sin FK que NancyConversation).
+// Una persona puede tener varias suscripciones a la vez (una por
+// celular/laptop donde active el permiso) — por eso es una tabla aparte y no
+// un campo único en User. `endpoint` es único porque el navegador lo genera
+// distinto por dispositivo/instalación.
+model PushSubscription {
+  id        String   @id @default(cuid())
+  ownerId   String
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  @@index([ownerId])
+}
