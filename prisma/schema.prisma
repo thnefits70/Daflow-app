@@ -1375,3 +1375,19 @@ model PushSubscription {
 
   @@index([ownerId])
 }
+
+// Confirmado 2026-07-28: no todos quieren que TODOS sus tipos de pendiente
+// les llegue como notificación push — cada quien puede apagar tipos
+// puntuales (ej. "Pagos recordatorios" sí, "Roles de pago" no). Por defecto
+// todo está activado — una fila aquí SOLO existe para un tipo que la
+// persona apagó explícitamente; su ausencia significa "activado". Así nadie
+// tiene que configurar nada si le sirve el comportamiento por defecto.
+model PushCategoryPreference {
+  id         String   @id @default(cuid())
+  ownerId    String
+  type       String
+  disabledAt DateTime @default(now())
+
+  @@unique([ownerId, type])
+  @@index([ownerId])
+}

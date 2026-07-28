@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAllPendingTasksActors, getPendingTasksForActor } from "@/lib/pendingTasks";
+import { getDisabledTypes } from "@/lib/pushPreferences";
 import { sendPushToOwner } from "@/lib/webPush";
 
 // Disparado por Vercel Cron (ver vercel.json) una vez al día. Protegido por
@@ -20,11 +21,20 @@ export async function GET(req: NextRequest) {
     const tasks = await getPendingTasksForActor(actor);
     if (!tasks || tasks.items.length === 0) continue;
 
-    const first = tasks.items[0];
+    // Confirmado 2026-07-28: cada quien puede apagar tipos puntuales de
+    // pendiente (ej. "Pagos recordatorios" sí, "Roles de pago" no) — se
+    // filtra aquí, no en getPendingTasksForActor, porque la tarjeta de
+    // Pendientes dentro de DAFLOW debe seguir mostrando todo siempre; la
+    // preferencia solo decide qué se manda como notificación externa.
+    const disabled = await getDisabledTypes(ownerId);
+    const notifiable = tasks.items.filter((i) => !disabled.has(i.type));
+    if (notifiable.length === 0) continue;
+
+    const first = notifiable[0];
     const body =
-      tasks.items.length === 1
+      notifiable.length === 1
         ? `${first.label} — ${first.meta}`
-        : `${first.label} — ${first.meta} (+${tasks.items.length - 1} más)`;
+        : `${first.label} — ${first.meta} (+${notifiable.length - 1} más)`;
 
     await sendPushToOwner(ownerId, {
       title: `DAFLOW · ${tasks.title}`,

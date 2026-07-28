@@ -178,7 +178,12 @@ async function monthlyReviewStatus(
 }
 
 // ---------------- Public types ----------------
+// `type` es el identificador estable de la categoría (ej. "roles_de_pago")
+// — confirmado 2026-07-28, usado para que cada persona pueda activar o
+// desactivar notificaciones push por tipo, sin depender del texto (que sí
+// puede variar, ej. "Feedback semanal — Análisis de Mercado").
 export type PendingItem = {
+  type: string;
   icon: string;
   label: string;
   meta: string;
@@ -187,6 +192,19 @@ export type PendingItem = {
 };
 
 export type PendingTasks = { title: string; sub: string; items: PendingItem[] };
+
+// Catálogo de categorías notificables por push, con su etiqueta legible —
+// usado por /api/push/preferences para armar la lista de interruptores.
+export const PENDING_TYPE_CATALOG: Record<string, string> = {
+  feedback: "Feedback semanal/mensual de departamentos",
+  roles_de_pago: "Roles de pago",
+  tasa_devolucion: "Tasa de Devolución General",
+  kpi_garantias: "KPI de Garantías",
+  pagos_recordatorios: "Pagos recordatorios",
+  servicio_postventa: "Servicio Postventa",
+  pedidos_despachados: "Pedidos despachados / Fill Rate",
+  ruptura_stock: "Ruptura de Stock",
+};
 
 // Each department's admin-leader feedback meeting falls on a different
 // weekday — confirmed by the user 2026-07-21: Análisis de Mercado (Bryan)
@@ -232,6 +250,7 @@ async function getFeedbackPendingItems(): Promise<PendingItem[]> {
       const status = await monthlyReviewStatus(existsFn, monthlyCfg.weekday, monthlyCfg.occurrence);
       if (status) {
         items.push({
+          type: "feedback",
           icon: "📝",
           label: `Feedback mensual — ${d.name}`,
           meta: `${formatMonthLabel(status.month)} · atrasado`,
@@ -245,6 +264,7 @@ async function getFeedbackPendingItems(): Promise<PendingItem[]> {
     const status = await weeklyPendingStatus(existsFn, FEEDBACK_REVIEW_WEEKDAY[d.code] ?? 1);
     if (status) {
       items.push({
+        type: "feedback",
         icon: "📝",
         label: `Feedback semanal — ${d.name}`,
         meta: `${formatWeekLabel(status.week)} · atrasado`,
@@ -263,6 +283,7 @@ async function getWeeklyMetricPendingItem(deptId: string, href: string): Promise
   });
   if (!status) return null;
   return {
+    type: "pedidos_despachados",
     icon: "📦",
     label: "Pedidos despachados / Fill Rate",
     meta: `${formatWeekLabel(status.week)} · atrasado`,
@@ -281,6 +302,7 @@ async function getStockoutPendingItem(href: string): Promise<PendingItem | null>
   });
   if (!status) return null;
   return {
+    type: "ruptura_stock",
     icon: "🗃️",
     label: "Ruptura de Stock",
     meta: `${formatWeekLabel(status.week)} · atrasado`,
@@ -310,6 +332,7 @@ async function getPayStubPendingItem(href: string): Promise<PendingItem | null> 
     const missing = await countMissingPayStubs(pm, py);
     if (missing > 0) {
       return {
+        type: "roles_de_pago",
         icon: "💳",
         label: "Roles de pago",
         meta: `Faltan ${missing} persona${missing === 1 ? "" : "s"} · ${formatMonthLabel(prev)} · atrasado`,
@@ -328,6 +351,7 @@ async function getReturnRatePendingItem(href: string): Promise<PendingItem | nul
   const prev = prevMonthStr(today);
   if (fixedDayDeadlinePassed(today, 4) && !(await prisma.returnRateRecord.findUnique({ where: { month: prev } }))) {
     return {
+      type: "tasa_devolucion",
       icon: "📉",
       label: "Tasa de Devolución General",
       meta: `${formatMonthLabel(prev)} · atrasado`,
@@ -347,6 +371,7 @@ async function getWarrantyPendingItem(href: string): Promise<PendingItem | null>
   const prev = prevMonthStr(today);
   if (fixedDayDeadlinePassed(today, 1) && !(await prisma.warrantyMonthTotal.findUnique({ where: { month: prev } }))) {
     return {
+      type: "kpi_garantias",
       icon: "🛡️",
       label: "KPI de Garantías",
       meta: `${formatMonthLabel(prev)} · atrasado`,
@@ -380,6 +405,7 @@ async function getPaymentReminderPendingItems(deptId: string, href: string): Pro
     if (record) continue;
     const amountLabel = r.amount != null ? ` · $${r.amount.toFixed(2)}` : "";
     items.push({
+      type: "pagos_recordatorios",
       icon: "💳",
       label: r.name,
       meta: `Vence el día ${r.dueDay}${amountLabel}${r.paymentMethod ? " · " + r.paymentMethod : ""} · atrasado`,
@@ -404,6 +430,7 @@ async function getStoreFeedbackPendingItem(href: string): Promise<PendingItem | 
   if (hasAny > 0) return null;
 
   return {
+    type: "servicio_postventa",
     icon: "🏬",
     label: "Servicio Postventa — feedback de tiendas",
     meta: `${formatMonthLabel(prev)} · atrasado`,
@@ -484,6 +511,34 @@ export async function getPendingTasksForCurrentUser(): Promise<PendingTasks | nu
   return getPendingTasksForActor(
     session.user.role === "admin" ? { isAdmin: true } : { isAdmin: false, userId: session.user.id }
   );
+}
+
+// Qué tipos de pendiente podrían ALGUNA VEZ aplicarle a este actor — a
+// diferencia de getPendingTasksForActor, no depende de si algo está
+// vencido ahora mismo, así la persona puede configurar sus preferencias de
+// notificación push desde el día uno, antes de que exista ningún atrasado.
+export async function getPossiblePendingTypesForActor(
+  actor: PendingTasksActor
+): Promise<{ type: string; label: string }[]> {
+  const types: string[] = [];
+
+  if (actor.isAdmin) {
+    types.push("feedback");
+  } else {
+    const me = await prisma.user.findUnique({
+      where: { id: actor.userId },
+      select: { isLeader: true, leadsDeptId: true, leadsDept: { select: { code: true, trackWeeklyMetric: true } } },
+    });
+    if (!me?.isLeader || !me.leadsDeptId || !me.leadsDept) return [];
+
+    if (me.leadsDept.code === "FIN") {
+      types.push("roles_de_pago", "tasa_devolucion", "kpi_garantias", "pagos_recordatorios", "servicio_postventa");
+    }
+    if (me.leadsDept.trackWeeklyMetric) types.push("pedidos_despachados");
+    if (me.leadsDept.code === "INV") types.push("ruptura_stock");
+  }
+
+  return types.map((type) => ({ type, label: PENDING_TYPE_CATALOG[type] }));
 }
 
 // Todo actor que alguna vez podría tener algo en "Pendientes" — admin
