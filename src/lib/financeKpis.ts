@@ -19,7 +19,9 @@ export type FinanceUploadDTO = {
 
 export type FinanceKpiSettingsDTO = {
   targetMargenBruto: number;
+  excelenteMargenBruto: number;
   targetMargenOperativo: number;
+  excelenteMargenOperativo: number;
   targetMargenNeto: number;
   excelenteMargenNeto: number;
   roiBandRed: number;
@@ -40,8 +42,10 @@ export type FinanceKpiDataDTO = {
 };
 
 const DEFAULT_SETTINGS: FinanceKpiSettingsDTO = {
-  targetMargenBruto: 35,
-  targetMargenOperativo: 15,
+  targetMargenBruto: 30,
+  excelenteMargenBruto: 40,
+  targetMargenOperativo: 20,
+  excelenteMargenOperativo: 30,
   targetMargenNeto: 20,
   excelenteMargenNeto: 30,
   roiBandRed: 15,
@@ -106,7 +110,9 @@ export async function getFinanceKpiData(deptId: string): Promise<FinanceKpiDataD
     settings: settings
       ? {
           targetMargenBruto: settings.targetMargenBruto,
+          excelenteMargenBruto: settings.excelenteMargenBruto,
           targetMargenOperativo: settings.targetMargenOperativo,
+          excelenteMargenOperativo: settings.excelenteMargenOperativo,
           targetMargenNeto: settings.targetMargenNeto,
           excelenteMargenNeto: settings.excelenteMargenNeto,
           roiBandRed: settings.roiBandRed,

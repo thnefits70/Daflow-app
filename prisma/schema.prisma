@@ -545,13 +545,18 @@ model FinanceKpiSettings {
   deptId     String     @unique
   department Department @relation(fields: [deptId], references: [id], onDelete: Cascade)
 
-  targetMargenBruto     Float @default(35)
-  targetMargenOperativo Float @default(15)
-  // Margen neto usa bandas absolutas propias (no un solo "target" relativo
-  // como bruto/operativo): <targetMargenNeto alerta, hasta excelenteMargenNeto
-  // saludable, por encima excelente.
-  targetMargenNeto      Float @default(20)
-  excelenteMargenNeto   Float @default(30)
+  // Confirmado 2026-07-28: margen bruto/operativo usan el mismo esquema de
+  // bandas absolutas que margen neto (ya no "distancia a una sola meta"):
+  // <targetMargenX alerta, hasta excelenteMargenX saludable, por encima
+  // excelente. Valores calculados por el asistente en base a los meses
+  // reales ya cargados (ene-may 2026) y aprobados por el admin — fijos, sin
+  // campo editable en la UI (a diferencia de la tasa de impuesto).
+  targetMargenBruto        Float @default(30)
+  excelenteMargenBruto     Float @default(40)
+  targetMargenOperativo    Float @default(20)
+  excelenteMargenOperativo Float @default(30)
+  targetMargenNeto         Float @default(20)
+  excelenteMargenNeto      Float @default(30)
 
   // Confirmado 2026-07-22: <roiBandRed malo, hasta roiBandYellow regular,
   // hasta roiBandExcellent saludable, por encima excelente — mismo patrón de

@@ -6,7 +6,9 @@ import { canEditDeptKpis } from "@/lib/guards";
 const settingsSchema = z.object({
   deptId: z.string().min(1),
   targetMargenBruto: z.number().min(0).max(100).optional(),
+  excelenteMargenBruto: z.number().min(0).max(100).optional(),
   targetMargenOperativo: z.number().min(0).max(100).optional(),
+  excelenteMargenOperativo: z.number().min(0).max(100).optional(),
   targetMargenNeto: z.number().min(0).max(100).optional(),
   excelenteMargenNeto: z.number().min(0).max(100).optional(),
   roiBandRed: z.number().min(0).max(100).optional(),

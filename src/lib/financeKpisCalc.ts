@@ -81,25 +81,18 @@ export function chronoDelta(
   return { pctDiff, moneyDiff };
 }
 
-export type StatusBand = { cls: "good" | "warn" | "crit"; color: "good" | "warn" | "crit"; label: string };
-
-// Margen bruto/operativo — relative to a single confirmed target (still
-// placeholders for bruto/operativo until the user confirms real numbers).
-export function statusForMargin(value: number, target: number): StatusBand {
-  if (value >= target) return { cls: "good", color: "good", label: "sobre la meta" };
-  if (value >= target * 0.8) return { cls: "warn", color: "warn", label: "cerca de la meta" };
-  return { cls: "crit", color: "crit", label: "bajo la meta" };
-}
-
-// Margen neto — absolute bands confirmed for real: <alerta rojo,
-// alerta-excelente verde saludable, >excelente teal "excelente".
-export function marginNetoStatus(value: number, bands: { alerta: number; excelente: number }) {
+// Margen bruto/operativo/neto — todos usan el mismo esquema de bandas
+// absolutas: <alerta rojo, alerta-excelente verde saludable, >excelente
+// teal "excelente". Confirmado 2026-07-28: bruto y operativo migraron de un
+// solo "target relativo" a este mismo esquema (ya usado por margen neto
+// desde antes), con valores calculados en base a los meses reales cargados.
+export function marginBandStatus(value: number, bands: { alerta: number; excelente: number }) {
   if (value >= bands.excelente) return { cls: "excelente" as const, label: "Excelente", icon: "🌟" };
   if (value >= bands.alerta) return { cls: "good" as const, label: "Saludable", icon: "🟢" };
   return { cls: "crit" as const, label: "Alerta", icon: "🔴" };
 }
 
-// Confirmado 2026-07-22: 4 niveles, mismo patrón que marginNetoStatus —
+// Confirmado 2026-07-22: 4 niveles, mismo patrón que marginBandStatus —
 // <red malo, hasta yellow regular, hasta excellent saludable, por encima excelente.
 export function roiStatus(value: number, bands: { red: number; yellow: number; excellent: number }) {
   if (value >= bands.excellent) return { cls: "excelente" as const, label: "Excelente" };

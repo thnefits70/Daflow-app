@@ -83,8 +83,9 @@ export function buildNancyContext(data: FinanceKpiDataDTO, filters: { brand: str
 
   const s = data.settings;
   const settingsText =
-    `Metas configuradas: margen bruto objetivo ${s.targetMargenBruto}%, margen operativo objetivo ${s.targetMargenOperativo}%, ` +
-    `margen neto objetivo ${s.targetMargenNeto}% (excelente desde ${s.excelenteMargenNeto}%), tasa de impuesto ${s.taxRatePct}%. ` +
+    `Bandas de margen bruto: alerta <${s.targetMargenBruto}%, saludable ${s.targetMargenBruto}-${s.excelenteMargenBruto}%, excelente >${s.excelenteMargenBruto}%. ` +
+    `Bandas de margen operativo: alerta <${s.targetMargenOperativo}%, saludable ${s.targetMargenOperativo}-${s.excelenteMargenOperativo}%, excelente >${s.excelenteMargenOperativo}%. ` +
+    `Bandas de margen neto: alerta <${s.targetMargenNeto}%, saludable ${s.targetMargenNeto}-${s.excelenteMargenNeto}%, excelente >${s.excelenteMargenNeto}%. Tasa de impuesto ${s.taxRatePct}%. ` +
     `Bandas de ROI: rojo <${s.roiBandRed}%, regular ${s.roiBandRed}-${s.roiBandYellow}%, saludable ${s.roiBandYellow}-${s.roiBandExcellent}%, excelente ≥${s.roiBandExcellent}%.`;
 
   const lastBalance = data.sharedBalances[data.sharedBalances.length - 1];

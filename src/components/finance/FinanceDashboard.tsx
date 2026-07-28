@@ -9,7 +9,7 @@ import { OtrosIndicadores } from "./OtrosIndicadores";
 import { FinancialAnalysis } from "./FinancialAnalysis";
 import { NancyPanel } from "./NancyPanel";
 import {
-  computeDerived, consolidateMonth, chronoDelta, statusForMargin, marginNetoStatus, buildFinancialAnalysis,
+  computeDerived, consolidateMonth, chronoDelta, marginBandStatus, buildFinancialAnalysis,
   type FinanceMonthRaw, type FinanceMonthDerived,
 } from "@/lib/financeKpisCalc";
 import type { FinanceKpiDataDTO } from "@/lib/financeKpis";
@@ -150,8 +150,7 @@ export function FinanceDashboard({
   }
 
   const analysis = buildFinancialAnalysis(windowed, data.settings.targetMargenNeto);
-  const netoStatus = curr ? marginNetoStatus(curr.margenNeto, { alerta: data.settings.targetMargenNeto, excelente: data.settings.excelenteMargenNeto }) : null;
-  const netoColor = netoStatus ? { good: "#22a67e", crit: "#e0574a", excelente: "#14c7c7" }[netoStatus.cls] : "#f1f5fb";
+  const MARGIN_STATUS_COLOR = { good: "#22a67e", crit: "#e0574a", excelente: "#14c7c7" } as const;
 
   const compIsConsolidado = brand === "consolidado";
   const compSegs = curr
@@ -367,11 +366,12 @@ export function FinanceDashboard({
       {curr && (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 mb-5">
           {[
-            { lbl: "Margen bruto", val: curr.margenBruto, target: data.settings.targetMargenBruto },
-            { lbl: "Margen operativo", val: curr.margenOperativo, target: data.settings.targetMargenOperativo },
+            { lbl: "Margen bruto", val: curr.margenBruto, alerta: data.settings.targetMargenBruto, excelente: data.settings.excelenteMargenBruto },
+            { lbl: "Margen operativo", val: curr.margenOperativo, alerta: data.settings.targetMargenOperativo, excelente: data.settings.excelenteMargenOperativo },
+            { lbl: "Margen neto", val: curr.margenNeto, alerta: data.settings.targetMargenNeto, excelente: data.settings.excelenteMargenNeto },
           ].map((m) => {
-            const st = statusForMargin(m.val, m.target);
-            const color = { good: "#22a67e", warn: "#d9a441", crit: "#e0574a" }[st.cls];
+            const st = marginBandStatus(m.val, { alerta: m.alerta, excelente: m.excelente });
+            const color = MARGIN_STATUS_COLOR[st.cls];
             return (
               <div key={m.lbl} className="bg-surface border border-rule rounded-md p-4">
                 <div className="flex items-baseline justify-between mb-2">
@@ -379,25 +379,15 @@ export function FinanceDashboard({
                   <span className="font-display font-bold text-[17px]" style={{ color }}>{pct(m.val)}</span>
                 </div>
                 <div className="h-2 rounded-full overflow-hidden" style={{ background: `${color}22` }}>
-                  <div className="h-full rounded-full" style={{ width: `${Math.max(0, Math.min(100, (m.val / m.target) * 100))}%`, background: color }} />
+                  <div className="h-full rounded-full" style={{ width: `${Math.max(0, Math.min(100, (m.val / m.excelente) * 100))}%`, background: color }} />
                 </div>
-                <div className="text-[10px] text-steel mt-1.5 font-mono">meta {m.target}%</div>
+                <div className="text-[10px] mt-1.5" style={{ color }}>{st.icon} {st.label}</div>
+                <div className="text-[9px] text-steel mt-1">
+                  🔴&lt;{m.alerta}% · 🟢{m.alerta}-{m.excelente}% · 🌟&gt;{m.excelente}%
+                </div>
               </div>
             );
           })}
-          <div className="bg-surface border border-rule rounded-md p-4">
-            <div className="flex items-baseline justify-between mb-2">
-              <span className="text-[11px] text-steel">Margen neto</span>
-              <span className="font-display font-bold text-[17px]" style={{ color: netoColor }}>{pct(curr.margenNeto)}</span>
-            </div>
-            <div className="h-2 rounded-full overflow-hidden" style={{ background: `${netoColor}22` }}>
-              <div className="h-full rounded-full" style={{ width: `${Math.max(0, Math.min(100, (curr.margenNeto / data.settings.excelenteMargenNeto) * 100))}%`, background: netoColor }} />
-            </div>
-            <div className="text-[10px] mt-1.5" style={{ color: netoColor }}>{netoStatus?.icon} {netoStatus?.label}</div>
-            <div className="text-[9px] text-steel mt-1">
-              🔴&lt;{data.settings.targetMargenNeto}% · 🟢{data.settings.targetMargenNeto}-{data.settings.excelenteMargenNeto}% · 🌟&gt;{data.settings.excelenteMargenNeto}%
-            </div>
-          </div>
         </div>
       )}
 
