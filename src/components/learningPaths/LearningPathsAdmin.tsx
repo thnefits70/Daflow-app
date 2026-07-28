@@ -104,9 +104,12 @@ export function LearningPathsAdmin({ initialPaths }: { initialPaths: PathSummary
   const [userQuery, setUserQuery] = useState("");
 
   const [addQuestionForStep, setAddQuestionForStep] = useState<string | null>(null);
-  // Confirmado 2026-07-27: los detalles de cada paso (preguntas, generar más,
-  // agregar manual) quedan ocultos por defecto — se ven solo al expandir ese
-  // paso puntual, así la ruta no se vuelve un muro larguísimo de chips.
+  // Confirmado 2026-07-27: al abrir una ruta solo se ve el título y el
+  // tiempo estimado — la lista de pasos queda oculta hasta que el admin
+  // pulsa "Ver pasos". Dentro de cada paso, las preguntas también quedan
+  // ocultas hasta expandir ese paso puntual (flechita individual). Así la
+  // ruta nunca se ve como un muro largo por defecto.
+  const [stepsExpanded, setStepsExpanded] = useState(false);
   const [expandedSteps, setExpandedSteps] = useState<Set<string>>(new Set());
   const toggleStepExpanded = (stepId: string) => {
     setExpandedSteps((prev) => {
@@ -138,6 +141,8 @@ export function LearningPathsAdmin({ initialPaths }: { initialPaths: PathSummary
   useEffect(() => {
     if (selectedId) loadDetail(selectedId);
     else setDetail(null);
+    setStepsExpanded(false);
+    setExpandedSteps(new Set());
   }, [selectedId, loadDetail]);
 
   useEffect(() => {
@@ -378,8 +383,17 @@ export function LearningPathsAdmin({ initialPaths }: { initialPaths: PathSummary
               <span className="text-steel/70 whitespace-nowrap">2h – 8h</span>
             </div>
 
-            <div className="text-[11.5px] font-bold uppercase tracking-wide text-steel mb-2">Pasos de la ruta</div>
+            <button
+              type="button"
+              onClick={() => setStepsExpanded((v) => !v)}
+              className="w-full flex items-center justify-between rounded-md bg-cloud border border-rule px-3.5 py-2.5 mb-3 text-[11.5px] font-bold uppercase tracking-wide text-steel cursor-pointer"
+            >
+              <span>Pasos de la ruta · {detail.steps.length}</span>
+              {stepsExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+            </button>
 
+            {stepsExpanded && (
+              <>
             {detail.steps.length === 0 && (
               <div className="border-[1.5px] border-dashed border-rule rounded-md p-6 text-center text-steel text-[13px] mb-3">
                 Sin pasos todavía.
@@ -520,6 +534,8 @@ export function LearningPathsAdmin({ initialPaths }: { initialPaths: PathSummary
                 </div>
               )}
             </div>
+              </>
+            )}
 
             <div className="text-[11.5px] font-bold uppercase tracking-wide text-steel mt-5 mb-2">Asignar a</div>
             <div className="flex flex-wrap gap-2 items-center">
