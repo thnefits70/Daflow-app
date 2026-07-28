@@ -25,10 +25,30 @@ function pct(n: number, total: number) {
 export function FillRateBreakdownCard({ data }: { data: NonNullable<FillRateBreakdown> }) {
   const status = STATUS_META[data.status];
   const segs = [
-    { label: "Despachadas", value: data.dispatched, color: "#14C7C7" },
-    { label: "Preparadas", value: data.prepared, color: "#1E5EFF" },
-    { label: "Generadas", value: data.generated, color: "#D9A441" },
-    { label: "Falta de stock", value: data.outOfStock, color: "#E0574A" },
+    {
+      label: "Despachadas",
+      value: data.dispatched,
+      color: "#14C7C7",
+      desc: "Se preparó, se etiquetó y se entregó al courier — el proceso completo.",
+    },
+    {
+      label: "Preparadas",
+      value: data.prepared,
+      color: "#1E5EFF",
+      desc: "Empacada y etiquetada, pero no se entregó al courier ese día.",
+    },
+    {
+      label: "Generadas",
+      value: data.generated,
+      color: "#D9A441",
+      desc: "Ya existe la guía/etiqueta, pero el producto no se empacó.",
+    },
+    {
+      label: "Falta de stock",
+      value: data.outOfStock,
+      color: "#E0574A",
+      desc: "No se pudo ni preparar porque no había la mercadería disponible.",
+    },
   ];
 
   return (
@@ -74,6 +94,7 @@ export function FillRateBreakdownCard({ data }: { data: NonNullable<FillRateBrea
               {s.value.toLocaleString("es-MX")}
               <span className="text-[11px] text-steel font-normal ml-1">{pct(s.value, data.total)}%</span>
             </div>
+            <div className="text-[10.5px] text-steel mt-1 leading-snug">{s.desc}</div>
           </div>
         ))}
       </div>
