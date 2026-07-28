@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, Check, Undo2, Trash2, Pencil, Search } from "lucide-react";
+import { PushTypeToggle } from "@/components/shared/PushTypeToggle";
 
 type RecordDTO = { period: string; amountPaid: number; completedAt: string; completedByName: string | null };
 type ReminderDTO = {
@@ -204,10 +205,13 @@ export function PaymentRemindersPanel({
 
   return (
     <div>
-      <div className="text-[13px] text-steel mb-4 max-w-2xl">
-        Recordatorios de pagos mensuales variados — suscripciones, servicios, tarjetas. Cada uno guarda un monto de
-        referencia que se queda fijo mes a mes (edítalo cuando de verdad cambie); al marcar "Realizado" puedes
-        confirmarlo o ajustarlo solo para ese mes.
+      <div className="flex items-start justify-between gap-3 mb-4">
+        <div className="text-[13px] text-steel max-w-2xl">
+          Recordatorios de pagos mensuales variados — suscripciones, servicios, tarjetas. Cada uno guarda un monto de
+          referencia que se queda fijo mes a mes (edítalo cuando de verdad cambie); al marcar "Realizado" puedes
+          confirmarlo o ajustarlo solo para ese mes.
+        </div>
+        <PushTypeToggle type="pagos_recordatorios" />
       </div>
 
       <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">

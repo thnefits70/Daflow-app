@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, Trash2, Pencil } from "lucide-react";
+import { PushTypeToggle } from "@/components/shared/PushTypeToggle";
 
 export type WeeklyReviewDTO = {
   id: string;
@@ -120,6 +121,7 @@ export function WeeklyReviewPanel({
         <div className="text-[13px] text-steel">
           Bitácora de la reunión semanal: problemas de la semana y plan de acción. Solo visible para esta área.
         </div>
+        <PushTypeToggle type="feedback" />
         {editable && (
           <button
             type="button"

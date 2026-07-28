@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, Trash2, ChevronDown, ChevronUp, PhoneCall, Search } from "lucide-react";
 import { Combobox } from "@/components/ui/Combobox";
+import { PushTypeToggle } from "@/components/shared/PushTypeToggle";
 import { retentionRiskFor } from "@/lib/storeFeedbackCalc";
 
 type EvaluationDTO = {
@@ -361,10 +362,13 @@ export function StoreFeedbackPanel({ stores, editable = true }: { stores: StoreD
 
   return (
     <div>
-      <div className="text-[13px] text-steel mb-2 max-w-2xl">
-        {editable
-          ? 'Registra el feedback de cada llamada a una tienda: fidelización ("¿qué tan probable es que sigas comprándonos?") y los KPIs que explican ese resultado — todos del 1 al 5, donde 5 es excelente y 1 es malo. El promedio de todas las tiendas evaluadas cada mes es lo que se muestra públicamente en Inicio.'
-          : "Consulta de solo lectura: el detalle de cada llamada a una tienda, quién la evaluó y qué se acordó. Puedes contactar directo por WhatsApp, pero no puedes crear, editar ni eliminar evaluaciones."}
+      <div className="flex items-start justify-between gap-3 mb-2">
+        <div className="text-[13px] text-steel max-w-2xl">
+          {editable
+            ? 'Registra el feedback de cada llamada a una tienda: fidelización ("¿qué tan probable es que sigas comprándonos?") y los KPIs que explican ese resultado — todos del 1 al 5, donde 5 es excelente y 1 es malo. El promedio de todas las tiendas evaluadas cada mes es lo que se muestra públicamente en Inicio.'
+            : "Consulta de solo lectura: el detalle de cada llamada a una tienda, quién la evaluó y qué se acordó. Puedes contactar directo por WhatsApp, pero no puedes crear, editar ni eliminar evaluaciones."}
+        </div>
+        <PushTypeToggle type="servicio_postventa" />
       </div>
 
       {editable && (

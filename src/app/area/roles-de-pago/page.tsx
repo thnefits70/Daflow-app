@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { TopLine } from "@/components/ui/TopLine";
+import { PushTypeToggle } from "@/components/shared/PushTypeToggle";
 import { PayStubsPanel } from "@/components/payroll/PayStubsPanel";
 import { canManagePayroll } from "@/lib/guards";
 
@@ -21,7 +22,7 @@ export default async function AreaRolesDePagoPage() {
 
   return (
     <div>
-      <TopLine eyebrow="Nómina" title="Roles de pago" />
+      <TopLine eyebrow="Nómina" title="Roles de pago" action={<PushTypeToggle type="roles_de_pago" />} />
       <PayStubsPanel
         mode={canManage ? "manage" : "own"}
         departments={departments}

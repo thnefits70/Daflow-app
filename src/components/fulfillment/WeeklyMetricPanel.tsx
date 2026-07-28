@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, Trash2, Pencil, Search } from "lucide-react";
+import { PushTypeToggle } from "@/components/shared/PushTypeToggle";
 
 export type WeeklyMetricDTO = {
   id: string;
@@ -128,6 +129,7 @@ export function WeeklyMetricPanel({
         <div className="text-[13px] text-steel">
           Registro semanal de {label.toLowerCase()}. Se muestra en Inicio para todo el equipo.
         </div>
+        <PushTypeToggle type="pedidos_despachados" />
         {editable && (
           <button
             type="button"
