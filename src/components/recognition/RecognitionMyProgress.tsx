@@ -74,6 +74,7 @@ export function RecognitionMyProgress() {
           periodLabel={formatMonthShort}
           latestLabel="último mes"
           statusFn={(v) => scoreStatus(Math.round((v / maxTotalScore) * 100))}
+          valueFormat={(v) => `${Math.round(v)} puntos`}
         />
       </div>
 
