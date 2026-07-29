@@ -75,6 +75,7 @@ model Department {
   purchaseReceiptSuppliers PurchaseReceiptSupplier[]
   purchaseReceiptBanks     PurchaseReceiptBank[]
   nancyConversations       NancyConversation[]
+  purchaseRequests         PurchaseRequest[]
 
   @@index([order])
 }
@@ -131,6 +132,13 @@ model User {
   // admin) lo ve; el admin puede otorgar esto a alguien más puntualmente.
   canViewPurchaseReceipts Boolean @default(false)
 
+  // Mismo patrón que canViewPurchaseReceipts — confirmado 2026-07-30: Control
+  // de Compras no es "la página de mi departamento" de nadie en particular
+  // (lo usan tanto Compras como Finanzas), así que el acceso vive en este
+  // flag directo en vez de en isLeader+leadsDeptId==COM. Admin siempre puede,
+  // sin necesitar el flag.
+  canManagePurchases Boolean @default(false)
+
   // Mismo patrón que canViewPurchaseReceipts, para Servicio Postventa —
   // confirmado 2026-07-25: por defecto solo el líder de Análisis de Mercado
   // (y admin) gestiona esto; el admin puede delegarlo a alguien más puntualmente.
@@ -167,6 +175,12 @@ model User {
   periodicRemindersCreated        PeriodicReminder[] @relation("PeriodicReminderCreatedBy")
   purchaseReceiptsCreated         PurchaseReceipt[] @relation("PurchaseReceiptCreatedBy")
   purchaseReceiptChangeRequests   PurchaseReceiptChangeRequest[] @relation("PurchaseReceiptRequestedBy")
+  purchaseCatalogItemsCreated     PurchaseCatalogItem[] @relation("PurchaseCatalogItemCreatedBy")
+  purchaseCatalogItemDeleteRequests PurchaseCatalogItemDeleteRequest[] @relation("PurchaseCatalogItemDeleteRequestedBy")
+  purchaseRequestsMade            PurchaseRequest[] @relation("PurchaseRequestRequestedBy")
+  purchaseRequestsReviewed        PurchaseRequest[] @relation("PurchaseRequestReviewedBy")
+  purchaseRequestReceiptsConfirmed PurchaseRequestReceipt[] @relation("PurchaseRequestReceiptConfirmedBy")
+  purchaseRequestUrgentReports    PurchaseRequestUrgentReport[] @relation("PurchaseRequestUrgentReportedBy")
   storeFeedbackEvaluations        StoreFeedbackEvaluation[] @relation("StoreFeedbackEvaluatedBy")
   confidentialAccess ConfidentialDocumentAccess[]
   monthlyEvaluationsReceived MonthlyEvaluation[]
@@ -761,8 +775,19 @@ enum SupplierStatus {
 }
 
 /* ---------------- Proveedores (directorio con aprobación del líder) ---------------- */
+enum SupplierType {
+  SUPPLIER
+  CARRIER
+}
+
 model Supplier {
   id          String  @id @default(cuid())
+  // Confirmado 2026-07-30: los transportistas de Control de Compras viven en
+  // esta MISMA tabla (type=CARRIER) en vez de un catálogo aparte, para que
+  // "se sincroniza con Proveedores" sea automático (una sola fila, nunca dos
+  // registros del mismo contacto) — se distinguen y filtran por type, y un
+  // transportista simplemente no pide location (no tiene local fijo).
+  type        SupplierType @default(SUPPLIER)
   name        String
   location    String?
   // Pin exacto marcado en el mapa (OpenStreetMap), opcional — más confiable que
@@ -771,6 +796,16 @@ model Supplier {
   locationLng Float?
   category    String?
   notes       String?
+
+  // Datos bancarios, para Control de Compras — confirmado 2026-07-30:
+  // obligatorios ahí al registrar un proveedor/transportista nuevo, pero
+  // opcionales a nivel de columna porque los proveedores ya existentes en
+  // este directorio (creados antes de Control de Compras) no los tienen.
+  bankName          String?
+  bankAccountType   String?
+  bankAccountNumber String?
+  bankAccountHolder String?
+  email             String?
 
   status       SupplierStatus @default(PENDING)
   rejectReason String?
@@ -791,9 +826,12 @@ model Supplier {
 
   contacts SupplierContact[]
   channels SupplierChannel[]
+  purchaseRequestsAsSupplier PurchaseRequest[] @relation("PurchaseRequestSupplier")
+  purchaseRequestsAsCarrier  PurchaseRequest[] @relation("PurchaseRequestCarrier")
 
   @@index([status])
   @@index([createdByDeptId])
+  @@index([type])
 }
 
 model SupplierContact {
@@ -820,6 +858,168 @@ model SupplierChannel {
   url      String
 
   @@index([supplierId])
+}
+
+/* ---------------- Control de Compras ---------------- */
+// Confirmado 2026-07-30 (boceto aprobado): reemplaza el grupo de WhatsApp
+// para pedir aprobación de pago. Un nombre por insumo, siempre — el
+// historial de precio depende de que nunca se parta en dos.
+model PurchaseCatalogItem {
+  id     String   @id @default(cuid())
+  name   String   @unique
+  // 1 a 3 fotos (real si se tiene físicamente, referencial del proveedor si
+  // no) — para que Inventario y Finanzas identifiquen el producto sin adivinar.
+  photos String[]
+
+  createdById String?
+  createdBy   User?    @relation("PurchaseCatalogItemCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+
+  requests      PurchaseRequest[]
+  deleteRequest PurchaseCatalogItemDeleteRequest?
+}
+
+// Mismo patrón que PurchaseReceiptChangeRequest: la sola existencia de esta
+// fila ES el estado "pendiente de eliminar" — @unique en itemId impide dos
+// solicitudes a la vez sobre el mismo insumo. Se borra al rechazar; al
+// aprobar, se borra junto con el insumo (ver ruta de aprobación).
+model PurchaseCatalogItemDeleteRequest {
+  id     String              @id @default(cuid())
+  itemId String              @unique
+  item   PurchaseCatalogItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  reason        String?
+  requestedById String?
+  requestedBy   User?    @relation("PurchaseCatalogItemDeleteRequestedBy", fields: [requestedById], references: [id], onDelete: SetNull)
+  requestedAt   DateTime @default(now())
+}
+
+enum PurchaseRequestStatus {
+  PENDING_APPROVAL
+  REJECTED
+  APPROVED
+  PAID
+  RECEIVED
+}
+
+enum PurchasePaymentMethod {
+  TRANSFER
+  PETTY_CASH
+}
+
+enum PurchaseInvoiceStatus {
+  PENDING
+  COMPLETE
+  PARTIAL
+  NON_FISCAL
+  NONE
+}
+
+// Solicitud de compra — el corazón del módulo. deptId es el área de quien
+// solicita (Bryan → Compras, Nairoby → Finanzas), para que la bandeja de
+// admin y los reportes puedan filtrar por área si hace falta más adelante.
+model PurchaseRequest {
+  id     String     @id @default(cuid())
+  deptId String
+  dept   Department @relation(fields: [deptId], references: [id], onDelete: Cascade)
+
+  catalogItemId String
+  catalogItem   PurchaseCatalogItem @relation(fields: [catalogItemId], references: [id], onDelete: Restrict)
+
+  supplierId String
+  supplier   Supplier @relation("PurchaseRequestSupplier", fields: [supplierId], references: [id], onDelete: Restrict)
+
+  quantity  Int
+  unitCost  Float
+  totalCost Float
+
+  // Cotización — verificada por IA una sola vez por solicitud (no es un chat).
+  quoteImageUrl      String
+  quoteReadTotal      Float?
+  // Cuando la cotización solo trae un código de proveedor, no el nombre del
+  // producto — la persona confirma manualmente a qué insumo corresponde.
+  quoteReferenceCode String?
+  quoteConfirmedAt    DateTime?
+
+  shippingIncluded      Boolean                @default(true)
+  carrierId              String?
+  carrier                Supplier?              @relation("PurchaseRequestCarrier", fields: [carrierId], references: [id], onDelete: SetNull)
+  shippingCostTotal     Float?
+  shippingPaymentMethod PurchasePaymentMethod?
+
+  // Obligatoria solo cuando el costo por unidad superó el promedio de las
+  // últimas 3 compras de este insumo — impuesta en la ruta, no aquí.
+  justification String?
+
+  status       PurchaseRequestStatus @default(PENDING_APPROVAL)
+  rejectReason String?
+
+  requestedById   String?
+  requestedBy     User?      @relation("PurchaseRequestRequestedBy", fields: [requestedById], references: [id], onDelete: SetNull)
+  requestedByDeptId String?
+  requestedAt     DateTime   @default(now())
+
+  reviewedById String?
+  reviewedBy   User?     @relation("PurchaseRequestReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewedAt   DateTime?
+
+  paidAt          DateTime?
+  paymentProofUrl String?
+
+  invoiceStatus PurchaseInvoiceStatus @default(PENDING)
+  invoiceAmount Float?
+  invoiceDocUrl String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  receipt       PurchaseRequestReceipt?
+  urgentReports PurchaseRequestUrgentReport[]
+
+  @@index([deptId])
+  @@index([status])
+  @@index([catalogItemId])
+  @@index([supplierId])
+  @@index([requestedById])
+}
+
+// Inventario confirma que de verdad llegó — sin esto el ciclo no se cierra.
+model PurchaseRequestReceipt {
+  id        String          @id @default(cuid())
+  requestId String          @unique
+  request   PurchaseRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  receivedQuantity Int
+  photoUrl         String
+  comment          String?
+
+  confirmedById String?
+  confirmedBy   User?    @relation("PurchaseRequestReceiptConfirmedBy", fields: [confirmedById], references: [id], onDelete: SetNull)
+  confirmedAt   DateTime @default(now())
+}
+
+enum PurchaseUrgentReportType {
+  DAMAGED_INCOMPLETE
+  NOT_ARRIVED
+}
+
+// "Informar urgente" desde la confirmación de Inventario — mercadería
+// dañada/incompleta, o que nunca llegó. Puede haber más de una por
+// solicitud (ej. se reporta que no llega, y luego llega dañada).
+model PurchaseRequestUrgentReport {
+  id        String          @id @default(cuid())
+  requestId String
+  request   PurchaseRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  type             PurchaseUrgentReportType
+  affectedQuantity Int?
+  description      String
+
+  reportedById String?
+  reportedBy   User?    @relation("PurchaseRequestUrgentReportedBy", fields: [reportedById], references: [id], onDelete: SetNull)
+  reportedAt   DateTime @default(now())
+
+  @@index([requestId])
 }
 
 /* ---------------- Comprobante de pago (Gestión de Compras) ---------------- */
