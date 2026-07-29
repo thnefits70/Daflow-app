@@ -686,7 +686,7 @@ export function ProfileDetail({
               <Receipt size={11} /> ¿Puede ver Comprobante de pago?
             </label>
             <div className="text-[11px] text-steel mb-2">
-              Acceso puntual a esta sección de Gestión de Compras, aunque no sea el líder del área.
+              Acceso puntual a esta sección de Control de Compras, aunque no sea el líder del área.
             </div>
             <div className="flex border border-rule rounded overflow-hidden max-w-[220px]">
               <button

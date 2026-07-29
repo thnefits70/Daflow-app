@@ -14,7 +14,7 @@ const DEFAULT_DEPARTMENTS = [
   { name: "Fulfillment", code: "FUL" },
   { name: "Inventario", code: "INV" },
   { name: "Análisis de Mercado", code: "MKT" },
-  { name: "Gestión de Compras", code: "COM" },
+  { name: "Control de Compras", code: "COM" },
 ];
 
 async function main() {
@@ -35,7 +35,7 @@ async function main() {
     const trackPaymentReminders = d.code === "FIN";
     await prisma.department.upsert({
       where: { code: d.code },
-      update: { trackKpis, trackWeeklyMetric, trackWeeklyReview, trackPaymentReminders },
+      update: { name: d.name, trackKpis, trackWeeklyMetric, trackWeeklyReview, trackPaymentReminders },
       create: { name: d.name, code: d.code, order: i, trackKpis, trackWeeklyMetric, trackWeeklyReview, trackPaymentReminders },
     });
   }
