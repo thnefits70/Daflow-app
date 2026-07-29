@@ -286,6 +286,50 @@ export async function canManagePurchaseReceipts(deptId: string) {
   return !!user.isLeader && user.leadsDeptId === deptId;
 }
 
+// Control de Compras — confirmado 2026-07-30: no es "la página de un
+// departamento" único, así que cada acción se resuelve por SU dueño natural
+// en vez de un solo deptId fijo: Bryan (Compras) y Nairoby (Finanzas) por
+// igual SOLICITAN; Daniel (Inventario) CONFIRMA que llegó; Finanzas
+// REGISTRA la factura. Admin siempre puede todo. canManagePurchases es la
+// misma clase de escape hatch que canViewPurchaseReceipts, para delegar a
+// alguien fuera de esos liderazgos sin tocar código.
+async function purchasesUserContext(userId: string) {
+  return prisma.user.findUnique({
+    where: { id: userId },
+    select: { canManagePurchases: true, isLeader: true, leadsDept: { select: { code: true } } },
+  });
+}
+
+export async function canSubmitPurchaseRequests() {
+  const session = await auth();
+  if (!session) return false;
+  if (session.user.role === "admin") return true;
+  const user = await purchasesUserContext(session.user.id);
+  if (!user) return false;
+  if (user.canManagePurchases) return true;
+  return !!user.isLeader && !!user.leadsDept && ["COM", "FIN"].includes(user.leadsDept.code);
+}
+
+export async function canConfirmPurchaseReceiving() {
+  const session = await auth();
+  if (!session) return false;
+  if (session.user.role === "admin") return true;
+  const user = await purchasesUserContext(session.user.id);
+  if (!user) return false;
+  if (user.canManagePurchases) return true;
+  return !!user.isLeader && user.leadsDept?.code === "INV";
+}
+
+export async function canRegisterPurchaseInvoices() {
+  const session = await auth();
+  if (!session) return false;
+  if (session.user.role === "admin") return true;
+  const user = await purchasesUserContext(session.user.id);
+  if (!user) return false;
+  if (user.canManagePurchases) return true;
+  return !!user.isLeader && user.leadsDept?.code === "FIN";
+}
+
 // How many of the current user's own pay stubs were uploaded/updated since
 // they last opened "Roles de pago" — drives the sidebar badge.
 export async function getUnseenPayStubCount() {

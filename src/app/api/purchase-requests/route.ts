@@ -47,8 +47,8 @@ export async function GET(req: NextRequest) {
   if (view === "invoicing") {
     if (!(await canRegisterPurchaseInvoices())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
     const rows = await prisma.purchaseRequest.findMany({
-      where: { status: { in: ["PAID", "RECEIVED"] } },
-      orderBy: { paidAt: "desc" },
+      where: { status: { in: ["APPROVED", "PAID", "RECEIVED"] } },
+      orderBy: [{ status: "asc" }, { requestedAt: "desc" }],
       include: requestInclude,
     });
     return NextResponse.json(rows);

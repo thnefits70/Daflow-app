@@ -23,6 +23,7 @@ import {
   Menu,
   X,
   Trophy,
+  ShoppingCart,
   LayoutGrid,
   Waypoints,
 } from "lucide-react";
@@ -44,12 +45,14 @@ export function AdminSidebar({
   specialDepartments,
   logoUrl,
   pendingSuppliersCount = 0,
+  pendingPurchasesCount = 0,
   pendingRecognitionMonth = null,
 }: {
   departments: Department[];
   specialDepartments: Department[];
   logoUrl?: string | null;
   pendingSuppliersCount?: number;
+  pendingPurchasesCount?: number;
   pendingRecognitionMonth?: string | null;
 }) {
   const pathname = usePathname();
@@ -208,6 +211,14 @@ export function AdminSidebar({
           </div>
         ))}
 
+        <Link href="/admin/control-de-compras" className={`${NAV_ITEM} ${pathname.startsWith("/admin/control-de-compras") ? NAV_ACTIVE : NAV_INACTIVE}`}>
+          <ShoppingCart size={15} /> Control de Compras
+          {pendingPurchasesCount > 0 && (
+            <span className="ml-auto font-mono text-[10px] font-semibold bg-red/20 text-red rounded-full px-1.5 py-0.5">
+              {pendingPurchasesCount}
+            </span>
+          )}
+        </Link>
         <Link href="/admin/proveedores" className={`${NAV_ITEM} ${pathname.startsWith("/admin/proveedores") ? NAV_ACTIVE : NAV_INACTIVE}`}>
           <Truck size={15} /> Proveedores
           {pendingSuppliersCount > 0 && (

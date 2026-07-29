@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Bell, BellOff } from "lucide-react";
+import { Bell, BellOff, Info } from "lucide-react";
 
 function urlBase64ToUint8Array(base64: string) {
   const padding = "=".repeat((4 - (base64.length % 4)) % 4);
@@ -129,15 +129,27 @@ export function PushSettingsToggle() {
   }
 
   return (
-    <button
-      type="button"
-      disabled={busy}
-      onClick={status === "on" ? turnOff : turnOn}
-      className="flex items-center gap-2 text-[#C9CFC5] hover:text-white text-[12.5px] cursor-pointer disabled:opacity-60"
-      title={status === "on" ? "Notificaciones activadas en este dispositivo — clic para desactivar" : "Notificaciones desactivadas en este dispositivo — clic para activar"}
-    >
-      {status === "on" ? <Bell size={14} /> : <BellOff size={14} />}
-      Notificaciones: {busy ? "..." : status === "on" ? "activadas" : "desactivadas"}
-    </button>
+    <div className="flex items-center gap-1.5">
+      <button
+        type="button"
+        disabled={busy}
+        onClick={status === "on" ? turnOff : turnOn}
+        className="flex items-center gap-2 text-[#C9CFC5] hover:text-white text-[12.5px] cursor-pointer disabled:opacity-60"
+      >
+        {status === "on" ? <Bell size={14} /> : <BellOff size={14} />}
+        Notificaciones: {busy ? "..." : status === "on" ? "activadas" : "desactivadas"}
+      </button>
+
+      <div className="relative group shrink-0">
+        <Info size={13} className="text-[#8C99A6] hover:text-white cursor-help" />
+        <div className="hidden group-hover:block absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-60 rounded-md bg-[#0c1524] border border-white/10 p-2.5 text-[11px] leading-snug text-[#C9CFC5] shadow-lg z-50">
+          Te avisa de tus pendientes aunque no tengas DAFLOW abierto — en el navegador o el celular, como cualquier otra notificación.
+          <br /><br />
+          Es <b className="text-white">por dispositivo</b>: activarlo aquí solo cubre este navegador/celular. Si quieres recibirlas también en otro dispositivo, hay que activarlo ahí también, con este mismo botón.
+          <br /><br />
+          Puedes desactivarlo cuando quieras — deja de avisarte solo en este dispositivo, sin afectar a nadie más.
+        </div>
+      </div>
+    </div>
   );
 }

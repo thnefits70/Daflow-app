@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
-import { LayoutDashboard, ClipboardList, Scale, LogOut, Truck, Rocket, Wallet, FolderLock, Gauge, Menu, X, Trophy, Users, LayoutGrid, Waypoints } from "lucide-react";
+import { LayoutDashboard, ClipboardList, Scale, LogOut, Truck, Rocket, Wallet, FolderLock, Gauge, Menu, X, Trophy, Users, LayoutGrid, Waypoints, ShoppingCart } from "lucide-react";
 import { BrandMark } from "@/components/brand/DaflowMark";
 import { PushSettingsToggle } from "@/components/shared/PushSettingsToggle";
 
@@ -15,6 +15,8 @@ export function EmployeeSidebar({
   logoUrl,
   showSuppliers = false,
   pendingSuppliersCount = 0,
+  showPurchases = false,
+  pendingPurchasesCount = 0,
   unseenFeedbackCount = 0,
   unseenPayStubCount = 0,
   showConfidential = false,
@@ -30,6 +32,8 @@ export function EmployeeSidebar({
   logoUrl?: string | null;
   showSuppliers?: boolean;
   pendingSuppliersCount?: number;
+  showPurchases?: boolean;
+  pendingPurchasesCount?: number;
   unseenFeedbackCount?: number;
   unseenPayStubCount?: number;
   showConfidential?: boolean;
@@ -127,6 +131,16 @@ export function EmployeeSidebar({
         {showNomina && (
           <Link href="/area/nomina" className={`${NAV_ITEM} ${pathname.startsWith("/area/nomina") ? NAV_ACTIVE : NAV_INACTIVE}`}>
             <Users size={15} /> Nómina
+          </Link>
+        )}
+        {showPurchases && (
+          <Link href="/area/control-de-compras" className={`${NAV_ITEM} ${pathname.startsWith("/area/control-de-compras") ? NAV_ACTIVE : NAV_INACTIVE}`}>
+            <ShoppingCart size={15} /> Control de Compras
+            {pendingPurchasesCount > 0 && (
+              <span className="ml-auto font-mono text-[10px] font-semibold bg-red/20 text-red rounded-full px-1.5 py-0.5">
+                {pendingPurchasesCount}
+              </span>
+            )}
           </Link>
         )}
         {showSuppliers && (

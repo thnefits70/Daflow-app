@@ -11,7 +11,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const session = await auth();
   if (!session || session.user.role !== "admin") redirect("/login");
 
-  const [allDepartments, settings, pendingSuppliersCount, pendingRecognitionMonth] = await Promise.all([
+  const [allDepartments, settings, pendingSuppliersCount, pendingRecognitionMonth, pendingPurchasesCount] = await Promise.all([
     prisma.department.findMany({
       orderBy: { order: "asc" },
       select: { id: true, name: true, code: true, isSpecial: true },
@@ -19,6 +19,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     prisma.platformSettings.findUnique({ where: { id: "singleton" } }),
     prisma.supplier.count({ where: { status: "PENDING" } }),
     getMonthPendingConfirmation(),
+    prisma.purchaseRequest.count({ where: { status: "PENDING_APPROVAL" } }),
   ]);
 
   const departments = allDepartments.filter((d) => !d.isSpecial);
@@ -31,6 +32,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         specialDepartments={specialDepartments}
         logoUrl={settings?.logoUrl}
         pendingSuppliersCount={pendingSuppliersCount}
+        pendingPurchasesCount={pendingPurchasesCount}
         pendingRecognitionMonth={pendingRecognitionMonth}
       />
       <main className="flex-1 overflow-y-auto bg-bg p-4 md:p-9">
