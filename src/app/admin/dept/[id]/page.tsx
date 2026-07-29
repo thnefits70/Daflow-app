@@ -81,6 +81,9 @@ export default async function DeptWorkspacePage({ params }: { params: Promise<{ 
         purchaseReceiptBanks={purchaseReceiptCatalogs.banks}
         canManageStoreFeedback={dept.code === "MKT"}
         storeFeedbackStores={storeFeedbackStores}
+        canSubmitPurchases={dept.code === "COM"}
+        canReceivePurchases={dept.code === "COM"}
+        canInvoicePurchases={dept.code === "COM"}
         isAdmin
         editable
       />
