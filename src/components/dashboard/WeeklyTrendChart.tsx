@@ -110,6 +110,7 @@ export function WeeklyTrendChart({
   invertDirection = false,
   compareIndexA,
   compareIndexB,
+  latestCaption,
 }: {
   label: string;
   deptName: string;
@@ -118,6 +119,10 @@ export function WeeklyTrendChart({
   format?: "count" | "percent";
   periodLabel?: (period: string) => string;
   latestLabel?: string;
+  // Línea fija bajo la fecha de la última semana (a diferencia de `detail`,
+  // que solo se ve al pasar el mouse) — para una aclaración que siempre debe
+  // estar visible, ej. el promedio diario detrás del total semanal.
+  latestCaption?: string;
   statusFn?: (value: number) => { label: string; color: string };
   // Full override of value formatting (e.g. money "$84,869") — when given,
   // it replaces the built-in count/percent formatter entirely, including
@@ -267,6 +272,7 @@ export function WeeklyTrendChart({
               <span className="text-[11px] text-teal font-mono">{formatIsoWeekRangeLabel(latest.week)}</span>
             )}
           </div>
+          {latestCaption && <div className="text-[11.5px] text-steel mt-1">{latestCaption}</div>}
         </div>
         {status && (
           <div className="flex items-center gap-2.5">

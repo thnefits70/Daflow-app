@@ -89,10 +89,11 @@ export function Dashboard({
       {weeklyTrend && (
         <div className="bg-surface border border-rule rounded-lg p-6 mb-5">
           <WeeklyTrendChart
-            label="Pedidos despachados"
+            label="Pedidos despachados totales en la semana"
             deptName={weeklyTrend.deptName}
             points={weeklyTrend.points}
             weeklyGoal={6000}
+            latestCaption={`≈ ${Math.round(weeklyTrend.points[weeklyTrend.points.length - 1].value / 6).toLocaleString("es-MX")} pedidos/día en promedio (lunes a sábado)`}
           />
         </div>
       )}
