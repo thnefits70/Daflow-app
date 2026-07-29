@@ -108,7 +108,10 @@ export function DeptWorkspaceTabs({
   currentUserId?: string | null;
 }) {
   const router = useRouter();
-  const [tab, setTab] = useState<TabKey>(trackKpis ? "kpis" : "procesos");
+  // Confirmado 2026-07-30: cada área debería abrir directo en su pestaña más
+  // usada, no siempre en "Procesos" — Finanzas ya abría en KPIs; Fulfillment
+  // ahora abre en "Pedidos despachados" (lo primero que revisan al entrar).
+  const [tab, setTab] = useState<TabKey>(trackKpis ? "kpis" : trackWeeklyMetric ? "semanal" : "procesos");
   const [seenFeedback, setSeenFeedback] = useState(false);
   const tabs = ALL_TABS.filter((t) => {
     if (t.key === "kpis") return trackKpis;
