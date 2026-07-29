@@ -94,12 +94,12 @@ export type WeeklyTrend = { deptName: string; points: { week: string; value: num
 // Shared by both the admin dashboard and every employee's Inicio — whichever
 // department has trackWeeklyMetric on (currently just Fulfillment).
 //
-// Confirmado 2026-07-29: el valor ya no es solo "despachados" — es el total
-// de pedidos gestionados en la semana (despachados + preparados + generados
-// + falta de stock), para reflejar todo el trabajo real de la semana, no
-// solo la porción que sí salió. Semanas de antes del desglose (prepared/
-// generated/outOfStock en null) simplemente suman 0 en esas tres, así que
-// siguen mostrando el mismo número de siempre — no hay que migrar nada.
+// Confirmado 2026-07-29 (revertido el mismo día): se probó sumar prepared/
+// generated/outOfStock aquí, pero el usuario aclaró que esas tres son solo
+// referenciales — representan pedidos que NO se entregaron al courier (des-
+// glosados por motivo). Este gráfico es específicamente "despachados", así
+// que vuelve a ser solo `value`. El desglose completo vive en
+// FillRateBreakdownCard (getLatestFillRateBreakdown), no aquí.
 export async function getWeeklyTrend(): Promise<WeeklyTrend> {
   const dept = await prisma.department.findFirst({ where: { trackWeeklyMetric: true } });
   if (!dept) return null;
@@ -112,10 +112,7 @@ export async function getWeeklyTrend(): Promise<WeeklyTrend> {
 
   return {
     deptName: dept.name,
-    points: records.map((r) => ({
-      week: r.week,
-      value: r.value + (r.prepared ?? 0) + (r.generated ?? 0) + (r.outOfStock ?? 0),
-    })),
+    points: records.map((r) => ({ week: r.week, value: r.value })),
   };
 }
 

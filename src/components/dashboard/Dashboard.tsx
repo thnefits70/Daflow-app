@@ -89,7 +89,7 @@ export function Dashboard({
       {weeklyTrend && (
         <div className="bg-surface border border-rule rounded-lg p-6 mb-5">
           <WeeklyTrendChart
-            label="Pedidos despachados totales en la semana"
+            label="Pedidos despachados"
             deptName={weeklyTrend.deptName}
             points={weeklyTrend.points}
             weeklyGoal={6000}
