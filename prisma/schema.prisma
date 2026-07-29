@@ -1383,6 +1383,29 @@ model NancyMessage {
   @@index([conversationId])
 }
 
+// Confirmado 2026-07-29: panel de gasto de IA, solo visible para admin (ve
+// /admin/gasto-ia). Registra cada llamada real a la IA (Nancy, generación de
+// preguntas de Rutas de conocimiento) con sus tokens reales reportados por
+// Anthropic — el costo se calcula una vez al guardar (ver src/lib/aiPricing.ts)
+// en vez de recalcularlo siempre contra una tabla de precios que puede
+// cambiar. actorId es User.id o el sentinel "admin" (mismo patrón sin FK que
+// NancyConversation.ownerId).
+model AiUsageLog {
+  id           String   @id @default(cuid())
+  feature      String // "nancy" | "rutas_conocimiento"
+  model        String
+  actorId      String
+  deptId       String?
+  inputTokens  Int
+  outputTokens Int
+  costUsd      Float
+  createdAt    DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([actorId])
+  @@index([feature])
+}
+
 // Confirmado 2026-07-28: notificaciones push (laptop y celular) para avisar
 // de "Pendientes" aunque la persona no tenga DAFLOW abierto. ownerId es
 // User.id o el sentinel "admin" (mismo patrón sin FK que NancyConversation).

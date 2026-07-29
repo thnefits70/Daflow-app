@@ -1,4 +1,5 @@
 import { getAnthropicClient } from "@/lib/nancy";
+import { logAiUsage } from "@/lib/aiUsage";
 
 export const LEARNING_PATH_AI_MODEL = "claude-sonnet-5";
 
@@ -142,6 +143,16 @@ export async function generateQuestionsForContent(source: ContentSource): Promis
   if (response.stop_reason === "max_tokens") {
     throw new Error("La IA generó demasiado contenido y se cortó a medias — intenta de nuevo o divide el documento.");
   }
+
+  // Siempre lo dispara el admin (las rutas de conocimiento son gestión
+  // admin-only) — no hay un actor de departamento que atribuirle.
+  await logAiUsage({
+    feature: "rutas_conocimiento",
+    model: LEARNING_PATH_AI_MODEL,
+    actorId: "admin",
+    inputTokens: response.usage.input_tokens,
+    outputTokens: response.usage.output_tokens,
+  });
 
   const textBlock = response.content.find((b) => b.type === "text");
   if (!textBlock || textBlock.type !== "text") throw new Error("La IA no devolvió contenido de texto.");

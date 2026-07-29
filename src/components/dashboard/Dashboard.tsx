@@ -8,6 +8,7 @@ import { ScoreGauge } from "./ScoreGauge";
 import { WeeklyTrendChart } from "./WeeklyTrendChart";
 import { KpiTile, FillRateTile, ReturnRateTile, WarrantyMonthTile } from "./KpiTile";
 import { FillRateBreakdownCard } from "./FillRateBreakdownCard";
+import { AiSpendWidget } from "./AiSpendWidget";
 import { StoreFeedbackTile } from "./StoreFeedbackTile";
 import { StockoutBarChart } from "./StockoutBarChart";
 import { PieChart } from "./PieChart";
@@ -43,6 +44,8 @@ export function Dashboard({
   storeFeedbackTrend = [],
   duePeriodicReminders = [],
   learningPathResults = [],
+  aiSpendToday,
+  aiSpendMonth,
 }: {
   data: DashboardData;
   weeklyTrend?: WeeklyTrend;
@@ -56,6 +59,8 @@ export function Dashboard({
   storeFeedbackTrend?: StoreFeedbackTrendPoint[];
   duePeriodicReminders?: DuePeriodicReminderDTO[];
   learningPathResults?: TeamLearningPathResultDTO[];
+  aiSpendToday?: number;
+  aiSpendMonth?: number;
 }) {
   const { rows, rowsSorted, totalAttempts, overallAvg } = data;
 
@@ -70,7 +75,11 @@ export function Dashboard({
         <div className="flex justify-center">
           <RecognitionPodium />
         </div>
-        <div />
+        {aiSpendToday !== undefined && aiSpendMonth !== undefined ? (
+          <AiSpendWidget today={aiSpendToday} month={aiSpendMonth} />
+        ) : (
+          <div />
+        )}
       </div>
 
       <PushOptIn />

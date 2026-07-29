@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { canEditDeptKpis } from "@/lib/guards";
 import { getFinanceKpiData } from "@/lib/financeKpis";
 import { getAnthropicClient, NANCY_SYSTEM_PROMPT, buildNancyContext, nancyOwnerId } from "@/lib/nancy";
+import { logAiUsage } from "@/lib/aiUsage";
 
 const messageSchema = z.object({ role: z.enum(["user", "assistant"]), content: z.string().min(1) });
 const bodySchema = z.object({
@@ -97,6 +98,18 @@ export async function POST(req: NextRequest) {
           await prisma.nancyMessage.create({ data: { conversationId, role: "assistant", content: acc } });
         }
         await prisma.nancyConversation.update({ where: { id: conversationId }, data: { updatedAt: new Date() } });
+
+        const finalMessage = await stream.finalMessage().catch(() => null);
+        if (finalMessage?.usage) {
+          await logAiUsage({
+            feature: "nancy",
+            model: "claude-opus-4-8",
+            actorId: ownerId,
+            deptId,
+            inputTokens: finalMessage.usage.input_tokens,
+            outputTokens: finalMessage.usage.output_tokens,
+          });
+        }
       }
     },
   });
