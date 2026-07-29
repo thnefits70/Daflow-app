@@ -98,7 +98,7 @@ export function FinanceDashboard({
       period: `${rows[0].period} → ${rows[rows.length - 1].period}`,
       ventas: sum("ventas"), costoVentas: sum("costoVentas"), gastosVenta: sum("gastosVenta"),
       gastosAdmin: sum("gastosAdmin"), otrosIngresos: sum("otrosIngresos"), gastosFinancieros: sum("gastosFinancieros"),
-      otrosGastos: sum("otrosGastos"), roi: null,
+      otrosGastos: sum("otrosGastos"),
     };
   }
   // "Comparar contra" always groups by the same window as "Ver" — except in

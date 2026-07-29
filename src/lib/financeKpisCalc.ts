@@ -13,7 +13,6 @@ export type FinanceMonthRaw = {
   otrosIngresos: number;
   gastosFinancieros: number;
   otrosGastos: number;
-  roi: number | null;
 };
 
 export type FinanceMonthDerived = FinanceMonthRaw & {
@@ -24,8 +23,15 @@ export type FinanceMonthDerived = FinanceMonthRaw & {
   margenOperativo: number;
   utilidadReportada: number;
   margenNeto: number;
+  roi: number | null;
 };
 
+// Confirmado 2026-07-29: el ROI ya no se tipea a mano — se calcula siempre
+// como utilidad neta ÷ costo de ventas (retorno sobre el costo de la
+// mercadería vendida, la fórmula que ya usaban manualmente). Al vivir en
+// computeDerived en vez de guardarse como dato crudo, el Consolidado sale
+// de sumar ventas/costos/utilidad reales entre operaciones y recién ahí
+// calcular el ROI — más preciso que promediar los ROI de cada marca.
 export function computeDerived(row: FinanceMonthRaw): FinanceMonthDerived {
   const utilidadBruta = row.ventas - row.costoVentas;
   const margenBruto = row.ventas === 0 ? 0 : (utilidadBruta / row.ventas) * 100;
@@ -34,7 +40,8 @@ export function computeDerived(row: FinanceMonthRaw): FinanceMonthDerived {
   const margenOperativo = row.ventas === 0 ? 0 : (utilidadOperativa / row.ventas) * 100;
   const utilidadReportada = utilidadOperativa + row.otrosIngresos - row.gastosFinancieros - row.otrosGastos;
   const margenNeto = row.ventas === 0 ? 0 : (utilidadReportada / row.ventas) * 100;
-  return { ...row, utilidadBruta, margenBruto, gastosOperativos, utilidadOperativa, margenOperativo, utilidadReportada, margenNeto };
+  const roi = row.costoVentas === 0 ? null : (utilidadReportada / row.costoVentas) * 100;
+  return { ...row, utilidadBruta, margenBruto, gastosOperativos, utilidadOperativa, margenOperativo, utilidadReportada, margenNeto, roi };
 }
 
 // Sums raw fields across every operación present for a period — the real
@@ -42,22 +49,16 @@ export function computeDerived(row: FinanceMonthRaw): FinanceMonthDerived {
 // per-operación data yet, only a company-wide total to scale down from).
 export function consolidateMonth(rows: FinanceMonthRaw[]): FinanceMonthRaw {
   const period = rows[0]?.period ?? "";
-  const sum = (k: keyof Omit<FinanceMonthRaw, "period" | "roi">) => rows.reduce((a, r) => a + r[k], 0);
-  const ventas = sum("ventas");
-  const roiRows = rows.filter((r) => r.roi !== null && r.ventas > 0);
-  const roi = roiRows.length
-    ? roiRows.reduce((a, r) => a + r.roi! * r.ventas, 0) / roiRows.reduce((a, r) => a + r.ventas, 0)
-    : null;
+  const sum = (k: keyof Omit<FinanceMonthRaw, "period">) => rows.reduce((a, r) => a + r[k], 0);
   return {
     period,
-    ventas,
+    ventas: sum("ventas"),
     costoVentas: sum("costoVentas"),
     gastosVenta: sum("gastosVenta"),
     gastosAdmin: sum("gastosAdmin"),
     otrosIngresos: sum("otrosIngresos"),
     gastosFinancieros: sum("gastosFinancieros"),
     otrosGastos: sum("otrosGastos"),
-    roi,
   };
 }
 

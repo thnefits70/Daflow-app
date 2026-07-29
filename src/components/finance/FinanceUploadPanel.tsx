@@ -44,7 +44,6 @@ type PreviewRow = {
   otrosIngresos: number;
   gastosFinancieros: number;
   otrosGastos: number;
-  roi: number | null;
 };
 type Preview = {
   period: string;
@@ -52,7 +51,7 @@ type Preview = {
   shared: { inventarioFinal: number | null; cuentasPorCobrar: number | null; cuentasPorPagar: number | null } | null;
 };
 
-const EMPTY_MANUAL = { ventas: "", costoVentas: "", gastosVenta: "", gastosAdmin: "", otrosIngresos: "", gastosFinancieros: "", otrosGastos: "", roi: "" };
+const EMPTY_MANUAL = { ventas: "", costoVentas: "", gastosVenta: "", gastosAdmin: "", otrosIngresos: "", gastosFinancieros: "", otrosGastos: "" };
 const EMPTY_SHARED = { inventarioFinal: "", cuentasPorCobrar: "", cuentasPorPagar: "" };
 
 export function FinanceUploadPanel({ deptId, data }: { deptId: string; data: FinanceKpiDataDTO }) {
@@ -128,7 +127,7 @@ export function FinanceUploadPanel({ deptId, data }: { deptId: string; data: Fin
         rows: preview.rows.map((r) => ({
           operationId: r.operationId, ventas: r.ventas, costoVentas: r.costoVentas, gastosVenta: r.gastosVenta,
           gastosAdmin: r.gastosAdmin, otrosIngresos: r.otrosIngresos, gastosFinancieros: r.gastosFinancieros,
-          otrosGastos: r.otrosGastos, roi: r.roi,
+          otrosGastos: r.otrosGastos,
         })),
         shared: preview.shared,
         fileUrl: fileMeta.url,
@@ -161,7 +160,7 @@ export function FinanceUploadPanel({ deptId, data }: { deptId: string; data: Fin
           operationId: manualOperationId, ventas: n(manualFields.ventas), costoVentas: n(manualFields.costoVentas),
           gastosVenta: n(manualFields.gastosVenta), gastosAdmin: n(manualFields.gastosAdmin),
           otrosIngresos: n(manualFields.otrosIngresos), gastosFinancieros: n(manualFields.gastosFinancieros),
-          otrosGastos: n(manualFields.otrosGastos), roi: manualFields.roi === "" ? null : Number(manualFields.roi),
+          otrosGastos: n(manualFields.otrosGastos),
         }],
         shared: null,
       }),
@@ -276,7 +275,6 @@ export function FinanceUploadPanel({ deptId, data }: { deptId: string; data: Fin
                     <th className="text-right font-mono text-[9.5px] uppercase text-steel pb-1.5">Otros ing.</th>
                     <th className="text-right font-mono text-[9.5px] uppercase text-steel pb-1.5">G. fin.</th>
                     <th className="text-right font-mono text-[9.5px] uppercase text-steel pb-1.5">Otros gastos</th>
-                    <th className="text-right font-mono text-[9.5px] uppercase text-steel pb-1.5">ROI</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -290,12 +288,12 @@ export function FinanceUploadPanel({ deptId, data }: { deptId: string; data: Fin
                       <td className="py-1.5 text-right font-mono">{money(r.otrosIngresos)}</td>
                       <td className="py-1.5 text-right font-mono">{money(r.gastosFinancieros)}</td>
                       <td className="py-1.5 text-right font-mono">{money(r.otrosGastos)}</td>
-                      <td className="py-1.5 text-right font-mono">{r.roi !== null ? `${r.roi}%` : "—"}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
+            <div className="text-[11px] text-steel mb-3">El ROI ya no se ingresa aquí — DAFLOW lo calcula solo (utilidad neta ÷ costo de ventas) y se ve en el dashboard.</div>
             {warnings.length > 0 && (
               <div className="flex flex-col gap-1 mb-3">
                 {warnings.map((w, i) => (
@@ -356,7 +354,7 @@ export function FinanceUploadPanel({ deptId, data }: { deptId: string; data: Fin
               {([
                 ["ventas", "Ventas"], ["costoVentas", "Costo de ventas"], ["gastosVenta", "Gastos de ventas"],
                 ["gastosAdmin", "Gastos administrativos"], ["otrosIngresos", "Otros ingresos"],
-                ["gastosFinancieros", "Gastos financieros"], ["otrosGastos", "Otros gastos"], ["roi", "ROI del mes (%)"],
+                ["gastosFinancieros", "Gastos financieros"], ["otrosGastos", "Otros gastos"],
               ] as const).map(([key, label]) => (
                 <div key={key}>
                   <label className="block mb-1 text-[10px] text-steel">{label}</label>

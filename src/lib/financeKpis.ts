@@ -87,7 +87,6 @@ export async function getFinanceKpiData(deptId: string): Promise<FinanceKpiDataD
       otrosIngresos: r.otrosIngresos,
       gastosFinancieros: r.gastosFinancieros,
       otrosGastos: r.otrosGastos,
-      roi: r.roi,
     });
   }
 

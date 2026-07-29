@@ -15,7 +15,6 @@ const rowSchema = z.object({
   otrosIngresos: z.number(),
   gastosFinancieros: z.number(),
   otrosGastos: z.number(),
-  roi: z.number().nullable().optional(),
 });
 
 const saveSchema = z
@@ -77,13 +76,13 @@ export async function POST(req: NextRequest) {
         update: {
           ventas: r.ventas, costoVentas: r.costoVentas, gastosVenta: r.gastosVenta, gastosAdmin: r.gastosAdmin,
           otrosIngresos: r.otrosIngresos, gastosFinancieros: r.gastosFinancieros, otrosGastos: r.otrosGastos,
-          roi: r.roi ?? null, uploadedById,
+          uploadedById,
         },
         create: {
           deptId, operationId: r.operationId, period,
           ventas: r.ventas, costoVentas: r.costoVentas, gastosVenta: r.gastosVenta, gastosAdmin: r.gastosAdmin,
           otrosIngresos: r.otrosIngresos, gastosFinancieros: r.gastosFinancieros, otrosGastos: r.otrosGastos,
-          roi: r.roi ?? null, uploadedById,
+          uploadedById,
         },
       })
     ),

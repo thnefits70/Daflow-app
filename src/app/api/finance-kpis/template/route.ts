@@ -36,9 +36,9 @@ export async function GET(req: NextRequest) {
 
   const dataHeaders = [
     "Mes", "Operación", "Ventas", "Costo de ventas", "Gastos de ventas",
-    "Gastos administrativos", "Otros ingresos", "Gastos financieros", "Otros gastos", "ROI del mes (%)",
+    "Gastos administrativos", "Otros ingresos", "Gastos financieros", "Otros gastos",
   ];
-  const dataRows = operations.map((op) => [period, op.name, "", "", "", "", "", "", "", ""]);
+  const dataRows = operations.map((op) => [period, op.name, "", "", "", "", "", "", ""]);
 
   const wb = XLSX.utils.book_new();
 
@@ -48,8 +48,8 @@ export async function GET(req: NextRequest) {
     ["Cómo llenarla:"],
     [`1. Ya viene una fila por cada operación activa (${operations.map((o) => o.name).join(", ")}) para ${monthLabel(period)}. No mezclar ni sumar las operaciones — DAFLOW las suma solo al activar la vista Consolidado.`],
     ["2. Llenar SOLO estas columnas con números (sin $, sin comas de miles):"],
-    ["   Ventas, Costo de ventas, Gastos de ventas, Gastos administrativos, Otros ingresos, Gastos financieros, Otros gastos, ROI del mes (%)."],
-    ["3. NO agregues fórmulas ni columnas calculadas — Utilidad bruta, márgenes, utilidad operativa y utilidad neta los calcula DAFLOW automáticamente al subir el archivo."],
+    ["   Ventas, Costo de ventas, Gastos de ventas, Gastos administrativos, Otros ingresos, Gastos financieros, Otros gastos."],
+    ["3. NO agregues fórmulas ni columnas calculadas — Utilidad bruta, márgenes, utilidad operativa, utilidad neta y ROI los calcula DAFLOW automáticamente al subir el archivo."],
     ["4. Hoja 'Datos compartidos mensuales': inventario, cuentas por cobrar y cuentas por pagar al cierre del mes — una sola vez para todas las operaciones (no se reparte por marca)."],
     ["5. Cuando termines, guarda el archivo y súbelo en Finanzas y Contabilidad → KPIs financieros → Cargar plantilla."],
   ];
@@ -58,7 +58,7 @@ export async function GET(req: NextRequest) {
   XLSX.utils.book_append_sheet(wb, wsInstr, "Instrucciones");
 
   const wsData = XLSX.utils.aoa_to_sheet([dataHeaders, ...dataRows]);
-  wsData["!cols"] = [{ wch: 10 }, { wch: 18 }, { wch: 12 }, { wch: 16 }, { wch: 15 }, { wch: 20 }, { wch: 14 }, { wch: 16 }, { wch: 14 }, { wch: 15 }];
+  wsData["!cols"] = [{ wch: 10 }, { wch: 18 }, { wch: 12 }, { wch: 16 }, { wch: 15 }, { wch: 20 }, { wch: 14 }, { wch: 16 }, { wch: 14 }];
   wsData["!dataValidation"] = {
     [`B2:B${dataRows.length + 1}`]: { type: "list", formula1: `"${operations.map((o) => o.name).join(",")}"` },
   };

@@ -481,6 +481,10 @@ model FinanceKpiRecord {
   // Mes al que corresponde el registro, formato "YYYY-MM"
   period String
 
+  // Confirmado 2026-07-29: el ROI ya NO se tipea a mano — se calcula
+  // (utilidad neta ÷ costo de ventas) en src/lib/financeKpisCalc.ts
+  // (computeDerived) a partir de estos mismos campos, así que no hace falta
+  // guardarlo aparte.
   ventas            Float
   costoVentas       Float
   gastosVenta       Float
@@ -488,7 +492,6 @@ model FinanceKpiRecord {
   otrosIngresos     Float
   gastosFinancieros Float
   otrosGastos       Float
-  roi               Float?
 
   // Quién subió/corrigió este registro por última vez — null si lo hizo el
   // admin directamente (su sesión no tiene un User real, igual que PayStub).

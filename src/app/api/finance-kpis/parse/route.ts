@@ -76,7 +76,6 @@ export async function POST(req: NextRequest) {
     otrosIngresos: number;
     gastosFinancieros: number;
     otrosGastos: number;
-    roi: number | null;
   }[] = [];
 
   const matchingRows = dataRows.filter((r) => String(r["Mes"] ?? "").trim() === period);
@@ -102,7 +101,6 @@ export async function POST(req: NextRequest) {
     const otrosIngresos = num(r["Otros ingresos"]) ?? 0;
     const gastosFinancieros = num(r["Gastos financieros"]) ?? 0;
     const otrosGastos = num(r["Otros gastos"]) ?? 0;
-    const roi = num(r["ROI del mes (%)"]);
 
     for (const [label, val] of [
       ["Gastos de ventas", r["Gastos de ventas"]],
@@ -119,7 +117,7 @@ export async function POST(req: NextRequest) {
     rows.push({
       operationId: op.id,
       operationName: op.name,
-      ventas, costoVentas, gastosVenta, gastosAdmin, otrosIngresos, gastosFinancieros, otrosGastos, roi,
+      ventas, costoVentas, gastosVenta, gastosAdmin, otrosIngresos, gastosFinancieros, otrosGastos,
     });
   }
 
