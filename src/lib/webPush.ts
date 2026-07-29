@@ -42,6 +42,13 @@ export async function sendPushToOwner(ownerId: string, payload: PushPayload) {
         const statusCode = (err as { statusCode?: number })?.statusCode;
         if (statusCode === 404 || statusCode === 410) {
           await prisma.pushSubscription.delete({ where: { id: sub.id } }).catch(() => null);
+        } else {
+          // Confirmado 2026-07-29: antes cualquier error que no fuera 404/410
+          // se descartaba en silencio — si el push fallaba por otra razón
+          // (VAPID mal configurado, payload inválido, etc.) nadie se
+          // enteraba nunca. Ahora queda en los logs de Vercel para poder
+          // diagnosticar sin adivinar.
+          console.error(`sendPushToOwner falló (ownerId=${ownerId}, statusCode=${statusCode}):`, err);
         }
       }
     })
