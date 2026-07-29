@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { AlertTriangle, CheckCircle2, Lock, Upload } from "lucide-react";
 import { uploadFile } from "@/lib/uploadFile";
 import { compressImage } from "@/lib/compressImage";
+import { usePasteFile } from "@/lib/usePasteFile";
 import { PurchaseCatalogPicker, type CatalogItemDTO } from "./PurchaseCatalogPicker";
 import { PurchaseSupplierPicker, type PurchaseSupplierDTO } from "./PurchaseSupplierPicker";
 
@@ -25,6 +26,7 @@ export function PurchaseRequestForm() {
   const [verifying, setVerifying] = useState(false);
   const [verifyResult, setVerifyResult] = useState<QuoteReadResult | null>(null);
   const [manualCodeConfirm, setManualCodeConfirm] = useState(false);
+  const onPasteQuote = usePasteFile((file) => handleQuoteFile(file));
 
   const [shippingIncluded, setShippingIncluded] = useState(true);
   const [carrier, setCarrier] = useState<PurchaseSupplierDTO | null>(null);
@@ -199,9 +201,13 @@ export function PurchaseRequestForm() {
       <div className="mb-3.5">
         <label className="block mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-steel">Cotización</label>
         {!quoteImageUrl ? (
-          <label className="flex items-center justify-center gap-2 border-[1.5px] border-dashed border-rule rounded-md py-4 cursor-pointer hover:border-teal text-steel text-[12.5px]">
+          <label
+            tabIndex={0}
+            onPaste={onPasteQuote}
+            className="flex items-center justify-center gap-2 border-[1.5px] border-dashed border-rule rounded-md py-4 cursor-pointer hover:border-teal focus:border-teal focus:outline-none text-steel text-[12.5px]"
+          >
             {uploadingQuote ? <span className="w-4 h-4 rounded-full border-2 border-rule border-t-teal animate-spin" /> : <Upload size={16} />}
-            Subir o pegar la cotización (Ctrl+V)
+            Subir o pegar la cotización (clic aquí y Ctrl+V)
             <input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && handleQuoteFile(e.target.files[0])} />
           </label>
         ) : (

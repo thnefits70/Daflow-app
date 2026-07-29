@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Search, Plus, Camera, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { uploadFile } from "@/lib/uploadFile";
 import { compressImage } from "@/lib/compressImage";
+import { usePasteFile } from "@/lib/usePasteFile";
 
 export type CatalogItemDTO = { id: string; name: string; photos: string[] };
 
@@ -25,6 +26,7 @@ export function PurchaseCatalogPicker({
   const [newName, setNewName] = useState("");
   const [photos, setPhotos] = useState<string[]>([]);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const onPastePhoto = usePasteFile((file) => addPhoto(file));
   const [similarity, setSimilarity] = useState<{ suspected: boolean; matchedName: string | null; message: string | null } | null>(null);
   const [checkingSimilarity, setCheckingSimilarity] = useState(false);
   const [confirmStep, setConfirmStep] = useState(false);
@@ -148,7 +150,12 @@ export function PurchaseCatalogPicker({
                 <img key={i} src={p} alt="" className="w-16 h-16 rounded object-cover border border-rule" />
               ))}
               {photos.length < 3 && (
-                <label className="w-16 h-16 rounded border-[1.5px] border-dashed border-rule flex items-center justify-center cursor-pointer text-steel hover:border-teal">
+                <label
+                  tabIndex={0}
+                  onPaste={onPastePhoto}
+                  title="Clic aquí y Ctrl+V para pegar una foto copiada"
+                  className="w-16 h-16 rounded border-[1.5px] border-dashed border-rule flex items-center justify-center cursor-pointer text-steel hover:border-teal focus:border-teal focus:outline-none"
+                >
                   {uploadingPhoto ? (
                     <span className="w-4 h-4 rounded-full border-2 border-rule border-t-teal animate-spin" />
                   ) : (

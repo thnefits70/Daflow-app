@@ -3,7 +3,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { TopLine } from "@/components/ui/TopLine";
 import { DeptWorkspaceTabs } from "@/components/dept/DeptWorkspaceTabs";
-import { getUnseenFeedbackCount, canManageStoreFeedback as checkCanManageStoreFeedback, canViewStoreFeedback as checkCanViewStoreFeedback } from "@/lib/guards";
+import { getUnseenFeedbackCount, canManageStoreFeedback as checkCanManageStoreFeedback, canViewStoreFeedback as checkCanViewStoreFeedback, canSubmitPurchaseRequests, canConfirmPurchaseReceiving, canRegisterPurchaseInvoices } from "@/lib/guards";
 import { getFinanceKpiData } from "@/lib/financeKpis";
 import { getDeptProcessDetail } from "@/lib/processDetail";
 import { getPaymentRemindersData } from "@/lib/paymentReminders";
@@ -25,6 +25,16 @@ export default async function WorkspacePage() {
   const [canManageStoreFeedback, canViewStoreFeedback] = await Promise.all([
     checkCanManageStoreFeedback(),
     checkCanViewStoreFeedback(),
+  ]);
+
+  // Mismo patrón sin dept.code — Control de Compras (confirmado 2026-07-30:
+  // Bryan y Nairoby están asignados a esto sin ser líderes formales del
+  // departamento "Control de Compras", así que se ve en su propia "Mi área
+  // de trabajo" sin importar a cuál pertenecen de verdad).
+  const [canSubmitPurchases, canReceivePurchases, canInvoicePurchases] = await Promise.all([
+    canSubmitPurchaseRequests(),
+    canConfirmPurchaseReceiving(),
+    canRegisterPurchaseInvoices(),
   ]);
 
   const [processDetail, periodicReminders, documents, exams, financeKpiData, paymentReminders, weeklyMetricRecords, weeklyReviewRecords, currentUser, unseenFeedbackCount, purchaseReceipts, purchaseReceiptCatalogs, storeFeedbackStores] = await Promise.all([
@@ -113,6 +123,9 @@ export default async function WorkspacePage() {
         canManageStoreFeedback={canManageStoreFeedback}
         canViewStoreFeedback={canViewStoreFeedback}
         storeFeedbackStores={storeFeedbackStores}
+        canSubmitPurchases={canSubmitPurchases}
+        canReceivePurchases={canReceivePurchases}
+        canInvoicePurchases={canInvoicePurchases}
         isAdmin={false}
         editable={false}
         kpisEditable={kpisEditable}

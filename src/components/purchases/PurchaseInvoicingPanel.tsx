@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Upload } from "lucide-react";
 import { uploadFile } from "@/lib/uploadFile";
 import { compressImage } from "@/lib/compressImage";
+import { usePasteFile } from "@/lib/usePasteFile";
 
 type Row = {
   id: string;
@@ -37,6 +38,7 @@ export function PurchaseInvoicingPanel() {
   const [payingId, setPayingId] = useState<string | null>(null);
   const [proofUrl, setProofUrl] = useState<string | null>(null);
   const [uploadingProof, setUploadingProof] = useState(false);
+  const onPasteProof = usePasteFile((file) => uploadProof(file));
   const [partialAmounts, setPartialAmounts] = useState<Record<string, string>>({});
   const [busyId, setBusyId] = useState<string | null>(null);
   const [err, setErr] = useState("");
@@ -133,8 +135,12 @@ export function PurchaseInvoicingPanel() {
                     {proofUrl ? (
                       <img src={proofUrl} alt="" className="w-16 h-16 rounded object-cover border border-rule mb-2" />
                     ) : (
-                      <label className="flex items-center gap-1.5 border-[1.5px] border-dashed border-rule rounded px-3 py-2 text-[12px] text-steel cursor-pointer hover:border-teal w-fit mb-2">
-                        {uploadingProof ? <span className="w-3.5 h-3.5 rounded-full border-2 border-rule border-t-teal animate-spin" /> : <Upload size={13} />} Subir comprobante
+                      <label
+                        tabIndex={0}
+                        onPaste={onPasteProof}
+                        className="flex items-center gap-1.5 border-[1.5px] border-dashed border-rule rounded px-3 py-2 text-[12px] text-steel cursor-pointer hover:border-teal focus:border-teal focus:outline-none w-fit mb-2"
+                      >
+                        {uploadingProof ? <span className="w-3.5 h-3.5 rounded-full border-2 border-rule border-t-teal animate-spin" /> : <Upload size={13} />} Subir o pegar comprobante
                         <input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && uploadProof(e.target.files[0])} />
                       </label>
                     )}

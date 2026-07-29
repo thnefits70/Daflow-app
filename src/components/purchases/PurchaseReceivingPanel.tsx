@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Camera } from "lucide-react";
 import { uploadFile } from "@/lib/uploadFile";
 import { compressImage } from "@/lib/compressImage";
+import { usePasteFile } from "@/lib/usePasteFile";
 
 type Row = { id: string; quantity: number; totalCost: number; catalogItem: { name: string }; supplier: { name: string } };
 
@@ -16,6 +17,7 @@ export function PurchaseReceivingPanel() {
   const [receivedQty, setReceivedQty] = useState("");
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const onPastePhoto = usePasteFile((file) => addPhoto(file));
   const [comment, setComment] = useState("");
   const [urgentType, setUrgentType] = useState<"DAMAGED_INCOMPLETE" | "NOT_ARRIVED">("DAMAGED_INCOMPLETE");
   const [urgentQty, setUrgentQty] = useState("");
@@ -116,8 +118,12 @@ export function PurchaseReceivingPanel() {
                   {photoUrl ? (
                     <img src={photoUrl} alt="" className="w-full h-9 rounded object-cover border border-rule" />
                   ) : (
-                    <label className="flex items-center justify-center gap-1.5 border-[1.5px] border-dashed border-rule rounded px-2.5 py-2 text-[12px] text-steel cursor-pointer hover:border-teal">
-                      {uploadingPhoto ? <span className="w-3.5 h-3.5 rounded-full border-2 border-rule border-t-teal animate-spin" /> : <Camera size={13} />} Subir
+                    <label
+                      tabIndex={0}
+                      onPaste={onPastePhoto}
+                      className="flex items-center justify-center gap-1.5 border-[1.5px] border-dashed border-rule rounded px-2.5 py-2 text-[12px] text-steel cursor-pointer hover:border-teal focus:border-teal focus:outline-none"
+                    >
+                      {uploadingPhoto ? <span className="w-3.5 h-3.5 rounded-full border-2 border-rule border-t-teal animate-spin" /> : <Camera size={13} />} Subir o pegar
                       <input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && addPhoto(e.target.files[0])} />
                     </label>
                   )}

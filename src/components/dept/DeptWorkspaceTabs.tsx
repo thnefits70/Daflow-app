@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { GitBranch, FileText, GraduationCap, LineChart, TrendingUp, MessageSquare, CalendarClock, BellRing, Receipt, Heart } from "lucide-react";
+import { GitBranch, FileText, GraduationCap, LineChart, TrendingUp, MessageSquare, CalendarClock, BellRing, Receipt, Heart, ShoppingCart } from "lucide-react";
 import { ProcessEmbeddedPanel } from "@/components/process/ProcessEmbeddedPanel";
 import type { ProcessDTO } from "@/components/process/ProcessEditor";
 import type { ProcessUpdateDTO } from "@/components/process/ProcessHistoryPanel";
@@ -20,6 +20,7 @@ import { PaymentRemindersPanel } from "@/components/finance/PaymentRemindersPane
 import type { PaymentReminderDTO } from "@/lib/paymentReminders";
 import { WeeklyMetricPanel, type WeeklyMetricDTO } from "@/components/fulfillment/WeeklyMetricPanel";
 import { WeeklyReviewPanel, type WeeklyReviewDTO } from "@/components/marketanalysis/WeeklyReviewPanel";
+import { PurchaseControlPanel } from "@/components/purchases/PurchaseControlPanel";
 
 type DocumentDTO = { id: string; title: string; content: string; link: string; fileUrl: string | null; fileName: string | null };
 type ExamSummary = { id: string; title: string; questionCount: number };
@@ -33,6 +34,7 @@ const ALL_TABS = [
   { key: "feedback", label: "Feedback semanal", icon: MessageSquare },
   { key: "procesos", label: "Procesos", icon: GitBranch },
   { key: "comprobante", label: "Comprobante de pago", icon: Receipt },
+  { key: "compras", label: "Control de Compras", icon: ShoppingCart },
   { key: "postventa", label: "Servicio Postventa", icon: Heart },
   { key: "documentos", label: "Documentos", icon: FileText },
   { key: "examenes", label: "Exámenes", icon: GraduationCap },
@@ -63,6 +65,9 @@ export function DeptWorkspaceTabs({
   canManageStoreFeedback = false,
   canViewStoreFeedback = false,
   storeFeedbackStores = [],
+  canSubmitPurchases = false,
+  canReceivePurchases = false,
+  canInvoicePurchases = false,
   isAdmin = false,
   editable,
   kpisEditable,
@@ -98,6 +103,14 @@ export function DeptWorkspaceTabs({
   canManageStoreFeedback?: boolean;
   canViewStoreFeedback?: boolean;
   storeFeedbackStores?: StoreDTO[];
+  // Control de Compras — mismo patrón sin dept.code que Servicio Postventa
+  // (confirmado 2026-07-30): Bryan y Nairoby están "asignados puntualmente"
+  // a esto sin ser líderes formales de Control de Compras como departamento,
+  // así que se ve en la propia "Mi área de trabajo" de cada quien sin
+  // importar a qué departamento pertenezcan de verdad.
+  canSubmitPurchases?: boolean;
+  canReceivePurchases?: boolean;
+  canInvoicePurchases?: boolean;
   isAdmin?: boolean;
   editable: boolean;
   kpisEditable?: boolean;
@@ -119,6 +132,7 @@ export function DeptWorkspaceTabs({
     if (t.key === "semanal") return trackWeeklyMetric;
     if (t.key === "feedback") return trackWeeklyReview;
     if (t.key === "comprobante") return canViewPurchaseReceipts;
+    if (t.key === "compras") return canSubmitPurchases || canReceivePurchases || canInvoicePurchases;
     if (t.key === "postventa") return canManageStoreFeedback || canViewStoreFeedback;
     return true;
   });
@@ -170,6 +184,14 @@ export function DeptWorkspaceTabs({
           banks={purchaseReceiptBanks}
           editable={canViewPurchaseReceipts}
           isAdmin={isAdmin}
+        />
+      )}
+      {tab === "compras" && (canSubmitPurchases || canReceivePurchases || canInvoicePurchases) && (
+        <PurchaseControlPanel
+          canSubmit={canSubmitPurchases}
+          canReview={false}
+          canReceive={canReceivePurchases}
+          canInvoice={canInvoicePurchases}
         />
       )}
       {tab === "postventa" && (canManageStoreFeedback || canViewStoreFeedback) && (

@@ -3,7 +3,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { AreaGateShell } from "@/components/dept/AreaGateShell";
 import type { ProcessDTO } from "@/components/process/ProcessEditor";
-import { SUPPLIER_VIEW_DEPT_CODES, canManageNomina, canSubmitPurchaseRequests, canConfirmPurchaseReceiving, canRegisterPurchaseInvoices } from "@/lib/guards";
+import { SUPPLIER_VIEW_DEPT_CODES, canManageNomina } from "@/lib/guards";
 
 export default async function AreaLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
@@ -123,15 +123,6 @@ export default async function AreaLayout({ children }: { children: React.ReactNo
   // rights. The page itself still gates each individual section's edit UI.
   const showKpis = true;
   const showNomina = await canManageNomina();
-  const [canSubmitPurchases, canReceivePurchases, canInvoicePurchases] = await Promise.all([
-    canSubmitPurchaseRequests(),
-    canConfirmPurchaseReceiving(),
-    canRegisterPurchaseInvoices(),
-  ]);
-  const showPurchases = canSubmitPurchases || canReceivePurchases || canInvoicePurchases;
-  const pendingPurchasesCount = canReceivePurchases
-    ? await prisma.purchaseRequest.count({ where: { status: "PAID" } })
-    : 0;
   const myLearningPathCount = await prisma.learningPathAssignment.count({ where: { userId: session.user.id } });
 
   return (
@@ -148,8 +139,6 @@ export default async function AreaLayout({ children }: { children: React.ReactNo
       ledDeptName={ledDeptName}
       showSuppliers={showSuppliers}
       pendingSuppliersCount={pendingSuppliersCount}
-      showPurchases={showPurchases}
-      pendingPurchasesCount={pendingPurchasesCount}
       unseenFeedbackCount={unseenFeedbackCount}
       unseenPayStubCount={unseenPayStubCount}
       showConfidential={confidentialAccessCount > 0}
