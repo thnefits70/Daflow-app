@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { signOut } from "next-auth/react";
+import { PushSettingsToggle } from "@/components/shared/PushSettingsToggle";
 import {
   LayoutDashboard,
   ShieldCheck,
@@ -234,8 +235,9 @@ export function AdminSidebar({
         </Link>
       </div>
 
-      <div className="px-4.5 py-3.5 border-t border-white/10">
+      <div className="px-4.5 py-3.5 border-t border-white/10 flex flex-col gap-2.5">
         {saving && <div className="text-[10.5px] text-[#B9C2CC] mb-2">Guardando orden…</div>}
+        <PushSettingsToggle />
         <button
           type="button"
           className="flex items-center gap-2 text-[#C9CFC5] hover:text-white text-[12.5px] cursor-pointer"
