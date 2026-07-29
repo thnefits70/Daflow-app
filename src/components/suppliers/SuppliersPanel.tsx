@@ -106,6 +106,9 @@ export function SuppliersPanel({
   const [rejectingId, setRejectingId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState("");
   const [query, setQuery] = useState("");
+  const [addingContactId, setAddingContactId] = useState<string | null>(null);
+  const [newContact, setNewContact] = useState({ label: "", whatsapp: "" });
+  const [contactErr, setContactErr] = useState("");
 
   const sortedSuppliers = useMemo(() => {
     if (!query.trim()) return suppliers;
@@ -194,6 +197,29 @@ export function SuppliersPanel({
     await fetch(`/api/suppliers/${id}`, { method: "DELETE" });
     setBusy(false);
     setConfirmingDeleteId(null);
+    router.refresh();
+  };
+
+  const addContact = async (supplierId: string) => {
+    if (!newContact.label.trim() || !newContact.whatsapp.trim()) {
+      setContactErr("Completa el nombre y el WhatsApp del asesor.");
+      return;
+    }
+    setContactErr("");
+    setBusy(true);
+    const res = await fetch(`/api/suppliers/${supplierId}/contacts`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ label: newContact.label.trim(), whatsapp: newContact.whatsapp.trim() }),
+    });
+    setBusy(false);
+    if (!res.ok) {
+      const data = await res.json().catch(() => null);
+      setContactErr(data?.error ?? "No se pudo agregar el asesor.");
+      return;
+    }
+    setAddingContactId(null);
+    setNewContact({ label: "", whatsapp: "" });
     router.refresh();
   };
 
@@ -353,7 +379,56 @@ export function SuppliersPanel({
                       <Globe size={13} /> {CHANNEL_LABELS[c.platform]}
                     </a>
                   ))}
+                  {canAdd && addingContactId !== s.id && (
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-1.5 text-[12px] font-semibold border border-dashed border-rule text-steel hover:text-ink hover:border-steel rounded-full px-3 py-1.5 cursor-pointer"
+                      onClick={() => {
+                        setAddingContactId(s.id);
+                        setNewContact({ label: "", whatsapp: "" });
+                        setContactErr("");
+                      }}
+                    >
+                      <Plus size={13} /> Agregar asesor
+                    </button>
+                  )}
                 </div>
+
+                {canAdd && addingContactId === s.id && (
+                  <div className="mt-2.5 pt-2.5 border-t border-rule">
+                    <div className="text-[10.5px] text-steel mb-1.5">
+                      Solo se agrega — no se puede editar ni quitar un asesor ya existente desde aquí.
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input
+                        className="flex-1 min-w-0 rounded border border-rule px-2.5 py-1.5 text-[12.5px]"
+                        placeholder="Ej. Asesor Juan"
+                        value={newContact.label}
+                        onChange={(e) => setNewContact((c) => ({ ...c, label: e.target.value }))}
+                      />
+                      <input
+                        className="flex-1 min-w-0 rounded border border-rule px-2.5 py-1.5 text-[12.5px]"
+                        placeholder="Ej. 593987654321"
+                        value={newContact.whatsapp}
+                        onChange={(e) => setNewContact((c) => ({ ...c, whatsapp: e.target.value }))}
+                      />
+                    </div>
+                    {contactErr && <div className="text-red text-[11.5px] mt-1.5">{contactErr}</div>}
+                    <div className="flex items-center gap-2.5 mt-2">
+                      <button
+                        type="button"
+                        disabled={busy}
+                        className="rounded border border-blue bg-blue px-3 py-1.5 text-[11.5px] font-semibold text-white cursor-pointer disabled:opacity-60"
+                        onClick={() => addContact(s.id)}
+                      >
+                        Guardar
+                      </button>
+                      <button type="button" className="text-steel text-[11.5px] cursor-pointer" onClick={() => setAddingContactId(null)}>
+                        Cancelar
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
           </div>
