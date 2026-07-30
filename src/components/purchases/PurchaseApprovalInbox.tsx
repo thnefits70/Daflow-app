@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { FileText } from "lucide-react";
 
 type Row = {
   id: string;
@@ -10,9 +11,15 @@ type Row = {
   unitCost: number;
   totalCost: number;
   justification: string | null;
+  quoteImageUrl: string;
+  purchaseOrderUrl: string | null;
   catalogItem: { name: string };
   supplier: { name: string };
 };
+
+function isPdf(url: string) {
+  return /\.pdf($|\?)/i.test(url);
+}
 
 function groupRows(rows: Row[]) {
   const map = new Map<string, Row[]>();
@@ -77,6 +84,18 @@ export function PurchaseApprovalInbox() {
               )}
             </div>
             {justification && <div className="text-[12px] text-steel mb-2.5">Justificación: &quot;{justification}&quot;</div>}
+            <div className="flex items-center gap-2 mb-2.5">
+              <a href={g[0].quoteImageUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-[11.5px] text-blue font-semibold cursor-pointer">
+                {isPdf(g[0].quoteImageUrl) ? <FileText size={13} /> : <img src={g[0].quoteImageUrl} alt="" className="w-6 h-6 rounded object-cover border border-rule" />}
+                Ver cotización
+              </a>
+              {g[0].purchaseOrderUrl && (
+                <a href={g[0].purchaseOrderUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-[11.5px] text-blue font-semibold cursor-pointer">
+                  {isPdf(g[0].purchaseOrderUrl) ? <FileText size={13} /> : <img src={g[0].purchaseOrderUrl} alt="" className="w-6 h-6 rounded object-cover border border-rule" />}
+                  Ver orden de compra
+                </a>
+              )}
+            </div>
             {rejectingGroup === groupId ? (
               <div>
                 <textarea className="w-full rounded border border-rule px-2.5 py-2 text-[12.5px] mb-2" rows={2} placeholder="Motivo del rechazo (opcional)" value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} />

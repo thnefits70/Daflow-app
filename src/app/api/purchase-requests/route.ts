@@ -95,6 +95,7 @@ const createSchema = z.object({
   quoteImageUrl: z.string().url(),
   quoteReadTotal: z.number().nullable(),
   quoteReferenceCode: z.string().trim().nullable().optional(),
+  purchaseOrderUrl: z.string().url().nullable().optional(),
   shippingIncluded: z.boolean(),
   carrierId: z.string().min(1).nullable().optional(),
   shippingCostTotal: z.number().nonnegative().nullable().optional(),
@@ -124,6 +125,15 @@ export async function POST(req: NextRequest) {
   const manuallyConfirmed = !!d.quoteReferenceCode;
   if (!matches && !manuallyConfirmed) {
     return NextResponse.json({ error: "La cotización no coincide con lo escrito — verifícala de nuevo antes de enviar." }, { status: 400 });
+  }
+  // Confirmado 2026-07-31: cuando la cotización solo trae un código de
+  // proveedor (no el nombre del producto), la orden de compra es obligatoria
+  // — es el único respaldo real de qué se está comprando y pagando.
+  if (manuallyConfirmed && !d.purchaseOrderUrl) {
+    return NextResponse.json(
+      { error: "La cotización solo trae un código, sin nombre de producto — sube la orden de compra como respaldo antes de enviar." },
+      { status: 400 }
+    );
   }
 
   // El envío se reparte proporcionalmente entre las líneas por cantidad,
@@ -182,6 +192,7 @@ export async function POST(req: NextRequest) {
           quoteImageUrl: d.quoteImageUrl,
           quoteReadTotal: d.quoteReadTotal,
           quoteReferenceCode: d.quoteReferenceCode || null,
+          purchaseOrderUrl: d.purchaseOrderUrl || null,
           quoteConfirmedAt: new Date(),
           shippingIncluded: d.shippingIncluded,
           carrierId: d.shippingIncluded ? null : d.carrierId,

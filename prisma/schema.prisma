@@ -956,6 +956,11 @@ model PurchaseRequest {
   // producto — la persona confirma manualmente a qué insumo corresponde.
   quoteReferenceCode String?
   quoteConfirmedAt    DateTime?
+  // Confirmado 2026-07-31: cuando la cotización solo trae código (no nombre
+  // de producto), la orden de compra es obligatoria como respaldo de qué se
+  // está comprando — impuesta en la ruta, no aquí; opcional en cualquier
+  // otro caso (se puede subir por adelantado igual).
+  purchaseOrderUrl   String?
 
   shippingIncluded      Boolean                @default(true)
   carrierId              String?

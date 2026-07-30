@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, CheckCircle2, Lock, Upload, Plus, X } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Lock, Upload, Plus, X, FileText, Clock } from "lucide-react";
 import { uploadFile } from "@/lib/uploadFile";
 import { compressImage } from "@/lib/compressImage";
 import { usePasteFile } from "@/lib/usePasteFile";
@@ -20,6 +20,37 @@ type QuoteReadResult = {
 
 type Line = { catalogItem: CatalogItemDTO | null; quantity: string; unitCost: string; stats: PriceStats | null };
 const emptyLine = (): Line => ({ catalogItem: null, quantity: "", unitCost: "", stats: null });
+
+type Draft = {
+  lines: { catalogItem: CatalogItemDTO | null; quantity: string; unitCost: string }[];
+  supplier: PurchaseSupplierDTO | null;
+  quoteImageUrl: string | null;
+  verifyResult: QuoteReadResult | null;
+  manualCodeConfirm: boolean;
+  purchaseOrderUrl: string | null;
+  shippingIncluded: boolean;
+  carrier: PurchaseSupplierDTO | null;
+  shippingCostTotal: string;
+  shippingPaymentMethod: "TRANSFER" | "PETTY_CASH";
+  justification: string;
+};
+
+// Confirmado 2026-07-31: si la persona sale de la página a medias, no debe
+// perder lo que ya llevaba avanzado — se guarda un borrador en localStorage
+// (los archivos ya se subieron a Storage apenas se eligen, así que lo que se
+// persiste son solo URLs y texto, todo serializable) y se restaura solo, con
+// un aviso arriba para que quede claro que es lo que ya tenía sin terminar.
+const DRAFT_KEY = "daflow.purchaseRequestDraft.v1";
+
+function draftHasContent(d: Pick<Draft, "lines" | "supplier" | "quoteImageUrl" | "purchaseOrderUrl" | "justification">) {
+  return (
+    d.lines.some((l) => l.catalogItem || l.quantity || l.unitCost) ||
+    !!d.supplier ||
+    !!d.quoteImageUrl ||
+    !!d.purchaseOrderUrl ||
+    !!d.justification.trim()
+  );
+}
 
 // Confirmado 2026-07-31: una cotización suele traer varios productos — se
 // arma como una lista de líneas (cada una con su propio insumo/cantidad/
@@ -39,6 +70,11 @@ export function PurchaseRequestForm() {
   const [manualCodeConfirm, setManualCodeConfirm] = useState(false);
   const onPasteQuote = usePasteFile((file) => handleQuoteFile(file));
 
+  const [purchaseOrderFile, setPurchaseOrderFile] = useState<File | null>(null);
+  const [purchaseOrderUrl, setPurchaseOrderUrl] = useState<string | null>(null);
+  const [uploadingPurchaseOrder, setUploadingPurchaseOrder] = useState(false);
+  const onPastePurchaseOrder = usePasteFile((file) => handlePurchaseOrderFile(file));
+
   const [shippingIncluded, setShippingIncluded] = useState(true);
   const [carrier, setCarrier] = useState<PurchaseSupplierDTO | null>(null);
   const [shippingCostTotal, setShippingCostTotal] = useState("");
@@ -49,17 +85,24 @@ export function PurchaseRequestForm() {
   const [err, setErr] = useState("");
   const [toast, setToast] = useState("");
 
+  const [hydrated, setHydrated] = useState(false);
+  const [draftRestored, setDraftRestored] = useState(false);
+
   function updateLine(idx: number, patch: Partial<Line>) {
     setLines((ls) => ls.map((l, i) => (i === idx ? { ...l, ...patch } : l)));
+  }
+
+  function fetchLineStats(idx: number, catalogItemId: string) {
+    fetch(`/api/purchase-catalog/${catalogItemId}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => updateLine(idx, { stats: data?.stats ?? null }))
+      .catch(() => updateLine(idx, { stats: null }));
   }
 
   function setLineCatalogItem(idx: number, item: CatalogItemDTO | null) {
     updateLine(idx, { catalogItem: item, stats: null });
     if (!item) return;
-    fetch(`/api/purchase-catalog/${item.id}`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => updateLine(idx, { stats: data?.stats ?? null }))
-      .catch(() => updateLine(idx, { stats: null }));
+    fetchLineStats(idx, item.id);
   }
 
   function addLine() {
@@ -67,6 +110,80 @@ export function PurchaseRequestForm() {
   }
   function removeLine(idx: number) {
     setLines((ls) => (ls.length > 1 ? ls.filter((_, i) => i !== idx) : ls));
+  }
+
+  // Restaura el borrador (si hay uno) una sola vez al montar, y recién
+  // después habilita el autoguardado — así no se pisa el borrador guardado
+  // con el estado vacío inicial antes de leerlo.
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(DRAFT_KEY);
+      if (raw) {
+        const d: Draft = JSON.parse(raw);
+        const restoredLines: Line[] = (d.lines?.length ? d.lines : [emptyLine()]).map((l) => ({ ...l, stats: null }));
+        setLines(restoredLines);
+        setSupplier(d.supplier ?? null);
+        setQuoteImageUrl(d.quoteImageUrl ?? null);
+        setVerifyResult(d.verifyResult ?? null);
+        setManualCodeConfirm(d.manualCodeConfirm ?? false);
+        setPurchaseOrderUrl(d.purchaseOrderUrl ?? null);
+        setShippingIncluded(d.shippingIncluded ?? true);
+        setCarrier(d.carrier ?? null);
+        setShippingCostTotal(d.shippingCostTotal ?? "");
+        setShippingPaymentMethod(d.shippingPaymentMethod ?? "TRANSFER");
+        setJustification(d.justification ?? "");
+        restoredLines.forEach((l, i) => l.catalogItem && fetchLineStats(i, l.catalogItem.id));
+        setDraftRestored(draftHasContent(d));
+      }
+    } catch {
+      // Borrador corrupto o ilegible — se ignora y se arranca en blanco.
+    }
+    setHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    const draft: Draft = {
+      lines: lines.map(({ catalogItem, quantity, unitCost }) => ({ catalogItem, quantity, unitCost })),
+      supplier,
+      quoteImageUrl,
+      verifyResult,
+      manualCodeConfirm,
+      purchaseOrderUrl,
+      shippingIncluded,
+      carrier,
+      shippingCostTotal,
+      shippingPaymentMethod,
+      justification,
+    };
+    if (draftHasContent(draft)) {
+      localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+    } else {
+      localStorage.removeItem(DRAFT_KEY);
+    }
+  }, [hydrated, lines, supplier, quoteImageUrl, verifyResult, manualCodeConfirm, purchaseOrderUrl, shippingIncluded, carrier, shippingCostTotal, shippingPaymentMethod, justification]);
+
+  function resetForm() {
+    setLines([emptyLine()]);
+    setSupplier(null);
+    setQuoteFile(null);
+    setQuoteImageUrl(null);
+    setVerifyResult(null);
+    setManualCodeConfirm(false);
+    setPurchaseOrderFile(null);
+    setPurchaseOrderUrl(null);
+    setCarrier(null);
+    setShippingCostTotal("");
+    setShippingIncluded(true);
+    setShippingPaymentMethod("TRANSFER");
+    setJustification("");
+    setDraftRestored(false);
+  }
+
+  function discardDraft() {
+    localStorage.removeItem(DRAFT_KEY);
+    resetForm();
+    setErr("");
   }
 
   const lineTotals = lines.map((l) => (Number(l.quantity) || 0) * (Number(l.unitCost) || 0));
@@ -104,6 +221,20 @@ export function PurchaseRequestForm() {
     setQuoteImageUrl(uploaded.url);
   }
 
+  async function handlePurchaseOrderFile(file: File) {
+    setPurchaseOrderFile(file);
+    setUploadingPurchaseOrder(true);
+    setErr("");
+    const compressed = await compressImage(file);
+    const uploaded = await uploadFile(compressed, "purchase-orders");
+    setUploadingPurchaseOrder(false);
+    if (!uploaded.ok) {
+      setErr(uploaded.error);
+      return;
+    }
+    setPurchaseOrderUrl(uploaded.url);
+  }
+
   async function verifyQuote() {
     if (!quoteImageUrl || total <= 0) return;
     setVerifying(true);
@@ -123,6 +254,10 @@ export function PurchaseRequestForm() {
   }
 
   const quoteVerified = verifyResult?.matches || (verifyResult?.referenceCodeFound && manualCodeConfirm);
+  // Confirmado 2026-07-31: cuando la IA no encuentra nombre de producto en la
+  // cotización, solo un código, la orden de compra pasa a ser obligatoria —
+  // es el único respaldo real de qué se está comprando y solicitando pagar.
+  const needsPurchaseOrder = !!verifyResult?.referenceCodeFound && !verifyResult?.productNameFound;
   const validLines = lines.filter((l) => l.catalogItem && Number(l.quantity) > 0 && Number(l.unitCost) > 0);
 
   async function submit() {
@@ -132,6 +267,10 @@ export function PurchaseRequestForm() {
     }
     if (!quoteVerified) {
       setErr("Verifica la cotización antes de enviar.");
+      return;
+    }
+    if (needsPurchaseOrder && !purchaseOrderUrl) {
+      setErr("La cotización solo trae un código, sin nombre de producto — sube la orden de compra antes de enviar.");
       return;
     }
     if (!shippingIncluded && !carrier) {
@@ -153,6 +292,7 @@ export function PurchaseRequestForm() {
         quoteImageUrl,
         quoteReadTotal: verifyResult?.readTotal ?? null,
         quoteReferenceCode: verifyResult?.referenceCodeFound ?? null,
+        purchaseOrderUrl,
         shippingIncluded,
         carrierId: shippingIncluded ? null : carrier?.id,
         shippingCostTotal: shippingIncluded ? null : Number(shippingCostTotal) || null,
@@ -167,20 +307,24 @@ export function PurchaseRequestForm() {
       return;
     }
     setToast("✅ Solicitud enviada — te llegará una notificación cuando se apruebe.");
-    setLines([emptyLine()]);
-    setSupplier(null);
-    setQuoteFile(null);
-    setQuoteImageUrl(null);
-    setVerifyResult(null);
-    setCarrier(null);
-    setShippingCostTotal("");
-    setShippingIncluded(true);
-    setJustification("");
+    localStorage.removeItem(DRAFT_KEY);
+    resetForm();
     router.refresh();
   }
 
   return (
     <div className="bg-surface border border-rule rounded-md p-4.5">
+      {draftRestored && (
+        <div className="flex items-center justify-between gap-3 bg-teal/10 border border-teal/35 rounded-md px-3.5 py-2.5 mb-4">
+          <div className="flex items-center gap-2 text-[12.5px] text-teal">
+            <Clock size={15} /> Retomando tu solicitud sin terminar — no se perdió nada.
+          </div>
+          <button type="button" className="text-[11.5px] text-steel font-semibold cursor-pointer whitespace-nowrap" onClick={discardDraft}>
+            Descartar y empezar de nuevo
+          </button>
+        </div>
+      )}
+
       <label className="block mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-steel">Productos</label>
       <div className="flex flex-col gap-3 mb-2">
         {lines.map((line, idx) => (
@@ -303,6 +447,49 @@ export function PurchaseRequestForm() {
             )}
             <button type="button" className="text-[11px] text-steel mt-2 cursor-pointer" onClick={() => { setQuoteFile(null); setQuoteImageUrl(null); setVerifyResult(null); }}>
               Cambiar imagen
+            </button>
+          </div>
+        )}
+      </div>
+
+      <div className="mb-3.5">
+        <label className="block mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-steel">
+          Orden de compra{" "}
+          {needsPurchaseOrder ? (
+            <span className="text-red normal-case font-semibold">— obligatoria</span>
+          ) : (
+            <span className="text-steel-dim normal-case font-normal">(opcional — puedes subirla por adelantado)</span>
+          )}
+        </label>
+        {needsPurchaseOrder && (
+          <div className="text-[11.5px] text-red mb-2">
+            La cotización solo trae un código, sin nombre de producto — sube la orden de compra para respaldar qué se está comprando.
+          </div>
+        )}
+        {!purchaseOrderUrl ? (
+          <label
+            tabIndex={0}
+            onPaste={onPastePurchaseOrder}
+            className={`flex items-center justify-center gap-2 border-[1.5px] border-dashed rounded-md py-3.5 cursor-pointer text-[12.5px] focus:outline-none ${
+              needsPurchaseOrder ? "border-red/45 text-red hover:border-red" : "border-rule text-steel hover:border-teal focus:border-teal"
+            }`}
+          >
+            {uploadingPurchaseOrder ? <span className="w-4 h-4 rounded-full border-2 border-rule border-t-teal animate-spin" /> : <Upload size={15} />}
+            Subir o pegar la orden de compra
+            <input type="file" accept="image/*,application/pdf" className="hidden" onChange={(e) => e.target.files?.[0] && handlePurchaseOrderFile(e.target.files[0])} />
+          </label>
+        ) : (
+          <div className="flex items-center gap-3 bg-cloud border border-rule rounded-md p-3">
+            {/\.pdf($|\?)/i.test(purchaseOrderUrl) ? (
+              <FileText size={22} className="text-steel shrink-0" />
+            ) : (
+              <img src={purchaseOrderUrl} alt="" className="w-11 h-11 rounded object-cover border border-rule shrink-0" />
+            )}
+            <div className="flex-1 flex items-center gap-1.5 text-[12px] text-teal">
+              <CheckCircle2 size={13} /> Orden de compra subida
+            </div>
+            <button type="button" className="text-[11px] text-steel cursor-pointer" onClick={() => { setPurchaseOrderFile(null); setPurchaseOrderUrl(null); }}>
+              Cambiar
             </button>
           </div>
         )}
