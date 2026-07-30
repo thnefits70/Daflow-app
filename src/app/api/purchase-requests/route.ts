@@ -37,9 +37,20 @@ export async function GET(req: NextRequest) {
 
   if (view === "receiving") {
     if (!(await canConfirmPurchaseReceiving())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
-    const rows = await prisma.purchaseRequest.findMany({
+    const pending = await prisma.purchaseRequest.findMany({
       where: { status: "PAID" },
+      select: { groupId: true },
       orderBy: { paidAt: "asc" },
+    });
+    // Confirmado 2026-07-31: Inventario necesita ver el grupo completo (no
+    // solo lo que falta) para declarar qué productos de una misma cotización
+    // ya llegaron y cuáles todavía se esperan — el grupo desaparece de esta
+    // bandeja solo cuando TODAS sus filas pasan a RECEIVED.
+    const groupIds = [...new Set(pending.map((r) => r.groupId))];
+    if (groupIds.length === 0) return NextResponse.json([]);
+    const rows = await prisma.purchaseRequest.findMany({
+      where: { groupId: { in: groupIds } },
+      orderBy: { requestedAt: "asc" },
       include: requestInclude,
     });
     return NextResponse.json(rows);
