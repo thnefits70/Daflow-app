@@ -6,8 +6,9 @@ import { MyPurchaseRequests } from "./MyPurchaseRequests";
 import { PurchaseApprovalInbox } from "./PurchaseApprovalInbox";
 import { PurchaseReceivingPanel } from "./PurchaseReceivingPanel";
 import { PurchaseInvoicingPanel } from "./PurchaseInvoicingPanel";
+import { PurchasePriceExplorer } from "./PurchasePriceExplorer";
 
-type Tab = "solicitar" | "mias" | "aprobacion" | "inventario" | "finanzas";
+type Tab = "solicitar" | "mias" | "comparar" | "aprobacion" | "inventario" | "finanzas";
 
 // Confirmado 2026-07-30: una sola pantalla para todo el módulo — las
 // pestañas que ve cada persona dependen de lo que puede hacer (admin ve
@@ -26,6 +27,7 @@ export function PurchaseControlPanel({
 }) {
   const tabs: { key: Tab; label: string }[] = [
     ...(canSubmit ? [{ key: "solicitar" as Tab, label: "Solicitar" }, { key: "mias" as Tab, label: "Mis solicitudes" }] : []),
+    ...(canSubmit || canReview ? [{ key: "comparar" as Tab, label: "Comparar precios" }] : []),
     ...(canReview ? [{ key: "aprobacion" as Tab, label: "Bandeja de aprobación" }] : []),
     ...(canReceive ? [{ key: "inventario" as Tab, label: "Inventario" }] : []),
     ...(canInvoice ? [{ key: "finanzas" as Tab, label: "Finanzas" }] : []),
@@ -53,6 +55,7 @@ export function PurchaseControlPanel({
 
       {tab === "solicitar" && <PurchaseRequestForm />}
       {tab === "mias" && <MyPurchaseRequests />}
+      {tab === "comparar" && <PurchasePriceExplorer />}
       {tab === "aprobacion" && <PurchaseApprovalInbox />}
       {tab === "inventario" && <PurchaseReceivingPanel />}
       {tab === "finanzas" && <PurchaseInvoicingPanel />}
