@@ -14,7 +14,7 @@ export type PurchaseSupplierDTO = {
   contacts: { label: string; whatsapp: string }[];
 };
 
-const emptyForm = { name: "", location: "", bankName: "", bankAccountType: "", bankAccountNumber: "", bankAccountHolder: "", email: "", contactLabel: "", contactWhatsapp: "" };
+const emptyForm = { name: "", category: "", notes: "", location: "", bankName: "", bankAccountType: "", bankAccountNumber: "", bankAccountHolder: "", email: "", contactLabel: "", contactWhatsapp: "" };
 
 // Reutilizado para proveedor (type=SUPPLIER, pide ubicación) y transportista
 // (type=CARRIER, sin ubicación) — confirmado 2026-07-30: ambos viven en la
@@ -51,7 +51,7 @@ export function PurchaseSupplierPicker({
   }, [query, type, value, creating]);
 
   async function save() {
-    if (!form.name.trim() || !form.bankName.trim() || !form.bankAccountType.trim() || !form.bankAccountNumber.trim() || !form.bankAccountHolder.trim() || !form.contactLabel.trim() || !form.contactWhatsapp.trim()) {
+    if (!form.name.trim() || !form.notes.trim() || !form.bankName.trim() || !form.bankAccountType.trim() || !form.bankAccountNumber.trim() || !form.bankAccountHolder.trim() || !form.contactLabel.trim() || !form.contactWhatsapp.trim()) {
       setErr("Completa todos los campos obligatorios.");
       return;
     }
@@ -109,6 +109,27 @@ export function PurchaseSupplierPicker({
               <input className="w-full rounded border border-rule px-2.5 py-2 text-[13px]" value={form.location} onChange={(e) => setForm((f) => ({ ...f, location: e.target.value }))} />
             </div>
           )}
+        </div>
+        <div className="grid grid-cols-2 gap-2.5 mb-2.5">
+          <div>
+            <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">
+              Qué {type === "SUPPLIER" ? "provee" : "transporta"} <span className="text-steel-dim">(opcional)</span>
+            </label>
+            <input className="w-full rounded border border-rule px-2.5 py-2 text-[13px]" value={form.category} onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))} />
+          </div>
+        </div>
+        <div className="mb-2.5">
+          <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Descripción</label>
+          <textarea
+            rows={2}
+            className="w-full rounded border border-rule px-2.5 py-2 text-[13px]"
+            value={form.notes}
+            onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
+            placeholder={type === "SUPPLIER" ? "Ej. Ropa y juguetes, artículos escolares, bisutería…" : "Ej. Entregas dentro de Guayaquil, moto propia…"}
+          />
+          <div className="text-[10.5px] text-steel mt-1">
+            Esta información también aparece en la sección de Proveedores — mientras más detalle, más fácil encontrarlo ahí.
+          </div>
         </div>
         <div className="grid grid-cols-2 gap-2.5 mb-2.5">
           <div>

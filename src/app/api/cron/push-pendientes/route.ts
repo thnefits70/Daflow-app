@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAllPendingTasksActors, getPendingTasksForActor } from "@/lib/pendingTasks";
 import { getDisabledTypes } from "@/lib/pushPreferences";
 import { getDuePersonalReminderPushes } from "@/lib/periodicReminders";
+import { getStalePurchaseRequestPushes } from "@/lib/purchases";
 import { sendPushToOwner } from "@/lib/webPush";
 
 // Disparado por Vercel Cron (ver vercel.json) una vez al día. Protegido por
@@ -53,6 +54,12 @@ export async function GET(req: NextRequest) {
 
   const personalReminders = await getDuePersonalReminderPushes();
   for (const r of personalReminders) {
+    await sendPushToOwner(r.ownerId, { title: r.title, body: r.body, url: r.url });
+    notified++;
+  }
+
+  const stalePurchases = await getStalePurchaseRequestPushes();
+  for (const r of stalePurchases) {
     await sendPushToOwner(r.ownerId, { title: r.title, body: r.body, url: r.url });
     notified++;
   }

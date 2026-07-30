@@ -36,9 +36,15 @@ export async function GET(req: NextRequest) {
   return NextResponse.json(suppliers);
 }
 
+// Confirmado 2026-07-30: debe pedir los MISMOS datos que ya pide la sección
+// Proveedores al crear uno (category opcional, notes obligatoria — ver
+// createSchema en src/app/api/suppliers/route.ts) más los datos bancarios
+// que Proveedores todavía no tiene, para que quede completo en ambos lados.
 const createSchema = z.object({
   type: z.enum(["SUPPLIER", "CARRIER"]),
   name: z.string().trim().min(1, "Falta el nombre."),
+  category: z.string().trim().optional(),
+  notes: z.string().trim().min(1, "Agrega una descripción — qué provee o qué transporta."),
   bankName: z.string().trim().min(1, "Falta el banco."),
   bankAccountType: z.string().trim().min(1, "Falta el tipo de cuenta."),
   bankAccountNumber: z.string().trim().min(1, "Falta el número de cuenta."),
@@ -71,6 +77,8 @@ export async function POST(req: NextRequest) {
     data: {
       type: parsed.data.type,
       name: parsed.data.name,
+      category: parsed.data.category || null,
+      notes: parsed.data.notes,
       location: parsed.data.type === "SUPPLIER" ? parsed.data.location : null,
       bankName: parsed.data.bankName,
       bankAccountType: parsed.data.bankAccountType,

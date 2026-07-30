@@ -55,3 +55,54 @@ export async function getCarrierShippingStats(carrierId: string) {
     .filter((r) => r.quantity > 0 && r.shippingCostTotal !== null)
     .map((r) => ({ requestedAt: r.requestedAt.toISOString(), perUnit: r.shippingCostTotal! / r.quantity }));
 }
+
+export type StalePurchaseRequestPush = { ownerId: string; title: string; body: string; url: string };
+
+// Confirmado 2026-07-30: si una solicitud lleva más de 24 horas sin avanzar
+// a la siguiente etapa, se avisa a quien le corresponde esa etapa — corre
+// dentro del mismo cron diario de "Pendientes" (no hay infraestructura para
+// algo más frecuente en el plan actual de Vercel), y se vuelve a avisar
+// cada día que sigue sin resolverse, mismo espíritu que el resto de esa
+// notificación diaria.
+export async function getStalePurchaseRequestPushes(): Promise<StalePurchaseRequestPush[]> {
+  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const pushes: StalePurchaseRequestPush[] = [];
+
+  const [pendingApproval, approvedUnpaid, paidUnreceived, invLeader, finLeader] = await Promise.all([
+    prisma.purchaseRequest.findMany({
+      where: { status: "PENDING_APPROVAL", requestedAt: { lt: cutoff } },
+      select: { id: true, totalCost: true, catalogItem: { select: { name: true } } },
+    }),
+    prisma.purchaseRequest.findMany({
+      where: { status: "APPROVED", reviewedAt: { lt: cutoff } },
+      select: { id: true, totalCost: true, catalogItem: { select: { name: true } } },
+    }),
+    prisma.purchaseRequest.findMany({
+      where: { status: "PAID", paidAt: { lt: cutoff } },
+      select: { id: true, totalCost: true, catalogItem: { select: { name: true } } },
+    }),
+    prisma.user.findFirst({ where: { isLeader: true, leadsDept: { code: "INV" } }, select: { id: true } }),
+    prisma.user.findFirst({ where: { isLeader: true, leadsDept: { code: "FIN" } }, select: { id: true } }),
+  ]);
+
+  for (const r of pendingApproval) {
+    pushes.push({
+      ownerId: "admin",
+      title: "⏰ Solicitud sin aprobar hace más de 24h",
+      body: `${r.catalogItem.name} — $${r.totalCost.toFixed(2)}`,
+      url: "/admin/dept",
+    });
+  }
+  for (const r of approvedUnpaid) {
+    const body = `${r.catalogItem.name} — $${r.totalCost.toFixed(2)} aprobado hace más de 24h, todavía sin pagar`;
+    pushes.push({ ownerId: "admin", title: "⏰ Falta pagar una compra aprobada", body, url: "/admin/dept" });
+    if (finLeader) pushes.push({ ownerId: finLeader.id, title: "⏰ Falta pagar una compra aprobada", body, url: "/area/workspace" });
+  }
+  for (const r of paidUnreceived) {
+    const body = `${r.catalogItem.name} — pagado hace más de 24h, Inventario todavía no confirma que llegó`;
+    pushes.push({ ownerId: "admin", title: "⏰ Falta confirmar que llegó una compra", body, url: "/admin/dept" });
+    if (invLeader) pushes.push({ ownerId: invLeader.id, title: "⏰ Falta confirmar que llegó una compra", body, url: "/area/workspace" });
+  }
+
+  return pushes;
+}
