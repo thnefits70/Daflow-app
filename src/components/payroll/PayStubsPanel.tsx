@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Upload, FileText, Download, Trash2, ChevronLeft, ChevronRight, MessageSquare } from "lucide-react";
 import { uploadFile as uploadToStorage } from "@/lib/uploadFile";
+import { compressImage } from "@/lib/compressImage";
 import { PayrollChat } from "@/components/payroll/PayrollChat";
 
 const MONTHS = [
@@ -18,7 +19,10 @@ function fileKind(name: string): "pdf" | "image" | "other" {
 }
 
 async function uploadFile(file: File): Promise<{ url: string; name: string } | null> {
-  const result = await uploadToStorage(file, "pay-stubs");
+  // Comprime si es imagen (no-op para PDF) — confirmado 2026-07-31: reducir
+  // peso de almacenamiento sin perder contenido.
+  const compressed = await compressImage(file);
+  const result = await uploadToStorage(compressed, "pay-stubs");
   if (!result.ok) return null;
   return { url: result.url, name: result.name };
 }

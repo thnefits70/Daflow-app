@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Plus, Trash2, Pencil, Download, Upload, X, FileText, Check, Ban, Search } from "lucide-react";
 import { Combobox, type ComboboxOption } from "@/components/ui/Combobox";
 import { uploadFile as uploadToStorage } from "@/lib/uploadFile";
+import { compressImage } from "@/lib/compressImage";
 
 type ChangeRequestDTO = {
   action: "EDIT" | "DELETE";
@@ -106,7 +107,8 @@ export function PurchaseReceiptsPanel({
   async function uploadFile(file: File, onDone: (url: string, name: string) => void) {
     setErr("");
     setBusy(true);
-    const result = await uploadToStorage(file, "purchase-receipts");
+    const compressed = await compressImage(file);
+    const result = await uploadToStorage(compressed, "purchase-receipts");
     setBusy(false);
     if (!result.ok) {
       setErr(result.error);

@@ -7,6 +7,7 @@ import { ArrowLeft, Pencil, Check, X, Upload } from "lucide-react";
 import { DocumentsPanel } from "@/components/documents/DocumentsPanel";
 import { ModuleExamPanel } from "@/components/modules/ModuleExamPanel";
 import { uploadFile } from "@/lib/uploadFile";
+import { compressImage } from "@/lib/compressImage";
 import { iconForModule } from "@/lib/moduleIcons";
 
 type ModuleDocumentDTO = {
@@ -57,7 +58,8 @@ export function ModuleDetail({
   const uploadImage = async (file: File) => {
     setErr("");
     setBusy(true);
-    const result = await uploadFile(file, "modules");
+    const compressed = await compressImage(file);
+    const result = await uploadFile(compressed, "modules");
     if (!result.ok) {
       setBusy(false);
       setErr(result.error);
