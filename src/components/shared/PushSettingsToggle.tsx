@@ -36,15 +36,21 @@ export function PushSettingsToggle() {
 
   useEffect(() => {
     async function check() {
-      if (typeof window === "undefined" || !("Notification" in window)) {
+      if (typeof window === "undefined") {
         setStatus("unsupported");
         return;
       }
+      // Confirmado 2026-07-30 (bug real, reportado por el usuario — en un
+      // iPhone no aparecía NADA, ni el interruptor ni el aviso de instalar):
+      // en iOS, "Notification" en window puede no existir todavía fuera de
+      // modo standalone — hay que revisar iOS ANTES de asumir "no soportado",
+      // porque justamente esa ausencia es la razón por la que hay que
+      // instalarlo primero, no una señal de que el dispositivo no sirve.
       if (isIOS() && !isStandalone()) {
         setStatus("ios-need-install");
         return;
       }
-      if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+      if (!("Notification" in window) || !("serviceWorker" in navigator) || !("PushManager" in window)) {
         setStatus("unsupported");
         return;
       }

@@ -45,13 +45,18 @@ export function PushOptIn() {
 
   useEffect(() => {
     if (localStorage.getItem(DISMISS_KEY)) return;
-    if (!("Notification" in window)) return;
 
     const iOS = isIOS();
     const standalone = isStandalone();
 
-    // En iPhone sin instalar: PushManager no existe todavía — hay que
-    // guiar a "Añadir a pantalla de inicio" primero, no intentar activar.
+    // Confirmado 2026-07-30 (bug real: el banner nunca aparecía en un
+    // iPhone con Chrome, ni el botón de activar ni el de instalar) — en iOS,
+    // "Notification" en window puede no existir todavía fuera de modo
+    // standalone, así que hay que revisar iOS ANTES de asumir "no soportado"
+    // — esa ausencia es justo la razón por la que hay que instalarlo
+    // primero, no una señal de que el dispositivo no sirve. PushManager
+    // tampoco existe todavía — hay que guiar a "Añadir a pantalla de
+    // inicio" primero, no intentar activar.
     if (iOS && !standalone) {
       fetch("/api/push/eligible")
         .then((r) => (r.ok ? r.json() : { eligible: false }))
@@ -60,6 +65,7 @@ export function PushOptIn() {
       return;
     }
 
+    if (!("Notification" in window)) return;
     if (!("serviceWorker" in navigator) || !("PushManager" in window)) return;
     if (Notification.permission !== "default") return;
 
