@@ -6,7 +6,7 @@ import { uploadFile } from "@/lib/uploadFile";
 import { compressImage } from "@/lib/compressImage";
 import { usePasteFile } from "@/lib/usePasteFile";
 
-export type CatalogItemDTO = { id: string; name: string; photos: string[] };
+export type CatalogItemDTO = { id: string; name: string; photos: string[]; description?: string | null };
 
 // Confirmado 2026-07-30 (boceto aprobado): un nombre por insumo, siempre. El
 // match EXACTO bloquea directo (obliga a seleccionar el existente); el
@@ -24,6 +24,7 @@ export function PurchaseCatalogPicker({
 
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState("");
+  const [newDescription, setNewDescription] = useState("");
   const [photos, setPhotos] = useState<string[]>([]);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const onPastePhoto = usePasteFile((file) => addPhoto(file));
@@ -54,6 +55,7 @@ export function PurchaseCatalogPicker({
   async function startCreate() {
     setCreating(true);
     setNewName(query);
+    setNewDescription("");
     setPhotos([]);
     setSimilarity(null);
     setConfirmStep(false);
@@ -108,7 +110,7 @@ export function PurchaseCatalogPicker({
     const res = await fetch("/api/purchase-catalog", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: newName.trim(), photos }),
+      body: JSON.stringify({ name: newName.trim(), photos, description: newDescription.trim() || undefined }),
     });
     setBusy(false);
     const data = await res.json().catch(() => null);
@@ -124,7 +126,10 @@ export function PurchaseCatalogPicker({
     return (
       <div className="flex items-center gap-2.5 bg-cloud border border-rule rounded-md px-3 py-2.5">
         {value.photos[0] && <img src={value.photos[0]} alt="" className="w-9 h-9 rounded object-cover shrink-0" />}
-        <span className="flex-1 text-[13.5px] font-semibold">{value.name}</span>
+        <div className="flex-1 min-w-0">
+          <div className="text-[13.5px] font-semibold">{value.name}</div>
+          {value.description && <div className="text-[11px] text-steel truncate">{value.description}</div>}
+        </div>
         <button type="button" className="text-[11.5px] text-blue font-semibold cursor-pointer" onClick={() => onChange(null)}>
           Cambiar
         </button>
@@ -168,6 +173,16 @@ export function PurchaseCatalogPicker({
             <div className="text-[11px] text-steel mb-3">
               Real si lo tienes físicamente; referencial del proveedor (misma foto de la cotización) si no — que se vea el producto exacto.
             </div>
+            <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">
+              Descripción <span className="text-steel-dim normal-case font-normal">(opcional)</span>
+            </label>
+            <textarea
+              rows={2}
+              className="w-full rounded border border-rule px-2.5 py-2 text-[13px] mb-3"
+              value={newDescription}
+              onChange={(e) => setNewDescription(e.target.value)}
+              placeholder="Ej. Qué es o para qué sirve este producto — ayuda a identificarlo"
+            />
             {err && <div className="text-red text-[12px] mb-2.5">{err}</div>}
             <div className="flex items-center gap-2.5">
               <button
@@ -193,6 +208,7 @@ export function PurchaseCatalogPicker({
             )}
             <div className="bg-cloud border border-rule rounded-md p-3 mb-3">
               <div className="text-[13px] font-semibold mb-1">{newName}</div>
+              {newDescription.trim() && <div className="text-[12px] text-steel mb-2">{newDescription.trim()}</div>}
               <div className="flex gap-1.5">
                 {photos.map((p, i) => (
                   <img key={i} src={p} alt="" className="w-12 h-12 rounded object-cover" />

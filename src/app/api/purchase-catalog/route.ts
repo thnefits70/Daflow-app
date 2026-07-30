@@ -15,7 +15,9 @@ export async function GET(req: NextRequest) {
   });
 
   if (!withStats) {
-    return NextResponse.json(items.map((i) => ({ id: i.id, name: i.name, photos: i.photos, hasPendingDelete: !!i.deleteRequest })));
+    return NextResponse.json(
+      items.map((i) => ({ id: i.id, name: i.name, photos: i.photos, description: i.description, hasPendingDelete: !!i.deleteRequest }))
+    );
   }
 
   const withStatsData = await Promise.all(
@@ -23,6 +25,7 @@ export async function GET(req: NextRequest) {
       id: i.id,
       name: i.name,
       photos: i.photos,
+      description: i.description,
       hasPendingDelete: !!i.deleteRequest,
       stats: await getCatalogItemPriceStats(i.id),
     }))
@@ -33,6 +36,7 @@ export async function GET(req: NextRequest) {
 const createSchema = z.object({
   name: z.string().trim().min(1, "Falta el nombre del insumo."),
   photos: z.array(z.string().url()).min(1, "Agrega al menos una foto del producto.").max(3),
+  description: z.string().trim().max(500).optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -61,7 +65,12 @@ export async function POST(req: NextRequest) {
 
   const isAdmin = session.user.role === "admin";
   const item = await prisma.purchaseCatalogItem.create({
-    data: { name: parsed.data.name, photos: parsed.data.photos, createdById: isAdmin ? null : session.user.id },
+    data: {
+      name: parsed.data.name,
+      photos: parsed.data.photos,
+      description: parsed.data.description || null,
+      createdById: isAdmin ? null : session.user.id,
+    },
   });
   return NextResponse.json(item, { status: 201 });
 }

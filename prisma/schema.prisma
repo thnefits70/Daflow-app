@@ -870,6 +870,10 @@ model PurchaseCatalogItem {
   // 1 a 3 fotos (real si se tiene físicamente, referencial del proveedor si
   // no) — para que Inventario y Finanzas identifiquen el producto sin adivinar.
   photos String[]
+  // Opcional — confirmado 2026-07-30: breve descripción de qué es/hace el
+  // producto, para ayudar a identificarlo (no obligatoria, a diferencia de
+  // Proveedores.notes).
+  description String?
 
   createdById String?
   createdBy   User?    @relation("PurchaseCatalogItemCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
