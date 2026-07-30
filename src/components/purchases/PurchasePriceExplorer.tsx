@@ -77,7 +77,7 @@ function ProductComparisonCard({ item, onRemove }: { item: CatalogItem; onRemove
         <div className="text-steel text-[12.5px]">Cargando historial…</div>
       ) : suppliers.length === 0 ? (
         <div className="border-[1.5px] border-dashed border-rule rounded-md p-5 text-center text-steel text-[12.5px]">
-          Todavía no hay compras registradas de este insumo.
+          Todavía no hay compras registradas de este producto, mercadería o insumo.
         </div>
       ) : (
         <div className="flex flex-col gap-2">

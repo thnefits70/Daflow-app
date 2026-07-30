@@ -21,7 +21,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (!parsed.success) return NextResponse.json({ error: "Datos inválidos." }, { status: 400 });
 
   const item = await prisma.purchaseCatalogItem.findUnique({ where: { id } });
-  if (!item) return NextResponse.json({ error: "Insumo no encontrado." }, { status: 404 });
+  if (!item) return NextResponse.json({ error: "Producto, mercadería o insumo no encontrado." }, { status: 404 });
 
   const isAdmin = session.user.role === "admin";
   const existing = await prisma.purchaseCatalogItemDeleteRequest.upsert({

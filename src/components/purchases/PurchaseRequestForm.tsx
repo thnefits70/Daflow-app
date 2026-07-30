@@ -127,7 +127,7 @@ export function PurchaseRequestForm() {
 
   async function submit() {
     if (validLines.length === 0 || validLines.length !== lines.length || !supplier || !quoteImageUrl) {
-      setErr("Completa insumo, cantidad y costo de cada producto, el proveedor, y la cotización.");
+      setErr("Completa producto, mercadería o insumo, cantidad y costo de cada línea, el proveedor, y la cotización.");
       return;
     }
     if (!quoteVerified) {
@@ -213,7 +213,7 @@ export function PurchaseRequestForm() {
               </div>
             )}
             {line.catalogItem && (!line.stats || line.stats.count === 0) && (
-              <div className="text-[11px] text-steel mb-2.5">🆕 Sin historial previo — primera vez que se compra este insumo.</div>
+              <div className="text-[11px] text-steel mb-2.5">🆕 Sin historial previo — primera vez que se compra este producto, mercadería o insumo.</div>
             )}
 
             <div className="grid grid-cols-3 gap-2.5">

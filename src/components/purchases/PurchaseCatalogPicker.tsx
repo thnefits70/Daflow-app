@@ -80,7 +80,7 @@ export function PurchaseCatalogPicker({
 
   async function goToConfirm() {
     if (!newName.trim()) {
-      setErr("Escribe el nombre del insumo.");
+      setErr("Escribe el nombre del producto, mercadería o insumo.");
       return;
     }
     if (photos.length === 0) {
@@ -117,7 +117,7 @@ export function PurchaseCatalogPicker({
     setBusy(false);
     const data = await res.json().catch(() => null);
     if (!res.ok) {
-      setErr(data?.error ?? "No se pudo crear el insumo.");
+      setErr(data?.error ?? "No se pudo crear el producto, mercadería o insumo.");
       return;
     }
     setCreating(false);
@@ -144,7 +144,7 @@ export function PurchaseCatalogPicker({
       <div className="bg-surface2 border border-rule rounded-md p-3.5">
         {!confirmStep ? (
           <>
-            <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Nombre del insumo nuevo</label>
+            <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Nombre del producto, mercadería o insumo nuevo</label>
             <input
               className="w-full rounded border border-rule px-2.5 py-2 text-[13.5px] mb-3"
               value={newName}
@@ -255,7 +255,7 @@ export function PurchaseCatalogPicker({
         <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-steel" />
         <input
           className="w-full rounded border border-rule pl-8.5 pr-3 py-2 text-[13.5px]"
-          placeholder="Buscar o crear insumo"
+          placeholder="Buscar o crear producto, mercadería o insumo"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onFocus={() => setOpen(true)}
@@ -282,7 +282,7 @@ export function PurchaseCatalogPicker({
             className="w-full flex items-center gap-2 px-3 py-2 text-left text-[12.5px] text-blue font-semibold hover:bg-cloud cursor-pointer"
             onClick={startCreate}
           >
-            <Plus size={13} /> Crear {query.trim() ? `"${query.trim()}"` : "insumo nuevo"} — solo si de verdad es distinto
+            <Plus size={13} /> Crear {query.trim() ? `"${query.trim()}"` : "producto, mercadería o insumo nuevo"} — solo si de verdad es distinto
           </button>
         </div>
       )}

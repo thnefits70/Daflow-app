@@ -35,7 +35,7 @@ export async function GET(req: NextRequest) {
 }
 
 const createSchema = z.object({
-  name: z.string().trim().min(1, "Falta el nombre del insumo."),
+  name: z.string().trim().min(1, "Falta el nombre del producto, mercadería o insumo."),
   photos: z.array(z.string().url()).min(1, "Agrega al menos una foto del producto.").max(3),
   description: z.string().trim().max(500).optional(),
   code: z.string().trim().max(100).optional(),

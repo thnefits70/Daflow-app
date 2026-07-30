@@ -27,7 +27,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const inUse = await prisma.purchaseRequest.count({ where: { catalogItemId: deleteRequest.itemId } });
   if (inUse > 0) {
     return NextResponse.json(
-      { error: "Este insumo ya tiene compras registradas — no se puede eliminar sin perder ese historial." },
+      { error: "Este producto, mercadería o insumo ya tiene compras registradas — no se puede eliminar sin perder ese historial." },
       { status: 409 }
     );
   }

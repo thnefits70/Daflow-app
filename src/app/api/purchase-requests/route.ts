@@ -150,7 +150,7 @@ export async function POST(req: NextRequest) {
     select: { id: true, name: true },
   });
   if (catalogItems.length !== new Set(d.items.map((it) => it.catalogItemId)).size) {
-    return NextResponse.json({ error: "Uno o más insumos no fueron encontrados." }, { status: 404 });
+    return NextResponse.json({ error: "Uno o más productos, mercaderías o insumos no fueron encontrados." }, { status: 404 });
   }
   const nameById = new Map(catalogItems.map((c) => [c.id, c.name]));
 
