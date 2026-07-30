@@ -31,7 +31,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     await sendPushToOwner(existing.requestedById, {
       title: parsed.data.action === "approve" ? "Solicitud aprobada" : "Solicitud rechazada",
       body: `${existing.catalogItem.name} — ${parsed.data.action === "approve" ? "sigue con el pago" : parsed.data.rejectReason || "sin motivo especificado"}`,
-      url: "/area/control-de-compras",
+      url: "/area/workspace",
     }).catch(() => null);
   }
 

@@ -40,7 +40,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   await Promise.all(
     [...notifyTargets].map((ownerId) =>
-      sendPushToOwner(ownerId, { title: label, body: `${existing.catalogItem.name} — ${parsed.data.description}`, url: "/admin/control-de-compras" }).catch(() => null)
+      sendPushToOwner(ownerId, { title: label, body: `${existing.catalogItem.name} — ${parsed.data.description}`, url: "/admin" }).catch(() => null)
     )
   );
 

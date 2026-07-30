@@ -42,7 +42,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     await sendPushToOwner(existing.requestedById, {
       title: "Mercadería recibida",
       body: `${existing.catalogItem.name} — Inventario confirmó ${parsed.data.receivedQuantity} un. recibidas`,
-      url: "/area/control-de-compras",
+      url: "/area/workspace",
     }).catch(() => null);
   }
 

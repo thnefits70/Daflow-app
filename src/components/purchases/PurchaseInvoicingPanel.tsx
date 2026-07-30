@@ -9,6 +9,7 @@ import { usePasteFile } from "@/lib/usePasteFile";
 
 type Row = {
   id: string;
+  groupId: string;
   status: "APPROVED" | "PAID" | "RECEIVED";
   quantity: number;
   totalCost: number;
@@ -31,16 +32,25 @@ function money(n: number) {
   return `$${n.toLocaleString("es-MX", { minimumFractionDigits: 2 })}`;
 }
 
+function groupRows(rows: Row[]) {
+  const map = new Map<string, Row[]>();
+  for (const r of rows) {
+    if (!map.has(r.groupId)) map.set(r.groupId, []);
+    map.get(r.groupId)!.push(r);
+  }
+  return [...map.values()];
+}
+
 export function PurchaseInvoicingPanel() {
   const router = useRouter();
   const [rows, setRows] = useState<Row[] | null>(null);
   const [pettyCash, setPettyCash] = useState<{ count: number; total: number } | null>(null);
-  const [payingId, setPayingId] = useState<string | null>(null);
+  const [payingGroup, setPayingGroup] = useState<string | null>(null);
   const [proofUrl, setProofUrl] = useState<string | null>(null);
   const [uploadingProof, setUploadingProof] = useState(false);
   const onPasteProof = usePasteFile((file) => uploadProof(file));
   const [partialAmounts, setPartialAmounts] = useState<Record<string, string>>({});
-  const [busyId, setBusyId] = useState<string | null>(null);
+  const [busyGroup, setBusyGroup] = useState<string | null>(null);
   const [err, setErr] = useState("");
 
   function load() {
@@ -49,39 +59,39 @@ export function PurchaseInvoicingPanel() {
   }
   useEffect(load, []);
 
-  async function pay(id: string) {
+  async function pay(groupId: string) {
     if (!proofUrl) {
       setErr("Sube el comprobante de pago.");
       return;
     }
-    setBusyId(id);
+    setBusyGroup(groupId);
     setErr("");
-    const res = await fetch(`/api/purchase-requests/${id}/pay`, {
+    const res = await fetch(`/api/purchase-requests/group/${groupId}/pay`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ paymentProofUrl: proofUrl }),
     });
-    setBusyId(null);
+    setBusyGroup(null);
     const data = await res.json().catch(() => null);
     if (!res.ok) {
       setErr(data?.error ?? "No se pudo registrar el pago.");
       return;
     }
-    setPayingId(null);
+    setPayingGroup(null);
     setProofUrl(null);
     load();
     router.refresh();
   }
 
-  async function setInvoice(id: string, invoiceStatus: Row["invoiceStatus"]) {
-    if (invoiceStatus === "PARTIAL" && !partialAmounts[id]) return;
-    setBusyId(id);
-    await fetch(`/api/purchase-requests/${id}/invoice`, {
+  async function setInvoice(groupId: string, invoiceStatus: Row["invoiceStatus"]) {
+    if (invoiceStatus === "PARTIAL" && !partialAmounts[groupId]) return;
+    setBusyGroup(groupId);
+    await fetch(`/api/purchase-requests/group/${groupId}/invoice`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ invoiceStatus, invoiceAmount: invoiceStatus === "PARTIAL" ? Number(partialAmounts[id]) : undefined }),
+      body: JSON.stringify({ invoiceStatus, invoiceAmount: invoiceStatus === "PARTIAL" ? Number(partialAmounts[groupId]) : undefined }),
     });
-    setBusyId(null);
+    setBusyGroup(null);
     load();
   }
 
@@ -99,8 +109,8 @@ export function PurchaseInvoicingPanel() {
 
   if (!rows) return <div className="text-steel text-[13px]">Cargando…</div>;
 
-  const approved = rows.filter((r) => r.status === "APPROVED");
-  const rest = rows.filter((r) => r.status !== "APPROVED");
+  const approvedGroups = groupRows(rows.filter((r) => r.status === "APPROVED"));
+  const restGroups = groupRows(rows.filter((r) => r.status !== "APPROVED"));
 
   return (
     <div>
@@ -122,80 +132,93 @@ export function PurchaseInvoicingPanel() {
         </div>
       )}
 
-      {approved.length > 0 && (
+      {approvedGroups.length > 0 && (
         <div className="mb-4">
           <div className="text-[11px] font-semibold uppercase tracking-wide text-steel mb-2">Aprobadas — falta pagar</div>
           <div className="flex flex-col gap-2.5">
-            {approved.map((r) => (
-              <div key={r.id} className="bg-surface border border-rule rounded-md p-4">
-                <div className="text-[13.5px] font-bold">{r.catalogItem.name} · {r.quantity} un.</div>
-                <div className="text-[11.5px] text-steel mb-2.5">{r.supplier.name} — {money(r.totalCost)}</div>
-                {payingId === r.id ? (
-                  <div>
-                    {proofUrl ? (
-                      <img src={proofUrl} alt="" className="w-16 h-16 rounded object-cover border border-rule mb-2" />
-                    ) : (
-                      <label
-                        tabIndex={0}
-                        onPaste={onPasteProof}
-                        className="flex items-center gap-1.5 border-[1.5px] border-dashed border-rule rounded px-3 py-2 text-[12px] text-steel cursor-pointer hover:border-teal focus:border-teal focus:outline-none w-fit mb-2"
-                      >
-                        {uploadingProof ? <span className="w-3.5 h-3.5 rounded-full border-2 border-rule border-t-teal animate-spin" /> : <Upload size={13} />} Subir o pegar comprobante
-                        <input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && uploadProof(e.target.files[0])} />
-                      </label>
-                    )}
-                    {err && <div className="text-red text-[12px] mb-2">{err}</div>}
-                    <div className="flex items-center gap-2">
-                      <button type="button" disabled={busyId === r.id} className="rounded border border-blue bg-blue px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer disabled:opacity-60" onClick={() => pay(r.id)}>
-                        Confirmar pago
-                      </button>
-                      <button type="button" className="text-steel text-[12.5px] cursor-pointer" onClick={() => setPayingId(null)}>Cancelar</button>
+            {approvedGroups.map((g) => {
+              const groupId = g[0].groupId;
+              const total = g.reduce((s, r) => s + r.totalCost, 0);
+              return (
+                <div key={groupId} className="bg-surface border border-rule rounded-md p-4">
+                  {g.map((r) => (
+                    <div key={r.id} className="text-[13.5px] font-bold">{r.catalogItem.name} · {r.quantity} un.</div>
+                  ))}
+                  <div className="text-[11.5px] text-steel mb-2.5">{g[0].supplier.name} — {money(total)}</div>
+                  {payingGroup === groupId ? (
+                    <div>
+                      {proofUrl ? (
+                        <img src={proofUrl} alt="" className="w-16 h-16 rounded object-cover border border-rule mb-2" />
+                      ) : (
+                        <label
+                          tabIndex={0}
+                          onPaste={onPasteProof}
+                          className="flex items-center gap-1.5 border-[1.5px] border-dashed border-rule rounded px-3 py-2 text-[12px] text-steel cursor-pointer hover:border-teal focus:border-teal focus:outline-none w-fit mb-2"
+                        >
+                          {uploadingProof ? <span className="w-3.5 h-3.5 rounded-full border-2 border-rule border-t-teal animate-spin" /> : <Upload size={13} />} Subir o pegar comprobante
+                          <input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && uploadProof(e.target.files[0])} />
+                        </label>
+                      )}
+                      {err && <div className="text-red text-[12px] mb-2">{err}</div>}
+                      <div className="flex items-center gap-2">
+                        <button type="button" disabled={busyGroup === groupId} className="rounded border border-blue bg-blue px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer disabled:opacity-60" onClick={() => pay(groupId)}>
+                          Confirmar pago
+                        </button>
+                        <button type="button" className="text-steel text-[12.5px] cursor-pointer" onClick={() => setPayingGroup(null)}>Cancelar</button>
+                      </div>
                     </div>
-                  </div>
-                ) : (
-                  <button type="button" className="rounded border border-blue bg-blue px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer" onClick={() => { setPayingId(r.id); setProofUrl(null); setErr(""); }}>
-                    💳 Marcar como pagado
-                  </button>
-                )}
-              </div>
-            ))}
+                  ) : (
+                    <button type="button" className="rounded border border-blue bg-blue px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer" onClick={() => { setPayingGroup(groupId); setProofUrl(null); setErr(""); }}>
+                      💳 Marcar como pagado
+                    </button>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
 
       <div className="text-[11px] font-semibold uppercase tracking-wide text-steel mb-2">Registrar factura</div>
-      {rest.length === 0 && <div className="border-[1.5px] border-dashed border-rule rounded-md p-6 text-center text-steel text-[13px]">Nada por aquí todavía.</div>}
+      {restGroups.length === 0 && <div className="border-[1.5px] border-dashed border-rule rounded-md p-6 text-center text-steel text-[13px]">Nada por aquí todavía.</div>}
       <div className="flex flex-col gap-2.5">
-        {rest.map((r) => (
-          <div key={r.id} className="bg-surface border border-rule rounded-md p-4">
-            <div className="flex items-center justify-between gap-3 flex-wrap mb-2">
-              <div>
-                <div className="text-[13.5px] font-bold">{r.catalogItem.name} · {r.quantity} un.</div>
-                <div className="text-[11.5px] text-steel">{r.supplier.name} — Pagado {money(r.totalCost)} {r.paidAt ? `· ${new Date(r.paidAt).toLocaleDateString("es-MX")}` : ""}</div>
+        {restGroups.map((g) => {
+          const groupId = g[0].groupId;
+          const total = g.reduce((s, r) => s + r.totalCost, 0);
+          const r0 = g[0];
+          return (
+            <div key={groupId} className="bg-surface border border-rule rounded-md p-4">
+              <div className="flex items-center justify-between gap-3 flex-wrap mb-2">
+                <div>
+                  {g.map((r) => (
+                    <div key={r.id} className="text-[13.5px] font-bold">{r.catalogItem.name} · {r.quantity} un.</div>
+                  ))}
+                  <div className="text-[11.5px] text-steel">{r0.supplier.name} — Pagado {money(total)} {r0.paidAt ? `· ${new Date(r0.paidAt).toLocaleDateString("es-MX")}` : ""}</div>
+                </div>
+                <select
+                  className="rounded border border-rule bg-surface2 px-2.5 py-1.5 text-[12px]"
+                  value={r0.invoiceStatus}
+                  onChange={(e) => setInvoice(groupId, e.target.value as Row["invoiceStatus"])}
+                >
+                  {Object.entries(INVOICE_LABELS).map(([k, label]) => <option key={k} value={k}>{label}</option>)}
+                </select>
               </div>
-              <select
-                className="rounded border border-rule bg-surface2 px-2.5 py-1.5 text-[12px]"
-                value={r.invoiceStatus}
-                onChange={(e) => setInvoice(r.id, e.target.value as Row["invoiceStatus"])}
-              >
-                {Object.entries(INVOICE_LABELS).map(([k, label]) => <option key={k} value={k}>{label}</option>)}
-              </select>
+              {r0.invoiceStatus === "PARTIAL" && (
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number" step="0.01" placeholder="¿Por qué valor se facturó?"
+                    className="rounded border border-rule px-2.5 py-1.5 text-[12.5px] w-48"
+                    value={partialAmounts[groupId] ?? (r0.invoiceAmount ?? "")}
+                    onChange={(e) => setPartialAmounts((p) => ({ ...p, [groupId]: e.target.value }))}
+                  />
+                  <button type="button" disabled={busyGroup === groupId} className="rounded border border-blue bg-blue px-3 py-1.5 text-[11.5px] font-semibold text-white cursor-pointer disabled:opacity-60" onClick={() => setInvoice(groupId, "PARTIAL")}>
+                    Guardar valor
+                  </button>
+                </div>
+              )}
             </div>
-            {r.invoiceStatus === "PARTIAL" && (
-              <div className="flex items-center gap-2">
-                <input
-                  type="number" step="0.01" placeholder="¿Por qué valor se facturó?"
-                  className="rounded border border-rule px-2.5 py-1.5 text-[12.5px] w-48"
-                  value={partialAmounts[r.id] ?? (r.invoiceAmount ?? "")}
-                  onChange={(e) => setPartialAmounts((p) => ({ ...p, [r.id]: e.target.value }))}
-                />
-                <button type="button" disabled={busyId === r.id} className="rounded border border-blue bg-blue px-3 py-1.5 text-[11.5px] font-semibold text-white cursor-pointer disabled:opacity-60" onClick={() => setInvoice(r.id, "PARTIAL")}>
-                  Guardar valor
-                </button>
-              </div>
-            )}
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

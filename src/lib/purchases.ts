@@ -90,17 +90,17 @@ export async function getStalePurchaseRequestPushes(): Promise<StalePurchaseRequ
       ownerId: "admin",
       title: "⏰ Solicitud sin aprobar hace más de 24h",
       body: `${r.catalogItem.name} — $${r.totalCost.toFixed(2)}`,
-      url: "/admin/dept",
+      url: "/admin",
     });
   }
   for (const r of approvedUnpaid) {
     const body = `${r.catalogItem.name} — $${r.totalCost.toFixed(2)} aprobado hace más de 24h, todavía sin pagar`;
-    pushes.push({ ownerId: "admin", title: "⏰ Falta pagar una compra aprobada", body, url: "/admin/dept" });
+    pushes.push({ ownerId: "admin", title: "⏰ Falta pagar una compra aprobada", body, url: "/admin" });
     if (finLeader) pushes.push({ ownerId: finLeader.id, title: "⏰ Falta pagar una compra aprobada", body, url: "/area/workspace" });
   }
   for (const r of paidUnreceived) {
     const body = `${r.catalogItem.name} — pagado hace más de 24h, Inventario todavía no confirma que llegó`;
-    pushes.push({ ownerId: "admin", title: "⏰ Falta confirmar que llegó una compra", body, url: "/admin/dept" });
+    pushes.push({ ownerId: "admin", title: "⏰ Falta confirmar que llegó una compra", body, url: "/admin" });
     if (invLeader) pushes.push({ ownerId: invLeader.id, title: "⏰ Falta confirmar que llegó una compra", body, url: "/area/workspace" });
   }
 

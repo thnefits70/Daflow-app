@@ -874,6 +874,11 @@ model PurchaseCatalogItem {
   // producto, para ayudar a identificarlo (no obligatoria, a diferencia de
   // Proveedores.notes).
   description String?
+  // Opcional — confirmado 2026-07-31: código/SKU que el proveedor usa para
+  // este producto. Algunas cotizaciones no traen el nombre, solo un código —
+  // si ya lo tenemos guardado aquí, se reconoce solo en vez de tener que
+  // confirmarlo a mano cada vez.
+  code String?
 
   createdById String?
   createdBy   User?    @relation("PurchaseCatalogItemCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
@@ -924,6 +929,13 @@ enum PurchaseInvoiceStatus {
 // admin y los reportes puedan filtrar por área si hace falta más adelante.
 model PurchaseRequest {
   id     String     @id @default(cuid())
+  // Confirmado 2026-07-31: una cotización suele traer varios productos —
+  // todas las filas creadas desde el mismo envío comparten este groupId
+  // (siempre poblado, incluso para una solicitud de un solo producto, para
+  // no tener que ramificar la lógica de agrupar entre "con grupo"/"sin
+  // grupo"). El total leído por IA se compara contra la SUMA de todas las
+  // líneas del grupo, no una por una.
+  groupId String
   deptId String
   dept   Department @relation(fields: [deptId], references: [id], onDelete: Cascade)
 
@@ -985,6 +997,7 @@ model PurchaseRequest {
   @@index([catalogItemId])
   @@index([supplierId])
   @@index([requestedById])
+  @@index([groupId])
 }
 
 // Inventario confirma que de verdad llegó — sin esto el ciclo no se cierra.

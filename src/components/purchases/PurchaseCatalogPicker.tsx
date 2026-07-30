@@ -6,7 +6,7 @@ import { uploadFile } from "@/lib/uploadFile";
 import { compressImage } from "@/lib/compressImage";
 import { usePasteFile } from "@/lib/usePasteFile";
 
-export type CatalogItemDTO = { id: string; name: string; photos: string[]; description?: string | null };
+export type CatalogItemDTO = { id: string; name: string; photos: string[]; description?: string | null; code?: string | null };
 
 // Confirmado 2026-07-30 (boceto aprobado): un nombre por insumo, siempre. El
 // match EXACTO bloquea directo (obliga a seleccionar el existente); el
@@ -25,6 +25,7 @@ export function PurchaseCatalogPicker({
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState("");
   const [newDescription, setNewDescription] = useState("");
+  const [newCode, setNewCode] = useState("");
   const [photos, setPhotos] = useState<string[]>([]);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const onPastePhoto = usePasteFile((file) => addPhoto(file));
@@ -56,6 +57,7 @@ export function PurchaseCatalogPicker({
     setCreating(true);
     setNewName(query);
     setNewDescription("");
+    setNewCode("");
     setPhotos([]);
     setSimilarity(null);
     setConfirmStep(false);
@@ -110,7 +112,7 @@ export function PurchaseCatalogPicker({
     const res = await fetch("/api/purchase-catalog", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: newName.trim(), photos, description: newDescription.trim() || undefined }),
+      body: JSON.stringify({ name: newName.trim(), photos, description: newDescription.trim() || undefined, code: newCode.trim() || undefined }),
     });
     setBusy(false);
     const data = await res.json().catch(() => null);
@@ -182,6 +184,15 @@ export function PurchaseCatalogPicker({
               value={newDescription}
               onChange={(e) => setNewDescription(e.target.value)}
               placeholder="Ej. Qué es o para qué sirve este producto — ayuda a identificarlo"
+            />
+            <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">
+              Código del proveedor <span className="text-steel-dim normal-case font-normal">(opcional — si lo tienes a la mano)</span>
+            </label>
+            <input
+              className="w-full rounded border border-rule px-2.5 py-2 text-[13px] mb-3"
+              value={newCode}
+              onChange={(e) => setNewCode(e.target.value)}
+              placeholder="Ej. REF-4471 — si la cotización trae un código en vez de nombre"
             />
             {err && <div className="text-red text-[12px] mb-2.5">{err}</div>}
             <div className="flex items-center gap-2.5">

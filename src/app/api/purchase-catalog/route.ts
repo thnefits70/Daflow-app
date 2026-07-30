@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
 
   if (!withStats) {
     return NextResponse.json(
-      items.map((i) => ({ id: i.id, name: i.name, photos: i.photos, description: i.description, hasPendingDelete: !!i.deleteRequest }))
+      items.map((i) => ({ id: i.id, name: i.name, photos: i.photos, description: i.description, code: i.code, hasPendingDelete: !!i.deleteRequest }))
     );
   }
 
@@ -26,6 +26,7 @@ export async function GET(req: NextRequest) {
       name: i.name,
       photos: i.photos,
       description: i.description,
+      code: i.code,
       hasPendingDelete: !!i.deleteRequest,
       stats: await getCatalogItemPriceStats(i.id),
     }))
@@ -37,6 +38,7 @@ const createSchema = z.object({
   name: z.string().trim().min(1, "Falta el nombre del insumo."),
   photos: z.array(z.string().url()).min(1, "Agrega al menos una foto del producto.").max(3),
   description: z.string().trim().max(500).optional(),
+  code: z.string().trim().max(100).optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -69,6 +71,7 @@ export async function POST(req: NextRequest) {
       name: parsed.data.name,
       photos: parsed.data.photos,
       description: parsed.data.description || null,
+      code: parsed.data.code || null,
       createdById: isAdmin ? null : session.user.id,
     },
   });

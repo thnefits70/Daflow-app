@@ -41,7 +41,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       sendPushToOwner(ownerId, {
         title: ownerId === existing.requestedById ? "Tu solicitud ya fue pagada" : "Mercadería pagada — en camino",
         body: `${existing.catalogItem.name} — ${existing.quantity} un.`,
-        url: ownerId === inventarioLeader?.id ? "/area/control-de-compras" : "/admin/control-de-compras",
+        url: ownerId === inventarioLeader?.id ? "/area/workspace" : "/admin",
       }).catch(() => null)
     )
   );
