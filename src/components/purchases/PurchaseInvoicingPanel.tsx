@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Upload, CheckCircle2, Truck } from "lucide-react";
+import { Upload, CheckCircle2, Truck, Lock } from "lucide-react";
 import { uploadFile } from "@/lib/uploadFile";
 import { compressImage } from "@/lib/compressImage";
 import { usePasteFile } from "@/lib/usePasteFile";
@@ -63,6 +63,8 @@ export function PurchaseInvoicingPanel() {
   const [payingGroup, setPayingGroup] = useState<string | null>(null);
   const [proofUrl, setProofUrl] = useState<string | null>(null);
   const [uploadingProof, setUploadingProof] = useState(false);
+  const [proofVerifying, setProofVerifying] = useState(false);
+  const [proofVerifyResult, setProofVerifyResult] = useState<{ readAmount: number | null; matches: boolean } | null>(null);
   const { onPaste: onPasteProof, onMouseEnter: onPasteProofHoverIn, onMouseLeave: onPasteProofHoverOut } = usePasteFile((file) => uploadProof(file));
   // El grupo de la factura que se está pasando el mouse encima ahora mismo
   // — un solo listener de paste "armado" por hover, compartido entre todas
@@ -79,6 +81,8 @@ export function PurchaseInvoicingPanel() {
   const [payingShippingGroup, setPayingShippingGroup] = useState<string | null>(null);
   const [shippingProofUrl, setShippingProofUrl] = useState<string | null>(null);
   const [uploadingShippingProof, setUploadingShippingProof] = useState(false);
+  const [shippingProofVerifying, setShippingProofVerifying] = useState(false);
+  const [shippingProofVerifyResult, setShippingProofVerifyResult] = useState<{ readAmount: number | null; matches: boolean } | null>(null);
   const { onPaste: onPasteShippingProof, onMouseEnter: onPasteShippingProofHoverIn, onMouseLeave: onPasteShippingProofHoverOut } = usePasteFile((file) => uploadShippingProof(file));
 
   // Confirmado 2026-07-31: por defecto se asume que SÍ hay factura (pide
@@ -96,9 +100,58 @@ export function PurchaseInvoicingPanel() {
   }
   useEffect(load, []);
 
+  function currentGroupRows(groupId: string) {
+    return (rows ?? []).filter((r) => r.groupId === groupId);
+  }
+
+  // Confirmado 2026-08-04: la misma verificación por IA del comprobante que
+  // ya corre en la Bandeja de aprobación aplica aquí también — no importa
+  // desde qué pantalla se suba el comprobante (mercadería o flete), siempre
+  // se compara contra lo que de verdad correspondía pagar antes de dejarlo
+  // avanzar.
+  async function verifyProof(groupId: string, url: string) {
+    setProofVerifying(true);
+    setProofVerifyResult(null);
+    const expectedAmount = currentGroupRows(groupId).reduce((s, r) => s + r.totalCost, 0);
+    const res = await fetch("/api/purchase-requests/verify-payment", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ proofUrl: url, expectedAmount }),
+    });
+    setProofVerifying(false);
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      setErr(data?.error ?? "No se pudo verificar el comprobante.");
+      return;
+    }
+    setProofVerifyResult(data);
+  }
+
+  async function verifyShippingProof(groupId: string, url: string) {
+    setShippingProofVerifying(true);
+    setShippingProofVerifyResult(null);
+    const expectedAmount = currentGroupRows(groupId)[0]?.shippingCostTotal ?? 0;
+    const res = await fetch("/api/purchase-requests/verify-payment", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ proofUrl: url, expectedAmount }),
+    });
+    setShippingProofVerifying(false);
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      setErr(data?.error ?? "No se pudo verificar el comprobante del flete.");
+      return;
+    }
+    setShippingProofVerifyResult(data);
+  }
+
   async function pay(groupId: string) {
     if (!proofUrl) {
       setErr("Sube el comprobante de pago.");
+      return;
+    }
+    if (!proofVerifyResult?.matches) {
+      setErr("El comprobante todavía no está verificado — el monto debe coincidir con lo que corresponde pagar.");
       return;
     }
     setBusyGroup(groupId);
@@ -116,6 +169,7 @@ export function PurchaseInvoicingPanel() {
     }
     setPayingGroup(null);
     setProofUrl(null);
+    setProofVerifyResult(null);
     load();
     router.refresh();
   }
@@ -141,6 +195,7 @@ export function PurchaseInvoicingPanel() {
   }
 
   async function uploadProof(file: File) {
+    if (!payingGroup) return;
     setUploadingProof(true);
     const compressed = await compressImage(file);
     const uploaded = await uploadFile(compressed, "purchase-payments");
@@ -150,9 +205,11 @@ export function PurchaseInvoicingPanel() {
       return;
     }
     setProofUrl(uploaded.url);
+    verifyProof(payingGroup, uploaded.url);
   }
 
   async function uploadShippingProof(file: File) {
+    if (!payingShippingGroup) return;
     setUploadingShippingProof(true);
     const compressed = await compressImage(file);
     const uploaded = await uploadFile(compressed, "purchase-payments");
@@ -162,9 +219,14 @@ export function PurchaseInvoicingPanel() {
       return;
     }
     setShippingProofUrl(uploaded.url);
+    verifyShippingProof(payingShippingGroup, uploaded.url);
   }
 
   async function payShipping(groupId: string) {
+    if (shippingProofUrl && !shippingProofVerifyResult?.matches) {
+      setErr("El comprobante del flete todavía no está verificado — el monto debe coincidir con lo que corresponde pagar.");
+      return;
+    }
     setBusyGroup(groupId);
     setErr("");
     const res = await fetch(`/api/purchase-requests/group/${groupId}/shipping-pay`, {
@@ -180,6 +242,7 @@ export function PurchaseInvoicingPanel() {
     }
     setPayingShippingGroup(null);
     setShippingProofUrl(null);
+    setShippingProofVerifyResult(null);
     load();
   }
 
@@ -242,29 +305,55 @@ export function PurchaseInvoicingPanel() {
                   {payingGroup === groupId ? (
                     <div>
                       {proofUrl ? (
-                        <img src={proofUrl} alt="" className="w-16 h-16 rounded object-cover border border-rule mb-2" />
+                        <div className="flex items-center gap-2 text-[12px] mb-2">
+                          {proofVerifying ? (
+                            <span className="w-3.5 h-3.5 rounded-full border-2 border-rule border-t-teal animate-spin" />
+                          ) : proofVerifyResult?.matches ? (
+                            <CheckCircle2 size={13} className="text-teal" />
+                          ) : proofVerifyResult ? (
+                            <Lock size={13} className="text-red" />
+                          ) : null}
+                          <span className={proofVerifying ? "text-steel" : proofVerifyResult?.matches ? "text-teal" : proofVerifyResult ? "text-red" : "text-steel"}>
+                            {proofVerifying
+                              ? "Verificando con IA…"
+                              : proofVerifyResult?.matches
+                              ? `Verificado — coincide (${proofVerifyResult.readAmount?.toFixed(2)})`
+                              : proofVerifyResult && proofVerifyResult.readAmount !== null
+                              ? `No coincide — dice $${proofVerifyResult.readAmount.toFixed(2)}, revisa antes de continuar`
+                              : proofVerifyResult
+                              ? "No se pudo leer el monto — sube una imagen más clara"
+                              : "Comprobante subido"}
+                          </span>
+                          <button type="button" className="text-steel ml-1 cursor-pointer" onClick={() => { setProofUrl(null); setProofVerifyResult(null); }}>Cambiar</button>
+                        </div>
                       ) : (
-                        <label
-                          tabIndex={0}
-                          onPaste={onPasteProof}
-                          onMouseEnter={onPasteProofHoverIn}
-                          onMouseLeave={onPasteProofHoverOut}
-                          className="flex items-center gap-1.5 border-[1.5px] border-dashed border-rule rounded px-3 py-2 text-[12px] text-steel cursor-pointer hover:border-teal focus:border-teal focus:outline-none w-fit mb-2"
-                        >
-                          {uploadingProof ? <span className="w-3.5 h-3.5 rounded-full border-2 border-rule border-t-teal animate-spin" /> : <Upload size={13} />} Subir o pegar comprobante
-                          <input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && uploadProof(e.target.files[0])} />
-                        </label>
+                        <div className="mb-2">
+                          <label
+                            tabIndex={0}
+                            onPaste={onPasteProof}
+                            onMouseEnter={onPasteProofHoverIn}
+                            onMouseLeave={onPasteProofHoverOut}
+                            className="flex items-center gap-1.5 border-[1.5px] border-dashed border-rule rounded px-3 py-2 text-[12px] text-steel cursor-pointer hover:border-teal focus:border-teal focus:outline-none w-fit"
+                          >
+                            {uploadingProof ? <span className="w-3.5 h-3.5 rounded-full border-2 border-rule border-t-teal animate-spin" /> : <Upload size={13} />} Subir o pegar foto (pasa el mouse y Ctrl+V)
+                            <input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && uploadProof(e.target.files[0])} />
+                          </label>
+                          <label className="flex items-center gap-1.5 mt-1 text-[10.5px] text-steel cursor-pointer hover:text-teal w-fit">
+                            ¿Es un PDF? Subir documento
+                            <input type="file" accept="application/pdf" className="hidden" onChange={(e) => e.target.files?.[0] && uploadProof(e.target.files[0])} />
+                          </label>
+                        </div>
                       )}
                       {err && <div className="text-red text-[12px] mb-2">{err}</div>}
                       <div className="flex items-center gap-2">
-                        <button type="button" disabled={busyGroup === groupId} className="rounded border border-blue bg-blue px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer disabled:opacity-60" onClick={() => pay(groupId)}>
+                        <button type="button" disabled={busyGroup === groupId || !proofUrl || proofVerifying || !proofVerifyResult?.matches} className="rounded border border-blue bg-blue px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer disabled:opacity-60" onClick={() => pay(groupId)}>
                           Confirmar pago
                         </button>
-                        <button type="button" className="text-steel text-[12.5px] cursor-pointer" onClick={() => setPayingGroup(null)}>Cancelar</button>
+                        <button type="button" className="text-steel text-[12.5px] cursor-pointer" onClick={() => { setPayingGroup(null); setProofUrl(null); setProofVerifyResult(null); }}>Cancelar</button>
                       </div>
                     </div>
                   ) : (
-                    <button type="button" className="rounded border border-blue bg-blue px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer" onClick={() => { setPayingGroup(groupId); setProofUrl(null); setErr(""); }}>
+                    <button type="button" className="rounded border border-blue bg-blue px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer" onClick={() => { setPayingGroup(groupId); setProofUrl(null); setProofVerifyResult(null); setErr(""); }}>
                       💳 Marcar como pagado
                     </button>
                   )}
@@ -292,29 +381,60 @@ export function PurchaseInvoicingPanel() {
                   {payingShippingGroup === groupId ? (
                     <div>
                       {shippingProofUrl ? (
-                        <img src={shippingProofUrl} alt="" className="w-16 h-16 rounded object-cover border border-rule mb-2" />
+                        <div className="flex items-center gap-2 text-[12px] mb-2">
+                          {shippingProofVerifying ? (
+                            <span className="w-3.5 h-3.5 rounded-full border-2 border-rule border-t-teal animate-spin" />
+                          ) : shippingProofVerifyResult?.matches ? (
+                            <CheckCircle2 size={13} className="text-teal" />
+                          ) : shippingProofVerifyResult ? (
+                            <Lock size={13} className="text-red" />
+                          ) : null}
+                          <span className={shippingProofVerifying ? "text-steel" : shippingProofVerifyResult?.matches ? "text-teal" : shippingProofVerifyResult ? "text-red" : "text-steel"}>
+                            {shippingProofVerifying
+                              ? "Verificando con IA…"
+                              : shippingProofVerifyResult?.matches
+                              ? `Verificado — coincide (${shippingProofVerifyResult.readAmount?.toFixed(2)})`
+                              : shippingProofVerifyResult && shippingProofVerifyResult.readAmount !== null
+                              ? `No coincide — dice $${shippingProofVerifyResult.readAmount.toFixed(2)}, revisa antes de continuar`
+                              : shippingProofVerifyResult
+                              ? "No se pudo leer el monto — sube una imagen más clara"
+                              : "Comprobante subido"}
+                          </span>
+                          <button type="button" className="text-steel ml-1 cursor-pointer" onClick={() => { setShippingProofUrl(null); setShippingProofVerifyResult(null); }}>Cambiar</button>
+                        </div>
                       ) : (
-                        <label
-                          tabIndex={0}
-                          onPaste={onPasteShippingProof}
-                          onMouseEnter={onPasteShippingProofHoverIn}
-                          onMouseLeave={onPasteShippingProofHoverOut}
-                          className="flex items-center gap-1.5 border-[1.5px] border-dashed border-rule rounded px-3 py-2 text-[12px] text-steel cursor-pointer hover:border-teal focus:border-teal focus:outline-none w-fit mb-2"
-                        >
-                          {uploadingShippingProof ? <span className="w-3.5 h-3.5 rounded-full border-2 border-rule border-t-teal animate-spin" /> : <Upload size={13} />} Subir o pegar comprobante (opcional)
-                          <input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && uploadShippingProof(e.target.files[0])} />
-                        </label>
+                        <div className="mb-2">
+                          <label
+                            tabIndex={0}
+                            onPaste={onPasteShippingProof}
+                            onMouseEnter={onPasteShippingProofHoverIn}
+                            onMouseLeave={onPasteShippingProofHoverOut}
+                            className="flex items-center gap-1.5 border-[1.5px] border-dashed border-rule rounded px-3 py-2 text-[12px] text-steel cursor-pointer hover:border-teal focus:border-teal focus:outline-none w-fit"
+                          >
+                            {uploadingShippingProof ? <span className="w-3.5 h-3.5 rounded-full border-2 border-rule border-t-teal animate-spin" /> : <Upload size={13} />} Subir o pegar foto (opcional, pasa el mouse y Ctrl+V)
+                            <input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && uploadShippingProof(e.target.files[0])} />
+                          </label>
+                          <label className="flex items-center gap-1.5 mt-1 text-[10.5px] text-steel cursor-pointer hover:text-teal w-fit">
+                            ¿Es un PDF? Subir documento
+                            <input type="file" accept="application/pdf" className="hidden" onChange={(e) => e.target.files?.[0] && uploadShippingProof(e.target.files[0])} />
+                          </label>
+                        </div>
                       )}
                       {err && <div className="text-red text-[12px] mb-2">{err}</div>}
                       <div className="flex items-center gap-2">
-                        <button type="button" disabled={busyGroup === groupId} className="rounded border border-blue bg-blue px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer disabled:opacity-60" onClick={() => payShipping(groupId)}>
+                        <button
+                          type="button"
+                          disabled={busyGroup === groupId || shippingProofVerifying || (!!shippingProofUrl && !shippingProofVerifyResult?.matches)}
+                          className="rounded border border-blue bg-blue px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer disabled:opacity-60"
+                          onClick={() => payShipping(groupId)}
+                        >
                           Confirmar pago del flete
                         </button>
-                        <button type="button" className="text-steel text-[12.5px] cursor-pointer" onClick={() => setPayingShippingGroup(null)}>Cancelar</button>
+                        <button type="button" className="text-steel text-[12.5px] cursor-pointer" onClick={() => { setPayingShippingGroup(null); setShippingProofUrl(null); setShippingProofVerifyResult(null); }}>Cancelar</button>
                       </div>
                     </div>
                   ) : (
-                    <button type="button" className="rounded border border-blue bg-blue px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer" onClick={() => { setPayingShippingGroup(groupId); setShippingProofUrl(null); setErr(""); }}>
+                    <button type="button" className="rounded border border-blue bg-blue px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer" onClick={() => { setPayingShippingGroup(groupId); setShippingProofUrl(null); setShippingProofVerifyResult(null); setErr(""); }}>
                       💳 Marcar flete como pagado
                     </button>
                   )}
