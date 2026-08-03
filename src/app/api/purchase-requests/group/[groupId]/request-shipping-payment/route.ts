@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { auth } from "@/auth";
 import { canSubmitPurchaseRequests } from "@/lib/guards";
 import { sendPushToOwner } from "@/lib/webPush";
 
@@ -8,7 +9,8 @@ import { sendPushToOwner } from "@/lib/webPush";
 // que corresponde pagar el flete — un empujón manual en vez de asumir que
 // el admin se acuerda solo.
 export async function POST(_req: NextRequest, { params }: { params: Promise<{ groupId: string }> }) {
-  if (!(await canSubmitPurchaseRequests())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+  const session = await auth();
+  if (!(await canSubmitPurchaseRequests()) || !session) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
   const { groupId } = await params;
   const rows = await prisma.purchaseRequest.findMany({
@@ -24,8 +26,12 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ gr
     return NextResponse.json({ error: "El flete ya está pagado." }, { status: 409 });
   }
 
+  const isAdmin = session.user.role === "admin";
   const requestedAt = new Date();
-  await prisma.purchaseRequest.updateMany({ where: { groupId }, data: { shippingPaymentRequestedAt: requestedAt } });
+  await prisma.purchaseRequest.updateMany({
+    where: { groupId },
+    data: { shippingPaymentRequestedAt: requestedAt, shippingPaymentRequestedById: isAdmin ? null : session.user.id },
+  });
 
   const names = rows.map((r) => r.catalogItem.name).join(", ");
   await sendPushToOwner("admin", {

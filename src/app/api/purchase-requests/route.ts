@@ -17,7 +17,11 @@ const requestInclude = {
   carrierBankAccount: { select: bankAccountSelect },
   requestedBy: { select: { name: true } },
   reviewedBy: { select: { name: true } },
-  receipt: true,
+  paidBy: { select: { name: true } },
+  invoicedBy: { select: { name: true } },
+  shippingPaymentRequestedBy: { select: { name: true } },
+  shippingPaidBy: { select: { name: true } },
+  receipt: { include: { confirmedBy: { select: { name: true } } } },
   urgentReports: { orderBy: { reportedAt: "desc" as const } },
 };
 

@@ -6,6 +6,7 @@ import { Upload, CheckCircle2, Truck } from "lucide-react";
 import { uploadFile } from "@/lib/uploadFile";
 import { compressImage } from "@/lib/compressImage";
 import { usePasteFile } from "@/lib/usePasteFile";
+import { actorName } from "@/lib/actorName";
 
 type InvoiceStatus = "PENDING" | "COMPLETE" | "PARTIAL" | "NON_FISCAL" | "NONE";
 
@@ -18,7 +19,10 @@ type Row = {
   invoiceStatus: InvoiceStatus;
   invoiceAmount: number | null;
   invoiceDocUrl: string | null;
+  invoicedBy: { name: string } | null;
   paidAt: string | null;
+  paidBy: { name: string } | null;
+  requestedBy: { name: string } | null;
   catalogItem: { name: string };
   supplier: { name: string };
   shippingIncluded: boolean;
@@ -26,7 +30,9 @@ type Row = {
   shippingCostTotal: number | null;
   carrier: { name: string } | null;
   shippingPaymentRequestedAt: string | null;
+  shippingPaymentRequestedBy: { name: string } | null;
   shippingPaidAt: string | null;
+  shippingPaidBy: { name: string } | null;
 };
 
 const INVOICE_LABELS: Record<InvoiceStatus, string> = {
@@ -231,7 +237,8 @@ export function PurchaseInvoicingPanel() {
                   {g.map((r) => (
                     <div key={r.id} className="text-[13.5px] font-bold">{r.catalogItem.name} · {r.quantity} un.</div>
                   ))}
-                  <div className="text-[11.5px] text-steel mb-2.5">{g[0].supplier.name} — {money(total)}</div>
+                  <div className="text-[11.5px] text-steel">{g[0].supplier.name} — {money(total)}</div>
+                  <div className="text-[10px] text-steel-dim mb-2.5">Solicitada por {actorName(g[0].requestedBy?.name)}</div>
                   {payingGroup === groupId ? (
                     <div>
                       {proofUrl ? (
@@ -280,7 +287,8 @@ export function PurchaseInvoicingPanel() {
                   <div className="flex items-center gap-1.5 text-[13.5px] font-bold mb-0.5">
                     <Truck size={14} /> {g.map((r) => r.catalogItem.name).join(", ")}
                   </div>
-                  <div className="text-[11.5px] text-steel mb-2.5">{r0.carrier?.name ?? "Transportista"} — {money(r0.shippingCostTotal ?? 0)}</div>
+                  <div className="text-[11.5px] text-steel">{r0.carrier?.name ?? "Transportista"} — {money(r0.shippingCostTotal ?? 0)}</div>
+                  <div className="text-[10px] text-steel-dim mb-2.5">Pedido por {actorName(r0.shippingPaymentRequestedBy?.name)}</div>
                   {payingShippingGroup === groupId ? (
                     <div>
                       {shippingProofUrl ? (
@@ -332,6 +340,9 @@ export function PurchaseInvoicingPanel() {
                   <div key={r.id} className="text-[13.5px] font-bold">{r.catalogItem.name} · {r.quantity} un.</div>
                 ))}
                 <div className="text-[11.5px] text-steel">{r0.supplier.name} — Pagado {money(total)} {r0.paidAt ? `· ${new Date(r0.paidAt).toLocaleDateString("es-MX")}` : ""}</div>
+                <div className="text-[10px] text-steel-dim">
+                  Solicitada por {actorName(r0.requestedBy?.name)} · Pagada por {actorName(r0.paidBy?.name)}
+                </div>
               </div>
 
               {r0.invoiceStatus === "PENDING" ? (
@@ -417,13 +428,16 @@ export function PurchaseInvoicingPanel() {
                   )}
                 </div>
               ) : (
-                <div className="flex items-center justify-between gap-2 bg-cloud border border-rule rounded-md px-3 py-2">
-                  <div className="flex items-center gap-1.5 text-[12px] text-teal">
-                    <CheckCircle2 size={13} /> {INVOICE_LABELS[r0.invoiceStatus]}{r0.invoiceStatus === "PARTIAL" && r0.invoiceAmount ? ` — ${money(r0.invoiceAmount)}` : ""}
+                <div className="bg-cloud border border-rule rounded-md px-3 py-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5 text-[12px] text-teal">
+                      <CheckCircle2 size={13} /> {INVOICE_LABELS[r0.invoiceStatus]}{r0.invoiceStatus === "PARTIAL" && r0.invoiceAmount ? ` — ${money(r0.invoiceAmount)}` : ""}
+                    </div>
+                    {r0.invoiceDocUrl && (
+                      <a href={r0.invoiceDocUrl} target="_blank" rel="noopener noreferrer" className="text-[11.5px] text-blue font-semibold whitespace-nowrap">Ver documento</a>
+                    )}
                   </div>
-                  {r0.invoiceDocUrl && (
-                    <a href={r0.invoiceDocUrl} target="_blank" rel="noopener noreferrer" className="text-[11.5px] text-blue font-semibold whitespace-nowrap">Ver documento</a>
-                  )}
+                  <div className="text-[10px] text-steel-dim mt-0.5">Registrada por {actorName(r0.invoicedBy?.name)}</div>
                 </div>
               )}
             </div>

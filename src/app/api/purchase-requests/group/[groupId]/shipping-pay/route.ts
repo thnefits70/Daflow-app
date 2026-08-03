@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { auth } from "@/auth";
 import { canRegisterPurchaseInvoices } from "@/lib/guards";
 import { sendPushToOwner } from "@/lib/webPush";
 
@@ -9,7 +10,8 @@ const schema = z.object({ proofUrl: z.string().url().nullable().optional() });
 // Confirmado 2026-08-03: registrar el pago del flete cuando quedó pendiente
 // hasta la entrega — separado del pago del producto, que ya pasó antes.
 export async function POST(req: NextRequest, { params }: { params: Promise<{ groupId: string }> }) {
-  if (!(await canRegisterPurchaseInvoices())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+  const session = await auth();
+  if (!(await canRegisterPurchaseInvoices()) || !session) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
   const { groupId } = await params;
   const body = await req.json().catch(() => ({}));
@@ -19,10 +21,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ gro
   const rows = await prisma.purchaseRequest.findMany({ where: { groupId }, include: { catalogItem: { select: { name: true } } } });
   if (rows.length === 0) return NextResponse.json({ error: "No encontrada." }, { status: 404 });
 
+  const isAdmin = session.user.role === "admin";
   const paidAt = new Date();
   await prisma.purchaseRequest.updateMany({
     where: { groupId },
-    data: { shippingPaidAt: paidAt, shippingPaymentProofUrl: parsed.data.proofUrl || null },
+    data: { shippingPaidAt: paidAt, shippingPaymentProofUrl: parsed.data.proofUrl || null, shippingPaidById: isAdmin ? null : session.user.id },
   });
 
   const requestedById = rows[0].requestedById;

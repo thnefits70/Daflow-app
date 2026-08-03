@@ -6,6 +6,7 @@ import { Camera, CheckCircle2 } from "lucide-react";
 import { uploadFile } from "@/lib/uploadFile";
 import { compressImage } from "@/lib/compressImage";
 import { usePasteFile } from "@/lib/usePasteFile";
+import { actorName } from "@/lib/actorName";
 
 type Row = {
   id: string;
@@ -15,6 +16,8 @@ type Row = {
   totalCost: number;
   catalogItem: { name: string };
   supplier: { name: string };
+  requestedBy: { name: string } | null;
+  paidBy: { name: string } | null;
 };
 
 function groupRows(rows: Row[]) {
@@ -135,6 +138,9 @@ export function PurchaseReceivingPanel() {
                 <div className="text-[11px] font-bold text-teal">{receivedCount}/{g.length} confirmados</div>
               </div>
             )}
+            <div className="text-[10px] text-steel-dim mb-2">
+              Solicitada por {actorName(g[0].requestedBy?.name)} · Pagada por {actorName(g[0].paidBy?.name)}
+            </div>
             <div className="flex flex-col gap-3">
               {g.map((r) => (
                 <div key={r.id}>

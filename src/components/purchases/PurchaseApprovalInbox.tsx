@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { FileText } from "lucide-react";
+import { actorName } from "@/lib/actorName";
 
 type Row = {
   id: string;
@@ -15,6 +16,7 @@ type Row = {
   purchaseOrderUrl: string | null;
   catalogItem: { name: string };
   supplier: { name: string };
+  requestedBy: { name: string } | null;
 };
 
 function isPdf(url: string) {
@@ -78,6 +80,7 @@ export function PurchaseApprovalInbox() {
                   <div key={r.id} className="text-[14px] font-bold">{r.catalogItem.name} · {r.quantity} un. — ${r.unitCost.toFixed(2)}/un.</div>
                 ))}
                 <div className="text-[11.5px] text-steel mt-0.5">{g[0].supplier.name} · Total ${total.toFixed(2)}</div>
+                <div className="text-[10px] text-steel-dim mt-0.5">Solicitada por {actorName(g[0].requestedBy?.name)}</div>
               </div>
               {justification && (
                 <span className="text-[10px] font-bold uppercase tracking-wide bg-red/15 text-red border border-red/40 rounded-full px-2.5 py-1">Sobre el historial</span>

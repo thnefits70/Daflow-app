@@ -167,6 +167,10 @@ model User {
   suppliersCreated  Supplier[] @relation("SupplierCreatedBy")
   suppliersApproved Supplier[] @relation("SupplierApprovedBy")
   supplierBankAccountsCreated SupplierBankAccount[] @relation("SupplierBankAccountCreatedBy")
+  purchaseRequestsPaidBy PurchaseRequest[] @relation("PurchaseRequestPaidBy")
+  purchaseRequestsInvoicedBy PurchaseRequest[] @relation("PurchaseRequestInvoicedBy")
+  purchaseRequestsShippingPaymentRequestedBy PurchaseRequest[] @relation("PurchaseRequestShippingPaymentRequestedBy")
+  purchaseRequestsShippingPaidBy PurchaseRequest[] @relation("PurchaseRequestShippingPaidBy")
   payStubs         PayStub[] @relation("PayStubOwner")
   payStubsUploaded PayStub[] @relation("PayStubUploadedBy")
   financeKpiRecordsUploaded FinanceKpiRecord[] @relation("FinanceKpiRecordUploadedBy")
@@ -1016,9 +1020,13 @@ model PurchaseRequest {
   shippingPaymentTiming      ShippingPaymentTiming?
   carrierBankAccountId       String?
   carrierBankAccount         SupplierBankAccount?   @relation("PurchaseRequestCarrierBankAccount", fields: [carrierBankAccountId], references: [id], onDelete: SetNull)
-  shippingPaymentRequestedAt DateTime?
-  shippingPaidAt             DateTime?
-  shippingPaymentProofUrl    String?
+  shippingPaymentRequestedAt   DateTime?
+  shippingPaymentRequestedById String?
+  shippingPaymentRequestedBy   User?      @relation("PurchaseRequestShippingPaymentRequestedBy", fields: [shippingPaymentRequestedById], references: [id], onDelete: SetNull)
+  shippingPaidAt               DateTime?
+  shippingPaidById             String?
+  shippingPaidBy               User?      @relation("PurchaseRequestShippingPaidBy", fields: [shippingPaidById], references: [id], onDelete: SetNull)
+  shippingPaymentProofUrl      String?
 
   // Obligatoria solo cuando el costo por unidad superó el promedio de las
   // últimas 3 compras de este insumo — impuesta en la ruta, no aquí.
@@ -1037,11 +1045,15 @@ model PurchaseRequest {
   reviewedAt   DateTime?
 
   paidAt          DateTime?
+  paidById        String?
+  paidBy          User?     @relation("PurchaseRequestPaidBy", fields: [paidById], references: [id], onDelete: SetNull)
   paymentProofUrl String?
 
-  invoiceStatus PurchaseInvoiceStatus @default(PENDING)
-  invoiceAmount Float?
-  invoiceDocUrl String?
+  invoiceStatus   PurchaseInvoiceStatus @default(PENDING)
+  invoiceAmount   Float?
+  invoiceDocUrl   String?
+  invoicedById    String?
+  invoicedBy      User?                 @relation("PurchaseRequestInvoicedBy", fields: [invoicedById], references: [id], onDelete: SetNull)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

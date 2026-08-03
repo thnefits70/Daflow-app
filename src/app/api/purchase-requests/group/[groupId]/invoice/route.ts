@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { auth } from "@/auth";
 import { canRegisterPurchaseInvoices } from "@/lib/guards";
 
 const schema = z.object({
@@ -12,7 +13,8 @@ const schema = z.object({
 // Una factura suele cubrir TODOS los productos de la misma compra — se
 // registra a nivel de grupo, no producto por producto.
 export async function POST(req: NextRequest, { params }: { params: Promise<{ groupId: string }> }) {
-  if (!(await canRegisterPurchaseInvoices())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+  const session = await auth();
+  if (!(await canRegisterPurchaseInvoices()) || !session) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
   const { groupId } = await params;
   const body = await req.json().catch(() => null);
@@ -26,12 +28,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ gro
   const count = await prisma.purchaseRequest.count({ where: { groupId } });
   if (count === 0) return NextResponse.json({ error: "No encontrada." }, { status: 404 });
 
+  const isAdmin = session.user.role === "admin";
   await prisma.purchaseRequest.updateMany({
     where: { groupId },
     data: {
       invoiceStatus: parsed.data.invoiceStatus,
       invoiceAmount: parsed.data.invoiceStatus === "PARTIAL" ? parsed.data.invoiceAmount : null,
       invoiceDocUrl: parsed.data.invoiceDocUrl || null,
+      invoicedById: isAdmin ? null : session.user.id,
     },
   });
   const updated = await prisma.purchaseRequest.findMany({ where: { groupId } });

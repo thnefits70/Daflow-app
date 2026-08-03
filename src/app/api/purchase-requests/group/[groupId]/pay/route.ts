@@ -22,10 +22,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ gro
     return NextResponse.json({ error: "Solo se puede pagar una solicitud ya aprobada." }, { status: 409 });
   }
 
+  const isAdmin = session.user.role === "admin";
   const paidAt = new Date();
   await prisma.purchaseRequest.updateMany({
     where: { groupId },
-    data: { status: "PAID", paidAt, paymentProofUrl: parsed.data.paymentProofUrl },
+    data: { status: "PAID", paidAt, paymentProofUrl: parsed.data.paymentProofUrl, paidById: isAdmin ? null : session.user.id },
   });
 
   const inventarioLeader = await prisma.user.findFirst({ where: { isLeader: true, leadsDept: { code: "INV" } }, select: { id: true } });

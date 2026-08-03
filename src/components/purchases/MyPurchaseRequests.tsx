@@ -6,6 +6,7 @@ import { uploadFile } from "@/lib/uploadFile";
 import { compressImage } from "@/lib/compressImage";
 import { usePasteFile } from "@/lib/usePasteFile";
 import type { BankAccountDTO } from "./PurchaseSupplierPicker";
+import { actorName } from "@/lib/actorName";
 
 type Row = {
   id: string;
@@ -25,6 +26,9 @@ type Row = {
   carrierBankAccountId: string | null;
   shippingPaymentRequestedAt: string | null;
   shippingPaidAt: string | null;
+  reviewedBy: { name: string } | null;
+  paidBy: { name: string } | null;
+  receipt: { confirmedBy: { name: string } | null } | null;
 };
 
 const STEPS: { key: Row["status"]; label: string }[] = [
@@ -238,13 +242,20 @@ function GroupCard({ g, onPurchaseOrderUploaded, onGroupUpdate }: { g: Row[]; on
       {rejected ? (
         <div className="text-[12px] text-red">Rechazada{g[0].rejectReason ? ` — ${g[0].rejectReason}` : ""}</div>
       ) : (
-        <div className="flex gap-1.5">
-          {STEPS.map((s, i) => (
-            <div key={s.key} className={`flex-1 rounded-md py-1.5 text-center text-[10.5px] font-semibold border ${i <= groupIdx ? "border-green/45 text-green bg-green/10" : "border-rule text-steel bg-cloud"}`}>
-              {s.label}
-            </div>
-          ))}
-        </div>
+        <>
+          <div className="flex gap-1.5">
+            {STEPS.map((s, i) => (
+              <div key={s.key} className={`flex-1 rounded-md py-1.5 text-center text-[10.5px] font-semibold border ${i <= groupIdx ? "border-green/45 text-green bg-green/10" : "border-rule text-steel bg-cloud"}`}>
+                {s.label}
+              </div>
+            ))}
+          </div>
+          <div className="text-[10px] text-steel-dim mt-1.5">
+            {groupIdx >= 1 && <>Aprobada por {actorName(g[0].reviewedBy?.name)} · </>}
+            {groupIdx >= 2 && <>Pagada por {actorName(g[0].paidBy?.name)} · </>}
+            {groupIdx >= 3 && <>Recibida por {[...new Set(g.map((r) => actorName(r.receipt?.confirmedBy?.name)))].join(", ")}</>}
+          </div>
+        </>
       )}
 
       {needsPurchaseOrder && (
