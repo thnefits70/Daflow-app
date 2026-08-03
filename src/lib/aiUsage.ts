@@ -1,13 +1,14 @@
 import { prisma } from "@/lib/prisma";
 import { computeCostUsd } from "@/lib/aiPricing";
 
-export type AiUsageFeature = "nancy" | "rutas_conocimiento" | "control_compras_cotizacion" | "control_compras_catalogo";
+export type AiUsageFeature = "nancy" | "rutas_conocimiento" | "control_compras_cotizacion" | "control_compras_catalogo" | "control_compras_comprobante_pago";
 
 const FEATURE_LABELS: Record<AiUsageFeature, string> = {
   nancy: "Nancy · chat financiero",
   rutas_conocimiento: "Rutas de conocimiento · generar preguntas",
   control_compras_cotizacion: "Control de Compras · verificar cotización",
   control_compras_catalogo: "Control de Compras · chequeo de catálogo",
+  control_compras_comprobante_pago: "Control de Compras · verificar comprobante de pago",
 };
 
 // Confirmado 2026-07-29: no debe poder tumbar el flujo principal (Nancy o la

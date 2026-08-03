@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { FileText, Upload, CheckCircle2, AlertTriangle } from "lucide-react";
+import { FileText, Upload, CheckCircle2, AlertTriangle, Lock } from "lucide-react";
 import { actorName } from "@/lib/actorName";
 import { uploadFile } from "@/lib/uploadFile";
 import { compressImage } from "@/lib/compressImage";
@@ -74,8 +74,12 @@ export function PurchaseApprovalInbox() {
   const [approvingGroup, setApprovingGroup] = useState<string | null>(null);
   const [proofUrl, setProofUrl] = useState<string | null>(null);
   const [uploadingProof, setUploadingProof] = useState(false);
+  const [proofVerifying, setProofVerifying] = useState(false);
+  const [proofVerifyResult, setProofVerifyResult] = useState<{ readAmount: number | null; matches: boolean } | null>(null);
   const [shippingProofUrl, setShippingProofUrl] = useState<string | null>(null);
   const [uploadingShippingProof, setUploadingShippingProof] = useState(false);
+  const [shippingProofVerifying, setShippingProofVerifying] = useState(false);
+  const [shippingProofVerifyResult, setShippingProofVerifyResult] = useState<{ readAmount: number | null; matches: boolean } | null>(null);
   const [err, setErr] = useState("");
 
   const { onPaste: onPasteProof, onMouseEnter: onPasteProofHoverIn, onMouseLeave: onPasteProofHoverOut } = usePasteFile((file) => uploadProof(file));
@@ -89,7 +93,53 @@ export function PurchaseApprovalInbox() {
   }
   useEffect(load, []);
 
+  function currentGroupRows(groupId: string) {
+    return (rows ?? []).filter((r) => r.groupId === groupId);
+  }
+
+  // Confirmado 2026-08-04: la IA lee el comprobante y se compara contra lo
+  // que de verdad correspondía pagar — si no cuadra (o no se puede leer un
+  // monto), "Aprobar y confirmar pago" queda bloqueado hasta corregir. Nunca
+  // se avanza con un comprobante sin verificar, así se haya cerrado la
+  // pestaña a medio camino o lo que sea.
+  async function verifyProof(groupId: string, url: string) {
+    setProofVerifying(true);
+    setProofVerifyResult(null);
+    const expectedAmount = currentGroupRows(groupId).reduce((s, r) => s + r.totalCost, 0);
+    const res = await fetch("/api/purchase-requests/verify-payment", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ proofUrl: url, expectedAmount }),
+    });
+    setProofVerifying(false);
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      setErr(data?.error ?? "No se pudo verificar el comprobante.");
+      return;
+    }
+    setProofVerifyResult(data);
+  }
+
+  async function verifyShippingProof(groupId: string, url: string) {
+    setShippingProofVerifying(true);
+    setShippingProofVerifyResult(null);
+    const expectedAmount = currentGroupRows(groupId)[0]?.shippingCostTotal ?? 0;
+    const res = await fetch("/api/purchase-requests/verify-payment", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ proofUrl: url, expectedAmount }),
+    });
+    setShippingProofVerifying(false);
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      setErr(data?.error ?? "No se pudo verificar el comprobante del flete.");
+      return;
+    }
+    setShippingProofVerifyResult(data);
+  }
+
   async function uploadProof(file: File) {
+    if (!approvingGroup) return;
     setUploadingProof(true);
     setErr("");
     const compressed = await compressImage(file);
@@ -100,9 +150,11 @@ export function PurchaseApprovalInbox() {
       return;
     }
     setProofUrl(uploaded.url);
+    verifyProof(approvingGroup, uploaded.url);
   }
 
   async function uploadShippingProof(file: File) {
+    if (!approvingGroup) return;
     setUploadingShippingProof(true);
     setErr("");
     const compressed = await compressImage(file);
@@ -113,6 +165,7 @@ export function PurchaseApprovalInbox() {
       return;
     }
     setShippingProofUrl(uploaded.url);
+    verifyShippingProof(approvingGroup, uploaded.url);
   }
 
   async function reject(groupId: string) {
@@ -136,6 +189,14 @@ export function PurchaseApprovalInbox() {
   async function approveAndPay(groupId: string, payShipping: boolean) {
     if (!proofUrl) {
       setErr("Sube el comprobante de pago de la mercadería.");
+      return;
+    }
+    if (!proofVerifyResult?.matches) {
+      setErr("El comprobante de la mercadería todavía no está verificado — el monto debe coincidir con lo que corresponde pagar.");
+      return;
+    }
+    if (payShipping && shippingProofUrl && !shippingProofVerifyResult?.matches) {
+      setErr("El comprobante del flete todavía no está verificado — el monto debe coincidir con lo que corresponde pagar.");
       return;
     }
     setBusyGroup(groupId);
@@ -173,7 +234,9 @@ export function PurchaseApprovalInbox() {
     setBusyGroup(null);
     setApprovingGroup(null);
     setProofUrl(null);
+    setProofVerifyResult(null);
     setShippingProofUrl(null);
+    setShippingProofVerifyResult(null);
     load();
     router.refresh();
   }
@@ -239,7 +302,29 @@ export function PurchaseApprovalInbox() {
               <div className="bg-surface2 border border-rule rounded-md p-3">
                 <label className="block mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-steel">Comprobante de pago — mercadería</label>
                 {proofUrl ? (
-                  <div className="flex items-center gap-2 text-[12px] text-teal mb-3"><CheckCircle2 size={13} /> Comprobante subido <button type="button" className="text-steel ml-1 cursor-pointer" onClick={() => setProofUrl(null)}>Cambiar</button></div>
+                  <div className="mb-3">
+                    <div className="flex items-center gap-2 text-[12px] mb-1">
+                      {proofVerifying ? (
+                        <span className="w-3.5 h-3.5 rounded-full border-2 border-rule border-t-teal animate-spin" />
+                      ) : proofVerifyResult?.matches ? (
+                        <CheckCircle2 size={13} className="text-teal" />
+                      ) : proofVerifyResult ? (
+                        <Lock size={13} className="text-red" />
+                      ) : null}
+                      <span className={proofVerifying ? "text-steel" : proofVerifyResult?.matches ? "text-teal" : proofVerifyResult ? "text-red" : "text-steel"}>
+                        {proofVerifying
+                          ? "Verificando con IA…"
+                          : proofVerifyResult?.matches
+                          ? `Verificado — coincide con lo que corresponde pagar (${proofVerifyResult.readAmount?.toFixed(2)})`
+                          : proofVerifyResult && proofVerifyResult.readAmount !== null
+                          ? `No coincide — el comprobante dice $${proofVerifyResult.readAmount.toFixed(2)}, revisa antes de continuar`
+                          : proofVerifyResult
+                          ? "No se pudo leer el monto — sube una imagen más clara"
+                          : "Comprobante subido"}
+                      </span>
+                      <button type="button" className="text-steel ml-1 cursor-pointer" onClick={() => { setProofUrl(null); setProofVerifyResult(null); }}>Cambiar</button>
+                    </div>
+                  </div>
                 ) : (
                   <div className="mb-3">
                     <label
@@ -266,7 +351,29 @@ export function PurchaseApprovalInbox() {
                       Comprobante de pago — flete <span className="text-steel-dim normal-case font-normal">(opcional)</span>
                     </label>
                     {shippingProofUrl ? (
-                      <div className="flex items-center gap-2 text-[12px] text-teal mb-3"><CheckCircle2 size={13} /> Comprobante subido <button type="button" className="text-steel ml-1 cursor-pointer" onClick={() => setShippingProofUrl(null)}>Cambiar</button></div>
+                      <div className="mb-3">
+                        <div className="flex items-center gap-2 text-[12px] mb-1">
+                          {shippingProofVerifying ? (
+                            <span className="w-3.5 h-3.5 rounded-full border-2 border-rule border-t-teal animate-spin" />
+                          ) : shippingProofVerifyResult?.matches ? (
+                            <CheckCircle2 size={13} className="text-teal" />
+                          ) : shippingProofVerifyResult ? (
+                            <Lock size={13} className="text-red" />
+                          ) : null}
+                          <span className={shippingProofVerifying ? "text-steel" : shippingProofVerifyResult?.matches ? "text-teal" : shippingProofVerifyResult ? "text-red" : "text-steel"}>
+                            {shippingProofVerifying
+                              ? "Verificando con IA…"
+                              : shippingProofVerifyResult?.matches
+                              ? `Verificado — coincide con el flete (${shippingProofVerifyResult.readAmount?.toFixed(2)})`
+                              : shippingProofVerifyResult && shippingProofVerifyResult.readAmount !== null
+                              ? `No coincide — el comprobante dice $${shippingProofVerifyResult.readAmount.toFixed(2)}, revisa antes de continuar`
+                              : shippingProofVerifyResult
+                              ? "No se pudo leer el monto — sube una imagen más clara"
+                              : "Comprobante subido"}
+                          </span>
+                          <button type="button" className="text-steel ml-1 cursor-pointer" onClick={() => { setShippingProofUrl(null); setShippingProofVerifyResult(null); }}>Cambiar</button>
+                        </div>
+                      </div>
                     ) : (
                       <div className="mb-3">
                         <label
@@ -293,20 +400,26 @@ export function PurchaseApprovalInbox() {
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    disabled={busyGroup === groupId || !proofUrl}
+                    disabled={
+                      busyGroup === groupId ||
+                      !proofUrl ||
+                      proofVerifying ||
+                      !proofVerifyResult?.matches ||
+                      (!!shippingProofUrl && (shippingProofVerifying || !shippingProofVerifyResult?.matches))
+                    }
                     className="rounded border border-green bg-green px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer disabled:opacity-60"
                     onClick={() => approveAndPay(groupId, canPayShippingNow)}
                   >
                     Aprobar y confirmar pago
                   </button>
-                  <button type="button" className="text-steel text-[12.5px] cursor-pointer" onClick={() => { setApprovingGroup(null); setProofUrl(null); setShippingProofUrl(null); setErr(""); }}>
+                  <button type="button" className="text-steel text-[12.5px] cursor-pointer" onClick={() => { setApprovingGroup(null); setProofUrl(null); setProofVerifyResult(null); setShippingProofUrl(null); setShippingProofVerifyResult(null); setErr(""); }}>
                     Cancelar
                   </button>
                 </div>
               </div>
             ) : (
               <div className="flex items-center gap-2">
-                <button type="button" disabled={busyGroup === groupId} className="rounded border border-green bg-green px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer disabled:opacity-60" onClick={() => { setApprovingGroup(groupId); setErr(""); }}>
+                <button type="button" disabled={busyGroup === groupId} className="rounded border border-green bg-green px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer disabled:opacity-60" onClick={() => { setApprovingGroup(groupId); setProofUrl(null); setProofVerifyResult(null); setShippingProofUrl(null); setShippingProofVerifyResult(null); setErr(""); }}>
                   Aprobar
                 </button>
                 <button type="button" disabled={busyGroup === groupId} className="rounded border border-rule px-3.5 py-1.5 text-[12.5px] font-semibold text-steel cursor-pointer" onClick={() => setRejectingGroup(groupId)}>

@@ -13,6 +13,23 @@ async function fetchImageBase64(url: string): Promise<{ data: string; mediaType:
   return { data: Buffer.from(buf).toString("base64"), mediaType };
 }
 
+// Confirmado 2026-08-04: el comprobante de pago puede venir como foto O como
+// PDF (a diferencia de la cotización, que siempre es foto) — se arma el
+// bloque de contenido correcto según el tipo real del archivo en vez de
+// mandar bytes de PDF disfrazados de imagen, que Claude no puede leer así.
+async function fetchFileContentBlock(url: string): Promise<{ type: "image"; source: { type: "base64"; media_type: "image/jpeg" | "image/png" | "image/webp"; data: string } } | { type: "document"; source: { type: "base64"; media_type: "application/pdf"; data: string } }> {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`No se pudo leer el archivo (${res.status}).`);
+  const contentType = res.headers.get("content-type") ?? "";
+  const buf = await res.arrayBuffer();
+  const data = Buffer.from(buf).toString("base64");
+  if (contentType.includes("pdf")) {
+    return { type: "document", source: { type: "base64", media_type: "application/pdf", data } };
+  }
+  const mediaType = contentType.includes("png") ? "image/png" : contentType.includes("webp") ? "image/webp" : "image/jpeg";
+  return { type: "image", source: { type: "base64", media_type: mediaType, data } };
+}
+
 function extractJson<T>(text: string): T {
   const match = text.match(/\{[\s\S]*\}/);
   if (!match) throw new Error("La IA no devolvió un JSON reconocible.");
@@ -72,6 +89,58 @@ export async function readPurchaseQuote(params: {
   const textBlock = response.content.find((b) => b.type === "text");
   if (!textBlock || textBlock.type !== "text") throw new Error("La IA no devolvió contenido de texto.");
   return extractJson<QuoteReadResult>(textBlock.text);
+}
+
+export type PaymentProofReadResult = {
+  readAmount: number | null;
+};
+
+// Confirmado 2026-08-04: antes de aprobar/pagar, la IA lee el comprobante de
+// transferencia (o el de caja chica) y devuelve el monto — el llamador lo
+// compara contra lo que de verdad correspondía pagar (mercadería o flete) y
+// bloquea seguir si no cuadra, para que un sobrepago por error no pase
+// desapercibido. Igual que la cotización: se lee UNA vez, nunca se inventa
+// un valor si no aparece.
+export async function readPaymentProof(params: {
+  proofImageUrl: string;
+  actorId: string;
+  deptId?: string;
+}): Promise<PaymentProofReadResult> {
+  const client = getAnthropicClient();
+  const fileBlock = await fetchFileContentBlock(params.proofImageUrl);
+
+  const response = await client.messages.create({
+    model: PURCHASE_AI_MODEL,
+    max_tokens: 512,
+    system:
+      "Lees comprobantes de pago (transferencia bancaria o recibo de caja chica) para Control de Compras de " +
+      "Provedix (Guayaquil, Ecuador). Extrae SOLO el monto que de verdad muestra el comprobante como transferido o " +
+      "pagado — nunca inventes un valor. " +
+      'Responde ÚNICAMENTE un JSON: {"readAmount": number|null}. ' +
+      "readAmount es el monto total transferido/pagado (sin símbolo de moneda). Si no se distingue con claridad, pon null.",
+    messages: [
+      {
+        role: "user",
+        content: [
+          fileBlock,
+          { type: "text", text: "Lee este comprobante de pago y devuelve el JSON pedido." },
+        ],
+      },
+    ],
+  });
+
+  await logAiUsage({
+    feature: "control_compras_comprobante_pago",
+    model: PURCHASE_AI_MODEL,
+    actorId: params.actorId,
+    deptId: params.deptId,
+    inputTokens: response.usage.input_tokens,
+    outputTokens: response.usage.output_tokens,
+  });
+
+  const textBlock = response.content.find((b) => b.type === "text");
+  if (!textBlock || textBlock.type !== "text") throw new Error("La IA no devolvió contenido de texto.");
+  return extractJson<PaymentProofReadResult>(textBlock.text);
 }
 
 export type CatalogDuplicateCheck = {
