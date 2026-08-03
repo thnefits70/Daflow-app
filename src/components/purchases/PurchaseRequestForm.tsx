@@ -24,6 +24,7 @@ const emptyLine = (): Line => ({ catalogItem: null, productQuery: "", quantity: 
 type Draft = {
   lines: { catalogItem: CatalogItemDTO | null; productQuery: string; quantity: string; unitCost: string }[];
   supplier: PurchaseSupplierDTO | null;
+  bankAccountId: string | null;
   quoteImageUrl: string | null;
   verifyResult: QuoteReadResult | null;
   manualCodeConfirm: boolean;
@@ -61,6 +62,7 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
   const router = useRouter();
   const [lines, setLines] = useState<Line[]>([emptyLine()]);
   const [supplier, setSupplier] = useState<PurchaseSupplierDTO | null>(null);
+  const [bankAccountId, setBankAccountId] = useState<string | null>(null);
 
   const [quoteFile, setQuoteFile] = useState<File | null>(null);
   const [quoteImageUrl, setQuoteImageUrl] = useState<string | null>(null);
@@ -123,6 +125,7 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
         const restoredLines: Line[] = (d.lines?.length ? d.lines : [emptyLine()]).map((l) => ({ ...l, productQuery: l.productQuery ?? "", stats: null }));
         setLines(restoredLines);
         setSupplier(d.supplier ?? null);
+        setBankAccountId(d.bankAccountId ?? null);
         setQuoteImageUrl(d.quoteImageUrl ?? null);
         setVerifyResult(d.verifyResult ?? null);
         setManualCodeConfirm(d.manualCodeConfirm ?? false);
@@ -146,6 +149,7 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
     const draft: Draft = {
       lines: lines.map(({ catalogItem, productQuery, quantity, unitCost }) => ({ catalogItem, productQuery, quantity, unitCost })),
       supplier,
+      bankAccountId,
       quoteImageUrl,
       verifyResult,
       manualCodeConfirm,
@@ -161,11 +165,12 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
     } else {
       localStorage.removeItem(DRAFT_KEY);
     }
-  }, [hydrated, lines, supplier, quoteImageUrl, verifyResult, manualCodeConfirm, purchaseOrderUrl, shippingIncluded, carrier, shippingCostTotal, shippingPaymentMethod, justification]);
+  }, [hydrated, lines, supplier, bankAccountId, quoteImageUrl, verifyResult, manualCodeConfirm, purchaseOrderUrl, shippingIncluded, carrier, shippingCostTotal, shippingPaymentMethod, justification]);
 
   function resetForm() {
     setLines([emptyLine()]);
     setSupplier(null);
+    setBankAccountId(null);
     setQuoteFile(null);
     setQuoteImageUrl(null);
     setVerifyResult(null);
@@ -277,6 +282,10 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
       setErr("Elige el transportista, ya que el envío no está incluido.");
       return;
     }
+    if (supplier.bankAccounts.length > 1 && !bankAccountId) {
+      setErr("Este proveedor tiene varias cuentas bancarias — elige a cuál se le paga.");
+      return;
+    }
     if (overThreshold && !justification.trim()) {
       setErr("Uno o más productos están por encima del historial — agrega una justificación.");
       return;
@@ -289,6 +298,7 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
       body: JSON.stringify({
         items: lines.map((l) => ({ catalogItemId: l.catalogItem!.id, quantity: Number(l.quantity), unitCost: Number(l.unitCost) })),
         supplierId: supplier.id,
+        bankAccountId: bankAccountId ?? supplier.bankAccounts[0]?.id ?? null,
         quoteImageUrl,
         quoteReadTotal: verifyResult?.readTotal ?? null,
         quoteReferenceCode: verifyResult?.referenceCodeFound ?? null,
@@ -390,7 +400,15 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
 
       <div className="mb-3.5">
         <label className="block mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-steel">Proveedor</label>
-        <PurchaseSupplierPicker type="SUPPLIER" value={supplier} onChange={setSupplier} label="Buscar o registrar proveedor" />
+        <PurchaseSupplierPicker
+          type="SUPPLIER"
+          value={supplier}
+          onChange={(s) => { setSupplier(s); if (!s) setBankAccountId(null); }}
+          label="Buscar o registrar proveedor"
+          isAdmin={isAdmin}
+          selectedBankAccountId={bankAccountId}
+          onSelectBankAccount={setBankAccountId}
+        />
       </div>
 
       <div className="mb-3.5">
@@ -514,7 +532,7 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
       {!shippingIncluded && (
         <div className="bg-surface2 border border-rule rounded-md p-3.5 mb-3.5">
           <label className="block mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-steel">Transportista</label>
-          <PurchaseSupplierPicker type="CARRIER" value={carrier} onChange={setCarrier} label="Buscar o registrar transportista" />
+          <PurchaseSupplierPicker type="CARRIER" value={carrier} onChange={setCarrier} label="Buscar o registrar transportista" isAdmin={isAdmin} />
           <div className="grid grid-cols-2 gap-2.5 mt-3">
             <div>
               <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Costo de envío (total)</label>

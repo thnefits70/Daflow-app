@@ -166,6 +166,7 @@ model User {
   ackUpdates    UserAckUpdate[]
   suppliersCreated  Supplier[] @relation("SupplierCreatedBy")
   suppliersApproved Supplier[] @relation("SupplierApprovedBy")
+  supplierBankAccountsCreated SupplierBankAccount[] @relation("SupplierBankAccountCreatedBy")
   payStubs         PayStub[] @relation("PayStubOwner")
   payStubsUploaded PayStub[] @relation("PayStubUploadedBy")
   financeKpiRecordsUploaded FinanceKpiRecord[] @relation("FinanceKpiRecordUploadedBy")
@@ -797,15 +798,7 @@ model Supplier {
   category    String?
   notes       String?
 
-  // Datos bancarios, para Control de Compras — confirmado 2026-07-30:
-  // obligatorios ahí al registrar un proveedor/transportista nuevo, pero
-  // opcionales a nivel de columna porque los proveedores ya existentes en
-  // este directorio (creados antes de Control de Compras) no los tienen.
-  bankName          String?
-  bankAccountType   String?
-  bankAccountNumber String?
-  bankAccountHolder String?
-  email             String?
+  email String?
 
   status       SupplierStatus @default(PENDING)
   rejectReason String?
@@ -828,10 +821,35 @@ model Supplier {
   channels SupplierChannel[]
   purchaseRequestsAsSupplier PurchaseRequest[] @relation("PurchaseRequestSupplier")
   purchaseRequestsAsCarrier  PurchaseRequest[] @relation("PurchaseRequestCarrier")
+  bankAccounts SupplierBankAccount[]
 
   @@index([status])
   @@index([createdByDeptId])
   @@index([type])
+}
+
+// Confirmado 2026-08-03: un proveedor puede tener varias cuentas bancarias
+// (cambia de banco, o pide que se le pague en una nueva cuenta) — se
+// agregan, nunca se editan, y solo el administrador principal puede
+// eliminarlas (con confirmación), para que el historial de a qué cuenta se
+// le pagó en el pasado no se pierda ni se pueda alterar por accidente.
+model SupplierBankAccount {
+  id         String   @id @default(cuid())
+  supplierId String
+  supplier   Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+
+  bankName          String
+  bankAccountType   String
+  bankAccountNumber String
+  bankAccountHolder String
+
+  createdById String?
+  createdBy   User?    @relation("SupplierBankAccountCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+
+  purchaseRequests PurchaseRequest[]
+
+  @@index([supplierId])
 }
 
 model SupplierContact {
@@ -944,6 +962,12 @@ model PurchaseRequest {
 
   supplierId String
   supplier   Supplier @relation("PurchaseRequestSupplier", fields: [supplierId], references: [id], onDelete: Restrict)
+
+  // Confirmado 2026-08-03: a qué cuenta bancaria del proveedor se le paga —
+  // relevante cuando el proveedor tiene varias. Null si en ese momento solo
+  // tenía una (no hacía falta elegir) o si la cuenta elegida se borró después.
+  bankAccountId String?
+  bankAccount   SupplierBankAccount? @relation(fields: [bankAccountId], references: [id], onDelete: SetNull)
 
   quantity  Int
   unitCost  Float

@@ -9,8 +9,9 @@ import { sendPushToOwner } from "@/lib/webPush";
 
 const requestInclude = {
   catalogItem: { select: { id: true, name: true, photos: true } },
-  supplier: { select: { id: true, name: true, bankName: true, bankAccountType: true, bankAccountNumber: true, bankAccountHolder: true } },
-  carrier: { select: { id: true, name: true, bankName: true, bankAccountType: true, bankAccountNumber: true, bankAccountHolder: true } },
+  supplier: { select: { id: true, name: true } },
+  carrier: { select: { id: true, name: true } },
+  bankAccount: { select: { id: true, bankName: true, bankAccountType: true, bankAccountNumber: true, bankAccountHolder: true } },
   requestedBy: { select: { name: true } },
   reviewedBy: { select: { name: true } },
   receipt: true,
@@ -92,6 +93,7 @@ const lineSchema = z.object({
 const createSchema = z.object({
   items: z.array(lineSchema).min(1, "Agrega al menos un producto."),
   supplierId: z.string().min(1),
+  bankAccountId: z.string().min(1).nullable().optional(),
   quoteImageUrl: z.string().url(),
   quoteReadTotal: z.number().nullable(),
   quoteReferenceCode: z.string().trim().nullable().optional(),
@@ -201,6 +203,7 @@ export async function POST(req: NextRequest) {
           deptId: effectiveDeptId,
           catalogItemId: it.catalogItemId,
           supplierId: d.supplierId,
+          bankAccountId: d.bankAccountId || null,
           quantity: it.quantity,
           unitCost: it.unitCost,
           totalCost: it.quantity * it.unitCost,

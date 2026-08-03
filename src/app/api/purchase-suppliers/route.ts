@@ -23,14 +23,14 @@ export async function GET(req: NextRequest) {
         ? {
             OR: [
               { name: { contains: q, mode: "insensitive" } },
-              { bankAccountNumber: { contains: q } },
+              { bankAccounts: { some: { bankAccountNumber: { contains: q } } } },
               { contacts: { some: { whatsapp: { contains: q } } } },
             ],
           }
         : {}),
     },
     orderBy: { name: "asc" },
-    include: { contacts: { orderBy: { id: "asc" } } },
+    include: { contacts: { orderBy: { id: "asc" } }, bankAccounts: { orderBy: { createdAt: "asc" } } },
     take: 30,
   });
   return NextResponse.json(suppliers);
@@ -80,10 +80,6 @@ export async function POST(req: NextRequest) {
       category: parsed.data.category || null,
       notes: parsed.data.notes,
       location: parsed.data.type === "SUPPLIER" ? parsed.data.location : null,
-      bankName: parsed.data.bankName,
-      bankAccountType: parsed.data.bankAccountType,
-      bankAccountNumber: parsed.data.bankAccountNumber,
-      bankAccountHolder: parsed.data.bankAccountHolder,
       email: parsed.data.email || null,
       status: "APPROVED",
       createdById: isAdmin ? null : session.user.id,
@@ -91,8 +87,19 @@ export async function POST(req: NextRequest) {
       approvedById: isAdmin ? null : session.user.id,
       approvedAt: new Date(),
       contacts: { create: [{ label: parsed.data.contactLabel, whatsapp: parsed.data.contactWhatsapp }] },
+      bankAccounts: {
+        create: [
+          {
+            bankName: parsed.data.bankName,
+            bankAccountType: parsed.data.bankAccountType,
+            bankAccountNumber: parsed.data.bankAccountNumber,
+            bankAccountHolder: parsed.data.bankAccountHolder,
+            createdById: isAdmin ? null : session.user.id,
+          },
+        ],
+      },
     },
-    include: { contacts: true },
+    include: { contacts: true, bankAccounts: true },
   });
   return NextResponse.json(supplier, { status: 201 });
 }

@@ -1,35 +1,45 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Search, Plus, CheckCircle2 } from "lucide-react";
+import { Search, Plus, CheckCircle2, Trash2 } from "lucide-react";
+
+export type BankAccountDTO = { id: string; bankName: string; bankAccountType: string; bankAccountNumber: string; bankAccountHolder: string };
 
 export type PurchaseSupplierDTO = {
   id: string;
   name: string;
   location: string | null;
-  bankName: string | null;
-  bankAccountType: string | null;
-  bankAccountNumber: string | null;
-  bankAccountHolder: string | null;
+  bankAccounts: BankAccountDTO[];
   contacts: { label: string; whatsapp: string }[];
 };
 
 const emptyForm = { name: "", category: "", notes: "", location: "", bankName: "", bankAccountType: "", bankAccountNumber: "", bankAccountHolder: "", email: "", contactLabel: "", contactWhatsapp: "" };
+const emptyAccountForm = { bankName: "", bankAccountType: "", bankAccountNumber: "", bankAccountHolder: "" };
 
 // Reutilizado para proveedor (type=SUPPLIER, pide ubicación) y transportista
 // (type=CARRIER, sin ubicación) — confirmado 2026-07-30: ambos viven en la
 // misma tabla que la sección de Proveedores, así que crear aquí también los
 // deja disponibles ahí, nunca dos registros del mismo contacto.
+// Confirmado 2026-08-03: un proveedor puede tener varias cuentas bancarias
+// (cambia de banco, o pide una cuenta nueva) — cualquiera con acceso a
+// solicitar compras puede AGREGAR una cuenta más; solo el administrador
+// puede ELIMINAR una ya registrada, con confirmación.
 export function PurchaseSupplierPicker({
   type,
   value,
   onChange,
   label,
+  isAdmin = false,
+  selectedBankAccountId,
+  onSelectBankAccount,
 }: {
   type: "SUPPLIER" | "CARRIER";
   value: PurchaseSupplierDTO | null;
   onChange: (s: PurchaseSupplierDTO | null) => void;
   label: string;
+  isAdmin?: boolean;
+  selectedBankAccountId?: string | null;
+  onSelectBankAccount?: (id: string | null) => void;
 }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<PurchaseSupplierDTO[]>([]);
@@ -38,6 +48,11 @@ export function PurchaseSupplierPicker({
   const [form, setForm] = useState(emptyForm);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+
+  const [addingAccount, setAddingAccount] = useState(false);
+  const [accountForm, setAccountForm] = useState(emptyAccountForm);
+  const [accountBusy, setAccountBusy] = useState(false);
+  const [accountErr, setAccountErr] = useState("");
 
   useEffect(() => {
     if (value || creating) return;
@@ -73,24 +88,118 @@ export function PurchaseSupplierPicker({
       return;
     }
     setCreating(false);
-    onChange({ ...data, contacts: data.contacts ?? [] });
+    const supplier: PurchaseSupplierDTO = { ...data, bankAccounts: data.bankAccounts ?? [], contacts: data.contacts ?? [] };
+    onChange(supplier);
+    if (supplier.bankAccounts[0]) onSelectBankAccount?.(supplier.bankAccounts[0].id);
+  }
+
+  async function addBankAccount() {
+    if (!value) return;
+    if (!accountForm.bankName.trim() || !accountForm.bankAccountType.trim() || !accountForm.bankAccountNumber.trim() || !accountForm.bankAccountHolder.trim()) {
+      setAccountErr("Completa todos los campos.");
+      return;
+    }
+    setAccountBusy(true);
+    setAccountErr("");
+    const res = await fetch(`/api/purchase-suppliers/${value.id}/bank-accounts`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(accountForm),
+    });
+    setAccountBusy(false);
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      setAccountErr(data?.error ?? "No se pudo guardar la cuenta.");
+      return;
+    }
+    onChange({ ...value, bankAccounts: [...value.bankAccounts, data] });
+    onSelectBankAccount?.(data.id);
+    setAddingAccount(false);
+    setAccountForm(emptyAccountForm);
+  }
+
+  async function deleteBankAccount(accountId: string) {
+    if (!value) return;
+    if (!confirm("¿Eliminar esta cuenta bancaria? Esta acción no se puede deshacer.")) return;
+    const res = await fetch(`/api/purchase-suppliers/${value.id}/bank-accounts/${accountId}`, { method: "DELETE" });
+    if (!res.ok) {
+      const data = await res.json().catch(() => null);
+      alert(data?.error ?? "No se pudo eliminar.");
+      return;
+    }
+    onChange({ ...value, bankAccounts: value.bankAccounts.filter((a) => a.id !== accountId) });
+    if (selectedBankAccountId === accountId) onSelectBankAccount?.(null);
   }
 
   if (value) {
     return (
       <div className="bg-cloud border border-rule rounded-md p-3">
-        <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center justify-between mb-2.5">
           <span className="text-[13.5px] font-semibold">{value.name}</span>
           <button type="button" className="text-[11.5px] text-blue font-semibold cursor-pointer" onClick={() => onChange(null)}>
             Cambiar
           </button>
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-          <div><div className="text-[9.5px] uppercase text-steel">Banco</div><div className="text-[12.5px] font-semibold break-words">{value.bankName ?? "—"}</div></div>
-          <div><div className="text-[9.5px] uppercase text-steel">Tipo de cuenta</div><div className="text-[12.5px] font-semibold break-words">{value.bankAccountType ?? "—"}</div></div>
-          <div><div className="text-[9.5px] uppercase text-steel">N° de cuenta</div><div className="text-[12.5px] font-semibold break-words">{value.bankAccountNumber ?? "—"}</div></div>
-          <div><div className="text-[9.5px] uppercase text-steel">Titular</div><div className="text-[12.5px] font-semibold break-words">{value.bankAccountHolder ?? "—"}</div></div>
+
+        <div className="flex flex-col gap-1.5 mb-2.5">
+          {value.bankAccounts.length === 0 && <div className="text-[11.5px] text-steel">Sin cuentas bancarias registradas.</div>}
+          {value.bankAccounts.map((acc) => {
+            const selectable = !!onSelectBankAccount;
+            const isSelected = selectedBankAccountId === acc.id;
+            return (
+              <div
+                key={acc.id}
+                onClick={() => onSelectBankAccount?.(acc.id)}
+                className={`flex items-center gap-2 rounded border px-2.5 py-2 ${selectable ? "cursor-pointer" : ""} ${isSelected ? "border-teal bg-teal/10" : "border-rule bg-surface2"}`}
+              >
+                {selectable && <input type="radio" readOnly checked={isSelected} className="shrink-0 w-auto" />}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-2.5 gap-y-0.5 flex-1 min-w-0 text-[11.5px]">
+                  <div><span className="text-steel">Banco: </span><span className="font-semibold break-words">{acc.bankName}</span></div>
+                  <div><span className="text-steel">Tipo: </span><span className="font-semibold break-words">{acc.bankAccountType}</span></div>
+                  <div><span className="text-steel">N°: </span><span className="font-semibold break-all">{acc.bankAccountNumber}</span></div>
+                  <div><span className="text-steel">Titular: </span><span className="font-semibold break-words">{acc.bankAccountHolder}</span></div>
+                </div>
+                {isAdmin && (
+                  <button
+                    type="button"
+                    title="Eliminar cuenta (solo administrador)"
+                    className="text-steel hover:text-red cursor-pointer shrink-0"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      deleteBankAccount(acc.id);
+                    }}
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                )}
+              </div>
+            );
+          })}
         </div>
+
+        {addingAccount ? (
+          <div className="bg-surface2 border border-rule rounded-md p-2.5">
+            <div className="grid grid-cols-2 gap-2 mb-2">
+              <input className="rounded border border-rule px-2 py-1.5 text-[12px]" placeholder="Banco" value={accountForm.bankName} onChange={(e) => setAccountForm((f) => ({ ...f, bankName: e.target.value }))} />
+              <input className="rounded border border-rule px-2 py-1.5 text-[12px]" placeholder="Tipo de cuenta" value={accountForm.bankAccountType} onChange={(e) => setAccountForm((f) => ({ ...f, bankAccountType: e.target.value }))} />
+              <input className="rounded border border-rule px-2 py-1.5 text-[12px]" placeholder="N° de cuenta" value={accountForm.bankAccountNumber} onChange={(e) => setAccountForm((f) => ({ ...f, bankAccountNumber: e.target.value }))} />
+              <input className="rounded border border-rule px-2 py-1.5 text-[12px]" placeholder="Titular" value={accountForm.bankAccountHolder} onChange={(e) => setAccountForm((f) => ({ ...f, bankAccountHolder: e.target.value }))} />
+            </div>
+            {accountErr && <div className="text-red text-[11.5px] mb-2">{accountErr}</div>}
+            <div className="flex items-center gap-2">
+              <button type="button" disabled={accountBusy} className="rounded border border-teal bg-teal px-3 py-1.5 text-[11.5px] font-bold text-navy cursor-pointer disabled:opacity-60" onClick={addBankAccount}>
+                Guardar cuenta
+              </button>
+              <button type="button" className="text-steel text-[11.5px] cursor-pointer" onClick={() => { setAddingAccount(false); setAccountErr(""); }}>
+                Cancelar
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button type="button" className="flex items-center gap-1 text-[11.5px] text-blue font-semibold cursor-pointer" onClick={() => setAddingAccount(true)}>
+            <Plus size={12} /> Agregar cuenta bancaria nueva
+          </button>
+        )}
       </div>
     );
   }
@@ -205,6 +314,7 @@ export function PurchaseSupplierPicker({
               onClick={() => {
                 onChange(s);
                 setOpen(false);
+                if (s.bankAccounts[0]) onSelectBankAccount?.(s.bankAccounts[0].id);
               }}
             >
               <CheckCircle2 size={13} className="text-teal shrink-0" />
