@@ -522,7 +522,7 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
             }`}
           >
             {uploadingPurchaseOrder ? <span className="w-4 h-4 rounded-full border-2 border-rule border-t-teal animate-spin" /> : <Upload size={15} />}
-            Subir o pegar la orden de compra
+            Subir o pegar la orden de compra (pasa el mouse y Ctrl+V)
             <input type="file" accept="image/*,application/pdf" className="hidden" onChange={(e) => e.target.files?.[0] && handlePurchaseOrderFile(e.target.files[0])} />
           </label>
         ) : (
