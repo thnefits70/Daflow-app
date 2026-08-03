@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { FileText, Upload } from "lucide-react";
+import { FileText, Upload, Truck, CheckCircle2, Plus } from "lucide-react";
 import { uploadFile } from "@/lib/uploadFile";
 import { compressImage } from "@/lib/compressImage";
 import { usePasteFile } from "@/lib/usePasteFile";
+import type { BankAccountDTO } from "./PurchaseSupplierPicker";
 
 type Row = {
   id: string;
@@ -17,6 +18,13 @@ type Row = {
   catalogItem: { name: string };
   invoiceStatus: string;
   purchaseOrderUrl: string | null;
+  shippingIncluded: boolean;
+  shippingPaymentTiming: "WITH_PURCHASE" | "ON_DELIVERY" | null;
+  shippingCostTotal: number | null;
+  carrier: { id: string; name: string; bankAccounts: BankAccountDTO[] } | null;
+  carrierBankAccountId: string | null;
+  shippingPaymentRequestedAt: string | null;
+  shippingPaidAt: string | null;
 };
 
 const STEPS: { key: Row["status"]; label: string }[] = [
@@ -40,7 +48,140 @@ function groupRows(rows: Row[]) {
   return [...map.values()];
 }
 
-function GroupCard({ g, onPurchaseOrderUploaded }: { g: Row[]; onPurchaseOrderUploaded: (groupId: string, url: string) => void }) {
+const emptyAccountForm = { bankName: "", bankAccountType: "", bankAccountNumber: "", bankAccountHolder: "", holderIdType: "" as "" | "RUC" | "CEDULA", holderIdNumber: "" };
+
+// Confirmado 2026-08-03: cuando el flete se dejó "pendiente hasta que llegue
+// la mercadería", una vez Inventario confirma la recepción (ya llega su
+// propia notificación push de "mercadería recibida"), acá aparece la opción
+// de pedir con un clic que se pague — y si el transportista todavía no dio
+// su cuenta bancaria (algunos solo la dan al entregar), se puede agregar
+// justo en este momento.
+function ShippingPaymentSection({ g, onUpdate }: { g: Row[]; onUpdate: (patch: Partial<Row>) => void }) {
+  const r0 = g[0];
+  const [addingAccount, setAddingAccount] = useState(false);
+  const [accountForm, setAccountForm] = useState(emptyAccountForm);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+
+  const carrier = r0.carrier;
+  const hasAccount = !!r0.carrierBankAccountId;
+  const requested = !!r0.shippingPaymentRequestedAt;
+
+  async function addAccount() {
+    if (!carrier) return;
+    if (!accountForm.bankName.trim() || !accountForm.bankAccountType.trim() || !accountForm.bankAccountNumber.trim() || !accountForm.bankAccountHolder.trim() || !accountForm.holderIdType || !accountForm.holderIdNumber.trim()) {
+      setErr("Completa todos los campos.");
+      return;
+    }
+    setBusy(true);
+    setErr("");
+    const res = await fetch(`/api/purchase-suppliers/${carrier.id}/bank-accounts`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(accountForm),
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      setBusy(false);
+      setErr(data?.error ?? "No se pudo guardar la cuenta.");
+      return;
+    }
+    const setRes = await fetch(`/api/purchase-requests/group/${r0.groupId}/carrier-bank-account`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ carrierBankAccountId: data.id }),
+    });
+    setBusy(false);
+    if (!setRes.ok) {
+      setErr("No se pudo asignar la cuenta.");
+      return;
+    }
+    onUpdate({ carrierBankAccountId: data.id });
+    setAddingAccount(false);
+    setAccountForm(emptyAccountForm);
+  }
+
+  async function requestPayment() {
+    setBusy(true);
+    setErr("");
+    const res = await fetch(`/api/purchase-requests/group/${r0.groupId}/request-shipping-payment`, { method: "POST" });
+    setBusy(false);
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      setErr(data?.error ?? "No se pudo enviar la solicitud.");
+      return;
+    }
+    onUpdate({ shippingPaymentRequestedAt: new Date().toISOString() });
+  }
+
+  if (r0.shippingPaidAt) {
+    return (
+      <div className="mt-3 pt-3 border-t border-rule flex items-center gap-1.5 text-[12px] text-teal">
+        <CheckCircle2 size={13} /> Flete pagado
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-3 pt-3 border-t border-rule">
+      <div className="flex items-center gap-1.5 text-[12px] font-semibold mb-2" style={{ color: "#D9A441" }}>
+        <Truck size={13} /> Flete pendiente — ${(r0.shippingCostTotal ?? 0).toFixed(2)} a {carrier?.name ?? "transportista"}
+      </div>
+
+      {!hasAccount && (
+        addingAccount ? (
+          <div className="bg-surface2 border border-rule rounded-md p-2.5 mb-2">
+            <div className="grid grid-cols-2 gap-2 mb-2">
+              <input className="rounded border border-rule px-2 py-1.5 text-[12px]" placeholder="Banco" value={accountForm.bankName} onChange={(e) => setAccountForm((f) => ({ ...f, bankName: e.target.value }))} />
+              <input className="rounded border border-rule px-2 py-1.5 text-[12px]" placeholder="N° de cuenta" value={accountForm.bankAccountNumber} onChange={(e) => setAccountForm((f) => ({ ...f, bankAccountNumber: e.target.value }))} />
+            </div>
+            <div className="flex gap-1.5 mb-2">
+              {["Ahorro", "Corriente"].map((t) => (
+                <button key={t} type="button" className={`flex-1 rounded border py-1 text-[11.5px] font-semibold cursor-pointer ${accountForm.bankAccountType === t ? "border-teal bg-teal/10 text-teal" : "border-rule text-steel"}`} onClick={() => setAccountForm((f) => ({ ...f, bankAccountType: t }))}>
+                  {t}
+                </button>
+              ))}
+            </div>
+            <input className="w-full rounded border border-rule px-2 py-1.5 text-[12px] mb-2" placeholder="Titular de la cuenta" value={accountForm.bankAccountHolder} onChange={(e) => setAccountForm((f) => ({ ...f, bankAccountHolder: e.target.value }))} />
+            <div className="flex gap-1.5 mb-2">
+              {[{ v: "RUC", l: "RUC" }, { v: "CEDULA", l: "Cédula" }].map((o) => (
+                <button key={o.v} type="button" className={`flex-1 rounded border py-1 text-[11.5px] font-semibold cursor-pointer ${accountForm.holderIdType === o.v ? "border-teal bg-teal/10 text-teal" : "border-rule text-steel"}`} onClick={() => setAccountForm((f) => ({ ...f, holderIdType: o.v as "RUC" | "CEDULA" }))}>
+                  {o.l}
+                </button>
+              ))}
+            </div>
+            <input className="w-full rounded border border-rule px-2 py-1.5 text-[12px] mb-2" placeholder={accountForm.holderIdType === "CEDULA" ? "N° de cédula" : "N° de RUC"} value={accountForm.holderIdNumber} onChange={(e) => setAccountForm((f) => ({ ...f, holderIdNumber: e.target.value }))} />
+            {err && <div className="text-red text-[11.5px] mb-2">{err}</div>}
+            <div className="flex items-center gap-2">
+              <button type="button" disabled={busy} className="rounded border border-teal bg-teal px-3 py-1.5 text-[11.5px] font-bold text-navy cursor-pointer disabled:opacity-60" onClick={addAccount}>
+                Guardar cuenta
+              </button>
+              <button type="button" className="text-steel text-[11.5px] cursor-pointer" onClick={() => { setAddingAccount(false); setErr(""); }}>
+                Cancelar
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button type="button" className="flex items-center gap-1 text-[11.5px] text-blue font-semibold cursor-pointer mb-2" onClick={() => setAddingAccount(true)}>
+            <Plus size={12} /> Agregar cuenta bancaria del transportista
+          </button>
+        )
+      )}
+
+      {err && !addingAccount && <div className="text-red text-[11.5px] mb-2">{err}</div>}
+
+      {requested ? (
+        <div className="text-[11.5px] text-steel">✓ Ya se le pidió al administrador que pague el flete — esperando confirmación.</div>
+      ) : (
+        <button type="button" disabled={busy} className="rounded border border-blue bg-blue px-3.5 py-1.5 text-[12px] font-semibold text-white cursor-pointer disabled:opacity-60" onClick={requestPayment}>
+          Pedir que se pague el flete
+        </button>
+      )}
+    </div>
+  );
+}
+
+function GroupCard({ g, onPurchaseOrderUploaded, onGroupUpdate }: { g: Row[]; onPurchaseOrderUploaded: (groupId: string, url: string) => void; onGroupUpdate: (groupId: string, patch: Partial<Row>) => void }) {
   const groupId = g[0].groupId;
   const total = g.reduce((s, r) => s + r.totalCost, 0);
   const rejected = g[0].status === "REJECTED";
@@ -54,6 +195,7 @@ function GroupCard({ g, onPurchaseOrderUploaded }: { g: Row[]; onPurchaseOrderUp
   // el paso MÁS ATRASADO de todos.
   const groupIdx = Math.min(...g.map((r) => stepIndex(r.status)));
   const statusesDiffer = new Set(g.map((r) => r.status)).size > 1;
+  const showShippingSection = !rejected && !g[0].shippingIncluded && g[0].shippingPaymentTiming === "ON_DELIVERY" && g[0].status === "RECEIVED";
 
   async function handleFile(file: File) {
     setUploading(true);
@@ -126,6 +268,8 @@ function GroupCard({ g, onPurchaseOrderUploaded }: { g: Row[]; onPurchaseOrderUp
           {err && <div className="text-red text-[11.5px] mt-1.5">{err}</div>}
         </div>
       )}
+
+      {showShippingSection && <ShippingPaymentSection g={g} onUpdate={(patch) => onGroupUpdate(groupId, patch)} />}
     </div>
   );
 }
@@ -146,6 +290,9 @@ export function MyPurchaseRequests() {
   function markUploaded(groupId: string, url: string) {
     setRows((rs) => rs && rs.map((r) => (r.groupId === groupId ? { ...r, purchaseOrderUrl: url } : r)));
   }
+  function updateGroup(groupId: string, patch: Partial<Row>) {
+    setRows((rs) => rs && rs.map((r) => (r.groupId === groupId ? { ...r, ...patch } : r)));
+  }
 
   return (
     <div>
@@ -157,7 +304,7 @@ export function MyPurchaseRequests() {
       )}
       <div className="flex flex-col gap-2.5">
         {groups.map((g) => (
-          <GroupCard key={g[0].groupId} g={g} onPurchaseOrderUploaded={markUploaded} />
+          <GroupCard key={g[0].groupId} g={g} onPurchaseOrderUploaded={markUploaded} onGroupUpdate={updateGroup} />
         ))}
       </div>
     </div>

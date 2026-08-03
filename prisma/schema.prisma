@@ -786,6 +786,11 @@ enum HolderIdType {
   CEDULA
 }
 
+enum ShippingPaymentTiming {
+  WITH_PURCHASE
+  ON_DELIVERY
+}
+
 model Supplier {
   id          String  @id @default(cuid())
   // Confirmado 2026-07-30: los transportistas de Control de Compras viven en
@@ -859,6 +864,7 @@ model SupplierBankAccount {
   createdAt   DateTime @default(now())
 
   purchaseRequests PurchaseRequest[]
+  purchaseRequestsAsCarrierAccount PurchaseRequest[] @relation("PurchaseRequestCarrierBankAccount")
 
   @@index([supplierId])
 }
@@ -1002,6 +1008,17 @@ model PurchaseRequest {
   carrier                Supplier?              @relation("PurchaseRequestCarrier", fields: [carrierId], references: [id], onDelete: SetNull)
   shippingCostTotal     Float?
   shippingPaymentMethod PurchasePaymentMethod?
+  // Confirmado 2026-08-03: cuando el flete se cobra aparte, se elige si se
+  // paga junto con la compra (como ya funcionaba) o si queda pendiente hasta
+  // que llegue la mercadería — algunos transportistas solo dan sus datos
+  // bancarios al entregar, así que la cuenta del transportista se puede
+  // agregar/elegir después, no necesariamente al solicitar.
+  shippingPaymentTiming      ShippingPaymentTiming?
+  carrierBankAccountId       String?
+  carrierBankAccount         SupplierBankAccount?   @relation("PurchaseRequestCarrierBankAccount", fields: [carrierBankAccountId], references: [id], onDelete: SetNull)
+  shippingPaymentRequestedAt DateTime?
+  shippingPaidAt             DateTime?
+  shippingPaymentProofUrl    String?
 
   // Obligatoria solo cuando el costo por unidad superó el promedio de las
   // últimas 3 compras de este insumo — impuesta en la ruta, no aquí.

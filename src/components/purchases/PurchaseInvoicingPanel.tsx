@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Upload, CheckCircle2 } from "lucide-react";
+import { Upload, CheckCircle2, Truck } from "lucide-react";
 import { uploadFile } from "@/lib/uploadFile";
 import { compressImage } from "@/lib/compressImage";
 import { usePasteFile } from "@/lib/usePasteFile";
@@ -21,6 +21,12 @@ type Row = {
   paidAt: string | null;
   catalogItem: { name: string };
   supplier: { name: string };
+  shippingIncluded: boolean;
+  shippingPaymentTiming: "WITH_PURCHASE" | "ON_DELIVERY" | null;
+  shippingCostTotal: number | null;
+  carrier: { name: string } | null;
+  shippingPaymentRequestedAt: string | null;
+  shippingPaidAt: string | null;
 };
 
 const INVOICE_LABELS: Record<InvoiceStatus, string> = {
@@ -63,6 +69,11 @@ export function PurchaseInvoicingPanel() {
   const [partialAmounts, setPartialAmounts] = useState<Record<string, string>>({});
   const [busyGroup, setBusyGroup] = useState<string | null>(null);
   const [err, setErr] = useState("");
+
+  const [payingShippingGroup, setPayingShippingGroup] = useState<string | null>(null);
+  const [shippingProofUrl, setShippingProofUrl] = useState<string | null>(null);
+  const [uploadingShippingProof, setUploadingShippingProof] = useState(false);
+  const { onPaste: onPasteShippingProof, onMouseEnter: onPasteShippingProofHoverIn, onMouseLeave: onPasteShippingProofHoverOut } = usePasteFile((file) => uploadShippingProof(file));
 
   // Confirmado 2026-07-31: por defecto se asume que SÍ hay factura (pide
   // completa/parcial + documento opcional) — "No hay factura" es la
@@ -135,6 +146,37 @@ export function PurchaseInvoicingPanel() {
     setProofUrl(uploaded.url);
   }
 
+  async function uploadShippingProof(file: File) {
+    setUploadingShippingProof(true);
+    const compressed = await compressImage(file);
+    const uploaded = await uploadFile(compressed, "purchase-payments");
+    setUploadingShippingProof(false);
+    if (!uploaded.ok) {
+      setErr(uploaded.error);
+      return;
+    }
+    setShippingProofUrl(uploaded.url);
+  }
+
+  async function payShipping(groupId: string) {
+    setBusyGroup(groupId);
+    setErr("");
+    const res = await fetch(`/api/purchase-requests/group/${groupId}/shipping-pay`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ proofUrl: shippingProofUrl }),
+    });
+    setBusyGroup(null);
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      setErr(data?.error ?? "No se pudo registrar el pago del flete.");
+      return;
+    }
+    setPayingShippingGroup(null);
+    setShippingProofUrl(null);
+    load();
+  }
+
   async function uploadInvoiceDoc(groupId: string, file: File) {
     setUploadingDoc(groupId);
     const compressed = await compressImage(file);
@@ -151,6 +193,11 @@ export function PurchaseInvoicingPanel() {
 
   const approvedGroups = groupRows(rows.filter((r) => r.status === "APPROVED"));
   const restGroups = groupRows(rows.filter((r) => r.status !== "APPROVED"));
+  // Confirmado 2026-08-03: solo aparece acá una vez que quien solicitó pidió
+  // el pago con un clic (antes de eso no hay nada que Finanzas deba hacer).
+  const pendingShippingGroups = groupRows(
+    rows.filter((r) => !r.shippingIncluded && r.shippingPaymentTiming === "ON_DELIVERY" && r.shippingPaymentRequestedAt && !r.shippingPaidAt)
+  );
 
   return (
     <div>
@@ -212,6 +259,55 @@ export function PurchaseInvoicingPanel() {
                   ) : (
                     <button type="button" className="rounded border border-blue bg-blue px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer" onClick={() => { setPayingGroup(groupId); setProofUrl(null); setErr(""); }}>
                       💳 Marcar como pagado
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {pendingShippingGroups.length > 0 && (
+        <div className="mb-4">
+          <div className="text-[11px] font-semibold uppercase tracking-wide text-steel mb-2">Fletes pendientes de pago</div>
+          <div className="flex flex-col gap-2.5">
+            {pendingShippingGroups.map((g) => {
+              const groupId = g[0].groupId;
+              const r0 = g[0];
+              return (
+                <div key={groupId} className="bg-surface border border-gold/40 rounded-md p-4">
+                  <div className="flex items-center gap-1.5 text-[13.5px] font-bold mb-0.5">
+                    <Truck size={14} /> {g.map((r) => r.catalogItem.name).join(", ")}
+                  </div>
+                  <div className="text-[11.5px] text-steel mb-2.5">{r0.carrier?.name ?? "Transportista"} — {money(r0.shippingCostTotal ?? 0)}</div>
+                  {payingShippingGroup === groupId ? (
+                    <div>
+                      {shippingProofUrl ? (
+                        <img src={shippingProofUrl} alt="" className="w-16 h-16 rounded object-cover border border-rule mb-2" />
+                      ) : (
+                        <label
+                          tabIndex={0}
+                          onPaste={onPasteShippingProof}
+                          onMouseEnter={onPasteShippingProofHoverIn}
+                          onMouseLeave={onPasteShippingProofHoverOut}
+                          className="flex items-center gap-1.5 border-[1.5px] border-dashed border-rule rounded px-3 py-2 text-[12px] text-steel cursor-pointer hover:border-teal focus:border-teal focus:outline-none w-fit mb-2"
+                        >
+                          {uploadingShippingProof ? <span className="w-3.5 h-3.5 rounded-full border-2 border-rule border-t-teal animate-spin" /> : <Upload size={13} />} Subir o pegar comprobante (opcional)
+                          <input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && uploadShippingProof(e.target.files[0])} />
+                        </label>
+                      )}
+                      {err && <div className="text-red text-[12px] mb-2">{err}</div>}
+                      <div className="flex items-center gap-2">
+                        <button type="button" disabled={busyGroup === groupId} className="rounded border border-blue bg-blue px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer disabled:opacity-60" onClick={() => payShipping(groupId)}>
+                          Confirmar pago del flete
+                        </button>
+                        <button type="button" className="text-steel text-[12.5px] cursor-pointer" onClick={() => setPayingShippingGroup(null)}>Cancelar</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button type="button" className="rounded border border-blue bg-blue px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer" onClick={() => { setPayingShippingGroup(groupId); setShippingProofUrl(null); setErr(""); }}>
+                      💳 Marcar flete como pagado
                     </button>
                   )}
                 </div>

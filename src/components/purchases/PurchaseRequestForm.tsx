@@ -18,11 +18,22 @@ type QuoteReadResult = {
   suggestedCatalogItem: { id: string; name: string } | null;
 };
 
-type Line = { catalogItem: CatalogItemDTO | null; productQuery: string; quantity: string; unitCost: string; stats: PriceStats | null };
-const emptyLine = (): Line => ({ catalogItem: null, productQuery: "", quantity: "", unitCost: "", stats: null });
+type Line = { catalogItem: CatalogItemDTO | null; productQuery: string; quantity: string; unitCost: string; ivaIncluded: boolean; stats: PriceStats | null };
+const emptyLine = (): Line => ({ catalogItem: null, productQuery: "", quantity: "", unitCost: "", ivaIncluded: false, stats: null });
+
+// Confirmado 2026-08-03: algunos proveedores cobran el 15% de IVA aparte del
+// costo por unidad que se escribe en el formulario — sin esto, el total no
+// coincide con el de la cotización. El valor CON IVA (no el que se tipeó) es
+// el que de verdad se paga, así que es ese el que se guarda y compara contra
+// el historial de precios — nunca el "antes de IVA".
+const IVA_RATE = 0.15;
+function effectiveLineUnitCost(l: { unitCost: string; ivaIncluded: boolean }) {
+  const raw = Number(l.unitCost) || 0;
+  return l.ivaIncluded ? Math.round(raw * (1 + IVA_RATE) * 100) / 100 : raw;
+}
 
 type Draft = {
-  lines: { catalogItem: CatalogItemDTO | null; productQuery: string; quantity: string; unitCost: string }[];
+  lines: { catalogItem: CatalogItemDTO | null; productQuery: string; quantity: string; unitCost: string; ivaIncluded: boolean }[];
   supplier: PurchaseSupplierDTO | null;
   bankAccountId: string | null;
   quoteImageUrl: string | null;
@@ -31,8 +42,10 @@ type Draft = {
   purchaseOrderUrl: string | null;
   shippingIncluded: boolean;
   carrier: PurchaseSupplierDTO | null;
+  carrierBankAccountId: string | null;
   shippingCostTotal: string;
   shippingPaymentMethod: "TRANSFER" | "PETTY_CASH";
+  shippingPaymentTiming: "WITH_PURCHASE" | "ON_DELIVERY";
   justification: string;
 };
 
@@ -97,8 +110,13 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
 
   const [shippingIncluded, setShippingIncluded] = useState(true);
   const [carrier, setCarrier] = useState<PurchaseSupplierDTO | null>(null);
+  const [carrierBankAccountId, setCarrierBankAccountId] = useState<string | null>(null);
   const [shippingCostTotal, setShippingCostTotal] = useState("");
   const [shippingPaymentMethod, setShippingPaymentMethod] = useState<"TRANSFER" | "PETTY_CASH">("TRANSFER");
+  // Confirmado 2026-08-03: si el flete se cobra aparte, se elige si se paga
+  // junto con la compra (como antes) o si queda pendiente hasta que llegue
+  // la mercadería — algunos transportistas solo dan su cuenta al entregar.
+  const [shippingPaymentTiming, setShippingPaymentTiming] = useState<"WITH_PURCHASE" | "ON_DELIVERY">("WITH_PURCHASE");
 
   const [justification, setJustification] = useState("");
   const [busy, setBusy] = useState(false);
@@ -140,7 +158,7 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
       const raw = localStorage.getItem(DRAFT_KEY);
       if (raw) {
         const d: Draft = JSON.parse(raw);
-        const restoredLines: Line[] = (d.lines?.length ? d.lines : [emptyLine()]).map((l) => ({ ...l, productQuery: l.productQuery ?? "", stats: null }));
+        const restoredLines: Line[] = (d.lines?.length ? d.lines : [emptyLine()]).map((l) => ({ ...l, productQuery: l.productQuery ?? "", ivaIncluded: l.ivaIncluded ?? false, stats: null }));
         setLines(restoredLines);
         setSupplier(normalizeSupplier(d.supplier));
         setBankAccountId(d.bankAccountId ?? null);
@@ -150,8 +168,10 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
         setPurchaseOrderUrl(d.purchaseOrderUrl ?? null);
         setShippingIncluded(d.shippingIncluded ?? true);
         setCarrier(normalizeSupplier(d.carrier));
+        setCarrierBankAccountId(d.carrierBankAccountId ?? null);
         setShippingCostTotal(d.shippingCostTotal ?? "");
         setShippingPaymentMethod(d.shippingPaymentMethod ?? "TRANSFER");
+        setShippingPaymentTiming(d.shippingPaymentTiming ?? "WITH_PURCHASE");
         setJustification(d.justification ?? "");
         restoredLines.forEach((l, i) => l.catalogItem && fetchLineStats(i, l.catalogItem.id));
         setDraftRestored(draftHasContent(d));
@@ -165,7 +185,7 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
   useEffect(() => {
     if (!hydrated) return;
     const draft: Draft = {
-      lines: lines.map(({ catalogItem, productQuery, quantity, unitCost }) => ({ catalogItem, productQuery, quantity, unitCost })),
+      lines: lines.map(({ catalogItem, productQuery, quantity, unitCost, ivaIncluded }) => ({ catalogItem, productQuery, quantity, unitCost, ivaIncluded })),
       supplier,
       bankAccountId,
       quoteImageUrl,
@@ -174,8 +194,10 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
       purchaseOrderUrl,
       shippingIncluded,
       carrier,
+      carrierBankAccountId,
       shippingCostTotal,
       shippingPaymentMethod,
+      shippingPaymentTiming,
       justification,
     };
     if (draftHasContent(draft)) {
@@ -183,7 +205,7 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
     } else {
       localStorage.removeItem(DRAFT_KEY);
     }
-  }, [hydrated, lines, supplier, bankAccountId, quoteImageUrl, verifyResult, manualCodeConfirm, purchaseOrderUrl, shippingIncluded, carrier, shippingCostTotal, shippingPaymentMethod, justification]);
+  }, [hydrated, lines, supplier, bankAccountId, quoteImageUrl, verifyResult, manualCodeConfirm, purchaseOrderUrl, shippingIncluded, carrier, carrierBankAccountId, shippingCostTotal, shippingPaymentMethod, shippingPaymentTiming, justification]);
 
   function resetForm() {
     setLines([emptyLine()]);
@@ -196,9 +218,11 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
     setPurchaseOrderFile(null);
     setPurchaseOrderUrl(null);
     setCarrier(null);
+    setCarrierBankAccountId(null);
     setShippingCostTotal("");
     setShippingIncluded(true);
     setShippingPaymentMethod("TRANSFER");
+    setShippingPaymentTiming("WITH_PURCHASE");
     setJustification("");
     setDraftRestored(false);
   }
@@ -209,18 +233,20 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
     setErr("");
   }
 
-  const lineTotals = lines.map((l) => (Number(l.quantity) || 0) * (Number(l.unitCost) || 0));
+  const lineTotals = lines.map((l) => (Number(l.quantity) || 0) * effectiveLineUnitCost(l));
   const totalQty = lines.reduce((s, l) => s + (Number(l.quantity) || 0), 0);
   const total = lineTotals.reduce((s, t) => s + t, 0);
 
   // Cada línea se compara contra SU propio historial — el envío (si no está
   // incluido) se reparte proporcionalmente por cantidad, igual que hace el
   // servidor, para que la vista previa coincida con lo que de verdad valida.
+  // El costo ya incluye el IVA cuando aplica, para que el historial refleje
+  // siempre el precio real pagado, no el que se tipeó antes de sumarlo.
   const overThresholdLines = lines
     .map((l, i) => {
       if (!l.stats || l.stats.last3Avg === null) return null;
       const qty = Number(l.quantity) || 0;
-      const cost = Number(l.unitCost) || 0;
+      const cost = effectiveLineUnitCost(l);
       const lineShipping = shippingIncluded || !shippingCostTotal || totalQty === 0 ? 0 : (Number(shippingCostTotal) * qty) / totalQty;
       const effCost = cost + (qty > 0 ? lineShipping / qty : 0);
       return effCost > l.stats.last3Avg ? { idx: i, name: l.catalogItem?.name ?? "?", effCost, last3Avg: l.stats.last3Avg } : null;
@@ -314,7 +340,7 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        items: lines.map((l) => ({ catalogItemId: l.catalogItem!.id, quantity: Number(l.quantity), unitCost: Number(l.unitCost) })),
+        items: lines.map((l) => ({ catalogItemId: l.catalogItem!.id, quantity: Number(l.quantity), unitCost: effectiveLineUnitCost(l) })),
         supplierId: supplier.id,
         bankAccountId: bankAccountId ?? (supplier.bankAccounts ?? [])[0]?.id ?? null,
         quoteImageUrl,
@@ -326,6 +352,8 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
         carrierId: shippingIncluded ? null : carrier?.id,
         shippingCostTotal: shippingIncluded ? null : Number(shippingCostTotal) || null,
         shippingPaymentMethod: shippingIncluded ? null : shippingPaymentMethod,
+        shippingPaymentTiming: shippingIncluded ? null : shippingPaymentTiming,
+        carrierBankAccountId: shippingIncluded ? null : carrierBankAccountId,
         justification: overThreshold ? justification.trim() : null,
       }),
     });
@@ -395,7 +423,7 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
               <div className="text-[11px] text-steel mb-2.5">🆕 Sin historial previo — primera vez que se compra este producto, mercadería o insumo.</div>
             )}
 
-            <div className="grid grid-cols-3 gap-2.5">
+            <div className="grid grid-cols-3 gap-2.5 mb-2">
               <div>
                 <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Cantidad</label>
                 <input type="number" min="1" className="w-full rounded border border-rule px-2.5 py-2 text-[13px]" value={line.quantity} onChange={(e) => updateLine(idx, { quantity: e.target.value })} />
@@ -405,10 +433,16 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
                 <input type="number" min="0" step="0.01" className="w-full rounded border border-rule px-2.5 py-2 text-[13px]" value={line.unitCost} onChange={(e) => updateLine(idx, { unitCost: e.target.value })} />
               </div>
               <div>
-                <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Subtotal</label>
+                <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">
+                  Subtotal {line.ivaIncluded && <span className="text-teal normal-case">(con IVA)</span>}
+                </label>
                 <div className="rounded border border-rule px-2.5 py-2 text-[13px] font-bold bg-cloud">${lineTotals[idx].toFixed(2)}</div>
               </div>
             </div>
+            <label className="flex items-center gap-2 text-[11.5px] text-steel cursor-pointer">
+              <input type="checkbox" className="w-auto" checked={line.ivaIncluded} onChange={(e) => updateLine(idx, { ivaIncluded: e.target.checked })} />
+              El proveedor cobra 15% de IVA aparte de este costo <span className="text-steel-dim">— súmalo para que cuadre con la cotización</span>
+            </label>
           </div>
         ))}
       </div>
@@ -560,14 +594,27 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
       {!shippingIncluded && (
         <div className="bg-surface2 border border-rule rounded-md p-3.5 mb-3.5">
           <label className="block mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-steel">Transportista</label>
-          <PurchaseSupplierPicker type="CARRIER" value={carrier} onChange={setCarrier} label="Buscar o registrar transportista" isAdmin={isAdmin} />
+          <PurchaseSupplierPicker
+            type="CARRIER"
+            value={carrier}
+            onChange={(c) => { setCarrier(c); if (!c) setCarrierBankAccountId(null); }}
+            label="Buscar o registrar transportista"
+            isAdmin={isAdmin}
+            selectedBankAccountId={carrierBankAccountId}
+            onSelectBankAccount={setCarrierBankAccountId}
+          />
+          {carrier && (carrier.bankAccounts ?? []).length === 0 && (
+            <div className="text-[10.5px] text-steel mt-1.5">
+              Todavía sin cuenta bancaria registrada — normal si el transportista solo la da al entregar. Se puede agregar después.
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-2.5 mt-3">
             <div>
               <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Costo de envío (total)</label>
               <input type="number" min="0" step="0.01" className="w-full rounded border border-rule px-2.5 py-2 text-[13.5px]" value={shippingCostTotal} onChange={(e) => setShippingCostTotal(e.target.value)} />
             </div>
             <div>
-              <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">¿Cómo se pagó?</label>
+              <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">¿Cómo se paga?</label>
               <select className="w-full rounded border border-rule bg-surface px-2.5 py-2 text-[13.5px]" value={shippingPaymentMethod} onChange={(e) => setShippingPaymentMethod(e.target.value as "TRANSFER" | "PETTY_CASH")}>
                 <option value="TRANSFER">Transferencia bancaria</option>
                 <option value="PETTY_CASH">Efectivo — caja chica</option>
@@ -577,6 +624,30 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
           {lines.length > 1 && (
             <div className="text-[10.5px] text-steel mt-2">El costo de envío se reparte entre los productos según la cantidad de cada uno.</div>
           )}
+          <div className="mt-3">
+            <label className="block mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-steel">¿Cuándo se paga el flete?</label>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                className={`flex-1 rounded-md border py-1.5 text-[12px] font-semibold cursor-pointer ${shippingPaymentTiming === "WITH_PURCHASE" ? "border-teal bg-teal/10 text-teal" : "border-rule text-steel"}`}
+                onClick={() => setShippingPaymentTiming("WITH_PURCHASE")}
+              >
+                Junto con la compra
+              </button>
+              <button
+                type="button"
+                className={`flex-1 rounded-md border py-1.5 text-[12px] font-semibold cursor-pointer ${shippingPaymentTiming === "ON_DELIVERY" ? "border-teal bg-teal/10 text-teal" : "border-rule text-steel"}`}
+                onClick={() => setShippingPaymentTiming("ON_DELIVERY")}
+              >
+                Cuando llegue la mercadería
+              </button>
+            </div>
+            {shippingPaymentTiming === "ON_DELIVERY" && (
+              <div className="text-[10.5px] text-steel mt-1.5">
+                Cuando Inventario confirme que llegó, vas a poder pedir con un clic que se pague el flete.
+              </div>
+            )}
+          </div>
         </div>
       )}
 

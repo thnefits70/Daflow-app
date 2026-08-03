@@ -7,11 +7,14 @@ import { canSubmitPurchaseRequests, canConfirmPurchaseReceiving, canRegisterPurc
 import { effectiveUnitCost, getCatalogItemPriceStats } from "@/lib/purchases";
 import { sendPushToOwner } from "@/lib/webPush";
 
+const bankAccountSelect = { id: true, bankName: true, bankAccountType: true, bankAccountNumber: true, bankAccountHolder: true, holderIdType: true, holderIdNumber: true };
+
 const requestInclude = {
   catalogItem: { select: { id: true, name: true, photos: true } },
   supplier: { select: { id: true, name: true } },
-  carrier: { select: { id: true, name: true } },
-  bankAccount: { select: { id: true, bankName: true, bankAccountType: true, bankAccountNumber: true, bankAccountHolder: true, holderIdType: true, holderIdNumber: true } },
+  carrier: { select: { id: true, name: true, bankAccounts: { orderBy: { createdAt: "asc" as const } } } },
+  bankAccount: { select: bankAccountSelect },
+  carrierBankAccount: { select: bankAccountSelect },
   requestedBy: { select: { name: true } },
   reviewedBy: { select: { name: true } },
   receipt: true,
@@ -102,6 +105,12 @@ const createSchema = z.object({
   carrierId: z.string().min(1).nullable().optional(),
   shippingCostTotal: z.number().nonnegative().nullable().optional(),
   shippingPaymentMethod: z.enum(["TRANSFER", "PETTY_CASH"]).nullable().optional(),
+  // Confirmado 2026-08-03: cuando el flete se cobra aparte, se puede pagar
+  // junto con la compra (como antes) o dejarlo pendiente hasta que llegue la
+  // mercadería — la cuenta del transportista es opcional aquí porque algunos
+  // solo la dan al entregar; se puede agregar/elegir después.
+  shippingPaymentTiming: z.enum(["WITH_PURCHASE", "ON_DELIVERY"]).nullable().optional(),
+  carrierBankAccountId: z.string().min(1).nullable().optional(),
   justification: z.string().trim().nullable().optional(),
   // El admin no pertenece a ningún departamento (login sin deptId) — cuando
   // solicita desde la pestaña de compras de una página de departamento
@@ -216,6 +225,8 @@ export async function POST(req: NextRequest) {
           carrierId: d.shippingIncluded ? null : d.carrierId,
           shippingCostTotal: d.shippingIncluded ? null : lineShipping,
           shippingPaymentMethod: d.shippingIncluded ? null : d.shippingPaymentMethod,
+          shippingPaymentTiming: d.shippingIncluded ? null : (d.shippingPaymentTiming ?? "WITH_PURCHASE"),
+          carrierBankAccountId: d.shippingIncluded ? null : d.carrierBankAccountId || null,
           justification: anyOverThreshold ? d.justification!.trim() : null,
           status: "PENDING_APPROVAL",
           requestedById: isAdmin ? null : session.user.id,
