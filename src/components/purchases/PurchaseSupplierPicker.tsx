@@ -112,7 +112,7 @@ export function PurchaseSupplierPicker({
       setAccountErr(data?.error ?? "No se pudo guardar la cuenta.");
       return;
     }
-    onChange({ ...value, bankAccounts: [...value.bankAccounts, data] });
+    onChange({ ...value, bankAccounts: [...(value.bankAccounts ?? []), data] });
     onSelectBankAccount?.(data.id);
     setAddingAccount(false);
     setAccountForm(emptyAccountForm);
@@ -127,7 +127,7 @@ export function PurchaseSupplierPicker({
       alert(data?.error ?? "No se pudo eliminar.");
       return;
     }
-    onChange({ ...value, bankAccounts: value.bankAccounts.filter((a) => a.id !== accountId) });
+    onChange({ ...value, bankAccounts: (value.bankAccounts ?? []).filter((a) => a.id !== accountId) });
     if (selectedBankAccountId === accountId) onSelectBankAccount?.(null);
   }
 
@@ -142,8 +142,8 @@ export function PurchaseSupplierPicker({
         </div>
 
         <div className="flex flex-col gap-1.5 mb-2.5">
-          {value.bankAccounts.length === 0 && <div className="text-[11.5px] text-steel">Sin cuentas bancarias registradas.</div>}
-          {value.bankAccounts.map((acc) => {
+          {(value.bankAccounts ?? []).length === 0 && <div className="text-[11.5px] text-steel">Sin cuentas bancarias registradas.</div>}
+          {(value.bankAccounts ?? []).map((acc) => {
             const selectable = !!onSelectBankAccount;
             const isSelected = selectedBankAccountId === acc.id;
             return (

@@ -41,7 +41,15 @@ type Draft = {
 // (los archivos ya se subieron a Storage apenas se eligen, así que lo que se
 // persiste son solo URLs y texto, todo serializable) y se restaura solo, con
 // un aviso arriba para que quede claro que es lo que ya tenía sin terminar.
-const DRAFT_KEY = "daflow.purchaseRequestDraft.v1";
+// v2: el proveedor pasó a tener bankAccounts[] en vez de campos bancarios
+// sueltos — un borrador viejo (v1) sin ese arreglo tumbaba la página entera
+// al restaurarlo (PurchaseSupplierPicker llamaba .map sobre undefined).
+const DRAFT_KEY = "daflow.purchaseRequestDraft.v2";
+
+function normalizeSupplier(s: PurchaseSupplierDTO | null | undefined): PurchaseSupplierDTO | null {
+  if (!s) return null;
+  return { ...s, bankAccounts: Array.isArray(s.bankAccounts) ? s.bankAccounts : [] };
+}
 
 function draftHasContent(d: Pick<Draft, "lines" | "supplier" | "quoteImageUrl" | "purchaseOrderUrl" | "justification">) {
   return (
@@ -124,14 +132,14 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
         const d: Draft = JSON.parse(raw);
         const restoredLines: Line[] = (d.lines?.length ? d.lines : [emptyLine()]).map((l) => ({ ...l, productQuery: l.productQuery ?? "", stats: null }));
         setLines(restoredLines);
-        setSupplier(d.supplier ?? null);
+        setSupplier(normalizeSupplier(d.supplier));
         setBankAccountId(d.bankAccountId ?? null);
         setQuoteImageUrl(d.quoteImageUrl ?? null);
         setVerifyResult(d.verifyResult ?? null);
         setManualCodeConfirm(d.manualCodeConfirm ?? false);
         setPurchaseOrderUrl(d.purchaseOrderUrl ?? null);
         setShippingIncluded(d.shippingIncluded ?? true);
-        setCarrier(d.carrier ?? null);
+        setCarrier(normalizeSupplier(d.carrier));
         setShippingCostTotal(d.shippingCostTotal ?? "");
         setShippingPaymentMethod(d.shippingPaymentMethod ?? "TRANSFER");
         setJustification(d.justification ?? "");
@@ -282,7 +290,7 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
       setErr("Elige el transportista, ya que el envío no está incluido.");
       return;
     }
-    if (supplier.bankAccounts.length > 1 && !bankAccountId) {
+    if ((supplier.bankAccounts ?? []).length > 1 && !bankAccountId) {
       setErr("Este proveedor tiene varias cuentas bancarias — elige a cuál se le paga.");
       return;
     }
@@ -298,7 +306,7 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
       body: JSON.stringify({
         items: lines.map((l) => ({ catalogItemId: l.catalogItem!.id, quantity: Number(l.quantity), unitCost: Number(l.unitCost) })),
         supplierId: supplier.id,
-        bankAccountId: bankAccountId ?? supplier.bankAccounts[0]?.id ?? null,
+        bankAccountId: bankAccountId ?? (supplier.bankAccounts ?? [])[0]?.id ?? null,
         quoteImageUrl,
         quoteReadTotal: verifyResult?.readTotal ?? null,
         quoteReferenceCode: verifyResult?.referenceCodeFound ?? null,
