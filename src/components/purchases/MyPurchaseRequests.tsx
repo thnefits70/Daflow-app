@@ -117,7 +117,11 @@ function GroupCard({ g, onPurchaseOrderUploaded }: { g: Row[]; onPurchaseOrderUp
           >
             {uploading ? <span className="w-3.5 h-3.5 rounded-full border-2 border-rule border-t-teal animate-spin" /> : <Upload size={14} />}
             Falta subir la orden de compra — subir o pegar (pasa el mouse y Ctrl+V)
-            <input type="file" accept="image/*,application/pdf" className="hidden" onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])} />
+            <input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])} />
+          </label>
+          <label className="flex items-center justify-center gap-1.5 mt-1.5 text-[10.5px] text-steel cursor-pointer hover:text-teal">
+            <FileText size={10.5} /> ¿Es un PDF? Subir documento
+            <input type="file" accept="application/pdf" className="hidden" onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])} />
           </label>
           {err && <div className="text-red text-[11.5px] mt-1.5">{err}</div>}
         </div>

@@ -512,19 +512,29 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
           </div>
         )}
         {!purchaseOrderUrl ? (
-          <label
-            tabIndex={0}
-            onPaste={onPastePurchaseOrder}
-            onMouseEnter={onPastePOHoverIn}
-            onMouseLeave={onPastePOHoverOut}
-            className={`flex items-center justify-center gap-2 border-[1.5px] border-dashed rounded-md py-3.5 cursor-pointer text-[12.5px] focus:outline-none ${
-              needsPurchaseOrder ? "border-red/45 text-red hover:border-red" : "border-rule text-steel hover:border-teal focus:border-teal"
-            }`}
-          >
-            {uploadingPurchaseOrder ? <span className="w-4 h-4 rounded-full border-2 border-rule border-t-teal animate-spin" /> : <Upload size={15} />}
-            Subir o pegar la orden de compra (pasa el mouse y Ctrl+V)
-            <input type="file" accept="image/*,application/pdf" className="hidden" onChange={(e) => e.target.files?.[0] && handlePurchaseOrderFile(e.target.files[0])} />
-          </label>
+          <div>
+            <label
+              tabIndex={0}
+              onPaste={onPastePurchaseOrder}
+              onMouseEnter={onPastePOHoverIn}
+              onMouseLeave={onPastePOHoverOut}
+              className={`flex items-center justify-center gap-2 border-[1.5px] border-dashed rounded-md py-3.5 cursor-pointer text-[12.5px] focus:outline-none ${
+                needsPurchaseOrder ? "border-red/45 text-red hover:border-red" : "border-rule text-steel hover:border-teal focus:border-teal"
+              }`}
+            >
+              {uploadingPurchaseOrder ? <span className="w-4 h-4 rounded-full border-2 border-rule border-t-teal animate-spin" /> : <Upload size={15} />}
+              Subir o pegar la orden de compra (pasa el mouse y Ctrl+V)
+              {/* Confirmado 2026-08-03: accept="image/*,application/pdf" hacía que el
+                  celular mostrara el selector genérico de "Cámara y archivos" en vez
+                  del acceso directo a la última foto — se separa el PDF como opción
+                  aparte para que la foto (el caso más común) siga siendo un solo toque. */}
+              <input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && handlePurchaseOrderFile(e.target.files[0])} />
+            </label>
+            <label className="flex items-center justify-center gap-1.5 mt-1.5 text-[11px] text-steel cursor-pointer hover:text-teal">
+              <FileText size={11} /> ¿Es un PDF? Subir documento
+              <input type="file" accept="application/pdf" className="hidden" onChange={(e) => e.target.files?.[0] && handlePurchaseOrderFile(e.target.files[0])} />
+            </label>
+          </div>
         ) : (
           <div className="flex items-center gap-3 bg-cloud border border-rule rounded-md p-3">
             {/\.pdf($|\?)/i.test(purchaseOrderUrl) ? (
