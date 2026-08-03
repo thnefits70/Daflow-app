@@ -54,7 +54,7 @@ export function PurchaseReceivingPanel() {
     setUploadingPhoto(true);
     setErr("");
     const compressed = await compressImage(file);
-    const uploaded = await uploadFile(compressed, "purchase-receipts");
+    const uploaded = await uploadFile(compressed, "purchase-request-receipts");
     setUploadingPhoto(false);
     if (!uploaded.ok) {
       setErr(uploaded.error);

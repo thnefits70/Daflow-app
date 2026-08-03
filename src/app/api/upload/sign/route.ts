@@ -3,7 +3,30 @@ import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { supabaseAdmin } from "@/lib/supabase";
-import { canManagePayroll, canManageNomina, canManagePurchaseReceipts } from "@/lib/guards";
+import {
+  canManagePayroll,
+  canManageNomina,
+  canManagePurchaseReceipts,
+  canSubmitPurchaseRequests,
+  canConfirmPurchaseReceiving,
+  canRegisterPurchaseInvoices,
+} from "@/lib/guards";
+
+// Confirmado 2026-08-03: bug real — ninguna de estas carpetas de Control de
+// Compras (cotización, orden de compra, fotos de catálogo, comprobante de
+// pago, factura, foto de recepción) tenía autorización para empleados, así
+// que CUALQUIERA que no fuera admin recibía "No autorizado" al subir algo
+// ahí, sin importar sus permisos de Control de Compras. Cualquiera de las
+// tres capacidades del módulo autoriza las seis carpetas — la carpeta en sí
+// no es el límite de seguridad, la ruta que después usa esa URL sí lo es.
+const PURCHASE_MODULE_FOLDERS = [
+  "purchase-quotes",
+  "purchase-orders",
+  "purchase-catalog",
+  "purchase-payments",
+  "purchase-invoices",
+  "purchase-request-receipts",
+];
 
 const BUCKET = "daflow-files";
 const MAX_BYTES = 15 * 1024 * 1024;
@@ -62,6 +85,9 @@ export async function POST(req: NextRequest) {
   }
   if (!allowed && session?.user.role === "employee" && folder === "purchase-receipts" && session.user.deptId) {
     allowed = await canManagePurchaseReceipts(session.user.deptId);
+  }
+  if (!allowed && session?.user.role === "employee" && PURCHASE_MODULE_FOLDERS.includes(folder)) {
+    allowed = (await canSubmitPurchaseRequests()) || (await canConfirmPurchaseReceiving()) || (await canRegisterPurchaseInvoices());
   }
   if (!allowed) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
