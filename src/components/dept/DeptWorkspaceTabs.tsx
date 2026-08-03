@@ -188,6 +188,7 @@ export function DeptWorkspaceTabs({
       )}
       {tab === "compras" && (canSubmitPurchases || canReceivePurchases || canInvoicePurchases) && (
         <PurchaseControlPanel
+          deptId={deptId}
           canSubmit={canSubmitPurchases}
           canReview={isAdmin}
           canReceive={canReceivePurchases}

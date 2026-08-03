@@ -2,10 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Upload } from "lucide-react";
+import { Upload, CheckCircle2 } from "lucide-react";
 import { uploadFile } from "@/lib/uploadFile";
 import { compressImage } from "@/lib/compressImage";
 import { usePasteFile } from "@/lib/usePasteFile";
+
+type InvoiceStatus = "PENDING" | "COMPLETE" | "PARTIAL" | "NON_FISCAL" | "NONE";
 
 type Row = {
   id: string;
@@ -13,19 +15,20 @@ type Row = {
   status: "APPROVED" | "PAID" | "RECEIVED";
   quantity: number;
   totalCost: number;
-  invoiceStatus: "PENDING" | "COMPLETE" | "PARTIAL" | "NON_FISCAL" | "NONE";
+  invoiceStatus: InvoiceStatus;
   invoiceAmount: number | null;
+  invoiceDocUrl: string | null;
   paidAt: string | null;
   catalogItem: { name: string };
   supplier: { name: string };
 };
 
-const INVOICE_LABELS: Record<Row["invoiceStatus"], string> = {
+const INVOICE_LABELS: Record<InvoiceStatus, string> = {
   PENDING: "Pendiente de revisar",
   COMPLETE: "Factura completa (por el total pagado)",
   PARTIAL: "Factura parcial (por una parte)",
   NON_FISCAL: "Comprobante de compra (no es factura fiscal)",
-  NONE: "No entrega ningún documento",
+  NONE: "No entregaron ningún documento",
 };
 
 function money(n: number) {
@@ -52,6 +55,15 @@ export function PurchaseInvoicingPanel() {
   const [partialAmounts, setPartialAmounts] = useState<Record<string, string>>({});
   const [busyGroup, setBusyGroup] = useState<string | null>(null);
   const [err, setErr] = useState("");
+
+  // Confirmado 2026-07-31: por defecto se asume que SÍ hay factura (pide
+  // completa/parcial + documento opcional) — "No hay factura" es la
+  // excepción que se elige a propósito, con dos botones de un solo clic
+  // (comprobante no fiscal / no entregaron nada) que finalizan al toque.
+  const [choice, setChoice] = useState<Record<string, "YES" | "NO">>({});
+  const [invoiceType, setInvoiceType] = useState<Record<string, "COMPLETE" | "PARTIAL">>({});
+  const [invoiceDocUrl, setInvoiceDocUrl] = useState<Record<string, string>>({});
+  const [uploadingDoc, setUploadingDoc] = useState<string | null>(null);
 
   function load() {
     fetch("/api/purchase-requests?view=invoicing").then((r) => (r.ok ? r.json() : [])).then(setRows).catch(() => setRows([]));
@@ -83,16 +95,24 @@ export function PurchaseInvoicingPanel() {
     router.refresh();
   }
 
-  async function setInvoice(groupId: string, invoiceStatus: Row["invoiceStatus"]) {
-    if (invoiceStatus === "PARTIAL" && !partialAmounts[groupId]) return;
+  async function setInvoice(groupId: string, invoiceStatus: InvoiceStatus, opts?: { invoiceAmount?: number; invoiceDocUrl?: string }) {
     setBusyGroup(groupId);
     await fetch(`/api/purchase-requests/group/${groupId}/invoice`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ invoiceStatus, invoiceAmount: invoiceStatus === "PARTIAL" ? Number(partialAmounts[groupId]) : undefined }),
+      body: JSON.stringify({ invoiceStatus, invoiceAmount: opts?.invoiceAmount, invoiceDocUrl: opts?.invoiceDocUrl }),
     });
     setBusyGroup(null);
     load();
+  }
+
+  function finalizeYes(groupId: string) {
+    const type = invoiceType[groupId] ?? "COMPLETE";
+    if (type === "PARTIAL" && !partialAmounts[groupId]) return;
+    setInvoice(groupId, type, {
+      invoiceAmount: type === "PARTIAL" ? Number(partialAmounts[groupId]) : undefined,
+      invoiceDocUrl: invoiceDocUrl[groupId],
+    });
   }
 
   async function uploadProof(file: File) {
@@ -105,6 +125,18 @@ export function PurchaseInvoicingPanel() {
       return;
     }
     setProofUrl(uploaded.url);
+  }
+
+  async function uploadInvoiceDoc(groupId: string, file: File) {
+    setUploadingDoc(groupId);
+    const compressed = await compressImage(file);
+    const uploaded = await uploadFile(compressed, "purchase-invoices");
+    setUploadingDoc(null);
+    if (!uploaded.ok) {
+      setErr(uploaded.error);
+      return;
+    }
+    setInvoiceDocUrl((m) => ({ ...m, [groupId]: uploaded.url }));
   }
 
   if (!rows) return <div className="text-steel text-[13px]">Cargando…</div>;
@@ -186,34 +218,103 @@ export function PurchaseInvoicingPanel() {
           const groupId = g[0].groupId;
           const total = g.reduce((s, r) => s + r.totalCost, 0);
           const r0 = g[0];
+          const isYes = (choice[groupId] ?? "YES") === "YES";
           return (
             <div key={groupId} className="bg-surface border border-rule rounded-md p-4">
-              <div className="flex items-center justify-between gap-3 flex-wrap mb-2">
-                <div>
-                  {g.map((r) => (
-                    <div key={r.id} className="text-[13.5px] font-bold">{r.catalogItem.name} · {r.quantity} un.</div>
-                  ))}
-                  <div className="text-[11.5px] text-steel">{r0.supplier.name} — Pagado {money(total)} {r0.paidAt ? `· ${new Date(r0.paidAt).toLocaleDateString("es-MX")}` : ""}</div>
-                </div>
-                <select
-                  className="rounded border border-rule bg-surface2 px-2.5 py-1.5 text-[12px]"
-                  value={r0.invoiceStatus}
-                  onChange={(e) => setInvoice(groupId, e.target.value as Row["invoiceStatus"])}
-                >
-                  {Object.entries(INVOICE_LABELS).map(([k, label]) => <option key={k} value={k}>{label}</option>)}
-                </select>
+              <div className="mb-2.5">
+                {g.map((r) => (
+                  <div key={r.id} className="text-[13.5px] font-bold">{r.catalogItem.name} · {r.quantity} un.</div>
+                ))}
+                <div className="text-[11.5px] text-steel">{r0.supplier.name} — Pagado {money(total)} {r0.paidAt ? `· ${new Date(r0.paidAt).toLocaleDateString("es-MX")}` : ""}</div>
               </div>
-              {r0.invoiceStatus === "PARTIAL" && (
-                <div className="flex items-center gap-2">
-                  <input
-                    type="number" step="0.01" placeholder="¿Por qué valor se facturó?"
-                    className="rounded border border-rule px-2.5 py-1.5 text-[12.5px] w-48"
-                    value={partialAmounts[groupId] ?? (r0.invoiceAmount ?? "")}
-                    onChange={(e) => setPartialAmounts((p) => ({ ...p, [groupId]: e.target.value }))}
-                  />
-                  <button type="button" disabled={busyGroup === groupId} className="rounded border border-blue bg-blue px-3 py-1.5 text-[11.5px] font-semibold text-white cursor-pointer disabled:opacity-60" onClick={() => setInvoice(groupId, "PARTIAL")}>
-                    Guardar valor
-                  </button>
+
+              {r0.invoiceStatus === "PENDING" ? (
+                <div>
+                  <div className="flex gap-2 mb-2.5">
+                    <button
+                      type="button"
+                      className={`flex-1 rounded-md border py-1.5 text-[12px] font-semibold cursor-pointer ${isYes ? "border-teal bg-teal/10 text-teal" : "border-rule text-steel"}`}
+                      onClick={() => setChoice((c) => ({ ...c, [groupId]: "YES" }))}
+                    >
+                      Sí tiene factura
+                    </button>
+                    <button
+                      type="button"
+                      className={`flex-1 rounded-md border py-1.5 text-[12px] font-semibold cursor-pointer ${!isYes ? "border-red/50 bg-red/10 text-red" : "border-rule text-steel"}`}
+                      onClick={() => setChoice((c) => ({ ...c, [groupId]: "NO" }))}
+                    >
+                      No hay factura en esta operación
+                    </button>
+                  </div>
+
+                  {isYes ? (
+                    <div className="bg-cloud border border-rule rounded-md p-3">
+                      <div className="flex gap-2 mb-2.5">
+                        <button
+                          type="button"
+                          className={`flex-1 rounded border py-1 text-[11.5px] font-semibold cursor-pointer ${(invoiceType[groupId] ?? "COMPLETE") === "COMPLETE" ? "border-teal text-teal bg-teal/10" : "border-rule text-steel"}`}
+                          onClick={() => setInvoiceType((t) => ({ ...t, [groupId]: "COMPLETE" }))}
+                        >
+                          Por el total pagado
+                        </button>
+                        <button
+                          type="button"
+                          className={`flex-1 rounded border py-1 text-[11.5px] font-semibold cursor-pointer ${invoiceType[groupId] === "PARTIAL" ? "border-teal text-teal bg-teal/10" : "border-rule text-steel"}`}
+                          onClick={() => setInvoiceType((t) => ({ ...t, [groupId]: "PARTIAL" }))}
+                        >
+                          Por una parte
+                        </button>
+                      </div>
+                      {invoiceType[groupId] === "PARTIAL" && (
+                        <input
+                          type="number" step="0.01" placeholder="¿Por qué valor se facturó?"
+                          className="w-full rounded border border-rule px-2.5 py-1.5 text-[12.5px] mb-2.5"
+                          value={partialAmounts[groupId] ?? ""}
+                          onChange={(e) => setPartialAmounts((p) => ({ ...p, [groupId]: e.target.value }))}
+                        />
+                      )}
+                      {invoiceDocUrl[groupId] ? (
+                        <div className="flex items-center gap-1.5 text-[11.5px] text-teal mb-2.5"><CheckCircle2 size={13} /> Documento subido</div>
+                      ) : (
+                        <label
+                          tabIndex={0}
+                          className="flex items-center gap-1.5 border-[1.5px] border-dashed border-rule rounded px-3 py-2 text-[11.5px] text-steel cursor-pointer hover:border-teal focus:border-teal focus:outline-none w-fit mb-2.5"
+                        >
+                          {uploadingDoc === groupId ? <span className="w-3.5 h-3.5 rounded-full border-2 border-rule border-t-teal animate-spin" /> : <Upload size={12} />} Subir la factura (opcional)
+                          <input type="file" accept="image/*,application/pdf" className="hidden" onChange={(e) => e.target.files?.[0] && uploadInvoiceDoc(groupId, e.target.files[0])} />
+                        </label>
+                      )}
+                      {err && <div className="text-red text-[12px] mb-2">{err}</div>}
+                      <div>
+                        <button
+                          type="button"
+                          disabled={busyGroup === groupId || (invoiceType[groupId] === "PARTIAL" && !partialAmounts[groupId])}
+                          className="rounded border border-blue bg-blue px-3.5 py-1.5 text-[12px] font-semibold text-white cursor-pointer disabled:opacity-60"
+                          onClick={() => finalizeYes(groupId)}
+                        >
+                          Guardar
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex gap-2">
+                      <button type="button" disabled={busyGroup === groupId} className="flex-1 rounded border border-rule px-3 py-2 text-[12px] font-semibold text-steel cursor-pointer disabled:opacity-60" onClick={() => setInvoice(groupId, "NON_FISCAL")}>
+                        Me dieron comprobante (no fiscal)
+                      </button>
+                      <button type="button" disabled={busyGroup === groupId} className="flex-1 rounded border border-red/50 text-red px-3 py-2 text-[12px] font-semibold cursor-pointer disabled:opacity-60" onClick={() => setInvoice(groupId, "NONE")}>
+                        No entregaron nada
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="flex items-center justify-between gap-2 bg-cloud border border-rule rounded-md px-3 py-2">
+                  <div className="flex items-center gap-1.5 text-[12px] text-teal">
+                    <CheckCircle2 size={13} /> {INVOICE_LABELS[r0.invoiceStatus]}{r0.invoiceStatus === "PARTIAL" && r0.invoiceAmount ? ` — ${money(r0.invoiceAmount)}` : ""}
+                  </div>
+                  {r0.invoiceDocUrl && (
+                    <a href={r0.invoiceDocUrl} target="_blank" rel="noopener noreferrer" className="text-[11.5px] text-blue font-semibold whitespace-nowrap">Ver documento</a>
+                  )}
                 </div>
               )}
             </div>

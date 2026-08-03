@@ -57,7 +57,7 @@ function draftHasContent(d: Pick<Draft, "lines" | "supplier" | "quoteImageUrl" |
 // costo, comparada contra SU propio historial), pero comparten un solo
 // proveedor, una sola cotización, y un solo envío/justificación, porque es
 // una sola compra.
-export function PurchaseRequestForm() {
+export function PurchaseRequestForm({ deptId }: { deptId: string }) {
   const router = useRouter();
   const [lines, setLines] = useState<Line[]>([emptyLine()]);
   const [supplier, setSupplier] = useState<PurchaseSupplierDTO | null>(null);
@@ -293,6 +293,7 @@ export function PurchaseRequestForm() {
         quoteReadTotal: verifyResult?.readTotal ?? null,
         quoteReferenceCode: verifyResult?.referenceCodeFound ?? null,
         purchaseOrderUrl,
+        deptId,
         shippingIncluded,
         carrierId: shippingIncluded ? null : carrier?.id,
         shippingCostTotal: shippingIncluded ? null : Number(shippingCostTotal) || null,

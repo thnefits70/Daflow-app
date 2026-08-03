@@ -15,11 +15,13 @@ type Tab = "solicitar" | "mias" | "comparar" | "aprobacion" | "inventario" | "fi
 // todas; Bryan/Nairoby ven Solicitar; Daniel ve Inventario; Nairoby además
 // ve Finanzas) — igual que ya funciona Proveedores en /area y /admin.
 export function PurchaseControlPanel({
+  deptId,
   canSubmit,
   canReview,
   canReceive,
   canInvoice,
 }: {
+  deptId: string;
   canSubmit: boolean;
   canReview: boolean;
   canReceive: boolean;
@@ -53,7 +55,7 @@ export function PurchaseControlPanel({
         ))}
       </div>
 
-      {tab === "solicitar" && <PurchaseRequestForm />}
+      {tab === "solicitar" && <PurchaseRequestForm deptId={deptId} />}
       {tab === "mias" && <MyPurchaseRequests />}
       {tab === "comparar" && <PurchasePriceExplorer />}
       {tab === "aprobacion" && <PurchaseApprovalInbox />}

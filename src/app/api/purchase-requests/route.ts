@@ -101,11 +101,15 @@ const createSchema = z.object({
   shippingCostTotal: z.number().nonnegative().nullable().optional(),
   shippingPaymentMethod: z.enum(["TRANSFER", "PETTY_CASH"]).nullable().optional(),
   justification: z.string().trim().nullable().optional(),
+  // El admin no pertenece a ningún departamento (login sin deptId) — cuando
+  // solicita desde la pestaña de compras de una página de departamento
+  // (siempre "Control de Compras"), el cliente manda ESE id explícito.
+  deptId: z.string().min(1).nullable().optional(),
 });
 
 export async function POST(req: NextRequest) {
   const session = await auth();
-  if (!(await canSubmitPurchaseRequests()) || !session || !session.user.deptId) {
+  if (!(await canSubmitPurchaseRequests()) || !session) {
     return NextResponse.json({ error: "No autorizado." }, { status: 403 });
   }
 
@@ -115,6 +119,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Datos inválidos." }, { status: 400 });
   }
   const d = parsed.data;
+
+  // Confirmado 2026-07-31: el bug real era este — el admin nunca tiene
+  // session.user.deptId (su login no pertenece a un departamento), así que
+  // antes esto rechazaba SIEMPRE con "No autorizado" aunque canSubmitPurchaseRequests()
+  // ya hubiera dado luz verde. Para empleados se sigue usando su propio
+  // departamento (nunca el que mande el cliente); solo el admin puede usar
+  // el deptId explícito que manda el formulario.
+  const isAdmin = session.user.role === "admin";
+  const effectiveDeptId = session.user.deptId ?? (isAdmin ? d.deptId ?? null : null);
+  if (!effectiveDeptId) {
+    return NextResponse.json({ error: "No se pudo determinar el departamento de la solicitud — vuelve a intentarlo desde Control de Compras." }, { status: 400 });
+  }
 
   if (!d.shippingIncluded && !d.carrierId) {
     return NextResponse.json({ error: "Falta el transportista, ya que el envío no está incluido." }, { status: 400 });
@@ -176,14 +192,13 @@ export async function POST(req: NextRequest) {
   const nameById = new Map(catalogItems.map((c) => [c.id, c.name]));
 
   const groupId = randomUUID();
-  const isAdmin = session.user.role === "admin";
   const requests = await prisma.$transaction(
     d.items.map((it) => {
       const lineShipping = d.shippingIncluded || !d.shippingCostTotal ? null : (d.shippingCostTotal * it.quantity) / totalQty;
       return prisma.purchaseRequest.create({
         data: {
           groupId,
-          deptId: session.user.deptId!,
+          deptId: effectiveDeptId,
           catalogItemId: it.catalogItemId,
           supplierId: d.supplierId,
           quantity: it.quantity,
@@ -201,7 +216,7 @@ export async function POST(req: NextRequest) {
           justification: anyOverThreshold ? d.justification!.trim() : null,
           status: "PENDING_APPROVAL",
           requestedById: isAdmin ? null : session.user.id,
-          requestedByDeptId: session.user.deptId!,
+          requestedByDeptId: effectiveDeptId,
         },
       });
     })
