@@ -15,12 +15,20 @@ export function PurchaseCatalogPicker({
   value,
   onChange,
   isAdmin = false,
+  defaultQuery = "",
+  onQueryChange,
 }: {
   value: CatalogItemDTO | null;
   onChange: (item: CatalogItemDTO | null) => void;
   isAdmin?: boolean;
+  // Confirmado 2026-08-03: mientras la persona todavía está escribiendo el
+  // nombre (antes de seleccionar o crear el insumo), ese texto vivía solo
+  // como estado interno de este componente y se perdía al restaurar un
+  // borrador — ahora el padre lo puede guardar y devolver como valor inicial.
+  defaultQuery?: string;
+  onQueryChange?: (query: string) => void;
 }) {
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(defaultQuery);
   const [results, setResults] = useState<CatalogItemDTO[]>([]);
   const [open, setOpen] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -282,7 +290,7 @@ export function PurchaseCatalogPicker({
           className="w-full rounded border border-rule pl-8.5 pr-3 py-2 text-[13.5px]"
           placeholder="Buscar o crear producto, mercadería o insumo"
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={(e) => { setQuery(e.target.value); onQueryChange?.(e.target.value); }}
           onFocus={() => setOpen(true)}
         />
       </div>

@@ -18,11 +18,11 @@ type QuoteReadResult = {
   suggestedCatalogItem: { id: string; name: string } | null;
 };
 
-type Line = { catalogItem: CatalogItemDTO | null; quantity: string; unitCost: string; stats: PriceStats | null };
-const emptyLine = (): Line => ({ catalogItem: null, quantity: "", unitCost: "", stats: null });
+type Line = { catalogItem: CatalogItemDTO | null; productQuery: string; quantity: string; unitCost: string; stats: PriceStats | null };
+const emptyLine = (): Line => ({ catalogItem: null, productQuery: "", quantity: "", unitCost: "", stats: null });
 
 type Draft = {
-  lines: { catalogItem: CatalogItemDTO | null; quantity: string; unitCost: string }[];
+  lines: { catalogItem: CatalogItemDTO | null; productQuery: string; quantity: string; unitCost: string }[];
   supplier: PurchaseSupplierDTO | null;
   quoteImageUrl: string | null;
   verifyResult: QuoteReadResult | null;
@@ -44,7 +44,7 @@ const DRAFT_KEY = "daflow.purchaseRequestDraft.v1";
 
 function draftHasContent(d: Pick<Draft, "lines" | "supplier" | "quoteImageUrl" | "purchaseOrderUrl" | "justification">) {
   return (
-    d.lines.some((l) => l.catalogItem || l.quantity || l.unitCost) ||
+    d.lines.some((l) => l.catalogItem || l.productQuery || l.quantity || l.unitCost) ||
     !!d.supplier ||
     !!d.quoteImageUrl ||
     !!d.purchaseOrderUrl ||
@@ -100,7 +100,7 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
   }
 
   function setLineCatalogItem(idx: number, item: CatalogItemDTO | null) {
-    updateLine(idx, { catalogItem: item, stats: null });
+    updateLine(idx, { catalogItem: item, productQuery: "", stats: null });
     if (!item) return;
     fetchLineStats(idx, item.id);
   }
@@ -120,7 +120,7 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
       const raw = localStorage.getItem(DRAFT_KEY);
       if (raw) {
         const d: Draft = JSON.parse(raw);
-        const restoredLines: Line[] = (d.lines?.length ? d.lines : [emptyLine()]).map((l) => ({ ...l, stats: null }));
+        const restoredLines: Line[] = (d.lines?.length ? d.lines : [emptyLine()]).map((l) => ({ ...l, productQuery: l.productQuery ?? "", stats: null }));
         setLines(restoredLines);
         setSupplier(d.supplier ?? null);
         setQuoteImageUrl(d.quoteImageUrl ?? null);
@@ -144,7 +144,7 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
   useEffect(() => {
     if (!hydrated) return;
     const draft: Draft = {
-      lines: lines.map(({ catalogItem, quantity, unitCost }) => ({ catalogItem, quantity, unitCost })),
+      lines: lines.map(({ catalogItem, productQuery, quantity, unitCost }) => ({ catalogItem, productQuery, quantity, unitCost })),
       supplier,
       quoteImageUrl,
       verifyResult,
@@ -320,7 +320,7 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
           <div className="flex items-center gap-2 text-[12.5px] text-teal">
             <Clock size={15} /> Retomando tu solicitud sin terminar — no se perdió nada.
           </div>
-          <button type="button" className="text-[11.5px] text-steel font-semibold cursor-pointer whitespace-nowrap" onClick={discardDraft}>
+          <button type="button" className="text-[11.5px] text-red font-semibold cursor-pointer whitespace-nowrap" onClick={discardDraft}>
             Descartar y empezar de nuevo
           </button>
         </div>
@@ -332,7 +332,13 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
           <div key={idx} className="bg-surface2 border border-rule rounded-md p-3">
             <div className="flex items-start gap-2 mb-2.5">
               <div className="flex-1 min-w-0">
-                <PurchaseCatalogPicker value={line.catalogItem} onChange={(item) => setLineCatalogItem(idx, item)} isAdmin={isAdmin} />
+                <PurchaseCatalogPicker
+                  value={line.catalogItem}
+                  onChange={(item) => setLineCatalogItem(idx, item)}
+                  isAdmin={isAdmin}
+                  defaultQuery={line.productQuery}
+                  onQueryChange={(q) => updateLine(idx, { productQuery: q })}
+                />
               </div>
               {lines.length > 1 && (
                 <button type="button" className="text-steel hover:text-red cursor-pointer p-1.5" onClick={() => removeLine(idx)} title="Quitar producto">
