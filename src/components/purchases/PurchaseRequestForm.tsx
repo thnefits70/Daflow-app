@@ -43,12 +43,22 @@ type Draft = {
 // un aviso arriba para que quede claro que es lo que ya tenía sin terminar.
 // v2: el proveedor pasó a tener bankAccounts[] en vez de campos bancarios
 // sueltos — un borrador viejo (v1) sin ese arreglo tumbaba la página entera
-// al restaurarlo (PurchaseSupplierPicker llamaba .map sobre undefined).
-const DRAFT_KEY = "daflow.purchaseRequestDraft.v2";
+// al restaurarlo (PurchaseSupplierPicker llamaba .map sobre undefined). v3:
+// se agregó email y RUC/cédula por cuenta — normalizeSupplier() de todas
+// formas rellena lo que falte, por las dudas.
+const DRAFT_KEY = "daflow.purchaseRequestDraft.v3";
 
 function normalizeSupplier(s: PurchaseSupplierDTO | null | undefined): PurchaseSupplierDTO | null {
   if (!s) return null;
-  return { ...s, bankAccounts: Array.isArray(s.bankAccounts) ? s.bankAccounts : [] };
+  return {
+    ...s,
+    email: s.email ?? null,
+    bankAccounts: (Array.isArray(s.bankAccounts) ? s.bankAccounts : []).map((a) => ({
+      ...a,
+      holderIdType: a.holderIdType ?? null,
+      holderIdNumber: a.holderIdNumber ?? null,
+    })),
+  };
 }
 
 function draftHasContent(d: Pick<Draft, "lines" | "supplier" | "quoteImageUrl" | "purchaseOrderUrl" | "justification">) {

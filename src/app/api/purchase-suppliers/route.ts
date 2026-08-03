@@ -49,6 +49,8 @@ const createSchema = z.object({
   bankAccountType: z.string().trim().min(1, "Falta el tipo de cuenta."),
   bankAccountNumber: z.string().trim().min(1, "Falta el número de cuenta."),
   bankAccountHolder: z.string().trim().min(1, "Falta el titular de la cuenta."),
+  holderIdType: z.enum(["RUC", "CEDULA"]),
+  holderIdNumber: z.string().trim().min(1, "Falta el número de RUC o cédula."),
   email: z.string().trim().email().optional().or(z.literal("")),
   // Obligatoria para SUPPLIER, no aplica a CARRIER (no tiene local fijo).
   location: z.string().trim().optional(),
@@ -94,6 +96,8 @@ export async function POST(req: NextRequest) {
             bankAccountType: parsed.data.bankAccountType,
             bankAccountNumber: parsed.data.bankAccountNumber,
             bankAccountHolder: parsed.data.bankAccountHolder,
+            holderIdType: parsed.data.holderIdType,
+            holderIdNumber: parsed.data.holderIdNumber,
             createdById: isAdmin ? null : session.user.id,
           },
         ],

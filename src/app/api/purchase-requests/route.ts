@@ -11,7 +11,7 @@ const requestInclude = {
   catalogItem: { select: { id: true, name: true, photos: true } },
   supplier: { select: { id: true, name: true } },
   carrier: { select: { id: true, name: true } },
-  bankAccount: { select: { id: true, bankName: true, bankAccountType: true, bankAccountNumber: true, bankAccountHolder: true } },
+  bankAccount: { select: { id: true, bankName: true, bankAccountType: true, bankAccountNumber: true, bankAccountHolder: true, holderIdType: true, holderIdNumber: true } },
   requestedBy: { select: { name: true } },
   reviewedBy: { select: { name: true } },
   receipt: true,

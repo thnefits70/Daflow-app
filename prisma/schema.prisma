@@ -781,6 +781,11 @@ enum SupplierType {
   CARRIER
 }
 
+enum HolderIdType {
+  RUC
+  CEDULA
+}
+
 model Supplier {
   id          String  @id @default(cuid())
   // Confirmado 2026-07-30: los transportistas de Control de Compras viven en
@@ -842,6 +847,12 @@ model SupplierBankAccount {
   bankAccountType   String
   bankAccountNumber String
   bankAccountHolder String
+  // Confirmado 2026-08-03: para transferencias hace falta saber si el
+  // titular se identifica con RUC (empresa) o cédula (persona natural) —
+  // opcional a nivel de columna porque las cuentas migradas antes de este
+  // campo no lo tienen, pero se pide siempre al registrar una cuenta nueva.
+  holderIdType   HolderIdType?
+  holderIdNumber String?
 
   createdById String?
   createdBy   User?    @relation("SupplierBankAccountCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)

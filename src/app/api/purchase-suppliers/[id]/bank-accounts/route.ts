@@ -9,6 +9,8 @@ const createSchema = z.object({
   bankAccountType: z.string().trim().min(1, "Falta el tipo de cuenta."),
   bankAccountNumber: z.string().trim().min(1, "Falta el número de cuenta."),
   bankAccountHolder: z.string().trim().min(1, "Falta el titular de la cuenta."),
+  holderIdType: z.enum(["RUC", "CEDULA"]),
+  holderIdNumber: z.string().trim().min(1, "Falta el número de RUC o cédula."),
 });
 
 // Confirmado 2026-08-03: cualquiera con acceso a solicitar compras puede
@@ -39,6 +41,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       bankAccountType: parsed.data.bankAccountType,
       bankAccountNumber: parsed.data.bankAccountNumber,
       bankAccountHolder: parsed.data.bankAccountHolder,
+      holderIdType: parsed.data.holderIdType,
+      holderIdNumber: parsed.data.holderIdNumber,
       createdById: isAdmin ? null : session.user.id,
     },
   });
