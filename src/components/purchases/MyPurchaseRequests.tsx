@@ -47,7 +47,7 @@ function GroupCard({ g, onPurchaseOrderUploaded }: { g: Row[]; onPurchaseOrderUp
   const needsPurchaseOrder = !rejected && !g[0].purchaseOrderUrl;
   const [uploading, setUploading] = useState(false);
   const [err, setErr] = useState("");
-  const onPaste = usePasteFile((file) => handleFile(file));
+  const { onPaste, onMouseEnter: onPasteHoverIn, onMouseLeave: onPasteHoverOut } = usePasteFile((file) => handleFile(file));
 
   // Si un grupo tiene varios productos, cada uno puede llegar por separado
   // (Inventario confirma producto por producto) — el avance general muestra
@@ -110,6 +110,8 @@ function GroupCard({ g, onPurchaseOrderUploaded }: { g: Row[]; onPurchaseOrderUp
           <label
             tabIndex={0}
             onPaste={onPaste}
+            onMouseEnter={onPasteHoverIn}
+            onMouseLeave={onPasteHoverOut}
             className="flex items-center justify-center gap-2 border-[1.5px] border-dashed border-gold/50 rounded-md py-2.5 cursor-pointer text-[12px] focus:outline-none focus:border-gold"
             style={{ color: "#D9A441" }}
           >

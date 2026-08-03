@@ -32,7 +32,7 @@ export function PurchaseCatalogPicker({
   const [newCode, setNewCode] = useState("");
   const [photos, setPhotos] = useState<string[]>([]);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
-  const onPastePhoto = usePasteFile((file) => addPhoto(file));
+  const { onPaste: onPastePhoto, onMouseEnter: onPasteHoverIn, onMouseLeave: onPasteHoverOut } = usePasteFile((file) => addPhoto(file));
   const [similarity, setSimilarity] = useState<{ suspected: boolean; matchedName: string | null; message: string | null } | null>(null);
   const [checkingSimilarity, setCheckingSimilarity] = useState(false);
   const [confirmStep, setConfirmStep] = useState(false);
@@ -183,7 +183,9 @@ export function PurchaseCatalogPicker({
                 <label
                   tabIndex={0}
                   onPaste={onPastePhoto}
-                  title="Clic aquí y Ctrl+V para pegar una foto copiada"
+                  onMouseEnter={onPasteHoverIn}
+                  onMouseLeave={onPasteHoverOut}
+                  title="Pasa el mouse y Ctrl+V para pegar una foto copiada"
                   className="w-16 h-16 rounded border-[1.5px] border-dashed border-rule flex items-center justify-center cursor-pointer text-steel hover:border-teal focus:border-teal focus:outline-none"
                 >
                   {uploadingPhoto ? (

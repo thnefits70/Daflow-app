@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Upload, CheckCircle2 } from "lucide-react";
 import { uploadFile } from "@/lib/uploadFile";
@@ -51,7 +51,15 @@ export function PurchaseInvoicingPanel() {
   const [payingGroup, setPayingGroup] = useState<string | null>(null);
   const [proofUrl, setProofUrl] = useState<string | null>(null);
   const [uploadingProof, setUploadingProof] = useState(false);
-  const onPasteProof = usePasteFile((file) => uploadProof(file));
+  const { onPaste: onPasteProof, onMouseEnter: onPasteProofHoverIn, onMouseLeave: onPasteProofHoverOut } = usePasteFile((file) => uploadProof(file));
+  // El grupo de la factura que se está pasando el mouse encima ahora mismo
+  // — un solo listener de paste "armado" por hover, compartido entre todas
+  // las tarjetas de la lista, en vez de un hook por cada una.
+  const invoiceDocGroupRef = useRef<string | null>(null);
+  const { onPaste: onPasteInvoiceDoc, onMouseEnter: armInvoiceDocPaste, onMouseLeave: disarmInvoiceDocPaste } = usePasteFile((file) => {
+    const groupId = invoiceDocGroupRef.current;
+    if (groupId) uploadInvoiceDoc(groupId, file);
+  });
   const [partialAmounts, setPartialAmounts] = useState<Record<string, string>>({});
   const [busyGroup, setBusyGroup] = useState<string | null>(null);
   const [err, setErr] = useState("");
@@ -185,6 +193,8 @@ export function PurchaseInvoicingPanel() {
                         <label
                           tabIndex={0}
                           onPaste={onPasteProof}
+                          onMouseEnter={onPasteProofHoverIn}
+                          onMouseLeave={onPasteProofHoverOut}
                           className="flex items-center gap-1.5 border-[1.5px] border-dashed border-rule rounded px-3 py-2 text-[12px] text-steel cursor-pointer hover:border-teal focus:border-teal focus:outline-none w-fit mb-2"
                         >
                           {uploadingProof ? <span className="w-3.5 h-3.5 rounded-full border-2 border-rule border-t-teal animate-spin" /> : <Upload size={13} />} Subir o pegar comprobante
@@ -278,9 +288,12 @@ export function PurchaseInvoicingPanel() {
                       ) : (
                         <label
                           tabIndex={0}
+                          onPaste={onPasteInvoiceDoc}
+                          onMouseEnter={() => { invoiceDocGroupRef.current = groupId; armInvoiceDocPaste(); }}
+                          onMouseLeave={() => { invoiceDocGroupRef.current = null; disarmInvoiceDocPaste(); }}
                           className="flex items-center gap-1.5 border-[1.5px] border-dashed border-rule rounded px-3 py-2 text-[11.5px] text-steel cursor-pointer hover:border-teal focus:border-teal focus:outline-none w-fit mb-2.5"
                         >
-                          {uploadingDoc === groupId ? <span className="w-3.5 h-3.5 rounded-full border-2 border-rule border-t-teal animate-spin" /> : <Upload size={12} />} Subir la factura (opcional)
+                          {uploadingDoc === groupId ? <span className="w-3.5 h-3.5 rounded-full border-2 border-rule border-t-teal animate-spin" /> : <Upload size={12} />} Subir o pegar la factura (opcional)
                           <input type="file" accept="image/*,application/pdf" className="hidden" onChange={(e) => e.target.files?.[0] && uploadInvoiceDoc(groupId, e.target.files[0])} />
                         </label>
                       )}

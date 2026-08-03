@@ -68,12 +68,12 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
   const [verifying, setVerifying] = useState(false);
   const [verifyResult, setVerifyResult] = useState<QuoteReadResult | null>(null);
   const [manualCodeConfirm, setManualCodeConfirm] = useState(false);
-  const onPasteQuote = usePasteFile((file) => handleQuoteFile(file));
+  const { onPaste: onPasteQuote, onMouseEnter: onPasteQuoteHoverIn, onMouseLeave: onPasteQuoteHoverOut } = usePasteFile((file) => handleQuoteFile(file));
 
   const [purchaseOrderFile, setPurchaseOrderFile] = useState<File | null>(null);
   const [purchaseOrderUrl, setPurchaseOrderUrl] = useState<string | null>(null);
   const [uploadingPurchaseOrder, setUploadingPurchaseOrder] = useState(false);
-  const onPastePurchaseOrder = usePasteFile((file) => handlePurchaseOrderFile(file));
+  const { onPaste: onPastePurchaseOrder, onMouseEnter: onPastePOHoverIn, onMouseLeave: onPastePOHoverOut } = usePasteFile((file) => handlePurchaseOrderFile(file));
 
   const [shippingIncluded, setShippingIncluded] = useState(true);
   const [carrier, setCarrier] = useState<PurchaseSupplierDTO | null>(null);
@@ -395,10 +395,12 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
           <label
             tabIndex={0}
             onPaste={onPasteQuote}
+            onMouseEnter={onPasteQuoteHoverIn}
+            onMouseLeave={onPasteQuoteHoverOut}
             className="flex items-center justify-center gap-2 border-[1.5px] border-dashed border-rule rounded-md py-4 cursor-pointer hover:border-teal focus:border-teal focus:outline-none text-steel text-[12.5px]"
           >
             {uploadingQuote ? <span className="w-4 h-4 rounded-full border-2 border-rule border-t-teal animate-spin" /> : <Upload size={16} />}
-            Subir o pegar la cotización (clic aquí y Ctrl+V)
+            Subir o pegar la cotización (pasa el mouse y Ctrl+V)
             <input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && handleQuoteFile(e.target.files[0])} />
           </label>
         ) : (
@@ -471,6 +473,8 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
           <label
             tabIndex={0}
             onPaste={onPastePurchaseOrder}
+            onMouseEnter={onPastePOHoverIn}
+            onMouseLeave={onPastePOHoverOut}
             className={`flex items-center justify-center gap-2 border-[1.5px] border-dashed rounded-md py-3.5 cursor-pointer text-[12.5px] focus:outline-none ${
               needsPurchaseOrder ? "border-red/45 text-red hover:border-red" : "border-rule text-steel hover:border-teal focus:border-teal"
             }`}
