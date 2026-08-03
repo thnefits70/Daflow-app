@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Search, Plus, Camera, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { Search, Plus, Camera, AlertTriangle, CheckCircle2, Trash2 } from "lucide-react";
 import { uploadFile } from "@/lib/uploadFile";
 import { compressImage } from "@/lib/compressImage";
 import { usePasteFile } from "@/lib/usePasteFile";
@@ -14,13 +14,17 @@ export type CatalogItemDTO = { id: string; name: string; photos: string[]; descr
 export function PurchaseCatalogPicker({
   value,
   onChange,
+  isAdmin = false,
 }: {
   value: CatalogItemDTO | null;
   onChange: (item: CatalogItemDTO | null) => void;
+  isAdmin?: boolean;
 }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<CatalogItemDTO[]>([]);
   const [open, setOpen] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteErr, setDeleteErr] = useState<string | null>(null);
 
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState("");
@@ -122,6 +126,25 @@ export function PurchaseCatalogPicker({
     }
     setCreating(false);
     onChange(data);
+  }
+
+  // Confirmado 2026-08-03: eliminar es SOLO del administrador (nadie más ve
+  // este ícono), y con confirmación siempre — para no borrar algo por
+  // accidente. El servidor igual vuelve a bloquear si el insumo ya tiene
+  // compras registradas.
+  async function deleteItem(item: CatalogItemDTO, e: React.MouseEvent) {
+    e.stopPropagation();
+    if (!confirm(`¿Eliminar "${item.name}" del catálogo? Esta acción no se puede deshacer.`)) return;
+    setDeletingId(item.id);
+    setDeleteErr(null);
+    const res = await fetch(`/api/purchase-catalog/${item.id}`, { method: "DELETE" });
+    setDeletingId(null);
+    if (!res.ok) {
+      const data = await res.json().catch(() => null);
+      setDeleteErr(data?.error ?? "No se pudo eliminar.");
+      return;
+    }
+    setResults((rs) => rs.filter((r) => r.id !== item.id));
   }
 
   if (value) {
@@ -263,19 +286,32 @@ export function PurchaseCatalogPicker({
       </div>
       {open && (
         <div className="mt-1.5 bg-surface2 border border-rule rounded-md overflow-hidden max-h-56 overflow-y-auto">
+          {deleteErr && <div className="px-3 py-2 text-[11.5px] text-red border-b border-rule">{deleteErr}</div>}
           {filtered.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              className="w-full flex items-center gap-2.5 px-3 py-2 text-left text-[13px] hover:bg-cloud cursor-pointer border-b border-rule last:border-none"
-              onClick={() => {
-                onChange(item);
-                setOpen(false);
-              }}
-            >
-              <CheckCircle2 size={13} className="text-teal shrink-0" />
-              {item.name}
-            </button>
+            <div key={item.id} className="flex items-center border-b border-rule last:border-none">
+              <button
+                type="button"
+                className="flex-1 min-w-0 flex items-center gap-2.5 px-3 py-2 text-left text-[13px] hover:bg-cloud cursor-pointer"
+                onClick={() => {
+                  onChange(item);
+                  setOpen(false);
+                }}
+              >
+                <CheckCircle2 size={13} className="text-teal shrink-0" />
+                <span className="truncate">{item.name}</span>
+              </button>
+              {isAdmin && (
+                <button
+                  type="button"
+                  title="Eliminar (solo administrador)"
+                  disabled={deletingId === item.id}
+                  className="px-2.5 py-2 text-steel hover:text-red cursor-pointer disabled:opacity-50 shrink-0"
+                  onClick={(e) => deleteItem(item, e)}
+                >
+                  {deletingId === item.id ? <span className="block w-3.5 h-3.5 rounded-full border-2 border-rule border-t-red animate-spin" /> : <Trash2 size={14} />}
+                </button>
+              )}
+            </div>
           ))}
           <button
             type="button"

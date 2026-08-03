@@ -193,6 +193,7 @@ export function DeptWorkspaceTabs({
           canReview={isAdmin}
           canReceive={canReceivePurchases}
           canInvoice={canInvoicePurchases}
+          isAdmin={isAdmin}
         />
       )}
       {tab === "postventa" && (canManageStoreFeedback || canViewStoreFeedback) && (

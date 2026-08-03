@@ -57,7 +57,7 @@ function draftHasContent(d: Pick<Draft, "lines" | "supplier" | "quoteImageUrl" |
 // costo, comparada contra SU propio historial), pero comparten un solo
 // proveedor, una sola cotización, y un solo envío/justificación, porque es
 // una sola compra.
-export function PurchaseRequestForm({ deptId }: { deptId: string }) {
+export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdmin: boolean }) {
   const router = useRouter();
   const [lines, setLines] = useState<Line[]>([emptyLine()]);
   const [supplier, setSupplier] = useState<PurchaseSupplierDTO | null>(null);
@@ -332,7 +332,7 @@ export function PurchaseRequestForm({ deptId }: { deptId: string }) {
           <div key={idx} className="bg-surface2 border border-rule rounded-md p-3">
             <div className="flex items-start gap-2 mb-2.5">
               <div className="flex-1 min-w-0">
-                <PurchaseCatalogPicker value={line.catalogItem} onChange={(item) => setLineCatalogItem(idx, item)} />
+                <PurchaseCatalogPicker value={line.catalogItem} onChange={(item) => setLineCatalogItem(idx, item)} isAdmin={isAdmin} />
               </div>
               {lines.length > 1 && (
                 <button type="button" className="text-steel hover:text-red cursor-pointer p-1.5" onClick={() => removeLine(idx)} title="Quitar producto">

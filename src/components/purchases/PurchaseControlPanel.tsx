@@ -20,12 +20,14 @@ export function PurchaseControlPanel({
   canReview,
   canReceive,
   canInvoice,
+  isAdmin,
 }: {
   deptId: string;
   canSubmit: boolean;
   canReview: boolean;
   canReceive: boolean;
   canInvoice: boolean;
+  isAdmin: boolean;
 }) {
   const tabs: { key: Tab; label: string }[] = [
     ...(canSubmit ? [{ key: "solicitar" as Tab, label: "Solicitar" }, { key: "mias" as Tab, label: "Mis solicitudes" }] : []),
@@ -55,7 +57,7 @@ export function PurchaseControlPanel({
         ))}
       </div>
 
-      {tab === "solicitar" && <PurchaseRequestForm deptId={deptId} />}
+      {tab === "solicitar" && <PurchaseRequestForm deptId={deptId} isAdmin={isAdmin} />}
       {tab === "mias" && <MyPurchaseRequests />}
       {tab === "comparar" && <PurchasePriceExplorer />}
       {tab === "aprobacion" && <PurchaseApprovalInbox />}
