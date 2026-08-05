@@ -10,6 +10,9 @@ import {
   canSubmitPurchaseRequests,
   canConfirmPurchaseReceiving,
   canRegisterPurchaseInvoices,
+  canManageInventoryControl,
+  canManagePettyCashPrincipal,
+  canManagePettyCashSecundaria,
 } from "@/lib/guards";
 
 // Confirmado 2026-08-03: bug real — ninguna de estas carpetas de Control de
@@ -88,6 +91,16 @@ export async function POST(req: NextRequest) {
   }
   if (!allowed && session?.user.role === "employee" && PURCHASE_MODULE_FOLDERS.includes(folder)) {
     allowed = (await canSubmitPurchaseRequests()) || (await canConfirmPurchaseReceiving()) || (await canRegisterPurchaseInvoices());
+  }
+  // Confirmado 2026-08-05: mismo bug de nuevo — Control de Inventario y Caja
+  // Chica se lanzaron con carpetas propias que nunca se agregaron aquí, así
+  // que Daniel (y cualquiera sin ser admin) recibía "No autorizado" al subir
+  // una captura, sin importar que sí tuviera el permiso del módulo.
+  if (!allowed && session?.user.role === "employee" && folder === "inventory-proofs") {
+    allowed = await canManageInventoryControl();
+  }
+  if (!allowed && session?.user.role === "employee" && (folder === "petty-cash" || folder === "petty-cash-proofs")) {
+    allowed = (await canManagePettyCashPrincipal()) || (await canManagePettyCashSecundaria());
   }
   if (!allowed) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
