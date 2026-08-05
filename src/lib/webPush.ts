@@ -3,6 +3,20 @@ import { prisma } from "@/lib/prisma";
 
 export type PushPayload = { title: string; body: string; url: string };
 
+// Confirmado 2026-08-05: el ícono de la notificación debe ser el logo real
+// que se sube en Configuración (faviconUrl), no un ícono genérico fijo —
+// cacheado un rato para no consultar la base de datos en cada notificación,
+// ya que este dato casi nunca cambia.
+let cachedIcon: { url: string | null; fetchedAt: number } | null = null;
+const ICON_CACHE_MS = 5 * 60 * 1000;
+
+async function getNotificationIcon(): Promise<string | null> {
+  if (cachedIcon && Date.now() - cachedIcon.fetchedAt < ICON_CACHE_MS) return cachedIcon.url;
+  const settings = await prisma.platformSettings.findUnique({ where: { id: "singleton" }, select: { faviconUrl: true } });
+  cachedIcon = { url: settings?.faviconUrl ?? null, fetchedAt: Date.now() };
+  return cachedIcon.url;
+}
+
 // Configurado al vuelo (no en el top-level del módulo) — confirmado
 // 2026-07-28: Next.js ejecuta este archivo durante "Collecting page data"
 // en el build para CUALQUIER ruta que lo importe, incluso sin llegar a
@@ -31,12 +45,14 @@ export async function sendPushToOwner(ownerId: string, payload: PushPayload) {
   if (subs.length === 0) return;
 
   ensureVapidConfigured();
+  const icon = await getNotificationIcon();
+  const body = JSON.stringify(icon ? { ...payload, icon } : payload);
   await Promise.all(
     subs.map(async (sub) => {
       try {
         await webpush.sendNotification(
           { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
-          JSON.stringify(payload)
+          body
         );
       } catch (err) {
         const statusCode = (err as { statusCode?: number })?.statusCode;
