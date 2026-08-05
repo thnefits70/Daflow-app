@@ -24,6 +24,20 @@ export function currentPeriod(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
+// Confirmado 2026-08-05: Daniel debe poder cargar o corregir cualquier mes
+// reciente (ej. julio, no solo el mes en curso), no solo el actual — últimos
+// 12 meses hasta el actual, igual criterio que periodOptions() de
+// FinanceUploadPanel.tsx (sin meses futuros, acá no aplica adelantarse).
+export function recentInventoryPeriods(): string[] {
+  const now = new Date();
+  const periods: string[] = [];
+  for (let i = -11; i <= 0; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+    periods.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+  }
+  return periods;
+}
+
 export type StaleProductDTO = {
   id: string;
   name: string;
@@ -33,22 +47,35 @@ export type StaleProductDTO = {
   lastConfirmedQuarter: string;
 };
 
+export type InventoryControlPeriodDTO = {
+  period: string;
+  value: number | null;
+  proofUrl: string | null;
+  aiMatches: boolean | null;
+};
+
 // Todo lo que necesita la pantalla de Daniel ("Control de Inventario" en Mi
-// área de trabajo) — solo captura, nunca ve gráficas desde acá.
+// área de trabajo) — solo captura, nunca ve gráficas desde acá. Trae los
+// últimos 12 meses (con lo ya cargado, si hay) para que pueda elegir
+// cualquiera, no solo el mes en curso.
 export async function getInventoryControlData() {
   const deptId = await getFinanzasDeptId();
   if (!deptId) return null;
 
-  const period = currentPeriod();
-  const [balance, products] = await Promise.all([
-    prisma.financeSharedMonthlyBalance.findUnique({ where: { deptId_period: { deptId, period } } }),
+  const periods = recentInventoryPeriods();
+  const [balances, products] = await Promise.all([
+    prisma.financeSharedMonthlyBalance.findMany({ where: { deptId, period: { in: periods } } }),
     prisma.inventoryStaleProduct.findMany({ where: { deptId }, orderBy: { createdAt: "asc" } }),
   ]);
+  const byPeriod = new Map(balances.map((b) => [b.period, b]));
 
   return {
     deptId,
-    period,
-    currentInventoryValue: balance?.inventarioFinal ?? null,
+    currentPeriod: currentPeriod(),
+    periods: periods.map((period): InventoryControlPeriodDTO => {
+      const b = byPeriod.get(period);
+      return { period, value: b?.inventarioFinal ?? null, proofUrl: b?.inventarioProofUrl ?? null, aiMatches: b?.inventarioAiMatches ?? null };
+    }),
     products: products.map((p): StaleProductDTO => ({
       id: p.id,
       name: p.name,

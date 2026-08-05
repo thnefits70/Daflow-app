@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { canManageInventoryControl } from "@/lib/guards";
-import { getFinanzasDeptId, currentPeriod } from "@/lib/inventoryKpis";
+import { getFinanzasDeptId, recentInventoryPeriods } from "@/lib/inventoryKpis";
 import { prisma } from "@/lib/prisma";
 
 const schema = z.object({
+  period: z.string().regex(/^\d{4}-\d{2}$/),
   value: z.number().nonnegative(),
   proofUrl: z.string().url().nullable().optional(),
   aiReadAmount: z.number().nullable().optional(),
@@ -15,10 +16,10 @@ const schema = z.object({
 // corresponde — confirmado 2026-08-04: escribe directo en el mismo
 // FinanceSharedMonthlyBalance.inventarioFinal que ya usa "Cargar plantilla",
 // solo que desde su propia pantalla ("Control de Inventario" en Mi área de
-// trabajo) en vez de la de Finanzas. Confirmado 2026-08-05: si adjuntó una
-// captura, ya se verificó UNA vez en /verify-value-proof — este endpoint
-// solo guarda, no vuelve a llamar a la IA (mismo patrón que Control de
-// Compras: verify-quote → create).
+// trabajo) en vez de la de Finanzas. Confirmado 2026-08-05: puede elegir
+// CUALQUIER mes reciente (no solo el actual, ej. cargar julio atrasado), y
+// si adjuntó una captura, ya se verificó UNA vez en /verify-value-proof —
+// este endpoint solo guarda, no vuelve a llamar a la IA.
 export async function POST(req: NextRequest) {
   if (!(await canManageInventoryControl())) {
     return NextResponse.json({ error: "No autorizado." }, { status: 403 });
@@ -26,12 +27,16 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json().catch(() => null);
   const parsed = schema.safeParse(body);
-  if (!parsed.success) return NextResponse.json({ error: "Valor inválido." }, { status: 400 });
+  if (!parsed.success) return NextResponse.json({ error: "Datos inválidos." }, { status: 400 });
+
+  if (!recentInventoryPeriods().includes(parsed.data.period)) {
+    return NextResponse.json({ error: "Ese mes no está disponible para cargar." }, { status: 400 });
+  }
 
   const deptId = await getFinanzasDeptId();
   if (!deptId) return NextResponse.json({ error: "No se encontró el departamento de Finanzas." }, { status: 500 });
 
-  const period = currentPeriod();
+  const { period } = parsed.data;
   const data = {
     inventarioFinal: parsed.data.value,
     inventarioProofUrl: parsed.data.proofUrl || null,

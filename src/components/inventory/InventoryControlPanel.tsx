@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, Pencil, Plus, Upload, AlertTriangle } from "lucide-react";
 import { isReviewDue, daysUntilDue, quarterLabel } from "@/lib/inventoryKpisCalc";
-import type { StaleProductDTO } from "@/lib/inventoryKpis";
+import type { StaleProductDTO, InventoryControlPeriodDTO } from "@/lib/inventoryKpis";
 import { usePasteFile } from "@/lib/usePasteFile";
 import { uploadFile } from "@/lib/uploadFile";
 
@@ -18,27 +18,40 @@ function money(v: number) {
 }
 
 export function InventoryControlPanel({
-  period,
-  currentInventoryValue,
+  currentPeriodDefault,
+  periods,
   products,
   currentQuarter,
 }: {
-  period: string;
-  currentInventoryValue: number | null;
+  currentPeriodDefault: string;
+  periods: InventoryControlPeriodDTO[];
   products: StaleProductDTO[];
   currentQuarter: string;
 }) {
   const router = useRouter();
-  const [value, setValue] = useState(currentInventoryValue !== null ? String(currentInventoryValue) : "");
+  const [period, setPeriod] = useState(currentPeriodDefault);
+  const selectedData = periods.find((p) => p.period === period) ?? null;
+  const [value, setValue] = useState(selectedData?.value !== null && selectedData?.value !== undefined ? String(selectedData.value) : "");
   const [savingValue, setSavingValue] = useState(false);
   const [toast, setToast] = useState("");
   const [err, setErr] = useState("");
 
-  const [proofUrl, setProofUrl] = useState<string | null>(null);
+  const [proofUrl, setProofUrl] = useState<string | null>(selectedData?.proofUrl ?? null);
   const [uploadingProof, setUploadingProof] = useState(false);
   const [verifying, setVerifying] = useState(false);
   const [verifyResult, setVerifyResult] = useState<{ readAmount: number | null; matches: boolean } | null>(null);
   const [confirming, setConfirming] = useState(false);
+
+  function changePeriod(newPeriod: string) {
+    setPeriod(newPeriod);
+    const data = periods.find((p) => p.period === newPeriod) ?? null;
+    setValue(data?.value !== null && data?.value !== undefined ? String(data.value) : "");
+    setProofUrl(data?.proofUrl ?? null);
+    setVerifyResult(null);
+    setConfirming(false);
+    setToast("");
+    setErr("");
+  }
 
   const [newName, setNewName] = useState("");
   const [newValue, setNewValue] = useState("");
@@ -94,7 +107,7 @@ export function InventoryControlPanel({
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        value: n, proofUrl,
+        period, value: n, proofUrl,
         aiReadAmount: verifyResult?.readAmount ?? null,
         aiMatches: proofUrl ? (verifyResult?.matches ?? null) : null,
       }),
@@ -161,7 +174,24 @@ export function InventoryControlPanel({
           <div className="font-semibold text-[13.5px]">Valor de inventario del mes</div>
           <span className="font-mono text-[10px] uppercase text-steel bg-cloud rounded-full px-2 py-0.5">Cada mes</span>
         </div>
-        <div className="text-[11.5px] text-steel mb-3">El mismo total que ya ves en tu reporte de saldos costeados y valorizados — {monthLabel(period)}.</div>
+        <div className="text-[11.5px] text-steel mb-3">El mismo total que ya ves en tu reporte de saldos costeados y valorizados.</div>
+
+        {!confirming && (
+          <div className="mb-3">
+            <label className="block mb-1 text-[10px] uppercase tracking-wide text-steel">Mes que estás cargando</label>
+            <select
+              className="rounded border border-rule bg-cloud px-2.5 py-2 text-[13px] font-mono"
+              value={period}
+              onChange={(e) => changePeriod(e.target.value)}
+            >
+              {periods.map((p) => (
+                <option key={p.period} value={p.period}>
+                  {monthLabel(p.period)}{p.value !== null ? " · ya cargado" : ""}{p.period === currentPeriodDefault ? " (actual)" : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
 
         {!confirming ? (
           <>
