@@ -193,7 +193,7 @@ export function InventoryKpisPanel({ data }: { data: InventoryKpisDataDTO }) {
 }
 
 type SnapshotRow = { productCode: string; description: string; avgCost: number; stock: number; costTotal: number };
-type SortKey = "stock" | "costTotal";
+type SortKey = "stock" | "costTotal" | "critical";
 
 // Confirmado 2026-08-05: vista interina — mientras solo hay UN mes cargado
 // no hay base para marcar "sin movimiento" (KPI #4 sale en 0%), así que esto
@@ -201,17 +201,37 @@ type SortKey = "stock" | "costTotal";
 // actuar de una vez, sin esperar el segundo mes de comparación.
 function AllProductsSnapshotTable({ rows, period }: { rows: SnapshotRow[]; period: string | null }) {
   const [search, setSearch] = useState("");
-  const [sortKey, setSortKey] = useState<SortKey>("stock");
+  const [sortKey, setSortKey] = useState<SortKey>("critical");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+
+  // "Crítico" no es lo mismo que ordenar por valor total: un producto con 1
+  // unidad carísima puede ganarle en $ a uno con 500 unidades baratas sin
+  // que el segundo sea menos urgente de mover. Por eso se rankea cada
+  // producto por separado en stock y en valor, y se combina — así sube arriba
+  // el que está alto en AMBAS cosas a la vez, no solo en una.
+  const rowsWithRank = useMemo(() => {
+    const byStock = [...rows].sort((a, b) => b.stock - a.stock);
+    const stockRank = new Map(byStock.map((r, i) => [r.productCode, i]));
+    const byValue = [...rows].sort((a, b) => b.costTotal - a.costTotal);
+    const valueRank = new Map(byValue.map((r, i) => [r.productCode, i]));
+    return rows.map((r) => ({ ...r, criticalScore: (stockRank.get(r.productCode) ?? 0) + (valueRank.get(r.productCode) ?? 0) }));
+  }, [rows]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     const base = q
-      ? rows.filter((r) => r.productCode.toLowerCase().includes(q) || r.description.toLowerCase().includes(q))
-      : rows;
-    const sorted = [...base].sort((a, b) => (sortDir === "asc" ? a[sortKey] - b[sortKey] : b[sortKey] - a[sortKey]));
+      ? rowsWithRank.filter((r) => r.productCode.toLowerCase().includes(q) || r.description.toLowerCase().includes(q))
+      : rowsWithRank;
+    const key = sortKey === "critical" ? "criticalScore" : sortKey;
+    // Para "criticalScore" un número MÁS BAJO es más crítico (va arriba en
+    // ambos rankings) — se invierte para que "desc" (el default visual de
+    // más urgente primero) ordene de menor a mayor puntaje.
+    const sorted = [...base].sort((a, b) => {
+      const diff = key === "criticalScore" ? a.criticalScore - b.criticalScore : b[key] - a[key];
+      return sortDir === "desc" ? diff : -diff;
+    });
     return sorted;
-  }, [rows, search, sortKey, sortDir]);
+  }, [rowsWithRank, search, sortKey, sortDir]);
 
   function toggleSort(key: SortKey) {
     if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -234,7 +254,7 @@ function AllProductsSnapshotTable({ rows, period }: { rows: SnapshotRow[]; perio
         <span className="font-mono text-[10px] uppercase text-steel bg-cloud rounded-full px-2 py-0.5">{filtered.length} de {rows.length}</span>
       </div>
       <div className="text-[11px] text-steel mb-3">
-        Vista de apoyo mientras se acumula un segundo mes para calcular &quot;sin movimiento&quot; de verdad — ordena por stock o valor para revisar qué mover primero.
+        Vista de apoyo mientras se acumula un segundo mes para calcular &quot;sin movimiento&quot; de verdad. &quot;Crítico&quot; combina alto stock + alto valor a la vez, no solo uno de los dos.
       </div>
 
       <div className="flex items-center gap-2.5 mb-3 flex-wrap">
@@ -250,39 +270,46 @@ function AllProductsSnapshotTable({ rows, period }: { rows: SnapshotRow[]; perio
         </div>
         <button
           type="button"
-          className={`flex items-center gap-1 rounded border px-2.5 py-1.5 text-[11.5px] font-semibold cursor-pointer ${sortKey === "stock" ? "border-teal text-teal bg-teal/10" : "border-rule text-steel"}`}
+          className={`flex items-center gap-1 rounded border px-2.5 py-1.5 text-[11.5px] font-semibold cursor-pointer whitespace-nowrap ${sortKey === "critical" ? "border-red text-red bg-red/10" : "border-rule text-steel"}`}
+          onClick={() => toggleSort("critical")}
+        >
+          🎯 Crítico {sortKey === "critical" ? (sortDir === "desc" ? "↓" : "↑") : ""}
+        </button>
+        <button
+          type="button"
+          className={`flex items-center gap-1 rounded border px-2.5 py-1.5 text-[11.5px] font-semibold cursor-pointer whitespace-nowrap ${sortKey === "stock" ? "border-teal text-teal bg-teal/10" : "border-rule text-steel"}`}
           onClick={() => toggleSort("stock")}
         >
           <ArrowUpDown size={12} /> Stock {sortKey === "stock" ? (sortDir === "desc" ? "↓" : "↑") : ""}
         </button>
         <button
           type="button"
-          className={`flex items-center gap-1 rounded border px-2.5 py-1.5 text-[11.5px] font-semibold cursor-pointer ${sortKey === "costTotal" ? "border-teal text-teal bg-teal/10" : "border-rule text-steel"}`}
+          className={`flex items-center gap-1 rounded border px-2.5 py-1.5 text-[11.5px] font-semibold cursor-pointer whitespace-nowrap ${sortKey === "costTotal" ? "border-teal text-teal bg-teal/10" : "border-rule text-steel"}`}
           onClick={() => toggleSort("costTotal")}
         >
           <ArrowUpDown size={12} /> Valor {sortKey === "costTotal" ? (sortDir === "desc" ? "↓" : "↑") : ""}
         </button>
       </div>
 
-      <div className="overflow-x-auto max-h-[28rem] overflow-y-auto">
-        <table className="w-full text-[12px] border-collapse">
+      <div className="overflow-x-auto max-h-[28rem] overflow-y-auto pr-1">
+        <table className="w-full min-w-[600px] text-[12px] border-collapse">
           <thead className="sticky top-0 bg-surface">
             <tr>
-              <th className="text-left font-mono text-[9.5px] uppercase text-steel pb-1.5">Código</th>
-              <th className="text-left font-mono text-[9.5px] uppercase text-steel pb-1.5">Descripción</th>
-              <th className="text-right font-mono text-[9.5px] uppercase text-steel pb-1.5">Costo prom.</th>
-              <th className="text-right font-mono text-[9.5px] uppercase text-steel pb-1.5">Stock actual</th>
-              <th className="text-right font-mono text-[9.5px] uppercase text-steel pb-1.5">Valor total</th>
+              <th className="text-left font-mono text-[9.5px] uppercase text-steel pb-1.5 pr-2 whitespace-nowrap">Código</th>
+              <th className="text-left font-mono text-[9.5px] uppercase text-steel pb-1.5 pr-2 w-full">Descripción</th>
+              <th className="text-right font-mono text-[9.5px] uppercase text-steel pb-1.5 pl-3 whitespace-nowrap">Costo prom.</th>
+              <th className="text-right font-mono text-[9.5px] uppercase text-steel pb-1.5 pl-3 whitespace-nowrap">Stock</th>
+              <th className="text-right font-mono text-[9.5px] uppercase text-steel pb-1.5 pl-3 whitespace-nowrap">Valor total</th>
             </tr>
           </thead>
           <tbody>
             {filtered.map((r) => (
               <tr key={r.productCode} className="border-t border-rule/50">
-                <td className="py-1.5 font-mono text-steel">{r.productCode}</td>
-                <td className="py-1.5 font-semibold truncate max-w-64">{r.description}</td>
-                <td className="py-1.5 text-right font-mono">{unitMoney(r.avgCost)}</td>
-                <td className="py-1.5 text-right font-mono">{r.stock}</td>
-                <td className="py-1.5 text-right font-mono">{money(r.costTotal)}</td>
+                <td className="py-1.5 pr-2 font-mono text-steel whitespace-nowrap">{r.productCode}</td>
+                <td className="py-1.5 pr-2 font-semibold truncate max-w-64">{r.description}</td>
+                <td className="py-1.5 pl-3 text-right font-mono whitespace-nowrap">{unitMoney(r.avgCost)}</td>
+                <td className="py-1.5 pl-3 text-right font-mono whitespace-nowrap">{r.stock.toLocaleString("es-MX")}</td>
+                <td className="py-1.5 pl-3 text-right font-mono whitespace-nowrap">{money(r.costTotal)}</td>
               </tr>
             ))}
           </tbody>
