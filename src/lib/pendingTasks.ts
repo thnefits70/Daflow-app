@@ -204,8 +204,16 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   servicio_postventa: "Servicio Postventa",
   pedidos_despachados: "Pedidos despachados / Fill Rate",
   ruptura_stock: "Ruptura de Stock",
-  colaborador_del_mes: "Colaborador del mes — calificar equipo",
 };
+
+// "colaborador_del_mes" es obligatorio — confirmado 2026-08-05: a diferencia
+// de todo lo demás en este archivo, el líder NO puede apagar este push. Por
+// eso deliberadamente no está en PENDING_TYPE_CATALOG ni en
+// getPossiblePendingTypesForActor (no aparece en "Preferencias de
+// notificaciones" para desactivarlo) y el cron lo manda sin mirar
+// getDisabledTypes. Deja de aparecer solo/naturalmente en cuanto el líder ya
+// no tiene a nadie pendiente de calificar — nunca por elección propia.
+export const MANDATORY_PUSH_TYPES = new Set(["colaborador_del_mes"]);
 
 // Each department's admin-leader feedback meeting falls on a different
 // weekday — confirmed by the user 2026-07-21: Análisis de Mercado (Bryan)
@@ -634,7 +642,7 @@ export async function getPossiblePendingTypesForActor(
   const types: string[] = [];
 
   if (actor.isAdmin) {
-    types.push("feedback", "colaborador_del_mes");
+    types.push("feedback");
   } else {
     const me = await prisma.user.findUnique({
       where: { id: actor.userId },
@@ -647,7 +655,6 @@ export async function getPossiblePendingTypesForActor(
     }
     if (me.leadsDept.trackWeeklyMetric) types.push("pedidos_despachados");
     if (me.leadsDept.code === "INV") types.push("ruptura_stock");
-    types.push("colaborador_del_mes");
   }
 
   return types.map((type) => ({ type, label: PENDING_TYPE_CATALOG[type] }));

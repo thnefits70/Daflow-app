@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getAllPendingTasksActors, getPendingTasksForActor } from "@/lib/pendingTasks";
+import { getAllPendingTasksActors, getPendingTasksForActor, MANDATORY_PUSH_TYPES } from "@/lib/pendingTasks";
 import { getDisabledTypes } from "@/lib/pushPreferences";
 import { getDuePersonalReminderPushes } from "@/lib/periodicReminders";
 import { getStalePurchaseRequestPushes } from "@/lib/purchases";
@@ -35,7 +35,7 @@ export async function GET(req: NextRequest) {
     // Pendientes dentro de DAFLOW debe seguir mostrando todo siempre; la
     // preferencia solo decide qué se manda como notificación externa.
     const disabled = await getDisabledTypes(ownerId);
-    const notifiable = tasks.items.filter((i) => !disabled.has(i.type));
+    const notifiable = tasks.items.filter((i) => MANDATORY_PUSH_TYPES.has(i.type) || !disabled.has(i.type));
     if (notifiable.length === 0) continue;
 
     const first = notifiable[0];
