@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
   try {
     workbook = XLSX.read(bytes, { type: "buffer" });
   } catch {
-    return NextResponse.json({ error: "No se pudo leer el archivo. ¿Es un .xlsx válido?" }, { status: 400 });
+    return NextResponse.json({ error: "No se pudo leer el archivo. ¿Es un .xlsx o .xls válido?" }, { status: 400 });
   }
 
   const sheetName = workbook.SheetNames[0];

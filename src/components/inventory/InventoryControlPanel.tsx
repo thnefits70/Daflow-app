@@ -325,10 +325,10 @@ export function InventoryControlPanel({
           <label className="flex flex-col items-center justify-center gap-1.5 border-[1.5px] border-dashed border-rule rounded-md py-7 cursor-pointer hover:border-teal transition-colors">
             <Upload size={22} className="text-steel" />
             <div className="text-[13px] font-semibold">Arrastra tu reporte aquí o haz clic para elegirlo</div>
-            <div className="text-[11px] text-steel">Formato .xlsx — código, costo promedio, descripción, stock actual</div>
+            <div className="text-[11px] text-steel">Formato .xlsx o .xls — código, costo promedio, descripción, stock actual</div>
             <input
               type="file"
-              accept=".xlsx"
+              accept=".xlsx,.xls"
               className="hidden"
               onChange={(e) => e.target.files?.[0] && handleSnapFile(e.target.files[0])}
             />
