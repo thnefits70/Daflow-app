@@ -1,6 +1,7 @@
 "use client";
 
-import { TrendingUp, TrendingDown, Minus } from "lucide-react";
+import { useMemo, useState } from "react";
+import { TrendingUp, TrendingDown, Minus, ArrowUpDown, Search } from "lucide-react";
 import type { InventoryKpisDataDTO } from "@/lib/inventoryKpis";
 import type { StaleStreakBucket } from "@/lib/inventoryKpisCalc";
 import { TrendSpark } from "@/components/shared/TrendSpark";
@@ -21,6 +22,9 @@ function monthLabel(period: string) {
 function money(v: number) {
   return "$" + Math.round(v).toLocaleString("es-MX");
 }
+function unitMoney(v: number) {
+  return "$" + v.toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 3 });
+}
 
 export function InventoryKpisPanel({ data }: { data: InventoryKpisDataDTO }) {
   if (!data.hasData) {
@@ -36,6 +40,7 @@ export function InventoryKpisPanel({ data }: { data: InventoryKpisDataDTO }) {
   const { staleSummary } = data;
 
   return (
+    <div className="flex flex-col gap-3.5">
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
       {/* 1. Rotación / DIO */}
       <div className="bg-surface border border-rule rounded-md p-4.5" style={{ borderTop: "2px solid #14c7c7" }}>
@@ -179,6 +184,110 @@ export function InventoryKpisPanel({ data }: { data: InventoryKpisDataDTO }) {
             </div>
           )}
         </div>
+      </div>
+    </div>
+
+    <AllProductsSnapshotTable rows={data.latestSnapshotRows} period={data.staleSnapshotPeriod} />
+    </div>
+  );
+}
+
+type SnapshotRow = { productCode: string; description: string; avgCost: number; stock: number; costTotal: number };
+type SortKey = "stock" | "costTotal";
+
+// Confirmado 2026-08-05: vista interina — mientras solo hay UN mes cargado
+// no hay base para marcar "sin movimiento" (KPI #4 sale en 0%), así que esto
+// deja revisar/filtrar el inventario real del mes por stock o valor para
+// actuar de una vez, sin esperar el segundo mes de comparación.
+function AllProductsSnapshotTable({ rows, period }: { rows: SnapshotRow[]; period: string | null }) {
+  const [search, setSearch] = useState("");
+  const [sortKey, setSortKey] = useState<SortKey>("stock");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    const base = q
+      ? rows.filter((r) => r.productCode.toLowerCase().includes(q) || r.description.toLowerCase().includes(q))
+      : rows;
+    const sorted = [...base].sort((a, b) => (sortDir === "asc" ? a[sortKey] - b[sortKey] : b[sortKey] - a[sortKey]));
+    return sorted;
+  }, [rows, search, sortKey, sortDir]);
+
+  function toggleSort(key: SortKey) {
+    if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else { setSortKey(key); setSortDir("desc"); }
+  }
+
+  if (rows.length === 0) {
+    return (
+      <div className="bg-surface border border-rule rounded-md p-4.5">
+        <div className="font-semibold text-[13.5px] mb-1">Todos los productos cargados</div>
+        <div className="text-[12px] text-steel">Todavía no hay un Excel de stock por SKU cargado.</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-surface border border-rule rounded-md p-4.5">
+      <div className="flex items-center justify-between mb-1 flex-wrap gap-y-1.5">
+        <div className="font-semibold text-[13.5px]">Todos los productos cargados{period ? ` — ${monthLabel(period)}` : ""}</div>
+        <span className="font-mono text-[10px] uppercase text-steel bg-cloud rounded-full px-2 py-0.5">{filtered.length} de {rows.length}</span>
+      </div>
+      <div className="text-[11px] text-steel mb-3">
+        Vista de apoyo mientras se acumula un segundo mes para calcular &quot;sin movimiento&quot; de verdad — ordena por stock o valor para revisar qué mover primero.
+      </div>
+
+      <div className="flex items-center gap-2.5 mb-3 flex-wrap">
+        <div className="relative flex-1 min-w-40">
+          <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-steel" />
+          <input
+            type="text"
+            placeholder="Buscar por código o descripción…"
+            className="w-full rounded border border-rule bg-cloud pl-8 pr-2.5 py-1.5 text-[12px]"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+        <button
+          type="button"
+          className={`flex items-center gap-1 rounded border px-2.5 py-1.5 text-[11.5px] font-semibold cursor-pointer ${sortKey === "stock" ? "border-teal text-teal bg-teal/10" : "border-rule text-steel"}`}
+          onClick={() => toggleSort("stock")}
+        >
+          <ArrowUpDown size={12} /> Stock {sortKey === "stock" ? (sortDir === "desc" ? "↓" : "↑") : ""}
+        </button>
+        <button
+          type="button"
+          className={`flex items-center gap-1 rounded border px-2.5 py-1.5 text-[11.5px] font-semibold cursor-pointer ${sortKey === "costTotal" ? "border-teal text-teal bg-teal/10" : "border-rule text-steel"}`}
+          onClick={() => toggleSort("costTotal")}
+        >
+          <ArrowUpDown size={12} /> Valor {sortKey === "costTotal" ? (sortDir === "desc" ? "↓" : "↑") : ""}
+        </button>
+      </div>
+
+      <div className="overflow-x-auto max-h-[28rem] overflow-y-auto">
+        <table className="w-full text-[12px] border-collapse">
+          <thead className="sticky top-0 bg-surface">
+            <tr>
+              <th className="text-left font-mono text-[9.5px] uppercase text-steel pb-1.5">Código</th>
+              <th className="text-left font-mono text-[9.5px] uppercase text-steel pb-1.5">Descripción</th>
+              <th className="text-right font-mono text-[9.5px] uppercase text-steel pb-1.5">Costo prom.</th>
+              <th className="text-right font-mono text-[9.5px] uppercase text-steel pb-1.5">Stock actual</th>
+              <th className="text-right font-mono text-[9.5px] uppercase text-steel pb-1.5">Valor total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map((r) => (
+              <tr key={r.productCode} className="border-t border-rule/50">
+                <td className="py-1.5 font-mono text-steel">{r.productCode}</td>
+                <td className="py-1.5 font-semibold truncate max-w-64">{r.description}</td>
+                <td className="py-1.5 text-right font-mono">{unitMoney(r.avgCost)}</td>
+                <td className="py-1.5 text-right font-mono">{r.stock}</td>
+                <td className="py-1.5 text-right font-mono">{money(r.costTotal)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {filtered.length === 0 && <div className="text-[12px] text-steel py-4 text-center">Ningún producto coincide con la búsqueda.</div>}
       </div>
     </div>
   );

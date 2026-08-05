@@ -95,6 +95,11 @@ export type InventoryKpisDataDTO = {
   staleSummary: ReturnType<typeof summarizeStaleStreaks>;
   staleEntries: StaleStreakEntry[];
   staleSnapshotPeriod: string | null;
+  // Confirmado 2026-08-05: vista interina mientras se acumula un segundo mes
+  // de historial — todos los productos del mes más reciente cargado, para
+  // que se puedan revisar por stock/valor aunque el sistema todavía no tenga
+  // base de comparación para marcar "sin movimiento" de verdad.
+  latestSnapshotRows: { productCode: string; description: string; avgCost: number; stock: number; costTotal: number }[];
 };
 
 // Todo lo que necesita la pestaña "Inventario" dentro de KPIs financieros —
@@ -112,6 +117,7 @@ export async function getInventoryKpisData(): Promise<InventoryKpisDataDTO> {
     staleSummary: summarizeStaleStreaks([], null),
     staleEntries: [],
     staleSnapshotPeriod: null,
+    latestSnapshotRows: [],
   };
 
   const deptId = await getFinanzasDeptId();
@@ -129,8 +135,13 @@ export async function getInventoryKpisData(): Promise<InventoryKpisDataDTO> {
     ? snapshots.filter((s) => s.period === staleSnapshotPeriod).reduce((sum, s) => sum + s.costTotal, 0)
     : null;
   const staleSummary = summarizeStaleStreaks(staleEntries, latestSnapshotTotal);
+  const latestSnapshotRows = staleSnapshotPeriod
+    ? snapshots
+        .filter((s) => s.period === staleSnapshotPeriod)
+        .map((s) => ({ productCode: s.productCode, description: s.description, avgCost: s.avgCost, stock: s.stock, costTotal: s.costTotal }))
+    : [];
 
-  if (records.length === 0) return { ...empty, staleEntries, staleSnapshotPeriod, staleSummary };
+  if (records.length === 0) return { ...empty, staleEntries, staleSnapshotPeriod, staleSummary, latestSnapshotRows };
 
   const byPeriod = new Map<string, FinanceMonthRaw[]>();
   for (const r of records) {
@@ -186,5 +197,6 @@ export async function getInventoryKpisData(): Promise<InventoryKpisDataDTO> {
     staleSummary,
     staleEntries,
     staleSnapshotPeriod,
+    latestSnapshotRows,
   };
 }
