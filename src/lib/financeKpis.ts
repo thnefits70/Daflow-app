@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import type { FinanceMonthRaw } from "@/lib/financeKpisCalc";
+import { getInventoryKpisData, type InventoryKpisDataDTO } from "@/lib/inventoryKpis";
 
 export type FinanceOperationDTO = { id: string; name: string; isActive: boolean };
 
@@ -39,6 +40,11 @@ export type FinanceKpiDataDTO = {
   sharedBalances: FinanceSharedBalanceDTO[];
   uploads: FinanceUploadDTO[];
   settings: FinanceKpiSettingsDTO;
+  // Confirmado 2026-08-04: solo tiene contenido real cuando deptId es
+  // Finanzas (el único que trackKpis=true hoy) — getInventoryKpisData ya
+  // resuelve internamente el deptId de Finanzas, así que llamarlo aquí
+  // siempre es seguro.
+  inventoryKpis: InventoryKpisDataDTO;
 };
 
 const DEFAULT_SETTINGS: FinanceKpiSettingsDTO = {
@@ -62,7 +68,7 @@ const DEFAULT_SETTINGS: FinanceKpiSettingsDTO = {
 // toggle, period comparison, granularity) exactly like the approved boceto,
 // with no extra round-trip per filter change.
 export async function getFinanceKpiData(deptId: string): Promise<FinanceKpiDataDTO> {
-  const [operations, records, sharedBalances, uploads, settings] = await Promise.all([
+  const [operations, records, sharedBalances, uploads, settings, inventoryKpis] = await Promise.all([
     prisma.financeOperation.findMany({ where: { deptId }, orderBy: { order: "asc" } }),
     prisma.financeKpiRecord.findMany({ where: { deptId }, orderBy: { period: "asc" } }),
     prisma.financeSharedMonthlyBalance.findMany({ where: { deptId }, orderBy: { period: "asc" } }),
@@ -73,6 +79,7 @@ export async function getFinanceKpiData(deptId: string): Promise<FinanceKpiDataD
       include: { uploadedBy: { select: { name: true } } },
     }),
     prisma.financeKpiSettings.findUnique({ where: { deptId } }),
+    getInventoryKpisData(),
   ]);
 
   const recordsByOperation: Record<string, FinanceMonthRaw[]> = {};
@@ -122,5 +129,6 @@ export async function getFinanceKpiData(deptId: string): Promise<FinanceKpiDataD
           targetMonthlyGrowthPct: settings.targetMonthlyGrowthPct,
         }
       : DEFAULT_SETTINGS,
+    inventoryKpis,
   };
 }

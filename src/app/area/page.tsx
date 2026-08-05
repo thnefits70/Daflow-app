@@ -15,12 +15,15 @@ import { getStoreFeedbackAggregate, getStoreFeedbackTrend } from "@/lib/storeFee
 import { getDuePeriodicReminders } from "@/lib/periodicReminders";
 import { getMyLearningPaths, summarizeMyLearningPaths } from "@/lib/learningPaths";
 import { EmployeeHome } from "@/components/dashboard/EmployeeHome";
+import { canViewInventoryKpisHome } from "@/lib/guards";
+import { getInventoryKpisData } from "@/lib/inventoryKpis";
 
 export default async function AreaHomePage() {
   const session = await auth();
   if (!session?.user.deptId) redirect("/login");
 
   const deptId = session.user.deptId;
+  const canSeeInventoryKpis = await canViewInventoryKpisHome();
   const [
     dept,
     procs,
@@ -39,6 +42,7 @@ export default async function AreaHomePage() {
     storeFeedbackTrend,
     duePeriodicReminders,
     myLearningPaths,
+    inventoryKpis,
   ] = await Promise.all([
     prisma.department.findUnique({ where: { id: deptId } }),
     prisma.process.count({ where: { deptId } }),
@@ -61,6 +65,7 @@ export default async function AreaHomePage() {
     getStoreFeedbackTrend(),
     getDuePeriodicReminders({ deptId }),
     getMyLearningPaths(session.user.id),
+    canSeeInventoryKpis ? getInventoryKpisData() : Promise.resolve(null),
   ]);
   if (!dept) redirect("/api/auth/force-logout");
 
@@ -82,6 +87,7 @@ export default async function AreaHomePage() {
       storeFeedback={storeFeedback}
       storeFeedbackTrend={storeFeedbackTrend}
       duePeriodicReminders={duePeriodicReminders}
+      inventoryKpis={inventoryKpis}
       rowsSorted={dashboardData.rowsSorted}
       learningPathSummary={summarizeMyLearningPaths(myLearningPaths)}
       scores={scores.map((s) => ({

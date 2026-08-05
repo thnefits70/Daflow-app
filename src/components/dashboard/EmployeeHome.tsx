@@ -13,10 +13,12 @@ import { StoreFeedbackTile } from "./StoreFeedbackTile";
 import { StockoutBarChart } from "./StockoutBarChart";
 import { PieChart } from "./PieChart";
 import { OrgChart } from "./OrgChart";
+import { InventoryKpisHomeCard } from "./InventoryKpisHomeCard";
 import type { DashboardRow, WeeklyTrend, StockoutWeekPoint, WarrantyMonthlyChart, PieSlice, FillRateBreakdown } from "@/lib/dashboard";
 import type { StoreFeedbackAggregate, StoreFeedbackTrendPoint } from "@/lib/storeFeedback";
 import type { DuePeriodicReminderDTO } from "@/lib/periodicReminders";
 import type { MyLearningPathSummaryDTO } from "@/lib/learningPaths";
+import type { InventoryKpisDataDTO } from "@/lib/inventoryKpis";
 
 type ScoreRow = { id: string; examTitle: string; score: number; total: number; createdAt: string };
 
@@ -61,6 +63,7 @@ export function EmployeeHome({
   rowsSorted,
   duePeriodicReminders = [],
   learningPathSummary,
+  inventoryKpis = null,
 }: {
   userName: string;
   deptName: string;
@@ -81,6 +84,7 @@ export function EmployeeHome({
   rowsSorted: DashboardRow[];
   duePeriodicReminders?: DuePeriodicReminderDTO[];
   learningPathSummary?: MyLearningPathSummaryDTO;
+  inventoryKpis?: InventoryKpisDataDTO | null;
 }) {
   const avg = scores.length
     ? Math.round(scores.reduce((a, s) => a + pct(s.score, s.total), 0) / scores.length)
@@ -125,6 +129,7 @@ export function EmployeeHome({
         fillRateBreakdown ||
         returnRateTrend ||
         storeFeedback ||
+        inventoryKpis?.hasData ||
         (stockoutWeeks && stockoutWeeks.length > 0)) && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-7">
           {storeFeedback && <StoreFeedbackTile data={storeFeedback} trend={storeFeedbackTrend} />}
@@ -155,6 +160,12 @@ export function EmployeeHome({
           {stockoutWeeks && stockoutWeeks.length > 0 && (
             <div className="bg-surface border border-rule rounded-lg p-6 sm:col-span-2">
               <StockoutBarChart points={stockoutWeeks} />
+            </div>
+          )}
+
+          {inventoryKpis?.hasData && (
+            <div className="sm:col-span-2">
+              <InventoryKpisHomeCard data={inventoryKpis} />
             </div>
           )}
         </div>

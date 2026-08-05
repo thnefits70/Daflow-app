@@ -66,6 +66,7 @@ model Department {
   financeKpis           FinanceKpiRecord[]
   financeSharedBalances FinanceSharedMonthlyBalance[]
   financeKpiUploads     FinanceKpiUpload[]
+  inventoryStaleProducts InventoryStaleProduct[]
   financeKpiSettings    FinanceKpiSettings?
   weeklyMetrics WeeklyMetricRecord[]
   weeklyReviews WeeklyReviewRecord[]
@@ -148,6 +149,19 @@ model User {
   // detalle y contactar por WhatsApp, pero nunca crear/editar/eliminar.
   canViewStoreFeedback Boolean @default(false)
 
+  // Mismo patrón — confirmado 2026-08-04: Control de Inventario (KPIs de
+  // inventario) no es "la página de mi departamento" de Daniel; se resuelve
+  // via isLeader+leadsDept.code==="INV" en canManageInventoryControl(), pero
+  // se deja aquí el mismo tipo de escape hatch para delegar puntualmente sin
+  // tocar código, igual que canManagePurchases.
+  canManageInventoryControl Boolean @default(false)
+
+  // Pestaña con la que "Mi área de trabajo" abre para ESTE usuario en vez del
+  // default por departamento — confirmado 2026-08-04 (ej. Nairoby o el admin
+  // pueden preferir otra distinta a "Feedback semanal"). Null = usar el
+  // default de siempre.
+  defaultWorkspaceTab String?
+
   // Última vez que este usuario (como líder) revisó el Feedback semanal de su área — usado para el
   // contador de "sin leer" en el sidebar. Null = nunca lo ha visto.
   lastSeenFeedbackAt DateTime?
@@ -182,6 +196,8 @@ model User {
   purchaseReceiptChangeRequests   PurchaseReceiptChangeRequest[] @relation("PurchaseReceiptRequestedBy")
   purchaseCatalogItemsCreated     PurchaseCatalogItem[] @relation("PurchaseCatalogItemCreatedBy")
   purchaseCatalogItemDeleteRequests PurchaseCatalogItemDeleteRequest[] @relation("PurchaseCatalogItemDeleteRequestedBy")
+  inventoryStaleProductsCreated     InventoryStaleProduct[] @relation("InventoryStaleProductCreatedBy")
+  inventoryStaleProductsUpdated     InventoryStaleProduct[] @relation("InventoryStaleProductUpdatedBy")
   purchaseRequestsMade            PurchaseRequest[] @relation("PurchaseRequestRequestedBy")
   purchaseRequestsReviewed        PurchaseRequest[] @relation("PurchaseRequestReviewedBy")
   purchaseRequestReceiptsConfirmed PurchaseRequestReceipt[] @relation("PurchaseRequestReceiptConfirmedBy")
@@ -545,6 +561,41 @@ model FinanceSharedMonthlyBalance {
   updatedAt DateTime @updatedAt
 
   @@unique([deptId, period])
+  @@index([deptId])
+}
+
+// Seguimiento trimestral de "productos sin movimiento" (KPI de inventario en
+// riesgo) — confirmado 2026-08-04: NO es una foto anual, Daniel (líder de
+// Inventario) confirma cada 3 meses si un producto flagueado sigue sin
+// venderse o ya se recuperó, y agrega los nuevos que recién cruzan el umbral
+// de 3 meses. quartersConfirmed cuenta cuántos trimestres SEGUIDOS se
+// reconfirmó "sigue igual" — de ahí se deriva el rango (1 = 3-6 meses, 2+ =
+// +6 meses) sin que nadie tenga que clasificarlo a mano. Los productos nunca
+// se eliminan (solo status pasa a "recovered"); el valor sí se puede editar.
+model InventoryStaleProduct {
+  id         String     @id @default(cuid())
+  deptId     String
+  department Department @relation(fields: [deptId], references: [id], onDelete: Cascade)
+
+  name  String
+  value Float
+
+  status String @default("active") // "active" | "recovered"
+
+  // "YYYY-Qn" — trimestre en que se confirmó por última vez que seguía sin
+  // venderse (o en que se creó, si nunca se ha reconfirmado).
+  lastConfirmedQuarter String
+  quartersConfirmed    Int    @default(1)
+  recoveredQuarter     String?
+
+  createdById String?
+  createdBy   User?   @relation("InventoryStaleProductCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedById String?
+  updatedBy   User?   @relation("InventoryStaleProductUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@index([deptId])
 }
 

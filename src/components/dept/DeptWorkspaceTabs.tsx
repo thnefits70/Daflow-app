@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { GitBranch, FileText, GraduationCap, LineChart, TrendingUp, MessageSquare, CalendarClock, BellRing, Receipt, Heart, ShoppingCart } from "lucide-react";
+import { GitBranch, FileText, GraduationCap, LineChart, TrendingUp, MessageSquare, CalendarClock, BellRing, Receipt, Heart, ShoppingCart, Package, Pin } from "lucide-react";
 import { ProcessEmbeddedPanel } from "@/components/process/ProcessEmbeddedPanel";
 import type { ProcessDTO } from "@/components/process/ProcessEditor";
 import type { ProcessUpdateDTO } from "@/components/process/ProcessHistoryPanel";
@@ -21,6 +21,8 @@ import type { PaymentReminderDTO } from "@/lib/paymentReminders";
 import { WeeklyMetricPanel, type WeeklyMetricDTO } from "@/components/fulfillment/WeeklyMetricPanel";
 import { WeeklyReviewPanel, type WeeklyReviewDTO } from "@/components/marketanalysis/WeeklyReviewPanel";
 import { PurchaseControlPanel } from "@/components/purchases/PurchaseControlPanel";
+import { InventoryControlPanel } from "@/components/inventory/InventoryControlPanel";
+import type { StaleProductDTO } from "@/lib/inventoryKpis";
 
 type DocumentDTO = { id: string; title: string; content: string; link: string; fileUrl: string | null; fileName: string | null };
 type ExamSummary = { id: string; title: string; questionCount: number };
@@ -35,6 +37,7 @@ const ALL_TABS = [
   { key: "procesos", label: "Procesos", icon: GitBranch },
   { key: "comprobante", label: "Comprobante de pago", icon: Receipt },
   { key: "compras", label: "Control de Compras", icon: ShoppingCart },
+  { key: "inventario", label: "Control de Inventario", icon: Package },
   { key: "postventa", label: "Servicio Postventa", icon: Heart },
   { key: "documentos", label: "Documentos", icon: FileText },
   { key: "examenes", label: "Exámenes", icon: GraduationCap },
@@ -68,6 +71,9 @@ export function DeptWorkspaceTabs({
   canSubmitPurchases = false,
   canReceivePurchases = false,
   canInvoicePurchases = false,
+  canManageInventoryControl = false,
+  inventoryControlData = null,
+  preferredTab = null,
   isAdmin = false,
   editable,
   kpisEditable,
@@ -111,6 +117,11 @@ export function DeptWorkspaceTabs({
   canSubmitPurchases?: boolean;
   canReceivePurchases?: boolean;
   canInvoicePurchases?: boolean;
+  // Control de Inventario — mismo patrón sin dept.code que Control de
+  // Compras/Servicio Postventa (confirmado 2026-08-04): Daniel lo ve en su
+  // propia "Mi área de trabajo" sin importar si su departamento real es INV.
+  canManageInventoryControl?: boolean;
+  inventoryControlData?: { period: string; currentInventoryValue: number | null; products: StaleProductDTO[]; currentQuarter: string } | null;
   isAdmin?: boolean;
   editable: boolean;
   kpisEditable?: boolean;
@@ -119,13 +130,12 @@ export function DeptWorkspaceTabs({
   // gestiona los suyos (comparando createdById), sin importar si es líder.
   // null para admin (no es una fila real de User).
   currentUserId?: string | null;
+  // Confirmado 2026-08-04: cada quien puede fijar su propia pestaña de
+  // apertura (ej. Nairoby o el admin prefiriendo otra distinta a "Feedback
+  // semanal", que ahora es el default de Finanzas). Null = usar el fallback.
+  preferredTab?: string | null;
 }) {
   const router = useRouter();
-  // Confirmado 2026-07-30: cada área debería abrir directo en su pestaña más
-  // usada, no siempre en "Procesos" — Finanzas ya abría en KPIs; Fulfillment
-  // ahora abre en "Pedidos despachados" (lo primero que revisan al entrar).
-  const [tab, setTab] = useState<TabKey>(trackKpis ? "kpis" : trackWeeklyMetric ? "semanal" : "procesos");
-  const [seenFeedback, setSeenFeedback] = useState(false);
   const tabs = ALL_TABS.filter((t) => {
     if (t.key === "kpis") return trackKpis;
     if (t.key === "pagos") return trackPaymentReminders;
@@ -133,9 +143,30 @@ export function DeptWorkspaceTabs({
     if (t.key === "feedback") return trackWeeklyReview;
     if (t.key === "comprobante") return canViewPurchaseReceipts;
     if (t.key === "compras") return canSubmitPurchases || canReceivePurchases || canInvoicePurchases;
+    if (t.key === "inventario") return canManageInventoryControl;
     if (t.key === "postventa") return canManageStoreFeedback || canViewStoreFeedback;
     return true;
   });
+  // Confirmado 2026-07-30: cada área debería abrir directo en su pestaña más
+  // usada, no siempre en "Procesos" — Fulfillment abre en "Pedidos
+  // despachados". Confirmado 2026-08-04: Finanzas ahora abre en "Feedback
+  // semanal" en vez de KPIs (trackWeeklyReview solo existe ahí). Cualquiera
+  // puede fijar su propia pestaña vía preferredTab, que gana sobre este
+  // fallback si sigue siendo una pestaña visible para él.
+  const fallbackTab: TabKey = trackWeeklyReview ? "feedback" : trackKpis ? "kpis" : trackWeeklyMetric ? "semanal" : "procesos";
+  const initialTab = (preferredTab && tabs.some((t) => t.key === preferredTab) ? (preferredTab as TabKey) : fallbackTab);
+  const [tab, setTab] = useState<TabKey>(initialTab);
+  const [seenFeedback, setSeenFeedback] = useState(false);
+  const [pinned, setPinned] = useState(false);
+
+  async function pinCurrentTab() {
+    setPinned(true);
+    await fetch("/api/me/default-workspace-tab", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tab }),
+    });
+  }
 
   return (
     <div>
@@ -149,6 +180,7 @@ export function DeptWorkspaceTabs({
             }`}
             onClick={() => {
               setTab(t.key);
+              setPinned(false);
               if (t.key === "feedback" && unseenFeedbackCount > 0 && !seenFeedback) {
                 setSeenFeedback(true);
                 fetch("/api/me/seen-feedback", { method: "POST" }).then(() => router.refresh());
@@ -163,6 +195,16 @@ export function DeptWorkspaceTabs({
             )}
           </button>
         ))}
+        {currentUserId && (
+          <button
+            type="button"
+            className={`ml-auto pb-2.5 text-[11px] flex items-center gap-1 cursor-pointer ${pinned ? "text-teal" : "text-steel hover:text-ink"}`}
+            onClick={pinCurrentTab}
+            title="Abrir siempre en esta pestaña"
+          >
+            <Pin size={12} /> {pinned ? "Fijada" : "Fijar como mi pestaña de inicio"}
+          </button>
+        )}
       </div>
 
       {tab === "procesos" && (
@@ -194,6 +236,14 @@ export function DeptWorkspaceTabs({
           canReceive={canReceivePurchases}
           canInvoice={canInvoicePurchases}
           isAdmin={isAdmin}
+        />
+      )}
+      {tab === "inventario" && canManageInventoryControl && inventoryControlData && (
+        <InventoryControlPanel
+          period={inventoryControlData.period}
+          currentInventoryValue={inventoryControlData.currentInventoryValue}
+          products={inventoryControlData.products}
+          currentQuarter={inventoryControlData.currentQuarter}
         />
       )}
       {tab === "postventa" && (canManageStoreFeedback || canViewStoreFeedback) && (

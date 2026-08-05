@@ -234,6 +234,41 @@ export async function canManageStockouts() {
   return !!user?.isLeader && user.leadsDept?.code === "INV";
 }
 
+// Control de Inventario (KPIs de inventario) — confirmado 2026-08-04: admin,
+// o quien lidere Inventario (hoy Daniel Morán), o quien el admin delegue
+// puntualmente vía User.canManageInventoryControl (mismo escape hatch que
+// canManagePurchases). Esta función gatilla SOLO la pantalla de captura
+// ("Control de Inventario" en Mi área de trabajo) — nunca ve las gráficas
+// resultantes desde ahí, esas viven en KPIs financieros / Inicio.
+export async function canManageInventoryControl() {
+  const session = await auth();
+  if (!session) return false;
+  if (session.user.role === "admin") return true;
+  const user = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { isLeader: true, leadsDept: { select: { code: true } }, canManageInventoryControl: true },
+  });
+  if (user?.canManageInventoryControl) return true;
+  return !!user?.isLeader && user.leadsDept?.code === "INV";
+}
+
+// KPIs de inventario en Inicio — confirmado 2026-08-04: admin, o quien lidere
+// Inventario (Daniel), Análisis de Mercado/ventas (Bryan Ríos) o Finanzas
+// (Nairoby Castro) — las 3 personas + el dueño que deben ver esta tarjeta,
+// sin importar si Daniel nunca ve las gráficas desde su propia pantalla de
+// captura (canManageInventoryControl es independiente de esta).
+export async function canViewInventoryKpisHome() {
+  const session = await auth();
+  if (!session) return false;
+  if (session.user.role === "admin") return true;
+  const user = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { isLeader: true, leadsDept: { select: { code: true } } },
+  });
+  const code = user?.leadsDept?.code;
+  return !!user?.isLeader && (code === "INV" || code === "MKT" || code === "FIN");
+}
+
 // Servicio Postventa (feedback de tiendas) — confirmado 2026-07-25: vive en
 // Análisis de Mercado (visible a asesores/líder de venta). Admin, quien lidera
 // Análisis de Mercado, o quien el admin delegue puntualmente vía

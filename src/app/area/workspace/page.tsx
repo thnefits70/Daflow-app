@@ -3,13 +3,14 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { TopLine } from "@/components/ui/TopLine";
 import { DeptWorkspaceTabs } from "@/components/dept/DeptWorkspaceTabs";
-import { getUnseenFeedbackCount, canManageStoreFeedback as checkCanManageStoreFeedback, canViewStoreFeedback as checkCanViewStoreFeedback, canSubmitPurchaseRequests, canConfirmPurchaseReceiving, canRegisterPurchaseInvoices } from "@/lib/guards";
+import { getUnseenFeedbackCount, canManageStoreFeedback as checkCanManageStoreFeedback, canViewStoreFeedback as checkCanViewStoreFeedback, canSubmitPurchaseRequests, canConfirmPurchaseReceiving, canRegisterPurchaseInvoices, canManageInventoryControl as checkCanManageInventoryControl } from "@/lib/guards";
 import { getFinanceKpiData } from "@/lib/financeKpis";
 import { getDeptProcessDetail } from "@/lib/processDetail";
 import { getPaymentRemindersData } from "@/lib/paymentReminders";
 import { getPeriodicReminders } from "@/lib/periodicReminders";
 import { getPurchaseReceipts, getPurchaseReceiptCatalogs } from "@/lib/purchaseReceipts";
 import { getStoreFeedbackData } from "@/lib/storeFeedback";
+import { getInventoryControlData } from "@/lib/inventoryKpis";
 
 export default async function WorkspacePage() {
   const session = await auth();
@@ -37,7 +38,12 @@ export default async function WorkspacePage() {
     canRegisterPurchaseInvoices(),
   ]);
 
-  const [processDetail, periodicReminders, documents, exams, financeKpiData, paymentReminders, weeklyMetricRecords, weeklyReviewRecords, currentUser, unseenFeedbackCount, purchaseReceipts, purchaseReceiptCatalogs, storeFeedbackStores] = await Promise.all([
+  // Control de Inventario — mismo patrón sin dept.code (confirmado
+  // 2026-08-04): Daniel lo ve desde su propia "Mi área de trabajo" sin
+  // importar si su departamento real es INV.
+  const canManageInventoryControl = await checkCanManageInventoryControl();
+
+  const [processDetail, periodicReminders, documents, exams, financeKpiData, paymentReminders, weeklyMetricRecords, weeklyReviewRecords, currentUser, unseenFeedbackCount, purchaseReceipts, purchaseReceiptCatalogs, storeFeedbackStores, inventoryControlData] = await Promise.all([
     getDeptProcessDetail(dept.id),
     getPeriodicReminders(dept.id),
     prisma.document.findMany({ where: { deptId: dept.id }, orderBy: { createdAt: "asc" } }),
@@ -60,12 +66,14 @@ export default async function WorkspacePage() {
         isLeader: true,
         leadsDeptId: true,
         canViewPurchaseReceipts: true,
+        defaultWorkspaceTab: true,
       },
     }),
     getUnseenFeedbackCount(),
     dept.code === "COM" ? getPurchaseReceipts(dept.id) : Promise.resolve([]),
     dept.code === "COM" ? getPurchaseReceiptCatalogs(dept.id) : Promise.resolve({ suppliers: [], banks: [] }),
     canManageStoreFeedback || canViewStoreFeedback ? getStoreFeedbackData() : Promise.resolve([]),
+    canManageInventoryControl ? getInventoryControlData() : Promise.resolve(null),
   ]);
 
   const kpisEditable = !!currentUser?.isLeader && currentUser.leadsDeptId === dept.id;
@@ -126,6 +134,9 @@ export default async function WorkspacePage() {
         canSubmitPurchases={canSubmitPurchases}
         canReceivePurchases={canReceivePurchases}
         canInvoicePurchases={canInvoicePurchases}
+        canManageInventoryControl={canManageInventoryControl}
+        inventoryControlData={inventoryControlData}
+        preferredTab={currentUser?.defaultWorkspaceTab ?? null}
         isAdmin={false}
         editable={false}
         kpisEditable={kpisEditable}

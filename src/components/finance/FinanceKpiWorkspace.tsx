@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { FinanceDashboard } from "./FinanceDashboard";
 import { FinanceUploadPanel } from "./FinanceUploadPanel";
+import { InventoryKpisPanel } from "./InventoryKpisPanel";
 import type { FinanceKpiDataDTO } from "@/lib/financeKpis";
 
 // Owns the Dashboard / Cargar plantilla sub-tab, nested inside the existing
@@ -18,7 +19,7 @@ export function FinanceKpiWorkspace({
   data: FinanceKpiDataDTO;
   editable: boolean;
 }) {
-  const [subTab, setSubTab] = useState<"dashboard" | "plantilla">("dashboard");
+  const [subTab, setSubTab] = useState<"dashboard" | "inventario" | "plantilla">("dashboard");
 
   return (
     <div>
@@ -31,6 +32,15 @@ export function FinanceKpiWorkspace({
           onClick={() => setSubTab("dashboard")}
         >
           📊 Dashboard
+        </button>
+        <button
+          type="button"
+          className={`px-4 py-2 text-[12.5px] font-semibold rounded-t-md border border-b-0 cursor-pointer ${
+            subTab === "inventario" ? "bg-surface text-ink border-rule" : "bg-cloud text-steel border-rule"
+          }`}
+          onClick={() => setSubTab("inventario")}
+        >
+          📦 Inventario
         </button>
         {editable && (
           <button
@@ -46,6 +56,7 @@ export function FinanceKpiWorkspace({
       </div>
 
       {subTab === "dashboard" && <FinanceDashboard deptId={deptId} data={data} editable={editable} />}
+      {subTab === "inventario" && <InventoryKpisPanel data={data.inventoryKpis} />}
       {subTab === "plantilla" && editable && <FinanceUploadPanel deptId={deptId} data={data} />}
     </div>
   );
