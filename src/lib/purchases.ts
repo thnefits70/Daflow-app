@@ -6,6 +6,24 @@ import type { PurchaseRequestStatus } from "@/generated/prisma/client";
 // todavía) ni las rechazadas.
 const PRICED_STATUSES: PurchaseRequestStatus[] = ["APPROVED", "PAID", "RECEIVED"];
 
+// Confirmado 2026-08-05: código correlativo para toda solicitud de compra
+// (SC-001, SC-002...) — una sola numeración compartida por TODO el módulo,
+// sin importar quién la suba (hoy Nairoby o Bryan) — para la auditoría
+// semestral de Finanzas. Se asigna UNA vez por grupo (no por fila), vía el
+// contador único en PlatformSettings, incrementado dentro de una transacción
+// para que nunca se repita aunque lleguen dos solicitudes al mismo tiempo.
+export async function nextPurchaseRequestNumber(): Promise<number> {
+  const updated = await prisma.platformSettings.update({
+    where: { id: "singleton" },
+    data: { lastPurchaseRequestNumber: { increment: 1 } },
+  });
+  return updated.lastPurchaseRequestNumber;
+}
+
+export function formatPurchaseRequestCode(requestNumber: number): string {
+  return `SC-${String(requestNumber).padStart(3, "0")}`;
+}
+
 // Confirmado 2026-07-30: el costo por unidad que se compara contra el
 // historial ya incluye el envío cuando el proveedor lo cobra aparte — así
 // nunca se puede esconder un sobreprecio repartiéndolo entre "producto" y

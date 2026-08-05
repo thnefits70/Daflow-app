@@ -23,6 +23,12 @@ model PlatformSettings {
   // Cumpleaños del admin — el único perfil sin un User real detrás, así que
   // vive aquí en vez de en la tabla User.
   adminBirthDate    DateTime?
+  // Confirmado 2026-08-05: contador único para el código correlativo de
+  // Control de Compras (SC-001, SC-002...) — una sola secuencia para todo el
+  // módulo, sin importar quién solicite. Incrementado dentro de una
+  // transacción al crear el primer PurchaseRequest de un grupo nuevo, y
+  // copiado a todas las filas de ese mismo grupo.
+  lastPurchaseRequestNumber Int @default(0)
   updatedAt         DateTime  @updatedAt
 }
 
@@ -634,12 +640,6 @@ model PettyCashBox {
   id           String           @id @default(cuid())
   type         PettyCashBoxType @unique
   minThreshold Float            @default(10)
-  // Confirmado 2026-08-05: cada solicitud de pago debe quedar numerada para
-  // control y para la auditoría semestral de todo lo de Finanzas — contador
-  // propio de cada caja, incrementado dentro de una transacción al crear un
-  // PettyCashEntry para que nunca se repita un número aunque lleguen dos
-  // solicitudes al mismo tiempo.
-  lastRequestNumber Int         @default(0)
   createdAt    DateTime         @default(now())
   updatedAt    DateTime         @updatedAt
 
@@ -652,11 +652,17 @@ model PettyCashBox {
 // borrarse por mal uso o manipulación). El saldo de la caja se calcula
 // siempre a partir de las filas NO archivadas.
 model PettyCashEntry {
-  id            String             @id @default(cuid())
-  boxId         String
-  box           PettyCashBox       @relation(fields: [boxId], references: [id], onDelete: Cascade)
-  kind          PettyCashEntryKind
-  requestNumber Int
+  id    String             @id @default(cuid())
+  boxId String
+  box   PettyCashBox       @relation(fields: [boxId], references: [id], onDelete: Cascade)
+  kind  PettyCashEntryKind
+  // Confirmado 2026-08-05: UN SOLO contador para las dos cajas (no uno por
+  // caja) — nunca se repite ni se reinicia entre Principal y Secundaria.
+  // Autoincrement de Postgres, así que nunca hay dos solicitudes con el
+  // mismo número aunque lleguen al mismo tiempo. El código legible que se
+  // le muestra a la persona (ej. "CC-P-003") se arma con esto + box.type,
+  // ver formatPettyCashCode() en src/lib/pettyCash.ts.
+  requestNumber Int @default(autoincrement()) @unique
 
   amount      Float
   description String
@@ -696,7 +702,6 @@ model PettyCashEntry {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@unique([boxId, requestNumber])
   @@index([boxId])
   @@index([linkedGroupId])
 }
@@ -1153,6 +1158,11 @@ model PurchaseRequest {
   // grupo"). El total leído por IA se compara contra la SUMA de todas las
   // líneas del grupo, no una por una.
   groupId String
+  // Confirmado 2026-08-05: código correlativo (SC-001, SC-002...) para
+  // control y la auditoría semestral — una sola numeración para todo el
+  // módulo, compartida por todas las filas del mismo groupId (se asigna una
+  // vez por grupo, no por fila). Null en solicitudes de antes de este cambio.
+  requestNumber Int?
   deptId String
   dept   Department @relation(fields: [deptId], references: [id], onDelete: Cascade)
 

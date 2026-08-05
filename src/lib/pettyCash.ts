@@ -16,6 +16,13 @@ export async function getOrCreateBox(type: PettyCashBoxTypeStr) {
   return prisma.pettyCashBox.upsert({ where: { type }, create: { type }, update: {} });
 }
 
+// Confirmado 2026-08-05: UN código legible por movimiento — "CC-P-003",
+// "CC-S-002"... — el número es un solo contador compartido entre las dos
+// cajas (nunca dos independientes), la letra dice de cuál caja era.
+export function formatPettyCashCode(boxType: PettyCashBoxTypeStr, requestNumber: number): string {
+  return `CC-${boxType === "PRINCIPAL" ? "P" : "S"}-${String(requestNumber).padStart(3, "0")}`;
+}
+
 async function computeBalance(boxId: string): Promise<number> {
   const entries = await prisma.pettyCashEntry.findMany({
     where: { boxId, archived: false },
@@ -43,6 +50,7 @@ export async function hasPendingConfirmation(boxId: string): Promise<boolean> {
 export type PettyCashEntryDTO = {
   id: string;
   requestNumber: number;
+  code: string;
   kind: "DESEMBOLSO" | "RECARGA";
   amount: number;
   description: string;
@@ -76,10 +84,11 @@ async function toEntryDTO(e: {
   proofUrl: string | null; aiReadAmount: number | null; aiMatches: boolean | null;
   linkedGroupId: string | null; manualReason: string | null; confirmedAt: Date | null;
   archived: boolean; createdAt: Date; createdBy: { name: string } | null; confirmedBy: { name: string } | null;
-}): Promise<PettyCashEntryDTO> {
+}, boxType: PettyCashBoxTypeStr): Promise<PettyCashEntryDTO> {
   return {
     id: e.id,
     requestNumber: e.requestNumber,
+    code: formatPettyCashCode(boxType, e.requestNumber),
     kind: e.kind as "DESEMBOLSO" | "RECARGA",
     amount: e.amount,
     description: e.description,
@@ -127,9 +136,9 @@ export async function getPettyCashBoxData(type: PettyCashBoxTypeStr): Promise<Pe
     balance,
     isLow: balance <= box.minThreshold,
     blocked: pending.length > 0,
-    entries: await Promise.all(active.map(toEntryDTO)),
-    archivedEntries: await Promise.all(archived.map(toEntryDTO)),
-    pendingRecharges: await Promise.all(pending.map(toEntryDTO)),
+    entries: await Promise.all(active.map((e) => toEntryDTO(e, type))),
+    archivedEntries: await Promise.all(archived.map((e) => toEntryDTO(e, type))),
+    pendingRecharges: await Promise.all(pending.map((e) => toEntryDTO(e, type))),
   };
 }
 
@@ -200,16 +209,6 @@ export async function markGroupFreightPaid(groupId: string, paidById: string | n
   });
 }
 
-// Confirmado 2026-08-05: numeración correlativa por caja, para control y la
-// auditoría semestral — incrementado dentro de una transacción para que
-// nunca se repita aunque lleguen dos solicitudes al mismo tiempo.
-export async function nextRequestNumber(boxId: string): Promise<number> {
-  const updated = await prisma.pettyCashBox.update({
-    where: { id: boxId },
-    data: { lastRequestNumber: { increment: 1 } },
-  });
-  return updated.lastRequestNumber;
-}
 
 export type PendingExceptionDTO = { id: string; groupId: string; label: string; reason: string; requestedByName: string };
 

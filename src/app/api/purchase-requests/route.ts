@@ -4,7 +4,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { canSubmitPurchaseRequests, canConfirmPurchaseReceiving, canRegisterPurchaseInvoices } from "@/lib/guards";
-import { effectiveUnitCost, getCatalogItemPriceStats } from "@/lib/purchases";
+import { effectiveUnitCost, getCatalogItemPriceStats, nextPurchaseRequestNumber } from "@/lib/purchases";
 import { sendPushToOwner } from "@/lib/webPush";
 
 const bankAccountSelect = { id: true, bankName: true, bankAccountType: true, bankAccountNumber: true, bankAccountHolder: true, holderIdType: true, holderIdNumber: true };
@@ -207,12 +207,14 @@ export async function POST(req: NextRequest) {
   const nameById = new Map(catalogItems.map((c) => [c.id, c.name]));
 
   const groupId = randomUUID();
+  const requestNumber = await nextPurchaseRequestNumber();
   const requests = await prisma.$transaction(
     d.items.map((it) => {
       const lineShipping = d.shippingIncluded || !d.shippingCostTotal ? null : (d.shippingCostTotal * it.quantity) / totalQty;
       return prisma.purchaseRequest.create({
         data: {
           groupId,
+          requestNumber,
           deptId: effectiveDeptId,
           catalogItemId: it.catalogItemId,
           supplierId: d.supplierId,

@@ -8,9 +8,17 @@ import { usePasteFile } from "@/lib/usePasteFile";
 import type { BankAccountDTO } from "./PurchaseSupplierPicker";
 import { actorName } from "@/lib/actorName";
 
+// Nota: formateo puro repetido a propósito (no importado de purchases.ts)
+// porque ese archivo trae `prisma` y este componente es "use client" — igual
+// que recognitionAdmin.ts/recognition.ts, mezclar rompe el build de Turbopack.
+function formatPurchaseRequestCode(requestNumber: number): string {
+  return `SC-${String(requestNumber).padStart(3, "0")}`;
+}
+
 type Row = {
   id: string;
   groupId: string;
+  requestNumber: number | null;
   status: "PENDING_APPROVAL" | "REJECTED" | "APPROVED" | "PAID" | "RECEIVED";
   quantity: number;
   totalCost: number;
@@ -228,6 +236,9 @@ function GroupCard({ g, onPurchaseOrderUploaded, onGroupUpdate }: { g: Row[]; on
     <div className={`bg-surface border rounded-md p-4 ${needsPurchaseOrder ? "border-gold/40" : "border-rule"}`}>
       <div className="flex items-center justify-between gap-3 flex-wrap mb-2.5">
         <div>
+          {g[0].requestNumber !== null && (
+            <div className="font-mono text-[10.5px] text-teal mb-0.5">{formatPurchaseRequestCode(g[0].requestNumber)}</div>
+          )}
           {g.map((r) => (
             <div key={r.id} className="text-[13.5px] font-bold">
               {r.catalogItem.name} · {r.quantity} un.

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/auth";
 import { canManagePettyCashPrincipal } from "@/lib/guards";
-import { getOrCreateBox, nextRequestNumber } from "@/lib/pettyCash";
+import { getOrCreateBox } from "@/lib/pettyCash";
 import { hashFileFromUrl } from "@/lib/fileHash";
 import { readPettyCashProof } from "@/lib/pettyCashAi";
 import { prisma } from "@/lib/prisma";
@@ -59,12 +59,10 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const requestNumber = await nextRequestNumber(box.id);
   const entry = await prisma.pettyCashEntry.create({
     data: {
       boxId: box.id,
       kind: "RECARGA",
-      requestNumber,
       amount: d.amount,
       description: d.description,
       proofUrl: d.proofUrl || null,

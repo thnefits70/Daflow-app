@@ -4,7 +4,7 @@ import { auth } from "@/auth";
 import { canManagePettyCashPrincipal, canManagePettyCashSecundaria } from "@/lib/guards";
 import {
   getOrCreateBox, hasPendingConfirmation, checkFreightAlreadyPaid, hasApprovedException,
-  markGroupFreightPaid, nextRequestNumber,
+  markGroupFreightPaid,
 } from "@/lib/pettyCash";
 import { hashFileFromUrl } from "@/lib/fileHash";
 import { readPettyCashProof } from "@/lib/pettyCashAi";
@@ -75,13 +75,11 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const requestNumber = await nextRequestNumber(box.id);
   const isAdmin = session.user.role === "admin";
   const entry = await prisma.pettyCashEntry.create({
     data: {
       boxId: box.id,
       kind: "DESEMBOLSO",
-      requestNumber,
       amount: d.amount,
       description: d.description,
       proofUrl: d.proofUrl || null,
