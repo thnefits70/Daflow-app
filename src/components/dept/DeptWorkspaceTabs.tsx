@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { GitBranch, FileText, GraduationCap, LineChart, TrendingUp, MessageSquare, CalendarClock, BellRing, Receipt, Heart, ShoppingCart, Package, Pin, Wallet } from "lucide-react";
+import { GitBranch, FileText, GraduationCap, LineChart, TrendingUp, MessageSquare, CalendarClock, BellRing, Receipt, Heart, ShoppingCart, Package, Pin, Wallet, BarChart3 } from "lucide-react";
 import { ProcessEmbeddedPanel } from "@/components/process/ProcessEmbeddedPanel";
 import type { ProcessDTO } from "@/components/process/ProcessEditor";
 import type { ProcessUpdateDTO } from "@/components/process/ProcessHistoryPanel";
@@ -22,7 +22,8 @@ import { WeeklyMetricPanel, type WeeklyMetricDTO } from "@/components/fulfillmen
 import { WeeklyReviewPanel, type WeeklyReviewDTO } from "@/components/marketanalysis/WeeklyReviewPanel";
 import { PurchaseControlPanel } from "@/components/purchases/PurchaseControlPanel";
 import { InventoryControlPanel } from "@/components/inventory/InventoryControlPanel";
-import type { InventoryControlPeriodDTO } from "@/lib/inventoryKpis";
+import { InventoryKpisPanel } from "@/components/finance/InventoryKpisPanel";
+import type { InventoryControlPeriodDTO, InventoryKpisDataDTO } from "@/lib/inventoryKpis";
 import { PettyCashPanel } from "@/components/pettycash/PettyCashPanel";
 import { PettyCashExceptionsPanel } from "@/components/pettycash/PettyCashExceptionsPanel";
 import type { PettyCashViewerData } from "@/lib/pettyCash";
@@ -41,6 +42,7 @@ const ALL_TABS = [
   { key: "comprobante", label: "Comprobante de pago", icon: Receipt },
   { key: "compras", label: "Control de Compras", icon: ShoppingCart },
   { key: "inventario", label: "Control de Inventario", icon: Package },
+  { key: "inventoriokpis", label: "KPIs de Inventario", icon: BarChart3 },
   { key: "cajachica", label: "Caja Chica", icon: Wallet },
   { key: "postventa", label: "Servicio Postventa", icon: Heart },
   { key: "documentos", label: "Documentos", icon: FileText },
@@ -77,6 +79,8 @@ export function DeptWorkspaceTabs({
   canInvoicePurchases = false,
   canManageInventoryControl = false,
   inventoryControlData = null,
+  canViewInventoryKpisPanel = false,
+  inventoryKpisData = null,
   pettyCashData = null,
   preferredTab = null,
   isAdmin = false,
@@ -127,6 +131,12 @@ export function DeptWorkspaceTabs({
   // propia "Mi área de trabajo" sin importar si su departamento real es INV.
   canManageInventoryControl?: boolean;
   inventoryControlData?: { currentPeriod: string; periods: InventoryControlPeriodDTO[] } | null;
+  // KPIs de inventario completos (no solo la tarjeta de Inicio) — confirmado
+  // 2026-08-05: Daniel (INV) y Bryan (MKT) los ven en su propia "Mi área de
+  // trabajo"; Nairoby y admin ya los ven vía KPIs financieros → Inventario,
+  // así que esta pestaña no se les agrega ahí para no duplicar la vista.
+  canViewInventoryKpisPanel?: boolean;
+  inventoryKpisData?: InventoryKpisDataDTO | null;
   // Caja Chica — confirmado 2026-08-05: null si la persona no ve ninguna de
   // las dos cajas (ni Principal ni Secundaria le corresponde).
   pettyCashData?: PettyCashViewerData | null;
@@ -152,6 +162,7 @@ export function DeptWorkspaceTabs({
     if (t.key === "comprobante") return canViewPurchaseReceipts;
     if (t.key === "compras") return canSubmitPurchases || canReceivePurchases || canInvoicePurchases;
     if (t.key === "inventario") return canManageInventoryControl;
+    if (t.key === "inventoriokpis") return canViewInventoryKpisPanel;
     if (t.key === "cajachica") return !!(pettyCashData?.principal || pettyCashData?.secundaria);
     if (t.key === "postventa") return canManageStoreFeedback || canViewStoreFeedback;
     return true;
@@ -252,6 +263,9 @@ export function DeptWorkspaceTabs({
           currentPeriodDefault={inventoryControlData.currentPeriod}
           periods={inventoryControlData.periods}
         />
+      )}
+      {tab === "inventoriokpis" && canViewInventoryKpisPanel && inventoryKpisData && (
+        <InventoryKpisPanel data={inventoryKpisData} />
       )}
       {tab === "cajachica" && pettyCashData && (pettyCashData.principal || pettyCashData.secundaria) && (
         <div>

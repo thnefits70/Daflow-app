@@ -269,6 +269,24 @@ export async function canViewInventoryKpisHome() {
   return !!user?.isLeader && (code === "INV" || code === "MKT" || code === "FIN");
 }
 
+// Panel completo de KPIs de inventario (las 4 tarjetas + la tabla de
+// productos cargados), no solo la tarjeta resumida de Inicio — confirmado
+// 2026-08-05: Daniel (INV) y Bryan (MKT) no tenían dónde ver esto en detalle,
+// solo el resumen de Inicio. Nairoby (FIN) y el admin YA lo ven completo vía
+// KPIs financieros → Inventario en la página de Finanzas, así que esta
+// función NO los incluye — evita duplicar la misma vista en dos pestañas de
+// la misma persona. Se agrega como pestaña nueva en "Mi área de trabajo".
+export async function canViewInventoryKpisPanel() {
+  const session = await auth();
+  if (!session || session.user.role === "admin") return false;
+  const user = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { isLeader: true, leadsDept: { select: { code: true } } },
+  });
+  const code = user?.leadsDept?.code;
+  return !!user?.isLeader && (code === "INV" || code === "MKT");
+}
+
 // Caja Chica Principal — confirmado 2026-08-05: admin, o quien lidere
 // Finanzas (hoy Nairoby Castro). Misma persona que ya administra KPIs
 // financieros/Nómina para esa área.

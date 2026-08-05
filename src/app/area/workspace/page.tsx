@@ -3,14 +3,14 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { TopLine } from "@/components/ui/TopLine";
 import { DeptWorkspaceTabs } from "@/components/dept/DeptWorkspaceTabs";
-import { getUnseenFeedbackCount, canManageStoreFeedback as checkCanManageStoreFeedback, canViewStoreFeedback as checkCanViewStoreFeedback, canSubmitPurchaseRequests, canConfirmPurchaseReceiving, canRegisterPurchaseInvoices, canManageInventoryControl as checkCanManageInventoryControl } from "@/lib/guards";
+import { getUnseenFeedbackCount, canManageStoreFeedback as checkCanManageStoreFeedback, canViewStoreFeedback as checkCanViewStoreFeedback, canSubmitPurchaseRequests, canConfirmPurchaseReceiving, canRegisterPurchaseInvoices, canManageInventoryControl as checkCanManageInventoryControl, canViewInventoryKpisPanel as checkCanViewInventoryKpisPanel } from "@/lib/guards";
 import { getFinanceKpiData } from "@/lib/financeKpis";
 import { getDeptProcessDetail } from "@/lib/processDetail";
 import { getPaymentRemindersData } from "@/lib/paymentReminders";
 import { getPeriodicReminders } from "@/lib/periodicReminders";
 import { getPurchaseReceipts, getPurchaseReceiptCatalogs } from "@/lib/purchaseReceipts";
 import { getStoreFeedbackData } from "@/lib/storeFeedback";
-import { getInventoryControlData } from "@/lib/inventoryKpis";
+import { getInventoryControlData, getInventoryKpisData } from "@/lib/inventoryKpis";
 import { getPettyCashViewerData } from "@/lib/pettyCash";
 
 export default async function WorkspacePage() {
@@ -43,8 +43,12 @@ export default async function WorkspacePage() {
   // 2026-08-04): Daniel lo ve desde su propia "Mi área de trabajo" sin
   // importar si su departamento real es INV.
   const canManageInventoryControl = await checkCanManageInventoryControl();
+  // KPIs de inventario completos en "Mi área de trabajo" — confirmado
+  // 2026-08-05: solo Daniel (INV) y Bryan (MKT), Nairoby/admin ya lo ven vía
+  // KPIs financieros → Inventario (ver canViewInventoryKpisPanel en guards.ts).
+  const canViewInventoryKpisPanel = await checkCanViewInventoryKpisPanel();
 
-  const [processDetail, periodicReminders, documents, exams, financeKpiData, paymentReminders, weeklyMetricRecords, weeklyReviewRecords, currentUser, unseenFeedbackCount, purchaseReceipts, purchaseReceiptCatalogs, storeFeedbackStores, inventoryControlData, pettyCashData] = await Promise.all([
+  const [processDetail, periodicReminders, documents, exams, financeKpiData, paymentReminders, weeklyMetricRecords, weeklyReviewRecords, currentUser, unseenFeedbackCount, purchaseReceipts, purchaseReceiptCatalogs, storeFeedbackStores, inventoryControlData, inventoryKpisData, pettyCashData] = await Promise.all([
     getDeptProcessDetail(dept.id),
     getPeriodicReminders(dept.id),
     prisma.document.findMany({ where: { deptId: dept.id }, orderBy: { createdAt: "asc" } }),
@@ -75,6 +79,7 @@ export default async function WorkspacePage() {
     dept.code === "COM" ? getPurchaseReceiptCatalogs(dept.id) : Promise.resolve({ suppliers: [], banks: [] }),
     canManageStoreFeedback || canViewStoreFeedback ? getStoreFeedbackData() : Promise.resolve([]),
     canManageInventoryControl ? getInventoryControlData() : Promise.resolve(null),
+    canViewInventoryKpisPanel ? getInventoryKpisData() : Promise.resolve(null),
     getPettyCashViewerData(false),
   ]);
 
@@ -138,6 +143,8 @@ export default async function WorkspacePage() {
         canInvoicePurchases={canInvoicePurchases}
         canManageInventoryControl={canManageInventoryControl}
         inventoryControlData={inventoryControlData}
+        canViewInventoryKpisPanel={canViewInventoryKpisPanel}
+        inventoryKpisData={inventoryKpisData}
         pettyCashData={pettyCashData}
         preferredTab={currentUser?.defaultWorkspaceTab ?? null}
         isAdmin={false}
