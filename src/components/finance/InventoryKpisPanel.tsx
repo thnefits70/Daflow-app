@@ -3,6 +3,7 @@
 import type { InventoryKpisDataDTO } from "@/lib/inventoryKpis";
 import { quarterLabel, staleBucket } from "@/lib/inventoryKpisCalc";
 import { TrendSpark } from "@/components/shared/TrendSpark";
+import { KpiInfoTip } from "@/components/shared/KpiInfoTip";
 
 const MONTH_NAMES = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
 function monthLabel(period: string) {
@@ -30,8 +31,13 @@ export function InventoryKpisPanel({ data }: { data: InventoryKpisDataDTO }) {
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
       {/* 1. Rotación / DIO */}
       <div className="bg-surface border border-rule rounded-md p-4.5" style={{ borderTop: "2px solid #14c7c7" }}>
-        <div className="flex items-center justify-between mb-1">
-          <div className="font-semibold text-[13.5px]">Rotación de inventario (DIO)</div>
+        <div className="flex items-center justify-between mb-1 flex-wrap gap-y-1.5">
+          <div className="flex items-center gap-1.5">
+            <div className="font-semibold text-[13.5px]">Rotación de inventario (DIO)</div>
+            <KpiInfoTip>
+              <b className="text-ink">Días de inventario:</b> cuántos días te tomaría vender todo lo que tienes guardado, al ritmo actual. Ejemplo: si tienes $10,000 en productos y cada mes vendes $5,000 en costo, tardarías 2 meses (≈60 días) en vender lo que hay hoy. Mientras más bajo, mejor — el dinero no se queda &quot;dormido&quot; en la bodega.
+            </KpiInfoTip>
+          </div>
           {lastPeriod && <span className="font-mono text-[10px] uppercase text-steel bg-cloud rounded-full px-2 py-0.5">{monthLabel(lastPeriod)}</span>}
         </div>
         <div className="flex items-baseline gap-2 mt-2">
@@ -46,8 +52,13 @@ export function InventoryKpisPanel({ data }: { data: InventoryKpisDataDTO }) {
 
       {/* 2. Inventario vs Ventas */}
       <div className="bg-surface border border-rule rounded-md p-4.5" style={{ borderTop: "2px solid #1e5eff" }}>
-        <div className="flex items-center justify-between mb-1">
-          <div className="font-semibold text-[13.5px]">Inventario vs. Ventas (mensual)</div>
+        <div className="flex items-center justify-between mb-1 flex-wrap gap-y-1.5">
+          <div className="flex items-center gap-1.5">
+            <div className="font-semibold text-[13.5px]">Inventario vs. Ventas (mensual)</div>
+            <KpiInfoTip>
+              <b className="text-ink">Compara si lo guardado crece al mismo ritmo que lo vendido.</b> Ejemplo: si tu inventario subió de $40,000 a $50,000 pero las ventas del mes se quedaron igual, es señal de que se está comprando más de lo que el negocio realmente está absorbiendo — mercadería que se puede acumular sin venderse.
+            </KpiInfoTip>
+          </div>
           {lastPeriod && <span className="font-mono text-[10px] uppercase text-steel bg-cloud rounded-full px-2 py-0.5">{monthLabel(lastPeriod)}</span>}
         </div>
         <div className="text-[11px] text-steel mt-2 mb-2">
@@ -75,8 +86,13 @@ export function InventoryKpisPanel({ data }: { data: InventoryKpisDataDTO }) {
 
       {/* 3. GMROI */}
       <div className="bg-surface border border-rule rounded-md p-4.5" style={{ borderTop: "2px solid #22a67e" }}>
-        <div className="flex items-center justify-between mb-1">
-          <div className="font-semibold text-[13.5px]">GMROI</div>
+        <div className="flex items-center justify-between mb-1 flex-wrap gap-y-1.5">
+          <div className="flex items-center gap-1.5">
+            <div className="font-semibold text-[13.5px]">GMROI</div>
+            <KpiInfoTip>
+              <b className="text-ink">Por cada $1 invertido en inventario, cuánta ganancia bruta genera.</b> Ejemplo: un GMROI de 0.5x significa que por cada $1 en inventario, solo se generan $0.50 de ganancia — menos de lo invertido. Un GMROI de 2x significa $2 de ganancia por cada $1 invertido — mucho mejor.
+            </KpiInfoTip>
+          </div>
           {lastPeriod && <span className="font-mono text-[10px] uppercase text-steel bg-cloud rounded-full px-2 py-0.5">{monthLabel(lastPeriod)}</span>}
         </div>
         <div className="flex items-baseline gap-2 mt-2">
@@ -95,8 +111,13 @@ export function InventoryKpisPanel({ data }: { data: InventoryKpisDataDTO }) {
 
       {/* 4. Productos sin movimiento */}
       <div className="bg-surface border border-rule rounded-md p-4.5" style={{ borderTop: "2px solid #e0574a" }}>
-        <div className="flex items-center justify-between mb-1">
-          <div className="font-semibold text-[13.5px]">Productos sin movimiento</div>
+        <div className="flex items-center justify-between mb-1 flex-wrap gap-y-1.5">
+          <div className="flex items-center gap-1.5">
+            <div className="font-semibold text-[13.5px]">Productos sin movimiento</div>
+            <KpiInfoTip>
+              <b className="text-ink">% del valor de inventario que lleva tiempo sin venderse</b>, revisado cada 3 meses por Daniel. Ejemplo: si el 15% de tu inventario está &quot;sin movimiento&quot;, de cada $100 guardados, $15 son productos que nadie está comprando — dinero que podría estar generando ventas en otro producto.
+            </KpiInfoTip>
+          </div>
           <span className="font-mono text-[10px] uppercase text-steel bg-cloud rounded-full px-2 py-0.5">Revisión trimestral · Daniel</span>
         </div>
         <div className="flex items-baseline gap-2 mt-2">
