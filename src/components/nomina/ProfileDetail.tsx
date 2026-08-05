@@ -38,6 +38,7 @@ type UserProfile = {
   canManagePurchases: boolean;
   canManageStoreFeedback: boolean;
   canViewStoreFeedback: boolean;
+  excludeFromRecognition: boolean;
   isActive: boolean;
   milestones: Milestone[];
   examScores: ExamScore[];
@@ -777,6 +778,31 @@ export function ProfileDetail({
                 type="button"
                 className={`flex-1 py-1.5 text-[12.5px] font-semibold cursor-pointer ${!p.canViewStoreFeedback ? "bg-blue text-white" : "bg-surface text-steel"}`}
                 onClick={() => save({ canViewStoreFeedback: false })}
+              >
+                No
+              </button>
+            </div>
+          </div>
+
+          <div className="bg-cloud border border-rule rounded p-3.5 mt-3.5">
+            <label className="flex items-center gap-1 mb-2 text-[10.5px] font-semibold uppercase tracking-wide text-steel">
+              <Award size={11} /> ¿Excluir de &quot;Colaborador del mes&quot;?
+            </label>
+            <div className="text-[11px] text-steel mb-2">
+              Su líder deja de verla en la lista para calificar y nunca se generan evaluaciones nuevas para ella. Las evaluaciones de meses anteriores no se borran.
+            </div>
+            <div className="flex border border-rule rounded overflow-hidden max-w-[220px]">
+              <button
+                type="button"
+                className={`flex-1 py-1.5 text-[12.5px] font-semibold cursor-pointer ${p.excludeFromRecognition ? "bg-blue text-white" : "bg-surface text-steel"}`}
+                onClick={() => save({ excludeFromRecognition: true })}
+              >
+                Sí
+              </button>
+              <button
+                type="button"
+                className={`flex-1 py-1.5 text-[12.5px] font-semibold cursor-pointer ${!p.excludeFromRecognition ? "bg-blue text-white" : "bg-surface text-steel"}`}
+                onClick={() => save({ excludeFromRecognition: false })}
               >
                 No
               </button>

@@ -156,6 +156,11 @@ model User {
   // tocar código, igual que canManagePurchases.
   canManageInventoryControl Boolean @default(false)
 
+  // Confirmado 2026-08-05: excluye a esta persona de "Colaborador del mes"
+  // por completo — su líder ya no la ve en su lista para calificar, y nunca
+  // se generan evaluaciones nuevas para ella. No borra evaluaciones pasadas.
+  excludeFromRecognition Boolean @default(false)
+
   // Pestaña con la que "Mi área de trabajo" abre para ESTE usuario en vez del
   // default por departamento — confirmado 2026-08-04 (ej. Nairoby o el admin
   // pueden preferir otra distinta a "Feedback semanal"). Null = usar el

@@ -43,6 +43,7 @@ export default async function NominaProfilePage({ params }: { params: Promise<{ 
         canManagePurchases: user.canManagePurchases,
         canManageStoreFeedback: user.canManageStoreFeedback,
         canViewStoreFeedback: user.canViewStoreFeedback,
+        excludeFromRecognition: user.excludeFromRecognition,
         isActive: user.isActive,
         milestones: user.milestones.map((m) => ({
           id: m.id,
