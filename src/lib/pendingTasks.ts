@@ -1,6 +1,6 @@
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { isFixedHoliday } from "@/lib/recognition";
+import { isFixedHoliday, evaluationDeadline, adminConfirmDeadline } from "@/lib/recognition";
 
 // ---------------- Date helpers ----------------
 // Deadline rule confirmed by the user 2026-07-20: work week is Mon-Sat, and
@@ -204,6 +204,7 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   servicio_postventa: "Servicio Postventa",
   pedidos_despachados: "Pedidos despachados / Fill Rate",
   ruptura_stock: "Ruptura de Stock",
+  colaborador_del_mes: "Colaborador del mes — calificar equipo",
 };
 
 // Each department's admin-leader feedback meeting falls on a different
@@ -447,6 +448,101 @@ async function getStoreFeedbackPendingItem(href: string): Promise<PendingItem | 
   };
 }
 
+// "Colaborador del mes" — confirmado 2026-08-05: a diferencia de los demás
+// pendientes de este archivo (que solo avisan una vez atrasados), este
+// empieza a avisar ANTES del plazo (últimos 5 días calendario del mes) para
+// dar tiempo real de calificar a todo el equipo antes de que cierre — el
+// objetivo es que el ganador del mes se sepa antes del día 7 del mes
+// siguiente, no solo detectar el atraso después de que ya pasó.
+const RECOGNITION_LEADER_HEADS_UP_DAYS = 5;
+
+async function getMissingEvaluatees(evaluatorIsAdmin: boolean, leaderDeptId: string | null, month: string) {
+  const where = evaluatorIsAdmin
+    ? { isLeader: true as const, isActive: true, excludeFromRecognition: false }
+    : { deptId: leaderDeptId!, isLeader: false as const, isActive: true, excludeFromRecognition: false };
+  const evaluatees = await prisma.user.findMany({ where, select: { id: true, name: true } });
+  if (evaluatees.length === 0) return [];
+  const done = await prisma.monthlyEvaluation.findMany({
+    where: { month, evaluateeId: { in: evaluatees.map((u) => u.id) } },
+    select: { evaluateeId: true },
+  });
+  const doneIds = new Set(done.map((e) => e.evaluateeId));
+  return evaluatees.filter((u) => !doneIds.has(u.id));
+}
+
+// One per leader (any department) — Bryan/Nairoby/Daniel/etc. all evaluate
+// their own team monthly, regardless of what other pending items they have.
+async function getRecognitionLeaderPendingItem(leaderDeptId: string, href: string): Promise<PendingItem | null> {
+  const month = currentMonthStr();
+  const deadline = evaluationDeadline(month);
+  const now = nowInEcuador();
+  const headsUpStart = new Date(deadline.getTime() - RECOGNITION_LEADER_HEADS_UP_DAYS * 86400000);
+  if (now < headsUpStart) return null;
+
+  const missing = await getMissingEvaluatees(false, leaderDeptId, month);
+  if (missing.length === 0) return null;
+
+  const overdue = now >= deadline;
+  const names = missing.slice(0, 3).map((u) => u.name).join(", ") + (missing.length > 3 ? ` y ${missing.length - 3} más` : "");
+  return {
+    type: "colaborador_del_mes",
+    icon: "🏆",
+    label: "Colaborador del mes — calificar a tu equipo",
+    meta: `Faltan ${missing.length}: ${names} · ${formatMonthLabel(month)}${overdue ? " · atrasado" : ""}`,
+    overdue,
+    href,
+  };
+}
+
+// Para el admin — a diferencia del resto de "Pendientes de esta semana"
+// (feedback), este mira los últimos 2 meses (el actual recién cerrado y el
+// anterior, por si quedó pendiente) y solo aparece una vez que el plazo de
+// los líderes ya venció, listando exactamente a quién le falta — no un
+// aviso genérico. Se pone "atrasado" (urgente) cuando ya pasó el plazo de 5
+// días hábiles que el admin tiene para confirmar (~día 7).
+async function getRecognitionAdminPendingItem(href: string): Promise<PendingItem | null> {
+  const now = nowInEcuador();
+  const cur = currentMonthStr();
+  const prev = prevMonthStr(cur);
+
+  for (const month of [prev, cur]) {
+    const deadline = evaluationDeadline(month);
+    if (now < deadline) continue;
+    const alreadyConfirmed = await prisma.monthlyRecognitionResult.findFirst({ where: { month } });
+    if (alreadyConfirmed) continue;
+
+    // Non-leaders span every department, so this checks all of them at once
+    // instead of the per-leader-deptId helper used elsewhere in this file.
+    const [missingLeaders, nonLeaders] = await Promise.all([
+      getMissingEvaluatees(true, null, month),
+      prisma.user.findMany({
+        where: { isLeader: false, isActive: true, excludeFromRecognition: false },
+        select: { id: true, name: true },
+      }),
+    ]);
+    const doneNonLeaders = await prisma.monthlyEvaluation.findMany({
+      where: { month, evaluateeId: { in: nonLeaders.map((u) => u.id) } },
+      select: { evaluateeId: true },
+    });
+    const doneNonLeaderIds = new Set(doneNonLeaders.map((e) => e.evaluateeId));
+    const missingTeam = nonLeaders.filter((u) => !doneNonLeaderIds.has(u.id));
+    const missing = [...missingLeaders, ...missingTeam];
+    if (missing.length === 0) continue;
+
+    const overdue = now >= adminConfirmDeadline(month);
+    const names = missing.slice(0, 4).map((u) => u.name).join(", ") + (missing.length > 4 ? ` y ${missing.length - 4} más` : "");
+    return {
+      type: "colaborador_del_mes",
+      icon: "🏆",
+      label: "Colaborador del mes — falta calificar/confirmar",
+      meta: `Faltan ${missing.length}: ${names} · ${formatMonthLabel(month)}${overdue ? " · atrasado" : ""}`,
+      overdue,
+      href,
+    };
+  }
+  return null;
+}
+
 // ---------------- Entry point ----------------
 // Each person only ever sees what's specifically assigned to them — admin
 // gets Feedback semanal (the one thing only admin can write), a department
@@ -461,7 +557,11 @@ export type PendingTasksActor = { isAdmin: true } | { isAdmin: false; userId: st
 
 export async function getPendingTasksForActor(actor: PendingTasksActor): Promise<PendingTasks | null> {
   if (actor.isAdmin) {
-    const items = await getFeedbackPendingItems();
+    const [feedbackItems, recognitionItem] = await Promise.all([
+      getFeedbackPendingItems(),
+      getRecognitionAdminPendingItem("/admin/colaborador-destacado"),
+    ]);
+    const items = [...feedbackItems, ...(recognitionItem ? [recognitionItem] : [])];
     if (items.length === 0) return null;
     return { title: "Pendientes de esta semana", sub: "Como administrador", items };
   }
@@ -505,6 +605,9 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     if (item) items.push(item);
   }
 
+  const recognitionItem = await getRecognitionLeaderPendingItem(me.leadsDeptId, "/area/colaborador-destacado");
+  if (recognitionItem) items.push(recognitionItem);
+
   if (items.length === 0) return null;
   return {
     title: monthly ? "Pendientes de este mes" : "Pendientes de esta semana",
@@ -531,7 +634,7 @@ export async function getPossiblePendingTypesForActor(
   const types: string[] = [];
 
   if (actor.isAdmin) {
-    types.push("feedback");
+    types.push("feedback", "colaborador_del_mes");
   } else {
     const me = await prisma.user.findUnique({
       where: { id: actor.userId },
@@ -544,6 +647,7 @@ export async function getPossiblePendingTypesForActor(
     }
     if (me.leadsDept.trackWeeklyMetric) types.push("pedidos_despachados");
     if (me.leadsDept.code === "INV") types.push("ruptura_stock");
+    types.push("colaborador_del_mes");
   }
 
   return types.map((type) => ({ type, label: PENDING_TYPE_CATALOG[type] }));
