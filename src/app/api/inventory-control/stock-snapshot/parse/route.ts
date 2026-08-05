@@ -23,11 +23,21 @@ function num(v: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-// El reporte real de Provedix ("saldos costeados y valorizados") trae estas
-// columnas exactas (confirmado 2026-08-05 con captura del usuario):
-// codigoproducto, costo promedio, descripcion, stockactual — se normalizan
-// (minúsculas, sin espacios/acentos) para tolerar variaciones menores del
-// export sin depender de una plantilla fija de DAFLOW como finance-kpis.
+// El reporte real de Provedix ("saldos costeados y valorizados") no tiene una
+// plantilla fija de DAFLOW (a diferencia de finance-kpis) — el nombre exacto
+// de cada columna puede variar entre exportaciones (confirmado 2026-08-05: el
+// export real trae "codigproducto", sin la "o" de "código", no
+// "codigoproducto" como se asumió al ver la primera captura). Por eso el
+// emparejamiento es por coincidencia parcial sobre la clave normalizada
+// (minúsculas, sin acentos/espacios), no por igualdad exacta.
+function findColumn(keys: string[], substrings: string[]): string | undefined {
+  for (const s of substrings) {
+    const found = keys.find((k) => normalizeKey(k).includes(s));
+    if (found) return found;
+  }
+  return undefined;
+}
+
 export async function POST(req: NextRequest) {
   if (!(await canManageInventoryControl())) {
     return NextResponse.json({ error: "No autorizado." }, { status: 403 });
@@ -74,16 +84,36 @@ export async function POST(req: NextRequest) {
   const warnings: string[] = [];
   const rows: { productCode: string; description: string; avgCost: number; stock: number; costTotal: number }[] = [];
 
-  for (const raw of rawRows) {
-    const normalized: RawRow = {};
-    for (const [k, v] of Object.entries(raw)) normalized[normalizeKey(k)] = v;
+  if (rawRows.length === 0) {
+    return NextResponse.json({ error: "El archivo no tiene filas de datos." }, { status: 400 });
+  }
 
-    const productCode = String(normalized["codigoproducto"] ?? "").trim();
+  const columnKeys = Object.keys(rawRows[0]);
+  const codeKey = findColumn(columnKeys, ["codig"]);
+  const descKey = findColumn(columnKeys, ["descripcion"]);
+  const costKey = findColumn(columnKeys, ["costo"]);
+  const stockKey = findColumn(columnKeys, ["stock"]);
+
+  if (!codeKey || !descKey || !costKey || !stockKey) {
+    const missing = [
+      !codeKey && "código de producto",
+      !descKey && "descripción",
+      !costKey && "costo promedio",
+      !stockKey && "stock actual",
+    ].filter(Boolean);
+    return NextResponse.json(
+      { error: `No se reconocieron estas columnas en el archivo: ${missing.join(", ")}. Columnas encontradas: ${columnKeys.join(", ")}.` },
+      { status: 400 }
+    );
+  }
+
+  for (const raw of rawRows) {
+    const productCode = String(raw[codeKey] ?? "").trim();
     if (!productCode) continue; // fila vacía o de totales al final del reporte
 
-    const description = String(normalized["descripcion"] ?? "").trim();
-    const avgCost = num(normalized["costopromedio"]);
-    const stock = num(normalized["stockactual"]);
+    const description = String(raw[descKey] ?? "").trim();
+    const avgCost = num(raw[costKey]);
+    const stock = num(raw[stockKey]);
 
     if (avgCost === null || stock === null) {
       warnings.push(`${productCode}: faltan costo promedio o stock actual — se ignora esta fila.`);
