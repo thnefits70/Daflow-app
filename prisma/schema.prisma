@@ -581,6 +581,16 @@ model FinanceSharedMonthlyBalance {
   cuentasPorCobrar Float?
   cuentasPorPagar  Float?
 
+  // Confirmado 2026-08-05: cuando Daniel (líder de Inventario) sube el
+  // inventario del mes desde "Control de Inventario", puede adjuntar una
+  // captura donde se vea ese valor — la IA lee el monto de la foto y lo
+  // compara contra lo que escribió (mismo patrón que Caja Chica), como
+  // respaldo adicional de que el número es real, no solo la confirmación
+  // manual que ya se le pide antes de guardar.
+  inventarioProofUrl     String?
+  inventarioAiReadAmount Float?
+  inventarioAiMatches    Boolean?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

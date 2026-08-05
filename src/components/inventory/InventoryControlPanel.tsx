@@ -2,9 +2,11 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, Pencil, Plus } from "lucide-react";
+import { CheckCircle2, Pencil, Plus, Upload, AlertTriangle } from "lucide-react";
 import { isReviewDue, daysUntilDue, quarterLabel } from "@/lib/inventoryKpisCalc";
 import type { StaleProductDTO } from "@/lib/inventoryKpis";
+import { usePasteFile } from "@/lib/usePasteFile";
+import { uploadFile } from "@/lib/uploadFile";
 
 const MONTH_NAMES = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
 function monthLabel(period: string) {
@@ -32,6 +34,12 @@ export function InventoryControlPanel({
   const [toast, setToast] = useState("");
   const [err, setErr] = useState("");
 
+  const [proofUrl, setProofUrl] = useState<string | null>(null);
+  const [uploadingProof, setUploadingProof] = useState(false);
+  const [verifying, setVerifying] = useState(false);
+  const [verifyResult, setVerifyResult] = useState<{ readAmount: number | null; matches: boolean } | null>(null);
+  const [confirming, setConfirming] = useState(false);
+
   const [newName, setNewName] = useState("");
   const [newValue, setNewValue] = useState("");
   const [addingProduct, setAddingProduct] = useState(false);
@@ -43,18 +51,57 @@ export function InventoryControlPanel({
   const active = products.filter((p) => p.status === "active");
   const recovered = products.filter((p) => p.status === "recovered");
 
-  async function saveMonthlyValue() {
+  const { onPaste, onMouseEnter, onMouseLeave } = usePasteFile((file) => uploadProof(file));
+
+  async function uploadProof(file: File) {
+    setUploadingProof(true);
+    setErr("");
+    const res = await uploadFile(file, "inventory-proofs");
+    setUploadingProof(false);
+    if (!res.ok) { setErr(res.error); return; }
+    setProofUrl(res.url);
+    setVerifyResult(null);
+    await verifyProof(res.url);
+  }
+
+  async function verifyProof(url: string) {
+    const n = Number(value);
+    if (Number.isNaN(n) || n < 0) return;
+    setVerifying(true);
+    const res = await fetch("/api/inventory-control/verify-value-proof", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ proofUrl: url, expectedValue: n }),
+    });
+    setVerifying(false);
+    const json = await res.json().catch(() => null);
+    if (!res.ok) { setErr(json?.error ?? "No se pudo leer la captura."); return; }
+    setVerifyResult({ readAmount: json.readAmount, matches: json.matches });
+  }
+
+  function openConfirm() {
     const n = Number(value);
     if (Number.isNaN(n) || n < 0) { setErr("Ingresa un valor válido."); return; }
+    setErr("");
+    setConfirming(true);
+  }
+
+  async function confirmSave() {
+    const n = Number(value);
     setSavingValue(true);
     setErr("");
     const res = await fetch("/api/inventory-control/monthly-value", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ value: n }),
+      body: JSON.stringify({
+        value: n, proofUrl,
+        aiReadAmount: verifyResult?.readAmount ?? null,
+        aiMatches: proofUrl ? (verifyResult?.matches ?? null) : null,
+      }),
     });
     setSavingValue(false);
     if (!res.ok) { setErr("No se pudo guardar."); return; }
+    setConfirming(false);
     setToast(`✅ Inventario de ${monthLabel(period)} guardado.`);
     router.refresh();
   }
@@ -115,22 +162,73 @@ export function InventoryControlPanel({
           <span className="font-mono text-[10px] uppercase text-steel bg-cloud rounded-full px-2 py-0.5">Cada mes</span>
         </div>
         <div className="text-[11.5px] text-steel mb-3">El mismo total que ya ves en tu reporte de saldos costeados y valorizados — {monthLabel(period)}.</div>
-        <div className="flex items-center gap-2.5">
-          <input
-            type="number" step="any" min={0}
-            className="w-48 rounded border border-rule bg-cloud px-2.5 py-2 text-[13px] font-mono text-right"
-            value={value}
-            onChange={(e) => setValue(e.target.value)}
-            placeholder="0.00"
-          />
-          <button
-            type="button" disabled={savingValue}
-            className="rounded border border-blue bg-blue px-3.5 py-2 text-[12.5px] font-semibold text-white cursor-pointer disabled:opacity-60"
-            onClick={saveMonthlyValue}
-          >
-            Guardar
-          </button>
-        </div>
+
+        {!confirming ? (
+          <>
+            <div className="flex items-center gap-2.5 mb-3">
+              <input
+                type="number" step="any" min={0}
+                className="w-48 rounded border border-rule bg-cloud px-2.5 py-2 text-[13px] font-mono text-right"
+                value={value}
+                onChange={(e) => { setValue(e.target.value); setVerifyResult(null); }}
+                placeholder="0.00"
+              />
+              <button
+                type="button" disabled={savingValue}
+                className="rounded border border-blue bg-blue px-3.5 py-2 text-[12.5px] font-semibold text-white cursor-pointer disabled:opacity-60"
+                onClick={openConfirm}
+              >
+                Guardar
+              </button>
+            </div>
+
+            {proofUrl ? (
+              <div className="flex items-center gap-2 text-[11.5px] text-teal">
+                <CheckCircle2 size={13} /> Captura adjunta
+                <button type="button" className="text-steel underline cursor-pointer ml-1" onClick={() => { setProofUrl(null); setVerifyResult(null); }}>quitar</button>
+              </div>
+            ) : uploadingProof ? (
+              <div className="text-[11.5px] text-steel">Subiendo captura…</div>
+            ) : (
+              <label
+                onPaste={onPaste} onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave}
+                className="flex items-center gap-2 border-[1.5px] border-dashed border-rule rounded-md px-3 py-2.5 cursor-pointer hover:border-teal transition-colors text-[11.5px] text-steel w-fit"
+              >
+                <Upload size={13} />
+                <span>De preferencia, adjunta una captura de tu reporte con este valor — clic, arrastra, o Ctrl+V</span>
+                <input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && uploadProof(e.target.files[0])} />
+              </label>
+            )}
+            {verifying && <div className="text-[11px] text-steel mt-1.5">La IA está leyendo la captura…</div>}
+          </>
+        ) : (
+          <div className="bg-cloud rounded-md p-3.5">
+            <div className="text-[12.5px] font-semibold mb-2">¿Confirmas que este es el valor correcto de {monthLabel(period)}?</div>
+            <div className="font-display text-[22px] font-bold mb-2">{money(Number(value))}</div>
+            {proofUrl && verifyResult && (
+              verifyResult.matches ? (
+                <div className="flex items-center gap-2 text-[11.5px] text-teal bg-teal/10 border border-teal/30 rounded-md px-2.5 py-1.5 mb-2.5">
+                  <CheckCircle2 size={13} /> La IA leyó {money(verifyResult.readAmount ?? 0)} en la captura — coincide.
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 text-[11.5px] text-red bg-red/10 border border-red/30 rounded-md px-2.5 py-1.5 mb-2.5">
+                  <AlertTriangle size={13} />
+                  {verifyResult.readAmount !== null
+                    ? `La IA leyó ${money(verifyResult.readAmount)} en la captura — no coincide con lo que escribiste. Revisa antes de continuar.`
+                    : "La IA no pudo leer un monto claro en la captura."}
+                </div>
+              )
+            )}
+            <div className="flex items-center gap-2">
+              <button type="button" disabled={savingValue} className="rounded bg-blue text-white px-3.5 py-2 text-[12.5px] font-semibold cursor-pointer disabled:opacity-60" onClick={confirmSave}>
+                Sí, guardar
+              </button>
+              <button type="button" className="text-steel text-[12.5px] cursor-pointer" onClick={() => setConfirming(false)}>
+                Cancelar, revisar
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="bg-surface border border-rule rounded-md p-4.5">
