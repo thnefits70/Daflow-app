@@ -17,7 +17,7 @@ async function fetchImageBase64(url: string): Promise<{ data: string; mediaType:
 // PDF (a diferencia de la cotización, que siempre es foto) — se arma el
 // bloque de contenido correcto según el tipo real del archivo en vez de
 // mandar bytes de PDF disfrazados de imagen, que Claude no puede leer así.
-async function fetchFileContentBlock(url: string): Promise<{ type: "image"; source: { type: "base64"; media_type: "image/jpeg" | "image/png" | "image/webp"; data: string } } | { type: "document"; source: { type: "base64"; media_type: "application/pdf"; data: string } }> {
+export async function fetchFileContentBlock(url: string): Promise<{ type: "image"; source: { type: "base64"; media_type: "image/jpeg" | "image/png" | "image/webp"; data: string } } | { type: "document"; source: { type: "base64"; media_type: "application/pdf"; data: string } }> {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`No se pudo leer el archivo (${res.status}).`);
   const contentType = res.headers.get("content-type") ?? "";

@@ -269,6 +269,49 @@ export async function canViewInventoryKpisHome() {
   return !!user?.isLeader && (code === "INV" || code === "MKT" || code === "FIN");
 }
 
+// Caja Chica Principal — confirmado 2026-08-05: admin, o quien lidere
+// Finanzas (hoy Nairoby Castro). Misma persona que ya administra KPIs
+// financieros/Nómina para esa área.
+export async function canManagePettyCashPrincipal() {
+  const session = await auth();
+  if (!session) return false;
+  if (session.user.role === "admin") return true;
+  const user = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { isLeader: true, leadsDept: { select: { code: true } } },
+  });
+  return !!user?.isLeader && user.leadsDept?.code === "FIN";
+}
+
+// Caja Chica Secundaria — confirmado 2026-08-05: admin, o quien el admin
+// delegue puntualmente vía User.canManagePettyCashSecundaria (hoy Bryan
+// Ríos) — no depende de su departamento real (Análisis de Mercado), mismo
+// patrón que canManagePurchases.
+export async function canManagePettyCashSecundaria() {
+  const session = await auth();
+  if (!session) return false;
+  if (session.user.role === "admin") return true;
+  const user = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { canManagePettyCashSecundaria: true },
+  });
+  return !!user?.canManagePettyCashSecundaria;
+}
+
+// Ver Caja Chica Principal (sin poder escribir) — confirmado 2026-08-05:
+// nunca se delega a nadie más que admin/Nairoby — Bryan NO la ve.
+export async function canViewPettyCashPrincipal() {
+  return canManagePettyCashPrincipal();
+}
+
+// Ver Caja Chica Secundaria (sin poder escribir) — confirmado 2026-08-05:
+// quien administra la Principal (Nairoby) también ve la Secundaria, porque
+// está "bajo su mando" — además de quien ya la administra (Bryan) y admin.
+export async function canViewPettyCashSecundaria() {
+  if (await canManagePettyCashSecundaria()) return true;
+  return canManagePettyCashPrincipal();
+}
+
 // Servicio Postventa (feedback de tiendas) — confirmado 2026-07-25: vive en
 // Análisis de Mercado (visible a asesores/líder de venta). Admin, quien lidera
 // Análisis de Mercado, o quien el admin delegue puntualmente vía

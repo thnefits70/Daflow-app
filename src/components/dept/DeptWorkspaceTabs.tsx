@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { GitBranch, FileText, GraduationCap, LineChart, TrendingUp, MessageSquare, CalendarClock, BellRing, Receipt, Heart, ShoppingCart, Package, Pin } from "lucide-react";
+import { GitBranch, FileText, GraduationCap, LineChart, TrendingUp, MessageSquare, CalendarClock, BellRing, Receipt, Heart, ShoppingCart, Package, Pin, Wallet } from "lucide-react";
 import { ProcessEmbeddedPanel } from "@/components/process/ProcessEmbeddedPanel";
 import type { ProcessDTO } from "@/components/process/ProcessEditor";
 import type { ProcessUpdateDTO } from "@/components/process/ProcessHistoryPanel";
@@ -23,6 +23,9 @@ import { WeeklyReviewPanel, type WeeklyReviewDTO } from "@/components/marketanal
 import { PurchaseControlPanel } from "@/components/purchases/PurchaseControlPanel";
 import { InventoryControlPanel } from "@/components/inventory/InventoryControlPanel";
 import type { StaleProductDTO } from "@/lib/inventoryKpis";
+import { PettyCashPanel } from "@/components/pettycash/PettyCashPanel";
+import { PettyCashExceptionsPanel } from "@/components/pettycash/PettyCashExceptionsPanel";
+import type { PettyCashViewerData } from "@/lib/pettyCash";
 
 type DocumentDTO = { id: string; title: string; content: string; link: string; fileUrl: string | null; fileName: string | null };
 type ExamSummary = { id: string; title: string; questionCount: number };
@@ -38,6 +41,7 @@ const ALL_TABS = [
   { key: "comprobante", label: "Comprobante de pago", icon: Receipt },
   { key: "compras", label: "Control de Compras", icon: ShoppingCart },
   { key: "inventario", label: "Control de Inventario", icon: Package },
+  { key: "cajachica", label: "Caja Chica", icon: Wallet },
   { key: "postventa", label: "Servicio Postventa", icon: Heart },
   { key: "documentos", label: "Documentos", icon: FileText },
   { key: "examenes", label: "Exámenes", icon: GraduationCap },
@@ -73,6 +77,7 @@ export function DeptWorkspaceTabs({
   canInvoicePurchases = false,
   canManageInventoryControl = false,
   inventoryControlData = null,
+  pettyCashData = null,
   preferredTab = null,
   isAdmin = false,
   editable,
@@ -122,6 +127,9 @@ export function DeptWorkspaceTabs({
   // propia "Mi área de trabajo" sin importar si su departamento real es INV.
   canManageInventoryControl?: boolean;
   inventoryControlData?: { period: string; currentInventoryValue: number | null; products: StaleProductDTO[]; currentQuarter: string } | null;
+  // Caja Chica — confirmado 2026-08-05: null si la persona no ve ninguna de
+  // las dos cajas (ni Principal ni Secundaria le corresponde).
+  pettyCashData?: PettyCashViewerData | null;
   isAdmin?: boolean;
   editable: boolean;
   kpisEditable?: boolean;
@@ -144,6 +152,7 @@ export function DeptWorkspaceTabs({
     if (t.key === "comprobante") return canViewPurchaseReceipts;
     if (t.key === "compras") return canSubmitPurchases || canReceivePurchases || canInvoicePurchases;
     if (t.key === "inventario") return canManageInventoryControl;
+    if (t.key === "cajachica") return !!(pettyCashData?.principal || pettyCashData?.secundaria);
     if (t.key === "postventa") return canManageStoreFeedback || canViewStoreFeedback;
     return true;
   });
@@ -245,6 +254,22 @@ export function DeptWorkspaceTabs({
           products={inventoryControlData.products}
           currentQuarter={inventoryControlData.currentQuarter}
         />
+      )}
+      {tab === "cajachica" && pettyCashData && (pettyCashData.principal || pettyCashData.secundaria) && (
+        <div>
+          {isAdmin && pettyCashData.pendingExceptions.length > 0 && (
+            <PettyCashExceptionsPanel exceptions={pettyCashData.pendingExceptions} />
+          )}
+          <PettyCashPanel
+            principal={pettyCashData.principal}
+            secundaria={pettyCashData.secundaria}
+            canManagePrincipal={pettyCashData.canManagePrincipal}
+            canManageSecundaria={pettyCashData.canManageSecundaria}
+            canFundPrincipal={pettyCashData.canFundPrincipal}
+            canFundSecundaria={pettyCashData.canFundSecundaria}
+            eligibleOrders={pettyCashData.eligibleOrders}
+          />
+        </div>
       )}
       {tab === "postventa" && (canManageStoreFeedback || canViewStoreFeedback) && (
         <StoreFeedbackPanel stores={storeFeedbackStores} editable={canManageStoreFeedback} />

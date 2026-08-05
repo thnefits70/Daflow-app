@@ -156,6 +156,12 @@ model User {
   // tocar código, igual que canManagePurchases.
   canManageInventoryControl Boolean @default(false)
 
+  // Escape hatch para Caja Chica Secundaria (hoy Bryan Ríos) — mismo patrón
+  // que canManagePurchases: no es "la página de su departamento" (Bryan
+  // lidera Análisis de Mercado, no un departamento de caja chica), así que
+  // el acceso vive en este flag directo. Admin siempre puede, sin el flag.
+  canManagePettyCashSecundaria Boolean @default(false)
+
   // Confirmado 2026-08-05: excluye a esta persona de "Colaborador del mes"
   // por completo — su líder ya no la ve en su lista para calificar, y nunca
   // se generan evaluaciones nuevas para ella. No borra evaluaciones pasadas.
@@ -203,6 +209,13 @@ model User {
   purchaseCatalogItemDeleteRequests PurchaseCatalogItemDeleteRequest[] @relation("PurchaseCatalogItemDeleteRequestedBy")
   inventoryStaleProductsCreated     InventoryStaleProduct[] @relation("InventoryStaleProductCreatedBy")
   inventoryStaleProductsUpdated     InventoryStaleProduct[] @relation("InventoryStaleProductUpdatedBy")
+  pettyCashEntriesCreated   PettyCashEntry[] @relation("PettyCashEntryCreatedBy")
+  pettyCashEntriesUpdated   PettyCashEntry[] @relation("PettyCashEntryUpdatedBy")
+  pettyCashEntriesArchived  PettyCashEntry[] @relation("PettyCashEntryArchivedBy")
+  pettyCashEntriesRestored  PettyCashEntry[] @relation("PettyCashEntryRestoredBy")
+  pettyCashEntriesConfirmed PettyCashEntry[] @relation("PettyCashEntryConfirmedBy")
+  pettyCashExceptionsRequested PettyCashFreightException[] @relation("PettyCashExceptionRequestedBy")
+  pettyCashExceptionsReviewed  PettyCashFreightException[] @relation("PettyCashExceptionReviewedBy")
   purchaseRequestsMade            PurchaseRequest[] @relation("PurchaseRequestRequestedBy")
   purchaseRequestsReviewed        PurchaseRequest[] @relation("PurchaseRequestReviewedBy")
   purchaseRequestReceiptsConfirmed PurchaseRequestReceipt[] @relation("PurchaseRequestReceiptConfirmedBy")
@@ -602,6 +615,115 @@ model InventoryStaleProduct {
   updatedAt DateTime @updatedAt
 
   @@index([deptId])
+}
+
+enum PettyCashBoxType {
+  PRINCIPAL
+  SECUNDARIA
+}
+
+enum PettyCashEntryKind {
+  DESEMBOLSO
+  RECARGA
+}
+
+// Confirmado 2026-08-05: dos cajas — Principal (Nairoby escribe) y
+// Secundaria (Bryan Ríos escribe, vive en su propia "Mi área de trabajo",
+// bajo el mando de la Principal — Nairoby la ve pero no escribe en ella).
+model PettyCashBox {
+  id           String           @id @default(cuid())
+  type         PettyCashBoxType @unique
+  minThreshold Float            @default(10)
+  // Confirmado 2026-08-05: cada solicitud de pago debe quedar numerada para
+  // control y para la auditoría semestral de todo lo de Finanzas — contador
+  // propio de cada caja, incrementado dentro de una transacción al crear un
+  // PettyCashEntry para que nunca se repita un número aunque lleguen dos
+  // solicitudes al mismo tiempo.
+  lastRequestNumber Int         @default(0)
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  entries    PettyCashEntry[]
+  exceptions PettyCashFreightException[]
+}
+
+// Un registro por movimiento (desembolso o recarga) — nunca se elimina,
+// solo se archiva (confirmado 2026-08-05, para que ninguna evidencia pueda
+// borrarse por mal uso o manipulación). El saldo de la caja se calcula
+// siempre a partir de las filas NO archivadas.
+model PettyCashEntry {
+  id            String             @id @default(cuid())
+  boxId         String
+  box           PettyCashBox       @relation(fields: [boxId], references: [id], onDelete: Cascade)
+  kind          PettyCashEntryKind
+  requestNumber Int
+
+  amount      Float
+  description String
+
+  proofUrl     String?
+  proofHash    String?
+  aiReadAmount Float?
+  aiMatches    Boolean?
+
+  // Desembolso — vínculo con una orden de compra (groupId de
+  // PurchaseRequest) o, como última opción, un motivo manual.
+  linkedGroupId String?
+  manualReason  String?
+
+  // Recarga — no se acredita al saldo hasta que quien la recibe confirma.
+  // Mientras confirmedAt sea null, la persona queda bloqueada para crear
+  // desembolsos/excepciones en su propia caja (chequeado en el guard, no
+  // aquí). fundingReminderSentAt evita mandar el aviso más de una vez.
+  confirmedAt           DateTime?
+  confirmedById         String?
+  confirmedBy           User?     @relation("PettyCashEntryConfirmedBy", fields: [confirmedById], references: [id], onDelete: SetNull)
+  fundingReminderSentAt DateTime?
+
+  archived     Boolean   @default(false)
+  archivedAt   DateTime?
+  archivedById String?
+  archivedBy   User?     @relation("PettyCashEntryArchivedBy", fields: [archivedById], references: [id], onDelete: SetNull)
+  restoredAt   DateTime?
+  restoredById String?
+  restoredBy   User?     @relation("PettyCashEntryRestoredBy", fields: [restoredById], references: [id], onDelete: SetNull)
+
+  createdById String?
+  createdBy   User?   @relation("PettyCashEntryCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedById String?
+  updatedBy   User?   @relation("PettyCashEntryUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([boxId, requestNumber])
+  @@index([boxId])
+  @@index([linkedGroupId])
+}
+
+// Confirmado 2026-08-05: si una orden de compra ya tiene flete pagado (por
+// cualquier canal — transferencia o caja chica) y de verdad hace falta un
+// segundo pago real, Bryan explica el motivo y el dueño aprueba/rechaza
+// antes de habilitar la segunda carga.
+model PettyCashFreightException {
+  id      String       @id @default(cuid())
+  boxId   String
+  box     PettyCashBox @relation(fields: [boxId], references: [id], onDelete: Cascade)
+  groupId String
+
+  reason String
+  status String @default("pending") // "pending" | "approved" | "rejected"
+
+  requestedById String?
+  requestedBy   User?     @relation("PettyCashExceptionRequestedBy", fields: [requestedById], references: [id], onDelete: SetNull)
+  reviewedById  String?
+  reviewedBy    User?     @relation("PettyCashExceptionReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewedAt    DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([boxId])
+  @@index([groupId])
 }
 
 // Historial de cargas — quién subió qué mes y cuándo, y si reemplazó

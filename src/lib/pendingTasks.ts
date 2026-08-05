@@ -1,6 +1,8 @@
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { isFixedHoliday, evaluationDeadline, adminConfirmDeadline } from "@/lib/recognition";
+import { addBusinessHours } from "@/lib/businessHours";
+import { getPettyCashBoxData, type PettyCashBoxTypeStr } from "@/lib/pettyCash";
 
 // ---------------- Date helpers ----------------
 // Deadline rule confirmed by the user 2026-07-20: work week is Mon-Sat, and
@@ -204,6 +206,8 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   servicio_postventa: "Servicio Postventa",
   pedidos_despachados: "Pedidos despachados / Fill Rate",
   ruptura_stock: "Ruptura de Stock",
+  caja_chica_saldo: "Caja Chica — saldo bajo",
+  caja_chica_confirmacion: "Caja Chica — falta que confirmen una recarga",
 };
 
 // "colaborador_del_mes" es obligatorio — confirmado 2026-08-05: a diferencia
@@ -551,6 +555,55 @@ async function getRecognitionAdminPendingItem(href: string): Promise<PendingItem
   return null;
 }
 
+// Confirmado 2026-08-05: el aviso de saldo bajo le llega tanto a admin como
+// a Nairoby (líder de Finanzas) — cualquiera de los dos puede recargar.
+async function getPettyCashLowBalanceItems(href: string): Promise<PendingItem[]> {
+  const boxes: { label: string; type: PettyCashBoxTypeStr }[] = [
+    { label: "Principal", type: "PRINCIPAL" },
+    { label: "Secundaria", type: "SECUNDARIA" },
+  ];
+  const items: PendingItem[] = [];
+  for (const b of boxes) {
+    const box = await getPettyCashBoxData(b.type);
+    if (box.isLow) {
+      items.push({
+        type: "caja_chica_saldo",
+        icon: "💰",
+        label: `Caja Chica ${b.label} con saldo bajo`,
+        meta: `$${box.balance.toFixed(2)} · mínimo $${box.minThreshold.toFixed(2)} · atrasado`,
+        overdue: true,
+        href,
+      });
+    }
+  }
+  return items;
+}
+
+// Confirmado 2026-08-05: si quien recibió una recarga no la confirma dentro
+// de 8 horas laborables (horario real, src/lib/businessHours.ts), se avisa
+// a quien la fondeó — admin ve las suyas (createdById null), Nairoby ve las
+// que ella misma fondeó a la Secundaria de Bryan.
+async function getPettyCashUnconfirmedFunderItems(funderId: string | null, href: string): Promise<PendingItem[]> {
+  const rows = await prisma.pettyCashEntry.findMany({
+    where: { kind: "RECARGA", confirmedAt: null, archived: false, createdById: funderId },
+    include: { box: true },
+  });
+  const now = nowInEcuador();
+  const items: PendingItem[] = [];
+  for (const r of rows) {
+    if (now < addBusinessHours(r.createdAt, 8)) continue;
+    items.push({
+      type: "caja_chica_confirmacion",
+      icon: "🔒",
+      label: `${r.box.type === "PRINCIPAL" ? "Nairoby" : "Bryan"} no ha confirmado tu recarga`,
+      meta: `$${r.amount.toFixed(2)} · pendiente hace más de 8h laborables · atrasado`,
+      overdue: true,
+      href,
+    });
+  }
+  return items;
+}
+
 // ---------------- Entry point ----------------
 // Each person only ever sees what's specifically assigned to them — admin
 // gets Feedback semanal (the one thing only admin can write), a department
@@ -565,11 +618,13 @@ export type PendingTasksActor = { isAdmin: true } | { isAdmin: false; userId: st
 
 export async function getPendingTasksForActor(actor: PendingTasksActor): Promise<PendingTasks | null> {
   if (actor.isAdmin) {
-    const [feedbackItems, recognitionItem] = await Promise.all([
+    const [feedbackItems, recognitionItem, pettyCashLow, pettyCashUnconfirmed] = await Promise.all([
       getFeedbackPendingItems(),
       getRecognitionAdminPendingItem("/admin/colaborador-destacado"),
+      getPettyCashLowBalanceItems("/admin"),
+      getPettyCashUnconfirmedFunderItems(null, "/admin"),
     ]);
-    const items = [...feedbackItems, ...(recognitionItem ? [recognitionItem] : [])];
+    const items = [...feedbackItems, ...(recognitionItem ? [recognitionItem] : []), ...pettyCashLow, ...pettyCashUnconfirmed];
     if (items.length === 0) return null;
     return { title: "Pendientes de esta semana", sub: "Como administrador", items };
   }
@@ -589,13 +644,16 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
 
   if (me.leadsDept.code === "FIN") {
     monthly = true;
-    const [payStub, returnRate, warranty, paymentReminders, storeFeedback] = await Promise.all([
+    const [payStub, returnRate, warranty, paymentReminders, storeFeedback, pettyCashLow, pettyCashUnconfirmed] = await Promise.all([
       getPayStubPendingItem("/area/roles-de-pago"),
       getReturnRatePendingItem("/area/kpis-generales"),
       getWarrantyPendingItem("/area/kpis-generales"),
       getPaymentReminderPendingItems(me.leadsDeptId, "/area/workspace"),
       getStoreFeedbackPendingItem("/area/kpis-generales"),
+      getPettyCashLowBalanceItems("/area/workspace"),
+      getPettyCashUnconfirmedFunderItems(actor.userId, "/area/workspace"),
     ]);
+    items.push(...pettyCashLow, ...pettyCashUnconfirmed);
     if (payStub) items.push(payStub);
     if (returnRate) items.push(returnRate);
     if (warranty) items.push(warranty);
@@ -642,7 +700,7 @@ export async function getPossiblePendingTypesForActor(
   const types: string[] = [];
 
   if (actor.isAdmin) {
-    types.push("feedback");
+    types.push("feedback", "caja_chica_saldo", "caja_chica_confirmacion");
   } else {
     const me = await prisma.user.findUnique({
       where: { id: actor.userId },
@@ -651,7 +709,7 @@ export async function getPossiblePendingTypesForActor(
     if (!me?.isLeader || !me.leadsDeptId || !me.leadsDept) return [];
 
     if (me.leadsDept.code === "FIN") {
-      types.push("roles_de_pago", "tasa_devolucion", "kpi_garantias", "pagos_recordatorios", "servicio_postventa");
+      types.push("roles_de_pago", "tasa_devolucion", "kpi_garantias", "pagos_recordatorios", "servicio_postventa", "caja_chica_saldo", "caja_chica_confirmacion");
     }
     if (me.leadsDept.trackWeeklyMetric) types.push("pedidos_despachados");
     if (me.leadsDept.code === "INV") types.push("ruptura_stock");

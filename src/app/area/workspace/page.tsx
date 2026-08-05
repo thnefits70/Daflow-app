@@ -11,6 +11,7 @@ import { getPeriodicReminders } from "@/lib/periodicReminders";
 import { getPurchaseReceipts, getPurchaseReceiptCatalogs } from "@/lib/purchaseReceipts";
 import { getStoreFeedbackData } from "@/lib/storeFeedback";
 import { getInventoryControlData } from "@/lib/inventoryKpis";
+import { getPettyCashViewerData } from "@/lib/pettyCash";
 
 export default async function WorkspacePage() {
   const session = await auth();
@@ -43,7 +44,7 @@ export default async function WorkspacePage() {
   // importar si su departamento real es INV.
   const canManageInventoryControl = await checkCanManageInventoryControl();
 
-  const [processDetail, periodicReminders, documents, exams, financeKpiData, paymentReminders, weeklyMetricRecords, weeklyReviewRecords, currentUser, unseenFeedbackCount, purchaseReceipts, purchaseReceiptCatalogs, storeFeedbackStores, inventoryControlData] = await Promise.all([
+  const [processDetail, periodicReminders, documents, exams, financeKpiData, paymentReminders, weeklyMetricRecords, weeklyReviewRecords, currentUser, unseenFeedbackCount, purchaseReceipts, purchaseReceiptCatalogs, storeFeedbackStores, inventoryControlData, pettyCashData] = await Promise.all([
     getDeptProcessDetail(dept.id),
     getPeriodicReminders(dept.id),
     prisma.document.findMany({ where: { deptId: dept.id }, orderBy: { createdAt: "asc" } }),
@@ -74,6 +75,7 @@ export default async function WorkspacePage() {
     dept.code === "COM" ? getPurchaseReceiptCatalogs(dept.id) : Promise.resolve({ suppliers: [], banks: [] }),
     canManageStoreFeedback || canViewStoreFeedback ? getStoreFeedbackData() : Promise.resolve([]),
     canManageInventoryControl ? getInventoryControlData() : Promise.resolve(null),
+    getPettyCashViewerData(false),
   ]);
 
   const kpisEditable = !!currentUser?.isLeader && currentUser.leadsDeptId === dept.id;
@@ -136,6 +138,7 @@ export default async function WorkspacePage() {
         canInvoicePurchases={canInvoicePurchases}
         canManageInventoryControl={canManageInventoryControl}
         inventoryControlData={inventoryControlData}
+        pettyCashData={pettyCashData}
         preferredTab={currentUser?.defaultWorkspaceTab ?? null}
         isAdmin={false}
         editable={false}

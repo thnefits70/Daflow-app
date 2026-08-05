@@ -9,13 +9,14 @@ import { getPeriodicReminders } from "@/lib/periodicReminders";
 import { getPurchaseReceipts, getPurchaseReceiptCatalogs } from "@/lib/purchaseReceipts";
 import { getStoreFeedbackData } from "@/lib/storeFeedback";
 import { getInventoryControlData } from "@/lib/inventoryKpis";
+import { getPettyCashViewerData } from "@/lib/pettyCash";
 
 export default async function DeptWorkspacePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const dept = await prisma.department.findUnique({ where: { id } });
   if (!dept) notFound();
 
-  const [processDetail, periodicReminders, documents, exams, financeKpiData, paymentReminders, weeklyMetricRecords, weeklyReviewRecords, purchaseReceipts, purchaseReceiptCatalogs, storeFeedbackStores, inventoryControlData] = await Promise.all([
+  const [processDetail, periodicReminders, documents, exams, financeKpiData, paymentReminders, weeklyMetricRecords, weeklyReviewRecords, purchaseReceipts, purchaseReceiptCatalogs, storeFeedbackStores, inventoryControlData, pettyCashData] = await Promise.all([
     getDeptProcessDetail(id),
     getPeriodicReminders(id),
     prisma.document.findMany({ where: { deptId: id }, orderBy: { createdAt: "asc" } }),
@@ -36,6 +37,7 @@ export default async function DeptWorkspacePage({ params }: { params: Promise<{ 
     dept.code === "COM" ? getPurchaseReceiptCatalogs(id) : Promise.resolve({ suppliers: [], banks: [] }),
     dept.code === "MKT" ? getStoreFeedbackData() : Promise.resolve([]),
     dept.code === "INV" ? getInventoryControlData() : Promise.resolve(null),
+    dept.code === "FIN" ? getPettyCashViewerData(true) : Promise.resolve(null),
   ]);
 
   return (
@@ -88,6 +90,7 @@ export default async function DeptWorkspacePage({ params }: { params: Promise<{ 
         canInvoicePurchases={dept.code === "COM"}
         canManageInventoryControl={dept.code === "INV"}
         inventoryControlData={inventoryControlData}
+        pettyCashData={pettyCashData}
         isAdmin
         editable
       />
