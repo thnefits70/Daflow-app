@@ -22,7 +22,7 @@ import { WeeklyMetricPanel, type WeeklyMetricDTO } from "@/components/fulfillmen
 import { WeeklyReviewPanel, type WeeklyReviewDTO } from "@/components/marketanalysis/WeeklyReviewPanel";
 import { PurchaseControlPanel } from "@/components/purchases/PurchaseControlPanel";
 import { InventoryControlPanel } from "@/components/inventory/InventoryControlPanel";
-import type { StaleProductDTO, InventoryControlPeriodDTO } from "@/lib/inventoryKpis";
+import type { InventoryControlPeriodDTO } from "@/lib/inventoryKpis";
 import { PettyCashPanel } from "@/components/pettycash/PettyCashPanel";
 import { PettyCashExceptionsPanel } from "@/components/pettycash/PettyCashExceptionsPanel";
 import type { PettyCashViewerData } from "@/lib/pettyCash";
@@ -126,7 +126,7 @@ export function DeptWorkspaceTabs({
   // Compras/Servicio Postventa (confirmado 2026-08-04): Daniel lo ve en su
   // propia "Mi área de trabajo" sin importar si su departamento real es INV.
   canManageInventoryControl?: boolean;
-  inventoryControlData?: { currentPeriod: string; periods: InventoryControlPeriodDTO[]; products: StaleProductDTO[]; currentQuarter: string } | null;
+  inventoryControlData?: { currentPeriod: string; periods: InventoryControlPeriodDTO[] } | null;
   // Caja Chica — confirmado 2026-08-05: null si la persona no ve ninguna de
   // las dos cajas (ni Principal ni Secundaria le corresponde).
   pettyCashData?: PettyCashViewerData | null;
@@ -251,8 +251,6 @@ export function DeptWorkspaceTabs({
         <InventoryControlPanel
           currentPeriodDefault={inventoryControlData.currentPeriod}
           periods={inventoryControlData.periods}
-          products={inventoryControlData.products}
-          currentQuarter={inventoryControlData.currentQuarter}
         />
       )}
       {tab === "cajachica" && pettyCashData && (pettyCashData.principal || pettyCashData.secundaria) && (

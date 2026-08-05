@@ -2,9 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, Pencil, Plus, Upload, AlertTriangle } from "lucide-react";
-import { isReviewDue, daysUntilDue, quarterLabel } from "@/lib/inventoryKpisCalc";
-import type { StaleProductDTO, InventoryControlPeriodDTO } from "@/lib/inventoryKpis";
+import { CheckCircle2, Upload, AlertTriangle, TrendingDown, Minus } from "lucide-react";
+import type { InventoryControlPeriodDTO } from "@/lib/inventoryKpis";
 import { usePasteFile } from "@/lib/usePasteFile";
 import { uploadFile } from "@/lib/uploadFile";
 
@@ -17,16 +16,23 @@ function money(v: number) {
   return "$" + v.toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+type SnapshotPreviewRow = {
+  productCode: string;
+  description: string;
+  avgCost: number;
+  stock: number;
+  costTotal: number;
+  previousStock: number | null;
+  decreased: boolean | null;
+};
+type SnapshotPreview = { period: string; previousPeriod: string | null; rows: SnapshotPreviewRow[] };
+
 export function InventoryControlPanel({
   currentPeriodDefault,
   periods,
-  products,
-  currentQuarter,
 }: {
   currentPeriodDefault: string;
   periods: InventoryControlPeriodDTO[];
-  products: StaleProductDTO[];
-  currentQuarter: string;
 }) {
   const router = useRouter();
   const [period, setPeriod] = useState(currentPeriodDefault);
@@ -52,17 +58,6 @@ export function InventoryControlPanel({
     setToast("");
     setErr("");
   }
-
-  const [newName, setNewName] = useState("");
-  const [newValue, setNewValue] = useState("");
-  const [addingProduct, setAddingProduct] = useState(false);
-
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editValue, setEditValue] = useState("");
-  const [busyId, setBusyId] = useState<string | null>(null);
-
-  const active = products.filter((p) => p.status === "active");
-  const recovered = products.filter((p) => p.status === "recovered");
 
   const { onPaste, onMouseEnter, onMouseLeave } = usePasteFile((file) => uploadProof(file));
 
@@ -119,48 +114,76 @@ export function InventoryControlPanel({
     router.refresh();
   }
 
-  async function addProduct() {
-    if (!newName.trim()) return;
-    const n = Number(newValue);
-    if (Number.isNaN(n) || n < 0) { setErr("Ingresa un valor válido para el producto."); return; }
-    setAddingProduct(true);
-    setErr("");
-    const res = await fetch("/api/inventory-control/stale-products", {
+  // --- Sección 2: Excel mensual de stock por SKU ("Productos sin movimiento") ---
+  const [snapPeriod, setSnapPeriod] = useState(currentPeriodDefault);
+  const snapData = periods.find((p) => p.period === snapPeriod) ?? null;
+  const [snapPhase, setSnapPhase] = useState<"idle" | "processing" | "preview">("idle");
+  const [snapPreview, setSnapPreview] = useState<SnapshotPreview | null>(null);
+  const [snapWarnings, setSnapWarnings] = useState<string[]>([]);
+  const [snapErr, setSnapErr] = useState("");
+  const [snapBusy, setSnapBusy] = useState(false);
+  const [snapToast, setSnapToast] = useState("");
+
+  function resetSnapUpload() {
+    setSnapPhase("idle");
+    setSnapPreview(null);
+    setSnapWarnings([]);
+    setSnapErr("");
+  }
+
+  function changeSnapPeriod(newPeriod: string) {
+    setSnapPeriod(newPeriod);
+    resetSnapUpload();
+    setSnapToast("");
+  }
+
+  async function handleSnapFile(file: File) {
+    setSnapErr("");
+    setSnapToast("");
+    setSnapPhase("processing");
+
+    const uploaded = await uploadFile(file, "inventory-stock-snapshot");
+    if (!uploaded.ok) {
+      setSnapErr(uploaded.error);
+      setSnapPhase("idle");
+      return;
+    }
+
+    const res = await fetch("/api/inventory-control/stock-snapshot/parse", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: newName.trim(), value: n }),
+      body: JSON.stringify({ period: snapPeriod, fileUrl: uploaded.url, fileName: uploaded.name }),
     });
-    setAddingProduct(false);
-    if (!res.ok) { setErr("No se pudo agregar el producto."); return; }
-    setNewName("");
-    setNewValue("");
-    router.refresh();
+    const json = await res.json().catch(() => null);
+    if (!res.ok) {
+      setSnapErr(json?.error ?? "No se pudo leer el archivo.");
+      setSnapPhase("idle");
+      return;
+    }
+    setSnapPreview(json.preview);
+    setSnapWarnings(json.warnings ?? []);
+    setSnapPhase("preview");
   }
 
-  async function confirmProduct(id: string, action: "stay" | "recover") {
-    setBusyId(id);
-    const res = await fetch(`/api/inventory-control/stale-products/${id}`, {
-      method: "PATCH",
+  async function confirmSnapSave() {
+    if (!snapPreview) return;
+    setSnapBusy(true);
+    setSnapErr("");
+    const res = await fetch("/api/inventory-control/stock-snapshot/save", {
+      method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action }),
+      body: JSON.stringify({
+        period: snapPreview.period,
+        rows: snapPreview.rows.map((r) => ({
+          productCode: r.productCode, description: r.description, avgCost: r.avgCost, stock: r.stock, costTotal: r.costTotal,
+        })),
+      }),
     });
-    setBusyId(null);
-    if (!res.ok) { setErr("No se pudo actualizar el producto."); return; }
-    router.refresh();
-  }
-
-  async function saveEditValue(id: string) {
-    const n = Number(editValue);
-    if (Number.isNaN(n) || n < 0) { setErr("Ingresa un valor válido."); return; }
-    setBusyId(id);
-    const res = await fetch(`/api/inventory-control/stale-products/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ value: n }),
-    });
-    setBusyId(null);
-    setEditingId(null);
-    if (!res.ok) { setErr("No se pudo guardar el nuevo valor."); return; }
+    setSnapBusy(false);
+    const json = await res.json().catch(() => null);
+    if (!res.ok) { setSnapErr(json?.error ?? "No se pudo guardar."); return; }
+    resetSnapUpload();
+    setSnapToast(`✅ ${monthLabel(snapPreview.period)} guardado — ${json.count} productos. Los KPIs ya se actualizaron.`);
     router.refresh();
   }
 
@@ -263,91 +286,131 @@ export function InventoryControlPanel({
 
       <div className="bg-surface border border-rule rounded-md p-4.5">
         <div className="flex items-center justify-between mb-1">
-          <div className="font-semibold text-[13.5px]">Revisión de productos sin movimiento</div>
-          <span className="font-mono text-[10px] uppercase text-steel bg-cloud rounded-full px-2 py-0.5">{quarterLabel(currentQuarter)}</span>
+          <div className="font-semibold text-[13.5px]">Productos sin movimiento — stock por SKU</div>
+          <span className="font-mono text-[10px] uppercase text-steel bg-cloud rounded-full px-2 py-0.5">Cada mes</span>
         </div>
-        <div className="text-[11.5px] text-steel mb-3.5">Confirma los productos marcados antes, y agrega los nuevos que ya llevan +3 meses sin venderse. Nunca se eliminan — solo se confirman, recuperan o corrige su valor.</div>
-
-        <div className="flex flex-col gap-2 mb-3.5">
-          {active.length === 0 && <div className="text-steel text-[12px]">No hay productos marcados todavía.</div>}
-          {active.map((p) => {
-            const due = isReviewDue(p.lastConfirmedQuarter);
-            const days = daysUntilDue(p.lastConfirmedQuarter);
-            return (
-              <div key={p.id} className="flex items-center justify-between gap-2.5 bg-cloud rounded-md px-3 py-2.5 text-[12.5px]">
-                <div className="flex-1 min-w-0">
-                  <div className="font-semibold truncate">{p.name}</div>
-                  {editingId === p.id ? (
-                    <div className="flex items-center gap-1.5 mt-1">
-                      <input
-                        type="number" step="any" min={0} autoFocus
-                        className="w-28 rounded border border-rule bg-bg px-2 py-1 text-[12px] font-mono"
-                        value={editValue}
-                        onChange={(e) => setEditValue(e.target.value)}
-                      />
-                      <button type="button" className="text-teal text-[11px] font-semibold cursor-pointer" onClick={() => saveEditValue(p.id)} disabled={busyId === p.id}>Guardar</button>
-                      <button type="button" className="text-steel text-[11px] cursor-pointer" onClick={() => setEditingId(null)}>Cancelar</button>
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-1.5 text-steel font-mono text-[11.5px] mt-0.5">
-                      {money(p.value)}
-                      <button type="button" className="text-steel hover:text-ink cursor-pointer" title="Editar valor" onClick={() => { setEditingId(p.id); setEditValue(String(p.value)); }}>
-                        <Pencil size={11} />
-                      </button>
-                    </div>
-                  )}
-                </div>
-                {due ? (
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <button type="button" disabled={busyId === p.id} className="rounded border border-gold/40 bg-gold/10 px-2.5 py-1.5 text-[11.5px] font-semibold cursor-pointer disabled:opacity-60" style={{ color: "#D9A441" }} onClick={() => confirmProduct(p.id, "stay")}>
-                      Sigue igual
-                    </button>
-                    <button type="button" disabled={busyId === p.id} className="rounded border border-green/40 bg-green/10 px-2.5 py-1.5 text-[11.5px] font-semibold text-green cursor-pointer disabled:opacity-60" onClick={() => confirmProduct(p.id, "recover")}>
-                      Ya se vende
-                    </button>
-                  </div>
-                ) : (
-                  <span className="text-[11px] text-teal shrink-0">✓ confirmado {days > 0 ? `· vence en ${days} días` : ""}</span>
-                )}
-              </div>
-            );
-          })}
+        <div className="text-[11.5px] text-steel mb-3">
+          Sube el mismo reporte de saldos costeados y valorizados (código, costo promedio, descripción, stock actual). DAFLOW compara cada producto contra el mes anterior y arma el ranking de productos sin movimiento solo — ya no hace falta escribirlos a mano.
         </div>
 
-        {recovered.length > 0 && (
-          <div className="mb-3.5">
-            <div className="text-[11px] font-semibold text-green mb-1.5">✓ Recuperados</div>
-            <div className="flex flex-col gap-1">
-              {recovered.map((p) => (
-                <div key={p.id} className="text-[11.5px] text-steel flex justify-between">
-                  <span>{p.name}</span><span>volvió a venderse — {quarterLabel(p.lastConfirmedQuarter)}</span>
-                </div>
+        {snapErr && <div className="text-red text-[12.5px] mb-2.5">{snapErr}</div>}
+
+        {snapPhase !== "preview" && (
+          <div className="mb-3">
+            <label className="block mb-1 text-[10px] uppercase tracking-wide text-steel">Mes del reporte</label>
+            <select
+              className="rounded border border-rule bg-cloud px-2.5 py-2 text-[13px] font-mono"
+              value={snapPeriod}
+              onChange={(e) => changeSnapPeriod(e.target.value)}
+            >
+              {periods.map((p) => (
+                <option key={p.period} value={p.period}>
+                  {monthLabel(p.period)}{p.hasSnapshot ? " · ya cargado" : ""}{p.period === currentPeriodDefault ? " (actual)" : ""}
+                </option>
               ))}
+            </select>
+          </div>
+        )}
+
+        {snapPhase !== "preview" && snapData?.hasSnapshot && (
+          <div className="bg-gold/10 border border-gold/30 rounded-md p-3 mb-3.5 text-[12.5px]" style={{ color: "#D9A441" }}>
+            <div className="flex items-center gap-1.5 font-semibold">
+              <AlertTriangle size={14} /> Ya existe un reporte cargado para {monthLabel(snapPeriod)}.
+            </div>
+            <div className="text-steel mt-1">Si subes uno nuevo, se <b className="text-ink">reemplaza por completo</b> el mes — útil si detectaste un error.</div>
+          </div>
+        )}
+
+        {snapPhase === "idle" && (
+          <label className="flex flex-col items-center justify-center gap-1.5 border-[1.5px] border-dashed border-rule rounded-md py-7 cursor-pointer hover:border-teal transition-colors">
+            <Upload size={22} className="text-steel" />
+            <div className="text-[13px] font-semibold">Arrastra tu reporte aquí o haz clic para elegirlo</div>
+            <div className="text-[11px] text-steel">Formato .xlsx — código, costo promedio, descripción, stock actual</div>
+            <input
+              type="file"
+              accept=".xlsx"
+              className="hidden"
+              onChange={(e) => e.target.files?.[0] && handleSnapFile(e.target.files[0])}
+            />
+          </label>
+        )}
+
+        {snapPhase === "processing" && (
+          <div className="flex items-center justify-center gap-2.5 py-7 text-steel text-[13px]">
+            <span className="w-4 h-4 rounded-full border-2 border-rule border-t-teal animate-spin" /> Leyendo reporte…
+          </div>
+        )}
+
+        {snapPhase === "preview" && snapPreview && (
+          <div>
+            <div className="text-[11.5px] text-steel mb-2.5">
+              {snapPreview.previousPeriod
+                ? <>Comparando contra <b className="text-ink">{monthLabel(snapPreview.previousPeriod)}</b> (el mes anterior con datos cargados).</>
+                : <>No hay un mes anterior cargado todavía — este será el primer punto de comparación, ningún producto se marcará sin movimiento aún.</>}
+            </div>
+            <div className="overflow-x-auto mb-3 max-h-96">
+              <table className="w-full text-[12px] border-collapse">
+                <thead className="sticky top-0 bg-surface">
+                  <tr>
+                    <th className="text-left font-mono text-[9.5px] uppercase text-steel pb-1.5">Código</th>
+                    <th className="text-left font-mono text-[9.5px] uppercase text-steel pb-1.5">Descripción</th>
+                    <th className="text-right font-mono text-[9.5px] uppercase text-steel pb-1.5">Costo prom.</th>
+                    <th className="text-right font-mono text-[9.5px] uppercase text-steel pb-1.5">Stock actual</th>
+                    <th className="text-right font-mono text-[9.5px] uppercase text-steel pb-1.5">Stock anterior</th>
+                    <th className="text-center font-mono text-[9.5px] uppercase text-steel pb-1.5">¿Bajó?</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {snapPreview.rows.map((r) => (
+                    <tr key={r.productCode} className="border-t border-rule/50">
+                      <td className="py-1.5 font-mono text-steel">{r.productCode}</td>
+                      <td className="py-1.5 font-semibold truncate max-w-56">{r.description}</td>
+                      <td className="py-1.5 text-right font-mono">{money(r.avgCost)}</td>
+                      <td className="py-1.5 text-right font-mono">{r.stock}</td>
+                      <td className="py-1.5 text-right font-mono text-steel">{r.previousStock !== null ? r.previousStock : "—"}</td>
+                      <td className="py-1.5 text-center">
+                        {r.decreased === null ? (
+                          <span className="text-steel">—</span>
+                        ) : r.decreased ? (
+                          <span className="inline-flex items-center gap-1 text-teal"><TrendingDown size={12} /> sí</span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-red"><Minus size={12} /> no</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {snapWarnings.length > 0 && (
+              <div className="flex flex-col gap-1 mb-3">
+                {snapWarnings.map((w, i) => (
+                  <div key={i} className="text-[11.5px] flex items-start gap-1.5" style={{ color: "#D9A441" }}>
+                    <AlertTriangle size={13} className="mt-0.5 shrink-0" /> {w}
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="flex items-center gap-2.5">
+              <button
+                type="button" disabled={snapBusy}
+                className="rounded border border-teal bg-teal px-4 py-2 text-[13px] font-semibold text-navy cursor-pointer disabled:opacity-60"
+                onClick={confirmSnapSave}
+              >
+                {snapData?.hasSnapshot ? "Reemplazar" : "Confirmar y guardar"} {monthLabel(snapPreview.period)}
+              </button>
+              <button type="button" className="text-steel text-[13px] cursor-pointer" onClick={resetSnapUpload}>
+                Cancelar
+              </button>
             </div>
           </div>
         )}
 
-        <div className="flex items-center gap-2 pt-3 border-t border-dashed border-rule">
-          <input
-            type="text" placeholder="Nombre del producto nuevo"
-            className="flex-1 rounded border border-rule bg-cloud px-2.5 py-2 text-[12.5px]"
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-          />
-          <input
-            type="number" step="any" min={0} placeholder="$ valor"
-            className="w-28 rounded border border-rule bg-cloud px-2.5 py-2 text-[12.5px] font-mono"
-            value={newValue}
-            onChange={(e) => setNewValue(e.target.value)}
-          />
-          <button
-            type="button" disabled={addingProduct}
-            className="flex items-center gap-1 rounded border border-blue bg-blue px-3 py-2 text-[12px] font-semibold text-white cursor-pointer disabled:opacity-60"
-            onClick={addProduct}
-          >
-            <Plus size={13} /> Agregar
-          </button>
-        </div>
+        {snapToast && snapPhase === "idle" && (
+          <div className="mt-3 flex items-center gap-2 text-teal text-[12.5px] bg-teal/10 border border-teal/30 rounded-md px-3 py-2">
+            <CheckCircle2 size={14} /> {snapToast}
+          </div>
+        )}
       </div>
     </div>
   );

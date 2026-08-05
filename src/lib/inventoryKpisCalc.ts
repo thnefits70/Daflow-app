@@ -2,69 +2,99 @@
 // sin Prisma, para poder usarse tanto en el ensamblado server-side como en
 // componentes cliente que necesiten recomputar algo al vuelo.
 
-export function quarterOf(d: Date): string {
-  const q = Math.floor(d.getMonth() / 3) + 1;
-  return `${d.getFullYear()}-Q${q}`;
+// Reemplaza por completo el mecanismo trimestral manual (confirmado
+// 2026-08-05) — cada mes Daniel sube un Excel con el stock valorizado por
+// SKU. "Sin movimiento" se deriva solo comparando el stock de cada producto
+// contra el mes inmediatamente anterior en que se subió información para
+// ese SKU: si NO bajó, cuenta como un mes más sin moverse. No hay venta por
+// SKU en el sistema — esto es un proxy transparente, no una medición exacta.
+
+export type ProductSnapshotRow = {
+  period: string; // "YYYY-MM"
+  productCode: string;
+  description: string;
+  avgCost: number;
+  stock: number;
+  costTotal: number;
+};
+
+export type StaleStreakBucket = "1" | "2-3" | "4+";
+
+export function staleStreakBucket(streakMonths: number): StaleStreakBucket {
+  if (streakMonths >= 4) return "4+";
+  if (streakMonths >= 2) return "2-3";
+  return "1";
 }
 
-export function currentQuarter(): string {
-  return quarterOf(new Date());
+export type StaleStreakEntry = {
+  productCode: string;
+  description: string;
+  avgCost: number;
+  stock: number;
+  costTotal: number;
+  streakMonths: number;
+  bucket: StaleStreakBucket;
+  trend: "up" | "flat" | "down";
+};
+
+// Recibe TODO el historial de snapshots de un departamento (todas las
+// filas, todos los meses) y calcula, para el mes más reciente cargado, qué
+// productos llevan racha sin bajar de stock. Cada producto se compara solo
+// contra su propio historial (no todos los SKU aparecen en todos los meses
+// — ej. productos nuevos o descontinuados), ordenado por período ascendente.
+export function computeStaleStreaks(allRows: ProductSnapshotRow[]): StaleStreakEntry[] {
+  const byProduct = new Map<string, ProductSnapshotRow[]>();
+  for (const r of allRows) {
+    const arr = byProduct.get(r.productCode) ?? [];
+    arr.push(r);
+    byProduct.set(r.productCode, arr);
+  }
+
+  const entries: StaleStreakEntry[] = [];
+  for (const rows of byProduct.values()) {
+    const sorted = [...rows].sort((a, b) => a.period.localeCompare(b.period));
+    const latest = sorted[sorted.length - 1];
+    const previous = sorted.length >= 2 ? sorted[sorted.length - 2] : null;
+
+    if (!previous) continue; // primer mes de este SKU — nada con qué comparar todavía
+    if (latest.stock < previous.stock) continue; // bajó de stock — hay evidencia de venta, no está "sin movimiento"
+
+    let streak = 0;
+    let i = sorted.length - 1;
+    while (i > 0 && sorted[i].stock >= sorted[i - 1].stock) {
+      streak++;
+      i--;
+    }
+
+    const trend: StaleStreakEntry["trend"] = latest.stock > previous.stock ? "up" : latest.stock < previous.stock ? "down" : "flat";
+
+    entries.push({
+      productCode: latest.productCode,
+      description: latest.description,
+      avgCost: latest.avgCost,
+      stock: latest.stock,
+      costTotal: latest.costTotal,
+      streakMonths: streak,
+      bucket: staleStreakBucket(streak),
+      trend,
+    });
+  }
+
+  return entries.sort((a, b) => b.streakMonths - a.streakMonths || b.costTotal - a.costTotal);
 }
 
-// Primer día del trimestre SIGUIENTE al indicado — usado para saber cuándo
-// vence la próxima reconfirmación de un producto sin movimiento.
-export function nextQuarterStart(quarter: string): Date {
-  const [yStr, qStr] = quarter.split("-Q");
-  const y = Number(yStr);
-  const q = Number(qStr);
-  const nextQ = q === 4 ? 1 : q + 1;
-  const nextY = q === 4 ? y + 1 : y;
-  return new Date(nextY, (nextQ - 1) * 3, 1);
-}
-
-export function daysUntilDue(lastConfirmedQuarter: string): number {
-  const due = nextQuarterStart(lastConfirmedQuarter);
-  const now = new Date();
-  return Math.ceil((due.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-}
-
-export function isReviewDue(lastConfirmedQuarter: string): boolean {
-  return currentQuarter() !== lastConfirmedQuarter;
-}
-
-const QUARTER_MONTH_NAMES = ["Ene-Mar", "Abr-Jun", "Jul-Sep", "Oct-Dic"];
-export function quarterLabel(quarter: string): string {
-  const [y, qStr] = quarter.split("-Q");
-  const q = Number(qStr);
-  return `${QUARTER_MONTH_NAMES[q - 1] ?? quarter} ${y}`;
-}
-
-// 1 trimestre confirmado = recién cruzó el umbral (3-6 meses aprox.);
-// 2 o más = ya lleva +6 meses sin venderse. Solo aplica a productos activos
-// (no recuperados) — confirmado 2026-08-04, Daniel nunca elige el rango,
-// se deriva solo de cuántas veces seguidas confirmó "sigue igual".
-export function staleBucket(quartersConfirmed: number): "3-6" | "6+" {
-  return quartersConfirmed >= 2 ? "6+" : "3-6";
-}
-
-export type StaleProductRow = { id: string; name: string; value: number; status: string; quartersConfirmed: number };
-
-export function summarizeStaleProducts(products: StaleProductRow[], totalInventoryValue: number | null) {
-  const active = products.filter((p) => p.status === "active");
-  const bucket36 = active.filter((p) => staleBucket(p.quartersConfirmed) === "3-6");
-  const bucket6plus = active.filter((p) => staleBucket(p.quartersConfirmed) === "6+");
-  const value36 = bucket36.reduce((s, p) => s + p.value, 0);
-  const value6plus = bucket6plus.reduce((s, p) => s + p.value, 0);
-  const totalStale = value36 + value6plus;
-  const pct = (v: number) => (totalInventoryValue && totalInventoryValue > 0 ? (v / totalInventoryValue) * 100 : null);
+export function summarizeStaleStreaks(entries: StaleStreakEntry[], totalPeriodValue: number | null) {
+  const bucket1 = entries.filter((e) => e.bucket === "1");
+  const bucket23 = entries.filter((e) => e.bucket === "2-3");
+  const bucket4plus = entries.filter((e) => e.bucket === "4+");
+  const totalStaleValue = entries.reduce((s, e) => s + e.costTotal, 0);
+  const pct = totalPeriodValue && totalPeriodValue > 0 ? (totalStaleValue / totalPeriodValue) * 100 : null;
   return {
-    bucket36,
-    bucket6plus,
-    value36,
-    value6plus,
-    totalStalePct: pct(totalStale),
-    bucket36Pct: pct(value36),
-    bucket6plusPct: pct(value6plus),
+    bucket1,
+    bucket23,
+    bucket4plus,
+    totalStaleValue,
+    totalStalePct: pct,
   };
 }
 

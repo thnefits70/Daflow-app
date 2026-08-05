@@ -1,14 +1,12 @@
 import { prisma } from "@/lib/prisma";
 import { computeDerived, consolidateMonth, workingCapitalDays, type FinanceMonthRaw } from "@/lib/financeKpisCalc";
 import {
-  currentQuarter,
-  isReviewDue,
-  daysUntilDue,
   gmroi,
-  summarizeStaleProducts,
   detectOverstockAlert,
   trendIsGood,
-  type StaleProductRow,
+  computeStaleStreaks,
+  summarizeStaleStreaks,
+  type StaleStreakEntry,
 } from "@/lib/inventoryKpisCalc";
 
 // Company-wide, no importa la marca (Provedix e Importadora Damián comparten
@@ -38,53 +36,43 @@ export function recentInventoryPeriods(): string[] {
   return periods;
 }
 
-export type StaleProductDTO = {
-  id: string;
-  name: string;
-  value: number;
-  status: string;
-  quartersConfirmed: number;
-  lastConfirmedQuarter: string;
-};
-
 export type InventoryControlPeriodDTO = {
   period: string;
   value: number | null;
   proofUrl: string | null;
   aiMatches: boolean | null;
+  hasSnapshot: boolean;
 };
 
 // Todo lo que necesita la pantalla de Daniel ("Control de Inventario" en Mi
-// área de trabajo) — solo captura, nunca ve gráficas desde acá. Trae los
-// últimos 12 meses (con lo ya cargado, si hay) para que pueda elegir
-// cualquiera, no solo el mes en curso.
+// área de trabajo) — solo captura, nunca ve gráficas ni el ranking desde acá
+// (write-only, confirmado 2026-08-04). Trae los últimos 12 meses (con lo ya
+// cargado, si hay) para que pueda elegir cualquiera, no solo el mes en curso.
 export async function getInventoryControlData() {
   const deptId = await getFinanzasDeptId();
   if (!deptId) return null;
 
   const periods = recentInventoryPeriods();
-  const [balances, products] = await Promise.all([
+  const [balances, snapshotPeriods] = await Promise.all([
     prisma.financeSharedMonthlyBalance.findMany({ where: { deptId, period: { in: periods } } }),
-    prisma.inventoryStaleProduct.findMany({ where: { deptId }, orderBy: { createdAt: "asc" } }),
+    prisma.inventoryProductSnapshot.findMany({ where: { deptId, period: { in: periods } }, select: { period: true }, distinct: ["period"] }),
   ]);
   const byPeriod = new Map(balances.map((b) => [b.period, b]));
+  const snapshotSet = new Set(snapshotPeriods.map((s) => s.period));
 
   return {
     deptId,
     currentPeriod: currentPeriod(),
     periods: periods.map((period): InventoryControlPeriodDTO => {
       const b = byPeriod.get(period);
-      return { period, value: b?.inventarioFinal ?? null, proofUrl: b?.inventarioProofUrl ?? null, aiMatches: b?.inventarioAiMatches ?? null };
+      return {
+        period,
+        value: b?.inventarioFinal ?? null,
+        proofUrl: b?.inventarioProofUrl ?? null,
+        aiMatches: b?.inventarioAiMatches ?? null,
+        hasSnapshot: snapshotSet.has(period),
+      };
     }),
-    products: products.map((p): StaleProductDTO => ({
-      id: p.id,
-      name: p.name,
-      value: p.value,
-      status: p.status,
-      quartersConfirmed: p.quartersConfirmed,
-      lastConfirmedQuarter: p.lastConfirmedQuarter,
-    })),
-    currentQuarter: currentQuarter(),
   };
 }
 
@@ -104,9 +92,9 @@ export type InventoryKpisDataDTO = {
   dio: { current: number | null; previous: number | null; good: boolean | null };
   gmroiSeries: { current: number | null; previous: number | null; good: boolean | null };
   overstockAlert: { alert: boolean; message: string | null };
-  staleSummary: ReturnType<typeof summarizeStaleProducts>;
-  staleProducts: StaleProductDTO[];
-  currentQuarter: string;
+  staleSummary: ReturnType<typeof summarizeStaleStreaks>;
+  staleEntries: StaleStreakEntry[];
+  staleSnapshotPeriod: string | null;
 };
 
 // Todo lo que necesita la pestaña "Inventario" dentro de KPIs financieros —
@@ -121,21 +109,28 @@ export async function getInventoryKpisData(): Promise<InventoryKpisDataDTO> {
     dio: { current: null, previous: null, good: null },
     gmroiSeries: { current: null, previous: null, good: null },
     overstockAlert: { alert: false, message: null },
-    staleSummary: summarizeStaleProducts([], null),
-    staleProducts: [],
-    currentQuarter: currentQuarter(),
+    staleSummary: summarizeStaleStreaks([], null),
+    staleEntries: [],
+    staleSnapshotPeriod: null,
   };
 
   const deptId = await getFinanzasDeptId();
   if (!deptId) return empty;
 
-  const [records, balances, products] = await Promise.all([
+  const [records, balances, snapshots] = await Promise.all([
     prisma.financeKpiRecord.findMany({ where: { deptId }, orderBy: { period: "asc" } }),
     prisma.financeSharedMonthlyBalance.findMany({ where: { deptId }, orderBy: { period: "asc" } }),
-    prisma.inventoryStaleProduct.findMany({ where: { deptId }, orderBy: { createdAt: "asc" } }),
+    prisma.inventoryProductSnapshot.findMany({ where: { deptId }, orderBy: { period: "asc" } }),
   ]);
 
-  if (records.length === 0) return { ...empty, staleProducts: products.map(toStaleDTO) };
+  const staleEntries = computeStaleStreaks(snapshots);
+  const staleSnapshotPeriod = snapshots.length > 0 ? snapshots[snapshots.length - 1].period : null;
+  const latestSnapshotTotal = staleSnapshotPeriod
+    ? snapshots.filter((s) => s.period === staleSnapshotPeriod).reduce((sum, s) => sum + s.costTotal, 0)
+    : null;
+  const staleSummary = summarizeStaleStreaks(staleEntries, latestSnapshotTotal);
+
+  if (records.length === 0) return { ...empty, staleEntries, staleSnapshotPeriod, staleSummary };
 
   const byPeriod = new Map<string, FinanceMonthRaw[]>();
   for (const r of records) {
@@ -188,17 +183,8 @@ export async function getInventoryKpisData(): Promise<InventoryKpisDataDTO> {
     dio: { current: dioCurrent, previous: dioPrevious, good: dioCurrent !== null ? trendIsGood(dioCurrent, dioPrevious, "down") : null },
     gmroiSeries: { current: gmroiCurrent, previous: gmroiPrevious, good: gmroiCurrent !== null ? trendIsGood(gmroiCurrent, gmroiPrevious, "up") : null },
     overstockAlert: detectOverstockAlert(overstockSeries),
-    staleSummary: summarizeStaleProducts(products.map(toStaleRow), series[series.length - 1]?.inventario ?? null),
-    staleProducts: products.map(toStaleDTO),
-    currentQuarter: currentQuarter(),
+    staleSummary,
+    staleEntries,
+    staleSnapshotPeriod,
   };
 }
-
-function toStaleDTO(p: { id: string; name: string; value: number; status: string; quartersConfirmed: number; lastConfirmedQuarter: string }): StaleProductDTO {
-  return { id: p.id, name: p.name, value: p.value, status: p.status, quartersConfirmed: p.quartersConfirmed, lastConfirmedQuarter: p.lastConfirmedQuarter };
-}
-function toStaleRow(p: { id: string; name: string; value: number; status: string; quartersConfirmed: number }): StaleProductRow {
-  return { id: p.id, name: p.name, value: p.value, status: p.status, quartersConfirmed: p.quartersConfirmed };
-}
-
-export { isReviewDue, daysUntilDue };

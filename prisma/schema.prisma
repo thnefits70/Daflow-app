@@ -72,7 +72,7 @@ model Department {
   financeKpis           FinanceKpiRecord[]
   financeSharedBalances FinanceSharedMonthlyBalance[]
   financeKpiUploads     FinanceKpiUpload[]
-  inventoryStaleProducts InventoryStaleProduct[]
+  inventoryProductSnapshots InventoryProductSnapshot[]
   financeKpiSettings    FinanceKpiSettings?
   weeklyMetrics WeeklyMetricRecord[]
   weeklyReviews WeeklyReviewRecord[]
@@ -213,8 +213,7 @@ model User {
   purchaseReceiptChangeRequests   PurchaseReceiptChangeRequest[] @relation("PurchaseReceiptRequestedBy")
   purchaseCatalogItemsCreated     PurchaseCatalogItem[] @relation("PurchaseCatalogItemCreatedBy")
   purchaseCatalogItemDeleteRequests PurchaseCatalogItemDeleteRequest[] @relation("PurchaseCatalogItemDeleteRequestedBy")
-  inventoryStaleProductsCreated     InventoryStaleProduct[] @relation("InventoryStaleProductCreatedBy")
-  inventoryStaleProductsUpdated     InventoryStaleProduct[] @relation("InventoryStaleProductUpdatedBy")
+  inventoryProductSnapshotsCreated  InventoryProductSnapshot[] @relation("InventoryProductSnapshotCreatedBy")
   pettyCashEntriesCreated   PettyCashEntry[] @relation("PettyCashEntryCreatedBy")
   pettyCashEntriesUpdated   PettyCashEntry[] @relation("PettyCashEntryUpdatedBy")
   pettyCashEntriesArchived  PettyCashEntry[] @relation("PettyCashEntryArchivedBy")
@@ -598,39 +597,36 @@ model FinanceSharedMonthlyBalance {
   @@index([deptId])
 }
 
-// Seguimiento trimestral de "productos sin movimiento" (KPI de inventario en
-// riesgo) — confirmado 2026-08-04: NO es una foto anual, Daniel (líder de
-// Inventario) confirma cada 3 meses si un producto flagueado sigue sin
-// venderse o ya se recuperó, y agrega los nuevos que recién cruzan el umbral
-// de 3 meses. quartersConfirmed cuenta cuántos trimestres SEGUIDOS se
-// reconfirmó "sigue igual" — de ahí se deriva el rango (1 = 3-6 meses, 2+ =
-// +6 meses) sin que nadie tenga que clasificarlo a mano. Los productos nunca
-// se eliminan (solo status pasa a "recovered"); el valor sí se puede editar.
-model InventoryStaleProduct {
-  id         String     @id @default(cuid())
-  deptId     String
+// Confirmado 2026-08-05: reemplaza por completo el seguimiento manual
+// anterior (InventoryStaleProduct, nunca llegó a usarse) — cada mes Daniel
+// sube el mismo Excel de saldos costeados/valorizados (código, costo
+// promedio, descripción, stock actual) en vez de escribir a mano qué
+// productos no se venden. "Sin movimiento" se deriva solo comparando el
+// stock de cada producto contra el mes inmediatamente anterior — si NO bajó,
+// cuenta como un mes más sin moverse (ver computeStaleStreaks en
+// inventoryKpisCalc.ts). Reemplazar el mes (no agregar filas sueltas) es la
+// única forma de corregir un error, igual que la plantilla de Finanzas.
+model InventoryProductSnapshot {
+  id     String     @id @default(cuid())
+  deptId String
   department Department @relation(fields: [deptId], references: [id], onDelete: Cascade)
 
-  name  String
-  value Float
-
-  status String @default("active") // "active" | "recovered"
-
-  // "YYYY-Qn" — trimestre en que se confirmó por última vez que seguía sin
-  // venderse (o en que se creó, si nunca se ha reconfirmado).
-  lastConfirmedQuarter String
-  quartersConfirmed    Int    @default(1)
-  recoveredQuarter     String?
+  period      String // "YYYY-MM"
+  productCode String
+  description String
+  avgCost     Float
+  stock       Float
+  costTotal   Float // avgCost * stock, calculado al momento de subir el archivo
 
   createdById String?
-  createdBy   User?   @relation("InventoryStaleProductCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  updatedById String?
-  updatedBy   User?   @relation("InventoryStaleProductUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  createdBy   User?   @relation("InventoryProductSnapshotCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([deptId])
+  @@unique([deptId, period, productCode])
+  @@index([deptId, period])
+  @@index([productCode])
 }
 
 enum PettyCashBoxType {

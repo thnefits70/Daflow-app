@@ -96,7 +96,7 @@ export async function POST(req: NextRequest) {
   // Chica se lanzaron con carpetas propias que nunca se agregaron aquí, así
   // que Daniel (y cualquiera sin ser admin) recibía "No autorizado" al subir
   // una captura, sin importar que sí tuviera el permiso del módulo.
-  if (!allowed && session?.user.role === "employee" && folder === "inventory-proofs") {
+  if (!allowed && session?.user.role === "employee" && (folder === "inventory-proofs" || folder === "inventory-stock-snapshot")) {
     allowed = await canManageInventoryControl();
   }
   if (!allowed && session?.user.role === "employee" && (folder === "petty-cash" || folder === "petty-cash-proofs")) {
