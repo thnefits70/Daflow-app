@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { generateQuestionsForContent, LEARNING_PATH_AI_MODEL, type ContentPart, type ContentSource } from "@/lib/learningPathAi";
+import { addBusinessHours } from "@/lib/businessHours";
 
 export type ContentKind = "document" | "law" | "process" | "module";
 
@@ -255,59 +256,11 @@ export type MyPathDTO = {
 const LEARNING_PATH_DEADLINE_BUSINESS_DAYS = 5;
 
 // Confirmado 2026-07-27: aprobar un paso requiere >= 8/10 (80%). Si reprueba,
-// puede reintentar recién a las 24 horas laborables — horario de oficina
-// lunes a sábado 8:00-18:00, hora de Ecuador (UTC-5; el servidor corre en
-// UTC, así que hay que correr el reloj antes de mirar día/hora — mismo
-// truco que nowInEcuador() en pendingTasks.ts). Domingo no cuenta.
+// puede reintentar recién a las 24 horas laborables — horario real de
+// oficina (src/lib/businessHours.ts), corregido 2026-08-05 (antes tenía
+// puesto lunes a sábado 8:00-18:00, que nunca fue el horario verdadero).
 const PASS_THRESHOLD = 0.8;
 const RETRY_COOLDOWN_BUSINESS_HOURS = 24;
-const ECUADOR_OFFSET_MS = 5 * 60 * 60 * 1000;
-const BUSINESS_START_HOUR = 8;
-const BUSINESS_END_HOUR = 18;
-
-function addBusinessHours(start: Date, hours: number): Date {
-  // Se trabaja enteramente en "hora de Ecuador desplazada" y se devuelve el
-  // resultado ya corregido de vuelta a UTC real.
-  let cur = new Date(start.getTime() - ECUADOR_OFFSET_MS);
-
-  const snapToWindow = (d: Date) => {
-    while (d.getUTCDay() === 0) {
-      d.setUTCDate(d.getUTCDate() + 1);
-      d.setUTCHours(BUSINESS_START_HOUR, 0, 0, 0);
-    }
-    if (d.getUTCHours() < BUSINESS_START_HOUR) {
-      d.setUTCHours(BUSINESS_START_HOUR, 0, 0, 0);
-    } else if (d.getUTCHours() >= BUSINESS_END_HOUR) {
-      d.setUTCDate(d.getUTCDate() + 1);
-      d.setUTCHours(BUSINESS_START_HOUR, 0, 0, 0);
-      snapToWindow(d);
-    }
-  };
-  snapToWindow(cur);
-
-  let remainingMs = hours * 60 * 60 * 1000;
-  while (remainingMs > 0) {
-    const dayEnd = new Date(cur);
-    dayEnd.setUTCHours(BUSINESS_END_HOUR, 0, 0, 0);
-    const availableMs = dayEnd.getTime() - cur.getTime();
-    if (availableMs <= 0) {
-      cur.setUTCDate(cur.getUTCDate() + 1);
-      cur.setUTCHours(BUSINESS_START_HOUR, 0, 0, 0);
-      snapToWindow(cur);
-      continue;
-    }
-    if (remainingMs <= availableMs) {
-      cur = new Date(cur.getTime() + remainingMs);
-      remainingMs = 0;
-    } else {
-      remainingMs -= availableMs;
-      cur.setUTCDate(cur.getUTCDate() + 1);
-      cur.setUTCHours(BUSINESS_START_HOUR, 0, 0, 0);
-      snapToWindow(cur);
-    }
-  }
-  return new Date(cur.getTime() + ECUADOR_OFFSET_MS);
-}
 
 function addBusinessDays(start: Date, days: number): Date {
   const d = new Date(start);
