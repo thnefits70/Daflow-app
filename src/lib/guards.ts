@@ -406,6 +406,23 @@ export async function canRegisterPurchaseInvoices() {
   return !!user.isLeader && user.leadsDept?.code === "FIN";
 }
 
+// Pagos administrativos (Finanzas) — confirmado 2026-08-06: exclusivo de
+// Finanzas + admin, a diferencia de Control de Compras que también incluye a
+// Compras. canManageAdminPayments es el mismo tipo de escape hatch que
+// canManagePurchases, para delegar sin tocar código.
+export async function canManageAdminPayments() {
+  const session = await auth();
+  if (!session) return false;
+  if (session.user.role === "admin") return true;
+  const user = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { canManageAdminPayments: true, isLeader: true, leadsDept: { select: { code: true } } },
+  });
+  if (!user) return false;
+  if (user.canManageAdminPayments) return true;
+  return !!user.isLeader && user.leadsDept?.code === "FIN";
+}
+
 // How many of the current user's own pay stubs were uploaded/updated since
 // they last opened "Roles de pago" — drives the sidebar badge.
 export async function getUnseenPayStubCount() {

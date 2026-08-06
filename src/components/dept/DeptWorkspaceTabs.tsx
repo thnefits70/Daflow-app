@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { GitBranch, FileText, GraduationCap, LineChart, TrendingUp, MessageSquare, CalendarClock, BellRing, Heart, ShoppingCart, Package, Pin, Wallet, BarChart3 } from "lucide-react";
+import { GitBranch, FileText, GraduationCap, LineChart, TrendingUp, MessageSquare, CalendarClock, BellRing, Heart, ShoppingCart, Package, Pin, Wallet, BarChart3, Landmark } from "lucide-react";
 import { ProcessEmbeddedPanel } from "@/components/process/ProcessEmbeddedPanel";
 import type { ProcessDTO } from "@/components/process/ProcessEditor";
 import type { ProcessUpdateDTO } from "@/components/process/ProcessHistoryPanel";
@@ -25,6 +25,7 @@ import type { InventoryControlPeriodDTO, InventoryKpisDataDTO } from "@/lib/inve
 import { PettyCashPanel } from "@/components/pettycash/PettyCashPanel";
 import { PettyCashExceptionsPanel } from "@/components/pettycash/PettyCashExceptionsPanel";
 import type { PettyCashViewerData } from "@/lib/pettyCash";
+import { AdminPaymentsPanel } from "@/components/finance/AdminPaymentsPanel";
 
 type DocumentDTO = { id: string; title: string; content: string; link: string; fileUrl: string | null; fileName: string | null };
 type ExamSummary = { id: string; title: string; questionCount: number };
@@ -41,6 +42,7 @@ const ALL_TABS = [
   { key: "inventario", label: "Control de Inventario", icon: Package },
   { key: "inventoriokpis", label: "KPIs de Inventario", icon: BarChart3 },
   { key: "cajachica", label: "Caja Chica", icon: Wallet },
+  { key: "pagosadmin", label: "Pagos administrativos", icon: Landmark },
   { key: "postventa", label: "Servicio Postventa", icon: Heart },
   { key: "documentos", label: "Documentos", icon: FileText },
   { key: "examenes", label: "Exámenes", icon: GraduationCap },
@@ -75,6 +77,7 @@ export function DeptWorkspaceTabs({
   canViewInventoryKpisPanel = false,
   inventoryKpisData = null,
   pettyCashData = null,
+  canManageAdminPayments = false,
   preferredTab = null,
   isAdmin = false,
   editable,
@@ -126,6 +129,9 @@ export function DeptWorkspaceTabs({
   // Caja Chica — confirmado 2026-08-05: null si la persona no ve ninguna de
   // las dos cajas (ni Principal ni Secundaria le corresponde).
   pettyCashData?: PettyCashViewerData | null;
+  // Pagos administrativos — mismo patrón sin dept.code que Control de
+  // Compras (confirmado 2026-08-06), exclusivo de Finanzas + admin.
+  canManageAdminPayments?: boolean;
   isAdmin?: boolean;
   editable: boolean;
   kpisEditable?: boolean;
@@ -150,6 +156,7 @@ export function DeptWorkspaceTabs({
     if (t.key === "inventoriokpis") return canViewInventoryKpisPanel;
     if (t.key === "cajachica") return !!(pettyCashData?.principal || pettyCashData?.secundaria);
     if (t.key === "postventa") return canManageStoreFeedback || canViewStoreFeedback;
+    if (t.key === "pagosadmin") return canManageAdminPayments;
     return true;
   });
   // Confirmado 2026-07-30: cada área debería abrir directo en su pestaña más
@@ -258,6 +265,8 @@ export function DeptWorkspaceTabs({
           />
         </div>
       )}
+
+      {tab === "pagosadmin" && canManageAdminPayments && <AdminPaymentsPanel isAdmin={isAdmin} />}
       {tab === "postventa" && (canManageStoreFeedback || canViewStoreFeedback) && (
         <StoreFeedbackPanel stores={storeFeedbackStores} editable={canManageStoreFeedback} />
       )}

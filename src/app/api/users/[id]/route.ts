@@ -47,6 +47,7 @@ const updateSchema = z.object({
   canManageLaws: z.boolean().optional(),
   canAddSuppliers: z.boolean().optional(),
   canManagePurchases: z.boolean().optional(),
+  canManageAdminPayments: z.boolean().optional(),
   canManageStoreFeedback: z.boolean().optional(),
   canViewStoreFeedback: z.boolean().optional(),
   excludeFromRecognition: z.boolean().optional(),
@@ -110,6 +111,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (d.canManageLaws !== undefined) data.canManageLaws = d.canManageLaws;
   if (d.canAddSuppliers !== undefined) data.canAddSuppliers = d.canAddSuppliers;
   if (d.canManagePurchases !== undefined) data.canManagePurchases = d.canManagePurchases;
+  if (d.canManageAdminPayments !== undefined) data.canManageAdminPayments = d.canManageAdminPayments;
   if (d.canManageStoreFeedback !== undefined) data.canManageStoreFeedback = d.canManageStoreFeedback;
   if (d.canViewStoreFeedback !== undefined) data.canViewStoreFeedback = d.canViewStoreFeedback;
   if (d.excludeFromRecognition !== undefined) data.excludeFromRecognition = d.excludeFromRecognition;

@@ -87,6 +87,7 @@ export default async function DeptWorkspacePage({ params }: { params: Promise<{ 
         canViewInventoryKpisPanel={dept.code === "INV" || dept.code === "MKT"}
         inventoryKpisData={inventoryKpisData}
         pettyCashData={pettyCashData}
+        canManageAdminPayments={dept.code === "FIN"}
         isAdmin
         editable
       />

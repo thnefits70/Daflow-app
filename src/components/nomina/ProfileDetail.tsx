@@ -35,6 +35,7 @@ type UserProfile = {
   canManageLaws: boolean;
   canAddSuppliers: boolean;
   canManagePurchases: boolean;
+  canManageAdminPayments: boolean;
   canManageStoreFeedback: boolean;
   canViewStoreFeedback: boolean;
   excludeFromRecognition: boolean;
@@ -701,6 +702,31 @@ export function ProfileDetail({
                 type="button"
                 className={`flex-1 py-1.5 text-[12.5px] font-semibold cursor-pointer ${!p.canManagePurchases ? "bg-blue text-white" : "bg-surface text-steel"}`}
                 onClick={() => save({ canManagePurchases: false })}
+              >
+                No
+              </button>
+            </div>
+          </div>
+
+          <div className="bg-cloud border border-rule rounded p-3.5 mt-3.5">
+            <label className="flex items-center gap-1 mb-2 text-[10.5px] font-semibold uppercase tracking-wide text-steel">
+              <Receipt size={11} /> ¿Puede gestionar Pagos administrativos?
+            </label>
+            <div className="text-[11px] text-steel mb-2">
+              Solicitudes de pago administrativos (IESS, sueldos, alquiler, etc.) de Finanzas — sin necesitar ser líder formal de ese departamento.
+            </div>
+            <div className="flex border border-rule rounded overflow-hidden max-w-[220px]">
+              <button
+                type="button"
+                className={`flex-1 py-1.5 text-[12.5px] font-semibold cursor-pointer ${p.canManageAdminPayments ? "bg-blue text-white" : "bg-surface text-steel"}`}
+                onClick={() => save({ canManageAdminPayments: true })}
+              >
+                Sí
+              </button>
+              <button
+                type="button"
+                className={`flex-1 py-1.5 text-[12.5px] font-semibold cursor-pointer ${!p.canManageAdminPayments ? "bg-blue text-white" : "bg-surface text-steel"}`}
+                onClick={() => save({ canManageAdminPayments: false })}
               >
                 No
               </button>

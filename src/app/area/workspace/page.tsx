@@ -3,7 +3,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { TopLine } from "@/components/ui/TopLine";
 import { DeptWorkspaceTabs } from "@/components/dept/DeptWorkspaceTabs";
-import { getUnseenFeedbackCount, canManageStoreFeedback as checkCanManageStoreFeedback, canViewStoreFeedback as checkCanViewStoreFeedback, canSubmitPurchaseRequests, canConfirmPurchaseReceiving, canRegisterPurchaseInvoices, canManageInventoryControl as checkCanManageInventoryControl, canViewInventoryKpisPanel as checkCanViewInventoryKpisPanel } from "@/lib/guards";
+import { getUnseenFeedbackCount, canManageStoreFeedback as checkCanManageStoreFeedback, canViewStoreFeedback as checkCanViewStoreFeedback, canSubmitPurchaseRequests, canConfirmPurchaseReceiving, canRegisterPurchaseInvoices, canManageInventoryControl as checkCanManageInventoryControl, canViewInventoryKpisPanel as checkCanViewInventoryKpisPanel, canManageAdminPayments as checkCanManageAdminPayments } from "@/lib/guards";
 import { getFinanceKpiData } from "@/lib/financeKpis";
 import { getDeptProcessDetail } from "@/lib/processDetail";
 import { getPaymentRemindersData } from "@/lib/paymentReminders";
@@ -46,6 +46,9 @@ export default async function WorkspacePage() {
   // 2026-08-05: solo Daniel (INV) y Bryan (MKT), Nairoby/admin ya lo ven vía
   // KPIs financieros → Inventario (ver canViewInventoryKpisPanel en guards.ts).
   const canViewInventoryKpisPanel = await checkCanViewInventoryKpisPanel();
+  // Pagos administrativos — mismo patrón sin dept.code que Control de
+  // Compras (confirmado 2026-08-06).
+  const canManageAdminPayments = await checkCanManageAdminPayments();
 
   const [processDetail, periodicReminders, documents, exams, financeKpiData, paymentReminders, weeklyMetricRecords, weeklyReviewRecords, currentUser, unseenFeedbackCount, storeFeedbackStores, inventoryControlData, inventoryKpisData, pettyCashData] = await Promise.all([
     getDeptProcessDetail(dept.id),
@@ -135,6 +138,7 @@ export default async function WorkspacePage() {
         canViewInventoryKpisPanel={canViewInventoryKpisPanel}
         inventoryKpisData={inventoryKpisData}
         pettyCashData={pettyCashData}
+        canManageAdminPayments={canManageAdminPayments}
         preferredTab={currentUser?.defaultWorkspaceTab ?? null}
         isAdmin={false}
         editable={false}

@@ -4,6 +4,7 @@ import { getDisabledTypes } from "@/lib/pushPreferences";
 import { getDuePersonalReminderPushes } from "@/lib/periodicReminders";
 import { getStalePurchaseRequestPushes } from "@/lib/purchases";
 import { getStaleSupplierCreditPushes } from "@/lib/supplierCredits";
+import { getStaleAdminPaymentPushes } from "@/lib/adminPayments";
 import { sendPushToOwner } from "@/lib/webPush";
 
 // Disparado por Vercel Cron (ver vercel.json) una vez al día. Protegido por
@@ -67,6 +68,12 @@ export async function GET(req: NextRequest) {
 
   const staleCredits = await getStaleSupplierCreditPushes();
   for (const r of staleCredits) {
+    await sendPushToOwner(r.ownerId, { title: r.title, body: r.body, url: r.url });
+    notified++;
+  }
+
+  const staleAdminPayments = await getStaleAdminPaymentPushes();
+  for (const r of staleAdminPayments) {
     await sendPushToOwner(r.ownerId, { title: r.title, body: r.body, url: r.url });
     notified++;
   }

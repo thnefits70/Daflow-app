@@ -138,6 +138,11 @@ model User {
   // isLeader+leadsDeptId==COM. Admin siempre puede, sin necesitar el flag.
   canManagePurchases Boolean @default(false)
 
+  // Escape hatch para Pagos administrativos (Finanzas) — confirmado
+  // 2026-08-06: por defecto solo el líder de Finanzas (y admin) gestiona
+  // esto; a diferencia de canManagePurchases, no incluye a Compras.
+  canManageAdminPayments Boolean @default(false)
+
   // Escape hatch para Servicio Postventa —
   // confirmado 2026-07-25: por defecto solo el líder de Análisis de Mercado
   // (y admin) gestiona esto; el admin puede delegarlo a alguien más puntualmente.
@@ -208,6 +213,10 @@ model User {
   urgentResolutionsReplacementVerified PurchaseUrgentResolution[] @relation("UrgentResolutionReplacementVerifiedBy")
   urgentResolutionsBankConfirmed       PurchaseUrgentResolution[] @relation("UrgentResolutionBankConfirmedBy")
   purchaseRequestsFinanceFlagged       PurchaseRequest[] @relation("PurchaseRequestFinanceFlaggedBy")
+  adminPaymentTemplatesCreated AdminPaymentTemplate[] @relation("AdminPaymentTemplateCreatedBy")
+  adminPaymentRequestsCreated  AdminPaymentRequest[]  @relation("AdminPaymentRequestCreatedBy")
+  adminPaymentsPaid            AdminPaymentRequest[]  @relation("AdminPaymentPaidBy")
+  adminPaymentsConfirmed       AdminPaymentRequest[]  @relation("AdminPaymentConfirmedBy")
   inventoryProductSnapshotsCreated  InventoryProductSnapshot[] @relation("InventoryProductSnapshotCreatedBy")
   pettyCashEntriesCreated   PettyCashEntry[] @relation("PettyCashEntryCreatedBy")
   pettyCashEntriesUpdated   PettyCashEntry[] @relation("PettyCashEntryUpdatedBy")
@@ -1947,4 +1956,81 @@ model PushCategoryPreference {
 
   @@unique([ownerId, type])
   @@index([ownerId])
+}
+
+/* ---------------- Pagos administrativos (Finanzas) ---------------- */
+// Confirmado 2026-08-06: Nairoby (líder de Finanzas) solicita pagos
+// administrativos (IESS, sueldos, alquiler, etc.) y el admin los paga y sube
+// comprobante — la IA cruza el monto en ambos puntos (doc. de soporte
+// opcional al crear, comprobante obligatorio al pagar). Distinto de "Pagos
+// recordatorios" (rastreador de vencimientos con checkbox, sin
+// solicitante/pagador separados ni archivos).
+enum AdminPaymentType {
+  RECURRING
+  VARIABLE
+}
+
+enum AdminPaymentStatus {
+  PENDING_PAYMENT
+  PAID
+  CONFIRMED
+}
+
+// Serie recurrente (ej. "Planilla IESS") — el motivo es fijo pero el monto
+// varía cada mes, así que solo sirve de plantilla/serie; el monto real vive
+// en cada AdminPaymentRequest. Catálogo "escribe o elige" (mismo patrón que
+// proveedores/bancos de Control de Compras).
+model AdminPaymentTemplate {
+  id          String   @id @default(cuid())
+  motivo      String   @unique
+  isActive    Boolean  @default(true)
+  createdById String?
+  createdBy   User?    @relation("AdminPaymentTemplateCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+
+  requests AdminPaymentRequest[]
+}
+
+// Confirmado 2026-08-06: la reaparición mensual de una recurrente es
+// perezosa (sin cron que la cree sola) — se calcula en memoria comparando
+// plantillas activas contra @@unique([templateId, period]) del mes actual,
+// igual que PaymentReminder/PaymentReminderRecord.
+model AdminPaymentRequest {
+  id String @id @default(cuid())
+
+  type       AdminPaymentType
+  templateId String?
+  template   AdminPaymentTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  period     String? // "YYYY-MM", solo type=RECURRING
+
+  motivo String
+  monto  Float
+  status AdminPaymentStatus @default(PENDING_PAYMENT)
+
+  // Doc. de soporte opcional al crear — bloqueante si la IA no lo hace calzar
+  declarationFileUrl  String?
+  declarationFileName String?
+  declarationAiMatch  Boolean?
+  declarationAiNote   String?
+
+  // Comprobante de pago del admin — obligatorio para pasar a PAID, bloqueante
+  paymentProofUrl  String?
+  paymentProofName String?
+  paymentAiMatch   Boolean?
+  paymentAiNote    String?
+  paidAt   DateTime?
+  paidById String?
+  paidBy   User?     @relation("AdminPaymentPaidBy", fields: [paidById], references: [id], onDelete: SetNull)
+
+  confirmedAt   DateTime?
+  confirmedById String?
+  confirmedBy   User?     @relation("AdminPaymentConfirmedBy", fields: [confirmedById], references: [id], onDelete: SetNull)
+
+  createdById String?
+  createdBy   User?    @relation("AdminPaymentRequestCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+
+  @@unique([templateId, period])
+  @@index([status])
+  @@index([type])
 }

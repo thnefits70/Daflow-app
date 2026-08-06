@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { FileText, Upload, Truck, CheckCircle2, Plus } from "lucide-react";
+import { FileText, Upload, Truck, CheckCircle2, Plus, Bell } from "lucide-react";
 import { uploadFile } from "@/lib/uploadFile";
 import { compressImage } from "@/lib/compressImage";
 import { usePasteFile } from "@/lib/usePasteFile";
@@ -200,6 +200,7 @@ function GroupCard({ g, onPurchaseOrderUploaded, onGroupUpdate }: { g: Row[]; on
   const needsPurchaseOrder = !rejected && !g[0].purchaseOrderUrl;
   const [uploading, setUploading] = useState(false);
   const [err, setErr] = useState("");
+  const [reminded, setReminded] = useState(false);
   const { onPaste, onMouseEnter: onPasteHoverIn, onMouseLeave: onPasteHoverOut } = usePasteFile((file) => handleFile(file));
 
   // Si un grupo tiene varios productos, cada uno puede llegar por separado
@@ -230,6 +231,13 @@ function GroupCard({ g, onPurchaseOrderUploaded, onGroupUpdate }: { g: Row[]; on
       return;
     }
     onPurchaseOrderUploaded(groupId, uploaded.url);
+  }
+
+  async function remindPayment() {
+    const target = g.find((r) => r.status === "APPROVED") ?? g[0];
+    await fetch(`/api/purchase-requests/${target.id}/remind-payment`, { method: "POST" }).catch(() => null);
+    setReminded(true);
+    setTimeout(() => setReminded(false), 2500);
   }
 
   return (
@@ -266,6 +274,15 @@ function GroupCard({ g, onPurchaseOrderUploaded, onGroupUpdate }: { g: Row[]; on
             {groupIdx >= 2 && <>Pagada por {actorName(g[0].paidBy?.name)} · </>}
             {groupIdx >= 3 && <>Recibida por {[...new Set(g.map((r) => actorName(r.receipt?.confirmedBy?.name)))].join(", ")}</>}
           </div>
+          {groupIdx === 1 && (
+            <button
+              type="button"
+              className="flex items-center gap-1.5 mt-2 text-[11.5px] font-semibold text-steel border border-rule rounded px-2.5 py-1.5 cursor-pointer"
+              onClick={remindPayment}
+            >
+              <Bell size={12} /> {reminded ? "✓ Enviado" : "Recordar pago al admin"}
+            </button>
+          )}
         </>
       )}
 

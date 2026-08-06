@@ -12,6 +12,7 @@ import {
   canManageInventoryControl,
   canManagePettyCashPrincipal,
   canManagePettyCashSecundaria,
+  canManageAdminPayments,
 } from "@/lib/guards";
 
 // Confirmado 2026-08-03: bug real — ninguna de estas carpetas de Control de
@@ -97,6 +98,9 @@ export async function POST(req: NextRequest) {
   }
   if (!allowed && session?.user.role === "employee" && (folder === "petty-cash" || folder === "petty-cash-proofs")) {
     allowed = (await canManagePettyCashPrincipal()) || (await canManagePettyCashSecundaria());
+  }
+  if (!allowed && session?.user.role === "employee" && folder === "admin-payments") {
+    allowed = await canManageAdminPayments();
   }
   if (!allowed) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
