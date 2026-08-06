@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Search, X, ChevronDown, Award } from "lucide-react";
 import { PriceTrendChart } from "./PriceTrendChart";
-import type { SupplierPriceHistory } from "@/app/api/purchase-catalog/[id]/supplier-comparison/route";
+import type { SupplierPriceHistory } from "@/lib/purchases";
 
 type CatalogItem = { id: string; name: string; photos: string[]; description?: string | null; code?: string | null };
 

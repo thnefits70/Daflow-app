@@ -1,12 +1,22 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Search, Plus, Camera, AlertTriangle, CheckCircle2, Trash2 } from "lucide-react";
+import { Search, Plus, Camera, AlertTriangle, CheckCircle2, Trash2, Flag } from "lucide-react";
 import { uploadFile } from "@/lib/uploadFile";
 import { compressImage } from "@/lib/compressImage";
 import { usePasteFile } from "@/lib/usePasteFile";
 
-export type CatalogItemDTO = { id: string; name: string; photos: string[]; description?: string | null; code?: string | null; canDelete?: boolean };
+export type CatalogItemDTO = {
+  id: string;
+  name: string;
+  photos: string[];
+  description?: string | null;
+  code?: string | null;
+  canDelete?: boolean;
+  canRequestDelete?: boolean;
+  hasPendingDelete?: boolean;
+  pendingDeleteRequest?: { id: string; reason: string | null; requestedByName: string | null } | null;
+};
 
 // Confirmado 2026-07-30 (boceto aprobado): un nombre por insumo, siempre. El
 // match EXACTO bloquea directo (obliga a seleccionar el existente); el
@@ -33,6 +43,11 @@ export function PurchaseCatalogPicker({
   const [open, setOpen] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deleteErr, setDeleteErr] = useState<string | null>(null);
+  const [requestingDeleteId, setRequestingDeleteId] = useState<string | null>(null);
+  const [requestDeleteReason, setRequestDeleteReason] = useState("");
+  const [requestDeleteBusy, setRequestDeleteBusy] = useState(false);
+  const [requestedDeleteIds, setRequestedDeleteIds] = useState<string[]>([]);
+  const [reviewingId, setReviewingId] = useState<string | null>(null);
 
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState("");
@@ -136,10 +151,11 @@ export function PurchaseCatalogPicker({
     onChange(data);
   }
 
-  // Confirmado 2026-08-03: eliminar es SOLO del administrador (nadie más ve
-  // este ícono), y con confirmación siempre — para no borrar algo por
-  // accidente. El servidor igual vuelve a bloquear si el insumo ya tiene
-  // compras registradas.
+  // Confirmado 2026-08-03/06: admin siempre puede eliminar; quien creó el
+  // insumo puede eliminarlo él mismo solo dentro de las primeras 2 horas y
+  // sin compras registradas (`canDelete`, calculado server-side) — con
+  // confirmación siempre, para no borrar algo por accidente. El servidor
+  // igual vuelve a bloquear si el insumo ya tiene compras registradas.
   async function deleteItem(item: CatalogItemDTO, e: React.MouseEvent) {
     e.stopPropagation();
     if (!confirm(`¿Eliminar "${item.name}" del catálogo? Esta acción no se puede deshacer.`)) return;
@@ -153,6 +169,56 @@ export function PurchaseCatalogPicker({
       return;
     }
     setResults((rs) => rs.filter((r) => r.id !== item.id));
+  }
+
+  // Confirmado 2026-08-06: si ya pasaron las 2 horas (o el insumo ya tiene
+  // compras) quien lo creó no puede borrarlo directo — puede pedirle al
+  // admin que lo borre, con una razón breve. Reutiliza el mismo modelo
+  // PurchaseCatalogItemDeleteRequest que ya existía en el schema.
+  async function requestDelete(item: CatalogItemDTO, e: React.MouseEvent) {
+    e.stopPropagation();
+    setRequestDeleteBusy(true);
+    setDeleteErr(null);
+    const res = await fetch(`/api/purchase-catalog/${item.id}/delete-request`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reason: requestDeleteReason.trim() || undefined }),
+    });
+    setRequestDeleteBusy(false);
+    if (!res.ok) {
+      const data = await res.json().catch(() => null);
+      setDeleteErr(`"${item.name}" — ${data?.error ?? "No se pudo enviar la solicitud."}`);
+      return;
+    }
+    setRequestedDeleteIds((ids) => [...ids, item.id]);
+    setRequestingDeleteId(null);
+    setRequestDeleteReason("");
+  }
+
+  // Revisión del admin sobre una solicitud de borrado pendiente — aprobar
+  // borra de verdad (el servidor vuelve a chequear que no tenga compras);
+  // rechazar solo descarta la solicitud, sin tocar el producto.
+  async function reviewDeleteRequest(item: CatalogItemDTO, action: "approve" | "reject", e: React.MouseEvent) {
+    e.stopPropagation();
+    if (!item.pendingDeleteRequest) return;
+    setReviewingId(item.id);
+    setDeleteErr(null);
+    const res = await fetch(`/api/purchase-catalog/delete-requests/${item.pendingDeleteRequest.id}/review`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action }),
+    });
+    setReviewingId(null);
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      setDeleteErr(`"${item.name}" — ${data?.error ?? "No se pudo procesar la solicitud."}`);
+      return;
+    }
+    if (data?.deleted) {
+      setResults((rs) => rs.filter((r) => r.id !== item.id));
+    } else {
+      setResults((rs) => rs.map((r) => (r.id === item.id ? { ...r, hasPendingDelete: false, pendingDeleteRequest: null } : r)));
+    }
   }
 
   if (value) {
@@ -304,32 +370,106 @@ export function PurchaseCatalogPicker({
               </button>
             </div>
           )}
-          {filtered.map((item) => (
-            <div key={item.id} className="flex items-center border-b border-rule last:border-none">
-              <button
-                type="button"
-                className="flex-1 min-w-0 flex items-center gap-2.5 px-3 py-2 text-left text-[13px] hover:bg-cloud cursor-pointer"
-                onClick={() => {
-                  onChange(item);
-                  setOpen(false);
-                }}
-              >
-                <CheckCircle2 size={13} className="text-teal shrink-0" />
-                <span className="truncate">{item.name}</span>
-              </button>
-              {item.canDelete && (
-                <button
-                  type="button"
-                  title={isAdmin ? "Eliminar" : "Eliminar — solo puedes borrar lo que tú creaste, dentro de las primeras 2 horas y sin compras registradas"}
-                  disabled={deletingId === item.id}
-                  className="px-2.5 py-2 text-steel hover:text-red cursor-pointer disabled:opacity-50 shrink-0"
-                  onClick={(e) => deleteItem(item, e)}
-                >
-                  {deletingId === item.id ? <span className="block w-3.5 h-3.5 rounded-full border-2 border-rule border-t-red animate-spin" /> : <Trash2 size={14} />}
-                </button>
-              )}
-            </div>
-          ))}
+          {filtered.map((item) => {
+            const alreadyRequested = requestedDeleteIds.includes(item.id) || (!!item.hasPendingDelete && !isAdmin);
+            return (
+              <div key={item.id} className="border-b border-rule last:border-none">
+                <div className="flex items-center">
+                  <button
+                    type="button"
+                    className="flex-1 min-w-0 flex items-center gap-2.5 px-3 py-2 text-left text-[13px] hover:bg-cloud cursor-pointer"
+                    onClick={() => {
+                      onChange(item);
+                      setOpen(false);
+                    }}
+                  >
+                    <CheckCircle2 size={13} className="text-teal shrink-0" />
+                    <span className="truncate">{item.name}</span>
+                  </button>
+                  {item.canDelete && (
+                    <button
+                      type="button"
+                      title={isAdmin ? "Eliminar" : "Eliminar — solo puedes borrar lo que tú creaste, dentro de las primeras 2 horas y sin compras registradas"}
+                      disabled={deletingId === item.id}
+                      className="px-2.5 py-2 text-steel hover:text-red cursor-pointer disabled:opacity-50 shrink-0"
+                      onClick={(e) => deleteItem(item, e)}
+                    >
+                      {deletingId === item.id ? <span className="block w-3.5 h-3.5 rounded-full border-2 border-rule border-t-red animate-spin" /> : <Trash2 size={14} />}
+                    </button>
+                  )}
+                  {!item.canDelete && item.canRequestDelete && !alreadyRequested && (
+                    <button
+                      type="button"
+                      title="Ya pasaron 2 horas (o tiene compras registradas) — pídele al admin que lo borre"
+                      className="px-2.5 py-2 text-steel hover:text-gold cursor-pointer shrink-0"
+                      onClick={(e) => { e.stopPropagation(); setRequestingDeleteId(item.id); setRequestDeleteReason(""); }}
+                    >
+                      <Flag size={13} />
+                    </button>
+                  )}
+                  {!item.canDelete && alreadyRequested && (
+                    <span className="px-2.5 text-[10px] text-steel shrink-0">Solicitud enviada</span>
+                  )}
+                </div>
+
+                {requestingDeleteId === item.id && (
+                  <div className="px-3 pb-2.5">
+                    <textarea
+                      className="w-full rounded border border-rule px-2.5 py-1.5 text-[11.5px] mb-1.5"
+                      rows={2}
+                      placeholder="¿Por qué hace falta borrarlo? (opcional)"
+                      value={requestDeleteReason}
+                      onChange={(e) => setRequestDeleteReason(e.target.value)}
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        disabled={requestDeleteBusy}
+                        className="rounded border border-gold/50 px-2.5 py-1 text-[11px] font-semibold cursor-pointer disabled:opacity-60"
+                        style={{ color: "#D9A441" }}
+                        onClick={(e) => requestDelete(item, e)}
+                      >
+                        Pedirle al admin que lo borre
+                      </button>
+                      <button type="button" className="text-steel text-[11px] cursor-pointer" onClick={(e) => { e.stopPropagation(); setRequestingDeleteId(null); }}>
+                        Cancelar
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {isAdmin && item.pendingDeleteRequest && (
+                  <div className="px-3 pb-2.5">
+                    <div className="flex items-start justify-between gap-2 bg-gold/10 border border-gold/35 rounded-md px-2.5 py-2 text-[11px]" style={{ color: "#D9A441" }}>
+                      <div>
+                        <div className="font-semibold">Solicitud de borrado — {item.pendingDeleteRequest.requestedByName}</div>
+                        {item.pendingDeleteRequest.reason && <div className="text-steel mt-0.5">&quot;{item.pendingDeleteRequest.reason}&quot;</div>}
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          type="button"
+                          disabled={reviewingId === item.id}
+                          className="text-green font-semibold cursor-pointer disabled:opacity-60"
+                          onClick={(e) => reviewDeleteRequest(item, "approve", e)}
+                        >
+                          Aprobar
+                        </button>
+                        <button
+                          type="button"
+                          disabled={reviewingId === item.id}
+                          className="text-steel font-semibold cursor-pointer disabled:opacity-60"
+                          onClick={(e) => reviewDeleteRequest(item, "reject", e)}
+                        >
+                          Rechazar
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
           <button
             type="button"
             className="w-full flex items-center gap-2 px-3 py-2 text-left text-[12.5px] text-blue font-semibold hover:bg-cloud cursor-pointer"

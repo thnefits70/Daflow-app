@@ -4,7 +4,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { canSubmitPurchaseRequests, canConfirmPurchaseReceiving, canRegisterPurchaseInvoices } from "@/lib/guards";
-import { effectiveUnitCost, getCatalogItemPriceStats, nextPurchaseRequestNumber } from "@/lib/purchases";
+import { effectiveUnitCost, getCatalogItemPriceStats, getCatalogItemSupplierComparison, nextPurchaseRequestNumber } from "@/lib/purchases";
 import { sendPushToOwner } from "@/lib/webPush";
 
 const bankAccountSelect = { id: true, bankName: true, bankAccountType: true, bankAccountNumber: true, bankAccountHolder: true, holderIdType: true, holderIdNumber: true };
@@ -190,12 +190,35 @@ export async function POST(req: NextRequest) {
       lineChecks.push({ catalogItemName: item?.name ?? "?", effCost, last3Avg: stats.last3Avg });
     }
   }
-  if (anyOverThreshold && !d.justification?.trim()) {
-    const detail = lineChecks.map((l) => `${l.catalogItemName} ($${l.effCost.toFixed(2)} vs. $${l.last3Avg.toFixed(2)})`).join(", ");
-    return NextResponse.json(
-      { error: `Uno o más productos superan el promedio de las últimas compras (${detail}) — agrega una justificación.` },
-      { status: 400 }
-    );
+  // Confirmado 2026-08-06: además de superar el historial de precio, si el
+  // proveedor elegido no es el más barato conocido para algún producto (y sí
+  // existe uno más barato), también hace falta justificar por qué se compra
+  // ahí — ej. el más barato ya no tiene stock. Mismo campo `justification`,
+  // ambos motivos se combinan en un solo mensaje si aplican los dos.
+  let anySupplierNotCheapest = false;
+  const supplierChecks: { catalogItemName: string; cheapestSupplierName: string; cheapestPrice: number }[] = [];
+  for (const it of d.items) {
+    const comparison = await getCatalogItemSupplierComparison(it.catalogItemId);
+    if (comparison.length === 0) continue;
+    const cheapest = comparison[0];
+    if (cheapest.supplierId !== d.supplierId) {
+      anySupplierNotCheapest = true;
+      const item = await prisma.purchaseCatalogItem.findUnique({ where: { id: it.catalogItemId }, select: { name: true } });
+      supplierChecks.push({ catalogItemName: item?.name ?? "?", cheapestSupplierName: cheapest.supplierName, cheapestPrice: cheapest.latest });
+    }
+  }
+
+  if ((anyOverThreshold || anySupplierNotCheapest) && !d.justification?.trim()) {
+    const parts: string[] = [];
+    if (lineChecks.length > 0) {
+      const detail = lineChecks.map((l) => `${l.catalogItemName} ($${l.effCost.toFixed(2)} vs. $${l.last3Avg.toFixed(2)})`).join(", ");
+      parts.push(`Uno o más productos superan el promedio de las últimas compras (${detail})`);
+    }
+    if (supplierChecks.length > 0) {
+      const detail = supplierChecks.map((s) => `${s.catalogItemName} — ${s.cheapestSupplierName} lo vendió más barato ($${s.cheapestPrice.toFixed(2)})`).join(", ");
+      parts.push(`Hay un proveedor más barato para uno o más productos (${detail})`);
+    }
+    return NextResponse.json({ error: `${parts.join(" · ")} — agrega una justificación.` }, { status: 400 });
   }
 
   const catalogItems = await prisma.purchaseCatalogItem.findMany({

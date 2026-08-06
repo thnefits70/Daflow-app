@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { canSubmitPurchaseRequests } from "@/lib/guards";
+import { sendPushToOwner } from "@/lib/webPush";
 
 const schema = z.object({ reason: z.string().trim().optional() });
 
@@ -29,5 +30,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     update: { reason: parsed.data.reason, requestedById: isAdmin ? null : session.user.id, requestedAt: new Date() },
     create: { itemId: id, reason: parsed.data.reason, requestedById: isAdmin ? null : session.user.id },
   });
+
+  await sendPushToOwner("admin", {
+    title: "🗑️ Solicitud de borrado de un producto",
+    body: `"${item.name}"${parsed.data.reason ? ` — ${parsed.data.reason}` : ""}`,
+    url: "/admin",
+  }).catch(() => null);
+
   return NextResponse.json(existing, { status: 201 });
 }

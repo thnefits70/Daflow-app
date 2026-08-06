@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { SupplierPricePoint } from "@/app/api/purchase-catalog/[id]/supplier-comparison/route";
+import type { SupplierPricePoint } from "@/lib/purchases";
 
 const STATUS_LABEL: Record<string, string> = { APPROVED: "Aprobado", PAID: "Pagado", RECEIVED: "Recibido" };
 

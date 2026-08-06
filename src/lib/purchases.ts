@@ -60,6 +60,68 @@ export async function getCatalogItemPriceStats(catalogItemId: string): Promise<P
   };
 }
 
+export type SupplierPricePoint = { date: string; unitCost: number; quantity: number; status: PurchaseRequestStatus };
+export type SupplierPriceHistory = {
+  supplierId: string;
+  supplierName: string;
+  latest: number;
+  min: number;
+  max: number;
+  avg: number;
+  count: number;
+  history: SupplierPricePoint[];
+};
+
+// Confirmado 2026-07-31: para un mismo insumo, cada proveedor tiene su propia
+// serie de precios en el tiempo — se agrupa por proveedor (no se mezcla el
+// historial general de effectiveUnitCost, que es global al insumo) y se
+// ordena del más barato al más caro (por el precio más reciente pagado) para
+// decidir a quién comprarle de un vistazo. Reutilizado tanto por la pantalla
+// "Comparar precios" como, desde 2026-08-06, por el formulario de solicitud
+// (para sugerir el proveedor más barato) y por la validación server-side que
+// exige justificar si se elige uno que no lo es.
+export async function getCatalogItemSupplierComparison(catalogItemId: string): Promise<SupplierPriceHistory[]> {
+  const rows = await prisma.purchaseRequest.findMany({
+    where: { catalogItemId, status: { in: PRICED_STATUSES } },
+    select: {
+      unitCost: true,
+      quantity: true,
+      shippingIncluded: true,
+      shippingCostTotal: true,
+      requestedAt: true,
+      status: true,
+      supplier: { select: { id: true, name: true } },
+    },
+    orderBy: { requestedAt: "asc" },
+  });
+
+  const bySupplier = new Map<string, { supplierId: string; supplierName: string; history: SupplierPricePoint[] }>();
+  for (const r of rows) {
+    const key = r.supplier.id;
+    if (!bySupplier.has(key)) bySupplier.set(key, { supplierId: r.supplier.id, supplierName: r.supplier.name, history: [] });
+    bySupplier.get(key)!.history.push({
+      date: r.requestedAt.toISOString(),
+      unitCost: effectiveUnitCost({ unitCost: r.unitCost, quantity: r.quantity, shippingIncluded: r.shippingIncluded, shippingCostTotal: r.shippingCostTotal }),
+      quantity: r.quantity,
+      status: r.status,
+    });
+  }
+
+  const suppliers: SupplierPriceHistory[] = [...bySupplier.values()].map((s) => {
+    const costs = s.history.map((h) => h.unitCost);
+    return {
+      ...s,
+      latest: costs[costs.length - 1],
+      min: Math.min(...costs),
+      max: Math.max(...costs),
+      avg: costs.reduce((a, b) => a + b, 0) / costs.length,
+      count: costs.length,
+    };
+  });
+  suppliers.sort((a, b) => a.latest - b.latest);
+  return suppliers;
+}
+
 // Historial de costo de envío por unidad para un transportista — mismo
 // principio que el del producto, pero aparte, para detectar sobreprecio de
 // flete específicamente (ej. cobrar de más por traer poca cantidad).

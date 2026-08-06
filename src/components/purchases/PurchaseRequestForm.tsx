@@ -8,6 +8,7 @@ import { compressImage } from "@/lib/compressImage";
 import { usePasteFile } from "@/lib/usePasteFile";
 import { PurchaseCatalogPicker, type CatalogItemDTO } from "./PurchaseCatalogPicker";
 import { PurchaseSupplierPicker, type PurchaseSupplierDTO } from "./PurchaseSupplierPicker";
+import type { SupplierPriceHistory } from "@/lib/purchases";
 
 type PriceStats = { count: number; min: number | null; avg: number | null; max: number | null; last3Avg: number | null };
 type QuoteReadResult = {
@@ -128,6 +129,13 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
   const [hydrated, setHydrated] = useState(false);
   const [draftRestored, setDraftRestored] = useState(false);
 
+  // Confirmado 2026-08-06: al elegir un producto, además del mínimo/promedio/
+  // máximo global ya existente, se muestra el historial POR PROVEEDOR (más
+  // barato primero) — para poder elegir a quién comprarle antes de fijar el
+  // proveedor de la solicitud. No se guarda en el borrador (se recalcula al
+  // restaurar, igual que `stats`).
+  const [supplierComparisons, setSupplierComparisons] = useState<Record<number, SupplierPriceHistory[]>>({});
+
   function updateLine(idx: number, patch: Partial<Line>) {
     setLines((ls) => ls.map((l, i) => (i === idx ? { ...l, ...patch } : l)));
   }
@@ -139,10 +147,19 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
       .catch(() => updateLine(idx, { stats: null }));
   }
 
+  function fetchSupplierComparison(idx: number, catalogItemId: string) {
+    fetch(`/api/purchase-catalog/${catalogItemId}/supplier-comparison`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((data: SupplierPriceHistory[]) => setSupplierComparisons((m) => ({ ...m, [idx]: data })))
+      .catch(() => setSupplierComparisons((m) => ({ ...m, [idx]: [] })));
+  }
+
   function setLineCatalogItem(idx: number, item: CatalogItemDTO | null) {
     updateLine(idx, { catalogItem: item, productQuery: "", stats: null });
+    setSupplierComparisons((m) => { const next = { ...m }; delete next[idx]; return next; });
     if (!item) return;
     fetchLineStats(idx, item.id);
+    fetchSupplierComparison(idx, item.id);
   }
 
   function addLine() {
@@ -150,6 +167,17 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
   }
   function removeLine(idx: number) {
     setLines((ls) => (ls.length > 1 ? ls.filter((_, i) => i !== idx) : ls));
+    // supplierComparisons vive fuera de `lines` (indexado por posición) — hay
+    // que reacomodarlo igual que el filter de arriba, si no se desalinea.
+    setSupplierComparisons((m) => {
+      const next: Record<number, SupplierPriceHistory[]> = {};
+      Object.entries(m).forEach(([k, v]) => {
+        const i = Number(k);
+        if (i < idx) next[i] = v;
+        else if (i > idx) next[i - 1] = v;
+      });
+      return next;
+    });
   }
 
   // Restaura el borrador (si hay uno) una sola vez al montar, y recién
@@ -175,7 +203,7 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
         setShippingPaymentMethod(d.shippingPaymentMethod ?? "TRANSFER");
         setShippingPaymentTiming(d.shippingPaymentTiming ?? "WITH_PURCHASE");
         setJustification(d.justification ?? "");
-        restoredLines.forEach((l, i) => l.catalogItem && fetchLineStats(i, l.catalogItem.id));
+        restoredLines.forEach((l, i) => { if (l.catalogItem) { fetchLineStats(i, l.catalogItem.id); fetchSupplierComparison(i, l.catalogItem.id); } });
         setDraftRestored(draftHasContent(d));
       }
     } catch {
@@ -256,6 +284,21 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
     })
     .filter((x): x is { idx: number; name: string; effCost: number; last3Avg: number } => x !== null);
   const overThreshold = overThresholdLines.length > 0;
+
+  // Confirmado 2026-08-06: si el proveedor elegido para toda la solicitud no
+  // es el más barato conocido para algún producto, también hace falta
+  // justificar — mismo campo de justificación, motivo adicional.
+  const supplierNotCheapestLines = lines
+    .map((l, i) => {
+      const comparison = supplierComparisons[i];
+      if (!l.catalogItem || !comparison || comparison.length === 0 || !supplier) return null;
+      const cheapest = comparison[0];
+      if (cheapest.supplierId === supplier.id) return null;
+      return { idx: i, name: l.catalogItem.name, cheapestSupplierName: cheapest.supplierName, cheapestPrice: cheapest.latest };
+    })
+    .filter((x): x is { idx: number; name: string; cheapestSupplierName: string; cheapestPrice: number } => x !== null);
+  const supplierNotCheapest = supplierNotCheapestLines.length > 0;
+  const needsJustification = overThreshold || supplierNotCheapest;
 
   // Confirmado 2026-08-06: bug real encontrado — si alguien escribía una
   // justificación (porque el precio superaba el historial) y LUEGO quitaba o
@@ -388,8 +431,14 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
       setErr("Este proveedor tiene varias cuentas bancarias — elige a cuál se le paga.");
       return;
     }
-    if (overThreshold && !justification.trim()) {
-      setErr("Uno o más productos están por encima del historial — agrega una justificación.");
+    if (needsJustification && !justification.trim()) {
+      setErr(
+        overThreshold && supplierNotCheapest
+          ? "Uno o más productos están por encima del historial, y hay un proveedor más barato para alguno — agrega una justificación."
+          : overThreshold
+          ? "Uno o más productos están por encima del historial — agrega una justificación."
+          : "Hay un proveedor más barato para uno o más productos — agrega una justificación."
+      );
       return;
     }
     setBusy(true);
@@ -412,7 +461,7 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
         shippingPaymentMethod: shippingIncluded ? null : shippingPaymentMethod,
         shippingPaymentTiming: shippingIncluded ? null : shippingPaymentTiming,
         carrierBankAccountId: shippingIncluded ? null : carrierBankAccountId,
-        justification: overThreshold ? justification.trim() : null,
+        justification: needsJustification ? justification.trim() : null,
       }),
     });
     setBusy(false);
@@ -488,6 +537,34 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
             )}
             {line.catalogItem && (!line.stats || line.stats.count === 0) && (
               <div className="text-[11px] text-steel mb-2.5">🆕 Sin historial previo — primera vez que se compra este producto, mercadería o insumo.</div>
+            )}
+
+            {/* Confirmado 2026-08-06: historial POR PROVEEDOR, más barato
+                primero — para decidir a quién comprarle antes de elegir el
+                proveedor de la solicitud (abajo), evitando pagar de más por
+                olvido. El proveedor ya elegido para la solicitud se marca
+                aparte si no es el más barato. */}
+            {(supplierComparisons[idx]?.length ?? 0) > 0 && (
+              <div className="bg-cloud border border-rule rounded-md p-2.5 mb-2.5">
+                <div className="text-[10px] font-semibold uppercase tracking-wide text-steel mb-1.5">Proveedores que ya vendieron esto — más barato primero</div>
+                <div className="flex flex-col gap-1">
+                  {supplierComparisons[idx]!.map((s, si) => {
+                    const isChosen = supplier?.id === s.supplierId;
+                    return (
+                      <div key={s.supplierId} className={`flex items-center justify-between gap-2 rounded px-2 py-1.5 text-[11.5px] ${isChosen ? "bg-teal/10 border border-teal/30" : "bg-surface2"}`}>
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          {si === 0 && <span className="text-[9px] font-bold uppercase tracking-wide bg-green/15 text-green border border-green/40 rounded-full px-1.5 py-0.5 shrink-0">Más barato</span>}
+                          <span className="truncate font-semibold">{s.supplierName}</span>
+                          {isChosen && <span className="text-teal text-[9px] font-bold uppercase shrink-0">Elegido</span>}
+                        </div>
+                        <div className="text-steel shrink-0 font-mono">
+                          últ. ${s.latest.toFixed(2)} · prom. ${s.avg.toFixed(2)} · máx. ${s.max.toFixed(2)}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
             )}
 
             <div className="grid grid-cols-3 gap-2.5 mb-2">
@@ -738,22 +815,27 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
         </div>
       )}
 
-      {overThreshold && (
+      {needsJustification && (
         <div className="bg-red/10 border-[1.5px] border-red/45 rounded-md p-3.5 mb-3.5">
           <div className="flex items-center gap-1.5 text-[13px] font-bold text-red mb-1">
-            <AlertTriangle size={14} /> Precio por encima del historial
+            <AlertTriangle size={14} /> {overThreshold && supplierNotCheapest ? "Precio sobre el historial y hay un proveedor más barato" : overThreshold ? "Precio por encima del historial" : "Hay un proveedor más barato"}
           </div>
           <div className="text-[12px] text-steel mb-2.5">
             {overThresholdLines.map((l) => (
-              <div key={l.idx}>
+              <div key={`over-${l.idx}`}>
                 <b className="text-ink">{l.name}</b>: ${l.effCost.toFixed(2)} por unidad, supera el promedio de ${l.last3Avg.toFixed(2)}.
+              </div>
+            ))}
+            {supplierNotCheapestLines.map((l) => (
+              <div key={`supplier-${l.idx}`}>
+                <b className="text-ink">{l.name}</b>: {l.cheapestSupplierName} lo vendió más barato (${l.cheapestPrice.toFixed(2)}/un.) que el proveedor elegido.
               </div>
             ))}
             No se puede enviar sin explicar por qué.
           </div>
           <textarea
             className="w-full rounded border border-red/40 bg-surface2 px-2.5 py-2 text-[12.5px] resize-vertical min-h-[60px]"
-            placeholder="Ej. El proveedor habitual no tiene stock esta semana…"
+            placeholder="Ej. El proveedor más barato ya no tiene stock esta semana…"
             value={justification}
             onChange={(e) => setJustification(e.target.value)}
           />

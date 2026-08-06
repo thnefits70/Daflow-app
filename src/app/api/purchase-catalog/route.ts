@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { canSubmitPurchaseRequests } from "@/lib/guards";
 import { getCatalogItemPriceStats } from "@/lib/purchases";
+import { actorName } from "@/lib/actorName";
 
 // Confirmado 2026-08-06: quien creó un producto puede eliminarlo él mismo
 // dentro de las primeras 2 horas desde que lo creó (ver DELETE en
@@ -22,21 +23,25 @@ export async function GET(req: NextRequest) {
     if (i.createdById !== session!.user.id) return false;
     return Date.now() - i.createdAt.getTime() <= OWN_DELETE_WINDOW_MS;
   }
+  // Confirmado 2026-08-06: si quien creó el insumo ya no puede borrarlo él
+  // mismo (pasaron más de 2h, o ya tiene compras), puede pedirle al admin
+  // que lo borre — mientras no haya ya una solicitud pendiente para ese
+  // mismo insumo.
+  function canRequestDelete(i: { createdById: string | null; deleteRequest: unknown }) {
+    if (isAdmin) return false;
+    if (i.createdById !== session!.user.id) return false;
+    if (i.deleteRequest) return false;
+    return true;
+  }
 
   const withStats = req.nextUrl.searchParams.get("withStats") === "1";
   const items = await prisma.purchaseCatalogItem.findMany({
     orderBy: { name: "asc" },
-    include: { deleteRequest: { select: { id: true } } },
+    include: { deleteRequest: { include: { requestedBy: { select: { name: true } } } } },
   });
 
-  if (!withStats) {
-    return NextResponse.json(
-      items.map((i) => ({ id: i.id, name: i.name, photos: i.photos, description: i.description, code: i.code, hasPendingDelete: !!i.deleteRequest, canDelete: canDelete(i) }))
-    );
-  }
-
-  const withStatsData = await Promise.all(
-    items.map(async (i) => ({
+  function toDTO(i: (typeof items)[number]) {
+    return {
       id: i.id,
       name: i.name,
       photos: i.photos,
@@ -44,8 +49,19 @@ export async function GET(req: NextRequest) {
       code: i.code,
       hasPendingDelete: !!i.deleteRequest,
       canDelete: canDelete(i),
-      stats: await getCatalogItemPriceStats(i.id),
-    }))
+      canRequestDelete: canRequestDelete(i) && !canDelete(i),
+      pendingDeleteRequest: isAdmin && i.deleteRequest
+        ? { id: i.deleteRequest.id, reason: i.deleteRequest.reason, requestedByName: actorName(i.deleteRequest.requestedBy?.name) }
+        : null,
+    };
+  }
+
+  if (!withStats) {
+    return NextResponse.json(items.map(toDTO));
+  }
+
+  const withStatsData = await Promise.all(
+    items.map(async (i) => ({ ...toDTO(i), stats: await getCatalogItemPriceStats(i.id) }))
   );
   return NextResponse.json(withStatsData);
 }
