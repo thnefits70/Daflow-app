@@ -1264,14 +1264,23 @@ model PurchaseRequest {
 }
 
 // Inventario confirma que de verdad llegó — sin esto el ciclo no se cierra.
+// Confirmado 2026-08-06: mínimo 2 fotos, máximo 3 (antes era 1 sola) — una
+// del producto encima/junto al cartón del bulto, otra del cartón abierto con
+// una unidad de muestra encima junto al bulto, para que la IA (aiPhotoMatch/
+// aiPhotoNote) pueda comparar contra las fotos de referencia del catálogo.
+// Es solo apoyo visual, NUNCA bloquea — Daniel (líder de Inventario) sigue
+// siendo quien confirma cantidades y producto, la IA no impide nada.
 model PurchaseRequestReceipt {
   id        String          @id @default(cuid())
   requestId String          @unique
   request   PurchaseRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
 
   receivedQuantity Int
-  photoUrl         String
+  photoUrls        String[]
   comment          String?
+
+  aiPhotoMatch Boolean?
+  aiPhotoNote  String?
 
   confirmedById String?
   confirmedBy   User?    @relation("PurchaseRequestReceiptConfirmedBy", fields: [confirmedById], references: [id], onDelete: SetNull)

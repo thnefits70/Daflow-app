@@ -192,6 +192,70 @@ export async function readPurchaseOrder(params: {
   return extractJson<PurchaseOrderReadResult>(textBlock.text);
 }
 
+export type ReceiptPhotoComparisonResult = {
+  likelyMatch: boolean | null;
+  note: string;
+};
+
+// Confirmado 2026-08-06: cuando Daniel (líder de Inventario) confirma que
+// llegó la mercadería, sube 2-3 fotos y la IA las compara UNA vez contra las
+// fotos de referencia del producto guardadas en el catálogo — solo apoyo
+// visual (no cuenta unidades, no es una medición exacta), NUNCA bloquea:
+// el líder sigue siendo quien de verdad confirma cantidad y producto.
+export async function compareReceiptPhotos(params: {
+  referencePhotoUrls: string[];
+  receivedPhotoUrls: string[];
+  actorId: string;
+  deptId?: string;
+}): Promise<ReceiptPhotoComparisonResult> {
+  if (params.referencePhotoUrls.length === 0) {
+    return { likelyMatch: null, note: "Este producto no tiene fotos de referencia en el catálogo — no se pudo comparar." };
+  }
+
+  const client = getAnthropicClient();
+  const [refBlocks, receivedBlocks] = await Promise.all([
+    Promise.all(params.referencePhotoUrls.map((u) => fetchFileContentBlock(u))),
+    Promise.all(params.receivedPhotoUrls.map((u) => fetchFileContentBlock(u))),
+  ]);
+
+  const response = await client.messages.create({
+    model: PURCHASE_AI_MODEL,
+    max_tokens: 512,
+    system:
+      "Ayudas a Inventario de Provedix (Guayaquil, Ecuador) a confirmar que la mercadería que llegó es el producto " +
+      "correcto. Te doy fotos DE REFERENCIA del producto que se pidió (del catálogo) y fotos de lo que de verdad " +
+      "llegó (tomadas por el líder de Inventario al recibir). Compara si visualmente parece el MISMO producto — " +
+      "esto es solo una referencia visual de apoyo, no una medición exacta ni un conteo de unidades. " +
+      'Responde ÚNICAMENTE un JSON: {"likelyMatch": boolean, "note": string}. note es una frase breve en español ' +
+      'explicando tu conclusión (ej. "Coincide — mismo empaque y forma" o "No coincide — el color/forma es distinto").',
+    messages: [
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "Fotos DE REFERENCIA (lo que se pidió):" },
+          ...refBlocks,
+          { type: "text", text: "Fotos de lo que llegó (recepción):" },
+          ...receivedBlocks,
+          { type: "text", text: "Devuelve el JSON pedido." },
+        ],
+      },
+    ],
+  });
+
+  await logAiUsage({
+    feature: "control_compras_recepcion_fotos",
+    model: PURCHASE_AI_MODEL,
+    actorId: params.actorId,
+    deptId: params.deptId,
+    inputTokens: response.usage.input_tokens,
+    outputTokens: response.usage.output_tokens,
+  });
+
+  const textBlock = response.content.find((b) => b.type === "text");
+  if (!textBlock || textBlock.type !== "text") throw new Error("La IA no devolvió contenido de texto.");
+  return extractJson<ReceiptPhotoComparisonResult>(textBlock.text);
+}
+
 export type CatalogDuplicateCheck = {
   suspected: boolean;
   matchedName: string | null;

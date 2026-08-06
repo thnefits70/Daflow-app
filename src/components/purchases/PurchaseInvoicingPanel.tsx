@@ -7,6 +7,7 @@ import { uploadFile } from "@/lib/uploadFile";
 import { compressImage } from "@/lib/compressImage";
 import { usePasteFile } from "@/lib/usePasteFile";
 import { actorName } from "@/lib/actorName";
+import { PurchaseOperationDocuments, type OperationDocRow } from "./PurchaseOperationDocuments";
 
 type InvoiceStatus = "PENDING" | "COMPLETE" | "PARTIAL" | "NON_FISCAL" | "NONE";
 
@@ -23,7 +24,7 @@ type Row = {
   paidAt: string | null;
   paidBy: { name: string } | null;
   requestedBy: { name: string } | null;
-  catalogItem: { name: string };
+  catalogItem: { name: string; photos: string[] };
   supplier: { name: string };
   shippingIncluded: boolean;
   shippingPaymentTiming: "WITH_PURCHASE" | "ON_DELIVERY" | null;
@@ -33,7 +34,34 @@ type Row = {
   shippingPaymentRequestedBy: { name: string } | null;
   shippingPaidAt: string | null;
   shippingPaidBy: { name: string } | null;
+  quoteImageUrl: string;
+  purchaseOrderUrl: string | null;
+  paymentProofUrl: string | null;
+  shippingPaymentProofUrl: string | null;
+  receipt: {
+    photoUrls: string[];
+    receivedQuantity: number;
+    aiPhotoMatch: boolean | null;
+    aiPhotoNote: string | null;
+    confirmedBy: { name: string } | null;
+  } | null;
 };
+
+function toDocRow(r: Row): OperationDocRow {
+  return {
+    id: r.id,
+    catalogItem: r.catalogItem,
+    quoteImageUrl: r.quoteImageUrl,
+    purchaseOrderUrl: r.purchaseOrderUrl,
+    paymentProofUrl: r.paymentProofUrl,
+    shippingPaymentProofUrl: r.shippingPaymentProofUrl,
+    invoiceDocUrl: r.invoiceDocUrl,
+    requestedBy: r.requestedBy,
+    paidBy: r.paidBy,
+    invoicedBy: r.invoicedBy,
+    receipt: r.receipt,
+  };
+}
 
 const INVOICE_LABELS: Record<InvoiceStatus, string> = {
   PENDING: "Pendiente de revisar",
@@ -585,6 +613,10 @@ export function PurchaseInvoicingPanel() {
                   <div className="text-[10px] text-steel-dim mt-0.5">Registrada por {actorName(r0.invoicedBy?.name)}</div>
                 </div>
               )}
+
+              <div className="mt-3">
+                <PurchaseOperationDocuments rows={g.map(toDocRow)} />
+              </div>
             </div>
           );
         })}
