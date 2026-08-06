@@ -213,6 +213,7 @@ model User {
   purchaseReceiptChangeRequests   PurchaseReceiptChangeRequest[] @relation("PurchaseReceiptRequestedBy")
   purchaseCatalogItemsCreated     PurchaseCatalogItem[] @relation("PurchaseCatalogItemCreatedBy")
   purchaseCatalogItemDeleteRequests PurchaseCatalogItemDeleteRequest[] @relation("PurchaseCatalogItemDeleteRequestedBy")
+  supplierCreditsCreated            SupplierCredit[] @relation("SupplierCreditCreatedBy")
   inventoryProductSnapshotsCreated  InventoryProductSnapshot[] @relation("InventoryProductSnapshotCreatedBy")
   pettyCashEntriesCreated   PettyCashEntry[] @relation("PettyCashEntryCreatedBy")
   pettyCashEntriesUpdated   PettyCashEntry[] @relation("PettyCashEntryUpdatedBy")
@@ -1025,6 +1026,7 @@ model Supplier {
   purchaseRequestsAsSupplier PurchaseRequest[] @relation("PurchaseRequestSupplier")
   purchaseRequestsAsCarrier  PurchaseRequest[] @relation("PurchaseRequestCarrier")
   bankAccounts SupplierBankAccount[]
+  credits      SupplierCredit[]
 
   @@index([status])
   @@index([createdByDeptId])
@@ -1295,6 +1297,10 @@ enum PurchaseUrgentReportType {
 // "Informar urgente" desde la confirmación de Inventario — mercadería
 // dañada/incompleta, o que nunca llegó. Puede haber más de una por
 // solicitud (ej. se reporta que no llega, y luego llega dañada).
+// Confirmado 2026-08-06: el admin la resuelve desde una bandeja propia — o
+// bien no hace falta ninguna acción con el proveedor (resolvedAt +
+// resolution, sin crédito), o se genera un SupplierCredit (crédito para la
+// próxima compra, o reembolso ya recibido en efectivo/transferencia).
 model PurchaseRequestUrgentReport {
   id        String          @id @default(cuid())
   requestId String
@@ -1308,7 +1314,51 @@ model PurchaseRequestUrgentReport {
   reportedBy   User?    @relation("PurchaseRequestUrgentReportedBy", fields: [reportedById], references: [id], onDelete: SetNull)
   reportedAt   DateTime @default(now())
 
+  resolvedAt   DateTime?
+  resolution   String?
+  credit       SupplierCredit?
+
   @@index([requestId])
+}
+
+enum SupplierCreditStatus {
+  AVAILABLE
+  APPLIED
+  REFUNDED
+}
+
+// Confirmado 2026-08-06: cuando algo llega dañado/incompleto/no llega y ya
+// se pagó, en vez de perder ese dinero se registra como crédito con el
+// proveedor (AVAILABLE) para aplicarlo a la siguiente compra que se le
+// haga (APPLIED, appliedToGroupId), o se marca que el proveedor ya
+// reembolsó en efectivo/transferencia (REFUNDED, refundProofUrl). Nunca se
+// elimina — es el respaldo de auditoría de por qué no se pagó el 100% de
+// una compra o por qué llegó un reembolso.
+model SupplierCredit {
+  id         String   @id @default(cuid())
+  supplierId String
+  supplier   Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+
+  amount Float
+  reason String
+
+  urgentReportId String?                      @unique
+  urgentReport   PurchaseRequestUrgentReport? @relation(fields: [urgentReportId], references: [id], onDelete: SetNull)
+
+  status SupplierCreditStatus @default(AVAILABLE)
+
+  appliedToGroupId String?
+  appliedAt        DateTime?
+
+  refundProofUrl String?
+  refundedAt     DateTime?
+
+  createdById String?
+  createdBy   User?    @relation("SupplierCreditCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+
+  @@index([supplierId])
+  @@index([status])
 }
 
 /* ---------------- Comprobante de pago (Gestión de Compras) ---------------- */

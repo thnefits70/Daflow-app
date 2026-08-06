@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Upload, CheckCircle2, Truck, Lock } from "lucide-react";
+import { Upload, CheckCircle2, Truck, Lock, Wallet } from "lucide-react";
 import { uploadFile } from "@/lib/uploadFile";
 import { compressImage } from "@/lib/compressImage";
 import { usePasteFile } from "@/lib/usePasteFile";
@@ -25,7 +25,7 @@ type Row = {
   paidBy: { name: string } | null;
   requestedBy: { name: string } | null;
   catalogItem: { name: string; photos: string[] };
-  supplier: { name: string };
+  supplier: { id: string; name: string };
   shippingIncluded: boolean;
   shippingPaymentTiming: "WITH_PURCHASE" | "ON_DELIVERY" | null;
   shippingCostTotal: number | null;
@@ -97,6 +97,8 @@ export function PurchaseInvoicingPanel() {
   const [uploadingProof, setUploadingProof] = useState(false);
   const [proofVerifying, setProofVerifying] = useState(false);
   const [proofVerifyResult, setProofVerifyResult] = useState<{ readAmount: number | null; matches: boolean } | null>(null);
+  const [availableCredits, setAvailableCredits] = useState<{ id: string; amount: number; reason: string }[]>([]);
+  const [selectedCreditIds, setSelectedCreditIds] = useState<string[]>([]);
   const { onPaste: onPasteProof, onMouseEnter: onPasteProofHoverIn, onMouseLeave: onPasteProofHoverOut } = usePasteFile((file) => uploadProof(file));
   // El grupo de la factura que se está pasando el mouse encima ahora mismo
   // — un solo listener de paste "armado" por hover, compartido entre todas
@@ -136,15 +138,41 @@ export function PurchaseInvoicingPanel() {
     return (rows ?? []).filter((r) => r.groupId === groupId);
   }
 
+  function netAmountFor(groupId: string) {
+    const total = currentGroupRows(groupId).reduce((s, r) => s + r.totalCost, 0);
+    const appliedTotal = availableCredits.filter((c) => selectedCreditIds.includes(c.id)).reduce((s, c) => s + c.amount, 0);
+    return Math.max(0, total - appliedTotal);
+  }
+
+  // Confirmado 2026-08-06: al abrir "Marcar como pagado" se consulta si el
+  // proveedor tiene crédito disponible (por mercadería dañada/incompleta de
+  // una compra anterior) — se puede aplicar aquí para pagar solo la
+  // diferencia, en vez de perderlo o tener que recordarlo a mano.
+  async function openPay(groupId: string, supplierId: string) {
+    setPayingGroup(groupId);
+    setProofUrl(null);
+    setProofVerifyResult(null);
+    setSelectedCreditIds([]);
+    setErr("");
+    const res = await fetch(`/api/purchase-suppliers/${supplierId}/credit-balance`);
+    const data = await res.json().catch(() => null);
+    setAvailableCredits(res.ok ? data.credits : []);
+  }
+
+  function toggleCredit(id: string) {
+    setSelectedCreditIds((ids) => (ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]));
+    setProofVerifyResult(null);
+  }
+
   // Confirmado 2026-08-04: la misma verificación por IA del comprobante que
   // ya corre en la Bandeja de aprobación aplica aquí también — no importa
   // desde qué pantalla se suba el comprobante (mercadería o flete), siempre
   // se compara contra lo que de verdad correspondía pagar antes de dejarlo
-  // avanzar.
+  // avanzar. Si se aplicó crédito, se compara contra el NETO, no el total.
   async function verifyProof(groupId: string, url: string) {
     setProofVerifying(true);
     setProofVerifyResult(null);
-    const expectedAmount = currentGroupRows(groupId).reduce((s, r) => s + r.totalCost, 0);
+    const expectedAmount = netAmountFor(groupId);
     const res = await fetch("/api/purchase-requests/verify-payment", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -178,20 +206,23 @@ export function PurchaseInvoicingPanel() {
   }
 
   async function pay(groupId: string) {
-    if (!proofUrl) {
-      setErr("Sube el comprobante de pago.");
-      return;
-    }
-    if (!proofVerifyResult?.matches) {
-      setErr("El comprobante todavía no está verificado — el monto debe coincidir con lo que corresponde pagar.");
-      return;
+    const netAmount = netAmountFor(groupId);
+    if (netAmount > 0) {
+      if (!proofUrl) {
+        setErr("Sube el comprobante de pago.");
+        return;
+      }
+      if (!proofVerifyResult?.matches) {
+        setErr("El comprobante todavía no está verificado — el monto debe coincidir con lo que corresponde pagar.");
+        return;
+      }
     }
     setBusyGroup(groupId);
     setErr("");
     const res = await fetch(`/api/purchase-requests/group/${groupId}/pay`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ paymentProofUrl: proofUrl }),
+      body: JSON.stringify({ paymentProofUrl: proofUrl ?? undefined, appliedCreditIds: selectedCreditIds }),
     });
     setBusyGroup(null);
     const data = await res.json().catch(() => null);
@@ -202,6 +233,7 @@ export function PurchaseInvoicingPanel() {
     setPayingGroup(null);
     setProofUrl(null);
     setProofVerifyResult(null);
+    setSelectedCreditIds([]);
     load();
     router.refresh();
   }
@@ -339,7 +371,23 @@ export function PurchaseInvoicingPanel() {
                   <div className="text-[10px] text-steel-dim mb-2.5">Solicitada por {actorName(g[0].requestedBy?.name)}</div>
                   {payingGroup === groupId ? (
                     <div>
-                      {proofUrl ? (
+                      {availableCredits.length > 0 && (
+                        <div className="bg-gold/10 border border-gold/35 rounded-md p-3 mb-2.5" style={{ color: "#D9A441" }}>
+                          <div className="flex items-center gap-1.5 text-[12px] font-semibold mb-1.5"><Wallet size={13} /> Crédito disponible con {g[0].supplier.name}</div>
+                          <div className="flex flex-col gap-1 mb-1.5">
+                            {availableCredits.map((c) => (
+                              <label key={c.id} className="flex items-center gap-2 text-[12px] text-ink cursor-pointer">
+                                <input type="checkbox" checked={selectedCreditIds.includes(c.id)} onChange={() => toggleCredit(c.id)} />
+                                {money(c.amount)} — {c.reason}
+                              </label>
+                            ))}
+                          </div>
+                          <div className="text-[12px] font-semibold text-ink">Neto a transferir: {money(netAmountFor(groupId))}</div>
+                        </div>
+                      )}
+                      {netAmountFor(groupId) === 0 ? (
+                        <div className="flex items-center gap-2 text-[12px] text-teal mb-2"><CheckCircle2 size={13} /> El crédito cubre el total — no hace falta transferir nada.</div>
+                      ) : proofUrl ? (
                         <div className="flex items-center gap-2 text-[12px] mb-2">
                           {proofVerifying ? (
                             <span className="w-3.5 h-3.5 rounded-full border-2 border-rule border-t-teal animate-spin" />
@@ -381,14 +429,19 @@ export function PurchaseInvoicingPanel() {
                       )}
                       {err && <div className="text-red text-[12px] mb-2">{err}</div>}
                       <div className="flex items-center gap-2">
-                        <button type="button" disabled={busyGroup === groupId || !proofUrl || proofVerifying || !proofVerifyResult?.matches} className="rounded border border-blue bg-blue px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer disabled:opacity-60" onClick={() => pay(groupId)}>
+                        <button
+                          type="button"
+                          disabled={busyGroup === groupId || (netAmountFor(groupId) > 0 && (!proofUrl || proofVerifying || !proofVerifyResult?.matches))}
+                          className="rounded border border-blue bg-blue px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer disabled:opacity-60"
+                          onClick={() => pay(groupId)}
+                        >
                           Confirmar pago
                         </button>
-                        <button type="button" className="text-steel text-[12.5px] cursor-pointer" onClick={() => { setPayingGroup(null); setProofUrl(null); setProofVerifyResult(null); }}>Cancelar</button>
+                        <button type="button" className="text-steel text-[12.5px] cursor-pointer" onClick={() => { setPayingGroup(null); setProofUrl(null); setProofVerifyResult(null); setSelectedCreditIds([]); }}>Cancelar</button>
                       </div>
                     </div>
                   ) : (
-                    <button type="button" className="rounded border border-blue bg-blue px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer" onClick={() => { setPayingGroup(groupId); setProofUrl(null); setProofVerifyResult(null); setErr(""); }}>
+                    <button type="button" className="rounded border border-blue bg-blue px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer" onClick={() => openPay(groupId, g[0].supplier.id)}>
                       💳 Marcar como pagado
                     </button>
                   )}

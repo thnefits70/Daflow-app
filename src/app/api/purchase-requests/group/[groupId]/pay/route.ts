@@ -5,7 +5,11 @@ import { auth } from "@/auth";
 import { canRegisterPurchaseInvoices } from "@/lib/guards";
 import { sendPushToOwner } from "@/lib/webPush";
 
-const schema = z.object({ paymentProofUrl: z.string().url() });
+// Confirmado 2026-08-06: si el crédito disponible con el proveedor cubre
+// TODO lo que corresponde pagar, no hay transferencia real que respaldar
+// con un comprobante — por eso paymentProofUrl es opcional cuando se aplica
+// crédito, pero sigue siendo obligatorio si queda algo por transferir.
+const schema = z.object({ paymentProofUrl: z.string().url().optional(), appliedCreditIds: z.array(z.string()).optional() });
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ groupId: string }> }) {
   const session = await auth();
@@ -22,12 +26,36 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ gro
     return NextResponse.json({ error: "Solo se puede pagar una solicitud ya aprobada." }, { status: 409 });
   }
 
+  const appliedCreditIds = parsed.data.appliedCreditIds ?? [];
+  let appliedTotal = 0;
+  if (appliedCreditIds.length > 0) {
+    const credits = await prisma.supplierCredit.findMany({ where: { id: { in: appliedCreditIds }, supplierId: rows[0].supplierId, status: "AVAILABLE" } });
+    if (credits.length !== appliedCreditIds.length) {
+      return NextResponse.json({ error: "Uno o más créditos ya no están disponibles." }, { status: 409 });
+    }
+    appliedTotal = credits.reduce((s, c) => s + c.amount, 0);
+  }
+
+  const total = rows.reduce((s, r) => s + r.totalCost, 0);
+  const netAmount = Math.max(0, total - appliedTotal);
+  if (netAmount > 0 && !parsed.data.paymentProofUrl) {
+    return NextResponse.json({ error: "Falta el comprobante de lo que se transfirió." }, { status: 400 });
+  }
+
   const isAdmin = session.user.role === "admin";
   const paidAt = new Date();
-  await prisma.purchaseRequest.updateMany({
-    where: { groupId },
-    data: { status: "PAID", paidAt, paymentProofUrl: parsed.data.paymentProofUrl, paidById: isAdmin ? null : session.user.id },
-  });
+  await prisma.$transaction([
+    prisma.purchaseRequest.updateMany({
+      where: { groupId },
+      data: { status: "PAID", paidAt, paymentProofUrl: parsed.data.paymentProofUrl ?? null, paidById: isAdmin ? null : session.user.id },
+    }),
+    ...(appliedCreditIds.length > 0
+      ? [prisma.supplierCredit.updateMany({
+          where: { id: { in: appliedCreditIds } },
+          data: { status: "APPLIED", appliedToGroupId: groupId, appliedAt: paidAt },
+        })]
+      : []),
+  ]);
 
   const inventarioLeader = await prisma.user.findFirst({ where: { isLeader: true, leadsDept: { code: "INV" } }, select: { id: true } });
   const requestedById = rows[0].requestedById;
