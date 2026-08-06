@@ -442,9 +442,12 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
               <div className="text-[10px] text-steel-dim mb-2.5">Solicitada por {actorName(r.createdBy?.name)} · {new Date(r.createdAt).toLocaleDateString("es-MX")}</div>
 
               {r.declarationFileUrl && (
-                <div className="flex items-center gap-2.5 text-[11.5px] text-steel mb-1.5">
-                  <ProofPreview url={r.declarationFileUrl} size={40} filename="documento-de-soporte" />
-                  {r.declarationAiNote && <span className="text-steel-dim">{r.declarationAiNote}</span>}
+                <div className="bg-green/10 border border-green/30 rounded-md p-2.5 mb-2.5">
+                  <div className="flex items-center gap-2.5 mb-1">
+                    <CheckCircle2 size={13} className="text-green shrink-0" />
+                    <ProofPreview url={r.declarationFileUrl} size={40} filename="documento-de-soporte" />
+                  </div>
+                  <div className="text-[11px] text-green">✅ Todo en orden — el documento coincide con lo declarado. {r.declarationAiNote}</div>
                 </div>
               )}
 
@@ -454,18 +457,22 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
               </div>
 
               {r.paymentProofUrl && (
-                <div className="bg-cloud border border-rule rounded-md p-2.5 mb-2.5">
+                <div className={`border rounded-md p-2.5 mb-2.5 ${r.paymentAiMatch ? "bg-green/10 border-green/30" : "bg-red/10 border-red/30"}`}>
                   <div className="flex items-center gap-2.5 mb-1">
-                    {r.paymentAiMatch ? <CheckCircle2 size={12} className="text-teal shrink-0" /> : <Lock size={12} className="text-red shrink-0" />}
+                    {r.paymentAiMatch ? <CheckCircle2 size={13} className="text-green shrink-0" /> : <Lock size={13} className="text-red shrink-0" />}
                     <ProofPreview url={r.paymentProofUrl} size={44} filename="comprobante-de-pago" />
                   </div>
-                  <div className={`text-[11px] ${r.paymentAiMatch ? "text-teal" : "text-red"}`}>{r.paymentAiNote}</div>
+                  <div className={`text-[11px] ${r.paymentAiMatch ? "text-green" : "text-red"}`}>
+                    {r.paymentAiMatch ? "✅ Todo en orden — el comprobante coincide con el monto pagado. " : ""}{r.paymentAiNote}
+                  </div>
                   {r.paidBy?.name && <div className="text-[10px] text-steel-dim mt-0.5">Pagado por {actorName(r.paidBy.name)}{r.paidAt ? ` · ${new Date(r.paidAt).toLocaleDateString("es-MX")}` : ""}</div>}
                 </div>
               )}
 
               {r.status === "CONFIRMED" && (
-                <div className="text-[10px] text-steel-dim">Confirmado por {actorName(r.confirmedBy?.name)}{r.confirmedAt ? ` · ${new Date(r.confirmedAt).toLocaleDateString("es-MX")}` : ""}</div>
+                <div className="bg-green/10 border border-green/30 rounded-md px-2.5 py-2 text-[11px] text-green">
+                  ✅ Operación finalizada — todo el proceso cuadró correctamente. Confirmado por {actorName(r.confirmedBy?.name)}{r.confirmedAt ? ` · ${new Date(r.confirmedAt).toLocaleDateString("es-MX")}` : ""}
+                </div>
               )}
 
               {r.status === "PENDING_PAYMENT" && isAdmin && (
