@@ -6,7 +6,7 @@ import { uploadFile } from "@/lib/uploadFile";
 import { compressImage } from "@/lib/compressImage";
 import { usePasteFile } from "@/lib/usePasteFile";
 
-export type CatalogItemDTO = { id: string; name: string; photos: string[]; description?: string | null; code?: string | null };
+export type CatalogItemDTO = { id: string; name: string; photos: string[]; description?: string | null; code?: string | null; canDelete?: boolean };
 
 // Confirmado 2026-07-30 (boceto aprobado): un nombre por insumo, siempre. El
 // match EXACTO bloquea directo (obliga a seleccionar el existente); el
@@ -317,10 +317,10 @@ export function PurchaseCatalogPicker({
                 <CheckCircle2 size={13} className="text-teal shrink-0" />
                 <span className="truncate">{item.name}</span>
               </button>
-              {isAdmin && (
+              {item.canDelete && (
                 <button
                   type="button"
-                  title="Eliminar (solo administrador)"
+                  title={isAdmin ? "Eliminar" : "Eliminar — solo puedes borrar lo que tú creaste, dentro de las primeras 2 horas y sin compras registradas"}
                   disabled={deletingId === item.id}
                   className="px-2.5 py-2 text-steel hover:text-red cursor-pointer disabled:opacity-50 shrink-0"
                   onClick={(e) => deleteItem(item, e)}

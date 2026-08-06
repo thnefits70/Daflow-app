@@ -5,8 +5,23 @@ import { auth } from "@/auth";
 import { canSubmitPurchaseRequests } from "@/lib/guards";
 import { getCatalogItemPriceStats } from "@/lib/purchases";
 
+// Confirmado 2026-08-06: quien creó un producto puede eliminarlo él mismo
+// dentro de las primeras 2 horas desde que lo creó (ver DELETE en
+// [id]/route.ts, que vuelve a validar esto server-side) — se calcula acá
+// mismo un booleano `canDelete` por producto para que el cliente no necesite
+// saber quién lo creó ni hacer el cálculo de tiempo por su cuenta.
+const OWN_DELETE_WINDOW_MS = 2 * 60 * 60 * 1000;
+
 export async function GET(req: NextRequest) {
-  if (!(await canSubmitPurchaseRequests())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+  const session = await auth();
+  if (!(await canSubmitPurchaseRequests()) || !session) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+
+  const isAdmin = session.user.role === "admin";
+  function canDelete(i: { createdById: string | null; createdAt: Date }) {
+    if (isAdmin) return true;
+    if (i.createdById !== session!.user.id) return false;
+    return Date.now() - i.createdAt.getTime() <= OWN_DELETE_WINDOW_MS;
+  }
 
   const withStats = req.nextUrl.searchParams.get("withStats") === "1";
   const items = await prisma.purchaseCatalogItem.findMany({
@@ -16,7 +31,7 @@ export async function GET(req: NextRequest) {
 
   if (!withStats) {
     return NextResponse.json(
-      items.map((i) => ({ id: i.id, name: i.name, photos: i.photos, description: i.description, code: i.code, hasPendingDelete: !!i.deleteRequest }))
+      items.map((i) => ({ id: i.id, name: i.name, photos: i.photos, description: i.description, code: i.code, hasPendingDelete: !!i.deleteRequest, canDelete: canDelete(i) }))
     );
   }
 
@@ -28,6 +43,7 @@ export async function GET(req: NextRequest) {
       description: i.description,
       code: i.code,
       hasPendingDelete: !!i.deleteRequest,
+      canDelete: canDelete(i),
       stats: await getCatalogItemPriceStats(i.id),
     }))
   );
