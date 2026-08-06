@@ -688,7 +688,7 @@ export function ProfileDetail({
               <Receipt size={11} /> ¿Puede solicitar/gestionar Control de Compras?
             </label>
             <div className="text-[11px] text-steel mb-2">
-              La herramienta de solicitudes de compra (catálogo, cotizaciones, Inventario, Finanzas) — sin necesitar ser líder formal de ese departamento. Aparece en su propia &quot;Mi área de trabajo&quot;.
+              La herramienta de solicitudes de compra (catálogo, cotizaciones, aprobar, facturar) — sin necesitar ser líder formal de Compras o Finanzas. NO incluye confirmar que llegó la mercadería — eso es exclusivo del líder de Inventario. Aparece en su propia &quot;Mi área de trabajo&quot;.
             </div>
             <div className="flex border border-rule rounded overflow-hidden max-w-[220px]">
               <button

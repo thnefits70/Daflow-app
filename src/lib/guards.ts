@@ -386,13 +386,18 @@ export async function canSubmitPurchaseRequests() {
   return !!user.isLeader && !!user.leadsDept && ["COM", "FIN"].includes(user.leadsDept.code);
 }
 
+// Confirmado 2026-08-06: bug real — canManagePurchases es un escape hatch
+// compartido pensado para Solicitar/Facturar (Bryan/Nairoby), pero como esta
+// función también lo aceptaba, cualquiera con ese flag heredaba de paso la
+// responsabilidad de Daniel de confirmar que la mercadería llegó (y de
+// informar urgencias) — algo que el usuario confirmó debe ser EXCLUSIVO del
+// líder de Inventario, sin ninguna delegación por flag genérico.
 export async function canConfirmPurchaseReceiving() {
   const session = await auth();
   if (!session) return false;
   if (session.user.role === "admin") return true;
   const user = await purchasesUserContext(session.user.id);
   if (!user) return false;
-  if (user.canManagePurchases) return true;
   return !!user.isLeader && user.leadsDept?.code === "INV";
 }
 
