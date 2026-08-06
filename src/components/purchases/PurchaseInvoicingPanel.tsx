@@ -47,6 +47,10 @@ function money(n: number) {
   return `$${n.toLocaleString("es-MX", { minimumFractionDigits: 2 })}`;
 }
 
+function isImageUrl(url: string) {
+  return /\.(jpe?g|png|gif|webp|heic)$/i.test(url);
+}
+
 function groupRows(rows: Row[]) {
   const map = new Map<string, Row[]>();
   for (const r of rows) {
@@ -196,6 +200,7 @@ export function PurchaseInvoicingPanel() {
 
   async function uploadProof(file: File) {
     if (!payingGroup) return;
+    setErr("");
     setUploadingProof(true);
     const compressed = await compressImage(file);
     const uploaded = await uploadFile(compressed, "purchase-payments");
@@ -210,6 +215,7 @@ export function PurchaseInvoicingPanel() {
 
   async function uploadShippingProof(file: File) {
     if (!payingShippingGroup) return;
+    setErr("");
     setUploadingShippingProof(true);
     const compressed = await compressImage(file);
     const uploaded = await uploadFile(compressed, "purchase-payments");
@@ -247,6 +253,7 @@ export function PurchaseInvoicingPanel() {
   }
 
   async function uploadInvoiceDoc(groupId: string, file: File) {
+    setErr("");
     setUploadingDoc(groupId);
     const compressed = await compressImage(file);
     const uploaded = await uploadFile(compressed, "purchase-invoices");
@@ -511,7 +518,25 @@ export function PurchaseInvoicingPanel() {
                         />
                       )}
                       {invoiceDocUrl[groupId] ? (
-                        <div className="flex items-center gap-1.5 text-[11.5px] text-teal mb-2.5"><CheckCircle2 size={13} /> Documento subido</div>
+                        <div className="mb-2.5">
+                          <div className="flex items-center gap-1.5 text-[11.5px] text-teal mb-1.5">
+                            <CheckCircle2 size={13} /> Documento subido — revisa que se vea bien antes de guardar
+                          </div>
+                          {isImageUrl(invoiceDocUrl[groupId]) ? (
+                            <a href={invoiceDocUrl[groupId]} target="_blank" rel="noopener noreferrer" className="block w-fit">
+                              <img src={invoiceDocUrl[groupId]} alt="Vista previa de la factura" className="max-h-52 rounded border border-rule" />
+                            </a>
+                          ) : (
+                            <iframe src={invoiceDocUrl[groupId]} className="w-full h-52 rounded border border-rule bg-white" title="Vista previa de la factura" />
+                          )}
+                          <button
+                            type="button"
+                            className="text-steel text-[11px] underline cursor-pointer mt-1.5"
+                            onClick={() => setInvoiceDocUrl((m) => { const next = { ...m }; delete next[groupId]; return next; })}
+                          >
+                            Cambiar documento
+                          </button>
+                        </div>
                       ) : (
                         <label
                           tabIndex={0}
