@@ -45,6 +45,17 @@ type Row = {
     aiPhotoNote: string | null;
     confirmedBy: { name: string } | null;
   } | null;
+  financeFlagNote: string | null;
+  financeFlaggedAt: string | null;
+  financeFlaggedBy: { name: string } | null;
+};
+
+type UrgentReportSummary = {
+  requestId: string;
+  damagedQty: number;
+  missingQty: number;
+  incompleteQty: number;
+  resolutions: { quantity: number; status: "PENDING" | "COMPLETED" | "CANCELLED" }[];
 };
 
 function toDocRow(r: Row): OperationDocRow {
@@ -131,6 +142,9 @@ export function PurchaseInvoicingPanel() {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [monthFilter, setMonthFilter] = useState("");
+  const [urgentReports, setUrgentReports] = useState<UrgentReportSummary[]>([]);
+  const [flagOpenGroupId, setFlagOpenGroupId] = useState<string | null>(null);
+  const [flagNote, setFlagNote] = useState("");
   const { onPaste: onPasteProof, onMouseEnter: onPasteProofHoverIn, onMouseLeave: onPasteProofHoverOut } = usePasteFile((file) => uploadProof(file));
   // El grupo de la factura que se está pasando el mouse encima ahora mismo
   // — un solo listener de paste "armado" por hover, compartido entre todas
@@ -163,8 +177,35 @@ export function PurchaseInvoicingPanel() {
   function load() {
     fetch("/api/purchase-requests?view=invoicing").then((r) => (r.ok ? r.json() : [])).then(setRows).catch(() => setRows([]));
     fetch("/api/purchase-requests/petty-cash-summary").then((r) => (r.ok ? r.json() : null)).then(setPettyCash).catch(() => null);
+    fetch("/api/purchase-requests/urgent-reports").then((r) => (r.ok ? r.json() : [])).then(setUrgentReports).catch(() => setUrgentReports([]));
   }
   useEffect(load, []);
+
+  // Confirmado 2026-08-06: mientras la suma de resoluciones COMPLETED no
+  // cubra el total reportado, la operación sigue "con algo pendiente con el
+  // proveedor" — no bloquea que Nairoby registre factura, solo se lo avisa.
+  function openReportsForGroup(groupId: string) {
+    const requestIds = new Set((rows ?? []).filter((r) => r.groupId === groupId).map((r) => r.id));
+    return urgentReports.filter((rep) => {
+      if (!requestIds.has(rep.requestId)) return false;
+      const total = rep.damagedQty + rep.missingQty + rep.incompleteQty;
+      const completed = rep.resolutions.filter((res) => res.status === "COMPLETED").reduce((s, res) => s + res.quantity, 0);
+      return completed < total;
+    });
+  }
+
+  async function saveFinanceFlag(groupId: string, note: string | null) {
+    setBusyGroup(groupId);
+    await fetch(`/api/purchase-requests/group/${groupId}/finance-flag`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ note }),
+    });
+    setBusyGroup(null);
+    setFlagOpenGroupId(null);
+    load();
+    router.refresh();
+  }
 
   function currentGroupRows(groupId: string) {
     return (rows ?? []).filter((r) => r.groupId === groupId);
@@ -644,6 +685,41 @@ export function PurchaseInvoicingPanel() {
                   Solicitada por {actorName(r0.requestedBy?.name)} · Pagada por {actorName(r0.paidBy?.name)}
                 </div>
               </div>
+
+              {(() => {
+                const openReports = openReportsForGroup(groupId);
+                if (openReports.length === 0) return null;
+                return (
+                  <div className="flex items-center gap-2 bg-red/10 border border-red/30 rounded-md px-3 py-2 mb-2.5 text-[12px] text-red">
+                    <span className="w-1.5 h-1.5 rounded-full bg-red shrink-0" />
+                    Esta operación todavía tiene algo pendiente con el proveedor — {openReports.length} reporte{openReports.length === 1 ? "" : "s"} urgente sin resolver del todo.
+                  </div>
+                );
+              })()}
+
+              {r0.financeFlagNote ? (
+                <div className="flex items-start justify-between gap-2 bg-gold/10 border border-gold/35 rounded-md px-3 py-2 mb-2.5 text-[12px]" style={{ color: "#D9A441" }}>
+                  <div>
+                    <div className="font-semibold">⚠️ Revisar: {r0.financeFlagNote}</div>
+                    <div className="text-steel mt-0.5">Marcado por {actorName(r0.financeFlaggedBy?.name)}{r0.financeFlaggedAt ? ` · ${new Date(r0.financeFlaggedAt).toLocaleDateString("es-MX")}` : ""}</div>
+                  </div>
+                  <button type="button" className="text-steel underline text-[11px] cursor-pointer shrink-0" onClick={() => saveFinanceFlag(groupId, null)}>quitar</button>
+                </div>
+              ) : flagOpenGroupId === groupId ? (
+                <div className="bg-cloud rounded-md p-2.5 mb-2.5">
+                  <textarea className="w-full rounded border border-rule px-2.5 py-2 text-[12px] mb-2" rows={2} placeholder="¿Qué hay que revisar en esta operación?" value={flagNote} onChange={(e) => setFlagNote(e.target.value)} />
+                  <div className="flex items-center gap-2">
+                    <button type="button" disabled={busyGroup === groupId || !flagNote.trim()} className="rounded border border-gold/50 px-2.5 py-1.5 text-[11.5px] font-semibold cursor-pointer disabled:opacity-60" style={{ color: "#D9A441" }} onClick={() => saveFinanceFlag(groupId, flagNote.trim())}>
+                      Marcar para revisar
+                    </button>
+                    <button type="button" className="text-steel text-[11.5px] cursor-pointer" onClick={() => setFlagOpenGroupId(null)}>Cancelar</button>
+                  </div>
+                </div>
+              ) : (
+                <button type="button" className="text-steel text-[11px] underline cursor-pointer mb-2.5" onClick={() => { setFlagOpenGroupId(groupId); setFlagNote(""); }}>
+                  ⚠️ Algo no cuadra — marcar para revisar
+                </button>
+              )}
 
               {r0.invoiceStatus === "PENDING" ? (
                 <div>

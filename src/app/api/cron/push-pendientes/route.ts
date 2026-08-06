@@ -3,6 +3,7 @@ import { getAllPendingTasksActors, getPendingTasksForActor, MANDATORY_PUSH_TYPES
 import { getDisabledTypes } from "@/lib/pushPreferences";
 import { getDuePersonalReminderPushes } from "@/lib/periodicReminders";
 import { getStalePurchaseRequestPushes } from "@/lib/purchases";
+import { getStaleSupplierCreditPushes } from "@/lib/supplierCredits";
 import { sendPushToOwner } from "@/lib/webPush";
 
 // Disparado por Vercel Cron (ver vercel.json) una vez al día. Protegido por
@@ -60,6 +61,12 @@ export async function GET(req: NextRequest) {
 
   const stalePurchases = await getStalePurchaseRequestPushes();
   for (const r of stalePurchases) {
+    await sendPushToOwner(r.ownerId, { title: r.title, body: r.body, url: r.url });
+    notified++;
+  }
+
+  const staleCredits = await getStaleSupplierCreditPushes();
+  for (const r of staleCredits) {
     await sendPushToOwner(r.ownerId, { title: r.title, body: r.body, url: r.url });
     notified++;
   }

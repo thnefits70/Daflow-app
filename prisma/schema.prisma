@@ -214,6 +214,10 @@ model User {
   purchaseCatalogItemsCreated     PurchaseCatalogItem[] @relation("PurchaseCatalogItemCreatedBy")
   purchaseCatalogItemDeleteRequests PurchaseCatalogItemDeleteRequest[] @relation("PurchaseCatalogItemDeleteRequestedBy")
   supplierCreditsCreated            SupplierCredit[] @relation("SupplierCreditCreatedBy")
+  urgentResolutionsCreated             PurchaseUrgentResolution[] @relation("UrgentResolutionCreatedBy")
+  urgentResolutionsReplacementVerified PurchaseUrgentResolution[] @relation("UrgentResolutionReplacementVerifiedBy")
+  urgentResolutionsBankConfirmed       PurchaseUrgentResolution[] @relation("UrgentResolutionBankConfirmedBy")
+  purchaseRequestsFinanceFlagged       PurchaseRequest[] @relation("PurchaseRequestFinanceFlaggedBy")
   inventoryProductSnapshotsCreated  InventoryProductSnapshot[] @relation("InventoryProductSnapshotCreatedBy")
   pettyCashEntriesCreated   PettyCashEntry[] @relation("PettyCashEntryCreatedBy")
   pettyCashEntriesUpdated   PettyCashEntry[] @relation("PettyCashEntryUpdatedBy")
@@ -1251,6 +1255,14 @@ model PurchaseRequest {
   invoicedById    String?
   invoicedBy      User?                 @relation("PurchaseRequestInvoicedBy", fields: [invoicedById], references: [id], onDelete: SetNull)
 
+  // Confirmado 2026-08-06: Nairoby puede marcar "revisar algo" en la misma
+  // operación cuando algo no cuadra en su revisión final — opcional, no
+  // obligatorio, y no bloquea nada por sí solo, solo deja visible la nota.
+  financeFlagNote     String?
+  financeFlaggedAt    DateTime?
+  financeFlaggedById  String?
+  financeFlaggedBy    User?             @relation("PurchaseRequestFinanceFlaggedBy", fields: [financeFlaggedById], references: [id], onDelete: SetNull)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -1289,36 +1301,99 @@ model PurchaseRequestReceipt {
   confirmedAt   DateTime @default(now())
 }
 
-enum PurchaseUrgentReportType {
-  DAMAGED_INCOMPLETE
-  NOT_ARRIVED
-}
-
 // "Informar urgente" desde la confirmación de Inventario — mercadería
-// dañada/incompleta, o que nunca llegó. Puede haber más de una por
-// solicitud (ej. se reporta que no llega, y luego llega dañada).
-// Confirmado 2026-08-06: el admin la resuelve desde una bandeja propia — o
-// bien no hace falta ninguna acción con el proveedor (resolvedAt +
-// resolution, sin crédito), o se genera un SupplierCredit (crédito para la
-// próxima compra, o reembolso ya recibido en efectivo/transferencia).
+// dañada, faltante, incompleta, o que nunca llegó, de UN producto puntual
+// de la solicitud (requestId). Confirmado 2026-08-06: cantidades separadas
+// por tipo (no un solo "afectado" genérico) + evidencia obligatoria (al
+// menos 1 foto; puede agregar 1 video) — todo comprimido antes de subir.
+// El valor en disputa (money.ts: damagedQty+missingQty+incompleteQty ×
+// request.unitCost) SIEMPRE se calcula del costo real de la cotización,
+// nunca un monto escrito a mano — así no se puede inflar el reclamo.
 model PurchaseRequestUrgentReport {
   id        String          @id @default(cuid())
   requestId String
   request   PurchaseRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
 
-  type             PurchaseUrgentReportType
-  affectedQuantity Int?
-  description      String
+  damagedQty    Int @default(0)
+  missingQty    Int @default(0)
+  incompleteQty Int @default(0)
+  description   String
+  mediaUrls     String[]
 
   reportedById String?
   reportedBy   User?    @relation("PurchaseRequestUrgentReportedBy", fields: [reportedById], references: [id], onDelete: SetNull)
   reportedAt   DateTime @default(now())
 
-  resolvedAt   DateTime?
-  resolution   String?
-  credit       SupplierCredit?
+  resolutions PurchaseUrgentResolution[]
 
   @@index([requestId])
+}
+
+enum UrgentResolutionType {
+  CREDIT
+  REPLACEMENT
+  REFUND
+  WRITE_OFF
+}
+
+enum UrgentResolutionStatus {
+  PENDING
+  COMPLETED
+  CANCELLED
+}
+
+// Confirmado 2026-08-06: Bryan (líder de Compras/Análisis de Mercado, quien
+// solicitó la compra) reparte la cantidad afectada de un reporte entre uno o
+// varios caminos — puede dividirla (ej. 10 un. con crédito, 20 un. con
+// reembolso). `quantity`/`amount` de cada resolución son una PORCIÓN de lo
+// reportado, nunca más de lo que queda sin resolver (se valida en la ruta).
+// El reporte se considera resuelto solo cuando la suma de resoluciones
+// COMPLETED cubre el total reportado — mientras no sea así, Finanzas ve un
+// aviso de que esa operación sigue con algo pendiente con el proveedor.
+model PurchaseUrgentResolution {
+  id       String                      @id @default(cuid())
+  reportId String
+  report   PurchaseRequestUrgentReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  type     UrgentResolutionType
+  quantity Int
+  amount   Float
+  // Nota libre — obligatoria solo para WRITE_OFF (por qué no se recupera).
+  note     String?
+
+  status UrgentResolutionStatus @default(PENDING)
+
+  // REPLACEMENT — Bryan pone la fecha máxima; cuando llega, Daniel la
+  // verifica con la misma metodología de fotos + IA que la recepción normal.
+  replacementDueDate      DateTime?
+  replacementArrivedAt    DateTime?
+  replacementPhotoUrls    String[]
+  replacementAiMatch      Boolean?
+  replacementAiNote       String?
+  replacementVerifiedById String?
+  replacementVerifiedBy   User?     @relation("UrgentResolutionReplacementVerifiedBy", fields: [replacementVerifiedById], references: [id], onDelete: SetNull)
+
+  // REFUND — precio fijo (el mismo de la cotización), solo la cantidad se
+  // ingresa; la IA cruza cantidad×precio contra el comprobante que suba el
+  // proveedor, y el admin confirma en su cuenta bancaria antes de cerrar.
+  refundProofUrl    String?
+  refundAiMatch     Boolean?
+  refundAiNote      String?
+  bankConfirmedAt   DateTime?
+  bankConfirmedById String?
+  bankConfirmedBy   User?     @relation("UrgentResolutionBankConfirmedBy", fields: [bankConfirmedById], references: [id], onDelete: SetNull)
+
+  // WRITE_OFF — se da por perdido, no hay nada más que recuperar (con una
+  // nota de por qué); queda COMPLETED de inmediato.
+
+  credit SupplierCredit?
+
+  createdById String?
+  createdBy   User?    @relation("UrgentResolutionCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+
+  @@index([reportId])
+  @@index([status])
 }
 
 enum SupplierCreditStatus {
@@ -1330,10 +1405,10 @@ enum SupplierCreditStatus {
 // Confirmado 2026-08-06: cuando algo llega dañado/incompleto/no llega y ya
 // se pagó, en vez de perder ese dinero se registra como crédito con el
 // proveedor (AVAILABLE) para aplicarlo a la siguiente compra que se le
-// haga (APPLIED, appliedToGroupId), o se marca que el proveedor ya
-// reembolsó en efectivo/transferencia (REFUNDED, refundProofUrl). Nunca se
-// elimina — es el respaldo de auditoría de por qué no se pagó el 100% de
-// una compra o por qué llegó un reembolso.
+// haga (APPLIED, appliedToGroupId). Nunca se elimina — es el respaldo de
+// auditoría de por qué no se pagó el 100% de una compra. Si no se aplica
+// dentro de 1 mes desde createdAt, se avisa automáticamente a admin,
+// Nairoby y Bryan (ver getStaleSupplierCreditPushes en supplierCredits.ts).
 model SupplierCredit {
   id         String   @id @default(cuid())
   supplierId String
@@ -1342,16 +1417,13 @@ model SupplierCredit {
   amount Float
   reason String
 
-  urgentReportId String?                      @unique
-  urgentReport   PurchaseRequestUrgentReport? @relation(fields: [urgentReportId], references: [id], onDelete: SetNull)
+  urgentResolutionId String?                   @unique
+  urgentResolution   PurchaseUrgentResolution? @relation(fields: [urgentResolutionId], references: [id], onDelete: SetNull)
 
   status SupplierCreditStatus @default(AVAILABLE)
 
   appliedToGroupId String?
   appliedAt        DateTime?
-
-  refundProofUrl String?
-  refundedAt     DateTime?
 
   createdById String?
   createdBy   User?    @relation("SupplierCreditCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)

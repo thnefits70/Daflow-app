@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Camera, CheckCircle2, X, AlertTriangle } from "lucide-react";
+import { Camera, CheckCircle2, X, AlertTriangle, Truck } from "lucide-react";
 import { uploadFile } from "@/lib/uploadFile";
 import { compressImage } from "@/lib/compressImage";
 import { usePasteFile } from "@/lib/usePasteFile";
@@ -14,7 +14,9 @@ type Row = {
   groupId: string;
   status: "PAID" | "RECEIVED";
   quantity: number;
+  unitCost: number;
   totalCost: number;
+  paidAt: string | null;
   catalogItem: { name: string; photos: string[] };
   supplier: { name: string };
   requestedBy: { name: string } | null;
@@ -32,6 +34,15 @@ type Row = {
     aiPhotoNote: string | null;
     confirmedBy: { name: string } | null;
   } | null;
+};
+
+type PendingReplacement = {
+  id: string;
+  quantity: number;
+  replacementDueDate: string | null;
+  report: {
+    request: { id: string; catalogItem: { name: string; photos: string[] }; supplier: { name: string } };
+  };
 };
 
 function groupRows(rows: Row[]) {
@@ -59,6 +70,12 @@ function toDocRow(r: Row): OperationDocRow {
   };
 }
 
+function isVideoUrl(url: string) {
+  return /\.(mp4|mov|webm|avi|m4v)($|\?)/i.test(url);
+}
+
+const CREDIT_CLAIM_WINDOW_DAYS = 7;
+
 export function PurchaseReceivingPanel() {
   const router = useRouter();
   const [rows, setRows] = useState<Row[] | null>(null);
@@ -71,17 +88,27 @@ export function PurchaseReceivingPanel() {
   const [aiResult, setAiResult] = useState<{ likelyMatch: boolean | null; note: string } | null>(null);
   const { onPaste: onPastePhoto, onMouseEnter: onPasteHoverIn, onMouseLeave: onPasteHoverOut } = usePasteFile((file) => addPhoto(file));
   const [comment, setComment] = useState("");
-  const [urgentType, setUrgentType] = useState<"DAMAGED_INCOMPLETE" | "NOT_ARRIVED">("DAMAGED_INCOMPLETE");
-  const [urgentQty, setUrgentQty] = useState("");
-  const [urgentDesc, setUrgentDesc] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
 
+  // Informar urgente — cantidades desglosadas por tipo + evidencia.
+  const [urgentDamagedQty, setUrgentDamagedQty] = useState("");
+  const [urgentMissingQty, setUrgentMissingQty] = useState("");
+  const [urgentIncompleteQty, setUrgentIncompleteQty] = useState("");
+  const [urgentDesc, setUrgentDesc] = useState("");
+  const [urgentMediaUrls, setUrgentMediaUrls] = useState<string[]>([]);
+  const [uploadingUrgentMedia, setUploadingUrgentMedia] = useState(false);
+  const { onPaste: onPasteUrgentMedia, onMouseEnter: onUrgentMediaHoverIn, onMouseLeave: onUrgentMediaHoverOut } = usePasteFile((file) => addUrgentMedia(file));
+
+  const [pendingReplacements, setPendingReplacements] = useState<PendingReplacement[]>([]);
+  const [openReplacementId, setOpenReplacementId] = useState<string | null>(null);
+  const [replacementPhotoUrls, setReplacementPhotoUrls] = useState<string[]>([]);
+  const [uploadingReplacementPhoto, setUploadingReplacementPhoto] = useState(false);
+  const { onPaste: onPasteReplacement, onMouseEnter: onReplacementHoverIn, onMouseLeave: onReplacementHoverOut } = usePasteFile((file) => addReplacementPhoto(file));
+
   function load() {
-    fetch("/api/purchase-requests?view=receiving")
-      .then((r) => (r.ok ? r.json() : []))
-      .then(setRows)
-      .catch(() => setRows([]));
+    fetch("/api/purchase-requests?view=receiving").then((r) => (r.ok ? r.json() : [])).then(setRows).catch(() => setRows([]));
+    fetch("/api/purchase-requests/urgent-resolutions/pending-replacements").then((r) => (r.ok ? r.json() : [])).then(setPendingReplacements).catch(() => setPendingReplacements([]));
   }
   useEffect(load, []);
 
@@ -154,7 +181,49 @@ export function PurchaseReceivingPanel() {
     router.refresh();
   }
 
+  function openUrgent(id: string) {
+    setUrgentId(id);
+    setUrgentDamagedQty("");
+    setUrgentMissingQty("");
+    setUrgentIncompleteQty("");
+    setUrgentDesc("");
+    setUrgentMediaUrls([]);
+    setErr("");
+  }
+
+  async function addUrgentMedia(file: File) {
+    if (urgentMediaUrls.length >= 4) return;
+    setUploadingUrgentMedia(true);
+    setErr("");
+    // Confirmado 2026-08-06: el video se sube tal cual (comprimir video de
+    // verdad en el navegador no es viable sin una librería pesada) — el
+    // límite de 15 MB de /api/upload/sign sigue aplicando igual.
+    const toUpload = file.type.startsWith("image/") ? await compressImage(file) : file;
+    const uploaded = await uploadFile(toUpload, "purchase-request-receipts");
+    setUploadingUrgentMedia(false);
+    if (!uploaded.ok) {
+      setErr(uploaded.error);
+      return;
+    }
+    setUrgentMediaUrls((m) => [...m, uploaded.url]);
+  }
+
+  function removeUrgentMedia(idx: number) {
+    setUrgentMediaUrls((m) => m.filter((_, i) => i !== idx));
+  }
+
   async function submitUrgent(id: string) {
+    const damaged = Number(urgentDamagedQty) || 0;
+    const missing = Number(urgentMissingQty) || 0;
+    const incomplete = Number(urgentIncompleteQty) || 0;
+    if (damaged + missing + incomplete <= 0) {
+      setErr("Ingresa al menos una cantidad afectada.");
+      return;
+    }
+    if (urgentMediaUrls.length === 0) {
+      setErr("Sube al menos una foto de evidencia.");
+      return;
+    }
     if (!urgentDesc.trim()) {
       setErr("Describe brevemente qué pasó.");
       return;
@@ -164,7 +233,7 @@ export function PurchaseReceivingPanel() {
     const res = await fetch(`/api/purchase-requests/${id}/urgent-report`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ type: urgentType, affectedQuantity: urgentQty ? Number(urgentQty) : undefined, description: urgentDesc.trim() }),
+      body: JSON.stringify({ damagedQty: damaged, missingQty: missing, incompleteQty: incomplete, description: urgentDesc.trim(), mediaUrls: urgentMediaUrls }),
     });
     setBusy(false);
     const data = await res.json().catch(() => null);
@@ -174,17 +243,110 @@ export function PurchaseReceivingPanel() {
     }
     setUrgentId(null);
     setUrgentDesc("");
-    setUrgentQty("");
+    setUrgentMediaUrls([]);
     load();
   }
 
+  async function addReplacementPhoto(file: File) {
+    if (replacementPhotoUrls.length >= 3) return;
+    setUploadingReplacementPhoto(true);
+    setErr("");
+    const compressed = await compressImage(file);
+    const uploaded = await uploadFile(compressed, "purchase-request-receipts");
+    setUploadingReplacementPhoto(false);
+    if (!uploaded.ok) {
+      setErr(uploaded.error);
+      return;
+    }
+    setReplacementPhotoUrls((p) => [...p, uploaded.url]);
+  }
+
+  async function confirmReplacement(resolutionId: string) {
+    if (replacementPhotoUrls.length < 2) {
+      setErr("Sube al menos 2 fotos.");
+      return;
+    }
+    setBusy(true);
+    setErr("");
+    const res = await fetch(`/api/purchase-requests/urgent-resolutions/${resolutionId}/replacement-arrived`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ photoUrls: replacementPhotoUrls }),
+    });
+    setBusy(false);
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      setErr(data?.error ?? "No se pudo confirmar.");
+      return;
+    }
+    setOpenReplacementId(null);
+    setReplacementPhotoUrls([]);
+    load();
+    router.refresh();
+  }
+
   if (!rows) return <div className="text-steel text-[13px]">Cargando…</div>;
-  if (rows.length === 0) return <div className="border-[1.5px] border-dashed border-rule rounded-md p-8 text-center text-steel text-[13.5px]">No hay mercadería pagada esperando confirmación.</div>;
 
   const groups = groupRows(rows);
 
   return (
     <div className="flex flex-col gap-2.5">
+      {pendingReplacements.length > 0 && (
+        <div className="bg-surface border border-gold/40 rounded-md p-4 mb-1">
+          <div className="flex items-center gap-1.5 text-[12px] font-bold mb-2" style={{ color: "#D9A441" }}>
+            <Truck size={14} /> Cambios de mercadería pendientes de verificar
+          </div>
+          <div className="flex flex-col gap-2.5">
+            {pendingReplacements.map((pr) => (
+              <div key={pr.id} className="bg-cloud rounded-md p-3">
+                <div className="text-[13px] font-bold">{pr.report.request.catalogItem.name}</div>
+                <div className="text-[11.5px] text-steel mb-2">
+                  {pr.report.request.supplier.name} — {pr.quantity} un. · llega hasta {pr.replacementDueDate ? new Date(pr.replacementDueDate).toLocaleDateString("es-MX") : "—"}
+                </div>
+                {openReplacementId === pr.id ? (
+                  <div>
+                    <div className="text-[11px] text-steel mb-1.5">Mínimo 2 fotos, igual que una recepción normal.</div>
+                    <div className="grid grid-cols-3 gap-2 mb-2.5">
+                      {replacementPhotoUrls.map((url, i) => (
+                        <img key={i} src={url} alt="" className="w-full h-24 rounded object-cover border border-rule" />
+                      ))}
+                      {replacementPhotoUrls.length < 3 && (
+                        <label
+                          tabIndex={0}
+                          onPaste={onPasteReplacement}
+                          onMouseEnter={onReplacementHoverIn}
+                          onMouseLeave={onReplacementHoverOut}
+                          className="flex flex-col items-center justify-center gap-1 h-24 border-[1.5px] border-dashed border-rule rounded text-[11px] text-steel cursor-pointer hover:border-teal"
+                        >
+                          {uploadingReplacementPhoto ? <span className="w-4 h-4 rounded-full border-2 border-rule border-t-teal animate-spin" /> : <Camera size={16} />}
+                          Subir o pegar
+                          <input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && addReplacementPhoto(e.target.files[0])} />
+                        </label>
+                      )}
+                    </div>
+                    {err && <div className="text-red text-[12px] mb-2">{err}</div>}
+                    <div className="flex items-center gap-2">
+                      <button type="button" disabled={busy || replacementPhotoUrls.length < 2} className="rounded border border-green bg-green px-3.5 py-1.5 text-[12px] font-semibold text-white cursor-pointer disabled:opacity-60" onClick={() => confirmReplacement(pr.id)}>
+                        ✓ Confirmar que llegó bien
+                      </button>
+                      <button type="button" className="text-steel text-[12px] cursor-pointer" onClick={() => { setOpenReplacementId(null); setReplacementPhotoUrls([]); }}>Cancelar</button>
+                    </div>
+                  </div>
+                ) : (
+                  <button type="button" className="rounded border border-teal bg-teal px-3.5 py-1.5 text-[12px] font-bold text-navy cursor-pointer" onClick={() => { setOpenReplacementId(pr.id); setReplacementPhotoUrls([]); setErr(""); }}>
+                    Verificar cambio recibido
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {rows.length === 0 && pendingReplacements.length === 0 && (
+        <div className="border-[1.5px] border-dashed border-rule rounded-md p-8 text-center text-steel text-[13.5px]">No hay mercadería pagada esperando confirmación.</div>
+      )}
+
       {groups.map((g) => {
         const groupId = g[0].groupId;
         const receivedCount = g.filter((r) => r.status === "RECEIVED").length;
@@ -213,7 +375,11 @@ export function PurchaseReceivingPanel() {
             )}
 
             <div className="flex flex-col gap-3 mb-3">
-              {g.map((r) => (
+              {g.map((r) => {
+                const creditDeadline = r.paidAt ? new Date(new Date(r.paidAt).getTime() + CREDIT_CLAIM_WINDOW_DAYS * 86400000) : null;
+                const pastCreditWindow = creditDeadline ? new Date() > creditDeadline : false;
+                const urgentTotal = (Number(urgentDamagedQty) || 0) + (Number(urgentMissingQty) || 0) + (Number(urgentIncompleteQty) || 0);
+                return (
                 <div key={r.id}>
                   <div className="flex items-center justify-between gap-3 flex-wrap mb-0.5">
                     <div className="text-[14px] font-bold">{r.catalogItem.name}</div>
@@ -272,6 +438,7 @@ export function PurchaseReceivingPanel() {
                               >
                                 {uploadingPhoto ? <span className="w-4 h-4 rounded-full border-2 border-rule border-t-teal animate-spin" /> : <Camera size={16} />}
                                 Subir o pegar
+                                <input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && addPhoto(e.target.files[0])} />
                               </label>
                             )}
                           </div>
@@ -299,15 +466,67 @@ export function PurchaseReceivingPanel() {
                         </div>
                       ) : urgentId === r.id ? (
                         <div className="mt-2">
-                          <div className="grid grid-cols-2 gap-2.5 mb-2.5">
-                            <select className="rounded border border-rule bg-surface px-2.5 py-2 text-[13px]" value={urgentType} onChange={(e) => setUrgentType(e.target.value as typeof urgentType)}>
-                              <option value="DAMAGED_INCOMPLETE">Dañada o incompleta</option>
-                              <option value="NOT_ARRIVED">Todavía no ha llegado</option>
-                            </select>
-                            {urgentType === "DAMAGED_INCOMPLETE" && (
-                              <input type="number" placeholder="Cantidad afectada" className="rounded border border-rule px-2.5 py-2 text-[13px]" value={urgentQty} onChange={(e) => setUrgentQty(e.target.value)} />
+                          {creditDeadline && (
+                            <div className={`flex items-center gap-1.5 text-[11px] mb-2.5 ${pastCreditWindow ? "text-red" : "text-steel"}`}>
+                              <AlertTriangle size={12} />
+                              {pastCreditWindow
+                                ? `Ya pasaron los 7 días desde el pago (venció ${creditDeadline.toLocaleDateString("es-MX")}) — el proveedor puede no aprobar crédito por esto.`
+                                : `Tienes hasta ${creditDeadline.toLocaleDateString("es-MX")} (7 días desde el pago) para que el proveedor apruebe crédito.`}
+                            </div>
+                          )}
+                          <div className="grid grid-cols-3 gap-2.5 mb-2.5">
+                            <div>
+                              <label className="block mb-1 text-[10px] text-steel">Dañada</label>
+                              <input type="number" min={0} className="w-full rounded border border-rule px-2 py-2 text-[13px]" value={urgentDamagedQty} onChange={(e) => setUrgentDamagedQty(e.target.value)} />
+                            </div>
+                            <div>
+                              <label className="block mb-1 text-[10px] text-steel">Faltante</label>
+                              <input type="number" min={0} className="w-full rounded border border-rule px-2 py-2 text-[13px]" value={urgentMissingQty} onChange={(e) => setUrgentMissingQty(e.target.value)} />
+                            </div>
+                            <div>
+                              <label className="block mb-1 text-[10px] text-steel">Incompleta</label>
+                              <input type="number" min={0} className="w-full rounded border border-rule px-2 py-2 text-[13px]" value={urgentIncompleteQty} onChange={(e) => setUrgentIncompleteQty(e.target.value)} />
+                            </div>
+                          </div>
+                          {urgentTotal > 0 && (
+                            <div className="text-[12px] font-semibold text-ink mb-2.5">
+                              {urgentTotal} un. afectadas · ${(urgentTotal * r.unitCost).toFixed(2)} en disputa (costo de la cotización)
+                            </div>
+                          )}
+
+                          <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">
+                            Evidencia ({urgentMediaUrls.length}/4) — mínimo 1 foto, puedes agregar 1 video
+                          </label>
+                          <div className="grid grid-cols-4 gap-2 mb-2.5">
+                            {urgentMediaUrls.map((url, i) => (
+                              <div key={i} className="relative">
+                                {isVideoUrl(url) ? (
+                                  <video src={url} controls className="w-full h-20 rounded object-cover border border-rule bg-cloud" />
+                                ) : (
+                                  <a href={url} target="_blank" rel="noopener noreferrer">
+                                    <img src={url} alt="" className="w-full h-20 rounded object-cover border border-rule" />
+                                  </a>
+                                )}
+                                <button type="button" className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red text-white flex items-center justify-center cursor-pointer" onClick={() => removeUrgentMedia(i)}>
+                                  <X size={11} />
+                                </button>
+                              </div>
+                            ))}
+                            {urgentMediaUrls.length < 4 && (
+                              <label
+                                tabIndex={0}
+                                onPaste={onPasteUrgentMedia}
+                                onMouseEnter={onUrgentMediaHoverIn}
+                                onMouseLeave={onUrgentMediaHoverOut}
+                                className="flex flex-col items-center justify-center gap-1 h-20 border-[1.5px] border-dashed border-red/40 rounded text-[10.5px] text-red cursor-pointer hover:border-red"
+                              >
+                                {uploadingUrgentMedia ? <span className="w-4 h-4 rounded-full border-2 border-rule border-t-red animate-spin" /> : <Camera size={15} />}
+                                Foto o video
+                                <input type="file" accept="image/*,video/*" className="hidden" onChange={(e) => e.target.files?.[0] && addUrgentMedia(e.target.files[0])} />
+                              </label>
                             )}
                           </div>
+
                           <textarea className="w-full rounded border border-rule px-2.5 py-2 text-[12.5px] mb-2.5" rows={2} placeholder="Describe qué pasó" value={urgentDesc} onChange={(e) => setUrgentDesc(e.target.value)} />
                           {err && <div className="text-red text-[12px] mb-2">{err}</div>}
                           <div className="flex items-center gap-2">
@@ -319,7 +538,7 @@ export function PurchaseReceivingPanel() {
                         </div>
                       ) : (
                         <div className="flex items-center gap-2 mt-1.5">
-                          <button type="button" className="text-[11.5px] font-semibold border border-red/50 text-red rounded px-3 py-1.5 cursor-pointer" onClick={() => { setUrgentId(r.id); setErr(""); }}>
+                          <button type="button" className="text-[11.5px] font-semibold border border-red/50 text-red rounded px-3 py-1.5 cursor-pointer" onClick={() => openUrgent(r.id)}>
                             🚨 Informar urgente
                           </button>
                           <button type="button" className="rounded border border-green bg-green px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer" onClick={() => { setOpenId(r.id); setReceivedPhotoUrls([]); setAiResult(null); setReceivedQty(""); setComment(""); setErr(""); }}>
@@ -330,7 +549,8 @@ export function PurchaseReceivingPanel() {
                     </>
                   )}
                 </div>
-              ))}
+                );
+              })}
             </div>
             {isMulti && pendingNames.length > 0 && (
               <div className="text-[11px] text-steel mb-3 pb-3 border-b border-rule">

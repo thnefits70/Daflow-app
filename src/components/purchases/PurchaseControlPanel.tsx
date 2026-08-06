@@ -34,7 +34,7 @@ export function PurchaseControlPanel({
     ...(canSubmit ? [{ key: "solicitar" as Tab, label: "Solicitar" }, { key: "mias" as Tab, label: "Mis solicitudes" }] : []),
     ...(canSubmit || canReview ? [{ key: "comparar" as Tab, label: "Comparar precios" }] : []),
     ...(canReview ? [{ key: "aprobacion" as Tab, label: "Bandeja de aprobación" }] : []),
-    ...(canReview ? [{ key: "urgentes" as Tab, label: "Reportes urgentes" }] : []),
+    ...(canSubmit || canReview ? [{ key: "urgentes" as Tab, label: "Reportes urgentes" }] : []),
     ...(canReceive ? [{ key: "inventario" as Tab, label: "Inventario" }] : []),
     ...(canInvoice ? [{ key: "finanzas" as Tab, label: "Finanzas" }] : []),
   ];
@@ -63,7 +63,7 @@ export function PurchaseControlPanel({
       {tab === "mias" && <MyPurchaseRequests />}
       {tab === "comparar" && <PurchasePriceExplorer />}
       {tab === "aprobacion" && <PurchaseApprovalInbox />}
-      {tab === "urgentes" && <PurchaseUrgentReportsPanel />}
+      {tab === "urgentes" && <PurchaseUrgentReportsPanel isAdmin={isAdmin} />}
       {tab === "inventario" && <PurchaseReceivingPanel />}
       {tab === "finanzas" && <PurchaseInvoicingPanel />}
     </div>
