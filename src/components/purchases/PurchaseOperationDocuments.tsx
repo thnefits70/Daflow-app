@@ -1,6 +1,7 @@
 "use client";
 
-import { FileText, Receipt, Truck, ClipboardCheck, Camera, AlertTriangle } from "lucide-react";
+import { useState } from "react";
+import { FileText, Receipt, Truck, ClipboardCheck, Camera, AlertTriangle, ChevronDown, ChevronRight } from "lucide-react";
 import { actorName } from "@/lib/actorName";
 
 export type OperationDocRow = {
@@ -73,12 +74,31 @@ function DocRow({ icon, label, url, meta, missingNote }: { icon: React.ReactNode
 // compra, pagos, factura) son los mismos en todas las filas del grupo — se
 // toman de la primera; la recepción sí es por producto.
 export function PurchaseOperationDocuments({ rows }: { rows: OperationDocRow[] }) {
+  const [open, setOpen] = useState(false);
   const r0 = rows[0];
   if (!r0) return null;
 
+  if (!open) {
+    return (
+      <button
+        type="button"
+        className="flex items-center gap-1.5 text-[11.5px] font-semibold text-steel hover:text-ink cursor-pointer"
+        onClick={() => setOpen(true)}
+      >
+        <ChevronRight size={13} /> Ver documentos de la operación
+      </button>
+    );
+  }
+
   return (
     <div className="bg-cloud border border-rule rounded-md p-3.5">
-      <div className="text-[10.5px] font-semibold uppercase tracking-wide text-steel mb-1">Documentos de la operación</div>
+      <button
+        type="button"
+        className="flex items-center gap-1.5 text-[10.5px] font-semibold uppercase tracking-wide text-steel mb-1 cursor-pointer hover:text-ink"
+        onClick={() => setOpen(false)}
+      >
+        <ChevronDown size={13} /> Documentos de la operación
+      </button>
       <div className="divide-y divide-rule/60">
         <DocRow
           icon={<Receipt size={16} />}

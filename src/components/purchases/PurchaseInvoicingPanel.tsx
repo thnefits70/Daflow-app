@@ -88,6 +88,31 @@ function groupRows(rows: Row[]) {
   return [...map.values()];
 }
 
+function pad2(n: number) {
+  return String(n).padStart(2, "0");
+}
+// Confirmado 2026-08-06: últimos 12 meses para el selector de "Filtrar por
+// mes" — mismo criterio ya usado en otras plantillas de meses de la app.
+function recentMonths(): string[] {
+  const now = new Date();
+  const months: string[] = [];
+  for (let i = 0; i <= 11; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    months.push(`${d.getFullYear()}-${pad2(d.getMonth() + 1)}`);
+  }
+  return months;
+}
+function monthBounds(month: string): { from: string; to: string } {
+  const [y, m] = month.split("-").map(Number);
+  const lastDay = new Date(y, m, 0).getDate();
+  return { from: `${month}-01`, to: `${month}-${pad2(lastDay)}` };
+}
+const MONTH_NAMES = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
+function monthFilterLabel(month: string) {
+  const [y, m] = month.split("-");
+  return `${MONTH_NAMES[Number(m) - 1]} ${y}`;
+}
+
 export function PurchaseInvoicingPanel() {
   const router = useRouter();
   const [rows, setRows] = useState<Row[] | null>(null);
@@ -99,6 +124,13 @@ export function PurchaseInvoicingPanel() {
   const [proofVerifyResult, setProofVerifyResult] = useState<{ readAmount: number | null; matches: boolean } | null>(null);
   const [availableCredits, setAvailableCredits] = useState<{ id: string; amount: number; reason: string }[]>([]);
   const [selectedCreditIds, setSelectedCreditIds] = useState<string[]>([]);
+  // Confirmado 2026-08-06: filtro de fechas para "Registrar factura" — sin
+  // esto la lista crece para siempre con todo el historial. dateFrom/dateTo
+  // vacíos = sin filtro (se ve todo). El selector de mes y "Mes anterior"
+  // solo son atajos que rellenan estos dos campos.
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [monthFilter, setMonthFilter] = useState("");
   const { onPaste: onPasteProof, onMouseEnter: onPasteProofHoverIn, onMouseLeave: onPasteProofHoverOut } = usePasteFile((file) => uploadProof(file));
   // El grupo de la factura que se está pasando el mouse encima ahora mismo
   // — un solo listener de paste "armado" por hover, compartido entre todas
@@ -328,7 +360,38 @@ export function PurchaseInvoicingPanel() {
   if (!rows) return <div className="text-steel text-[13px]">Cargando…</div>;
 
   const approvedGroups = groupRows(rows.filter((r) => r.status === "APPROVED"));
-  const restGroups = groupRows(rows.filter((r) => r.status !== "APPROVED"));
+  const restGroupsAll = groupRows(rows.filter((r) => r.status !== "APPROVED"));
+  // Confirmado 2026-08-06: por fecha de pago (paidAt) — es lo que ya se ve
+  // impreso en cada tarjeta ("Pagado ... · fecha"), así el filtro coincide
+  // con lo que la persona está mirando.
+  const restGroups = (dateFrom || dateTo)
+    ? restGroupsAll.filter((g) => {
+        const d = g[0].paidAt?.slice(0, 10);
+        if (!d) return true;
+        if (dateFrom && d < dateFrom) return false;
+        if (dateTo && d > dateTo) return false;
+        return true;
+      })
+    : restGroupsAll;
+
+  function applyMonthFilter(month: string) {
+    setMonthFilter(month);
+    if (!month) { setDateFrom(""); setDateTo(""); return; }
+    const { from, to } = monthBounds(month);
+    setDateFrom(from);
+    setDateTo(to);
+  }
+  function applyPrevMonth() {
+    const now = new Date();
+    const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const month = `${prev.getFullYear()}-${pad2(prev.getMonth() + 1)}`;
+    applyMonthFilter(month);
+  }
+  function clearDateFilter() {
+    setMonthFilter("");
+    setDateFrom("");
+    setDateTo("");
+  }
   // Confirmado 2026-08-03: solo aparece acá una vez que quien solicitó pidió
   // el pago con un clic (antes de eso no hay nada que Finanzas deba hacer).
   const pendingShippingGroups = groupRows(
@@ -533,8 +596,37 @@ export function PurchaseInvoicingPanel() {
         </div>
       )}
 
-      <div className="text-[11px] font-semibold uppercase tracking-wide text-steel mb-2">Registrar factura</div>
-      {restGroups.length === 0 && <div className="border-[1.5px] border-dashed border-rule rounded-md p-6 text-center text-steel text-[13px]">Nada por aquí todavía.</div>}
+      <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
+        <div className="text-[11px] font-semibold uppercase tracking-wide text-steel">Registrar factura</div>
+        <span className="font-mono text-[10px] text-steel">{restGroups.length} de {restGroupsAll.length}</span>
+      </div>
+      <div className="flex items-center gap-2 mb-3 flex-wrap text-[12px]">
+        <select
+          className="rounded border border-rule bg-cloud px-2 py-1.5 font-mono"
+          value={monthFilter}
+          onChange={(e) => applyMonthFilter(e.target.value)}
+        >
+          <option value="">Todos los meses</option>
+          {recentMonths().map((m) => (
+            <option key={m} value={m}>{monthFilterLabel(m)}</option>
+          ))}
+        </select>
+        <button type="button" className="rounded border border-rule px-2.5 py-1.5 text-steel cursor-pointer hover:border-teal" onClick={applyPrevMonth}>
+          Mes anterior
+        </button>
+        <label className="flex items-center gap-1.5 text-steel">
+          Desde
+          <input type="date" className="rounded border border-rule bg-cloud px-2 py-1.5" value={dateFrom} onChange={(e) => { setDateFrom(e.target.value); setMonthFilter(""); }} />
+        </label>
+        <label className="flex items-center gap-1.5 text-steel">
+          Hasta
+          <input type="date" className="rounded border border-rule bg-cloud px-2 py-1.5" value={dateTo} onChange={(e) => { setDateTo(e.target.value); setMonthFilter(""); }} />
+        </label>
+        {(dateFrom || dateTo) && (
+          <button type="button" className="text-steel underline cursor-pointer" onClick={clearDateFilter}>Limpiar</button>
+        )}
+      </div>
+      {restGroups.length === 0 && <div className="border-[1.5px] border-dashed border-rule rounded-md p-6 text-center text-steel text-[13px]">{restGroupsAll.length === 0 ? "Nada por aquí todavía." : "Nada en ese rango de fechas."}</div>}
       <div className="flex flex-col gap-2.5">
         {restGroups.map((g) => {
           const groupId = g[0].groupId;
