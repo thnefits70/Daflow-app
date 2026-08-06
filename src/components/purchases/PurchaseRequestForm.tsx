@@ -106,6 +106,8 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
   const [purchaseOrderFile, setPurchaseOrderFile] = useState<File | null>(null);
   const [purchaseOrderUrl, setPurchaseOrderUrl] = useState<string | null>(null);
   const [uploadingPurchaseOrder, setUploadingPurchaseOrder] = useState(false);
+  const [poVerifying, setPoVerifying] = useState(false);
+  const [poVerifyResult, setPoVerifyResult] = useState<{ readTotal: number | null; matches: boolean } | null>(null);
   const { onPaste: onPastePurchaseOrder, onMouseEnter: onPastePOHoverIn, onMouseLeave: onPastePOHoverOut } = usePasteFile((file) => handlePurchaseOrderFile(file));
 
   const [shippingIncluded, setShippingIncluded] = useState(true);
@@ -217,6 +219,7 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
     setManualCodeConfirm(false);
     setPurchaseOrderFile(null);
     setPurchaseOrderUrl(null);
+    setPoVerifyResult(null);
     setCarrier(null);
     setCarrierBankAccountId(null);
     setShippingCostTotal("");
@@ -272,6 +275,7 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
 
   async function handlePurchaseOrderFile(file: File) {
     setPurchaseOrderFile(file);
+    setPoVerifyResult(null);
     setUploadingPurchaseOrder(true);
     setErr("");
     const compressed = await compressImage(file);
@@ -282,6 +286,28 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
       return;
     }
     setPurchaseOrderUrl(uploaded.url);
+    // Confirmado 2026-08-06: cuando es obligatoria (cotización solo con
+    // código), el monto de la orden de compra se cruza contra lo mismo que
+    // ya se comparó contra la cotización — cotización, lo tipeado a mano, y
+    // la orden de compra deben coincidir entre los tres, no solo dos.
+    if (needsPurchaseOrder && total > 0) verifyPurchaseOrder(uploaded.url);
+  }
+
+  async function verifyPurchaseOrder(url: string) {
+    setPoVerifying(true);
+    setPoVerifyResult(null);
+    const res = await fetch("/api/purchase-requests/verify-purchase-order", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ purchaseOrderUrl: url, expectedTotal: total }),
+    });
+    setPoVerifying(false);
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      setErr(data?.error ?? "No se pudo verificar la orden de compra.");
+      return;
+    }
+    setPoVerifyResult(data);
   }
 
   async function verifyQuote() {
@@ -320,6 +346,10 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
     }
     if (needsPurchaseOrder && !purchaseOrderUrl) {
       setErr("La cotización solo trae un código, sin nombre de producto — sube la orden de compra antes de enviar.");
+      return;
+    }
+    if (needsPurchaseOrder && !poVerifyResult?.matches) {
+      setErr("El monto de la orden de compra todavía no está verificado — debe coincidir con lo que escribiste.");
       return;
     }
     if (!shippingIncluded && !carrier) {
@@ -542,7 +572,8 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
         </label>
         {needsPurchaseOrder && (
           <div className="text-[11.5px] text-red mb-2">
-            La cotización solo trae un código, sin nombre de producto — sube la orden de compra para respaldar qué se está comprando.
+            La cotización solo trae un código, sin nombre de producto — sin eso, no hay respaldo de qué se está comprando ni de que el monto sea el correcto.
+            Sube la orden de compra: la IA la va a leer y cruzar su monto contra lo que escribiste, para que cotización, lo tipeado y la orden de compra sean transparentes entre sí.
           </div>
         )}
         {!purchaseOrderUrl ? (
@@ -570,18 +601,37 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
             </label>
           </div>
         ) : (
-          <div className="flex items-center gap-3 bg-cloud border border-rule rounded-md p-3">
-            {/\.pdf($|\?)/i.test(purchaseOrderUrl) ? (
-              <FileText size={22} className="text-steel shrink-0" />
-            ) : (
-              <img src={purchaseOrderUrl} alt="" className="w-11 h-11 rounded object-cover border border-rule shrink-0" />
-            )}
-            <div className="flex-1 flex items-center gap-1.5 text-[12px] text-teal">
-              <CheckCircle2 size={13} /> Orden de compra subida
+          <div className="bg-cloud border border-rule rounded-md p-3">
+            <div className="flex items-center gap-3">
+              {/\.pdf($|\?)/i.test(purchaseOrderUrl) ? (
+                <FileText size={22} className="text-steel shrink-0" />
+              ) : (
+                <img src={purchaseOrderUrl} alt="" className="w-11 h-11 rounded object-cover border border-rule shrink-0" />
+              )}
+              <div className="flex-1 flex items-center gap-1.5 text-[12px] text-teal">
+                <CheckCircle2 size={13} /> Orden de compra subida
+              </div>
+              <button type="button" className="text-[11px] text-steel cursor-pointer" onClick={() => { setPurchaseOrderFile(null); setPurchaseOrderUrl(null); setPoVerifyResult(null); }}>
+                Cambiar
+              </button>
             </div>
-            <button type="button" className="text-[11px] text-steel cursor-pointer" onClick={() => { setPurchaseOrderFile(null); setPurchaseOrderUrl(null); }}>
-              Cambiar
-            </button>
+            {needsPurchaseOrder && (
+              <div className="mt-2.5 pt-2.5 border-t border-rule">
+                {poVerifying ? (
+                  <div className="flex items-center gap-2 text-[12px] text-steel">
+                    <span className="w-3.5 h-3.5 rounded-full border-2 border-rule border-t-teal animate-spin" /> Leyendo el monto de la orden de compra…
+                  </div>
+                ) : poVerifyResult?.matches ? (
+                  <div className="flex items-center gap-2 text-[12px] text-teal">
+                    <CheckCircle2 size={14} /> Coincide — la orden de compra dice ${poVerifyResult.readTotal?.toFixed(2)}, igual que la cotización y lo escrito.
+                  </div>
+                ) : poVerifyResult ? (
+                  <div className="flex items-center gap-2 text-[12px] text-red">
+                    <Lock size={14} /> No coincide — la orden de compra dice ${poVerifyResult.readTotal?.toFixed(2) ?? "?"}, pero se escribió ${total.toFixed(2)}. Corrige el número o sube la orden de compra correcta.
+                  </div>
+                ) : null}
+              </div>
+            )}
           </div>
         )}
       </div>

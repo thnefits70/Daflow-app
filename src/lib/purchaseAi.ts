@@ -143,6 +143,55 @@ export async function readPaymentProof(params: {
   return extractJson<PaymentProofReadResult>(textBlock.text);
 }
 
+export type PurchaseOrderReadResult = {
+  readTotal: number | null;
+};
+
+// Confirmado 2026-08-06: cuando la cotización solo trae un código (sin
+// nombre de producto) y la orden de compra pasa a ser obligatoria, la IA
+// también la lee UNA vez y su monto se cruza contra lo que la persona
+// escribió a mano — el mismo total que ya se comparó contra la cotización.
+// Objetivo explícito del usuario: que cotización, lo tipeado a mano, y la
+// orden de compra sean transparentes entre sí en cuanto a precio y pagos,
+// no solo dos de los tres documentos.
+export async function readPurchaseOrder(params: {
+  purchaseOrderUrl: string;
+  actorId: string;
+  deptId?: string;
+}): Promise<PurchaseOrderReadResult> {
+  const client = getAnthropicClient();
+  const fileBlock = await fetchFileContentBlock(params.purchaseOrderUrl);
+
+  const response = await client.messages.create({
+    model: PURCHASE_AI_MODEL,
+    max_tokens: 512,
+    system:
+      "Lees órdenes de compra para Control de Compras de Provedix (Guayaquil, Ecuador). " +
+      "Extrae SOLO el monto TOTAL que de verdad muestra el documento — nunca inventes un valor. " +
+      'Responde ÚNICAMENTE un JSON: {"readTotal": number|null}. ' +
+      "readTotal es el monto TOTAL de la orden de compra (sin símbolo de moneda). Si no se distingue con claridad, pon null.",
+    messages: [
+      {
+        role: "user",
+        content: [fileBlock, { type: "text", text: "Lee esta orden de compra y devuelve el JSON pedido." }],
+      },
+    ],
+  });
+
+  await logAiUsage({
+    feature: "control_compras_orden_compra",
+    model: PURCHASE_AI_MODEL,
+    actorId: params.actorId,
+    deptId: params.deptId,
+    inputTokens: response.usage.input_tokens,
+    outputTokens: response.usage.output_tokens,
+  });
+
+  const textBlock = response.content.find((b) => b.type === "text");
+  if (!textBlock || textBlock.type !== "text") throw new Error("La IA no devolvió contenido de texto.");
+  return extractJson<PurchaseOrderReadResult>(textBlock.text);
+}
+
 export type CatalogDuplicateCheck = {
   suspected: boolean;
   matchedName: string | null;
