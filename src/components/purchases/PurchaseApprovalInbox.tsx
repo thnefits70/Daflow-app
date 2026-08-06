@@ -291,12 +291,18 @@ export function PurchaseApprovalInbox() {
                 {g.map((r) => (
                   <div key={r.id} className="text-[14px] font-bold">{r.catalogItem.name} · {r.quantity} un. — ${r.unitCost.toFixed(2)}/un.</div>
                 ))}
-                <div className="text-[11.5px] text-steel mt-0.5">{g[0].supplier.name} · Total ${total.toFixed(2)}</div>
+                <div className="text-[11.5px] text-steel mt-0.5">{g[0].supplier.name}</div>
                 <div className="text-[10px] text-steel-dim mt-0.5">Solicitada por {actorName(g[0].requestedBy?.name)}</div>
               </div>
-              {justification && (
-                <span className="text-[10px] font-bold uppercase tracking-wide bg-red/15 text-red border border-red/40 rounded-full px-2.5 py-1">Sobre el historial</span>
-              )}
+              <div className="flex flex-col items-end gap-1">
+                {justification && (
+                  <span className="text-[10px] font-bold uppercase tracking-wide bg-red/15 text-red border border-red/40 rounded-full px-2.5 py-1">Sobre el historial</span>
+                )}
+                <div className="text-right">
+                  <div className="text-[9px] font-semibold uppercase tracking-wide text-steel">Total a pagar</div>
+                  <div className="font-display text-[22px] font-bold text-teal leading-tight">${total.toFixed(2)}</div>
+                </div>
+              </div>
             </div>
 
             <div className={`flex items-start gap-1.5 rounded-md px-3 py-2 mb-2.5 text-[11.5px] ${summary.hasIssue ? "bg-red/10 text-red border border-red/30" : "bg-teal/10 text-teal border border-teal/30"}`}>
