@@ -306,7 +306,7 @@ function BoxCard({
         </div>
       )}
 
-      {myPending && (
+      {myPending && canManage && (
         <div className="mt-3 bg-blue/10 border border-blue/30 rounded-md p-3">
           <div className="text-[12px] font-semibold mb-1">📥 Te fondearon la caja — confírmalo</div>
           <div className="text-[11px] text-steel mb-2">{myPending.description}</div>
