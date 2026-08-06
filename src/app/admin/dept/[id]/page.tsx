@@ -6,7 +6,6 @@ import { getFinanceKpiData } from "@/lib/financeKpis";
 import { getDeptProcessDetail } from "@/lib/processDetail";
 import { getPaymentRemindersData } from "@/lib/paymentReminders";
 import { getPeriodicReminders } from "@/lib/periodicReminders";
-import { getPurchaseReceipts, getPurchaseReceiptCatalogs } from "@/lib/purchaseReceipts";
 import { getStoreFeedbackData } from "@/lib/storeFeedback";
 import { getInventoryControlData, getInventoryKpisData } from "@/lib/inventoryKpis";
 import { getPettyCashViewerData } from "@/lib/pettyCash";
@@ -16,7 +15,7 @@ export default async function DeptWorkspacePage({ params }: { params: Promise<{ 
   const dept = await prisma.department.findUnique({ where: { id } });
   if (!dept) notFound();
 
-  const [processDetail, periodicReminders, documents, exams, financeKpiData, paymentReminders, weeklyMetricRecords, weeklyReviewRecords, purchaseReceipts, purchaseReceiptCatalogs, storeFeedbackStores, inventoryControlData, inventoryKpisData, pettyCashData] = await Promise.all([
+  const [processDetail, periodicReminders, documents, exams, financeKpiData, paymentReminders, weeklyMetricRecords, weeklyReviewRecords, storeFeedbackStores, inventoryControlData, inventoryKpisData, pettyCashData] = await Promise.all([
     getDeptProcessDetail(id),
     getPeriodicReminders(id, null),
     prisma.document.findMany({ where: { deptId: id }, orderBy: { createdAt: "asc" } }),
@@ -33,8 +32,6 @@ export default async function DeptWorkspacePage({ params }: { params: Promise<{ 
     dept.trackWeeklyReview
       ? prisma.weeklyReviewRecord.findMany({ where: { deptId: id }, orderBy: { week: "asc" } })
       : Promise.resolve([]),
-    dept.code === "COM" ? getPurchaseReceipts(id) : Promise.resolve([]),
-    dept.code === "COM" ? getPurchaseReceiptCatalogs(id) : Promise.resolve({ suppliers: [], banks: [] }),
     dept.code === "MKT" ? getStoreFeedbackData() : Promise.resolve([]),
     dept.code === "INV" ? getInventoryControlData() : Promise.resolve(null),
     dept.code === "INV" || dept.code === "MKT" ? getInventoryKpisData() : Promise.resolve(null),
@@ -80,10 +77,6 @@ export default async function DeptWorkspacePage({ params }: { params: Promise<{ 
           actionPlan: w.actionPlan,
           status: w.status,
         }))}
-        canViewPurchaseReceipts={dept.code === "COM"}
-        purchaseReceipts={purchaseReceipts}
-        purchaseReceiptSuppliers={purchaseReceiptCatalogs.suppliers}
-        purchaseReceiptBanks={purchaseReceiptCatalogs.banks}
         canManageStoreFeedback={dept.code === "MKT"}
         storeFeedbackStores={storeFeedbackStores}
         canSubmitPurchases={dept.code === "COM"}

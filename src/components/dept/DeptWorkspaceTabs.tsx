@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { GitBranch, FileText, GraduationCap, LineChart, TrendingUp, MessageSquare, CalendarClock, BellRing, Receipt, Heart, ShoppingCart, Package, Pin, Wallet, BarChart3 } from "lucide-react";
+import { GitBranch, FileText, GraduationCap, LineChart, TrendingUp, MessageSquare, CalendarClock, BellRing, Heart, ShoppingCart, Package, Pin, Wallet, BarChart3 } from "lucide-react";
 import { ProcessEmbeddedPanel } from "@/components/process/ProcessEmbeddedPanel";
 import type { ProcessDTO } from "@/components/process/ProcessEditor";
 import type { ProcessUpdateDTO } from "@/components/process/ProcessHistoryPanel";
@@ -10,8 +10,6 @@ import { PeriodicRemindersPanel } from "@/components/process/PeriodicRemindersPa
 import type { PeriodicReminderDTO } from "@/lib/periodicReminders";
 import { DocumentsPanel } from "@/components/documents/DocumentsPanel";
 import { ExamsPanel } from "@/components/exams/ExamsPanel";
-import { PurchaseReceiptsPanel } from "@/components/purchases/PurchaseReceiptsPanel";
-import type { PurchaseReceiptDTO, PurchaseReceiptCatalogDTO } from "@/lib/purchaseReceipts";
 import { StoreFeedbackPanel } from "@/components/finance/StoreFeedbackPanel";
 import type { StoreDTO } from "@/lib/storeFeedback";
 import { FinanceKpiWorkspace } from "@/components/finance/FinanceKpiWorkspace";
@@ -39,7 +37,6 @@ const ALL_TABS = [
   { key: "semanal", label: "Pedidos despachados", icon: TrendingUp },
   { key: "feedback", label: "Feedback semanal", icon: MessageSquare },
   { key: "procesos", label: "Procesos", icon: GitBranch },
-  { key: "comprobante", label: "Comprobante de pago", icon: Receipt },
   { key: "compras", label: "Control de Compras", icon: ShoppingCart },
   { key: "inventario", label: "Control de Inventario", icon: Package },
   { key: "inventoriokpis", label: "KPIs de Inventario", icon: BarChart3 },
@@ -67,10 +64,6 @@ export function DeptWorkspaceTabs({
   weeklyMetricRecords = [],
   trackWeeklyReview = false,
   weeklyReviewRecords = [],
-  canViewPurchaseReceipts = false,
-  purchaseReceipts = [],
-  purchaseReceiptSuppliers = [],
-  purchaseReceiptBanks = [],
   canManageStoreFeedback = false,
   canViewStoreFeedback = false,
   storeFeedbackStores = [],
@@ -103,15 +96,8 @@ export function DeptWorkspaceTabs({
   weeklyMetricRecords?: WeeklyMetricDTO[];
   trackWeeklyReview?: boolean;
   weeklyReviewRecords?: WeeklyReviewDTO[];
-  // Comprobante de pago (Gestión de Compras) — unlike the trackXxx flags
-  // above, this gates the tab per-VIEWER (leader/admin/explicitly granted),
-  // not per-department, so nobody else on the team even sees it exists.
-  canViewPurchaseReceipts?: boolean;
-  purchaseReceipts?: PurchaseReceiptDTO[];
-  purchaseReceiptSuppliers?: PurchaseReceiptCatalogDTO[];
-  purchaseReceiptBanks?: PurchaseReceiptCatalogDTO[];
-  // Servicio Postventa (Análisis de Mercado) — same per-viewer gate pattern
-  // as canViewPurchaseReceipts, not a per-department trackXxx flag. Two
+  // Servicio Postventa (Análisis de Mercado) — per-viewer gate pattern, not
+  // a per-department trackXxx flag. Two
   // tiers: canManageStoreFeedback (full edit) or canViewStoreFeedback
   // (read-only — confirmed 2026-07-25, for leaders like sales who should
   // see but never touch what Nairoby registered).
@@ -159,7 +145,6 @@ export function DeptWorkspaceTabs({
     if (t.key === "pagos") return trackPaymentReminders;
     if (t.key === "semanal") return trackWeeklyMetric;
     if (t.key === "feedback") return trackWeeklyReview;
-    if (t.key === "comprobante") return canViewPurchaseReceipts;
     if (t.key === "compras") return canSubmitPurchases || canReceivePurchases || canInvoicePurchases;
     if (t.key === "inventario") return canManageInventoryControl;
     if (t.key === "inventoriokpis") return canViewInventoryKpisPanel;
@@ -236,16 +221,6 @@ export function DeptWorkspaceTabs({
           reminders={periodicReminders}
           canManageAll={kpisEditable ?? editable}
           currentUserId={currentUserId}
-        />
-      )}
-      {tab === "comprobante" && canViewPurchaseReceipts && (
-        <PurchaseReceiptsPanel
-          deptId={deptId}
-          receipts={purchaseReceipts}
-          suppliers={purchaseReceiptSuppliers}
-          banks={purchaseReceiptBanks}
-          editable={canViewPurchaseReceipts}
-          isAdmin={isAdmin}
         />
       )}
       {tab === "compras" && (canSubmitPurchases || canReceivePurchases || canInvoicePurchases) && (

@@ -46,7 +46,6 @@ const updateSchema = z.object({
   leadsDeptId: z.string().nullable().optional(),
   canManageLaws: z.boolean().optional(),
   canAddSuppliers: z.boolean().optional(),
-  canViewPurchaseReceipts: z.boolean().optional(),
   canManagePurchases: z.boolean().optional(),
   canManageStoreFeedback: z.boolean().optional(),
   canViewStoreFeedback: z.boolean().optional(),
@@ -110,7 +109,6 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (d.leadsDeptId !== undefined) data.leadsDeptId = d.leadsDeptId;
   if (d.canManageLaws !== undefined) data.canManageLaws = d.canManageLaws;
   if (d.canAddSuppliers !== undefined) data.canAddSuppliers = d.canAddSuppliers;
-  if (d.canViewPurchaseReceipts !== undefined) data.canViewPurchaseReceipts = d.canViewPurchaseReceipts;
   if (d.canManagePurchases !== undefined) data.canManagePurchases = d.canManagePurchases;
   if (d.canManageStoreFeedback !== undefined) data.canManageStoreFeedback = d.canManageStoreFeedback;
   if (d.canViewStoreFeedback !== undefined) data.canViewStoreFeedback = d.canViewStoreFeedback;

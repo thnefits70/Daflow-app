@@ -8,7 +8,6 @@ import { getFinanceKpiData } from "@/lib/financeKpis";
 import { getDeptProcessDetail } from "@/lib/processDetail";
 import { getPaymentRemindersData } from "@/lib/paymentReminders";
 import { getPeriodicReminders } from "@/lib/periodicReminders";
-import { getPurchaseReceipts, getPurchaseReceiptCatalogs } from "@/lib/purchaseReceipts";
 import { getStoreFeedbackData } from "@/lib/storeFeedback";
 import { getInventoryControlData, getInventoryKpisData } from "@/lib/inventoryKpis";
 import { getPettyCashViewerData } from "@/lib/pettyCash";
@@ -48,7 +47,7 @@ export default async function WorkspacePage() {
   // KPIs financieros → Inventario (ver canViewInventoryKpisPanel en guards.ts).
   const canViewInventoryKpisPanel = await checkCanViewInventoryKpisPanel();
 
-  const [processDetail, periodicReminders, documents, exams, financeKpiData, paymentReminders, weeklyMetricRecords, weeklyReviewRecords, currentUser, unseenFeedbackCount, purchaseReceipts, purchaseReceiptCatalogs, storeFeedbackStores, inventoryControlData, inventoryKpisData, pettyCashData] = await Promise.all([
+  const [processDetail, periodicReminders, documents, exams, financeKpiData, paymentReminders, weeklyMetricRecords, weeklyReviewRecords, currentUser, unseenFeedbackCount, storeFeedbackStores, inventoryControlData, inventoryKpisData, pettyCashData] = await Promise.all([
     getDeptProcessDetail(dept.id),
     getPeriodicReminders(dept.id, session.user.id),
     prisma.document.findMany({ where: { deptId: dept.id }, orderBy: { createdAt: "asc" } }),
@@ -70,13 +69,10 @@ export default async function WorkspacePage() {
       select: {
         isLeader: true,
         leadsDeptId: true,
-        canViewPurchaseReceipts: true,
         defaultWorkspaceTab: true,
       },
     }),
     getUnseenFeedbackCount(),
-    dept.code === "COM" ? getPurchaseReceipts(dept.id) : Promise.resolve([]),
-    dept.code === "COM" ? getPurchaseReceiptCatalogs(dept.id) : Promise.resolve({ suppliers: [], banks: [] }),
     canManageStoreFeedback || canViewStoreFeedback ? getStoreFeedbackData() : Promise.resolve([]),
     canManageInventoryControl ? getInventoryControlData() : Promise.resolve(null),
     canViewInventoryKpisPanel ? getInventoryKpisData() : Promise.resolve(null),
@@ -84,9 +80,6 @@ export default async function WorkspacePage() {
   ]);
 
   const kpisEditable = !!currentUser?.isLeader && currentUser.leadsDeptId === dept.id;
-  // Comprobante de pago — leader of Compras, or anyone the admin has
-  // explicitly granted the escape hatch to, regardless of role.
-  const canViewPurchaseReceipts = dept.code === "COM" && (kpisEditable || !!currentUser?.canViewPurchaseReceipts);
 
   return (
     <div>
@@ -131,10 +124,6 @@ export default async function WorkspacePage() {
               }))
             : []
         }
-        canViewPurchaseReceipts={canViewPurchaseReceipts}
-        purchaseReceipts={purchaseReceipts}
-        purchaseReceiptSuppliers={purchaseReceiptCatalogs.suppliers}
-        purchaseReceiptBanks={purchaseReceiptCatalogs.banks}
         canManageStoreFeedback={canManageStoreFeedback}
         canViewStoreFeedback={canViewStoreFeedback}
         storeFeedbackStores={storeFeedbackStores}

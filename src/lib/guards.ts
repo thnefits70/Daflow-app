@@ -362,33 +362,13 @@ export async function canViewStoreFeedback() {
   return !!user?.canViewStoreFeedback;
 }
 
-// Comprobante de pago (Gestión de Compras) — confirmado 2026-07-23: admin
-// siempre; el líder de Compras; o quien el admin haya autorizado puntualmente
-// vía User.canViewPurchaseReceipts (sin ser necesariamente el líder). Esta
-// misma función gatilla tanto ver la pestaña como crear/solicitar cambios —
-// aprobar/rechazar solicitudes queda admin-only, chequeado aparte en la ruta.
-export async function canManagePurchaseReceipts(deptId: string) {
-  const session = await auth();
-  if (!session) return false;
-  if (session.user.role === "admin") return true;
-  const dept = await prisma.department.findUnique({ where: { id: deptId }, select: { code: true } });
-  if (dept?.code !== "COM") return false;
-  const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    select: { isLeader: true, leadsDeptId: true, canViewPurchaseReceipts: true },
-  });
-  if (!user) return false;
-  if (user.canViewPurchaseReceipts) return true;
-  return !!user.isLeader && user.leadsDeptId === deptId;
-}
-
 // Control de Compras — confirmado 2026-07-30: no es "la página de un
 // departamento" único, así que cada acción se resuelve por SU dueño natural
 // en vez de un solo deptId fijo: Bryan (Compras) y Nairoby (Finanzas) por
 // igual SOLICITAN; Daniel (Inventario) CONFIRMA que llegó; Finanzas
-// REGISTRA la factura. Admin siempre puede todo. canManagePurchases es la
-// misma clase de escape hatch que canViewPurchaseReceipts, para delegar a
-// alguien fuera de esos liderazgos sin tocar código.
+// REGISTRA la factura. Admin siempre puede todo. canManagePurchases es un
+// escape hatch para delegar a alguien fuera de esos liderazgos sin tocar
+// código.
 async function purchasesUserContext(userId: string) {
   return prisma.user.findUnique({
     where: { id: userId },

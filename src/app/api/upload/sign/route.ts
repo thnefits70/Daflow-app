@@ -6,7 +6,6 @@ import { supabaseAdmin } from "@/lib/supabase";
 import {
   canManagePayroll,
   canManageNomina,
-  canManagePurchaseReceipts,
   canSubmitPurchaseRequests,
   canConfirmPurchaseReceiving,
   canRegisterPurchaseInvoices,
@@ -85,9 +84,6 @@ export async function POST(req: NextRequest) {
   // the profile (canManageNomina), not just admin.
   if (!allowed && session?.user.role === "employee" && (folder === "photos" || folder === "cvs")) {
     allowed = await canManageNomina();
-  }
-  if (!allowed && session?.user.role === "employee" && folder === "purchase-receipts" && session.user.deptId) {
-    allowed = await canManagePurchaseReceipts(session.user.deptId);
   }
   if (!allowed && session?.user.role === "employee" && PURCHASE_MODULE_FOLDERS.includes(folder)) {
     allowed = (await canSubmitPurchaseRequests()) || (await canConfirmPurchaseReceiving()) || (await canRegisterPurchaseInvoices());

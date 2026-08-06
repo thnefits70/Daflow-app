@@ -34,7 +34,6 @@ type UserProfile = {
   leadsDeptId: string | null;
   canManageLaws: boolean;
   canAddSuppliers: boolean;
-  canViewPurchaseReceipts: boolean;
   canManagePurchases: boolean;
   canManageStoreFeedback: boolean;
   canViewStoreFeedback: boolean;
@@ -677,31 +676,6 @@ export function ProfileDetail({
                 type="button"
                 className={`flex-1 py-1.5 text-[12.5px] font-semibold cursor-pointer ${!p.canAddSuppliers ? "bg-blue text-white" : "bg-surface text-steel"}`}
                 onClick={() => save({ canAddSuppliers: false })}
-              >
-                No
-              </button>
-            </div>
-          </div>
-
-          <div className="bg-cloud border border-rule rounded p-3.5 mt-3.5">
-            <label className="flex items-center gap-1 mb-2 text-[10.5px] font-semibold uppercase tracking-wide text-steel">
-              <Receipt size={11} /> ¿Puede ver Comprobante de pago?
-            </label>
-            <div className="text-[11px] text-steel mb-2">
-              Acceso puntual a esta sección de Control de Compras, aunque no sea el líder del área.
-            </div>
-            <div className="flex border border-rule rounded overflow-hidden max-w-[220px]">
-              <button
-                type="button"
-                className={`flex-1 py-1.5 text-[12.5px] font-semibold cursor-pointer ${p.canViewPurchaseReceipts ? "bg-blue text-white" : "bg-surface text-steel"}`}
-                onClick={() => save({ canViewPurchaseReceipts: true })}
-              >
-                Sí
-              </button>
-              <button
-                type="button"
-                className={`flex-1 py-1.5 text-[12.5px] font-semibold cursor-pointer ${!p.canViewPurchaseReceipts ? "bg-blue text-white" : "bg-surface text-steel"}`}
-                onClick={() => save({ canViewPurchaseReceipts: false })}
               >
                 No
               </button>
