@@ -198,6 +198,7 @@ model User {
   purchaseRequestsPaidBy PurchaseRequest[] @relation("PurchaseRequestPaidBy")
   purchaseRequestsInvoicedBy PurchaseRequest[] @relation("PurchaseRequestInvoicedBy")
   purchaseRequestsShippingPaymentRequestedBy PurchaseRequest[] @relation("PurchaseRequestShippingPaymentRequestedBy")
+  purchaseRequestsBankAccountChangeRequestedBy PurchaseRequest[] @relation("PurchaseRequestBankAccountChangeRequestedBy")
   purchaseRequestsShippingPaidBy PurchaseRequest[] @relation("PurchaseRequestShippingPaidBy")
   payStubs         PayStub[] @relation("PayStubOwner")
   payStubsUploaded PayStub[] @relation("PayStubUploadedBy")
@@ -1188,6 +1189,15 @@ model PurchaseRequest {
   // tenía una (no hacía falta elegir) o si la cuenta elegida se borró después.
   bankAccountId String?
   bankAccount   SupplierBankAccount? @relation(fields: [bankAccountId], references: [id], onDelete: SetNull)
+
+  // Confirmado 2026-08-06: si al momento de pagar la cuenta elegida no
+  // funciona (datos mal, banco rechaza la transferencia), admin pide con un
+  // clic que quien solicitó cambie o elija otra cuenta — se limpia solo en
+  // cuanto esa persona vuelve a elegir una cuenta para esta solicitud.
+  bankAccountChangeRequestedAt   DateTime?
+  bankAccountChangeNote          String?
+  bankAccountChangeRequestedById String?
+  bankAccountChangeRequestedBy   User?     @relation("PurchaseRequestBankAccountChangeRequestedBy", fields: [bankAccountChangeRequestedById], references: [id], onDelete: SetNull)
 
   quantity  Int
   unitCost  Float

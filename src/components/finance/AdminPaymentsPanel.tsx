@@ -8,6 +8,7 @@ import { uploadFile } from "@/lib/uploadFile";
 import { compressImage } from "@/lib/compressImage";
 import { usePasteFile } from "@/lib/usePasteFile";
 import { actorName } from "@/lib/actorName";
+import { ProofPreview } from "@/components/shared/ProofPreview";
 
 type PaymentType = "RECURRING" | "VARIABLE";
 type Status = "PENDING_PAYMENT" | "PAID" | "CONFIRMED";
@@ -441,10 +442,9 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
               <div className="text-[10px] text-steel-dim mb-2.5">Solicitada por {actorName(r.createdBy?.name)} · {new Date(r.createdAt).toLocaleDateString("es-MX")}</div>
 
               {r.declarationFileUrl && (
-                <div className="flex items-center gap-1.5 text-[11.5px] text-steel mb-1.5">
-                  <CheckCircle2 size={12} className="text-teal" />
-                  <a href={r.declarationFileUrl} target="_blank" rel="noopener noreferrer" className="text-blue font-semibold">Ver documento de soporte</a>
-                  {r.declarationAiNote && <span className="text-steel-dim">— {r.declarationAiNote}</span>}
+                <div className="flex items-center gap-2.5 text-[11.5px] text-steel mb-1.5">
+                  <ProofPreview url={r.declarationFileUrl} size={40} filename="documento-de-soporte" />
+                  {r.declarationAiNote && <span className="text-steel-dim">{r.declarationAiNote}</span>}
                 </div>
               )}
 
@@ -455,9 +455,9 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
 
               {r.paymentProofUrl && (
                 <div className="bg-cloud border border-rule rounded-md p-2.5 mb-2.5">
-                  <div className="flex items-center gap-1.5 text-[11.5px] mb-1">
-                    {r.paymentAiMatch ? <CheckCircle2 size={12} className="text-teal" /> : <Lock size={12} className="text-red" />}
-                    <a href={r.paymentProofUrl} target="_blank" rel="noopener noreferrer" className="text-blue font-semibold">Ver comprobante de pago</a>
+                  <div className="flex items-center gap-2.5 mb-1">
+                    {r.paymentAiMatch ? <CheckCircle2 size={12} className="text-teal shrink-0" /> : <Lock size={12} className="text-red shrink-0" />}
+                    <ProofPreview url={r.paymentProofUrl} size={44} filename="comprobante-de-pago" />
                   </div>
                   <div className={`text-[11px] ${r.paymentAiMatch ? "text-teal" : "text-red"}`}>{r.paymentAiNote}</div>
                   {r.paidBy?.name && <div className="text-[10px] text-steel-dim mt-0.5">Pagado por {actorName(r.paidBy.name)}{r.paidAt ? ` · ${new Date(r.paidAt).toLocaleDateString("es-MX")}` : ""}</div>}

@@ -2,11 +2,21 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { FileText, Upload, CheckCircle2, AlertTriangle, Lock } from "lucide-react";
+import { FileText, Upload, CheckCircle2, AlertTriangle, Lock, Landmark } from "lucide-react";
 import { actorName } from "@/lib/actorName";
 import { uploadFile } from "@/lib/uploadFile";
 import { compressImage } from "@/lib/compressImage";
 import { usePasteFile } from "@/lib/usePasteFile";
+
+type BankAccount = {
+  id: string;
+  bankName: string;
+  bankAccountType: string;
+  bankAccountNumber: string;
+  bankAccountHolder: string;
+  holderIdType: "RUC" | "CEDULA" | null;
+  holderIdNumber: string | null;
+};
 
 type Row = {
   id: string;
@@ -24,6 +34,9 @@ type Row = {
   shippingCostTotal: number | null;
   catalogItem: { name: string };
   supplier: { name: string };
+  bankAccount: BankAccount | null;
+  bankAccountChangeRequestedAt: string | null;
+  bankAccountChangeNote: string | null;
   requestedBy: { name: string } | null;
 };
 
@@ -81,6 +94,9 @@ export function PurchaseApprovalInbox() {
   const [shippingProofVerifying, setShippingProofVerifying] = useState(false);
   const [shippingProofVerifyResult, setShippingProofVerifyResult] = useState<{ readAmount: number | null; matches: boolean } | null>(null);
   const [err, setErr] = useState("");
+  const [requestingAccountChangeFor, setRequestingAccountChangeFor] = useState<string | null>(null);
+  const [accountChangeNote, setAccountChangeNote] = useState("");
+  const [busyAccountGroup, setBusyAccountGroup] = useState<string | null>(null);
 
   const { onPaste: onPasteProof, onMouseEnter: onPasteProofHoverIn, onMouseLeave: onPasteProofHoverOut } = usePasteFile((file) => uploadProof(file));
   const { onPaste: onPasteShippingProof, onMouseEnter: onPasteShippingProofHoverIn, onMouseLeave: onPasteShippingProofHoverOut } = usePasteFile((file) => uploadShippingProof(file));
@@ -166,6 +182,20 @@ export function PurchaseApprovalInbox() {
     }
     setShippingProofUrl(uploaded.url);
     verifyShippingProof(approvingGroup, uploaded.url);
+  }
+
+  async function requestAccountChange(groupId: string) {
+    setBusyAccountGroup(groupId);
+    await fetch(`/api/purchase-requests/group/${groupId}/request-account-change`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ note: accountChangeNote.trim() || undefined }),
+    });
+    setBusyAccountGroup(null);
+    setRequestingAccountChangeFor(null);
+    setAccountChangeNote("");
+    load();
+    router.refresh();
   }
 
   async function reject(groupId: string) {
@@ -286,6 +316,54 @@ export function PurchaseApprovalInbox() {
                 </a>
               )}
             </div>
+
+            {g[0].bankAccountChangeRequestedAt ? (
+              <div className="flex items-start gap-1.5 bg-gold/10 border border-gold/35 rounded-md px-3 py-2 mb-2.5 text-[11.5px]" style={{ color: "#D9A441" }}>
+                <Landmark size={13} className="mt-0.5 shrink-0" />
+                <span>
+                  Esperando que {actorName(g[0].requestedBy?.name)} cambie la cuenta bancaria{g[0].bankAccountChangeNote ? ` — "${g[0].bankAccountChangeNote}"` : ""}.
+                </span>
+              </div>
+            ) : g[0].bankAccount ? (
+              <div className="bg-cloud border border-rule rounded-md px-3 py-2.5 mb-2.5">
+                <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-steel mb-1.5">
+                  <Landmark size={12} /> Cuenta bancaria para pagar
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-2.5 gap-y-0.5 text-[11.5px] mb-2">
+                  <div><span className="text-steel">Banco: </span><span className="font-semibold">{g[0].bankAccount.bankName}</span></div>
+                  <div><span className="text-steel">Tipo: </span><span className="font-semibold">{g[0].bankAccount.bankAccountType}</span></div>
+                  <div><span className="text-steel">N°: </span><span className="font-semibold break-all">{g[0].bankAccount.bankAccountNumber}</span></div>
+                  <div><span className="text-steel">Titular: </span><span className="font-semibold">{g[0].bankAccount.bankAccountHolder}</span></div>
+                  {g[0].bankAccount.holderIdType && (
+                    <div><span className="text-steel">{g[0].bankAccount.holderIdType === "RUC" ? "RUC" : "CI"}: </span><span className="font-semibold break-all">{g[0].bankAccount.holderIdNumber}</span></div>
+                  )}
+                </div>
+                {requestingAccountChangeFor === groupId ? (
+                  <div>
+                    <textarea
+                      className="w-full rounded border border-rule px-2.5 py-1.5 text-[11.5px] mb-1.5"
+                      rows={2}
+                      placeholder="¿Por qué hace falta cambiarla? (opcional, ej. el banco no permite la transferencia)"
+                      value={accountChangeNote}
+                      onChange={(e) => setAccountChangeNote(e.target.value)}
+                    />
+                    <div className="flex items-center gap-2">
+                      <button type="button" disabled={busyAccountGroup === groupId} className="rounded border border-gold/50 px-2.5 py-1 text-[11px] font-semibold cursor-pointer disabled:opacity-60" style={{ color: "#D9A441" }} onClick={() => requestAccountChange(groupId)}>
+                        Confirmar aviso
+                      </button>
+                      <button type="button" className="text-steel text-[11px] cursor-pointer" onClick={() => { setRequestingAccountChangeFor(null); setAccountChangeNote(""); }}>Cancelar</button>
+                    </div>
+                  </div>
+                ) : (
+                  <button type="button" className="text-[11px] text-steel underline cursor-pointer" onClick={() => setRequestingAccountChangeFor(groupId)}>
+                    Esta cuenta no sirvió — pedir que la cambien
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className="text-[11px] text-steel mb-2.5">Sin cuenta bancaria elegida (el proveedor solo tenía una en ese momento).</div>
+            )}
+
             {justification && <div className="text-[12px] text-steel mb-2.5">Justificación: &quot;{justification}&quot;</div>}
 
             {rejectingGroup === groupId ? (

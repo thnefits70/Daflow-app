@@ -11,10 +11,11 @@ const bankAccountSelect = { id: true, bankName: true, bankAccountType: true, ban
 
 const requestInclude = {
   catalogItem: { select: { id: true, name: true, photos: true } },
-  supplier: { select: { id: true, name: true } },
+  supplier: { select: { id: true, name: true, bankAccounts: { orderBy: { createdAt: "asc" as const } } } },
   carrier: { select: { id: true, name: true, bankAccounts: { orderBy: { createdAt: "asc" as const } } } },
   bankAccount: { select: bankAccountSelect },
   carrierBankAccount: { select: bankAccountSelect },
+  bankAccountChangeRequestedBy: { select: { name: true } },
   requestedBy: { select: { name: true } },
   reviewedBy: { select: { name: true } },
   paidBy: { select: { name: true } },

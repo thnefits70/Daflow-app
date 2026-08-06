@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { CheckCircle2, Pencil, Archive, RotateCcw, Upload } from "lucide-react";
 import { usePasteFile } from "@/lib/usePasteFile";
 import { uploadFile } from "@/lib/uploadFile";
+import { ProofPreview } from "@/components/shared/ProofPreview";
 import type { PettyCashBoxDTO, EligiblePaymentOrderDTO } from "@/lib/pettyCash";
 
 function money(v: number) {
@@ -117,6 +118,11 @@ function EntryRow({
             {entry.kind === "DESEMBOLSO" ? (entry.linkedOrderLabel ?? entry.manualReason ?? "Sin vínculo") : "Recarga"}
             {" · "}{fmtDate(entry.createdAt)} · {entry.createdByName}
             {entry.aiMatches === false && <span className="text-red"> · monto no coincide con la foto</span>}
+          </div>
+        )}
+        {!editing && entry.proofUrl && (
+          <div className="mt-1.5">
+            <ProofPreview url={entry.proofUrl} size={40} />
           </div>
         )}
       </div>

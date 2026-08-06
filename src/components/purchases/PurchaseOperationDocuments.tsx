@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { FileText, Receipt, Truck, ClipboardCheck, Camera, AlertTriangle, ChevronDown, ChevronRight } from "lucide-react";
+import { FileText, Receipt, Truck, ClipboardCheck, Camera, AlertTriangle, ChevronDown, ChevronRight, Download } from "lucide-react";
 import { actorName } from "@/lib/actorName";
+import { downloadFile } from "@/components/shared/ProofPreview";
 
 export type OperationDocRow = {
   id: string;
@@ -54,14 +55,21 @@ function DocRow({ icon, label, url, meta, missingNote }: { icon: React.ReactNode
     );
   }
   return (
-    <a href={url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 py-2 hover:opacity-80">
-      <DocThumb url={url} />
-      <div className="flex-1 text-[12px]">
-        <div className="font-semibold text-ink">{label}</div>
-        {meta && <div className="text-steel">{meta}</div>}
+    <div className="flex items-center gap-3 py-2">
+      <a href={url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 flex-1 min-w-0 hover:opacity-80" title="Clic derecho en la miniatura para copiar la imagen">
+        <DocThumb url={url} />
+        <div className="flex-1 min-w-0 text-[12px]">
+          <div className="font-semibold text-ink">{label}</div>
+          {meta && <div className="text-steel truncate">{meta}</div>}
+        </div>
+      </a>
+      <div className="flex items-center gap-2.5 shrink-0">
+        <a href={url} target="_blank" rel="noopener noreferrer" className="text-[11px] font-semibold text-blue">Ver</a>
+        <button type="button" className="flex items-center gap-1 text-[11px] font-semibold text-blue cursor-pointer" onClick={() => downloadFile(url, `${label}.${isPdf(url) ? "pdf" : "jpg"}`)}>
+          <Download size={11} /> Descargar
+        </button>
       </div>
-      <span className="text-[11px] font-semibold text-blue shrink-0">Ver</span>
-    </a>
+    </div>
   );
 }
 

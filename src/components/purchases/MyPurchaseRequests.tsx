@@ -37,6 +37,10 @@ type Row = {
   reviewedBy: { name: string } | null;
   paidBy: { name: string } | null;
   receipt: { confirmedBy: { name: string } | null } | null;
+  supplier: { id: string; name: string; bankAccounts: BankAccountDTO[] };
+  bankAccountId: string | null;
+  bankAccountChangeRequestedAt: string | null;
+  bankAccountChangeNote: string | null;
 };
 
 const STEPS: { key: Row["status"]; label: string }[] = [
@@ -61,6 +65,122 @@ function groupRows(rows: Row[]) {
 }
 
 const emptyAccountForm = { bankName: "", bankAccountType: "", bankAccountNumber: "", bankAccountHolder: "", holderIdType: "" as "" | "RUC" | "CEDULA", holderIdNumber: "" };
+
+// Confirmado 2026-08-06: cuando el admin no pudo pagar con la cuenta elegida
+// (datos mal, el banco rechaza la transferencia), pide con un clic que se
+// cambie — acá se elige otra cuenta ya registrada del proveedor o se agrega
+// una nueva, mismo patrón que la cuenta del transportista.
+function BankAccountChangeSection({ g, onUpdate }: { g: Row[]; onUpdate: (patch: Partial<Row>) => void }) {
+  const r0 = g[0];
+  const groupId = r0.groupId;
+  const supplier = r0.supplier;
+  const [addingAccount, setAddingAccount] = useState(false);
+  const [accountForm, setAccountForm] = useState(emptyAccountForm);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+
+  async function chooseAccount(bankAccountId: string) {
+    setBusy(true);
+    setErr("");
+    const res = await fetch(`/api/purchase-requests/group/${groupId}/bank-account`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ bankAccountId }),
+    });
+    setBusy(false);
+    if (!res.ok) { setErr("No se pudo cambiar la cuenta."); return; }
+    onUpdate({ bankAccountId, bankAccountChangeRequestedAt: null, bankAccountChangeNote: null });
+  }
+
+  async function addAccount() {
+    if (!accountForm.bankName.trim() || !accountForm.bankAccountType.trim() || !accountForm.bankAccountNumber.trim() || !accountForm.bankAccountHolder.trim() || !accountForm.holderIdType || !accountForm.holderIdNumber.trim()) {
+      setErr("Completa todos los campos.");
+      return;
+    }
+    setBusy(true);
+    setErr("");
+    const res = await fetch(`/api/purchase-suppliers/${supplier.id}/bank-accounts`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(accountForm),
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      setBusy(false);
+      setErr(data?.error ?? "No se pudo guardar la cuenta.");
+      return;
+    }
+    await chooseAccount(data.id);
+    setAddingAccount(false);
+    setAccountForm(emptyAccountForm);
+  }
+
+  return (
+    <div className="mt-3 pt-3 border-t border-rule">
+      <div className="flex items-center gap-1.5 text-[12px] font-semibold mb-2" style={{ color: "#D9A441" }}>
+        🏦 El admin no pudo pagar con la cuenta actual{r0.bankAccountChangeNote ? ` — "${r0.bankAccountChangeNote}"` : ""}
+      </div>
+      <div className="text-[11.5px] text-steel mb-2">Elige otra cuenta de {supplier.name} o agrega una nueva.</div>
+
+      {supplier.bankAccounts.length > 0 && (
+        <div className="flex flex-col gap-1.5 mb-2.5">
+          {supplier.bankAccounts.map((acc) => (
+            <div
+              key={acc.id}
+              onClick={() => !busy && chooseAccount(acc.id)}
+              className={`flex items-center gap-2 rounded border px-2.5 py-2 cursor-pointer ${acc.id === r0.bankAccountId ? "border-teal bg-teal/10" : "border-rule bg-surface2 hover:border-teal"}`}
+            >
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-2.5 gap-y-0.5 flex-1 min-w-0 text-[11.5px]">
+                <div><span className="text-steel">Banco: </span><span className="font-semibold break-words">{acc.bankName}</span></div>
+                <div><span className="text-steel">Tipo: </span><span className="font-semibold break-words">{acc.bankAccountType}</span></div>
+                <div><span className="text-steel">N°: </span><span className="font-semibold break-all">{acc.bankAccountNumber}</span></div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {addingAccount ? (
+        <div className="bg-surface2 border border-rule rounded-md p-2.5 mb-2">
+          <div className="grid grid-cols-2 gap-2 mb-2">
+            <input className="rounded border border-rule px-2 py-1.5 text-[12px]" placeholder="Banco" value={accountForm.bankName} onChange={(e) => setAccountForm((f) => ({ ...f, bankName: e.target.value }))} />
+            <input className="rounded border border-rule px-2 py-1.5 text-[12px]" placeholder="N° de cuenta" value={accountForm.bankAccountNumber} onChange={(e) => setAccountForm((f) => ({ ...f, bankAccountNumber: e.target.value }))} />
+          </div>
+          <div className="flex gap-1.5 mb-2">
+            {["Ahorro", "Corriente"].map((t) => (
+              <button key={t} type="button" className={`flex-1 rounded border py-1 text-[11.5px] font-semibold cursor-pointer ${accountForm.bankAccountType === t ? "border-teal bg-teal/10 text-teal" : "border-rule text-steel"}`} onClick={() => setAccountForm((f) => ({ ...f, bankAccountType: t }))}>
+                {t}
+              </button>
+            ))}
+          </div>
+          <input className="w-full rounded border border-rule px-2 py-1.5 text-[12px] mb-2" placeholder="Titular de la cuenta" value={accountForm.bankAccountHolder} onChange={(e) => setAccountForm((f) => ({ ...f, bankAccountHolder: e.target.value }))} />
+          <div className="flex gap-1.5 mb-2">
+            {[{ v: "RUC", l: "RUC" }, { v: "CEDULA", l: "Cédula" }].map((o) => (
+              <button key={o.v} type="button" className={`flex-1 rounded border py-1 text-[11.5px] font-semibold cursor-pointer ${accountForm.holderIdType === o.v ? "border-teal bg-teal/10 text-teal" : "border-rule text-steel"}`} onClick={() => setAccountForm((f) => ({ ...f, holderIdType: o.v as "RUC" | "CEDULA" }))}>
+                {o.l}
+              </button>
+            ))}
+          </div>
+          <input className="w-full rounded border border-rule px-2 py-1.5 text-[12px] mb-2" placeholder={accountForm.holderIdType === "CEDULA" ? "N° de cédula" : "N° de RUC"} value={accountForm.holderIdNumber} onChange={(e) => setAccountForm((f) => ({ ...f, holderIdNumber: e.target.value }))} />
+          {err && <div className="text-red text-[11.5px] mb-2">{err}</div>}
+          <div className="flex items-center gap-2">
+            <button type="button" disabled={busy} className="rounded border border-teal bg-teal px-3 py-1.5 text-[11.5px] font-bold text-navy cursor-pointer disabled:opacity-60" onClick={addAccount}>
+              Guardar y usar esta cuenta
+            </button>
+            <button type="button" className="text-steel text-[11.5px] cursor-pointer" onClick={() => { setAddingAccount(false); setErr(""); }}>
+              Cancelar
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button type="button" className="flex items-center gap-1 text-[11.5px] text-blue font-semibold cursor-pointer" onClick={() => setAddingAccount(true)}>
+          <Plus size={12} /> Agregar cuenta bancaria nueva
+        </button>
+      )}
+      {err && !addingAccount && <div className="text-red text-[11.5px] mt-1.5">{err}</div>}
+    </div>
+  );
+}
 
 // Confirmado 2026-08-03: cuando el flete se dejó "pendiente hasta que llegue
 // la mercadería", una vez Inventario confirma la recepción (ya llega su
@@ -306,6 +426,10 @@ function GroupCard({ g, onPurchaseOrderUploaded, onGroupUpdate }: { g: Row[]; on
           </label>
           {err && <div className="text-red text-[11.5px] mt-1.5">{err}</div>}
         </div>
+      )}
+
+      {!rejected && g[0].bankAccountChangeRequestedAt && (
+        <BankAccountChangeSection g={g} onUpdate={(patch) => onGroupUpdate(groupId, patch)} />
       )}
 
       {showShippingSection && <ShippingPaymentSection g={g} onUpdate={(patch) => onGroupUpdate(groupId, patch)} />}

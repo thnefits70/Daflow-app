@@ -6,6 +6,7 @@ import { AlertTriangle, CheckCircle2, Wallet, Upload } from "lucide-react";
 import { uploadFile } from "@/lib/uploadFile";
 import { compressImage } from "@/lib/compressImage";
 import { actorName } from "@/lib/actorName";
+import { ProofPreview } from "@/components/shared/ProofPreview";
 
 type ResolutionType = "CREDIT" | "REPLACEMENT" | "REFUND" | "WRITE_OFF";
 type ResolutionStatus = "PENDING" | "COMPLETED" | "CANCELLED";
@@ -357,14 +358,17 @@ function ResolutionRow({
               <input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && onFileRefund(e.target.files[0])} />
             </label>
           ) : (
-            <div className={`flex items-center gap-1.5 ${res.refundAiMatch ? "text-teal" : "text-red"}`}>
-              {res.refundAiMatch ? <CheckCircle2 size={12} /> : <AlertTriangle size={12} />} 🤖 {res.refundAiNote}
-              {!res.refundAiMatch && (
-                <label className="text-steel underline cursor-pointer ml-1">
-                  cambiar
-                  <input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && onFileRefund(e.target.files[0])} />
-                </label>
-              )}
+            <div>
+              <div className="mb-1"><ProofPreview url={res.refundProofUrl} size={40} filename="comprobante-reembolso" /></div>
+              <div className={`flex items-center gap-1.5 ${res.refundAiMatch ? "text-teal" : "text-red"}`}>
+                {res.refundAiMatch ? <CheckCircle2 size={12} /> : <AlertTriangle size={12} />} 🤖 {res.refundAiNote}
+                {!res.refundAiMatch && (
+                  <label className="text-steel underline cursor-pointer ml-1">
+                    cambiar
+                    <input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && onFileRefund(e.target.files[0])} />
+                  </label>
+                )}
+              </div>
             </div>
           )}
           {res.refundAiMatch && res.status === "PENDING" && isAdmin && (
