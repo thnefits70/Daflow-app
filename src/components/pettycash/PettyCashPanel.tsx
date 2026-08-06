@@ -13,6 +13,28 @@ function money(v: number) {
 function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString("es-MX", { day: "2-digit", month: "short" });
 }
+function pad2(n: number) {
+  return String(n).padStart(2, "0");
+}
+function recentMonths(): string[] {
+  const now = new Date();
+  const months: string[] = [];
+  for (let i = 0; i <= 11; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    months.push(`${d.getFullYear()}-${pad2(d.getMonth() + 1)}`);
+  }
+  return months;
+}
+function monthBounds(month: string): { from: string; to: string } {
+  const [y, m] = month.split("-").map(Number);
+  const lastDay = new Date(y, m, 0).getDate();
+  return { from: `${month}-01`, to: `${month}-${pad2(lastDay)}` };
+}
+const MONTH_NAMES = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
+function monthFilterLabel(month: string) {
+  const [y, m] = month.split("-");
+  return `${MONTH_NAMES[Number(m) - 1]} ${y}`;
+}
 
 function UploadBox({ label, onFile }: { label: string; onFile: (file: File) => void }) {
   const { onPaste, onMouseEnter, onMouseLeave } = usePasteFile(onFile);
@@ -28,6 +50,32 @@ function UploadBox({ label, onFile }: { label: string; onFile: (file: File) => v
       <div className="text-[10px] text-steel">Clic, arrastra, o pasa el mouse aquí y Ctrl+V</div>
       <input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])} />
     </label>
+  );
+}
+
+// Confirmado 2026-08-06: doble clic sobre la miniatura del comprobante lo
+// amplía sin salir de la pestaña — para poder verificarlo uno mismo antes
+// (o además) de que la IA lo haga.
+function Lightbox({ url, onClose }: { url: string; onClose: () => void }) {
+  return (
+    <div
+      className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-6 cursor-zoom-out"
+      onClick={onClose}
+    >
+      <img src={url} alt="Comprobante ampliado" className="max-w-full max-h-full rounded-md shadow-lg" onClick={(e) => e.stopPropagation()} />
+    </div>
+  );
+}
+
+function ProofThumb({ url, onZoom }: { url: string; onZoom: () => void }) {
+  return (
+    <img
+      src={url}
+      alt="Comprobante"
+      title="Doble clic para ampliar"
+      onDoubleClick={onZoom}
+      className="w-14 h-14 object-cover rounded border border-rule cursor-zoom-in shrink-0"
+    />
   );
 }
 
@@ -114,23 +162,58 @@ function BoxCard({
   const [description, setDescription] = useState("");
   const [proofUrl, setProofUrl] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [proofVerifying, setProofVerifying] = useState(false);
+  const [proofVerifyResult, setProofVerifyResult] = useState<{ matches: boolean; readAmount: number | null; note: string } | null>(null);
 
   const [fundAmount, setFundAmount] = useState("");
   const [fundDesc, setFundDesc] = useState("");
   const [fundProofUrl, setFundProofUrl] = useState<string | null>(null);
   const [fundUploading, setFundUploading] = useState(false);
+  const [fundVerifying, setFundVerifying] = useState(false);
+  const [fundVerifyResult, setFundVerifyResult] = useState<{ matches: boolean; readAmount: number | null; note: string } | null>(null);
 
   const [excReason, setExcReason] = useState("");
+  const [zoomedUrl, setZoomedUrl] = useState<string | null>(null);
+
+  // Confirmado 2026-08-06: filtro de fechas para el historial de esta caja —
+  // mismo patrón (desde/hasta + selector de mes + "Mes anterior") ya usado
+  // en Facturación de Control de Compras y Pagos administrativos.
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [monthFilter, setMonthFilter] = useState("");
 
   const blocked = box.blocked && canManage;
   const myPending = box.pendingRecharges[0];
+
+  async function verifyProof(target: "desembolso" | "recarga", url: string, expected: number) {
+    if (target === "desembolso") { setProofVerifying(true); setProofVerifyResult(null); } else { setFundVerifying(true); setFundVerifyResult(null); }
+    const res = await fetch("/api/petty-cash/verify-proof", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ boxType: box.type, proofUrl: url, expectedAmount: expected }),
+    });
+    const data = await res.json().catch(() => null);
+    if (target === "desembolso") setProofVerifying(false); else setFundVerifying(false);
+    if (!res.ok) { setErr(data?.error ?? "No se pudo verificar el comprobante."); return; }
+    if (target === "desembolso") setProofVerifyResult(data); else setFundVerifyResult(data);
+  }
 
   async function doUpload(file: File, target: "desembolso" | "recarga") {
     if (target === "desembolso") setUploading(true); else setFundUploading(true);
     const res = await uploadFile(file, "petty-cash");
     if (target === "desembolso") setUploading(false); else setFundUploading(false);
     if (!res.ok) { setErr(res.error); return; }
-    if (target === "desembolso") setProofUrl(res.url); else setFundProofUrl(res.url);
+    if (target === "desembolso") {
+      setProofUrl(res.url);
+      setProofVerifyResult(null);
+      const n = Number(amount);
+      if (!Number.isNaN(n) && n > 0) verifyProof("desembolso", res.url, n);
+    } else {
+      setFundProofUrl(res.url);
+      setFundVerifyResult(null);
+      const n = Number(fundAmount);
+      if (!Number.isNaN(n) && n > 0) verifyProof("recarga", res.url, n);
+    }
   }
 
   async function confirmReceived() {
@@ -146,6 +229,7 @@ function BoxCard({
     const n = Number(amount);
     if (Number.isNaN(n) || n <= 0) { setErr("Ingresa un monto válido."); return; }
     if (!description.trim()) { setErr("Escribe una descripción."); return; }
+    if (proofUrl && proofVerifyResult?.matches === false) { setErr("El comprobante no coincide con el monto — cambia la foto o corrige el monto antes de guardar."); return; }
     setBusy(true);
     setErr("");
     const res = await fetch("/api/petty-cash/entries", {
@@ -160,13 +244,14 @@ function BoxCard({
     setBusy(false);
     const json = await res.json().catch(() => null);
     if (!res.ok) { setErr(json?.error ?? "No se pudo guardar."); return; }
-    setAmount(""); setDescription(""); setProofUrl(null); setReason("");
+    setAmount(""); setDescription(""); setProofUrl(null); setReason(""); setProofVerifyResult(null);
     router.refresh();
   }
 
   async function submitFund() {
     const n = Number(fundAmount);
     if (Number.isNaN(n) || n <= 0) { setErr("Ingresa un monto válido."); return; }
+    if (fundProofUrl && fundVerifyResult?.matches === false) { setErr("El comprobante no coincide con el monto — cambia la foto o corrige el monto antes de enviar."); return; }
     setBusy(true);
     setErr("");
     const res = await fetch("/api/petty-cash/recharge", {
@@ -177,7 +262,7 @@ function BoxCard({
     setBusy(false);
     const json = await res.json().catch(() => null);
     if (!res.ok) { setErr(json?.error ?? "No se pudo enviar."); return; }
-    setFundAmount(""); setFundDesc(""); setFundProofUrl(null);
+    setFundAmount(""); setFundDesc(""); setFundProofUrl(null); setFundVerifyResult(null);
     router.refresh();
   }
 
@@ -196,6 +281,15 @@ function BoxCard({
     setExcReason("");
     router.refresh();
   }
+
+  const filteredEntries = (dateFrom || dateTo)
+    ? box.entries.filter((e) => {
+        const d = e.createdAt.slice(0, 10);
+        if (dateFrom && d < dateFrom) return false;
+        if (dateTo && d > dateTo) return false;
+        return true;
+      })
+    : box.entries;
 
   return (
     <div className="bg-surface border border-rule rounded-md p-4.5">
@@ -229,9 +323,59 @@ function BoxCard({
       )}
 
       <div className="mt-3.5">
+        {box.entries.length > 0 && (
+          <div className="flex items-center gap-1.5 mb-2.5 flex-wrap text-[11px]">
+            <select
+              className="rounded border border-rule bg-cloud px-2 py-1 font-mono"
+              value={monthFilter}
+              onChange={(e) => {
+                const month = e.target.value;
+                setMonthFilter(month);
+                if (!month) { setDateFrom(""); setDateTo(""); return; }
+                const { from, to } = monthBounds(month);
+                setDateFrom(from);
+                setDateTo(to);
+              }}
+            >
+              <option value="">Todos los meses</option>
+              {recentMonths().map((m) => (
+                <option key={m} value={m}>{monthFilterLabel(m)}</option>
+              ))}
+            </select>
+            <button
+              type="button"
+              className="rounded border border-rule px-2 py-1 text-steel cursor-pointer hover:border-teal"
+              onClick={() => {
+                const now = new Date();
+                const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+                const month = `${prev.getFullYear()}-${pad2(prev.getMonth() + 1)}`;
+                setMonthFilter(month);
+                const { from, to } = monthBounds(month);
+                setDateFrom(from);
+                setDateTo(to);
+              }}
+            >
+              Mes anterior
+            </button>
+            <label className="flex items-center gap-1 text-steel">
+              Desde
+              <input type="date" className="rounded border border-rule bg-cloud px-1.5 py-1" value={dateFrom} onChange={(e) => { setDateFrom(e.target.value); setMonthFilter(""); }} />
+            </label>
+            <label className="flex items-center gap-1 text-steel">
+              Hasta
+              <input type="date" className="rounded border border-rule bg-cloud px-1.5 py-1" value={dateTo} onChange={(e) => { setDateTo(e.target.value); setMonthFilter(""); }} />
+            </label>
+            {(dateFrom || dateTo) && (
+              <button type="button" className="text-steel underline cursor-pointer" onClick={() => { setMonthFilter(""); setDateFrom(""); setDateTo(""); }}>Limpiar</button>
+            )}
+          </div>
+        )}
         {box.entries.length === 0 && <div className="text-steel text-[12px]">Sin movimientos todavía.</div>}
+        {box.entries.length > 0 && filteredEntries.length === 0 && (
+          <div className="text-steel text-[12px]">Nada en ese rango de fechas.</div>
+        )}
         <div className="flex flex-col gap-1.5">
-          {box.entries.map((e) => (
+          {filteredEntries.map((e) => (
             <EntryRow
               key={e.id} entry={e} canManage={canManage} isAdmin={isAdmin}
               onEdit={async (id, amt, desc) => {
@@ -294,11 +438,41 @@ function BoxCard({
           <input type="text" placeholder="Descripción" className="w-full rounded border border-rule bg-cloud px-2.5 py-2 text-[12px] mb-2.5" value={description} onChange={(e) => setDescription(e.target.value)} />
           <input type="number" step="any" placeholder="$0.00" className="w-full rounded border border-rule bg-cloud px-2.5 py-2 text-[12px] font-mono mb-2.5" value={amount} onChange={(e) => setAmount(e.target.value)} />
           {proofUrl ? (
-            <div className="flex items-center gap-2 text-[11.5px] text-teal mb-2.5"><CheckCircle2 size={13} /> Comprobante listo</div>
+            <div className="flex items-start gap-2.5 mb-2.5">
+              <ProofThumb url={proofUrl} onZoom={() => setZoomedUrl(proofUrl)} />
+              <div className="flex-1 min-w-0 text-[11.5px]">
+                {proofVerifying ? (
+                  <span className="text-steel flex items-center gap-1.5"><span className="w-3 h-3 rounded-full border-2 border-rule border-t-teal animate-spin shrink-0" /> Verificando con IA…</span>
+                ) : proofVerifyResult?.matches ? (
+                  <span className="text-teal flex items-center gap-1"><CheckCircle2 size={13} /> {proofVerifyResult.note}</span>
+                ) : proofVerifyResult ? (
+                  <span className="text-red">{proofVerifyResult.note}</span>
+                ) : (
+                  <span className="text-teal flex items-center gap-1"><CheckCircle2 size={13} /> Comprobante listo — doble clic para ampliar</span>
+                )}
+                <div className="flex items-center gap-2.5 mt-1">
+                  <button type="button" className="text-steel underline cursor-pointer" onClick={() => { setProofUrl(null); setProofVerifyResult(null); }}>Cambiar foto</button>
+                  {!proofVerifying && (
+                    <button
+                      type="button"
+                      className="text-steel underline cursor-pointer"
+                      onClick={() => { const n = Number(amount); if (!Number.isNaN(n) && n > 0) verifyProof("desembolso", proofUrl, n); else setErr("Ingresa el monto antes de verificar."); }}
+                    >
+                      Verificar de nuevo
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
           ) : (
             <div className="mb-2.5">{uploading ? <div className="text-[11.5px] text-steel">Subiendo…</div> : <UploadBox label="📷 Subir comprobante" onFile={(f) => doUpload(f, "desembolso")} />}</div>
           )}
-          <button type="button" disabled={busy} className="rounded bg-blue text-white px-3.5 py-2 text-[12.5px] font-semibold cursor-pointer disabled:opacity-60" onClick={submitDesembolso}>
+          <button
+            type="button"
+            disabled={busy || proofVerifying || (!!proofUrl && proofVerifyResult?.matches === false)}
+            className="rounded bg-blue text-white px-3.5 py-2 text-[12.5px] font-semibold cursor-pointer disabled:opacity-60"
+            onClick={submitDesembolso}
+          >
             Guardar desembolso
           </button>
 
@@ -323,15 +497,47 @@ function BoxCard({
           <input type="number" step="any" placeholder="Monto que entregas" className="w-full rounded border border-rule bg-cloud px-2.5 py-2 text-[12px] font-mono mb-2" value={fundAmount} onChange={(e) => setFundAmount(e.target.value)} />
           <input type="text" placeholder="Descripción (opcional)" className="w-full rounded border border-rule bg-cloud px-2.5 py-2 text-[12px] mb-2" value={fundDesc} onChange={(e) => setFundDesc(e.target.value)} />
           {fundProofUrl ? (
-            <div className="flex items-center gap-2 text-[11.5px] text-teal mb-2"><CheckCircle2 size={13} /> Evidencia lista</div>
+            <div className="flex items-start gap-2.5 mb-2">
+              <ProofThumb url={fundProofUrl} onZoom={() => setZoomedUrl(fundProofUrl)} />
+              <div className="flex-1 min-w-0 text-[11.5px]">
+                {fundVerifying ? (
+                  <span className="text-steel flex items-center gap-1.5"><span className="w-3 h-3 rounded-full border-2 border-rule border-t-teal animate-spin shrink-0" /> Verificando con IA…</span>
+                ) : fundVerifyResult?.matches ? (
+                  <span className="text-teal flex items-center gap-1"><CheckCircle2 size={13} /> {fundVerifyResult.note}</span>
+                ) : fundVerifyResult ? (
+                  <span className="text-red">{fundVerifyResult.note}</span>
+                ) : (
+                  <span className="text-teal flex items-center gap-1"><CheckCircle2 size={13} /> Evidencia lista — doble clic para ampliar</span>
+                )}
+                <div className="flex items-center gap-2.5 mt-1">
+                  <button type="button" className="text-steel underline cursor-pointer" onClick={() => { setFundProofUrl(null); setFundVerifyResult(null); }}>Cambiar foto</button>
+                  {!fundVerifying && (
+                    <button
+                      type="button"
+                      className="text-steel underline cursor-pointer"
+                      onClick={() => { const n = Number(fundAmount); if (!Number.isNaN(n) && n > 0) verifyProof("recarga", fundProofUrl, n); else setErr("Ingresa el monto antes de verificar."); }}
+                    >
+                      Verificar de nuevo
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
           ) : (
             <div className="mb-2">{fundUploading ? <div className="text-[11.5px] text-steel">Subiendo…</div> : <UploadBox label="📷 Evidencia de entrega/retiro" onFile={(f) => doUpload(f, "recarga")} />}</div>
           )}
-          <button type="button" disabled={busy} className="rounded border border-blue text-blue px-3.5 py-2 text-[12.5px] font-semibold cursor-pointer disabled:opacity-60" onClick={submitFund}>
+          <button
+            type="button"
+            disabled={busy || fundVerifying || (!!fundProofUrl && fundVerifyResult?.matches === false)}
+            className="rounded border border-blue text-blue px-3.5 py-2 text-[12.5px] font-semibold cursor-pointer disabled:opacity-60"
+            onClick={submitFund}
+          >
             Enviar — queda pendiente que confirmen
           </button>
         </div>
       )}
+
+      {zoomedUrl && <Lightbox url={zoomedUrl} onClose={() => setZoomedUrl(null)} />}
     </div>
   );
 }

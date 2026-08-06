@@ -75,6 +75,17 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // Confirmado 2026-08-06: un mismatch CONFIRMADO (no solo "no se pudo leer")
+  // bloquea el guardado — la persona debe cambiar la foto o corregir el
+  // monto. La verificación en vivo (verify-proof) ya debería haber avisado
+  // esto antes de llegar aquí; este chequeo es la defensa server-side.
+  if (aiMatches === false) {
+    return NextResponse.json(
+      { error: `Rechazado — el comprobante muestra $${aiReadAmount?.toFixed(2)}, pero ingresaste $${d.amount.toFixed(2)}.` },
+      { status: 409 }
+    );
+  }
+
   const isAdmin = session.user.role === "admin";
   const entry = await prisma.pettyCashEntry.create({
     data: {

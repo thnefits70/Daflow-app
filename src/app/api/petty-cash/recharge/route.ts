@@ -59,6 +59,15 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // Confirmado 2026-08-06: mismo freno que en entries/route.ts — un mismatch
+  // CONFIRMADO bloquea el guardado.
+  if (aiMatches === false) {
+    return NextResponse.json(
+      { error: `Rechazado — el comprobante muestra $${aiReadAmount?.toFixed(2)}, pero ingresaste $${d.amount.toFixed(2)}.` },
+      { status: 409 }
+    );
+  }
+
   const entry = await prisma.pettyCashEntry.create({
     data: {
       boxId: box.id,
