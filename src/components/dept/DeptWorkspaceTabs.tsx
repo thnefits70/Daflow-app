@@ -262,6 +262,7 @@ export function DeptWorkspaceTabs({
             canFundPrincipal={pettyCashData.canFundPrincipal}
             canFundSecundaria={pettyCashData.canFundSecundaria}
             eligibleOrders={pettyCashData.eligibleOrders}
+            isAdmin={isAdmin}
           />
         </div>
       )}

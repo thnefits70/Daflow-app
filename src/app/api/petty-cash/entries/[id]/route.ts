@@ -31,6 +31,14 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const isAdmin = session.user.role === "admin";
   const actorId = isAdmin ? null : session.user.id;
 
+  // Confirmado 2026-08-06: solo admin edita cuánto se fondeó una caja — quien
+  // recibe el fondeo (Nairoby/Bryan) no puede cambiar ese monto, ya que es el
+  // admin quien de verdad recarga cada caja. Editar un DESEMBOLSO (su propio
+  // registro de pago) sigue permitido para el manager de la caja.
+  if (parsed.data.action === "edit" && entry.kind === "RECARGA" && !isAdmin) {
+    return NextResponse.json({ error: "Solo el admin puede editar el monto de un fondeo." }, { status: 403 });
+  }
+
   if (parsed.data.action === "edit") {
     const data: { amount?: number; description?: string; updatedById: string | null } = { updatedById: actorId };
     if (parsed.data.amount !== undefined) data.amount = parsed.data.amount;

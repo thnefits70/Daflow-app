@@ -32,14 +32,20 @@ function UploadBox({ label, onFile }: { label: string; onFile: (file: File) => v
 }
 
 function EntryRow({
-  entry, canManage, onEdit, onArchive, onRestore,
+  entry, canManage, isAdmin, onEdit, onArchive, onRestore,
 }: {
   entry: PettyCashBoxDTO["entries"][number];
   canManage: boolean;
+  isAdmin: boolean;
   onEdit: (id: string, amount: number, description: string) => void;
   onArchive: (id: string) => void;
   onRestore: (id: string) => void;
 }) {
+  // Confirmado 2026-08-06: solo admin edita el monto de un fondeo (RECARGA)
+  // — quien recibe el fondeo no decide cuánto le tocó, eso lo define quien
+  // de verdad recarga la caja. Editar un DESEMBOLSO (su propio registro de
+  // pago) sigue permitido para el manager de la caja.
+  const canEditThis = entry.kind === "RECARGA" ? isAdmin : canManage;
   const [editing, setEditing] = useState(false);
   const [amt, setAmt] = useState(String(entry.amount));
   const [desc, setDesc] = useState(entry.description);
@@ -72,7 +78,9 @@ function EntryRow({
         </span>
         {canManage && !editing && !entry.archived && (
           <>
-            <button type="button" title="Editar" className="text-steel hover:text-ink cursor-pointer" onClick={() => setEditing(true)}><Pencil size={13} /></button>
+            {canEditThis && (
+              <button type="button" title="Editar" className="text-steel hover:text-ink cursor-pointer" onClick={() => setEditing(true)}><Pencil size={13} /></button>
+            )}
             <button type="button" title="Archivar" className="text-steel hover:text-red cursor-pointer" onClick={() => onArchive(entry.id)}><Archive size={13} /></button>
           </>
         )}
@@ -85,13 +93,14 @@ function EntryRow({
 }
 
 function BoxCard({
-  box, canManage, canFund, showOrderLink, eligibleOrders,
+  box, canManage, canFund, showOrderLink, eligibleOrders, isAdmin,
 }: {
   box: PettyCashBoxDTO;
   canManage: boolean;
   canFund: boolean;
   showOrderLink: boolean;
   eligibleOrders: EligiblePaymentOrderDTO[];
+  isAdmin: boolean;
 }) {
   const router = useRouter();
   const [showArchived, setShowArchived] = useState(false);
@@ -224,7 +233,7 @@ function BoxCard({
         <div className="flex flex-col gap-1.5">
           {box.entries.map((e) => (
             <EntryRow
-              key={e.id} entry={e} canManage={canManage}
+              key={e.id} entry={e} canManage={canManage} isAdmin={isAdmin}
               onEdit={async (id, amt, desc) => {
                 await fetch(`/api/petty-cash/entries/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "edit", amount: amt, description: desc }) });
                 router.refresh();
@@ -250,7 +259,7 @@ function BoxCard({
           {showArchived && (
             <div className="flex flex-col gap-1.5 mt-2">
               {box.archivedEntries.map((e) => (
-                <EntryRow key={e.id} entry={e} canManage={canManage}
+                <EntryRow key={e.id} entry={e} canManage={canManage} isAdmin={isAdmin}
                   onEdit={() => {}}
                   onArchive={() => {}}
                   onRestore={async (id) => {
@@ -328,7 +337,7 @@ function BoxCard({
 }
 
 export function PettyCashPanel({
-  principal, secundaria, canManagePrincipal, canManageSecundaria, canFundPrincipal, canFundSecundaria, eligibleOrders,
+  principal, secundaria, canManagePrincipal, canManageSecundaria, canFundPrincipal, canFundSecundaria, eligibleOrders, isAdmin = false,
 }: {
   principal: PettyCashBoxDTO | null;
   secundaria: PettyCashBoxDTO | null;
@@ -337,11 +346,12 @@ export function PettyCashPanel({
   canFundPrincipal: boolean;
   canFundSecundaria: boolean;
   eligibleOrders: EligiblePaymentOrderDTO[];
+  isAdmin?: boolean;
 }) {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-      {principal && <BoxCard box={principal} canManage={canManagePrincipal} canFund={canFundPrincipal} showOrderLink={false} eligibleOrders={[]} />}
-      {secundaria && <BoxCard box={secundaria} canManage={canManageSecundaria} canFund={canFundSecundaria} showOrderLink={true} eligibleOrders={eligibleOrders} />}
+      {principal && <BoxCard box={principal} canManage={canManagePrincipal} canFund={canFundPrincipal} showOrderLink={false} eligibleOrders={[]} isAdmin={isAdmin} />}
+      {secundaria && <BoxCard box={secundaria} canManage={canManageSecundaria} canFund={canFundSecundaria} showOrderLink={true} eligibleOrders={eligibleOrders} isAdmin={isAdmin} />}
     </div>
   );
 }
