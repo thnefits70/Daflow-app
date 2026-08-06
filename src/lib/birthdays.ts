@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { isBusinessDay } from "@/lib/recognition";
 
 export type Celebrant = { id: string; name: string; photoUrl: string | null; message?: string };
 
@@ -68,33 +69,49 @@ function pickMotivationalMessage(celebrantId: string, dateKey: string) {
   return MOTIVATIONAL_MESSAGES[hash % MOTIVATIONAL_MESSAGES.length];
 }
 
-// Server runtime is UTC (Vercel), and an HTML date input round-trips as UTC
-// midnight, so comparing month/day in UTC on both sides keeps them in sync —
-// same simplification the rest of the app already makes with plain dates.
-function matchesToday(date: Date, todayMonth: number, todayDay: number) {
-  return date.getUTCMonth() + 1 === todayMonth && date.getUTCDate() === todayDay;
+// Vercel corre en UTC — "hoy" siempre se calcula desplazado a la hora de
+// Ecuador primero (mismo truco usado en periodicReminders.ts/pendingTasks.ts),
+// para que la fecha de celebración no se adelante/atrase un día cerca de la
+// medianoche.
+const ECUADOR_UTC_OFFSET_HOURS = 5;
+function nowInEcuador(): Date {
+  return new Date(Date.now() - ECUADOR_UTC_OFFSET_HOURS * 3600 * 1000);
 }
 
 function todayAtMidnightUTC() {
-  const now = new Date();
+  const now = nowInEcuador();
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
 }
 
+// Confirmado 2026-08-06: si el cumpleaños cae sábado, domingo o feriado
+// ecuatoriano, se anuncia (popup + avisos) el último día laborable antes —
+// normalmente viernes. Reusa isBusinessDay() de recognition.ts, que ya
+// trata sábado como no laborable para este propósito (distinto del horario
+// real de oficina, que sí abre medio día el sábado — ver businessHours.ts).
+// Límite conocido: un cumpleaños del 1-3 de enero que caiga en fin de
+// semana/feriado debería poder retroceder hasta el 31 de diciembre del año
+// anterior; esta función no cruza el límite de año (caso muy raro, no
+// modelado, igual que el resto de aproximaciones de este calendario).
+export function celebrationDateFor(birthDate: Date, year: number): Date {
+  let d = new Date(Date.UTC(year, birthDate.getUTCMonth(), birthDate.getUTCDate()));
+  while (!isBusinessDay(d)) d = new Date(d.getTime() - 86400000);
+  return d;
+}
+
 export async function getTodaysCelebrants(): Promise<Celebrant[]> {
-  const now = new Date();
-  const month = now.getUTCMonth() + 1;
-  const day = now.getUTCDate();
+  const today = todayAtMidnightUTC();
+  const year = today.getUTCFullYear();
 
   const users = await prisma.user.findMany({
     where: { birthDate: { not: null }, isActive: true },
     select: { id: true, name: true, photoUrl: true, birthDate: true },
   });
   const celebrants: Celebrant[] = users
-    .filter((u) => u.birthDate && matchesToday(u.birthDate, month, day))
+    .filter((u) => u.birthDate && celebrationDateFor(u.birthDate, year).getTime() === today.getTime())
     .map((u) => ({ id: u.id, name: u.name, photoUrl: u.photoUrl }));
 
   const settings = await prisma.platformSettings.findUnique({ where: { id: "singleton" } });
-  if (settings?.adminBirthDate && matchesToday(settings.adminBirthDate, month, day)) {
+  if (settings?.adminBirthDate && celebrationDateFor(settings.adminBirthDate, year).getTime() === today.getTime()) {
     celebrants.push({ id: "admin", name: "Administrador", photoUrl: settings.logoUrl ?? null });
   }
 
@@ -130,4 +147,27 @@ export async function markCelebrantSeen(viewerId: string, celebrantId: string) {
     create: { viewerId, celebrantId, celebrationDate },
     update: {},
   });
+}
+
+export type UpcomingBirthday = { id: string; name: string; deptId: string | null; deptName: string | null };
+
+// Confirmado 2026-08-06: aviso 1 día antes al líder del área y al admin —
+// usa la misma fecha de celebración ya desplazada (viernes si el cumpleaños
+// real cae fin de semana/feriado) que el popup, así el aviso siempre llega
+// la víspera del día real en que se felicita, sea el cumpleaños mismo o el
+// último día laborable anterior. `deptId` filtra a un solo departamento
+// (para el líder); sin filtro, es para el admin (toda la empresa).
+export async function getUpcomingBirthdays(deptId?: string): Promise<UpcomingBirthday[]> {
+  const today = todayAtMidnightUTC();
+  const tomorrow = new Date(today.getTime() + 86400000);
+  const year = tomorrow.getUTCFullYear();
+
+  const users = await prisma.user.findMany({
+    where: { birthDate: { not: null }, isActive: true, ...(deptId ? { deptId } : {}) },
+    select: { id: true, name: true, deptId: true, birthDate: true, department: { select: { name: true } } },
+  });
+
+  return users
+    .filter((u) => u.birthDate && celebrationDateFor(u.birthDate, year).getTime() === tomorrow.getTime())
+    .map((u) => ({ id: u.id, name: u.name, deptId: u.deptId, deptName: u.department?.name ?? null }));
 }

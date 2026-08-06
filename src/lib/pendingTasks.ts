@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { isFixedHoliday, evaluationDeadline, adminConfirmDeadline } from "@/lib/recognition";
 import { addBusinessHours } from "@/lib/businessHours";
 import { getPettyCashBoxData, type PettyCashBoxTypeStr } from "@/lib/pettyCash";
+import { getUpcomingBirthdays } from "@/lib/birthdays";
 
 // ---------------- Date helpers ----------------
 // Deadline rule confirmed by the user 2026-07-20: work week is Mon-Sat, and
@@ -208,6 +209,7 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   ruptura_stock: "Ruptura de Stock",
   caja_chica_saldo: "Caja Chica — saldo bajo",
   caja_chica_confirmacion: "Caja Chica — falta que confirmen una recarga",
+  cumpleanos: "Cumpleaños de tu equipo (aviso 1 día antes)",
 };
 
 // "colaborador_del_mes" es obligatorio — confirmado 2026-08-05: a diferencia
@@ -604,6 +606,26 @@ async function getPettyCashUnconfirmedFunderItems(funderId: string | null, href:
   return items;
 }
 
+// Confirmado 2026-08-06: aviso 1 día antes de la fecha en que se va a
+// felicitar (que puede ser el cumpleaños real o el último día laborable
+// antes, si cae sábado/domingo/feriado — ver celebrationDateFor en
+// birthdays.ts). Sin deptId = vista del admin, toda la empresa; con deptId,
+// la del líder de esa área (excluyendo su propio cumpleaños, no tiene
+// sentido que se autorecuerde felicitarse a sí mismo).
+async function getUpcomingBirthdayPendingItems(href: string, deptId?: string, excludeUserId?: string): Promise<PendingItem[]> {
+  const upcoming = await getUpcomingBirthdays(deptId);
+  return upcoming
+    .filter((u) => u.id !== excludeUserId)
+    .map((u) => ({
+      type: "cumpleanos",
+      icon: "🎂",
+      label: `Cumpleaños de ${u.name}`,
+      meta: `${u.deptName ?? ""} · mañana`.trim(),
+      overdue: false,
+      href,
+    }));
+}
+
 // ---------------- Entry point ----------------
 // Each person only ever sees what's specifically assigned to them — admin
 // gets Feedback semanal (the one thing only admin can write), a department
@@ -618,13 +640,14 @@ export type PendingTasksActor = { isAdmin: true } | { isAdmin: false; userId: st
 
 export async function getPendingTasksForActor(actor: PendingTasksActor): Promise<PendingTasks | null> {
   if (actor.isAdmin) {
-    const [feedbackItems, recognitionItem, pettyCashLow, pettyCashUnconfirmed] = await Promise.all([
+    const [feedbackItems, recognitionItem, pettyCashLow, pettyCashUnconfirmed, birthdayItems] = await Promise.all([
       getFeedbackPendingItems(),
       getRecognitionAdminPendingItem("/admin/colaborador-destacado"),
       getPettyCashLowBalanceItems("/admin"),
       getPettyCashUnconfirmedFunderItems(null, "/admin"),
+      getUpcomingBirthdayPendingItems("/admin/nomina"),
     ]);
-    const items = [...feedbackItems, ...(recognitionItem ? [recognitionItem] : []), ...pettyCashLow, ...pettyCashUnconfirmed];
+    const items = [...feedbackItems, ...(recognitionItem ? [recognitionItem] : []), ...pettyCashLow, ...pettyCashUnconfirmed, ...birthdayItems];
     if (items.length === 0) return null;
     return { title: "Pendientes de esta semana", sub: "Como administrador", items };
   }
@@ -674,6 +697,11 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
   const recognitionItem = await getRecognitionLeaderPendingItem(me.leadsDeptId, "/area/colaborador-destacado");
   if (recognitionItem) items.push(recognitionItem);
 
+  // Confirmado 2026-08-06: aplica a CUALQUIER líder, no solo Finanzas — su
+  // propio equipo puede tener un cumpleaños mañana sin importar el área.
+  const birthdayItems = await getUpcomingBirthdayPendingItems("/area/nomina", me.leadsDeptId, actor.userId);
+  items.push(...birthdayItems);
+
   if (items.length === 0) return null;
   return {
     title: monthly ? "Pendientes de este mes" : "Pendientes de esta semana",
@@ -700,7 +728,7 @@ export async function getPossiblePendingTypesForActor(
   const types: string[] = [];
 
   if (actor.isAdmin) {
-    types.push("feedback", "caja_chica_saldo", "caja_chica_confirmacion");
+    types.push("feedback", "caja_chica_saldo", "caja_chica_confirmacion", "cumpleanos");
   } else {
     const me = await prisma.user.findUnique({
       where: { id: actor.userId },
@@ -708,6 +736,7 @@ export async function getPossiblePendingTypesForActor(
     });
     if (!me?.isLeader || !me.leadsDeptId || !me.leadsDept) return [];
 
+    types.push("cumpleanos");
     if (me.leadsDept.code === "FIN") {
       types.push("roles_de_pago", "tasa_devolucion", "kpi_garantias", "pagos_recordatorios", "servicio_postventa", "caja_chica_saldo", "caja_chica_confirmacion");
     }
