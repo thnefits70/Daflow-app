@@ -257,6 +257,34 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
     .filter((x): x is { idx: number; name: string; effCost: number; last3Avg: number } => x !== null);
   const overThreshold = overThresholdLines.length > 0;
 
+  // Confirmado 2026-08-06: bug real encontrado — si alguien escribía una
+  // justificación (porque el precio superaba el historial) y LUEGO quitaba o
+  // cambiaba ese producto (catalogItem vuelve a null), la justificación se
+  // quedaba huérfana en el borrador guardado. overThreshold pasa a false (no
+  // hay catalogItem con qué compararlo), así que nada se ve en pantalla, pero
+  // `justification` seguía siendo texto no vacío — suficiente para que
+  // draftHasContent() marcara el borrador como "con contenido" y mostrara el
+  // aviso de "retomando", aunque todos los campos visibles estuvieran vacíos.
+  // Se limpia sola en cuanto ya no queda ningún producto elegido en ninguna
+  // línea (nunca durante la carga async de stats de un producto que sí sigue
+  // elegido, para no borrar una justificación válida a medio cargar).
+  const hasAnyCatalogItem = lines.some((l) => l.catalogItem);
+  useEffect(() => {
+    if (hydrated && !hasAnyCatalogItem && justification) setJustification("");
+  }, [hydrated, hasAnyCatalogItem, justification]);
+
+  // Lo que de verdad hay guardado en el borrador, para mostrarlo en el aviso
+  // de "retomando" — así se ve a qué se refiere en vez de solo un mensaje
+  // genérico, y si algo se ve vacío ahí es porque de verdad no tenía nada.
+  const draftSummaryParts: string[] = [];
+  lines.forEach((l) => {
+    if (l.catalogItem) draftSummaryParts.push(`${l.catalogItem.name}${l.quantity ? ` · ${l.quantity} un.` : ""}`);
+    else if (l.productQuery.trim()) draftSummaryParts.push(`"${l.productQuery.trim()}" (sin seleccionar todavía)`);
+  });
+  if (supplier) draftSummaryParts.push(`Proveedor: ${supplier.name}`);
+  if (quoteImageUrl) draftSummaryParts.push("Cotización ya subida");
+  if (purchaseOrderUrl) draftSummaryParts.push("Orden de compra ya subida");
+
   async function handleQuoteFile(file: File) {
     setQuoteFile(file);
     setVerifyResult(null);
@@ -402,13 +430,22 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
   return (
     <div className="bg-surface border border-rule rounded-md p-4.5">
       {draftRestored && (
-        <div className="flex items-center justify-between gap-3 bg-teal/10 border border-teal/35 rounded-md px-3.5 py-2.5 mb-4">
-          <div className="flex items-center gap-2 text-[12.5px] text-teal">
-            <Clock size={15} /> Retomando tu solicitud sin terminar — no se perdió nada.
+        <div className="bg-teal/10 border border-teal/35 rounded-md px-3.5 py-2.5 mb-4">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2 text-[12.5px] text-teal">
+              <Clock size={15} /> Retomando tu solicitud sin terminar — no se perdió nada.
+            </div>
+            <button type="button" className="text-[11.5px] text-red font-semibold cursor-pointer whitespace-nowrap" onClick={discardDraft}>
+              Descartar y empezar de nuevo
+            </button>
           </div>
-          <button type="button" className="text-[11.5px] text-red font-semibold cursor-pointer whitespace-nowrap" onClick={discardDraft}>
-            Descartar y empezar de nuevo
-          </button>
+          {draftSummaryParts.length > 0 ? (
+            <ul className="mt-1.5 pl-5 text-[11.5px] text-teal/90 list-disc">
+              {draftSummaryParts.map((p, i) => <li key={i}>{p}</li>)}
+            </ul>
+          ) : (
+            <div className="mt-1.5 text-[11.5px] text-steel">Todavía no hay nada que mostrar de este borrador — puedes descartarlo y empezar de nuevo.</div>
+          )}
         </div>
       )}
 
