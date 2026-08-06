@@ -2,13 +2,14 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Upload, CheckCircle2, Lock, Bell, Trash2 } from "lucide-react";
+import { Upload, CheckCircle2, Lock, Bell, Trash2, Landmark } from "lucide-react";
 import { Combobox } from "@/components/ui/Combobox";
 import { uploadFile } from "@/lib/uploadFile";
 import { compressImage } from "@/lib/compressImage";
 import { usePasteFile } from "@/lib/usePasteFile";
 import { actorName } from "@/lib/actorName";
 import { ProofPreview } from "@/components/shared/ProofPreview";
+import { AdminPayeePicker, type AdminPaymentPayeeDTO, type PayeeBankAccountDTO } from "@/components/finance/AdminPayeePicker";
 
 type PaymentType = "RECURRING" | "VARIABLE";
 type Status = "PENDING_PAYMENT" | "PAID" | "CONFIRMED";
@@ -34,6 +35,8 @@ type RequestDTO = {
   confirmedAt: string | null;
   createdAt: string;
   template: { id: string; motivo: string } | null;
+  payee: { id: string; name: string } | null;
+  bankAccount: PayeeBankAccountDTO | null;
   createdBy: { name: string } | null;
   paidBy: { name: string } | null;
   confirmedBy: { name: string } | null;
@@ -76,12 +79,15 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
   const [requests, setRequests] = useState<RequestDTO[] | null>(null);
   const [templates, setTemplates] = useState<TemplateDTO[]>([]);
   const [pendingThisMonth, setPendingThisMonth] = useState<TemplateDTO[]>([]);
+  const [payees, setPayees] = useState<AdminPaymentPayeeDTO[]>([]);
   const [err, setErr] = useState("");
 
   const [showForm, setShowForm] = useState(false);
   const [formType, setFormType] = useState<PaymentType>("VARIABLE");
   const [formMotivo, setFormMotivo] = useState("");
   const [formMonto, setFormMonto] = useState("");
+  const [formPayee, setFormPayee] = useState<AdminPaymentPayeeDTO | null>(null);
+  const [formBankAccountId, setFormBankAccountId] = useState<string | null>(null);
   const [formDeclarationUrl, setFormDeclarationUrl] = useState<string | null>(null);
   const [formDeclarationName, setFormDeclarationName] = useState<string | null>(null);
   const [uploadingDeclaration, setUploadingDeclaration] = useState(false);
@@ -106,19 +112,25 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
 
   function load() {
     fetch("/api/admin-payments")
-      .then((r) => (r.ok ? r.json() : { requests: [], templates: [], pendingThisMonth: [] }))
+      .then((r) => (r.ok ? r.json() : { requests: [], templates: [], pendingThisMonth: [], payees: [] }))
       .then((data) => {
         setRequests(data.requests);
         setTemplates(data.templates);
         setPendingThisMonth(data.pendingThisMonth);
+        setPayees(data.payees ?? []);
       })
       .catch(() => {
         setRequests([]);
         setTemplates([]);
         setPendingThisMonth([]);
+        setPayees([]);
       });
   }
   useEffect(load, []);
+
+  function upsertPayeeInList(p: AdminPaymentPayeeDTO) {
+    setPayees((cur) => (cur.some((x) => x.id === p.id) ? cur.map((x) => (x.id === p.id ? p : x)) : [...cur, p].sort((a, b) => a.name.localeCompare(b.name))));
+  }
 
   function resetForm() {
     setShowForm(false);
@@ -127,6 +139,8 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
     setFormMonto("");
     setFormDeclarationUrl(null);
     setFormDeclarationName(null);
+    setFormPayee(null);
+    setFormBankAccountId(null);
     setErr("");
   }
 
@@ -137,6 +151,8 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
     setFormMonto("");
     setFormDeclarationUrl(null);
     setFormDeclarationName(null);
+    setFormPayee(null);
+    setFormBankAccountId(null);
     setErr("");
   }
 
@@ -165,6 +181,8 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
       type: formType,
       motivo: formMotivo.trim(),
       monto: Number(formMonto),
+      payeeId: formPayee?.id ?? undefined,
+      bankAccountId: formBankAccountId ?? undefined,
       declarationFileUrl: formDeclarationUrl ?? undefined,
       declarationFileName: formDeclarationName ?? undefined,
     };
@@ -350,6 +368,19 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
                 className="w-full rounded border border-rule px-2.5 py-2 text-[13px] mb-2.5"
               />
 
+              <div className="mb-2.5">
+                <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">A quién pagar <span className="text-steel-dim">(opcional)</span></label>
+                <AdminPayeePicker
+                  payees={payees}
+                  value={formPayee}
+                  onChange={setFormPayee}
+                  isAdmin={isAdmin}
+                  selectedBankAccountId={formBankAccountId}
+                  onSelectBankAccount={setFormBankAccountId}
+                  onPayeeUpdated={upsertPayeeInList}
+                />
+              </div>
+
               {formDeclarationUrl ? (
                 <div className="mb-2.5">
                   <div className="flex items-center gap-1.5 text-[11.5px] text-teal mb-1.5">
@@ -432,14 +463,43 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
           const canDelete = !r.declarationFileUrl && !r.paymentProofUrl;
           return (
             <div key={r.id} className="bg-surface border border-rule rounded-md p-4">
-              <div className="flex items-start justify-between gap-2 mb-1">
-                <div className="text-[13.5px] font-bold">{r.motivo}</div>
-                <span className="text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded bg-cloud text-steel shrink-0">
-                  {r.type === "RECURRING" ? "Recurrente" : "Variable"}
-                </span>
+              <div className="flex items-start justify-between gap-3 flex-wrap mb-1">
+                <div>
+                  <div className="flex items-center gap-1.5 mb-0.5">
+                    <div className="text-[13.5px] font-bold">{r.motivo}</div>
+                    <span className="text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded bg-cloud text-steel shrink-0">
+                      {r.type === "RECURRING" ? "Recurrente" : "Variable"}
+                    </span>
+                  </div>
+                  {r.period && <div className="text-[11.5px] text-steel">período {r.period}</div>}
+                  <div className="text-[10px] text-steel-dim mt-0.5">Solicitada por {actorName(r.createdBy?.name)} · {new Date(r.createdAt).toLocaleDateString("es-MX")}</div>
+                </div>
+                <div className="text-right shrink-0">
+                  <div className="text-[9px] font-semibold uppercase tracking-wide text-steel">Total a pagar</div>
+                  <div className="font-display text-[22px] font-bold text-teal leading-tight">{money(r.monto)}</div>
+                </div>
               </div>
-              <div className="text-[11.5px] text-steel">{money(r.monto)} {r.period ? `· período ${r.period}` : ""}</div>
-              <div className="text-[10px] text-steel-dim mb-2.5">Solicitada por {actorName(r.createdBy?.name)} · {new Date(r.createdAt).toLocaleDateString("es-MX")}</div>
+
+              {r.payee && (
+                <div className="bg-cloud border border-rule rounded-md px-3 py-2.5 mb-2.5">
+                  <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-steel mb-1.5">
+                    <Landmark size={12} /> A pagar a {r.payee.name}
+                  </div>
+                  {r.bankAccount ? (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-2.5 gap-y-0.5 text-[11.5px]">
+                      <div><span className="text-steel">Banco: </span><span className="font-semibold">{r.bankAccount.bankName}</span></div>
+                      <div><span className="text-steel">Tipo: </span><span className="font-semibold">{r.bankAccount.bankAccountType}</span></div>
+                      <div><span className="text-steel">N°: </span><span className="font-semibold break-all">{r.bankAccount.bankAccountNumber}</span></div>
+                      <div><span className="text-steel">Titular: </span><span className="font-semibold">{r.bankAccount.bankAccountHolder}</span></div>
+                      {r.bankAccount.holderIdType && (
+                        <div><span className="text-steel">{r.bankAccount.holderIdType === "RUC" ? "RUC" : "CI"}: </span><span className="font-semibold break-all">{r.bankAccount.holderIdNumber}</span></div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="text-[11.5px] text-steel">Sin cuenta bancaria elegida.</div>
+                  )}
+                </div>
+              )}
 
               {r.declarationFileUrl && (
                 <div className="bg-green/10 border border-green/30 rounded-md p-2.5 mb-2.5">

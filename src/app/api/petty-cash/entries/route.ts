@@ -105,7 +105,7 @@ export async function POST(req: NextRequest) {
   });
 
   if (d.linkedGroupId) {
-    await markGroupFreightPaid(d.linkedGroupId, isAdmin ? null : session.user.id, d.proofUrl || null);
+    await markGroupFreightPaid(d.linkedGroupId, isAdmin ? null : session.user.id, d.proofUrl || null, d.amount);
   }
 
   return NextResponse.json({ ok: true, entry });

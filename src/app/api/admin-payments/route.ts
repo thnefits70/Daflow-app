@@ -4,18 +4,21 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { canManageAdminPayments } from "@/lib/guards";
 import { readAdminPaymentDeclaration } from "@/lib/adminPaymentAi";
-import { getAdminPaymentTemplates, getAdminPaymentTemplatesPendingThisMonth, currentPeriod } from "@/lib/adminPayments";
+import { getAdminPaymentTemplates, getAdminPaymentTemplatesPendingThisMonth, getAdminPaymentPayees, currentPeriod } from "@/lib/adminPayments";
 import { pushOwnerId } from "@/lib/pushOwner";
 import { sendPushToOwner } from "@/lib/webPush";
 
 export async function GET() {
   if (!(await canManageAdminPayments())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
-  const [requests, templates, pendingThisMonth] = await Promise.all([
+  const bankAccountSelect = { id: true, bankName: true, bankAccountType: true, bankAccountNumber: true, bankAccountHolder: true, holderIdType: true, holderIdNumber: true };
+  const [requests, templates, pendingThisMonth, payees] = await Promise.all([
     prisma.adminPaymentRequest.findMany({
       orderBy: { createdAt: "desc" },
       include: {
         template: { select: { id: true, motivo: true } },
+        payee: { select: { id: true, name: true } },
+        bankAccount: { select: bankAccountSelect },
         createdBy: { select: { name: true } },
         paidBy: { select: { name: true } },
         confirmedBy: { select: { name: true } },
@@ -23,9 +26,10 @@ export async function GET() {
     }),
     getAdminPaymentTemplates(),
     getAdminPaymentTemplatesPendingThisMonth(),
+    getAdminPaymentPayees(),
   ]);
 
-  return NextResponse.json({ requests, templates, pendingThisMonth });
+  return NextResponse.json({ requests, templates, pendingThisMonth, payees });
 }
 
 const schema = z.object({
@@ -34,6 +38,8 @@ const schema = z.object({
   newTemplateMotivo: z.string().trim().min(1).optional(),
   motivo: z.string().trim().min(1),
   monto: z.number().positive(),
+  payeeId: z.string().optional(),
+  bankAccountId: z.string().optional(),
   declarationFileUrl: z.string().url().optional(),
   declarationFileName: z.string().optional(),
 });
@@ -100,6 +106,8 @@ export async function POST(req: NextRequest) {
       period,
       motivo: d.motivo,
       monto: d.monto,
+      payeeId: d.payeeId || null,
+      bankAccountId: d.bankAccountId || null,
       declarationFileUrl: d.declarationFileUrl ?? null,
       declarationFileName: d.declarationFileName ?? null,
       declarationAiMatch,

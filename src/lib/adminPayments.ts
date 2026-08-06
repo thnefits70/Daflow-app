@@ -35,6 +35,31 @@ export async function getAdminPaymentTemplatesPendingThisMonth(): Promise<AdminP
   return templates.filter((t) => t.requests.length === 0).map((t) => ({ id: t.id, motivo: t.motivo, isActive: t.isActive }));
 }
 
+export type AdminPaymentPayeeBankAccountDTO = {
+  id: string;
+  bankName: string;
+  bankAccountType: string;
+  bankAccountNumber: string;
+  bankAccountHolder: string;
+  holderIdType: "RUC" | "CEDULA" | null;
+  holderIdNumber: string | null;
+};
+export type AdminPaymentPayeeDTO = { id: string; name: string; bankAccounts: AdminPaymentPayeeBankAccountDTO[] };
+
+export async function getAdminPaymentPayees(): Promise<AdminPaymentPayeeDTO[]> {
+  return prisma.adminPaymentPayee.findMany({
+    orderBy: { name: "asc" },
+    select: {
+      id: true,
+      name: true,
+      bankAccounts: {
+        orderBy: { createdAt: "asc" },
+        select: { id: true, bankName: true, bankAccountType: true, bankAccountNumber: true, bankAccountHolder: true, holderIdType: true, holderIdNumber: true },
+      },
+    },
+  });
+}
+
 export type StaleAdminPaymentPush = { ownerId: string; title: string; body: string; url: string };
 
 // Mismo espíritu que getStalePurchaseRequestPushes (src/lib/purchases.ts) —

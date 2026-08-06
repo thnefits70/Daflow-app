@@ -218,6 +218,8 @@ model User {
   adminPaymentRequestsCreated  AdminPaymentRequest[]  @relation("AdminPaymentRequestCreatedBy")
   adminPaymentsPaid            AdminPaymentRequest[]  @relation("AdminPaymentPaidBy")
   adminPaymentsConfirmed       AdminPaymentRequest[]  @relation("AdminPaymentConfirmedBy")
+  adminPaymentPayeesCreated            AdminPaymentPayee[]            @relation("AdminPaymentPayeeCreatedBy")
+  adminPaymentPayeeBankAccountsCreated AdminPaymentPayeeBankAccount[] @relation("AdminPaymentPayeeBankAccountCreatedBy")
   inventoryProductSnapshotsCreated  InventoryProductSnapshot[] @relation("InventoryProductSnapshotCreatedBy")
   pettyCashEntriesCreated   PettyCashEntry[] @relation("PettyCashEntryCreatedBy")
   pettyCashEntriesUpdated   PettyCashEntry[] @relation("PettyCashEntryUpdatedBy")
@@ -1986,6 +1988,44 @@ enum AdminPaymentStatus {
   CONFIRMED
 }
 
+// Confirmado 2026-08-06: a quién se le paga (Bryan por una devolución, un
+// restaurante por almuerzos, etc.) — catálogo liviano y reutilizable,
+// deliberadamente SIN los campos de Supplier (ubicación, categoría,
+// aprobación, WhatsApp) que no aplican acá; solo nombre + cuentas bancarias,
+// mismo patrón "varias cuentas, agregar todas, borrar solo admin" ya usado
+// en Control de Compras.
+model AdminPaymentPayee {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  createdById String?
+  createdBy   User?    @relation("AdminPaymentPayeeCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+
+  bankAccounts AdminPaymentPayeeBankAccount[]
+  requests     AdminPaymentRequest[]
+}
+
+model AdminPaymentPayeeBankAccount {
+  id      String            @id @default(cuid())
+  payeeId String
+  payee   AdminPaymentPayee @relation(fields: [payeeId], references: [id], onDelete: Cascade)
+
+  bankName          String
+  bankAccountType   String
+  bankAccountNumber String
+  bankAccountHolder String
+  holderIdType      HolderIdType?
+  holderIdNumber    String?
+
+  createdById String?
+  createdBy   User?    @relation("AdminPaymentPayeeBankAccountCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+
+  requests AdminPaymentRequest[]
+
+  @@index([payeeId])
+}
+
 // Serie recurrente (ej. "Planilla IESS") — el motivo es fijo pero el monto
 // varía cada mes, así que solo sirve de plantilla/serie; el monto real vive
 // en cada AdminPaymentRequest. Catálogo "escribe o elige" (mismo patrón que
@@ -2016,6 +2056,13 @@ model AdminPaymentRequest {
   motivo String
   monto  Float
   status AdminPaymentStatus @default(PENDING_PAYMENT)
+
+  // Confirmado 2026-08-06: a quién y a qué cuenta se le paga — opcional
+  // porque solicitudes viejas (antes de este campo) no lo tienen.
+  payeeId       String?
+  payee         AdminPaymentPayee?            @relation(fields: [payeeId], references: [id], onDelete: SetNull)
+  bankAccountId String?
+  bankAccount   AdminPaymentPayeeBankAccount? @relation(fields: [bankAccountId], references: [id], onDelete: SetNull)
 
   // Doc. de soporte opcional al crear — bloqueante si la IA no lo hace calzar
   declarationFileUrl  String?

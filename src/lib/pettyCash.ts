@@ -202,10 +202,22 @@ export async function hasApprovedException(boxId: string, groupId: string): Prom
   return !!approved;
 }
 
-export async function markGroupFreightPaid(groupId: string, paidById: string | null, proofUrl: string | null) {
+// Confirmado 2026-08-06: bug real — el monto que de verdad se pagó por caja
+// chica nunca se guardaba de vuelta en la solicitud de compra, así que el
+// costo por unidad (y todo el historial de precios que se calcula a partir
+// de eso) seguía usando el ESTIMADO que se escribió al pedir la compra, no
+// lo que en verdad se terminó pagando. `actualAmount` (cuando viene, ej.
+// pago por caja chica) reemplaza `shippingCostTotal` en ese momento — para
+// transferencia directa (sin monto real distinto) sigue sin tocarse.
+export async function markGroupFreightPaid(groupId: string, paidById: string | null, proofUrl: string | null, actualAmount?: number) {
   await prisma.purchaseRequest.updateMany({
     where: { groupId },
-    data: { shippingPaidAt: new Date(), shippingPaidById: paidById, shippingPaymentProofUrl: proofUrl },
+    data: {
+      shippingPaidAt: new Date(),
+      shippingPaidById: paidById,
+      shippingPaymentProofUrl: proofUrl,
+      ...(actualAmount !== undefined ? { shippingCostTotal: actualAmount } : {}),
+    },
   });
 }
 

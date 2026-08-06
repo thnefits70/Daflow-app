@@ -428,8 +428,8 @@ function BoxCard({
           <div className="text-[12px] font-semibold mb-2">Registrar solicitud de pago</div>
           {showOrderLink && (
             <div className="flex gap-1.5 mb-2.5">
-              <button type="button" className={`flex-1 rounded px-2 py-1.5 text-[11px] font-semibold cursor-pointer ${linkMode === "orden" ? "bg-blue text-white" : "bg-cloud text-steel"}`} onClick={() => setLinkMode("orden")}>📦 Orden de pago</button>
-              <button type="button" className={`flex-1 rounded px-2 py-1.5 text-[11px] font-semibold cursor-pointer ${linkMode === "motivo" ? "bg-blue text-white" : "bg-cloud text-steel"}`} onClick={() => setLinkMode("motivo")}>✏️ Sin orden — motivo</button>
+              <button type="button" className={`flex-1 rounded px-2 py-1.5 text-[11px] font-semibold cursor-pointer ${linkMode === "orden" ? "bg-blue text-white" : "bg-cloud text-steel"}`} onClick={() => setLinkMode("orden")}>🚚 Flete</button>
+              <button type="button" className={`flex-1 rounded px-2 py-1.5 text-[11px] font-semibold cursor-pointer ${linkMode === "motivo" ? "bg-blue text-white" : "bg-cloud text-steel"}`} onClick={() => setLinkMode("motivo")}>✏️ Otro gasto</button>
             </div>
           )}
           {showOrderLink && linkMode === "orden" && (
