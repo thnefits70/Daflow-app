@@ -60,11 +60,13 @@ const emptyForm = {
   notifyPush: false,
 };
 
-// Confirmado 2026-07-28: cada persona en Nómina puede crear y gestionar sus
-// propios recordatorios (createdById), sin necesidad de ser líder — el
-// líder/admin (canManageAll) conserva la capacidad de gestionar TODOS los
-// de su área, igual que antes. La lista sigue siendo compartida/visible
-// para todo el equipo, pero cada quien solo edita/completa/elimina lo suyo.
+// Confirmado 2026-08-05: los recordatorios son estrictamente PERSONALES — el
+// servidor (getPeriodicReminders en periodicReminders.ts) ya filtra por
+// createdById === quien pide la lista, así que ni el líder ni el admin ven
+// los de un compañero, aunque sean del mismo departamento. `reminders` acá
+// siempre llega pre-filtrado a "los míos" — canManageAll/canManage() por eso
+// ya no distingue "de otro" vs "mío" en la práctica, solo queda por si algún
+// día se necesita una excepción puntual.
 export function PeriodicRemindersPanel({
   deptId,
   reminders,
@@ -344,7 +346,6 @@ export function PeriodicRemindersPanel({
                         <Bell size={11} /> Push
                       </span>
                     )}
-                    <span>· Creado por {r.createdByName ?? "—"}</span>
                   </div>
                 </div>
                 <span className={`text-[12.5px] font-semibold whitespace-nowrap ${rec ? "text-green" : "text-steel"}`}>

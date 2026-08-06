@@ -50,7 +50,7 @@ export default async function WorkspacePage() {
 
   const [processDetail, periodicReminders, documents, exams, financeKpiData, paymentReminders, weeklyMetricRecords, weeklyReviewRecords, currentUser, unseenFeedbackCount, purchaseReceipts, purchaseReceiptCatalogs, storeFeedbackStores, inventoryControlData, inventoryKpisData, pettyCashData] = await Promise.all([
     getDeptProcessDetail(dept.id),
-    getPeriodicReminders(dept.id),
+    getPeriodicReminders(dept.id, session.user.id),
     prisma.document.findMany({ where: { deptId: dept.id }, orderBy: { createdAt: "asc" } }),
     prisma.exam.findMany({
       where: { deptId: dept.id },

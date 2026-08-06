@@ -51,9 +51,13 @@ export type PeriodicReminderDTO = {
   completions: PeriodicReminderCompletionDTO[];
 };
 
-export async function getPeriodicReminders(deptId: string): Promise<PeriodicReminderDTO[]> {
+// Confirmado 2026-08-05: los recordatorios son estrictamente PERSONALES — ni
+// siquiera el líder o el admin ven los de otro compañero, aunque sean del
+// mismo departamento. viewerId es el id de quien está viendo (null = admin,
+// mismo sentinela que createdById en la creación).
+export async function getPeriodicReminders(deptId: string, viewerId: string | null): Promise<PeriodicReminderDTO[]> {
   const reminders = await prisma.periodicReminder.findMany({
-    where: { deptId },
+    where: { deptId, createdById: viewerId },
     orderBy: { order: "asc" },
     include: {
       createdBy: { select: { name: true } },
@@ -128,11 +132,35 @@ function isDueNow(r: { recurrence: "DAILY" | "WEEKLY" | "ONCE"; weekday: number 
   return now >= t;
 }
 
-// `scope: "all"` for admin (every department); `{ deptId }` for an
-// employee/leader (their own department only).
-export async function getDuePeriodicReminders(scope: { deptId: string } | "all"): Promise<DuePeriodicReminderDTO[]> {
+// Fix confirmado 2026-08-06: el cron de push corre UNA sola vez al día
+// (08:00 hora Ecuador) — isDueNow() comparaba contra timeOfDay incluso ahí,
+// así que cualquier recordatorio DIARIO con una hora configurada DESPUÉS de
+// las 8am nunca se consideraba "due" en esa única corrida, todos los días,
+// para siempre (WEEKLY/ONCE se autocorregían al día siguiente por su lógica
+// de "ya pasó el día objetivo", pero DIARIO reinicia el período cada día y
+// repetía el mismo bloqueo). Para decidir si hay que EMPUJAR una notificación
+// se ignora la hora por completo — ya no hay forma de respetarla con un solo
+// chequeo diario, así que se avisa en cuanto el período esté vigente y no
+// se haya marcado como hecho, tal como ya prometía el comentario de abajo.
+function isDueForPush(r: { recurrence: "DAILY" | "WEEKLY" | "ONCE"; weekday: number | null; date: Date | null }, now: Date): boolean {
+  if (r.recurrence === "ONCE") {
+    if (!r.date) return false;
+    const dueDate = new Date(Date.UTC(r.date.getUTCFullYear(), r.date.getUTCMonth(), r.date.getUTCDate()));
+    const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+    return today >= dueDate;
+  }
+  if (r.recurrence === "WEEKLY") {
+    if (r.weekday == null) return true;
+    return isoWeekdayOf(now) >= r.weekday;
+  }
+  return true; // DAILY
+}
+
+// Estrictamente personal (confirmado 2026-08-05) — solo lo que ESTA persona
+// creó, nunca lo de un compañero del mismo departamento. userId null = admin.
+export async function getDuePeriodicReminders(scope: { deptId: string; userId: string | null }): Promise<DuePeriodicReminderDTO[]> {
   const reminders = await prisma.periodicReminder.findMany({
-    where: scope === "all" ? { isActive: true } : { isActive: true, deptId: scope.deptId },
+    where: { isActive: true, deptId: scope.deptId, createdById: scope.userId },
     include: { department: { select: { name: true } }, completions: { select: { period: true } } },
     orderBy: { order: "asc" },
   });
@@ -177,7 +205,7 @@ export async function getDuePersonalReminderPushes(): Promise<PersonalReminderPu
   for (const r of reminders) {
     const period = currentPeriodFor(r.recurrence, now);
     if (r.completions.some((c) => c.period === period)) continue;
-    if (!isDueNow(r, now)) continue;
+    if (!isDueForPush(r, now)) continue;
     const ownerId = r.createdById ?? "admin";
     const url = ownerId === "admin" ? `/admin/dept/${r.deptId}` : "/area/workspace";
     out.push({ ownerId, title: `DAFLOW · Recordatorio`, body: r.title, url });

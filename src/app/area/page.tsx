@@ -63,7 +63,7 @@ export default async function AreaHomePage() {
     getWarrantyReasonChart(),
     getStoreFeedbackAggregate(),
     getStoreFeedbackTrend(),
-    getDuePeriodicReminders({ deptId }),
+    getDuePeriodicReminders({ deptId, userId: session.user.id }),
     getMyLearningPaths(session.user.id),
     canSeeInventoryKpis ? getInventoryKpisData() : Promise.resolve(null),
   ]);
