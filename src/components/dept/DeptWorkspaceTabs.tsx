@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { GitBranch, FileText, GraduationCap, LineChart, TrendingUp, MessageSquare, CalendarClock, BellRing, Heart, ShoppingCart, Package, Pin, Wallet, BarChart3, Landmark } from "lucide-react";
 import { ProcessEmbeddedPanel } from "@/components/process/ProcessEmbeddedPanel";
@@ -170,6 +170,21 @@ export function DeptWorkspaceTabs({
   const [tab, setTab] = useState<TabKey>(initialTab);
   const [seenFeedback, setSeenFeedback] = useState(false);
   const [pinned, setPinned] = useState(false);
+  const [focusBox, setFocusBox] = useState<string | null>(null);
+
+  // Confirmado 2026-08-06: los links "Ir →" de Pendientes (ej. "Caja Chica
+  // Secundaria con saldo bajo") llegan con ?tab=...&box=... — esto los honra
+  // una sola vez al montar, sin pisar la pestaña fijada si no viene el
+  // parámetro. Se lee del URL directo (no useSearchParams) para no requerir
+  // un límite de Suspense en cada página que renderiza este componente.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const tabParam = params.get("tab");
+    const boxParam = params.get("box");
+    if (tabParam && tabs.some((t) => t.key === tabParam)) setTab(tabParam as TabKey);
+    if (boxParam) setFocusBox(boxParam);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function pinCurrentTab() {
     setPinned(true);
@@ -263,6 +278,7 @@ export function DeptWorkspaceTabs({
             canFundSecundaria={pettyCashData.canFundSecundaria}
             eligibleOrders={pettyCashData.eligibleOrders}
             isAdmin={isAdmin}
+            focusBox={focusBox}
           />
         </div>
       )}

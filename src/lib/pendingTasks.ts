@@ -559,7 +559,12 @@ async function getRecognitionAdminPendingItem(href: string): Promise<PendingItem
 
 // Confirmado 2026-08-05: el aviso de saldo bajo le llega tanto a admin como
 // a Nairoby (líder de Finanzas) — cualquiera de los dos puede recargar.
-async function getPettyCashLowBalanceItems(href: string): Promise<PendingItem[]> {
+// Confirmado 2026-08-06: el link "Ir →" debe llevar directo a la pestaña
+// "Caja Chica" y hacer scroll+resaltado sobre la caja específica (Principal
+// o Secundaria) — no solo a la página general — así que hrefBase (la página
+// de destino, sin query) se recibe ya resuelta por el llamador y acá solo se
+// le agregan los parámetros que DeptWorkspaceTabs/PettyCashPanel leen.
+async function getPettyCashLowBalanceItems(hrefBase: string): Promise<PendingItem[]> {
   const boxes: { label: string; type: PettyCashBoxTypeStr }[] = [
     { label: "Principal", type: "PRINCIPAL" },
     { label: "Secundaria", type: "SECUNDARIA" },
@@ -574,7 +579,7 @@ async function getPettyCashLowBalanceItems(href: string): Promise<PendingItem[]>
         label: `Caja Chica ${b.label} con saldo bajo`,
         meta: `$${box.balance.toFixed(2)} · mínimo $${box.minThreshold.toFixed(2)} · atrasado`,
         overdue: true,
-        href,
+        href: `${hrefBase}?tab=cajachica&box=${b.type.toLowerCase()}`,
       });
     }
   }
@@ -585,7 +590,7 @@ async function getPettyCashLowBalanceItems(href: string): Promise<PendingItem[]>
 // de 8 horas laborables (horario real, src/lib/businessHours.ts), se avisa
 // a quien la fondeó — admin ve las suyas (createdById null), Nairoby ve las
 // que ella misma fondeó a la Secundaria de Bryan.
-async function getPettyCashUnconfirmedFunderItems(funderId: string | null, href: string): Promise<PendingItem[]> {
+async function getPettyCashUnconfirmedFunderItems(funderId: string | null, hrefBase: string): Promise<PendingItem[]> {
   const rows = await prisma.pettyCashEntry.findMany({
     where: { kind: "RECARGA", confirmedAt: null, archived: false, createdById: funderId },
     include: { box: true },
@@ -600,7 +605,7 @@ async function getPettyCashUnconfirmedFunderItems(funderId: string | null, href:
       label: `${r.box.type === "PRINCIPAL" ? "Nairoby" : "Bryan"} no ha confirmado tu recarga`,
       meta: `$${r.amount.toFixed(2)} · pendiente hace más de 8h laborables · atrasado`,
       overdue: true,
-      href,
+      href: `${hrefBase}?tab=cajachica&box=${r.box.type.toLowerCase()}`,
     });
   }
   return items;
@@ -640,11 +645,16 @@ export type PendingTasksActor = { isAdmin: true } | { isAdmin: false; userId: st
 
 export async function getPendingTasksForActor(actor: PendingTasksActor): Promise<PendingTasks | null> {
   if (actor.isAdmin) {
+    // Confirmado 2026-08-06: la Caja Chica solo se ve dentro de la pestaña
+    // "Caja Chica" del área de Finanzas — el link de admin debe apuntar a
+    // esa página específica (/admin/dept/[id]), no a "/admin" a secas.
+    const finDept = await prisma.department.findUnique({ where: { code: "FIN" }, select: { id: true } });
+    const financeHref = finDept ? `/admin/dept/${finDept.id}` : "/admin";
     const [feedbackItems, recognitionItem, pettyCashLow, pettyCashUnconfirmed, birthdayItems] = await Promise.all([
       getFeedbackPendingItems(),
       getRecognitionAdminPendingItem("/admin/colaborador-destacado"),
-      getPettyCashLowBalanceItems("/admin"),
-      getPettyCashUnconfirmedFunderItems(null, "/admin"),
+      getPettyCashLowBalanceItems(financeHref),
+      getPettyCashUnconfirmedFunderItems(null, financeHref),
       getUpcomingBirthdayPendingItems("/admin/nomina"),
     ]);
     const items = [...feedbackItems, ...(recognitionItem ? [recognitionItem] : []), ...pettyCashLow, ...pettyCashUnconfirmed, ...birthdayItems];

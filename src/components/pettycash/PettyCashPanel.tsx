@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, Pencil, Archive, RotateCcw, Upload } from "lucide-react";
 import { usePasteFile } from "@/lib/usePasteFile";
@@ -147,7 +147,7 @@ function EntryRow({
 }
 
 function BoxCard({
-  box, canManage, canFund, showOrderLink, eligibleOrders, isAdmin,
+  box, canManage, canFund, showOrderLink, eligibleOrders, isAdmin, highlight = false,
 }: {
   box: PettyCashBoxDTO;
   canManage: boolean;
@@ -155,11 +155,23 @@ function BoxCard({
   showOrderLink: boolean;
   eligibleOrders: EligiblePaymentOrderDTO[];
   isAdmin: boolean;
+  highlight?: boolean;
 }) {
   const router = useRouter();
   const [showArchived, setShowArchived] = useState(false);
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
+  const [glow, setGlow] = useState(false);
+
+  useEffect(() => {
+    if (!highlight) return;
+    const el = document.getElementById(`caja-chica-${box.type.toLowerCase()}`);
+    el?.scrollIntoView({ behavior: "smooth", block: "start" });
+    setGlow(true);
+    const t = setTimeout(() => setGlow(false), 2500);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [highlight]);
 
   const [linkMode, setLinkMode] = useState<"orden" | "motivo">("orden");
   const [groupId, setGroupId] = useState(eligibleOrders[0]?.groupId ?? "");
@@ -298,7 +310,10 @@ function BoxCard({
     : box.entries;
 
   return (
-    <div className="bg-surface border border-rule rounded-md p-4.5">
+    <div
+      id={`caja-chica-${box.type.toLowerCase()}`}
+      className={`bg-surface border rounded-md p-4.5 transition-shadow duration-500 ${glow ? "border-teal shadow-[0_0_0_3px_rgba(20,199,199,0.25)]" : "border-rule"}`}
+    >
       {err && <div className="text-red text-[12px] mb-2.5">{err}</div>}
 
       <div className="flex items-center justify-between mb-1">
@@ -549,7 +564,7 @@ function BoxCard({
 }
 
 export function PettyCashPanel({
-  principal, secundaria, canManagePrincipal, canManageSecundaria, canFundPrincipal, canFundSecundaria, eligibleOrders, isAdmin = false,
+  principal, secundaria, canManagePrincipal, canManageSecundaria, canFundPrincipal, canFundSecundaria, eligibleOrders, isAdmin = false, focusBox = null,
 }: {
   principal: PettyCashBoxDTO | null;
   secundaria: PettyCashBoxDTO | null;
@@ -559,11 +574,15 @@ export function PettyCashPanel({
   canFundSecundaria: boolean;
   eligibleOrders: EligiblePaymentOrderDTO[];
   isAdmin?: boolean;
+  // Confirmado 2026-08-06: "principal" | "secundaria" (en minúscula, viene
+  // del query param ?box=... armado en src/lib/pendingTasks.ts) — hace
+  // scroll y resalta esa caja cuando se llega desde un aviso de Pendientes.
+  focusBox?: string | null;
 }) {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-      {principal && <BoxCard box={principal} canManage={canManagePrincipal} canFund={canFundPrincipal} showOrderLink={false} eligibleOrders={[]} isAdmin={isAdmin} />}
-      {secundaria && <BoxCard box={secundaria} canManage={canManageSecundaria} canFund={canFundSecundaria} showOrderLink={true} eligibleOrders={eligibleOrders} isAdmin={isAdmin} />}
+      {principal && <BoxCard box={principal} canManage={canManagePrincipal} canFund={canFundPrincipal} showOrderLink={false} eligibleOrders={[]} isAdmin={isAdmin} highlight={focusBox === "principal"} />}
+      {secundaria && <BoxCard box={secundaria} canManage={canManageSecundaria} canFund={canFundSecundaria} showOrderLink={true} eligibleOrders={eligibleOrders} isAdmin={isAdmin} highlight={focusBox === "secundaria"} />}
     </div>
   );
 }
