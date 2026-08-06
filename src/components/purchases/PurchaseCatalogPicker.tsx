@@ -149,7 +149,7 @@ export function PurchaseCatalogPicker({
     setDeletingId(null);
     if (!res.ok) {
       const data = await res.json().catch(() => null);
-      setDeleteErr(data?.error ?? "No se pudo eliminar.");
+      setDeleteErr(`"${item.name}" — ${data?.error ?? "No se pudo eliminar."}`);
       return;
     }
     setResults((rs) => rs.filter((r) => r.id !== item.id));
@@ -296,7 +296,14 @@ export function PurchaseCatalogPicker({
       </div>
       {open && (
         <div className="mt-1.5 bg-surface2 border border-rule rounded-md overflow-hidden max-h-56 overflow-y-auto">
-          {deleteErr && <div className="px-3 py-2 text-[11.5px] text-red border-b border-rule">{deleteErr}</div>}
+          {deleteErr && (
+            <div className="flex items-start justify-between gap-2 px-3 py-2 text-[11.5px] text-red border-b border-rule bg-red/5">
+              <span>{deleteErr}</span>
+              <button type="button" className="shrink-0 font-semibold underline cursor-pointer" onClick={() => setDeleteErr(null)}>
+                Entendido, no se borra
+              </button>
+            </div>
+          )}
           {filtered.map((item) => (
             <div key={item.id} className="flex items-center border-b border-rule last:border-none">
               <button
