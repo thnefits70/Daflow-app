@@ -787,16 +787,26 @@ export function PurchaseInvoicingPanel() {
                           </button>
                         </div>
                       ) : (
-                        <label
-                          tabIndex={0}
-                          onPaste={onPasteInvoiceDoc}
-                          onMouseEnter={() => { invoiceDocGroupRef.current = groupId; armInvoiceDocPaste(); }}
-                          onMouseLeave={() => { invoiceDocGroupRef.current = null; disarmInvoiceDocPaste(); }}
-                          className="flex items-center gap-1.5 border-[1.5px] border-dashed border-rule rounded px-3 py-2 text-[11.5px] text-steel cursor-pointer hover:border-teal focus:border-teal focus:outline-none w-fit mb-2.5"
-                        >
-                          {uploadingDoc === groupId ? <span className="w-3.5 h-3.5 rounded-full border-2 border-rule border-t-teal animate-spin" /> : <Upload size={12} />} Subir o pegar la factura (opcional)
-                          <input type="file" accept="image/*,application/pdf" className="hidden" onChange={(e) => e.target.files?.[0] && uploadInvoiceDoc(groupId, e.target.files[0])} />
-                        </label>
+                        <div className="mb-2.5">
+                          <label
+                            tabIndex={0}
+                            onPaste={onPasteInvoiceDoc}
+                            onMouseEnter={() => { invoiceDocGroupRef.current = groupId; armInvoiceDocPaste(); }}
+                            onMouseLeave={() => { invoiceDocGroupRef.current = null; disarmInvoiceDocPaste(); }}
+                            className="flex items-center gap-1.5 border-[1.5px] border-dashed border-rule rounded px-3 py-2 text-[11.5px] text-steel cursor-pointer hover:border-teal focus:border-teal focus:outline-none w-fit"
+                          >
+                            {uploadingDoc === groupId ? <span className="w-3.5 h-3.5 rounded-full border-2 border-rule border-t-teal animate-spin" /> : <Upload size={12} />} Subir o pegar la factura (opcional)
+                            {/* Confirmado 2026-08-06: accept="image/*,application/pdf" hacía que el
+                                celular mostrara el selector genérico de "Cámara y archivos" en vez
+                                del acceso directo a la última foto — se separa el PDF como opción
+                                aparte, mismo fix ya aplicado en PurchaseRequestForm.tsx. */}
+                            <input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && uploadInvoiceDoc(groupId, e.target.files[0])} />
+                          </label>
+                          <label className="flex items-center gap-1 mt-1 text-[10.5px] text-steel cursor-pointer hover:text-teal w-fit">
+                            ¿Es un PDF? Subir documento
+                            <input type="file" accept="application/pdf" className="hidden" onChange={(e) => e.target.files?.[0] && uploadInvoiceDoc(groupId, e.target.files[0])} />
+                          </label>
+                        </div>
                       )}
                       {err && <div className="text-red text-[12px] mb-2">{err}</div>}
                       <div>
