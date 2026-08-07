@@ -10,6 +10,8 @@ import { UpdateGate } from "@/components/dept/UpdateGate";
 import { LeaderBanner } from "@/components/dept/LeaderBanner";
 import { BirthdayPopup } from "@/components/birthday/BirthdayPopup";
 import { MonthlyRecognitionPopup } from "@/components/recognition/MonthlyRecognitionPopup";
+import { RecognitionLockGate } from "@/components/recognition/RecognitionLockGate";
+import type { RecognitionPersonDTO } from "@/components/recognition/RecognitionPanel";
 import { signOut } from "next-auth/react";
 import type { ProcessDTO } from "@/components/process/ProcessEditor";
 import { isFutureDate } from "@/lib/time";
@@ -23,6 +25,8 @@ export function AreaGateShell({
   userPhotoUrl,
   logoUrl,
   bannerUrl,
+  recognitionLockout = null,
+  recognitionLockoutPeople = [],
   pendingUpdates,
   activeProcess,
   snoozeUntil,
@@ -45,6 +49,8 @@ export function AreaGateShell({
   userPhotoUrl?: string | null;
   logoUrl: string | null | undefined;
   bannerUrl?: string | null;
+  recognitionLockout?: { month: string; deadline: string } | null;
+  recognitionLockoutPeople?: RecognitionPersonDTO[];
   pendingUpdates: PendingUpdate[];
   activeProcess: ProcessDTO | null;
   snoozeUntil: string | null;
@@ -70,6 +76,21 @@ export function AreaGateShell({
   const isSnoozed = isFutureDate(snoozeUntil);
   const activeUpdate = pendingUpdates.find((u) => !dismissedIds.has(u.id));
   const showGate = !!activeUpdate && !isSnoozed && !snoozedNow;
+
+  // Confirmado 2026-08-07: el bloqueo de Colaborador del mes gana sobre
+  // cualquier otro gate — reemplaza TODO el shell, sin importar qué otra
+  // cosa esté pendiente.
+  if (recognitionLockout) {
+    return (
+      <RecognitionLockGate
+        month={recognitionLockout.month}
+        deadline={recognitionLockout.deadline}
+        people={recognitionLockoutPeople}
+        emptyMessage="Aún no tienes personas asignadas a tu equipo."
+        logoUrl={logoUrl}
+      />
+    );
+  }
 
   if (showGate && activeUpdate) {
     return (

@@ -124,6 +124,40 @@ export async function getEarliestIncompleteMonthBefore(
   return null;
 }
 
+function nextMonthStr(month: string): string {
+  const [y, m] = month.split("-").map(Number);
+  const d = new Date(Date.UTC(y, m, 1));
+  return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}`;
+}
+
+// Confirmado 2026-08-07: plazo duro pedido explícitamente por el usuario —
+// calificar el mes M vence el día 5 (calendario) del mes siguiente. A
+// diferencia de evaluationDeadline() (fin del mes M, usada solo como aviso
+// informativo/heads-up), este plazo es el que dispara el bloqueo total de
+// cuenta si se pasa sin completar.
+function evaluationHardDeadline(month: string): Date {
+  const next = nextMonthStr(month);
+  const [y, m] = next.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, 5, 23, 59, 59));
+}
+
+export type RecognitionLockout = { month: string; deadline: string };
+
+// Confirmado 2026-08-07: si al día de hoy ya venció el plazo duro (día 5 del
+// mes siguiente) para el mes incompleto más reciente de este evaluador
+// (líder o admin), toda la cuenta queda bloqueada — solo puede calificar,
+// nada más — hasta que se ponga al día. Se apoya en
+// getEarliestIncompleteMonthBefore (que ya recorre hacia atrás desde el mes
+// actual) para encontrar ese mes.
+export async function getRecognitionLockout(evaluatorIsAdmin: boolean, leaderDeptId: string | null): Promise<RecognitionLockout | null> {
+  const now = nowInEcuador();
+  const incompleteMonth = await getEarliestIncompleteMonthBefore(evaluatorIsAdmin, leaderDeptId, currentMonthStr());
+  if (!incompleteMonth) return null;
+  const deadline = evaluationHardDeadline(incompleteMonth);
+  if (now <= deadline) return null;
+  return { month: incompleteMonth, deadline: deadline.toISOString() };
+}
+
 // Company work week is Mon-Sat (confirmed 2026-07-20) — only Sunday and
 // Ecuadorian national holidays (fixed-date list shared with
 // src/lib/recognition.ts) are non-business days here. Deliberately not the

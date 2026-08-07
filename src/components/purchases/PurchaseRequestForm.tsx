@@ -111,7 +111,12 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
   const [poVerifyResult, setPoVerifyResult] = useState<{ readTotal: number | null; matches: boolean } | null>(null);
   const { onPaste: onPastePurchaseOrder, onMouseEnter: onPastePOHoverIn, onMouseLeave: onPastePOHoverOut } = usePasteFile((file) => handlePurchaseOrderFile(file));
 
-  const [shippingIncluded, setShippingIncluded] = useState(true);
+  // Confirmado 2026-08-07: antes venía marcado por default (asumía "envío
+  // incluido"), lo que hacía que muchas solicitudes se enviaran sin costo de
+  // flete cuando en realidad SÍ se cobraba aparte. Ahora arranca sin marcar
+  // — cada quien confirma explícitamente con un clic cuando el proveedor de
+  // verdad no cobra flete aparte (ej. entrega a domicilio sin costo extra).
+  const [shippingIncluded, setShippingIncluded] = useState(false);
   const [carrier, setCarrier] = useState<PurchaseSupplierDTO | null>(null);
   const [carrierBankAccountId, setCarrierBankAccountId] = useState<string | null>(null);
   const [shippingCostTotal, setShippingCostTotal] = useState("");
@@ -196,7 +201,7 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
         setVerifyResult(d.verifyResult ?? null);
         setManualCodeConfirm(d.manualCodeConfirm ?? false);
         setPurchaseOrderUrl(d.purchaseOrderUrl ?? null);
-        setShippingIncluded(d.shippingIncluded ?? true);
+        setShippingIncluded(d.shippingIncluded ?? false);
         setCarrier(normalizeSupplier(d.carrier));
         setCarrierBankAccountId(d.carrierBankAccountId ?? null);
         setShippingCostTotal(d.shippingCostTotal ?? "");
@@ -427,7 +432,12 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
       setErr("Elige el transportista, ya que el envío no está incluido.");
       return;
     }
-    if ((supplier.bankAccounts ?? []).length > 1 && !bankAccountId) {
+    const supplierAccounts = supplier.bankAccounts ?? [];
+    if (supplierAccounts.length === 0) {
+      setErr("Este proveedor no tiene ninguna cuenta bancaria registrada — agrégale una cuenta antes de enviar la solicitud.");
+      return;
+    }
+    if (supplierAccounts.length > 1 && !bankAccountId) {
       setErr("Este proveedor tiene varias cuentas bancarias — elige a cuál se le paga.");
       return;
     }
@@ -752,7 +762,7 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
 
       <label className="flex items-center gap-2 mb-3.5 text-[12.5px] text-steel cursor-pointer">
         <input type="checkbox" checked={shippingIncluded} onChange={(e) => setShippingIncluded(e.target.checked)} className="w-auto" />
-        El costo del producto SÍ incluye el envío <span className="text-steel-dim">— desmárcalo solo si el proveedor cobra el flete por separado</span>
+        El costo del producto SÍ incluye el envío <span className="text-steel-dim">— márcalo solo si confirmas que el proveedor NO cobra el flete por separado</span>
       </label>
 
       {!shippingIncluded && (

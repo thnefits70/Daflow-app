@@ -3,7 +3,9 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { AreaGateShell } from "@/components/dept/AreaGateShell";
 import type { ProcessDTO } from "@/components/process/ProcessEditor";
+import type { RecognitionPersonDTO } from "@/components/recognition/RecognitionPanel";
 import { SUPPLIER_VIEW_DEPT_CODES, canManageNomina } from "@/lib/guards";
+import { getRecognitionLockout } from "@/lib/pendingTasks";
 
 export default async function AreaLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
@@ -18,6 +20,33 @@ export default async function AreaLayout({ children }: { children: React.ReactNo
   ]);
 
   if (!dept || !currentUser || !currentUser.isActive) redirect("/api/auth/force-logout");
+
+  // Confirmado 2026-08-07: solo los líderes evalúan (a su propio equipo), así
+  // que solo ellos pueden quedar bloqueados — un colaborador normal nunca
+  // tiene esta responsabilidad y jamás ve este bloqueo.
+  const lockout =
+    currentUser.isLeader && currentUser.leadsDeptId ? await getRecognitionLockout(false, currentUser.leadsDeptId) : null;
+  let lockoutPeople: RecognitionPersonDTO[] = [];
+  if (lockout) {
+    const team = await prisma.user.findMany({
+      where: { deptId: currentUser.leadsDeptId!, isLeader: false, isActive: true, excludeFromRecognition: false },
+      select: { id: true, name: true, photoUrl: true, position: true, department: { select: { name: true } } },
+      orderBy: { name: "asc" },
+    });
+    const evaluations = await prisma.monthlyEvaluation.findMany({
+      where: { month: lockout.month, evaluateeId: { in: team.map((u) => u.id) } },
+      select: { evaluateeId: true },
+    });
+    const doneIds = new Set(evaluations.map((e) => e.evaluateeId));
+    lockoutPeople = team.map((u) => ({
+      id: u.id,
+      name: u.name,
+      photoUrl: u.photoUrl,
+      position: u.position,
+      deptName: u.department?.name ?? null,
+      doneMonths: doneIds.has(u.id) ? [lockout.month] : [],
+    }));
+  }
 
   const pendingUpdatesRaw = await prisma.processUpdate.findMany({
     where: { process: { deptId: dept.id }, acks: { none: { userId: session.user.id } } },
@@ -132,6 +161,8 @@ export default async function AreaLayout({ children }: { children: React.ReactNo
       userPhotoUrl={currentUser.photoUrl}
       logoUrl={settings?.logoUrl}
       bannerUrl={settings?.bannerUrl}
+      recognitionLockout={lockout}
+      recognitionLockoutPeople={lockoutPeople}
       pendingUpdates={pendingUpdates}
       activeProcess={activeProcess}
       snoozeUntil={snoozeUntil}

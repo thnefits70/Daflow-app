@@ -152,6 +152,23 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Falta el transportista, ya que el envío no está incluido." }, { status: 400 });
   }
 
+  // Confirmado 2026-08-07: bug real — si el proveedor no tenía NINGUNA cuenta
+  // registrada al momento de la solicitud, bankAccountId se guardaba en null
+  // sin ningún aviso, y quien tenía que pagar no sabía a qué cuenta
+  // transferir. Ahora es obligatorio elegir una cuenta real del proveedor —
+  // se bloquea si no tiene ninguna, o si tiene varias y no eligió cuál.
+  const supplierBankAccounts = await prisma.supplierBankAccount.findMany({ where: { supplierId: d.supplierId }, select: { id: true } });
+  if (supplierBankAccounts.length === 0) {
+    return NextResponse.json({ error: "Este proveedor no tiene ninguna cuenta bancaria registrada — agrégale una cuenta antes de enviar la solicitud." }, { status: 400 });
+  }
+  if (!d.bankAccountId) {
+    if (supplierBankAccounts.length > 1) {
+      return NextResponse.json({ error: "Este proveedor tiene varias cuentas bancarias — elige a cuál se le paga." }, { status: 400 });
+    }
+  } else if (!supplierBankAccounts.some((a) => a.id === d.bankAccountId)) {
+    return NextResponse.json({ error: "La cuenta bancaria elegida no pertenece a este proveedor." }, { status: 400 });
+  }
+
   const groupTotal = d.items.reduce((sum, it) => sum + it.quantity * it.unitCost, 0);
   const matches = d.quoteReadTotal !== null && Math.abs(d.quoteReadTotal - groupTotal) < 0.01;
   const manuallyConfirmed = !!d.quoteReferenceCode;
@@ -242,7 +259,7 @@ export async function POST(req: NextRequest) {
           deptId: effectiveDeptId,
           catalogItemId: it.catalogItemId,
           supplierId: d.supplierId,
-          bankAccountId: d.bankAccountId || null,
+          bankAccountId: d.bankAccountId || supplierBankAccounts[0].id,
           quantity: it.quantity,
           unitCost: it.unitCost,
           totalCost: it.quantity * it.unitCost,
