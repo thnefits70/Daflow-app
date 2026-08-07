@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Upload, CheckCircle2, Lock, Bell, Trash2, Landmark } from "lucide-react";
+import { Upload, CheckCircle2, Lock, Bell, Trash2, Landmark, Send } from "lucide-react";
 import { Combobox } from "@/components/ui/Combobox";
 import { uploadFile } from "@/lib/uploadFile";
 import { compressImage } from "@/lib/compressImage";
@@ -102,6 +102,7 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
   });
 
   const [remindedId, setRemindedId] = useState<string | null>(null);
+  const [notifiedId, setNotifiedId] = useState<string | null>(null);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -233,6 +234,13 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
     await fetch(`/api/admin-payments/${id}/remind-payment`, { method: "POST" }).catch(() => null);
     setRemindedId(id);
     setTimeout(() => setRemindedId((cur) => (cur === id ? null : cur)), 2500);
+  }
+
+  async function notifyPaid(id: string) {
+    setErr("");
+    await fetch(`/api/admin-payments/${id}/notify-paid`, { method: "POST" }).catch(() => null);
+    setNotifiedId(id);
+    setTimeout(() => setNotifiedId((cur) => (cur === id ? null : cur)), 2500);
   }
 
   async function confirmDone(id: string) {
@@ -527,6 +535,16 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
                   </div>
                   {r.paidBy?.name && <div className="text-[10px] text-steel-dim mt-0.5">Pagado por {actorName(r.paidBy.name)}{r.paidAt ? ` · ${new Date(r.paidAt).toLocaleDateString("es-MX")}` : ""}</div>}
                 </div>
+              )}
+
+              {isAdmin && r.paymentProofUrl && r.paymentAiMatch && (
+                <button
+                  type="button"
+                  className="rounded border border-rule px-2.5 py-1.5 text-[11.5px] font-semibold text-steel cursor-pointer flex items-center gap-1.5 mb-2.5"
+                  onClick={() => notifyPaid(r.id)}
+                >
+                  <Send size={12} /> {notifiedId === r.id ? "✓ Enviado" : "Enviar confirmación de pago"}
+                </button>
               )}
 
               {r.status === "CONFIRMED" && (
