@@ -71,7 +71,7 @@ function formatWeekLabel(week: string) {
   return `S${Number(w)}`;
 }
 
-function formatMonthLabel(month: string) {
+export function formatMonthLabel(month: string) {
   const [y, m] = month.split("-");
   return `${MONTH_ABBR[Number(m) - 1]} ${y.slice(2)}`;
 }
@@ -81,10 +81,47 @@ function currentMonthStr(): string {
   return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}`;
 }
 
-function prevMonthStr(month: string): string {
+export function prevMonthStr(month: string): string {
   const [y, m] = month.split("-").map(Number);
   const d = new Date(Date.UTC(y, m - 2, 1));
   return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}`;
+}
+
+// Confirmado 2026-08-07: metodología estricta mes por mes — no se puede
+// calificar un mes si el evaluador (líder o admin) todavía tiene gente sin
+// calificar de un mes ANTERIOR (ej. no se puede calificar agosto si julio
+// se quedó incompleto). Recorre hacia atrás desde el mes objetivo hasta el
+// mes más antiguo con algún registro para este mismo grupo de evaluados —
+// nunca más atrás, así no se traba por meses de antes de que este grupo
+// existiera. Usa monthlyEvaluationSummary (no el detalle, que se purga con
+// el tiempo) porque el resumen es el registro permanente de "esto ya se
+// calificó" — se escribe siempre junto con la evaluación detallada.
+export async function getEarliestIncompleteMonthBefore(
+  evaluatorIsAdmin: boolean,
+  leaderDeptId: string | null,
+  targetMonth: string
+): Promise<string | null> {
+  const where = evaluatorIsAdmin
+    ? { isLeader: true as const, isActive: true, excludeFromRecognition: false }
+    : { deptId: leaderDeptId!, isLeader: false as const, isActive: true, excludeFromRecognition: false };
+  const cohort = await prisma.user.findMany({ where, select: { id: true } });
+  if (cohort.length === 0) return null;
+  const cohortIds = cohort.map((u) => u.id);
+
+  const genesis = await prisma.monthlyEvaluationSummary.findFirst({
+    where: { evaluateeId: { in: cohortIds } },
+    orderBy: { month: "asc" },
+    select: { month: true },
+  });
+  if (!genesis) return null; // este grupo nunca tuvo ninguna evaluación — nada que bloquear
+
+  let month = prevMonthStr(targetMonth);
+  while (month >= genesis.month) {
+    const done = await prisma.monthlyEvaluationSummary.count({ where: { month, evaluateeId: { in: cohortIds } } });
+    if (done < cohortIds.length) return month;
+    month = prevMonthStr(month);
+  }
+  return null;
 }
 
 // Company work week is Mon-Sat (confirmed 2026-07-20) — only Sunday and

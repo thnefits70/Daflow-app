@@ -66,6 +66,7 @@ export function RecognitionPanel({
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [saved, setSaved] = useState(false);
+  const [blocked, setBlocked] = useState<{ message: string; blockedMonth: string } | null>(null);
 
   const selectedPerson = people.find((p) => p.id === selectedId) ?? null;
 
@@ -74,13 +75,22 @@ export function RecognitionPanel({
     setLoading(true);
     setErr("");
     setSaved(false);
+    setBlocked(null);
+    setData(null);
     fetch(`/api/recognition/evaluation?evaluateeId=${selectedId}&month=${selectedMonth}`)
-      .then((res) => res.json())
-      .then((d: EvaluationData) => {
-        setData(d);
+      .then(async (res) => {
+        const d = await res.json();
+        // Confirmado 2026-08-07: metodología estricta mes por mes — si el
+        // servidor bloqueó este mes por dejar uno anterior sin terminar, no
+        // hay preguntas que mostrar, solo el aviso de qué mes falta primero.
+        if (!res.ok) {
+          setBlocked({ message: d?.error ?? "No se puede calificar este mes todavía.", blockedMonth: d?.blockedMonth ?? "" });
+          return;
+        }
+        setData(d as EvaluationData);
         setComment(d.comment ?? "");
         const initial: Record<string, number> = {};
-        for (const pillar of d.pillars) {
+        for (const pillar of (d as EvaluationData).pillars) {
           for (const q of pillar.questions) {
             if (q.score !== null) initial[q.id] = q.score;
           }
@@ -151,6 +161,22 @@ export function RecognitionPanel({
         </div>
 
         {loading && <div className="text-[13px] text-steel">Cargando preguntas…</div>}
+
+        {blocked && !loading && (
+          <div className="bg-gold/10 border border-gold/35 rounded-md p-4.5 text-[12.5px]" style={{ color: "#D9A441" }}>
+            <div className="mb-2.5">{blocked.message}</div>
+            {blocked.blockedMonth && (
+              <button
+                type="button"
+                className="rounded border px-3 py-1.5 text-[12px] font-semibold cursor-pointer"
+                style={{ borderColor: "#D9A441", color: "#D9A441" }}
+                onClick={() => setSelectedMonth(blocked.blockedMonth)}
+              >
+                Ir a {blocked.blockedMonth}
+              </button>
+            )}
+          </div>
+        )}
 
         {data && !loading && (
           <div>

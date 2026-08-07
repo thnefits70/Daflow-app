@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { canEvaluateUser } from "@/lib/guards";
 import { PILLARS, pickQuestions, currentMonth, QUESTIONS_PER_PILLAR, summaryFieldsFromScores } from "@/lib/recognition";
 import { purgeOldEvaluationDetail } from "@/lib/recognitionPurge";
+import { getEarliestIncompleteMonthBefore, formatMonthLabel } from "@/lib/pendingTasks";
 
 // Returns this month's randomized question set for (evaluator, evaluatee),
 // grouped by pillar, plus any scores/comment already saved (so reopening a
@@ -27,6 +28,20 @@ export async function GET(req: NextRequest) {
   const monthParam = req.nextUrl.searchParams.get("month");
   const month = monthParam && /^\d{4}-\d{2}$/.test(monthParam) && monthParam <= currentMonth() ? monthParam : currentMonth();
   const evaluatorId = session.user.role === "admin" ? "admin" : session.user.id;
+
+  // Confirmado 2026-08-07: metodología estricta mes por mes — si todavía
+  // queda gente sin calificar de un mes anterior, se avisa acá (antes de
+  // cargar las preguntas) en vez de dejar que llene todo el formulario y
+  // recién se entere al guardar.
+  const isAdmin = session.user.role === "admin";
+  const evaluateeDept = isAdmin ? null : await prisma.user.findUnique({ where: { id: evaluateeId }, select: { deptId: true } });
+  const blockedMonth = await getEarliestIncompleteMonthBefore(isAdmin, evaluateeDept?.deptId ?? null, month);
+  if (blockedMonth) {
+    return NextResponse.json(
+      { error: `Antes de calificar ${formatMonthLabel(month)}, completa primero ${formatMonthLabel(blockedMonth)} — todavía te falta gente por calificar ese mes.`, blockedMonth },
+      { status: 409 }
+    );
+  }
 
   const existing = await prisma.monthlyEvaluation.findUnique({
     where: { month_evaluateeId: { month, evaluateeId } },
@@ -90,6 +105,19 @@ export async function POST(req: NextRequest) {
   // this feature didn't exist for yet, not backdating around the deadline.
   const month = parsed.data.month && parsed.data.month <= currentMonth() ? parsed.data.month : currentMonth();
   const evaluatorId = session.user.role === "admin" ? "admin" : session.user.id;
+
+  // Defensa server-side del mismo bloqueo que ya avisó el GET — por si
+  // alguien deja el formulario abierto desde antes y guarda después de que
+  // otro mes anterior quedó pendiente, o llama a la API directo.
+  const isAdmin = session.user.role === "admin";
+  const evaluateeDept = isAdmin ? null : await prisma.user.findUnique({ where: { id: evaluateeId }, select: { deptId: true } });
+  const blockedMonth = await getEarliestIncompleteMonthBefore(isAdmin, evaluateeDept?.deptId ?? null, month);
+  if (blockedMonth) {
+    return NextResponse.json(
+      { error: `Antes de calificar ${formatMonthLabel(month)}, completa primero ${formatMonthLabel(blockedMonth)} — todavía te falta gente por calificar ese mes.`, blockedMonth },
+      { status: 409 }
+    );
+  }
 
   const summaryFields = summaryFieldsFromScores(scores);
 
