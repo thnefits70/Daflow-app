@@ -401,13 +401,17 @@ export async function canConfirmPurchaseReceiving() {
   return !!user.isLeader && user.leadsDept?.code === "INV";
 }
 
+// Fix confirmado 2026-08-07: mismo bug que ya se corrigió en
+// canConfirmPurchaseReceiving — canManagePurchases es el escape hatch
+// pensado para Solicitar (Bryan), pero como esta función también lo
+// aceptaba, Bryan heredaba de paso la pestaña "Finanzas"/Facturación, que es
+// exclusiva de Nairoby (líder de Finanzas). Sin delegación por flag genérico.
 export async function canRegisterPurchaseInvoices() {
   const session = await auth();
   if (!session) return false;
   if (session.user.role === "admin") return true;
   const user = await purchasesUserContext(session.user.id);
   if (!user) return false;
-  if (user.canManagePurchases) return true;
   return !!user.isLeader && user.leadsDept?.code === "FIN";
 }
 
