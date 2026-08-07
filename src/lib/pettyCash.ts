@@ -67,7 +67,7 @@ export type PettyCashEntryDTO = {
   createdAt: string;
 };
 
-async function orderLabel(groupId: string | null): Promise<string | null> {
+export async function orderLabel(groupId: string | null): Promise<string | null> {
   if (!groupId) return null;
   const rows = await prisma.purchaseRequest.findMany({
     where: { groupId },

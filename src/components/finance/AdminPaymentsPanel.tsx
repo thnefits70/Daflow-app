@@ -10,6 +10,7 @@ import { usePasteFile } from "@/lib/usePasteFile";
 import { actorName } from "@/lib/actorName";
 import { ProofPreview } from "@/components/shared/ProofPreview";
 import { AdminPayeePicker, type AdminPaymentPayeeDTO, type PayeeBankAccountDTO } from "@/components/finance/AdminPayeePicker";
+import type { EligiblePaymentOrderDTO } from "@/lib/pettyCash";
 
 type PaymentType = "RECURRING" | "VARIABLE";
 type Status = "PENDING_PAYMENT" | "PAID" | "CONFIRMED";
@@ -38,6 +39,8 @@ type RequestDTO = {
   template: { id: string; motivo: string } | null;
   payee: { id: string; name: string } | null;
   bankAccount: PayeeBankAccountDTO | null;
+  linkedGroupId: string | null;
+  linkedGroupLabel: string | null;
   createdBy: { name: string } | null;
   paidBy: { name: string } | null;
   confirmedBy: { name: string } | null;
@@ -81,9 +84,12 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
   const [templates, setTemplates] = useState<TemplateDTO[]>([]);
   const [pendingThisMonth, setPendingThisMonth] = useState<TemplateDTO[]>([]);
   const [payees, setPayees] = useState<AdminPaymentPayeeDTO[]>([]);
+  const [eligibleOrders, setEligibleOrders] = useState<EligiblePaymentOrderDTO[]>([]);
   const [err, setErr] = useState("");
 
   const [showForm, setShowForm] = useState(false);
+  const [formLinkMode, setFormLinkMode] = useState<"flete" | "otro">("otro");
+  const [formGroupId, setFormGroupId] = useState("");
   const [formType, setFormType] = useState<PaymentType>("VARIABLE");
   const [formMotivo, setFormMotivo] = useState("");
   const [formMonto, setFormMonto] = useState("");
@@ -114,18 +120,20 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
 
   function load() {
     fetch("/api/admin-payments")
-      .then((r) => (r.ok ? r.json() : { requests: [], templates: [], pendingThisMonth: [], payees: [] }))
+      .then((r) => (r.ok ? r.json() : { requests: [], templates: [], pendingThisMonth: [], payees: [], eligibleOrders: [] }))
       .then((data) => {
         setRequests(data.requests);
         setTemplates(data.templates);
         setPendingThisMonth(data.pendingThisMonth);
         setPayees(data.payees ?? []);
+        setEligibleOrders(data.eligibleOrders ?? []);
       })
       .catch(() => {
         setRequests([]);
         setTemplates([]);
         setPendingThisMonth([]);
         setPayees([]);
+        setEligibleOrders([]);
       });
   }
   useEffect(load, []);
@@ -134,8 +142,19 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
     setPayees((cur) => (cur.some((x) => x.id === p.id) ? cur.map((x) => (x.id === p.id ? p : x)) : [...cur, p].sort((a, b) => a.name.localeCompare(b.name))));
   }
 
+  function selectFreightOrder(groupId: string) {
+    setFormGroupId(groupId);
+    const order = eligibleOrders.find((o) => o.groupId === groupId);
+    if (order) {
+      setFormMotivo(order.label);
+      setFormMonto(order.shippingCostTotal.toFixed(2));
+    }
+  }
+
   function resetForm() {
     setShowForm(false);
+    setFormLinkMode("otro");
+    setFormGroupId("");
     setFormType("VARIABLE");
     setFormMotivo("");
     setFormMonto("");
@@ -148,6 +167,8 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
 
   function openFormForTemplate(t: TemplateDTO) {
     setShowForm(true);
+    setFormLinkMode("otro");
+    setFormGroupId("");
     setFormType("RECURRING");
     setFormMotivo(t.motivo);
     setFormMonto("");
@@ -174,21 +195,26 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
 
   async function createRequest() {
     setErr("");
+    if (formLinkMode === "flete" && !formGroupId) {
+      setErr("Elige la orden con flete pendiente.");
+      return;
+    }
     if (!formMotivo.trim() || !formMonto || Number(formMonto) <= 0) {
       setErr("Completa el motivo y un monto válido.");
       return;
     }
     setSubmitting(true);
     const body: Record<string, unknown> = {
-      type: formType,
+      type: formLinkMode === "flete" ? "VARIABLE" : formType,
       motivo: formMotivo.trim(),
       monto: Number(formMonto),
       payeeId: formPayee?.id ?? undefined,
       bankAccountId: formBankAccountId ?? undefined,
+      linkedGroupId: formLinkMode === "flete" ? formGroupId : undefined,
       declarationFileUrl: formDeclarationUrl ?? undefined,
       declarationFileName: formDeclarationName ?? undefined,
     };
-    if (formType === "RECURRING") body.newTemplateMotivo = formMotivo.trim();
+    if (formLinkMode !== "flete" && formType === "RECURRING") body.newTemplateMotivo = formMotivo.trim();
     const res = await fetch("/api/admin-payments", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -344,21 +370,52 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
               <div className="flex gap-2 mb-2.5">
                 <button
                   type="button"
-                  className={`flex-1 rounded border py-1.5 text-[12px] font-semibold cursor-pointer ${formType === "VARIABLE" ? "border-teal bg-teal/10 text-teal" : "border-rule text-steel"}`}
-                  onClick={() => setFormType("VARIABLE")}
+                  className={`flex-1 rounded border py-1.5 text-[12px] font-semibold cursor-pointer ${formLinkMode === "otro" ? "border-teal bg-teal/10 text-teal" : "border-rule text-steel"}`}
+                  onClick={() => { setFormLinkMode("otro"); setFormGroupId(""); setFormMotivo(""); setFormMonto(""); }}
                 >
-                  Variable
+                  ✏️ Otro gasto
                 </button>
                 <button
                   type="button"
-                  className={`flex-1 rounded border py-1.5 text-[12px] font-semibold cursor-pointer ${formType === "RECURRING" ? "border-teal bg-teal/10 text-teal" : "border-rule text-steel"}`}
-                  onClick={() => setFormType("RECURRING")}
+                  className={`flex-1 rounded border py-1.5 text-[12px] font-semibold cursor-pointer ${formLinkMode === "flete" ? "border-teal bg-teal/10 text-teal" : "border-rule text-steel"}`}
+                  onClick={() => { setFormLinkMode("flete"); setFormType("VARIABLE"); setFormMotivo(""); setFormMonto(""); }}
                 >
-                  Recurrente
+                  🚚 Flete pendiente
                 </button>
               </div>
 
-              {formType === "RECURRING" ? (
+              {formLinkMode === "flete" ? (
+                <select
+                  value={formGroupId}
+                  onChange={(e) => selectFreightOrder(e.target.value)}
+                  disabled={eligibleOrders.length === 0}
+                  className="w-full rounded border border-rule px-2.5 py-2 text-[13px] mb-2.5 bg-surface disabled:opacity-60"
+                >
+                  <option value="">{eligibleOrders.length === 0 ? "No hay órdenes con flete pendiente" : "Elige una orden con flete pendiente"}</option>
+                  {eligibleOrders.map((o) => (
+                    <option key={o.groupId} value={o.groupId}>{o.label}</option>
+                  ))}
+                </select>
+              ) : (
+                <div className="flex gap-2 mb-2.5">
+                  <button
+                    type="button"
+                    className={`flex-1 rounded border py-1.5 text-[12px] font-semibold cursor-pointer ${formType === "VARIABLE" ? "border-teal bg-teal/10 text-teal" : "border-rule text-steel"}`}
+                    onClick={() => setFormType("VARIABLE")}
+                  >
+                    Variable
+                  </button>
+                  <button
+                    type="button"
+                    className={`flex-1 rounded border py-1.5 text-[12px] font-semibold cursor-pointer ${formType === "RECURRING" ? "border-teal bg-teal/10 text-teal" : "border-rule text-steel"}`}
+                    onClick={() => setFormType("RECURRING")}
+                  >
+                    Recurrente
+                  </button>
+                </div>
+              )}
+
+              {formLinkMode === "otro" && formType === "RECURRING" ? (
                 <Combobox
                   value={formMotivo}
                   onChange={setFormMotivo}
@@ -496,7 +553,13 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
                     <span className="text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded bg-cloud text-steel shrink-0">
                       {r.type === "RECURRING" ? "Recurrente" : "Variable"}
                     </span>
+                    {r.linkedGroupId && (
+                      <span className="text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded bg-blue/15 text-blue shrink-0">
+                        🚚 Flete
+                      </span>
+                    )}
                   </div>
+                  {r.linkedGroupLabel && <div className="text-[11px] text-steel">{r.linkedGroupLabel}</div>}
                   {r.period && <div className="text-[11.5px] text-steel">período {r.period}</div>}
                   <div className="text-[10px] text-steel-dim mt-0.5">Solicitada por {actorName(r.createdBy?.name)} · {new Date(r.createdAt).toLocaleDateString("es-MX")}</div>
                 </div>

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { readPaymentProof } from "@/lib/purchaseAi";
+import { markGroupFreightPaid } from "@/lib/pettyCash";
 import { pushOwnerId } from "@/lib/pushOwner";
 import { sendPushToOwner } from "@/lib/webPush";
 
@@ -48,6 +49,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       ...(matches ? { status: "PAID", paidAt: new Date(), paidById: null } : {}),
     },
   });
+
+  if (matches && request.linkedGroupId) {
+    await markGroupFreightPaid(request.linkedGroupId, null, parsed.data.proofUrl, request.monto);
+  }
 
   if (matches && request.createdById) {
     await sendPushToOwner(request.createdById, {

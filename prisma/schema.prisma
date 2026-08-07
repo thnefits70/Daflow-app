@@ -2064,6 +2064,13 @@ model AdminPaymentRequest {
   bankAccountId String?
   bankAccount   AdminPaymentPayeeBankAccount? @relation(fields: [bankAccountId], references: [id], onDelete: SetNull)
 
+  // Confirmado 2026-08-06: mismo vínculo con una orden de compra que ya
+  // existe en Caja Chica (PettyCashEntry.linkedGroupId) — para cuando el
+  // flete pendiente de esa orden se paga por transferencia en vez de caja
+  // chica. Al subir el comprobante, markGroupFreightPaid() escribe el monto
+  // REAL pagado de vuelta en PurchaseRequest.shippingCostTotal.
+  linkedGroupId String?
+
   // Doc. de soporte opcional al crear — bloqueante si la IA no lo hace calzar
   declarationFileUrl  String?
   declarationFileName String?
@@ -2096,4 +2103,5 @@ model AdminPaymentRequest {
   @@unique([templateId, period])
   @@index([status])
   @@index([type])
+  @@index([linkedGroupId])
 }

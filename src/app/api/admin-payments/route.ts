@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { canManageAdminPayments } from "@/lib/guards";
 import { readAdminPaymentDeclaration } from "@/lib/adminPaymentAi";
 import { getAdminPaymentTemplates, getAdminPaymentTemplatesPendingThisMonth, getAdminPaymentPayees, currentPeriod } from "@/lib/adminPayments";
+import { getEligiblePaymentOrdersForFreight, checkFreightAlreadyPaid, orderLabel } from "@/lib/pettyCash";
 import { pushOwnerId } from "@/lib/pushOwner";
 import { sendPushToOwner } from "@/lib/webPush";
 
@@ -12,7 +13,7 @@ export async function GET() {
   if (!(await canManageAdminPayments())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
   const bankAccountSelect = { id: true, bankName: true, bankAccountType: true, bankAccountNumber: true, bankAccountHolder: true, holderIdType: true, holderIdNumber: true };
-  const [requests, templates, pendingThisMonth, payees] = await Promise.all([
+  const [rows, templates, pendingThisMonth, payees, eligibleOrders] = await Promise.all([
     prisma.adminPaymentRequest.findMany({
       orderBy: { createdAt: "desc" },
       include: {
@@ -27,9 +28,14 @@ export async function GET() {
     getAdminPaymentTemplates(),
     getAdminPaymentTemplatesPendingThisMonth(),
     getAdminPaymentPayees(),
+    getEligiblePaymentOrdersForFreight(),
   ]);
 
-  return NextResponse.json({ requests, templates, pendingThisMonth, payees });
+  const requests = await Promise.all(
+    rows.map(async (r) => ({ ...r, linkedGroupLabel: r.linkedGroupId ? await orderLabel(r.linkedGroupId) : null }))
+  );
+
+  return NextResponse.json({ requests, templates, pendingThisMonth, payees, eligibleOrders });
 }
 
 const schema = z.object({
@@ -40,6 +46,7 @@ const schema = z.object({
   monto: z.number().positive(),
   payeeId: z.string().optional(),
   bankAccountId: z.string().optional(),
+  linkedGroupId: z.string().optional(),
   declarationFileUrl: z.string().url().optional(),
   declarationFileName: z.string().optional(),
 });
@@ -59,6 +66,16 @@ export async function POST(req: NextRequest) {
 
   if (d.type === "RECURRING" && !d.templateId && !d.newTemplateMotivo) {
     return NextResponse.json({ error: "Falta elegir o escribir el motivo recurrente." }, { status: 400 });
+  }
+
+  if (d.linkedGroupId) {
+    const check = await checkFreightAlreadyPaid(d.linkedGroupId);
+    if (check.alreadyPaid) {
+      return NextResponse.json(
+        { error: `Esta orden ya tiene el flete pagado el ${check.paidAt} por ${check.paidByName}.` },
+        { status: 409 }
+      );
+    }
   }
 
   const createdById = session.user.role === "admin" ? null : session.user.id;
@@ -108,6 +125,7 @@ export async function POST(req: NextRequest) {
       monto: d.monto,
       payeeId: d.payeeId || null,
       bankAccountId: d.bankAccountId || null,
+      linkedGroupId: d.linkedGroupId || null,
       declarationFileUrl: d.declarationFileUrl ?? null,
       declarationFileName: d.declarationFileName ?? null,
       declarationAiMatch,
