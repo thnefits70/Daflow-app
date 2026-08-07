@@ -31,6 +31,7 @@ type RequestDTO = {
   paymentProofName: string | null;
   paymentAiMatch: boolean | null;
   paymentAiNote: string | null;
+  paymentNotifiedAt: string | null;
   paidAt: string | null;
   confirmedAt: string | null;
   createdAt: string;
@@ -238,9 +239,16 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
 
   async function notifyPaid(id: string) {
     setErr("");
-    await fetch(`/api/admin-payments/${id}/notify-paid`, { method: "POST" }).catch(() => null);
     setNotifiedId(id);
-    setTimeout(() => setNotifiedId((cur) => (cur === id ? null : cur)), 2500);
+    const res = await fetch(`/api/admin-payments/${id}/notify-paid`, { method: "POST" }).catch(() => null);
+    setNotifiedId(null);
+    if (!res || !res.ok) {
+      const data = await res?.json().catch(() => null);
+      setErr(data?.error ?? "No se pudo enviar la confirmación.");
+      return;
+    }
+    const data = await res.json().catch(() => null);
+    setRequests((cur) => cur && cur.map((x) => (x.id === id ? { ...x, paymentNotifiedAt: data?.paymentNotifiedAt ?? new Date().toISOString() } : x)));
   }
 
   async function confirmDone(id: string) {
@@ -538,13 +546,24 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
               )}
 
               {isAdmin && r.paymentProofUrl && r.paymentAiMatch && (
-                <button
-                  type="button"
-                  className="rounded border border-rule px-2.5 py-1.5 text-[11.5px] font-semibold text-steel cursor-pointer flex items-center gap-1.5 mb-2.5"
-                  onClick={() => notifyPaid(r.id)}
-                >
-                  <Send size={12} /> {notifiedId === r.id ? "✓ Enviado" : "Enviar confirmación de pago"}
-                </button>
+                <div className="mb-2.5">
+                  <button
+                    type="button"
+                    disabled={notifiedId === r.id}
+                    className={`rounded border px-2.5 py-1.5 text-[11.5px] font-semibold cursor-pointer flex items-center gap-1.5 disabled:opacity-60 ${
+                      r.paymentNotifiedAt ? "border-teal/40 bg-teal/10 text-teal" : "border-rule text-steel"
+                    }`}
+                    onClick={() => notifyPaid(r.id)}
+                  >
+                    {r.paymentNotifiedAt ? <CheckCircle2 size={12} /> : <Send size={12} />}
+                    {notifiedId === r.id ? "Enviando…" : r.paymentNotifiedAt ? "✓ Pago enviado" : "Enviar confirmación de pago"}
+                  </button>
+                  {r.paymentNotifiedAt && (
+                    <div className="text-[10px] text-steel-dim mt-1">
+                      Avisado el {new Date(r.paymentNotifiedAt).toLocaleDateString("es-MX")} · toca el botón para reenviar
+                    </div>
+                  )}
+                </div>
               )}
 
               {r.status === "CONFIRMED" && (

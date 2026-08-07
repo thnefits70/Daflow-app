@@ -2079,6 +2079,12 @@ model AdminPaymentRequest {
   paidById String?
   paidBy   User?     @relation("AdminPaymentPaidBy", fields: [paidById], references: [id], onDelete: SetNull)
 
+  // Confirmado 2026-08-06: se guarda para que el botón "Enviar confirmación
+  // de pago" quede fijo en "Pago enviado" tras el primer clic (en vez de
+  // volver a su texto original a los segundos, que hacía pensar que no se
+  // había avisado) — el admin igual puede reenviar cuando quiera.
+  paymentNotifiedAt DateTime?
+
   confirmedAt   DateTime?
   confirmedById String?
   confirmedBy   User?     @relation("AdminPaymentConfirmedBy", fields: [confirmedById], references: [id], onDelete: SetNull)

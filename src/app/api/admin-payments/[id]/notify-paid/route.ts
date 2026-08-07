@@ -16,6 +16,11 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   if (!request) return NextResponse.json({ error: "No encontrada." }, { status: 404 });
   if (!request.paymentProofUrl) return NextResponse.json({ error: "Todavía no hay comprobante de pago." }, { status: 409 });
 
+  const updated = await prisma.adminPaymentRequest.update({
+    where: { id },
+    data: { paymentNotifiedAt: new Date() },
+  });
+
   if (request.createdById) {
     await sendPushToOwner(request.createdById, {
       title: "✅ Confirmación de pago",
@@ -24,5 +29,5 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     }).catch(() => null);
   }
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, paymentNotifiedAt: updated.paymentNotifiedAt });
 }
