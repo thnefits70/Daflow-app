@@ -58,19 +58,41 @@ export async function GET(req: NextRequest) {
   });
 
   let ranked;
+  let evaluatedUserIds: string[];
   if (detailedEvaluations.length > 0) {
     ranked = rankEvaluations(detailedEvaluations.map((e) => ({ ...e, evaluatee: e.evaluatee! })));
+    evaluatedUserIds = detailedEvaluations.map((e) => e.evaluateeId);
   } else {
     const summaries = await prisma.monthlyEvaluationSummary.findMany({
       where: { month, ...(scopedEvaluateeWhere ? { evaluatee: scopedEvaluateeWhere } : {}) },
       include: { evaluatee: { select: { id: true, name: true, photoUrl: true, isLeader: true, department: { select: { name: true } } } } },
     });
     ranked = rankSummaries(summaries.map((s) => ({ ...s, evaluatee: s.evaluatee! })));
+    evaluatedUserIds = summaries.map((s) => s.evaluateeId);
   }
 
-  // Only admin can confirm, and only in the company-wide view (no deptId
-  // scoping) — a leader's "Ranking de mi equipo" never shows this.
-  const canConfirm = session!.user.role === "admin";
+  // Confirmado 2026-08-06: el podio es de TODA la empresa, así que solo tiene
+  // sentido confirmarlo en la vista general (sin filtrar por área) — y solo
+  // cuando cada colaborador y líder activo YA tiene su evaluación de este
+  // mes registrada. Antes canConfirm solo miraba el rol, así que el botón
+  // aparecía aunque faltara gente por calificar; ahora se bloquea y se
+  // muestra cuántos faltan, en vez de dejar confirmar un podio incompleto.
+  const isCompanyWideAdminView = session!.user.role === "admin" && !deptId;
+  let missingCount = 0;
+  let totalEligible = 0;
+  if (isCompanyWideAdminView) {
+    // Mismo criterio ya usado por el aviso de Pendientes (getMissingEvaluatees
+    // en pendingTasks.ts): todo activo sin excludeFromRecognition cuenta,
+    // sea líder (lo evalúa el admin) o no (lo evalúa el líder de su área) —
+    // excludeFromRecognition es el flag permanente de Nómina (ej. Dexi
+    // Villafuerte), esas personas nunca cuentan como "pendientes".
+    const eligibleUsers = await prisma.user.findMany({ where: { isActive: true, excludeFromRecognition: false }, select: { id: true } });
+    totalEligible = eligibleUsers.length;
+    const evaluatedSet = new Set(evaluatedUserIds);
+    missingCount = eligibleUsers.filter((u) => !evaluatedSet.has(u.id)).length;
+  }
+  const canConfirm = isCompanyWideAdminView && totalEligible > 0 && missingCount === 0;
+
   const confirmedPodium = await prisma.monthlyRecognitionResult.findMany({
     where: { month },
     include: { user: { select: { name: true, photoUrl: true } } },
@@ -83,6 +105,8 @@ export async function GET(req: NextRequest) {
     ranked,
     months,
     canConfirm,
+    missingCount,
+    totalEligible,
     confirmedPodium: confirmedPodium.map((p) => ({ rank: p.rank, userId: p.userId, name: p.user.name, photoUrl: p.user.photoUrl, totalScore: p.totalScore })),
   });
 }

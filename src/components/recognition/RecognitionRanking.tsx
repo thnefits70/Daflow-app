@@ -52,6 +52,8 @@ export function RecognitionRanking({
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [canConfirm, setCanConfirm] = useState(false);
+  const [missingCount, setMissingCount] = useState(0);
+  const [totalEligible, setTotalEligible] = useState(0);
   const [confirmedPodium, setConfirmedPodium] = useState<ConfirmedPodiumEntry[]>([]);
   const [confirmingWinner, setConfirmingWinner] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -62,6 +64,8 @@ export function RecognitionRanking({
     maxTotalScore: number;
     ranked: RankedPersonDTO[];
     canConfirm: boolean;
+    missingCount?: number;
+    totalEligible?: number;
     confirmedPodium: ConfirmedPodiumEntry[];
   }) => {
     setMonth(d.month);
@@ -69,6 +73,8 @@ export function RecognitionRanking({
     setMaxTotalScore(d.maxTotalScore);
     setRanked(d.ranked);
     setCanConfirm(d.canConfirm);
+    setMissingCount(d.missingCount ?? 0);
+    setTotalEligible(d.totalEligible ?? 0);
     setConfirmedPodium(d.confirmedPodium);
   };
 
@@ -192,6 +198,17 @@ export function RecognitionRanking({
               <Trophy size={14} /> Confirmar Colaborador Destacado
             </button>
           )}
+        </div>
+      )}
+
+      {/* Confirmado 2026-08-06: mientras falte gente por calificar este mes
+          (líderes o su equipo), no se puede confirmar el podio — se explica
+          cuántos faltan en vez de dejar el botón siempre disponible. Solo
+          aplica a la vista general del admin, que es donde vive "confirmar". */}
+      {!loading && scope === "admin" && !deptId && confirmedPodium.length === 0 && !canConfirm && missingCount > 0 && (
+        <div className="bg-gold/10 border border-gold/35 rounded-md p-4 mb-5 text-[12.5px]" style={{ color: "#D9A441" }}>
+          Faltan {missingCount} de {totalEligible} colaboradores por calificar este mes — la confirmación se
+          habilita automáticamente cuando todos estén evaluados.
         </div>
       )}
 
