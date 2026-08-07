@@ -486,26 +486,43 @@ async function getMissingEvaluatees(evaluatorIsAdmin: boolean, leaderDeptId: str
 
 // One per leader (any department) — Bryan/Nairoby/Daniel/etc. all evaluate
 // their own team monthly, regardless of what other pending items they have.
+// Fix confirmado 2026-08-07: antes solo miraba el mes ACTUAL, así que en
+// cuanto el calendario cambiaba de mes, un mes anterior que se quedó
+// incompleto (ej. julio sin calificar todavía, ya en agosto) dejaba de
+// avisar para siempre — nunca se marcaba "atrasado", simplemente
+// desaparecía del radar del líder. Ahora revisa el mes anterior primero (si
+// su plazo ya venció, siempre es más urgente) y el actual después (solo
+// dentro de la ventana de aviso previo al plazo) — mismo patrón de dos
+// meses que ya usa getRecognitionAdminPendingItem más abajo.
 async function getRecognitionLeaderPendingItem(leaderDeptId: string, href: string): Promise<PendingItem | null> {
-  const month = currentMonthStr();
-  const deadline = evaluationDeadline(month);
   const now = nowInEcuador();
-  const headsUpStart = new Date(deadline.getTime() - RECOGNITION_LEADER_HEADS_UP_DAYS * 86400000);
-  if (now < headsUpStart) return null;
+  const cur = currentMonthStr();
+  const prev = prevMonthStr(cur);
 
-  const missing = await getMissingEvaluatees(false, leaderDeptId, month);
-  if (missing.length === 0) return null;
+  for (const month of [prev, cur]) {
+    const deadline = evaluationDeadline(month);
+    if (month === cur) {
+      const headsUpStart = new Date(deadline.getTime() - RECOGNITION_LEADER_HEADS_UP_DAYS * 86400000);
+      if (now < headsUpStart) continue;
+    } else if (now < deadline) {
+      continue;
+    }
 
-  const overdue = now >= deadline;
-  const names = missing.slice(0, 3).map((u) => u.name).join(", ") + (missing.length > 3 ? ` y ${missing.length - 3} más` : "");
-  return {
-    type: "colaborador_del_mes",
-    icon: "🏆",
-    label: "Colaborador del mes — calificar a tu equipo",
-    meta: `Faltan ${missing.length}: ${names} · ${formatMonthLabel(month)}${overdue ? " · atrasado" : ""}`,
-    overdue,
-    href,
-  };
+    const missing = await getMissingEvaluatees(false, leaderDeptId, month);
+    if (missing.length === 0) continue;
+
+    const overdue = now >= deadline;
+    const names = missing.slice(0, 3).map((u) => u.name).join(", ") + (missing.length > 3 ? ` y ${missing.length - 3} más` : "");
+    return {
+      type: "colaborador_del_mes",
+      icon: "🏆",
+      label: "Colaborador del mes — calificar a tu equipo",
+      meta: `Faltan ${missing.length}: ${names} · ${formatMonthLabel(month)}${overdue ? " · atrasado" : ""}`,
+      overdue,
+      href,
+    };
+  }
+  return null;
 }
 
 // Para el admin — a diferencia del resto de "Pendientes de esta semana"
