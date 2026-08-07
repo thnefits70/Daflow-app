@@ -143,19 +143,31 @@ function evaluationHardDeadline(month: string): Date {
 
 export type RecognitionLockout = { month: string; deadline: string };
 
-// Confirmado 2026-08-07: si al día de hoy ya venció el plazo duro (día 5 del
-// mes siguiente) para el mes incompleto más reciente de este evaluador
-// (líder o admin), toda la cuenta queda bloqueada — solo puede calificar,
-// nada más — hasta que se ponga al día. Se apoya en
-// getEarliestIncompleteMonthBefore (que ya recorre hacia atrás desde el mes
-// actual) para encontrar ese mes.
+// Fix confirmado 2026-08-07: bug real — la primera versión reusaba
+// getEarliestIncompleteMonthBefore, que recorre hacia atrás hasta el mes más
+// viejo con CUALQUIER registro para el grupo (el "genesis"). Eso significa
+// que un hueco viejo (ej. un líder que todavía no existía o no se evaluó en
+// un mes de hace tiempo, antes de que esta metodología se aplicara en serio)
+// bloqueaba para siempre, aunque el mes que de verdad importa (el anterior
+// al actual) ya estuviera completo — pasó de verdad: julio ya estaba
+// calificado para los 5 líderes pero igual bloqueaba por un mes anterior a
+// julio. El bloqueo SOLO debe mirar el mes inmediatamente anterior al
+// actual — nunca más atrás — para no arrastrar huecos históricos.
 export async function getRecognitionLockout(evaluatorIsAdmin: boolean, leaderDeptId: string | null): Promise<RecognitionLockout | null> {
   const now = nowInEcuador();
-  const incompleteMonth = await getEarliestIncompleteMonthBefore(evaluatorIsAdmin, leaderDeptId, currentMonthStr());
-  if (!incompleteMonth) return null;
-  const deadline = evaluationHardDeadline(incompleteMonth);
+  const month = prevMonthStr(currentMonthStr());
+  const deadline = evaluationHardDeadline(month);
   if (now <= deadline) return null;
-  return { month: incompleteMonth, deadline: deadline.toISOString() };
+
+  const where = evaluatorIsAdmin
+    ? { isLeader: true as const, isActive: true, excludeFromRecognition: false }
+    : { deptId: leaderDeptId!, isLeader: false as const, isActive: true, excludeFromRecognition: false };
+  const cohort = await prisma.user.findMany({ where, select: { id: true } });
+  if (cohort.length === 0) return null;
+
+  const done = await prisma.monthlyEvaluationSummary.count({ where: { month, evaluateeId: { in: cohort.map((u) => u.id) } } });
+  if (done >= cohort.length) return null;
+  return { month, deadline: deadline.toISOString() };
 }
 
 // Company work week is Mon-Sat (confirmed 2026-07-20) — only Sunday and
