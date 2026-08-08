@@ -75,6 +75,20 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(rows);
   }
 
+  // Confirmado 2026-08-08: "Auditoría" — historial completo de todo lo que
+  // ya se confirmó recibido en bodega, exclusivo del admin, puramente de
+  // solo lectura (ninguna acción se hace desde esta vista). Se ordena por
+  // fecha de confirmación de recepción, la más reciente primero.
+  if (view === "audit") {
+    if (session.user.role !== "admin") return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+    const rows = await prisma.purchaseRequest.findMany({
+      where: { status: "RECEIVED" },
+      orderBy: { receipt: { confirmedAt: "desc" } },
+      include: requestInclude,
+    });
+    return NextResponse.json(rows);
+  }
+
   // "mine" — lo que yo mismo pedí, para seguir el avance de mi solicitud.
   if (!(await canSubmitPurchaseRequests())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
   const isAdmin = session.user.role === "admin";

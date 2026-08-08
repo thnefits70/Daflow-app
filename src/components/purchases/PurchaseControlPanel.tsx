@@ -8,8 +8,9 @@ import { PurchaseReceivingPanel } from "./PurchaseReceivingPanel";
 import { PurchaseInvoicingPanel } from "./PurchaseInvoicingPanel";
 import { PurchasePriceExplorer } from "./PurchasePriceExplorer";
 import { PurchaseUrgentReportsPanel } from "./PurchaseUrgentReportsPanel";
+import { PurchaseAuditPanel } from "./PurchaseAuditPanel";
 
-type Tab = "solicitar" | "mias" | "comparar" | "aprobacion" | "inventario" | "finanzas" | "urgentes";
+type Tab = "solicitar" | "mias" | "comparar" | "aprobacion" | "inventario" | "finanzas" | "urgentes" | "auditoria";
 
 // Confirmado 2026-07-30: una sola pantalla para todo el módulo — las
 // pestañas que ve cada persona dependen de lo que puede hacer (admin ve
@@ -37,6 +38,9 @@ export function PurchaseControlPanel({
     ...(canSubmit || canReview ? [{ key: "urgentes" as Tab, label: "Reportes urgentes" }] : []),
     ...(canReceive ? [{ key: "inventario" as Tab, label: "Inventario" }] : []),
     ...(canInvoice ? [{ key: "finanzas" as Tab, label: "Finanzas" }] : []),
+    // Confirmado 2026-08-08: exclusivo del admin — historial de solo lectura
+    // de todo lo confirmado recibido, para auditar sin poder editar nada.
+    ...(isAdmin ? [{ key: "auditoria" as Tab, label: "Auditoría" }] : []),
   ];
   const [tab, setTab] = useState<Tab>(tabs[0]?.key ?? "solicitar");
 
@@ -77,6 +81,7 @@ export function PurchaseControlPanel({
       {tab === "urgentes" && <PurchaseUrgentReportsPanel isAdmin={isAdmin} />}
       {tab === "inventario" && <PurchaseReceivingPanel />}
       {tab === "finanzas" && <PurchaseInvoicingPanel />}
+      {tab === "auditoria" && <PurchaseAuditPanel />}
     </div>
   );
 }
