@@ -48,11 +48,13 @@ type Draft = {
   shippingPaymentMethod: "TRANSFER" | "PETTY_CASH";
   shippingPaymentTiming: "WITH_PURCHASE" | "ON_DELIVERY";
   justification: string;
-  // Confirmado 2026-08-07: presente solo cuando el borrador viene de
-  // "Corregir y reenviar" en Mis solicitudes — nextAttemptNumber es solo
-  // informativo (el servidor recalcula el real); resubmittedFromGroupId sí
-  // se manda tal cual en el POST.
-  resubmittedFromGroupId?: string;
+  // Confirmado 2026-08-08: cambio de política — "Corregir y reenviar" ya NO
+  // crea una solicitud nueva; corrige la MISMA (mismo groupId/código SC-XXX)
+  // en su lugar. editingGroupId presente = el envío va a
+  // /api/purchase-requests/group/{editingGroupId}/resubmit en vez de crear
+  // una nueva. nextAttemptNumber es solo informativo para el aviso de arriba
+  // (el servidor recalcula el real).
+  editingGroupId?: string;
   nextAttemptNumber?: number;
 };
 
@@ -139,7 +141,7 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
 
   const [hydrated, setHydrated] = useState(false);
   const [draftRestored, setDraftRestored] = useState(false);
-  const [resubmittedFromGroupId, setResubmittedFromGroupId] = useState<string | null>(null);
+  const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
   const [resubmitAttemptHint, setResubmitAttemptHint] = useState<number | null>(null);
 
   // Confirmado 2026-08-06: al elegir un producto, además del mínimo/promedio/
@@ -216,7 +218,7 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
         setShippingPaymentMethod(d.shippingPaymentMethod ?? "TRANSFER");
         setShippingPaymentTiming(d.shippingPaymentTiming ?? "WITH_PURCHASE");
         setJustification(d.justification ?? "");
-        setResubmittedFromGroupId(d.resubmittedFromGroupId ?? null);
+        setEditingGroupId(d.editingGroupId ?? null);
         setResubmitAttemptHint(d.nextAttemptNumber ?? null);
         restoredLines.forEach((l, i) => { if (l.catalogItem) { fetchLineStats(i, l.catalogItem.id); fetchSupplierComparison(i, l.catalogItem.id); } });
         setDraftRestored(draftHasContent(d));
@@ -244,7 +246,7 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
       shippingPaymentMethod,
       shippingPaymentTiming,
       justification,
-      resubmittedFromGroupId: resubmittedFromGroupId ?? undefined,
+      editingGroupId: editingGroupId ?? undefined,
       nextAttemptNumber: resubmitAttemptHint ?? undefined,
     };
     if (draftHasContent(draft)) {
@@ -252,7 +254,7 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
     } else {
       localStorage.removeItem(DRAFT_KEY);
     }
-  }, [hydrated, lines, supplier, bankAccountId, quoteImageUrl, verifyResult, manualCodeConfirm, purchaseOrderUrl, shippingIncluded, carrier, carrierBankAccountId, shippingCostTotal, shippingPaymentMethod, shippingPaymentTiming, justification, resubmittedFromGroupId, resubmitAttemptHint]);
+  }, [hydrated, lines, supplier, bankAccountId, quoteImageUrl, verifyResult, manualCodeConfirm, purchaseOrderUrl, shippingIncluded, carrier, carrierBankAccountId, shippingCostTotal, shippingPaymentMethod, shippingPaymentTiming, justification, editingGroupId, resubmitAttemptHint]);
 
   function resetForm() {
     setLines([emptyLine()]);
@@ -273,7 +275,7 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
     setShippingPaymentTiming("WITH_PURCHASE");
     setJustification("");
     setDraftRestored(false);
-    setResubmittedFromGroupId(null);
+    setEditingGroupId(null);
     setResubmitAttemptHint(null);
   }
 
@@ -467,35 +469,45 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
     }
     setBusy(true);
     setErr("");
-    const res = await fetch("/api/purchase-requests", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        items: lines.map((l) => ({ catalogItemId: l.catalogItem!.id, quantity: Number(l.quantity), unitCost: effectiveLineUnitCost(l) })),
-        supplierId: supplier.id,
-        bankAccountId: bankAccountId ?? (supplier.bankAccounts ?? [])[0]?.id ?? null,
-        quoteImageUrl,
-        quoteReadTotal: verifyResult?.readTotal ?? null,
-        quoteReferenceCode: verifyResult?.referenceCodeFound ?? null,
-        purchaseOrderUrl,
-        deptId,
-        shippingIncluded,
-        carrierId: shippingIncluded ? null : carrier?.id,
-        shippingCostTotal: shippingIncluded ? null : Number(shippingCostTotal) || null,
-        shippingPaymentMethod: shippingIncluded ? null : shippingPaymentMethod,
-        shippingPaymentTiming: shippingIncluded ? null : shippingPaymentTiming,
-        carrierBankAccountId: shippingIncluded ? null : carrierBankAccountId,
-        justification: needsJustification ? justification.trim() : null,
-        resubmittedFromGroupId: resubmittedFromGroupId ?? undefined,
-      }),
-    });
+    const body = {
+      items: lines.map((l) => ({ catalogItemId: l.catalogItem!.id, quantity: Number(l.quantity), unitCost: effectiveLineUnitCost(l) })),
+      supplierId: supplier.id,
+      bankAccountId: bankAccountId ?? (supplier.bankAccounts ?? [])[0]?.id ?? null,
+      quoteImageUrl,
+      quoteReadTotal: verifyResult?.readTotal ?? null,
+      quoteReferenceCode: verifyResult?.referenceCodeFound ?? null,
+      purchaseOrderUrl,
+      shippingIncluded,
+      carrierId: shippingIncluded ? null : carrier?.id,
+      shippingCostTotal: shippingIncluded ? null : Number(shippingCostTotal) || null,
+      shippingPaymentMethod: shippingIncluded ? null : shippingPaymentMethod,
+      shippingPaymentTiming: shippingIncluded ? null : shippingPaymentTiming,
+      carrierBankAccountId: shippingIncluded ? null : carrierBankAccountId,
+      justification: needsJustification ? justification.trim() : null,
+    };
+    // Confirmado 2026-08-08: cambio de política — corregir una solicitud
+    // rechazada YA NO crea una nueva (eso hacía crecer la lista con
+    // duplicados del mismo pedido, ej. SC-004/005/006 del mismo producto).
+    // Ahora corrige la MISMA en su lugar: mismo groupId y mismo código
+    // SC-XXX, el servidor solo incrementa attemptNumber.
+    const res = editingGroupId
+      ? await fetch(`/api/purchase-requests/group/${editingGroupId}/resubmit`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        })
+      : await fetch("/api/purchase-requests", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...body, deptId }),
+        });
     setBusy(false);
     const data = await res.json().catch(() => null);
     if (!res.ok) {
       setErr(data?.error ?? "No se pudo enviar la solicitud.");
       return;
     }
-    setToast("✅ Solicitud enviada — te llegará una notificación cuando se apruebe.");
+    setToast(editingGroupId ? "✅ Solicitud corregida y reenviada — te llegará una notificación cuando se apruebe." : "✅ Solicitud enviada — te llegará una notificación cuando se apruebe.");
     localStorage.removeItem(DRAFT_KEY);
     resetForm();
     router.refresh();
@@ -503,10 +515,10 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
 
   return (
     <div className="bg-surface border border-rule rounded-md p-4.5">
-      {resubmittedFromGroupId && (
+      {editingGroupId && (
         <div className="bg-gold/10 border border-gold/35 rounded-md px-3.5 py-2.5 mb-4 text-[12.5px]" style={{ color: "#D9A441" }}>
           <AlertTriangle size={14} className="inline mr-1.5 -mt-0.5" />
-          Estás corrigiendo una solicitud rechazada{resubmitAttemptHint ? ` — este será tu ${resubmitAttemptHint === 2 ? "2do" : resubmitAttemptHint === 3 ? "3er" : `${resubmitAttemptHint}to`} intento` : ""}. Revisa qué faltaba antes de enviar de nuevo.
+          Estás corrigiendo esta misma solicitud rechazada{resubmitAttemptHint ? ` — este será tu ${resubmitAttemptHint === 2 ? "2do" : resubmitAttemptHint === 3 ? "3er" : `${resubmitAttemptHint}to`} intento` : ""}. No se crea una solicitud nueva, se corrige la misma. Revisa qué faltaba antes de enviar de nuevo.
         </div>
       )}
       {draftRestored && (

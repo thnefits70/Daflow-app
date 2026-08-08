@@ -4,30 +4,12 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { canSubmitPurchaseRequests, canConfirmPurchaseReceiving, canRegisterPurchaseInvoices } from "@/lib/guards";
-import { effectiveUnitCost, getCatalogItemPriceStats, getCatalogItemSupplierComparison, nextPurchaseRequestNumber } from "@/lib/purchases";
+import { checkPurchaseSubmission, purchaseSubmissionSchema, nextPurchaseRequestNumber, purchaseRequestInclude } from "@/lib/purchases";
 import { sendPushToOwner } from "@/lib/webPush";
 
-const bankAccountSelect = { id: true, bankName: true, bankAccountType: true, bankAccountNumber: true, bankAccountHolder: true, holderIdType: true, holderIdNumber: true };
-
-const requestInclude = {
-  catalogItem: { select: { id: true, name: true, photos: true } },
-  supplier: { select: { id: true, name: true, bankAccounts: { orderBy: { createdAt: "asc" as const } } } },
-  carrier: { select: { id: true, name: true, bankAccounts: { orderBy: { createdAt: "asc" as const } } } },
-  bankAccount: { select: bankAccountSelect },
-  carrierBankAccount: { select: bankAccountSelect },
-  bankAccountChangeRequestedBy: { select: { name: true } },
-  requestedBy: { select: { name: true } },
-  reviewedBy: { select: { name: true } },
-  paidBy: { select: { name: true } },
-  invoicedBy: { select: { name: true } },
-  shippingPaymentRequestedBy: { select: { name: true } },
-  shippingPaidBy: { select: { name: true } },
-  receipt: { include: { confirmedBy: { select: { name: true } } } },
-  urgentReports: { orderBy: { reportedAt: "desc" as const } },
-};
-
 // status: "approval" (bandeja admin), "receiving" (Inventario), "invoicing"
-// (Finanzas), "mine" (lo que yo pedí) — cada rol ve solo su propia cola.
+// (Finanzas), "audit" (admin, historial de solo lectura), "mine" (lo que yo
+// pedí) — cada rol ve solo su propia cola.
 export async function GET(req: NextRequest) {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "No autorizado." }, { status: 401 });
@@ -39,7 +21,7 @@ export async function GET(req: NextRequest) {
     const rows = await prisma.purchaseRequest.findMany({
       where: { status: "PENDING_APPROVAL" },
       orderBy: { requestedAt: "asc" },
-      include: requestInclude,
+      include: purchaseRequestInclude,
     });
     return NextResponse.json(rows);
   }
@@ -60,7 +42,7 @@ export async function GET(req: NextRequest) {
     const rows = await prisma.purchaseRequest.findMany({
       where: { groupId: { in: groupIds } },
       orderBy: { requestedAt: "asc" },
-      include: requestInclude,
+      include: purchaseRequestInclude,
     });
     return NextResponse.json(rows);
   }
@@ -70,7 +52,7 @@ export async function GET(req: NextRequest) {
     const rows = await prisma.purchaseRequest.findMany({
       where: { status: { in: ["APPROVED", "PAID", "RECEIVED"] } },
       orderBy: [{ status: "asc" }, { requestedAt: "desc" }],
-      include: requestInclude,
+      include: purchaseRequestInclude,
     });
     return NextResponse.json(rows);
   }
@@ -84,7 +66,7 @@ export async function GET(req: NextRequest) {
     const rows = await prisma.purchaseRequest.findMany({
       where: { status: "RECEIVED" },
       orderBy: { receipt: { confirmedAt: "desc" } },
-      include: requestInclude,
+      include: purchaseRequestInclude,
     });
     return NextResponse.json(rows);
   }
@@ -95,27 +77,11 @@ export async function GET(req: NextRequest) {
   const rows = await prisma.purchaseRequest.findMany({
     where: isAdmin ? {} : { requestedById: session.user.id },
     orderBy: { requestedAt: "desc" },
-    include: requestInclude,
+    include: purchaseRequestInclude,
     take: 50,
   });
 
-  // Confirmado 2026-08-08: una solicitud rechazada ya reenviada (existe un
-  // groupId nuevo que la referencia como resubmittedFromGroupId) no se puede
-  // volver a reenviar — así el historial de intentos queda limpio, cada
-  // rechazo tiene un único reenvío. La ruta POST hace la misma validación
-  // como defensa por si alguien llama a la API directo.
-  const rejectedGroupIds = [...new Set(rows.filter((r) => r.status === "REJECTED").map((r) => r.groupId))];
-  const supersededRows = rejectedGroupIds.length > 0
-    ? await prisma.purchaseRequest.findMany({
-        where: { resubmittedFromGroupId: { in: rejectedGroupIds } },
-        select: { resubmittedFromGroupId: true },
-        distinct: ["resubmittedFromGroupId"],
-      })
-    : [];
-  const supersededSet = new Set(supersededRows.map((r) => r.resubmittedFromGroupId));
-  const rowsWithFlag = rows.map((r) => ({ ...r, hasBeenResubmitted: r.status === "REJECTED" && supersededSet.has(r.groupId) }));
-
-  return NextResponse.json(rowsWithFlag);
+  return NextResponse.json(rows);
 }
 
 // Confirmado 2026-07-31: una cotización suele traer varios productos — se
@@ -123,39 +89,11 @@ export async function GET(req: NextRequest) {
 // crea una fila PurchaseRequest POR PRODUCTO (conserva intacta toda la
 // lógica de historial de precio/umbral por insumo), todas con el mismo
 // groupId para que se vean, aprueben y paguen como una sola compra.
-const lineSchema = z.object({
-  catalogItemId: z.string().min(1),
-  quantity: z.number().int().positive(),
-  unitCost: z.number().positive(),
-});
-
-const createSchema = z.object({
-  items: z.array(lineSchema).min(1, "Agrega al menos un producto."),
-  supplierId: z.string().min(1),
-  bankAccountId: z.string().min(1).nullable().optional(),
-  quoteImageUrl: z.string().url(),
-  quoteReadTotal: z.number().nullable(),
-  quoteReferenceCode: z.string().trim().nullable().optional(),
-  purchaseOrderUrl: z.string().url().nullable().optional(),
-  shippingIncluded: z.boolean(),
-  carrierId: z.string().min(1).nullable().optional(),
-  shippingCostTotal: z.number().nonnegative().nullable().optional(),
-  shippingPaymentMethod: z.enum(["TRANSFER", "PETTY_CASH"]).nullable().optional(),
-  // Confirmado 2026-08-03: cuando el flete se cobra aparte, se puede pagar
-  // junto con la compra (como antes) o dejarlo pendiente hasta que llegue la
-  // mercadería — la cuenta del transportista es opcional aquí porque algunos
-  // solo la dan al entregar; se puede agregar/elegir después.
-  shippingPaymentTiming: z.enum(["WITH_PURCHASE", "ON_DELIVERY"]).nullable().optional(),
-  carrierBankAccountId: z.string().min(1).nullable().optional(),
-  justification: z.string().trim().nullable().optional(),
+const createSchema = purchaseSubmissionSchema.extend({
   // El admin no pertenece a ningún departamento (login sin deptId) — cuando
   // solicita desde la pestaña de compras de una página de departamento
   // (siempre "Control de Compras"), el cliente manda ESE id explícito.
   deptId: z.string().min(1).nullable().optional(),
-  // Confirmado 2026-08-07: reenvío de una solicitud rechazada — el groupId
-  // anterior, nunca confiado a ciegas (se valida abajo que sea del mismo
-  // usuario y esté REJECTED antes de encadenar attemptNumber).
-  resubmittedFromGroupId: z.string().min(1).optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -183,144 +121,21 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "No se pudo determinar el departamento de la solicitud — vuelve a intentarlo desde Control de Compras." }, { status: 400 });
   }
 
-  if (!d.shippingIncluded && !d.carrierId) {
-    return NextResponse.json({ error: "Falta el transportista, ya que el envío no está incluido." }, { status: 400 });
-  }
-
-  // Confirmado 2026-08-07: bug real — si el proveedor no tenía NINGUNA cuenta
-  // registrada al momento de la solicitud, bankAccountId se guardaba en null
-  // sin ningún aviso, y quien tenía que pagar no sabía a qué cuenta
-  // transferir. Ahora es obligatorio elegir una cuenta real del proveedor —
-  // se bloquea si no tiene ninguna, o si tiene varias y no eligió cuál.
-  const supplierBankAccounts = await prisma.supplierBankAccount.findMany({ where: { supplierId: d.supplierId }, select: { id: true } });
-  if (supplierBankAccounts.length === 0) {
-    return NextResponse.json({ error: "Este proveedor no tiene ninguna cuenta bancaria registrada — agrégale una cuenta antes de enviar la solicitud." }, { status: 400 });
-  }
-  if (!d.bankAccountId) {
-    if (supplierBankAccounts.length > 1) {
-      return NextResponse.json({ error: "Este proveedor tiene varias cuentas bancarias — elige a cuál se le paga." }, { status: 400 });
-    }
-  } else if (!supplierBankAccounts.some((a) => a.id === d.bankAccountId)) {
-    return NextResponse.json({ error: "La cuenta bancaria elegida no pertenece a este proveedor." }, { status: 400 });
-  }
-
-  // Confirmado 2026-08-07: reenvío de una solicitud rechazada — solo se
-  // encadena si el groupId anterior es de verdad de esta misma persona y
-  // está REJECTED (nunca confiar en lo que manda el cliente a ciegas).
-  // Confirmado 2026-08-08: y solo si esa rechazada TODAVÍA no fue reenviada
-  // antes — cada rechazo tiene un único reenvío, para que el historial de
-  // intentos quede limpio (esto es la defensa server-side del mismo chequeo
-  // que ya oculta el botón "Corregir y reenviar" en el cliente).
-  let attemptNumber = 1;
-  if (d.resubmittedFromGroupId) {
-    const [prevRows, alreadyResubmitted] = await Promise.all([
-      prisma.purchaseRequest.findMany({
-        where: { groupId: d.resubmittedFromGroupId },
-        select: { status: true, requestedById: true, attemptNumber: true },
-      }),
-      prisma.purchaseRequest.findFirst({ where: { resubmittedFromGroupId: d.resubmittedFromGroupId }, select: { id: true } }),
-    ]);
-    if (alreadyResubmitted) {
-      return NextResponse.json({ error: "Esa solicitud rechazada ya fue reenviada antes — revisa el intento más reciente en Mis solicitudes." }, { status: 409 });
-    }
-    const prevRow = prevRows[0];
-    const ownsPrev = isAdmin ? prevRow?.requestedById === null : prevRow?.requestedById === session.user.id;
-    if (prevRow && prevRow.status === "REJECTED" && ownsPrev) {
-      attemptNumber = Math.max(...prevRows.map((r) => r.attemptNumber)) + 1;
-    }
-  }
-
-  const groupTotal = d.items.reduce((sum, it) => sum + it.quantity * it.unitCost, 0);
-  const matches = d.quoteReadTotal !== null && Math.abs(d.quoteReadTotal - groupTotal) < 0.01;
-  const manuallyConfirmed = !!d.quoteReferenceCode;
-  if (!matches && !manuallyConfirmed) {
-    return NextResponse.json({ error: "La cotización no coincide con lo escrito — verifícala de nuevo antes de enviar." }, { status: 400 });
-  }
-  // Confirmado 2026-07-31: cuando la cotización solo trae un código de
-  // proveedor (no el nombre del producto), la orden de compra es obligatoria
-  // — es el único respaldo real de qué se está comprando y pagando.
-  if (manuallyConfirmed && !d.purchaseOrderUrl) {
-    return NextResponse.json(
-      { error: "La cotización solo trae un código, sin nombre de producto — sube la orden de compra como respaldo antes de enviar." },
-      { status: 400 }
-    );
-  }
-
-  // El envío se reparte proporcionalmente entre las líneas por cantidad,
-  // para que el costo efectivo por unidad de CADA producto siga incluyendo
-  // su parte del flete al compararlo contra su propio historial.
-  const totalQty = d.items.reduce((s, it) => s + it.quantity, 0);
-
-  let anyOverThreshold = false;
-  const lineChecks: { catalogItemName: string; effCost: number; last3Avg: number }[] = [];
-  for (const it of d.items) {
-    const stats = await getCatalogItemPriceStats(it.catalogItemId);
-    const lineShipping = d.shippingIncluded || !d.shippingCostTotal ? null : (d.shippingCostTotal * it.quantity) / totalQty;
-    const effCost = effectiveUnitCost({
-      unitCost: it.unitCost,
-      quantity: it.quantity,
-      shippingIncluded: d.shippingIncluded,
-      shippingCostTotal: lineShipping,
-    });
-    if (stats.last3Avg !== null && effCost > stats.last3Avg) {
-      anyOverThreshold = true;
-      const item = await prisma.purchaseCatalogItem.findUnique({ where: { id: it.catalogItemId }, select: { name: true } });
-      lineChecks.push({ catalogItemName: item?.name ?? "?", effCost, last3Avg: stats.last3Avg });
-    }
-  }
-  // Confirmado 2026-08-06: además de superar el historial de precio, si el
-  // proveedor elegido no es el más barato conocido para algún producto (y sí
-  // existe uno más barato), también hace falta justificar por qué se compra
-  // ahí — ej. el más barato ya no tiene stock. Mismo campo `justification`,
-  // ambos motivos se combinan en un solo mensaje si aplican los dos.
-  let anySupplierNotCheapest = false;
-  const supplierChecks: { catalogItemName: string; cheapestSupplierName: string; cheapestPrice: number }[] = [];
-  for (const it of d.items) {
-    const comparison = await getCatalogItemSupplierComparison(it.catalogItemId);
-    if (comparison.length === 0) continue;
-    const cheapest = comparison[0];
-    if (cheapest.supplierId !== d.supplierId) {
-      anySupplierNotCheapest = true;
-      const item = await prisma.purchaseCatalogItem.findUnique({ where: { id: it.catalogItemId }, select: { name: true } });
-      supplierChecks.push({ catalogItemName: item?.name ?? "?", cheapestSupplierName: cheapest.supplierName, cheapestPrice: cheapest.latest });
-    }
-  }
-
-  if ((anyOverThreshold || anySupplierNotCheapest) && !d.justification?.trim()) {
-    const parts: string[] = [];
-    if (lineChecks.length > 0) {
-      const detail = lineChecks.map((l) => `${l.catalogItemName} ($${l.effCost.toFixed(2)} vs. $${l.last3Avg.toFixed(2)})`).join(", ");
-      parts.push(`Uno o más productos superan el promedio de las últimas compras (${detail})`);
-    }
-    if (supplierChecks.length > 0) {
-      const detail = supplierChecks.map((s) => `${s.catalogItemName} — ${s.cheapestSupplierName} lo vendió más barato ($${s.cheapestPrice.toFixed(2)})`).join(", ");
-      parts.push(`Hay un proveedor más barato para uno o más productos (${detail})`);
-    }
-    return NextResponse.json({ error: `${parts.join(" · ")} — agrega una justificación.` }, { status: 400 });
-  }
-
-  const catalogItems = await prisma.purchaseCatalogItem.findMany({
-    where: { id: { in: d.items.map((it) => it.catalogItemId) } },
-    select: { id: true, name: true },
-  });
-  if (catalogItems.length !== new Set(d.items.map((it) => it.catalogItemId)).size) {
-    return NextResponse.json({ error: "Uno o más productos, mercaderías o insumos no fueron encontrados." }, { status: 404 });
-  }
-  const nameById = new Map(catalogItems.map((c) => [c.id, c.name]));
+  const check = await checkPurchaseSubmission(d);
+  if (!check.ok) return NextResponse.json({ error: check.error }, { status: check.status });
 
   const groupId = randomUUID();
   const requestNumber = await nextPurchaseRequestNumber();
-  const requests = await prisma.$transaction(
-    d.items.map((it) => {
-      const lineShipping = d.shippingIncluded || !d.shippingCostTotal ? null : (d.shippingCostTotal * it.quantity) / totalQty;
-      return prisma.purchaseRequest.create({
+  await prisma.$transaction(
+    d.items.map((it, idx) =>
+      prisma.purchaseRequest.create({
         data: {
           groupId,
           requestNumber,
           deptId: effectiveDeptId,
           catalogItemId: it.catalogItemId,
           supplierId: d.supplierId,
-          bankAccountId: d.bankAccountId || supplierBankAccounts[0].id,
+          bankAccountId: check.resolvedBankAccountId,
           quantity: it.quantity,
           unitCost: it.unitCost,
           totalCost: it.quantity * it.unitCost,
@@ -331,30 +146,28 @@ export async function POST(req: NextRequest) {
           quoteConfirmedAt: new Date(),
           shippingIncluded: d.shippingIncluded,
           carrierId: d.shippingIncluded ? null : d.carrierId,
-          shippingCostTotal: d.shippingIncluded ? null : lineShipping,
+          shippingCostTotal: d.shippingIncluded ? null : check.lineShippingByIndex[idx] ?? null,
           shippingPaymentMethod: d.shippingIncluded ? null : d.shippingPaymentMethod,
           shippingPaymentTiming: d.shippingIncluded ? null : (d.shippingPaymentTiming ?? "WITH_PURCHASE"),
           carrierBankAccountId: d.shippingIncluded ? null : d.carrierBankAccountId || null,
-          justification: (anyOverThreshold || anySupplierNotCheapest) ? d.justification!.trim() : null,
+          justification: (check.anyOverThreshold || check.anySupplierNotCheapest) ? d.justification!.trim() : null,
           status: "PENDING_APPROVAL",
           requestedById: isAdmin ? null : session.user.id,
           requestedByDeptId: effectiveDeptId,
-          attemptNumber,
-          resubmittedFromGroupId: attemptNumber > 1 ? d.resubmittedFromGroupId : null,
         },
-      });
-    })
+      })
+    )
   );
 
   // Confirmado 2026-07-30: push en tiempo real al admin, aparte de la
   // notificación diaria de Pendientes — apenas se envía la solicitud.
-  const summary = d.items.length === 1 ? nameById.get(d.items[0].catalogItemId) : `${d.items.length} productos`;
+  const summary = d.items.length === 1 ? check.nameById.get(d.items[0].catalogItemId) : `${d.items.length} productos`;
   await sendPushToOwner("admin", {
-    title: anyOverThreshold ? "🔴 Nueva solicitud — precio por encima del historial" : "Nueva solicitud de compra",
-    body: `${summary} · $${groupTotal.toFixed(2)}`,
+    title: check.anyOverThreshold ? "🔴 Nueva solicitud — precio por encima del historial" : "Nueva solicitud de compra",
+    body: `${summary} · $${check.groupTotal.toFixed(2)}`,
     url: "/admin",
   }).catch(() => null);
 
-  const full = await prisma.purchaseRequest.findMany({ where: { groupId }, include: requestInclude });
+  const full = await prisma.purchaseRequest.findMany({ where: { groupId }, include: purchaseRequestInclude });
   return NextResponse.json(full, { status: 201 });
 }

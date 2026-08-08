@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import type { PurchaseRequestStatus } from "@/generated/prisma/client";
 
@@ -186,3 +187,167 @@ export async function getStalePurchaseRequestPushes(): Promise<StalePurchaseRequ
 
   return pushes;
 }
+
+// Confirmado 2026-07-31: una cotización suele traer varios productos — se
+// manda un arreglo `items`, todos comparten proveedor/cotización/envío.
+export const purchaseLineSchema = z.object({
+  catalogItemId: z.string().min(1),
+  quantity: z.number().int().positive(),
+  unitCost: z.number().positive(),
+});
+
+// Confirmado 2026-08-08: compartido entre crear una solicitud nueva
+// (POST /api/purchase-requests) y corregir una rechazada en su lugar
+// (POST /api/purchase-requests/group/[groupId]/resubmit) — ambos flujos
+// deben validar EXACTAMENTE lo mismo (cuenta bancaria obligatoria, cotización
+// vs. lo escrito, umbral de precio, proveedor más barato), así que la lógica
+// vive en un solo lugar en vez de duplicarse y arriesgar que diverjan.
+export const purchaseSubmissionSchema = z.object({
+  items: z.array(purchaseLineSchema).min(1, "Agrega al menos un producto."),
+  supplierId: z.string().min(1),
+  bankAccountId: z.string().min(1).nullable().optional(),
+  quoteImageUrl: z.string().url(),
+  quoteReadTotal: z.number().nullable(),
+  quoteReferenceCode: z.string().trim().nullable().optional(),
+  purchaseOrderUrl: z.string().url().nullable().optional(),
+  shippingIncluded: z.boolean(),
+  carrierId: z.string().min(1).nullable().optional(),
+  shippingCostTotal: z.number().nonnegative().nullable().optional(),
+  shippingPaymentMethod: z.enum(["TRANSFER", "PETTY_CASH"]).nullable().optional(),
+  shippingPaymentTiming: z.enum(["WITH_PURCHASE", "ON_DELIVERY"]).nullable().optional(),
+  carrierBankAccountId: z.string().min(1).nullable().optional(),
+  justification: z.string().trim().nullable().optional(),
+});
+
+export type PurchaseSubmissionData = z.infer<typeof purchaseSubmissionSchema>;
+
+export type PurchaseSubmissionCheck =
+  | {
+      ok: true;
+      resolvedBankAccountId: string;
+      anyOverThreshold: boolean;
+      anySupplierNotCheapest: boolean;
+      nameById: Map<string, string>;
+      groupTotal: number;
+      // Indexado por posición en d.items, NUNCA por catalogItemId — el mismo
+      // producto puede aparecer en dos líneas distintas de una misma
+      // solicitud (ej. dos cotizaciones de precio diferente), y un Map por
+      // id perdería el flete de una de las dos.
+      lineShippingByIndex: (number | null)[];
+    }
+  | { ok: false; error: string; status: number };
+
+export async function checkPurchaseSubmission(d: PurchaseSubmissionData): Promise<PurchaseSubmissionCheck> {
+  if (!d.shippingIncluded && !d.carrierId) {
+    return { ok: false, status: 400, error: "Falta el transportista, ya que el envío no está incluido." };
+  }
+
+  // Confirmado 2026-08-07: bug real — si el proveedor no tenía NINGUNA cuenta
+  // registrada, bankAccountId se guardaba en null sin ningún aviso. Ahora es
+  // obligatorio elegir una cuenta real del proveedor.
+  const supplierBankAccounts = await prisma.supplierBankAccount.findMany({ where: { supplierId: d.supplierId }, select: { id: true } });
+  if (supplierBankAccounts.length === 0) {
+    return { ok: false, status: 400, error: "Este proveedor no tiene ninguna cuenta bancaria registrada — agrégale una cuenta antes de enviar la solicitud." };
+  }
+  if (!d.bankAccountId) {
+    if (supplierBankAccounts.length > 1) {
+      return { ok: false, status: 400, error: "Este proveedor tiene varias cuentas bancarias — elige a cuál se le paga." };
+    }
+  } else if (!supplierBankAccounts.some((a) => a.id === d.bankAccountId)) {
+    return { ok: false, status: 400, error: "La cuenta bancaria elegida no pertenece a este proveedor." };
+  }
+  const resolvedBankAccountId = d.bankAccountId || supplierBankAccounts[0].id;
+
+  const groupTotal = d.items.reduce((sum, it) => sum + it.quantity * it.unitCost, 0);
+  const matches = d.quoteReadTotal !== null && Math.abs(d.quoteReadTotal - groupTotal) < 0.01;
+  const manuallyConfirmed = !!d.quoteReferenceCode;
+  if (!matches && !manuallyConfirmed) {
+    return { ok: false, status: 400, error: "La cotización no coincide con lo escrito — verifícala de nuevo antes de enviar." };
+  }
+  // Confirmado 2026-07-31: cuando la cotización solo trae un código de
+  // proveedor (no el nombre del producto), la orden de compra es obligatoria.
+  if (manuallyConfirmed && !d.purchaseOrderUrl) {
+    return {
+      ok: false,
+      status: 400,
+      error: "La cotización solo trae un código, sin nombre de producto — sube la orden de compra como respaldo antes de enviar.",
+    };
+  }
+
+  const totalQty = d.items.reduce((s, it) => s + it.quantity, 0);
+  const lineShippingByIndex: (number | null)[] = [];
+  let anyOverThreshold = false;
+  const lineChecks: { catalogItemName: string; effCost: number; last3Avg: number }[] = [];
+  for (const it of d.items) {
+    const stats = await getCatalogItemPriceStats(it.catalogItemId);
+    const lineShipping = d.shippingIncluded || !d.shippingCostTotal ? null : (d.shippingCostTotal * it.quantity) / totalQty;
+    lineShippingByIndex.push(lineShipping);
+    const effCost = effectiveUnitCost({ unitCost: it.unitCost, quantity: it.quantity, shippingIncluded: d.shippingIncluded, shippingCostTotal: lineShipping });
+    if (stats.last3Avg !== null && effCost > stats.last3Avg) {
+      anyOverThreshold = true;
+      const item = await prisma.purchaseCatalogItem.findUnique({ where: { id: it.catalogItemId }, select: { name: true } });
+      lineChecks.push({ catalogItemName: item?.name ?? "?", effCost, last3Avg: stats.last3Avg });
+    }
+  }
+  // Confirmado 2026-08-06: además de superar el historial de precio, si el
+  // proveedor elegido no es el más barato conocido, también hace falta
+  // justificar — mismo campo `justification`, ambos motivos se combinan.
+  let anySupplierNotCheapest = false;
+  const supplierChecks: { catalogItemName: string; cheapestSupplierName: string; cheapestPrice: number }[] = [];
+  for (const it of d.items) {
+    const comparison = await getCatalogItemSupplierComparison(it.catalogItemId);
+    if (comparison.length === 0) continue;
+    const cheapest = comparison[0];
+    if (cheapest.supplierId !== d.supplierId) {
+      anySupplierNotCheapest = true;
+      const item = await prisma.purchaseCatalogItem.findUnique({ where: { id: it.catalogItemId }, select: { name: true } });
+      supplierChecks.push({ catalogItemName: item?.name ?? "?", cheapestSupplierName: cheapest.supplierName, cheapestPrice: cheapest.latest });
+    }
+  }
+
+  if ((anyOverThreshold || anySupplierNotCheapest) && !d.justification?.trim()) {
+    const parts: string[] = [];
+    if (lineChecks.length > 0) {
+      const detail = lineChecks.map((l) => `${l.catalogItemName} ($${l.effCost.toFixed(2)} vs. $${l.last3Avg.toFixed(2)})`).join(", ");
+      parts.push(`Uno o más productos superan el promedio de las últimas compras (${detail})`);
+    }
+    if (supplierChecks.length > 0) {
+      const detail = supplierChecks.map((s) => `${s.catalogItemName} — ${s.cheapestSupplierName} lo vendió más barato ($${s.cheapestPrice.toFixed(2)})`).join(", ");
+      parts.push(`Hay un proveedor más barato para uno o más productos (${detail})`);
+    }
+    return { ok: false, status: 400, error: `${parts.join(" · ")} — agrega una justificación.` };
+  }
+
+  const catalogItems = await prisma.purchaseCatalogItem.findMany({
+    where: { id: { in: d.items.map((it) => it.catalogItemId) } },
+    select: { id: true, name: true },
+  });
+  if (catalogItems.length !== new Set(d.items.map((it) => it.catalogItemId)).size) {
+    return { ok: false, status: 404, error: "Uno o más productos, mercaderías o insumos no fueron encontrados." };
+  }
+  const nameById = new Map(catalogItems.map((c) => [c.id, c.name]));
+
+  return { ok: true, resolvedBankAccountId, anyOverThreshold, anySupplierNotCheapest, nameById, groupTotal, lineShippingByIndex };
+}
+
+const bankAccountSelect = { id: true, bankName: true, bankAccountType: true, bankAccountNumber: true, bankAccountHolder: true, holderIdType: true, holderIdNumber: true };
+
+// Include compartido por las rutas de solicitudes de compra (listar,
+// aprobar, recibir, facturar, auditar, corregir) — un solo lugar para no
+// tener 6 copias ligeramente distintas del mismo shape.
+export const purchaseRequestInclude = {
+  catalogItem: { select: { id: true, name: true, photos: true } },
+  supplier: { select: { id: true, name: true, bankAccounts: { orderBy: { createdAt: "asc" as const } } } },
+  carrier: { select: { id: true, name: true, bankAccounts: { orderBy: { createdAt: "asc" as const } } } },
+  bankAccount: { select: bankAccountSelect },
+  carrierBankAccount: { select: bankAccountSelect },
+  bankAccountChangeRequestedBy: { select: { name: true } },
+  requestedBy: { select: { name: true } },
+  reviewedBy: { select: { name: true } },
+  paidBy: { select: { name: true } },
+  invoicedBy: { select: { name: true } },
+  shippingPaymentRequestedBy: { select: { name: true } },
+  shippingPaidBy: { select: { name: true } },
+  receipt: { include: { confirmedBy: { select: { name: true } } } },
+  urgentReports: { orderBy: { reportedAt: "desc" as const } },
+};
