@@ -1335,8 +1335,13 @@ model PurchaseRequestUrgentReport {
   request   PurchaseRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
 
   damagedQty    Int @default(0)
+  // Confirmado 2026-08-08: "Faltante" queda solo para reportes viejos —
+  // ahora se reemplaza por "Diferente" (producto distinto al pedido, visible
+  // gracias a las fotos de referencia del catálogo que ahora se muestran al
+  // reportar). Nunca se borra el campo viejo para no perder el historial.
   missingQty    Int @default(0)
   incompleteQty Int @default(0)
+  differentQty  Int @default(0)
   description   String
   mediaUrls     String[]
 

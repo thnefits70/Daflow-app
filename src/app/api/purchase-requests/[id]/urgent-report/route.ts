@@ -8,16 +8,21 @@ import { isWithinCreditClaimWindow } from "@/lib/purchaseUrgent";
 
 const schema = z.object({
   damagedQty: z.number().int().nonnegative().default(0),
+  // Confirmado 2026-08-08: se mantiene aceptado por si queda algún cliente
+  // viejo en caché, pero el formulario actual ya no lo manda — reemplazado
+  // por differentQty.
   missingQty: z.number().int().nonnegative().default(0),
   incompleteQty: z.number().int().nonnegative().default(0),
+  differentQty: z.number().int().nonnegative().default(0),
   description: z.string().trim().min(1, "Describe brevemente qué pasó."),
   mediaUrls: z.array(z.string().url()).min(1, "Sube al menos una foto de evidencia.").max(4),
 });
 
-// Confirmado 2026-08-06: Daniel (líder de Inventario) desglosa la cantidad
-// por tipo (dañada/faltante/incompleta) y sube evidencia (mínimo 1 foto,
-// puede agregar 1 video) — el valor en disputa se calcula solo con el
-// costo real de la cotización, nunca un monto escrito a mano.
+// Confirmado 2026-08-06 (actualizado 2026-08-08): Daniel (líder de
+// Inventario) desglosa la cantidad por tipo (dañada/incompleta/diferente) y
+// sube evidencia (mínimo 1 foto, puede agregar 1 video) — el valor en
+// disputa se calcula solo con el costo real de la cotización, nunca un
+// monto escrito a mano.
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!(await canConfirmPurchaseReceiving()) || !session) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
@@ -27,9 +32,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const parsed = schema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Datos inválidos." }, { status: 400 });
 
-  const totalAffected = parsed.data.damagedQty + parsed.data.missingQty + parsed.data.incompleteQty;
+  const totalAffected = parsed.data.damagedQty + parsed.data.missingQty + parsed.data.incompleteQty + parsed.data.differentQty;
   if (totalAffected <= 0) {
-    return NextResponse.json({ error: "Ingresa al menos una cantidad afectada (dañada, faltante o incompleta)." }, { status: 400 });
+    return NextResponse.json({ error: "Ingresa al menos una cantidad afectada (dañada, incompleta o diferente)." }, { status: 400 });
   }
 
   const existing = await prisma.purchaseRequest.findUnique({ where: { id }, include: { catalogItem: { select: { name: true } } } });
@@ -45,6 +50,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       damagedQty: parsed.data.damagedQty,
       missingQty: parsed.data.missingQty,
       incompleteQty: parsed.data.incompleteQty,
+      differentQty: parsed.data.differentQty,
       description: parsed.data.description,
       mediaUrls: parsed.data.mediaUrls,
       reportedById: isAdmin ? null : session.user.id,

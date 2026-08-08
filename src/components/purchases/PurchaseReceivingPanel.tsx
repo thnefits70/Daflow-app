@@ -93,7 +93,7 @@ export function PurchaseReceivingPanel() {
 
   // Informar urgente — cantidades desglosadas por tipo + evidencia.
   const [urgentDamagedQty, setUrgentDamagedQty] = useState("");
-  const [urgentMissingQty, setUrgentMissingQty] = useState("");
+  const [urgentDifferentQty, setUrgentDifferentQty] = useState("");
   const [urgentIncompleteQty, setUrgentIncompleteQty] = useState("");
   const [urgentDesc, setUrgentDesc] = useState("");
   const [urgentMediaUrls, setUrgentMediaUrls] = useState<string[]>([]);
@@ -184,7 +184,7 @@ export function PurchaseReceivingPanel() {
   function openUrgent(id: string) {
     setUrgentId(id);
     setUrgentDamagedQty("");
-    setUrgentMissingQty("");
+    setUrgentDifferentQty("");
     setUrgentIncompleteQty("");
     setUrgentDesc("");
     setUrgentMediaUrls([]);
@@ -214,9 +214,9 @@ export function PurchaseReceivingPanel() {
 
   async function submitUrgent(id: string) {
     const damaged = Number(urgentDamagedQty) || 0;
-    const missing = Number(urgentMissingQty) || 0;
+    const different = Number(urgentDifferentQty) || 0;
     const incomplete = Number(urgentIncompleteQty) || 0;
-    if (damaged + missing + incomplete <= 0) {
+    if (damaged + different + incomplete <= 0) {
       setErr("Ingresa al menos una cantidad afectada.");
       return;
     }
@@ -233,7 +233,7 @@ export function PurchaseReceivingPanel() {
     const res = await fetch(`/api/purchase-requests/${id}/urgent-report`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ damagedQty: damaged, missingQty: missing, incompleteQty: incomplete, description: urgentDesc.trim(), mediaUrls: urgentMediaUrls }),
+      body: JSON.stringify({ damagedQty: damaged, differentQty: different, incompleteQty: incomplete, description: urgentDesc.trim(), mediaUrls: urgentMediaUrls }),
     });
     setBusy(false);
     const data = await res.json().catch(() => null);
@@ -378,7 +378,7 @@ export function PurchaseReceivingPanel() {
               {g.map((r) => {
                 const creditDeadline = r.paidAt ? new Date(new Date(r.paidAt).getTime() + CREDIT_CLAIM_WINDOW_DAYS * 86400000) : null;
                 const pastCreditWindow = creditDeadline ? new Date() > creditDeadline : false;
-                const urgentTotal = (Number(urgentDamagedQty) || 0) + (Number(urgentMissingQty) || 0) + (Number(urgentIncompleteQty) || 0);
+                const urgentTotal = (Number(urgentDamagedQty) || 0) + (Number(urgentDifferentQty) || 0) + (Number(urgentIncompleteQty) || 0);
                 return (
                 <div key={r.id}>
                   <div className="flex items-center justify-between gap-3 flex-wrap mb-0.5">
@@ -494,18 +494,37 @@ export function PurchaseReceivingPanel() {
                                 : `Tienes hasta ${creditDeadline.toLocaleDateString("es-MX")} (7 días desde el pago) para que el proveedor apruebe crédito.`}
                             </div>
                           )}
+                          {/* Confirmado 2026-08-08: mismo pedido que "Confirmar que llegó" —
+                              ver las fotos de referencia del catálogo ayuda a confirmar que lo
+                              dañado/incompleto que llegó de verdad corresponde a lo que se pidió,
+                              no un producto distinto por error del proveedor. */}
+                          <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">
+                            Fotos de referencia — como se registró el producto
+                          </label>
+                          {r.catalogItem.photos.length > 0 ? (
+                            <div className="grid grid-cols-3 gap-2 mb-3">
+                              {r.catalogItem.photos.map((url, i) => (
+                                <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="bg-cloud rounded border border-teal/40 flex items-center justify-center h-24">
+                                  <img src={url} alt="" className="max-w-full max-h-full object-contain" />
+                                </a>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="text-[11px] text-steel-dim mb-3">Este producto no tiene fotos de referencia registradas en el catálogo.</div>
+                          )}
+
                           <div className="grid grid-cols-3 gap-2.5 mb-2.5">
                             <div>
                               <label className="block mb-1 text-[10px] text-steel">Dañada</label>
                               <input type="number" min={0} className="w-full rounded border border-rule px-2 py-2 text-[13px]" value={urgentDamagedQty} onChange={(e) => setUrgentDamagedQty(e.target.value)} />
                             </div>
                             <div>
-                              <label className="block mb-1 text-[10px] text-steel">Faltante</label>
-                              <input type="number" min={0} className="w-full rounded border border-rule px-2 py-2 text-[13px]" value={urgentMissingQty} onChange={(e) => setUrgentMissingQty(e.target.value)} />
-                            </div>
-                            <div>
                               <label className="block mb-1 text-[10px] text-steel">Incompleta</label>
                               <input type="number" min={0} className="w-full rounded border border-rule px-2 py-2 text-[13px]" value={urgentIncompleteQty} onChange={(e) => setUrgentIncompleteQty(e.target.value)} />
+                            </div>
+                            <div>
+                              <label className="block mb-1 text-[10px] text-steel">Diferente</label>
+                              <input type="number" min={0} className="w-full rounded border border-rule px-2 py-2 text-[13px]" value={urgentDifferentQty} onChange={(e) => setUrgentDifferentQty(e.target.value)} />
                             </div>
                           </div>
                           {urgentTotal > 0 && (

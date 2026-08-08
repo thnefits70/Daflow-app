@@ -2,11 +2,15 @@
 // → resolución (crédito/cambio/reembolso/pérdida), sin Prisma — reutilizables
 // tanto en el ensamblado server-side como en las rutas que validan cantidades.
 
-export type UrgentReportQuantities = { damagedQty: number; missingQty: number; incompleteQty: number };
+// Confirmado 2026-08-08: missingQty ("Faltante") queda solo para reportes
+// creados antes de este cambio — ya no se pide en el formulario, se
+// reemplazó por differentQty ("Diferente") — pero se sigue sumando aquí para
+// que el total de un reporte viejo no cambie.
+export type UrgentReportQuantities = { damagedQty: number; missingQty: number; incompleteQty: number; differentQty: number };
 export type UrgentResolutionLite = { quantity: number; status: "PENDING" | "COMPLETED" | "CANCELLED" };
 
 export function totalReportedQty(report: UrgentReportQuantities): number {
-  return report.damagedQty + report.missingQty + report.incompleteQty;
+  return report.damagedQty + report.missingQty + report.incompleteQty + report.differentQty;
 }
 
 // Cantidad ya "reclamada" por una resolución que no está cancelada — cuenta

@@ -55,6 +55,7 @@ type UrgentReportSummary = {
   damagedQty: number;
   missingQty: number;
   incompleteQty: number;
+  differentQty: number;
   resolutions: { quantity: number; status: "PENDING" | "COMPLETED" | "CANCELLED" }[];
 };
 
@@ -188,7 +189,7 @@ export function PurchaseInvoicingPanel() {
     const requestIds = new Set((rows ?? []).filter((r) => r.groupId === groupId).map((r) => r.id));
     return urgentReports.filter((rep) => {
       if (!requestIds.has(rep.requestId)) return false;
-      const total = rep.damagedQty + rep.missingQty + rep.incompleteQty;
+      const total = rep.damagedQty + rep.missingQty + rep.incompleteQty + rep.differentQty;
       const completed = rep.resolutions.filter((res) => res.status === "COMPLETED").reduce((s, res) => s + res.quantity, 0);
       return completed < total;
     });

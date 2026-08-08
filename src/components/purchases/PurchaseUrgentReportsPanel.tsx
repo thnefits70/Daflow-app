@@ -37,6 +37,7 @@ type Report = {
   damagedQty: number;
   missingQty: number;
   incompleteQty: number;
+  differentQty: number;
   description: string;
   mediaUrls: string[];
   reportedAt: string;
@@ -57,7 +58,7 @@ function claimedQty(resolutions: Resolution[]) {
   return resolutions.filter((r) => r.status !== "CANCELLED").reduce((s, r) => s + r.quantity, 0);
 }
 function totalReported(r: Report) {
-  return r.damagedQty + r.missingQty + r.incompleteQty;
+  return r.damagedQty + r.missingQty + r.incompleteQty + r.differentQty;
 }
 
 const RESOLUTION_LABEL: Record<ResolutionType, string> = {
@@ -210,8 +211,9 @@ export function PurchaseUrgentReportsPanel({ isAdmin }: { isAdmin: boolean }) {
                   </div>
                   <div className="text-[11px] text-steel mb-1">
                     {r.damagedQty > 0 && <>Dañada: {r.damagedQty} · </>}
-                    {r.missingQty > 0 && <>Faltante: {r.missingQty} · </>}
                     {r.incompleteQty > 0 && <>Incompleta: {r.incompleteQty} · </>}
+                    {r.differentQty > 0 && <>Diferente: {r.differentQty} · </>}
+                    {r.missingQty > 0 && <>Faltante: {r.missingQty} · </>}
                     ${(totalReported(r) * r.request.unitCost).toFixed(2)} en disputa
                   </div>
                   <div className="text-[12px] mb-2">{r.description}</div>
