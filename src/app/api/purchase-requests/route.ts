@@ -121,6 +121,10 @@ const createSchema = z.object({
   // solicita desde la pestaña de compras de una página de departamento
   // (siempre "Control de Compras"), el cliente manda ESE id explícito.
   deptId: z.string().min(1).nullable().optional(),
+  // Confirmado 2026-08-07: reenvío de una solicitud rechazada — el groupId
+  // anterior, nunca confiado a ciegas (se valida abajo que sea del mismo
+  // usuario y esté REJECTED antes de encadenar attemptNumber).
+  resubmittedFromGroupId: z.string().min(1).optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -167,6 +171,22 @@ export async function POST(req: NextRequest) {
     }
   } else if (!supplierBankAccounts.some((a) => a.id === d.bankAccountId)) {
     return NextResponse.json({ error: "La cuenta bancaria elegida no pertenece a este proveedor." }, { status: 400 });
+  }
+
+  // Confirmado 2026-08-07: reenvío de una solicitud rechazada — solo se
+  // encadena si el groupId anterior es de verdad de esta misma persona y
+  // está REJECTED (nunca confiar en lo que manda el cliente a ciegas).
+  let attemptNumber = 1;
+  if (d.resubmittedFromGroupId) {
+    const prevRows = await prisma.purchaseRequest.findMany({
+      where: { groupId: d.resubmittedFromGroupId },
+      select: { status: true, requestedById: true, attemptNumber: true },
+    });
+    const prevRow = prevRows[0];
+    const ownsPrev = isAdmin ? prevRow?.requestedById === null : prevRow?.requestedById === session.user.id;
+    if (prevRow && prevRow.status === "REJECTED" && ownsPrev) {
+      attemptNumber = Math.max(...prevRows.map((r) => r.attemptNumber)) + 1;
+    }
   }
 
   const groupTotal = d.items.reduce((sum, it) => sum + it.quantity * it.unitCost, 0);
@@ -274,10 +294,12 @@ export async function POST(req: NextRequest) {
           shippingPaymentMethod: d.shippingIncluded ? null : d.shippingPaymentMethod,
           shippingPaymentTiming: d.shippingIncluded ? null : (d.shippingPaymentTiming ?? "WITH_PURCHASE"),
           carrierBankAccountId: d.shippingIncluded ? null : d.carrierBankAccountId || null,
-          justification: anyOverThreshold ? d.justification!.trim() : null,
+          justification: (anyOverThreshold || anySupplierNotCheapest) ? d.justification!.trim() : null,
           status: "PENDING_APPROVAL",
           requestedById: isAdmin ? null : session.user.id,
           requestedByDeptId: effectiveDeptId,
+          attemptNumber,
+          resubmittedFromGroupId: attemptNumber > 1 ? d.resubmittedFromGroupId : null,
         },
       });
     })

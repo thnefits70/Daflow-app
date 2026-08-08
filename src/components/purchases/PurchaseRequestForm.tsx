@@ -48,6 +48,12 @@ type Draft = {
   shippingPaymentMethod: "TRANSFER" | "PETTY_CASH";
   shippingPaymentTiming: "WITH_PURCHASE" | "ON_DELIVERY";
   justification: string;
+  // Confirmado 2026-08-07: presente solo cuando el borrador viene de
+  // "Corregir y reenviar" en Mis solicitudes — nextAttemptNumber es solo
+  // informativo (el servidor recalcula el real); resubmittedFromGroupId sí
+  // se manda tal cual en el POST.
+  resubmittedFromGroupId?: string;
+  nextAttemptNumber?: number;
 };
 
 // Confirmado 2026-07-31: si la persona sale de la página a medias, no debe
@@ -60,7 +66,7 @@ type Draft = {
 // al restaurarlo (PurchaseSupplierPicker llamaba .map sobre undefined). v3:
 // se agregó email y RUC/cédula por cuenta — normalizeSupplier() de todas
 // formas rellena lo que falte, por las dudas.
-const DRAFT_KEY = "daflow.purchaseRequestDraft.v3";
+export const DRAFT_KEY = "daflow.purchaseRequestDraft.v3";
 
 function normalizeSupplier(s: PurchaseSupplierDTO | null | undefined): PurchaseSupplierDTO | null {
   if (!s) return null;
@@ -133,6 +139,8 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
 
   const [hydrated, setHydrated] = useState(false);
   const [draftRestored, setDraftRestored] = useState(false);
+  const [resubmittedFromGroupId, setResubmittedFromGroupId] = useState<string | null>(null);
+  const [resubmitAttemptHint, setResubmitAttemptHint] = useState<number | null>(null);
 
   // Confirmado 2026-08-06: al elegir un producto, además del mínimo/promedio/
   // máximo global ya existente, se muestra el historial POR PROVEEDOR (más
@@ -208,6 +216,8 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
         setShippingPaymentMethod(d.shippingPaymentMethod ?? "TRANSFER");
         setShippingPaymentTiming(d.shippingPaymentTiming ?? "WITH_PURCHASE");
         setJustification(d.justification ?? "");
+        setResubmittedFromGroupId(d.resubmittedFromGroupId ?? null);
+        setResubmitAttemptHint(d.nextAttemptNumber ?? null);
         restoredLines.forEach((l, i) => { if (l.catalogItem) { fetchLineStats(i, l.catalogItem.id); fetchSupplierComparison(i, l.catalogItem.id); } });
         setDraftRestored(draftHasContent(d));
       }
@@ -234,13 +244,15 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
       shippingPaymentMethod,
       shippingPaymentTiming,
       justification,
+      resubmittedFromGroupId: resubmittedFromGroupId ?? undefined,
+      nextAttemptNumber: resubmitAttemptHint ?? undefined,
     };
     if (draftHasContent(draft)) {
       localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
     } else {
       localStorage.removeItem(DRAFT_KEY);
     }
-  }, [hydrated, lines, supplier, bankAccountId, quoteImageUrl, verifyResult, manualCodeConfirm, purchaseOrderUrl, shippingIncluded, carrier, carrierBankAccountId, shippingCostTotal, shippingPaymentMethod, shippingPaymentTiming, justification]);
+  }, [hydrated, lines, supplier, bankAccountId, quoteImageUrl, verifyResult, manualCodeConfirm, purchaseOrderUrl, shippingIncluded, carrier, carrierBankAccountId, shippingCostTotal, shippingPaymentMethod, shippingPaymentTiming, justification, resubmittedFromGroupId, resubmitAttemptHint]);
 
   function resetForm() {
     setLines([emptyLine()]);
@@ -256,11 +268,13 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
     setCarrier(null);
     setCarrierBankAccountId(null);
     setShippingCostTotal("");
-    setShippingIncluded(true);
+    setShippingIncluded(false);
     setShippingPaymentMethod("TRANSFER");
     setShippingPaymentTiming("WITH_PURCHASE");
     setJustification("");
     setDraftRestored(false);
+    setResubmittedFromGroupId(null);
+    setResubmitAttemptHint(null);
   }
 
   function discardDraft() {
@@ -472,6 +486,7 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
         shippingPaymentTiming: shippingIncluded ? null : shippingPaymentTiming,
         carrierBankAccountId: shippingIncluded ? null : carrierBankAccountId,
         justification: needsJustification ? justification.trim() : null,
+        resubmittedFromGroupId: resubmittedFromGroupId ?? undefined,
       }),
     });
     setBusy(false);
@@ -488,6 +503,12 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
 
   return (
     <div className="bg-surface border border-rule rounded-md p-4.5">
+      {resubmittedFromGroupId && (
+        <div className="bg-gold/10 border border-gold/35 rounded-md px-3.5 py-2.5 mb-4 text-[12.5px]" style={{ color: "#D9A441" }}>
+          <AlertTriangle size={14} className="inline mr-1.5 -mt-0.5" />
+          Estás corrigiendo una solicitud rechazada{resubmitAttemptHint ? ` — este será tu ${resubmitAttemptHint === 2 ? "2do" : resubmitAttemptHint === 3 ? "3er" : `${resubmitAttemptHint}to`} intento` : ""}. Revisa qué faltaba antes de enviar de nuevo.
+        </div>
+      )}
       {draftRestored && (
         <div className="bg-teal/10 border border-teal/35 rounded-md px-3.5 py-2.5 mb-4">
           <div className="flex items-center justify-between gap-3">

@@ -1218,7 +1218,7 @@ model PurchaseRequest {
   // otro caso (se puede subir por adelantado igual).
   purchaseOrderUrl   String?
 
-  shippingIncluded      Boolean                @default(true)
+  shippingIncluded      Boolean                @default(false)
   carrierId              String?
   carrier                Supplier?              @relation("PurchaseRequestCarrier", fields: [carrierId], references: [id], onDelete: SetNull)
   shippingCostTotal     Float?
@@ -1245,6 +1245,14 @@ model PurchaseRequest {
 
   status       PurchaseRequestStatus @default(PENDING_APPROVAL)
   rejectReason String?
+
+  // Confirmado 2026-08-07: si una solicitud se rechaza, quien la pidió puede
+  // corregir lo que faltó y reenviarla — cada reenvío crea un groupId nuevo
+  // (nunca se edita el rechazado), y este campo apunta al groupId anterior
+  // para armar la cadena. attemptNumber se calcula en el servidor a partir de
+  // ese anterior (nunca confiado del cliente) — 1 = primer intento.
+  attemptNumber          Int     @default(1)
+  resubmittedFromGroupId String?
 
   requestedById   String?
   requestedBy     User?      @relation("PurchaseRequestRequestedBy", fields: [requestedById], references: [id], onDelete: SetNull)
@@ -1286,6 +1294,7 @@ model PurchaseRequest {
   @@index([supplierId])
   @@index([requestedById])
   @@index([groupId])
+  @@index([resubmittedFromGroupId])
 }
 
 // Inventario confirma que de verdad llegó — sin esto el ciclo no se cierra.

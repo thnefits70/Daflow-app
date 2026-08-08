@@ -21,10 +21,16 @@ type Row = {
   requestNumber: number | null;
   status: "PENDING_APPROVAL" | "REJECTED" | "APPROVED" | "PAID" | "RECEIVED";
   quantity: number;
+  unitCost: number;
   totalCost: number;
   requestedAt: string;
   rejectReason: string | null;
-  catalogItem: { name: string };
+  attemptNumber: number;
+  catalogItem: { id: string; name: string };
+  quoteImageUrl: string;
+  quoteReadTotal: number | null;
+  quoteReferenceCode: string | null;
+  justification: string | null;
   invoiceStatus: string;
   purchaseOrderUrl: string | null;
   shippingIncluded: boolean;
@@ -65,6 +71,12 @@ function groupRows(rows: Row[]) {
 }
 
 const emptyAccountForm = { bankName: "", bankAccountType: "", bankAccountNumber: "", bankAccountHolder: "", holderIdType: "" as "" | "RUC" | "CEDULA", holderIdNumber: "" };
+
+function attemptLabel(n: number) {
+  if (n === 2) return "2do intento";
+  if (n === 3) return "3er intento";
+  return `${n}to intento`;
+}
 
 // Confirmado 2026-08-06: cuando el admin no pudo pagar con la cuenta elegida
 // (datos mal, el banco rechaza la transferencia), pide con un clic que se
@@ -313,7 +325,56 @@ function ShippingPaymentSection({ g, onUpdate }: { g: Row[]; onUpdate: (patch: P
   );
 }
 
-function GroupCard({ g, onPurchaseOrderUploaded, onGroupUpdate }: { g: Row[]; onPurchaseOrderUploaded: (groupId: string, url: string) => void; onGroupUpdate: (groupId: string, patch: Partial<Row>) => void }) {
+// Confirmado 2026-08-07: reenviar una solicitud rechazada arma un borrador
+// con TODO lo que ya se había llenado (mismo mecanismo de borrador que ya
+// usa PurchaseRequestForm para "retomar sin terminar") y lo deja listo en
+// la pestaña Solicitar — la persona revisa el motivo del rechazo y corrige
+// solo lo que haga falta, sin volver a escribir todo desde cero.
+function buildResubmitDraft(g: Row[]) {
+  const r0 = g[0];
+  return {
+    lines: g.map((r) => ({
+      catalogItem: { id: r.catalogItem.id, name: r.catalogItem.name, photos: [] },
+      productQuery: r.catalogItem.name,
+      quantity: String(r.quantity),
+      unitCost: String(r.unitCost),
+      ivaIncluded: false,
+    })),
+    supplier: { id: r0.supplier.id, name: r0.supplier.name, location: null, email: null, bankAccounts: r0.supplier.bankAccounts, contacts: [] },
+    bankAccountId: r0.bankAccountId,
+    quoteImageUrl: r0.quoteImageUrl,
+    verifyResult: {
+      readTotal: r0.quoteReadTotal,
+      productNameFound: r0.quoteReferenceCode ? null : r0.catalogItem.name,
+      referenceCodeFound: r0.quoteReferenceCode,
+      matches: !r0.quoteReferenceCode,
+      suggestedCatalogItem: null,
+    },
+    manualCodeConfirm: !!r0.quoteReferenceCode,
+    purchaseOrderUrl: r0.purchaseOrderUrl,
+    shippingIncluded: r0.shippingIncluded,
+    carrier: r0.carrier ? { id: r0.carrier.id, name: r0.carrier.name, location: null, email: null, bankAccounts: r0.carrier.bankAccounts, contacts: [] } : null,
+    carrierBankAccountId: r0.carrierBankAccountId,
+    shippingCostTotal: r0.shippingCostTotal != null ? String(r0.shippingCostTotal) : "",
+    shippingPaymentMethod: "TRANSFER",
+    shippingPaymentTiming: r0.shippingPaymentTiming ?? "WITH_PURCHASE",
+    justification: r0.justification ?? "",
+    resubmittedFromGroupId: r0.groupId,
+    nextAttemptNumber: r0.attemptNumber + 1,
+  };
+}
+
+function GroupCard({
+  g,
+  onPurchaseOrderUploaded,
+  onGroupUpdate,
+  onResubmit,
+}: {
+  g: Row[];
+  onPurchaseOrderUploaded: (groupId: string, url: string) => void;
+  onGroupUpdate: (groupId: string, patch: Partial<Row>) => void;
+  onResubmit: (draft: ReturnType<typeof buildResubmitDraft>) => void;
+}) {
   const groupId = g[0].groupId;
   const total = g.reduce((s, r) => s + r.totalCost, 0);
   const rejected = g[0].status === "REJECTED";
@@ -365,7 +426,10 @@ function GroupCard({ g, onPurchaseOrderUploaded, onGroupUpdate }: { g: Row[]; on
       <div className="flex items-center justify-between gap-3 flex-wrap mb-2.5">
         <div>
           {g[0].requestNumber !== null && (
-            <div className="font-mono text-[10.5px] text-teal mb-0.5">{formatPurchaseRequestCode(g[0].requestNumber)}</div>
+            <div className="font-mono text-[10.5px] text-teal mb-0.5 flex items-center gap-1.5">
+              {formatPurchaseRequestCode(g[0].requestNumber)}
+              {g[0].attemptNumber > 1 && <span className="text-steel-dim font-sans">— {attemptLabel(g[0].attemptNumber)}</span>}
+            </div>
           )}
           {g.map((r) => (
             <div key={r.id} className="text-[13.5px] font-bold">
@@ -379,7 +443,16 @@ function GroupCard({ g, onPurchaseOrderUploaded, onGroupUpdate }: { g: Row[]; on
         </div>
       </div>
       {rejected ? (
-        <div className="text-[12px] text-red">Rechazada{g[0].rejectReason ? ` — ${g[0].rejectReason}` : ""}</div>
+        <div>
+          <div className="text-[12px] text-red mb-2">Rechazada{g[0].rejectReason ? ` — ${g[0].rejectReason}` : ""}</div>
+          <button
+            type="button"
+            className="rounded border border-blue bg-blue px-3 py-1.5 text-[12px] font-semibold text-white cursor-pointer"
+            onClick={() => onResubmit(buildResubmitDraft(g))}
+          >
+            Corregir y reenviar
+          </button>
+        </div>
       ) : (
         <>
           <div className="flex gap-1.5">
@@ -437,7 +510,7 @@ function GroupCard({ g, onPurchaseOrderUploaded, onGroupUpdate }: { g: Row[]; on
   );
 }
 
-export function MyPurchaseRequests() {
+export function MyPurchaseRequests({ onResubmit }: { onResubmit: (draft: ReturnType<typeof buildResubmitDraft>) => void }) {
   const [rows, setRows] = useState<Row[] | null>(null);
 
   useEffect(() => {
@@ -467,7 +540,7 @@ export function MyPurchaseRequests() {
       )}
       <div className="flex flex-col gap-2.5">
         {groups.map((g) => (
-          <GroupCard key={g[0].groupId} g={g} onPurchaseOrderUploaded={markUploaded} onGroupUpdate={updateGroup} />
+          <GroupCard key={g[0].groupId} g={g} onPurchaseOrderUploaded={markUploaded} onGroupUpdate={updateGroup} onResubmit={onResubmit} />
         ))}
       </div>
     </div>
