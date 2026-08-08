@@ -401,8 +401,14 @@ export function PurchaseReceivingPanel() {
                       {openId === r.id ? (
                         <div className="mt-2">
                           <div className="mb-2.5">
-                            <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Cantidad recibida</label>
+                            <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Cantidad recibida — se pidieron {r.quantity} un.</label>
                             <input type="number" className="w-full rounded border border-rule px-2.5 py-2 text-[13.5px]" value={receivedQty} onChange={(e) => setReceivedQty(e.target.value)} />
+                            {receivedQty !== "" && Number(receivedQty) !== r.quantity && (
+                              <div className="flex items-center gap-1.5 text-[11px] text-red mt-1.5">
+                                <AlertTriangle size={12} className="shrink-0" />
+                                No coincide con lo pedido ({r.quantity} un.) — no se puede confirmar así. Usa &quot;🚨 Informar urgente&quot; para reportar la diferencia.
+                              </div>
+                            )}
                           </div>
 
                           {/* Confirmado 2026-08-08: antes solo se veía la nota de texto de la
@@ -436,7 +442,7 @@ export function PurchaseReceivingPanel() {
                           <div className="grid grid-cols-3 gap-2 mb-2.5">
                             {receivedPhotoUrls.map((url, i) => (
                               <div key={i} className="relative">
-                                <a href={url} target="_blank" rel="noopener noreferrer" className="bg-cloud rounded border border-rule flex items-center justify-center h-28">
+                                <a href={url} target="_blank" rel="noopener noreferrer" className="bg-cloud rounded border border-rule flex items-center justify-center h-56">
                                   <img src={url} alt="" className="max-w-full max-h-full object-contain" />
                                 </a>
                                 <button
@@ -454,7 +460,7 @@ export function PurchaseReceivingPanel() {
                                 onPaste={onPastePhoto}
                                 onMouseEnter={onPasteHoverIn}
                                 onMouseLeave={onPasteHoverOut}
-                                className="flex flex-col items-center justify-center gap-1 h-28 border-[1.5px] border-dashed border-rule rounded text-[11px] text-steel cursor-pointer hover:border-teal focus:border-teal focus:outline-none"
+                                className="flex flex-col items-center justify-center gap-1 h-56 border-[1.5px] border-dashed border-rule rounded text-[11px] text-steel cursor-pointer hover:border-teal focus:border-teal focus:outline-none"
                               >
                                 {uploadingPhoto ? <span className="w-4 h-4 rounded-full border-2 border-rule border-t-teal animate-spin" /> : <Camera size={16} />}
                                 Subir o pegar
@@ -465,8 +471,19 @@ export function PurchaseReceivingPanel() {
 
                           {aiChecking && <div className="text-[11.5px] text-steel mb-2">🤖 Comparando con las fotos de referencia del catálogo…</div>}
                           {aiResult && (
-                            <div className={`flex items-start gap-1.5 text-[11.5px] mb-2.5 ${aiResult.likelyMatch ? "text-teal" : "text-steel"}`}>
+                            <div className={`flex items-start gap-1.5 text-[11.5px] mb-1 ${aiResult.likelyMatch ? "text-teal" : "text-red font-semibold"}`}>
                               🤖 {aiResult.note}
+                            </div>
+                          )}
+                          {/* Confirmado 2026-08-08: cambio de política pedido explícitamente
+                              por el usuario — antes la IA era solo apoyo visual y nunca
+                              bloqueaba; ahora si detecta que el producto NO corresponde, o si
+                              la cantidad recibida no coincide con lo pedido, "Confirmar que
+                              llegó" se deshabilita del todo — la única salida es "Informar
+                              urgente" (que sí manda notificación con la novedad real). */}
+                          {aiResult && aiResult.likelyMatch === false && (
+                            <div className="text-[11px] text-red mb-2.5">
+                              No se puede confirmar así — si de verdad llegó un producto distinto, usa &quot;🚨 Informar urgente&quot; (categoría Diferente) en vez de este botón.
                             </div>
                           )}
 
@@ -475,7 +492,13 @@ export function PurchaseReceivingPanel() {
                           <div className="flex items-center gap-2">
                             <button
                               type="button"
-                              disabled={busy || receivedPhotoUrls.length < 2 || !receivedQty}
+                              disabled={
+                                busy ||
+                                receivedPhotoUrls.length < 2 ||
+                                !receivedQty ||
+                                Number(receivedQty) !== r.quantity ||
+                                aiResult?.likelyMatch === false
+                              }
                               className="rounded border border-green bg-green px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer disabled:opacity-60"
                               onClick={() => confirmReceipt(r.id)}
                             >

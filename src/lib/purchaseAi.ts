@@ -226,8 +226,16 @@ export async function compareReceiptPhotos(params: {
       "correcto. Te doy fotos DE REFERENCIA del producto que se pidió (del catálogo) y fotos de lo que de verdad " +
       "llegó (tomadas por el líder de Inventario al recibir). Compara si visualmente parece el MISMO producto — " +
       "esto es solo una referencia visual de apoyo, no una medición exacta ni un conteo de unidades. " +
+      // Confirmado 2026-08-08: antes se permitía un veredicto "coincide" aunque
+      // una de varias fotos de recepción no correspondiera al producto —
+      // resultado incorrecto de baja confianza. Ahora CUALQUIER foto de
+      // recepción que no corresponda visualmente a las de referencia hace que
+      // el veredicto general sea false, sin importar si las demás sí coinciden.
+      "Si CUALQUIERA de las fotos de recepción no corresponde visualmente al producto de referencia (aunque las " +
+      "demás sí coincidan), likelyMatch debe ser false — nunca lo marques true si hay aunque sea una duda real. " +
       'Responde ÚNICAMENTE un JSON: {"likelyMatch": boolean, "note": string}. note es una frase breve en español ' +
-      'explicando tu conclusión (ej. "Coincide — mismo empaque y forma" o "No coincide — el color/forma es distinto").',
+      'explicando tu conclusión, mencionando específicamente cuál foto no corresponde si aplica (ej. "Coincide — ' +
+      'mismo empaque y forma" o "No coincide — la 3ra foto de recepción muestra un producto distinto").',
     messages: [
       {
         role: "user",

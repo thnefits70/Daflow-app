@@ -1302,8 +1302,11 @@ model PurchaseRequest {
 // del producto encima/junto al cartón del bulto, otra del cartón abierto con
 // una unidad de muestra encima junto al bulto, para que la IA (aiPhotoMatch/
 // aiPhotoNote) pueda comparar contra las fotos de referencia del catálogo.
-// Es solo apoyo visual, NUNCA bloquea — Daniel (líder de Inventario) sigue
-// siendo quien confirma cantidades y producto, la IA no impide nada.
+// Fix confirmado 2026-08-08: cambio explícito de política — antes esto era
+// solo apoyo visual y nunca bloqueaba; ahora el botón "Confirmar que llegó"
+// SÍ se deshabilita en el cliente si aiPhotoMatch da false (producto distinto)
+// o si la cantidad recibida no coincide con lo pedido — la única salida en
+// esos casos es "Informar urgente" (PurchaseRequestUrgentReport).
 model PurchaseRequestReceipt {
   id        String          @id @default(cuid())
   requestId String          @unique

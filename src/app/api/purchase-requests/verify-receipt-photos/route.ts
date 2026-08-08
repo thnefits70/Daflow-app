@@ -13,7 +13,11 @@ const schema = z.object({
 
 // Mismo patrón que verify-quote/verify-purchase-order — sin escritura, la IA
 // compara UNA vez y el resultado se reutiliza al confirmar la recepción.
-// Puramente informativo: nunca impide que Daniel confirme, solo le da apoyo.
+// Fix confirmado 2026-08-08: cambio de política — YA NO es puramente
+// informativo. El cliente (PurchaseReceivingPanel.tsx) deshabilita el botón
+// "Confirmar que llegó" si likelyMatch da false (producto distinto), para
+// forzar el uso de "Informar urgente" en vez de confirmar algo que no
+// corresponde.
 export async function POST(req: NextRequest) {
   const session = await auth();
   if (!(await canConfirmPurchaseReceiving()) || !session) {

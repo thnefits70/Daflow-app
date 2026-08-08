@@ -32,6 +32,20 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "Falta que suban la orden de compra — no se puede confirmar la recepción todavía." }, { status: 409 });
   }
 
+  // Fix confirmado 2026-08-08: cambio de política pedido explícitamente por
+  // el usuario — antes esto era puramente informativo (nunca bloqueaba);
+  // ahora, si la IA detectó que el producto no corresponde, o si la cantidad
+  // recibida no coincide con lo pedido, se bloquea del todo — la única
+  // salida es "Informar urgente" (que sí manda notificación con la novedad).
+  // Defensa server-side del mismo chequeo que ya deshabilita el botón en
+  // el cliente.
+  if (parsed.data.aiPhotoMatch === false) {
+    return NextResponse.json({ error: "La IA detectó que el producto no corresponde a la referencia — usa 'Informar urgente' en vez de confirmar." }, { status: 409 });
+  }
+  if (parsed.data.receivedQuantity !== existing.quantity) {
+    return NextResponse.json({ error: `La cantidad recibida no coincide con lo pedido (${existing.quantity} un.) — usa 'Informar urgente' para reportar la diferencia.` }, { status: 409 });
+  }
+
   const isAdmin = session.user.role === "admin";
   const [, updated] = await prisma.$transaction([
     prisma.purchaseRequestReceipt.create({
