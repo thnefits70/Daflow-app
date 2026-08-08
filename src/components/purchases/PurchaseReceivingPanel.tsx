@@ -416,8 +416,8 @@ export function PurchaseReceivingPanel() {
                           {r.catalogItem.photos.length > 0 ? (
                             <div className="grid grid-cols-3 gap-2 mb-3">
                               {r.catalogItem.photos.map((url, i) => (
-                                <a key={i} href={url} target="_blank" rel="noopener noreferrer">
-                                  <img src={url} alt="" className="w-full h-28 rounded object-cover border border-teal/40" />
+                                <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="bg-cloud rounded border border-teal/40 flex items-center justify-center h-28">
+                                  <img src={url} alt="" className="max-w-full max-h-full object-contain" />
                                 </a>
                               ))}
                             </div>
@@ -436,8 +436,8 @@ export function PurchaseReceivingPanel() {
                           <div className="grid grid-cols-3 gap-2 mb-2.5">
                             {receivedPhotoUrls.map((url, i) => (
                               <div key={i} className="relative">
-                                <a href={url} target="_blank" rel="noopener noreferrer">
-                                  <img src={url} alt="" className="w-full h-28 rounded object-cover border border-rule" />
+                                <a href={url} target="_blank" rel="noopener noreferrer" className="bg-cloud rounded border border-rule flex items-center justify-center h-28">
+                                  <img src={url} alt="" className="max-w-full max-h-full object-contain" />
                                 </a>
                                 <button
                                   type="button"
