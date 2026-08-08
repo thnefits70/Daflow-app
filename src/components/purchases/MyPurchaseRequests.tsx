@@ -26,6 +26,7 @@ type Row = {
   requestedAt: string;
   rejectReason: string | null;
   attemptNumber: number;
+  hasBeenResubmitted: boolean;
   catalogItem: { id: string; name: string };
   quoteImageUrl: string;
   quoteReadTotal: number | null;
@@ -445,13 +446,17 @@ function GroupCard({
       {rejected ? (
         <div>
           <div className="text-[12px] text-red mb-2">Rechazada{g[0].rejectReason ? ` — ${g[0].rejectReason}` : ""}</div>
-          <button
-            type="button"
-            className="rounded border border-blue bg-blue px-3 py-1.5 text-[12px] font-semibold text-white cursor-pointer"
-            onClick={() => onResubmit(buildResubmitDraft(g))}
-          >
-            Corregir y reenviar
-          </button>
+          {g[0].hasBeenResubmitted ? (
+            <div className="text-[11.5px] text-steel-dim">Ya se corrigió y reenvió — revisa el intento más reciente arriba.</div>
+          ) : (
+            <button
+              type="button"
+              className="rounded border border-blue bg-blue px-3 py-1.5 text-[12px] font-semibold text-white cursor-pointer"
+              onClick={() => onResubmit(buildResubmitDraft(g))}
+            >
+              Corregir y reenviar
+            </button>
+          )}
         </div>
       ) : (
         <>

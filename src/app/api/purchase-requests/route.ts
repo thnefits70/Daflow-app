@@ -84,7 +84,24 @@ export async function GET(req: NextRequest) {
     include: requestInclude,
     take: 50,
   });
-  return NextResponse.json(rows);
+
+  // Confirmado 2026-08-08: una solicitud rechazada ya reenviada (existe un
+  // groupId nuevo que la referencia como resubmittedFromGroupId) no se puede
+  // volver a reenviar — así el historial de intentos queda limpio, cada
+  // rechazo tiene un único reenvío. La ruta POST hace la misma validación
+  // como defensa por si alguien llama a la API directo.
+  const rejectedGroupIds = [...new Set(rows.filter((r) => r.status === "REJECTED").map((r) => r.groupId))];
+  const supersededRows = rejectedGroupIds.length > 0
+    ? await prisma.purchaseRequest.findMany({
+        where: { resubmittedFromGroupId: { in: rejectedGroupIds } },
+        select: { resubmittedFromGroupId: true },
+        distinct: ["resubmittedFromGroupId"],
+      })
+    : [];
+  const supersededSet = new Set(supersededRows.map((r) => r.resubmittedFromGroupId));
+  const rowsWithFlag = rows.map((r) => ({ ...r, hasBeenResubmitted: r.status === "REJECTED" && supersededSet.has(r.groupId) }));
+
+  return NextResponse.json(rowsWithFlag);
 }
 
 // Confirmado 2026-07-31: una cotización suele traer varios productos — se
@@ -176,12 +193,22 @@ export async function POST(req: NextRequest) {
   // Confirmado 2026-08-07: reenvío de una solicitud rechazada — solo se
   // encadena si el groupId anterior es de verdad de esta misma persona y
   // está REJECTED (nunca confiar en lo que manda el cliente a ciegas).
+  // Confirmado 2026-08-08: y solo si esa rechazada TODAVÍA no fue reenviada
+  // antes — cada rechazo tiene un único reenvío, para que el historial de
+  // intentos quede limpio (esto es la defensa server-side del mismo chequeo
+  // que ya oculta el botón "Corregir y reenviar" en el cliente).
   let attemptNumber = 1;
   if (d.resubmittedFromGroupId) {
-    const prevRows = await prisma.purchaseRequest.findMany({
-      where: { groupId: d.resubmittedFromGroupId },
-      select: { status: true, requestedById: true, attemptNumber: true },
-    });
+    const [prevRows, alreadyResubmitted] = await Promise.all([
+      prisma.purchaseRequest.findMany({
+        where: { groupId: d.resubmittedFromGroupId },
+        select: { status: true, requestedById: true, attemptNumber: true },
+      }),
+      prisma.purchaseRequest.findFirst({ where: { resubmittedFromGroupId: d.resubmittedFromGroupId }, select: { id: true } }),
+    ]);
+    if (alreadyResubmitted) {
+      return NextResponse.json({ error: "Esa solicitud rechazada ya fue reenviada antes — revisa el intento más reciente en Mis solicitudes." }, { status: 409 });
+    }
     const prevRow = prevRows[0];
     const ownsPrev = isAdmin ? prevRow?.requestedById === null : prevRow?.requestedById === session.user.id;
     if (prevRow && prevRow.status === "REJECTED" && ownsPrev) {
