@@ -540,10 +540,10 @@ export function PurchaseReceivingPanel() {
                             {urgentMediaUrls.map((url, i) => (
                               <div key={i} className="relative">
                                 {isVideoUrl(url) ? (
-                                  <video src={url} controls className="w-full h-20 rounded object-cover border border-rule bg-cloud" />
+                                  <video src={url} controls className="w-full h-48 rounded object-contain border border-rule bg-cloud" />
                                 ) : (
-                                  <a href={url} target="_blank" rel="noopener noreferrer">
-                                    <img src={url} alt="" className="w-full h-20 rounded object-cover border border-rule" />
+                                  <a href={url} target="_blank" rel="noopener noreferrer" className="bg-cloud rounded border border-rule flex items-center justify-center h-48">
+                                    <img src={url} alt="" className="max-w-full max-h-full object-contain" />
                                   </a>
                                 )}
                                 <button type="button" className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red text-white flex items-center justify-center cursor-pointer" onClick={() => removeUrgentMedia(i)}>
@@ -557,7 +557,7 @@ export function PurchaseReceivingPanel() {
                                 onPaste={onPasteUrgentMedia}
                                 onMouseEnter={onUrgentMediaHoverIn}
                                 onMouseLeave={onUrgentMediaHoverOut}
-                                className="flex flex-col items-center justify-center gap-1 h-20 border-[1.5px] border-dashed border-red/40 rounded text-[10.5px] text-red cursor-pointer hover:border-red"
+                                className="flex flex-col items-center justify-center gap-1 h-48 border-[1.5px] border-dashed border-red/40 rounded text-[10.5px] text-red cursor-pointer hover:border-red"
                               >
                                 {uploadingUrgentMedia ? <span className="w-4 h-4 rounded-full border-2 border-rule border-t-red animate-spin" /> : <Camera size={15} />}
                                 Foto o video
