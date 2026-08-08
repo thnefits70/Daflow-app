@@ -405,12 +405,32 @@ export function PurchaseReceivingPanel() {
                             <input type="number" className="w-full rounded border border-rule px-2.5 py-2 text-[13.5px]" value={receivedQty} onChange={(e) => setReceivedQty(e.target.value)} />
                           </div>
 
+                          {/* Confirmado 2026-08-08: antes solo se veía la nota de texto de la
+                              IA — Daniel pedía ver las fotos de referencia del catálogo (las que
+                              se subieron al registrar el producto) lado a lado con lo que él
+                              sube, para comparar a simple vista ANTES de confirmar, no solo
+                              confiar en el texto de la IA. */}
+                          <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">
+                            Fotos de referencia — como se registró el producto
+                          </label>
+                          {r.catalogItem.photos.length > 0 ? (
+                            <div className="grid grid-cols-3 gap-2 mb-3">
+                              {r.catalogItem.photos.map((url, i) => (
+                                <a key={i} href={url} target="_blank" rel="noopener noreferrer">
+                                  <img src={url} alt="" className="w-full h-28 rounded object-cover border border-teal/40" />
+                                </a>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="text-[11px] text-steel-dim mb-3">Este producto no tiene fotos de referencia registradas en el catálogo.</div>
+                          )}
+
                           <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">
                             Fotos de lo recibido ({receivedPhotoUrls.length}/3, mínimo 2)
                           </label>
                           <div className="text-[11px] text-steel mb-2">
                             Foto 1: el producto encima o junto al cartón del bulto. Foto 2: el cartón abierto con una unidad de muestra encima, junto al bulto —
-                            así la IA puede comparar que es el mismo producto (referencial, no cuenta las unidades).
+                            compáralas contra las de referencia de arriba antes de confirmar; la IA también las revisa apenas subas la 2da.
                           </div>
 
                           <div className="grid grid-cols-3 gap-2 mb-2.5">
