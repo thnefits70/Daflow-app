@@ -31,9 +31,12 @@ export function PurchaseControlPanel({
   canInvoice: boolean;
   isAdmin: boolean;
 }) {
+  // Confirmado 2026-08-08: "Comparar precios" va primera de izquierda a
+  // derecha (pedido explícito del usuario) — el orden visual es independiente
+  // de qué pestaña abre por defecto (eso lo decide preferredDefault abajo).
   const tabs: { key: Tab; label: string }[] = [
-    ...(canSubmit ? [{ key: "solicitar" as Tab, label: "Solicitar" }, { key: "mias" as Tab, label: "Mis solicitudes" }] : []),
     ...(canSubmit || canReview ? [{ key: "comparar" as Tab, label: "Comparar precios" }] : []),
+    ...(canSubmit ? [{ key: "solicitar" as Tab, label: "Solicitar" }, { key: "mias" as Tab, label: "Mis solicitudes" }] : []),
     ...(canReview ? [{ key: "aprobacion" as Tab, label: "Bandeja de aprobación" }] : []),
     ...(canSubmit || canReview ? [{ key: "urgentes" as Tab, label: "Reportes urgentes" }] : []),
     ...(canReceive ? [{ key: "inventario" as Tab, label: "Inventario" }] : []),
@@ -42,7 +45,8 @@ export function PurchaseControlPanel({
     // de todo lo confirmado recibido, para auditar sin poder editar nada.
     ...(isAdmin ? [{ key: "auditoria" as Tab, label: "Auditoría" }] : []),
   ];
-  const [tab, setTab] = useState<Tab>(tabs[0]?.key ?? "solicitar");
+  const preferredDefault: Tab[] = ["solicitar", "aprobacion", "inventario", "finanzas", "mias", "comparar", "urgentes", "auditoria"];
+  const [tab, setTab] = useState<Tab>(preferredDefault.find((k) => tabs.some((t) => t.key === k)) ?? tabs[0]?.key ?? "solicitar");
 
   if (tabs.length === 0) {
     return <div className="text-steel text-[13.5px]">No tienes acceso a ninguna parte de Control de Compras.</div>;
