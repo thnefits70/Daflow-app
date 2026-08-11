@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Upload, CheckCircle2, Truck, Lock, Wallet } from "lucide-react";
+import { Upload, CheckCircle2, Truck, Lock, Wallet, Search } from "lucide-react";
 import { uploadFile } from "@/lib/uploadFile";
 import { compressImage } from "@/lib/compressImage";
 import { usePasteFile } from "@/lib/usePasteFile";
@@ -14,6 +14,7 @@ type InvoiceStatus = "PENDING" | "COMPLETE" | "PARTIAL" | "NON_FISCAL" | "NONE";
 type Row = {
   id: string;
   groupId: string;
+  requestNumber: number | null;
   status: "APPROVED" | "PAID" | "RECEIVED";
   quantity: number;
   totalCost: number;
@@ -87,6 +88,13 @@ function money(n: number) {
   return `$${n.toLocaleString("es-MX", { minimumFractionDigits: 2 })}`;
 }
 
+// Confirmado 2026-08-11: mismo código único (SC-XXX) ya visible en Mis
+// solicitudes/Auditoría — pedido explícito del usuario para poder buscar
+// una operación por código, igual que ya se puede filtrar por fecha.
+function formatPurchaseRequestCode(requestNumber: number | null): string {
+  return requestNumber ? `SC-${String(requestNumber).padStart(3, "0")}` : "—";
+}
+
 function isImageUrl(url: string) {
   return /\.(jpe?g|png|gif|webp|heic)$/i.test(url);
 }
@@ -143,6 +151,7 @@ export function PurchaseInvoicingPanel() {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [monthFilter, setMonthFilter] = useState("");
+  const [query, setQuery] = useState("");
   const [urgentReports, setUrgentReports] = useState<UrgentReportSummary[]>([]);
   const [flagOpenGroupId, setFlagOpenGroupId] = useState<string | null>(null);
   const [flagNote, setFlagNote] = useState("");
@@ -406,13 +415,20 @@ export function PurchaseInvoicingPanel() {
   // Confirmado 2026-08-06: por fecha de pago (paidAt) — es lo que ya se ve
   // impreso en cada tarjeta ("Pagado ... · fecha"), así el filtro coincide
   // con lo que la persona está mirando.
-  const restGroups = (dateFrom || dateTo)
+  const q = query.trim().toLowerCase();
+  const restGroups = (dateFrom || dateTo || q)
     ? restGroupsAll.filter((g) => {
         const d = g[0].paidAt?.slice(0, 10);
-        if (!d) return true;
-        if (dateFrom && d < dateFrom) return false;
-        if (dateTo && d > dateTo) return false;
-        return true;
+        if ((dateFrom || dateTo) && d) {
+          if (dateFrom && d < dateFrom) return false;
+          if (dateTo && d > dateTo) return false;
+        }
+        if (!q) return true;
+        return (
+          g.some((r) => r.catalogItem.name.toLowerCase().includes(q)) ||
+          g[0].supplier.name.toLowerCase().includes(q) ||
+          formatPurchaseRequestCode(g[0].requestNumber).toLowerCase().includes(q)
+        );
       })
     : restGroupsAll;
 
@@ -469,9 +485,14 @@ export function PurchaseInvoicingPanel() {
               const total = g.reduce((s, r) => s + r.totalCost, 0);
               return (
                 <div key={groupId} className="bg-surface border border-rule rounded-md p-4">
-                  {g.map((r) => (
-                    <div key={r.id} className="text-[13.5px] font-bold">{r.catalogItem.name} · {r.quantity} un.</div>
-                  ))}
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      {g.map((r) => (
+                        <div key={r.id} className="text-[13.5px] font-bold">{r.catalogItem.name} · {r.quantity} un.</div>
+                      ))}
+                    </div>
+                    <span className="font-mono text-[10.5px] text-steel shrink-0">{formatPurchaseRequestCode(g[0].requestNumber)}</span>
+                  </div>
                   <div className="text-[11.5px] text-steel">{g[0].supplier.name} — {money(total)}</div>
                   <div className="text-[10px] text-steel-dim mb-2.5">Solicitada por {actorName(g[0].requestedBy?.name)}</div>
                   {payingGroup === groupId ? (
@@ -566,8 +587,11 @@ export function PurchaseInvoicingPanel() {
               const r0 = g[0];
               return (
                 <div key={groupId} className="bg-surface border border-gold/40 rounded-md p-4">
-                  <div className="flex items-center gap-1.5 text-[13.5px] font-bold mb-0.5">
-                    <Truck size={14} /> {g.map((r) => r.catalogItem.name).join(", ")}
+                  <div className="flex items-start justify-between gap-2 mb-0.5">
+                    <div className="flex items-center gap-1.5 text-[13.5px] font-bold">
+                      <Truck size={14} /> {g.map((r) => r.catalogItem.name).join(", ")}
+                    </div>
+                    <span className="font-mono text-[10.5px] text-steel shrink-0">{formatPurchaseRequestCode(r0.requestNumber)}</span>
                   </div>
                   <div className="text-[11.5px] text-steel">{r0.carrier?.name ?? "Transportista"} — {money(r0.shippingCostTotal ?? 0)}</div>
                   <div className="text-[10px] text-steel-dim mb-2.5">Pedido por {actorName(r0.shippingPaymentRequestedBy?.name)}</div>
@@ -643,6 +667,16 @@ export function PurchaseInvoicingPanel() {
         <span className="font-mono text-[10px] text-steel">{restGroups.length} de {restGroupsAll.length}</span>
       </div>
       <div className="flex items-center gap-2 mb-3 flex-wrap text-[12px]">
+        <div className="relative">
+          <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-steel" />
+          <input
+            type="text"
+            placeholder="Buscar producto, proveedor o código…"
+            className="rounded border border-rule bg-cloud pl-7 pr-2.5 py-1.5 w-64"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        </div>
         <select
           className="rounded border border-rule bg-cloud px-2 py-1.5 font-mono"
           value={monthFilter}
@@ -664,8 +698,8 @@ export function PurchaseInvoicingPanel() {
           Hasta
           <input type="date" className="rounded border border-rule bg-cloud px-2 py-1.5" value={dateTo} onChange={(e) => { setDateTo(e.target.value); setMonthFilter(""); }} />
         </label>
-        {(dateFrom || dateTo) && (
-          <button type="button" className="text-steel underline cursor-pointer" onClick={clearDateFilter}>Limpiar</button>
+        {(dateFrom || dateTo || query) && (
+          <button type="button" className="text-steel underline cursor-pointer" onClick={() => { clearDateFilter(); setQuery(""); }}>Limpiar</button>
         )}
       </div>
       {restGroups.length === 0 && <div className="border-[1.5px] border-dashed border-rule rounded-md p-6 text-center text-steel text-[13px]">{restGroupsAll.length === 0 ? "Nada por aquí todavía." : "Nada en ese rango de fechas."}</div>}
@@ -678,9 +712,14 @@ export function PurchaseInvoicingPanel() {
           return (
             <div key={groupId} className="bg-surface border border-rule rounded-md p-4">
               <div className="mb-2.5">
-                {g.map((r) => (
-                  <div key={r.id} className="text-[13.5px] font-bold">{r.catalogItem.name} · {r.quantity} un.</div>
-                ))}
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    {g.map((r) => (
+                      <div key={r.id} className="text-[13.5px] font-bold">{r.catalogItem.name} · {r.quantity} un.</div>
+                    ))}
+                  </div>
+                  <span className="font-mono text-[10.5px] text-steel shrink-0">{formatPurchaseRequestCode(r0.requestNumber)}</span>
+                </div>
                 <div className="text-[11.5px] text-steel">{r0.supplier.name} — Pagado {money(total)} {r0.paidAt ? `· ${new Date(r0.paidAt).toLocaleDateString("es-MX")}` : ""}</div>
                 <div className="text-[10px] text-steel-dim">
                   Solicitada por {actorName(r0.requestedBy?.name)} · Pagada por {actorName(r0.paidBy?.name)}
