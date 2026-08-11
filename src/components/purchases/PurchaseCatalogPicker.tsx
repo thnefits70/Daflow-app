@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Search, Plus, Camera, AlertTriangle, CheckCircle2, Trash2, Flag } from "lucide-react";
+import { Search, Plus, Camera, AlertTriangle, CheckCircle2, Trash2, Flag, X } from "lucide-react";
 import { uploadFile } from "@/lib/uploadFile";
 import { compressImage } from "@/lib/compressImage";
 import { usePasteFile } from "@/lib/usePasteFile";
@@ -251,7 +251,17 @@ export function PurchaseCatalogPicker({
             <label className="block mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-steel">Fotos (1 a 3)</label>
             <div className="flex gap-2 mb-3">
               {photos.map((p, i) => (
-                <img key={i} src={p} alt="" className="w-16 h-16 rounded object-cover border border-rule" />
+                <div key={i} className="relative">
+                  <img src={p} alt="" className="w-16 h-16 rounded object-cover border border-rule" />
+                  <button
+                    type="button"
+                    title="Quitar esta foto"
+                    className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red text-white flex items-center justify-center cursor-pointer"
+                    onClick={() => setPhotos((ps) => ps.filter((_, idx) => idx !== i))}
+                  >
+                    <X size={11} />
+                  </button>
+                </div>
               ))}
               {photos.length < 3 && (
                 <label
