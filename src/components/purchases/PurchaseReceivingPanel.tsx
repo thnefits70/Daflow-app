@@ -90,7 +90,14 @@ function isVideoUrl(url: string) {
 
 const CREDIT_CLAIM_WINDOW_DAYS = 7;
 
-export function PurchaseReceivingPanel() {
+// Fix confirmado 2026-08-11: pedido explícito del usuario — admin puede ver
+// esta pestaña (para supervisar) pero nunca debe poder confirmar que llegó,
+// informar urgente, ni verificar cambios recibidos — eso es exclusivo del
+// líder de Inventario. Los botones quedan visibles pero deshabilitados para
+// admin, nunca ocultos del todo (así sabe que existen, solo no los puede
+// usar). El servidor también lo bloquea (canActOnPurchaseReceiving), así
+// que esto no es solo cosmético.
+export function PurchaseReceivingPanel({ isAdmin = false }: { isAdmin?: boolean }) {
   const router = useRouter();
   const [rows, setRows] = useState<Row[] | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
@@ -347,7 +354,13 @@ export function PurchaseReceivingPanel() {
                     </div>
                   </div>
                 ) : (
-                  <button type="button" className="rounded border border-teal bg-teal px-3.5 py-1.5 text-[12px] font-bold text-navy cursor-pointer" onClick={() => { setOpenReplacementId(pr.id); setReplacementPhotoUrls([]); setErr(""); }}>
+                  <button
+                    type="button"
+                    disabled={isAdmin}
+                    title={isAdmin ? "Exclusivo del líder de Inventario" : undefined}
+                    className="rounded border border-teal bg-teal px-3.5 py-1.5 text-[12px] font-bold text-navy cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                    onClick={() => { setOpenReplacementId(pr.id); setReplacementPhotoUrls([]); setErr(""); }}
+                  >
                     Verificar cambio recibido
                   </button>
                 )}
@@ -639,11 +652,23 @@ export function PurchaseReceivingPanel() {
                           )}
                           <div className="flex items-center gap-2">
                             {r.urgentReports.length === 0 && (
-                              <button type="button" className="text-[11.5px] font-semibold border border-red/50 text-red rounded px-3 py-1.5 cursor-pointer" onClick={() => openUrgent(r.id)}>
+                              <button
+                                type="button"
+                                disabled={isAdmin}
+                                title={isAdmin ? "Exclusivo del líder de Inventario" : undefined}
+                                className="text-[11.5px] font-semibold border border-red/50 text-red rounded px-3 py-1.5 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                                onClick={() => openUrgent(r.id)}
+                              >
                                 🚨 Informar urgente
                               </button>
                             )}
-                            <button type="button" className="rounded border border-green bg-green px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer" onClick={() => { setOpenId(r.id); setReceivedPhotoUrls([]); setAiResult(null); setReceivedQty(""); setComment(""); setErr(""); }}>
+                            <button
+                              type="button"
+                              disabled={isAdmin}
+                              title={isAdmin ? "Exclusivo del líder de Inventario" : undefined}
+                              className="rounded border border-green bg-green px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                              onClick={() => { setOpenId(r.id); setReceivedPhotoUrls([]); setAiResult(null); setReceivedQty(""); setComment(""); setErr(""); }}
+                            >
                               ✓ Confirmar que llegó
                             </button>
                           </div>

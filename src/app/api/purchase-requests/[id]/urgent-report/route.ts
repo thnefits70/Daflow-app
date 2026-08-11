@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
-import { canConfirmPurchaseReceiving } from "@/lib/guards";
+import { canActOnPurchaseReceiving } from "@/lib/guards";
 import { sendPushToOwner } from "@/lib/webPush";
 import { isWithinCreditClaimWindow } from "@/lib/purchaseUrgent";
 
@@ -25,7 +25,7 @@ const schema = z.object({
 // monto escrito a mano.
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
-  if (!(await canConfirmPurchaseReceiving()) || !session) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+  if (!(await canActOnPurchaseReceiving()) || !session) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
   const { id } = await params;
   const body = await req.json().catch(() => null);

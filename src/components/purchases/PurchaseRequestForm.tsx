@@ -42,6 +42,7 @@ type Draft = {
   manualCodeConfirm: boolean;
   purchaseOrderUrl: string | null;
   shippingIncluded: boolean;
+  shippingCarrierPending: boolean;
   carrier: PurchaseSupplierDTO | null;
   carrierBankAccountId: string | null;
   shippingCostTotal: string;
@@ -125,6 +126,12 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
   // — cada quien confirma explícitamente con un clic cuando el proveedor de
   // verdad no cobra flete aparte (ej. entrega a domicilio sin costo extra).
   const [shippingIncluded, setShippingIncluded] = useState(false);
+  // Confirmado 2026-08-11: pedido explícito del usuario — a veces todavía
+  // no se sabe ni el transportista ni el costo real del flete al momento
+  // de solicitar. Con esto marcado, esos dos campos dejan de ser
+  // obligatorios y quedan pendientes de completar después desde "Mis
+  // solicitudes" (mismo patrón que la orden de compra).
+  const [shippingCarrierPending, setShippingCarrierPending] = useState(false);
   const [carrier, setCarrier] = useState<PurchaseSupplierDTO | null>(null);
   const [carrierBankAccountId, setCarrierBankAccountId] = useState<string | null>(null);
   const [shippingCostTotal, setShippingCostTotal] = useState("");
@@ -212,6 +219,7 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
         setManualCodeConfirm(d.manualCodeConfirm ?? false);
         setPurchaseOrderUrl(d.purchaseOrderUrl ?? null);
         setShippingIncluded(d.shippingIncluded ?? false);
+        setShippingCarrierPending(d.shippingCarrierPending ?? false);
         setCarrier(normalizeSupplier(d.carrier));
         setCarrierBankAccountId(d.carrierBankAccountId ?? null);
         setShippingCostTotal(d.shippingCostTotal ?? "");
@@ -240,6 +248,7 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
       manualCodeConfirm,
       purchaseOrderUrl,
       shippingIncluded,
+      shippingCarrierPending,
       carrier,
       carrierBankAccountId,
       shippingCostTotal,
@@ -254,7 +263,7 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
     } else {
       localStorage.removeItem(DRAFT_KEY);
     }
-  }, [hydrated, lines, supplier, bankAccountId, quoteImageUrl, verifyResult, manualCodeConfirm, purchaseOrderUrl, shippingIncluded, carrier, carrierBankAccountId, shippingCostTotal, shippingPaymentMethod, shippingPaymentTiming, justification, editingGroupId, resubmitAttemptHint]);
+  }, [hydrated, lines, supplier, bankAccountId, quoteImageUrl, verifyResult, manualCodeConfirm, purchaseOrderUrl, shippingIncluded, shippingCarrierPending, carrier, carrierBankAccountId, shippingCostTotal, shippingPaymentMethod, shippingPaymentTiming, justification, editingGroupId, resubmitAttemptHint]);
 
   function resetForm() {
     setLines([emptyLine()]);
@@ -271,6 +280,7 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
     setCarrierBankAccountId(null);
     setShippingCostTotal("");
     setShippingIncluded(false);
+    setShippingCarrierPending(false);
     setShippingPaymentMethod("TRANSFER");
     setShippingPaymentTiming("WITH_PURCHASE");
     setJustification("");
@@ -444,8 +454,8 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
       setErr("El monto de la orden de compra todavía no está verificado — debe coincidir con lo que escribiste.");
       return;
     }
-    if (!shippingIncluded && !carrier) {
-      setErr("Elige el transportista, ya que el envío no está incluido.");
+    if (!shippingIncluded && !carrier && !shippingCarrierPending) {
+      setErr("Elige el transportista, ya que el envío no está incluido — o marca que todavía no lo sabes.");
       return;
     }
     const supplierAccounts = supplier.bankAccounts ?? [];
@@ -478,6 +488,7 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
       quoteReferenceCode: verifyResult?.referenceCodeFound ?? null,
       purchaseOrderUrl,
       shippingIncluded,
+      shippingCarrierPending: !shippingIncluded && shippingCarrierPending,
       carrierId: shippingIncluded ? null : carrier?.id,
       shippingCostTotal: shippingIncluded ? null : Number(shippingCostTotal) || null,
       shippingPaymentMethod: shippingIncluded ? null : shippingPaymentMethod,
@@ -801,60 +812,79 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
       {!shippingIncluded && (
         <div className="bg-surface2 border border-rule rounded-md p-3.5 mb-3.5">
           <label className="block mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-steel">Transportista</label>
-          <PurchaseSupplierPicker
-            type="CARRIER"
-            value={carrier}
-            onChange={(c) => { setCarrier(c); if (!c) setCarrierBankAccountId(null); }}
-            label="Buscar o registrar transportista"
-            isAdmin={isAdmin}
-            selectedBankAccountId={carrierBankAccountId}
-            onSelectBankAccount={setCarrierBankAccountId}
-          />
-          {carrier && (carrier.bankAccounts ?? []).length === 0 && (
-            <div className="text-[10.5px] text-steel mt-1.5">
-              Todavía sin cuenta bancaria registrada — normal si el transportista solo la da al entregar. Se puede agregar después.
+
+          <label className="flex items-center gap-2 mb-3 text-[12px] text-steel cursor-pointer">
+            <input
+              type="checkbox"
+              checked={shippingCarrierPending}
+              onChange={(e) => { setShippingCarrierPending(e.target.checked); if (e.target.checked) { setCarrier(null); setCarrierBankAccountId(null); setShippingCostTotal(""); } }}
+              className="w-auto"
+            />
+            Todavía no sé el transportista ni el costo del flete — lo completo después
+          </label>
+
+          {shippingCarrierPending ? (
+            <div className="text-[11.5px] text-steel bg-cloud border border-dashed border-rule rounded-md p-3">
+              Va a quedar pendiente en &quot;Mis solicitudes&quot; hasta que completes el transportista y el costo real — el pago del flete se hace cuando llegue la mercadería.
             </div>
-          )}
-          <div className="grid grid-cols-2 gap-2.5 mt-3">
-            <div>
-              <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Costo de envío (total)</label>
-              <input type="number" min="0" step="0.01" className="w-full rounded border border-rule px-2.5 py-2 text-[13.5px]" value={shippingCostTotal} onChange={(e) => setShippingCostTotal(e.target.value)} />
-            </div>
-            <div>
-              <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">¿Cómo se paga?</label>
-              <select className="w-full rounded border border-rule bg-surface px-2.5 py-2 text-[13.5px]" value={shippingPaymentMethod} onChange={(e) => setShippingPaymentMethod(e.target.value as "TRANSFER" | "PETTY_CASH")}>
-                <option value="TRANSFER">Transferencia bancaria</option>
-                <option value="PETTY_CASH">Efectivo — caja chica</option>
-              </select>
-            </div>
-          </div>
-          {lines.length > 1 && (
-            <div className="text-[10.5px] text-steel mt-2">El costo de envío se reparte entre los productos según la cantidad de cada uno.</div>
-          )}
-          <div className="mt-3">
-            <label className="block mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-steel">¿Cuándo se paga el flete?</label>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                className={`flex-1 rounded-md border py-1.5 text-[12px] font-semibold cursor-pointer ${shippingPaymentTiming === "WITH_PURCHASE" ? "border-teal bg-teal/10 text-teal" : "border-rule text-steel"}`}
-                onClick={() => setShippingPaymentTiming("WITH_PURCHASE")}
-              >
-                Junto con la compra
-              </button>
-              <button
-                type="button"
-                className={`flex-1 rounded-md border py-1.5 text-[12px] font-semibold cursor-pointer ${shippingPaymentTiming === "ON_DELIVERY" ? "border-teal bg-teal/10 text-teal" : "border-rule text-steel"}`}
-                onClick={() => setShippingPaymentTiming("ON_DELIVERY")}
-              >
-                Cuando llegue la mercadería
-              </button>
-            </div>
-            {shippingPaymentTiming === "ON_DELIVERY" && (
-              <div className="text-[10.5px] text-steel mt-1.5">
-                Cuando Inventario confirme que llegó, vas a poder pedir con un clic que se pague el flete.
+          ) : (
+            <>
+              <PurchaseSupplierPicker
+                type="CARRIER"
+                value={carrier}
+                onChange={(c) => { setCarrier(c); if (!c) setCarrierBankAccountId(null); }}
+                label="Buscar o registrar transportista"
+                isAdmin={isAdmin}
+                selectedBankAccountId={carrierBankAccountId}
+                onSelectBankAccount={setCarrierBankAccountId}
+              />
+              {carrier && (carrier.bankAccounts ?? []).length === 0 && (
+                <div className="text-[10.5px] text-steel mt-1.5">
+                  Todavía sin cuenta bancaria registrada — normal si el transportista solo la da al entregar. Se puede agregar después.
+                </div>
+              )}
+              <div className="grid grid-cols-2 gap-2.5 mt-3">
+                <div>
+                  <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Costo de envío (total)</label>
+                  <input type="number" min="0" step="0.01" className="w-full rounded border border-rule px-2.5 py-2 text-[13.5px]" value={shippingCostTotal} onChange={(e) => setShippingCostTotal(e.target.value)} />
+                </div>
+                <div>
+                  <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">¿Cómo se paga?</label>
+                  <select className="w-full rounded border border-rule bg-surface px-2.5 py-2 text-[13.5px]" value={shippingPaymentMethod} onChange={(e) => setShippingPaymentMethod(e.target.value as "TRANSFER" | "PETTY_CASH")}>
+                    <option value="TRANSFER">Transferencia bancaria</option>
+                    <option value="PETTY_CASH">Efectivo — caja chica</option>
+                  </select>
+                </div>
               </div>
-            )}
-          </div>
+              {lines.length > 1 && (
+                <div className="text-[10.5px] text-steel mt-2">El costo de envío se reparte entre los productos según la cantidad de cada uno.</div>
+              )}
+              <div className="mt-3">
+                <label className="block mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-steel">¿Cuándo se paga el flete?</label>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    className={`flex-1 rounded-md border py-1.5 text-[12px] font-semibold cursor-pointer ${shippingPaymentTiming === "WITH_PURCHASE" ? "border-teal bg-teal/10 text-teal" : "border-rule text-steel"}`}
+                    onClick={() => setShippingPaymentTiming("WITH_PURCHASE")}
+                  >
+                    Junto con la compra
+                  </button>
+                  <button
+                    type="button"
+                    className={`flex-1 rounded-md border py-1.5 text-[12px] font-semibold cursor-pointer ${shippingPaymentTiming === "ON_DELIVERY" ? "border-teal bg-teal/10 text-teal" : "border-rule text-steel"}`}
+                    onClick={() => setShippingPaymentTiming("ON_DELIVERY")}
+                  >
+                    Cuando llegue la mercadería
+                  </button>
+                </div>
+                {shippingPaymentTiming === "ON_DELIVERY" && (
+                  <div className="text-[10.5px] text-steel mt-1.5">
+                    Cuando Inventario confirme que llegó, vas a poder pedir con un clic que se pague el flete.
+                  </div>
+                )}
+              </div>
+            </>
+          )}
         </div>
       )}
 

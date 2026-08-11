@@ -401,6 +401,20 @@ export async function canConfirmPurchaseReceiving() {
   return !!user.isLeader && user.leadsDept?.code === "INV";
 }
 
+// Fix confirmado 2026-08-11: excepción explícita al patrón "admin siempre
+// puede" — el usuario pidió específicamente que confirmar que llegó,
+// informar urgente, y verificar cambios recibidos sean EXCLUSIVOS del líder
+// de Inventario, ni siquiera admin. canConfirmPurchaseReceiving arriba
+// sigue igual (se usa para poder VER la pestaña Inventario/GET), pero las
+// rutas que de verdad ejecutan la acción usan esta en su lugar.
+export async function canActOnPurchaseReceiving() {
+  const session = await auth();
+  if (!session) return false;
+  const user = await purchasesUserContext(session.user.id);
+  if (!user) return false;
+  return !!user.isLeader && user.leadsDept?.code === "INV";
+}
+
 // Fix confirmado 2026-08-07: mismo bug que ya se corrigió en
 // canConfirmPurchaseReceiving — canManagePurchases es el escape hatch
 // pensado para Solicitar (Bryan), pero como esta función también lo

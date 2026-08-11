@@ -79,11 +79,11 @@ export function PurchaseControlPanel({
       </div>
 
       {tab === "solicitar" && <PurchaseRequestForm deptId={deptId} isAdmin={isAdmin} />}
-      {tab === "mias" && <MyPurchaseRequests onResubmit={handleResubmit} />}
+      {tab === "mias" && <MyPurchaseRequests onResubmit={handleResubmit} isAdmin={isAdmin} />}
       {tab === "comparar" && <PurchasePriceExplorer />}
       {tab === "aprobacion" && <PurchaseApprovalInbox />}
       {tab === "urgentes" && <PurchaseUrgentReportsPanel isAdmin={isAdmin} />}
-      {tab === "inventario" && <PurchaseReceivingPanel />}
+      {tab === "inventario" && <PurchaseReceivingPanel isAdmin={isAdmin} />}
       {tab === "finanzas" && <PurchaseInvoicingPanel />}
       {tab === "auditoria" && <PurchaseAuditPanel />}
     </div>

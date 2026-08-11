@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { canConfirmPurchaseReceiving } from "@/lib/guards";
+import { canActOnPurchaseReceiving } from "@/lib/guards";
 import { compareReceiptPhotos } from "@/lib/purchaseAi";
 import { pushOwnerId } from "@/lib/pushOwner";
 
@@ -14,7 +14,7 @@ const schema = z.object({ photoUrls: z.array(z.string().url()).min(2).max(3) });
 // solo da apoyo, Daniel es quien de verdad confirma que llegó bien.
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
-  if (!(await canConfirmPurchaseReceiving()) || !session) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+  if (!(await canActOnPurchaseReceiving()) || !session) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
   const { id } = await params;
   const body = await req.json().catch(() => null);

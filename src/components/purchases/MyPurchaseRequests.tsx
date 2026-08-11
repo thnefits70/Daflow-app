@@ -5,7 +5,7 @@ import { FileText, Upload, Truck, CheckCircle2, Plus, Bell } from "lucide-react"
 import { uploadFile } from "@/lib/uploadFile";
 import { compressImage } from "@/lib/compressImage";
 import { usePasteFile } from "@/lib/usePasteFile";
-import type { BankAccountDTO } from "./PurchaseSupplierPicker";
+import { PurchaseSupplierPicker, type BankAccountDTO, type PurchaseSupplierDTO } from "./PurchaseSupplierPicker";
 import { actorName } from "@/lib/actorName";
 
 // Nota: formateo puro repetido a propósito (no importado de purchases.ts)
@@ -34,6 +34,7 @@ type Row = {
   invoiceStatus: string;
   purchaseOrderUrl: string | null;
   shippingIncluded: boolean;
+  shippingCarrierPending: boolean;
   shippingPaymentTiming: "WITH_PURCHASE" | "ON_DELIVERY" | null;
   shippingCostTotal: number | null;
   carrier: { id: string; name: string; bankAccounts: BankAccountDTO[] } | null;
@@ -325,6 +326,77 @@ function ShippingPaymentSection({ g, onUpdate }: { g: Row[]; onUpdate: (patch: P
   );
 }
 
+// Confirmado 2026-08-11: pedido explícito del usuario — cuando se solicitó
+// marcando "todavía no sé el transportista ni el costo del flete", esto
+// aparece hasta que se complete con los datos reales (mismo patrón que la
+// orden de compra pendiente, arriba).
+function ShippingCarrierPendingSection({ g, onUpdate, isAdmin }: { g: Row[]; onUpdate: (patch: Partial<Row>) => void; isAdmin: boolean }) {
+  const r0 = g[0];
+  const [carrier, setCarrier] = useState<PurchaseSupplierDTO | null>(null);
+  const [carrierBankAccountId, setCarrierBankAccountId] = useState<string | null>(null);
+  const [cost, setCost] = useState("");
+  const [method, setMethod] = useState<"TRANSFER" | "PETTY_CASH">("TRANSFER");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+
+  async function submit() {
+    if (!carrier) { setErr("Elige el transportista."); return; }
+    const n = Number(cost);
+    if (!cost || Number.isNaN(n) || n < 0) { setErr("Ingresa el costo del flete."); return; }
+    setBusy(true);
+    setErr("");
+    const res = await fetch(`/api/purchase-requests/group/${r0.groupId}/carrier-info`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ carrierId: carrier.id, shippingCostTotal: n, shippingPaymentMethod: method, carrierBankAccountId }),
+    });
+    setBusy(false);
+    const data = await res.json().catch(() => null);
+    if (!res.ok) { setErr(data?.error ?? "No se pudo guardar."); return; }
+    onUpdate({
+      shippingCarrierPending: false,
+      carrier: { id: carrier.id, name: carrier.name, bankAccounts: carrier.bankAccounts },
+      carrierBankAccountId,
+      shippingCostTotal: n,
+      shippingPaymentTiming: "ON_DELIVERY",
+    });
+  }
+
+  return (
+    <div className="mt-3 pt-3 border-t border-dashed border-gold/40">
+      <div className="flex items-center gap-1.5 text-[12px] font-semibold mb-2" style={{ color: "#D9A441" }}>
+        <Truck size={13} /> Falta completar el transportista y el costo del flete
+      </div>
+      <PurchaseSupplierPicker
+        type="CARRIER"
+        value={carrier}
+        onChange={(c) => { setCarrier(c); if (!c) setCarrierBankAccountId(null); }}
+        label="Buscar o registrar transportista"
+        isAdmin={isAdmin}
+        selectedBankAccountId={carrierBankAccountId}
+        onSelectBankAccount={setCarrierBankAccountId}
+      />
+      <div className="grid grid-cols-2 gap-2.5 mt-2.5">
+        <div>
+          <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Costo de envío (total)</label>
+          <input type="number" min="0" step="0.01" className="w-full rounded border border-rule px-2.5 py-2 text-[13px]" value={cost} onChange={(e) => setCost(e.target.value)} />
+        </div>
+        <div>
+          <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">¿Cómo se paga?</label>
+          <select className="w-full rounded border border-rule bg-surface px-2.5 py-2 text-[13px]" value={method} onChange={(e) => setMethod(e.target.value as "TRANSFER" | "PETTY_CASH")}>
+            <option value="TRANSFER">Transferencia bancaria</option>
+            <option value="PETTY_CASH">Efectivo — caja chica</option>
+          </select>
+        </div>
+      </div>
+      {err && <div className="text-red text-[11.5px] mt-2">{err}</div>}
+      <button type="button" disabled={busy} className="mt-2.5 rounded border border-blue bg-blue px-3.5 py-1.5 text-[12px] font-semibold text-white cursor-pointer disabled:opacity-60" onClick={submit}>
+        Guardar
+      </button>
+    </div>
+  );
+}
+
 // Confirmado 2026-08-07: reenviar una solicitud rechazada arma un borrador
 // con TODO lo que ya se había llenado (mismo mecanismo de borrador que ya
 // usa PurchaseRequestForm para "retomar sin terminar") y lo deja listo en
@@ -353,6 +425,7 @@ function buildResubmitDraft(g: Row[]) {
     manualCodeConfirm: !!r0.quoteReferenceCode,
     purchaseOrderUrl: r0.purchaseOrderUrl,
     shippingIncluded: r0.shippingIncluded,
+    shippingCarrierPending: r0.shippingCarrierPending,
     carrier: r0.carrier ? { id: r0.carrier.id, name: r0.carrier.name, location: null, email: null, bankAccounts: r0.carrier.bankAccounts, contacts: [] } : null,
     carrierBankAccountId: r0.carrierBankAccountId,
     shippingCostTotal: r0.shippingCostTotal != null ? String(r0.shippingCostTotal) : "",
@@ -369,11 +442,13 @@ function GroupCard({
   onPurchaseOrderUploaded,
   onGroupUpdate,
   onResubmit,
+  isAdmin,
 }: {
   g: Row[];
   onPurchaseOrderUploaded: (groupId: string, url: string) => void;
   onGroupUpdate: (groupId: string, patch: Partial<Row>) => void;
   onResubmit: (draft: ReturnType<typeof buildResubmitDraft>) => void;
+  isAdmin: boolean;
 }) {
   const groupId = g[0].groupId;
   const total = g.reduce((s, r) => s + r.totalCost, 0);
@@ -501,6 +576,10 @@ function GroupCard({
         </div>
       )}
 
+      {!rejected && g[0].shippingCarrierPending && (
+        <ShippingCarrierPendingSection g={g} onUpdate={(patch) => onGroupUpdate(groupId, patch)} isAdmin={isAdmin} />
+      )}
+
       {!rejected && g[0].bankAccountChangeRequestedAt && (
         <BankAccountChangeSection g={g} onUpdate={(patch) => onGroupUpdate(groupId, patch)} />
       )}
@@ -510,7 +589,7 @@ function GroupCard({
   );
 }
 
-export function MyPurchaseRequests({ onResubmit }: { onResubmit: (draft: ReturnType<typeof buildResubmitDraft>) => void }) {
+export function MyPurchaseRequests({ onResubmit, isAdmin = false }: { onResubmit: (draft: ReturnType<typeof buildResubmitDraft>) => void; isAdmin?: boolean }) {
   const [rows, setRows] = useState<Row[] | null>(null);
 
   useEffect(() => {
@@ -540,7 +619,7 @@ export function MyPurchaseRequests({ onResubmit }: { onResubmit: (draft: ReturnT
       )}
       <div className="flex flex-col gap-2.5">
         {groups.map((g) => (
-          <GroupCard key={g[0].groupId} g={g} onPurchaseOrderUploaded={markUploaded} onGroupUpdate={updateGroup} onResubmit={onResubmit} />
+          <GroupCard key={g[0].groupId} g={g} onPurchaseOrderUploaded={markUploaded} onGroupUpdate={updateGroup} onResubmit={onResubmit} isAdmin={isAdmin} />
         ))}
       </div>
     </div>
