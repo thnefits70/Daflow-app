@@ -200,7 +200,14 @@ function BoxCard({
   const [dateTo, setDateTo] = useState("");
   const [monthFilter, setMonthFilter] = useState("");
 
-  const blocked = box.blocked && canManage;
+  // Fix confirmado 2026-08-11: pedido explícito del usuario — confirmar que
+  // llegó el fondeo y registrar un desembolso son acciones EXCLUSIVAS de
+  // quien de verdad administra la caja del día a día (Bryan en Secundaria) —
+  // canManage sigue siendo true para admin (ve, funda, puede editar/archivar
+  // el historial), pero admin nunca debe ver ni usar estas dos acciones
+  // puntuales, que le corresponden solo al dueño real de la caja.
+  const canOperate = canManage && !isAdmin;
+  const blocked = box.blocked && canOperate;
   const myPending = box.pendingRecharges[0];
 
   async function verifyProof(target: "desembolso" | "recarga", url: string, expected: number) {
@@ -327,7 +334,7 @@ function BoxCard({
         </div>
       )}
 
-      {myPending && canManage && (
+      {myPending && canOperate && (
         <div className="mt-3 bg-blue/10 border border-blue/30 rounded-md p-3">
           <div className="text-[12px] font-semibold mb-1">📥 Te fondearon la caja — confírmalo</div>
           <div className="text-[11px] text-steel mb-2">{myPending.description}</div>
@@ -438,7 +445,7 @@ function BoxCard({
         </div>
       )}
 
-      {canManage && !blocked && (
+      {canOperate && !blocked && (
         <div className="mt-4 pt-3.5 border-t border-dashed border-rule">
           <div className="text-[12px] font-semibold mb-2">Registrar solicitud de pago</div>
           {showOrderLink && (
