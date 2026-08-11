@@ -48,6 +48,7 @@ const updateSchema = z.object({
   canAddSuppliers: z.boolean().optional(),
   canManagePurchases: z.boolean().optional(),
   canManageAdminPayments: z.boolean().optional(),
+  canManagePettyCashSecundaria: z.boolean().optional(),
   canConfirmMarketingDesign: z.boolean().optional(),
   canConfirmMarketingAdvisor: z.boolean().optional(),
   marketingAdvisorBrand: z.string().nullable().optional(),
@@ -115,6 +116,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (d.canAddSuppliers !== undefined) data.canAddSuppliers = d.canAddSuppliers;
   if (d.canManagePurchases !== undefined) data.canManagePurchases = d.canManagePurchases;
   if (d.canManageAdminPayments !== undefined) data.canManageAdminPayments = d.canManageAdminPayments;
+  if (d.canManagePettyCashSecundaria !== undefined) data.canManagePettyCashSecundaria = d.canManagePettyCashSecundaria;
   if (d.canConfirmMarketingDesign !== undefined) data.canConfirmMarketingDesign = d.canConfirmMarketingDesign;
   if (d.canConfirmMarketingAdvisor !== undefined) data.canConfirmMarketingAdvisor = d.canConfirmMarketingAdvisor;
   if (d.marketingAdvisorBrand !== undefined) data.marketingAdvisorBrand = d.marketingAdvisorBrand;

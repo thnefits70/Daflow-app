@@ -36,6 +36,7 @@ type UserProfile = {
   canAddSuppliers: boolean;
   canManagePurchases: boolean;
   canManageAdminPayments: boolean;
+  canManagePettyCashSecundaria: boolean;
   canConfirmMarketingDesign: boolean;
   canConfirmMarketingAdvisor: boolean;
   marketingAdvisorBrand: string | null;
@@ -730,6 +731,31 @@ export function ProfileDetail({
                 type="button"
                 className={`flex-1 py-1.5 text-[12.5px] font-semibold cursor-pointer ${!p.canManageAdminPayments ? "bg-blue text-white" : "bg-surface text-steel"}`}
                 onClick={() => save({ canManageAdminPayments: false })}
+              >
+                No
+              </button>
+            </div>
+          </div>
+
+          <div className="bg-cloud border border-rule rounded p-3.5 mt-3.5">
+            <label className="flex items-center gap-1 mb-2 text-[10.5px] font-semibold uppercase tracking-wide text-steel">
+              <Receipt size={11} /> ¿Puede administrar Caja Chica Secundaria?
+            </label>
+            <div className="text-[11px] text-steel mb-2">
+              Confirmar que recibió una recarga y registrar sus propios desembolsos — sin necesitar ser líder formal de Finanzas. Aparece en su propia &quot;Mi área de trabajo&quot;.
+            </div>
+            <div className="flex border border-rule rounded overflow-hidden max-w-[220px]">
+              <button
+                type="button"
+                className={`flex-1 py-1.5 text-[12.5px] font-semibold cursor-pointer ${p.canManagePettyCashSecundaria ? "bg-blue text-white" : "bg-surface text-steel"}`}
+                onClick={() => save({ canManagePettyCashSecundaria: true })}
+              >
+                Sí
+              </button>
+              <button
+                type="button"
+                className={`flex-1 py-1.5 text-[12.5px] font-semibold cursor-pointer ${!p.canManagePettyCashSecundaria ? "bg-blue text-white" : "bg-surface text-steel"}`}
+                onClick={() => save({ canManagePettyCashSecundaria: false })}
               >
                 No
               </button>
