@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { GitBranch, FileText, GraduationCap, LineChart, TrendingUp, MessageSquare, CalendarClock, BellRing, Heart, ShoppingCart, Package, Pin, Wallet, BarChart3, Landmark } from "lucide-react";
+import { GitBranch, FileText, GraduationCap, LineChart, TrendingUp, MessageSquare, CalendarClock, BellRing, Heart, ShoppingCart, Package, Pin, Wallet, BarChart3, Landmark, PackageCheck } from "lucide-react";
 import { ProcessEmbeddedPanel } from "@/components/process/ProcessEmbeddedPanel";
 import type { ProcessDTO } from "@/components/process/ProcessEditor";
 import type { ProcessUpdateDTO } from "@/components/process/ProcessHistoryPanel";
@@ -26,6 +26,7 @@ import { PettyCashPanel } from "@/components/pettycash/PettyCashPanel";
 import { PettyCashExceptionsPanel } from "@/components/pettycash/PettyCashExceptionsPanel";
 import type { PettyCashViewerData } from "@/lib/pettyCash";
 import { AdminPaymentsPanel } from "@/components/finance/AdminPaymentsPanel";
+import { MarketingArrivalsPanel } from "@/components/marketing/MarketingArrivalsPanel";
 
 type DocumentDTO = { id: string; title: string; content: string; link: string; fileUrl: string | null; fileName: string | null };
 type ExamSummary = { id: string; title: string; questionCount: number };
@@ -39,6 +40,7 @@ const ALL_TABS = [
   { key: "feedback", label: "Feedback semanal", icon: MessageSquare },
   { key: "procesos", label: "Procesos", icon: GitBranch },
   { key: "compras", label: "Control de Compras", icon: ShoppingCart },
+  { key: "llegadas", label: "Mercadería recibida", icon: PackageCheck },
   { key: "inventario", label: "Control de Inventario", icon: Package },
   { key: "inventoriokpis", label: "KPIs de Inventario", icon: BarChart3 },
   { key: "cajachica", label: "Caja Chica", icon: Wallet },
@@ -78,6 +80,9 @@ export function DeptWorkspaceTabs({
   inventoryKpisData = null,
   pettyCashData = null,
   canManageAdminPayments = false,
+  canViewMarketingArrivals = false,
+  canConfirmMarketingDesign = false,
+  canConfirmMarketingAdvisor = false,
   preferredTab = null,
   isAdmin = false,
   editable,
@@ -132,6 +137,13 @@ export function DeptWorkspaceTabs({
   // Pagos administrativos — mismo patrón sin dept.code que Control de
   // Compras (confirmado 2026-08-06), exclusivo de Finanzas + admin.
   canManageAdminPayments?: boolean;
+  // "Mercadería recibida" — confirmado 2026-08-08: visible para TODOS los
+  // que pertenecen a Análisis de Mercado (informativo), pero solo confirman
+  // quien tenga el flag puntual (canConfirmMarketingDesign/Advisor) — nunca
+  // el líder del área, que solo supervisa.
+  canViewMarketingArrivals?: boolean;
+  canConfirmMarketingDesign?: boolean;
+  canConfirmMarketingAdvisor?: boolean;
   isAdmin?: boolean;
   editable: boolean;
   kpisEditable?: boolean;
@@ -152,6 +164,7 @@ export function DeptWorkspaceTabs({
     if (t.key === "semanal") return trackWeeklyMetric;
     if (t.key === "feedback") return trackWeeklyReview;
     if (t.key === "compras") return canSubmitPurchases || canReceivePurchases || canInvoicePurchases;
+    if (t.key === "llegadas") return canViewMarketingArrivals;
     if (t.key === "inventario") return canManageInventoryControl;
     if (t.key === "inventoriokpis") return canViewInventoryKpisPanel;
     if (t.key === "cajachica") return !!(pettyCashData?.principal || pettyCashData?.secundaria);
@@ -254,6 +267,9 @@ export function DeptWorkspaceTabs({
           canInvoice={canInvoicePurchases}
           isAdmin={isAdmin}
         />
+      )}
+      {tab === "llegadas" && canViewMarketingArrivals && (
+        <MarketingArrivalsPanel canConfirmDesign={canConfirmMarketingDesign} canConfirmAdvisor={canConfirmMarketingAdvisor} />
       )}
       {tab === "inventario" && canManageInventoryControl && inventoryControlData && (
         <InventoryControlPanel

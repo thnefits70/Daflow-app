@@ -165,6 +165,23 @@ model User {
   // el acceso vive en este flag directo. Admin siempre puede, sin el flag.
   canManagePettyCashSecundaria Boolean @default(false)
 
+  // Confirmado 2026-08-08: "Mercadería recibida" (Análisis de Mercado) —
+  // dos flags separados porque son dos tareas totalmente distintas sobre la
+  // misma llegada. canConfirmMarketingDesign = el diseñador de AMBAS marcas
+  // (hoy Robert) sube fotos reales brandeadas + video publicitario en Drive.
+  // canConfirmMarketingAdvisor = el asesor de cualquiera de las dos marcas
+  // (hoy Heidy — Importadora Damián — o Jariel — Provedix) verifica stock,
+  // precio de venta, descripción y Dropi. Ambos ven TODAS las llegadas (no
+  // hay campo de marca real en el catálogo); la marca que se muestra en
+  // pantalla es solo informativa, derivada de quién confirmó. Admin siempre
+  // puede ambas cosas, sin necesitar el flag.
+  canConfirmMarketingDesign  Boolean @default(false)
+  canConfirmMarketingAdvisor Boolean @default(false)
+  // Solo informativo (mismo espíritu que Store.brand) — qué marca asesora
+  // esta persona, para mostrarla junto a su nombre cuando confirma. Nunca se
+  // usa para filtrar ni bloquear quién ve o puede confirmar qué llegada.
+  marketingAdvisorBrand String?
+
   // Confirmado 2026-08-05: excluye a esta persona de "Colaborador del mes"
   // por completo — su líder ya no la ve en su lista para calificar, y nunca
   // se generan evaluaciones nuevas para ella. No borra evaluaciones pasadas.
@@ -231,6 +248,8 @@ model User {
   purchaseRequestsMade            PurchaseRequest[] @relation("PurchaseRequestRequestedBy")
   purchaseRequestsReviewed        PurchaseRequest[] @relation("PurchaseRequestReviewedBy")
   purchaseRequestReceiptsConfirmed PurchaseRequestReceipt[] @relation("PurchaseRequestReceiptConfirmedBy")
+  marketingFollowUpsDesignConfirmed  PurchaseReceiptFollowUp[] @relation("PurchaseReceiptFollowUpDesignConfirmedBy")
+  marketingFollowUpsAdvisorConfirmed PurchaseReceiptFollowUp[] @relation("PurchaseReceiptFollowUpAdvisorConfirmedBy")
   purchaseRequestUrgentReports    PurchaseRequestUrgentReport[] @relation("PurchaseRequestUrgentReportedBy")
   storeFeedbackEvaluations        StoreFeedbackEvaluation[] @relation("StoreFeedbackEvaluatedBy")
   confidentialAccess ConfidentialDocumentAccess[]
@@ -1287,6 +1306,7 @@ model PurchaseRequest {
 
   receipt       PurchaseRequestReceipt?
   urgentReports PurchaseRequestUrgentReport[]
+  marketingFollowUp PurchaseReceiptFollowUp?
 
   @@index([deptId])
   @@index([status])
@@ -1322,6 +1342,36 @@ model PurchaseRequestReceipt {
   confirmedById String?
   confirmedBy   User?    @relation("PurchaseRequestReceiptConfirmedBy", fields: [confirmedById], references: [id], onDelete: SetNull)
   confirmedAt   DateTime @default(now())
+}
+
+// Confirmado 2026-08-08: "Mercadería recibida" — pedido explícito del
+// usuario, para que Análisis de Mercado (Bryan y su equipo) sepa cuándo
+// llegó algo a bodega y qué falta hacer con eso. Se crea UNA fila por cada
+// PurchaseRequest que pasa a RECEIVED (1:1, igual que PurchaseRequestReceipt).
+// Dos confirmaciones totalmente independientes, cada una su propia tarea:
+// designConfirmedAt = el diseñador (canConfirmMarketingDesign, hoy Robert)
+// ya subió fotos reales brandeadas + video publicitario a Drive.
+// advisorConfirmedAt = el asesor de cualquiera de las dos marcas
+// (canConfirmMarketingAdvisor, hoy Heidy o Jariel) ya verificó stock, precio
+// de venta, descripción y Dropi. No hay campo de marca en el catálogo — la
+// marca mostrada en pantalla es solo informativa, derivada de QUIÉN
+// confirmó (ver src/lib/marketingArrivals.ts), nunca usada para filtrar ni
+// bloquear. Bryan (líder del área) nunca confirma nada acá — solo supervisa
+// viendo el estado de todos.
+model PurchaseReceiptFollowUp {
+  id        String          @id @default(cuid())
+  requestId String          @unique
+  request   PurchaseRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  designConfirmedAt   DateTime?
+  designConfirmedById String?
+  designConfirmedBy   User?     @relation("PurchaseReceiptFollowUpDesignConfirmedBy", fields: [designConfirmedById], references: [id], onDelete: SetNull)
+
+  advisorConfirmedAt   DateTime?
+  advisorConfirmedById String?
+  advisorConfirmedBy   User?     @relation("PurchaseReceiptFollowUpAdvisorConfirmedBy", fields: [advisorConfirmedById], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
 }
 
 // "Informar urgente" desde la confirmación de Inventario — mercadería

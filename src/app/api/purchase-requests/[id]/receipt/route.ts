@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { canConfirmPurchaseReceiving } from "@/lib/guards";
 import { sendPushToOwner } from "@/lib/webPush";
+import { getMarketingArrivalActorIds } from "@/lib/marketingArrivals";
 
 const schema = z.object({
   receivedQuantity: z.number().int().nonnegative(),
@@ -60,6 +61,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       },
     }),
     prisma.purchaseRequest.update({ where: { id }, data: { status: "RECEIVED" } }),
+    // Confirmado 2026-08-08: "Mercadería recibida" — se crea vacía apenas
+    // Daniel confirma, para que Análisis de Mercado (Robert/Heidy/Jariel) la
+    // vea y la vaya confirmando cada quien su parte.
+    prisma.purchaseReceiptFollowUp.create({ data: { requestId: id } }),
   ]);
 
   if (existing.requestedById) {
@@ -69,6 +74,20 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       url: "/area/workspace",
     }).catch(() => null);
   }
+
+  const arrivalBody = `${existing.catalogItem.name} · ${parsed.data.receivedQuantity} un.`;
+  const [designIds, advisorIds] = await Promise.all([
+    getMarketingArrivalActorIds("design"),
+    getMarketingArrivalActorIds("advisor"),
+  ]);
+  await Promise.all([
+    ...designIds.map((uid) =>
+      sendPushToOwner(uid, { title: "Llegó mercadería a bodega", body: arrivalBody, url: "/area/workspace?tab=llegadas" }).catch(() => null)
+    ),
+    ...advisorIds.map((uid) =>
+      sendPushToOwner(uid, { title: "Llegó mercadería a bodega", body: arrivalBody, url: "/area/workspace?tab=llegadas" }).catch(() => null)
+    ),
+  ]);
 
   return NextResponse.json(updated);
 }

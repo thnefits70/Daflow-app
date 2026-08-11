@@ -432,6 +432,34 @@ export async function canManageAdminPayments() {
   return !!user.isLeader && user.leadsDept?.code === "FIN";
 }
 
+// "Mercadería recibida" (Análisis de Mercado) — confirmado 2026-08-08.
+// Ver visible = pertenecer al departamento MKT (Bryan incluido, aunque él
+// nunca confirma nada, solo supervisa). Confirmar = flag puntual, admin
+// siempre puede ambas.
+export async function canViewMarketingArrivals() {
+  const session = await auth();
+  if (!session) return false;
+  if (session.user.role === "admin") return true;
+  const user = await prisma.user.findUnique({ where: { id: session.user.id }, select: { department: { select: { code: true } } } });
+  return user?.department?.code === "MKT";
+}
+
+export async function canConfirmMarketingDesign() {
+  const session = await auth();
+  if (!session) return false;
+  if (session.user.role === "admin") return true;
+  const user = await prisma.user.findUnique({ where: { id: session.user.id }, select: { canConfirmMarketingDesign: true } });
+  return !!user?.canConfirmMarketingDesign;
+}
+
+export async function canConfirmMarketingAdvisor() {
+  const session = await auth();
+  if (!session) return false;
+  if (session.user.role === "admin") return true;
+  const user = await prisma.user.findUnique({ where: { id: session.user.id }, select: { canConfirmMarketingAdvisor: true } });
+  return !!user?.canConfirmMarketingAdvisor;
+}
+
 // How many of the current user's own pay stubs were uploaded/updated since
 // they last opened "Roles de pago" — drives the sidebar badge.
 export async function getUnseenPayStubCount() {

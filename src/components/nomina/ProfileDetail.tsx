@@ -36,6 +36,9 @@ type UserProfile = {
   canAddSuppliers: boolean;
   canManagePurchases: boolean;
   canManageAdminPayments: boolean;
+  canConfirmMarketingDesign: boolean;
+  canConfirmMarketingAdvisor: boolean;
+  marketingAdvisorBrand: string | null;
   canManageStoreFeedback: boolean;
   canViewStoreFeedback: boolean;
   excludeFromRecognition: boolean;
@@ -731,6 +734,67 @@ export function ProfileDetail({
                 No
               </button>
             </div>
+          </div>
+
+          <div className="bg-cloud border border-rule rounded p-3.5 mt-3.5">
+            <label className="flex items-center gap-1 mb-2 text-[10.5px] font-semibold uppercase tracking-wide text-steel">
+              <Truck size={11} /> ¿Es diseñador de marca (Mercadería recibida)?
+            </label>
+            <div className="text-[11px] text-steel mb-2">
+              Ve cada llegada a bodega y debe confirmar cuando ya subió fotos reales brandeadas y el video publicitario en Drive (Provedix o Importadora Damián, según corresponda).
+            </div>
+            <div className="flex border border-rule rounded overflow-hidden max-w-[220px]">
+              <button
+                type="button"
+                className={`flex-1 py-1.5 text-[12.5px] font-semibold cursor-pointer ${p.canConfirmMarketingDesign ? "bg-blue text-white" : "bg-surface text-steel"}`}
+                onClick={() => save({ canConfirmMarketingDesign: true })}
+              >
+                Sí
+              </button>
+              <button
+                type="button"
+                className={`flex-1 py-1.5 text-[12.5px] font-semibold cursor-pointer ${!p.canConfirmMarketingDesign ? "bg-blue text-white" : "bg-surface text-steel"}`}
+                onClick={() => save({ canConfirmMarketingDesign: false })}
+              >
+                No
+              </button>
+            </div>
+          </div>
+
+          <div className="bg-cloud border border-rule rounded p-3.5 mt-3.5">
+            <label className="flex items-center gap-1 mb-2 text-[10.5px] font-semibold uppercase tracking-wide text-steel">
+              <Truck size={11} /> ¿Es asesor de marca (Mercadería recibida)?
+            </label>
+            <div className="text-[11px] text-steel mb-2">
+              Ve cada llegada a bodega y debe confirmar cuando ya verificó stock, precio de venta, descripción y Dropi.
+            </div>
+            <div className="flex border border-rule rounded overflow-hidden max-w-[220px] mb-2.5">
+              <button
+                type="button"
+                className={`flex-1 py-1.5 text-[12.5px] font-semibold cursor-pointer ${p.canConfirmMarketingAdvisor ? "bg-blue text-white" : "bg-surface text-steel"}`}
+                onClick={() => save({ canConfirmMarketingAdvisor: true })}
+              >
+                Sí
+              </button>
+              <button
+                type="button"
+                className={`flex-1 py-1.5 text-[12.5px] font-semibold cursor-pointer ${!p.canConfirmMarketingAdvisor ? "bg-blue text-white" : "bg-surface text-steel"}`}
+                onClick={() => save({ canConfirmMarketingAdvisor: false })}
+              >
+                No
+              </button>
+            </div>
+            {p.canConfirmMarketingAdvisor && (
+              <div>
+                <label className="block mb-1 text-[10px] text-steel">Marca que asesora (solo informativo)</label>
+                <input
+                  className="w-full max-w-[280px] rounded border border-rule px-2.5 py-1.5 text-[12.5px]"
+                  placeholder="Ej. Provedix, Importadora Damián"
+                  defaultValue={p.marketingAdvisorBrand ?? ""}
+                  onBlur={(e) => save({ marketingAdvisorBrand: e.target.value.trim() || null })}
+                />
+              </div>
+            )}
           </div>
 
           <div className="bg-cloud border border-rule rounded p-3.5 mt-3.5">

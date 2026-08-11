@@ -3,7 +3,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { TopLine } from "@/components/ui/TopLine";
 import { DeptWorkspaceTabs } from "@/components/dept/DeptWorkspaceTabs";
-import { getUnseenFeedbackCount, canManageStoreFeedback as checkCanManageStoreFeedback, canViewStoreFeedback as checkCanViewStoreFeedback, canSubmitPurchaseRequests, canConfirmPurchaseReceiving, canRegisterPurchaseInvoices, canManageInventoryControl as checkCanManageInventoryControl, canViewInventoryKpisPanel as checkCanViewInventoryKpisPanel, canManageAdminPayments as checkCanManageAdminPayments } from "@/lib/guards";
+import { getUnseenFeedbackCount, canManageStoreFeedback as checkCanManageStoreFeedback, canViewStoreFeedback as checkCanViewStoreFeedback, canSubmitPurchaseRequests, canConfirmPurchaseReceiving, canRegisterPurchaseInvoices, canManageInventoryControl as checkCanManageInventoryControl, canViewInventoryKpisPanel as checkCanViewInventoryKpisPanel, canManageAdminPayments as checkCanManageAdminPayments, canViewMarketingArrivals as checkCanViewMarketingArrivals, canConfirmMarketingDesign as checkCanConfirmMarketingDesign, canConfirmMarketingAdvisor as checkCanConfirmMarketingAdvisor } from "@/lib/guards";
 import { getFinanceKpiData } from "@/lib/financeKpis";
 import { getDeptProcessDetail } from "@/lib/processDetail";
 import { getPaymentRemindersData } from "@/lib/paymentReminders";
@@ -49,6 +49,14 @@ export default async function WorkspacePage() {
   // Pagos administrativos — mismo patrón sin dept.code que Control de
   // Compras (confirmado 2026-08-06).
   const canManageAdminPayments = await checkCanManageAdminPayments();
+  // "Mercadería recibida" — confirmado 2026-08-08: por departamento (MKT),
+  // no un flag suelto como Control de Compras — cualquiera cuyo
+  // departamento real sea Análisis de Mercado la ve.
+  const [canViewMarketingArrivals, canConfirmMarketingDesign, canConfirmMarketingAdvisor] = await Promise.all([
+    checkCanViewMarketingArrivals(),
+    checkCanConfirmMarketingDesign(),
+    checkCanConfirmMarketingAdvisor(),
+  ]);
 
   const [processDetail, periodicReminders, documents, exams, financeKpiData, paymentReminders, weeklyMetricRecords, weeklyReviewRecords, currentUser, unseenFeedbackCount, storeFeedbackStores, inventoryControlData, inventoryKpisData, pettyCashData] = await Promise.all([
     getDeptProcessDetail(dept.id),
@@ -139,6 +147,9 @@ export default async function WorkspacePage() {
         inventoryKpisData={inventoryKpisData}
         pettyCashData={pettyCashData}
         canManageAdminPayments={canManageAdminPayments}
+        canViewMarketingArrivals={canViewMarketingArrivals}
+        canConfirmMarketingDesign={canConfirmMarketingDesign}
+        canConfirmMarketingAdvisor={canConfirmMarketingAdvisor}
         preferredTab={currentUser?.defaultWorkspaceTab ?? null}
         isAdmin={false}
         editable={false}

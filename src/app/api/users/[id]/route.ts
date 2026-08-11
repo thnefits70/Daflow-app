@@ -48,6 +48,9 @@ const updateSchema = z.object({
   canAddSuppliers: z.boolean().optional(),
   canManagePurchases: z.boolean().optional(),
   canManageAdminPayments: z.boolean().optional(),
+  canConfirmMarketingDesign: z.boolean().optional(),
+  canConfirmMarketingAdvisor: z.boolean().optional(),
+  marketingAdvisorBrand: z.string().nullable().optional(),
   canManageStoreFeedback: z.boolean().optional(),
   canViewStoreFeedback: z.boolean().optional(),
   excludeFromRecognition: z.boolean().optional(),
@@ -112,6 +115,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (d.canAddSuppliers !== undefined) data.canAddSuppliers = d.canAddSuppliers;
   if (d.canManagePurchases !== undefined) data.canManagePurchases = d.canManagePurchases;
   if (d.canManageAdminPayments !== undefined) data.canManageAdminPayments = d.canManageAdminPayments;
+  if (d.canConfirmMarketingDesign !== undefined) data.canConfirmMarketingDesign = d.canConfirmMarketingDesign;
+  if (d.canConfirmMarketingAdvisor !== undefined) data.canConfirmMarketingAdvisor = d.canConfirmMarketingAdvisor;
+  if (d.marketingAdvisorBrand !== undefined) data.marketingAdvisorBrand = d.marketingAdvisorBrand;
   if (d.canManageStoreFeedback !== undefined) data.canManageStoreFeedback = d.canManageStoreFeedback;
   if (d.canViewStoreFeedback !== undefined) data.canViewStoreFeedback = d.canViewStoreFeedback;
   if (d.excludeFromRecognition !== undefined) data.excludeFromRecognition = d.excludeFromRecognition;

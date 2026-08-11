@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { AreaGateShell } from "@/components/dept/AreaGateShell";
+import { MarketingArrivalAlert } from "@/components/marketing/MarketingArrivalAlert";
 import type { ProcessDTO } from "@/components/process/ProcessEditor";
 import type { RecognitionPersonDTO } from "@/components/recognition/RecognitionPanel";
 import { SUPPLIER_VIEW_DEPT_CODES, canManageNomina } from "@/lib/guards";
@@ -180,6 +181,9 @@ export default async function AreaLayout({ children }: { children: React.ReactNo
       showMyLearningPath={myLearningPathCount > 0}
     >
       {children}
+      {(currentUser.canConfirmMarketingDesign || currentUser.canConfirmMarketingAdvisor) && (
+        <MarketingArrivalAlert canConfirmDesign={currentUser.canConfirmMarketingDesign} canConfirmAdvisor={currentUser.canConfirmMarketingAdvisor} />
+      )}
     </AreaGateShell>
   );
 }
