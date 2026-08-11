@@ -23,7 +23,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const parsed = schema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Datos inválidos." }, { status: 400 });
 
-  const existing = await prisma.purchaseRequest.findUnique({ where: { id }, include: { catalogItem: { select: { name: true } } } });
+  const existing = await prisma.purchaseRequest.findUnique({
+    where: { id },
+    include: { catalogItem: { select: { name: true } }, urgentReports: true },
+  });
   if (!existing) return NextResponse.json({ error: "No encontrada." }, { status: 404 });
   if (existing.status !== "PAID") return NextResponse.json({ error: "Todavía no está pagada." }, { status: 409 });
   // Confirmado 2026-08-06: sin la orden de compra, Daniel no tiene el
@@ -35,16 +38,34 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   // Fix confirmado 2026-08-08: cambio de política pedido explícitamente por
   // el usuario — antes esto era puramente informativo (nunca bloqueaba);
-  // ahora, si la IA detectó que el producto no corresponde, o si la cantidad
-  // recibida no coincide con lo pedido, se bloquea del todo — la única
-  // salida es "Informar urgente" (que sí manda notificación con la novedad).
-  // Defensa server-side del mismo chequeo que ya deshabilita el botón en
-  // el cliente.
+  // ahora, si la IA detectó que el producto no corresponde, se bloquea del
+  // todo — la única salida es "Informar urgente" (que sí manda notificación
+  // con la novedad). Defensa server-side del mismo chequeo que ya
+  // deshabilita el botón en el cliente.
   if (parsed.data.aiPhotoMatch === false) {
     return NextResponse.json({ error: "La IA detectó que el producto no corresponde a la referencia — usa 'Informar urgente' en vez de confirmar." }, { status: 409 });
   }
-  if (parsed.data.receivedQuantity !== existing.quantity) {
-    return NextResponse.json({ error: `La cantidad recibida no coincide con lo pedido (${existing.quantity} un.) — usa 'Informar urgente' para reportar la diferencia.` }, { status: 409 });
+
+  // Confirmado 2026-08-11: pedido explícito del usuario — si ya hay un
+  // "reporte urgente" sobre esta solicitud (dañada/incompleta/diferente), se
+  // puede confirmar la cantidad BUENA (lo pedido menos lo reportado) para
+  // que esa parte siga el proceso normal de venta sin esperar a que se
+  // resuelva lo administrativo con el proveedor — eso se sigue rastreando
+  // aparte (ver openReportsForGroup en Finanzas/Auditoría) hasta que se
+  // cubra con reemplazo, reembolso/crédito o write-off.
+  const totalAffected = existing.urgentReports.reduce(
+    (s, r) => s + r.damagedQty + r.incompleteQty + r.differentQty + r.missingQty,
+    0
+  );
+  const expectedQuantity = existing.quantity - totalAffected;
+  if (totalAffected > 0 && expectedQuantity <= 0) {
+    return NextResponse.json({ error: "Ya se reportó como afectado el 100% de lo pedido — no hay cantidad buena que confirmar." }, { status: 409 });
+  }
+  if (parsed.data.receivedQuantity !== expectedQuantity) {
+    const msg = totalAffected > 0
+      ? `La cantidad buena a confirmar es ${expectedQuantity} un. (${existing.quantity} pedidas menos ${totalAffected} ya reportadas).`
+      : `La cantidad recibida no coincide con lo pedido (${existing.quantity} un.) — usa 'Informar urgente' para reportar la diferencia.`;
+    return NextResponse.json({ error: msg }, { status: 409 });
   }
 
   const isAdmin = session.user.role === "admin";

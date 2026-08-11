@@ -88,6 +88,16 @@ function isVideoUrl(url: string) {
   return /\.(mp4|mov|webm|avi|m4v)($|\?)/i.test(url);
 }
 
+// Confirmado 2026-08-11: si ya hay un reporte urgente sobre esta solicitud,
+// lo que se puede confirmar como "recibido" es solo la cantidad buena (lo
+// pedido menos lo reportado dañado/incompleto/diferente) — lo demás sigue
+// su propio proceso de reemplazo/reembolso/crédito, sin bloquear la venta
+// de lo que sí llegó bien.
+function goodQuantity(r: Row): number {
+  const affected = r.urgentReports.reduce((s, rep) => s + rep.damagedQty + rep.incompleteQty + rep.differentQty + rep.missingQty, 0);
+  return r.quantity - affected;
+}
+
 const CREDIT_CLAIM_WINDOW_DAYS = 7;
 
 // Fix confirmado 2026-08-11: pedido explícito del usuario — admin puede ver
@@ -428,15 +438,27 @@ export function PurchaseReceivingPanel({ isAdmin = false }: { isAdmin?: boolean 
                       {openId === r.id ? (
                         <div className="mt-2">
                           <div className="mb-2.5">
-                            <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Cantidad recibida — se pidieron {r.quantity} un.</label>
+                            <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">
+                              {r.urgentReports.length > 0
+                                ? `Cantidad buena a confirmar — ${goodQuantity(r)} un. (de ${r.quantity} pedidas, ya reportadas ${r.quantity - goodQuantity(r)} dañada/incompleta/diferente)`
+                                : `Cantidad recibida — se pidieron ${r.quantity} un.`}
+                            </label>
                             <input type="number" className="w-full rounded border border-rule px-2.5 py-2 text-[13.5px]" value={receivedQty} onChange={(e) => setReceivedQty(e.target.value)} />
-                            {receivedQty !== "" && Number(receivedQty) !== r.quantity && (
+                            {receivedQty !== "" && Number(receivedQty) !== (r.urgentReports.length > 0 ? goodQuantity(r) : r.quantity) && (
                               <div className="flex items-center gap-1.5 text-[11px] text-red mt-1.5">
                                 <AlertTriangle size={12} className="shrink-0" />
-                                No coincide con lo pedido ({r.quantity} un.) — no se puede confirmar así. Usa &quot;🚨 Informar urgente&quot; para reportar la diferencia.
+                                {r.urgentReports.length > 0
+                                  ? `Debe ser ${goodQuantity(r)} un. — la cantidad buena según lo ya reportado.`
+                                  : `No coincide con lo pedido (${r.quantity} un.) — no se puede confirmar así. Usa "🚨 Informar urgente" para reportar la diferencia.`}
                               </div>
                             )}
                           </div>
+                          {r.urgentReports.length > 0 && (
+                            <div className="flex items-start gap-1.5 bg-red/10 border border-red/30 rounded-md px-3 py-2 mb-2.5 text-[11.5px] text-red">
+                              <AlertTriangle size={13} className="shrink-0 mt-0.5" />
+                              Esto confirma solo la parte buena — la operación sigue "pendiente con el proveedor" en Finanzas/Auditoría hasta que se resuelva lo reportado (reemplazo, reembolso/crédito o pérdida).
+                            </div>
+                          )}
 
                           {/* Confirmado 2026-08-08: antes solo se veía la nota de texto de la
                               IA — Daniel pedía ver las fotos de referencia del catálogo (las que
@@ -523,7 +545,7 @@ export function PurchaseReceivingPanel({ isAdmin = false }: { isAdmin?: boolean 
                                 busy ||
                                 receivedPhotoUrls.length < 2 ||
                                 !receivedQty ||
-                                Number(receivedQty) !== r.quantity ||
+                                Number(receivedQty) !== (r.urgentReports.length > 0 ? goodQuantity(r) : r.quantity) ||
                                 aiResult?.likelyMatch === false
                               }
                               className="rounded border border-green bg-green px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer disabled:opacity-60"
@@ -667,9 +689,9 @@ export function PurchaseReceivingPanel({ isAdmin = false }: { isAdmin?: boolean 
                               disabled={isAdmin}
                               title={isAdmin ? "Exclusivo del líder de Inventario" : undefined}
                               className="rounded border border-green bg-green px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-                              onClick={() => { setOpenId(r.id); setReceivedPhotoUrls([]); setAiResult(null); setReceivedQty(""); setComment(""); setErr(""); }}
+                              onClick={() => { setOpenId(r.id); setReceivedPhotoUrls([]); setAiResult(null); setReceivedQty(r.urgentReports.length > 0 ? String(goodQuantity(r)) : ""); setComment(""); setErr(""); }}
                             >
-                              ✓ Confirmar que llegó
+                              {r.urgentReports.length > 0 ? "✓ Confirmar cantidad buena" : "✓ Confirmar que llegó"}
                             </button>
                           </div>
                         </div>
