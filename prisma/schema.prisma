@@ -1238,6 +1238,15 @@ model PurchaseRequest {
   purchaseOrderUrl   String?
 
   shippingIncluded      Boolean                @default(false)
+  // Confirmado 2026-08-11: pedido explícito del usuario — a veces al
+  // solicitar todavía no se sabe ni el transportista ni el costo real del
+  // flete (se sabrá más cerca de la entrega). Con esto en true, carrierId y
+  // shippingCostTotal quedan vacíos a propósito (no por error) y
+  // shippingPaymentTiming se fuerza a ON_DELIVERY — aparece como pendiente
+  // en "Mis solicitudes" hasta que se complete con el transportista y costo
+  // reales (mismo patrón que purchaseOrderUrl, que también se completa
+  // después).
+  shippingCarrierPending Boolean               @default(false)
   carrierId              String?
   carrier                Supplier?              @relation("PurchaseRequestCarrier", fields: [carrierId], references: [id], onDelete: SetNull)
   shippingCostTotal     Float?
@@ -1257,6 +1266,7 @@ model PurchaseRequest {
   shippingPaidById             String?
   shippingPaidBy               User?      @relation("PurchaseRequestShippingPaidBy", fields: [shippingPaidById], references: [id], onDelete: SetNull)
   shippingPaymentProofUrl      String?
+  shippingPaymentProofReceiptNumber String?
 
   // Obligatoria solo cuando el costo por unidad superó el promedio de las
   // últimas 3 compras de este insumo — impuesta en la ruta, no aquí.
@@ -1286,6 +1296,12 @@ model PurchaseRequest {
   paidById        String?
   paidBy          User?     @relation("PurchaseRequestPaidBy", fields: [paidById], references: [id], onDelete: SetNull)
   paymentProofUrl String?
+  // Confirmado 2026-08-11: pedido explícito del usuario — la IA lee el N° de
+  // comprobante/transacción del comprobante de pago (ya lo hace para el
+  // monto) y queda guardado acá. Sirve para detectar si el mismo comprobante
+  // se intenta reutilizar en otra solicitud (por error) — nunca visible en
+  // las pantallas normales de Compras/Finanzas, solo en Auditoría.
+  paymentProofReceiptNumber String?
 
   invoiceStatus   PurchaseInvoiceStatus @default(PENDING)
   invoiceAmount   Float?
@@ -1315,6 +1331,8 @@ model PurchaseRequest {
   @@index([requestedById])
   @@index([groupId])
   @@index([resubmittedFromGroupId])
+  @@index([paymentProofReceiptNumber])
+  @@index([shippingPaymentProofReceiptNumber])
 }
 
 // Inventario confirma que de verdad llegó — sin esto el ciclo no se cierra.

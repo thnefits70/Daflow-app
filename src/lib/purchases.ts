@@ -25,6 +25,27 @@ export function formatPurchaseRequestCode(requestNumber: number): string {
   return `SC-${String(requestNumber).padStart(3, "0")}`;
 }
 
+// Confirmado 2026-08-11: pedido explícito del usuario — cada comprobante de
+// pago (mercadería o flete) debe pertenecer a UNA sola solicitud. Antes de
+// dar por pagado, se busca si ese mismo N° de comprobante ya quedó guardado
+// en CUALQUIER otra solicitud (mercadería o flete, cualquier estado) — si
+// aparece, se bloquea para que no se reutilice por error. receiptNumber
+// vacío/no legible nunca bloquea (no hay nada que comparar).
+export async function findDuplicatePaymentProofUse(
+  receiptNumber: string | null | undefined,
+  excludeGroupId: string
+): Promise<{ requestNumber: number | null; groupId: string } | null> {
+  const trimmed = receiptNumber?.trim();
+  if (!trimmed) return null;
+  return prisma.purchaseRequest.findFirst({
+    where: {
+      groupId: { not: excludeGroupId },
+      OR: [{ paymentProofReceiptNumber: trimmed }, { shippingPaymentProofReceiptNumber: trimmed }],
+    },
+    select: { requestNumber: true, groupId: true },
+  });
+}
+
 // Confirmado 2026-07-30: el costo por unidad que se compara contra el
 // historial ya incluye el envío cuando el proveedor lo cobra aparte — así
 // nunca se puede esconder un sobreprecio repartiéndolo entre "producto" y
@@ -211,6 +232,10 @@ export const purchaseSubmissionSchema = z.object({
   quoteReferenceCode: z.string().trim().nullable().optional(),
   purchaseOrderUrl: z.string().url().nullable().optional(),
   shippingIncluded: z.boolean(),
+  // Confirmado 2026-08-11: a veces todavía no se sabe transportista ni costo
+  // real del flete al solicitar — con esto en true, ninguno de los dos es
+  // obligatorio (se completan después desde "Mis solicitudes").
+  shippingCarrierPending: z.boolean().optional(),
   carrierId: z.string().min(1).nullable().optional(),
   shippingCostTotal: z.number().nonnegative().nullable().optional(),
   shippingPaymentMethod: z.enum(["TRANSFER", "PETTY_CASH"]).nullable().optional(),
@@ -238,7 +263,7 @@ export type PurchaseSubmissionCheck =
   | { ok: false; error: string; status: number };
 
 export async function checkPurchaseSubmission(d: PurchaseSubmissionData): Promise<PurchaseSubmissionCheck> {
-  if (!d.shippingIncluded && !d.carrierId) {
+  if (!d.shippingIncluded && !d.carrierId && !d.shippingCarrierPending) {
     return { ok: false, status: 400, error: "Falta el transportista, ya que el envío no está incluido." };
   }
 
@@ -349,5 +374,5 @@ export const purchaseRequestInclude = {
   shippingPaymentRequestedBy: { select: { name: true } },
   shippingPaidBy: { select: { name: true } },
   receipt: { include: { confirmedBy: { select: { name: true } } } },
-  urgentReports: { orderBy: { reportedAt: "desc" as const } },
+  urgentReports: { orderBy: { reportedAt: "desc" as const }, include: { reportedBy: { select: { name: true } } } },
 };

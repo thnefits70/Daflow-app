@@ -14,6 +14,10 @@ type Row = Omit<OperationDocRow, "receipt"> & {
   paidAt: string | null;
   supplier: { name: string };
   urgentReports: { id: string }[];
+  // Confirmado 2026-08-11: pedido explícito del usuario — solo visible acá
+  // (Auditoría), nunca en Solicitar/Bandeja de aprobación/Finanzas.
+  paymentProofReceiptNumber: string | null;
+  shippingPaymentProofReceiptNumber: string | null;
   receipt: {
     photoUrls: string[];
     receivedQuantity: number;
@@ -187,10 +191,18 @@ export function PurchaseAuditPanel() {
                 <span className="font-mono text-[10.5px] text-steel shrink-0">{formatPurchaseRequestCode(r0.requestNumber)}</span>
               </div>
               <div className="text-[11.5px] text-steel">{r0.supplier.name} — {money(total)}</div>
-              <div className="text-[10px] text-steel-dim mb-2.5">
+              <div className="text-[10px] text-steel-dim mb-1">
                 Solicitada por {actorName(r0.requestedBy?.name)} · Pagada por {actorName(r0.paidBy?.name)} · Recibida por {actorName(r0.receipt?.confirmedBy?.name)}
                 {r0.receipt?.confirmedAt ? ` · ${new Date(r0.receipt.confirmedAt).toLocaleDateString("es-MX")}` : ""}
               </div>
+              {(r0.paymentProofReceiptNumber || r0.shippingPaymentProofReceiptNumber) && (
+                <div className="text-[10px] text-steel-dim mb-2.5 font-mono">
+                  {r0.paymentProofReceiptNumber && <>N° comprobante mercadería: {r0.paymentProofReceiptNumber}</>}
+                  {r0.paymentProofReceiptNumber && r0.shippingPaymentProofReceiptNumber && " · "}
+                  {r0.shippingPaymentProofReceiptNumber && <>N° comprobante flete: {r0.shippingPaymentProofReceiptNumber}</>}
+                </div>
+              )}
+              {!(r0.paymentProofReceiptNumber || r0.shippingPaymentProofReceiptNumber) && <div className="mb-2.5" />}
 
               {urgentCount > 0 && (
                 <div className="flex items-center gap-1.5 bg-gold/10 border border-gold/35 rounded-md px-3 py-2 mb-2.5 text-[11.5px]" style={{ color: "#D9A441" }}>

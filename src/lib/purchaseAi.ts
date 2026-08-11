@@ -93,6 +93,10 @@ export async function readPurchaseQuote(params: {
 
 export type PaymentProofReadResult = {
   readAmount: number | null;
+  // Confirmado 2026-08-11: N° de comprobante/transacción/referencia del
+  // banco (o de caja chica) — se usa para detectar si el mismo comprobante
+  // se reutiliza por error en otra solicitud. Null si no se distingue.
+  receiptNumber: string | null;
 };
 
 // Confirmado 2026-08-04: antes de aprobar/pagar, la IA lee el comprobante de
@@ -115,9 +119,12 @@ export async function readPaymentProof(params: {
     system:
       "Lees comprobantes de pago (transferencia bancaria o recibo de caja chica) para Control de Compras de " +
       "Provedix (Guayaquil, Ecuador). Extrae SOLO el monto que de verdad muestra el comprobante como transferido o " +
-      "pagado — nunca inventes un valor. " +
-      'Responde ÚNICAMENTE un JSON: {"readAmount": number|null}. ' +
-      "readAmount es el monto total transferido/pagado (sin símbolo de moneda). Si no se distingue con claridad, pon null.",
+      "pagado — nunca inventes un valor. También extrae el número de comprobante/transacción/referencia del banco " +
+      "(puede aparecer como 'N° de comprobante', 'N° de transacción', 'Número de referencia', 'ID de transacción', " +
+      "'Nro. de operación', etc. — usa el que encuentres). " +
+      'Responde ÚNICAMENTE un JSON: {"readAmount": number|null, "receiptNumber": string|null}. ' +
+      "readAmount es el monto total transferido/pagado (sin símbolo de moneda). receiptNumber es el número de " +
+      "comprobante tal como aparece (letras y números tal cual). Si no se distingue con claridad, pon null en cualquiera de los dos.",
     messages: [
       {
         role: "user",

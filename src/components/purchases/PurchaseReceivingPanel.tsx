@@ -34,6 +34,20 @@ type Row = {
     aiPhotoNote: string | null;
     confirmedBy: { name: string } | null;
   } | null;
+  // Fix confirmado 2026-08-11: reportado por el usuario — sin esto, el
+  // botón "Informar urgente" volvía a mostrar el formulario vacío como si
+  // nunca se hubiera reportado nada, permitiendo reportar dos veces el
+  // mismo incidente.
+  urgentReports: {
+    id: string;
+    damagedQty: number;
+    incompleteQty: number;
+    differentQty: number;
+    missingQty: number;
+    description: string;
+    reportedAt: string;
+    reportedBy: { name: string } | null;
+  }[];
 };
 
 type PendingReplacement = {
@@ -599,13 +613,40 @@ export function PurchaseReceivingPanel() {
                           </div>
                         </div>
                       ) : (
-                        <div className="flex items-center gap-2 mt-1.5">
-                          <button type="button" className="text-[11.5px] font-semibold border border-red/50 text-red rounded px-3 py-1.5 cursor-pointer" onClick={() => openUrgent(r.id)}>
-                            🚨 Informar urgente
-                          </button>
-                          <button type="button" className="rounded border border-green bg-green px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer" onClick={() => { setOpenId(r.id); setReceivedPhotoUrls([]); setAiResult(null); setReceivedQty(""); setComment(""); setErr(""); }}>
-                            ✓ Confirmar que llegó
-                          </button>
+                        <div className="mt-1.5">
+                          {r.urgentReports.length > 0 && (
+                            <div className="bg-red/10 border border-red/30 rounded-md p-3 mb-2">
+                              <div className="flex items-center gap-1.5 text-[12px] font-semibold text-red mb-1.5">
+                                <AlertTriangle size={13} /> Reporte urgente ya enviado — no se puede volver a reportar
+                              </div>
+                              {r.urgentReports.map((rep) => {
+                                const parts = [
+                                  rep.damagedQty > 0 && `${rep.damagedQty} dañada`,
+                                  rep.incompleteQty > 0 && `${rep.incompleteQty} incompleta`,
+                                  rep.differentQty > 0 && `${rep.differentQty} diferente`,
+                                  rep.missingQty > 0 && `${rep.missingQty} faltante`,
+                                ].filter(Boolean) as string[];
+                                return (
+                                  <div key={rep.id} className="text-[11.5px] text-steel mb-1.5 last:mb-0">
+                                    {parts.join(" · ")}{rep.description ? ` — "${rep.description}"` : ""}
+                                    <div className="text-[10px] text-steel-dim">
+                                      Reportado por {actorName(rep.reportedBy?.name)} · {new Date(rep.reportedAt).toLocaleDateString("es-MX")}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                          <div className="flex items-center gap-2">
+                            {r.urgentReports.length === 0 && (
+                              <button type="button" className="text-[11.5px] font-semibold border border-red/50 text-red rounded px-3 py-1.5 cursor-pointer" onClick={() => openUrgent(r.id)}>
+                                🚨 Informar urgente
+                              </button>
+                            )}
+                            <button type="button" className="rounded border border-green bg-green px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer" onClick={() => { setOpenId(r.id); setReceivedPhotoUrls([]); setAiResult(null); setReceivedQty(""); setComment(""); setErr(""); }}>
+                              ✓ Confirmar que llegó
+                            </button>
+                          </div>
                         </div>
                       )}
                     </>

@@ -4,12 +4,20 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { canRegisterPurchaseInvoices } from "@/lib/guards";
 import { sendPushToOwner } from "@/lib/webPush";
+import { findDuplicatePaymentProofUse, formatPurchaseRequestCode } from "@/lib/purchases";
 
 // Confirmado 2026-08-06: si el crédito disponible con el proveedor cubre
 // TODO lo que corresponde pagar, no hay transferencia real que respaldar
 // con un comprobante — por eso paymentProofUrl es opcional cuando se aplica
 // crédito, pero sigue siendo obligatorio si queda algo por transferir.
-const schema = z.object({ paymentProofUrl: z.string().url().optional(), appliedCreditIds: z.array(z.string()).optional() });
+const schema = z.object({
+  paymentProofUrl: z.string().url().optional(),
+  appliedCreditIds: z.array(z.string()).optional(),
+  // Confirmado 2026-08-11: leído por la IA al verificar el comprobante en el
+  // cliente — se manda tal cual (mismo patrón que aiPhotoMatch en receipt/
+  // route.ts), nunca se re-lee server-side.
+  paymentProofReceiptNumber: z.string().trim().nullable().optional(),
+});
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ groupId: string }> }) {
   const session = await auth();
@@ -42,12 +50,26 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ gro
     return NextResponse.json({ error: "Falta el comprobante de lo que se transfirió." }, { status: 400 });
   }
 
+  const dup = await findDuplicatePaymentProofUse(parsed.data.paymentProofReceiptNumber, groupId);
+  if (dup) {
+    return NextResponse.json(
+      { error: `Ese comprobante ya se usó en otra solicitud (${dup.requestNumber ? formatPurchaseRequestCode(dup.requestNumber) : "otra operación"}) — no se puede reutilizar.` },
+      { status: 409 }
+    );
+  }
+
   const isAdmin = session.user.role === "admin";
   const paidAt = new Date();
   await prisma.$transaction([
     prisma.purchaseRequest.updateMany({
       where: { groupId },
-      data: { status: "PAID", paidAt, paymentProofUrl: parsed.data.paymentProofUrl ?? null, paidById: isAdmin ? null : session.user.id },
+      data: {
+        status: "PAID",
+        paidAt,
+        paymentProofUrl: parsed.data.paymentProofUrl ?? null,
+        paymentProofReceiptNumber: parsed.data.paymentProofReceiptNumber?.trim() || null,
+        paidById: isAdmin ? null : session.user.id,
+      },
     }),
     ...(appliedCreditIds.length > 0
       ? [prisma.supplierCredit.updateMany({

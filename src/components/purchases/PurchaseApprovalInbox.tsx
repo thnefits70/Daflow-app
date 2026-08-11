@@ -95,11 +95,11 @@ export function PurchaseApprovalInbox() {
   const [proofUrl, setProofUrl] = useState<string | null>(null);
   const [uploadingProof, setUploadingProof] = useState(false);
   const [proofVerifying, setProofVerifying] = useState(false);
-  const [proofVerifyResult, setProofVerifyResult] = useState<{ readAmount: number | null; matches: boolean } | null>(null);
+  const [proofVerifyResult, setProofVerifyResult] = useState<{ readAmount: number | null; matches: boolean; receiptNumber: string | null } | null>(null);
   const [shippingProofUrl, setShippingProofUrl] = useState<string | null>(null);
   const [uploadingShippingProof, setUploadingShippingProof] = useState(false);
   const [shippingProofVerifying, setShippingProofVerifying] = useState(false);
-  const [shippingProofVerifyResult, setShippingProofVerifyResult] = useState<{ readAmount: number | null; matches: boolean } | null>(null);
+  const [shippingProofVerifyResult, setShippingProofVerifyResult] = useState<{ readAmount: number | null; matches: boolean; receiptNumber: string | null } | null>(null);
   const [err, setErr] = useState("");
   const [requestingAccountChangeFor, setRequestingAccountChangeFor] = useState<string | null>(null);
   const [accountChangeNote, setAccountChangeNote] = useState("");
@@ -252,7 +252,7 @@ export function PurchaseApprovalInbox() {
     const payRes = await fetch(`/api/purchase-requests/group/${groupId}/pay`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ paymentProofUrl: proofUrl }),
+      body: JSON.stringify({ paymentProofUrl: proofUrl, paymentProofReceiptNumber: proofVerifyResult?.receiptNumber ?? null }),
     });
     if (!payRes.ok) {
       setBusyGroup(null);
@@ -265,7 +265,7 @@ export function PurchaseApprovalInbox() {
       await fetch(`/api/purchase-requests/group/${groupId}/shipping-pay`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ proofUrl: shippingProofUrl }),
+        body: JSON.stringify({ proofUrl: shippingProofUrl, proofReceiptNumber: shippingProofVerifyResult?.receiptNumber ?? null }),
       }).catch(() => null);
     }
     setBusyGroup(null);

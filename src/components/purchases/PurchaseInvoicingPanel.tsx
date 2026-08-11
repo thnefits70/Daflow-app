@@ -133,7 +133,7 @@ export function PurchaseInvoicingPanel() {
   const [proofUrl, setProofUrl] = useState<string | null>(null);
   const [uploadingProof, setUploadingProof] = useState(false);
   const [proofVerifying, setProofVerifying] = useState(false);
-  const [proofVerifyResult, setProofVerifyResult] = useState<{ readAmount: number | null; matches: boolean } | null>(null);
+  const [proofVerifyResult, setProofVerifyResult] = useState<{ readAmount: number | null; matches: boolean; receiptNumber: string | null } | null>(null);
   const [availableCredits, setAvailableCredits] = useState<{ id: string; amount: number; reason: string }[]>([]);
   const [selectedCreditIds, setSelectedCreditIds] = useState<string[]>([]);
   // Confirmado 2026-08-06: filtro de fechas para "Registrar factura" — sin
@@ -163,7 +163,7 @@ export function PurchaseInvoicingPanel() {
   const [shippingProofUrl, setShippingProofUrl] = useState<string | null>(null);
   const [uploadingShippingProof, setUploadingShippingProof] = useState(false);
   const [shippingProofVerifying, setShippingProofVerifying] = useState(false);
-  const [shippingProofVerifyResult, setShippingProofVerifyResult] = useState<{ readAmount: number | null; matches: boolean } | null>(null);
+  const [shippingProofVerifyResult, setShippingProofVerifyResult] = useState<{ readAmount: number | null; matches: boolean; receiptNumber: string | null } | null>(null);
   const { onPaste: onPasteShippingProof, onMouseEnter: onPasteShippingProofHoverIn, onMouseLeave: onPasteShippingProofHoverOut } = usePasteFile((file) => uploadShippingProof(file));
 
   // Confirmado 2026-07-31: por defecto se asume que SÍ hay factura (pide
@@ -296,7 +296,7 @@ export function PurchaseInvoicingPanel() {
     const res = await fetch(`/api/purchase-requests/group/${groupId}/pay`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ paymentProofUrl: proofUrl ?? undefined, appliedCreditIds: selectedCreditIds }),
+      body: JSON.stringify({ paymentProofUrl: proofUrl ?? undefined, paymentProofReceiptNumber: proofVerifyResult?.receiptNumber ?? null, appliedCreditIds: selectedCreditIds }),
     });
     setBusyGroup(null);
     const data = await res.json().catch(() => null);
@@ -372,7 +372,7 @@ export function PurchaseInvoicingPanel() {
     const res = await fetch(`/api/purchase-requests/group/${groupId}/shipping-pay`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ proofUrl: shippingProofUrl }),
+      body: JSON.stringify({ proofUrl: shippingProofUrl, proofReceiptNumber: shippingProofVerifyResult?.receiptNumber ?? null }),
     });
     setBusyGroup(null);
     const data = await res.json().catch(() => null);
