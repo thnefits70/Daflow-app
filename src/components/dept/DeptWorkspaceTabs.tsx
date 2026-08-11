@@ -210,12 +210,12 @@ export function DeptWorkspaceTabs({
 
   return (
     <div>
-      <div className="flex gap-5.5 border-b border-rule mb-5.5">
+      <div className="flex gap-5.5 border-b border-rule mb-5.5 overflow-x-auto">
         {tabs.map((t) => (
           <button
             key={t.key}
             type="button"
-            className={`pb-2.5 text-[13px] font-semibold flex items-center gap-1.5 border-b-2 cursor-pointer ${
+            className={`pb-2.5 text-[13px] font-semibold flex items-center gap-1.5 border-b-2 cursor-pointer whitespace-nowrap shrink-0 ${
               tab === t.key ? "text-ink border-teal" : "text-steel border-transparent hover:text-ink"
             }`}
             onClick={() => {

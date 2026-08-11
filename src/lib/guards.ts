@@ -433,9 +433,8 @@ export async function canManageAdminPayments() {
 }
 
 // "Mercadería recibida" (Análisis de Mercado) — confirmado 2026-08-08.
-// Ver visible = pertenecer al departamento MKT (Bryan incluido, aunque él
-// nunca confirma nada, solo supervisa). Confirmar = flag puntual, admin
-// siempre puede ambas.
+// Ver visible = pertenecer al departamento MKT + admin (Bryan y Andrés
+// incluidos, aunque ninguno de los dos confirma nada, solo supervisan).
 export async function canViewMarketingArrivals() {
   const session = await auth();
   if (!session) return false;
@@ -444,18 +443,20 @@ export async function canViewMarketingArrivals() {
   return user?.department?.code === "MKT";
 }
 
+// Fix confirmado 2026-08-08: excepción explícita al patrón habitual de
+// "admin siempre puede" — el usuario (admin/CEO) pidió específicamente que
+// los botones de confirmar sean exclusivos de quien tiene el flag (hoy
+// Robert/Heidy/Jariel); ni él ni Bryan deben poder confirmar, solo ver.
 export async function canConfirmMarketingDesign() {
   const session = await auth();
-  if (!session) return false;
-  if (session.user.role === "admin") return true;
+  if (!session || session.user.role === "admin") return false;
   const user = await prisma.user.findUnique({ where: { id: session.user.id }, select: { canConfirmMarketingDesign: true } });
   return !!user?.canConfirmMarketingDesign;
 }
 
 export async function canConfirmMarketingAdvisor() {
   const session = await auth();
-  if (!session) return false;
-  if (session.user.role === "admin") return true;
+  if (!session || session.user.role === "admin") return false;
   const user = await prisma.user.findUnique({ where: { id: session.user.id }, select: { canConfirmMarketingAdvisor: true } });
   return !!user?.canConfirmMarketingAdvisor;
 }

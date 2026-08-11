@@ -20,7 +20,7 @@ type Row = {
 function PhotoRow({ label, urls }: { label: string; urls: string[] }) {
   if (urls.length === 0) return null;
   return (
-    <div>
+    <div className="flex-1 min-w-[180px] p-3">
       <div className="text-[10px] font-semibold uppercase tracking-wide text-steel mb-1.5">{label}</div>
       <div className="flex gap-2 flex-wrap">
         {urls.map((u, i) => (
@@ -91,35 +91,43 @@ export function MarketingArrivalsPanel({ canConfirmDesign, canConfirmAdvisor }: 
               {r.receipt?.receivedQuantity ?? r.quantity} un. recibidas{r.receipt ? ` · ${new Date(r.receipt.confirmedAt).toLocaleString("es-MX", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })}` : ""}
             </div>
 
-            <div className="flex gap-5 flex-wrap mb-3.5">
-              <PhotoRow label="Referencia" urls={r.catalogItem.photos} />
-              <PhotoRow label="Llegó así" urls={r.receipt?.photoUrls ?? []} />
+            <div className="flex flex-wrap divide-x divide-rule border border-rule rounded-md overflow-hidden mb-3.5">
+              <PhotoRow label="Referencia — como se registró el producto" urls={r.catalogItem.photos} />
+              <PhotoRow label="Llegó así — foto real de esta recepción" urls={r.receipt?.photoUrls ?? []} />
             </div>
 
-            <div className="flex gap-2 flex-wrap pt-3 border-t border-rule">
-              {fu?.designConfirmedAt ? (
-                <div className="flex-1 flex items-center gap-1.5 text-[12px] text-teal">
-                  <CheckCircle2 size={14} /> Fotos y video subidos — {actorName(fu.designConfirmedBy?.name)}
-                </div>
-              ) : canConfirmDesign ? (
-                <ConfirmButton label="Confirmar fotos y video subidos" icon={<Camera size={14} />} busy={busyId === r.id} onConfirm={() => confirm("design", r.id)} />
-              ) : (
-                <div className="flex-1 flex items-center gap-1.5 text-[12px] text-steel">
-                  <Camera size={14} /> Falta subir fotos y video
-                </div>
-              )}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-3 border-t border-rule">
+              <div>
+                <div className="text-[11px] font-semibold text-ink mb-0.5">Diseño de marca</div>
+                <div className="text-[10.5px] text-steel mb-2">Fotos reales brandeadas + video publicitario en el catálogo de Drive.</div>
+                {fu?.designConfirmedAt ? (
+                  <div className="flex items-center gap-1.5 text-[12px] text-teal">
+                    <CheckCircle2 size={14} /> Confirmado — {actorName(fu.designConfirmedBy?.name)}
+                  </div>
+                ) : canConfirmDesign ? (
+                  <ConfirmButton label="Confirmar fotos y video subidos" icon={<Camera size={14} />} busy={busyId === r.id} onConfirm={() => confirm("design", r.id)} />
+                ) : (
+                  <div className="flex items-center gap-1.5 text-[12px] text-steel">
+                    <Camera size={14} /> Todavía pendiente
+                  </div>
+                )}
+              </div>
 
-              {fu?.advisorConfirmedAt ? (
-                <div className="flex-1 flex items-center gap-1.5 text-[12px] text-teal">
-                  <CheckCircle2 size={14} /> Verificado — {actorName(fu.advisorConfirmedBy?.name)}{fu.advisorConfirmedBy?.marketingAdvisorBrand ? ` (${fu.advisorConfirmedBy.marketingAdvisorBrand})` : ""}
-                </div>
-              ) : canConfirmAdvisor ? (
-                <ConfirmButton label="Confirmar stock, precio, descripción y Dropi" icon={<ClipboardCheck size={14} />} busy={busyId === r.id} onConfirm={() => confirm("advisor", r.id)} />
-              ) : (
-                <div className="flex-1 flex items-center gap-1.5 text-[12px] text-steel">
-                  <ClipboardCheck size={14} /> Falta verificar stock, precio, descripción y Dropi
-                </div>
-              )}
+              <div>
+                <div className="text-[11px] font-semibold text-ink mb-0.5">Asesor de marca</div>
+                <div className="text-[10.5px] text-steel mb-2">Verificar stock, precio de venta, descripción y Dropi.</div>
+                {fu?.advisorConfirmedAt ? (
+                  <div className="flex items-center gap-1.5 text-[12px] text-teal">
+                    <CheckCircle2 size={14} /> Confirmado — {actorName(fu.advisorConfirmedBy?.name)}{fu.advisorConfirmedBy?.marketingAdvisorBrand ? ` (${fu.advisorConfirmedBy.marketingAdvisorBrand})` : ""}
+                  </div>
+                ) : canConfirmAdvisor ? (
+                  <ConfirmButton label="Confirmar stock, precio, descripción y Dropi" icon={<ClipboardCheck size={14} />} busy={busyId === r.id} onConfirm={() => confirm("advisor", r.id)} />
+                ) : (
+                  <div className="flex items-center gap-1.5 text-[12px] text-steel">
+                    <ClipboardCheck size={14} /> Todavía pendiente
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         );

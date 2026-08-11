@@ -89,8 +89,9 @@ export default async function DeptWorkspacePage({ params }: { params: Promise<{ 
         pettyCashData={pettyCashData}
         canManageAdminPayments={dept.code === "FIN"}
         canViewMarketingArrivals={dept.code === "MKT"}
-        canConfirmMarketingDesign={dept.code === "MKT"}
-        canConfirmMarketingAdvisor={dept.code === "MKT"}
+        // Confirmado 2026-08-08: admin ve pero nunca confirma — exclusivo de quien tiene el flag.
+        canConfirmMarketingDesign={false}
+        canConfirmMarketingAdvisor={false}
         isAdmin
         editable
       />
