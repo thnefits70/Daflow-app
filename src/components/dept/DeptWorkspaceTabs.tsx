@@ -11,7 +11,8 @@ import type { PeriodicReminderDTO } from "@/lib/periodicReminders";
 import { DocumentsPanel } from "@/components/documents/DocumentsPanel";
 import { ExamsPanel } from "@/components/exams/ExamsPanel";
 import { StoreFeedbackPanel } from "@/components/finance/StoreFeedbackPanel";
-import type { StoreDTO } from "@/lib/storeFeedback";
+import { StoreFeedbackKpiPanel } from "@/components/finance/StoreFeedbackKpiPanel";
+import type { StoreDTO, StoreFeedbackAggregate } from "@/lib/storeFeedback";
 import { FinanceKpiWorkspace } from "@/components/finance/FinanceKpiWorkspace";
 import type { FinanceKpiDataDTO } from "@/lib/financeKpis";
 import { PaymentRemindersPanel } from "@/components/finance/PaymentRemindersPanel";
@@ -71,6 +72,7 @@ export function DeptWorkspaceTabs({
   canManageStoreFeedback = false,
   canViewStoreFeedback = false,
   storeFeedbackStores = [],
+  storeFeedbackAggregates = [],
   canSubmitPurchases = false,
   canReceivePurchases = false,
   canInvoicePurchases = false,
@@ -106,12 +108,14 @@ export function DeptWorkspaceTabs({
   weeklyReviewRecords?: WeeklyReviewDTO[];
   // Servicio Postventa (Análisis de Mercado) — per-viewer gate pattern, not
   // a per-department trackXxx flag. Two
-  // tiers: canManageStoreFeedback (full edit) or canViewStoreFeedback
-  // (read-only — confirmed 2026-07-25, for leaders like sales who should
-  // see but never touch what Nairoby registered).
+  // tiers: canManageStoreFeedback (full edit, incluye el detalle de cada
+  // llamada) o canViewStoreFeedback (fix confirmado 2026-08-11: ya NO ve el
+  // detalle de cada llamada — solo el resultado agregado por mes,
+  // storeFeedbackAggregates, para analizar sin exponer el detalle operativo).
   canManageStoreFeedback?: boolean;
   canViewStoreFeedback?: boolean;
   storeFeedbackStores?: StoreDTO[];
+  storeFeedbackAggregates?: StoreFeedbackAggregate[];
   // Control de Compras — mismo patrón sin dept.code que Servicio Postventa
   // (confirmado 2026-07-30): Bryan y Nairoby están "asignados puntualmente"
   // a esto sin ser líderes formales de Control de Compras como departamento,
@@ -210,12 +214,17 @@ export function DeptWorkspaceTabs({
 
   return (
     <div>
-      <div className="flex gap-5.5 border-b border-rule mb-5.5 overflow-x-auto">
+      {/* Fix confirmado 2026-08-11: con overflow-x-auto solo, una pestaña
+          fuera del ancho visible quedaba invisible sin ningún indicio de que
+          había más (le pasó a Bryan con "Caja Chica") — flex-wrap garantiza
+          que TODAS las pestañas queden siempre a la vista, aunque ocupen más
+          de una línea. */}
+      <div className="flex flex-wrap gap-x-5.5 gap-y-2 border-b border-rule mb-5.5">
         {tabs.map((t) => (
           <button
             key={t.key}
             type="button"
-            className={`pb-2.5 text-[13px] font-semibold flex items-center gap-1.5 border-b-2 cursor-pointer whitespace-nowrap shrink-0 ${
+            className={`pb-2.5 text-[13px] font-semibold flex items-center gap-1.5 border-b-2 cursor-pointer whitespace-nowrap ${
               tab === t.key ? "text-ink border-teal" : "text-steel border-transparent hover:text-ink"
             }`}
             onClick={() => {
@@ -300,8 +309,11 @@ export function DeptWorkspaceTabs({
       )}
 
       {tab === "pagosadmin" && canManageAdminPayments && <AdminPaymentsPanel isAdmin={isAdmin} />}
-      {tab === "postventa" && (canManageStoreFeedback || canViewStoreFeedback) && (
-        <StoreFeedbackPanel stores={storeFeedbackStores} editable={canManageStoreFeedback} />
+      {tab === "postventa" && canManageStoreFeedback && (
+        <StoreFeedbackPanel stores={storeFeedbackStores} editable />
+      )}
+      {tab === "postventa" && !canManageStoreFeedback && canViewStoreFeedback && (
+        <StoreFeedbackKpiPanel aggregates={storeFeedbackAggregates} />
       )}
       {tab === "documentos" && <DocumentsPanel deptId={deptId} documents={documents} editable={editable} />}
       {tab === "examenes" && <ExamsPanel deptId={deptId} exams={exams} editable={editable} />}

@@ -26,14 +26,6 @@ export async function getMarketingArrivals() {
   return rows;
 }
 
-// Cuántas llegadas todavía esperan la confirmación de ESTE actor puntual —
-// usado tanto por el badge/lista como por el sondeo del aviso en pantalla
-// (src/components/marketing/MarketingArrivalAlert.tsx).
-export async function getPendingMarketingArrivalCount(role: "design" | "advisor"): Promise<number> {
-  const where = role === "design" ? { designConfirmedAt: null } : { advisorConfirmedAt: null };
-  return prisma.purchaseReceiptFollowUp.count({ where });
-}
-
 // Confirmado 2026-08-08: se le avisa a TODOS los que puedan confirmar ese
 // rol (Robert es el único diseñador hoy, pero puede haber más de un
 // asesor — Heidy Y Jariel se enteran de toda llegada, aunque en la
@@ -42,34 +34,4 @@ export async function getMarketingArrivalActorIds(role: "design" | "advisor"): P
   const flag = role === "design" ? { canConfirmMarketingDesign: true } : { canConfirmMarketingAdvisor: true };
   const users = await prisma.user.findMany({ where: { ...flag, isActive: true }, select: { id: true } });
   return users.map((u) => u.id);
-}
-
-export type StaleMarketingArrivalPush = { ownerId: string; title: string; body: string; url: string };
-
-// Confirmado 2026-08-08: mismo espíritu que getStalePurchaseRequestPushes —
-// mientras falte una confirmación, se sigue avisando cada día (el cron ya
-// corre una vez al día), para que nadie se olvide.
-export async function getStaleMarketingArrivalPushes(): Promise<StaleMarketingArrivalPush[]> {
-  const pushes: StaleMarketingArrivalPush[] = [];
-  const pending = await prisma.purchaseReceiptFollowUp.findMany({
-    where: { OR: [{ designConfirmedAt: null }, { advisorConfirmedAt: null }] },
-    include: { request: { select: { quantity: true, catalogItem: { select: { name: true } } } } },
-  });
-  if (pending.length === 0) return pushes;
-
-  const [designIds, advisorIds] = await Promise.all([
-    getMarketingArrivalActorIds("design"),
-    getMarketingArrivalActorIds("advisor"),
-  ]);
-
-  for (const f of pending) {
-    const body = `${f.request.catalogItem.name} · ${f.request.quantity} un.`;
-    if (!f.designConfirmedAt) {
-      for (const id of designIds) pushes.push({ ownerId: id, title: "Llegó mercadería — falta subir fotos/video", body, url: "/area/workspace?tab=llegadas" });
-    }
-    if (!f.advisorConfirmedAt) {
-      for (const id of advisorIds) pushes.push({ ownerId: id, title: "Llegó mercadería — falta verificar", body, url: "/area/workspace?tab=llegadas" });
-    }
-  }
-  return pushes;
 }

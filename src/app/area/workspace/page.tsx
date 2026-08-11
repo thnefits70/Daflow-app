@@ -8,7 +8,7 @@ import { getFinanceKpiData } from "@/lib/financeKpis";
 import { getDeptProcessDetail } from "@/lib/processDetail";
 import { getPaymentRemindersData } from "@/lib/paymentReminders";
 import { getPeriodicReminders } from "@/lib/periodicReminders";
-import { getStoreFeedbackData } from "@/lib/storeFeedback";
+import { getStoreFeedbackData, getStoreFeedbackMonthlyAggregates } from "@/lib/storeFeedback";
 import { getInventoryControlData, getInventoryKpisData } from "@/lib/inventoryKpis";
 import { getPettyCashViewerData } from "@/lib/pettyCash";
 
@@ -58,7 +58,7 @@ export default async function WorkspacePage() {
     checkCanConfirmMarketingAdvisor(),
   ]);
 
-  const [processDetail, periodicReminders, documents, exams, financeKpiData, paymentReminders, weeklyMetricRecords, weeklyReviewRecords, currentUser, unseenFeedbackCount, storeFeedbackStores, inventoryControlData, inventoryKpisData, pettyCashData] = await Promise.all([
+  const [processDetail, periodicReminders, documents, exams, financeKpiData, paymentReminders, weeklyMetricRecords, weeklyReviewRecords, currentUser, unseenFeedbackCount, storeFeedbackStores, inventoryControlData, inventoryKpisData, pettyCashData, storeFeedbackAggregates] = await Promise.all([
     getDeptProcessDetail(dept.id),
     getPeriodicReminders(dept.id, session.user.id),
     prisma.document.findMany({ where: { deptId: dept.id }, orderBy: { createdAt: "asc" } }),
@@ -84,10 +84,13 @@ export default async function WorkspacePage() {
       },
     }),
     getUnseenFeedbackCount(),
-    canManageStoreFeedback || canViewStoreFeedback ? getStoreFeedbackData() : Promise.resolve([]),
+    canManageStoreFeedback ? getStoreFeedbackData() : Promise.resolve([]),
     canManageInventoryControl ? getInventoryControlData() : Promise.resolve(null),
     canViewInventoryKpisPanel ? getInventoryKpisData() : Promise.resolve(null),
     getPettyCashViewerData(false),
+    // Fix confirmado 2026-08-11: canViewStoreFeedback (Bryan) ya no ve el
+    // detalle por tienda — solo el resultado agregado por mes.
+    canManageStoreFeedback || canViewStoreFeedback ? getStoreFeedbackMonthlyAggregates() : Promise.resolve([]),
   ]);
 
   const kpisEditable = !!currentUser?.isLeader && currentUser.leadsDeptId === dept.id;
@@ -138,6 +141,7 @@ export default async function WorkspacePage() {
         canManageStoreFeedback={canManageStoreFeedback}
         canViewStoreFeedback={canViewStoreFeedback}
         storeFeedbackStores={storeFeedbackStores}
+        storeFeedbackAggregates={storeFeedbackAggregates}
         canSubmitPurchases={canSubmitPurchases}
         canReceivePurchases={canReceivePurchases}
         canInvoicePurchases={canInvoicePurchases}

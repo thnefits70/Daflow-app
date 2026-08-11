@@ -117,6 +117,34 @@ export async function getStoreFeedbackAggregate(): Promise<StoreFeedbackAggregat
   return { ...current, prevAvgLoyaltyScore: prev?.avgLoyaltyScore ?? null };
 }
 
+// Confirmado 2026-08-11: pedido explícito del usuario — quien solo puede
+// VER (Bryan, canViewStoreFeedback sin canManageStoreFeedback) ya no debe
+// ver el detalle de cada llamada (nombre de tienda, comentarios, quién
+// evaluó) — eso queda exclusivo de quien de verdad llama (hoy Nairoby, vía
+// canManageStoreFeedback). En su lugar ve solo el resultado agregado por
+// mes de los 6 indicadores, para analizar y mejorar sin exponer el detalle
+// operativo de cada relación comercial.
+export async function getStoreFeedbackMonthlyAggregates(): Promise<StoreFeedbackAggregate[]> {
+  const periodRows = await prisma.storeFeedbackEvaluation.findMany({
+    distinct: ["period"],
+    orderBy: { period: "desc" },
+    select: { period: true },
+  });
+
+  const aggregates = await Promise.all(
+    periodRows.map(async ({ period }) => {
+      const current = await aggregateForPeriod(period);
+      if (!current) return null;
+      const [y, m] = period.split("-").map(Number);
+      const prevDate = new Date(Date.UTC(y, m - 2, 1));
+      const prevPeriod = `${prevDate.getUTCFullYear()}-${String(prevDate.getUTCMonth() + 1).padStart(2, "0")}`;
+      const prev = await aggregateForPeriod(prevPeriod);
+      return { ...current, prevAvgLoyaltyScore: prev?.avgLoyaltyScore ?? null };
+    })
+  );
+  return aggregates.filter((a): a is StoreFeedbackAggregate => a !== null);
+}
+
 export type StoreFeedbackTrendPoint = { period: string; avgLoyaltyScore: number };
 
 // Public — last N periods that actually have data (not calendar months, to
