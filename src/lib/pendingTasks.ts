@@ -292,6 +292,7 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   ruptura_stock: "Ruptura de Stock",
   caja_chica_saldo: "Caja Chica — saldo bajo",
   caja_chica_confirmacion: "Caja Chica — falta que confirmen una recarga",
+  pagos_administrativos: "Pagos administrativos pendientes de pago",
   cumpleanos: "Cumpleaños de tu equipo (aviso 1 día antes)",
 };
 
@@ -711,6 +712,33 @@ async function getPettyCashUnconfirmedFunderItems(funderId: string | null, hrefB
   return items;
 }
 
+// Confirmado 2026-08-12: pedido explícito del usuario — un enlace de un
+// clic en Inicio cuando el admin tiene pagos administrativos esperando que
+// suba el comprobante. Mismo umbral de 24h que ya usa el cron de push
+// (getStaleAdminPaymentPushes en adminPayments.ts) para marcarlo "atrasado".
+// Desaparece solo apenas la solicitud deja de estar PENDING_PAYMENT — eso
+// solo pasa cuando se sube un comprobante y la IA lo verifica correcto (ver
+// AdminPaymentsPanel.tsx / api/admin-payments/[id]/upload-proof), nunca
+// antes.
+async function getAdminPaymentsPendingItem(href: string): Promise<PendingItem | null> {
+  const pending = await prisma.adminPaymentRequest.findMany({
+    where: { status: "PENDING_PAYMENT" },
+    select: { monto: true, createdAt: true },
+  });
+  if (pending.length === 0) return null;
+  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const overdue = pending.some((r) => r.createdAt < cutoff);
+  const total = pending.reduce((s, r) => s + r.monto, 0);
+  return {
+    type: "pagos_administrativos",
+    icon: "🧾",
+    label: "Pagos administrativos pendientes de pago",
+    meta: `${pending.length} solicitud${pending.length === 1 ? "" : "es"} · $${total.toFixed(2)}${overdue ? " · atrasado" : ""}`,
+    overdue,
+    href,
+  };
+}
+
 // Confirmado 2026-08-06: aviso 1 día antes de la fecha en que se va a
 // felicitar (que puede ser el cumpleaños real o el último día laborable
 // antes, si cae sábado/domingo/feriado — ver celebrationDateFor en
@@ -750,14 +778,22 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     // esa página específica (/admin/dept/[id]), no a "/admin" a secas.
     const finDept = await prisma.department.findUnique({ where: { code: "FIN" }, select: { id: true } });
     const financeHref = finDept ? `/admin/dept/${finDept.id}` : "/admin";
-    const [feedbackItems, recognitionItem, pettyCashLow, pettyCashUnconfirmed, birthdayItems] = await Promise.all([
+    const [feedbackItems, recognitionItem, pettyCashLow, pettyCashUnconfirmed, adminPaymentsItem, birthdayItems] = await Promise.all([
       getFeedbackPendingItems(),
       getRecognitionAdminPendingItem("/admin/colaborador-destacado"),
       getPettyCashLowBalanceItems(financeHref),
       getPettyCashUnconfirmedFunderItems(null, financeHref),
+      getAdminPaymentsPendingItem(`${financeHref}?tab=pagosadmin`),
       getUpcomingBirthdayPendingItems("/admin/nomina"),
     ]);
-    const items = [...feedbackItems, ...(recognitionItem ? [recognitionItem] : []), ...pettyCashLow, ...pettyCashUnconfirmed, ...birthdayItems];
+    const items = [
+      ...feedbackItems,
+      ...(recognitionItem ? [recognitionItem] : []),
+      ...pettyCashLow,
+      ...pettyCashUnconfirmed,
+      ...(adminPaymentsItem ? [adminPaymentsItem] : []),
+      ...birthdayItems,
+    ];
     if (items.length === 0) return null;
     return { title: "Pendientes de esta semana", sub: "Como administrador", items };
   }
