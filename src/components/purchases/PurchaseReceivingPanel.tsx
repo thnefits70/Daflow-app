@@ -339,7 +339,9 @@ export function PurchaseReceivingPanel({ isAdmin = false }: { isAdmin?: boolean 
                     <div className="text-[11px] text-steel mb-1.5">Mínimo 2 fotos, igual que una recepción normal.</div>
                     <div className="grid grid-cols-3 gap-2 mb-2.5">
                       {replacementPhotoUrls.map((url, i) => (
-                        <img key={i} src={url} alt="" className="w-full h-24 rounded object-cover border border-rule" />
+                        <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="bg-cloud rounded border border-rule flex items-center justify-center h-24">
+                          <img src={url} alt="" className="max-w-full max-h-full object-contain" />
+                        </a>
                       ))}
                       {replacementPhotoUrls.length < 3 && (
                         <label
