@@ -691,7 +691,7 @@ export function PurchaseReceivingPanel({ isAdmin = false }: { isAdmin?: boolean 
                               className="rounded border border-green bg-green px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                               onClick={() => { setOpenId(r.id); setReceivedPhotoUrls([]); setAiResult(null); setReceivedQty(r.urgentReports.length > 0 ? String(goodQuantity(r)) : ""); setComment(""); setErr(""); }}
                             >
-                              {r.urgentReports.length > 0 ? "✓ Confirmar cantidad buena" : "✓ Confirmar que llegó"}
+                              {r.urgentReports.length > 0 ? `✓ Confirmar ${goodQuantity(r)} un. buenas` : "✓ Confirmar que llegó"}
                             </button>
                           </div>
                         </div>
