@@ -46,6 +46,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       paymentProofName: parsed.data.proofName ?? null,
       paymentAiMatch: matches,
       paymentAiNote: note,
+      paymentAiReadAmount: readAmount,
       ...(matches ? { status: "PAID", paidAt: new Date(), paidById: null } : {}),
     },
   });

@@ -2167,6 +2167,11 @@ model AdminPaymentRequest {
   paymentProofName String?
   paymentAiMatch   Boolean?
   paymentAiNote    String?
+  // Confirmado 2026-08-12: pedido explícito del usuario — el monto real que
+  // la IA leyó del comprobante (coincida o no con `monto`), para mostrarlo
+  // al lado de "Total a pagar" — antes solo vivía como texto dentro de
+  // paymentAiNote, sin un número aparte que la UI pudiera mostrar directo.
+  paymentAiReadAmount Float?
   // Confirmado 2026-08-12: pedido explícito del usuario — solo el admin (el
   // único que hace estos pagos) puede, con un clic + una breve nota, dar por
   // buena una transacción cuando el comprobante no coincide con lo

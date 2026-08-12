@@ -32,6 +32,7 @@ type RequestDTO = {
   paymentProofName: string | null;
   paymentAiMatch: boolean | null;
   paymentAiNote: string | null;
+  paymentAiReadAmount: number | null;
   paymentOverrideNote: string | null;
   paymentExtraFileUrl: string | null;
   paymentExtraFileName: string | null;
@@ -667,6 +668,21 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
                 <div className="text-right shrink-0">
                   <div className="text-[9px] font-semibold uppercase tracking-wide text-steel">Total a pagar</div>
                   <div className="font-display text-[22px] font-bold text-teal leading-tight">{money(r.monto)}</div>
+                  {/* Confirmado 2026-08-12: pedido explícito del usuario — al lado del
+                      monto solicitado, la suma real que se pagó según el comprobante,
+                      una vez que quedó verificado (por IA o manualmente). Verde si
+                      coincide exacto, ámbar si se verificó manual con un monto distinto. */}
+                  {(r.paymentAiMatch === true || r.paymentOverrideNote) && r.paymentAiReadAmount !== null && (
+                    <div className="mt-1.5">
+                      <div className="text-[9px] font-semibold uppercase tracking-wide text-steel">Pagado</div>
+                      <div
+                        className={`text-[15px] font-bold leading-tight flex items-center justify-end gap-1 ${r.paymentAiMatch === true ? "text-green" : ""}`}
+                        style={r.paymentAiMatch !== true ? { color: "#D9A441" } : undefined}
+                      >
+                        <CheckCircle2 size={12} /> {money(r.paymentAiReadAmount)} · Pagado
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 
