@@ -525,13 +525,18 @@ async function getPaymentReminderPendingItems(deptId: string, href: string): Pro
 // este tema (ni en la tarjeta de Pendientes ni por push) antes de ese mes.
 const STORE_FEEDBACK_START_MONTH = "2026-08";
 
+// Confirmado 2026-08-12: pedido explícito del usuario — el feedback es del
+// mes que acaba de pasar, así que recién tiene sentido pedirlo después del
+// día 15 del mes actual (antes de eso, ni siquiera ha pasado la mitad del
+// mes que se está evaluando en la práctica de Nairoby). Mismo patrón de
+// "día fijo del mes, con corrimiento a día hábil" que ya usa Roles de
+// pago/Devolución/Garantías — antes usaba el 3er miércoles, cambiado acá.
 async function getStoreFeedbackPendingItem(href: string): Promise<PendingItem | null> {
   const today = currentMonthStr();
   if (today < STORE_FEEDBACK_START_MONTH) return null;
 
   const prev = prevMonthStr(today);
-  const startDate = nthWeekdayOfMonth(today, 3, 2); // 3 = miércoles, 2da ocurrencia
-  if (nowInEcuador() < startDate) return null;
+  if (!fixedDayDeadlinePassed(today, 15)) return null;
 
   const hasAny = await prisma.storeFeedbackEvaluation.count({ where: { period: prev } });
   if (hasAny > 0) return null;
