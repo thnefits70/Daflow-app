@@ -202,6 +202,13 @@ export async function readPurchaseOrder(params: {
 export type ReceiptPhotoComparisonResult = {
   likelyMatch: boolean | null;
   note: string;
+  // Confirmado 2026-08-12: pedido explícito del usuario — cuando likelyMatch
+  // es false, distinguir si la única diferencia es el COLOR (mismo producto,
+  // mismo diseño, solo cambia el color) de un producto genuinamente distinto.
+  // Solo en el primer caso la UI ofrece un botón de un clic para que el
+  // líder de Inventario confirme y siga adelante sin pasar por "Informar
+  // urgente" — un producto realmente distinto sigue bloqueado igual que antes.
+  colorMismatchOnly: boolean;
 };
 
 // Confirmado 2026-08-06: cuando Daniel (líder de Inventario) confirma que
@@ -216,7 +223,7 @@ export async function compareReceiptPhotos(params: {
   deptId?: string;
 }): Promise<ReceiptPhotoComparisonResult> {
   if (params.referencePhotoUrls.length === 0) {
-    return { likelyMatch: null, note: "Este producto no tiene fotos de referencia en el catálogo — no se pudo comparar." };
+    return { likelyMatch: null, colorMismatchOnly: false, note: "Este producto no tiene fotos de referencia en el catálogo — no se pudo comparar." };
   }
 
   const client = getAnthropicClient();
@@ -240,9 +247,15 @@ export async function compareReceiptPhotos(params: {
       // el veredicto general sea false, sin importar si las demás sí coinciden.
       "Si CUALQUIERA de las fotos de recepción no corresponde visualmente al producto de referencia (aunque las " +
       "demás sí coincidan), likelyMatch debe ser false — nunca lo marques true si hay aunque sea una duda real. " +
-      'Responde ÚNICAMENTE un JSON: {"likelyMatch": boolean, "note": string}. note es una frase breve en español ' +
-      'explicando tu conclusión, mencionando específicamente cuál foto no corresponde si aplica (ej. "Coincide — ' +
-      'mismo empaque y forma" o "No coincide — la 3ra foto de recepción muestra un producto distinto").',
+      "Cuando likelyMatch sea false, determina además si la ÚNICA diferencia es el COLOR — mismo producto, mismo " +
+      "diseño/forma/empaque, solo cambia el color — en ese caso colorMismatchOnly debe ser true. Si el producto " +
+      "es distinto en forma, diseño, tamaño o tipo (no solo color), colorMismatchOnly debe ser false. Cuando " +
+      "likelyMatch es true, colorMismatchOnly siempre debe ser false. " +
+      'Responde ÚNICAMENTE un JSON: {"likelyMatch": boolean, "colorMismatchOnly": boolean, "note": string}. note ' +
+      'es una frase breve en español explicando tu conclusión, mencionando específicamente cuál foto no ' +
+      'corresponde y qué cambia (color u otra cosa) si aplica (ej. "Coincide — mismo empaque y forma" o "No ' +
+      'coincide — la 3ra foto de recepción muestra un producto distinto" o "No coincide — mismo producto pero ' +
+      'llegó en color gris en vez de amarillo").',
     messages: [
       {
         role: "user",
@@ -268,7 +281,8 @@ export async function compareReceiptPhotos(params: {
 
   const textBlock = response.content.find((b) => b.type === "text");
   if (!textBlock || textBlock.type !== "text") throw new Error("La IA no devolvió contenido de texto.");
-  return extractJson<ReceiptPhotoComparisonResult>(textBlock.text);
+  const result = extractJson<ReceiptPhotoComparisonResult>(textBlock.text);
+  return { ...result, colorMismatchOnly: result.likelyMatch === false && !!result.colorMismatchOnly };
 }
 
 export type CatalogDuplicateCheck = {

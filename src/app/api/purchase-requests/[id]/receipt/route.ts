@@ -12,6 +12,13 @@ const schema = z.object({
   comment: z.string().trim().optional(),
   aiPhotoMatch: z.boolean().nullable().optional(),
   aiPhotoNote: z.string().nullable().optional(),
+  // Confirmado 2026-08-12: pedido explícito del usuario — si la IA marcó
+  // que la ÚNICA diferencia es el color (colorMismatchOnly), el líder de
+  // Inventario puede confirmar con un clic (colorConfirmed) y seguir
+  // adelante sin pasar por "Informar urgente" — un producto genuinamente
+  // distinto sigue bloqueado igual que antes.
+  colorMismatchOnly: z.boolean().nullable().optional(),
+  colorConfirmed: z.boolean().optional(),
 });
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -42,7 +49,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // todo — la única salida es "Informar urgente" (que sí manda notificación
   // con la novedad). Defensa server-side del mismo chequeo que ya
   // deshabilita el botón en el cliente.
-  if (parsed.data.aiPhotoMatch === false) {
+  const colorOverride = parsed.data.aiPhotoMatch === false && !!parsed.data.colorMismatchOnly && !!parsed.data.colorConfirmed;
+  if (parsed.data.aiPhotoMatch === false && !colorOverride) {
     return NextResponse.json({ error: "La IA detectó que el producto no corresponde a la referencia — usa 'Informar urgente' en vez de confirmar." }, { status: 409 });
   }
 
@@ -78,6 +86,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         comment: parsed.data.comment || null,
         aiPhotoMatch: parsed.data.aiPhotoMatch ?? null,
         aiPhotoNote: parsed.data.aiPhotoNote ?? null,
+        colorMismatchConfirmed: colorOverride,
         confirmedById: isAdmin ? null : session.user.id,
       },
     }),
@@ -88,15 +97,21 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     prisma.purchaseReceiptFollowUp.create({ data: { requestId: id } }),
   ]);
 
+  // Confirmado 2026-08-12: pedido explícito del usuario — cuando Inventario
+  // confirma pese a un color distinto al de referencia, todas las partes que
+  // ya se avisan de la llegada deben enterarse de ese detalle también, para
+  // que lo tengan en cuenta al vender/mostrar el producto.
+  const colorNote = colorOverride ? " ⚠️ Llegó en un color distinto a la referencia (confirmado por Inventario)." : "";
+
   if (existing.requestedById) {
     await sendPushToOwner(existing.requestedById, {
       title: "Mercadería recibida",
-      body: `${existing.catalogItem.name} — Inventario confirmó ${parsed.data.receivedQuantity} un. recibidas`,
+      body: `${existing.catalogItem.name} — Inventario confirmó ${parsed.data.receivedQuantity} un. recibidas.${colorNote}`,
       url: "/area/workspace",
     }).catch(() => null);
   }
 
-  const arrivalBody = `${existing.catalogItem.name} · ${parsed.data.receivedQuantity} un.`;
+  const arrivalBody = `${existing.catalogItem.name} · ${parsed.data.receivedQuantity} un.${colorNote}`;
   const [designIds, advisorIds] = await Promise.all([
     getMarketingArrivalActorIds("design"),
     getMarketingArrivalActorIds("advisor"),

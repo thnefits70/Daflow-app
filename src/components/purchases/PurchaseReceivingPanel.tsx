@@ -116,7 +116,8 @@ export function PurchaseReceivingPanel({ isAdmin = false }: { isAdmin?: boolean 
   const [receivedPhotoUrls, setReceivedPhotoUrls] = useState<string[]>([]);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [aiChecking, setAiChecking] = useState(false);
-  const [aiResult, setAiResult] = useState<{ likelyMatch: boolean | null; note: string } | null>(null);
+  const [aiResult, setAiResult] = useState<{ likelyMatch: boolean | null; note: string; colorMismatchOnly?: boolean } | null>(null);
+  const [colorConfirmed, setColorConfirmed] = useState(false);
   const { onPaste: onPastePhoto, onMouseEnter: onPasteHoverIn, onMouseLeave: onPasteHoverOut } = usePasteFile((file) => addPhoto(file));
   const [comment, setComment] = useState("");
   const [busy, setBusy] = useState(false);
@@ -164,11 +165,13 @@ export function PurchaseReceivingPanel({ isAdmin = false }: { isAdmin?: boolean 
   function removePhoto(idx: number) {
     setReceivedPhotoUrls((ps) => ps.filter((_, i) => i !== idx));
     setAiResult(null);
+    setColorConfirmed(false);
   }
 
   async function verifyPhotos(requestId: string, photos: string[]) {
     setAiChecking(true);
     setAiResult(null);
+    setColorConfirmed(false);
     const res = await fetch("/api/purchase-requests/verify-receipt-photos", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -195,6 +198,8 @@ export function PurchaseReceivingPanel({ isAdmin = false }: { isAdmin?: boolean 
         comment: comment.trim() || undefined,
         aiPhotoMatch: aiResult?.likelyMatch ?? null,
         aiPhotoNote: aiResult?.note ?? null,
+        colorMismatchOnly: aiResult?.colorMismatchOnly ?? null,
+        colorConfirmed,
       }),
     });
     setBusy(false);
@@ -207,6 +212,7 @@ export function PurchaseReceivingPanel({ isAdmin = false }: { isAdmin?: boolean 
     setReceivedQty("");
     setReceivedPhotoUrls([]);
     setAiResult(null);
+    setColorConfirmed(false);
     setComment("");
     load();
     router.refresh();
@@ -532,7 +538,27 @@ export function PurchaseReceivingPanel({ isAdmin = false }: { isAdmin?: boolean 
                               la cantidad recibida no coincide con lo pedido, "Confirmar que
                               llegó" se deshabilita del todo — la única salida es "Informar
                               urgente" (que sí manda notificación con la novedad real). */}
-                          {aiResult && aiResult.likelyMatch === false && (
+                          {aiResult && aiResult.likelyMatch === false && aiResult.colorMismatchOnly && !colorConfirmed && (
+                            <div className="bg-gold/10 border border-gold/35 rounded-md px-3 py-2.5 mb-2.5">
+                              <div className="text-[11px] mb-2" style={{ color: "#D9A441" }}>
+                                La IA detectó que es el mismo producto pero en un color distinto al de referencia — si está bien así, confirma con un clic para no quedarse detenido. Si de verdad llegó otro producto (no solo el color), usa &quot;🚨 Informar urgente&quot; en vez de esto.
+                              </div>
+                              <button
+                                type="button"
+                                className="rounded border border-gold/50 px-2.5 py-1.5 text-[11.5px] font-semibold cursor-pointer"
+                                style={{ color: "#D9A441" }}
+                                onClick={() => setColorConfirmed(true)}
+                              >
+                                ✓ El color está bien, seguir con el ingreso
+                              </button>
+                            </div>
+                          )}
+                          {aiResult && aiResult.likelyMatch === false && aiResult.colorMismatchOnly && colorConfirmed && (
+                            <div className="flex items-center gap-1.5 text-[11px] mb-2.5" style={{ color: "#D9A441" }}>
+                              <CheckCircle2 size={13} /> Color confirmado — se avisará a todas las partes del cambio de color.
+                            </div>
+                          )}
+                          {aiResult && aiResult.likelyMatch === false && !aiResult.colorMismatchOnly && (
                             <div className="text-[11px] text-red mb-2.5">
                               No se puede confirmar así — si de verdad llegó un producto distinto, usa &quot;🚨 Informar urgente&quot; (categoría Diferente) en vez de este botón.
                             </div>
@@ -548,14 +574,14 @@ export function PurchaseReceivingPanel({ isAdmin = false }: { isAdmin?: boolean 
                                 receivedPhotoUrls.length < 2 ||
                                 !receivedQty ||
                                 Number(receivedQty) !== (r.urgentReports.length > 0 ? goodQuantity(r) : r.quantity) ||
-                                aiResult?.likelyMatch === false
+                                (aiResult?.likelyMatch === false && !(aiResult.colorMismatchOnly && colorConfirmed))
                               }
                               className="rounded border border-green bg-green px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer disabled:opacity-60"
                               onClick={() => confirmReceipt(r.id)}
                             >
                               ✓ Confirmar que llegó
                             </button>
-                            <button type="button" className="text-steel text-[12.5px] cursor-pointer" onClick={() => { setOpenId(null); setReceivedPhotoUrls([]); setAiResult(null); }}>Cancelar</button>
+                            <button type="button" className="text-steel text-[12.5px] cursor-pointer" onClick={() => { setOpenId(null); setReceivedPhotoUrls([]); setAiResult(null); setColorConfirmed(false); }}>Cancelar</button>
                           </div>
                         </div>
                       ) : urgentId === r.id ? (
@@ -691,7 +717,7 @@ export function PurchaseReceivingPanel({ isAdmin = false }: { isAdmin?: boolean 
                               disabled={isAdmin}
                               title={isAdmin ? "Exclusivo del líder de Inventario" : undefined}
                               className="rounded border border-green bg-green px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-                              onClick={() => { setOpenId(r.id); setReceivedPhotoUrls([]); setAiResult(null); setReceivedQty(r.urgentReports.length > 0 ? String(goodQuantity(r)) : ""); setComment(""); setErr(""); }}
+                              onClick={() => { setOpenId(r.id); setReceivedPhotoUrls([]); setAiResult(null); setColorConfirmed(false); setReceivedQty(r.urgentReports.length > 0 ? String(goodQuantity(r)) : ""); setComment(""); setErr(""); }}
                             >
                               {r.urgentReports.length > 0 ? `✓ Confirmar ${goodQuantity(r)} un. buenas` : "✓ Confirmar que llegó"}
                             </button>

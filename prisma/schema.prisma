@@ -1356,6 +1356,12 @@ model PurchaseRequestReceipt {
 
   aiPhotoMatch Boolean?
   aiPhotoNote  String?
+  // Confirmado 2026-08-12: pedido explícito del usuario — cuando la IA
+  // detecta que la única diferencia es el COLOR (mismo producto), el líder
+  // de Inventario puede confirmar con un clic y seguir adelante sin pasar
+  // por "Informar urgente". aiPhotoMatch se deja tal cual lo dio la IA
+  // (false) — este campo es el registro de que se confirmó a pesar de eso.
+  colorMismatchConfirmed Boolean @default(false)
 
   confirmedById String?
   confirmedBy   User?    @relation("PurchaseRequestReceiptConfirmedBy", fields: [confirmedById], references: [id], onDelete: SetNull)
