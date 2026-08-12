@@ -32,6 +32,7 @@ type RequestDTO = {
   paymentProofName: string | null;
   paymentAiMatch: boolean | null;
   paymentAiNote: string | null;
+  paymentOverrideNote: string | null;
   paymentNotifiedAt: string | null;
   paidAt: string | null;
   confirmedAt: string | null;
@@ -110,6 +111,9 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
 
   const [remindedId, setRemindedId] = useState<string | null>(null);
   const [notifiedId, setNotifiedId] = useState<string | null>(null);
+  const [overrideOpenId, setOverrideOpenId] = useState<string | null>(null);
+  const [overrideNote, setOverrideNote] = useState("");
+  const [overridingId, setOverridingId] = useState<string | null>(null);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -252,6 +256,34 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
       setErr(data?.error ?? "No se pudo verificar el comprobante.");
       return;
     }
+    load();
+    router.refresh();
+  }
+
+  // Confirmado 2026-08-12: pedido explícito del usuario — solo admin, solo
+  // en Pagos administrativos, y solo cuando ya hay un comprobante que no
+  // coincide (nunca para saltarse subir el comprobante). Da por pagado con
+  // una nota breve de por qué está bien igual (ej. comisión bancaria).
+  async function submitOverride(id: string) {
+    if (!overrideNote.trim()) {
+      setErr("Describe brevemente por qué está bien.");
+      return;
+    }
+    setErr("");
+    setOverridingId(id);
+    const res = await fetch(`/api/admin-payments/${id}/override-payment`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ note: overrideNote.trim() }),
+    });
+    setOverridingId(null);
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      setErr(data?.error ?? "No se pudo confirmar el pago.");
+      return;
+    }
+    setOverrideOpenId(null);
+    setOverrideNote("");
     load();
     router.refresh();
   }
@@ -606,15 +638,60 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
               </div>
 
               {r.paymentProofUrl && (
-                <div className={`border rounded-md p-2.5 mb-2.5 ${r.paymentAiMatch ? "bg-green/10 border-green/30" : "bg-red/10 border-red/30"}`}>
+                <div className={`border rounded-md p-2.5 mb-2.5 ${r.paymentAiMatch ? "bg-green/10 border-green/30" : r.paymentOverrideNote ? "bg-gold/10 border-gold/35" : "bg-red/10 border-red/30"}`}>
                   <div className="flex items-center gap-2.5 mb-1">
-                    {r.paymentAiMatch ? <CheckCircle2 size={13} className="text-green shrink-0" /> : <Lock size={13} className="text-red shrink-0" />}
+                    {r.paymentAiMatch ? <CheckCircle2 size={13} className="text-green shrink-0" /> : r.paymentOverrideNote ? <CheckCircle2 size={13} className="shrink-0" style={{ color: "#D9A441" }} /> : <Lock size={13} className="text-red shrink-0" />}
                     <ProofPreview url={r.paymentProofUrl} size={44} filename="comprobante-de-pago" />
                   </div>
-                  <div className={`text-[11px] ${r.paymentAiMatch ? "text-green" : "text-red"}`}>
+                  <div className={`text-[11px] ${r.paymentAiMatch ? "text-green" : r.paymentOverrideNote ? "" : "text-red"}`} style={r.paymentOverrideNote && !r.paymentAiMatch ? { color: "#D9A441" } : undefined}>
                     {r.paymentAiMatch ? "✅ Todo en orden — el comprobante coincide con el monto pagado. " : ""}{r.paymentAiNote}
                   </div>
+                  {r.paymentOverrideNote && (
+                    <div className="text-[11px] mt-1" style={{ color: "#D9A441" }}>
+                      ⚠️ Verificado manualmente por el admin: {r.paymentOverrideNote}
+                    </div>
+                  )}
                   {r.paidBy?.name && <div className="text-[10px] text-steel-dim mt-0.5">Pagado por {actorName(r.paidBy.name)}{r.paidAt ? ` · ${new Date(r.paidAt).toLocaleDateString("es-MX")}` : ""}</div>}
+                </div>
+              )}
+
+              {isAdmin && r.status === "PENDING_PAYMENT" && r.paymentProofUrl && r.paymentAiMatch === false && (
+                <div className="mb-2.5">
+                  {overrideOpenId === r.id ? (
+                    <div className="bg-cloud border border-rule rounded-md p-2.5">
+                      <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">
+                        ¿Por qué está bien igual?
+                      </label>
+                      <textarea
+                        className="w-full rounded border border-rule px-2.5 py-2 text-[12px] mb-2"
+                        rows={2}
+                        placeholder="Ej: el banco cobró una comisión de $2.72 aparte"
+                        value={overrideNote}
+                        onChange={(e) => setOverrideNote(e.target.value)}
+                      />
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          disabled={overridingId === r.id}
+                          className="rounded border border-gold/50 px-3 py-1.5 text-[11.5px] font-semibold cursor-pointer disabled:opacity-60"
+                          style={{ color: "#D9A441" }}
+                          onClick={() => submitOverride(r.id)}
+                        >
+                          {overridingId === r.id ? "Confirmando…" : "✓ Confirmar que está bien"}
+                        </button>
+                        <button type="button" className="text-steel text-[11.5px] cursor-pointer" onClick={() => { setOverrideOpenId(null); setOverrideNote(""); }}>Cancelar</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      className="rounded border border-gold/50 px-2.5 py-1.5 text-[11.5px] font-semibold cursor-pointer"
+                      style={{ color: "#D9A441" }}
+                      onClick={() => { setOverrideOpenId(r.id); setOverrideNote(""); setErr(""); }}
+                    >
+                      ✓ Verificar que está bien
+                    </button>
+                  )}
                 </div>
               )}
 

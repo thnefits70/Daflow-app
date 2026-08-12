@@ -2167,6 +2167,13 @@ model AdminPaymentRequest {
   paymentProofName String?
   paymentAiMatch   Boolean?
   paymentAiNote    String?
+  // Confirmado 2026-08-12: pedido explícito del usuario — solo el admin (el
+  // único que hace estos pagos) puede, con un clic + una breve nota, dar por
+  // buena una transacción cuando el comprobante no coincide con lo
+  // declarado (ej. comisión bancaria distinta). paymentAiMatch se deja tal
+  // cual lo leyó la IA (false) — este campo es el registro de auditoría de
+  // por qué igual se dio por pagado.
+  paymentOverrideNote String?
   paidAt   DateTime?
   paidById String?
   paidBy   User?     @relation("AdminPaymentPaidBy", fields: [paidById], references: [id], onDelete: SetNull)
