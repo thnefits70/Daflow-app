@@ -124,6 +124,7 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
   const [extraNote, setExtraNote] = useState("");
   const [uploadingExtra, setUploadingExtra] = useState(false);
   const [savingExtraId, setSavingExtraId] = useState<string | null>(null);
+  const { onPaste: onPasteExtra, onMouseEnter: armExtraPaste, onMouseLeave: disarmExtraPaste } = usePasteFile((file) => uploadExtraFile(file));
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -778,10 +779,26 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
                           <button type="button" className="text-steel text-[11px] underline cursor-pointer" onClick={() => { setExtraFileUrl(null); setExtraFileName(null); }}>Quitar</button>
                         </div>
                       ) : (
-                        <label className="flex items-center gap-1.5 border-[1.5px] border-dashed border-rule rounded px-3 py-2 text-[12px] text-steel cursor-pointer hover:border-teal w-fit mb-2">
-                          {uploadingExtra ? <span className="w-3.5 h-3.5 rounded-full border-2 border-rule border-t-teal animate-spin" /> : <Upload size={13} />} Subir documento o imagen
-                          <input type="file" accept="image/*,application/pdf" className="hidden" onChange={(e) => e.target.files?.[0] && uploadExtraFile(e.target.files[0])} />
-                        </label>
+                        <div className="mb-2">
+                          <label
+                            tabIndex={0}
+                            onPaste={onPasteExtra}
+                            onMouseEnter={armExtraPaste}
+                            onMouseLeave={disarmExtraPaste}
+                            className="flex items-center gap-1.5 border-[1.5px] border-dashed border-rule rounded px-3 py-2 text-[12px] text-steel cursor-pointer hover:border-teal focus:border-teal focus:outline-none w-fit"
+                          >
+                            {uploadingExtra ? <span className="w-3.5 h-3.5 rounded-full border-2 border-rule border-t-teal animate-spin" /> : <Upload size={13} />} Subir o pegar documento o imagen
+                            {/* Confirmado 2026-08-06: accept="image/*,application/pdf" hacía que el
+                                celular mostrara el selector genérico de "Cámara y archivos" en vez
+                                del acceso directo a la última foto — se separa el PDF como opción
+                                aparte, mismo fix ya aplicado en el resto de subidas de este módulo. */}
+                            <input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && uploadExtraFile(e.target.files[0])} />
+                          </label>
+                          <label className="flex items-center gap-1 mt-1 text-[10.5px] text-steel cursor-pointer hover:text-teal w-fit">
+                            ¿Es un PDF? Subir documento
+                            <input type="file" accept="application/pdf" className="hidden" onChange={(e) => e.target.files?.[0] && uploadExtraFile(e.target.files[0])} />
+                          </label>
+                        </div>
                       )}
                       <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">
                         Descripción (opcional)
