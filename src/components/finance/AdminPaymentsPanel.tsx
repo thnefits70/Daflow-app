@@ -33,6 +33,9 @@ type RequestDTO = {
   paymentAiMatch: boolean | null;
   paymentAiNote: string | null;
   paymentOverrideNote: string | null;
+  paymentExtraFileUrl: string | null;
+  paymentExtraFileName: string | null;
+  paymentNote: string | null;
   paymentNotifiedAt: string | null;
   paidAt: string | null;
   confirmedAt: string | null;
@@ -114,6 +117,13 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
   const [overrideOpenId, setOverrideOpenId] = useState<string | null>(null);
   const [overrideNote, setOverrideNote] = useState("");
   const [overridingId, setOverridingId] = useState<string | null>(null);
+
+  const [extraOpenId, setExtraOpenId] = useState<string | null>(null);
+  const [extraFileUrl, setExtraFileUrl] = useState<string | null>(null);
+  const [extraFileName, setExtraFileName] = useState<string | null>(null);
+  const [extraNote, setExtraNote] = useState("");
+  const [uploadingExtra, setUploadingExtra] = useState(false);
+  const [savingExtraId, setSavingExtraId] = useState<string | null>(null);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -286,6 +296,49 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
     setOverrideNote("");
     load();
     router.refresh();
+  }
+
+  // Confirmado 2026-08-12: pedido explícito del usuario — al hacer el pago,
+  // admin puede opcionalmente adjuntar un segundo documento/imagen de
+  // soporte y una descripción, ambos opcionales, sin pasar por IA.
+  function openExtra(r: RequestDTO) {
+    setExtraOpenId(r.id);
+    setExtraFileUrl(r.paymentExtraFileUrl);
+    setExtraFileName(r.paymentExtraFileName);
+    setExtraNote(r.paymentNote ?? "");
+    setErr("");
+  }
+
+  async function uploadExtraFile(file: File) {
+    setErr("");
+    setUploadingExtra(true);
+    const compressed = file.type.startsWith("image/") ? await compressImage(file) : file;
+    const uploaded = await uploadFile(compressed, "admin-payments");
+    setUploadingExtra(false);
+    if (!uploaded.ok) {
+      setErr(uploaded.error);
+      return;
+    }
+    setExtraFileUrl(uploaded.url);
+    setExtraFileName(uploaded.name);
+  }
+
+  async function saveExtra(id: string) {
+    setErr("");
+    setSavingExtraId(id);
+    const res = await fetch(`/api/admin-payments/${id}/extra`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ fileUrl: extraFileUrl, fileName: extraFileName, note: extraNote.trim() || null }),
+    });
+    setSavingExtraId(null);
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      setErr(data?.error ?? "No se pudo guardar.");
+      return;
+    }
+    setExtraOpenId(null);
+    load();
   }
 
   async function remindPayment(id: string) {
@@ -707,6 +760,64 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
                       onClick={() => { setOverrideOpenId(r.id); setOverrideNote(""); setErr(""); }}
                     >
                       ✓ Verificar que está bien
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {isAdmin && r.paymentProofUrl && (
+                <div className="mb-2.5">
+                  {extraOpenId === r.id ? (
+                    <div className="bg-cloud border border-rule rounded-md p-2.5">
+                      <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">
+                        Segundo documento o imagen (opcional)
+                      </label>
+                      {extraFileUrl ? (
+                        <div className="flex items-center gap-2 mb-2">
+                          <ProofPreview url={extraFileUrl} size={36} filename={extraFileName ?? "documento-adicional"} />
+                          <button type="button" className="text-steel text-[11px] underline cursor-pointer" onClick={() => { setExtraFileUrl(null); setExtraFileName(null); }}>Quitar</button>
+                        </div>
+                      ) : (
+                        <label className="flex items-center gap-1.5 border-[1.5px] border-dashed border-rule rounded px-3 py-2 text-[12px] text-steel cursor-pointer hover:border-teal w-fit mb-2">
+                          {uploadingExtra ? <span className="w-3.5 h-3.5 rounded-full border-2 border-rule border-t-teal animate-spin" /> : <Upload size={13} />} Subir documento o imagen
+                          <input type="file" accept="image/*,application/pdf" className="hidden" onChange={(e) => e.target.files?.[0] && uploadExtraFile(e.target.files[0])} />
+                        </label>
+                      )}
+                      <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">
+                        Descripción (opcional)
+                      </label>
+                      <textarea
+                        className="w-full rounded border border-rule px-2.5 py-2 text-[12px] mb-2"
+                        rows={2}
+                        placeholder="Ej: comprobante extra que envió el banco por WhatsApp"
+                        value={extraNote}
+                        onChange={(e) => setExtraNote(e.target.value)}
+                      />
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          disabled={savingExtraId === r.id}
+                          className="rounded border border-blue bg-blue px-3 py-1.5 text-[11.5px] font-semibold text-white cursor-pointer disabled:opacity-60"
+                          onClick={() => saveExtra(r.id)}
+                        >
+                          {savingExtraId === r.id ? "Guardando…" : "Guardar"}
+                        </button>
+                        <button type="button" className="text-steel text-[11.5px] cursor-pointer" onClick={() => setExtraOpenId(null)}>Cancelar</button>
+                      </div>
+                    </div>
+                  ) : r.paymentExtraFileUrl || r.paymentNote ? (
+                    <div className="bg-cloud border border-rule rounded-md p-2.5">
+                      {r.paymentExtraFileUrl && (
+                        <div className="mb-1.5">
+                          <ProofPreview url={r.paymentExtraFileUrl} size={36} filename={r.paymentExtraFileName ?? "documento-adicional"} />
+                        </div>
+                      )}
+                      {r.paymentNote && <div className="text-[11.5px] text-steel mb-1">{r.paymentNote}</div>}
+                      <button type="button" className="text-steel text-[11px] underline cursor-pointer" onClick={() => openExtra(r)}>Editar</button>
+                    </div>
+                  ) : (
+                    <button type="button" className="text-steel text-[11.5px] underline cursor-pointer" onClick={() => openExtra(r)}>
+                      + Adjuntar un segundo documento o descripción (opcional)
                     </button>
                   )}
                 </div>

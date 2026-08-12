@@ -2174,6 +2174,15 @@ model AdminPaymentRequest {
   // cual lo leyó la IA (false) — este campo es el registro de auditoría de
   // por qué igual se dio por pagado.
   paymentOverrideNote String?
+
+  // Confirmado 2026-08-12: pedido explícito del usuario — al hacer el pago,
+  // opcionalmente se puede adjuntar un segundo documento/imagen de soporte
+  // (ej. captura extra del banco) y una descripción breve. Nunca pasa por
+  // verificación de IA (es solo contexto adicional) y no bloquea nada.
+  paymentExtraFileUrl  String?
+  paymentExtraFileName String?
+  paymentNote          String?
+
   paidAt   DateTime?
   paidById String?
   paidBy   User?     @relation("AdminPaymentPaidBy", fields: [paidById], references: [id], onDelete: SetNull)
