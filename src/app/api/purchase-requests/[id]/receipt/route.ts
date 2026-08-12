@@ -12,13 +12,14 @@ const schema = z.object({
   comment: z.string().trim().optional(),
   aiPhotoMatch: z.boolean().nullable().optional(),
   aiPhotoNote: z.string().nullable().optional(),
-  // Confirmado 2026-08-12: pedido explícito del usuario — si la IA marcó
-  // que la ÚNICA diferencia es el color (colorMismatchOnly), el líder de
-  // Inventario puede confirmar con un clic (colorConfirmed) y seguir
-  // adelante sin pasar por "Informar urgente" — un producto genuinamente
-  // distinto sigue bloqueado igual que antes.
-  colorMismatchOnly: z.boolean().nullable().optional(),
-  colorConfirmed: z.boolean().optional(),
+  // Confirmado 2026-08-12 (ampliado el mismo día): si la IA marcó que sigue
+  // siendo el MISMO producto con una diferencia MENOR (minorDifferenceOnly —
+  // color, logo, empaque, etc.), el líder de Inventario puede confirmar con
+  // un clic (minorDifferenceConfirmed) y decidir si lo deja pasar o lo
+  // reporta — un producto genuinamente distinto sigue bloqueado igual que
+  // antes.
+  minorDifferenceOnly: z.boolean().nullable().optional(),
+  minorDifferenceConfirmed: z.boolean().optional(),
 });
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -49,8 +50,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // todo — la única salida es "Informar urgente" (que sí manda notificación
   // con la novedad). Defensa server-side del mismo chequeo que ya
   // deshabilita el botón en el cliente.
-  const colorOverride = parsed.data.aiPhotoMatch === false && !!parsed.data.colorMismatchOnly && !!parsed.data.colorConfirmed;
-  if (parsed.data.aiPhotoMatch === false && !colorOverride) {
+  const minorDifferenceOverride = parsed.data.aiPhotoMatch === false && !!parsed.data.minorDifferenceOnly && !!parsed.data.minorDifferenceConfirmed;
+  if (parsed.data.aiPhotoMatch === false && !minorDifferenceOverride) {
     return NextResponse.json({ error: "La IA detectó que el producto no corresponde a la referencia — usa 'Informar urgente' en vez de confirmar." }, { status: 409 });
   }
 
@@ -86,7 +87,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         comment: parsed.data.comment || null,
         aiPhotoMatch: parsed.data.aiPhotoMatch ?? null,
         aiPhotoNote: parsed.data.aiPhotoNote ?? null,
-        colorMismatchConfirmed: colorOverride,
+        minorDifferenceConfirmed: minorDifferenceOverride,
         confirmedById: isAdmin ? null : session.user.id,
       },
     }),
@@ -98,20 +99,22 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   ]);
 
   // Confirmado 2026-08-12: pedido explícito del usuario — cuando Inventario
-  // confirma pese a un color distinto al de referencia, todas las partes que
-  // ya se avisan de la llegada deben enterarse de ese detalle también, para
-  // que lo tengan en cuenta al vender/mostrar el producto.
-  const colorNote = colorOverride ? " ⚠️ Llegó en un color distinto a la referencia (confirmado por Inventario)." : "";
+  // confirma pese a una diferencia menor frente a la referencia, todas las
+  // partes que ya se avisan de la llegada deben enterarse de ese detalle
+  // también, para que lo tengan en cuenta al vender/mostrar el producto.
+  const differenceNote = minorDifferenceOverride
+    ? ` ⚠️ Llegó con una diferencia menor frente a la referencia (confirmado por Inventario)${parsed.data.aiPhotoNote ? `: ${parsed.data.aiPhotoNote}` : ""}.`
+    : "";
 
   if (existing.requestedById) {
     await sendPushToOwner(existing.requestedById, {
       title: "Mercadería recibida",
-      body: `${existing.catalogItem.name} — Inventario confirmó ${parsed.data.receivedQuantity} un. recibidas.${colorNote}`,
+      body: `${existing.catalogItem.name} — Inventario confirmó ${parsed.data.receivedQuantity} un. recibidas.${differenceNote}`,
       url: "/area/workspace",
     }).catch(() => null);
   }
 
-  const arrivalBody = `${existing.catalogItem.name} · ${parsed.data.receivedQuantity} un.${colorNote}`;
+  const arrivalBody = `${existing.catalogItem.name} · ${parsed.data.receivedQuantity} un.${differenceNote}`;
   const [designIds, advisorIds] = await Promise.all([
     getMarketingArrivalActorIds("design"),
     getMarketingArrivalActorIds("advisor"),
