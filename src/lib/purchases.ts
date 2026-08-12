@@ -375,5 +375,16 @@ export const purchaseRequestInclude = {
   shippingPaidBy: { select: { name: true } },
   financeFlaggedBy: { select: { name: true } },
   receipt: { include: { confirmedBy: { select: { name: true } } } },
-  urgentReports: { orderBy: { reportedAt: "desc" as const }, include: { reportedBy: { select: { name: true } } } },
+  urgentReports: {
+    orderBy: { reportedAt: "desc" as const },
+    include: {
+      reportedBy: { select: { name: true } },
+      // Confirmado 2026-08-12: pedido explícito del usuario — Auditoría
+      // necesita saber si un reporte urgente ya quedó resuelto del todo
+      // (suma de resoluciones COMPLETED cubre el total reportado) para
+      // poder excluir del historial cualquier operación que todavía tenga
+      // algo pendiente con el proveedor.
+      resolutions: { select: { quantity: true, status: true } },
+    },
+  },
 };

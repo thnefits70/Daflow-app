@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ShieldCheck, Search, AlertTriangle } from "lucide-react";
+import { ShieldCheck, Search, CheckCircle2 } from "lucide-react";
 import { actorName } from "@/lib/actorName";
 import { PurchaseOperationDocuments, type OperationDocRow } from "./PurchaseOperationDocuments";
 
@@ -69,11 +69,14 @@ function monthFilterLabel(month: string) {
 }
 
 // Confirmado 2026-08-08 (ampliado 2026-08-12): pantalla de solo lectura —
-// el historial completo de todo lo que ya se confirmó recibido en bodega,
-// para auditar sin poder editar nada (ni borrar, ni cambiar estado). Ya no
-// es exclusiva del admin: Bryan (Solicitar), Daniel (Inventario) y Nairoby
-// (Finanzas) también la ven, siempre en modo solo lectura — cada quien ya
-// tiene acceso de escritura a su propia parte de estas mismas operaciones.
+// el historial de todo lo que ya se confirmó recibido en bodega Y quedó
+// completamente saneado (sin ningún reporte urgente pendiente de resolver
+// con el proveedor) — mientras algo siga pendiente, NO aparece acá, sigue
+// visible en Reportes urgentes hasta que se resuelva. Para auditar sin
+// poder editar nada (ni borrar, ni cambiar estado). Ya no es exclusiva del
+// admin: Bryan (Solicitar), Daniel (Inventario) y Nairoby (Finanzas)
+// también la ven, siempre en modo solo lectura — cada quien ya tiene
+// acceso de escritura a su propia parte de estas mismas operaciones.
 // Filtra por fecha de recepción (receipt.confirmedAt), con selector de mes
 // + búsqueda libre por producto/proveedor/código, para encontrar algo
 // puntual rápido.
@@ -131,7 +134,7 @@ export function PurchaseAuditPanel() {
   return (
     <div>
       <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-steel mb-2.5">
-        <ShieldCheck size={13} /> Historial de todo lo recibido — solo lectura
+        <ShieldCheck size={13} /> Historial de lo ya recibido y saneado del todo — solo lectura
       </div>
 
       <div className="flex items-center gap-2 mb-3 flex-wrap text-[12px]">
@@ -174,7 +177,7 @@ export function PurchaseAuditPanel() {
 
       {groups.length === 0 && (
         <div className="border-[1.5px] border-dashed border-rule rounded-md p-6 text-center text-steel text-[13px]">
-          {rows.length === 0 ? "Todavía no hay nada confirmado como recibido." : "Nada coincide con esa búsqueda o rango de fechas."}
+          {rows.length === 0 ? "Todavía no hay nada recibido y completamente saneado." : "Nada coincide con esa búsqueda o rango de fechas."}
         </div>
       )}
 
@@ -209,8 +212,8 @@ export function PurchaseAuditPanel() {
               {!(r0.paymentProofReceiptNumber || r0.shippingPaymentProofReceiptNumber) && <div className="mb-2.5" />}
 
               {urgentCount > 0 && (
-                <div className="flex items-center gap-1.5 bg-gold/10 border border-gold/35 rounded-md px-3 py-2 mb-2.5 text-[11.5px]" style={{ color: "#D9A441" }}>
-                  <AlertTriangle size={13} /> {urgentCount} reporte{urgentCount === 1 ? "" : "s"} urgente{urgentCount === 1 ? "" : "s"} en esta operación
+                <div className="flex items-center gap-1.5 bg-green/10 border border-green/30 rounded-md px-3 py-2 mb-2.5 text-[11.5px] text-green">
+                  <CheckCircle2 size={13} /> {urgentCount} reporte{urgentCount === 1 ? "" : "s"} urgente{urgentCount === 1 ? "" : "s"} — ya resuelto{urgentCount === 1 ? "" : "s"} con el proveedor
                 </div>
               )}
 

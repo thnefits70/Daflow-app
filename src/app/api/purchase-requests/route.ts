@@ -75,7 +75,24 @@ export async function GET(req: NextRequest) {
       orderBy: { receipt: { confirmedAt: "desc" } },
       include: purchaseRequestInclude,
     });
-    return NextResponse.json(rows);
+    // Confirmado 2026-08-12: pedido explícito del usuario — Auditoría es
+    // "todo ya saneado", nunca algo que siga pendiente. Si CUALQUIER
+    // producto de la cotización tiene un reporte urgente sin resolver del
+    // todo (suma de resoluciones COMPLETED < total reportado), se excluye
+    // la operación COMPLETA hasta que quede resuelta con el proveedor
+    // (reemplazo, reembolso/crédito o pérdida) — recién ahí pasa a verse acá.
+    const groupIdsWithOpenReports = new Set(
+      rows
+        .filter((r) =>
+          r.urgentReports.some((rep) => {
+            const total = rep.damagedQty + rep.missingQty + rep.incompleteQty + rep.differentQty;
+            const completed = rep.resolutions.filter((res) => res.status === "COMPLETED").reduce((s, res) => s + res.quantity, 0);
+            return completed < total;
+          })
+        )
+        .map((r) => r.groupId)
+    );
+    return NextResponse.json(rows.filter((r) => !groupIdsWithOpenReports.has(r.groupId)));
   }
 
   // "mine" — lo que yo mismo pedí, para seguir el avance de mi solicitud.
