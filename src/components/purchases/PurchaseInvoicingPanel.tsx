@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Upload, CheckCircle2, Truck, Lock, Wallet, Search } from "lucide-react";
+import { Upload, CheckCircle2, Truck, Lock, Wallet, Search, AlertTriangle } from "lucide-react";
 import { uploadFile } from "@/lib/uploadFile";
 import { compressImage } from "@/lib/compressImage";
 import { usePasteFile } from "@/lib/usePasteFile";
@@ -411,7 +411,17 @@ export function PurchaseInvoicingPanel() {
   if (!rows) return <div className="text-steel text-[13px]">Cargando…</div>;
 
   const approvedGroups = groupRows(rows.filter((r) => r.status === "APPROVED"));
-  const restGroupsAll = groupRows(rows.filter((r) => r.status !== "APPROVED"));
+  // Confirmado 2026-08-12: pedido explícito del usuario (Opción A) — una
+  // operación desaparece de "Registrar factura" solo cuando las DOS partes
+  // ya cerraron: Nairoby ya declaró la factura (invoiceStatus !== PENDING)
+  // Y Daniel ya confirmó que llegó TODO lo de esa cotización (cada fila en
+  // RECEIVED) — a propósito, para que Nairoby no pueda dar por cerrada una
+  // operación mientras la mercadería todavía no llegó de verdad y se pueda
+  // perder ese dinero. Mientras falte cualquiera de las dos, sigue aquí;
+  // una vez cierran ambas, solo queda visible en Auditoría.
+  const restGroupsAll = groupRows(rows.filter((r) => r.status !== "APPROVED")).filter(
+    (g) => !(g[0].invoiceStatus !== "PENDING" && g.every((r) => r.status === "RECEIVED"))
+  );
   // Confirmado 2026-08-06: por fecha de pago (paidAt) — es lo que ya se ve
   // impreso en cada tarjeta ("Pagado ... · fecha"), así el filtro coincide
   // con lo que la persona está mirando.
@@ -882,6 +892,11 @@ export function PurchaseInvoicingPanel() {
                     )}
                   </div>
                   <div className="text-[10px] text-steel-dim mt-0.5">Registrada por {actorName(r0.invoicedBy?.name)}</div>
+                  {!g.every((r) => r.status === "RECEIVED") && (
+                    <div className="flex items-center gap-1.5 text-[11px] mt-1.5 pt-1.5 border-t border-rule" style={{ color: "#D9A441" }}>
+                      <AlertTriangle size={12} className="shrink-0" /> Sigue aquí hasta que Inventario confirme que llegó todo — recién ahí pasa a Auditoría.
+                    </div>
+                  )}
                 </div>
               )}
 
