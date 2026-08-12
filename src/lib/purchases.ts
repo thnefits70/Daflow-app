@@ -373,6 +373,7 @@ export const purchaseRequestInclude = {
   invoicedBy: { select: { name: true } },
   shippingPaymentRequestedBy: { select: { name: true } },
   shippingPaidBy: { select: { name: true } },
+  financeFlaggedBy: { select: { name: true } },
   receipt: { include: { confirmedBy: { select: { name: true } } } },
   urgentReports: { orderBy: { reportedAt: "desc" as const }, include: { reportedBy: { select: { name: true } } } },
 };
