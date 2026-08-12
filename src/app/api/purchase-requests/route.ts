@@ -62,7 +62,14 @@ export async function GET(req: NextRequest) {
   // solo lectura (ninguna acción se hace desde esta vista). Se ordena por
   // fecha de confirmación de recepción, la más reciente primero.
   if (view === "audit") {
-    if (session.user.role !== "admin") return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+    // Confirmado 2026-08-12: pedido explícito del usuario — ya no exclusivo
+    // de admin. Bryan (Solicitar), Daniel (Inventario) y Nairoby (Finanzas)
+    // también ven Auditoría, siempre de solo lectura — cada uno ya tiene
+    // acceso de escritura a su propia parte de este mismo historial, esto
+    // solo les da la vista completa de las transacciones ya registradas.
+    const hasAuditAccess =
+      (await canSubmitPurchaseRequests()) || (await canConfirmPurchaseReceiving()) || (await canRegisterPurchaseInvoices());
+    if (!hasAuditAccess) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
     const rows = await prisma.purchaseRequest.findMany({
       where: { status: "RECEIVED" },
       orderBy: { receipt: { confirmedAt: "desc" } },

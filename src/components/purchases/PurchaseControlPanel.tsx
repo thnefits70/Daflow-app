@@ -41,9 +41,11 @@ export function PurchaseControlPanel({
     ...(canSubmit || canReview ? [{ key: "urgentes" as Tab, label: "Reportes urgentes" }] : []),
     ...(canReceive ? [{ key: "inventario" as Tab, label: "Inventario" }] : []),
     ...(canInvoice ? [{ key: "finanzas" as Tab, label: "Finanzas" }] : []),
-    // Confirmado 2026-08-08: exclusivo del admin — historial de solo lectura
-    // de todo lo confirmado recibido, para auditar sin poder editar nada.
-    ...(isAdmin ? [{ key: "auditoria" as Tab, label: "Auditoría" }] : []),
+    // Confirmado 2026-08-08 (ampliado 2026-08-12): historial de solo lectura
+    // de todo lo confirmado recibido, para auditar sin poder editar nada —
+    // ya no exclusivo del admin, cualquiera con acceso a este módulo
+    // (Bryan/Daniel/Nairoby) también la ve, siempre en modo solo lectura.
+    ...(isAdmin || canSubmit || canReceive || canInvoice ? [{ key: "auditoria" as Tab, label: "Auditoría" }] : []),
   ];
   const preferredDefault: Tab[] = ["solicitar", "aprobacion", "inventario", "finanzas", "mias", "comparar", "urgentes", "auditoria"];
   const [tab, setTab] = useState<Tab>(preferredDefault.find((k) => tabs.some((t) => t.key === k)) ?? tabs[0]?.key ?? "solicitar");

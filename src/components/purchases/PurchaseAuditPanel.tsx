@@ -68,11 +68,15 @@ function monthFilterLabel(month: string) {
   return `${MONTH_NAMES[Number(m) - 1]} ${y}`;
 }
 
-// Confirmado 2026-08-08: pantalla exclusiva del admin, de solo lectura — el
-// historial completo de todo lo que ya se confirmó recibido en bodega, para
-// auditar sin poder editar nada (ni borrar, ni cambiar estado). Filtra por
-// fecha de recepción (receipt.confirmedAt), con selector de mes + búsqueda
-// libre por producto/proveedor/código, para encontrar algo puntual rápido.
+// Confirmado 2026-08-08 (ampliado 2026-08-12): pantalla de solo lectura —
+// el historial completo de todo lo que ya se confirmó recibido en bodega,
+// para auditar sin poder editar nada (ni borrar, ni cambiar estado). Ya no
+// es exclusiva del admin: Bryan (Solicitar), Daniel (Inventario) y Nairoby
+// (Finanzas) también la ven, siempre en modo solo lectura — cada quien ya
+// tiene acceso de escritura a su propia parte de estas mismas operaciones.
+// Filtra por fecha de recepción (receipt.confirmedAt), con selector de mes
+// + búsqueda libre por producto/proveedor/código, para encontrar algo
+// puntual rápido.
 export function PurchaseAuditPanel() {
   const [rows, setRows] = useState<Row[] | null>(null);
   const [dateFrom, setDateFrom] = useState("");
