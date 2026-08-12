@@ -374,6 +374,20 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
       })
     : requests;
 
+  // Confirmado 2026-08-12: pedido explícito del usuario — los pendientes de
+  // pago con más de 24h desde que se solicitaron (mismo umbral que ya usa
+  // el aviso de Inicio) van primero, arriba de todo sin hacer scroll; los
+  // demás pendientes después; lo ya pagado/confirmado va bajando al fondo
+  // según avanza en el proceso, en vez de mezclarse por fecha de creación.
+  function paymentPriority(r: RequestDTO): number {
+    if (r.status === "PENDING_PAYMENT") {
+      const overdue = Date.now() - new Date(r.createdAt).getTime() > 24 * 60 * 60 * 1000;
+      return overdue ? 0 : 1;
+    }
+    return r.status === "PAID" ? 2 : 3;
+  }
+  const sorted = [...filtered].sort((a, b) => paymentPriority(a) - paymentPriority(b));
+
   return (
     <div>
       {pendingThisMonth.length > 0 && (
@@ -574,8 +588,9 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
       )}
 
       <div className="flex flex-col gap-2.5">
-        {filtered.map((r) => {
+        {sorted.map((r) => {
           const canDelete = !r.declarationFileUrl && !r.paymentProofUrl;
+          const overdue = r.status === "PENDING_PAYMENT" && Date.now() - new Date(r.createdAt).getTime() > 24 * 60 * 60 * 1000;
           return (
             <div key={r.id} className="bg-surface border border-rule rounded-md p-4">
               <div className="flex items-start justify-between gap-3 flex-wrap mb-1">
@@ -633,8 +648,10 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
               )}
 
               <div className="flex items-center gap-1.5 text-[12px] mb-2.5">
-                {r.status === "CONFIRMED" ? <CheckCircle2 size={13} className="text-teal" /> : r.status === "PAID" ? <CheckCircle2 size={13} className="text-blue" /> : <span className="w-1.5 h-1.5 rounded-full bg-gold" />}
-                <span className={r.status === "CONFIRMED" ? "text-teal" : r.status === "PAID" ? "text-blue" : "text-steel"}>{STATUS_LABELS[r.status]}</span>
+                {r.status === "CONFIRMED" ? <CheckCircle2 size={13} className="text-teal" /> : r.status === "PAID" ? <CheckCircle2 size={13} className="text-blue" /> : <span className={`w-1.5 h-1.5 rounded-full ${overdue ? "bg-red" : "bg-gold"}`} />}
+                <span className={r.status === "CONFIRMED" ? "text-teal" : r.status === "PAID" ? "text-blue" : overdue ? "text-red font-semibold" : "text-steel"}>
+                  {STATUS_LABELS[r.status]}{overdue ? " · atrasado (+24h)" : ""}
+                </span>
               </div>
 
               {r.paymentProofUrl && (
