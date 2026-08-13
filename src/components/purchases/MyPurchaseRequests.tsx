@@ -459,6 +459,22 @@ function GroupCard({
   const [reminded, setReminded] = useState(false);
   const { onPaste, onMouseEnter: onPasteHoverIn, onMouseLeave: onPasteHoverOut } = usePasteFile((file) => handleFile(file));
 
+  // Confirmado 2026-08-13: pedido explícito del usuario — Bryan también
+  // tiene que ver reflejado, en su propio "Mis solicitudes", el crédito que
+  // ya quedó reservado para esta solicitud desde que la pidió — mismo
+  // ajuste que ya se hizo en la Bandeja de aprobación.
+  const [reservedCredits, setReservedCredits] = useState<{ id: string; amount: number; reason: string }[]>([]);
+  useEffect(() => {
+    if (rejected) return;
+    fetch(`/api/purchase-suppliers/${g[0].supplier.id}/credit-balance?groupId=${groupId}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => setReservedCredits(data?.reserved ?? []))
+      .catch(() => setReservedCredits([]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [groupId]);
+  const reservedTotal = reservedCredits.reduce((s, c) => s + c.amount, 0);
+  const netTotal = Math.max(0, total - reservedTotal);
+
   // Si un grupo tiene varios productos, cada uno puede llegar por separado
   // (Inventario confirma producto por producto) — el avance general muestra
   // el paso MÁS ATRASADO de todos.
@@ -514,7 +530,15 @@ function GroupCard({
               )}
             </div>
           ))}
-          <div className="text-[11.5px] text-steel">${total.toFixed(2)} · {new Date(g[0].requestedAt).toLocaleDateString("es-MX")}</div>
+          {reservedTotal > 0 ? (
+            <div className="text-[11.5px] text-steel">
+              <span className="line-through text-steel-dim">${total.toFixed(2)}</span>{" "}
+              <span className="text-teal font-semibold">${netTotal.toFixed(2)} neto</span>{" "}
+              <span className="text-steel-dim">(crédito de ${reservedTotal.toFixed(2)} aplicado)</span> · {new Date(g[0].requestedAt).toLocaleDateString("es-MX")}
+            </div>
+          ) : (
+            <div className="text-[11.5px] text-steel">${total.toFixed(2)} · {new Date(g[0].requestedAt).toLocaleDateString("es-MX")}</div>
+          )}
         </div>
       </div>
       {rejected ? (
