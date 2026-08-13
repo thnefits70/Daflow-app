@@ -97,7 +97,20 @@ export async function GET(req: NextRequest) {
         )
         .map((r) => r.groupId)
     );
-    return NextResponse.json(rows.filter((r) => !groupIdsWithOpenReports.has(r.groupId)));
+    // Confirmado 2026-08-13: pedido explícito del usuario — un flete que
+    // todavía no se pagó (cobro aparte, diferido hasta la entrega) también
+    // cuenta como "algo pendiente" — se excluye la operación completa hasta
+    // que quede pagado, mismo criterio que ya aplica a factura y reportes
+    // urgentes. El flete incluido en el precio, o pagado junto con la
+    // compra (WITH_PURCHASE, ya resuelto en el pago inicial), nunca bloquea.
+    const groupIdsWithPendingShipping = new Set(
+      rows
+        .filter((r) => !r.shippingIncluded && r.shippingPaymentTiming === "ON_DELIVERY" && !r.shippingPaidAt)
+        .map((r) => r.groupId)
+    );
+    return NextResponse.json(
+      rows.filter((r) => !groupIdsWithOpenReports.has(r.groupId) && !groupIdsWithPendingShipping.has(r.groupId))
+    );
   }
 
   // "mine" — lo que yo mismo pedí, para seguir el avance de mi solicitud.
