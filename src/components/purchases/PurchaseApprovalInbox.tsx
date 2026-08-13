@@ -33,7 +33,7 @@ type Row = {
   shippingPaymentTiming: "WITH_PURCHASE" | "ON_DELIVERY" | null;
   shippingCostTotal: number | null;
   catalogItem: { name: string };
-  supplier: { name: string };
+  supplier: { id: string; name: string };
   bankAccount: BankAccount | null;
   bankAccountChangeRequestedAt: string | null;
   bankAccountChangeNote: string | null;
@@ -105,19 +105,49 @@ export function PurchaseApprovalInbox() {
   const [accountChangeNote, setAccountChangeNote] = useState("");
   const [busyAccountGroup, setBusyAccountGroup] = useState<string | null>(null);
 
+  // Confirmado 2026-08-13: fix — esta pantalla no tenía en cuenta el
+  // crédito que ya quedó reservado para esta solicitud desde que se pidió
+  // (ver reserveCreditsForGroup), así que mostraba el total completo y
+  // exigía comprobante por el total, aunque el crédito fuera a cubrir todo
+  // o parte. El servidor (/pay) ya lo descuenta solo — esto es para que la
+  // pantalla muestre y valide lo mismo que de verdad se va a cobrar, desde
+  // que se carga la bandeja (no solo al abrir "Aprobar").
+  const [reservedCreditsByGroup, setReservedCreditsByGroup] = useState<Record<string, { id: string; amount: number; reason: string }[]>>({});
+
   const { onPaste: onPasteProof, onMouseEnter: onPasteProofHoverIn, onMouseLeave: onPasteProofHoverOut } = usePasteFile((file) => uploadProof(file));
   const { onPaste: onPasteShippingProof, onMouseEnter: onPasteShippingProofHoverIn, onMouseLeave: onPasteShippingProofHoverOut } = usePasteFile((file) => uploadShippingProof(file));
 
   function load() {
     fetch("/api/purchase-requests?view=approval")
       .then((r) => (r.ok ? r.json() : []))
-      .then(setRows)
+      .then(async (data: Row[]) => {
+        setRows(data);
+        const groups = groupRows(data);
+        const entries = await Promise.all(
+          groups.map(async (g) => {
+            const groupId = g[0].groupId;
+            const res = await fetch(`/api/purchase-suppliers/${g[0].supplier.id}/credit-balance?groupId=${groupId}`);
+            const d = await res.json().catch(() => null);
+            return [groupId, res.ok ? d.reserved ?? [] : []] as const;
+          })
+        );
+        setReservedCreditsByGroup(Object.fromEntries(entries));
+      })
       .catch(() => setRows([]));
   }
   useEffect(load, []);
 
   function currentGroupRows(groupId: string) {
     return (rows ?? []).filter((r) => r.groupId === groupId);
+  }
+
+  function reservedTotalFor(groupId: string) {
+    return (reservedCreditsByGroup[groupId] ?? []).reduce((s, c) => s + c.amount, 0);
+  }
+
+  function netAmountFor(groupId: string) {
+    const total = currentGroupRows(groupId).reduce((s, r) => s + r.totalCost, 0);
+    return Math.max(0, total - reservedTotalFor(groupId));
   }
 
   // Confirmado 2026-08-04: la IA lee el comprobante y se compara contra lo
@@ -128,7 +158,7 @@ export function PurchaseApprovalInbox() {
   async function verifyProof(groupId: string, url: string) {
     setProofVerifying(true);
     setProofVerifyResult(null);
-    const expectedAmount = currentGroupRows(groupId).reduce((s, r) => s + r.totalCost, 0);
+    const expectedAmount = netAmountFor(groupId);
     const res = await fetch("/api/purchase-requests/verify-payment", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -224,13 +254,16 @@ export function PurchaseApprovalInbox() {
   // (el del flete es opcional), en vez de tener que volver más tarde a
   // Finanzas para la mitad que faltaba.
   async function approveAndPay(groupId: string, payShipping: boolean) {
-    if (!proofUrl) {
-      setErr("Sube el comprobante de pago de la mercadería.");
-      return;
-    }
-    if (!proofVerifyResult?.matches) {
-      setErr("El comprobante de la mercadería todavía no está verificado — el monto debe coincidir con lo que corresponde pagar.");
-      return;
+    const netAmount = netAmountFor(groupId);
+    if (netAmount > 0) {
+      if (!proofUrl) {
+        setErr("Sube el comprobante de pago de la mercadería.");
+        return;
+      }
+      if (!proofVerifyResult?.matches) {
+        setErr("El comprobante de la mercadería todavía no está verificado — el monto debe coincidir con lo que corresponde pagar.");
+        return;
+      }
     }
     if (payShipping && shippingProofUrl && !shippingProofVerifyResult?.matches) {
       setErr("El comprobante del flete todavía no está verificado — el monto debe coincidir con lo que corresponde pagar.");
@@ -252,7 +285,7 @@ export function PurchaseApprovalInbox() {
     const payRes = await fetch(`/api/purchase-requests/group/${groupId}/pay`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ paymentProofUrl: proofUrl, paymentProofReceiptNumber: proofVerifyResult?.receiptNumber ?? null }),
+      body: JSON.stringify({ paymentProofUrl: proofUrl ?? undefined, paymentProofReceiptNumber: proofVerifyResult?.receiptNumber ?? null }),
     });
     if (!payRes.ok) {
       setBusyGroup(null);
@@ -309,8 +342,16 @@ export function PurchaseApprovalInbox() {
                   <span className="text-[10px] font-bold uppercase tracking-wide bg-red/15 text-red border border-red/40 rounded-full px-2.5 py-1">Sobre el historial</span>
                 )}
                 <div className="text-right">
-                  <div className="text-[9px] font-semibold uppercase tracking-wide text-steel">Total a pagar</div>
-                  <div className="font-display text-[22px] font-bold text-teal leading-tight">${total.toFixed(2)}</div>
+                  {reservedTotalFor(groupId) > 0 && (
+                    <>
+                      <div className="text-[9px] font-semibold uppercase tracking-wide text-steel-dim">Total ${total.toFixed(2)} − crédito reservado ${reservedTotalFor(groupId).toFixed(2)}</div>
+                      <div className="text-[9px] font-semibold uppercase tracking-wide text-steel">Neto a pagar</div>
+                    </>
+                  )}
+                  {reservedTotalFor(groupId) === 0 && (
+                    <div className="text-[9px] font-semibold uppercase tracking-wide text-steel">Total a pagar</div>
+                  )}
+                  <div className="font-display text-[22px] font-bold text-teal leading-tight">${netAmountFor(groupId).toFixed(2)}</div>
                 </div>
               </div>
             </div>
@@ -394,6 +435,17 @@ export function PurchaseApprovalInbox() {
               </div>
             ) : approvingGroup === groupId ? (
               <div className="bg-surface2 border border-rule rounded-md p-3">
+                {reservedTotalFor(groupId) > 0 && (
+                  <div className="flex items-center gap-1.5 text-[12px] text-teal bg-teal/10 border border-teal/30 rounded-md px-3 py-2 mb-3">
+                    <CheckCircle2 size={13} /> Crédito reservado con {g[0].supplier.name} aplicado: ${reservedTotalFor(groupId).toFixed(2)} — neto a transferir: ${netAmountFor(groupId).toFixed(2)}
+                  </div>
+                )}
+                {netAmountFor(groupId) === 0 ? (
+                  <div className="flex items-center gap-2 text-[12px] text-teal mb-1">
+                    <CheckCircle2 size={13} /> El crédito cubre el total — no hace falta comprobante de mercadería.
+                  </div>
+                ) : (
+                  <>
                 <label className="block mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-steel">Comprobante de pago — mercadería</label>
                 {proofUrl ? (
                   <div className="mb-3">
@@ -437,6 +489,8 @@ export function PurchaseApprovalInbox() {
                       <input type="file" accept="application/pdf" className="hidden" onChange={(e) => e.target.files?.[0] && uploadProof(e.target.files[0])} />
                     </label>
                   </div>
+                )}
+                  </>
                 )}
 
                 {canPayShippingNow && (
@@ -496,9 +550,7 @@ export function PurchaseApprovalInbox() {
                     type="button"
                     disabled={
                       busyGroup === groupId ||
-                      !proofUrl ||
-                      proofVerifying ||
-                      !proofVerifyResult?.matches ||
+                      (netAmountFor(groupId) > 0 && (!proofUrl || proofVerifying || !proofVerifyResult?.matches)) ||
                       (!!shippingProofUrl && (shippingProofVerifying || !shippingProofVerifyResult?.matches))
                     }
                     className="rounded border border-green bg-green px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer disabled:opacity-60"
