@@ -71,8 +71,12 @@ export async function GET(req: NextRequest) {
     const hasAuditAccess =
       (await canSubmitPurchaseRequests()) || (await canConfirmPurchaseReceiving()) || (await canRegisterPurchaseInvoices());
     if (!hasAuditAccess) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+    // Confirmado 2026-08-13: pedido explícito del usuario — Auditoría
+    // tampoco muestra una operación mientras Finanzas no la haya cerrado
+    // (invoiceStatus sigue en PENDING), aunque Inventario ya haya confirmado
+    // que llegó. Sigue viéndose en la bandeja de Finanzas hasta ese momento.
     const rows = await prisma.purchaseRequest.findMany({
-      where: { status: "RECEIVED" },
+      where: { status: "RECEIVED", invoiceStatus: { not: "PENDING" } },
       orderBy: { receipt: { confirmedAt: "desc" } },
       include: purchaseRequestInclude,
     });

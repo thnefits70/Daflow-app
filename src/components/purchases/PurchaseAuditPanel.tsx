@@ -11,7 +11,9 @@ type Row = Omit<OperationDocRow, "receipt"> & {
   quantity: number;
   totalCost: number;
   requestedAt: string;
+  reviewedAt: string | null;
   paidAt: string | null;
+  invoicedAt: string | null;
   supplier: { name: string };
   urgentReports: { id: string }[];
   // Confirmado 2026-08-11: pedido explícito del usuario — solo visible acá
@@ -34,6 +36,57 @@ function formatPurchaseRequestCode(requestNumber: number | null): string {
 
 function money(n: number) {
   return `$${n.toLocaleString("es-MX", { minimumFractionDigits: 2 })}`;
+}
+
+function durationParts(ms: number) {
+  const totalMin = Math.max(0, Math.round(ms / 60000));
+  const days = Math.floor(totalMin / (60 * 24));
+  const hours = Math.floor((totalMin % (60 * 24)) / 60);
+  const mins = totalMin % 60;
+  return { days, hours, mins };
+}
+// Compacto, para el desglose por etapa — "1d 2h", "9h 20min", "20min".
+function formatDurationShort(ms: number) {
+  const { days, hours, mins } = durationParts(ms);
+  if (days > 0) return `${days}d ${hours}h`;
+  if (hours > 0) return mins > 0 ? `${hours}h ${mins}min` : `${hours}h`;
+  return `${mins}min`;
+}
+// Palabra completa, para el tiempo total destacado — "3 días 4h".
+function formatDurationLong(ms: number) {
+  const { days, hours, mins } = durationParts(ms);
+  if (days > 0) return `${days} día${days === 1 ? "" : "s"} ${hours}h`;
+  if (hours > 0) return mins > 0 ? `${hours}h ${mins}min` : `${hours}h`;
+  return `${mins}min`;
+}
+
+// Confirmado 2026-08-13: pedido explícito del usuario — 4 etapas fijas,
+// desde que se solicita hasta que Finanzas cierra la operación (lo último
+// que puede pasar; si cierra ANTES de que Inventario confirme que llegó, la
+// etapa de "Cierre" simplemente queda en 0 en vez de negativa).
+const GOOD_MS = 24 * 60 * 60 * 1000;
+const MID_MS = 3 * 24 * 60 * 60 * 1000;
+function totalTimeClass(ms: number) {
+  if (ms <= GOOD_MS) return "good";
+  if (ms <= MID_MS) return "mid";
+  return "slow";
+}
+function computeStageTimes(r0: Row) {
+  if (!r0.reviewedAt || !r0.paidAt || !r0.receipt?.confirmedAt || !r0.invoicedAt) return null;
+  const requestedAt = new Date(r0.requestedAt).getTime();
+  const reviewedAt = new Date(r0.reviewedAt).getTime();
+  const paidAt = new Date(r0.paidAt).getTime();
+  const receivedAt = new Date(r0.receipt.confirmedAt).getTime();
+  const closedAt = Math.max(receivedAt, new Date(r0.invoicedAt).getTime());
+  return {
+    totalMs: closedAt - requestedAt,
+    stages: [
+      { label: "Aprob.", ms: reviewedAt - requestedAt },
+      { label: "Pago", ms: paidAt - reviewedAt },
+      { label: "Recepción", ms: receivedAt - paidAt },
+      { label: "Cierre", ms: Math.max(0, closedAt - receivedAt) },
+    ],
+  };
 }
 
 function groupRows(rows: Row[]) {
@@ -187,6 +240,7 @@ export function PurchaseAuditPanel() {
           const total = g.reduce((s, r) => s + r.totalCost, 0);
           const r0 = g[0];
           const urgentCount = g.reduce((s, r) => s + r.urgentReports.length, 0);
+          const timing = computeStageTimes(r0);
           return (
             <div key={groupId} className="bg-surface border border-rule rounded-md p-4">
               <div className="flex items-start justify-between gap-2 mb-1">
@@ -195,7 +249,29 @@ export function PurchaseAuditPanel() {
                     <div key={r.id} className="text-[13.5px] font-bold">{r.catalogItem.name} · {r.quantity} un.</div>
                   ))}
                 </div>
-                <span className="font-mono text-[10.5px] text-steel shrink-0">{formatPurchaseRequestCode(r0.requestNumber)}</span>
+                <div className="flex flex-col items-end gap-0.5 shrink-0 max-w-[210px]">
+                  <span className="font-mono text-[10.5px] text-steel">{formatPurchaseRequestCode(r0.requestNumber)}</span>
+                  {timing && (
+                    <>
+                      {(() => {
+                        const cls = totalTimeClass(timing.totalMs);
+                        return (
+                          <span
+                            className={`text-[15px] font-extrabold tabular-nums mt-0.5 ${cls === "good" ? "text-green" : cls === "slow" ? "text-red" : ""}`}
+                            style={cls === "mid" ? { color: "#D9A441" } : undefined}
+                          >
+                            {formatDurationLong(timing.totalMs)}
+                          </span>
+                        );
+                      })()}
+                      <span className="text-[10px] text-steel-dim text-right leading-snug tabular-nums">
+                        {timing.stages.slice(0, 2).map((s) => `${s.label} ${formatDurationShort(s.ms)}`).join(" · ")}
+                        <br />
+                        {timing.stages.slice(2).map((s) => `${s.label} ${formatDurationShort(s.ms)}`).join(" · ")}
+                      </span>
+                    </>
+                  )}
+                </div>
               </div>
               <div className="text-[11.5px] text-steel">{r0.supplier.name} — {money(total)}</div>
               <div className="text-[10px] text-steel-dim mb-1">

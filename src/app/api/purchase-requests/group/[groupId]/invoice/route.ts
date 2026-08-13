@@ -36,6 +36,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ gro
       invoiceAmount: parsed.data.invoiceStatus === "PARTIAL" ? parsed.data.invoiceAmount : null,
       invoiceDocUrl: parsed.data.invoiceDocUrl || null,
       invoicedById: isAdmin ? null : session.user.id,
+      // Confirmado 2026-08-13: momento en que Finanzas cierra la operación —
+      // alimenta el tiempo total que se ve en Auditoría.
+      invoicedAt: parsed.data.invoiceStatus === "PENDING" ? null : new Date(),
     },
   });
   const updated = await prisma.purchaseRequest.findMany({ where: { groupId } });

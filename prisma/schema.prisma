@@ -1308,6 +1308,11 @@ model PurchaseRequest {
   invoiceDocUrl   String?
   invoicedById    String?
   invoicedBy      User?                 @relation("PurchaseRequestInvoicedBy", fields: [invoicedById], references: [id], onDelete: SetNull)
+  // Confirmado 2026-08-13: pedido explícito del usuario — momento exacto en
+  // que Finanzas cierra la operación (deja de estar PENDING). Alimenta el
+  // tiempo total y por etapa que se muestra en Auditoría — una operación
+  // recién aparece ahí cuando esto ya tiene valor.
+  invoicedAt      DateTime?
 
   // Confirmado 2026-08-06: Nairoby puede marcar "revisar algo" en la misma
   // operación cuando algo no cuadra en su revisión final — opcional, no
