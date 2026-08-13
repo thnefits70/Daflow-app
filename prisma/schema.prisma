@@ -261,6 +261,18 @@ model User {
   payrollMessagesReceived    PayrollMessage[] @relation("PayrollMessageEmployee")
   payrollMessagesSent        PayrollMessage[] @relation("PayrollMessageSender")
 
+  payrollProfile              PayrollProfile?
+  overtimeEntriesOwn           OvertimeEntry[] @relation("OvertimeEntryEmployee")
+  overtimeEntriesEntered       OvertimeEntry[] @relation("OvertimeEntryEnteredBy")
+  overtimeEntriesApproved      OvertimeEntry[] @relation("OvertimeEntryApprovedBy")
+  payrollSettingsUpdated       PayrollSettings[] @relation("PayrollSettingsUpdatedBy")
+  payrollPeriodsGenerated      PayrollPeriod[] @relation("PayrollPeriodGeneratedBy")
+  payrollPeriodsPublished      PayrollPeriod[] @relation("PayrollPeriodPublishedBy")
+  payrollQuincenaRolesOwn      PayrollQuincenaRole[] @relation("PayrollQuincenaRoleEmployee")
+  payrollQuincenaRolesCreated  PayrollQuincenaRole[] @relation("PayrollQuincenaRoleCreatedBy")
+  monthlyLegalRolesOwn         MonthlyLegalRole[] @relation("MonthlyLegalRoleEmployee")
+  monthlyLegalRolesPublished   MonthlyLegalRole[] @relation("MonthlyLegalRolePublishedBy")
+
   @@index([deptId])
   @@index([leadsDeptId])
 }
@@ -2243,4 +2255,195 @@ model AdminPaymentRequest {
   @@index([status])
   @@index([type])
   @@index([linkedGroupId])
+}
+
+/* ---------------- Nómina: calculadora de horas extra y roles de pago ---------------- */
+// Confirmado 2026-08-13: pedido explícito del usuario, tras varias rondas de
+// diseño — reemplaza el cálculo manual en Excel. Vive dentro de la sección
+// "Nómina" que ya existía. Todo el detalle real (sueldo real, horas extra,
+// bonos, descuentos) es exclusivo de Nairoby Castro (edita) y el admin
+// (solo ve, sin poder editar) — nadie más tiene acceso, ni siquiera con un
+// flag delegado. Los colaboradores solo ven un "Rol del mes" simplificado
+// (MonthlyLegalRole), calculado sobre el sueldo declarado en el IESS.
+
+enum PayrollLineItemKind {
+  INCOME
+  EXPENSE
+}
+
+enum PayrollPeriodStatus {
+  DRAFT
+  PUBLISHED
+}
+
+// Datos de sueldo e interruptores por persona — aparte de User porque son
+// datos sensibles que solo Nairoby edita, no un "escape hatch" delegable
+// como el resto de canManageX del sistema.
+model PayrollProfile {
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  realSalary         Float?
+  iessDeclaredSalary Float?
+
+  // La empresa asume el 100% del aporte del IESS de esta persona (hoy solo
+  // Andrés y Marcos) — no se le descuenta nada de IESS en su rol, aunque la
+  // empresa lo sigue pagando por su lado.
+  companyAbsorbsIess Boolean @default(false)
+
+  // Habilita que le aparezca la pantalla de registrar horas extra — apagado
+  // por defecto, se prende persona por persona (hoy Inventario y
+  // Fulfillment).
+  canLogOvertimeHours Boolean @default(false)
+
+  // Umbral más estricto/legal de horas extra (después de las 5pm entre
+  // semana, y TODO el sábado 8:30-12:30 cuenta como extra) en vez del
+  // umbral por defecto (después de las 6:30pm; el sábado 8:30-13:30 es
+  // turno normal, no extra). Se activa persona por persona a medida que se
+  // pueda costear pagar así a todos.
+  usesFullLegalOvertimeSchedule Boolean @default(false)
+
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+}
+
+// Fila única — sueldo básico nacional vigente, usado para calcular el valor
+// de toda hora extra de todo el personal. Se actualiza acá cuando el
+// gobierno lo cambie.
+model PayrollSettings {
+  id                 String   @id @default(cuid())
+  nationalBaseSalary Float
+  updatedAt          DateTime @updatedAt
+  updatedById        String?
+  updatedBy          User?    @relation("PayrollSettingsUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+}
+
+// El líder de cada área (incluido él mismo) carga, día por día, cuánto se
+// quedó extra — nunca hora de entrada/salida libre, siempre en pasos de 45
+// min o 1 hora. Solo se puede cargar/corregir dentro de las 24h siguientes
+// a ese día (ver isEditableOvertimeDate en payrollCalc.ts) — pasado eso,
+// ese día queda cerrado para siempre, para evitar cargar horas de semanas
+// pasadas. Sin approvedAt, ese día no cuenta para nada del cálculo mensual.
+model OvertimeEntry {
+  id         String @id @default(cuid())
+  employeeId String
+  employee   User   @relation("OvertimeEntryEmployee", fields: [employeeId], references: [id], onDelete: Cascade)
+  date       DateTime // medianoche UTC del día trabajado
+
+  minutesExtra Int // 45 o 60
+
+  enteredById String?
+  enteredBy   User?    @relation("OvertimeEntryEnteredBy", fields: [enteredById], references: [id], onDelete: SetNull)
+  enteredAt   DateTime @default(now())
+
+  approvedAt   DateTime?
+  approvedById String?
+  approvedBy   User?     @relation("OvertimeEntryApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+
+  @@unique([employeeId, date])
+  @@index([employeeId])
+  @@index([approvedAt])
+}
+
+// Una fila por quincena (ej. "2026-08-Q1" = 1-15 agosto) — global, no por
+// persona. Nairoby genera el borrador de todos a la vez y publica de una.
+model PayrollPeriod {
+  id     String @id @default(cuid())
+  period String @unique // "YYYY-MM-Q1" o "YYYY-MM-Q2"
+
+  status PayrollPeriodStatus @default(DRAFT)
+
+  generatedAt   DateTime?
+  generatedById String?
+  generatedBy   User?     @relation("PayrollPeriodGeneratedBy", fields: [generatedById], references: [id], onDelete: SetNull)
+
+  publishedAt   DateTime?
+  publishedById String?
+  publishedBy   User?     @relation("PayrollPeriodPublishedBy", fields: [publishedById], references: [id], onDelete: SetNull)
+
+  roles PayrollQuincenaRole[]
+
+  @@index([status])
+}
+
+// El detalle real completo de lo que se le paga a cada persona esa
+// quincena — exclusivo de Nairoby y el admin, el colaborador NUNCA lo ve.
+// Todo (sueldo, horas extra, IESS, bonos, descuentos) vive como
+// PayrollLineItem — este modelo solo guarda los totales ya calculados +
+// el versionado. Al corregir uno ya publicado, se crea una fila nueva con
+// isCurrent=true y se apaga la anterior — nunca se sobreescribe.
+model PayrollQuincenaRole {
+  id         String        @id @default(cuid())
+  periodId   String
+  period     PayrollPeriod @relation(fields: [periodId], references: [id], onDelete: Cascade)
+  employeeId String
+  employee   User          @relation("PayrollQuincenaRoleEmployee", fields: [employeeId], references: [id], onDelete: Cascade)
+
+  version    Int     @default(1)
+  isCurrent  Boolean @default(true)
+  // Obligatorio cuando version > 1 — nota interna para Nairoby/admin.
+  changeNote String?
+
+  totalIncome  Float
+  totalExpense Float
+  netTotal     Float
+
+  createdAt   DateTime @default(now())
+  createdById String?
+  createdBy   User?    @relation("PayrollQuincenaRoleCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  lineItems PayrollLineItem[]
+
+  @@index([periodId])
+  @@index([employeeId])
+  @@index([employeeId, isCurrent])
+}
+
+model PayrollLineItem {
+  id     String              @id @default(cuid())
+  roleId String
+  role   PayrollQuincenaRole @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  label  String
+  amount Float
+  kind   PayrollLineItemKind
+
+  // true = línea agregada sola (ej. "+$50 Colaborador destacado", sueldo,
+  // horas extra) — Nairoby igual la puede editar o quitar.
+  isAutomatic Boolean @default(false)
+
+  @@index([roleId])
+}
+
+// Lo único que ve cada colaborador en "Roles de pago" — nunca el detalle
+// real de PayrollQuincenaRole. Se llama "Rol del mes" en pantalla (nunca
+// "quincena", para que no parezca que falta otro) — calculado sobre el
+// sueldo DECLARADO en el IESS (la mitad para casi todos), con su
+// descuento de IESS. Se genera/actualiza junto con la quincena de fin de
+// mes. Versionado igual que PayrollQuincenaRole: una corrección nunca
+// borra, crea una versión nueva "principal" con nota — esta nota SÍ la ve
+// el colaborador, para que entienda por qué cambió.
+model MonthlyLegalRole {
+  id         String @id @default(cuid())
+  employeeId String
+  employee   User   @relation("MonthlyLegalRoleEmployee", fields: [employeeId], references: [id], onDelete: Cascade)
+  month      String // "YYYY-MM"
+
+  version    Int     @default(1)
+  isCurrent  Boolean @default(true)
+  changeNote String?
+
+  declaredSalary Float
+  iessDeduction  Float
+  netTotal       Float
+
+  publishedAt   DateTime @default(now())
+  publishedById String?
+  publishedBy   User?    @relation("MonthlyLegalRolePublishedBy", fields: [publishedById], references: [id], onDelete: SetNull)
+
+  @@unique([employeeId, month, version])
+  @@index([employeeId])
+  @@index([employeeId, isCurrent])
 }

@@ -9,6 +9,7 @@ import {
   Copy, Check, RefreshCw, Cake, Power, Receipt, Heart,
 } from "lucide-react";
 import { PositionPicker } from "@/components/users/PositionPicker";
+import { PayrollProfileFields } from "@/components/nomina/PayrollProfileFields";
 import { uploadFile as uploadToStorage } from "@/lib/uploadFile";
 
 type Dept = { id: string; name: string; code: string };
@@ -74,12 +75,16 @@ export function ProfileDetail({
   positions,
   basePath = "/admin/nomina",
   canDelete = true,
+  canViewPayroll = false,
+  canEditPayroll = false,
 }: {
   profile: UserProfile;
   departments: Dept[];
   positions: Position[];
   basePath?: string;
   canDelete?: boolean;
+  canViewPayroll?: boolean;
+  canEditPayroll?: boolean;
 }) {
   const router = useRouter();
   const [p, setP] = useState(profile);
@@ -736,6 +741,8 @@ export function ProfileDetail({
               </button>
             </div>
           </div>
+
+          {canViewPayroll && <PayrollProfileFields userId={p.id} canEdit={canEditPayroll} />}
 
           <div className="bg-cloud border border-rule rounded p-3.5 mt-3.5">
             <label className="flex items-center gap-1 mb-2 text-[10.5px] font-semibold uppercase tracking-wide text-steel">

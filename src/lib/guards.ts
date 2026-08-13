@@ -155,6 +155,56 @@ export async function canManagePayroll() {
   return !!user?.isLeader && user.leadsDept?.code === "FIN";
 }
 
+// Confirmado 2026-08-13: pedido explícito del usuario — la calculadora de
+// roles de pago (sueldo real, horas extra, bonos, descuentos) es distinta
+// del resto del sistema: el admin NUNCA edita, solo ve — a diferencia de
+// TODOS los demás canManageX de este archivo, donde admin siempre puede.
+// Por eso NO reusa canManagePayroll (que sí le da edición al admin) — hoy
+// resuelve a Nairoby Castro (líder de Finanzas), pero sigue el mismo
+// criterio por rol que el resto del sistema, no su identidad puntual.
+export async function canEditPayrollRoles() {
+  const session = await auth();
+  if (!session) return false;
+  const user = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { isLeader: true, leadsDept: { select: { code: true } } },
+  });
+  return !!user?.isLeader && user.leadsDept?.code === "FIN";
+}
+
+// Admin ve exactamente lo mismo que Nairoby, pero de solo lectura — cada
+// ruta de escritura debe seguir usando canEditPayrollRoles() aparte, nunca
+// esta función, para no dejar editar al admin sin querer.
+export async function canViewPayrollRoles() {
+  const session = await auth();
+  if (!session) return false;
+  if (session.user.role === "admin") return true;
+  return canEditPayrollRoles();
+}
+
+// Confirmado 2026-08-13: solo el propio líder de un área habilitada
+// (interruptor PayrollProfile.canLogOvertimeHours en su propio perfil) ve
+// la pantalla de registrar horas extra — carga las suyas y las de su
+// equipo. Hoy solo Inventario y Fulfillment lo tienen prendido.
+export async function canLogOvertimeHours() {
+  const session = await auth();
+  if (!session) return false;
+  if (session.user.role === "admin") return false;
+  const user = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { isLeader: true, payrollProfile: { select: { canLogOvertimeHours: true } } },
+  });
+  return !!user?.isLeader && !!user.payrollProfile?.canLogOvertimeHours;
+}
+
+// Confirmado 2026-08-13: pedido explícito del usuario — sin la aprobación
+// del admin, día por día, ninguna hora extra cuenta para el cálculo
+// mensual. Exclusivo del admin, nadie más.
+export async function canApproveOvertimeHours() {
+  const session = await auth();
+  return !!session && session.user.role === "admin";
+}
+
 // Chat interno de Roles de pago — confirmado 2026-07-27: solo el propio
 // colaborador o quien de verdad gestiona la nómina (líder de Finanzas, NO
 // admin) puede escribirle directo a alguien. El admin ve todo (canView...

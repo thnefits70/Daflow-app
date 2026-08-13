@@ -1,11 +1,12 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { ProfileDetail } from "@/components/nomina/ProfileDetail";
+import { canViewPayrollRoles, canEditPayrollRoles } from "@/lib/guards";
 
 export default async function NominaProfilePage({ params }: { params: Promise<{ userId: string }> }) {
   const { userId } = await params;
 
-  const [user, departments, positions] = await Promise.all([
+  const [user, departments, positions, canViewPayroll, canEditPayroll] = await Promise.all([
     prisma.user.findUnique({
       where: { id: userId },
       include: {
@@ -15,6 +16,8 @@ export default async function NominaProfilePage({ params }: { params: Promise<{ 
     }),
     prisma.department.findMany({ orderBy: { order: "asc" }, select: { id: true, name: true, code: true } }),
     prisma.position.findMany({ orderBy: { name: "asc" } }),
+    canViewPayrollRoles(),
+    canEditPayrollRoles(),
   ]);
 
   if (!user) notFound();
@@ -65,6 +68,8 @@ export default async function NominaProfilePage({ params }: { params: Promise<{ 
       }}
       departments={departments}
       positions={positions.map((p) => ({ id: p.id, deptId: p.deptId, name: p.name }))}
+      canViewPayroll={canViewPayroll}
+      canEditPayroll={canEditPayroll}
     />
   );
 }

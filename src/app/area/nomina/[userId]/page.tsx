@@ -1,14 +1,14 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { ProfileDetail } from "@/components/nomina/ProfileDetail";
-import { canManageNomina } from "@/lib/guards";
+import { canManageNomina, canViewPayrollRoles, canEditPayrollRoles } from "@/lib/guards";
 
 export default async function AreaNominaProfilePage({ params }: { params: Promise<{ userId: string }> }) {
   if (!(await canManageNomina())) notFound();
 
   const { userId } = await params;
 
-  const [user, departments, positions] = await Promise.all([
+  const [user, departments, positions, canViewPayroll, canEditPayroll] = await Promise.all([
     prisma.user.findUnique({
       where: { id: userId },
       include: {
@@ -18,6 +18,8 @@ export default async function AreaNominaProfilePage({ params }: { params: Promis
     }),
     prisma.department.findMany({ orderBy: { order: "asc" }, select: { id: true, name: true, code: true } }),
     prisma.position.findMany({ orderBy: { name: "asc" } }),
+    canViewPayrollRoles(),
+    canEditPayrollRoles(),
   ]);
 
   if (!user) notFound();
@@ -70,6 +72,8 @@ export default async function AreaNominaProfilePage({ params }: { params: Promis
       positions={positions.map((p) => ({ id: p.id, deptId: p.deptId, name: p.name }))}
       basePath="/area/nomina"
       canDelete={false}
+      canViewPayroll={canViewPayroll}
+      canEditPayroll={canEditPayroll}
     />
   );
 }

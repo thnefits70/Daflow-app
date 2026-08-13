@@ -5,7 +5,7 @@ import { AreaGateShell } from "@/components/dept/AreaGateShell";
 import { MarketingArrivalAlert } from "@/components/marketing/MarketingArrivalAlert";
 import type { ProcessDTO } from "@/components/process/ProcessEditor";
 import type { RecognitionPersonDTO } from "@/components/recognition/RecognitionPanel";
-import { SUPPLIER_VIEW_DEPT_CODES, canManageNomina } from "@/lib/guards";
+import { SUPPLIER_VIEW_DEPT_CODES, canManageNomina, canLogOvertimeHours } from "@/lib/guards";
 import { getRecognitionLockout } from "@/lib/pendingTasks";
 
 export default async function AreaLayout({ children }: { children: React.ReactNode }) {
@@ -152,7 +152,12 @@ export default async function AreaLayout({ children }: { children: React.ReactNo
   // average is public to every employee, even those with no other KPI edit
   // rights. The page itself still gates each individual section's edit UI.
   const showKpis = true;
-  const showNomina = await canManageNomina();
+  // Confirmado 2026-08-13: pedido explícito del usuario — el líder de un
+  // área habilitada para horas extra (hoy Inventario y Fulfillment)
+  // necesita entrar acá para registrar, aunque no gestione Nómina en
+  // general (esa parte de la pantalla queda oculta para él, ver
+  // NominaPageTabs).
+  const showNomina = (await canManageNomina()) || (await canLogOvertimeHours());
   const myLearningPathCount = await prisma.learningPathAssignment.count({ where: { userId: session.user.id } });
 
   return (

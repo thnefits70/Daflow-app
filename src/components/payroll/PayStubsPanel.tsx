@@ -5,6 +5,7 @@ import { Upload, FileText, Download, Trash2, ChevronLeft, ChevronRight, MessageS
 import { uploadFile as uploadToStorage } from "@/lib/uploadFile";
 import { compressImage } from "@/lib/compressImage";
 import { PayrollChat } from "@/components/payroll/PayrollChat";
+import { MonthlyLegalRolePanel } from "@/components/payroll/MonthlyLegalRolePanel";
 
 const MONTHS = [
   "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
@@ -264,6 +265,8 @@ export function PayStubsPanel({
 
     return (
       <div>
+        <MonthlyLegalRolePanel />
+
         {ownUserId && (
           <div className="mb-4.5">
             <div className="font-semibold text-[13.5px] mb-1.5 flex items-center gap-1.5">

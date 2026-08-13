@@ -1,11 +1,21 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { TopLine } from "@/components/ui/TopLine";
-import { NominaGrid } from "@/components/nomina/NominaGrid";
-import { canManageNomina } from "@/lib/guards";
+import { NominaPageTabs } from "@/components/nomina/NominaPageTabs";
+import { canManageNomina, canLogOvertimeHours, canApproveOvertimeHours, canViewPayrollRoles, canEditPayrollRoles } from "@/lib/guards";
 
 export default async function AreaNominaPage() {
-  if (!(await canManageNomina())) notFound();
+  const [canManage, canLogOvertime, canApproveOvertime, canViewRoles, canEditRoles] = await Promise.all([
+    canManageNomina(),
+    canLogOvertimeHours(),
+    canApproveOvertimeHours(),
+    canViewPayrollRoles(),
+    canEditPayrollRoles(),
+  ]);
+  // Confirmado 2026-08-13: un líder de área habilitada (Inventario,
+  // Fulfillment) necesita entrar acá para registrar horas extra aunque no
+  // tenga canManageNomina — antes esta página era exclusiva de Nómina.
+  if (!canManage && !canLogOvertime && !canViewRoles) notFound();
 
   const [users, departments] = await Promise.all([
     prisma.user.findMany({
@@ -29,7 +39,16 @@ export default async function AreaNominaPage() {
   return (
     <div>
       <TopLine eyebrow="Recursos humanos" title="Nómina" />
-      <NominaGrid users={users} departments={departments} basePath="/area/nomina" />
+      <NominaPageTabs
+        users={canManage ? users : []}
+        departments={canManage ? departments : []}
+        basePath="/area/nomina"
+        canManage={canManage}
+        canLogOvertime={canLogOvertime}
+        canApproveOvertime={canApproveOvertime}
+        canViewRoles={canViewRoles}
+        canEditRoles={canEditRoles}
+      />
     </div>
   );
 }

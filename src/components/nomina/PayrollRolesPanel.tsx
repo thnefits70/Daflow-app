@@ -1,0 +1,351 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import { X, ShieldCheck } from "lucide-react";
+
+type LineItem = { id?: string; label: string; amount: number; kind: "INCOME" | "EXPENSE"; isAutomatic?: boolean };
+type Role = {
+  id: string;
+  employeeId: string;
+  version: number;
+  changeNote: string | null;
+  totalIncome: number;
+  totalExpense: number;
+  netTotal: number;
+  employee: { id: string; name: string; position: string | null };
+  lineItems: LineItem[];
+};
+type PeriodDetail = {
+  period: string;
+  status: "DRAFT" | "PUBLISHED" | "NOT_GENERATED";
+  roles: Role[];
+  monthlyRoleIdByEmployee?: Record<string, string>;
+};
+
+function money(n: number) {
+  return `$${n.toFixed(2)}`;
+}
+
+function recentPeriods(): string[] {
+  const out: string[] = [];
+  const now = new Date();
+  for (let i = 0; i < 4; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    out.push(`${ym}-Q2`, `${ym}-Q1`);
+  }
+  return out;
+}
+function periodLabel(period: string) {
+  const [y, m, q] = period.split("-");
+  const MONTHS = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
+  const monthName = MONTHS[Number(m) - 1];
+  return q === "Q1" ? `1-15 ${monthName} ${y}` : `16-fin ${monthName} ${y}`;
+}
+
+function NewConceptForm({ onAdd }: { onAdd: (item: LineItem) => void }) {
+  const [label, setLabel] = useState("");
+  const [amount, setAmount] = useState("");
+  const [kind, setKind] = useState<"INCOME" | "EXPENSE">("EXPENSE");
+  return (
+    <div className="flex items-center gap-2 mt-2 flex-wrap">
+      <input className="text-[12px] rounded border border-rule bg-cloud px-2 py-1 flex-1 min-w-[160px]" placeholder="Concepto (ej. Anticipo, Bono)" value={label} onChange={(e) => setLabel(e.target.value)} />
+      <input className="text-[12px] rounded border border-rule bg-cloud px-2 py-1 w-24" type="number" step="0.01" placeholder="Monto" value={amount} onChange={(e) => setAmount(e.target.value)} />
+      <select className="text-[12px] rounded border border-rule bg-cloud px-2 py-1" value={kind} onChange={(e) => setKind(e.target.value as "INCOME" | "EXPENSE")}>
+        <option value="EXPENSE">Descuento</option>
+        <option value="INCOME">Ingreso</option>
+      </select>
+      <button
+        type="button"
+        className="text-[11.5px] font-semibold text-blue cursor-pointer"
+        onClick={() => {
+          const amt = Number(amount);
+          if (!label.trim() || !amt || amt <= 0) return;
+          onAdd({ label: label.trim(), amount: amt, kind });
+          setLabel(""); setAmount("");
+        }}
+      >
+        + Agregar
+      </button>
+    </div>
+  );
+}
+
+function RoleCard({ role, published, canEdit, monthlyRoleId, onChanged }: { role: Role; published: boolean; canEdit: boolean; monthlyRoleId?: string; onChanged: () => void }) {
+  const [items, setItems] = useState<LineItem[]>(role.lineItems);
+  const [saving, setSaving] = useState(false);
+  const [correcting, setCorrecting] = useState(false);
+  const [changeNote, setChangeNote] = useState("");
+  const [correctingMonthly, setCorrectingMonthly] = useState(false);
+  const [monthlyChangeNote, setMonthlyChangeNote] = useState("");
+  const [savingMonthly, setSavingMonthly] = useState(false);
+
+  async function submitMonthlyCorrection() {
+    if (!monthlyRoleId || !monthlyChangeNote.trim()) return;
+    setSavingMonthly(true);
+    await fetch(`/api/payroll/monthly-role/${monthlyRoleId}/correct`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ changeNote: monthlyChangeNote.trim() }),
+    });
+    setSavingMonthly(false);
+    setCorrectingMonthly(false);
+    setMonthlyChangeNote("");
+    onChanged();
+  }
+
+  async function saveDraft(next: LineItem[]) {
+    setItems(next);
+    if (published) return;
+    setSaving(true);
+    await fetch(`/api/payroll/roles/${role.id}/line-items`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ lineItems: next }),
+    });
+    setSaving(false);
+    onChanged();
+  }
+
+  async function submitCorrection() {
+    if (!changeNote.trim()) return;
+    setSaving(true);
+    await fetch(`/api/payroll/roles/${role.id}/correct`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ lineItems: items, changeNote: changeNote.trim() }),
+    });
+    setSaving(false);
+    setCorrecting(false);
+    setChangeNote("");
+    onChanged();
+  }
+
+  const total = items.filter((i) => i.kind === "INCOME").reduce((s, i) => s + i.amount, 0) - items.filter((i) => i.kind === "EXPENSE").reduce((s, i) => s + i.amount, 0);
+  const editingEnabled = canEdit && (!published || correcting);
+
+  return (
+    <div className="bg-surface border border-rule rounded-md p-3.5">
+      <div className="flex items-center justify-between gap-2 mb-2">
+        <div>
+          <div className="font-bold text-[13px]">{role.employee.name}</div>
+          {role.employee.position && <div className="text-[10.5px] text-steel">{role.employee.position}</div>}
+        </div>
+        <div className="text-[15px] font-extrabold tabular-nums">{money(total)}</div>
+      </div>
+
+      <div className="flex flex-col gap-1">
+        {items.map((it, idx) => (
+          <div key={idx} className="flex items-center gap-2 text-[12px]">
+            <span className="flex-1 text-ink">{it.label}</span>
+            <span className={`font-bold tabular-nums ${it.kind === "INCOME" ? "text-green" : "text-red"}`}>
+              {it.kind === "INCOME" ? "+" : "−"}{money(it.amount)}
+            </span>
+            {editingEnabled && (
+              <button type="button" className="text-steel-dim cursor-pointer" onClick={() => saveDraft(items.filter((_, i) => i !== idx))}>
+                <X size={12} />
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {editingEnabled && <NewConceptForm onAdd={(item) => saveDraft([...items, item])} />}
+      {saving && <div className="text-[10.5px] text-steel-dim mt-1">Guardando…</div>}
+
+      {published && !correcting && canEdit && (
+        <button type="button" className="text-[11px] text-blue font-semibold cursor-pointer mt-2.5" onClick={() => setCorrecting(true)}>
+          Corregir este rol
+        </button>
+      )}
+      {correcting && (
+        <div className="mt-3 pt-3 border-t border-rule">
+          <input
+            className="text-[12px] rounded border border-rule bg-cloud px-2 py-1.5 w-full mb-2"
+            placeholder="Motivo del cambio (obligatorio, nota interna)"
+            value={changeNote}
+            onChange={(e) => setChangeNote(e.target.value)}
+          />
+          <div className="flex gap-2">
+            <button type="button" disabled={!changeNote.trim() || saving} className="text-[12px] font-bold bg-blue text-white rounded px-3 py-1.5 cursor-pointer disabled:opacity-50" onClick={submitCorrection}>
+              Guardar corrección y republicar
+            </button>
+            <button type="button" className="text-[12px] text-steel cursor-pointer" onClick={() => { setCorrecting(false); setItems(role.lineItems); }}>
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
+      {role.changeNote && <div className="text-[10.5px] text-steel-dim mt-2 italic">Corregido — {role.changeNote}</div>}
+
+      {published && monthlyRoleId && canEdit && !correctingMonthly && (
+        <button type="button" className="text-[11px] text-blue font-semibold cursor-pointer mt-1.5 block" onClick={() => setCorrectingMonthly(true)}>
+          Corregir el &quot;Rol del mes&quot; que ve este colaborador
+        </button>
+      )}
+      {correctingMonthly && (
+        <div className="mt-3 pt-3 border-t border-rule">
+          <div className="text-[10.5px] text-steel-dim mb-2">
+            Recalcula desde el sueldo declarado vigente en su perfil — si el error era ese, corregilo ahí primero.
+          </div>
+          <input
+            className="text-[12px] rounded border border-rule bg-cloud px-2 py-1.5 w-full mb-2"
+            placeholder="Motivo del cambio — el colaborador lo va a ver"
+            value={monthlyChangeNote}
+            onChange={(e) => setMonthlyChangeNote(e.target.value)}
+          />
+          <div className="flex gap-2">
+            <button type="button" disabled={!monthlyChangeNote.trim() || savingMonthly} className="text-[12px] font-bold bg-blue text-white rounded px-3 py-1.5 cursor-pointer disabled:opacity-50" onClick={submitMonthlyCorrection}>
+              Guardar y republicar su Rol del mes
+            </button>
+            <button type="button" className="text-[12px] text-steel cursor-pointer" onClick={() => { setCorrectingMonthly(false); setMonthlyChangeNote(""); }}>
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Confirmado 2026-08-13: pantalla de gestión de Nómina — Nairoby edita
+// (canEdit), admin solo ve exactamente esto sin ningún control de
+// escritura (canEdit=false, todos los botones desaparecen).
+export function PayrollRolesPanel({ canEdit }: { canEdit: boolean }) {
+  const periods = useMemo(recentPeriods, []);
+  const [period, setPeriod] = useState(periods[0]);
+  const [detail, setDetail] = useState<PeriodDetail | null>(null);
+  const [nationalBaseSalary, setNationalBaseSalary] = useState("");
+  const [savingSettings, setSavingSettings] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const [confirmingPublish, setConfirmingPublish] = useState(false);
+
+  function loadDetail() {
+    fetch(`/api/payroll/periods/${period}`).then((r) => (r.ok ? r.json() : null)).then(setDetail);
+  }
+  useEffect(loadDetail, [period]);
+  useEffect(() => {
+    fetch("/api/payroll/settings").then((r) => (r.ok ? r.json() : null)).then((s) => setNationalBaseSalary(s?.nationalBaseSalary != null ? String(s.nationalBaseSalary) : ""));
+  }, []);
+
+  async function saveSettings() {
+    const value = Number(nationalBaseSalary);
+    if (!value || value <= 0) return;
+    setSavingSettings(true);
+    await fetch("/api/payroll/settings", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nationalBaseSalary: value }),
+    });
+    setSavingSettings(false);
+  }
+
+  async function generate() {
+    setBusy(true);
+    setErr("");
+    const res = await fetch(`/api/payroll/periods/${period}/generate`, { method: "POST" });
+    setBusy(false);
+    const data = await res.json().catch(() => null);
+    if (!res.ok) { setErr(data?.error ?? "No se pudo generar."); return; }
+    loadDetail();
+  }
+
+  async function publish() {
+    setBusy(true);
+    setErr("");
+    const res = await fetch(`/api/payroll/periods/${period}/publish`, { method: "POST" });
+    setBusy(false);
+    setConfirmingPublish(false);
+    const data = await res.json().catch(() => null);
+    if (!res.ok) { setErr(data?.error ?? "No se pudo publicar."); return; }
+    loadDetail();
+  }
+
+  return (
+    <div>
+      <div className="bg-surface border border-rule rounded-md p-4 mb-4">
+        <div className="text-[11px] font-semibold uppercase tracking-wide text-steel mb-2">Sueldo básico nacional</div>
+        <div className="flex items-center gap-2">
+          <input
+            className="rounded border border-rule bg-cloud px-2.5 py-1.5 text-[13px] w-28"
+            type="number"
+            step="0.01"
+            value={nationalBaseSalary}
+            disabled={!canEdit}
+            onChange={(e) => setNationalBaseSalary(e.target.value)}
+          />
+          {canEdit && (
+            <button type="button" disabled={savingSettings} className="text-[11.5px] font-semibold text-blue cursor-pointer" onClick={saveSettings}>
+              {savingSettings ? "Guardando…" : "Guardar"}
+            </button>
+          )}
+        </div>
+        <span className="text-[11px] text-steel-dim block mt-1">Alimenta el cálculo de todas las horas extra ya aprobadas.</span>
+      </div>
+
+      <div className="flex items-center gap-3 mb-4 flex-wrap">
+        <select className="rounded border border-rule bg-surface px-2.5 py-2 text-[13px]" value={period} onChange={(e) => setPeriod(e.target.value)}>
+          {periods.map((p) => (
+            <option key={p} value={p}>{periodLabel(p)}</option>
+          ))}
+        </select>
+        {detail?.status === "PUBLISHED" && (
+          <span className="flex items-center gap-1.5 text-[11px] font-semibold text-green bg-green/10 border border-green/30 rounded-full px-2.5 py-1">
+            <ShieldCheck size={12} /> Publicado
+          </span>
+        )}
+      </div>
+
+      {err && <div className="text-red text-[12.5px] mb-3">{err}</div>}
+
+      {(!detail || detail.status === "NOT_GENERATED") && canEdit && (
+        <button type="button" disabled={busy} className="text-[12.5px] font-bold border border-rule rounded-md px-4 py-2 cursor-pointer disabled:opacity-60" onClick={generate}>
+          {busy ? "Generando…" : "Generar roles de esta quincena"}
+        </button>
+      )}
+      {(!detail || detail.status === "NOT_GENERATED") && (
+        <div className="text-steel text-[12.5px] mt-2">Todavía no se generaron los roles de este período.</div>
+      )}
+
+      {detail && detail.status !== "NOT_GENERATED" && (
+        <>
+          <div className="flex flex-col gap-2.5 mb-4">
+            {detail.roles.map((r) => (
+              <RoleCard
+                key={r.id}
+                role={r}
+                published={detail.status === "PUBLISHED"}
+                canEdit={canEdit}
+                monthlyRoleId={detail.monthlyRoleIdByEmployee?.[r.employeeId]}
+                onChanged={loadDetail}
+              />
+            ))}
+          </div>
+
+          {detail.status === "DRAFT" && canEdit && (
+            <div>
+              {!confirmingPublish ? (
+                <button type="button" className="text-[13px] font-bold bg-green text-white rounded-md px-4 py-2 cursor-pointer" onClick={() => setConfirmingPublish(true)}>
+                  Publicar
+                </button>
+              ) : (
+                <div className="max-w-sm border-[1.5px] border-green rounded-md bg-cloud p-4">
+                  <div className="text-[13px] font-bold mb-3">¿Seguro que está todo bien antes de publicar?</div>
+                  <div className="flex gap-2">
+                    <button type="button" className="text-[12px] font-semibold border border-rule rounded px-3 py-1.5 cursor-pointer" onClick={() => setConfirmingPublish(false)}>
+                      No, seguir revisando
+                    </button>
+                    <button type="button" disabled={busy} className="text-[12px] font-bold bg-green text-white rounded px-3 py-1.5 cursor-pointer disabled:opacity-60" onClick={publish}>
+                      {busy ? "Publicando…" : "Sí, publicar"}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
