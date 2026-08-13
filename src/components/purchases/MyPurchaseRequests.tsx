@@ -6,6 +6,7 @@ import { uploadFile } from "@/lib/uploadFile";
 import { compressImage } from "@/lib/compressImage";
 import { usePasteFile } from "@/lib/usePasteFile";
 import { PurchaseSupplierPicker, type BankAccountDTO, type PurchaseSupplierDTO } from "./PurchaseSupplierPicker";
+import { PurchaseOperationDocuments } from "./PurchaseOperationDocuments";
 import { actorName } from "@/lib/actorName";
 
 // Nota: formateo puro repetido a propósito (no importado de purchases.ts)
@@ -26,13 +27,16 @@ type Row = {
   requestedAt: string;
   rejectReason: string | null;
   attemptNumber: number;
-  catalogItem: { id: string; name: string };
+  catalogItem: { id: string; name: string; photos: string[] };
   quoteImageUrl: string;
   quoteReadTotal: number | null;
   quoteReferenceCode: string | null;
   justification: string | null;
   invoiceStatus: string;
+  invoiceDocUrl: string | null;
   purchaseOrderUrl: string | null;
+  paymentProofUrl: string | null;
+  shippingPaymentProofUrl: string | null;
   shippingIncluded: boolean;
   shippingCarrierPending: boolean;
   shippingPaymentTiming: "WITH_PURCHASE" | "ON_DELIVERY" | null;
@@ -41,9 +45,17 @@ type Row = {
   carrierBankAccountId: string | null;
   shippingPaymentRequestedAt: string | null;
   shippingPaidAt: string | null;
+  requestedBy: { name: string } | null;
   reviewedBy: { name: string } | null;
   paidBy: { name: string } | null;
-  receipt: { confirmedBy: { name: string } | null } | null;
+  invoicedBy: { name: string } | null;
+  receipt: {
+    photoUrls: string[];
+    receivedQuantity: number;
+    aiPhotoMatch: boolean | null;
+    aiPhotoNote: string | null;
+    confirmedBy: { name: string } | null;
+  } | null;
   supplier: { id: string; name: string; bankAccounts: BankAccountDTO[] };
   bankAccountId: string | null;
   bankAccountChangeRequestedAt: string | null;
@@ -609,6 +621,12 @@ function GroupCard({
       )}
 
       {showShippingSection && <ShippingPaymentSection g={g} onUpdate={(patch) => onGroupUpdate(groupId, patch)} />}
+
+      {/* Confirmado 2026-08-13: pedido explícito del usuario — apenas queda
+          Pagada, quien la pidió (hoy Bryan, a cargo provisional de Compras)
+          puede ver y descargar los comprobantes ya subidos, para poder
+          enviárselos al proveedor — solo lectura, nunca editar ni borrar. */}
+      {!rejected && groupIdx >= 2 && <PurchaseOperationDocuments rows={g} />}
     </div>
   );
 }
