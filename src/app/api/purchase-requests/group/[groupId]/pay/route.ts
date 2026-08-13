@@ -34,7 +34,16 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ gro
     return NextResponse.json({ error: "Solo se puede pagar una solicitud ya aprobada." }, { status: 409 });
   }
 
-  const appliedCreditIds = parsed.data.appliedCreditIds ?? [];
+  // Confirmado 2026-08-12: pedido explícito del usuario — los créditos ya
+  // reservados para esta solicitud desde que se solicitó (ver
+  // reserveCreditsForGroup) se incluyen solos acá, sin tener que
+  // volver a elegirlos — appliedCreditIds sigue sirviendo para sumar MÁS
+  // crédito disponible del mismo proveedor, adicional al ya reservado.
+  const reservedCredits = await prisma.supplierCredit.findMany({ where: { reservedForGroupId: groupId, status: "RESERVED" } });
+  const reservedIds = reservedCredits.map((c) => c.id);
+  const reservedTotal = reservedCredits.reduce((s, c) => s + c.amount, 0);
+
+  const appliedCreditIds = (parsed.data.appliedCreditIds ?? []).filter((id) => !reservedIds.includes(id));
   let appliedTotal = 0;
   if (appliedCreditIds.length > 0) {
     const credits = await prisma.supplierCredit.findMany({ where: { id: { in: appliedCreditIds }, supplierId: rows[0].supplierId, status: "AVAILABLE" } });
@@ -44,8 +53,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ gro
     appliedTotal = credits.reduce((s, c) => s + c.amount, 0);
   }
 
+  const allCreditIdsToApply = [...reservedIds, ...appliedCreditIds];
   const total = rows.reduce((s, r) => s + r.totalCost, 0);
-  const netAmount = Math.max(0, total - appliedTotal);
+  const netAmount = Math.max(0, total - reservedTotal - appliedTotal);
   if (netAmount > 0 && !parsed.data.paymentProofUrl) {
     return NextResponse.json({ error: "Falta el comprobante de lo que se transfirió." }, { status: 400 });
   }
@@ -71,9 +81,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ gro
         paidById: isAdmin ? null : session.user.id,
       },
     }),
-    ...(appliedCreditIds.length > 0
+    ...(allCreditIdsToApply.length > 0
       ? [prisma.supplierCredit.updateMany({
-          where: { id: { in: appliedCreditIds } },
+          where: { id: { in: allCreditIdsToApply } },
           data: { status: "APPLIED", appliedToGroupId: groupId, appliedAt: paidAt },
         })]
       : []),

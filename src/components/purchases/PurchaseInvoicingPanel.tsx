@@ -144,6 +144,10 @@ export function PurchaseInvoicingPanel() {
   const [proofVerifyResult, setProofVerifyResult] = useState<{ readAmount: number | null; matches: boolean; receiptNumber: string | null } | null>(null);
   const [availableCredits, setAvailableCredits] = useState<{ id: string; amount: number; reason: string }[]>([]);
   const [selectedCreditIds, setSelectedCreditIds] = useState<string[]>([]);
+  // Confirmado 2026-08-12: crédito que ya quedó reservado para esta solicitud
+  // desde que Bryan la pidió (ver reserveCreditsForGroup) — se ve como ya
+  // aplicado, sin checkbox, separado del crédito adicional que sí se elige acá.
+  const [reservedCredits, setReservedCredits] = useState<{ id: string; amount: number; reason: string }[]>([]);
   // Confirmado 2026-08-06: filtro de fechas para "Registrar factura" — sin
   // esto la lista crece para siempre con todo el historial. dateFrom/dateTo
   // vacíos = sin filtro (se ve todo). El selector de mes y "Mes anterior"
@@ -223,23 +227,28 @@ export function PurchaseInvoicingPanel() {
 
   function netAmountFor(groupId: string) {
     const total = currentGroupRows(groupId).reduce((s, r) => s + r.totalCost, 0);
+    const reservedTotal = reservedCredits.reduce((s, c) => s + c.amount, 0);
     const appliedTotal = availableCredits.filter((c) => selectedCreditIds.includes(c.id)).reduce((s, c) => s + c.amount, 0);
-    return Math.max(0, total - appliedTotal);
+    return Math.max(0, total - reservedTotal - appliedTotal);
   }
 
   // Confirmado 2026-08-06: al abrir "Marcar como pagado" se consulta si el
   // proveedor tiene crédito disponible (por mercadería dañada/incompleta de
   // una compra anterior) — se puede aplicar aquí para pagar solo la
-  // diferencia, en vez de perderlo o tener que recordarlo a mano.
+  // diferencia, en vez de perderlo o tener que recordarlo a mano. Confirmado
+  // 2026-08-12: también se consulta el crédito YA reservado para esta
+  // solicitud desde que se pidió, para restarlo del neto sin volver a elegirlo.
   async function openPay(groupId: string, supplierId: string) {
     setPayingGroup(groupId);
     setProofUrl(null);
     setProofVerifyResult(null);
     setSelectedCreditIds([]);
+    setReservedCredits([]);
     setErr("");
-    const res = await fetch(`/api/purchase-suppliers/${supplierId}/credit-balance`);
+    const res = await fetch(`/api/purchase-suppliers/${supplierId}/credit-balance?groupId=${groupId}`);
     const data = await res.json().catch(() => null);
     setAvailableCredits(res.ok ? data.credits : []);
+    setReservedCredits(res.ok ? data.reserved ?? [] : []);
   }
 
   function toggleCredit(id: string) {
@@ -317,6 +326,7 @@ export function PurchaseInvoicingPanel() {
     setProofUrl(null);
     setProofVerifyResult(null);
     setSelectedCreditIds([]);
+    setReservedCredits([]);
     load();
     router.refresh();
   }
@@ -507,9 +517,20 @@ export function PurchaseInvoicingPanel() {
                   <div className="text-[10px] text-steel-dim mb-2.5">Solicitada por {actorName(g[0].requestedBy?.name)}</div>
                   {payingGroup === groupId ? (
                     <div>
+                      {reservedCredits.length > 0 && (
+                        <div className="bg-teal/10 border border-teal/35 rounded-md p-3 mb-2.5">
+                          <div className="flex items-center gap-1.5 text-[12px] font-semibold text-teal mb-1.5"><Lock size={13} /> Crédito ya reservado al pedir esta solicitud</div>
+                          <div className="flex flex-col gap-1 mb-1.5">
+                            {reservedCredits.map((c) => (
+                              <div key={c.id} className="text-[12px] text-ink">{money(c.amount)} — {c.reason}</div>
+                            ))}
+                          </div>
+                          <div className="text-[12px] font-semibold text-ink">Neto a transferir: {money(netAmountFor(groupId))}</div>
+                        </div>
+                      )}
                       {availableCredits.length > 0 && (
                         <div className="bg-gold/10 border border-gold/35 rounded-md p-3 mb-2.5" style={{ color: "#D9A441" }}>
-                          <div className="flex items-center gap-1.5 text-[12px] font-semibold mb-1.5"><Wallet size={13} /> Crédito disponible con {g[0].supplier.name}</div>
+                          <div className="flex items-center gap-1.5 text-[12px] font-semibold mb-1.5"><Wallet size={13} /> Crédito adicional disponible con {g[0].supplier.name}</div>
                           <div className="flex flex-col gap-1 mb-1.5">
                             {availableCredits.map((c) => (
                               <label key={c.id} className="flex items-center gap-2 text-[12px] text-ink cursor-pointer">

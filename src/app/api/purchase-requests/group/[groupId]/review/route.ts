@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { sendPushToOwner } from "@/lib/webPush";
+import { releaseCreditsForGroup } from "@/lib/supplierCredits";
 
 const schema = z.object({ action: z.enum(["approve", "reject"]), rejectReason: z.string().trim().optional() });
 
@@ -29,6 +30,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ gro
         ? { status: "APPROVED", reviewedById: null, reviewedAt: new Date() }
         : { status: "REJECTED", rejectReason: parsed.data.rejectReason, reviewedById: null, reviewedAt: new Date() },
   });
+
+  // Confirmado 2026-08-12: pedido explícito del usuario — si se rechaza por
+  // completo, cualquier crédito reservado para esta solicitud vuelve a
+  // quedar libre de inmediato.
+  if (parsed.data.action === "reject") {
+    await releaseCreditsForGroup(groupId);
+  }
 
   const requestedById = rows[0].requestedById;
   if (requestedById) {

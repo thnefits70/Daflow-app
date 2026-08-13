@@ -9,8 +9,9 @@ import { PurchaseInvoicingPanel } from "./PurchaseInvoicingPanel";
 import { PurchasePriceExplorer } from "./PurchasePriceExplorer";
 import { PurchaseUrgentReportsPanel } from "./PurchaseUrgentReportsPanel";
 import { PurchaseAuditPanel } from "./PurchaseAuditPanel";
+import { PurchaseCreditsPanel } from "./PurchaseCreditsPanel";
 
-type Tab = "solicitar" | "mias" | "comparar" | "aprobacion" | "inventario" | "finanzas" | "urgentes" | "auditoria";
+type Tab = "solicitar" | "mias" | "comparar" | "aprobacion" | "inventario" | "finanzas" | "urgentes" | "creditos" | "auditoria";
 
 // Confirmado 2026-07-30: una sola pantalla para todo el módulo — las
 // pestañas que ve cada persona dependen de lo que puede hacer (admin ve
@@ -39,6 +40,7 @@ export function PurchaseControlPanel({
     ...(canSubmit ? [{ key: "solicitar" as Tab, label: "Solicitar" }, { key: "mias" as Tab, label: "Mis solicitudes" }] : []),
     ...(canReview ? [{ key: "aprobacion" as Tab, label: "Bandeja de aprobación" }] : []),
     ...(canSubmit || canReview ? [{ key: "urgentes" as Tab, label: "Reportes urgentes" }] : []),
+    ...(canSubmit || canReview ? [{ key: "creditos" as Tab, label: "Créditos pendientes" }] : []),
     ...(canReceive ? [{ key: "inventario" as Tab, label: "Inventario" }] : []),
     ...(canInvoice ? [{ key: "finanzas" as Tab, label: "Finanzas" }] : []),
     // Confirmado 2026-08-08 (ampliado 2026-08-12): historial de solo lectura
@@ -85,6 +87,7 @@ export function PurchaseControlPanel({
       {tab === "comparar" && <PurchasePriceExplorer />}
       {tab === "aprobacion" && <PurchaseApprovalInbox />}
       {tab === "urgentes" && <PurchaseUrgentReportsPanel isAdmin={isAdmin} />}
+      {tab === "creditos" && <PurchaseCreditsPanel />}
       {tab === "inventario" && <PurchaseReceivingPanel isAdmin={isAdmin} />}
       {tab === "finanzas" && <PurchaseInvoicingPanel />}
       {tab === "auditoria" && <PurchaseAuditPanel />}

@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import { canSubmitPurchaseRequests } from "@/lib/guards";
 import { checkPurchaseSubmission, purchaseSubmissionSchema, purchaseRequestInclude } from "@/lib/purchases";
 import { sendPushToOwner } from "@/lib/webPush";
+import { reserveCreditsForGroup } from "@/lib/supplierCredits";
 
 // Confirmado 2026-08-08: cambio de política pedido explícitamente por el
 // usuario — "Corregir y reenviar" una solicitud rechazada antes creaba una
@@ -42,6 +43,16 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ gro
 
   const check = await checkPurchaseSubmission(d);
   if (!check.ok) return NextResponse.json({ error: check.error }, { status: check.status });
+
+  if (d.appliedCreditIds && d.appliedCreditIds.length > 0) {
+    const reserveResult = await reserveCreditsForGroup({
+      creditIds: d.appliedCreditIds,
+      supplierId: d.supplierId,
+      groupId,
+      groupTotal: check.groupTotal,
+    });
+    if (!reserveResult.ok) return NextResponse.json({ error: reserveResult.error }, { status: reserveResult.status });
+  }
 
   const attemptNumber = Math.max(...existingRows.map((r) => r.attemptNumber)) + 1;
 

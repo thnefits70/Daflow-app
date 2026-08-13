@@ -29,6 +29,7 @@ const PURCHASE_MODULE_FOLDERS = [
   "purchase-payments",
   "purchase-invoices",
   "purchase-request-receipts",
+  "supplier-credits",
 ];
 
 const BUCKET = "daflow-files";

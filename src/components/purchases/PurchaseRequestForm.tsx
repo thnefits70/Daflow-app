@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, CheckCircle2, Lock, Upload, Plus, X, FileText, Clock } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Lock, Upload, Plus, X, FileText, Clock, Wallet } from "lucide-react";
 import { uploadFile } from "@/lib/uploadFile";
 import { compressImage } from "@/lib/compressImage";
 import { usePasteFile } from "@/lib/usePasteFile";
@@ -11,6 +11,7 @@ import { PurchaseSupplierPicker, type PurchaseSupplierDTO } from "./PurchaseSupp
 import type { SupplierPriceHistory } from "@/lib/purchases";
 
 type PriceStats = { count: number; min: number | null; avg: number | null; max: number | null; last3Avg: number | null };
+type SupplierCreditDTO = { id: string; amount: number; reason: string; status: "AVAILABLE" | "RESERVED" | "APPLIED" | "REFUNDED"; createdAt: string };
 type QuoteReadResult = {
   readTotal: number | null;
   productNameFound: string | null;
@@ -105,6 +106,23 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
   const [supplier, setSupplier] = useState<PurchaseSupplierDTO | null>(null);
   const [bankAccountId, setBankAccountId] = useState<string | null>(null);
 
+  // Confirmado 2026-08-12: pedido explícito del usuario — al elegir
+  // proveedor, se ofrece usar el crédito pendiente que ya se tenga con él
+  // (de un reporte urgente resuelto, o cargado a mano) para descontarlo del
+  // total a pagar. Se reserva de una vez al enviar la solicitud (nadie más
+  // lo puede usar mientras tanto) — ver reserveCreditsForGroup.
+  const [availableCredits, setAvailableCredits] = useState<SupplierCreditDTO[]>([]);
+  const [selectedCreditIds, setSelectedCreditIds] = useState<string[]>([]);
+  const [creditExceedsMsg, setCreditExceedsMsg] = useState("");
+  const [manualCreditOpen, setManualCreditOpen] = useState(false);
+  const [manualCreditAmount, setManualCreditAmount] = useState("");
+  const [manualCreditReason, setManualCreditReason] = useState("");
+  const [manualCreditProofUrl, setManualCreditProofUrl] = useState<string | null>(null);
+  const [manualCreditProofName, setManualCreditProofName] = useState<string | null>(null);
+  const [uploadingManualCreditProof, setUploadingManualCreditProof] = useState(false);
+  const [savingManualCredit, setSavingManualCredit] = useState(false);
+  const { onPaste: onPasteManualCredit, onMouseEnter: onManualCreditHoverIn, onMouseLeave: onManualCreditHoverOut } = usePasteFile((file) => uploadManualCreditProof(file));
+
   const [quoteFile, setQuoteFile] = useState<File | null>(null);
   const [quoteImageUrl, setQuoteImageUrl] = useState<string | null>(null);
   const [uploadingQuote, setUploadingQuote] = useState(false);
@@ -182,6 +200,89 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
     if (!item) return;
     fetchLineStats(idx, item.id);
     fetchSupplierComparison(idx, item.id);
+  }
+
+  // Confirmado 2026-08-12: apenas se elige (o se restaura del borrador) un
+  // proveedor, se consulta su crédito disponible — misma ruta que ya usa la
+  // Bandeja de aprobación al pagar, reusada acá para ofrecerlo desde antes.
+  useEffect(() => {
+    setSelectedCreditIds([]);
+    setCreditExceedsMsg("");
+    if (!supplier?.id) {
+      setAvailableCredits([]);
+      return;
+    }
+    fetch(`/api/purchase-suppliers/${supplier.id}/credit-balance`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => setAvailableCredits(data?.credits ?? []))
+      .catch(() => setAvailableCredits([]));
+  }, [supplier?.id]);
+
+  function toggleCredit(id: string) {
+    setCreditExceedsMsg("");
+    setSelectedCreditIds((ids) => {
+      if (ids.includes(id)) return ids.filter((x) => x !== id);
+      const credit = availableCredits.find((c) => c.id === id);
+      if (!credit) return ids;
+      const currentTotal = availableCredits.filter((c) => ids.includes(c.id)).reduce((s, c) => s + c.amount, 0);
+      if (currentTotal + credit.amount > total) {
+        setCreditExceedsMsg(
+          `Este crédito ($${credit.amount.toFixed(2)}) haría que el crédito aplicado supere el total de esta solicitud ($${total.toFixed(2)}) — avísale al admin para que lo revise antes de aplicarlo, en vez de marcarlo aquí.`
+        );
+        return ids;
+      }
+      return [...ids, id];
+    });
+  }
+
+  async function uploadManualCreditProof(file: File) {
+    setErr("");
+    setUploadingManualCreditProof(true);
+    const compressed = await compressImage(file);
+    const uploaded = await uploadFile(compressed, "supplier-credits");
+    setUploadingManualCreditProof(false);
+    if (!uploaded.ok) {
+      setErr(uploaded.error);
+      return;
+    }
+    setManualCreditProofUrl(uploaded.url);
+    setManualCreditProofName(uploaded.name);
+  }
+
+  async function saveManualCredit() {
+    if (!supplier) return;
+    const amt = Number(manualCreditAmount);
+    if (!amt || amt <= 0) {
+      setErr("Ingresa un monto válido para el crédito.");
+      return;
+    }
+    if (!manualCreditReason.trim()) {
+      setErr("Describe el motivo del crédito.");
+      return;
+    }
+    if (!manualCreditProofUrl) {
+      setErr("Sube el comprobante — captura del chat o documento donde el proveedor acepta.");
+      return;
+    }
+    setSavingManualCredit(true);
+    setErr("");
+    const res = await fetch(`/api/purchase-suppliers/${supplier.id}/credits`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ amount: amt, reason: manualCreditReason.trim(), proofUrl: manualCreditProofUrl, proofName: manualCreditProofName }),
+    });
+    setSavingManualCredit(false);
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      setErr(data?.error ?? "No se pudo guardar el crédito.");
+      return;
+    }
+    setAvailableCredits((cs) => [...cs, { id: data.id, amount: data.amount, reason: data.reason, status: data.status, createdAt: data.createdAt }]);
+    setManualCreditOpen(false);
+    setManualCreditAmount("");
+    setManualCreditReason("");
+    setManualCreditProofUrl(null);
+    setManualCreditProofName(null);
   }
 
   function addLine() {
@@ -287,6 +388,14 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
     setDraftRestored(false);
     setEditingGroupId(null);
     setResubmitAttemptHint(null);
+    setAvailableCredits([]);
+    setSelectedCreditIds([]);
+    setCreditExceedsMsg("");
+    setManualCreditOpen(false);
+    setManualCreditAmount("");
+    setManualCreditReason("");
+    setManualCreditProofUrl(null);
+    setManualCreditProofName(null);
   }
 
   function discardDraft() {
@@ -495,6 +604,7 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
       shippingPaymentTiming: shippingIncluded ? null : shippingPaymentTiming,
       carrierBankAccountId: shippingIncluded ? null : carrierBankAccountId,
       justification: needsJustification ? justification.trim() : null,
+      appliedCreditIds: selectedCreditIds,
     };
     // Confirmado 2026-08-08: cambio de política — corregir una solicitud
     // rechazada YA NO crea una nueva (eso hacía crecer la lista con
@@ -660,6 +770,105 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
           onSelectBankAccount={setBankAccountId}
         />
       </div>
+
+      {supplier && (availableCredits.length > 0 || manualCreditOpen) && (
+        <div className="mb-3.5 rounded-md border border-rule bg-cloud/40 p-3">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-steel">
+              <Wallet size={13} /> Créditos pendientes con {supplier.name}
+            </div>
+            {!manualCreditOpen && (
+              <button type="button" className="text-[11.5px] text-blue font-semibold cursor-pointer" onClick={() => setManualCreditOpen(true)}>
+                + Agregar crédito manual
+              </button>
+            )}
+          </div>
+
+          {availableCredits.length > 0 ? (
+            <div className="flex flex-col gap-1.5 mb-1">
+              {availableCredits.map((c) => (
+                <label key={c.id} className="flex items-center gap-2 text-[12px] text-ink cursor-pointer">
+                  <input type="checkbox" className="w-auto" checked={selectedCreditIds.includes(c.id)} onChange={() => toggleCredit(c.id)} />
+                  <span className="font-semibold">${c.amount.toFixed(2)}</span>
+                  <span className="text-steel">— {c.reason}</span>
+                </label>
+              ))}
+            </div>
+          ) : (
+            !manualCreditOpen && <div className="text-[12px] text-steel">Sin créditos disponibles todavía con este proveedor.</div>
+          )}
+
+          {creditExceedsMsg && <div className="text-[11.5px] mt-1" style={{ color: "#D9A441" }}>{creditExceedsMsg}</div>}
+
+          {selectedCreditIds.length > 0 && (
+            <div className="text-[12px] mt-2 pt-2 border-t border-rule">
+              <div className="text-green font-semibold">
+                Crédito aplicado: ${availableCredits.filter((c) => selectedCreditIds.includes(c.id)).reduce((s, c) => s + c.amount, 0).toFixed(2)}
+              </div>
+              <div className="text-steel">
+                Se solicitará pagar: ${Math.max(0, total - availableCredits.filter((c) => selectedCreditIds.includes(c.id)).reduce((s, c) => s + c.amount, 0)).toFixed(2)}
+              </div>
+            </div>
+          )}
+
+          {manualCreditOpen && (
+            <div className="mt-2.5 pt-2.5 border-t border-rule flex flex-col gap-2">
+              <input
+                type="number"
+                step="0.01"
+                placeholder="Monto del crédito"
+                className="text-[12.5px]"
+                value={manualCreditAmount}
+                onChange={(e) => setManualCreditAmount(e.target.value)}
+              />
+              <input
+                type="text"
+                placeholder="Motivo (ej. producto dañado que el proveedor acreditó)"
+                className="text-[12.5px]"
+                value={manualCreditReason}
+                onChange={(e) => setManualCreditReason(e.target.value)}
+              />
+              {!manualCreditProofUrl ? (
+                <label
+                  tabIndex={0}
+                  onPaste={onPasteManualCredit}
+                  onMouseEnter={onManualCreditHoverIn}
+                  onMouseLeave={onManualCreditHoverOut}
+                  className="flex items-center justify-center gap-2 border-[1.5px] border-dashed border-rule rounded-md py-3 cursor-pointer hover:border-teal focus:border-teal focus:outline-none text-steel text-[12px]"
+                >
+                  {uploadingManualCreditProof ? <span className="w-4 h-4 rounded-full border-2 border-rule border-t-teal animate-spin" /> : <Upload size={14} />}
+                  Sube el comprobante — captura del chat o documento donde el proveedor acepta el crédito
+                  <input type="file" accept="image/*,.pdf" className="hidden" onChange={(e) => e.target.files?.[0] && uploadManualCreditProof(e.target.files[0])} />
+                </label>
+              ) : (
+                <div className="flex items-center gap-1.5 text-[12px] text-teal">
+                  <FileText size={13} /> {manualCreditProofName || "Comprobante adjunto"}
+                  <button type="button" className="text-steel cursor-pointer" onClick={() => { setManualCreditProofUrl(null); setManualCreditProofName(null); }}>
+                    <X size={13} />
+                  </button>
+                </div>
+              )}
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={savingManualCredit}
+                  className="text-[12px] font-semibold text-white bg-blue rounded-md px-3 py-1.5 cursor-pointer disabled:opacity-50"
+                  onClick={saveManualCredit}
+                >
+                  {savingManualCredit ? "Guardando…" : "Guardar crédito"}
+                </button>
+                <button
+                  type="button"
+                  className="text-[12px] text-steel cursor-pointer"
+                  onClick={() => { setManualCreditOpen(false); setManualCreditAmount(""); setManualCreditReason(""); setManualCreditProofUrl(null); setManualCreditProofName(null); }}
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="mb-3.5">
         <label className="block mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-steel">

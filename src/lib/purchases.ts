@@ -242,6 +242,11 @@ export const purchaseSubmissionSchema = z.object({
   shippingPaymentTiming: z.enum(["WITH_PURCHASE", "ON_DELIVERY"]).nullable().optional(),
   carrierBankAccountId: z.string().min(1).nullable().optional(),
   justification: z.string().trim().nullable().optional(),
+  // Confirmado 2026-08-12: créditos con el proveedor elegido, marcados para
+  // usarse en esta misma solicitud — se reservan al enviar (ver
+  // reserveCreditsForGroup en supplierCredits.ts), nunca pueden superar el
+  // total de la solicitud.
+  appliedCreditIds: z.array(z.string()).optional(),
 });
 
 export type PurchaseSubmissionData = z.infer<typeof purchaseSubmissionSchema>;

@@ -4,7 +4,7 @@ export type SupplierCreditDTO = {
   id: string;
   amount: number;
   reason: string;
-  status: "AVAILABLE" | "APPLIED" | "REFUNDED";
+  status: "AVAILABLE" | "RESERVED" | "APPLIED" | "REFUNDED";
   createdAt: string;
 };
 
@@ -22,6 +22,122 @@ export async function getAvailableCreditsForSupplier(supplierId: string): Promis
     orderBy: { createdAt: "asc" },
   });
   return credits.map((c) => ({ id: c.id, amount: c.amount, reason: c.reason, status: c.status, createdAt: c.createdAt.toISOString() }));
+}
+
+// Confirmado 2026-08-12: pedido explícito del usuario — al solicitar una
+// compra, los créditos que se marquen quedan RESERVADOS a esa solicitud de
+// una vez (nadie más los puede usar mientras tanto). Si la suma supera el
+// total de la solicitud (caso excepcional — en la práctica el crédito
+// siempre es menor a la compra), se rechaza: ese caso requiere que el
+// admin lo revise manualmente, no se resuelve solo.
+export type ReserveCreditsResult =
+  | { ok: true; reservedTotal: number }
+  | { ok: false; error: string; status: number };
+
+export async function reserveCreditsForGroup(params: {
+  creditIds: string[];
+  supplierId: string;
+  groupId: string;
+  groupTotal: number;
+}): Promise<ReserveCreditsResult> {
+  const { creditIds, supplierId, groupId, groupTotal } = params;
+  if (creditIds.length === 0) return { ok: true, reservedTotal: 0 };
+
+  const credits = await prisma.supplierCredit.findMany({
+    where: { id: { in: creditIds }, supplierId, status: "AVAILABLE" },
+  });
+  if (credits.length !== creditIds.length) {
+    return { ok: false, error: "Uno o más créditos ya no están disponibles — vuelve a revisar antes de enviar.", status: 409 };
+  }
+  const reservedTotal = credits.reduce((s, c) => s + c.amount, 0);
+  if (reservedTotal > groupTotal) {
+    return {
+      ok: false,
+      error: `El crédito seleccionado ($${reservedTotal.toFixed(2)}) es mayor al total de esta solicitud ($${groupTotal.toFixed(2)}) — avísale al admin para que lo revise, en vez de aplicarlo aquí.`,
+      status: 409,
+    };
+  }
+
+  await prisma.supplierCredit.updateMany({
+    where: { id: { in: creditIds }, status: "AVAILABLE" },
+    data: { status: "RESERVED", reservedForGroupId: groupId, reservedAt: new Date() },
+  });
+  return { ok: true, reservedTotal };
+}
+
+// Confirmado 2026-08-12: al pagar, Finanzas necesita ver el crédito que ya
+// quedó anclado a esta solicitud desde que se pidió (reserveCreditsForGroup)
+// — se muestra como ya aplicado, sin poder destildarlo, para no confundirlo
+// con crédito adicional del mismo proveedor que sí se puede elegir ahí mismo.
+export async function getReservedCreditsForGroup(groupId: string): Promise<SupplierCreditDTO[]> {
+  const credits = await prisma.supplierCredit.findMany({
+    where: { reservedForGroupId: groupId, status: "RESERVED" },
+    orderBy: { createdAt: "asc" },
+  });
+  return credits.map((c) => ({ id: c.id, amount: c.amount, reason: c.reason, status: c.status, createdAt: c.createdAt.toISOString() }));
+}
+
+// Confirmado 2026-08-12: si la solicitud se rechaza por completo, cualquier
+// crédito que se le hubiera reservado vuelve a quedar libre de inmediato.
+export async function releaseCreditsForGroup(groupId: string): Promise<void> {
+  await prisma.supplierCredit.updateMany({
+    where: { reservedForGroupId: groupId, status: "RESERVED" },
+    data: { status: "AVAILABLE", reservedForGroupId: null, reservedAt: null },
+  });
+}
+
+export type PendingCreditDTO = {
+  id: string;
+  amount: number;
+  reason: string;
+  status: "AVAILABLE" | "RESERVED";
+  createdAt: string;
+  proofUrl: string | null;
+  proofName: string | null;
+  isManual: boolean;
+  supplier: { id: string; name: string };
+  createdBy: { name: string } | null;
+  reservedForCode: string | null;
+};
+
+// Confirmado 2026-08-12: pedido explícito del usuario — una sola pantalla
+// con TODO el crédito vivo de la empresa (de cualquier proveedor), venga de
+// un reporte urgente resuelto o cargado a mano. Desaparece de acá en cuanto
+// se aplica de verdad (status pasa a APPLIED al pagar).
+export async function getAllPendingCredits(): Promise<PendingCreditDTO[]> {
+  const credits = await prisma.supplierCredit.findMany({
+    where: { status: { in: ["AVAILABLE", "RESERVED"] } },
+    orderBy: { createdAt: "desc" },
+    include: { supplier: { select: { id: true, name: true } }, createdBy: { select: { name: true } } },
+  });
+
+  const groupIds = [...new Set(credits.map((c) => c.reservedForGroupId).filter((x): x is string => !!x))];
+  const codeByGroupId = new Map<string, number | null>();
+  if (groupIds.length > 0) {
+    const rows = await prisma.purchaseRequest.findMany({
+      where: { groupId: { in: groupIds } },
+      select: { groupId: true, requestNumber: true },
+      distinct: ["groupId"],
+    });
+    rows.forEach((r) => codeByGroupId.set(r.groupId, r.requestNumber));
+  }
+
+  return credits.map((c) => ({
+    id: c.id,
+    amount: c.amount,
+    reason: c.reason,
+    status: c.status as "AVAILABLE" | "RESERVED",
+    createdAt: c.createdAt.toISOString(),
+    proofUrl: c.proofUrl,
+    proofName: c.proofName,
+    isManual: !c.urgentResolutionId,
+    supplier: c.supplier,
+    createdBy: c.createdBy,
+    reservedForCode:
+      c.reservedForGroupId && codeByGroupId.get(c.reservedForGroupId)
+        ? `SC-${String(codeByGroupId.get(c.reservedForGroupId)).padStart(3, "0")}`
+        : null,
+  }));
 }
 
 export type StaleSupplierCreditPush = { ownerId: string; title: string; body: string; url: string };

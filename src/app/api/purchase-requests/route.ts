@@ -6,6 +6,7 @@ import { auth } from "@/auth";
 import { canSubmitPurchaseRequests, canConfirmPurchaseReceiving, canRegisterPurchaseInvoices } from "@/lib/guards";
 import { checkPurchaseSubmission, purchaseSubmissionSchema, nextPurchaseRequestNumber, purchaseRequestInclude } from "@/lib/purchases";
 import { sendPushToOwner } from "@/lib/webPush";
+import { reserveCreditsForGroup } from "@/lib/supplierCredits";
 
 // status: "approval" (bandeja admin), "receiving" (Inventario), "invoicing"
 // (Finanzas), "audit" (admin, historial de solo lectura), "mine" (lo que yo
@@ -149,6 +150,20 @@ export async function POST(req: NextRequest) {
   if (!check.ok) return NextResponse.json({ error: check.error }, { status: check.status });
 
   const groupId = randomUUID();
+
+  // Confirmado 2026-08-12: pedido explícito del usuario — se reservan ANTES
+  // de crear la solicitud; si algo no cuadra (crédito ya usado, o supera el
+  // total de esta solicitud), se corta acá y no se crea nada.
+  if (d.appliedCreditIds && d.appliedCreditIds.length > 0) {
+    const reserveResult = await reserveCreditsForGroup({
+      creditIds: d.appliedCreditIds,
+      supplierId: d.supplierId,
+      groupId,
+      groupTotal: check.groupTotal,
+    });
+    if (!reserveResult.ok) return NextResponse.json({ error: reserveResult.error }, { status: reserveResult.status });
+  }
+
   const requestNumber = await nextPurchaseRequestNumber();
   await prisma.$transaction(
     d.items.map((it, idx) =>

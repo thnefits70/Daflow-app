@@ -1501,6 +1501,11 @@ model PurchaseUrgentResolution {
 
 enum SupplierCreditStatus {
   AVAILABLE
+  // Confirmado 2026-08-12: pedido explícito del usuario — apenas se marca un
+  // crédito al solicitar una compra, queda "anclado" a esa solicitud
+  // (reservedForGroupId) para que nadie más lo pueda usar mientras tanto.
+  // Vuelve a AVAILABLE solo si la solicitud se rechaza por completo.
+  RESERVED
   APPLIED
   REFUNDED
 }
@@ -1523,7 +1528,22 @@ model SupplierCredit {
   urgentResolutionId String?                   @unique
   urgentResolution   PurchaseUrgentResolution? @relation(fields: [urgentResolutionId], references: [id], onDelete: SetNull)
 
+  // Confirmado 2026-08-12: pedido explícito del usuario — un crédito también
+  // se puede registrar A MANO (sin pasar por un reporte urgente), siempre
+  // con un comprobante obligatorio (captura del chat o documento donde el
+  // proveedor acepta). urgentResolutionId queda null en ese caso — ya
+  // distingue "automático" de "manual" sin necesidad de un campo aparte.
+  proofUrl  String?
+  proofName String?
+
   status SupplierCreditStatus @default(AVAILABLE)
+
+  // Confirmado 2026-08-12: se llena apenas se marca este crédito al
+  // solicitar una compra (antes de aprobar/pagar) — mientras tanto queda
+  // fuera de la disponibilidad para cualquier otra solicitud con ese mismo
+  // proveedor. Se limpia solo si esa solicitud se rechaza por completo.
+  reservedForGroupId String?
+  reservedAt         DateTime?
 
   appliedToGroupId String?
   appliedAt        DateTime?
@@ -1534,6 +1554,7 @@ model SupplierCredit {
 
   @@index([supplierId])
   @@index([status])
+  @@index([reservedForGroupId])
 }
 
 // Comprobante de pago (PDF o imagen) de un empleado para un mes/año — solo lo
