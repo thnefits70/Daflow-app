@@ -293,6 +293,8 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   caja_chica_saldo: "Caja Chica — saldo bajo",
   caja_chica_confirmacion: "Caja Chica — falta que confirmen una recarga",
   pagos_administrativos: "Pagos administrativos pendientes de pago",
+  pagos_mercaderia: "Pagos de mercadería pendientes",
+  pagos_flete: "Fletes pendientes de pago",
   cumpleanos: "Cumpleaños de tu equipo (aviso 1 día antes)",
 };
 
@@ -744,6 +746,71 @@ async function getAdminPaymentsPendingItem(href: string): Promise<PendingItem | 
   };
 }
 
+// Confirmado 2026-08-13: pedido explícito del usuario — un solo enlace en
+// Inicio con el TOTAL de pagos de mercadería que ya están aprobados y
+// esperan que se les pague (nunca el listado completo, uno por uno — eso
+// ya se ve dentro de Control de Compras). Se paga desde la pestaña
+// Finanzas de Control de Compras (Bandeja de aprobación ya combina
+// aprobar+pagar; esto cubre lo que quedó aprobado sin pagar todavía).
+// Mismo umbral de 24h que el resto de "atrasado" de este archivo.
+async function getPurchaseMerchandisePendingItem(href: string): Promise<PendingItem | null> {
+  const rows = await prisma.purchaseRequest.findMany({
+    where: { status: "APPROVED" },
+    select: { groupId: true, totalCost: true, reviewedAt: true },
+  });
+  if (rows.length === 0) return null;
+
+  const byGroup = new Map<string, { total: number; reviewedAt: Date | null }>();
+  for (const r of rows) {
+    const cur = byGroup.get(r.groupId) ?? { total: 0, reviewedAt: r.reviewedAt };
+    cur.total += r.totalCost;
+    byGroup.set(r.groupId, cur);
+  }
+  const groups = [...byGroup.values()];
+  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const overdue = groups.some((g) => g.reviewedAt && g.reviewedAt < cutoff);
+  const total = groups.reduce((s, g) => s + g.total, 0);
+  return {
+    type: "pagos_mercaderia",
+    icon: "📦",
+    label: "Pagos de mercadería pendientes",
+    meta: `${groups.length} operación${groups.length === 1 ? "" : "es"} · $${total.toFixed(2)}${overdue ? " · atrasado" : ""}`,
+    overdue,
+    href,
+  };
+}
+
+// Confirmado 2026-08-13: mismo criterio que arriba, pero para fletes que
+// quedaron pendientes de pago hasta la entrega (ON_DELIVERY) — mismo
+// filtro exacto que ya usa PurchaseInvoicingPanel.tsx para su sección
+// "Fletes pendientes".
+async function getPurchaseShippingPendingItem(href: string): Promise<PendingItem | null> {
+  const rows = await prisma.purchaseRequest.findMany({
+    where: { shippingIncluded: false, shippingPaymentTiming: "ON_DELIVERY", shippingPaymentRequestedAt: { not: null }, shippingPaidAt: null },
+    select: { groupId: true, shippingCostTotal: true, shippingPaymentRequestedAt: true },
+  });
+  if (rows.length === 0) return null;
+
+  const byGroup = new Map<string, { total: number; requestedAt: Date | null }>();
+  for (const r of rows) {
+    const cur = byGroup.get(r.groupId) ?? { total: 0, requestedAt: r.shippingPaymentRequestedAt };
+    cur.total += r.shippingCostTotal ?? 0;
+    byGroup.set(r.groupId, cur);
+  }
+  const groups = [...byGroup.values()];
+  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const overdue = groups.some((g) => g.requestedAt && g.requestedAt < cutoff);
+  const total = groups.reduce((s, g) => s + g.total, 0);
+  return {
+    type: "pagos_flete",
+    icon: "🚚",
+    label: "Fletes pendientes de pago",
+    meta: `${groups.length} operación${groups.length === 1 ? "" : "es"} · $${total.toFixed(2)}${overdue ? " · atrasado" : ""}`,
+    overdue,
+    href,
+  };
+}
+
 // Confirmado 2026-08-06: aviso 1 día antes de la fecha en que se va a
 // felicitar (que puede ser el cumpleaños real o el último día laborable
 // antes, si cae sábado/domingo/feriado — ver celebrationDateFor en
@@ -783,12 +850,21 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     // esa página específica (/admin/dept/[id]), no a "/admin" a secas.
     const finDept = await prisma.department.findUnique({ where: { code: "FIN" }, select: { id: true } });
     const financeHref = finDept ? `/admin/dept/${finDept.id}` : "/admin";
-    const [feedbackItems, recognitionItem, pettyCashLow, pettyCashUnconfirmed, adminPaymentsItem, birthdayItems] = await Promise.all([
+    // Confirmado 2026-08-13: Control de Compras vive en la página del
+    // departamento COM (Compras) — mismo criterio que financeHref arriba —
+    // y ambos pendientes de pago (mercadería y flete) se pagan desde su
+    // pestaña interna "Finanzas" (?ptab=finanzas, leído por
+    // PurchaseControlPanel).
+    const comDept = await prisma.department.findUnique({ where: { code: "COM" }, select: { id: true } });
+    const comPaymentsHref = comDept ? `/admin/dept/${comDept.id}?tab=compras&ptab=finanzas` : "/admin";
+    const [feedbackItems, recognitionItem, pettyCashLow, pettyCashUnconfirmed, adminPaymentsItem, purchaseMerchandiseItem, purchaseShippingItem, birthdayItems] = await Promise.all([
       getFeedbackPendingItems(),
       getRecognitionAdminPendingItem("/admin/colaborador-destacado"),
       getPettyCashLowBalanceItems(financeHref),
       getPettyCashUnconfirmedFunderItems(null, financeHref),
       getAdminPaymentsPendingItem(`${financeHref}?tab=pagosadmin`),
+      getPurchaseMerchandisePendingItem(comPaymentsHref),
+      getPurchaseShippingPendingItem(comPaymentsHref),
       getUpcomingBirthdayPendingItems("/admin/nomina"),
     ]);
     const items = [
@@ -797,6 +873,8 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       ...pettyCashLow,
       ...pettyCashUnconfirmed,
       ...(adminPaymentsItem ? [adminPaymentsItem] : []),
+      ...(purchaseMerchandiseItem ? [purchaseMerchandiseItem] : []),
+      ...(purchaseShippingItem ? [purchaseShippingItem] : []),
       ...birthdayItems,
     ];
     if (items.length === 0) return null;

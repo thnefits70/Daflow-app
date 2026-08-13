@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { PurchaseRequestForm, DRAFT_KEY } from "./PurchaseRequestForm";
 import { MyPurchaseRequests } from "./MyPurchaseRequests";
 import { PurchaseApprovalInbox } from "./PurchaseApprovalInbox";
@@ -51,6 +51,17 @@ export function PurchaseControlPanel({
   ];
   const preferredDefault: Tab[] = ["solicitar", "aprobacion", "inventario", "finanzas", "mias", "comparar", "urgentes", "auditoria"];
   const [tab, setTab] = useState<Tab>(preferredDefault.find((k) => tabs.some((t) => t.key === k)) ?? tabs[0]?.key ?? "solicitar");
+
+  // Confirmado 2026-08-13: pedido explícito del usuario — los links "Ir →"
+  // de Pendientes en Inicio (ej. "Pagos de mercadería pendientes") llegan
+  // con ?ptab=finanzas y deben abrir directo esa pestaña interna, sin pisar
+  // el ?tab= que ya lee DeptWorkspaceTabs para la pestaña "Control de
+  // Compras" en sí. Mismo patrón: se lee del URL directo, una sola vez.
+  useEffect(() => {
+    const ptab = new URLSearchParams(window.location.search).get("ptab");
+    if (ptab && tabs.some((t) => t.key === ptab)) setTab(ptab as Tab);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   if (tabs.length === 0) {
     return <div className="text-steel text-[13.5px]">No tienes acceso a ninguna parte de Control de Compras.</div>;
