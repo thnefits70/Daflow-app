@@ -771,7 +771,7 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
         />
       </div>
 
-      {supplier && (availableCredits.length > 0 || manualCreditOpen) && (
+      {supplier && (
         <div className="mb-3.5 rounded-md border border-rule bg-cloud/40 p-3">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-steel">
