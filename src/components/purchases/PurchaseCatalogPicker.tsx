@@ -6,6 +6,17 @@ import { uploadFile } from "@/lib/uploadFile";
 import { compressImage } from "@/lib/compressImage";
 import { usePasteFile } from "@/lib/usePasteFile";
 
+// Confirmado 2026-08-14: bug real reportado por Bryan — mientras se está
+// "creando" un producto nuevo (nombre, fotos, descripción, código), todo eso
+// vivía SOLO como estado interno de este componente y nunca llegaba al
+// padre hasta el clic final en "Guardar". Si la persona salía de la página
+// a medias (aunque tuviera nombre y fotos ya cargadas y visibles en
+// pantalla), el borrador de PurchaseRequestForm no tenía nada que guardar —
+// no es que se "perdiera" al restaurar, es que nunca se llegó a capturar.
+// Mismo patrón ya usado para `productQuery`/`onQueryChange`, extendido para
+// cubrir también este sub-formulario.
+export type CatalogCreateDraft = { creating: boolean; newName: string; newDescription: string; newCode: string; photos: string[] };
+
 export type CatalogItemDTO = {
   id: string;
   name: string;
@@ -27,6 +38,8 @@ export function PurchaseCatalogPicker({
   isAdmin = false,
   defaultQuery = "",
   onQueryChange,
+  defaultCreateDraft = null,
+  onCreateDraftChange,
 }: {
   value: CatalogItemDTO | null;
   onChange: (item: CatalogItemDTO | null) => void;
@@ -37,6 +50,10 @@ export function PurchaseCatalogPicker({
   // borrador — ahora el padre lo puede guardar y devolver como valor inicial.
   defaultQuery?: string;
   onQueryChange?: (query: string) => void;
+  // Mismo mecanismo que defaultQuery/onQueryChange, para el sub-formulario
+  // de "crear producto nuevo" — ver el comentario en CatalogCreateDraft.
+  defaultCreateDraft?: CatalogCreateDraft | null;
+  onCreateDraftChange?: (draft: CatalogCreateDraft) => void;
 }) {
   const [query, setQuery] = useState(defaultQuery);
   const [results, setResults] = useState<CatalogItemDTO[]>([]);
@@ -49,11 +66,11 @@ export function PurchaseCatalogPicker({
   const [requestedDeleteIds, setRequestedDeleteIds] = useState<string[]>([]);
   const [reviewingId, setReviewingId] = useState<string | null>(null);
 
-  const [creating, setCreating] = useState(false);
-  const [newName, setNewName] = useState("");
-  const [newDescription, setNewDescription] = useState("");
-  const [newCode, setNewCode] = useState("");
-  const [photos, setPhotos] = useState<string[]>([]);
+  const [creating, setCreating] = useState(defaultCreateDraft?.creating ?? false);
+  const [newName, setNewName] = useState(defaultCreateDraft?.newName ?? "");
+  const [newDescription, setNewDescription] = useState(defaultCreateDraft?.newDescription ?? "");
+  const [newCode, setNewCode] = useState(defaultCreateDraft?.newCode ?? "");
+  const [photos, setPhotos] = useState<string[]>(defaultCreateDraft?.photos ?? []);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const { onPaste: onPastePhoto, onMouseEnter: onPasteHoverIn, onMouseLeave: onPasteHoverOut } = usePasteFile((file) => addPhoto(file));
   const [similarity, setSimilarity] = useState<{ suspected: boolean; matchedName: string | null; message: string | null } | null>(null);
@@ -61,6 +78,25 @@ export function PurchaseCatalogPicker({
   const [confirmStep, setConfirmStep] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+
+  // Reporta al padre en cada cambio — así el borrador de PurchaseRequestForm
+  // ya no se queda ciego mientras alguien está a medio crear un producto
+  // nuevo (ver comentario en CatalogCreateDraft).
+  useEffect(() => {
+    onCreateDraftChange?.({ creating, newName, newDescription, newCode, photos });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [creating, newName, newDescription, newCode, photos]);
+
+  function resetCreateForm() {
+    setCreating(false);
+    setNewName("");
+    setNewDescription("");
+    setNewCode("");
+    setPhotos([]);
+    setSimilarity(null);
+    setConfirmStep(false);
+    setErr("");
+  }
 
   useEffect(() => {
     if (value) return;
@@ -313,7 +349,7 @@ export function PurchaseCatalogPicker({
               >
                 {checkingSimilarity ? "Revisando…" : "Continuar"}
               </button>
-              <button type="button" className="text-steel text-[12.5px] cursor-pointer" onClick={() => setCreating(false)}>
+              <button type="button" className="text-steel text-[12.5px] cursor-pointer" onClick={resetCreateForm}>
                 Cancelar
               </button>
             </div>

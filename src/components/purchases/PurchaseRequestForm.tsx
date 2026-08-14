@@ -6,7 +6,7 @@ import { AlertTriangle, CheckCircle2, Lock, Upload, Plus, X, FileText, Clock, Wa
 import { uploadFile } from "@/lib/uploadFile";
 import { compressImage } from "@/lib/compressImage";
 import { usePasteFile } from "@/lib/usePasteFile";
-import { PurchaseCatalogPicker, type CatalogItemDTO } from "./PurchaseCatalogPicker";
+import { PurchaseCatalogPicker, type CatalogItemDTO, type CatalogCreateDraft } from "./PurchaseCatalogPicker";
 import { PurchaseSupplierPicker, type PurchaseSupplierDTO } from "./PurchaseSupplierPicker";
 import type { SupplierPriceHistory } from "@/lib/purchases";
 
@@ -20,8 +20,8 @@ type QuoteReadResult = {
   suggestedCatalogItem: { id: string; name: string } | null;
 };
 
-type Line = { catalogItem: CatalogItemDTO | null; productQuery: string; quantity: string; unitCost: string; ivaIncluded: boolean; stats: PriceStats | null };
-const emptyLine = (): Line => ({ catalogItem: null, productQuery: "", quantity: "", unitCost: "", ivaIncluded: false, stats: null });
+type Line = { catalogItem: CatalogItemDTO | null; productQuery: string; createDraft: CatalogCreateDraft | null; quantity: string; unitCost: string; ivaIncluded: boolean; stats: PriceStats | null };
+const emptyLine = (): Line => ({ catalogItem: null, productQuery: "", createDraft: null, quantity: "", unitCost: "", ivaIncluded: false, stats: null });
 
 // Confirmado 2026-08-03: algunos proveedores cobran el 15% de IVA aparte del
 // costo por unidad que se escribe en el formulario — sin esto, el total no
@@ -35,7 +35,7 @@ function effectiveLineUnitCost(l: { unitCost: string; ivaIncluded: boolean }) {
 }
 
 type Draft = {
-  lines: { catalogItem: CatalogItemDTO | null; productQuery: string; quantity: string; unitCost: string; ivaIncluded: boolean }[];
+  lines: { catalogItem: CatalogItemDTO | null; productQuery: string; createDraft: CatalogCreateDraft | null; quantity: string; unitCost: string; ivaIncluded: boolean }[];
   supplier: PurchaseSupplierDTO | null;
   bankAccountId: string | null;
   quoteImageUrl: string | null;
@@ -87,7 +87,7 @@ function normalizeSupplier(s: PurchaseSupplierDTO | null | undefined): PurchaseS
 
 function draftHasContent(d: Pick<Draft, "lines" | "supplier" | "quoteImageUrl" | "purchaseOrderUrl" | "justification">) {
   return (
-    d.lines.some((l) => l.catalogItem || l.productQuery || l.quantity || l.unitCost) ||
+    d.lines.some((l) => l.catalogItem || l.productQuery || l.quantity || l.unitCost || (l.createDraft?.creating && (l.createDraft.newName.trim() || l.createDraft.photos.length > 0))) ||
     !!d.supplier ||
     !!d.quoteImageUrl ||
     !!d.purchaseOrderUrl ||
@@ -195,7 +195,7 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
   }
 
   function setLineCatalogItem(idx: number, item: CatalogItemDTO | null) {
-    updateLine(idx, { catalogItem: item, productQuery: "", stats: null });
+    updateLine(idx, { catalogItem: item, productQuery: "", createDraft: null, stats: null });
     setSupplierComparisons((m) => { const next = { ...m }; delete next[idx]; return next; });
     if (!item) return;
     fetchLineStats(idx, item.id);
@@ -311,7 +311,7 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
       const raw = localStorage.getItem(DRAFT_KEY);
       if (raw) {
         const d: Draft = JSON.parse(raw);
-        const restoredLines: Line[] = (d.lines?.length ? d.lines : [emptyLine()]).map((l) => ({ ...l, productQuery: l.productQuery ?? "", ivaIncluded: l.ivaIncluded ?? false, stats: null }));
+        const restoredLines: Line[] = (d.lines?.length ? d.lines : [emptyLine()]).map((l) => ({ ...l, productQuery: l.productQuery ?? "", createDraft: l.createDraft ?? null, ivaIncluded: l.ivaIncluded ?? false, stats: null }));
         setLines(restoredLines);
         setSupplier(normalizeSupplier(d.supplier));
         setBankAccountId(d.bankAccountId ?? null);
@@ -341,7 +341,7 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
   useEffect(() => {
     if (!hydrated) return;
     const draft: Draft = {
-      lines: lines.map(({ catalogItem, productQuery, quantity, unitCost, ivaIncluded }) => ({ catalogItem, productQuery, quantity, unitCost, ivaIncluded })),
+      lines: lines.map(({ catalogItem, productQuery, createDraft, quantity, unitCost, ivaIncluded }) => ({ catalogItem, productQuery, createDraft, quantity, unitCost, ivaIncluded })),
       supplier,
       bankAccountId,
       quoteImageUrl,
@@ -462,6 +462,7 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
   const draftSummaryParts: string[] = [];
   lines.forEach((l) => {
     if (l.catalogItem) draftSummaryParts.push(`${l.catalogItem.name}${l.quantity ? ` · ${l.quantity} un.` : ""}`);
+    else if (l.createDraft?.creating && l.createDraft.newName.trim()) draftSummaryParts.push(`"${l.createDraft.newName.trim()}" (creando, sin terminar)`);
     else if (l.productQuery.trim()) draftSummaryParts.push(`"${l.productQuery.trim()}" (sin seleccionar todavía)`);
   });
   if (supplier) draftSummaryParts.push(`Proveedor: ${supplier.name}`);
@@ -674,6 +675,8 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
                   isAdmin={isAdmin}
                   defaultQuery={line.productQuery}
                   onQueryChange={(q) => updateLine(idx, { productQuery: q })}
+                  defaultCreateDraft={line.createDraft}
+                  onCreateDraftChange={(d) => updateLine(idx, { createDraft: d })}
                 />
               </div>
               {lines.length > 1 && (
