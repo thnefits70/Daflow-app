@@ -2,15 +2,27 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { TopLine } from "@/components/ui/TopLine";
 import { NominaPageTabs } from "@/components/nomina/NominaPageTabs";
-import { canManageNomina, canLogOvertimeHours, canApproveOvertimeHours, canViewPayrollRoles, canEditPayrollRoles } from "@/lib/guards";
+import {
+  canManageNomina,
+  canLogOvertimeHours,
+  canApproveOvertimeHours,
+  canViewPayrollRoles,
+  canEditPayrollRoles,
+  canProposeCommissionAmounts,
+  canApproveCommissionAmounts,
+  canGrantCeoBonus,
+} from "@/lib/guards";
 
 export default async function AreaNominaPage() {
-  const [canManage, canLogOvertime, canApproveOvertime, canViewRoles, canEditRoles] = await Promise.all([
+  const [canManage, canLogOvertime, canApproveOvertime, canViewRoles, canEditRoles, canProposeCommissions, canApproveCommissions, canGrantBonus] = await Promise.all([
     canManageNomina(),
     canLogOvertimeHours(),
     canApproveOvertimeHours(),
     canViewPayrollRoles(),
     canEditPayrollRoles(),
+    canProposeCommissionAmounts(),
+    canApproveCommissionAmounts(),
+    canGrantCeoBonus(),
   ]);
   // Confirmado 2026-08-13: un líder de área habilitada (Inventario,
   // Fulfillment) necesita entrar acá para registrar horas extra aunque no
@@ -48,6 +60,9 @@ export default async function AreaNominaPage() {
         canApproveOvertime={canApproveOvertime}
         canViewRoles={canViewRoles}
         canEditRoles={canEditRoles}
+        canProposeCommissions={canProposeCommissions}
+        canApproveCommissions={canApproveCommissions}
+        canGrantCeoBonus={canGrantBonus}
       />
     </div>
   );

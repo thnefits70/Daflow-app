@@ -4,27 +4,38 @@ import { useState } from "react";
 import { OvertimeEntryPanel } from "./OvertimeEntryPanel";
 import { OvertimeApprovalPanel } from "./OvertimeApprovalPanel";
 import { PayrollRolesPanel } from "./PayrollRolesPanel";
+import { CommissionTiersPanel } from "./CommissionTiersPanel";
+import { CeoBonusesPanel } from "./CeoBonusesPanel";
 
-type Tab = "horas" | "aprobar" | "roles";
+type Tab = "horas" | "aprobar" | "roles" | "comisiones" | "bonosceo";
 
 // Confirmado 2026-08-13: pedido explícito del usuario — todo esto vive
 // dentro de la misma sección "Nómina" que ya existía, como pestañas nuevas,
-// no una pantalla aparte.
+// no una pantalla aparte. Ampliado 2026-08-14 con Comisiones de equipo
+// (Nairoby propone, admin aprueba) y Bonos discrecionales (admin-only).
 export function PayrollWorkspace({
   canLogOvertime,
   canApproveOvertime,
   canViewRoles,
   canEditRoles,
+  canProposeCommissions,
+  canApproveCommissions,
+  canGrantCeoBonus,
 }: {
   canLogOvertime: boolean;
   canApproveOvertime: boolean;
   canViewRoles: boolean;
   canEditRoles: boolean;
+  canProposeCommissions: boolean;
+  canApproveCommissions: boolean;
+  canGrantCeoBonus: boolean;
 }) {
   const tabs: { key: Tab; label: string }[] = [
     ...(canLogOvertime ? [{ key: "horas" as Tab, label: "Registrar horas extra" }] : []),
     ...(canApproveOvertime ? [{ key: "aprobar" as Tab, label: "Aprobar horas extra" }] : []),
     ...(canViewRoles ? [{ key: "roles" as Tab, label: "Rol de pago" }] : []),
+    ...(canProposeCommissions ? [{ key: "comisiones" as Tab, label: "Comisiones de equipo" }] : []),
+    ...(canGrantCeoBonus ? [{ key: "bonosceo" as Tab, label: "Bonos discrecionales" }] : []),
   ];
   const [tab, setTab] = useState<Tab>(tabs[0]?.key ?? "roles");
 
@@ -48,6 +59,8 @@ export function PayrollWorkspace({
       {tab === "horas" && canLogOvertime && <OvertimeEntryPanel />}
       {tab === "aprobar" && canApproveOvertime && <OvertimeApprovalPanel />}
       {tab === "roles" && canViewRoles && <PayrollRolesPanel canEdit={canEditRoles} />}
+      {tab === "comisiones" && canProposeCommissions && <CommissionTiersPanel canPropose={canProposeCommissions} canApprove={canApproveCommissions} />}
+      {tab === "bonosceo" && canGrantCeoBonus && <CeoBonusesPanel />}
     </div>
   );
 }

@@ -1,0 +1,38 @@
+"use client";
+
+import { useEffect, useState } from "react";
+
+type Grant = { id: string; type: "ADICIONAL" | "PRODUCTIVIDAD" | "MERITO"; note: string | null; grantedAt: string; user: { name: string } };
+
+const LABELS: Record<Grant["type"], string> = { ADICIONAL: "Bono Adicional", PRODUCTIVIDAD: "Bono de Productividad", MERITO: "Bono al Mérito" };
+
+function fmtDate(iso: string) {
+  return new Date(iso).toLocaleDateString("es-EC", { day: "numeric", month: "short" });
+}
+
+// Confirmado 2026-08-14: solo lectura — Nairoby ve qué bonos otorgó el CEO
+// para saber que ya vienen incluidos en la próxima quincena. Nunca visible
+// a nadie más.
+export function CeoBonusesForNairobyPanel() {
+  const [grants, setGrants] = useState<Grant[] | null>(null);
+
+  useEffect(() => {
+    fetch("/api/ceo-bonuses/for-nairoby").then((r) => (r.ok ? r.json() : [])).then(setGrants);
+  }, []);
+
+  if (!grants || grants.length === 0) return null;
+
+  return (
+    <div className="bg-surface border border-rule rounded-md p-4 mb-4">
+      <div className="text-[11px] font-semibold uppercase tracking-wide text-steel mb-2">Bonos del CEO (confidencial)</div>
+      <div className="flex flex-col gap-1.5">
+        {grants.map((g) => (
+          <div key={g.id} className="flex items-center justify-between gap-2 text-[12px] text-ink">
+            <span><span className="font-semibold">{g.user.name}</span> — {LABELS[g.type]}</span>
+            <span className="text-steel-dim shrink-0">{fmtDate(g.grantedAt)}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}

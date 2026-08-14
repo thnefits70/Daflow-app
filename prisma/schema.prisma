@@ -273,6 +273,10 @@ model User {
   monthlyLegalRolesOwn         MonthlyLegalRole[] @relation("MonthlyLegalRoleEmployee")
   monthlyLegalRolesPublished   MonthlyLegalRole[] @relation("MonthlyLegalRolePublishedBy")
 
+  commissionTierAmounts         CommissionTierAmount[] @relation("CommissionTierAmountUser")
+  commissionTierAmountsProposed CommissionTierAmount[] @relation("CommissionTierAmountProposedBy")
+  ceoBonusGrantsReceived        CeoBonusGrant[]         @relation("CeoBonusGrantUser")
+
   @@index([deptId])
   @@index([leadsDeptId])
 }
@@ -2446,4 +2450,76 @@ model MonthlyLegalRole {
   @@unique([employeeId, month, version])
   @@index([employeeId])
   @@index([employeeId, isCurrent])
+}
+
+/* ---------------- Comisiones de equipo por niveles + Bonos discrecionales del CEO ---------------- */
+// Confirmado 2026-08-14: diseñado en conversación larga con el usuario, no
+// re-derivar. 3 niveles (Raíz/Cosecha/PROVEDIX) según el promedio DIARIO de
+// "Pedidos despachados" (WeeklyMetricRecord del depto con trackWeeklyMetric),
+// promediado por mes calendario. Nairoby propone el monto que cobra cada
+// persona si se alcanza cada nivel; el admin debe aprobarlo antes de que
+// quede activo — por eso amount (vigente) y pendingAmount (propuesta sin
+// aprobar) son campos separados. Aprobar copia pendingAmount -> amount.
+model CommissionTier {
+  id          String   @id @default(cuid())
+  name        String   @unique // "Raíz", "Cosecha", "PROVEDIX"
+  orderIndex  Int      @unique // 1, 2, 3 — mayor = nivel más alto
+  minDailyAvg Float
+  maxDailyAvg Float? // solo informativo — superarlo no excluye del nivel más alto
+  isActive    Boolean  @default(true)
+
+  amounts CommissionTierAmount[]
+}
+
+model CommissionTierAmount {
+  id     String         @id @default(cuid())
+  tierId String
+  tier   CommissionTier @relation(fields: [tierId], references: [id], onDelete: Cascade)
+  userId String
+  user   User           @relation("CommissionTierAmountUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  amount        Float     @default(0)
+  pendingAmount Float?
+  proposedAt    DateTime?
+  proposedById  String?
+  proposedBy    User?     @relation("CommissionTierAmountProposedBy", fields: [proposedById], references: [id], onDelete: SetNull)
+  approvedAt    DateTime?
+  // Sin approvedById — solo el admin aprueba, y el admin no tiene fila real
+  // en User (mismo motivo por el que otros modelos de este archivo omiten
+  // ese campo cuando el actor es exclusivamente el admin).
+
+  @@unique([tierId, userId])
+}
+
+enum CeoBonusType {
+  ADICIONAL
+  PRODUCTIVIDAD
+  MERITO
+}
+
+// Bono discrecional del CEO — siempre lo otorga el admin (sin fila User),
+// por eso no hay grantedById. Confidencial: solo lo ve el destinatario y
+// quien administra Nómina (Nairoby/admin) — nunca el resto del equipo.
+// Mismo desfase de un mes que horas extra/comisión de equipo: un bono
+// otorgado en el mes M se paga en la quincena Q1 del mes M+1.
+model CeoBonusGrant {
+  id        String       @id @default(cuid())
+  userId    String
+  user      User         @relation("CeoBonusGrantUser", fields: [userId], references: [id], onDelete: Cascade)
+  type      CeoBonusType
+  note      String?
+  grantedAt DateTime     @default(now())
+
+  @@index([userId])
+}
+
+// Mismo patrón sin FK que BirthdayPopupSeen/MonthlyRecognitionPopupSeen —
+// viewerId es User.id o el string literal "admin".
+model CeoBonusGrantSeen {
+  id       String   @id @default(cuid())
+  viewerId String
+  grantId  String
+  seenAt   DateTime @default(now())
+
+  @@unique([viewerId, grantId])
 }

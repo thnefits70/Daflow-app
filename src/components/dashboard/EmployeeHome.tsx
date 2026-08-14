@@ -7,6 +7,7 @@ import { PeriodicRemindersCard } from "./PeriodicRemindersCard";
 import { RecognitionPodium } from "@/components/recognition/RecognitionPodium";
 import { ScoreGauge } from "./ScoreGauge";
 import { WeeklyTrendChart } from "./WeeklyTrendChart";
+import { CommissionProgressCard } from "./CommissionProgressCard";
 import { KpiTile, FillRateTile, ReturnRateTile, WarrantyMonthTile } from "./KpiTile";
 import { FillRateBreakdownCard } from "./FillRateBreakdownCard";
 import { StoreFeedbackTile } from "./StoreFeedbackTile";
@@ -14,7 +15,7 @@ import { StockoutBarChart } from "./StockoutBarChart";
 import { PieChart } from "./PieChart";
 import { OrgChart } from "./OrgChart";
 import { InventoryKpisHomeCard } from "./InventoryKpisHomeCard";
-import type { DashboardRow, WeeklyTrend, StockoutWeekPoint, WarrantyMonthlyChart, PieSlice, FillRateBreakdown } from "@/lib/dashboard";
+import type { DashboardRow, WeeklyTrend, StockoutWeekPoint, WarrantyMonthlyChart, PieSlice, FillRateBreakdown, CommissionProgress } from "@/lib/dashboard";
 import type { StoreFeedbackAggregate, StoreFeedbackTrendPoint } from "@/lib/storeFeedback";
 import type { DuePeriodicReminderDTO } from "@/lib/periodicReminders";
 import type { MyLearningPathSummaryDTO } from "@/lib/learningPaths";
@@ -64,6 +65,7 @@ export function EmployeeHome({
   duePeriodicReminders = [],
   learningPathSummary,
   inventoryKpis = null,
+  commissionProgress,
 }: {
   userName: string;
   deptName: string;
@@ -73,6 +75,7 @@ export function EmployeeHome({
   trackKpis: boolean;
   scores: ScoreRow[];
   weeklyTrend?: WeeklyTrend;
+  commissionProgress?: CommissionProgress;
   fillRateTrend?: WeeklyTrend;
   fillRateBreakdown?: FillRateBreakdown;
   returnRateTrend?: WeeklyTrend;
@@ -110,6 +113,8 @@ export function EmployeeHome({
       <PushOptIn />
       <PendingTasksCard />
       <PeriodicRemindersCard items={duePeriodicReminders} />
+
+      <CommissionProgressCard progress={commissionProgress ?? null} />
 
       {weeklyTrend && (
         <div className="bg-surface border border-rule rounded-lg p-6 mb-5">

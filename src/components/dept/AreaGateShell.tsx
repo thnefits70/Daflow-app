@@ -10,6 +10,7 @@ import { UpdateGate } from "@/components/dept/UpdateGate";
 import { LeaderBanner } from "@/components/dept/LeaderBanner";
 import { BirthdayPopup } from "@/components/birthday/BirthdayPopup";
 import { MonthlyRecognitionPopup } from "@/components/recognition/MonthlyRecognitionPopup";
+import { CeoBonusPopup } from "@/components/shared/CeoBonusPopup";
 import { RecognitionLockGate } from "@/components/recognition/RecognitionLockGate";
 import type { RecognitionPersonDTO } from "@/components/recognition/RecognitionPanel";
 import { signOut } from "next-auth/react";
@@ -188,6 +189,7 @@ export function AreaGateShell({
       </main>
       <BirthdayPopup />
       <MonthlyRecognitionPopup />
+      <CeoBonusPopup />
     </div>
   );
 }

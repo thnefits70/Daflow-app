@@ -1,10 +1,18 @@
 import { prisma } from "@/lib/prisma";
 import { TopLine } from "@/components/ui/TopLine";
 import { NominaPageTabs } from "@/components/nomina/NominaPageTabs";
-import { canLogOvertimeHours, canApproveOvertimeHours, canViewPayrollRoles, canEditPayrollRoles } from "@/lib/guards";
+import {
+  canLogOvertimeHours,
+  canApproveOvertimeHours,
+  canViewPayrollRoles,
+  canEditPayrollRoles,
+  canProposeCommissionAmounts,
+  canApproveCommissionAmounts,
+  canGrantCeoBonus,
+} from "@/lib/guards";
 
 export default async function NominaPage() {
-  const [users, departments, canLogOvertime, canApproveOvertime, canViewRoles, canEditRoles] = await Promise.all([
+  const [users, departments, canLogOvertime, canApproveOvertime, canViewRoles, canEditRoles, canProposeCommissions, canApproveCommissions, canGrantBonus] = await Promise.all([
     prisma.user.findMany({
       orderBy: { name: "asc" },
       select: {
@@ -25,6 +33,9 @@ export default async function NominaPage() {
     canApproveOvertimeHours(),
     canViewPayrollRoles(),
     canEditPayrollRoles(),
+    canProposeCommissionAmounts(),
+    canApproveCommissionAmounts(),
+    canGrantCeoBonus(),
   ]);
 
   return (
@@ -37,6 +48,9 @@ export default async function NominaPage() {
         canApproveOvertime={canApproveOvertime}
         canViewRoles={canViewRoles}
         canEditRoles={canEditRoles}
+        canProposeCommissions={canProposeCommissions}
+        canApproveCommissions={canApproveCommissions}
+        canGrantCeoBonus={canGrantBonus}
       />
     </div>
   );

@@ -7,6 +7,7 @@ import {
   isFirstQuincenaOfMonth,
   isEndOfMonthQuincena,
 } from "@/lib/payrollCalc";
+import { getDailyAverageForMonth, getAchievedTier, CEO_BONUS_AMOUNTS, CEO_BONUS_LABELS } from "@/lib/commissionTiers";
 
 const PERIOD_RE = /^\d{4}-\d{2}-Q[12]$/;
 
@@ -31,24 +32,59 @@ export async function buildAutomaticLineItems(employeeId: string, period: string
 
   if (isFirstQuincenaOfMonth(period)) {
     const sourceMonth = overtimeSourceMonthForPeriod(period);
-    if (sourceMonth && settings?.nationalBaseSalary) {
+    if (sourceMonth) {
       const [y, m] = sourceMonth.split("-").map(Number);
       const monthStart = new Date(Date.UTC(y, m - 1, 1));
       const monthEnd = new Date(Date.UTC(y, m, 1));
-      const approvedEntries = await prisma.overtimeEntry.findMany({
-        where: { employeeId, date: { gte: monthStart, lt: monthEnd }, approvedAt: { not: null } },
-      });
-      const overtimeAmount = approvedEntries.reduce(
-        (s, e) => s + computeOvertimeAmount(settings.nationalBaseSalary, e.minutesExtra, e.date),
-        0
-      );
-      if (overtimeAmount > 0) {
-        items.push({ label: `Horas extra (${sourceMonth})`, amount: overtimeAmount, kind: "INCOME", isAutomatic: true });
+
+      if (settings?.nationalBaseSalary) {
+        const approvedEntries = await prisma.overtimeEntry.findMany({
+          where: { employeeId, date: { gte: monthStart, lt: monthEnd }, approvedAt: { not: null } },
+        });
+        const overtimeAmount = approvedEntries.reduce(
+          (s, e) => s + computeOvertimeAmount(settings.nationalBaseSalary, e.minutesExtra, e.date),
+          0
+        );
+        if (overtimeAmount > 0) {
+          items.push({ label: `Horas extra (${sourceMonth})`, amount: overtimeAmount, kind: "INCOME", isAutomatic: true });
+        }
       }
 
       const winner = await prisma.monthlyRecognitionResult.findUnique({ where: { month_rank: { month: sourceMonth, rank: 1 } } });
       if (winner?.userId === employeeId) {
         items.push({ label: `Bono colaborador destacado (${sourceMonth})`, amount: 50, kind: "INCOME", isAutomatic: true });
+      }
+
+      // Confirmado 2026-08-14: comisión de equipo por nivel — el nivel
+      // alcanzado el mes fuente completo, si esta persona tiene un monto
+      // aprobado (>0) para ese nivel. Mismo desfase de un mes que horas
+      // extra/bono destacado arriba.
+      const dailyAvg = await getDailyAverageForMonth(sourceMonth);
+      if (dailyAvg !== null) {
+        const tier = await getAchievedTier(dailyAvg);
+        if (tier) {
+          const ta = await prisma.commissionTierAmount.findUnique({
+            where: { tierId_userId: { tierId: tier.id, userId: employeeId } },
+          });
+          if (ta && ta.amount > 0) {
+            items.push({ label: `Comisión de equipo (${tier.name} — ${sourceMonth})`, amount: ta.amount, kind: "INCOME", isAutomatic: true });
+          }
+        }
+      }
+
+      // Bonos discrecionales del CEO otorgados durante el mes fuente —
+      // confidencial, confirmado 2026-08-14: nunca se paga en el mismo mes
+      // en que se otorga, siempre en la Q1 del mes siguiente.
+      const bonuses = await prisma.ceoBonusGrant.findMany({
+        where: { userId: employeeId, grantedAt: { gte: monthStart, lt: monthEnd } },
+      });
+      for (const b of bonuses) {
+        items.push({
+          label: `${CEO_BONUS_LABELS[b.type]} (${sourceMonth})`,
+          amount: CEO_BONUS_AMOUNTS[b.type],
+          kind: "INCOME",
+          isAutomatic: true,
+        });
       }
     }
   }

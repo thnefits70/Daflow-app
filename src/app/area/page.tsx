@@ -10,6 +10,7 @@ import {
   getDashboardData,
   getWarrantyMonthlyChart,
   getWarrantyReasonChart,
+  getCommissionProgress,
 } from "@/lib/dashboard";
 import { getStoreFeedbackAggregate, getStoreFeedbackTrend } from "@/lib/storeFeedback";
 import { getDuePeriodicReminders } from "@/lib/periodicReminders";
@@ -43,6 +44,7 @@ export default async function AreaHomePage() {
     duePeriodicReminders,
     myLearningPaths,
     inventoryKpis,
+    commissionProgress,
   ] = await Promise.all([
     prisma.department.findUnique({ where: { id: deptId } }),
     prisma.process.count({ where: { deptId } }),
@@ -66,6 +68,7 @@ export default async function AreaHomePage() {
     getDuePeriodicReminders({ deptId, userId: session.user.id }),
     getMyLearningPaths(session.user.id),
     canSeeInventoryKpis ? getInventoryKpisData() : Promise.resolve(null),
+    getCommissionProgress(),
   ]);
   if (!dept) redirect("/api/auth/force-logout");
 
@@ -78,6 +81,7 @@ export default async function AreaHomePage() {
       examCount={examCount}
       trackKpis={dept.trackKpis}
       weeklyTrend={weeklyTrend}
+      commissionProgress={commissionProgress}
       fillRateTrend={fillRateTrend}
       fillRateBreakdown={fillRateBreakdown}
       returnRateTrend={returnRateTrend}

@@ -6,6 +6,7 @@ import { uploadFile as uploadToStorage } from "@/lib/uploadFile";
 import { compressImage } from "@/lib/compressImage";
 import { PayrollChat } from "@/components/payroll/PayrollChat";
 import { MonthlyLegalRolePanel } from "@/components/payroll/MonthlyLegalRolePanel";
+import { MyCeoBonusesPanel } from "@/components/payroll/MyCeoBonusesPanel";
 
 const MONTHS = [
   "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
@@ -266,6 +267,7 @@ export function PayStubsPanel({
     return (
       <div>
         <MonthlyLegalRolePanel />
+        <MyCeoBonusesPanel />
 
         {ownUserId && (
           <div className="mb-4.5">

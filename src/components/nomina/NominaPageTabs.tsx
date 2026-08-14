@@ -30,6 +30,9 @@ export function NominaPageTabs({
   canApproveOvertime,
   canViewRoles,
   canEditRoles,
+  canProposeCommissions,
+  canApproveCommissions,
+  canGrantCeoBonus,
 }: {
   users: NominaUser[];
   departments: Dept[];
@@ -39,8 +42,11 @@ export function NominaPageTabs({
   canApproveOvertime: boolean;
   canViewRoles: boolean;
   canEditRoles: boolean;
+  canProposeCommissions: boolean;
+  canApproveCommissions: boolean;
+  canGrantCeoBonus: boolean;
 }) {
-  const showPayrollTab = canLogOvertime || canApproveOvertime || canViewRoles;
+  const showPayrollTab = canLogOvertime || canApproveOvertime || canViewRoles || canProposeCommissions || canGrantCeoBonus;
   const [tab, setTab] = useState<"colaboradores" | "pagos">(canManage ? "colaboradores" : "pagos");
 
   // Confirmado 2026-08-14: pedido explícito del usuario — el atajo "Ir →"
@@ -62,6 +68,9 @@ export function NominaPageTabs({
         canApproveOvertime={canApproveOvertime}
         canViewRoles={canViewRoles}
         canEditRoles={canEditRoles}
+        canProposeCommissions={canProposeCommissions}
+        canApproveCommissions={canApproveCommissions}
+        canGrantCeoBonus={canGrantCeoBonus}
       />
     );
   }
@@ -94,6 +103,9 @@ export function NominaPageTabs({
           canApproveOvertime={canApproveOvertime}
           canViewRoles={canViewRoles}
           canEditRoles={canEditRoles}
+          canProposeCommissions={canProposeCommissions}
+          canApproveCommissions={canApproveCommissions}
+          canGrantCeoBonus={canGrantCeoBonus}
         />
       )}
     </div>

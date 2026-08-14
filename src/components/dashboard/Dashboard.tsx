@@ -6,6 +6,7 @@ import { PeriodicRemindersCard } from "./PeriodicRemindersCard";
 import { RecognitionPodium } from "@/components/recognition/RecognitionPodium";
 import { ScoreGauge } from "./ScoreGauge";
 import { WeeklyTrendChart } from "./WeeklyTrendChart";
+import { CommissionProgressCard } from "./CommissionProgressCard";
 import { KpiTile, FillRateTile, ReturnRateTile, WarrantyMonthTile } from "./KpiTile";
 import { FillRateBreakdownCard } from "./FillRateBreakdownCard";
 import { AiSpendWidget } from "./AiSpendWidget";
@@ -13,7 +14,7 @@ import { StoreFeedbackTile } from "./StoreFeedbackTile";
 import { StockoutBarChart } from "./StockoutBarChart";
 import { PieChart } from "./PieChart";
 import { OrgChart } from "./OrgChart";
-import type { DashboardData, WeeklyTrend, StockoutWeekPoint, WarrantyMonthlyChart, PieSlice, FillRateBreakdown } from "@/lib/dashboard";
+import type { DashboardData, WeeklyTrend, StockoutWeekPoint, WarrantyMonthlyChart, PieSlice, FillRateBreakdown, CommissionProgress } from "@/lib/dashboard";
 import type { StoreFeedbackAggregate, StoreFeedbackTrendPoint } from "@/lib/storeFeedback";
 import type { DuePeriodicReminderDTO } from "@/lib/periodicReminders";
 import type { TeamLearningPathResultDTO } from "@/lib/learningPaths";
@@ -46,10 +47,12 @@ export function Dashboard({
   learningPathResults = [],
   aiSpendToday,
   aiSpendMonth,
+  commissionProgress,
 }: {
   data: DashboardData;
   weeklyTrend?: WeeklyTrend;
   fillRateTrend?: WeeklyTrend;
+  commissionProgress?: CommissionProgress;
   fillRateBreakdown?: FillRateBreakdown;
   returnRateTrend?: WeeklyTrend;
   stockoutWeeks?: StockoutWeekPoint[];
@@ -85,6 +88,8 @@ export function Dashboard({
       <PushOptIn />
       <PendingTasksCard />
       <PeriodicRemindersCard items={duePeriodicReminders} showDept />
+
+      <CommissionProgressCard progress={commissionProgress ?? null} />
 
       {weeklyTrend && (
         <div className="bg-surface border border-rule rounded-lg p-6 mb-5">

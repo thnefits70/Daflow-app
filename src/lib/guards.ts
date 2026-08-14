@@ -205,6 +205,39 @@ export async function canApproveOvertimeHours() {
   return !!session && session.user.role === "admin";
 }
 
+// Confirmado 2026-08-14: Nairoby propone los montos de comisión de equipo
+// (mismo criterio que canEditPayrollRoles — líder de FIN), el admin
+// también puede tocarlos directo. La APROBACIÓN es otra función aparte,
+// exclusiva del admin — ver canApproveCommissionAmounts abajo.
+export async function canProposeCommissionAmounts() {
+  const session = await auth();
+  if (!session) return false;
+  if (session.user.role === "admin") return true;
+  return canEditPayrollRoles();
+}
+
+// Confirmado 2026-08-14: pedido explícito del usuario — para evitar que
+// Nairoby infle un monto a alguien, ningún cambio queda activo hasta que
+// el admin lo apruebe. Exclusivo del admin, sin excepción (nunca
+// auto-aprobación, a diferencia de otros guards de este archivo).
+export async function canApproveCommissionAmounts() {
+  const session = await auth();
+  return !!session && session.user.role === "admin";
+}
+
+// Cambiar los rangos/nombres de los 3 niveles es estructural (afecta a
+// todo el equipo a la vez) — exclusivo del admin, ni siquiera Nairoby.
+export async function canManageCommissionTiers() {
+  const session = await auth();
+  return !!session && session.user.role === "admin";
+}
+
+// Bonos discrecionales del CEO — solo el admin los otorga, siempre.
+export async function canGrantCeoBonus() {
+  const session = await auth();
+  return !!session && session.user.role === "admin";
+}
+
 // Chat interno de Roles de pago — confirmado 2026-07-27: solo el propio
 // colaborador o quien de verdad gestiona la nómina (líder de Finanzas, NO
 // admin) puede escribirle directo a alguien. El admin ve todo (canView...

@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { getDailyAverageForMonth } from "@/lib/commissionTiers";
 
 function pct(a: number, b: number) {
   return b === 0 ? 0 : Math.round((a / b) * 100);
@@ -87,6 +88,31 @@ export async function getDashboardData(): Promise<DashboardData> {
   const overallAvg = ranked.length ? Math.round(ranked.reduce((a, r) => a + (r.avg ?? 0), 0) / ranked.length) : null;
 
   return { rows, rowsSorted, totalAttempts, overallAvg };
+}
+
+export type CommissionProgress = {
+  month: string;
+  dailyAvg: number | null;
+  tiers: { id: string; name: string; minDailyAvg: number; maxDailyAvg: number | null }[];
+} | null;
+
+function currentMonthStr(): string {
+  const now = new Date(Date.now() - 5 * 3600 * 1000); // Ecuador UTC-5
+  return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+// Confirmado 2026-08-14: pedido explícito del usuario — público para TODO
+// el equipo (a diferencia de los montos de comisión por persona, que son
+// confidenciales), para el efecto motivacional buscado. Mismo cálculo que
+// expone /api/commissions/progress, threaded acá igual que weeklyTrend.
+export async function getCommissionProgress(): Promise<CommissionProgress> {
+  const month = currentMonthStr();
+  const [dailyAvg, tiers] = await Promise.all([
+    getDailyAverageForMonth(month, { asOfNow: true }),
+    prisma.commissionTier.findMany({ where: { isActive: true }, orderBy: { orderIndex: "asc" } }),
+  ]);
+  if (tiers.length === 0) return null;
+  return { month, dailyAvg, tiers: tiers.map((t) => ({ id: t.id, name: t.name, minDailyAvg: t.minDailyAvg, maxDailyAvg: t.maxDailyAvg })) };
 }
 
 export type WeeklyTrend = { deptName: string; points: { week: string; value: number; detail?: string }[] } | null;

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { X, ShieldCheck } from "lucide-react";
 import { PayrollEmployeeSalariesPanel } from "./PayrollEmployeeSalariesPanel";
+import { CeoBonusesForNairobyPanel } from "./CeoBonusesForNairobyPanel";
 
 type LineItem = { id?: string; label: string; amount: number; kind: "INCOME" | "EXPENSE"; isAutomatic?: boolean };
 type Role = {
@@ -281,6 +282,7 @@ export function PayrollRolesPanel({ canEdit }: { canEdit: boolean }) {
   return (
     <div>
       <PayrollEmployeeSalariesPanel canEdit={canEdit} />
+      <CeoBonusesForNairobyPanel />
 
       <div className="bg-surface border border-rule rounded-md p-4 mb-4">
         <div className="text-[11px] font-semibold uppercase tracking-wide text-steel mb-2">Sueldo básico nacional</div>

@@ -5,6 +5,7 @@ import { AdminSidebar } from "@/components/shell/AdminSidebar";
 import { TopBanner } from "@/components/shell/TopBanner";
 import { BirthdayPopup } from "@/components/birthday/BirthdayPopup";
 import { MonthlyRecognitionPopup } from "@/components/recognition/MonthlyRecognitionPopup";
+import { CeoBonusPopup } from "@/components/shared/CeoBonusPopup";
 import { getMonthPendingConfirmation } from "@/lib/recognitionAdmin";
 
 // Confirmado 2026-08-07: el admin NUNCA se bloquea a sí mismo, sin excepción
@@ -44,6 +45,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       </main>
       <BirthdayPopup />
       <MonthlyRecognitionPopup />
+      <CeoBonusPopup />
     </div>
   );
 }
