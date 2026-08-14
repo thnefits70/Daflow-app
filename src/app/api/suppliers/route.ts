@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
-import { getSupplierAccess } from "@/lib/guards";
+import { getSupplierAccess, canSubmitPurchaseRequests } from "@/lib/guards";
 
 const supplierInclude = {
   contacts: { orderBy: { id: "asc" as const } },
@@ -56,6 +56,7 @@ const channelSchema = z.object({
 });
 
 const createSchema = z.object({
+  type: z.enum(["SUPPLIER", "CARRIER"]).optional().default("SUPPLIER"),
   name: z.string().trim().min(1, "El nombre del proveedor es obligatorio."),
   location: z.string().trim().optional(),
   locationLat: z.number().min(-90).max(90).nullable().optional(),
@@ -77,14 +78,25 @@ export async function POST(req: NextRequest) {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "No autorizado." }, { status: 401 });
 
-  const access = await getSupplierAccess();
-  if (!access.canAdd) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
-
   const body = await req.json().catch(() => null);
   const parsed = createSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Datos inválidos." }, { status: 400 });
   }
+  const isCarrier = parsed.data.type === "CARRIER";
+
+  const access = await getSupplierAccess();
+  // Confirmado 2026-08-14: pedido explícito del usuario — separar
+  // transportistas dentro de Proveedores y poder registrarlos ahí sin pasar
+  // por Solicitar. Quien ya puede crear un transportista DESDE Solicitar
+  // (canSubmitPurchaseRequests — Bryan/Nairoby vía COM/FIN) también puede
+  // hacerlo desde acá, aunque su área no tenga acceso a Proveedores en
+  // general (ej. Nairoby/FIN no ve el directorio de proveedores normales).
+  const canAddCarrier = access.canAdd || (isCarrier && (await canSubmitPurchaseRequests()));
+  if (isCarrier ? !canAddCarrier : !access.canAdd) {
+    return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+  }
+
   const { contacts, channels, ...rest } = parsed.data;
 
   // Admin isn't a real User row (its session id is the literal "admin"), so
@@ -94,8 +106,11 @@ export async function POST(req: NextRequest) {
   const isAdmin = session.user.role === "admin";
   // A leader creating a supplier for their own área would just approve it
   // themselves anyway, so skip the round trip and save it approved directly.
+  // Un transportista SIEMPRE queda aprobado al toque, igual que ya pasa
+  // cuando se crea desde Solicitar — es un contacto operativo, no una
+  // relación estratégica que necesite revisión del líder.
   const isSelfApproving = access.isLeader && access.leadsDeptId === session.user.deptId;
-  const autoApproved = isAdmin || isSelfApproving;
+  const autoApproved = isAdmin || isSelfApproving || isCarrier;
 
   const supplier = await prisma.supplier.create({
     data: {

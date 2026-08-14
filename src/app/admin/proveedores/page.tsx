@@ -27,6 +27,7 @@ export default async function AdminProveedoresPage() {
         suppliers={suppliers.map(toSupplierDTO)}
         pending={pending.map(toSupplierDTO)}
         canAdd
+        canAddCarrier
         canReview
         isAdmin
       />

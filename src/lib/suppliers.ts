@@ -2,6 +2,7 @@ import type { SupplierDTO, ChannelPlatform } from "@/components/suppliers/Suppli
 
 type SupplierRow = {
   id: string;
+  type: "SUPPLIER" | "CARRIER";
   name: string;
   location: string | null;
   locationLat: number | null;
@@ -24,6 +25,7 @@ type SupplierRow = {
 export function toSupplierDTO(s: SupplierRow): SupplierDTO {
   return {
     id: s.id,
+    type: s.type,
     name: s.name,
     location: s.location,
     locationLat: s.locationLat,

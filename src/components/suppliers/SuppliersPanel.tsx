@@ -8,8 +8,10 @@ import { LocationPicker } from "./LocationPicker";
 export type SupplierContactDTO = { id?: string; label: string; whatsapp: string };
 export type ChannelPlatform = "TELEGRAM" | "INSTAGRAM" | "FACEBOOK" | "OTHER";
 export type SupplierChannelDTO = { id?: string; platform: ChannelPlatform; url: string };
+export type SupplierType = "SUPPLIER" | "CARRIER";
 export type SupplierDTO = {
   id: string;
+  type: SupplierType;
   name: string;
   location: string | null;
   locationLat: number | null;
@@ -86,19 +88,27 @@ export function SuppliersPanel({
   suppliers,
   pending,
   canAdd,
+  canAddCarrier,
   canReview,
   isAdmin,
 }: {
   suppliers: SupplierDTO[];
   pending: SupplierDTO[];
   canAdd: boolean;
+  canAddCarrier: boolean;
   canReview: boolean;
   isAdmin: boolean;
 }) {
   const router = useRouter();
-  const [tab, setTab] = useState<"directorio" | "pendientes">("directorio");
+  // Confirmado 2026-08-14: pedido explícito del usuario — separar los
+  // transportistas del directorio de proveedores normales, y poder
+  // registrarlos ahí mismo sin pasar por Solicitar. Viven en la misma tabla
+  // (type=CARRIER), solo se filtran/etiquetan distinto en esta pantalla.
+  const [tab, setTab] = useState<"directorio" | "transportistas" | "pendientes">("directorio");
+  const listType: SupplierType = tab === "transportistas" ? "CARRIER" : "SUPPLIER";
   const [formOpen, setFormOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [formType, setFormType] = useState<SupplierType>("SUPPLIER");
   const [form, setForm] = useState(emptyForm);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
@@ -110,13 +120,15 @@ export function SuppliersPanel({
   const [newContact, setNewContact] = useState({ label: "", whatsapp: "" });
   const [contactErr, setContactErr] = useState("");
 
+  const listSuppliers = useMemo(() => suppliers.filter((s) => s.type === listType), [suppliers, listType]);
   const sortedSuppliers = useMemo(() => {
-    if (!query.trim()) return suppliers;
-    return [...suppliers].sort((a, b) => relevanceScore(b, query) - relevanceScore(a, query));
-  }, [suppliers, query]);
+    if (!query.trim()) return listSuppliers;
+    return [...listSuppliers].sort((a, b) => relevanceScore(b, query) - relevanceScore(a, query));
+  }, [listSuppliers, query]);
 
   const startNew = () => {
     setEditingId(null);
+    setFormType(listType);
     setForm(emptyForm);
     setFormOpen(true);
     setErr("");
@@ -124,6 +136,7 @@ export function SuppliersPanel({
 
   const startEdit = (s: SupplierDTO) => {
     setEditingId(s.id);
+    setFormType(s.type);
     setForm({
       name: s.name,
       location: s.location ?? "",
@@ -153,13 +166,15 @@ export function SuppliersPanel({
   const save = async () => {
     const contacts = form.contacts.filter((c) => c.label.trim() && c.whatsapp.trim());
     const channels = form.channels.filter((c) => c.url.trim()).map((c) => ({ platform: c.platform, url: c.url.trim() }));
+    const noun = formType === "CARRIER" ? "transportista" : "proveedor";
     if (!form.name.trim() || !form.notes.trim() || contacts.length === 0) {
-      setErr("Completa el nombre del proveedor, la descripción en Notas, y al menos un contacto de WhatsApp.");
+      setErr(`Completa el nombre del ${noun}, la descripción en Notas, y al menos un contacto de WhatsApp.`);
       return;
     }
     setErr("");
     setBusy(true);
     const payload = {
+      type: formType,
       name: form.name.trim(),
       location: form.location.trim(),
       locationLat: form.locationLat,
@@ -183,7 +198,7 @@ export function SuppliersPanel({
     setBusy(false);
     if (!res.ok) {
       const data = await res.json().catch(() => null);
-      setErr(data?.error ?? "No se pudo guardar el proveedor.");
+      setErr(data?.error ?? `No se pudo guardar el ${noun}.`);
       return;
     }
     setFormOpen(false);
@@ -191,8 +206,8 @@ export function SuppliersPanel({
     router.refresh();
   };
 
-  const remove = async (id: string) => {
-    if (!confirm("¿Eliminar este proveedor del directorio?")) return;
+  const remove = async (id: string, removeType: SupplierType) => {
+    if (!confirm(`¿Eliminar este ${removeType === "CARRIER" ? "transportista" : "proveedor"} del directorio?`)) return;
     setBusy(true);
     await fetch(`/api/suppliers/${id}`, { method: "DELETE" });
     setBusy(false);
@@ -240,15 +255,22 @@ export function SuppliersPanel({
 
   return (
     <div>
-      {canReview && (
-        <div className="flex gap-5.5 border-b border-rule mb-5.5">
-          <button
-            type="button"
-            className={`pb-2.5 text-[13px] font-semibold border-b-2 cursor-pointer ${tab === "directorio" ? "text-ink border-teal" : "text-steel border-transparent hover:text-ink"}`}
-            onClick={() => setTab("directorio")}
-          >
-            Directorio
-          </button>
+      <div className="flex gap-5.5 border-b border-rule mb-5.5">
+        <button
+          type="button"
+          className={`pb-2.5 text-[13px] font-semibold border-b-2 cursor-pointer ${tab === "directorio" ? "text-ink border-teal" : "text-steel border-transparent hover:text-ink"}`}
+          onClick={() => setTab("directorio")}
+        >
+          Directorio
+        </button>
+        <button
+          type="button"
+          className={`pb-2.5 text-[13px] font-semibold border-b-2 cursor-pointer ${tab === "transportistas" ? "text-ink border-teal" : "text-steel border-transparent hover:text-ink"}`}
+          onClick={() => setTab("transportistas")}
+        >
+          Transportistas
+        </button>
+        {canReview && (
           <button
             type="button"
             className={`pb-2.5 text-[13px] font-semibold border-b-2 cursor-pointer ${tab === "pendientes" ? "text-ink border-teal" : "text-steel border-transparent hover:text-ink"}`}
@@ -256,31 +278,33 @@ export function SuppliersPanel({
           >
             Pendientes {pendingCount > 0 && <span className="ml-1 font-mono text-[10.5px] bg-red/15 text-red px-1.5 py-0.5 rounded-full">{pendingCount}</span>}
           </button>
-        </div>
-      )}
+        )}
+      </div>
 
-      {tab === "directorio" && (
+      {(tab === "directorio" || tab === "transportistas") && (
         <div>
           <div className="flex items-center justify-between gap-3 mb-4">
-            <div className="text-[13px] text-steel">Directorio de proveedores y sus contactos de WhatsApp.</div>
-            {canAdd && (
+            <div className="text-[13px] text-steel">
+              {listType === "CARRIER" ? "Transportistas y sus contactos de WhatsApp." : "Directorio de proveedores y sus contactos de WhatsApp."}
+            </div>
+            {(listType === "CARRIER" ? canAddCarrier : canAdd) && (
               <button
                 type="button"
                 disabled={busy}
                 className="inline-flex items-center gap-1.5 rounded border border-blue bg-blue px-3.5 py-2 text-[12.5px] font-semibold text-white cursor-pointer disabled:opacity-60 shrink-0"
                 onClick={startNew}
               >
-                <Plus size={14} /> Nuevo proveedor
+                <Plus size={14} /> {listType === "CARRIER" ? "Nuevo transportista" : "Nuevo proveedor"}
               </button>
             )}
           </div>
 
-          {suppliers.length > 0 && (
+          {listSuppliers.length > 0 && (
             <div className="relative mb-4">
               <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-steel" />
               <input
                 className="w-full rounded border border-rule pl-8.5 pr-3 py-2 text-[13px]"
-                placeholder="¿Qué necesitas? Ej. productos de cocina — ordena por probabilidad, no oculta a nadie"
+                placeholder={listType === "CARRIER" ? "Buscar transportista…" : "¿Qué necesitas? Ej. productos de cocina — ordena por probabilidad, no oculta a nadie"}
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
               />
@@ -289,6 +313,7 @@ export function SuppliersPanel({
 
           {formOpen && (
             <SupplierForm
+              type={formType}
               form={form}
               setForm={setForm}
               updateContact={updateContact}
@@ -308,9 +333,9 @@ export function SuppliersPanel({
             />
           )}
 
-          {suppliers.length === 0 && !formOpen && (
+          {listSuppliers.length === 0 && !formOpen && (
             <div className="border-[1.5px] border-dashed border-rule rounded-md p-8.5 text-center text-steel text-[13.5px]">
-              Aún no hay proveedores en el directorio.
+              {listType === "CARRIER" ? "Aún no hay transportistas registrados." : "Aún no hay proveedores en el directorio."}
             </div>
           )}
 
@@ -326,7 +351,7 @@ export function SuppliersPanel({
                       </button>
                       {confirmingDeleteId === s.id ? (
                         <span className="flex items-center gap-1.5">
-                          <button type="button" disabled={busy} className="text-red text-[11px] font-semibold cursor-pointer" onClick={() => remove(s.id)}>
+                          <button type="button" disabled={busy} className="text-red text-[11px] font-semibold cursor-pointer" onClick={() => remove(s.id, s.type)}>
                             Eliminar
                           </button>
                           <button type="button" className="text-steel text-[11px] cursor-pointer" onClick={() => setConfirmingDeleteId(null)}>
@@ -543,6 +568,7 @@ export function SuppliersPanel({
 }
 
 function SupplierForm({
+  type,
   form,
   setForm,
   updateContact,
@@ -557,6 +583,7 @@ function SupplierForm({
   onSave,
   onCancel,
 }: {
+  type: SupplierType;
   form: typeof emptyForm;
   setForm: React.Dispatch<React.SetStateAction<typeof emptyForm>>;
   updateContact: (idx: number, field: "label" | "whatsapp", value: string) => void;
@@ -571,11 +598,12 @@ function SupplierForm({
   onSave: () => void;
   onCancel: () => void;
 }) {
+  const isCarrier = type === "CARRIER";
   return (
     <div className="bg-surface border border-rule rounded-md p-4.5 mb-4">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
         <div>
-          <label className="block mb-1 text-[10.5px] font-semibold uppercase tracking-wide text-steel">Proveedor</label>
+          <label className="block mb-1 text-[10.5px] font-semibold uppercase tracking-wide text-steel">{isCarrier ? "Transportista" : "Proveedor"}</label>
           <input
             className="w-full rounded border border-rule px-2.5 py-2 text-[13.5px]"
             value={form.name}
@@ -584,54 +612,58 @@ function SupplierForm({
           />
         </div>
         <div>
-          <label className="block mb-1 text-[10.5px] font-semibold uppercase tracking-wide text-steel">Qué provee</label>
+          <label className="block mb-1 text-[10.5px] font-semibold uppercase tracking-wide text-steel">{isCarrier ? "Qué transporta" : "Qué provee"} <span className="text-steel-dim">(opcional)</span></label>
           <input
             className="w-full rounded border border-rule px-2.5 py-2 text-[13.5px]"
             value={form.category}
             onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}
-            placeholder="Ej. mercadería por bulto, productos para el hogar, artículos de salud…"
+            placeholder={isCarrier ? "Ej. Entregas dentro de Guayaquil, moto propia…" : "Ej. mercadería por bulto, productos para el hogar, artículos de salud…"}
           />
         </div>
       </div>
 
-      <div className="mb-3">
-        <label className="block mb-1 text-[10.5px] font-semibold uppercase tracking-wide text-steel">
-          Ubicación (referencia corta)
-        </label>
-        <input
-          className="w-full rounded border border-rule px-2.5 py-2 text-[13.5px]"
-          value={form.location}
-          onChange={(e) => setForm((f) => ({ ...f, location: e.target.value }))}
-          placeholder="Ej. Guayaquil, cerca del Mall del Sol"
-        />
-      </div>
+      {!isCarrier && (
+        <>
+          <div className="mb-3">
+            <label className="block mb-1 text-[10.5px] font-semibold uppercase tracking-wide text-steel">
+              Ubicación (referencia corta)
+            </label>
+            <input
+              className="w-full rounded border border-rule px-2.5 py-2 text-[13.5px]"
+              value={form.location}
+              onChange={(e) => setForm((f) => ({ ...f, location: e.target.value }))}
+              placeholder="Ej. Guayaquil, cerca del Mall del Sol"
+            />
+          </div>
+
+          <div className="mb-3">
+            <label className="block mb-1 text-[10.5px] font-semibold uppercase tracking-wide text-steel">
+              Marcar en el mapa (para llegar exacto)
+            </label>
+            <LocationPicker
+              lat={form.locationLat}
+              lng={form.locationLng}
+              onChange={({ lat, lng }) => setForm((f) => ({ ...f, locationLat: lat, locationLng: lng }))}
+            />
+          </div>
+        </>
+      )}
 
       <div className="mb-3">
         <label className="block mb-1 text-[10.5px] font-semibold uppercase tracking-wide text-steel">
-          Marcar en el mapa (para llegar exacto)
-        </label>
-        <LocationPicker
-          lat={form.locationLat}
-          lng={form.locationLng}
-          onChange={({ lat, lng }) => setForm((f) => ({ ...f, locationLat: lat, locationLng: lng }))}
-        />
-      </div>
-
-      <div className="mb-3">
-        <label className="block mb-1 text-[10.5px] font-semibold uppercase tracking-wide text-steel">
-          Notas — descripción del catálogo (obligatorio)
+          Notas — {isCarrier ? "descripción del servicio" : "descripción del catálogo"} (obligatorio)
         </label>
         <div className="text-[11px] text-steel mb-1.5">
-          Pon la mayor cantidad de información posible sobre qué vende este proveedor — por ejemplo, copia y pega
-          aquí la lista de productos desde tu chat de Telegram con ellos. El buscador usa este texto para
-          encontrarlo cuando alguien busque un producto específico.
+          {isCarrier
+            ? "Describe la cobertura y condiciones del servicio — zonas, tipo de vehículo, disponibilidad."
+            : "Pon la mayor cantidad de información posible sobre qué vende este proveedor — por ejemplo, copia y pega aquí la lista de productos desde tu chat de Telegram con ellos. El buscador usa este texto para encontrarlo cuando alguien busque un producto específico."}
         </div>
         <textarea
           rows={5}
           className="w-full rounded border border-rule px-2.5 py-2 text-[13.5px]"
           value={form.notes}
           onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
-          placeholder="Ej. Ropa y juguetes para niños, artículos escolares, bisutería, productos de limpieza para el hogar…"
+          placeholder={isCarrier ? "Ej. Entregas dentro de Guayaquil, moto propia, disponible de lunes a sábado…" : "Ej. Ropa y juguetes para niños, artículos escolares, bisutería, productos de limpieza para el hogar…"}
         />
       </div>
 
