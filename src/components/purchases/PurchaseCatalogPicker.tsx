@@ -150,14 +150,34 @@ export function PurchaseCatalogPicker({
       setErr("Agrega al menos 1 foto del producto.");
       return;
     }
+    if (uploadingPhoto) {
+      setErr("Espera a que termine de subir la foto.");
+      return;
+    }
     setErr("");
     setCheckingSimilarity(true);
-    const res = await fetch("/api/purchase-catalog/check-name", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: newName.trim() }),
-    });
+    // Confirmado 2026-08-14: bug real reportado por Bryan — un corte de red o
+    // que el servidor tarde de más dejaba este fetch sin resolver nunca, y el
+    // botón quedaba trabado en "Revisando…" para siempre, sin aviso y sin
+    // forma de reintentar. Ahora cualquier falla se avisa y se puede
+    // reintentar — nunca se queda pegado.
+    let res: Response;
+    try {
+      res = await fetch("/api/purchase-catalog/check-name", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: newName.trim() }),
+      });
+    } catch {
+      setCheckingSimilarity(false);
+      setErr("No se pudo verificar el nombre — revisa tu conexión e intenta de nuevo.");
+      return;
+    }
     setCheckingSimilarity(false);
+    if (!res.ok) {
+      setErr("No se pudo verificar el nombre — intenta de nuevo.");
+      return;
+    }
     const data = await res.json().catch(() => null);
     if (data?.exactMatch) {
       setErr(`Ya existe "${data.exactMatch.name}" — selecciónalo de la lista en vez de crear uno nuevo.`);
@@ -172,11 +192,18 @@ export function PurchaseCatalogPicker({
   async function saveNew() {
     setBusy(true);
     setErr("");
-    const res = await fetch("/api/purchase-catalog", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: newName.trim(), photos, description: newDescription.trim() || undefined, code: newCode.trim() || undefined }),
-    });
+    let res: Response;
+    try {
+      res = await fetch("/api/purchase-catalog", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: newName.trim(), photos, description: newDescription.trim() || undefined, code: newCode.trim() || undefined }),
+      });
+    } catch {
+      setBusy(false);
+      setErr("No se pudo guardar — revisa tu conexión e intenta de nuevo.");
+      return;
+    }
     setBusy(false);
     const data = await res.json().catch(() => null);
     if (!res.ok) {
@@ -343,7 +370,7 @@ export function PurchaseCatalogPicker({
             <div className="flex items-center gap-2.5">
               <button
                 type="button"
-                disabled={checkingSimilarity}
+                disabled={checkingSimilarity || uploadingPhoto}
                 className="rounded border border-blue bg-blue px-3.5 py-2 text-[12.5px] font-semibold text-white cursor-pointer disabled:opacity-60"
                 onClick={goToConfirm}
               >
