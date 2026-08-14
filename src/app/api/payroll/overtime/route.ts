@@ -3,7 +3,7 @@ import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { canLogOvertimeHours } from "@/lib/guards";
-import { isValidOvertimeDate, isOvertimeEntryEditable } from "@/lib/payrollCalc";
+import { isValidOvertimeDate, isOvertimeEntryEditable, nowInEcuador } from "@/lib/payrollCalc";
 import { sendPushToOwner } from "@/lib/webPush";
 import { actorName } from "@/lib/actorName";
 
@@ -24,7 +24,7 @@ export async function GET() {
     include: { employee: { select: { id: true, name: true } }, enteredBy: { select: { name: true } } },
   });
 
-  const now = new Date();
+  const now = nowInEcuador();
   return NextResponse.json(
     entries.map((e) => ({
       id: e.id,
@@ -63,10 +63,10 @@ export async function POST(req: NextRequest) {
   const date = new Date(`${parsed.data.date}T00:00:00.000Z`);
   if (Number.isNaN(date.getTime())) return NextResponse.json({ error: "Fecha inválida." }, { status: 400 });
   if (!isValidOvertimeDate(date)) return NextResponse.json({ error: "No se trabaja los domingos." }, { status: 400 });
-  const today = new Date(); today.setUTCHours(0, 0, 0, 0);
+  const today = nowInEcuador(); today.setUTCHours(0, 0, 0, 0);
   if (date > today) return NextResponse.json({ error: "No se puede cargar un día que todavía no pasó." }, { status: 400 });
   if (!isOvertimeEntryEditable(date)) {
-    return NextResponse.json({ error: "Ya pasaron 24h desde ese día — no se puede cargar ni corregir." }, { status: 409 });
+    return NextResponse.json({ error: "Ya pasó ese día — las horas extra se cargan siempre el mismo día que se trabajaron." }, { status: 409 });
   }
 
   const existing = await prisma.overtimeEntry.findUnique({ where: { employeeId_date: { employeeId: employee.id, date } } });

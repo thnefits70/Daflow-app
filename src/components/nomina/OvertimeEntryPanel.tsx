@@ -27,8 +27,10 @@ function fmtMinutes(min: number) {
 // Confirmado 2026-08-13: pedido explícito del usuario — el líder de cada
 // área carga, día por día, cuánto se quedó extra (él mismo o su equipo),
 // solo en pasos de 45 min o 1 hora, con doble confirmación antes de
-// enviar. Solo se puede cargar/corregir dentro de las 24h del día
-// trabajado — pasado eso queda bloqueado para siempre.
+// enviar. Ajustado 2026-08-14: solo se puede cargar/corregir el MISMO día
+// trabajado (antes daba hasta el día siguiente) — pasado eso queda
+// bloqueado para siempre, justamente para que no se les "quede pendiente
+// para el otro día" y se olvide.
 export function OvertimeEntryPanel() {
   const [team, setTeam] = useState<TeamMember[] | null>(null);
   const [entries, setEntries] = useState<Entry[] | null>(null);
@@ -38,7 +40,11 @@ export function OvertimeEntryPanel() {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
 
-  const today = new Date().toISOString().slice(0, 10);
+  // Fecha local del navegador (no toISOString/UTC) — quien carga esto está
+  // físicamente en Ecuador, así que la hora del sistema ya es la correcta;
+  // convertir a UTC primero corría el día para adelante después de las 7pm.
+  const nowLocal = new Date();
+  const today = `${nowLocal.getFullYear()}-${String(nowLocal.getMonth() + 1).padStart(2, "0")}-${String(nowLocal.getDate()).padStart(2, "0")}`;
 
   function load() {
     fetch("/api/payroll/my-team").then((r) => (r.ok ? r.json() : [])).then((t) => {
@@ -165,7 +171,7 @@ export function OvertimeEntryPanel() {
                   </span>
                 ) : (
                   <span className="flex items-center gap-1 text-[10.5px] text-steel-dim italic">
-                    <Lock size={10} /> Ya pasaron 24h
+                    <Lock size={10} /> Se cerró — no se cargó ese día
                   </span>
                 )}
               </span>

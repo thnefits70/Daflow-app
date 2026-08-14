@@ -25,12 +25,21 @@ export function isValidOvertimeDate(date: Date): boolean {
   return date.getUTCDay() !== 0;
 }
 
-// Confirmado 2026-08-13: pedido explícito del usuario — solo se puede
-// cargar o corregir un día dentro de las 24h siguientes a que ese día
-// terminó (hasta la medianoche del día después del trabajado), para evitar
-// que se carguen horas de semanas pasadas.
-export function isOvertimeEntryEditable(date: Date, now: Date = new Date()): boolean {
-  const cutoff = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() + 2));
+// Ecuador es UTC-5, sin horario de verano. Vercel corre en UTC, así que
+// "ahora" siempre se pre-ajusta antes de comparar contra un día calendario
+// — mismo patrón ya usado en pendingTasks.ts/birthdays.ts/periodicReminders.ts.
+const ECUADOR_UTC_OFFSET_HOURS = 5;
+export function nowInEcuador(): Date {
+  return new Date(Date.now() - ECUADOR_UTC_OFFSET_HOURS * 3600 * 1000);
+}
+
+// Confirmado 2026-08-14: pedido explícito del usuario — antes daba hasta la
+// medianoche del día SIGUIENTE (un colchón contra errores), pero eso hacía
+// fácil que se les "quedara pendiente para el otro día" y se olvidaran.
+// Ahora es estricto: solo se puede cargar o corregir el MISMO día
+// trabajado, se cierra a la medianoche de ese mismo día (hora Ecuador).
+export function isOvertimeEntryEditable(date: Date, now: Date = nowInEcuador()): boolean {
+  const cutoff = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() + 1));
   return now < cutoff;
 }
 

@@ -295,6 +295,7 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   pagos_administrativos: "Pagos administrativos pendientes de pago",
   pagos_mercaderia: "Pagos de mercadería pendientes",
   pagos_flete: "Fletes pendientes de pago",
+  horas_extra_aprobacion: "Horas extra por aprobar",
   cumpleanos: "Cumpleaños de tu equipo (aviso 1 día antes)",
 };
 
@@ -811,6 +812,33 @@ async function getPurchaseShippingPendingItem(href: string): Promise<PendingItem
   };
 }
 
+// Confirmado 2026-08-14: pedido explícito del usuario — quiere ver en
+// Inicio, con un solo clic, todas las horas extra que le quedaron por
+// aprobar (exclusivo admin — canApproveOvertimeHours es admin-only). Ahora
+// que la carga se cierra el mismo día trabajado, cualquier hora que siga
+// sin aprobar al día siguiente ya cuenta como atrasada — si no se aprueba,
+// "Generar roles de esta quincena" no la va a incluir.
+async function getOvertimeApprovalPendingItem(href: string): Promise<PendingItem | null> {
+  const rows = await prisma.overtimeEntry.findMany({
+    where: { approvedAt: null },
+    select: { date: true, minutesExtra: true },
+  });
+  if (rows.length === 0) return null;
+
+  const cutoff = new Date(); cutoff.setUTCHours(0, 0, 0, 0);
+  const overdue = rows.some((r) => r.date < cutoff);
+  const totalMinutes = rows.reduce((s, r) => s + r.minutesExtra, 0);
+  const hours = (totalMinutes / 60).toFixed(1).replace(/\.0$/, "");
+  return {
+    type: "horas_extra_aprobacion",
+    icon: "⏱️",
+    label: "Horas extra por aprobar",
+    meta: `${rows.length} entrada${rows.length === 1 ? "" : "s"} · ${hours}h${overdue ? " · atrasado" : ""}`,
+    overdue,
+    href,
+  };
+}
+
 // Confirmado 2026-08-06: aviso 1 día antes de la fecha en que se va a
 // felicitar (que puede ser el cumpleaños real o el último día laborable
 // antes, si cae sábado/domingo/feriado — ver celebrationDateFor en
@@ -857,7 +885,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     // PurchaseControlPanel).
     const comDept = await prisma.department.findUnique({ where: { code: "COM" }, select: { id: true } });
     const comPaymentsHref = comDept ? `/admin/dept/${comDept.id}?tab=compras&ptab=finanzas` : "/admin";
-    const [feedbackItems, recognitionItem, pettyCashLow, pettyCashUnconfirmed, adminPaymentsItem, purchaseMerchandiseItem, purchaseShippingItem, birthdayItems] = await Promise.all([
+    const [feedbackItems, recognitionItem, pettyCashLow, pettyCashUnconfirmed, adminPaymentsItem, purchaseMerchandiseItem, purchaseShippingItem, overtimeApprovalItem, birthdayItems] = await Promise.all([
       getFeedbackPendingItems(),
       getRecognitionAdminPendingItem("/admin/colaborador-destacado"),
       getPettyCashLowBalanceItems(financeHref),
@@ -865,6 +893,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       getAdminPaymentsPendingItem(`${financeHref}?tab=pagosadmin`),
       getPurchaseMerchandisePendingItem(comPaymentsHref),
       getPurchaseShippingPendingItem(comPaymentsHref),
+      getOvertimeApprovalPendingItem("/admin/nomina?tab=pagos"),
       getUpcomingBirthdayPendingItems("/admin/nomina"),
     ]);
     const items = [
@@ -875,6 +904,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       ...(adminPaymentsItem ? [adminPaymentsItem] : []),
       ...(purchaseMerchandiseItem ? [purchaseMerchandiseItem] : []),
       ...(purchaseShippingItem ? [purchaseShippingItem] : []),
+      ...(overtimeApprovalItem ? [overtimeApprovalItem] : []),
       ...birthdayItems,
     ];
     if (items.length === 0) return null;

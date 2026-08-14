@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { NominaGrid } from "./NominaGrid";
 import { PayrollWorkspace } from "./PayrollWorkspace";
 
@@ -42,6 +42,17 @@ export function NominaPageTabs({
 }) {
   const showPayrollTab = canLogOvertime || canApproveOvertime || canViewRoles;
   const [tab, setTab] = useState<"colaboradores" | "pagos">(canManage ? "colaboradores" : "pagos");
+
+  // Confirmado 2026-08-14: pedido explícito del usuario — el atajo "Ir →"
+  // de Pendientes en Inicio ("Horas extra por aprobar") llega con
+  // ?tab=pagos y debe abrir directo esa pestaña, sin necesidad de un
+  // segundo nivel — PayrollWorkspace ya arranca en "Aprobar horas extra"
+  // para el admin (es la primera pestaña que tiene disponible).
+  useEffect(() => {
+    const t = new URLSearchParams(window.location.search).get("tab");
+    if (t === "pagos" && showPayrollTab) setTab("pagos");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   if (canManage && !showPayrollTab) return <NominaGrid users={users} departments={departments} basePath={basePath} />;
   if (!canManage && showPayrollTab) {
