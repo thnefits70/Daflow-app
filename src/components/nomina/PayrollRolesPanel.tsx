@@ -26,15 +26,30 @@ function money(n: number) {
   return `$${n.toFixed(2)}`;
 }
 
+const ECUADOR_UTC_OFFSET_HOURS = 5; // UTC-5, sin horario de verano en Ecuador
+function nowInEcuador(): Date {
+  return new Date(Date.now() - ECUADOR_UTC_OFFSET_HOURS * 3600 * 1000);
+}
+
 function recentPeriods(): string[] {
   const out: string[] = [];
-  const now = new Date();
+  const now = nowInEcuador();
   for (let i = 0; i < 4; i++) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const d = new Date(now.getUTCFullYear(), now.getUTCMonth() - i, 1);
     const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
     out.push(`${ym}-Q2`, `${ym}-Q1`);
   }
   return out;
+}
+
+// Confirmado 2026-08-14: bug real encontrado por el usuario — el selector
+// por defecto siempre caía en la Q2 (16-fin) del mes actual, aunque hoy
+// todavía estuviera en la primera quincena, mostrando una quincena que ni
+// siquiera había empezado. Ahora arranca en la quincena que corre hoy.
+function currentPeriod(): string {
+  const now = nowInEcuador();
+  const ym = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
+  return `${ym}-${now.getUTCDate() <= 15 ? "Q1" : "Q2"}`;
 }
 function periodLabel(period: string) {
   const [y, m, q] = period.split("-");
@@ -213,7 +228,7 @@ function RoleCard({ role, published, canEdit, monthlyRoleId, onChanged }: { role
 // escritura (canEdit=false, todos los botones desaparecen).
 export function PayrollRolesPanel({ canEdit }: { canEdit: boolean }) {
   const periods = useMemo(recentPeriods, []);
-  const [period, setPeriod] = useState(periods[0]);
+  const [period, setPeriod] = useState(currentPeriod);
   const [detail, setDetail] = useState<PeriodDetail | null>(null);
   const [nationalBaseSalary, setNationalBaseSalary] = useState("");
   const [savingSettings, setSavingSettings] = useState(false);
