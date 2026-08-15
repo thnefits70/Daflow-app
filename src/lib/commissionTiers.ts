@@ -5,13 +5,6 @@
 import { prisma } from "@/lib/prisma";
 import { isFixedHoliday } from "@/lib/recognition";
 
-// Ecuador es UTC-5, sin horario de verano. Copia local del mismo patrón ya
-// usado en pendingTasks.ts/payrollCalc.ts — no hay archivo compartido.
-const ECUADOR_UTC_OFFSET_HOURS = 5;
-function nowInEcuador(): Date {
-  return new Date(Date.now() - ECUADOR_UTC_OFFSET_HOURS * 3600 * 1000);
-}
-
 // Mismo cálculo de lunes-de-semana-ISO que ya usa pendingTasks.ts (no
 // exportado ahí, así que se reimplementa acá — cada archivo tiene la suya).
 function mondayOfIsoWeek(week: string): Date {
@@ -58,8 +51,12 @@ function businessDaysInRange(start: Date, end: Date): number {
 // una semana a un mes.
 //
 // `asOfNow`: para el mes EN CURSO (el widget de Inicio), los días
-// laborables se cuentan solo hasta hoy, no hasta fin de mes — si no, el
-// promedio saldría artificialmente bajo a inicios de mes.
+// laborables se cuentan solo hasta el domingo de la ÚLTIMA semana ya
+// cargada — nunca hasta "hoy" del calendario. Bug real corregido
+// 2026-08-14: dividir contra los días hábiles transcurridos hasta hoy
+// hundía el promedio a inicios de la semana en curso, porque esos días
+// todavía no tienen "Pedidos despachados" cargado (se reporta al cierre
+// de la semana) — se contaban como si hubieran tenido cero pedidos.
 export async function getDailyAverageForMonth(month: string, opts?: { asOfNow?: boolean }): Promise<number | null> {
   const dept = await prisma.department.findFirst({ where: { trackWeeklyMetric: true } });
   if (!dept) return null;
@@ -69,16 +66,18 @@ export async function getDailyAverageForMonth(month: string, opts?: { asOfNow?: 
   const monthEnd = new Date(Date.UTC(y, m, 1));
 
   const records = await prisma.weeklyMetricRecord.findMany({ where: { deptId: dept.id } });
-  const monthRecords = records.filter((r) => {
-    const monday = mondayOfIsoWeek(r.week);
-    return monday >= monthStart && monday < monthEnd;
-  });
+  const monthRecords = records
+    .map((r) => ({ ...r, monday: mondayOfIsoWeek(r.week) }))
+    .filter((r) => r.monday >= monthStart && r.monday < monthEnd);
   if (monthRecords.length === 0) return null;
 
   const total = monthRecords.reduce((s, r) => s + r.value, 0);
 
-  const now = nowInEcuador();
-  const rangeEnd = opts?.asOfNow ? new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1)) : monthEnd;
+  let rangeEnd = monthEnd;
+  if (opts?.asOfNow) {
+    const latestMonday = monthRecords.reduce((max, r) => (r.monday > max ? r.monday : max), monthRecords[0].monday);
+    rangeEnd = new Date(Date.UTC(latestMonday.getUTCFullYear(), latestMonday.getUTCMonth(), latestMonday.getUTCDate() + 7));
+  }
   const effectiveEnd = rangeEnd < monthEnd ? rangeEnd : monthEnd;
   const businessDays = businessDaysInRange(monthStart, effectiveEnd);
   if (businessDays === 0) return null;
