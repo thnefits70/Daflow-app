@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { getMonthDispatchSummary } from "@/lib/commissionTiers";
+import { prevMonthStr } from "@/lib/pendingTasks";
 
 function pct(a: number, b: number) {
   return b === 0 ? 0 : Math.round((a / b) * 100);
@@ -107,8 +108,16 @@ function currentMonthStr(): string {
 // el equipo (a diferencia de los montos de comisión por persona, que son
 // confidenciales), para el efecto motivacional buscado. Mismo cálculo que
 // expone /api/commissions/progress, threaded acá igual que weeklyTrend.
+//
+// Ajuste 2026-08-14: muestra el ÚLTIMO MES COMPLETO (nunca el mes en
+// curso) — pedido explícito del usuario para que este número no se vea
+// descuadrado contra "Pedidos despachados" (que muestra la última semana
+// sola). Un mes completo siempre tiene semanas enteras, así que no hay
+// ambigüedad de "hasta qué día" como sí la había con el mes en progreso.
+// Coincide además con el mes que de verdad determina el pago real de la
+// comisión (se paga en la quincena del mes siguiente).
 export async function getCommissionProgress(): Promise<CommissionProgress> {
-  const month = currentMonthStr();
+  const month = prevMonthStr(currentMonthStr());
   const [summary, tiers] = await Promise.all([
     getMonthDispatchSummary(month),
     prisma.commissionTier.findMany({ where: { isActive: true }, orderBy: { orderIndex: "asc" } }),

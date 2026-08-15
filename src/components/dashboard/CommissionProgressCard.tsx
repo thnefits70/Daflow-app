@@ -2,6 +2,12 @@ import type { CommissionProgress } from "@/lib/dashboard";
 
 const TIER_EMOJI: Record<string, string> = { "Raíz": "🌱", "Cosecha": "🌾" };
 
+const MONTH_ABBR = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
+function fmtMonth(month: string) {
+  const [y, m] = month.split("-");
+  return `${MONTH_ABBR[Number(m) - 1]} ${y.slice(2)}`;
+}
+
 function fmtRange(from: string, to: string) {
   const f = new Date(`${from}T00:00:00Z`);
   const t = new Date(`${to}T00:00:00Z`);
@@ -11,16 +17,18 @@ function fmtRange(from: string, to: string) {
 
 // Confirmado 2026-08-14: pedido explícito del usuario — visible para TODO
 // el equipo (no confidencial, a diferencia de los montos de comisión por
-// persona/nivel) para el efecto motivacional buscado. Muestra el promedio
-// diario de pedidos despachados de este mes hasta hoy, contra los 3 niveles.
+// persona/nivel) para el efecto motivacional buscado. Muestra el ÚLTIMO
+// MES COMPLETO (nunca el mes en curso — pedido explícito, para que no se
+// vea descuadrado contra "Pedidos despachados" que muestra la última
+// semana sola) contra los 3 niveles.
 export function CommissionProgressCard({ progress }: { progress: CommissionProgress }) {
   if (!progress) return null;
-  const { dailyAvg, from, to, tiers } = progress;
+  const { dailyAvg, month, from, to, tiers } = progress;
 
   return (
     <div className="bg-surface border border-rule rounded-lg p-5 mb-5">
       <div className="flex items-center justify-between mb-3">
-        <div className="font-mono text-[10.5px] tracking-[.14em] uppercase text-steel">Comisión de equipo — este mes</div>
+        <div className="font-mono text-[10.5px] tracking-[.14em] uppercase text-steel">Comisión de equipo — {fmtMonth(month)}</div>
         {dailyAvg !== null && (
           <div className="text-right">
             <div className="text-[13px] font-bold tabular-nums">{dailyAvg.toFixed(0)} pedidos/día</div>
@@ -29,7 +37,7 @@ export function CommissionProgressCard({ progress }: { progress: CommissionProgr
         )}
       </div>
       {dailyAvg === null ? (
-        <div className="text-steel text-[12.5px]">Todavía no hay datos de Pedidos despachados este mes.</div>
+        <div className="text-steel text-[12.5px]">Todavía no hay datos de Pedidos despachados de {fmtMonth(month)}.</div>
       ) : (
         <div className="flex flex-wrap gap-2">
           {tiers.map((t) => {

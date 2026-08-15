@@ -14,6 +14,12 @@ function money(n: number) {
   return `$${n.toFixed(2)}`;
 }
 
+const MONTH_ABBR = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
+function fmtMonth(month: string) {
+  const [y, m] = month.split("-");
+  return `${MONTH_ABBR[Number(m) - 1]} ${y.slice(2)}`;
+}
+
 function fmtRange(from: string, to: string) {
   const f = new Date(`${from}T00:00:00Z`);
   const t = new Date(`${to}T00:00:00Z`);
@@ -21,6 +27,9 @@ function fmtRange(from: string, to: string) {
   return `${fmt(f)} – ${fmt(t)}`;
 }
 
+// Confirmado 2026-08-14: muestra el ÚLTIMO MES COMPLETO (nunca el mes en
+// curso), mismo criterio que el widget público de Inicio — evita que este
+// número se vea descuadrado contra otros indicadores de una sola semana.
 function ProgressWidget() {
   const [progress, setProgress] = useState<Progress | null>(null);
   useEffect(() => {
@@ -30,7 +39,7 @@ function ProgressWidget() {
 
   return (
     <div className="bg-surface border border-rule rounded-md p-4 mb-4">
-      <div className="text-[11px] font-semibold uppercase tracking-wide text-steel mb-2">Progreso de este mes</div>
+      <div className="text-[11px] font-semibold uppercase tracking-wide text-steel mb-2">Progreso — {fmtMonth(progress.month)} (último mes completo)</div>
       <div className="text-[13px] mb-2.5">
         {progress.dailyAvg !== null ? (
           <>
@@ -38,7 +47,7 @@ function ProgressWidget() {
             {progress.from && progress.to && <span className="text-steel-dim"> — {fmtRange(progress.from, progress.to)} (lunes a sábado, sin domingos)</span>}
           </>
         ) : (
-          "Todavía no hay datos de Pedidos despachados este mes."
+          <>Todavía no hay datos de Pedidos despachados de {fmtMonth(progress.month)}.</>
         )}
       </div>
       <div className="flex flex-wrap gap-2">
