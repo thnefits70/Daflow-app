@@ -275,17 +275,34 @@ export function WeeklyTrendChart({
           {latestCaption && <div className="text-[11.5px] text-steel mt-1">{latestCaption}</div>}
         </div>
         {status && (
-          <div className="flex items-center gap-2.5">
-            <span
-              className="font-mono text-[10.5px] font-semibold tracking-wider px-2.5 py-1 rounded-full"
-              style={{ color: status.color, border: `1px solid ${status.color}`, background: `${status.color}1a` }}
-            >
-              {status.label}
-            </span>
-            {format !== "percent" && goalPct !== null && (
-              <span className="text-[12px] text-steel">
-                {goalPct}% de la meta semanal ({weeklyGoal!.toLocaleString("es-MX")})
+          <div className="flex flex-col items-end gap-1.5">
+            <div className="flex items-center gap-2.5">
+              <span
+                className="font-mono text-[10.5px] font-semibold tracking-wider px-2.5 py-1 rounded-full"
+                style={{ color: status.color, border: `1px solid ${status.color}`, background: `${status.color}1a` }}
+              >
+                {status.label}
               </span>
+              {format !== "percent" && goalPct !== null && (
+                <span className="text-[12px] text-steel">
+                  {goalPct}% de la meta semanal ({weeklyGoal!.toLocaleString("es-MX")})
+                </span>
+              )}
+            </div>
+            {format !== "percent" && goalPct !== null && (
+              <div className="w-full min-w-[180px]">
+                <div className="h-1.5 rounded-full bg-rule overflow-hidden">
+                  <div
+                    className="h-full rounded-full transition-all"
+                    style={{ width: `${Math.min(100, Math.max(goalPct, 2))}%`, background: status.color }}
+                  />
+                </div>
+                <div className="text-[11px] text-steel mt-1 text-right">
+                  {goalPct >= 100
+                    ? "¡Meta semanal superada!"
+                    : `Faltan ${(weeklyGoal! - latest.value).toLocaleString("es-MX")} pedidos para llegar a la meta`}
+                </div>
+              </div>
             )}
           </div>
         )}

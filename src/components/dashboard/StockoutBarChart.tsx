@@ -5,7 +5,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { formatWeekShort, formatIsoWeekRangeLabel, smoothPath } from "./WeeklyTrendChart";
 import type { StockoutWeekPoint } from "@/lib/dashboard";
 
-const WINDOW_SIZE = 4;
+const WINDOW_SIZE = 25;
 
 export function StockoutBarChart({ points }: { points: StockoutWeekPoint[] }) {
   const [offset, setOffset] = useState(0);
@@ -55,6 +55,16 @@ export function StockoutBarChart({ points }: { points: StockoutWeekPoint[] }) {
     y: padT + innerH - (p.value / yMax) * innerH,
   }));
   const trendPath = smoothPath(topCoords);
+
+  const productCounts = new Map<string, number>();
+  for (const p of points) {
+    for (const name of p.products) {
+      productCounts.set(name, (productCounts.get(name) ?? 0) + 1);
+    }
+  }
+  const recurring = [...productCounts.entries()]
+    .filter(([, count]) => count > 2)
+    .sort((a, b) => b[1] - a[1]);
 
   return (
     <div ref={rootRef}>
@@ -217,6 +227,25 @@ export function StockoutBarChart({ points }: { points: StockoutWeekPoint[] }) {
           );
         })()}
       </div>
+
+      {recurring.length > 0 && (
+        <div className="mt-5 pt-4 border-t border-rule">
+          <div className="text-[11px] font-semibold tracking-wide uppercase text-steel mb-2">
+            Productos recurrentes · más de 2 rupturas de stock
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {recurring.map(([name, count]) => (
+              <span
+                key={name}
+                className="flex items-center gap-1.5 text-[11px] text-ink bg-surface border border-rule rounded px-2 py-1 leading-tight"
+              >
+                {name}
+                <span className="font-mono text-[10px] font-semibold text-red">{count}×</span>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
