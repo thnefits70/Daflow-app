@@ -225,6 +225,13 @@ export function WeeklyTrendChart({
     : goalPct !== null
     ? (format === "percent" ? fillRateStatus(goalPct) : goalStatus(goalPct))
     : null;
+  // Confirmado 2026-08-15: el relleno de la barra de progreso usa su propio
+  // semáforo por tercios del ancho (rojo <33%, amarillo 33-66%, verde
+  // >66%) en vez del color del badge de estado — así se ve el avance como
+  // "acercándose" progresivamente aunque el badge siga diciendo "No
+  // eficiente". Independiente de goalStatus/fillRateStatus.
+  const barPct = goalPct !== null ? Math.min(100, Math.max(goalPct, 0)) : 0;
+  const barColor = barPct >= 200 / 3 ? "#22C55E" : barPct >= 100 / 3 ? "#D9A441" : "#C4453A";
   const goalYRaw = weeklyGoal ? padT + innerH - (weeklyGoal / yMax) * innerH : null;
   const goalY = goalYRaw !== null && goalYRaw > padT + 4 ? goalYRaw : null;
 
@@ -306,9 +313,17 @@ export function WeeklyTrendChart({
               <div className="w-full min-w-[180px]">
                 <div className="h-1.5 rounded-full bg-rule overflow-hidden">
                   <div
-                    className="h-full rounded-full transition-all"
-                    style={{ width: `${Math.min(100, Math.max(goalPct, 2))}%`, background: status.color }}
-                  />
+                    className="h-full rounded-full transition-all relative overflow-hidden"
+                    style={{ width: `${Math.max(barPct, 2)}%`, background: barColor }}
+                  >
+                    <div
+                      className="absolute inset-y-0 w-1/3"
+                      style={{
+                        background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.55), transparent)",
+                        animation: "daflow-bar-shimmer 2.2s ease-in-out infinite",
+                      }}
+                    />
+                  </div>
                 </div>
                 <div className="text-[11px] text-steel mt-1 text-right">
                   {goalPct >= 100

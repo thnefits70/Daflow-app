@@ -54,3 +54,9 @@ body {
   0%, 100% { opacity: .4; transform: scale(1); }
   50% { opacity: 1; transform: scale(1.25); }
 }
+
+@keyframes daflow-bar-shimmer {
+  0% { transform: translateX(-120%); }
+  50% { transform: translateX(220%); }
+  100% { transform: translateX(-120%); }
+}
