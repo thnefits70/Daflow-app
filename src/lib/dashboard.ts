@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { getDailyAverageForMonth } from "@/lib/commissionTiers";
+import { getMonthDispatchSummary } from "@/lib/commissionTiers";
 
 function pct(a: number, b: number) {
   return b === 0 ? 0 : Math.round((a / b) * 100);
@@ -93,6 +93,8 @@ export async function getDashboardData(): Promise<DashboardData> {
 export type CommissionProgress = {
   month: string;
   dailyAvg: number | null;
+  from: string | null;
+  to: string | null;
   tiers: { id: string; name: string; minDailyAvg: number; maxDailyAvg: number | null }[];
 } | null;
 
@@ -107,12 +109,18 @@ function currentMonthStr(): string {
 // expone /api/commissions/progress, threaded acá igual que weeklyTrend.
 export async function getCommissionProgress(): Promise<CommissionProgress> {
   const month = currentMonthStr();
-  const [dailyAvg, tiers] = await Promise.all([
-    getDailyAverageForMonth(month),
+  const [summary, tiers] = await Promise.all([
+    getMonthDispatchSummary(month),
     prisma.commissionTier.findMany({ where: { isActive: true }, orderBy: { orderIndex: "asc" } }),
   ]);
   if (tiers.length === 0) return null;
-  return { month, dailyAvg, tiers: tiers.map((t) => ({ id: t.id, name: t.name, minDailyAvg: t.minDailyAvg, maxDailyAvg: t.maxDailyAvg })) };
+  return {
+    month,
+    dailyAvg: summary?.dailyAvg ?? null,
+    from: summary?.from ?? null,
+    to: summary?.to ?? null,
+    tiers: tiers.map((t) => ({ id: t.id, name: t.name, minDailyAvg: t.minDailyAvg, maxDailyAvg: t.maxDailyAvg })),
+  };
 }
 
 export type WeeklyTrend = { deptName: string; points: { week: string; value: number; detail?: string }[] } | null;

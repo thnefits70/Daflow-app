@@ -3,7 +3,6 @@
 // nunca se guarda un resultado derivado, siempre se recalcula desde los
 // datos crudos (WeeklyMetricRecord).
 import { prisma } from "@/lib/prisma";
-import { isFixedHoliday } from "@/lib/recognition";
 
 // Mismo cálculo de lunes-de-semana-ISO que ya usa pendingTasks.ts (no
 // exportado ahí, así que se reimplementa acá — cada archivo tiene la suya).
@@ -20,14 +19,15 @@ function mondayOfIsoWeek(week: string): Date {
   return target;
 }
 
-// Confirmado 2026-08-14: días laborables Provedix son lunes a sábado (mismo
-// criterio que isValidOvertimeDate en payrollCalc.ts — domingo nunca cuenta)
-// más los feriados fijos ya modelados en recognition.ts. Ojo: NO es lo mismo
-// que isBusinessDay() de recognition.ts, que ahí trata sábado como fin de
-// semana — ese es específico de los plazos de Colaborador Destacado, no de
-// la semana laboral real de la empresa.
+// Confirmado 2026-08-14: días laborables Provedix son lunes a sábado —
+// SOLO se excluye domingo (mismo criterio que isValidOvertimeDate en
+// payrollCalc.ts), los feriados NO se excluyen para este cálculo
+// específico (confirmado explícitamente por el usuario). Ojo: NO es lo
+// mismo que isBusinessDay() de recognition.ts, que ahí trata sábado como
+// fin de semana — ese es específico de los plazos de Colaborador
+// Destacado, no de la semana laboral real de la empresa.
 function isProvedixBusinessDay(date: Date): boolean {
-  return date.getUTCDay() !== 0 && !isFixedHoliday(date);
+  return date.getUTCDay() !== 0;
 }
 
 function businessDaysInRange(start: Date, end: Date): number {
@@ -40,11 +40,23 @@ function businessDaysInRange(start: Date, end: Date): number {
   return count;
 }
 
+export type MonthDispatchSummary = {
+  dailyAvg: number;
+  totalPedidos: number;
+  businessDays: number;
+  weeks: number;
+  from: string; // "YYYY-MM-DD" — lunes de la primera semana con dato
+  to: string; // "YYYY-MM-DD" — sábado de la última semana con dato
+};
+
 // Confirmado 2026-08-14: pedido explícito del usuario — el rango de
-// pedidos por nivel (750-1050) es el PROMEDIO DIARIO de "Pedidos
-// despachados" (WeeklyMetricRecord del depto con trackWeeklyMetric,
-// hoy Fulfillment), promediado sobre un mes calendario — nunca el total
-// semanal ni el agregado mensual grande que ya se ve en Inicio.
+// pedidos por nivel (750-1050) es el total de "Pedidos despachados" del
+// mes (WeeklyMetricRecord del depto con trackWeeklyMetric, hoy
+// Fulfillment), dividido entre los días de lunes a sábado — domingos NO
+// cuentan, feriados SÍ cuentan como día laborable (confirmado
+// explícitamente: acá no se excluyen, a diferencia de otros cálculos de
+// la app). Nunca el total semanal ni el agregado mensual grande que ya se
+// ve en Inicio.
 //
 // Una semana ISO "pertenece" al mes cuyo calendario contiene su lunes —
 // mismo criterio simple ya usado en otras partes de la app para atribuir
@@ -59,7 +71,7 @@ function businessDaysInRange(start: Date, end: Date): number {
 // lunes a domingo), nunca de un rango de calendario aparte — así el mes en
 // curso (con una sola semana cargada) da exactamente lo mismo que el
 // promedio de esa semana sola, sin desfase.
-export async function getDailyAverageForMonth(month: string): Promise<number | null> {
+export async function getMonthDispatchSummary(month: string): Promise<MonthDispatchSummary | null> {
   const dept = await prisma.department.findFirst({ where: { trackWeeklyMetric: true } });
   if (!dept) return null;
 
@@ -80,7 +92,19 @@ export async function getDailyAverageForMonth(month: string): Promise<number | n
   }, 0);
   if (businessDays === 0) return null;
 
-  return total / businessDays;
+  const mondays = monthRecords.map((r) => r.monday);
+  const minMonday = mondays.reduce((a, b) => (b < a ? b : a));
+  const maxMonday = mondays.reduce((a, b) => (b > a ? b : a));
+  const lastSaturday = new Date(Date.UTC(maxMonday.getUTCFullYear(), maxMonday.getUTCMonth(), maxMonday.getUTCDate() + 5));
+
+  return {
+    dailyAvg: total / businessDays,
+    totalPedidos: total,
+    businessDays,
+    weeks: monthRecords.length,
+    from: minMonday.toISOString().slice(0, 10),
+    to: lastSaturday.toISOString().slice(0, 10),
+  };
 }
 
 export type CommissionTierRow = {

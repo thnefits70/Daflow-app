@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
-import { getDailyAverageForMonth } from "@/lib/commissionTiers";
+import { getMonthDispatchSummary } from "@/lib/commissionTiers";
 
 function currentMonthStr(): string {
   const now = new Date(Date.now() - 5 * 3600 * 1000); // Ecuador UTC-5
@@ -16,10 +16,16 @@ export async function GET() {
   if (!session) return NextResponse.json({ error: "No autorizado." }, { status: 401 });
 
   const month = currentMonthStr();
-  const [dailyAvg, tiers] = await Promise.all([
-    getDailyAverageForMonth(month),
+  const [summary, tiers] = await Promise.all([
+    getMonthDispatchSummary(month),
     prisma.commissionTier.findMany({ where: { isActive: true }, orderBy: { orderIndex: "asc" } }),
   ]);
 
-  return NextResponse.json({ month, dailyAvg, tiers });
+  return NextResponse.json({
+    month,
+    dailyAvg: summary?.dailyAvg ?? null,
+    from: summary?.from ?? null,
+    to: summary?.to ?? null,
+    tiers,
+  });
 }

@@ -7,7 +7,7 @@ import {
   isFirstQuincenaOfMonth,
   isEndOfMonthQuincena,
 } from "@/lib/payrollCalc";
-import { getDailyAverageForMonth, getAchievedTier, CEO_BONUS_AMOUNTS, CEO_BONUS_LABELS } from "@/lib/commissionTiers";
+import { getMonthDispatchSummary, getAchievedTier, CEO_BONUS_AMOUNTS, CEO_BONUS_LABELS } from "@/lib/commissionTiers";
 
 const PERIOD_RE = /^\d{4}-\d{2}-Q[12]$/;
 
@@ -59,9 +59,9 @@ export async function buildAutomaticLineItems(employeeId: string, period: string
       // alcanzado el mes fuente completo, si esta persona tiene un monto
       // aprobado (>0) para ese nivel. Mismo desfase de un mes que horas
       // extra/bono destacado arriba.
-      const dailyAvg = await getDailyAverageForMonth(sourceMonth);
-      if (dailyAvg !== null) {
-        const tier = await getAchievedTier(dailyAvg);
+      const dispatchSummary = await getMonthDispatchSummary(sourceMonth);
+      if (dispatchSummary) {
+        const tier = await getAchievedTier(dispatchSummary.dailyAvg);
         if (tier) {
           const ta = await prisma.commissionTierAmount.findUnique({
             where: { tierId_userId: { tierId: tier.id, userId: employeeId } },

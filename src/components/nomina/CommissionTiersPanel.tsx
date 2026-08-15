@@ -6,12 +6,19 @@ import { Check, X } from "lucide-react";
 type Tier = { id: string; name: string; orderIndex: number; minDailyAvg: number; maxDailyAvg: number | null };
 type EmployeeTierAmount = { tierId: string; tierName: string; amount: number; pendingAmount: number | null; proposedByName: string | null };
 type Employee = { id: string; name: string; position: string | null; department: { name: string } | null; tiers: EmployeeTierAmount[] };
-type Progress = { month: string; dailyAvg: number | null; tiers: Tier[] };
+type Progress = { month: string; dailyAvg: number | null; from: string | null; to: string | null; tiers: Tier[] };
 
 const TIER_EMOJI: Record<string, string> = { "Raíz": "🌱", "Cosecha": "🌾" };
 
 function money(n: number) {
   return `$${n.toFixed(2)}`;
+}
+
+function fmtRange(from: string, to: string) {
+  const f = new Date(`${from}T00:00:00Z`);
+  const t = new Date(`${to}T00:00:00Z`);
+  const fmt = (d: Date) => d.toLocaleDateString("es-EC", { day: "numeric", month: "short", timeZone: "UTC" });
+  return `${fmt(f)} – ${fmt(t)}`;
 }
 
 function ProgressWidget() {
@@ -26,7 +33,10 @@ function ProgressWidget() {
       <div className="text-[11px] font-semibold uppercase tracking-wide text-steel mb-2">Progreso de este mes</div>
       <div className="text-[13px] mb-2.5">
         {progress.dailyAvg !== null ? (
-          <>Promedio diario hasta hoy: <span className="font-bold tabular-nums">{progress.dailyAvg.toFixed(0)}</span> pedidos/día</>
+          <>
+            Promedio diario: <span className="font-bold tabular-nums">{progress.dailyAvg.toFixed(0)}</span> pedidos/día
+            {progress.from && progress.to && <span className="text-steel-dim"> — {fmtRange(progress.from, progress.to)} (lunes a sábado, sin domingos)</span>}
+          </>
         ) : (
           "Todavía no hay datos de Pedidos despachados este mes."
         )}
