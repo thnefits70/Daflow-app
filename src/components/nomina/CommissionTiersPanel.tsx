@@ -6,7 +6,7 @@ import { Check, X } from "lucide-react";
 type Tier = { id: string; name: string; orderIndex: number; minDailyAvg: number; maxDailyAvg: number | null };
 type EmployeeTierAmount = { tierId: string; tierName: string; amount: number; pendingAmount: number | null; proposedByName: string | null };
 type Employee = { id: string; name: string; position: string | null; department: { name: string } | null; tiers: EmployeeTierAmount[] };
-type Progress = { month: string; dailyAvg: number | null; from: string | null; to: string | null; tiers: Tier[] };
+type Progress = { month: string; dailyAvg: number | null; tiers: Tier[] };
 
 const TIER_EMOJI: Record<string, string> = { "Raíz": "🌱", "Cosecha": "🌾" };
 
@@ -20,16 +20,12 @@ function fmtMonth(month: string) {
   return `${MONTH_ABBR[Number(m) - 1]} ${y.slice(2)}`;
 }
 
-function fmtRange(from: string, to: string) {
-  const f = new Date(`${from}T00:00:00Z`);
-  const t = new Date(`${to}T00:00:00Z`);
-  const fmt = (d: Date) => d.toLocaleDateString("es-EC", { day: "numeric", month: "short", timeZone: "UTC" });
-  return `${fmt(f)} – ${fmt(t)}`;
-}
-
 // Confirmado 2026-08-14: muestra el ÚLTIMO MES COMPLETO (nunca el mes en
 // curso), mismo criterio que el widget público de Inicio — evita que este
 // número se vea descuadrado contra otros indicadores de una sola semana.
+// Sin rango de fechas visible (se sacó a pedido del usuario — el total
+// siempre suma semanas completas, así que un rango tipo "6 jul – 1 ago"
+// confundía aunque el cálculo fuera correcto).
 function ProgressWidget() {
   const [progress, setProgress] = useState<Progress | null>(null);
   useEffect(() => {
@@ -44,7 +40,7 @@ function ProgressWidget() {
         {progress.dailyAvg !== null ? (
           <>
             Promedio diario: <span className="font-bold tabular-nums">{progress.dailyAvg.toFixed(0)}</span> pedidos/día
-            {progress.from && progress.to && <span className="text-steel-dim"> — {fmtRange(progress.from, progress.to)} (lunes a sábado, sin domingos)</span>}
+            <span className="text-steel-dim"> (lunes a sábado, sin domingos)</span>
           </>
         ) : (
           <>Todavía no hay datos de Pedidos despachados de {fmtMonth(progress.month)}.</>

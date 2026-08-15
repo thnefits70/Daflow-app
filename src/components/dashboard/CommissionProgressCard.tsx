@@ -8,32 +8,24 @@ function fmtMonth(month: string) {
   return `${MONTH_ABBR[Number(m) - 1]} ${y.slice(2)}`;
 }
 
-function fmtRange(from: string, to: string) {
-  const f = new Date(`${from}T00:00:00Z`);
-  const t = new Date(`${to}T00:00:00Z`);
-  const fmt = (d: Date) => d.toLocaleDateString("es-EC", { day: "numeric", month: "short", timeZone: "UTC" });
-  return `${fmt(f)} – ${fmt(t)}`;
-}
-
 // Confirmado 2026-08-14: pedido explícito del usuario — visible para TODO
 // el equipo (no confidencial, a diferencia de los montos de comisión por
 // persona/nivel) para el efecto motivacional buscado. Muestra el ÚLTIMO
 // MES COMPLETO (nunca el mes en curso — pedido explícito, para que no se
 // vea descuadrado contra "Pedidos despachados" que muestra la última
-// semana sola) contra los 3 niveles.
+// semana sola) contra los 3 niveles. Sin rango de fechas visible (se sacó
+// a pedido del usuario — el total siempre suma semanas completas, así que
+// mostrar "6 jul – 1 ago" confundía aunque el cálculo fuera correcto).
 export function CommissionProgressCard({ progress }: { progress: CommissionProgress }) {
   if (!progress) return null;
-  const { dailyAvg, month, from, to, tiers } = progress;
+  const { dailyAvg, month, tiers } = progress;
 
   return (
     <div className="bg-surface border border-rule rounded-lg p-5 mb-5">
       <div className="flex items-center justify-between mb-3">
         <div className="font-mono text-[10.5px] tracking-[.14em] uppercase text-steel">Comisión de equipo — {fmtMonth(month)}</div>
         {dailyAvg !== null && (
-          <div className="text-right">
-            <div className="text-[13px] font-bold tabular-nums">{dailyAvg.toFixed(0)} pedidos/día</div>
-            {from && to && <div className="text-[10.5px] text-steel-dim">{fmtRange(from, to)}</div>}
-          </div>
+          <div className="text-[13px] font-bold tabular-nums">{dailyAvg.toFixed(0)} pedidos/día</div>
         )}
       </div>
       {dailyAvg === null ? (
