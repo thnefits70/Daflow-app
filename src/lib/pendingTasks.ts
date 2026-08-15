@@ -926,7 +926,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
 
   if (me.leadsDept.code === "FIN") {
     monthly = true;
-    const [payStub, returnRate, warranty, paymentReminders, storeFeedback, pettyCashLow, pettyCashUnconfirmed] = await Promise.all([
+    const [payStub, returnRate, warranty, paymentReminders, storeFeedback, pettyCashLow, pettyCashUnconfirmed, purchaseShippingItem] = await Promise.all([
       getPayStubPendingItem("/area/roles-de-pago"),
       getReturnRatePendingItem("/area/kpis-generales"),
       getWarrantyPendingItem("/area/kpis-generales"),
@@ -934,6 +934,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       getStoreFeedbackPendingItem("/area/kpis-generales"),
       getPettyCashLowBalanceItems("/area/workspace"),
       getPettyCashUnconfirmedFunderItems(actor.userId, "/area/workspace"),
+      getPurchaseShippingPendingItem("/area/workspace?tab=compras&ptab=finanzas"),
     ]);
     items.push(...pettyCashLow, ...pettyCashUnconfirmed);
     if (payStub) items.push(payStub);
@@ -941,6 +942,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     if (warranty) items.push(warranty);
     items.push(...paymentReminders);
     if (storeFeedback) items.push(storeFeedback);
+    if (purchaseShippingItem) items.push(purchaseShippingItem);
   }
 
   if (me.leadsDept.trackWeeklyMetric) {

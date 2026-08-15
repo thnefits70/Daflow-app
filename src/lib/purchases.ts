@@ -170,7 +170,7 @@ export async function getStalePurchaseRequestPushes(): Promise<StalePurchaseRequ
   const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
   const pushes: StalePurchaseRequestPush[] = [];
 
-  const [pendingApproval, approvedUnpaid, paidUnreceived, invLeader, finLeader] = await Promise.all([
+  const [pendingApproval, approvedUnpaid, paidUnreceived, shippingPaidUnreceived, invLeader, finLeader] = await Promise.all([
     prisma.purchaseRequest.findMany({
       where: { status: "PENDING_APPROVAL", requestedAt: { lt: cutoff } },
       select: { id: true, totalCost: true, catalogItem: { select: { name: true } } },
@@ -181,6 +181,17 @@ export async function getStalePurchaseRequestPushes(): Promise<StalePurchaseRequ
     }),
     prisma.purchaseRequest.findMany({
       where: { status: "PAID", paidAt: { lt: cutoff } },
+      select: { id: true, totalCost: true, catalogItem: { select: { name: true } } },
+    }),
+    // Confirmado 2026-08-14: pedido explícito del usuario — desde que el
+    // flete se puede pagar sin esperar a que Inventario confirme recepción,
+    // si pasan 24h desde que se pagó el flete (shippingPaidAt) y la
+    // mercadería SIGUE sin quedar en RECEIVED, se re-avisa cada día como
+    // urgente hasta que se revise — mismo espíritu "se sigue avisando cada
+    // día" que el resto de esta función, independiente de paidUnreceived
+    // (que mira el pago del producto, no del flete).
+    prisma.purchaseRequest.findMany({
+      where: { shippingPaidAt: { lt: cutoff }, status: { notIn: ["RECEIVED", "REJECTED"] } },
       select: { id: true, totalCost: true, catalogItem: { select: { name: true } } },
     }),
     prisma.user.findFirst({ where: { isLeader: true, leadsDept: { code: "INV" } }, select: { id: true } }),
@@ -204,6 +215,11 @@ export async function getStalePurchaseRequestPushes(): Promise<StalePurchaseRequ
     const body = `${r.catalogItem.name} — pagado hace más de 24h, Inventario todavía no confirma que llegó`;
     pushes.push({ ownerId: "admin", title: "⏰ Falta confirmar que llegó una compra", body, url: "/admin" });
     if (invLeader) pushes.push({ ownerId: invLeader.id, title: "⏰ Falta confirmar que llegó una compra", body, url: "/area/workspace" });
+  }
+  for (const r of shippingPaidUnreceived) {
+    const body = `${r.catalogItem.name} — el flete ya se pagó hace más de 24h y todavía no se revisa la mercadería`;
+    pushes.push({ ownerId: "admin", title: "🚨 Urgente — flete pagado sin revisar mercadería", body, url: "/admin" });
+    if (invLeader) pushes.push({ ownerId: invLeader.id, title: "🚨 Urgente — flete pagado sin revisar mercadería", body, url: "/area/workspace" });
   }
 
   return pushes;

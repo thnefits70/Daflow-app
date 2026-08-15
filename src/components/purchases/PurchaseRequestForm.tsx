@@ -1091,7 +1091,7 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
                 </div>
                 {shippingPaymentTiming === "ON_DELIVERY" && (
                   <div className="text-[10.5px] text-steel mt-1.5">
-                    Cuando Inventario confirme que llegó, vas a poder pedir con un clic que se pague el flete.
+                    En cuanto esté aprobada vas a poder pedir con un clic que se pague el flete — no hace falta esperar a que Inventario confirme que llegó. Eso sí, apenas se pague, Inventario recibe aviso para revisar esa mercadería.
                   </div>
                 )}
               </div>

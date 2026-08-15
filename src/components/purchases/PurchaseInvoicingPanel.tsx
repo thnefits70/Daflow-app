@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Upload, CheckCircle2, Truck, Lock, Wallet, Search, AlertTriangle } from "lucide-react";
+import { Upload, CheckCircle2, Truck, Lock, Wallet, Search, AlertTriangle, Landmark } from "lucide-react";
 import { uploadFile } from "@/lib/uploadFile";
 import { compressImage } from "@/lib/compressImage";
 import { usePasteFile } from "@/lib/usePasteFile";
@@ -27,10 +27,27 @@ type Row = {
   requestedBy: { name: string } | null;
   catalogItem: { name: string; photos: string[] };
   supplier: { id: string; name: string };
+  bankAccount: {
+    bankName: string;
+    bankAccountType: string;
+    bankAccountNumber: string;
+    bankAccountHolder: string;
+    holderIdType: string | null;
+    holderIdNumber: string | null;
+  } | null;
   shippingIncluded: boolean;
   shippingPaymentTiming: "WITH_PURCHASE" | "ON_DELIVERY" | null;
+  shippingPaymentMethod: "TRANSFER" | "PETTY_CASH" | null;
   shippingCostTotal: number | null;
   carrier: { name: string } | null;
+  carrierBankAccount: {
+    bankName: string;
+    bankAccountType: string;
+    bankAccountNumber: string;
+    bankAccountHolder: string;
+    holderIdType: string | null;
+    holderIdNumber: string | null;
+  } | null;
   shippingPaymentRequestedAt: string | null;
   shippingPaymentRequestedBy: { name: string } | null;
   shippingPaidAt: string | null;
@@ -473,7 +490,7 @@ export function PurchaseInvoicingPanel() {
   // Confirmado 2026-08-03: solo aparece acá una vez que quien solicitó pidió
   // el pago con un clic (antes de eso no hay nada que Finanzas deba hacer).
   const pendingShippingGroups = groupRows(
-    rows.filter((r) => !r.shippingIncluded && r.shippingPaymentTiming === "ON_DELIVERY" && r.shippingPaymentRequestedAt && !r.shippingPaidAt)
+    rows.filter((r) => !r.shippingIncluded && r.shippingPaymentTiming === "ON_DELIVERY" && r.shippingPaymentRequestedAt && !r.shippingPaidAt && r.shippingPaymentMethod !== "PETTY_CASH")
   );
 
   return (
@@ -515,8 +532,27 @@ export function PurchaseInvoicingPanel() {
                   </div>
                   <div className="text-[11.5px] text-steel">{g[0].supplier.name} — {money(total)}</div>
                   <div className="text-[10px] text-steel-dim mb-2.5">Solicitada por {actorName(g[0].requestedBy?.name)}</div>
+                  <div className="bg-cloud border border-rule rounded-md px-3 py-2.5 mb-2.5">
+                    <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-steel mb-1.5">
+                      <Landmark size={12} /> Transferir a {g[0].supplier.name}
+                    </div>
+                    {g[0].bankAccount ? (
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-2.5 gap-y-0.5 text-[11.5px]">
+                        <div><span className="text-steel">Banco: </span><span className="font-semibold">{g[0].bankAccount.bankName}</span></div>
+                        <div><span className="text-steel">Tipo: </span><span className="font-semibold">{g[0].bankAccount.bankAccountType}</span></div>
+                        <div><span className="text-steel">N°: </span><span className="font-semibold break-all">{g[0].bankAccount.bankAccountNumber}</span></div>
+                        <div><span className="text-steel">Titular: </span><span className="font-semibold">{g[0].bankAccount.bankAccountHolder}</span></div>
+                        {g[0].bankAccount.holderIdType && (
+                          <div><span className="text-steel">{g[0].bankAccount.holderIdType === "RUC" ? "RUC" : "CI"}: </span><span className="font-semibold break-all">{g[0].bankAccount.holderIdNumber}</span></div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="text-[11.5px] text-red">Falta registrar la cuenta bancaria del proveedor.</div>
+                    )}
+                  </div>
                   {payingGroup === groupId ? (
                     <div>
+                      <div className="text-[11px] text-steel mb-2">Paso 2 de 2: sube el comprobante de la transferencia que ya hiciste y confirma abajo para cerrar esta solicitud.</div>
                       {reservedCredits.length > 0 && (
                         <div className="bg-teal/10 border border-teal/35 rounded-md p-3 mb-2.5">
                           <div className="flex items-center gap-1.5 text-[12px] font-semibold text-teal mb-1.5"><Lock size={13} /> Crédito ya reservado al pedir esta solicitud</div>
@@ -598,9 +634,12 @@ export function PurchaseInvoicingPanel() {
                       </div>
                     </div>
                   ) : (
-                    <button type="button" className="rounded border border-blue bg-blue px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer" onClick={() => openPay(groupId, g[0].supplier.id)}>
-                      💳 Marcar como pagado
-                    </button>
+                    <>
+                      <div className="text-[11px] text-steel mb-1.5">Paso 1 de 2: transfiere el monto a la cuenta de arriba (o usa el crédito, si aplica). Después haz clic aquí para subir el comprobante y cerrar la solicitud.</div>
+                      <button type="button" className="rounded border border-blue bg-blue px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer" onClick={() => openPay(groupId, g[0].supplier.id)}>
+                        💳 Ya transferí, cerrar solicitud
+                      </button>
+                    </>
                   )}
                 </div>
               );
@@ -626,8 +665,27 @@ export function PurchaseInvoicingPanel() {
                   </div>
                   <div className="text-[11.5px] text-steel">{r0.carrier?.name ?? "Transportista"} — {money(r0.shippingCostTotal ?? 0)}</div>
                   <div className="text-[10px] text-steel-dim mb-2.5">Pedido por {actorName(r0.shippingPaymentRequestedBy?.name)}</div>
+                  <div className="bg-cloud border border-rule rounded-md px-3 py-2.5 mb-2.5">
+                    <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-steel mb-1.5">
+                      <Landmark size={12} /> Transferir a {r0.carrier?.name ?? "transportista"}
+                    </div>
+                    {r0.carrierBankAccount ? (
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-2.5 gap-y-0.5 text-[11.5px]">
+                        <div><span className="text-steel">Banco: </span><span className="font-semibold">{r0.carrierBankAccount.bankName}</span></div>
+                        <div><span className="text-steel">Tipo: </span><span className="font-semibold">{r0.carrierBankAccount.bankAccountType}</span></div>
+                        <div><span className="text-steel">N°: </span><span className="font-semibold break-all">{r0.carrierBankAccount.bankAccountNumber}</span></div>
+                        <div><span className="text-steel">Titular: </span><span className="font-semibold">{r0.carrierBankAccount.bankAccountHolder}</span></div>
+                        {r0.carrierBankAccount.holderIdType && (
+                          <div><span className="text-steel">{r0.carrierBankAccount.holderIdType === "RUC" ? "RUC" : "CI"}: </span><span className="font-semibold break-all">{r0.carrierBankAccount.holderIdNumber}</span></div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="text-[11.5px] text-red">Falta registrar la cuenta bancaria del transportista.</div>
+                    )}
+                  </div>
                   {payingShippingGroup === groupId ? (
                     <div>
+                      <div className="text-[11px] text-steel mb-2">Paso 2 de 2: si tienes el comprobante de la transferencia que ya hiciste, súbelo (opcional) y confirma abajo para cerrar esta solicitud.</div>
                       {shippingProofUrl ? (
                         <div className="flex items-center gap-2 text-[12px] mb-2">
                           {shippingProofVerifying ? (
@@ -682,9 +740,12 @@ export function PurchaseInvoicingPanel() {
                       </div>
                     </div>
                   ) : (
-                    <button type="button" className="rounded border border-blue bg-blue px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer" onClick={() => { setPayingShippingGroup(groupId); setShippingProofUrl(null); setShippingProofVerifyResult(null); setErr(""); }}>
-                      💳 Marcar flete como pagado
-                    </button>
+                    <>
+                      <div className="text-[11px] text-steel mb-1.5">Paso 1 de 2: transfiere el monto a la cuenta de arriba. Después haz clic aquí para cerrar la solicitud.</div>
+                      <button type="button" className="rounded border border-blue bg-blue px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer" onClick={() => { setPayingShippingGroup(groupId); setShippingProofUrl(null); setShippingProofVerifyResult(null); setErr(""); }}>
+                        💳 Ya transferí, cerrar solicitud
+                      </button>
+                    </>
                   )}
                 </div>
               );

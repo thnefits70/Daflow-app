@@ -24,6 +24,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ gro
 
   const rows = await prisma.purchaseRequest.findMany({ where: { groupId }, include: { catalogItem: { select: { name: true } } } });
   if (rows.length === 0) return NextResponse.json({ error: "No encontrada." }, { status: 404 });
+  // Confirmado 2026-08-14: guarda extra contra pagar el mismo flete dos
+  // veces — complementa el checkFreightAlreadyPaid del lado de Caja Chica
+  // (pettyCash.ts), que ya usa este mismo shippingPaidAt como fuente única
+  // de verdad sin importar el canal.
+  if (rows[0].shippingPaidAt) {
+    return NextResponse.json({ error: "El flete ya está pagado." }, { status: 409 });
+  }
 
   const dup = await findDuplicatePaymentProofUse(parsed.data.proofReceiptNumber, groupId);
   if (dup) {
@@ -46,13 +53,33 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ gro
   });
 
   const requestedById = rows[0].requestedById;
+  const names = rows.map((r) => r.catalogItem.name).join(", ");
   if (requestedById) {
-    const names = rows.map((r) => r.catalogItem.name).join(", ");
     await sendPushToOwner(requestedById, {
       title: "Flete pagado",
       body: `Ya se pagó el flete de ${names}`,
       url: "/area/workspace",
     }).catch(() => null);
+  }
+
+  // Confirmado 2026-08-14: pedido explícito del usuario — como ahora el
+  // flete se puede pagar sin esperar a que Inventario confirme recepción,
+  // apenas se paga (si todavía falta esa confirmación) se le avisa a Daniel
+  // (líder INV) + admin que hay mercadería pagada pendiente de revisar, para
+  // que no se quede sin revisión solo porque nadie se acordó.
+  if (rows.some((r) => r.status !== "RECEIVED")) {
+    const invLeader = await prisma.user.findFirst({ where: { isLeader: true, leadsDept: { code: "INV" } }, select: { id: true } });
+    const reviewTargets = new Set<string>(["admin"]);
+    if (invLeader) reviewTargets.add(invLeader.id);
+    await Promise.all(
+      [...reviewTargets].map((ownerId) =>
+        sendPushToOwner(ownerId, {
+          title: "📦 Flete pagado — falta revisar la mercadería",
+          body: `${names} — ya se pagó el flete, confirma que llegó todo bien`,
+          url: ownerId === "admin" ? "/admin" : "/area/workspace",
+        }).catch(() => null)
+      )
+    );
   }
 
   const updated = await prisma.purchaseRequest.findMany({ where: { groupId } });

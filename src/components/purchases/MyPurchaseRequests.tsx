@@ -40,6 +40,7 @@ type Row = {
   shippingIncluded: boolean;
   shippingCarrierPending: boolean;
   shippingPaymentTiming: "WITH_PURCHASE" | "ON_DELIVERY" | null;
+  shippingPaymentMethod: "TRANSFER" | "PETTY_CASH" | null;
   shippingCostTotal: number | null;
   carrier: { id: string; name: string; bankAccounts: BankAccountDTO[] } | null;
   carrierBankAccountId: string | null;
@@ -327,8 +328,12 @@ function ShippingPaymentSection({ g, onUpdate }: { g: Row[]; onUpdate: (patch: P
 
       {err && !addingAccount && <div className="text-red text-[11.5px] mb-2">{err}</div>}
 
-      {requested ? (
+      {r0.shippingPaymentMethod === "PETTY_CASH" ? (
+        <div className="text-[11.5px] text-steel">Se paga con caja chica — Bryan Ríos lo registra desde su Caja Chica cuando llegue la mercadería.</div>
+      ) : requested ? (
         <div className="text-[11.5px] text-steel">✓ Ya se le pidió al administrador que pague el flete — esperando confirmación.</div>
+      ) : !hasAccount ? (
+        <div className="text-[11.5px] text-steel">Agrega la cuenta bancaria del transportista (arriba) antes de poder pedir el pago.</div>
       ) : (
         <button type="button" disabled={busy} className="rounded border border-blue bg-blue px-3.5 py-1.5 text-[12px] font-semibold text-white cursor-pointer disabled:opacity-60" onClick={requestPayment}>
           Pedir que se pague el flete
@@ -492,7 +497,14 @@ function GroupCard({
   // el paso MÁS ATRASADO de todos.
   const groupIdx = Math.min(...g.map((r) => stepIndex(r.status)));
   const statusesDiffer = new Set(g.map((r) => r.status)).size > 1;
-  const showShippingSection = !rejected && !g[0].shippingIncluded && g[0].shippingPaymentTiming === "ON_DELIVERY" && g[0].status === "RECEIVED";
+  // Confirmado 2026-08-14: antes exigía status RECEIVED (Inventario ya
+  // revisó), pero eso bloqueaba pedir el pago del flete mientras la
+  // mercadería ya está físicamente en bodega esperando revisión — el
+  // transportista no puede esperar a que Daniel tenga tiempo de confirmar.
+  // Ahora solo exige que la solicitud ya esté aprobada (no pendiente, no
+  // rechazada); Inventario se entera aparte de que hay algo pagado por
+  // revisar (ver shipping-pay/route.ts).
+  const showShippingSection = !rejected && !g[0].shippingIncluded && g[0].shippingPaymentTiming === "ON_DELIVERY" && g[0].status !== "PENDING_APPROVAL";
 
   async function handleFile(file: File) {
     setUploading(true);
