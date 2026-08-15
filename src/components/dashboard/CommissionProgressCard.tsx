@@ -23,9 +23,12 @@ export function CommissionProgressCard({ progress }: { progress: CommissionProgr
   return (
     <div className="bg-surface border border-rule rounded-lg p-5 mb-5">
       <div className="flex items-center justify-between mb-3">
-        <div className="font-mono text-[10.5px] tracking-[.14em] uppercase text-steel">Comisión de equipo — {fmtMonth(month)}</div>
+        <div className="font-mono text-[10.5px] tracking-[.14em] uppercase text-steel">Comisión de equipo</div>
         {dailyAvg !== null && (
-          <div className="text-[13px] font-bold tabular-nums">{dailyAvg.toFixed(0)} pedidos/día</div>
+          <div className="text-right">
+            <div className="text-[22px] font-extrabold tabular-nums leading-tight">{dailyAvg.toFixed(0)} pedidos/día</div>
+            <div className="text-[11.5px] font-semibold text-steel-dim">{fmtMonth(month)} — mes pasado</div>
+          </div>
         )}
       </div>
       {dailyAvg === null ? (
