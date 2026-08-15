@@ -320,7 +320,7 @@ export function WeeklyTrendChart({
                       className="absolute inset-y-0 w-1/3"
                       style={{
                         background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.55), transparent)",
-                        animation: "daflow-bar-shimmer 2.2s ease-in-out infinite",
+                        animation: "daflow-bar-shimmer 1.8s linear infinite",
                       }}
                     />
                   </div>
