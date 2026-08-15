@@ -17,7 +17,7 @@ export async function GET() {
 
   const month = currentMonthStr();
   const [dailyAvg, tiers] = await Promise.all([
-    getDailyAverageForMonth(month, { asOfNow: true }),
+    getDailyAverageForMonth(month),
     prisma.commissionTier.findMany({ where: { isActive: true }, orderBy: { orderIndex: "asc" } }),
   ]);
 

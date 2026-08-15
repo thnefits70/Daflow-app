@@ -50,14 +50,16 @@ function businessDaysInRange(start: Date, end: Date): number {
 // mismo criterio simple ya usado en otras partes de la app para atribuir
 // una semana a un mes.
 //
-// `asOfNow`: para el mes EN CURSO (el widget de Inicio), los días
-// laborables se cuentan solo hasta el domingo de la ÚLTIMA semana ya
-// cargada — nunca hasta "hoy" del calendario. Bug real corregido
-// 2026-08-14: dividir contra los días hábiles transcurridos hasta hoy
-// hundía el promedio a inicios de la semana en curso, porque esos días
-// todavía no tienen "Pedidos despachados" cargado (se reporta al cierre
-// de la semana) — se contaban como si hubieran tenido cero pedidos.
-export async function getDailyAverageForMonth(month: string, opts?: { asOfNow?: boolean }): Promise<number | null> {
+// Bug real corregido 2026-08-14 (dos vueltas): el denominador de días
+// laborables se calculaba como un rango continuo desde el 1 del mes, lo
+// que colaba días de la semana ANTERIOR (atribuida a otro mes) dentro del
+// conteo — ej. el sábado 1 de agosto pertenece a la semana que se atribuyó
+// a julio, pero igual se contaba como día hábil de agosto. Ahora los días
+// laborables se suman SOLO dentro de cada semana ya atribuida (su propio
+// lunes a domingo), nunca de un rango de calendario aparte — así el mes en
+// curso (con una sola semana cargada) da exactamente lo mismo que el
+// promedio de esa semana sola, sin desfase.
+export async function getDailyAverageForMonth(month: string): Promise<number | null> {
   const dept = await prisma.department.findFirst({ where: { trackWeeklyMetric: true } });
   if (!dept) return null;
 
@@ -72,14 +74,10 @@ export async function getDailyAverageForMonth(month: string, opts?: { asOfNow?: 
   if (monthRecords.length === 0) return null;
 
   const total = monthRecords.reduce((s, r) => s + r.value, 0);
-
-  let rangeEnd = monthEnd;
-  if (opts?.asOfNow) {
-    const latestMonday = monthRecords.reduce((max, r) => (r.monday > max ? r.monday : max), monthRecords[0].monday);
-    rangeEnd = new Date(Date.UTC(latestMonday.getUTCFullYear(), latestMonday.getUTCMonth(), latestMonday.getUTCDate() + 7));
-  }
-  const effectiveEnd = rangeEnd < monthEnd ? rangeEnd : monthEnd;
-  const businessDays = businessDaysInRange(monthStart, effectiveEnd);
+  const businessDays = monthRecords.reduce((s, r) => {
+    const weekEnd = new Date(Date.UTC(r.monday.getUTCFullYear(), r.monday.getUTCMonth(), r.monday.getUTCDate() + 7));
+    return s + businessDaysInRange(r.monday, weekEnd);
+  }, 0);
   if (businessDays === 0) return null;
 
   return total / businessDays;

@@ -108,7 +108,7 @@ function currentMonthStr(): string {
 export async function getCommissionProgress(): Promise<CommissionProgress> {
   const month = currentMonthStr();
   const [dailyAvg, tiers] = await Promise.all([
-    getDailyAverageForMonth(month, { asOfNow: true }),
+    getDailyAverageForMonth(month),
     prisma.commissionTier.findMany({ where: { isActive: true }, orderBy: { orderIndex: "asc" } }),
   ]);
   if (tiers.length === 0) return null;
