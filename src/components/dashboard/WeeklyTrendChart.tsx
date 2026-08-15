@@ -111,6 +111,7 @@ export function WeeklyTrendChart({
   compareIndexA,
   compareIndexB,
   latestCaption,
+  dailyDivisor,
 }: {
   label: string;
   deptName: string;
@@ -142,6 +143,14 @@ export function WeeklyTrendChart({
   // dashboard's Analizar/Comparar contra) — omit either to skip it entirely.
   compareIndexA?: number;
   compareIndexB?: number;
+  // Confirmado 2026-08-15: para Pedidos despachados, la meta y el "faltan
+  // X" deben hablar en pedidos/día (dividiendo weeklyGoal y el valor de la
+  // semana entre este divisor, típicamente 6 días lunes-sábado) en vez de
+  // total semanal — porque las comisiones (3 niveles, ver
+  // commissionTiers.ts) se pagan sobre el promedio diario, no sobre el
+  // total de la semana. El % mostrado en el badge no cambia (es la misma
+  // proporción), solo la unidad en que se explica.
+  dailyDivisor?: number;
 }) {
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const [dateTooltipWeek, setDateTooltipWeek] = useState<string | null>(null);
@@ -209,6 +218,8 @@ export function WeeklyTrendChart({
   const areaPath = `${linePath} L${last.x.toFixed(1)},${(padT + innerH).toFixed(1)} L${coords[0].x.toFixed(1)},${(padT + innerH).toFixed(1)} Z`;
 
   const goalPct = weeklyGoal ? Math.round((latest.value / weeklyGoal) * 100) : null;
+  const dailyGoal = dailyDivisor && weeklyGoal ? weeklyGoal / dailyDivisor : null;
+  const dailyAvg = dailyDivisor ? latest.value / dailyDivisor : null;
   const status = statusFn
     ? statusFn(latest.value)
     : goalPct !== null
@@ -285,7 +296,9 @@ export function WeeklyTrendChart({
               </span>
               {format !== "percent" && goalPct !== null && (
                 <span className="text-[12px] text-steel">
-                  {goalPct}% de la meta semanal ({weeklyGoal!.toLocaleString("es-MX")})
+                  {dailyGoal !== null
+                    ? `${goalPct}% de la meta diaria (${Math.round(dailyGoal).toLocaleString("es-MX")} pedidos/día)`
+                    : `${goalPct}% de la meta semanal (${weeklyGoal!.toLocaleString("es-MX")})`}
                 </span>
               )}
             </div>
@@ -299,7 +312,11 @@ export function WeeklyTrendChart({
                 </div>
                 <div className="text-[11px] text-steel mt-1 text-right">
                   {goalPct >= 100
-                    ? "¡Meta semanal superada!"
+                    ? dailyGoal !== null
+                      ? "¡Meta diaria superada!"
+                      : "¡Meta semanal superada!"
+                    : dailyGoal !== null && dailyAvg !== null
+                    ? `Faltan ${Math.round(dailyGoal - dailyAvg).toLocaleString("es-MX")} pedidos/día para llegar a la meta`
                     : `Faltan ${(weeklyGoal! - latest.value).toLocaleString("es-MX")} pedidos para llegar a la meta`}
                 </div>
               </div>

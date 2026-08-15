@@ -123,6 +123,7 @@ export function EmployeeHome({
             deptName={weeklyTrend.deptName}
             points={weeklyTrend.points}
             weeklyGoal={6000}
+            dailyDivisor={6}
             latestCaption={`≈ ${Math.round(weeklyTrend.points[weeklyTrend.points.length - 1].value / 6).toLocaleString("es-MX")} pedidos/día en promedio (lunes a sábado)`}
           />
         </div>
