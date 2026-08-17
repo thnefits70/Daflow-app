@@ -3,7 +3,11 @@
 // resultados derivados sin recalcular — igual que financeKpisCalc.ts, todo
 // se deriva siempre de los datos crudos.
 
-export const OVERTIME_HOUR_DIVISOR = 240; // sueldo básico ÷ 240 = valor de 1 hora
+// Confirmado 2026-08-17: pedido explícito del usuario, con su propio
+// método de cálculo manual — el sueldo básico se divide entre 30 días y
+// luego entre 9 horas trabajadas por día (no 8), así que el divisor total
+// es 270. Antes era 240 (30 días × 8 horas).
+export const OVERTIME_HOUR_DIVISOR = 270; // sueldo básico ÷ 270 = valor de 1 hora (30 días × 9h/día)
 export const OVERTIME_WEEKDAY_MULTIPLIER = 1.5; // lunes a viernes (suplementaria)
 export const OVERTIME_SATURDAY_MULTIPLIER = 2.0; // sábado (como feriado)
 export const IESS_RATE = 0.0945;
