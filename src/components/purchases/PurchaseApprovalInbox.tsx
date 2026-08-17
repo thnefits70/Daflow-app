@@ -8,8 +8,15 @@ import { uploadFile } from "@/lib/uploadFile";
 import { compressImage } from "@/lib/compressImage";
 import { usePasteFile } from "@/lib/usePasteFile";
 import { PriceTrendChart } from "./PriceTrendChart";
-import { effectiveUnitCost } from "@/lib/purchases";
 import type { SupplierPriceHistory, PriceHistoryStats } from "@/lib/purchases";
+
+// Copiada de lib/purchases.ts (no se puede importar el original: arrastra
+// prisma/pg al bundle del cliente y rompe el build — ver commit que lo
+// corrigió). Mantener esta copia en sync con effectiveUnitCost del server.
+function effectiveUnitCost(r: { unitCost: number; quantity: number; shippingIncluded: boolean; shippingCostTotal: number | null }) {
+  if (r.shippingIncluded || !r.shippingCostTotal || r.quantity === 0) return r.unitCost;
+  return r.unitCost + r.shippingCostTotal / r.quantity;
+}
 
 type BankAccount = {
   id: string;
