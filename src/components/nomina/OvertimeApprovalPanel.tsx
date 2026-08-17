@@ -12,8 +12,11 @@ type Pending = {
 
 type Employee = { id: string; name: string; department: { name: string } | null };
 
+// La fecha se guarda como medianoche UTC del día trabajado — hay que
+// leerla en UTC, si no toLocaleDateString la interpreta en la hora local
+// del navegador (Ecuador, UTC-5) y el día se corre uno para atrás.
 function fmtDate(iso: string) {
-  return new Date(iso).toLocaleDateString("es-EC", { weekday: "short", day: "numeric", month: "short" });
+  return new Date(iso).toLocaleDateString("es-EC", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
 }
 function fmtMinutes(min: number) {
   const h = Math.floor(min / 60);
@@ -49,13 +52,18 @@ function RejectButton({ onConfirm, busy }: { onConfirm: () => void; busy: boolea
 // también puede rechazar (borra el pendiente, nunca contó) o cargar horas
 // extra manualmente para cualquier colaborador — esa carga manual queda
 // aprobada de una vez porque la está haciendo el propio admin.
+// Fecha local del navegador — quien usa esto está físicamente en Ecuador,
+// mismo criterio que OvertimeEntryPanel.
+const nowLocal = new Date();
+const todayStr = `${nowLocal.getFullYear()}-${String(nowLocal.getMonth() + 1).padStart(2, "0")}-${String(nowLocal.getDate()).padStart(2, "0")}`;
+
 export function OvertimeApprovalPanel() {
   const [pending, setPending] = useState<Pending[] | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [employees, setEmployees] = useState<Employee[] | null>(null);
   const [showManual, setShowManual] = useState(false);
   const [manualEmployeeId, setManualEmployeeId] = useState("");
-  const [manualDate, setManualDate] = useState("");
+  const [manualDate, setManualDate] = useState(todayStr);
   const [manualMinutes, setManualMinutes] = useState(60);
   const [manualBusy, setManualBusy] = useState(false);
   const [manualErr, setManualErr] = useState("");
@@ -64,11 +72,6 @@ export function OvertimeApprovalPanel() {
     fetch("/api/payroll/overtime/pending").then((r) => (r.ok ? r.json() : [])).then(setPending);
   }
   useEffect(load, []);
-
-  useEffect(() => {
-    const nowLocal = new Date();
-    setManualDate(`${nowLocal.getFullYear()}-${String(nowLocal.getMonth() + 1).padStart(2, "0")}-${String(nowLocal.getDate()).padStart(2, "0")}`);
-  }, []);
 
   function loadEmployees() {
     if (employees) return;
@@ -107,6 +110,7 @@ export function OvertimeApprovalPanel() {
       return;
     }
     setManualMinutes(60);
+    setManualDate(todayStr);
     setShowManual(false);
     load();
   }
@@ -149,7 +153,7 @@ export function OvertimeApprovalPanel() {
                   type="date"
                   className="rounded border border-rule bg-cloud px-2.5 py-2 text-[13px]"
                   value={manualDate}
-                  max={manualDate}
+                  max={todayStr}
                   onChange={(e) => setManualDate(e.target.value)}
                 />
               </div>

@@ -3,11 +3,12 @@
 import { useState } from "react";
 import { OvertimeEntryPanel } from "./OvertimeEntryPanel";
 import { OvertimeApprovalPanel } from "./OvertimeApprovalPanel";
+import { OvertimeHistoryPanel } from "./OvertimeHistoryPanel";
 import { PayrollRolesPanel } from "./PayrollRolesPanel";
 import { CommissionTiersPanel } from "./CommissionTiersPanel";
 import { CeoBonusesPanel } from "./CeoBonusesPanel";
 
-type Tab = "horas" | "aprobar" | "roles" | "comisiones" | "bonosceo";
+type Tab = "horas" | "aprobar" | "historial" | "roles" | "comisiones" | "bonosceo";
 
 // Confirmado 2026-08-13: pedido explícito del usuario — todo esto vive
 // dentro de la misma sección "Nómina" que ya existía, como pestañas nuevas,
@@ -33,6 +34,7 @@ export function PayrollWorkspace({
   const tabs: { key: Tab; label: string }[] = [
     ...(canLogOvertime ? [{ key: "horas" as Tab, label: "Registrar horas extra" }] : []),
     ...(canApproveOvertime ? [{ key: "aprobar" as Tab, label: "Aprobar horas extra" }] : []),
+    ...(canViewRoles ? [{ key: "historial" as Tab, label: "Historial de horas extra" }] : []),
     ...(canViewRoles ? [{ key: "roles" as Tab, label: "Rol de pago" }] : []),
     ...(canProposeCommissions ? [{ key: "comisiones" as Tab, label: "Comisiones de equipo" }] : []),
     ...(canGrantCeoBonus ? [{ key: "bonosceo" as Tab, label: "Bonos discrecionales" }] : []),
@@ -58,6 +60,7 @@ export function PayrollWorkspace({
 
       {tab === "horas" && canLogOvertime && <OvertimeEntryPanel />}
       {tab === "aprobar" && canApproveOvertime && <OvertimeApprovalPanel />}
+      {tab === "historial" && canViewRoles && <OvertimeHistoryPanel />}
       {tab === "roles" && canViewRoles && <PayrollRolesPanel canEdit={canEditRoles} />}
       {tab === "comisiones" && canProposeCommissions && <CommissionTiersPanel canPropose={canProposeCommissions} canApprove={canApproveCommissions} />}
       {tab === "bonosceo" && canGrantCeoBonus && <CeoBonusesPanel />}

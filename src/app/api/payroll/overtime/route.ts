@@ -33,7 +33,8 @@ export async function GET() {
       minutesExtra: e.minutesExtra,
       enteredByName: e.enteredBy?.name ?? null,
       approvedAt: e.approvedAt?.toISOString() ?? null,
-      editable: !e.approvedAt && isOvertimeEntryEditable(e.date, now),
+      rejectedAt: e.rejectedAt?.toISOString() ?? null,
+      editable: !e.approvedAt && !e.rejectedAt && isOvertimeEntryEditable(e.date, now),
     }))
   );
 }
@@ -72,6 +73,9 @@ export async function POST(req: NextRequest) {
   const existing = await prisma.overtimeEntry.findUnique({ where: { employeeId_date: { employeeId: employee.id, date } } });
   if (existing?.approvedAt) {
     return NextResponse.json({ error: "Ese día ya fue aprobado — no se puede volver a editar." }, { status: 409 });
+  }
+  if (existing?.rejectedAt) {
+    return NextResponse.json({ error: "Ese día ya fue rechazado — no se puede volver a cargar." }, { status: 409 });
   }
 
   const entry = await prisma.overtimeEntry.upsert({

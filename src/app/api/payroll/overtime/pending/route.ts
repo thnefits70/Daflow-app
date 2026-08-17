@@ -6,7 +6,7 @@ export async function GET() {
   if (!(await canApproveOvertimeHours())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
   const entries = await prisma.overtimeEntry.findMany({
-    where: { approvedAt: null },
+    where: { approvedAt: null, rejectedAt: null },
     orderBy: { date: "asc" },
     include: {
       employee: { select: { id: true, name: true, department: { select: { name: true } } } },

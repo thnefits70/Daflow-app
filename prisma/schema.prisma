@@ -265,6 +265,7 @@ model User {
   overtimeEntriesOwn           OvertimeEntry[] @relation("OvertimeEntryEmployee")
   overtimeEntriesEntered       OvertimeEntry[] @relation("OvertimeEntryEnteredBy")
   overtimeEntriesApproved      OvertimeEntry[] @relation("OvertimeEntryApprovedBy")
+  overtimeEntriesRejected      OvertimeEntry[] @relation("OvertimeEntryRejectedBy")
   payrollSettingsUpdated       PayrollSettings[] @relation("PayrollSettingsUpdatedBy")
   payrollPeriodsGenerated      PayrollPeriod[] @relation("PayrollPeriodGeneratedBy")
   payrollPeriodsPublished      PayrollPeriod[] @relation("PayrollPeriodPublishedBy")
@@ -2345,6 +2346,12 @@ model OvertimeEntry {
   approvedAt   DateTime?
   approvedById String?
   approvedBy   User?     @relation("OvertimeEntryApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+
+  // Rechazar ya no borra el registro (lo hacía antes) — se conserva como
+  // historial visible para el líder que lo cargó, el admin y Nairoby.
+  rejectedAt   DateTime?
+  rejectedById String?
+  rejectedBy   User?     @relation("OvertimeEntryRejectedBy", fields: [rejectedById], references: [id], onDelete: SetNull)
 
   @@unique([employeeId, date])
   @@index([employeeId])

@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
 
   const entry = await prisma.overtimeEntry.upsert({
     where: { employeeId_date: { employeeId: employee.id, date } },
-    update: { minutesExtra: parsed.data.minutesExtra, enteredById: null, enteredAt: new Date(), approvedAt: new Date(), approvedById: null },
+    update: { minutesExtra: parsed.data.minutesExtra, enteredById: null, enteredAt: new Date(), approvedAt: new Date(), approvedById: null, rejectedAt: null, rejectedById: null },
     create: { employeeId: employee.id, date, minutesExtra: parsed.data.minutesExtra, enteredById: null, approvedAt: new Date(), approvedById: null },
   });
 

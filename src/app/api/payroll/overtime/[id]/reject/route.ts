@@ -3,7 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { canApproveOvertimeHours } from "@/lib/guards";
 
 // Rechazar = el día nunca llegó a contar para nada (mismo criterio que no
-// aprobar), así que simplemente se borra el registro pendiente.
+// aprobar), pero el registro queda (rejectedAt) en vez de borrarse, para
+// que el líder que lo cargó, el admin y Nairoby puedan ver el historial.
 export async function POST(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   if (!(await canApproveOvertimeHours())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
@@ -11,7 +12,11 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   const entry = await prisma.overtimeEntry.findUnique({ where: { id } });
   if (!entry) return NextResponse.json({ error: "No encontrada." }, { status: 404 });
   if (entry.approvedAt) return NextResponse.json({ error: "Ya estaba aprobada." }, { status: 409 });
+  if (entry.rejectedAt) return NextResponse.json({ error: "Ya estaba rechazada." }, { status: 409 });
 
-  await prisma.overtimeEntry.delete({ where: { id } });
-  return NextResponse.json({ ok: true });
+  const updated = await prisma.overtimeEntry.update({
+    where: { id },
+    data: { rejectedAt: new Date(), rejectedById: null },
+  });
+  return NextResponse.json(updated);
 }
