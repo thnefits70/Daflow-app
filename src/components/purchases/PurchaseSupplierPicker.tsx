@@ -228,11 +228,11 @@ export function PurchaseSupplierPicker({
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-2.5 gap-y-0.5 flex-1 min-w-0 text-[11.5px]">
                   <div><span className="text-steel">Banco: </span><span className="font-semibold break-words">{acc.bankName}</span></div>
                   <div><span className="text-steel">Tipo: </span><span className="font-semibold break-words">{acc.bankAccountType}</span></div>
-                  <div><span className="text-steel">N°: </span><span className="font-semibold break-all">{acc.bankAccountNumber}</span></div>
-                  <div><span className="text-steel">Titular: </span><span className="font-semibold break-words">{acc.bankAccountHolder}</span></div>
                   {acc.holderIdType && (
                     <div><span className="text-steel">{acc.holderIdType === "RUC" ? "RUC" : "CI"}: </span><span className="font-semibold break-all">{acc.holderIdNumber}</span></div>
                   )}
+                  <div><span className="text-steel">Titular: </span><span className="font-semibold break-words">{acc.bankAccountHolder}</span></div>
+                  <div><span className="text-steel">N°: </span><span className="font-semibold break-all">{acc.bankAccountNumber}</span></div>
                 </div>
                 {isAdmin && (
                   <button

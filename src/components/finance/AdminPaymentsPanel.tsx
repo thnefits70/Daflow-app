@@ -700,11 +700,11 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-2.5 gap-y-0.5 text-[11.5px]">
                       <div><span className="text-steel">Banco: </span><span className="font-semibold">{r.bankAccount.bankName}</span></div>
                       <div><span className="text-steel">Tipo: </span><span className="font-semibold">{r.bankAccount.bankAccountType}</span></div>
-                      <div><span className="text-steel">N°: </span><span className="font-semibold break-all">{r.bankAccount.bankAccountNumber}</span></div>
-                      <div><span className="text-steel">Titular: </span><span className="font-semibold">{r.bankAccount.bankAccountHolder}</span></div>
                       {r.bankAccount.holderIdType && (
                         <div><span className="text-steel">{r.bankAccount.holderIdType === "RUC" ? "RUC" : "CI"}: </span><span className="font-semibold break-all">{r.bankAccount.holderIdNumber}</span></div>
                       )}
+                      <div><span className="text-steel">Titular: </span><span className="font-semibold">{r.bankAccount.bankAccountHolder}</span></div>
+                      <div><span className="text-steel">N°: </span><span className="font-semibold break-all">{r.bankAccount.bankAccountNumber}</span></div>
                     </div>
                   ) : (
                     <div className="text-[11.5px] text-steel">Sin cuenta bancaria elegida.</div>

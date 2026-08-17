@@ -304,6 +304,7 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   compras_cuenta_bancaria: "Tus solicitudes de compra — cambiar cuenta bancaria",
   compras_recepcion: "Control de Compras — confirmar mercadería recibida",
   compras_cambios_verificar: "Control de Compras — verificar cambios de mercadería",
+  compras_creditos_pendientes: "Créditos pendientes de recuperar",
   control_inventario: "Control de Inventario — captura mensual",
 };
 
@@ -1009,6 +1010,35 @@ async function getPurchaseReplacementVerificationPendingItem(href: string): Prom
   };
 }
 
+// Confirmado 2026-08-17: pedido explícito del usuario — un enlace de un
+// clic en Inicio para que Bryan (o quien coordina con el proveedor) le dé
+// seguimiento a los créditos ya acordados (tipo CREDIT, resueltos en
+// Reportes urgentes) que siguen sin usarse en una compra futura. Mismo
+// cálculo que la sección "Créditos pendientes de recuperar" de
+// PurchaseUrgentReportsPanel.tsx (créditos con SupplierCredit.status
+// AVAILABLE), pero acá "atrasado" usa el mismo umbral de 24h que el resto de
+// este archivo en vez del "30 días" que ese panel usa solo para resaltar en
+// rojo visualmente.
+async function getPurchaseCreditsPendingItem(href: string): Promise<PendingItem | null> {
+  const rows = await prisma.purchaseUrgentResolution.findMany({
+    where: { type: "CREDIT", credit: { status: "AVAILABLE" } },
+    select: { amount: true, createdAt: true },
+  });
+  if (rows.length === 0) return null;
+
+  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const overdue = rows.some((r) => r.createdAt < cutoff);
+  const total = rows.reduce((s, r) => s + r.amount, 0);
+  return {
+    type: "compras_creditos_pendientes",
+    icon: "🪙",
+    label: "Créditos pendientes de recuperar",
+    meta: `${rows.length} crédito${rows.length === 1 ? "" : "s"} · $${total.toFixed(2)}${overdue ? " · atrasado" : ""}`,
+    overdue,
+    href,
+  };
+}
+
 // Confirmado 2026-08-17: pedido explícito del usuario (día 3, mismo plazo
 // que Roles de pago) — la captura mensual de Control de Inventario que
 // Daniel hace a mano no tenía ningún aviso en Inicio, había que entrar a
@@ -1112,7 +1142,8 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     // PurchaseControlPanel).
     const comDept = await prisma.department.findUnique({ where: { code: "COM" }, select: { id: true } });
     const comPaymentsHref = comDept ? `/admin/dept/${comDept.id}?tab=compras&ptab=finanzas` : "/admin";
-    const [feedbackItems, recognitionItem, pettyCashLow, pettyCashUnconfirmed, adminPaymentsItem, purchaseMerchandiseItem, purchaseShippingItem, overtimeApprovalItem, birthdayItems] = await Promise.all([
+    const comCreditsHref = comDept ? `/admin/dept/${comDept.id}?tab=compras&ptab=urgentes` : "/admin";
+    const [feedbackItems, recognitionItem, pettyCashLow, pettyCashUnconfirmed, adminPaymentsItem, purchaseMerchandiseItem, purchaseShippingItem, purchaseCreditsItem, overtimeApprovalItem, birthdayItems] = await Promise.all([
       getFeedbackPendingItems(),
       getRecognitionAdminPendingItem("/admin/colaborador-destacado"),
       getPettyCashLowBalanceItems(financeHref),
@@ -1120,6 +1151,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       getAdminPaymentsPendingItem(`${financeHref}?tab=pagosadmin`),
       getPurchaseMerchandisePendingItem(comDept?.id ?? null),
       getPurchaseShippingPendingItem(comPaymentsHref),
+      getPurchaseCreditsPendingItem(comCreditsHref),
       getOvertimeApprovalPendingItem("/admin/nomina?tab=pagos"),
       getUpcomingBirthdayPendingItems("/admin/nomina"),
     ]);
@@ -1131,6 +1163,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       ...(adminPaymentsItem ? [adminPaymentsItem] : []),
       ...(purchaseMerchandiseItem ? [purchaseMerchandiseItem] : []),
       ...(purchaseShippingItem ? [purchaseShippingItem] : []),
+      ...(purchaseCreditsItem ? [purchaseCreditsItem] : []),
       ...(overtimeApprovalItem ? [overtimeApprovalItem] : []),
       ...birthdayItems,
     ];
@@ -1143,6 +1176,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     select: {
       isLeader: true,
       leadsDeptId: true,
+      canManagePurchases: true,
       leadsDept: { select: { code: true, name: true, trackWeeklyMetric: true } },
     },
   });
@@ -1204,6 +1238,17 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
   const purchaseRequesterItems = await getPurchaseRequesterPendingItems(actor.userId, "/area/workspace?tab=compras&ptab=mias");
   items.push(...purchaseRequesterItems);
 
+  // Confirmado 2026-08-17: pedido explícito del usuario — a diferencia de lo
+  // anterior, esto NO es un dato propio del líder, es company-wide (todos
+  // los créditos con proveedores AVAILABLE), así que solo se muestra a quien
+  // de verdad puede coordinar con el proveedor: mismo criterio de elegibilidad
+  // que canSubmitPurchaseRequests (guards.ts) — delegado vía
+  // canManagePurchases, o líder de COM/FIN.
+  if (me.canManagePurchases || ["COM", "FIN"].includes(me.leadsDept.code)) {
+    const purchaseCreditsItem = await getPurchaseCreditsPendingItem("/area/workspace?tab=compras&ptab=urgentes");
+    if (purchaseCreditsItem) items.push(purchaseCreditsItem);
+  }
+
   if (items.length === 0) return null;
   return {
     title: monthly ? "Pendientes de este mes" : "Pendientes de esta semana",
@@ -1230,7 +1275,7 @@ export async function getPossiblePendingTypesForActor(
   const types: string[] = [];
 
   if (actor.isAdmin) {
-    types.push("feedback", "caja_chica_saldo", "caja_chica_confirmacion", "cumpleanos");
+    types.push("feedback", "caja_chica_saldo", "caja_chica_confirmacion", "cumpleanos", "compras_creditos_pendientes");
   } else {
     const me = await prisma.user.findUnique({
       where: { id: actor.userId },
@@ -1251,7 +1296,7 @@ export async function getPossiblePendingTypesForActor(
     // pero calculado acá sin sesión, para poder listar los tipos posibles de
     // cualquier líder (usado también por el barrido del cron).
     if (me.canManagePurchases || ["COM", "FIN"].includes(me.leadsDept.code)) {
-      types.push("compras_rechazadas", "compras_orden_compra", "compras_transportista", "compras_cuenta_bancaria");
+      types.push("compras_rechazadas", "compras_orden_compra", "compras_transportista", "compras_cuenta_bancaria", "compras_creditos_pendientes");
     }
   }
 

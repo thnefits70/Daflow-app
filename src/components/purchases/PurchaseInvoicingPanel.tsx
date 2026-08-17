@@ -542,11 +542,11 @@ export function PurchaseInvoicingPanel() {
                       <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-2.5 gap-y-0.5 text-[11.5px]">
                         <div><span className="text-steel">Banco: </span><span className="font-semibold">{g[0].bankAccount.bankName}</span></div>
                         <div><span className="text-steel">Tipo: </span><span className="font-semibold">{g[0].bankAccount.bankAccountType}</span></div>
-                        <div><span className="text-steel">N°: </span><span className="font-semibold break-all">{g[0].bankAccount.bankAccountNumber}</span></div>
-                        <div><span className="text-steel">Titular: </span><span className="font-semibold">{g[0].bankAccount.bankAccountHolder}</span></div>
                         {g[0].bankAccount.holderIdType && (
                           <div><span className="text-steel">{g[0].bankAccount.holderIdType === "RUC" ? "RUC" : "CI"}: </span><span className="font-semibold break-all">{g[0].bankAccount.holderIdNumber}</span></div>
                         )}
+                        <div><span className="text-steel">Titular: </span><span className="font-semibold">{g[0].bankAccount.bankAccountHolder}</span></div>
+                        <div><span className="text-steel">N°: </span><span className="font-semibold break-all">{g[0].bankAccount.bankAccountNumber}</span></div>
                       </div>
                     ) : (
                       <div className="text-[11.5px] text-red">Falta registrar la cuenta bancaria del proveedor.</div>
@@ -679,11 +679,11 @@ export function PurchaseInvoicingPanel() {
                       <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-2.5 gap-y-0.5 text-[11.5px]">
                         <div><span className="text-steel">Banco: </span><span className="font-semibold">{r0.carrierBankAccount.bankName}</span></div>
                         <div><span className="text-steel">Tipo: </span><span className="font-semibold">{r0.carrierBankAccount.bankAccountType}</span></div>
-                        <div><span className="text-steel">N°: </span><span className="font-semibold break-all">{r0.carrierBankAccount.bankAccountNumber}</span></div>
-                        <div><span className="text-steel">Titular: </span><span className="font-semibold">{r0.carrierBankAccount.bankAccountHolder}</span></div>
                         {r0.carrierBankAccount.holderIdType && (
                           <div><span className="text-steel">{r0.carrierBankAccount.holderIdType === "RUC" ? "RUC" : "CI"}: </span><span className="font-semibold break-all">{r0.carrierBankAccount.holderIdNumber}</span></div>
                         )}
+                        <div><span className="text-steel">Titular: </span><span className="font-semibold">{r0.carrierBankAccount.bankAccountHolder}</span></div>
+                        <div><span className="text-steel">N°: </span><span className="font-semibold break-all">{r0.carrierBankAccount.bankAccountNumber}</span></div>
                       </div>
                     ) : (
                       <div className="text-[11.5px] text-red">Falta registrar la cuenta bancaria del transportista.</div>

@@ -40,8 +40,8 @@ export default async function AreaProveedoresPage() {
     <div>
       <TopLine eyebrow="Directorio" title="Proveedores" />
       <SuppliersPanel
-        suppliers={suppliers.map(toSupplierDTO)}
-        pending={pending.map(toSupplierDTO)}
+        suppliers={suppliers.map((s) => toSupplierDTO(s))}
+        pending={pending.map((s) => toSupplierDTO(s))}
         canAdd={access.canAdd}
         canAddCarrier={canAddCarrier}
         canReview={canReview}

@@ -2,13 +2,24 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Trash2, Pencil, MessageCircle, MapPin, Tag, Check, X, Search, Globe } from "lucide-react";
+import { Plus, Trash2, Pencil, MessageCircle, MapPin, Tag, Check, X, Search, Globe, Lock, Eye, EyeOff } from "lucide-react";
 import { LocationPicker } from "./LocationPicker";
 
 export type SupplierContactDTO = { id?: string; label: string; whatsapp: string };
 export type ChannelPlatform = "TELEGRAM" | "INSTAGRAM" | "FACEBOOK" | "OTHER";
 export type SupplierChannelDTO = { id?: string; platform: ChannelPlatform; url: string };
 export type SupplierType = "SUPPLIER" | "CARRIER";
+export type SupplierBankAccountDTO = {
+  id: string;
+  bankName: string;
+  bankAccountType: string;
+  bankAccountNumber: string;
+  bankAccountHolder: string;
+  holderIdType: "RUC" | "CEDULA" | null;
+  holderIdNumber: string | null;
+  createdByName: string | null;
+  createdAt: string;
+};
 export type SupplierDTO = {
   id: string;
   type: SupplierType;
@@ -25,7 +36,16 @@ export type SupplierDTO = {
   createdAt: string;
   contacts: SupplierContactDTO[];
   channels: SupplierChannelDTO[];
+  // Presente solo cuando el que pide la página es admin — ver
+  // canViewSupplierBankAccounts en guards.ts. Nadie más recibe este campo,
+  // ni siquiera vacío, así que su sola presencia ya implica autorización.
+  bankAccounts?: SupplierBankAccountDTO[];
 };
+
+function maskAccountNumber(number: string) {
+  const last4 = number.slice(-4);
+  return `•••• ${last4}`;
+}
 
 const CHANNEL_LABELS: Record<ChannelPlatform, string> = {
   TELEGRAM: "Telegram",
@@ -119,6 +139,16 @@ export function SuppliersPanel({
   const [addingContactId, setAddingContactId] = useState<string | null>(null);
   const [newContact, setNewContact] = useState({ label: "", whatsapp: "" });
   const [contactErr, setContactErr] = useState("");
+  const [revealedAccountIds, setRevealedAccountIds] = useState<Set<string>>(new Set());
+
+  const toggleRevealAccount = (id: string) => {
+    setRevealedAccountIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
 
   const listSuppliers = useMemo(() => suppliers.filter((s) => s.type === listType), [suppliers, listType]);
   const sortedSuppliers = useMemo(() => {
@@ -451,6 +481,47 @@ export function SuppliersPanel({
                       <button type="button" className="text-steel text-[11.5px] cursor-pointer" onClick={() => setAddingContactId(null)}>
                         Cancelar
                       </button>
+                    </div>
+                  </div>
+                )}
+
+                {s.bankAccounts && s.bankAccounts.length > 0 && (
+                  <div className="mt-3 pt-3 border-t border-rule">
+                    <div className="flex items-center gap-1.5 mb-2">
+                      <Lock size={12} className="text-steel" />
+                      <span className="text-[11.5px] font-semibold text-ink">Datos bancarios</span>
+                      <span className="text-[10px] font-semibold text-steel border border-rule rounded-full px-2 py-0.5">Exclusivo · admin</span>
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      {s.bankAccounts.map((b) => {
+                        const revealed = revealedAccountIds.has(b.id);
+                        return (
+                          <div key={b.id} className="bg-cloud border border-rule rounded px-3 py-2.5">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-[12.5px] font-semibold text-ink">
+                                {b.bankName} · {b.bankAccountType}
+                              </span>
+                              <button
+                                type="button"
+                                className="inline-flex items-center gap-1 text-[11px] font-semibold text-steel hover:text-ink cursor-pointer shrink-0"
+                                onClick={() => toggleRevealAccount(b.id)}
+                              >
+                                {revealed ? <EyeOff size={12} /> : <Eye size={12} />} {revealed ? "Ocultar" : "Revelar"}
+                              </button>
+                            </div>
+                            <div className="text-[13px] font-mono text-ink mt-1.5">
+                              {revealed ? b.bankAccountNumber : maskAccountNumber(b.bankAccountNumber)}
+                            </div>
+                            <div className="text-[11px] text-steel mt-1.5">
+                              Titular: {b.bankAccountHolder}
+                              {b.holderIdType && b.holderIdNumber ? ` · ${b.holderIdType === "RUC" ? "RUC" : "Cédula"} ${b.holderIdNumber}` : ""}
+                            </div>
+                            <div className="text-[10.5px] text-steel-dim mt-1">
+                              Agregada por {b.createdByName ?? "—"} · {new Date(b.createdAt).toLocaleDateString("es-EC", { day: "numeric", month: "short", year: "numeric" })}
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 )}

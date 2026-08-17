@@ -112,6 +112,16 @@ export async function getSupplierAccess() {
   };
 }
 
+// Datos bancarios de proveedores — confirmado 2026-08-17: pedido explícito
+// del usuario, exclusivo de él (admin), nadie más los ve por ahora. A
+// diferencia de casi todo este archivo, no tiene escape hatch por flag —
+// el usuario dijo que en algún momento va a querer delegarlo a alguien y
+// avisará cuándo, así que se deja hard-coded a admin hasta entonces.
+export async function canViewSupplierBankAccounts() {
+  const session = await auth();
+  return !!session && session.user.role === "admin";
+}
+
 // A pending supplier can be approved/rejected by admin, or by whoever leads
 // the department the submitter belonged to when they proposed it.
 export async function canReviewSupplier(createdByDeptId: string | null) {
