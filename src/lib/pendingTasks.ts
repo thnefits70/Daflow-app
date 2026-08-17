@@ -4,6 +4,7 @@ import { isFixedHoliday, evaluationDeadline, adminConfirmDeadline } from "@/lib/
 import { addBusinessHours } from "@/lib/businessHours";
 import { getPettyCashBoxData, type PettyCashBoxTypeStr } from "@/lib/pettyCash";
 import { getUpcomingBirthdays } from "@/lib/birthdays";
+import { getFinanzasDeptId } from "@/lib/inventoryKpis";
 
 // ---------------- Date helpers ----------------
 // Deadline rule confirmed by the user 2026-07-20: work week is Mon-Sat, and
@@ -297,6 +298,13 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   pagos_flete: "Fletes pendientes de pago",
   horas_extra_aprobacion: "Horas extra por aprobar",
   cumpleanos: "Cumpleaños de tu equipo (aviso 1 día antes)",
+  compras_rechazadas: "Tus solicitudes de compra rechazadas — corregir y reenviar",
+  compras_orden_compra: "Tus solicitudes de compra — falta subir orden de compra",
+  compras_transportista: "Tus solicitudes de compra — falta transportista",
+  compras_cuenta_bancaria: "Tus solicitudes de compra — cambiar cuenta bancaria",
+  compras_recepcion: "Control de Compras — confirmar mercadería recibida",
+  compras_cambios_verificar: "Control de Compras — verificar cambios de mercadería",
+  control_inventario: "Control de Inventario — captura mensual",
 };
 
 // "colaborador_del_mes" es obligatorio — confirmado 2026-08-05: a diferencia
@@ -863,6 +871,174 @@ async function getPurchaseShippingPendingItem(href: string): Promise<PendingItem
   };
 }
 
+// Confirmado 2026-08-17: pedido explícito del usuario — Bryan (o cualquier
+// otro delegado de Control de Compras, hoy o en el futuro) quiere ver en
+// Inicio, con un solo clic, sus PROPIAS solicitudes de compra que quedaron
+// esperando algo de él: rechazada (falta corregir y reenviar), falta subir
+// la orden de compra, falta completar transportista/costo de envío, o
+// admin/Finanzas le pidió cambiar la cuenta bancaria del proveedor. Filtra
+// por requestedById (el DATO de quién la creó, no un permiso) — así aparece
+// solo para quien de verdad tiene algo propio pendiente, sin importar su
+// departamento real (mismo espíritu que el resto de "Control de Compras",
+// que ya vive fuera de dept.code — ver canSubmitPurchaseRequests).
+async function getPurchaseRequesterPendingItems(userId: string, href: string): Promise<PendingItem[]> {
+  const rows = await prisma.purchaseRequest.findMany({
+    where: { requestedById: userId },
+    select: { groupId: true, status: true, purchaseOrderUrl: true, shippingCarrierPending: true, bankAccountChangeRequestedAt: true, requestedAt: true },
+  });
+  if (rows.length === 0) return [];
+
+  const byGroup = new Map<string, (typeof rows)[number]>();
+  for (const r of rows) if (!byGroup.has(r.groupId)) byGroup.set(r.groupId, r);
+  const groups = [...byGroup.values()];
+  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const items: PendingItem[] = [];
+
+  const rejected = groups.filter((g) => g.status === "REJECTED");
+  if (rejected.length > 0) {
+    items.push({
+      type: "compras_rechazadas",
+      icon: "🔁",
+      label: "Solicitudes de compra rechazadas — corregir y reenviar",
+      meta: `${rejected.length} solicitud${rejected.length === 1 ? "" : "es"} · atrasado`,
+      overdue: true,
+      href,
+    });
+  }
+
+  const missingPO = groups.filter((g) => g.status !== "REJECTED" && !g.purchaseOrderUrl);
+  if (missingPO.length > 0) {
+    const overdue = missingPO.some((g) => g.requestedAt < cutoff);
+    items.push({
+      type: "compras_orden_compra",
+      icon: "📄",
+      label: "Falta subir la orden de compra",
+      meta: `${missingPO.length} solicitud${missingPO.length === 1 ? "" : "es"}${overdue ? " · atrasado" : ""}`,
+      overdue,
+      href,
+    });
+  }
+
+  const missingCarrier = groups.filter((g) => g.status !== "REJECTED" && g.shippingCarrierPending);
+  if (missingCarrier.length > 0) {
+    const overdue = missingCarrier.some((g) => g.requestedAt < cutoff);
+    items.push({
+      type: "compras_transportista",
+      icon: "🚚",
+      label: "Falta completar transportista y costo de envío",
+      meta: `${missingCarrier.length} solicitud${missingCarrier.length === 1 ? "" : "es"}${overdue ? " · atrasado" : ""}`,
+      overdue,
+      href,
+    });
+  }
+
+  const bankChange = groups.filter((g) => g.status !== "REJECTED" && g.bankAccountChangeRequestedAt);
+  if (bankChange.length > 0) {
+    items.push({
+      type: "compras_cuenta_bancaria",
+      icon: "🏦",
+      label: "Cambia la cuenta bancaria del proveedor — la anterior no sirvió",
+      meta: `${bankChange.length} solicitud${bankChange.length === 1 ? "" : "es"} · atrasado`,
+      overdue: true,
+      href,
+    });
+  }
+
+  return items;
+}
+
+// Confirmado 2026-08-17: pedido explícito del usuario — Daniel (líder de
+// Inventario) ve en Inicio, con un solo clic, las solicitudes de compra ya
+// pagadas (PAID) que le faltan confirmar como recibidas en Control de
+// Compras → pestaña Inventario. Mismo umbral de 24h sobre paidAt que ya usa
+// getStalePurchaseRequestPushes (paidUnreceived) para "atrasado", y mismo
+// agrupado por groupId que getPurchaseMerchandisePaymentsSummary — una
+// cotización con varias líneas cuenta como una sola operación pendiente.
+async function getPurchaseReceivingPendingItem(href: string): Promise<PendingItem | null> {
+  const rows = await prisma.purchaseRequest.findMany({
+    where: { status: "PAID" },
+    select: { groupId: true, totalCost: true, paidAt: true },
+  });
+  if (rows.length === 0) return null;
+
+  const byGroup = new Map<string, { total: number; paidAt: Date | null }>();
+  for (const r of rows) {
+    const cur = byGroup.get(r.groupId) ?? { total: 0, paidAt: r.paidAt };
+    cur.total += r.totalCost;
+    byGroup.set(r.groupId, cur);
+  }
+  const groups = [...byGroup.values()];
+  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const overdue = groups.some((g) => g.paidAt && g.paidAt < cutoff);
+  const total = groups.reduce((s, g) => s + g.total, 0);
+  return {
+    type: "compras_recepcion",
+    icon: "📥",
+    label: "Confirmar mercadería recibida",
+    meta: `${groups.length} solicitud${groups.length === 1 ? "" : "es"} · $${total.toFixed(2)}${overdue ? " · atrasado" : ""}`,
+    overdue,
+    href,
+  };
+}
+
+// Confirmado 2026-08-17: pedido explícito del usuario — los cambios de
+// mercadería (PurchaseUrgentResolution tipo REPLACEMENT) que quien coordina
+// con el proveedor dejó en curso y siguen PENDING de que Daniel verifique
+// que llegaron bien (misma pantalla, misma metodología de fotos + IA que una
+// recepción normal — ver api/purchase-requests/urgent-resolutions/[id]/
+// replacement-arrived). "Atrasado" solo una vez pasada la fecha máxima que
+// se puso al coordinar el cambio (replacementDueDate) — antes de esa fecha
+// el cambio sigue en camino y no hay nada que Daniel pueda hacer todavía,
+// pero igual se muestra para que lo tenga en el radar.
+async function getPurchaseReplacementVerificationPendingItem(href: string): Promise<PendingItem | null> {
+  const rows = await prisma.purchaseUrgentResolution.findMany({
+    where: { type: "REPLACEMENT", status: "PENDING" },
+    select: { replacementDueDate: true },
+  });
+  if (rows.length === 0) return null;
+
+  const now = new Date();
+  const overdue = rows.some((r) => r.replacementDueDate != null && r.replacementDueDate < now);
+  return {
+    type: "compras_cambios_verificar",
+    icon: "🔄",
+    label: "Verificar cambios de mercadería",
+    meta: `${rows.length} cambio${rows.length === 1 ? "" : "s"} pendiente${rows.length === 1 ? "" : "s"}${overdue ? " · atrasado" : ""}`,
+    overdue,
+    href,
+  };
+}
+
+// Confirmado 2026-08-17: pedido explícito del usuario (día 3, mismo plazo
+// que Roles de pago) — la captura mensual de Control de Inventario que
+// Daniel hace a mano no tenía ningún aviso en Inicio, había que entrar a
+// ojear el tab para notar que faltaba. El valor vive en
+// FinanceSharedMonthlyBalance bajo el departamento Finanzas, no Inventario
+// (mismo detalle ya documentado en getFinanzasDeptId/inventoryKpis.ts) —
+// company-wide, no por departamento.
+async function getInventoryControlPendingItem(href: string): Promise<PendingItem | null> {
+  const today = currentMonthStr();
+  const prev = prevMonthStr(today);
+  if (!fixedDayDeadlinePassed(today, 3)) return null;
+
+  const finDeptId = await getFinanzasDeptId();
+  if (!finDeptId) return null;
+  const rec = await prisma.financeSharedMonthlyBalance.findUnique({
+    where: { deptId_period: { deptId: finDeptId, period: prev } },
+    select: { inventarioFinal: true },
+  });
+  if (rec?.inventarioFinal != null) return null;
+
+  return {
+    type: "control_inventario",
+    icon: "📋",
+    label: "Control de Inventario — captura mensual",
+    meta: `${formatMonthLabel(prev)} · atrasado`,
+    overdue: true,
+    href,
+  };
+}
+
 // Confirmado 2026-08-14: pedido explícito del usuario — quiere ver en
 // Inicio, con un solo clic, todas las horas extra que le quedaron por
 // aprobar (exclusivo admin — canApproveOvertimeHours es admin-only). Ahora
@@ -1002,8 +1178,16 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
   }
 
   if (me.leadsDept.code === "INV") {
-    const item = await getStockoutPendingItem("/area/kpis-generales");
-    if (item) items.push(item);
+    const [stockoutItem, receivingItem, replacementItem, inventoryControlItem] = await Promise.all([
+      getStockoutPendingItem("/area/kpis-generales"),
+      getPurchaseReceivingPendingItem("/area/workspace?tab=compras&ptab=inventario"),
+      getPurchaseReplacementVerificationPendingItem("/area/workspace?tab=compras&ptab=inventario"),
+      getInventoryControlPendingItem("/area/workspace?tab=inventario"),
+    ]);
+    if (stockoutItem) items.push(stockoutItem);
+    if (receivingItem) items.push(receivingItem);
+    if (replacementItem) items.push(replacementItem);
+    if (inventoryControlItem) items.push(inventoryControlItem);
   }
 
   const recognitionItem = await getRecognitionLeaderPendingItem(me.leadsDeptId, "/area/colaborador-destacado");
@@ -1013,6 +1197,12 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
   // propio equipo puede tener un cumpleaños mañana sin importar el área.
   const birthdayItems = await getUpcomingBirthdayPendingItems("/area/nomina", me.leadsDeptId, actor.userId);
   items.push(...birthdayItems);
+
+  // Confirmado 2026-08-17: aplica a CUALQUIER líder, no solo COM/FIN — se
+  // autofiltra por datos (requestedById), así que solo aparece para quien de
+  // verdad tiene solicitudes de compra propias con algo pendiente.
+  const purchaseRequesterItems = await getPurchaseRequesterPendingItems(actor.userId, "/area/workspace?tab=compras&ptab=mias");
+  items.push(...purchaseRequesterItems);
 
   if (items.length === 0) return null;
   return {
@@ -1044,7 +1234,7 @@ export async function getPossiblePendingTypesForActor(
   } else {
     const me = await prisma.user.findUnique({
       where: { id: actor.userId },
-      select: { isLeader: true, leadsDeptId: true, leadsDept: { select: { code: true, trackWeeklyMetric: true } } },
+      select: { isLeader: true, leadsDeptId: true, canManagePurchases: true, leadsDept: { select: { code: true, trackWeeklyMetric: true } } },
     });
     if (!me?.isLeader || !me.leadsDeptId || !me.leadsDept) return [];
 
@@ -1053,7 +1243,16 @@ export async function getPossiblePendingTypesForActor(
       types.push("roles_de_pago", "tasa_devolucion", "kpi_garantias", "pagos_recordatorios", "servicio_postventa", "caja_chica_saldo", "caja_chica_confirmacion");
     }
     if (me.leadsDept.trackWeeklyMetric) types.push("pedidos_despachados");
-    if (me.leadsDept.code === "INV") types.push("ruptura_stock");
+    if (me.leadsDept.code === "INV") {
+      types.push("ruptura_stock", "compras_recepcion", "compras_cambios_verificar", "control_inventario");
+    }
+    // Mismo criterio de elegibilidad que canSubmitPurchaseRequests
+    // (guards.ts) — delegado vía canManagePurchases, o líder de COM/FIN —
+    // pero calculado acá sin sesión, para poder listar los tipos posibles de
+    // cualquier líder (usado también por el barrido del cron).
+    if (me.canManagePurchases || ["COM", "FIN"].includes(me.leadsDept.code)) {
+      types.push("compras_rechazadas", "compras_orden_compra", "compras_transportista", "compras_cuenta_bancaria");
+    }
   }
 
   return types.map((type) => ({ type, label: PENDING_TYPE_CATALOG[type] }));
