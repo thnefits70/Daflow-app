@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { FileText, Upload, CheckCircle2, AlertTriangle, Lock, Landmark, LineChart, ChevronDown } from "lucide-react";
+import { FileText, Upload, CheckCircle2, AlertTriangle, Lock, Landmark, LineChart, ChevronDown, Award } from "lucide-react";
 import { actorName } from "@/lib/actorName";
 import { uploadFile } from "@/lib/uploadFile";
 import { compressImage } from "@/lib/compressImage";
@@ -124,16 +124,21 @@ export function PurchaseApprovalInbox() {
   // repetir el fetch si hay varios grupos pendientes del mismo insumo.
   const [historyOpenGroup, setHistoryOpenGroup] = useState<string | null>(null);
   const [historyByCatalogItem, setHistoryByCatalogItem] = useState<Record<string, SupplierPriceHistory[] | null>>({});
-  // Confirmado 2026-08-17: la gráfica solo muestra pagos YA confirmados
-  // (paidAt), nunca aprobados-pendientes-de-pago — y arranca mostrando los
-  // últimos 6, con un clic para ir sumando los anteriores.
+  // Confirmado 2026-08-17: el mismo insumo se le compra a varios proveedores
+  // — el panel lista TODOS (más barato primero), no solo el de esta
+  // solicitud, reusando la misma data que ya carga "Comparar precios". Cada
+  // fila es un acordeón aparte con su propia gráfica de tendencia: solo
+  // pagos YA confirmados (paidAt), últimos 6 y un clic para ir sumando los
+  // anteriores.
   const HISTORY_WINDOW = 6;
+  const [openSupplierId, setOpenSupplierId] = useState<string | null>(null);
   const [historyExpanded, setHistoryExpanded] = useState(false);
 
   const { onPaste: onPasteProof, onMouseEnter: onPasteProofHoverIn, onMouseLeave: onPasteProofHoverOut } = usePasteFile((file) => uploadProof(file));
   const { onPaste: onPasteShippingProof, onMouseEnter: onPasteShippingProofHoverIn, onMouseLeave: onPasteShippingProofHoverOut } = usePasteFile((file) => uploadShippingProof(file));
 
   function toggleHistory(groupId: string, catalogItemId: string) {
+    setOpenSupplierId(null);
     setHistoryExpanded(false);
     setHistoryOpenGroup((cur) => (cur === groupId ? null : groupId));
     if (historyByCatalogItem[catalogItemId] !== undefined) return;
@@ -142,6 +147,11 @@ export function PurchaseApprovalInbox() {
       .then((r) => (r.ok ? r.json() : []))
       .then((data: SupplierPriceHistory[]) => setHistoryByCatalogItem((m) => ({ ...m, [catalogItemId]: data })))
       .catch(() => setHistoryByCatalogItem((m) => ({ ...m, [catalogItemId]: [] })));
+  }
+
+  function toggleSupplierRow(supplierId: string) {
+    setHistoryExpanded(false);
+    setOpenSupplierId((cur) => (cur === supplierId ? null : supplierId));
   }
 
   function load() {
@@ -398,36 +408,98 @@ export function PurchaseApprovalInbox() {
 
             {historyOpenGroup === groupId && (
               <div className="bg-surface2 border border-rule rounded-md p-3 mb-2.5">
+                <div className="text-[10px] font-semibold uppercase tracking-wide text-steel mb-1.5">Historial de precio — todos los proveedores</div>
                 {historyByCatalogItem[g[0].catalogItemId] === undefined || historyByCatalogItem[g[0].catalogItemId] === null ? (
                   <div className="text-steel text-[12px]">Cargando historial de precio…</div>
                 ) : (
                   (() => {
-                    const suppliers = historyByCatalogItem[g[0].catalogItemId]!;
-                    const s = suppliers.find((x) => x.supplierId === g[0].supplier.id);
-                    if (!s) {
-                      return <div className="text-steel text-[12px]">Sin historial previo de {g[0].supplier.name} para este insumo.</div>;
+                    const withPaid = historyByCatalogItem[g[0].catalogItemId]!
+                      .map((s) => ({ s, paid: s.history.filter((p) => p.paidAt) }))
+                      .filter((x) => x.paid.length > 0)
+                      .sort((a, b) => a.paid[a.paid.length - 1].unitCost - b.paid[b.paid.length - 1].unitCost);
+
+                    if (withPaid.length === 0) {
+                      return <div className="text-steel text-[12px]">Todavía no hay pagos confirmados de este insumo con ningún proveedor.</div>;
                     }
+
+                    const cheapestId = withPaid[0].s.supplierId;
+
                     return (
-                      <>
-                        <div className="text-[10px] font-semibold uppercase tracking-wide text-steel mb-1.5">
-                          Tendencia de precio — {g[0].supplier.name} · {s.count} {s.count === 1 ? "compra" : "compras"}
-                        </div>
-                        <PriceTrendChart points={s.history} />
-                        <div className="grid grid-cols-3 gap-2 mt-2">
-                          <div className="bg-cloud rounded p-2 text-center">
-                            <div className="text-[8.5px] uppercase text-steel">Más bajo</div>
-                            <div className="text-[12.5px] font-bold text-green">${s.min.toFixed(2)}</div>
-                          </div>
-                          <div className="bg-cloud rounded p-2 text-center">
-                            <div className="text-[8.5px] uppercase text-steel">Promedio</div>
-                            <div className="text-[12.5px] font-bold text-teal">${s.avg.toFixed(2)}</div>
-                          </div>
-                          <div className="bg-cloud rounded p-2 text-center">
-                            <div className="text-[8.5px] uppercase text-steel">Más alto</div>
-                            <div className="text-[12.5px] font-bold text-red">${s.max.toFixed(2)}</div>
-                          </div>
-                        </div>
-                      </>
+                      <div className="flex flex-col gap-2">
+                        {withPaid.map(({ s, paid }) => {
+                          const isCheapest = s.supplierId === cheapestId;
+                          const isCurrent = s.supplierId === g[0].supplier.id;
+                          const isOpen = openSupplierId === s.supplierId;
+                          const latest = paid[paid.length - 1].unitCost;
+                          const avgAll = paid.reduce((sum, p) => sum + p.unitCost, 0) / paid.length;
+                          const visible = historyExpanded ? paid : paid.slice(-HISTORY_WINDOW);
+                          const hiddenCount = paid.length - visible.length;
+                          const costs = paid.map((p) => p.unitCost);
+                          const min = Math.min(...costs);
+                          const max = Math.max(...costs);
+                          return (
+                            <div key={s.supplierId} className={`rounded-md border ${isCheapest ? "border-teal/50 bg-teal/[0.06]" : "border-rule bg-surface"}`}>
+                              <button
+                                type="button"
+                                className="w-full flex items-center gap-3 px-3 py-2.5 text-left cursor-pointer"
+                                onClick={() => toggleSupplierRow(s.supplierId)}
+                              >
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span className="text-[13px] font-semibold truncate">{s.supplierName}</span>
+                                    {isCheapest && (
+                                      <span className="flex items-center gap-1 text-[9.5px] font-bold uppercase tracking-wide bg-teal/15 text-teal border border-teal/40 rounded-full px-2 py-0.5">
+                                        <Award size={9} /> Más barato
+                                      </span>
+                                    )}
+                                    {isCurrent && <span className="text-[9.5px] font-bold uppercase tracking-wide text-red">Esta solicitud</span>}
+                                  </div>
+                                  <div className="text-[11px] text-steel mt-0.5">
+                                    {paid.length} {paid.length === 1 ? "pago" : "pagos"} · promedio ${avgAll.toFixed(2)}
+                                  </div>
+                                </div>
+                                <div className="text-right shrink-0">
+                                  <div className={`text-[16px] font-bold ${isCheapest ? "text-teal" : "text-ink"}`}>${latest.toFixed(2)}</div>
+                                  <div className="text-[10px] text-steel">último pago</div>
+                                </div>
+                                <ChevronDown size={15} className={`text-steel shrink-0 transition-transform ${isOpen ? "rotate-180" : ""}`} />
+                              </button>
+                              {isOpen && (
+                                <div className="px-3 pb-3.5 pt-1 border-t border-rule">
+                                  <PriceTrendChart points={visible} />
+                                  {(hiddenCount > 0 || (historyExpanded && paid.length > HISTORY_WINDOW)) && (
+                                    <div className="flex justify-center mt-1">
+                                      {hiddenCount > 0 ? (
+                                        <button type="button" onClick={() => setHistoryExpanded(true)} className="text-[11px] text-teal font-semibold cursor-pointer">
+                                          Ver {hiddenCount} {hiddenCount === 1 ? "pago anterior" : "pagos anteriores"}
+                                        </button>
+                                      ) : (
+                                        <button type="button" onClick={() => setHistoryExpanded(false)} className="text-[11px] text-steel font-semibold cursor-pointer">
+                                          Ocultar pagos anteriores
+                                        </button>
+                                      )}
+                                    </div>
+                                  )}
+                                  <div className="grid grid-cols-3 gap-2 mt-2">
+                                    <div className="bg-cloud rounded p-2 text-center">
+                                      <div className="text-[8.5px] uppercase text-steel">Más bajo</div>
+                                      <div className="text-[12.5px] font-bold text-green">${min.toFixed(2)}</div>
+                                    </div>
+                                    <div className="bg-cloud rounded p-2 text-center">
+                                      <div className="text-[8.5px] uppercase text-steel">Promedio</div>
+                                      <div className="text-[12.5px] font-bold text-teal">${avgAll.toFixed(2)}</div>
+                                    </div>
+                                    <div className="bg-cloud rounded p-2 text-center">
+                                      <div className="text-[8.5px] uppercase text-steel">Más alto</div>
+                                      <div className="text-[12.5px] font-bold text-red">${max.toFixed(2)}</div>
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
                     );
                   })()
                 )}
