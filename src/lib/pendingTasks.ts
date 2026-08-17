@@ -747,43 +747,68 @@ async function getAdminPaymentsPendingItem(href: string): Promise<PendingItem | 
   };
 }
 
-// Cálculo compartido: agrupa las PurchaseRequest APPROVED (aprobadas, sin
-// pagar aún) por groupId. Usado tanto por el item de "Pendientes de esta
-// semana" (se oculta si count es 0) como por el acceso directo fijo de
-// Inicio (getPurchaseMerchandisePaymentsShortcut, que sí se muestra en 0).
-async function getPurchaseMerchandisePaymentsSummary(): Promise<{ count: number; total: number; overdue: boolean }> {
-  const rows = await prisma.purchaseRequest.findMany({
-    where: { status: "APPROVED" },
-    select: { groupId: true, totalCost: true, reviewedAt: true },
-  });
-  const byGroup = new Map<string, { total: number; reviewedAt: Date | null }>();
-  for (const r of rows) {
-    const cur = byGroup.get(r.groupId) ?? { total: 0, reviewedAt: r.reviewedAt };
-    cur.total += r.totalCost;
-    byGroup.set(r.groupId, cur);
-  }
-  const groups = [...byGroup.values()];
+// Cálculo compartido. Confirmado 2026-08-17 (corregido tras feedback del
+// usuario): para quien paga, una solicitud esperando en Bandeja de
+// aprobación YA es "un pago de mercadería pendiente" — aprobar y pagar casi
+// siempre quedan en el mismo paso (ver PurchaseApprovalInbox.tsx), así que
+// mostrar solo lo APPROVED-sin-pagar se quedaba corto y decía "no hay" con
+// solicitudes reales esperando. Suma ambos estados: PENDING_APPROVAL (sin
+// revisar todavía) y APPROVED (revisado, falta subir comprobante). El link
+// va a Bandeja de aprobación si algo sigue sin revisar (ahí se decide y,
+// casi siempre, se paga); si ya no queda nada por revisar y solo falta
+// comprobante de algo ya aprobado, va directo a Finanzas.
+async function getPurchaseMerchandisePaymentsSummary(comDeptId: string | null): Promise<{
+  count: number;
+  total: number;
+  overdue: boolean;
+  href: string;
+}> {
+  const base = comDeptId ? `/admin/dept/${comDeptId}` : "/admin";
   const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
-  const overdue = groups.some((g) => g.reviewedAt && g.reviewedAt < cutoff);
-  const total = groups.reduce((s, g) => s + g.total, 0);
-  return { count: groups.length, total, overdue };
+
+  const groupRows = (rows: { groupId: string; totalCost: number; at: Date | null }[]) => {
+    const byGroup = new Map<string, { total: number; at: Date | null }>();
+    for (const r of rows) {
+      const cur = byGroup.get(r.groupId) ?? { total: 0, at: r.at };
+      cur.total += r.totalCost;
+      byGroup.set(r.groupId, cur);
+    }
+    return [...byGroup.values()];
+  };
+
+  const [pendingApprovalRows, approvedRows] = await Promise.all([
+    prisma.purchaseRequest.findMany({
+      where: { status: "PENDING_APPROVAL" },
+      select: { groupId: true, totalCost: true, requestedAt: true },
+    }),
+    prisma.purchaseRequest.findMany({
+      where: { status: "APPROVED" },
+      select: { groupId: true, totalCost: true, reviewedAt: true },
+    }),
+  ]);
+
+  const pendingGroups = groupRows(pendingApprovalRows.map((r) => ({ groupId: r.groupId, totalCost: r.totalCost, at: r.requestedAt })));
+  const approvedGroups = groupRows(approvedRows.map((r) => ({ groupId: r.groupId, totalCost: r.totalCost, at: r.reviewedAt })));
+  const allGroups = [...pendingGroups, ...approvedGroups];
+
+  const overdue = allGroups.some((g) => g.at && g.at < cutoff);
+  const total = allGroups.reduce((s, g) => s + g.total, 0);
+  const ptab = pendingGroups.length > 0 ? "aprobacion" : "finanzas";
+
+  return { count: allGroups.length, total, overdue, href: `${base}?tab=compras&ptab=${ptab}` };
 }
 
 // Confirmado 2026-08-13: pedido explícito del usuario — un solo enlace en
-// Inicio con el TOTAL de pagos de mercadería que ya están aprobados y
-// esperan que se les pague (nunca el listado completo, uno por uno — eso
-// ya se ve dentro de Control de Compras). Se paga desde la pestaña
-// Finanzas de Control de Compras (Bandeja de aprobación ya combina
-// aprobar+pagar; esto cubre lo que quedó aprobado sin pagar todavía).
-// Mismo umbral de 24h que el resto de "atrasado" de este archivo.
-async function getPurchaseMerchandisePendingItem(href: string): Promise<PendingItem | null> {
-  const { count, total, overdue } = await getPurchaseMerchandisePaymentsSummary();
+// Inicio con el TOTAL de pagos de mercadería pendientes (ver criterio
+// arriba). Mismo umbral de 24h que el resto de "atrasado" de este archivo.
+async function getPurchaseMerchandisePendingItem(comDeptId: string | null): Promise<PendingItem | null> {
+  const { count, total, overdue, href } = await getPurchaseMerchandisePaymentsSummary(comDeptId);
   if (count === 0) return null;
   return {
     type: "pagos_mercaderia",
     icon: "📦",
     label: "Pagos de mercadería pendientes",
-    meta: `${count} operación${count === 1 ? "" : "es"} · $${total.toFixed(2)}${overdue ? " · atrasado" : ""}`,
+    meta: `${count} operaci${count === 1 ? "ón" : "ones"} · $${total.toFixed(2)}${overdue ? " · atrasado" : ""}`,
     overdue,
     href,
   };
@@ -802,9 +827,7 @@ export async function getPurchaseMerchandisePaymentsShortcut(): Promise<{
   href: string;
 }> {
   const comDept = await prisma.department.findUnique({ where: { code: "COM" }, select: { id: true } });
-  const href = comDept ? `/admin/dept/${comDept.id}?tab=compras&ptab=finanzas` : "/admin";
-  const summary = await getPurchaseMerchandisePaymentsSummary();
-  return { ...summary, href };
+  return getPurchaseMerchandisePaymentsSummary(comDept?.id ?? null);
 }
 
 // Confirmado 2026-08-13: mismo criterio que arriba, pero para fletes que
@@ -917,7 +940,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       getPettyCashLowBalanceItems(financeHref),
       getPettyCashUnconfirmedFunderItems(null, financeHref),
       getAdminPaymentsPendingItem(`${financeHref}?tab=pagosadmin`),
-      getPurchaseMerchandisePendingItem(comPaymentsHref),
+      getPurchaseMerchandisePendingItem(comDept?.id ?? null),
       getPurchaseShippingPendingItem(comPaymentsHref),
       getOvertimeApprovalPendingItem("/admin/nomina?tab=pagos"),
       getUpcomingBirthdayPendingItems("/admin/nomina"),
