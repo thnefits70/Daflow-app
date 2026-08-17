@@ -5,7 +5,7 @@ import { X, ShieldCheck } from "lucide-react";
 import { PayrollEmployeeSalariesPanel } from "./PayrollEmployeeSalariesPanel";
 import { CeoBonusesForNairobyPanel } from "./CeoBonusesForNairobyPanel";
 
-type LineItem = { id?: string; label: string; amount: number; kind: "INCOME" | "EXPENSE"; isAutomatic?: boolean };
+type LineItem = { id?: string; label: string; amount: number; kind: "INCOME" | "EXPENSE"; isAutomatic?: boolean; note?: string | null };
 type Role = {
   id: string;
   employeeId: string;
@@ -153,16 +153,19 @@ function RoleCard({ role, published, canEdit, monthlyRoleId, onChanged }: { role
 
       <div className="flex flex-col gap-1">
         {items.map((it, idx) => (
-          <div key={idx} className="flex items-center gap-2 text-[12px]">
-            <span className="flex-1 text-ink">{it.label}</span>
-            <span className={`font-bold tabular-nums ${it.kind === "INCOME" ? "text-green" : "text-red"}`}>
-              {it.kind === "INCOME" ? "+" : "−"}{money(it.amount)}
-            </span>
-            {editingEnabled && (
-              <button type="button" className="text-steel-dim cursor-pointer" onClick={() => saveDraft(items.filter((_, i) => i !== idx))}>
-                <X size={12} />
-              </button>
-            )}
+          <div key={idx}>
+            <div className="flex items-center gap-2 text-[12px]">
+              <span className="flex-1 text-ink">{it.label}</span>
+              <span className={`font-bold tabular-nums ${it.kind === "INCOME" ? "text-green" : "text-red"}`}>
+                {it.kind === "INCOME" ? "+" : "−"}{money(it.amount)}
+              </span>
+              {editingEnabled && (
+                <button type="button" className="text-steel-dim cursor-pointer" onClick={() => saveDraft(items.filter((_, i) => i !== idx))}>
+                  <X size={12} />
+                </button>
+              )}
+            </div>
+            {it.note && <div className="text-[10.5px] text-steel-dim mt-0.5">{it.note}</div>}
           </div>
         ))}
       </div>
@@ -232,8 +235,6 @@ export function PayrollRolesPanel({ canEdit }: { canEdit: boolean }) {
   const periods = useMemo(recentPeriods, []);
   const [period, setPeriod] = useState(currentPeriod);
   const [detail, setDetail] = useState<PeriodDetail | null>(null);
-  const [nationalBaseSalary, setNationalBaseSalary] = useState("");
-  const [savingSettings, setSavingSettings] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [confirmingPublish, setConfirmingPublish] = useState(false);
@@ -242,21 +243,6 @@ export function PayrollRolesPanel({ canEdit }: { canEdit: boolean }) {
     fetch(`/api/payroll/periods/${period}`).then((r) => (r.ok ? r.json() : null)).then(setDetail);
   }
   useEffect(loadDetail, [period]);
-  useEffect(() => {
-    fetch("/api/payroll/settings").then((r) => (r.ok ? r.json() : null)).then((s) => setNationalBaseSalary(s?.nationalBaseSalary != null ? String(s.nationalBaseSalary) : ""));
-  }, []);
-
-  async function saveSettings() {
-    const value = Number(nationalBaseSalary);
-    if (!value || value <= 0) return;
-    setSavingSettings(true);
-    await fetch("/api/payroll/settings", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ nationalBaseSalary: value }),
-    });
-    setSavingSettings(false);
-  }
 
   async function generate() {
     setBusy(true);
@@ -286,22 +272,8 @@ export function PayrollRolesPanel({ canEdit }: { canEdit: boolean }) {
 
       <div className="bg-surface border border-rule rounded-md p-4 mb-4">
         <div className="text-[11px] font-semibold uppercase tracking-wide text-steel mb-2">Sueldo básico nacional</div>
-        <div className="flex items-center gap-2">
-          <input
-            className="rounded border border-rule bg-cloud px-2.5 py-1.5 text-[13px] w-28"
-            type="number"
-            step="0.01"
-            value={nationalBaseSalary}
-            disabled={!canEdit}
-            onChange={(e) => setNationalBaseSalary(e.target.value)}
-          />
-          {canEdit && (
-            <button type="button" disabled={savingSettings} className="text-[11.5px] font-semibold text-blue cursor-pointer" onClick={saveSettings}>
-              {savingSettings ? "Guardando…" : "Guardar"}
-            </button>
-          )}
-        </div>
-        <span className="text-[11px] text-steel-dim block mt-1">Alimenta el cálculo de todas las horas extra ya aprobadas.</span>
+        <div className="text-[15px] font-bold tabular-nums">$482.00</div>
+        <span className="text-[11px] text-steel-dim block mt-1">Fijo por ahora — el cálculo de horas extra siempre usa este valor, sin excepción.</span>
       </div>
 
       <div className="flex items-center gap-3 mb-4 flex-wrap">

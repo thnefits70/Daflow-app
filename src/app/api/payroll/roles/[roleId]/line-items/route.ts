@@ -12,6 +12,7 @@ const schema = z.object({
         amount: z.number().positive(),
         kind: z.enum(["INCOME", "EXPENSE"]),
         isAutomatic: z.boolean().optional(),
+        note: z.string().optional(),
       })
     )
     .min(1),

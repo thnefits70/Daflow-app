@@ -6,6 +6,8 @@ import {
   overtimeSourceMonthForPeriod,
   isFirstQuincenaOfMonth,
   isEndOfMonthQuincena,
+  OVERTIME_NATIONAL_BASE_SALARY,
+  describeOvertimeCalculation,
 } from "@/lib/payrollCalc";
 import { getMonthDispatchSummary, getAchievedTier, CEO_BONUS_AMOUNTS, CEO_BONUS_LABELS } from "@/lib/commissionTiers";
 
@@ -15,16 +17,13 @@ export function isValidPeriod(period: string): boolean {
   return PERIOD_RE.test(period);
 }
 
-export type QuincenaLineItemInput = { label: string; amount: number; kind: "INCOME" | "EXPENSE"; isAutomatic: boolean };
+export type QuincenaLineItemInput = { label: string; amount: number; kind: "INCOME" | "EXPENSE"; isAutomatic: boolean; note?: string };
 
 // Confirmado 2026-08-13: todo (sueldo, horas extra, bono, IESS) vive como
 // línea suelta desde el arranque — Nairoby puede editar o quitar cualquiera,
 // incluso las automáticas.
 export async function buildAutomaticLineItems(employeeId: string, period: string): Promise<QuincenaLineItemInput[]> {
-  const [profile, settings] = await Promise.all([
-    prisma.payrollProfile.findUnique({ where: { userId: employeeId } }),
-    prisma.payrollSettings.findFirst(),
-  ]);
+  const profile = await prisma.payrollProfile.findUnique({ where: { userId: employeeId } });
 
   const items: QuincenaLineItemInput[] = [];
   const realSalary = profile?.realSalary ?? 0;
@@ -37,17 +36,21 @@ export async function buildAutomaticLineItems(employeeId: string, period: string
       const monthStart = new Date(Date.UTC(y, m - 1, 1));
       const monthEnd = new Date(Date.UTC(y, m, 1));
 
-      if (settings?.nationalBaseSalary) {
-        const approvedEntries = await prisma.overtimeEntry.findMany({
-          where: { employeeId, date: { gte: monthStart, lt: monthEnd }, approvedAt: { not: null } },
+      const approvedEntries = await prisma.overtimeEntry.findMany({
+        where: { employeeId, date: { gte: monthStart, lt: monthEnd }, approvedAt: { not: null } },
+      });
+      const overtimeAmount = approvedEntries.reduce(
+        (s, e) => s + computeOvertimeAmount(OVERTIME_NATIONAL_BASE_SALARY, e.minutesExtra, e.date),
+        0
+      );
+      if (overtimeAmount > 0) {
+        items.push({
+          label: `Horas extra (${sourceMonth})`,
+          amount: overtimeAmount,
+          kind: "INCOME",
+          isAutomatic: true,
+          note: describeOvertimeCalculation(approvedEntries, OVERTIME_NATIONAL_BASE_SALARY),
         });
-        const overtimeAmount = approvedEntries.reduce(
-          (s, e) => s + computeOvertimeAmount(settings.nationalBaseSalary, e.minutesExtra, e.date),
-          0
-        );
-        if (overtimeAmount > 0) {
-          items.push({ label: `Horas extra (${sourceMonth})`, amount: overtimeAmount, kind: "INCOME", isAutomatic: true });
-        }
       }
 
       const winner = await prisma.monthlyRecognitionResult.findUnique({ where: { month_rank: { month: sourceMonth, rank: 1 } } });

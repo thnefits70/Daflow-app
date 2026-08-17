@@ -47,6 +47,12 @@ export function isOvertimeEntryEditable(date: Date, now: Date = nowInEcuador()):
   return now < cutoff;
 }
 
+// Confirmado 2026-08-17: pedido explícito del usuario — el cálculo de horas
+// extra siempre usa este valor fijo, nunca el de PayrollSettings.nationalBaseSalary
+// (ese campo queda sin uso para este cálculo por ahora). "No tomes ningún
+// otro valor" — instrucción textual del usuario.
+export const OVERTIME_NATIONAL_BASE_SALARY = 482;
+
 // Confirmado 2026-08-13: el valor de la hora extra se calcula sobre el
 // sueldo básico NACIONAL (compartido, igual para todos), nunca sobre el
 // sueldo real de cada persona. Sábado paga distinto que entre semana, como
@@ -55,6 +61,29 @@ export function computeOvertimeAmount(nationalBaseSalary: number, minutesExtra: 
   const hourValue = nationalBaseSalary / OVERTIME_HOUR_DIVISOR;
   const multiplier = date.getUTCDay() === 6 ? OVERTIME_SATURDAY_MULTIPLIER : OVERTIME_WEEKDAY_MULTIPLIER;
   return hourValue * multiplier * (minutesExtra / 60);
+}
+
+// Confirmado 2026-08-17: pedido explícito del usuario — cada vez que se
+// genera el resultado, mostrar una breve descripción de cómo se calculó,
+// para poder verificar que se hizo tal como se indicó. Resume el mes
+// completo (todas las entradas aprobadas), no una entrada suelta.
+export function describeOvertimeCalculation(entries: { minutesExtra: number; date: Date }[], nationalBaseSalary: number): string {
+  const hourValue = nationalBaseSalary / OVERTIME_HOUR_DIVISOR;
+  const weekdayMinutes = entries.filter((e) => e.date.getUTCDay() !== 6).reduce((s, e) => s + e.minutesExtra, 0);
+  const saturdayMinutes = entries.filter((e) => e.date.getUTCDay() === 6).reduce((s, e) => s + e.minutesExtra, 0);
+  const weekdayHours = weekdayMinutes / 60;
+  const saturdayHours = saturdayMinutes / 60;
+
+  const parts = [`Valor hora = $${nationalBaseSalary.toFixed(2)} ÷ ${OVERTIME_HOUR_DIVISOR} = $${hourValue.toFixed(2)}/h`];
+  if (weekdayHours > 0) {
+    const amt = hourValue * OVERTIME_WEEKDAY_MULTIPLIER * weekdayHours;
+    parts.push(`L-V: ${weekdayHours.toFixed(2)}h × $${hourValue.toFixed(2)} × ${OVERTIME_WEEKDAY_MULTIPLIER} = $${amt.toFixed(2)}`);
+  }
+  if (saturdayHours > 0) {
+    const amt = hourValue * OVERTIME_SATURDAY_MULTIPLIER * saturdayHours;
+    parts.push(`Sáb: ${saturdayHours.toFixed(2)}h × $${hourValue.toFixed(2)} × ${OVERTIME_SATURDAY_MULTIPLIER} = $${amt.toFixed(2)}`);
+  }
+  return parts.join(" · ");
 }
 
 // Confirmado 2026-08-13: desfase de un mes — las horas extra de un mes
