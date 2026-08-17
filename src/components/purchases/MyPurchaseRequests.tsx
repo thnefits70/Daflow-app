@@ -441,6 +441,11 @@ function buildResubmitDraft(g: Row[]) {
     },
     manualCodeConfirm: !!r0.quoteReferenceCode,
     purchaseOrderUrl: r0.purchaseOrderUrl,
+    // Si ya había orden de compra subida, es porque ya había pasado la
+    // verificación en el envío original (submit() lo exige) — se reconstruye
+    // como coincidente en vez de null, igual que ya se hace arriba con
+    // verifyResult para la cotización.
+    poVerifyResult: r0.purchaseOrderUrl ? { readTotal: g.reduce((s, r) => s + r.totalCost, 0), matches: true } : null,
     shippingIncluded: r0.shippingIncluded,
     shippingCarrierPending: r0.shippingCarrierPending,
     carrier: r0.carrier ? { id: r0.carrier.id, name: r0.carrier.name, location: null, email: null, bankAccounts: r0.carrier.bankAccounts, contacts: [] } : null,

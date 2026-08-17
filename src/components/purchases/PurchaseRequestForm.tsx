@@ -42,6 +42,7 @@ type Draft = {
   verifyResult: QuoteReadResult | null;
   manualCodeConfirm: boolean;
   purchaseOrderUrl: string | null;
+  poVerifyResult: { readTotal: number | null; matches: boolean } | null;
   shippingIncluded: boolean;
   shippingCarrierPending: boolean;
   carrier: PurchaseSupplierDTO | null;
@@ -129,6 +130,15 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
   const [verifying, setVerifying] = useState(false);
   const [verifyResult, setVerifyResult] = useState<QuoteReadResult | null>(null);
   const [manualCodeConfirm, setManualCodeConfirm] = useState(false);
+  // Confirmado 2026-08-17: una vez que la IA confirma que el monto coincide,
+  // el documento queda anclado — no se puede cambiar ni "eliminar" con un
+  // clic, para que no se pueda subir el documento real, dejar que pase la
+  // verificación, y después cambiarlo por otro sin que quede rastro de cuál
+  // fue el que realmente se validó. Solo se desbloquea con una confirmación
+  // explícita, y al desbloquear se pierde el archivo y la verificación por
+  // completo — obliga a subir y verificar de nuevo, nunca a reutilizar el
+  // resultado viejo con un archivo distinto.
+  const [confirmUnlockQuote, setConfirmUnlockQuote] = useState(false);
   const { onPaste: onPasteQuote, onMouseEnter: onPasteQuoteHoverIn, onMouseLeave: onPasteQuoteHoverOut } = usePasteFile((file) => handleQuoteFile(file));
 
   const [purchaseOrderFile, setPurchaseOrderFile] = useState<File | null>(null);
@@ -136,6 +146,7 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
   const [uploadingPurchaseOrder, setUploadingPurchaseOrder] = useState(false);
   const [poVerifying, setPoVerifying] = useState(false);
   const [poVerifyResult, setPoVerifyResult] = useState<{ readTotal: number | null; matches: boolean } | null>(null);
+  const [confirmUnlockPO, setConfirmUnlockPO] = useState(false);
   const { onPaste: onPastePurchaseOrder, onMouseEnter: onPastePOHoverIn, onMouseLeave: onPastePOHoverOut } = usePasteFile((file) => handlePurchaseOrderFile(file));
 
   // Confirmado 2026-08-07: antes venía marcado por default (asumía "envío
@@ -319,6 +330,7 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
         setVerifyResult(d.verifyResult ?? null);
         setManualCodeConfirm(d.manualCodeConfirm ?? false);
         setPurchaseOrderUrl(d.purchaseOrderUrl ?? null);
+        setPoVerifyResult(d.poVerifyResult ?? null);
         setShippingIncluded(d.shippingIncluded ?? false);
         setShippingCarrierPending(d.shippingCarrierPending ?? false);
         setCarrier(normalizeSupplier(d.carrier));
@@ -348,6 +360,7 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
       verifyResult,
       manualCodeConfirm,
       purchaseOrderUrl,
+      poVerifyResult,
       shippingIncluded,
       shippingCarrierPending,
       carrier,
@@ -364,7 +377,7 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
     } else {
       localStorage.removeItem(DRAFT_KEY);
     }
-  }, [hydrated, lines, supplier, bankAccountId, quoteImageUrl, verifyResult, manualCodeConfirm, purchaseOrderUrl, shippingIncluded, shippingCarrierPending, carrier, carrierBankAccountId, shippingCostTotal, shippingPaymentMethod, shippingPaymentTiming, justification, editingGroupId, resubmitAttemptHint]);
+  }, [hydrated, lines, supplier, bankAccountId, quoteImageUrl, verifyResult, manualCodeConfirm, purchaseOrderUrl, poVerifyResult, shippingIncluded, shippingCarrierPending, carrier, carrierBankAccountId, shippingCostTotal, shippingPaymentMethod, shippingPaymentTiming, justification, editingGroupId, resubmitAttemptHint]);
 
   function resetForm() {
     setLines([emptyLine()]);
@@ -545,6 +558,7 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
   // cotización, solo un código, la orden de compra pasa a ser obligatoria —
   // es el único respaldo real de qué se está comprando y solicitando pagar.
   const needsPurchaseOrder = !!verifyResult?.referenceCodeFound && !verifyResult?.productNameFound;
+  const poAnchored = !!poVerifyResult?.matches;
   const validLines = lines.filter((l) => l.catalogItem && Number(l.quantity) > 0 && Number(l.unitCost) > 0);
 
   async function submit() {
@@ -934,9 +948,34 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
                 )}
               </>
             )}
-            <button type="button" className="text-[11px] text-steel mt-2 cursor-pointer" onClick={() => { setQuoteFile(null); setQuoteImageUrl(null); setVerifyResult(null); }}>
-              Cambiar imagen
-            </button>
+            {!quoteVerified ? (
+              <button type="button" className="text-[11px] text-steel mt-2 cursor-pointer" onClick={() => { setQuoteFile(null); setQuoteImageUrl(null); setVerifyResult(null); }}>
+                Cambiar imagen
+              </button>
+            ) : !confirmUnlockQuote ? (
+              <div className="flex items-center gap-2 mt-2">
+                <span className="flex items-center gap-1 text-[11px] text-steel-dim"><Lock size={11} /> Verificada — anclada</span>
+                <button type="button" className="text-[11px] text-steel underline cursor-pointer" onClick={() => setConfirmUnlockQuote(true)}>
+                  Quitar verificación
+                </button>
+              </div>
+            ) : (
+              <div className="mt-2 border border-red/40 rounded-md bg-red/5 p-2.5">
+                <div className="text-[11.5px] text-ink mb-2">¿Seguro? Se pierde esta imagen y su verificación — vas a tener que subir la cotización de nuevo y volver a verificarla con la IA.</div>
+                <div className="flex gap-2">
+                  <button type="button" className="text-[11px] text-steel border border-rule rounded px-2.5 py-1 cursor-pointer" onClick={() => setConfirmUnlockQuote(false)}>
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    className="text-[11px] font-semibold text-white bg-red rounded px-2.5 py-1 cursor-pointer"
+                    onClick={() => { setQuoteFile(null); setQuoteImageUrl(null); setVerifyResult(null); setManualCodeConfirm(false); setConfirmUnlockQuote(false); }}
+                  >
+                    Sí, quitar verificación
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -991,10 +1030,35 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
               <div className="flex-1 flex items-center gap-1.5 text-[12px] text-teal">
                 <CheckCircle2 size={13} /> Orden de compra subida
               </div>
-              <button type="button" className="text-[11px] text-steel cursor-pointer" onClick={() => { setPurchaseOrderFile(null); setPurchaseOrderUrl(null); setPoVerifyResult(null); }}>
-                Cambiar
-              </button>
+              {!poAnchored ? (
+                <button type="button" className="text-[11px] text-steel cursor-pointer" onClick={() => { setPurchaseOrderFile(null); setPurchaseOrderUrl(null); setPoVerifyResult(null); }}>
+                  Cambiar
+                </button>
+              ) : !confirmUnlockPO ? (
+                <button type="button" className="flex items-center gap-1 text-[11px] text-steel underline cursor-pointer shrink-0" onClick={() => setConfirmUnlockPO(true)}>
+                  <Lock size={11} /> Quitar verificación
+                </button>
+              ) : null}
             </div>
+            {poAnchored && confirmUnlockPO && (
+              <div className="mt-2.5 pt-2.5 border-t border-rule">
+                <div className="border border-red/40 rounded-md bg-red/5 p-2.5">
+                  <div className="text-[11.5px] text-ink mb-2">¿Seguro? Se pierde este documento y su verificación — vas a tener que subir la orden de compra de nuevo y volver a verificarla con la IA.</div>
+                  <div className="flex gap-2">
+                    <button type="button" className="text-[11px] text-steel border border-rule rounded px-2.5 py-1 cursor-pointer" onClick={() => setConfirmUnlockPO(false)}>
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      className="text-[11px] font-semibold text-white bg-red rounded px-2.5 py-1 cursor-pointer"
+                      onClick={() => { setPurchaseOrderFile(null); setPurchaseOrderUrl(null); setPoVerifyResult(null); setConfirmUnlockPO(false); }}
+                    >
+                      Sí, quitar verificación
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
             {needsPurchaseOrder && (
               <div className="mt-2.5 pt-2.5 border-t border-rule">
                 {poVerifying ? (
