@@ -8,7 +8,8 @@ import { uploadFile } from "@/lib/uploadFile";
 import { compressImage } from "@/lib/compressImage";
 import { usePasteFile } from "@/lib/usePasteFile";
 import { PriceTrendChart } from "./PriceTrendChart";
-import type { SupplierPriceHistory } from "@/lib/purchases";
+import { effectiveUnitCost } from "@/lib/purchases";
+import type { SupplierPriceHistory, PriceHistoryStats } from "@/lib/purchases";
 
 type BankAccount = {
   id: string;
@@ -134,6 +135,14 @@ export function PurchaseApprovalInbox() {
   const [openSupplierId, setOpenSupplierId] = useState<string | null>(null);
   const [historyExpanded, setHistoryExpanded] = useState(false);
 
+  // Confirmado 2026-08-17: pedido explícito del usuario — la comparación
+  // contra el historial YA se hace con el precio efectivo (con flete
+  // incluido) en ambos lados, pero eso quedaba invisible: la tarjeta solo
+  // mostraba el precio sin flete que escribió quien pidió. Se trae el
+  // last3Avg real (el mismo que usó el servidor para exigir justificación)
+  // para mostrarlo junto al precio efectivo de esta solicitud, sin abrir nada.
+  const [statsByCatalogItem, setStatsByCatalogItem] = useState<Record<string, PriceHistoryStats | null>>({});
+
   const { onPaste: onPasteProof, onMouseEnter: onPasteProofHoverIn, onMouseLeave: onPasteProofHoverOut } = usePasteFile((file) => uploadProof(file));
   const { onPaste: onPasteShippingProof, onMouseEnter: onPasteShippingProofHoverIn, onMouseLeave: onPasteShippingProofHoverOut } = usePasteFile((file) => uploadShippingProof(file));
 
@@ -169,6 +178,14 @@ export function PurchaseApprovalInbox() {
           })
         );
         setReservedCreditsByGroup(Object.fromEntries(entries));
+
+        const catalogItemIds = [...new Set(data.filter((r) => r.justification).map((r) => r.catalogItemId))];
+        catalogItemIds.forEach((catalogItemId) => {
+          fetch(`/api/purchase-catalog/${catalogItemId}`)
+            .then((r) => (r.ok ? r.json() : null))
+            .then((d: { stats: PriceHistoryStats } | null) => setStatsByCatalogItem((m) => ({ ...m, [catalogItemId]: d?.stats ?? null })))
+            .catch(() => setStatsByCatalogItem((m) => ({ ...m, [catalogItemId]: null })));
+        });
       })
       .catch(() => setRows([]));
   }
@@ -401,9 +418,41 @@ export function PurchaseApprovalInbox() {
               </div>
             </div>
 
-            <div className={`flex items-start gap-1.5 rounded-md px-3 py-2 mb-2.5 text-[11.5px] ${summary.hasIssue ? "bg-red/10 text-red border border-red/30" : "bg-teal/10 text-teal border border-teal/30"}`}>
-              {summary.hasIssue ? <AlertTriangle size={13} className="mt-0.5 shrink-0" /> : <CheckCircle2 size={13} className="mt-0.5 shrink-0" />}
-              <span>{summary.text}</span>
+            <div className={`rounded-md px-3 py-2 mb-2.5 text-[11.5px] ${summary.hasIssue ? "bg-red/10 text-red border border-red/30" : "bg-teal/10 text-teal border border-teal/30"}`}>
+              <div className="flex items-start gap-1.5">
+                {summary.hasIssue ? <AlertTriangle size={13} className="mt-0.5 shrink-0" /> : <CheckCircle2 size={13} className="mt-0.5 shrink-0" />}
+                <span>{summary.text}</span>
+              </div>
+              {summary.hasIssue && g.some((r) => r.justification) && (
+                <div className="flex flex-wrap gap-x-5 gap-y-1.5 mt-2 pt-2 border-t border-red/25">
+                  {g.filter((r) => r.justification).map((r) => {
+                    const stats = statsByCatalogItem[r.catalogItemId];
+                    const eff = effectiveUnitCost(r);
+                    return (
+                      <div key={r.id} className="flex gap-4 flex-wrap">
+                        <div>
+                          <div className="text-[9px] uppercase tracking-wide text-red/70">Precio efectivo — esta solicitud</div>
+                          <div className="text-[13.5px] font-bold">${eff.toFixed(2)} <span className="text-[9.5px] font-normal text-red/70">/un. con flete</span></div>
+                        </div>
+                        {stats === undefined || stats === null || stats.last3Avg === null ? (
+                          <div className="text-[10px] text-red/70 self-center">Cargando historial…</div>
+                        ) : (
+                          <>
+                            <div>
+                              <div className="text-[9px] uppercase tracking-wide text-red/70">Historial reciente (últimas compras)</div>
+                              <div className="text-[13.5px] font-bold text-steel">${stats.last3Avg.toFixed(2)} <span className="text-[9.5px] font-normal text-red/70">/un. con flete</span></div>
+                            </div>
+                            <div>
+                              <div className="text-[9px] uppercase tracking-wide text-red/70">Diferencia</div>
+                              <div className="text-[13.5px] font-bold">{eff - stats.last3Avg >= 0 ? "+" : ""}${(eff - stats.last3Avg).toFixed(2)}/un.</div>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
             {historyOpenGroup === groupId && (
