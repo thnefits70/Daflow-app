@@ -66,7 +66,7 @@ export function Dashboard({
   learningPathResults?: TeamLearningPathResultDTO[];
   aiSpendToday?: number;
   aiSpendMonth?: number;
-  merchandisePayments?: { count: number; total: number; overdue: boolean; href: string };
+  merchandisePayments?: { count: number; total: number; overdue: boolean; href: string } | null;
 }) {
   const { rows, rowsSorted, totalAttempts, overallAvg } = data;
 
@@ -103,9 +103,7 @@ export function Dashboard({
           <div className="flex-1 min-w-0">
             <div className="font-semibold text-[13.5px] mb-0.5">Pagos de mercadería pendientes</div>
             <div className={`text-[12px] ${merchandisePayments.overdue ? "text-red" : "text-steel"}`}>
-              {merchandisePayments.count === 0
-                ? "No hay pagos de mercadería pendientes por ahora."
-                : `${merchandisePayments.count} operaci${merchandisePayments.count === 1 ? "ón" : "ones"} · $${merchandisePayments.total.toFixed(2)}${merchandisePayments.overdue ? " · atrasado" : ""}`}
+              {`${merchandisePayments.count} operaci${merchandisePayments.count === 1 ? "ón" : "ones"} · $${merchandisePayments.total.toFixed(2)}${merchandisePayments.overdue ? " · atrasado" : ""}`}
             </div>
           </div>
           <span className="text-[11px] font-bold text-blue shrink-0">Ir a pagar →</span>

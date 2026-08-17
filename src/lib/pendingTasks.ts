@@ -814,20 +814,22 @@ async function getPurchaseMerchandisePendingItem(comDeptId: string | null): Prom
   };
 }
 
-// Confirmado 2026-08-17: pedido explícito del usuario — además de aparecer
-// en "Pendientes de esta semana" cuando hay algo atrasado, quiere un acceso
-// fijo y siempre visible en Inicio para ir con un solo clic a pagar
-// mercadería, sin depender de que el sistema lo marque como pendiente. A
-// diferencia de getPurchaseMerchandisePendingItem, esta nunca devuelve
-// null — el atajo siempre está ahí, aunque el conteo sea 0.
+// Confirmado 2026-08-17: pedido explícito del usuario — acceso directo en
+// Inicio para ir a pagar mercadería con un solo clic, pero SOLO cuando
+// realmente hay algo pendiente (mismo criterio que
+// getPurchaseMerchandisePendingItem). Antes se mostraba siempre, incluso
+// con conteo 0 ("No hay pagos de mercadería pendientes"), pero el usuario
+// pidió revertir eso el mismo día — prefiere que la tarjeta desaparezca
+// cuando no hay nada que pagar.
 export async function getPurchaseMerchandisePaymentsShortcut(): Promise<{
   count: number;
   total: number;
   overdue: boolean;
   href: string;
-}> {
+} | null> {
   const comDept = await prisma.department.findUnique({ where: { code: "COM" }, select: { id: true } });
-  return getPurchaseMerchandisePaymentsSummary(comDept?.id ?? null);
+  const summary = await getPurchaseMerchandisePaymentsSummary(comDept?.id ?? null);
+  return summary.count === 0 ? null : summary;
 }
 
 // Confirmado 2026-08-13: mismo criterio que arriba, pero para fletes que
@@ -869,7 +871,7 @@ async function getPurchaseShippingPendingItem(href: string): Promise<PendingItem
 // "Generar roles de esta quincena" no la va a incluir.
 async function getOvertimeApprovalPendingItem(href: string): Promise<PendingItem | null> {
   const rows = await prisma.overtimeEntry.findMany({
-    where: { approvedAt: null },
+    where: { approvedAt: null, rejectedAt: null },
     select: { date: true, minutesExtra: true },
   });
   if (rows.length === 0) return null;
