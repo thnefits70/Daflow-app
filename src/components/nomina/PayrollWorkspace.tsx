@@ -61,7 +61,9 @@ export function PayrollWorkspace({
       {tab === "horas" && canLogOvertime && <OvertimeEntryPanel />}
       {tab === "aprobar" && canApproveOvertime && <OvertimeApprovalPanel />}
       {tab === "historial" && canViewRoles && <OvertimeHistoryPanel />}
-      {tab === "roles" && canViewRoles && <PayrollRolesPanel canEdit={canEditRoles} />}
+      {tab === "roles" && canViewRoles && (
+        <PayrollRolesPanel canEdit={canEditRoles} canProposeFixedBonus={canProposeCommissions} canApproveFixedBonus={canApproveCommissions} />
+      )}
       {tab === "comisiones" && canProposeCommissions && <CommissionTiersPanel canPropose={canProposeCommissions} canApprove={canApproveCommissions} />}
       {tab === "bonosceo" && canGrantCeoBonus && <CeoBonusesPanel />}
     </div>

@@ -277,6 +277,8 @@ model User {
   commissionTierAmounts         CommissionTierAmount[] @relation("CommissionTierAmountUser")
   commissionTierAmountsProposed CommissionTierAmount[] @relation("CommissionTierAmountProposedBy")
   ceoBonusGrantsReceived        CeoBonusGrant[]         @relation("CeoBonusGrantUser")
+  fixedMonthlyBonus             FixedMonthlyBonus?      @relation("FixedMonthlyBonusUser")
+  fixedMonthlyBonusesProposed   FixedMonthlyBonus[]     @relation("FixedMonthlyBonusProposedBy")
 
   @@index([deptId])
   @@index([leadsDeptId])
@@ -2503,6 +2505,26 @@ model CommissionTierAmount {
   // ese campo cuando el actor es exclusivamente el admin).
 
   @@unique([tierId, userId])
+}
+
+// Confirmado 2026-08-17: pedido explícito del usuario — un bono fijo
+// mensual por persona (ej. "$50 fijo todos los meses"), que se suma al
+// sueldo base. Mismo patrón propone/aprueba que CommissionTierAmount:
+// Nairoby (o admin) propone el monto, pero queda inactivo (pendingAmount)
+// hasta que el admin lo aprueba. Se paga con el mismo desfase de un mes
+// que horas extra/comisiones/bonos CEO — nunca en el mismo mes en que se
+// aprueba.
+model FixedMonthlyBonus {
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation("FixedMonthlyBonusUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  amount        Float     @default(0)
+  pendingAmount Float?
+  proposedAt    DateTime?
+  proposedById  String?
+  proposedBy    User?     @relation("FixedMonthlyBonusProposedBy", fields: [proposedById], references: [id], onDelete: SetNull)
+  approvedAt    DateTime?
 }
 
 enum CeoBonusType {

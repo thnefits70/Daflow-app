@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ChevronDown, ChevronUp } from "lucide-react";
+import { ChevronDown, ChevronUp, Check, X } from "lucide-react";
 
 type EmployeeProfile = {
   id: string;
@@ -15,9 +15,92 @@ type EmployeeProfile = {
     canLogOvertimeHours: boolean;
     usesFullLegalOvertimeSchedule: boolean;
   } | null;
+  fixedMonthlyBonus: {
+    amount: number;
+    pendingAmount: number | null;
+    proposedBy: { name: string } | null;
+  } | null;
 };
 
-function SalaryRow({ employee, canEdit, onSaved }: { employee: EmployeeProfile; canEdit: boolean; onSaved: () => void }) {
+function money(n: number) {
+  return `$${n.toFixed(2)}`;
+}
+
+// Confirmado 2026-08-17: pedido explícito del usuario — bono fijo mensual
+// por persona, se suma al sueldo base con el mismo desfase de un mes que
+// horas extra/comisiones. Nairoby propone, queda pendiente hasta que el
+// admin lo aprueba — mismo patrón que TierCell en CommissionTiersPanel.tsx.
+function FixedBonusCell({ employeeId, bonus, canPropose, canApprove, onSaved }: {
+  employeeId: string;
+  bonus: EmployeeProfile["fixedMonthlyBonus"];
+  canPropose: boolean;
+  canApprove: boolean;
+  onSaved: () => void;
+}) {
+  const [value, setValue] = useState(String(bonus?.pendingAmount ?? bonus?.amount ?? 0));
+  const [busy, setBusy] = useState(false);
+  const hasPending = bonus?.pendingAmount != null;
+
+  async function propose() {
+    const n = Number(value);
+    if (n < 0 || Number.isNaN(n)) return;
+    if (n === (bonus?.amount ?? 0) && !hasPending) return;
+    setBusy(true);
+    await fetch(`/api/payroll/fixed-bonus/${employeeId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pendingAmount: n }),
+    });
+    setBusy(false);
+    onSaved();
+  }
+
+  async function resolve(action: "approve" | "reject") {
+    setBusy(true);
+    await fetch(`/api/payroll/fixed-bonus/${employeeId}/${action}`, { method: "POST" });
+    setBusy(false);
+    onSaved();
+  }
+
+  return (
+    <td className="py-2 pr-3">
+      <input
+        className={`rounded border px-2 py-1 text-[12px] w-24 disabled:opacity-70 ${hasPending ? "border-gold bg-gold/10" : "border-rule bg-cloud"}`}
+        type="number"
+        step="0.01"
+        disabled={!canPropose || busy}
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onBlur={propose}
+      />
+      {hasPending && (
+        <div className="mt-1 text-[10px]">
+          <div style={{ color: "#D9A441" }} className="font-semibold">
+            Esperando aprobación (vigente: {money(bonus?.amount ?? 0)})
+          </div>
+          {canApprove && (
+            <div className="flex items-center gap-2 mt-0.5">
+              <button type="button" disabled={busy} className="flex items-center gap-0.5 text-green font-semibold cursor-pointer" onClick={() => resolve("approve")}>
+                <Check size={11} /> Aprobar
+              </button>
+              <button type="button" disabled={busy} className="flex items-center gap-0.5 text-red font-semibold cursor-pointer" onClick={() => resolve("reject")}>
+                <X size={11} /> Rechazar
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </td>
+  );
+}
+
+function SalaryRow({ employee, canEdit, canProposeBonus, canApproveBonus, onSaved }: {
+  employee: EmployeeProfile;
+  canEdit: boolean;
+  canProposeBonus: boolean;
+  canApproveBonus: boolean;
+  onSaved: () => void;
+}) {
   const p = employee.payrollProfile;
   const [realSalary, setRealSalary] = useState(p?.realSalary != null ? String(p.realSalary) : "");
   const [iessDeclaredSalary, setIessDeclaredSalary] = useState(p?.iessDeclaredSalary != null ? String(p.iessDeclaredSalary) : "");
@@ -68,9 +151,10 @@ function SalaryRow({ employee, canEdit, onSaved }: { employee: EmployeeProfile; 
       <td className="py-2 pr-3 text-center">
         <input type="checkbox" disabled={!canEdit} checked={p?.canLogOvertimeHours ?? false} onChange={(e) => save({ canLogOvertimeHours: e.target.checked })} />
       </td>
-      <td className="py-2 text-center">
+      <td className="py-2 pr-3 text-center">
         <input type="checkbox" disabled={!canEdit} checked={p?.usesFullLegalOvertimeSchedule ?? false} onChange={(e) => save({ usesFullLegalOvertimeSchedule: e.target.checked })} />
       </td>
+      <FixedBonusCell employeeId={employee.id} bonus={employee.fixedMonthlyBonus} canPropose={canProposeBonus} canApprove={canApproveBonus} onSaved={onSaved} />
     </tr>
   );
 }
@@ -81,7 +165,7 @@ function SalaryRow({ employee, canEdit, onSaved }: { employee: EmployeeProfile; 
 // PayrollProfileFields.tsx (el bloque dentro del perfil individual) — esto
 // es un segundo punto de entrada al mismo PayrollProfile, no un duplicado;
 // editar desde cualquiera de los dos lados queda sincronizado al instante.
-export function PayrollEmployeeSalariesPanel({ canEdit }: { canEdit: boolean }) {
+export function PayrollEmployeeSalariesPanel({ canEdit, canProposeBonus, canApproveBonus }: { canEdit: boolean; canProposeBonus: boolean; canApproveBonus: boolean }) {
   const [employees, setEmployees] = useState<EmployeeProfile[] | null>(null);
   const [open, setOpen] = useState(true);
 
@@ -105,16 +189,17 @@ export function PayrollEmployeeSalariesPanel({ canEdit }: { canEdit: boolean }) 
             <thead>
               <tr className="text-[10px] font-semibold uppercase tracking-wide text-steel border-b border-rule">
                 <th className="pb-1.5 pr-3">Colaborador</th>
-                <th className="pb-1.5 pr-3">Sueldo real</th>
+                <th className="pb-1.5 pr-3">Sueldo base</th>
                 <th className="pb-1.5 pr-3">Declarado IESS</th>
                 <th className="pb-1.5 pr-3 text-center">IESS 100%<br />Provedix</th>
                 <th className="pb-1.5 pr-3 text-center">Horas<br />extra</th>
-                <th className="pb-1.5 text-center">Horario<br />legal</th>
+                <th className="pb-1.5 pr-3 text-center">Horario<br />legal</th>
+                <th className="pb-1.5 pr-3">Bonos especiales<br />fijos</th>
               </tr>
             </thead>
             <tbody>
               {employees.map((e) => (
-                <SalaryRow key={e.id} employee={e} canEdit={canEdit} onSaved={load} />
+                <SalaryRow key={e.id} employee={e} canEdit={canEdit} canProposeBonus={canProposeBonus} canApproveBonus={canApproveBonus} onSaved={load} />
               ))}
             </tbody>
           </table>

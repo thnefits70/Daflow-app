@@ -232,6 +232,24 @@ export async function canManageCommissionTiers() {
   return !!session && session.user.role === "admin";
 }
 
+// Confirmado 2026-08-17: mismo criterio que canProposeCommissionAmounts —
+// Nairoby (líder de FIN) o admin proponen el bono fijo mensual por
+// persona.
+export async function canProposeFixedMonthlyBonus() {
+  const session = await auth();
+  if (!session) return false;
+  if (session.user.role === "admin") return true;
+  return canEditPayrollRoles();
+}
+
+// Confirmado 2026-08-17: pedido explícito del usuario — el bono fijo
+// mensual queda inactivo hasta que el admin lo aprueba, exclusivo del
+// admin, mismo criterio que canApproveCommissionAmounts.
+export async function canApproveFixedMonthlyBonus() {
+  const session = await auth();
+  return !!session && session.user.role === "admin";
+}
+
 // Bonos discrecionales del CEO — solo el admin los otorga, siempre.
 export async function canGrantCeoBonus() {
   const session = await auth();

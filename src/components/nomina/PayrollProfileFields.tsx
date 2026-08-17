@@ -70,7 +70,7 @@ export function PayrollProfileFields({ userId, canEdit }: { userId: string; canE
 
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <div className="text-[10px] font-semibold uppercase tracking-wide text-steel mb-1">Sueldo real</div>
+          <div className="text-[10px] font-semibold uppercase tracking-wide text-steel mb-1">Sueldo base</div>
           <input
             className="rounded border border-rule bg-surface px-2.5 py-1.5 text-[13px] w-full disabled:opacity-70"
             type="number"

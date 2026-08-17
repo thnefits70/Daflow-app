@@ -16,6 +16,7 @@ export async function GET() {
       position: true,
       department: { select: { name: true } },
       payrollProfile: true,
+      fixedMonthlyBonus: { include: { proposedBy: { select: { name: true } } } },
     },
   });
   return NextResponse.json(employees);

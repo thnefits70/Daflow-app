@@ -231,7 +231,7 @@ function RoleCard({ role, published, canEdit, monthlyRoleId, onChanged }: { role
 // Confirmado 2026-08-13: pantalla de gestión de Nómina — Nairoby edita
 // (canEdit), admin solo ve exactamente esto sin ningún control de
 // escritura (canEdit=false, todos los botones desaparecen).
-export function PayrollRolesPanel({ canEdit }: { canEdit: boolean }) {
+export function PayrollRolesPanel({ canEdit, canProposeFixedBonus, canApproveFixedBonus }: { canEdit: boolean; canProposeFixedBonus: boolean; canApproveFixedBonus: boolean }) {
   const periods = useMemo(recentPeriods, []);
   const [period, setPeriod] = useState(currentPeriod);
   const [detail, setDetail] = useState<PeriodDetail | null>(null);
@@ -267,7 +267,7 @@ export function PayrollRolesPanel({ canEdit }: { canEdit: boolean }) {
 
   return (
     <div>
-      <PayrollEmployeeSalariesPanel canEdit={canEdit} />
+      <PayrollEmployeeSalariesPanel canEdit={canEdit} canProposeBonus={canProposeFixedBonus} canApproveBonus={canApproveFixedBonus} />
       <CeoBonusesForNairobyPanel />
 
       <div className="bg-surface border border-rule rounded-md p-4 mb-4">

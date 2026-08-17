@@ -89,6 +89,16 @@ export async function buildAutomaticLineItems(employeeId: string, period: string
           isAutomatic: true,
         });
       }
+
+      // Confirmado 2026-08-17: bono especial fijo mensual (aprobado por el
+      // admin) — mismo desfase de un mes que todo lo demás en este bloque,
+      // pedido explícito del usuario: "todos los bonos, comisiones, horas
+      // extras deben sumarse al pago de su sueldo base en la primera
+      // quincena del mes siguiente".
+      const fixedBonus = await prisma.fixedMonthlyBonus.findUnique({ where: { userId: employeeId } });
+      if (fixedBonus && fixedBonus.amount > 0) {
+        items.push({ label: `Bonos especiales fijos (${sourceMonth})`, amount: fixedBonus.amount, kind: "INCOME", isAutomatic: true });
+      }
     }
   }
 
