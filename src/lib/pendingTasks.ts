@@ -747,20 +747,15 @@ async function getAdminPaymentsPendingItem(href: string): Promise<PendingItem | 
   };
 }
 
-// Confirmado 2026-08-13: pedido explícito del usuario — un solo enlace en
-// Inicio con el TOTAL de pagos de mercadería que ya están aprobados y
-// esperan que se les pague (nunca el listado completo, uno por uno — eso
-// ya se ve dentro de Control de Compras). Se paga desde la pestaña
-// Finanzas de Control de Compras (Bandeja de aprobación ya combina
-// aprobar+pagar; esto cubre lo que quedó aprobado sin pagar todavía).
-// Mismo umbral de 24h que el resto de "atrasado" de este archivo.
-async function getPurchaseMerchandisePendingItem(href: string): Promise<PendingItem | null> {
+// Cálculo compartido: agrupa las PurchaseRequest APPROVED (aprobadas, sin
+// pagar aún) por groupId. Usado tanto por el item de "Pendientes de esta
+// semana" (se oculta si count es 0) como por el acceso directo fijo de
+// Inicio (getPurchaseMerchandisePaymentsShortcut, que sí se muestra en 0).
+async function getPurchaseMerchandisePaymentsSummary(): Promise<{ count: number; total: number; overdue: boolean }> {
   const rows = await prisma.purchaseRequest.findMany({
     where: { status: "APPROVED" },
     select: { groupId: true, totalCost: true, reviewedAt: true },
   });
-  if (rows.length === 0) return null;
-
   const byGroup = new Map<string, { total: number; reviewedAt: Date | null }>();
   for (const r of rows) {
     const cur = byGroup.get(r.groupId) ?? { total: 0, reviewedAt: r.reviewedAt };
@@ -771,14 +766,45 @@ async function getPurchaseMerchandisePendingItem(href: string): Promise<PendingI
   const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
   const overdue = groups.some((g) => g.reviewedAt && g.reviewedAt < cutoff);
   const total = groups.reduce((s, g) => s + g.total, 0);
+  return { count: groups.length, total, overdue };
+}
+
+// Confirmado 2026-08-13: pedido explícito del usuario — un solo enlace en
+// Inicio con el TOTAL de pagos de mercadería que ya están aprobados y
+// esperan que se les pague (nunca el listado completo, uno por uno — eso
+// ya se ve dentro de Control de Compras). Se paga desde la pestaña
+// Finanzas de Control de Compras (Bandeja de aprobación ya combina
+// aprobar+pagar; esto cubre lo que quedó aprobado sin pagar todavía).
+// Mismo umbral de 24h que el resto de "atrasado" de este archivo.
+async function getPurchaseMerchandisePendingItem(href: string): Promise<PendingItem | null> {
+  const { count, total, overdue } = await getPurchaseMerchandisePaymentsSummary();
+  if (count === 0) return null;
   return {
     type: "pagos_mercaderia",
     icon: "📦",
     label: "Pagos de mercadería pendientes",
-    meta: `${groups.length} operación${groups.length === 1 ? "" : "es"} · $${total.toFixed(2)}${overdue ? " · atrasado" : ""}`,
+    meta: `${count} operación${count === 1 ? "" : "es"} · $${total.toFixed(2)}${overdue ? " · atrasado" : ""}`,
     overdue,
     href,
   };
+}
+
+// Confirmado 2026-08-17: pedido explícito del usuario — además de aparecer
+// en "Pendientes de esta semana" cuando hay algo atrasado, quiere un acceso
+// fijo y siempre visible en Inicio para ir con un solo clic a pagar
+// mercadería, sin depender de que el sistema lo marque como pendiente. A
+// diferencia de getPurchaseMerchandisePendingItem, esta nunca devuelve
+// null — el atajo siempre está ahí, aunque el conteo sea 0.
+export async function getPurchaseMerchandisePaymentsShortcut(): Promise<{
+  count: number;
+  total: number;
+  overdue: boolean;
+  href: string;
+}> {
+  const comDept = await prisma.department.findUnique({ where: { code: "COM" }, select: { id: true } });
+  const href = comDept ? `/admin/dept/${comDept.id}?tab=compras&ptab=finanzas` : "/admin";
+  const summary = await getPurchaseMerchandisePaymentsSummary();
+  return { ...summary, href };
 }
 
 // Confirmado 2026-08-13: mismo criterio que arriba, pero para fletes que

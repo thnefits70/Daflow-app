@@ -12,6 +12,7 @@ import {
 import { getStoreFeedbackAggregate, getStoreFeedbackTrend } from "@/lib/storeFeedback";
 import { getTeamLearningPathResults } from "@/lib/learningPaths";
 import { getAiSpendOverview } from "@/lib/aiUsage";
+import { getPurchaseMerchandisePaymentsShortcut } from "@/lib/pendingTasks";
 import { Dashboard } from "@/components/dashboard/Dashboard";
 
 // Confirmado 2026-07-27: el admin no pertenece a ningún área, así que no
@@ -21,7 +22,7 @@ import { Dashboard } from "@/components/dashboard/Dashboard";
 // líder ya ve los suyos en su propio Inicio (`getDuePeriodicReminders({deptId})`
 // en area/page.tsx) — el admin ya no ve ninguno aquí.
 export default async function AdminHomePage() {
-  const [data, weeklyTrend, fillRateTrend, fillRateBreakdown, returnRateTrend, stockoutWeeks, warrantyMonthlyChart, warrantyReasonChart, storeFeedback, storeFeedbackTrend, learningPathResults, aiSpend, commissionProgress] =
+  const [data, weeklyTrend, fillRateTrend, fillRateBreakdown, returnRateTrend, stockoutWeeks, warrantyMonthlyChart, warrantyReasonChart, storeFeedback, storeFeedbackTrend, learningPathResults, aiSpend, commissionProgress, merchandisePayments] =
     await Promise.all([
       getDashboardData(),
       getWeeklyTrend(),
@@ -36,6 +37,7 @@ export default async function AdminHomePage() {
       getTeamLearningPathResults(),
       getAiSpendOverview(),
       getCommissionProgress(),
+      getPurchaseMerchandisePaymentsShortcut(),
     ]);
   return (
     <Dashboard
@@ -53,6 +55,7 @@ export default async function AdminHomePage() {
       learningPathResults={learningPathResults}
       aiSpendToday={aiSpend.today}
       aiSpendMonth={aiSpend.month}
+      merchandisePayments={merchandisePayments}
     />
   );
 }

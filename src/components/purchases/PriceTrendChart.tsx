@@ -39,6 +39,10 @@ export function PriceTrendChart({ points }: { points: SupplierPricePoint[] }) {
     const d = new Date(iso);
     return `${d.getDate()}/${d.getMonth() + 1}/${String(d.getFullYear()).slice(2)}`;
   };
+  // Eje y tooltip muestran la fecha de pago cuando ya existe — es lo que le
+  // importa a quien aprueba (cuándo se pagó ese precio). Si todavía no se ha
+  // pagado (aprobado pero pendiente), cae a la fecha de solicitud y se avisa.
+  const effDate = (p: SupplierPricePoint) => p.paidAt ?? p.date;
 
   return (
     <svg viewBox={`0 0 ${width} ${height}`} width="100%" height={height} preserveAspectRatio="none" className="block" onMouseLeave={() => setHover(null)}>
@@ -57,7 +61,7 @@ export function PriceTrendChart({ points }: { points: SupplierPricePoint[] }) {
 
       {coords.map((c, i) => (
         <text key={`d-${i}`} x={c.x} y={height - 8} textAnchor="middle" fontSize="9.5" fill="#92a3c0">
-          {fmtDate(points[i].date)}
+          {fmtDate(effDate(points[i]))}
         </text>
       ))}
 
@@ -90,10 +94,10 @@ export function PriceTrendChart({ points }: { points: SupplierPricePoint[] }) {
                 ${p.unitCost.toFixed(2)}
               </text>
               <text x={boxX + boxW / 2} y={boxY + 30} textAnchor="middle" fontSize="9.5" fill="#92a3c0">
-                {fmtDate(p.date)} · {p.quantity} un.
+                {fmtDate(effDate(p))} · {p.quantity} un.
               </text>
               <text x={boxX + boxW / 2} y={boxY + 42} textAnchor="middle" fontSize="9.5" fill="#92a3c0">
-                {STATUS_LABEL[p.status] ?? p.status}
+                {p.paidAt ? "Pagado" : `${STATUS_LABEL[p.status] ?? p.status} · pago pendiente`}
               </text>
             </g>
           );

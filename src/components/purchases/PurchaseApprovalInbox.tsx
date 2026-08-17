@@ -2,11 +2,13 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { FileText, Upload, CheckCircle2, AlertTriangle, Lock, Landmark } from "lucide-react";
+import { FileText, Upload, CheckCircle2, AlertTriangle, Lock, Landmark, LineChart, ChevronDown } from "lucide-react";
 import { actorName } from "@/lib/actorName";
 import { uploadFile } from "@/lib/uploadFile";
 import { compressImage } from "@/lib/compressImage";
 import { usePasteFile } from "@/lib/usePasteFile";
+import { PriceTrendChart } from "./PriceTrendChart";
+import type { SupplierPriceHistory } from "@/lib/purchases";
 
 type BankAccount = {
   id: string;
@@ -32,6 +34,7 @@ type Row = {
   shippingIncluded: boolean;
   shippingPaymentTiming: "WITH_PURCHASE" | "ON_DELIVERY" | null;
   shippingCostTotal: number | null;
+  catalogItemId: string;
   catalogItem: { name: string };
   supplier: { id: string; name: string };
   bankAccount: BankAccount | null;
@@ -114,8 +117,32 @@ export function PurchaseApprovalInbox() {
   // que se carga la bandeja (no solo al abrir "Aprobar").
   const [reservedCreditsByGroup, setReservedCreditsByGroup] = useState<Record<string, { id: string; amount: number; reason: string }[]>>({});
 
+  // Confirmado 2026-08-17: pedido explícito del usuario — quien aprueba
+  // quiere ver el precio y sus fechas de pago en una gráfica de tendencia,
+  // no solo el badge "Sobre el historial", antes de decidir. Se abre por
+  // grupo (groupId) y se cachea por producto (catalogItemId) para no
+  // repetir el fetch si hay varios grupos pendientes del mismo insumo.
+  const [historyOpenGroup, setHistoryOpenGroup] = useState<string | null>(null);
+  const [historyByCatalogItem, setHistoryByCatalogItem] = useState<Record<string, SupplierPriceHistory[] | null>>({});
+  // Confirmado 2026-08-17: la gráfica solo muestra pagos YA confirmados
+  // (paidAt), nunca aprobados-pendientes-de-pago — y arranca mostrando los
+  // últimos 6, con un clic para ir sumando los anteriores.
+  const HISTORY_WINDOW = 6;
+  const [historyExpanded, setHistoryExpanded] = useState(false);
+
   const { onPaste: onPasteProof, onMouseEnter: onPasteProofHoverIn, onMouseLeave: onPasteProofHoverOut } = usePasteFile((file) => uploadProof(file));
   const { onPaste: onPasteShippingProof, onMouseEnter: onPasteShippingProofHoverIn, onMouseLeave: onPasteShippingProofHoverOut } = usePasteFile((file) => uploadShippingProof(file));
+
+  function toggleHistory(groupId: string, catalogItemId: string) {
+    setHistoryExpanded(false);
+    setHistoryOpenGroup((cur) => (cur === groupId ? null : groupId));
+    if (historyByCatalogItem[catalogItemId] !== undefined) return;
+    setHistoryByCatalogItem((m) => ({ ...m, [catalogItemId]: null }));
+    fetch(`/api/purchase-catalog/${catalogItemId}/supplier-comparison`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((data: SupplierPriceHistory[]) => setHistoryByCatalogItem((m) => ({ ...m, [catalogItemId]: data })))
+      .catch(() => setHistoryByCatalogItem((m) => ({ ...m, [catalogItemId]: [] })));
+  }
 
   function load() {
     fetch("/api/purchase-requests?view=approval")
@@ -339,7 +366,15 @@ export function PurchaseApprovalInbox() {
               </div>
               <div className="flex flex-col items-end gap-1">
                 {justification && (
-                  <span className="text-[10px] font-bold uppercase tracking-wide bg-red/15 text-red border border-red/40 rounded-full px-2.5 py-1">Sobre el historial</span>
+                  <button
+                    type="button"
+                    onClick={() => toggleHistory(groupId, g[0].catalogItemId)}
+                    className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide bg-red/15 text-red border border-red/40 rounded-full px-2.5 py-1 cursor-pointer hover:bg-red/25"
+                  >
+                    <LineChart size={11} />
+                    Sobre el historial
+                    <ChevronDown size={11} className={`transition-transform ${historyOpenGroup === groupId ? "rotate-180" : ""}`} />
+                  </button>
                 )}
                 <div className="text-right">
                   {reservedTotalFor(groupId) > 0 && (
@@ -360,6 +395,44 @@ export function PurchaseApprovalInbox() {
               {summary.hasIssue ? <AlertTriangle size={13} className="mt-0.5 shrink-0" /> : <CheckCircle2 size={13} className="mt-0.5 shrink-0" />}
               <span>{summary.text}</span>
             </div>
+
+            {historyOpenGroup === groupId && (
+              <div className="bg-surface2 border border-rule rounded-md p-3 mb-2.5">
+                {historyByCatalogItem[g[0].catalogItemId] === undefined || historyByCatalogItem[g[0].catalogItemId] === null ? (
+                  <div className="text-steel text-[12px]">Cargando historial de precio…</div>
+                ) : (
+                  (() => {
+                    const suppliers = historyByCatalogItem[g[0].catalogItemId]!;
+                    const s = suppliers.find((x) => x.supplierId === g[0].supplier.id);
+                    if (!s) {
+                      return <div className="text-steel text-[12px]">Sin historial previo de {g[0].supplier.name} para este insumo.</div>;
+                    }
+                    return (
+                      <>
+                        <div className="text-[10px] font-semibold uppercase tracking-wide text-steel mb-1.5">
+                          Tendencia de precio — {g[0].supplier.name} · {s.count} {s.count === 1 ? "compra" : "compras"}
+                        </div>
+                        <PriceTrendChart points={s.history} />
+                        <div className="grid grid-cols-3 gap-2 mt-2">
+                          <div className="bg-cloud rounded p-2 text-center">
+                            <div className="text-[8.5px] uppercase text-steel">Más bajo</div>
+                            <div className="text-[12.5px] font-bold text-green">${s.min.toFixed(2)}</div>
+                          </div>
+                          <div className="bg-cloud rounded p-2 text-center">
+                            <div className="text-[8.5px] uppercase text-steel">Promedio</div>
+                            <div className="text-[12.5px] font-bold text-teal">${s.avg.toFixed(2)}</div>
+                          </div>
+                          <div className="bg-cloud rounded p-2 text-center">
+                            <div className="text-[8.5px] uppercase text-steel">Más alto</div>
+                            <div className="text-[12.5px] font-bold text-red">${s.max.toFixed(2)}</div>
+                          </div>
+                        </div>
+                      </>
+                    );
+                  })()
+                )}
+              </div>
+            )}
 
             <div className="flex items-center gap-2 mb-2.5">
               <a href={g[0].quoteImageUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-[11.5px] text-blue font-semibold cursor-pointer">

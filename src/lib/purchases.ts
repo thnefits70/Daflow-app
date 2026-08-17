@@ -82,7 +82,12 @@ export async function getCatalogItemPriceStats(catalogItemId: string): Promise<P
   };
 }
 
-export type SupplierPricePoint = { date: string; unitCost: number; quantity: number; status: PurchaseRequestStatus };
+// Confirmado 2026-08-17: "date" sigue siendo la fecha de solicitud (define el
+// orden), pero paidAt es la fecha real de pago cuando ya existe — el gráfico
+// de tendencia la usa para el eje cuando está disponible, porque eso es lo
+// que de verdad le importa a quien aprueba (cuándo se pagó ese precio), no
+// cuándo se pidió.
+export type SupplierPricePoint = { date: string; paidAt: string | null; unitCost: number; quantity: number; status: PurchaseRequestStatus };
 export type SupplierPriceHistory = {
   supplierId: string;
   supplierName: string;
@@ -111,6 +116,7 @@ export async function getCatalogItemSupplierComparison(catalogItemId: string): P
       shippingIncluded: true,
       shippingCostTotal: true,
       requestedAt: true,
+      paidAt: true,
       status: true,
       supplier: { select: { id: true, name: true } },
     },
@@ -123,10 +129,16 @@ export async function getCatalogItemSupplierComparison(catalogItemId: string): P
     if (!bySupplier.has(key)) bySupplier.set(key, { supplierId: r.supplier.id, supplierName: r.supplier.name, history: [] });
     bySupplier.get(key)!.history.push({
       date: r.requestedAt.toISOString(),
+      paidAt: r.paidAt ? r.paidAt.toISOString() : null,
       unitCost: effectiveUnitCost({ unitCost: r.unitCost, quantity: r.quantity, shippingIncluded: r.shippingIncluded, shippingCostTotal: r.shippingCostTotal }),
       quantity: r.quantity,
       status: r.status,
     });
+  }
+  // Reordenar por fecha efectiva (pago si ya existe, si no la solicitud) —
+  // casi siempre coincide con el orden de solicitud, pero no es garantía.
+  for (const s of bySupplier.values()) {
+    s.history.sort((a, b) => new Date(a.paidAt ?? a.date).getTime() - new Date(b.paidAt ?? b.date).getTime());
   }
 
   const suppliers: SupplierPriceHistory[] = [...bySupplier.values()].map((s) => {
