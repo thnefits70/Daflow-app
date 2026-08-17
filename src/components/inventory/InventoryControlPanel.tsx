@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, Upload, AlertTriangle, TrendingDown, Minus } from "lucide-react";
 import type { InventoryControlPeriodDTO } from "@/lib/inventoryKpis";
@@ -60,6 +60,7 @@ export function InventoryControlPanel({
   }
 
   const { onPaste, onMouseEnter, onMouseLeave } = usePasteFile((file) => uploadProof(file));
+  const proofFileInputRef = useRef<HTMLInputElement>(null);
 
   async function uploadProof(file: File) {
     setUploadingProof(true);
@@ -244,12 +245,17 @@ export function InventoryControlPanel({
               <div className="text-[11.5px] text-steel">Subiendo captura…</div>
             ) : (
               <label
+                tabIndex={0}
                 onPaste={onPaste} onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave}
+                onClick={(e) => e.preventDefault()}
                 className="flex items-center gap-2 border-[1.5px] border-dashed border-rule rounded-md px-3 py-2.5 cursor-pointer hover:border-teal transition-colors text-[11.5px] text-steel w-fit"
               >
                 <Upload size={13} />
-                <span>De preferencia, adjunta una captura de tu reporte con este valor — clic, arrastra, o Ctrl+V</span>
-                <input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && uploadProof(e.target.files[0])} />
+                <span>De preferencia, adjunta una captura de tu reporte con este valor — pégala aquí (Ctrl+V)</span>
+                <button type="button" className="text-[10.5px] underline decoration-dotted opacity-80 hover:opacity-100 cursor-pointer" onClick={(e) => { e.stopPropagation(); proofFileInputRef.current?.click(); }}>
+                  o selecciona un archivo
+                </button>
+                <input ref={proofFileInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && uploadProof(e.target.files[0])} />
               </label>
             )}
             {verifying && <div className="text-[11px] text-steel mt-1.5">La IA está leyendo la captura…</div>}

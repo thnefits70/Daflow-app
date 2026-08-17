@@ -151,7 +151,9 @@ export function PurchaseApprovalInbox() {
   const [statsByCatalogItem, setStatsByCatalogItem] = useState<Record<string, PriceHistoryStats | null>>({});
 
   const { onPaste: onPasteProof, onMouseEnter: onPasteProofHoverIn, onMouseLeave: onPasteProofHoverOut } = usePasteFile((file) => uploadProof(file));
+  const proofFileInputRef = useRef<HTMLInputElement>(null);
   const { onPaste: onPasteShippingProof, onMouseEnter: onPasteShippingProofHoverIn, onMouseLeave: onPasteShippingProofHoverOut } = usePasteFile((file) => uploadShippingProof(file));
+  const shippingProofFileInputRef = useRef<HTMLInputElement>(null);
 
   function toggleHistory(groupId: string, catalogItemId: string) {
     setOpenSupplierId(null);
@@ -679,11 +681,15 @@ export function PurchaseApprovalInbox() {
                       onPaste={onPasteProof}
                       onMouseEnter={onPasteProofHoverIn}
                       onMouseLeave={onPasteProofHoverOut}
+                      onClick={(e) => e.preventDefault()}
                       className="flex items-center justify-center gap-2 border-[1.5px] border-dashed border-rule rounded-md py-2.5 cursor-pointer text-[12px] text-steel hover:border-teal focus:border-teal focus:outline-none"
                     >
                       {uploadingProof ? <span className="w-3.5 h-3.5 rounded-full border-2 border-rule border-t-teal animate-spin" /> : <Upload size={14} />}
-                      Subir o pegar foto (pasa el mouse y Ctrl+V)
-                      <input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && uploadProof(e.target.files[0])} />
+                      Pega la foto aquí (Ctrl+V)
+                      <button type="button" className="text-[10.5px] underline decoration-dotted opacity-80 hover:opacity-100 cursor-pointer" onClick={(e) => { e.stopPropagation(); proofFileInputRef.current?.click(); }}>
+                        o selecciona un archivo
+                      </button>
+                      <input ref={proofFileInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && uploadProof(e.target.files[0])} />
                     </label>
                     <label className="flex items-center justify-center gap-1.5 mt-1.5 text-[10.5px] text-steel cursor-pointer hover:text-teal">
                       <FileText size={10.5} /> ¿Es un PDF? Subir documento
@@ -730,11 +736,15 @@ export function PurchaseApprovalInbox() {
                           onPaste={onPasteShippingProof}
                           onMouseEnter={onPasteShippingProofHoverIn}
                           onMouseLeave={onPasteShippingProofHoverOut}
+                          onClick={(e) => e.preventDefault()}
                           className="flex items-center justify-center gap-2 border-[1.5px] border-dashed border-rule rounded-md py-2.5 cursor-pointer text-[12px] text-steel hover:border-teal focus:border-teal focus:outline-none"
                         >
                           {uploadingShippingProof ? <span className="w-3.5 h-3.5 rounded-full border-2 border-rule border-t-teal animate-spin" /> : <Upload size={14} />}
-                          Subir o pegar foto (pasa el mouse y Ctrl+V)
-                          <input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && uploadShippingProof(e.target.files[0])} />
+                          Pega la foto aquí (Ctrl+V)
+                          <button type="button" className="text-[10.5px] underline decoration-dotted opacity-80 hover:opacity-100 cursor-pointer" onClick={(e) => { e.stopPropagation(); shippingProofFileInputRef.current?.click(); }}>
+                            o selecciona un archivo
+                          </button>
+                          <input ref={shippingProofFileInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && uploadShippingProof(e.target.files[0])} />
                         </label>
                         <label className="flex items-center justify-center gap-1.5 mt-1.5 text-[10.5px] text-steel cursor-pointer hover:text-teal">
                           <FileText size={10.5} /> ¿Es un PDF? Subir documento

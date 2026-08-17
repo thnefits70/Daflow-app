@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, CheckCircle2, Lock, Upload, Plus, X, FileText, Clock, Wallet } from "lucide-react";
 import { uploadFile } from "@/lib/uploadFile";
@@ -123,6 +123,7 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
   const [uploadingManualCreditProof, setUploadingManualCreditProof] = useState(false);
   const [savingManualCredit, setSavingManualCredit] = useState(false);
   const { onPaste: onPasteManualCredit, onMouseEnter: onManualCreditHoverIn, onMouseLeave: onManualCreditHoverOut } = usePasteFile((file) => uploadManualCreditProof(file));
+  const manualCreditFileInputRef = useRef<HTMLInputElement>(null);
 
   const [quoteFile, setQuoteFile] = useState<File | null>(null);
   const [quoteImageUrl, setQuoteImageUrl] = useState<string | null>(null);
@@ -140,6 +141,7 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
   // resultado viejo con un archivo distinto.
   const [confirmUnlockQuote, setConfirmUnlockQuote] = useState(false);
   const { onPaste: onPasteQuote, onMouseEnter: onPasteQuoteHoverIn, onMouseLeave: onPasteQuoteHoverOut } = usePasteFile((file) => handleQuoteFile(file));
+  const quoteFileInputRef = useRef<HTMLInputElement>(null);
 
   const [purchaseOrderFile, setPurchaseOrderFile] = useState<File | null>(null);
   const [purchaseOrderUrl, setPurchaseOrderUrl] = useState<string | null>(null);
@@ -148,6 +150,7 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
   const [poVerifyResult, setPoVerifyResult] = useState<{ readTotal: number | null; matches: boolean } | null>(null);
   const [confirmUnlockPO, setConfirmUnlockPO] = useState(false);
   const { onPaste: onPastePurchaseOrder, onMouseEnter: onPastePOHoverIn, onMouseLeave: onPastePOHoverOut } = usePasteFile((file) => handlePurchaseOrderFile(file));
+  const purchaseOrderFileInputRef = useRef<HTMLInputElement>(null);
 
   // Confirmado 2026-08-07: antes venía marcado por default (asumía "envío
   // incluido"), lo que hacía que muchas solicitudes se enviaran sin costo de
@@ -420,6 +423,21 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
   const lineTotals = lines.map((l) => (Number(l.quantity) || 0) * effectiveLineUnitCost(l));
   const totalQty = lines.reduce((s, l) => s + (Number(l.quantity) || 0), 0);
   const total = lineTotals.reduce((s, t) => s + t, 0);
+
+  // Confirmado 2026-08-17: pedido explícito del usuario — cuando la
+  // cotización solo trae código (sin nombre de producto), antes el total que
+  // leía la IA (readTotal) se descartaba en silencio: solo se comparaba la
+  // orden de compra contra lo escrito. Si el proveedor ya tenía un crédito
+  // pendiente y lo aplicó directo en la cotización (el "total a transferir"
+  // que puso ahí ya viene descontado), esa diferencia nunca se detectaba ni
+  // se registraba como crédito — se terminaba pagando de más. Con esto, si
+  // el total leído de la cotización es menor a lo escrito, se ofrece
+  // registrar la diferencia como crédito de una vez (ver bloque de
+  // "Cotización" más abajo).
+  const quoteCreditGap =
+    verifyResult?.referenceCodeFound && verifyResult.readTotal !== null && total - verifyResult.readTotal > 0.01
+      ? total - verifyResult.readTotal
+      : null;
 
   // Cada línea se compara contra SU propio historial — el envío (si no está
   // incluido) se reparte proporcionalmente por cantidad, igual que hace el
@@ -851,11 +869,17 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
                   onPaste={onPasteManualCredit}
                   onMouseEnter={onManualCreditHoverIn}
                   onMouseLeave={onManualCreditHoverOut}
-                  className="flex items-center justify-center gap-2 border-[1.5px] border-dashed border-rule rounded-md py-3 cursor-pointer hover:border-teal focus:border-teal focus:outline-none text-steel text-[12px]"
+                  onClick={(e) => e.preventDefault()}
+                  className="flex flex-col items-center justify-center gap-1 border-[1.5px] border-dashed border-rule rounded-md py-3 cursor-pointer hover:border-teal focus:border-teal focus:outline-none text-steel text-[12px]"
                 >
-                  {uploadingManualCreditProof ? <span className="w-4 h-4 rounded-full border-2 border-rule border-t-teal animate-spin" /> : <Upload size={14} />}
-                  Sube el comprobante — captura del chat o documento donde el proveedor acepta el crédito
-                  <input type="file" accept="image/*,.pdf" className="hidden" onChange={(e) => e.target.files?.[0] && uploadManualCreditProof(e.target.files[0])} />
+                  <span className="flex items-center gap-2">
+                    {uploadingManualCreditProof ? <span className="w-4 h-4 rounded-full border-2 border-rule border-t-teal animate-spin" /> : <Upload size={14} />}
+                    Pega el comprobante aquí (Ctrl+V) — captura del chat o documento donde el proveedor acepta el crédito
+                  </span>
+                  <button type="button" className="text-[10.5px] underline decoration-dotted opacity-80 hover:opacity-100 cursor-pointer" onClick={(e) => { e.stopPropagation(); manualCreditFileInputRef.current?.click(); }}>
+                    o selecciona un archivo
+                  </button>
+                  <input ref={manualCreditFileInputRef} type="file" accept="image/*,.pdf" className="hidden" onChange={(e) => e.target.files?.[0] && uploadManualCreditProof(e.target.files[0])} />
                 </label>
               ) : (
                 <div className="flex items-center gap-1.5 text-[12px] text-teal">
@@ -897,11 +921,17 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
             onPaste={onPasteQuote}
             onMouseEnter={onPasteQuoteHoverIn}
             onMouseLeave={onPasteQuoteHoverOut}
-            className="flex items-center justify-center gap-2 border-[1.5px] border-dashed border-rule rounded-md py-4 cursor-pointer hover:border-teal focus:border-teal focus:outline-none text-steel text-[12.5px]"
+            onClick={(e) => e.preventDefault()}
+            className="flex flex-col items-center justify-center gap-1 border-[1.5px] border-dashed border-rule rounded-md py-4 cursor-pointer hover:border-teal focus:border-teal focus:outline-none text-steel text-[12.5px]"
           >
-            {uploadingQuote ? <span className="w-4 h-4 rounded-full border-2 border-rule border-t-teal animate-spin" /> : <Upload size={16} />}
-            Subir o pegar la cotización (pasa el mouse y Ctrl+V)
-            <input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && handleQuoteFile(e.target.files[0])} />
+            <span className="flex items-center gap-2">
+              {uploadingQuote ? <span className="w-4 h-4 rounded-full border-2 border-rule border-t-teal animate-spin" /> : <Upload size={16} />}
+              Pega la cotización aquí (Ctrl+V)
+            </span>
+            <button type="button" className="text-[10.5px] underline decoration-dotted opacity-80 hover:opacity-100 cursor-pointer" onClick={(e) => { e.stopPropagation(); quoteFileInputRef.current?.click(); }}>
+              o selecciona un archivo
+            </button>
+            <input ref={quoteFileInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && handleQuoteFile(e.target.files[0])} />
           </label>
         ) : (
           <div className="bg-cloud border border-rule rounded-md p-3">
@@ -931,6 +961,24 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
                     {verifyResult.suggestedCatalogItem && (
                       <div className="text-[11.5px] text-steel mb-2">
                         Ese código ya está guardado como <b className="text-ink">{verifyResult.suggestedCatalogItem.name}</b> en el catálogo.
+                      </div>
+                    )}
+                    {quoteCreditGap !== null && (
+                      <div className="text-[11.5px] mb-2 rounded-md border p-2" style={{ borderColor: "#D9A441", color: "#D9A441", background: "rgba(217,164,65,0.08)" }}>
+                        La cotización dice que el total a transferir es <b>${verifyResult.readTotal!.toFixed(2)}</b>, pero lo escrito es <b>${total.toFixed(2)}</b> — la diferencia (${quoteCreditGap.toFixed(2)}) ¿es un crédito pendiente con este proveedor?
+                        <button
+                          type="button"
+                          className="block mt-1.5 text-[11.5px] font-semibold text-blue cursor-pointer"
+                          onClick={() => {
+                            setManualCreditAmount(quoteCreditGap.toFixed(2));
+                            setManualCreditReason(`Cotización (código ${verifyResult.referenceCodeFound}) indicó $${verifyResult.readTotal!.toFixed(2)} a transferir — diferencia con lo escrito por crédito pendiente`);
+                            setManualCreditProofUrl(quoteImageUrl);
+                            setManualCreditProofName("Cotización");
+                            setManualCreditOpen(true);
+                          }}
+                        >
+                          Sí, registrar crédito por ${quoteCreditGap.toFixed(2)} — se agrega arriba, en &quot;Créditos pendientes&quot;
+                        </button>
                       </div>
                     )}
                     {!manualCodeConfirm ? (
@@ -1002,17 +1050,23 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
               onPaste={onPastePurchaseOrder}
               onMouseEnter={onPastePOHoverIn}
               onMouseLeave={onPastePOHoverOut}
-              className={`flex items-center justify-center gap-2 border-[1.5px] border-dashed rounded-md py-3.5 cursor-pointer text-[12.5px] focus:outline-none ${
+              onClick={(e) => e.preventDefault()}
+              className={`flex flex-col items-center justify-center gap-1 border-[1.5px] border-dashed rounded-md py-3.5 cursor-pointer text-[12.5px] focus:outline-none ${
                 needsPurchaseOrder ? "border-red/45 text-red hover:border-red" : "border-rule text-steel hover:border-teal focus:border-teal"
               }`}
             >
-              {uploadingPurchaseOrder ? <span className="w-4 h-4 rounded-full border-2 border-rule border-t-teal animate-spin" /> : <Upload size={15} />}
-              Subir o pegar la orden de compra (pasa el mouse y Ctrl+V)
+              <span className="flex items-center gap-2">
+                {uploadingPurchaseOrder ? <span className="w-4 h-4 rounded-full border-2 border-rule border-t-teal animate-spin" /> : <Upload size={15} />}
+                Pega la orden de compra aquí (Ctrl+V)
+              </span>
+              <button type="button" className="text-[10.5px] underline decoration-dotted opacity-80 hover:opacity-100 cursor-pointer" onClick={(e) => { e.stopPropagation(); purchaseOrderFileInputRef.current?.click(); }}>
+                o selecciona una imagen
+              </button>
               {/* Confirmado 2026-08-03: accept="image/*,application/pdf" hacía que el
                   celular mostrara el selector genérico de "Cámara y archivos" en vez
                   del acceso directo a la última foto — se separa el PDF como opción
                   aparte para que la foto (el caso más común) siga siendo un solo toque. */}
-              <input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && handlePurchaseOrderFile(e.target.files[0])} />
+              <input ref={purchaseOrderFileInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && handlePurchaseOrderFile(e.target.files[0])} />
             </label>
             <label className="flex items-center justify-center gap-1.5 mt-1.5 text-[11px] text-steel cursor-pointer hover:text-teal">
               <FileText size={11} /> ¿Es un PDF? Subir documento

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Camera, CheckCircle2, X, AlertTriangle, Truck } from "lucide-react";
 import { uploadFile } from "@/lib/uploadFile";
@@ -119,6 +119,7 @@ export function PurchaseReceivingPanel({ isAdmin = false }: { isAdmin?: boolean 
   const [aiResult, setAiResult] = useState<{ likelyMatch: boolean | null; note: string; minorDifferenceOnly?: boolean } | null>(null);
   const [minorDifferenceConfirmed, setMinorDifferenceConfirmed] = useState(false);
   const { onPaste: onPastePhoto, onMouseEnter: onPasteHoverIn, onMouseLeave: onPasteHoverOut } = usePasteFile((file) => addPhoto(file));
+  const photoFileInputRef = useRef<HTMLInputElement>(null);
   const [comment, setComment] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
@@ -131,12 +132,14 @@ export function PurchaseReceivingPanel({ isAdmin = false }: { isAdmin?: boolean 
   const [urgentMediaUrls, setUrgentMediaUrls] = useState<string[]>([]);
   const [uploadingUrgentMedia, setUploadingUrgentMedia] = useState(false);
   const { onPaste: onPasteUrgentMedia, onMouseEnter: onUrgentMediaHoverIn, onMouseLeave: onUrgentMediaHoverOut } = usePasteFile((file) => addUrgentMedia(file));
+  const urgentMediaFileInputRef = useRef<HTMLInputElement>(null);
 
   const [pendingReplacements, setPendingReplacements] = useState<PendingReplacement[]>([]);
   const [openReplacementId, setOpenReplacementId] = useState<string | null>(null);
   const [replacementPhotoUrls, setReplacementPhotoUrls] = useState<string[]>([]);
   const [uploadingReplacementPhoto, setUploadingReplacementPhoto] = useState(false);
   const { onPaste: onPasteReplacement, onMouseEnter: onReplacementHoverIn, onMouseLeave: onReplacementHoverOut } = usePasteFile((file) => addReplacementPhoto(file));
+  const replacementFileInputRef = useRef<HTMLInputElement>(null);
 
   function load() {
     fetch("/api/purchase-requests?view=receiving").then((r) => (r.ok ? r.json() : [])).then(setRows).catch(() => setRows([]));
@@ -355,11 +358,15 @@ export function PurchaseReceivingPanel({ isAdmin = false }: { isAdmin?: boolean 
                           onPaste={onPasteReplacement}
                           onMouseEnter={onReplacementHoverIn}
                           onMouseLeave={onReplacementHoverOut}
+                          onClick={(e) => e.preventDefault()}
                           className="flex flex-col items-center justify-center gap-1 h-24 border-[1.5px] border-dashed border-rule rounded text-[11px] text-steel cursor-pointer hover:border-teal"
                         >
                           {uploadingReplacementPhoto ? <span className="w-4 h-4 rounded-full border-2 border-rule border-t-teal animate-spin" /> : <Camera size={16} />}
-                          Subir o pegar
-                          <input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && addReplacementPhoto(e.target.files[0])} />
+                          Pegar (Ctrl+V)
+                          <button type="button" className="text-[9.5px] underline decoration-dotted opacity-80 hover:opacity-100 cursor-pointer" onClick={(e) => { e.stopPropagation(); replacementFileInputRef.current?.click(); }}>
+                            o seleccionar
+                          </button>
+                          <input ref={replacementFileInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && addReplacementPhoto(e.target.files[0])} />
                         </label>
                       )}
                     </div>
@@ -517,11 +524,15 @@ export function PurchaseReceivingPanel({ isAdmin = false }: { isAdmin?: boolean 
                                 onPaste={onPastePhoto}
                                 onMouseEnter={onPasteHoverIn}
                                 onMouseLeave={onPasteHoverOut}
+                                onClick={(e) => e.preventDefault()}
                                 className="flex flex-col items-center justify-center gap-1 h-56 border-[1.5px] border-dashed border-rule rounded text-[11px] text-steel cursor-pointer hover:border-teal focus:border-teal focus:outline-none"
                               >
                                 {uploadingPhoto ? <span className="w-4 h-4 rounded-full border-2 border-rule border-t-teal animate-spin" /> : <Camera size={16} />}
-                                Subir o pegar
-                                <input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && addPhoto(e.target.files[0])} />
+                                Pegar (Ctrl+V)
+                                <button type="button" className="text-[10px] underline decoration-dotted opacity-80 hover:opacity-100 cursor-pointer" onClick={(e) => { e.stopPropagation(); photoFileInputRef.current?.click(); }}>
+                                  o seleccionar
+                                </button>
+                                <input ref={photoFileInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && addPhoto(e.target.files[0])} />
                               </label>
                             )}
                           </div>
@@ -657,11 +668,15 @@ export function PurchaseReceivingPanel({ isAdmin = false }: { isAdmin?: boolean 
                                 onPaste={onPasteUrgentMedia}
                                 onMouseEnter={onUrgentMediaHoverIn}
                                 onMouseLeave={onUrgentMediaHoverOut}
+                                onClick={(e) => e.preventDefault()}
                                 className="flex flex-col items-center justify-center gap-1 h-48 border-[1.5px] border-dashed border-red/40 rounded text-[10.5px] text-red cursor-pointer hover:border-red"
                               >
                                 {uploadingUrgentMedia ? <span className="w-4 h-4 rounded-full border-2 border-rule border-t-red animate-spin" /> : <Camera size={15} />}
-                                Foto o video
-                                <input type="file" accept="image/*,video/*" className="hidden" onChange={(e) => e.target.files?.[0] && addUrgentMedia(e.target.files[0])} />
+                                Foto o video — Pegar (Ctrl+V)
+                                <button type="button" className="text-[9.5px] underline decoration-dotted opacity-80 hover:opacity-100 cursor-pointer" onClick={(e) => { e.stopPropagation(); urgentMediaFileInputRef.current?.click(); }}>
+                                  o seleccionar
+                                </button>
+                                <input ref={urgentMediaFileInputRef} type="file" accept="image/*,video/*" className="hidden" onChange={(e) => e.target.files?.[0] && addUrgentMedia(e.target.files[0])} />
                               </label>
                             )}
                           </div>

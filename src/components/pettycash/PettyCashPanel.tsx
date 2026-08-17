@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, Pencil, Archive, RotateCcw, Upload } from "lucide-react";
 import { usePasteFile } from "@/lib/usePasteFile";
@@ -39,17 +39,23 @@ function monthFilterLabel(month: string) {
 
 function UploadBox({ label, onFile }: { label: string; onFile: (file: File) => void }) {
   const { onPaste, onMouseEnter, onMouseLeave } = usePasteFile(onFile);
+  const inputRef = useRef<HTMLInputElement>(null);
   return (
     <label
+      tabIndex={0}
       onPaste={onPaste}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
+      onClick={(e) => e.preventDefault()}
       className="flex flex-col items-center justify-center gap-1 border-[1.5px] border-dashed border-rule rounded-md py-4 cursor-pointer hover:border-teal transition-colors text-center"
     >
       <Upload size={16} className="text-steel" />
       <div className="text-[11.5px] font-semibold">{label}</div>
-      <div className="text-[10px] text-steel">Clic, arrastra, o pasa el mouse aquí y Ctrl+V</div>
-      <input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])} />
+      <div className="text-[10px] text-steel">Pega la imagen aquí (Ctrl+V)</div>
+      <button type="button" className="text-[10px] underline decoration-dotted text-steel opacity-80 hover:opacity-100 cursor-pointer" onClick={(e) => { e.stopPropagation(); inputRef.current?.click(); }}>
+        o selecciona un archivo
+      </button>
+      <input ref={inputRef} type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])} />
     </label>
   );
 }
