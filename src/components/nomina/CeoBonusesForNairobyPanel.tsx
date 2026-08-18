@@ -5,6 +5,10 @@ import { useEffect, useState } from "react";
 type Grant = { id: string; type: "ADICIONAL" | "PRODUCTIVIDAD" | "MERITO"; note: string | null; grantedAt: string; user: { name: string } };
 
 const LABELS: Record<Grant["type"], string> = { ADICIONAL: "Bono Adicional", PRODUCTIVIDAD: "Bono de Productividad", MERITO: "Bono al Mérito" };
+// Mismo motivo por el que LABELS está duplicado acá en vez de importarse de
+// commissionTiers.ts: ese archivo importa prisma (server-only) y este es un
+// componente "use client" — no se puede traer al bundle del navegador.
+const AMOUNTS: Record<Grant["type"], number> = { ADICIONAL: 50, PRODUCTIVIDAD: 100, MERITO: 150 };
 
 function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString("es-EC", { day: "numeric", month: "short" });
@@ -28,7 +32,7 @@ export function CeoBonusesForNairobyPanel() {
       <div className="flex flex-col gap-1.5">
         {grants.map((g) => (
           <div key={g.id} className="flex items-center justify-between gap-2 text-[12px] text-ink">
-            <span><span className="font-semibold">{g.user.name}</span> — {LABELS[g.type]}</span>
+            <span><span className="font-semibold">{g.user.name}</span> — {LABELS[g.type]} · ${AMOUNTS[g.type]}</span>
             <span className="text-steel-dim shrink-0">{fmtDate(g.grantedAt)}</span>
           </div>
         ))}
