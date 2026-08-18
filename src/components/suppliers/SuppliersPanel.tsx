@@ -40,6 +40,10 @@ export type SupplierDTO = {
   // canViewSupplierBankAccounts en guards.ts. Nadie más recibe este campo,
   // ni siquiera vacío, así que su sola presencia ya implica autorización.
   bankAccounts?: SupplierBankAccountDTO[];
+  // Confirmado 2026-08-18: versión liviana para quien puede AGREGAR una
+  // cuenta bancaria (ver canAddSupplierBankAccounts) pero no ver las ya
+  // registradas — nunca expone banco/número/titular, solo si ya tiene una.
+  hasBankAccount?: boolean;
 };
 
 function maskAccountNumber(number: string) {
@@ -126,6 +130,7 @@ export function SuppliersPanel({
   canAddCarrier,
   canReview,
   isAdmin,
+  canAddBankAccounts = false,
 }: {
   suppliers: SupplierDTO[];
   pending: SupplierDTO[];
@@ -133,6 +138,11 @@ export function SuppliersPanel({
   canAddCarrier: boolean;
   canReview: boolean;
   isAdmin: boolean;
+  // Confirmado 2026-08-18: puede AGREGAR cuenta bancaria (delegado a
+  // personas puntuales, hoy Jariel y Bryan) sin ser admin — separado de
+  // `isAdmin`, que sigue siendo lo único que da acceso a VER las ya
+  // registradas de otros proveedores. isAdmin ya implica esto (true).
+  canAddBankAccounts?: boolean;
 }) {
   const router = useRouter();
   // Confirmado 2026-08-14: pedido explícito del usuario — separar los
@@ -433,7 +443,7 @@ export function SuppliersPanel({
           {formOpen && (
             <SupplierForm
               type={formType}
-              isAdmin={isAdmin}
+              canAddBankAccounts={isAdmin || canAddBankAccounts}
               form={form}
               setForm={setForm}
               updateContact={updateContact}
@@ -575,17 +585,24 @@ export function SuppliersPanel({
                   </div>
                 )}
 
-                {isAdmin && s.bankAccounts && (
+                {(isAdmin ? !!s.bankAccounts : canAddBankAccounts) && (
                   <div className="mt-3 pt-3 border-t border-rule">
                     <div className="flex items-center gap-1.5 mb-2">
                       <Lock size={12} className="text-steel" />
                       <span className="text-[11.5px] font-semibold text-ink">Datos bancarios</span>
-                      <span className="text-[10px] font-semibold text-steel border border-rule rounded-full px-2 py-0.5">Exclusivo · admin</span>
+                      <span className="text-[10px] font-semibold text-steel border border-rule rounded-full px-2 py-0.5">
+                        {isAdmin ? "Exclusivo · admin" : "Solo agregar"}
+                      </span>
                     </div>
-                    {s.bankAccounts.length === 0 && addingAccountId !== s.id && (
+                    {!isAdmin && (
+                      <div className="text-[11.5px] text-steel mb-2">
+                        {s.hasBankAccount ? "Ya tiene cuenta bancaria registrada." : "Sin cuenta bancaria registrada."} No puedes ver los datos de las ya existentes — solo agregar una nueva.
+                      </div>
+                    )}
+                    {isAdmin && s.bankAccounts && s.bankAccounts.length === 0 && addingAccountId !== s.id && (
                       <div className="text-[11.5px] text-steel mb-2">Sin cuentas bancarias registradas.</div>
                     )}
-                    {s.bankAccounts.length > 0 && (
+                    {isAdmin && s.bankAccounts && s.bankAccounts.length > 0 && (
                       <div className="flex flex-col gap-2 mb-2">
                         {s.bankAccounts.map((b) => {
                           const revealed = revealedAccountIds.has(b.id);
@@ -778,7 +795,7 @@ export function SuppliersPanel({
 
 function SupplierForm({
   type,
-  isAdmin,
+  canAddBankAccounts,
   form,
   setForm,
   updateContact,
@@ -794,7 +811,7 @@ function SupplierForm({
   onCancel,
 }: {
   type: SupplierType;
-  isAdmin: boolean;
+  canAddBankAccounts: boolean;
   form: typeof emptyForm;
   setForm: React.Dispatch<React.SetStateAction<typeof emptyForm>>;
   updateContact: (idx: number, field: "label" | "whatsapp", value: string) => void;
@@ -878,7 +895,7 @@ function SupplierForm({
         />
       </div>
 
-      {isAdmin && !editing && (
+      {canAddBankAccounts && !editing && (
         <div className="mb-3.5 bg-cloud border border-rule rounded-md p-3">
           <div className="flex items-center gap-1.5 mb-1">
             <Lock size={12} className="text-steel" />

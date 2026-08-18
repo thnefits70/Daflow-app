@@ -33,6 +33,7 @@ export default async function AdminProveedoresPage() {
         canAddCarrier
         canReview
         isAdmin
+        canAddBankAccounts
       />
     </div>
   );

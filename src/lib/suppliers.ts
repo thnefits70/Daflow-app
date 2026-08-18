@@ -32,6 +32,7 @@ type SupplierRow = {
   createdBy: { name: string } | null;
   approvedBy: { name: string } | null;
   bankAccounts?: BankAccountRow[];
+  _count?: { bankAccounts: number };
 };
 
 // Admin actions aren't linked to a real User row, so a null actor on an
@@ -43,7 +44,14 @@ type SupplierRow = {
 // omite del DTO por completo cuando este flag es false, en vez de solo
 // ocultarlo en la UI. Como esta página es un Server Component, lo que no
 // entra al DTO nunca viaja en las props serializadas al cliente.
-export function toSupplierDTO(s: SupplierRow, includeBankAccounts = false): SupplierDTO {
+// Confirmado 2026-08-18: pedido explícito del usuario — Jariel y Bryan
+// pueden AGREGAR una cuenta bancaria sin poder VER las ya registradas de
+// otros proveedores. Para que sepan si hace falta una sin exponer los
+// datos, includeHasBankAccount expone solo un booleano (de un `_count`
+// liviano, nunca de la fila completa) — separado de includeBankAccounts,
+// que sigue siendo exclusivo de admin.
+export function toSupplierDTO(s: SupplierRow, includeBankAccounts = false, includeHasBankAccount = false): SupplierDTO {
+  const bankAccountsCount = s._count?.bankAccounts ?? s.bankAccounts?.length;
   return {
     id: s.id,
     type: s.type,
@@ -74,5 +82,6 @@ export function toSupplierDTO(s: SupplierRow, includeBankAccounts = false): Supp
             createdAt: b.createdAt.toISOString(),
           }))
         : undefined,
+    hasBankAccount: (includeBankAccounts || includeHasBankAccount) && bankAccountsCount !== undefined ? bankAccountsCount > 0 : undefined,
   };
 }

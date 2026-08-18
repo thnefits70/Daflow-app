@@ -113,13 +113,23 @@ export async function getSupplierAccess() {
 }
 
 // Datos bancarios de proveedores — confirmado 2026-08-17: pedido explícito
-// del usuario, exclusivo de él (admin), nadie más los ve por ahora. A
-// diferencia de casi todo este archivo, no tiene escape hatch por flag —
-// el usuario dijo que en algún momento va a querer delegarlo a alguien y
-// avisará cuándo, así que se deja hard-coded a admin hasta entonces.
+// del usuario, exclusivo de él (admin), nadie más los ve por ahora.
 export async function canViewSupplierBankAccounts() {
   const session = await auth();
   return !!session && session.user.role === "admin";
+}
+
+// Confirmado 2026-08-18: pedido explícito del usuario — llegó el momento de
+// delegar (hoy Jariel y Bryan), pero solo para AGREGAR una cuenta bancaria
+// nueva, nunca para ver las ya registradas de otros proveedores (eso sigue
+// siendo canViewSupplierBankAccounts, admin-only). Mismo patrón de escape
+// hatch por flag que canManagePurchases.
+export async function canAddSupplierBankAccounts() {
+  const session = await auth();
+  if (!session) return false;
+  if (session.user.role === "admin") return true;
+  const user = await prisma.user.findUnique({ where: { id: session.user.id }, select: { canAddSupplierBankAccounts: true } });
+  return !!user?.canAddSupplierBankAccounts;
 }
 
 // A pending supplier can be approved/rejected by admin, or by whoever leads
@@ -511,8 +521,15 @@ export async function canViewStoreFeedback() {
 async function purchasesUserContext(userId: string) {
   return prisma.user.findUnique({
     where: { id: userId },
-    select: { canManagePurchases: true, isLeader: true, leadsDept: { select: { code: true } } },
+    // department (a diferencia de leadsDept, que es lo que la persona
+    // LIDERA) se agregó 2026-08-18 para reconocer al resto del equipo de
+    // Inventario, no solo a Daniel (su líder).
+    select: { canManagePurchases: true, isLeader: true, leadsDept: { select: { code: true } }, department: { select: { code: true } } },
   });
+}
+
+function isInventoryTeamMember(user: { isLeader: boolean; leadsDept: { code: string } | null; department: { code: string } | null }) {
+  return (user.isLeader && user.leadsDept?.code === "INV") || user.department?.code === "INV";
 }
 
 export async function canSubmitPurchaseRequests() {
@@ -537,7 +554,32 @@ export async function canConfirmPurchaseReceiving() {
   if (session.user.role === "admin") return true;
   const user = await purchasesUserContext(session.user.id);
   if (!user) return false;
-  return !!user.isLeader && user.leadsDept?.code === "INV";
+  return isInventoryTeamMember(user);
+}
+
+// Confirmado 2026-08-18: pedido explícito del usuario — la recepción física
+// (foto+video) y "Informar urgente" dejan de ser exclusivos de Daniel y se
+// abren a cualquiera cuyo departamento sea Inventario (no una lista de
+// personas ni un flag delegado nuevo). Sigue excluyendo a admin, mismo
+// criterio que canActOnPurchaseReceiving — la aprobación FINAL (ver esa
+// función más abajo) sigue siendo exclusiva del líder.
+export async function canReceivePurchasesTeam() {
+  const session = await auth();
+  if (!session) return false;
+  const user = await purchasesUserContext(session.user.id);
+  if (!user) return false;
+  return isInventoryTeamMember(user);
+}
+
+// Confirmado 2026-08-18: id de Daniel (líder de Inventario) para avisarle
+// puntualmente cuando su equipo sube algo pendiente de su aprobación —
+// mismo estilo que getMarketingArrivalActorIds en marketingArrivals.ts.
+export async function getInventoryLeadId(): Promise<string | null> {
+  const lead = await prisma.user.findFirst({
+    where: { isLeader: true, leadsDept: { code: "INV" }, isActive: true },
+    select: { id: true },
+  });
+  return lead?.id ?? null;
 }
 
 // Fix confirmado 2026-08-11: excepción explícita al patrón "admin siempre

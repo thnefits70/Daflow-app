@@ -37,6 +37,7 @@ type UserProfile = {
   canAddSuppliers: boolean;
   canManagePurchases: boolean;
   canManageAdminPayments: boolean;
+  canAddSupplierBankAccounts: boolean;
   canManagePettyCashSecundaria: boolean;
   canConfirmMarketingDesign: boolean;
   canConfirmMarketingAdvisor: boolean;
@@ -686,6 +687,31 @@ export function ProfileDetail({
                 type="button"
                 className={`flex-1 py-1.5 text-[12.5px] font-semibold cursor-pointer ${!p.canAddSuppliers ? "bg-blue text-white" : "bg-surface text-steel"}`}
                 onClick={() => save({ canAddSuppliers: false })}
+              >
+                No
+              </button>
+            </div>
+          </div>
+
+          <div className="bg-cloud border border-rule rounded p-3.5 mt-3.5">
+            <label className="flex items-center gap-1 mb-2 text-[10.5px] font-semibold uppercase tracking-wide text-steel">
+              <Truck size={11} /> ¿Puede agregar cuentas bancarias a proveedores?
+            </label>
+            <div className="text-[11px] text-steel mb-2">
+              Puede cargar la cuenta bancaria de un proveedor (al crearlo, o después desde su ficha en el directorio) — solo agregar, nunca editar ni eliminar. No incluye ver las cuentas ya registradas de otros proveedores — eso sigue siendo exclusivo de administrador.
+            </div>
+            <div className="flex border border-rule rounded overflow-hidden max-w-[220px]">
+              <button
+                type="button"
+                className={`flex-1 py-1.5 text-[12.5px] font-semibold cursor-pointer ${p.canAddSupplierBankAccounts ? "bg-blue text-white" : "bg-surface text-steel"}`}
+                onClick={() => save({ canAddSupplierBankAccounts: true })}
+              >
+                Sí
+              </button>
+              <button
+                type="button"
+                className={`flex-1 py-1.5 text-[12.5px] font-semibold cursor-pointer ${!p.canAddSupplierBankAccounts ? "bg-blue text-white" : "bg-surface text-steel"}`}
+                onClick={() => save({ canAddSupplierBankAccounts: false })}
               >
                 No
               </button>

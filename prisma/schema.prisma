@@ -10,76 +10,80 @@ datasource db {
   provider = "postgresql"
 }
 
-/* ---------------- Configuración global de la plataforma ---------------- */
+/**
+ * ---------------- Configuración global de la plataforma ----------------
+ */
 model PlatformSettings {
-  id                String    @id @default("singleton")
-  adminPasswordHash String
-  adminEmail        String?
-  logoUrl           String?
+  id                        String    @id @default("singleton")
+  adminPasswordHash         String
+  adminEmail                String?
+  logoUrl                   String?
   // Marca de agua opcional (logo + wordmark) mostrada discretamente en la tarjeta de Inicio.
-  bannerUrl         String?
+  bannerUrl                 String?
   // Ícono de la pestaña del navegador — si no se sube uno, se usa el /icon.svg genérico por defecto.
-  faviconUrl        String?
+  faviconUrl                String?
   // Cumpleaños del admin — el único perfil sin un User real detrás, así que
   // vive aquí en vez de en la tabla User.
-  adminBirthDate    DateTime?
+  adminBirthDate            DateTime?
   // Confirmado 2026-08-05: contador único para el código correlativo de
   // Control de Compras (SC-001, SC-002...) — una sola secuencia para todo el
   // módulo, sin importar quién solicite. Incrementado dentro de una
   // transacción al crear el primer PurchaseRequest de un grupo nuevo, y
   // copiado a todas las filas de ese mismo grupo.
-  lastPurchaseRequestNumber Int @default(0)
-  updatedAt         DateTime  @updatedAt
+  lastPurchaseRequestNumber Int       @default(0)
+  updatedAt                 DateTime  @updatedAt
 }
 
 // Token temporal para el flujo de "olvidé mi contraseña" del administrador
 model PasswordResetToken {
-  id        String   @id @default(cuid())
-  tokenHash String   @unique
+  id        String    @id @default(cuid())
+  tokenHash String    @unique
   expiresAt DateTime
   usedAt    DateTime?
-  createdAt DateTime @default(now())
+  createdAt DateTime  @default(now())
 }
 
-/* ---------------- Áreas del negocio ---------------- */
+/**
+ * ---------------- Áreas del negocio ----------------
+ */
 model Department {
-  id         String   @id @default(cuid())
-  name       String
-  code       String   @unique
-  order      Int      @default(0)
+  id                    String   @id @default(cuid())
+  name                  String
+  code                  String   @unique
+  order                 Int      @default(0)
   // Áreas especiales (ej. proyectos confidenciales) se anclan aparte en el menú,
   // no se mezclan con la lista arrastrable de áreas normales del negocio.
-  isSpecial  Boolean  @default(false)
+  isSpecial             Boolean  @default(false)
   // Habilita la pestaña de KPIs financieros (ROI, ventas y ganancia mensual) para esta área.
-  trackKpis  Boolean  @default(false)
+  trackKpis             Boolean  @default(false)
   // Habilita el registro semanal (ej. pedidos despachados) que se muestra en el Inicio para todos.
-  trackWeeklyMetric Boolean @default(false)
+  trackWeeklyMetric     Boolean  @default(false)
   // Habilita la bitácora de feedback semanal (reunión admin-líder): problemas y plan de acción.
   // Solo el admin puede escribir en ella; el área solo puede verla.
-  trackWeeklyReview Boolean @default(false)
+  trackWeeklyReview     Boolean  @default(false)
   // Habilita "Pagos recordatorios" (facturas/suscripciones mensuales que vencen en fechas
   // variables) — confirmado 2026-07-22: solo Finanzas y Contabilidad, por ahora.
-  trackPaymentReminders Boolean @default(false)
-  createdAt  DateTime @default(now())
+  trackPaymentReminders Boolean  @default(false)
+  createdAt             DateTime @default(now())
 
-  users        User[]
-  processes    Process[]
-  documents    Document[]
-  exams        Exam[]
-  leaders      User[]      @relation("DeptLeader")
-  positions    Position[]
-  financeOperations     FinanceOperation[]
-  financeKpis           FinanceKpiRecord[]
-  financeSharedBalances FinanceSharedMonthlyBalance[]
-  financeKpiUploads     FinanceKpiUpload[]
+  users                     User[]
+  processes                 Process[]
+  documents                 Document[]
+  exams                     Exam[]
+  leaders                   User[]                        @relation("DeptLeader")
+  positions                 Position[]
+  financeOperations         FinanceOperation[]
+  financeKpis               FinanceKpiRecord[]
+  financeSharedBalances     FinanceSharedMonthlyBalance[]
+  financeKpiUploads         FinanceKpiUpload[]
   inventoryProductSnapshots InventoryProductSnapshot[]
-  financeKpiSettings    FinanceKpiSettings?
-  weeklyMetrics WeeklyMetricRecord[]
-  weeklyReviews WeeklyReviewRecord[]
-  paymentReminders      PaymentReminder[]
-  periodicReminders     PeriodicReminder[]
-  nancyConversations       NancyConversation[]
-  purchaseRequests         PurchaseRequest[]
+  financeKpiSettings        FinanceKpiSettings?
+  weeklyMetrics             WeeklyMetricRecord[]
+  weeklyReviews             WeeklyReviewRecord[]
+  paymentReminders          PaymentReminder[]
+  periodicReminders         PeriodicReminder[]
+  nancyConversations        NancyConversation[]
+  purchaseRequests          PurchaseRequest[]
 
   @@index([order])
 }
@@ -95,11 +99,13 @@ model Position {
   @@index([deptId])
 }
 
-/* ---------------- Personas (nómina + acceso) ---------------- */
+/**
+ * ---------------- Personas (nómina + acceso) ----------------
+ */
 model User {
-  id           String   @id @default(cuid())
+  id           String      @id @default(cuid())
   name         String
-  username     String   @unique
+  username     String      @unique
   passwordHash String
   deptId       String?
   department   Department? @relation(fields: [deptId], references: [id], onDelete: SetNull)
@@ -117,7 +123,7 @@ model User {
   phone     String?
   startDate DateTime?
   birthDate DateTime?
-  skills    String[] @default([])
+  skills    String[]  @default([])
   cvUrl     String?
   cvName    String?
 
@@ -143,6 +149,14 @@ model User {
   // esto; a diferencia de canManagePurchases, no incluye a Compras.
   canManageAdminPayments Boolean @default(false)
 
+  // Confirmado 2026-08-18: pedido explícito del usuario — delegar a
+  // personas puntuales (hoy Jariel y Bryan) la posibilidad de AGREGAR una
+  // cuenta bancaria a un proveedor desde la sección Proveedores (al crearlo,
+  // o después desde su ficha). Deliberadamente NO les da acceso a VER las
+  // cuentas ya registradas de otros proveedores (eso sigue siendo exclusivo
+  // de admin vía canViewSupplierBankAccounts) — solo pueden sumar una nueva.
+  canAddSupplierBankAccounts Boolean @default(false)
+
   // Escape hatch para Servicio Postventa —
   // confirmado 2026-07-25: por defecto solo el líder de Análisis de Mercado
   // (y admin) gestiona esto; el admin puede delegarlo a alguien más puntualmente.
@@ -150,7 +164,7 @@ model User {
   // Nivel de acceso separado, solo lectura — confirmado 2026-07-25: para
   // líderes de otras áreas (ej. líder de ventas) que deben poder ver el
   // detalle y contactar por WhatsApp, pero nunca crear/editar/eliminar.
-  canViewStoreFeedback Boolean @default(false)
+  canViewStoreFeedback   Boolean @default(false)
 
   // Mismo patrón — confirmado 2026-08-04: Control de Inventario (KPIs de
   // inventario) no es "la página de mi departamento" de Daniel; se resuelve
@@ -180,7 +194,7 @@ model User {
   // Solo informativo (mismo espíritu que Store.brand) — qué marca asesora
   // esta persona, para mostrarla junto a su nombre cuando confirma. Nunca se
   // usa para filtrar ni bloquear quién ve o puede confirmar qué llegada.
-  marketingAdvisorBrand String?
+  marketingAdvisorBrand      String?
 
   // Confirmado 2026-08-05: excluye a esta persona de "Colaborador del mes"
   // por completo — su líder ya no la ve en su lista para calificar, y nunca
@@ -206,85 +220,87 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  examScores    ExamScore[]
-  milestones    Milestone[]
-  ackUpdates    UserAckUpdate[]
-  suppliersCreated  Supplier[] @relation("SupplierCreatedBy")
-  suppliersApproved Supplier[] @relation("SupplierApprovedBy")
-  supplierBankAccountsCreated SupplierBankAccount[] @relation("SupplierBankAccountCreatedBy")
-  purchaseRequestsPaidBy PurchaseRequest[] @relation("PurchaseRequestPaidBy")
-  purchaseRequestsInvoicedBy PurchaseRequest[] @relation("PurchaseRequestInvoicedBy")
-  purchaseRequestsShippingPaymentRequestedBy PurchaseRequest[] @relation("PurchaseRequestShippingPaymentRequestedBy")
-  purchaseRequestsBankAccountChangeRequestedBy PurchaseRequest[] @relation("PurchaseRequestBankAccountChangeRequestedBy")
-  purchaseRequestsShippingPaidBy PurchaseRequest[] @relation("PurchaseRequestShippingPaidBy")
-  payStubs         PayStub[] @relation("PayStubOwner")
-  payStubsUploaded PayStub[] @relation("PayStubUploadedBy")
-  financeKpiRecordsUploaded FinanceKpiRecord[] @relation("FinanceKpiRecordUploadedBy")
-  financeKpiUploadsBy       FinanceKpiUpload[] @relation("FinanceKpiUploadUploadedBy")
-  paymentReminderRecordsCompleted PaymentReminderRecord[] @relation("PaymentReminderCompletedBy")
-  periodicReminderCompletions     PeriodicReminderCompletion[] @relation("PeriodicReminderCompletedBy")
-  periodicRemindersCreated        PeriodicReminder[] @relation("PeriodicReminderCreatedBy")
-  purchaseCatalogItemsCreated     PurchaseCatalogItem[] @relation("PurchaseCatalogItemCreatedBy")
-  purchaseCatalogItemDeleteRequests PurchaseCatalogItemDeleteRequest[] @relation("PurchaseCatalogItemDeleteRequestedBy")
-  supplierCreditsCreated            SupplierCredit[] @relation("SupplierCreditCreatedBy")
-  urgentResolutionsCreated             PurchaseUrgentResolution[] @relation("UrgentResolutionCreatedBy")
-  urgentResolutionsReplacementVerified PurchaseUrgentResolution[] @relation("UrgentResolutionReplacementVerifiedBy")
-  urgentResolutionsBankConfirmed       PurchaseUrgentResolution[] @relation("UrgentResolutionBankConfirmedBy")
-  purchaseRequestsFinanceFlagged       PurchaseRequest[] @relation("PurchaseRequestFinanceFlaggedBy")
-  adminPaymentTemplatesCreated AdminPaymentTemplate[] @relation("AdminPaymentTemplateCreatedBy")
-  adminPaymentRequestsCreated  AdminPaymentRequest[]  @relation("AdminPaymentRequestCreatedBy")
-  adminPaymentsPaid            AdminPaymentRequest[]  @relation("AdminPaymentPaidBy")
-  adminPaymentsConfirmed       AdminPaymentRequest[]  @relation("AdminPaymentConfirmedBy")
-  adminPaymentPayeesCreated            AdminPaymentPayee[]            @relation("AdminPaymentPayeeCreatedBy")
-  adminPaymentPayeeBankAccountsCreated AdminPaymentPayeeBankAccount[] @relation("AdminPaymentPayeeBankAccountCreatedBy")
-  inventoryProductSnapshotsCreated  InventoryProductSnapshot[] @relation("InventoryProductSnapshotCreatedBy")
-  pettyCashEntriesCreated   PettyCashEntry[] @relation("PettyCashEntryCreatedBy")
-  pettyCashEntriesUpdated   PettyCashEntry[] @relation("PettyCashEntryUpdatedBy")
-  pettyCashEntriesArchived  PettyCashEntry[] @relation("PettyCashEntryArchivedBy")
-  pettyCashEntriesRestored  PettyCashEntry[] @relation("PettyCashEntryRestoredBy")
-  pettyCashEntriesConfirmed PettyCashEntry[] @relation("PettyCashEntryConfirmedBy")
-  pettyCashExceptionsRequested PettyCashFreightException[] @relation("PettyCashExceptionRequestedBy")
-  pettyCashExceptionsReviewed  PettyCashFreightException[] @relation("PettyCashExceptionReviewedBy")
-  purchaseRequestsMade            PurchaseRequest[] @relation("PurchaseRequestRequestedBy")
-  purchaseRequestsReviewed        PurchaseRequest[] @relation("PurchaseRequestReviewedBy")
-  purchaseRequestReceiptsConfirmed PurchaseRequestReceipt[] @relation("PurchaseRequestReceiptConfirmedBy")
-  marketingFollowUpsDesignConfirmed  PurchaseReceiptFollowUp[] @relation("PurchaseReceiptFollowUpDesignConfirmedBy")
-  marketingFollowUpsAdvisorConfirmed PurchaseReceiptFollowUp[] @relation("PurchaseReceiptFollowUpAdvisorConfirmedBy")
-  purchaseRequestUrgentReports    PurchaseRequestUrgentReport[] @relation("PurchaseRequestUrgentReportedBy")
-  storeFeedbackEvaluations        StoreFeedbackEvaluation[] @relation("StoreFeedbackEvaluatedBy")
-  confidentialAccess ConfidentialDocumentAccess[]
-  monthlyEvaluationsReceived MonthlyEvaluation[]
-  monthlyRecognitionResults  MonthlyRecognitionResult[]
-  monthlyEvaluationSummaries MonthlyEvaluationSummary[]
-  learningPathsAssigned      LearningPathAssignment[] @relation("LearningPathAssignedTo")
-  learningPathStepProgress   LearningPathStepProgress[] @relation("LearningPathStepProgressBy")
-  payrollMessagesReceived    PayrollMessage[] @relation("PayrollMessageEmployee")
-  payrollMessagesSent        PayrollMessage[] @relation("PayrollMessageSender")
+  examScores                                   ExamScore[]
+  milestones                                   Milestone[]
+  ackUpdates                                   UserAckUpdate[]
+  suppliersCreated                             Supplier[]                         @relation("SupplierCreatedBy")
+  suppliersApproved                            Supplier[]                         @relation("SupplierApprovedBy")
+  supplierBankAccountsCreated                  SupplierBankAccount[]              @relation("SupplierBankAccountCreatedBy")
+  purchaseRequestsPaidBy                       PurchaseRequest[]                  @relation("PurchaseRequestPaidBy")
+  purchaseRequestsInvoicedBy                   PurchaseRequest[]                  @relation("PurchaseRequestInvoicedBy")
+  purchaseRequestsShippingPaymentRequestedBy   PurchaseRequest[]                  @relation("PurchaseRequestShippingPaymentRequestedBy")
+  purchaseRequestsBankAccountChangeRequestedBy PurchaseRequest[]                  @relation("PurchaseRequestBankAccountChangeRequestedBy")
+  purchaseRequestsShippingPaidBy               PurchaseRequest[]                  @relation("PurchaseRequestShippingPaidBy")
+  payStubs                                     PayStub[]                          @relation("PayStubOwner")
+  payStubsUploaded                             PayStub[]                          @relation("PayStubUploadedBy")
+  financeKpiRecordsUploaded                    FinanceKpiRecord[]                 @relation("FinanceKpiRecordUploadedBy")
+  financeKpiUploadsBy                          FinanceKpiUpload[]                 @relation("FinanceKpiUploadUploadedBy")
+  paymentReminderRecordsCompleted              PaymentReminderRecord[]            @relation("PaymentReminderCompletedBy")
+  periodicReminderCompletions                  PeriodicReminderCompletion[]       @relation("PeriodicReminderCompletedBy")
+  periodicRemindersCreated                     PeriodicReminder[]                 @relation("PeriodicReminderCreatedBy")
+  purchaseCatalogItemsCreated                  PurchaseCatalogItem[]              @relation("PurchaseCatalogItemCreatedBy")
+  purchaseCatalogItemDeleteRequests            PurchaseCatalogItemDeleteRequest[] @relation("PurchaseCatalogItemDeleteRequestedBy")
+  supplierCreditsCreated                       SupplierCredit[]                   @relation("SupplierCreditCreatedBy")
+  urgentResolutionsCreated                     PurchaseUrgentResolution[]         @relation("UrgentResolutionCreatedBy")
+  urgentResolutionsReplacementVerified         PurchaseUrgentResolution[]         @relation("UrgentResolutionReplacementVerifiedBy")
+  urgentResolutionsBankConfirmed               PurchaseUrgentResolution[]         @relation("UrgentResolutionBankConfirmedBy")
+  purchaseRequestsFinanceFlagged               PurchaseRequest[]                  @relation("PurchaseRequestFinanceFlaggedBy")
+  adminPaymentTemplatesCreated                 AdminPaymentTemplate[]             @relation("AdminPaymentTemplateCreatedBy")
+  adminPaymentRequestsCreated                  AdminPaymentRequest[]              @relation("AdminPaymentRequestCreatedBy")
+  adminPaymentsPaid                            AdminPaymentRequest[]              @relation("AdminPaymentPaidBy")
+  adminPaymentsConfirmed                       AdminPaymentRequest[]              @relation("AdminPaymentConfirmedBy")
+  adminPaymentPayeesCreated                    AdminPaymentPayee[]                @relation("AdminPaymentPayeeCreatedBy")
+  adminPaymentPayeeBankAccountsCreated         AdminPaymentPayeeBankAccount[]     @relation("AdminPaymentPayeeBankAccountCreatedBy")
+  inventoryProductSnapshotsCreated             InventoryProductSnapshot[]         @relation("InventoryProductSnapshotCreatedBy")
+  pettyCashEntriesCreated                      PettyCashEntry[]                   @relation("PettyCashEntryCreatedBy")
+  pettyCashEntriesUpdated                      PettyCashEntry[]                   @relation("PettyCashEntryUpdatedBy")
+  pettyCashEntriesArchived                     PettyCashEntry[]                   @relation("PettyCashEntryArchivedBy")
+  pettyCashEntriesRestored                     PettyCashEntry[]                   @relation("PettyCashEntryRestoredBy")
+  pettyCashEntriesConfirmed                    PettyCashEntry[]                   @relation("PettyCashEntryConfirmedBy")
+  pettyCashExceptionsRequested                 PettyCashFreightException[]        @relation("PettyCashExceptionRequestedBy")
+  pettyCashExceptionsReviewed                  PettyCashFreightException[]        @relation("PettyCashExceptionReviewedBy")
+  purchaseRequestsMade                         PurchaseRequest[]                  @relation("PurchaseRequestRequestedBy")
+  purchaseRequestsReviewed                     PurchaseRequest[]                  @relation("PurchaseRequestReviewedBy")
+  purchaseRequestReceiptsConfirmed             PurchaseRequestReceipt[]           @relation("PurchaseRequestReceiptConfirmedBy")
+  purchaseRequestReceiptsApproved              PurchaseRequestReceipt[]           @relation("PurchaseRequestReceiptApprovedBy")
+  marketingFollowUpsDesignConfirmed            PurchaseReceiptFollowUp[]          @relation("PurchaseReceiptFollowUpDesignConfirmedBy")
+  marketingFollowUpsAdvisorConfirmed           PurchaseReceiptFollowUp[]          @relation("PurchaseReceiptFollowUpAdvisorConfirmedBy")
+  purchaseRequestUrgentReports                 PurchaseRequestUrgentReport[]      @relation("PurchaseRequestUrgentReportedBy")
+  purchaseRequestUrgentReportsReviewed         PurchaseRequestUrgentReport[]      @relation("PurchaseRequestUrgentReportReviewedByLead")
+  storeFeedbackEvaluations                     StoreFeedbackEvaluation[]          @relation("StoreFeedbackEvaluatedBy")
+  confidentialAccess                           ConfidentialDocumentAccess[]
+  monthlyEvaluationsReceived                   MonthlyEvaluation[]
+  monthlyRecognitionResults                    MonthlyRecognitionResult[]
+  monthlyEvaluationSummaries                   MonthlyEvaluationSummary[]
+  learningPathsAssigned                        LearningPathAssignment[]           @relation("LearningPathAssignedTo")
+  learningPathStepProgress                     LearningPathStepProgress[]         @relation("LearningPathStepProgressBy")
+  payrollMessagesReceived                      PayrollMessage[]                   @relation("PayrollMessageEmployee")
+  payrollMessagesSent                          PayrollMessage[]                   @relation("PayrollMessageSender")
 
   payrollProfile              PayrollProfile?
-  overtimeEntriesOwn           OvertimeEntry[] @relation("OvertimeEntryEmployee")
-  overtimeEntriesEntered       OvertimeEntry[] @relation("OvertimeEntryEnteredBy")
-  overtimeEntriesApproved      OvertimeEntry[] @relation("OvertimeEntryApprovedBy")
-  overtimeEntriesRejected      OvertimeEntry[] @relation("OvertimeEntryRejectedBy")
-  payrollSettingsUpdated       PayrollSettings[] @relation("PayrollSettingsUpdatedBy")
-  payrollPeriodsGenerated      PayrollPeriod[] @relation("PayrollPeriodGeneratedBy")
-  payrollPeriodsPublished      PayrollPeriod[] @relation("PayrollPeriodPublishedBy")
-  payrollQuincenaRolesOwn      PayrollQuincenaRole[] @relation("PayrollQuincenaRoleEmployee")
-  payrollQuincenaRolesCreated  PayrollQuincenaRole[] @relation("PayrollQuincenaRoleCreatedBy")
-  monthlyLegalRolesOwn         MonthlyLegalRole[] @relation("MonthlyLegalRoleEmployee")
-  monthlyLegalRolesPublished   MonthlyLegalRole[] @relation("MonthlyLegalRolePublishedBy")
+  overtimeEntriesOwn          OvertimeEntry[]       @relation("OvertimeEntryEmployee")
+  overtimeEntriesEntered      OvertimeEntry[]       @relation("OvertimeEntryEnteredBy")
+  overtimeEntriesApproved     OvertimeEntry[]       @relation("OvertimeEntryApprovedBy")
+  overtimeEntriesRejected     OvertimeEntry[]       @relation("OvertimeEntryRejectedBy")
+  payrollSettingsUpdated      PayrollSettings[]     @relation("PayrollSettingsUpdatedBy")
+  payrollPeriodsGenerated     PayrollPeriod[]       @relation("PayrollPeriodGeneratedBy")
+  payrollPeriodsPublished     PayrollPeriod[]       @relation("PayrollPeriodPublishedBy")
+  payrollQuincenaRolesOwn     PayrollQuincenaRole[] @relation("PayrollQuincenaRoleEmployee")
+  payrollQuincenaRolesCreated PayrollQuincenaRole[] @relation("PayrollQuincenaRoleCreatedBy")
+  monthlyLegalRolesOwn        MonthlyLegalRole[]    @relation("MonthlyLegalRoleEmployee")
+  monthlyLegalRolesPublished  MonthlyLegalRole[]    @relation("MonthlyLegalRolePublishedBy")
 
   commissionTierAmounts         CommissionTierAmount[] @relation("CommissionTierAmountUser")
   commissionTierAmountsProposed CommissionTierAmount[] @relation("CommissionTierAmountProposedBy")
-  ceoBonusGrantsReceived        CeoBonusGrant[]         @relation("CeoBonusGrantUser")
-  fixedMonthlyBonus             FixedMonthlyBonus?      @relation("FixedMonthlyBonusUser")
-  fixedMonthlyBonusesProposed   FixedMonthlyBonus[]     @relation("FixedMonthlyBonusProposedBy")
+  ceoBonusGrantsReceived        CeoBonusGrant[]        @relation("CeoBonusGrantUser")
+  fixedMonthlyBonus             FixedMonthlyBonus?     @relation("FixedMonthlyBonusUser")
+  fixedMonthlyBonusesProposed   FixedMonthlyBonus[]    @relation("FixedMonthlyBonusProposedBy")
 
-  retailProductsCreated  RetailProduct[]        @relation("RetailProductCreatedBy")
-  personalPurchases      PersonalPurchase[]     @relation("PersonalPurchaseEmployee")
-  employeeBankAccount    EmployeeBankAccount?
-  salaryAdvances         SalaryAdvance[]        @relation("SalaryAdvanceEmployee")
-  managementDeductions   ManagementDeduction[]  @relation("ManagementDeductionEmployee")
+  retailProductsCreated RetailProduct[]       @relation("RetailProductCreatedBy")
+  personalPurchases     PersonalPurchase[]    @relation("PersonalPurchaseEmployee")
+  employeeBankAccount   EmployeeBankAccount?
+  salaryAdvances        SalaryAdvance[]       @relation("SalaryAdvanceEmployee")
+  managementDeductions  ManagementDeduction[] @relation("ManagementDeductionEmployee")
 
   @@index([deptId])
   @@index([leadsDeptId])
@@ -301,7 +317,9 @@ model Milestone {
   @@index([userId])
 }
 
-/* ---------------- Recordatorios periódicos ---------------- */
+/**
+ * ---------------- Recordatorios periódicos ----------------
+ */
 // Confirmado 2026-07-23: disponible para todas las áreas (no exclusivo de
 // una sola, a diferencia de Pagos recordatorios). Mismo permiso que
 // Procesos/Documentos/Exámenes en esa área — admin edita, el líder solo ve.
@@ -357,21 +375,23 @@ model PeriodicReminderCompletion {
   @@index([reminderId])
 }
 
-/* ---------------- Procesos (flujograma) ---------------- */
+/**
+ * ---------------- Procesos (flujograma) ----------------
+ */
 model Process {
-  id          String  @id @default(cuid())
+  id          String     @id @default(cuid())
   deptId      String
   department  Department @relation(fields: [deptId], references: [id], onDelete: Cascade)
   title       String
-  description String  @default("")
+  description String     @default("")
   sketchUrl   String?
   sketchName  String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
 
-  flowSteps      FlowStep[]
-  updates        ProcessUpdate[]
-  questionSet    ContentQuestionSet?
+  flowSteps   FlowStep[]
+  updates     ProcessUpdate[]
+  questionSet ContentQuestionSet?
 
   @@index([deptId])
 }
@@ -407,9 +427,9 @@ model FlowStep {
   positionX Float @default(0)
   positionY Float @default(0)
 
-  branches        FlowBranch[]            @relation("StepBranches")
-  incomingBranch  FlowBranch[]            @relation("StepTarget")
-  checklistItems  FlowStepChecklistItem[]
+  branches       FlowBranch[]            @relation("StepBranches")
+  incomingBranch FlowBranch[]            @relation("StepTarget")
+  checklistItems FlowStepChecklistItem[]
 
   @@index([processId])
 }
@@ -426,10 +446,10 @@ model FlowStepChecklistItem {
 }
 
 model FlowBranch {
-  id           String   @id @default(cuid())
+  id           String    @id @default(cuid())
   stepId       String
-  step         FlowStep @relation("StepBranches", fields: [stepId], references: [id], onDelete: Cascade)
-  label        String   @default("")
+  step         FlowStep  @relation("StepBranches", fields: [stepId], references: [id], onDelete: Cascade)
+  label        String    @default("")
   targetStepId String?
   targetStep   FlowStep? @relation("StepTarget", fields: [targetStepId], references: [id], onDelete: SetNull)
 
@@ -463,7 +483,9 @@ model UserAckUpdate {
   @@id([userId, updateId])
 }
 
-/* ---------------- Módulos (empresa entera, admin: contenido + examen opcional) ---------------- */
+/**
+ * ---------------- Módulos (empresa entera, admin: contenido + examen opcional) ----------------
+ */
 // Confirmado 2026-07-25: reemplaza el enfoque de sección única "Misión y
 // Visión" — el admin crea tantos módulos como quiera (Misión y Visión,
 // Manual de operaciones, etc.), cada uno con imagen de portada, uno o más
@@ -478,28 +500,30 @@ model Module {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  documents Document[]
-  exam      Exam?
+  documents   Document[]
+  exam        Exam?
   questionSet ContentQuestionSet?
 
   @@index([order])
 }
 
-/* ---------------- Documentos (por área, Leyes y Reglamentos con deptId nulo, o dentro de un módulo) ---------------- */
+/**
+ * ---------------- Documentos (por área, Leyes y Reglamentos con deptId nulo, o dentro de un módulo) ----------------
+ */
 model Document {
-  id        String      @id @default(cuid())
-  deptId    String?
+  id         String      @id @default(cuid())
+  deptId     String?
   department Department? @relation(fields: [deptId], references: [id], onDelete: Cascade)
-  isLaw     Boolean     @default(false)
-  moduleId  String?
-  module    Module?     @relation(fields: [moduleId], references: [id], onDelete: Cascade)
-  title     String
-  content   String      @default("")
-  link      String      @default("")
-  fileUrl   String?
-  fileName  String?
-  createdAt DateTime    @default(now())
-  updatedAt DateTime    @updatedAt
+  isLaw      Boolean     @default(false)
+  moduleId   String?
+  module     Module?     @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  title      String
+  content    String      @default("")
+  link       String      @default("")
+  fileUrl    String?
+  fileName   String?
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
 
   questionSet ContentQuestionSet?
 
@@ -508,17 +532,19 @@ model Document {
   @@index([moduleId])
 }
 
-/* ---------------- Exámenes (por área, o dentro de un módulo) ---------------- */
+/**
+ * ---------------- Exámenes (por área, o dentro de un módulo) ----------------
+ */
 model Exam {
-  id        String   @id @default(cuid())
+  id         String      @id @default(cuid())
   // Exactamente uno de deptId/moduleId está presente — un examen de área
   // (como antes) o el único examen opcional de un módulo, nunca ambos.
-  deptId    String?
+  deptId     String?
   department Department? @relation(fields: [deptId], references: [id], onDelete: Cascade)
-  moduleId  String? @unique
-  module    Module? @relation(fields: [moduleId], references: [id], onDelete: Cascade)
-  title     String
-  createdAt DateTime @default(now())
+  moduleId   String?     @unique
+  module     Module?     @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  title      String
+  createdAt  DateTime    @default(now())
 
   questions ExamQuestion[]
   scores    ExamScore[]
@@ -527,13 +553,13 @@ model Exam {
 }
 
 model ExamQuestion {
-  id           String @id @default(cuid())
+  id           String   @id @default(cuid())
   examId       String
-  exam         Exam   @relation(fields: [examId], references: [id], onDelete: Cascade)
+  exam         Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
   text         String
   options      String[]
   correctIndex Int
-  order        Int    @default(0)
+  order        Int      @default(0)
 
   @@index([examId])
 }
@@ -553,7 +579,9 @@ model ExamScore {
   @@index([userId])
 }
 
-/* ---------------- KPIs financieros (histórico mensual por operación) ---------------- */
+/**
+ * ---------------- KPIs financieros (histórico mensual por operación) ----------------
+ */
 // Catálogo de operaciones/marcas dentro de un departamento (hoy solo lo usa
 // Finanzas y Contabilidad): Provedix, Importadora Damián, e Importadora
 // Shanghai (todavía inactiva). Activar una operación nueva es un simple
@@ -658,8 +686,8 @@ model FinanceSharedMonthlyBalance {
 // inventoryKpisCalc.ts). Reemplazar el mes (no agregar filas sueltas) es la
 // única forma de corregir un error, igual que la plantilla de Finanzas.
 model InventoryProductSnapshot {
-  id     String     @id @default(cuid())
-  deptId String
+  id         String     @id @default(cuid())
+  deptId     String
   department Department @relation(fields: [deptId], references: [id], onDelete: Cascade)
 
   period      String // "YYYY-MM"
@@ -709,17 +737,17 @@ model PettyCashBox {
 // borrarse por mal uso o manipulación). El saldo de la caja se calcula
 // siempre a partir de las filas NO archivadas.
 model PettyCashEntry {
-  id    String             @id @default(cuid())
-  boxId String
-  box   PettyCashBox       @relation(fields: [boxId], references: [id], onDelete: Cascade)
-  kind  PettyCashEntryKind
+  id            String             @id @default(cuid())
+  boxId         String
+  box           PettyCashBox       @relation(fields: [boxId], references: [id], onDelete: Cascade)
+  kind          PettyCashEntryKind
   // Confirmado 2026-08-05: UN SOLO contador para las dos cajas (no uno por
   // caja) — nunca se repite ni se reinicia entre Principal y Secundaria.
   // Autoincrement de Postgres, así que nunca hay dos solicitudes con el
   // mismo número aunque lleguen al mismo tiempo. El código legible que se
   // le muestra a la persona (ej. "CC-P-003") se arma con esto + box.type,
   // ver formatPettyCashCode() en src/lib/pettyCash.ts.
-  requestNumber Int @default(autoincrement()) @unique
+  requestNumber Int                @unique @default(autoincrement())
 
   amount      Float
   description String
@@ -860,17 +888,17 @@ model FinanceKpiSettings {
 // que se precarga con esta referencia pero se puede ajustar sin tocarla,
 // para el mes puntual en que varíe.
 model PaymentReminder {
-  id         String     @id @default(cuid())
-  deptId     String
-  department Department @relation(fields: [deptId], references: [id], onDelete: Cascade)
-  name       String // empresa/plataforma a la que se paga
-  amount        Float? // monto de referencia, editable, no cambia solo
-  paymentMethod String?
+  id               String     @id @default(cuid())
+  deptId           String
+  department       Department @relation(fields: [deptId], references: [id], onDelete: Cascade)
+  name             String // empresa/plataforma a la que se paga
+  amount           Float? // monto de referencia, editable, no cambia solo
+  paymentMethod    String?
   dueDay           Int // día del mes de vencimiento (1-31, se recorta al último día real del mes)
   reminderStartDay Int // día del mes desde el cual empieza a aparecer en pendientes
-  isActive   Boolean  @default(true)
-  order      Int      @default(0)
-  createdAt  DateTime @default(now())
+  isActive         Boolean    @default(true)
+  order            Int        @default(0)
+  createdAt        DateTime   @default(now())
 
   records PaymentReminderRecord[]
 
@@ -891,7 +919,9 @@ model PaymentReminderRecord {
   @@index([reminderId])
 }
 
-/* ---------------- Servicio Postventa (feedback de tiendas) ---------------- */
+/**
+ * ---------------- Servicio Postventa (feedback de tiendas) ----------------
+ */
 // Confirmado 2026-07-22: Nairoby (líder de Finanzas y Contabilidad) contacta
 // tiendas y registra feedback sin fecha fija — no es un KPI mensual, es un
 // registro por llamada. Fulfillment e Inventario pueden VER los resultados
@@ -946,8 +976,8 @@ model StoreFeedbackEvaluation {
   // de nosotros para crecer (más stock, apoyo creativo para Meta/TikTok,
   // mejores tiempos, etc.). El semáforo de riesgo se deriva de loyaltyScore,
   // no necesita su propio campo.
-  actionPlan   String   @default("")
-  growthNeeds  String   @default("")
+  actionPlan    String   @default("")
+  growthNeeds   String   @default("")
   evaluatedById String?
   evaluatedBy   User?    @relation("StoreFeedbackEvaluatedBy", fields: [evaluatedById], references: [id], onDelete: SetNull)
   evaluatedAt   DateTime @default(now())
@@ -956,7 +986,9 @@ model StoreFeedbackEvaluation {
   @@index([period])
 }
 
-/* ---------------- Métrica semanal (ej. pedidos despachados de Fulfillment) ---------------- */
+/**
+ * ---------------- Métrica semanal (ej. pedidos despachados de Fulfillment) ----------------
+ */
 model WeeklyMetricRecord {
   id         String     @id @default(cuid())
   deptId     String
@@ -995,7 +1027,9 @@ enum ReviewStatus {
   REJECTED
 }
 
-/* ---------------- Feedback semanal (reunión admin-líder: problemas y plan de acción) ---------------- */
+/**
+ * ---------------- Feedback semanal (reunión admin-líder: problemas y plan de acción) ----------------
+ */
 model WeeklyReviewRecord {
   id         String     @id @default(cuid())
   deptId     String
@@ -1019,7 +1053,9 @@ enum SupplierStatus {
   REJECTED
 }
 
-/* ---------------- Proveedores (directorio con aprobación del líder) ---------------- */
+/**
+ * ---------------- Proveedores (directorio con aprobación del líder) ----------------
+ */
 enum SupplierType {
   SUPPLIER
   CARRIER
@@ -1036,7 +1072,7 @@ enum ShippingPaymentTiming {
 }
 
 model Supplier {
-  id          String  @id @default(cuid())
+  id          String       @id @default(cuid())
   // Confirmado 2026-07-30: los transportistas de Control de Compras viven en
   // esta MISMA tabla (type=CARRIER) en vez de un catálogo aparte, para que
   // "se sincroniza con Proveedores" sea automático (una sola fila, nunca dos
@@ -1071,12 +1107,12 @@ model Supplier {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  contacts SupplierContact[]
-  channels SupplierChannel[]
-  purchaseRequestsAsSupplier PurchaseRequest[] @relation("PurchaseRequestSupplier")
-  purchaseRequestsAsCarrier  PurchaseRequest[] @relation("PurchaseRequestCarrier")
-  bankAccounts SupplierBankAccount[]
-  credits      SupplierCredit[]
+  contacts                   SupplierContact[]
+  channels                   SupplierChannel[]
+  purchaseRequestsAsSupplier PurchaseRequest[]     @relation("PurchaseRequestSupplier")
+  purchaseRequestsAsCarrier  PurchaseRequest[]     @relation("PurchaseRequestCarrier")
+  bankAccounts               SupplierBankAccount[]
+  credits                    SupplierCredit[]
 
   @@index([status])
   @@index([createdByDeptId])
@@ -1101,14 +1137,14 @@ model SupplierBankAccount {
   // titular se identifica con RUC (empresa) o cédula (persona natural) —
   // opcional a nivel de columna porque las cuentas migradas antes de este
   // campo no lo tienen, pero se pide siempre al registrar una cuenta nueva.
-  holderIdType   HolderIdType?
-  holderIdNumber String?
+  holderIdType      HolderIdType?
+  holderIdNumber    String?
 
   createdById String?
   createdBy   User?    @relation("SupplierBankAccountCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   createdAt   DateTime @default(now())
 
-  purchaseRequests PurchaseRequest[]
+  purchaseRequests                 PurchaseRequest[]
   purchaseRequestsAsCarrierAccount PurchaseRequest[] @relation("PurchaseRequestCarrierBankAccount")
 
   @@index([supplierId])
@@ -1140,16 +1176,18 @@ model SupplierChannel {
   @@index([supplierId])
 }
 
-/* ---------------- Control de Compras ---------------- */
+/**
+ * ---------------- Control de Compras ----------------
+ */
 // Confirmado 2026-07-30 (boceto aprobado): reemplaza el grupo de WhatsApp
 // para pedir aprobación de pago. Un nombre por insumo, siempre — el
 // historial de precio depende de que nunca se parta en dos.
 model PurchaseCatalogItem {
-  id     String   @id @default(cuid())
-  name   String   @unique
+  id          String   @id @default(cuid())
+  name        String   @unique
   // 1 a 3 fotos (real si se tiene físicamente, referencial del proveedor si
   // no) — para que Inventario y Finanzas identifiquen el producto sin adivinar.
-  photos String[]
+  photos      String[]
   // Opcional — confirmado 2026-07-30: breve descripción de qué es/hace el
   // producto, para ayudar a identificarlo (no obligatoria, a diferencia de
   // Proveedores.notes).
@@ -1158,7 +1196,7 @@ model PurchaseCatalogItem {
   // este producto. Algunas cotizaciones no traen el nombre, solo un código —
   // si ya lo tenemos guardado aquí, se reconoce solo en vez de tener que
   // confirmarlo a mano cada vez.
-  code String?
+  code        String?
 
   createdById String?
   createdBy   User?    @relation("PurchaseCatalogItemCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
@@ -1188,6 +1226,12 @@ enum PurchaseRequestStatus {
   REJECTED
   APPROVED
   PAID
+  // Confirmado 2026-08-18: pedido explícito del usuario — la recepción física
+  // ya no es exclusiva de Daniel (líder de Inventario), cualquiera de su
+  // equipo puede recibir con foto+video. Este estado marca "el equipo ya
+  // recibió, pendiente de que Daniel dé la aprobación final" — solo ahí pasa
+  // a RECEIVED de verdad (ver PurchaseRequestReceipt.approvedAt).
+  RECEIVED_PENDING_REVIEW
   RECEIVED
 }
 
@@ -1208,21 +1252,21 @@ enum PurchaseInvoiceStatus {
 // solicita (Bryan → Compras, Nairoby → Finanzas), para que la bandeja de
 // admin y los reportes puedan filtrar por área si hace falta más adelante.
 model PurchaseRequest {
-  id     String     @id @default(cuid())
+  id            String     @id @default(cuid())
   // Confirmado 2026-07-31: una cotización suele traer varios productos —
   // todas las filas creadas desde el mismo envío comparten este groupId
   // (siempre poblado, incluso para una solicitud de un solo producto, para
   // no tener que ramificar la lógica de agrupar entre "con grupo"/"sin
   // grupo"). El total leído por IA se compara contra la SUMA de todas las
   // líneas del grupo, no una por una.
-  groupId String
+  groupId       String
   // Confirmado 2026-08-05: código correlativo (SC-001, SC-002...) para
   // control y la auditoría semestral — una sola numeración para todo el
   // módulo, compartida por todas las filas del mismo groupId (se asigna una
   // vez por grupo, no por fila). Null en solicitudes de antes de este cambio.
   requestNumber Int?
-  deptId String
-  dept   Department @relation(fields: [deptId], references: [id], onDelete: Cascade)
+  deptId        String
+  dept          Department @relation(fields: [deptId], references: [id], onDelete: Cascade)
 
   catalogItemId String
   catalogItem   PurchaseCatalogItem @relation(fields: [catalogItemId], references: [id], onDelete: Restrict)
@@ -1251,18 +1295,18 @@ model PurchaseRequest {
 
   // Cotización — verificada por IA una sola vez por solicitud (no es un chat).
   quoteImageUrl      String
-  quoteReadTotal      Float?
+  quoteReadTotal     Float?
   // Cuando la cotización solo trae un código de proveedor, no el nombre del
   // producto — la persona confirma manualmente a qué insumo corresponde.
   quoteReferenceCode String?
-  quoteConfirmedAt    DateTime?
+  quoteConfirmedAt   DateTime?
   // Confirmado 2026-07-31: cuando la cotización solo trae código (no nombre
   // de producto), la orden de compra es obligatoria como respaldo de qué se
   // está comprando — impuesta en la ruta, no aquí; opcional en cualquier
   // otro caso (se puede subir por adelantado igual).
   purchaseOrderUrl   String?
 
-  shippingIncluded      Boolean                @default(false)
+  shippingIncluded                  Boolean                @default(false)
   // Confirmado 2026-08-11: pedido explícito del usuario — a veces al
   // solicitar todavía no se sabe ni el transportista ni el costo real del
   // flete (se sabrá más cerca de la entrega). Con esto en true, carrierId y
@@ -1271,26 +1315,26 @@ model PurchaseRequest {
   // en "Mis solicitudes" hasta que se complete con el transportista y costo
   // reales (mismo patrón que purchaseOrderUrl, que también se completa
   // después).
-  shippingCarrierPending Boolean               @default(false)
-  carrierId              String?
-  carrier                Supplier?              @relation("PurchaseRequestCarrier", fields: [carrierId], references: [id], onDelete: SetNull)
-  shippingCostTotal     Float?
-  shippingPaymentMethod PurchasePaymentMethod?
+  shippingCarrierPending            Boolean                @default(false)
+  carrierId                         String?
+  carrier                           Supplier?              @relation("PurchaseRequestCarrier", fields: [carrierId], references: [id], onDelete: SetNull)
+  shippingCostTotal                 Float?
+  shippingPaymentMethod             PurchasePaymentMethod?
   // Confirmado 2026-08-03: cuando el flete se cobra aparte, se elige si se
   // paga junto con la compra (como ya funcionaba) o si queda pendiente hasta
   // que llegue la mercadería — algunos transportistas solo dan sus datos
   // bancarios al entregar, así que la cuenta del transportista se puede
   // agregar/elegir después, no necesariamente al solicitar.
-  shippingPaymentTiming      ShippingPaymentTiming?
-  carrierBankAccountId       String?
-  carrierBankAccount         SupplierBankAccount?   @relation("PurchaseRequestCarrierBankAccount", fields: [carrierBankAccountId], references: [id], onDelete: SetNull)
-  shippingPaymentRequestedAt   DateTime?
-  shippingPaymentRequestedById String?
-  shippingPaymentRequestedBy   User?      @relation("PurchaseRequestShippingPaymentRequestedBy", fields: [shippingPaymentRequestedById], references: [id], onDelete: SetNull)
-  shippingPaidAt               DateTime?
-  shippingPaidById             String?
-  shippingPaidBy               User?      @relation("PurchaseRequestShippingPaidBy", fields: [shippingPaidById], references: [id], onDelete: SetNull)
-  shippingPaymentProofUrl      String?
+  shippingPaymentTiming             ShippingPaymentTiming?
+  carrierBankAccountId              String?
+  carrierBankAccount                SupplierBankAccount?   @relation("PurchaseRequestCarrierBankAccount", fields: [carrierBankAccountId], references: [id], onDelete: SetNull)
+  shippingPaymentRequestedAt        DateTime?
+  shippingPaymentRequestedById      String?
+  shippingPaymentRequestedBy        User?                  @relation("PurchaseRequestShippingPaymentRequestedBy", fields: [shippingPaymentRequestedById], references: [id], onDelete: SetNull)
+  shippingPaidAt                    DateTime?
+  shippingPaidById                  String?
+  shippingPaidBy                    User?                  @relation("PurchaseRequestShippingPaidBy", fields: [shippingPaidById], references: [id], onDelete: SetNull)
+  shippingPaymentProofUrl           String?
   shippingPaymentProofReceiptNumber String?
 
   // Obligatoria solo cuando el costo por unidad superó el promedio de las
@@ -1308,19 +1352,19 @@ model PurchaseRequest {
   attemptNumber          Int     @default(1)
   resubmittedFromGroupId String?
 
-  requestedById   String?
-  requestedBy     User?      @relation("PurchaseRequestRequestedBy", fields: [requestedById], references: [id], onDelete: SetNull)
+  requestedById     String?
+  requestedBy       User?    @relation("PurchaseRequestRequestedBy", fields: [requestedById], references: [id], onDelete: SetNull)
   requestedByDeptId String?
-  requestedAt     DateTime   @default(now())
+  requestedAt       DateTime @default(now())
 
   reviewedById String?
   reviewedBy   User?     @relation("PurchaseRequestReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
   reviewedAt   DateTime?
 
-  paidAt          DateTime?
-  paidById        String?
-  paidBy          User?     @relation("PurchaseRequestPaidBy", fields: [paidById], references: [id], onDelete: SetNull)
-  paymentProofUrl String?
+  paidAt                    DateTime?
+  paidById                  String?
+  paidBy                    User?     @relation("PurchaseRequestPaidBy", fields: [paidById], references: [id], onDelete: SetNull)
+  paymentProofUrl           String?
   // Confirmado 2026-08-11: pedido explícito del usuario — la IA lee el N° de
   // comprobante/transacción del comprobante de pago (ya lo hace para el
   // monto) y queda guardado acá. Sirve para detectar si el mismo comprobante
@@ -1328,30 +1372,30 @@ model PurchaseRequest {
   // las pantallas normales de Compras/Finanzas, solo en Auditoría.
   paymentProofReceiptNumber String?
 
-  invoiceStatus   PurchaseInvoiceStatus @default(PENDING)
-  invoiceAmount   Float?
-  invoiceDocUrl   String?
-  invoicedById    String?
-  invoicedBy      User?                 @relation("PurchaseRequestInvoicedBy", fields: [invoicedById], references: [id], onDelete: SetNull)
+  invoiceStatus PurchaseInvoiceStatus @default(PENDING)
+  invoiceAmount Float?
+  invoiceDocUrl String?
+  invoicedById  String?
+  invoicedBy    User?                 @relation("PurchaseRequestInvoicedBy", fields: [invoicedById], references: [id], onDelete: SetNull)
   // Confirmado 2026-08-13: pedido explícito del usuario — momento exacto en
   // que Finanzas cierra la operación (deja de estar PENDING). Alimenta el
   // tiempo total y por etapa que se muestra en Auditoría — una operación
   // recién aparece ahí cuando esto ya tiene valor.
-  invoicedAt      DateTime?
+  invoicedAt    DateTime?
 
   // Confirmado 2026-08-06: Nairoby puede marcar "revisar algo" en la misma
   // operación cuando algo no cuadra en su revisión final — opcional, no
   // obligatorio, y no bloquea nada por sí solo, solo deja visible la nota.
-  financeFlagNote     String?
-  financeFlaggedAt    DateTime?
-  financeFlaggedById  String?
-  financeFlaggedBy    User?             @relation("PurchaseRequestFinanceFlaggedBy", fields: [financeFlaggedById], references: [id], onDelete: SetNull)
+  financeFlagNote    String?
+  financeFlaggedAt   DateTime?
+  financeFlaggedById String?
+  financeFlaggedBy   User?     @relation("PurchaseRequestFinanceFlaggedBy", fields: [financeFlaggedById], references: [id], onDelete: SetNull)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  receipt       PurchaseRequestReceipt?
-  urgentReports PurchaseRequestUrgentReport[]
+  receipt           PurchaseRequestReceipt?
+  urgentReports     PurchaseRequestUrgentReport[]
   marketingFollowUp PurchaseReceiptFollowUp?
 
   @@index([deptId])
@@ -1382,21 +1426,37 @@ model PurchaseRequestReceipt {
 
   receivedQuantity Int
   photoUrls        String[]
+  // Confirmado 2026-08-18: pedido explícito del usuario — evidencia en video
+  // ADEMÁS de las fotos (que siguen siendo obligatorias), opcional, útil
+  // sobre todo cuando llegan muchos bultos a la vez. Mismo criterio que ya
+  // usa PurchaseRequestUrgentReport.mediaUrls: se sube sin comprimir.
+  videoUrls        String[] @default([])
   comment          String?
 
-  aiPhotoMatch Boolean?
-  aiPhotoNote  String?
+  aiPhotoMatch             Boolean?
+  aiPhotoNote              String?
   // Confirmado 2026-08-12: pedido explícito del usuario — cuando la IA
   // confirma que sigue siendo el MISMO producto que el de referencia pero
   // con una diferencia menor (color, logo, empaque, etc.), el líder de
   // Inventario decide si lo deja pasar con un clic o lo reporta como algo
   // que no se puede dejar pasar. aiPhotoMatch se deja tal cual lo dio la IA
   // (false) — este campo es el registro de que se confirmó a pesar de eso.
-  minorDifferenceConfirmed Boolean @default(false)
+  minorDifferenceConfirmed Boolean  @default(false)
 
+  // Confirmado 2026-08-18: pedido explícito del usuario — quien de verdad
+  // recibió la mercadería físicamente (cualquiera del equipo de Inventario,
+  // ya no exclusivo de Daniel).
   confirmedById String?
   confirmedBy   User?    @relation("PurchaseRequestReceiptConfirmedBy", fields: [confirmedById], references: [id], onDelete: SetNull)
   confirmedAt   DateTime @default(now())
+
+  // Confirmado 2026-08-18: la aprobación final de Daniel (líder de
+  // Inventario) — es lo que de verdad cierra el ciclo (request.status pasa a
+  // RECEIVED recién acá, ver approve-receipt/route.ts). Null mientras está
+  // en RECEIVED_PENDING_REVIEW.
+  approvedById String?
+  approvedBy   User?     @relation("PurchaseRequestReceiptApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  approvedAt   DateTime?
 }
 
 // Confirmado 2026-08-08: "Mercadería recibida" — pedido explícito del
@@ -1442,20 +1502,29 @@ model PurchaseRequestUrgentReport {
   requestId String
   request   PurchaseRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
 
-  damagedQty    Int @default(0)
+  damagedQty    Int      @default(0)
   // Confirmado 2026-08-08: "Faltante" queda solo para reportes viejos —
   // ahora se reemplaza por "Diferente" (producto distinto al pedido, visible
   // gracias a las fotos de referencia del catálogo que ahora se muestran al
   // reportar). Nunca se borra el campo viejo para no perder el historial.
-  missingQty    Int @default(0)
-  incompleteQty Int @default(0)
-  differentQty  Int @default(0)
+  missingQty    Int      @default(0)
+  incompleteQty Int      @default(0)
+  differentQty  Int      @default(0)
   description   String
   mediaUrls     String[]
 
   reportedById String?
   reportedBy   User?    @relation("PurchaseRequestUrgentReportedBy", fields: [reportedById], references: [id], onDelete: SetNull)
   reportedAt   DateTime @default(now())
+
+  // Confirmado 2026-08-18: pedido explícito del usuario — "Informar urgente"
+  // ya no es exclusivo de Daniel (cualquiera de su equipo de Inventario
+  // puede reportar), pero el reporte le llega primero a ÉL — no se notifica
+  // a admin/solicitante ni aparece en la bandeja de Bryan (Reportes urgentes)
+  // hasta que Daniel lo revisa acá.
+  reviewedByLeadId String?
+  reviewedByLead   User?     @relation("PurchaseRequestUrgentReportReviewedByLead", fields: [reviewedByLeadId], references: [id], onDelete: SetNull)
+  reviewedByLeadAt DateTime?
 
   resolutions PurchaseUrgentResolution[]
 
@@ -1752,7 +1821,7 @@ model WarrantyMonthTotal {
 // para ver qué categoría acumula más — no se sube por separado, se calcula.
 model WarrantyCategoryMonthCount {
   id         String           @id @default(cuid())
-  month      String           // "YYYY-MM"
+  month      String // "YYYY-MM"
   categoryId String
   category   WarrantyCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
   count      Int
@@ -1765,7 +1834,9 @@ model WarrantyCategoryMonthCount {
   @@index([categoryId])
 }
 
-/* ---------------- Colaborador Destacado del Mes ---------------- */
+/**
+ * ---------------- Colaborador Destacado del Mes ----------------
+ */
 
 // Una evaluación mensual completa: un líder evaluando a un miembro de su
 // equipo, o el admin evaluando a un líder. evaluatorId es "admin" (sentinel,
@@ -1817,14 +1888,14 @@ model MonthlyEvaluationSummary {
   evaluateeId String
   evaluatee   User   @relation(fields: [evaluateeId], references: [id], onDelete: Cascade)
 
-  totalScore          Float
-  resultadosScore     Int
-  excelenciaScore     Int
-  compromisoScore     Int
-  colaboracionScore   Int
-  clienteScore        Int
-  innovacionScore     Int
-  liderazgoScore      Int
+  totalScore        Float
+  resultadosScore   Int
+  excelenciaScore   Int
+  compromisoScore   Int
+  colaboracionScore Int
+  clienteScore      Int
+  innovacionScore   Int
+  liderazgoScore    Int
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1861,7 +1932,9 @@ model MonthlyRecognitionPopupSeen {
   @@unique([viewerId, month, rank])
 }
 
-/* ---------------- Rutas de conocimiento ---------------- */
+/**
+ * ---------------- Rutas de conocimiento ----------------
+ */
 // Confirmado 2026-07-27: el admin arma, por persona (no por puesto formal de
 // Nómina), una ruta de pasos ordenados que referencian contenido que ya
 // existe en DAFLOW (un Documento/Ley, un Proceso o un Módulo completo). Cada
@@ -2001,7 +2074,9 @@ model LearningPathAnswer {
   @@index([questionId])
 }
 
-/* ---------------- Chat interno de Roles de pago ---------------- */
+/**
+ * ---------------- Chat interno de Roles de pago ----------------
+ */
 // Confirmado 2026-07-27: por cada colaborador, un hilo de mensajes directo
 // entre él y quien gestione su nómina (hoy Nairoby, líder de Finanzas, o el
 // admin subiendo directo) — el admin puede ver TODAS las conversaciones de
@@ -2009,20 +2084,22 @@ model LearningPathAnswer {
 // senderId es siempre employeeId (el colaborador respondiendo) o quien
 // gestiona la nómina — nunca el admin.
 model PayrollMessage {
-  id         String   @id @default(cuid())
+  id         String    @id @default(cuid())
   employeeId String
-  employee   User     @relation("PayrollMessageEmployee", fields: [employeeId], references: [id], onDelete: Cascade)
+  employee   User      @relation("PayrollMessageEmployee", fields: [employeeId], references: [id], onDelete: Cascade)
   senderId   String
-  sender     User     @relation("PayrollMessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+  sender     User      @relation("PayrollMessageSender", fields: [senderId], references: [id], onDelete: Cascade)
   body       String
-  createdAt  DateTime @default(now())
+  createdAt  DateTime  @default(now())
   // Null hasta que la otra parte del hilo (no el admin, que solo observa) lo lee.
   readAt     DateTime?
 
   @@index([employeeId])
 }
 
-/* ---------------- Historial de conversaciones con Nancy ---------------- */
+/**
+ * ---------------- Historial de conversaciones con Nancy ----------------
+ */
 // Confirmado 2026-07-27: antes las conversaciones con Nancy solo vivían en
 // memoria del navegador — se perdían al salir de la pantalla. Ahora cada
 // conversación se guarda completa (se auto-crea con el primer mensaje) y se
@@ -2031,13 +2108,13 @@ model PayrollMessage {
 // el admin no es una fila real de User) — cada quien solo ve sus propias
 // conversaciones, no se comparten entre admin y el líder del área.
 model NancyConversation {
-  id         String        @id @default(cuid())
+  id         String     @id @default(cuid())
   deptId     String
-  department Department    @relation(fields: [deptId], references: [id], onDelete: Cascade)
+  department Department @relation(fields: [deptId], references: [id], onDelete: Cascade)
   ownerId    String
   title      String
-  createdAt  DateTime      @default(now())
-  updatedAt  DateTime      @updatedAt
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
 
   messages NancyMessage[]
 
@@ -2113,7 +2190,9 @@ model PushCategoryPreference {
   @@index([ownerId])
 }
 
-/* ---------------- Pagos administrativos (Finanzas) ---------------- */
+/**
+ * ---------------- Pagos administrativos (Finanzas) ----------------
+ */
 // Confirmado 2026-08-06: Nairoby (líder de Finanzas) solicita pagos
 // administrativos (IESS, sueldos, alquiler, etc.) y el admin los paga y sube
 // comprobante — la IA cruza el monto en ambos puntos (doc. de soporte
@@ -2221,10 +2300,10 @@ model AdminPaymentRequest {
   declarationAiNote   String?
 
   // Comprobante de pago del admin — obligatorio para pasar a PAID, bloqueante
-  paymentProofUrl  String?
-  paymentProofName String?
-  paymentAiMatch   Boolean?
-  paymentAiNote    String?
+  paymentProofUrl     String?
+  paymentProofName    String?
+  paymentAiMatch      Boolean?
+  paymentAiNote       String?
   // Confirmado 2026-08-12: pedido explícito del usuario — el monto real que
   // la IA leyó del comprobante (coincida o no con `monto`), para mostrarlo
   // al lado de "Total a pagar" — antes solo vivía como texto dentro de
@@ -2270,7 +2349,9 @@ model AdminPaymentRequest {
   @@index([linkedGroupId])
 }
 
-/* ---------------- Nómina: calculadora de horas extra y roles de pago ---------------- */
+/**
+ * ---------------- Nómina: calculadora de horas extra y roles de pago ----------------
+ */
 // Confirmado 2026-08-13: pedido explícito del usuario, tras varias rondas de
 // diseño — reemplaza el cálculo manual en Excel. Vive dentro de la sección
 // "Nómina" que ya existía. Todo el detalle real (sueldo real, horas extra,
@@ -2340,9 +2421,9 @@ model PayrollSettings {
 // ese día queda cerrado para siempre, para evitar cargar horas de semanas
 // pasadas. Sin approvedAt, ese día no cuenta para nada del cálculo mensual.
 model OvertimeEntry {
-  id         String @id @default(cuid())
+  id         String   @id @default(cuid())
   employeeId String
-  employee   User   @relation("OvertimeEntryEmployee", fields: [employeeId], references: [id], onDelete: Cascade)
+  employee   User     @relation("OvertimeEntryEmployee", fields: [employeeId], references: [id], onDelete: Cascade)
   date       DateTime // medianoche UTC del día trabajado
 
   minutesExtra Int // 45 o 60
@@ -2474,7 +2555,9 @@ model MonthlyLegalRole {
   @@index([employeeId, isCurrent])
 }
 
-/* ---------------- Comisiones de equipo por niveles + Bonos discrecionales del CEO ---------------- */
+/**
+ * ---------------- Comisiones de equipo por niveles + Bonos discrecionales del CEO ----------------
+ */
 // Confirmado 2026-08-14: diseñado en conversación larga con el usuario, no
 // re-derivar. 3 niveles (Raíz/Cosecha/PROVEDIX) según el promedio DIARIO de
 // "Pedidos despachados" (WeeklyMetricRecord del depto con trackWeeklyMetric),
@@ -2483,12 +2566,12 @@ model MonthlyLegalRole {
 // quede activo — por eso amount (vigente) y pendingAmount (propuesta sin
 // aprobar) son campos separados. Aprobar copia pendingAmount -> amount.
 model CommissionTier {
-  id          String   @id @default(cuid())
-  name        String   @unique // "Raíz", "Cosecha", "PROVEDIX"
-  orderIndex  Int      @unique // 1, 2, 3 — mayor = nivel más alto
+  id          String  @id @default(cuid())
+  name        String  @unique // "Raíz", "Cosecha", "PROVEDIX"
+  orderIndex  Int     @unique // 1, 2, 3 — mayor = nivel más alto
   minDailyAvg Float
   maxDailyAvg Float? // solo informativo — superarlo no excluye del nivel más alto
-  isActive    Boolean  @default(true)
+  isActive    Boolean @default(true)
 
   amounts CommissionTierAmount[]
 }
@@ -2578,12 +2661,14 @@ model CeoBonusGrantSeen {
 // del equipo) — lo mantiene Daniel (Inventario) o el admin, el colaborador
 // solo elige. Precio al costo vs. precio Dropi, distinto de PurchaseCatalogItem
 // (que es para comprar A proveedores, no para vender/retirar del propio stock).
+// Confirmado 2026-08-18: ajustado el mismo día — el catálogo NO guarda
+// precio. Nairoby es quien digita el valor en dólares al cerrar cada
+// compra (confirm-finance), nunca un precio fijo de catálogo — el
+// colaborador solo declara para quién es la compra.
 model RetailProduct {
-  id         String @id @default(cuid())
-  name       String @unique
-  photo      String?
-  costPrice  Float
-  dropiPrice Float
+  id    String  @id @default(cuid())
+  name  String  @unique
+  photo String?
 
   createdById String?
   createdBy   User?    @relation("RetailProductCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
@@ -2621,10 +2706,13 @@ model PersonalPurchase {
   livePhotoUrl  String
   buyerRelation PurchaseBuyerRelation
   buyerNote     String? // ej. "mi hijo Juan, 8 años" — solo si no es SELF
-  priceMode     String // "COST" | "DROPI" — calculado y congelado al crear
-  unitPrice     Float
-  totalAmount   Float
-  installments  Int    @default(1) // 1 o 2 (solo si totalAmount >= 25)
+  priceMode     String // "COST" | "DROPI" — declarado por el colaborador al crear, según buyerRelation + enfriamiento
+  // Confirmado 2026-08-18: Nairoby es quien digita el precio en dólares al
+  // cerrar la compra (confirm-finance) — nulo hasta ese momento, nunca lo
+  // fija el colaborador ni un catálogo.
+  unitPrice     Float?
+  totalAmount   Float?
+  installments  Int                   @default(1) // 1 o 2 — lo decide Nairoby junto con el precio (solo si totalAmount >= 25)
 
   status                 PersonalPurchaseStatus @default(PENDING_INVENTORY)
   inventoryConfirmedAt   DateTime?
@@ -2703,7 +2791,7 @@ model ManagementDeduction {
   totalAmount  Float
   reason       String
   evidenceUrl  String?
-  installments Int    @default(1)
+  installments Int     @default(1)
   startMonth   String // elegido por el admin al crear
 
   acceptedAt       DateTime?
