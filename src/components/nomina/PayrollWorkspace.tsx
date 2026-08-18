@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { OvertimeEntryPanel } from "./OvertimeEntryPanel";
 import { OvertimeApprovalPanel } from "./OvertimeApprovalPanel";
 import { OvertimeHistoryPanel } from "./OvertimeHistoryPanel";
@@ -40,6 +40,16 @@ export function PayrollWorkspace({
     ...(canGrantCeoBonus ? [{ key: "bonosceo" as Tab, label: "Bonos discrecionales" }] : []),
   ];
   const [tab, setTab] = useState<Tab>(tabs[0]?.key ?? "roles");
+
+  // Confirmado 2026-08-18: pedido explícito del usuario — el atajo "Ir →" de
+  // Pendientes en Inicio ("Comisiones y bonos por aprobar") llega con
+  // ?tab=pagos&ptab=comisiones|roles y debe abrir directo esa sub-pestaña,
+  // mismo espíritu que el "tab=pagos" que ya lee NominaPageTabs.
+  useEffect(() => {
+    const ptab = new URLSearchParams(window.location.search).get("ptab");
+    if ((ptab === "comisiones" || ptab === "roles") && tabs.some((t) => t.key === ptab)) setTab(ptab);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   if (tabs.length === 0) return null;
 

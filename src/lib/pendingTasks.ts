@@ -297,6 +297,7 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   pagos_mercaderia: "Pagos de mercadería pendientes",
   pagos_flete: "Fletes pendientes de pago",
   horas_extra_aprobacion: "Horas extra por aprobar",
+  comisiones_bonos_aprobacion: "Comisiones y bonos por aprobar",
   cumpleanos: "Cumpleaños de tu equipo (aviso 1 día antes)",
   compras_rechazadas: "Tus solicitudes de compra rechazadas — corregir y reenviar",
   compras_orden_compra: "Tus solicitudes de compra — falta subir orden de compra",
@@ -1096,6 +1097,36 @@ async function getOvertimeApprovalPendingItem(href: string): Promise<PendingItem
   };
 }
 
+// Confirmado 2026-08-18: pedido explícito del usuario — mismo patrón que
+// getOvertimeApprovalPendingItem, un acceso directo en Inicio para las
+// propuestas de comisión de equipo (CommissionTierAmount.pendingAmount) y
+// de bono fijo mensual (FixedMonthlyBonus.pendingAmount) que siguen sin
+// aprobar. Exclusivo del admin — canApproveCommissionAmounts y
+// canApproveFixedMonthlyBonus son admin-only, sin auto-aprobación. Cuando
+// hay de los dos tipos a la vez, el link entra directo a la sub-pestaña de
+// comisiones primero (PayrollWorkspace lee "ptab" — ver useEffect agregado
+// ahí), la persona resuelve esa y vuelve a Inicio para la de bono fijo.
+async function getCommissionAndBonusApprovalPendingItem(hrefBase: string): Promise<PendingItem | null> {
+  const [commissionRows, bonusRows] = await Promise.all([
+    prisma.commissionTierAmount.findMany({ where: { pendingAmount: { not: null } }, select: { proposedAt: true } }),
+    prisma.fixedMonthlyBonus.findMany({ where: { pendingAmount: { not: null } }, select: { proposedAt: true } }),
+  ]);
+  const total = commissionRows.length + bonusRows.length;
+  if (total === 0) return null;
+
+  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const overdue = [...commissionRows, ...bonusRows].some((r) => r.proposedAt != null && r.proposedAt < cutoff);
+  const ptab = commissionRows.length > 0 ? "comisiones" : "roles";
+  return {
+    type: "comisiones_bonos_aprobacion",
+    icon: "💵",
+    label: "Comisiones y bonos por aprobar",
+    meta: `${total} propuesta${total === 1 ? "" : "s"}${overdue ? " · atrasado" : ""}`,
+    overdue,
+    href: `${hrefBase}?tab=pagos&ptab=${ptab}`,
+  };
+}
+
 // Confirmado 2026-08-06: aviso 1 día antes de la fecha en que se va a
 // felicitar (que puede ser el cumpleaños real o el último día laborable
 // antes, si cae sábado/domingo/feriado — ver celebrationDateFor en
@@ -1143,7 +1174,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     const comDept = await prisma.department.findUnique({ where: { code: "COM" }, select: { id: true } });
     const comPaymentsHref = comDept ? `/admin/dept/${comDept.id}?tab=compras&ptab=finanzas` : "/admin";
     const comCreditsHref = comDept ? `/admin/dept/${comDept.id}?tab=compras&ptab=urgentes` : "/admin";
-    const [feedbackItems, recognitionItem, pettyCashLow, pettyCashUnconfirmed, adminPaymentsItem, purchaseMerchandiseItem, purchaseShippingItem, purchaseCreditsItem, overtimeApprovalItem, birthdayItems] = await Promise.all([
+    const [feedbackItems, recognitionItem, pettyCashLow, pettyCashUnconfirmed, adminPaymentsItem, purchaseMerchandiseItem, purchaseShippingItem, purchaseCreditsItem, overtimeApprovalItem, commissionBonusApprovalItem, birthdayItems] = await Promise.all([
       getFeedbackPendingItems(),
       getRecognitionAdminPendingItem("/admin/colaborador-destacado"),
       getPettyCashLowBalanceItems(financeHref),
@@ -1153,6 +1184,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       getPurchaseShippingPendingItem(comPaymentsHref),
       getPurchaseCreditsPendingItem(comCreditsHref),
       getOvertimeApprovalPendingItem("/admin/nomina?tab=pagos"),
+      getCommissionAndBonusApprovalPendingItem("/admin/nomina"),
       getUpcomingBirthdayPendingItems("/admin/nomina"),
     ]);
     const items = [
@@ -1165,6 +1197,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       ...(purchaseShippingItem ? [purchaseShippingItem] : []),
       ...(purchaseCreditsItem ? [purchaseCreditsItem] : []),
       ...(overtimeApprovalItem ? [overtimeApprovalItem] : []),
+      ...(commissionBonusApprovalItem ? [commissionBonusApprovalItem] : []),
       ...birthdayItems,
     ];
     if (items.length === 0) return null;
