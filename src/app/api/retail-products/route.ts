@@ -18,8 +18,6 @@ export async function GET() {
 const schema = z.object({
   name: z.string().trim().min(1),
   photo: z.string().optional(),
-  costPrice: z.number().positive(),
-  dropiPrice: z.number().positive(),
 });
 
 export async function POST(req: NextRequest) {

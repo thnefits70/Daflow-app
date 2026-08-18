@@ -5,7 +5,6 @@ import { useEffect, useState } from "react";
 type Item = {
   id: string;
   quantity: number;
-  totalAmount: number;
   priceMode: string;
   livePhotoUrl: string;
   buyerRelation: string;
@@ -13,10 +12,6 @@ type Item = {
   employee: { name: string };
   product: { name: string; photo: string | null };
 };
-
-function money(n: number) {
-  return `$${n.toFixed(2)}`;
-}
 
 const RELATION_LABEL: Record<string, string> = { SELF: "Para él/ella mismo/a", MINOR_CHILD: "Para su hijo/a menor", OTHER_FAMILY: "Para otro familiar" };
 
@@ -68,8 +63,10 @@ export function PersonalPurchasesInventoryPanel() {
               <img src={it.livePhotoUrl} alt="Foto de la compra" className="w-20 h-20 object-cover rounded-md border border-rule shrink-0" />
               <div className="flex-1 min-w-0">
                 <div className="font-bold text-[13px]">{it.employee.name}</div>
-                <div className="text-[12.5px]">{it.product.name} × {it.quantity} — <span className="font-bold">{money(it.totalAmount)}</span></div>
-                <div className="text-[11px] text-steel-dim">{it.priceMode === "COST" ? "Precio al costo" : "Precio Dropi"} · {RELATION_LABEL[it.buyerRelation]}{it.buyerNote ? ` — ${it.buyerNote}` : ""}</div>
+                <div className="text-[12.5px]">{it.product.name} × {it.quantity}</div>
+                <div className="text-[11px] text-steel-dim">
+                  <span className={it.priceMode === "COST" ? "text-green font-semibold" : "font-semibold"}>{it.priceMode === "COST" ? "Precio al costo" : "Precio Dropi"}</span> · {RELATION_LABEL[it.buyerRelation]}{it.buyerNote ? ` — ${it.buyerNote}` : ""}
+                </div>
               </div>
             </div>
             {rejecting === it.id ? (

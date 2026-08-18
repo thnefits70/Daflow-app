@@ -124,13 +124,13 @@ export async function buildAutomaticLineItems(employeeId: string, period: string
       const periodMonth = monthOfPeriod(period);
 
       const purchases = await prisma.personalPurchase.findMany({
-        where: { employeeId, status: "APPROVED", firstPayoutMonth: { not: null } },
+        where: { employeeId, status: "APPROVED", firstPayoutMonth: { not: null }, totalAmount: { not: null } },
         include: { product: { select: { name: true } } },
       });
       for (const p of purchases) {
         const idx = installmentIndexForMonth(p.firstPayoutMonth!, p.installments, periodMonth);
         if (idx === null) continue;
-        const amt = installmentAmount(p.totalAmount, p.installments, idx);
+        const amt = installmentAmount(p.totalAmount!, p.installments, idx);
         const cuota = p.installments > 1 ? ` (cuota ${idx + 1}/${p.installments})` : "";
         items.push({ label: `Compra personal — ${p.product.name}${cuota}`, amount: amt, kind: "EXPENSE", isAutomatic: true });
       }

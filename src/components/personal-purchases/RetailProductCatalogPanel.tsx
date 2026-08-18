@@ -4,21 +4,16 @@ import { useEffect, useState } from "react";
 import { compressImage } from "@/lib/compressImage";
 import { uploadFile } from "@/lib/uploadFile";
 
-type Product = { id: string; name: string; photo: string | null; costPrice: number; dropiPrice: number };
+type Product = { id: string; name: string; photo: string | null };
 
-function money(n: number) {
-  return `$${n.toFixed(2)}`;
-}
-
-// Confirmado 2026-08-18: Daniel (Inventario) o admin mantienen este
-// catálogo — el colaborador que compra solo elige de esta lista, nunca
-// crea productos al vuelo (evita que alguien fije su propio precio).
+// Confirmado 2026-08-18 (ajustado el mismo día): Daniel (Inventario) o admin
+// mantienen este catálogo — el colaborador que compra solo elige de esta
+// lista, nunca crea productos al vuelo. El catálogo no guarda precio —
+// Nairoby lo digita en dólares recién al cerrar cada compra.
 export function RetailProductCatalogPanel() {
   const [products, setProducts] = useState<Product[] | null>(null);
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
-  const [costPrice, setCostPrice] = useState("");
-  const [dropiPrice, setDropiPrice] = useState("");
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -40,20 +35,18 @@ export function RetailProductCatalogPanel() {
   }
 
   async function submit() {
-    const cost = Number(costPrice);
-    const dropi = Number(dropiPrice);
-    if (!name.trim() || !cost || !dropi) return;
+    if (!name.trim()) return;
     setBusy(true);
     setErr("");
     const res = await fetch("/api/retail-products", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: name.trim(), photo: photoUrl ?? undefined, costPrice: cost, dropiPrice: dropi }),
+      body: JSON.stringify({ name: name.trim(), photo: photoUrl ?? undefined }),
     });
     setBusy(false);
     const data = await res.json().catch(() => null);
     if (!res.ok) { setErr(data?.error ?? "No se pudo crear."); return; }
-    setName(""); setCostPrice(""); setDropiPrice(""); setPhotoUrl(null); setCreating(false);
+    setName(""); setPhotoUrl(null); setCreating(false);
     load();
   }
 
@@ -72,10 +65,6 @@ export function RetailProductCatalogPanel() {
         <div className="border border-rule rounded-md p-3 mb-3 bg-cloud">
           <div className="flex flex-col gap-2">
             <input className="text-[12.5px] rounded border border-rule bg-surface px-2 py-1.5" placeholder="Nombre del producto" value={name} onChange={(e) => setName(e.target.value)} />
-            <div className="flex gap-2">
-              <input className="text-[12.5px] rounded border border-rule bg-surface px-2 py-1.5 flex-1" type="number" step="0.01" placeholder="Precio al costo" value={costPrice} onChange={(e) => setCostPrice(e.target.value)} />
-              <input className="text-[12.5px] rounded border border-rule bg-surface px-2 py-1.5 flex-1" type="number" step="0.01" placeholder="Precio Dropi" value={dropiPrice} onChange={(e) => setDropiPrice(e.target.value)} />
-            </div>
             <label className="text-[11.5px] font-semibold text-blue cursor-pointer">
               {uploading ? "Subiendo…" : photoUrl ? "Foto lista — cambiar" : "Agregar foto (opcional)"}
               <input type="file" accept="image/*" className="hidden" onChange={onPhoto} />
@@ -93,7 +82,6 @@ export function RetailProductCatalogPanel() {
         {products.map((p) => (
           <div key={p.id} className="flex items-center gap-2 text-[12.5px] py-1.5 border-b border-rule last:border-0">
             <span className="flex-1 font-semibold">{p.name}</span>
-            <span className="text-steel-dim">Costo {money(p.costPrice)} · Dropi {money(p.dropiPrice)}</span>
           </div>
         ))}
       </div>

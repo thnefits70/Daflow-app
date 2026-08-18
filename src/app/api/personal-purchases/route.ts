@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { computePurchasePrice } from "@/lib/personalPurchases";
+import { computePriceMode } from "@/lib/personalPurchases";
 import { nowInEcuador } from "@/lib/payrollCalc";
 import { sendPushToOwner } from "@/lib/webPush";
 import { actorName } from "@/lib/actorName";
@@ -32,12 +32,13 @@ const schema = z.object({
   livePhotoUrl: z.string().min(1),
   buyerRelation: z.enum(["SELF", "MINOR_CHILD", "OTHER_FAMILY"]),
   buyerNote: z.string().optional(),
-  installments: z.number().int().min(1).max(2),
 });
 
 // Confirmado 2026-08-18: cualquier colaborador puede pedir esto, sin guard
-// especial — el precio se recalcula server-side (nunca se confía en lo que
-// mande el cliente) para que nadie pueda manipular el monto.
+// especial. Ajustado el mismo día: acá solo se declara el modo de precio
+// (costo/Dropi) — nunca un monto. Nairoby es quien digita el precio real en
+// dólares al cerrar la compra (confirm-finance); ahí también se decide si
+// se paga en cuotas, una vez que se sepa el total.
 export async function POST(req: NextRequest) {
   const session = await auth();
   if (!session || session.user.role === "admin") return NextResponse.json({ error: "No autorizado." }, { status: 401 });
@@ -50,11 +51,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Contá para quién es la compra." }, { status: 400 });
   }
 
-  const { priceMode, unitPrice } = await computePurchasePrice(session.user.id, parsed.data.productId, parsed.data.buyerRelation);
-  const totalAmount = unitPrice * parsed.data.quantity;
-  if (parsed.data.installments === 2 && totalAmount < 25) {
-    return NextResponse.json({ error: "Solo se puede pagar en 2 cuotas si el total es de $25 o más." }, { status: 400 });
-  }
+  const { priceMode } = await computePriceMode(session.user.id, parsed.data.productId, parsed.data.buyerRelation);
 
   const purchase = await prisma.personalPurchase.create({
     data: {
@@ -65,9 +62,6 @@ export async function POST(req: NextRequest) {
       buyerRelation: parsed.data.buyerRelation,
       buyerNote: parsed.data.buyerNote?.trim(),
       priceMode,
-      unitPrice,
-      totalAmount,
-      installments: parsed.data.installments,
       eventMonth: currentMonthStr(),
     },
     include: { product: { select: { name: true } } },
@@ -77,7 +71,7 @@ export async function POST(req: NextRequest) {
   if (invLeader) {
     await sendPushToOwner(invLeader.id, {
       title: "🛒 Nueva compra personal — falta confirmar",
-      body: `${actorName(session.user.name)} · ${purchase.product.name} × ${purchase.quantity} · $${totalAmount.toFixed(2)}`,
+      body: `${actorName(session.user.name)} · ${purchase.product.name} × ${purchase.quantity} · ${priceMode === "COST" ? "precio al costo" : "precio Dropi"}`,
       url: "/area/compras-personales",
     }).catch(() => null);
   }

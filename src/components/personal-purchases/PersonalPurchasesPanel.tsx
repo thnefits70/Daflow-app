@@ -4,12 +4,12 @@ import { useEffect, useState } from "react";
 import { ShoppingBag, Camera } from "lucide-react";
 import { LiveCameraCapture } from "@/components/shared/LiveCameraCapture";
 
-type RetailProduct = { id: string; name: string; photo: string | null; costPrice: number; dropiPrice: number };
+type RetailProduct = { id: string; name: string; photo: string | null };
 type BuyerRelation = "SELF" | "MINOR_CHILD" | "OTHER_FAMILY";
 type Purchase = {
   id: string;
   quantity: number;
-  totalAmount: number;
+  totalAmount: number | null;
   installments: number;
   priceMode: string;
   status: string;
@@ -25,15 +25,15 @@ function money(n: number) {
 
 const STATUS_LABEL: Record<string, { label: string; color: string }> = {
   PENDING_INVENTORY: { label: "Esperando confirmación de bodega", color: "#D9A441" },
-  PENDING_FINANCE: { label: "Ya podés retirarlo — falta cerrar el precio", color: "#1E5EFF" },
+  PENDING_FINANCE: { label: "Ya podés retirarlo — falta que Nairoby cierre el precio", color: "#1E5EFF" },
   APPROVED: { label: "Aprobada", color: "#22C55E" },
   REJECTED: { label: "Rechazada", color: "#C4453A" },
 };
 
-// Confirmado 2026-08-18: pantalla de autoservicio para cualquier
-// colaborador — elige producto, para quién es, ve el precio calculado (se
-// muestra SOLO acá, no se repite después), toma la foto en vivo, y si el
-// total es >= $25 puede elegir pagarlo en 2 cuotas.
+// Confirmado 2026-08-18 (ajustado el mismo día): el colaborador solo
+// DECLARA para quién es la compra — nunca ve ni fija un monto en dólares.
+// El sistema le dice si eso califica para precio al costo o Dropi y por
+// qué; el precio real lo digita Nairoby después, al cerrar la compra.
 export function PersonalPurchasesPanel() {
   const [products, setProducts] = useState<RetailProduct[] | null>(null);
   const [purchases, setPurchases] = useState<Purchase[] | null>(null);
@@ -41,8 +41,7 @@ export function PersonalPurchasesPanel() {
   const [quantity, setQuantity] = useState(1);
   const [buyerRelation, setBuyerRelation] = useState<BuyerRelation>("SELF");
   const [buyerNote, setBuyerNote] = useState("");
-  const [preview, setPreview] = useState<{ priceMode: string; unitPrice: number; cooldownNote: string | null } | null>(null);
-  const [installments, setInstallments] = useState(1);
+  const [preview, setPreview] = useState<{ priceMode: string; cooldownNote: string | null; ruleText: string | null } | null>(null);
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [takingPhoto, setTakingPhoto] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -63,10 +62,6 @@ export function PersonalPurchasesPanel() {
       .then(setPreview);
   }, [productId, buyerRelation]);
 
-  const product = products?.find((p) => p.id === productId);
-  const total = preview ? preview.unitPrice * quantity : 0;
-  const canSplit = total >= 25;
-
   async function submit() {
     if (!productId || !photoUrl) return;
     setBusy(true);
@@ -80,13 +75,12 @@ export function PersonalPurchasesPanel() {
         livePhotoUrl: photoUrl,
         buyerRelation,
         buyerNote: buyerNote.trim() || undefined,
-        installments: canSplit ? installments : 1,
       }),
     });
     setBusy(false);
     const data = await res.json().catch(() => null);
     if (!res.ok) { setErr(data?.error ?? "No se pudo enviar."); return; }
-    setProductId(""); setQuantity(1); setBuyerRelation("SELF"); setBuyerNote(""); setPhotoUrl(null); setInstallments(1);
+    setProductId(""); setQuantity(1); setBuyerRelation("SELF"); setBuyerNote(""); setPhotoUrl(null);
     loadPurchases();
   }
 
@@ -125,27 +119,20 @@ export function PersonalPurchasesPanel() {
             <input className="rounded border border-rule bg-cloud px-2.5 py-1.5 text-[13px]" placeholder="Contá para quién es (ej. mi hijo Juan, 8 años)" value={buyerNote} onChange={(e) => setBuyerNote(e.target.value)} />
           )}
 
-          <div className="flex items-center gap-3">
-            <div>
-              <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Cantidad</label>
-              <input className="rounded border border-rule bg-cloud px-2.5 py-1.5 text-[13px] w-20" type="number" min={1} value={quantity} onChange={(e) => setQuantity(Math.max(1, Number(e.target.value)))} />
-            </div>
-            {preview && product && (
-              <div className="text-[13px]">
-                <div className="font-bold">
-                  {money(preview.unitPrice)} × {quantity} = {money(total)}
-                  <span className="text-steel-dim font-normal text-[11px] ml-1.5">({preview.priceMode === "COST" ? "precio al costo" : "precio Dropi"})</span>
-                </div>
-                {preview.cooldownNote && <div className="text-[11px] text-steel-dim mt-0.5 max-w-md">{preview.cooldownNote}</div>}
-              </div>
-            )}
+          <div>
+            <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Cantidad</label>
+            <input className="rounded border border-rule bg-cloud px-2.5 py-1.5 text-[13px] w-20" type="number" min={1} value={quantity} onChange={(e) => setQuantity(Math.max(1, Number(e.target.value)))} />
           </div>
 
-          {canSplit && (
-            <label className="flex items-center gap-2 text-[12.5px]">
-              <input type="checkbox" checked={installments === 2} onChange={(e) => setInstallments(e.target.checked ? 2 : 1)} />
-              Pagarlo en 2 cuotas (el total es {money(total)}, califica por ser ≥ $25)
-            </label>
+          {preview && (
+            <div className="text-[12.5px] bg-cloud border border-rule rounded-md p-3">
+              <div className="font-bold">
+                Esta compra califica a <span className={preview.priceMode === "COST" ? "text-green" : "text-steel"}>{preview.priceMode === "COST" ? "precio al costo" : "precio Dropi"}</span>
+              </div>
+              {preview.ruleText && <div className="text-[11.5px] text-steel-dim mt-1">{preview.ruleText}</div>}
+              {preview.cooldownNote && <div className="text-[11.5px] text-steel-dim mt-1">{preview.cooldownNote}</div>}
+              <div className="text-[11px] text-steel-dim mt-1.5 italic">El monto en dólares lo va a confirmar Nairoby al cerrar tu compra.</div>
+            </div>
           )}
 
           <div>
@@ -181,7 +168,9 @@ export function PersonalPurchasesPanel() {
             return (
               <div key={p.id} className="flex items-center gap-3 text-[12.5px] py-2 border-b border-rule last:border-0 flex-wrap">
                 <span className="font-semibold flex-1 min-w-[140px]">{p.product.name} × {p.quantity}</span>
-                <span className="font-bold tabular-nums">{money(p.totalAmount)}{p.installments > 1 ? ` (${p.installments} cuotas)` : ""}</span>
+                <span className="font-bold tabular-nums">
+                  {p.totalAmount != null ? `${money(p.totalAmount)}${p.installments > 1 ? ` (${p.installments} cuotas)` : ""}` : "Precio por confirmar"}
+                </span>
                 <span className="text-[10.5px] font-semibold rounded-full px-2 py-0.5" style={{ color: s.color, border: `1px solid ${s.color}` }}>{s.label}</span>
                 {p.rejectionReason && <span className="text-[11px] text-red">{p.rejectionReason}</span>}
               </div>
