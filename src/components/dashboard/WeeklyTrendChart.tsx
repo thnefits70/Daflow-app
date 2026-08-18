@@ -287,6 +287,22 @@ export function WeeklyTrendChart({
     const rose = points[i + 1].value >= points[i].value;
     segColors.push((invertDirection ? !rose : rose) ? "#14C7C7" : "#FF9B90");
   }
+  // Points stay invisible until the draw-in sweep actually reaches their x
+  // position — confirmed 2026-08-18: showing every point up front (even
+  // before the line reached it) spoiled the "what happens next" suspense the
+  // draw-in is going for. Same equal-per-segment timing assumption as the
+  // line segments above, since coords are evenly spaced in x.
+  const dotRevealAnimate = (i: number) =>
+    segCount > 0 && !reducedMotion ? (
+      <animate
+        attributeName="opacity"
+        dur={`${CYCLE_SECONDS}s`}
+        repeatCount="indefinite"
+        keyTimes={`0;${((i / segCount) * drawFrac).toFixed(4)};${Math.min(1, (i / segCount) * drawFrac + 0.0025).toFixed(4)};1`}
+        values="0;0;1;1"
+      />
+    ) : null;
+
   let drawInDot: React.ReactNode = null;
   if (segCount > 0 && !reducedMotion) {
     const dotKeyTimes = segColors.map((_, i) => ((i / segCount) * drawFrac).toFixed(4)).concat(["1"]).join(";");
@@ -569,7 +585,10 @@ export function WeeklyTrendChart({
                 stroke="#0a1526"
                 strokeWidth={2}
                 pointerEvents="none"
-              />
+                opacity={segCount > 0 && !reducedMotion ? 0 : 1}
+              >
+                {dotRevealAnimate(i)}
+              </circle>
             );
           }
           return (
@@ -582,7 +601,10 @@ export function WeeklyTrendChart({
               stroke={isHover ? "#0a1526" : isLast ? "none" : "#14C7C7"}
               strokeWidth={isHover ? 2 : isLast ? 0 : 1.5}
               pointerEvents="none"
-            />
+              opacity={segCount > 0 && !reducedMotion ? 0 : 1}
+            >
+              {dotRevealAnimate(i)}
+            </circle>
           );
         })}
 
