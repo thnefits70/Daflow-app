@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 
 export type WeeklyPoint = { week: string; value: number; detail?: string };
 
@@ -96,6 +96,28 @@ export function smoothPath(coords: { x: number; y: number }[]) {
   return d;
 }
 
+// Same catmull-rom-to-bezier math as smoothPath, but returns one "M..C.."
+// string per consecutive pair instead of one concatenated path — so each
+// segment can be revealed/colored independently while still joining up into
+// the exact same curve (no visual seam) as the combined smoothPath output.
+export function smoothPathSegments(coords: { x: number; y: number }[]): string[] {
+  const segments: string[] = [];
+  for (let i = 0; i < coords.length - 1; i++) {
+    const p0 = coords[i - 1] ?? coords[i];
+    const p1 = coords[i];
+    const p2 = coords[i + 1];
+    const p3 = coords[i + 2] ?? p2;
+    const cp1x = p1.x + (p2.x - p0.x) / 6;
+    const cp1y = p1.y + (p2.y - p0.y) / 6;
+    const cp2x = p2.x - (p3.x - p1.x) / 6;
+    const cp2y = p2.y - (p3.y - p1.y) / 6;
+    segments.push(
+      `M${p1.x.toFixed(1)},${p1.y.toFixed(1)} C${cp1x.toFixed(1)},${cp1y.toFixed(1)} ${cp2x.toFixed(1)},${cp2y.toFixed(1)} ${p2.x.toFixed(1)},${p2.y.toFixed(1)}`
+    );
+  }
+  return segments;
+}
+
 export function WeeklyTrendChart({
   label,
   deptName,
@@ -164,6 +186,7 @@ export function WeeklyTrendChart({
   // es igual de chica y difícil de leer.
   const [metaZoomed, setMetaZoomed] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
+  const uid = useId();
 
   useEffect(() => {
     function onClickOutside(e: MouseEvent) {
@@ -238,34 +261,64 @@ export function WeeklyTrendChart({
   const tickEvery = Math.max(1, Math.ceil(points.length / 12));
   const hitR = Math.max(4, Math.min(14, stepX / 2 - 1));
 
-  // Traveling light dot that borders the line left-to-right, looping
-  // forever — teal on segments where the value rose vs. the point before
-  // it, light red where it fell. One continuous <animateMotion> along the
-  // exact same path so it never jumps, paired with a calcMode="discrete"
-  // <animate> on `color` (inherited via currentColor) that switches the
-  // instant it crosses into a new segment.
+  // Draw-in: the line traces itself left-to-right over DRAW_SECONDS (colored
+  // teal per segment where the value rose vs. the point before it, light red
+  // where it fell — same semantics as colorDotsByDirection/invertDirection
+  // elsewhere in this file), holds fully drawn for PAUSE_SECONDS, then resets
+  // and redraws — on an indefinite loop. Confirmed 2026-08-18 against a
+  // reference video: ~25s to draw, ~3min hold before it redraws.
+  //
+  // Built entirely with SMIL (no rAF/JS timers) so it survives this
+  // component's frequent re-renders (hover state etc.) without restarting —
+  // same technique the old always-on traveling dot used. Each segment gets
+  // its own <path pathLength="1"> so the stroke-dashoffset reveal doesn't
+  // need real pixel lengths measured off the DOM; segments are assumed
+  // equal-duration since points are evenly spaced in x (stepX is constant),
+  // which is the same approximation the previous traveling dot used for its
+  // per-segment color keyTimes.
   const segCount = points.length - 1;
-  const travelDur = Math.max(8, Math.min(20, segCount * 0.9));
-  let travelDot: React.ReactNode = null;
+  const DRAW_SECONDS = 25;
+  const PAUSE_SECONDS = 180;
+  const CYCLE_SECONDS = DRAW_SECONDS + PAUSE_SECONDS;
+  const drawFrac = DRAW_SECONDS / CYCLE_SECONDS;
+  const lineSegments = segCount > 0 ? smoothPathSegments(coords) : [];
+  const segColors: string[] = [];
+  for (let i = 0; i < segCount; i++) {
+    const rose = points[i + 1].value >= points[i].value;
+    segColors.push((invertDirection ? !rose : rose) ? "#14C7C7" : "#FF9B90");
+  }
+  let drawInDot: React.ReactNode = null;
   if (segCount > 0 && !reducedMotion) {
-    const segColors: string[] = [];
-    for (let i = 0; i < segCount; i++) {
-      const rose = points[i + 1].value >= points[i].value;
-      segColors.push((invertDirection ? !rose : rose) ? "#14C7C7" : "#FF9B90");
-    }
-    const keyTimes = segColors.map((_, i) => (i / segCount).toFixed(4)).join(";");
-    travelDot = (
-      <g color="#14C7C7">
-        <animateMotion dur={`${travelDur}s`} repeatCount="indefinite" rotate="0" path={linePath} />
+    const dotKeyTimes = segColors.map((_, i) => ((i / segCount) * drawFrac).toFixed(4)).concat(["1"]).join(";");
+    const dotValues = segColors.concat([segColors[segColors.length - 1]]).join(";");
+    const fadeAt = Math.min(1, drawFrac + 0.005).toFixed(4);
+    drawInDot = (
+      <g color={segColors[0]}>
+        <animateMotion
+          dur={`${CYCLE_SECONDS}s`}
+          repeatCount="indefinite"
+          rotate="0"
+          path={linePath}
+          calcMode="linear"
+          keyPoints="0;1;1"
+          keyTimes={`0;${drawFrac.toFixed(4)};1`}
+        />
         <animate
           attributeName="color"
-          dur={`${travelDur}s`}
+          dur={`${CYCLE_SECONDS}s`}
           repeatCount="indefinite"
           calcMode="discrete"
-          keyTimes={keyTimes}
-          values={segColors.join(";")}
+          keyTimes={dotKeyTimes}
+          values={dotValues}
         />
-        <circle r="9" fill="currentColor" opacity="0.3" filter="url(#weekly-trend-dot-glow)" />
+        <animate
+          attributeName="opacity"
+          dur={`${CYCLE_SECONDS}s`}
+          repeatCount="indefinite"
+          keyTimes={`0;${drawFrac.toFixed(4)};${fadeAt};1`}
+          values="1;1;0;0"
+        />
+        <circle r="9" fill="currentColor" opacity="0.3" filter={`url(#weekly-trend-dot-glow-${uid})`} />
         <circle r="3.2" fill="currentColor" />
       </g>
     );
@@ -350,13 +403,26 @@ export function WeeklyTrendChart({
         onMouseLeave={() => setHoverIndex(null)}
       >
         <defs>
-          <linearGradient id="weekly-trend-fill" x1="0" y1="0" x2="0" y2="1">
+          <linearGradient id={`weekly-trend-fill-${uid}`} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="#14C7C7" stopOpacity="0.32" />
             <stop offset="100%" stopColor="#14C7C7" stopOpacity="0" />
           </linearGradient>
-          <filter id="weekly-trend-dot-glow" x="-200%" y="-200%" width="500%" height="500%">
+          <filter id={`weekly-trend-dot-glow-${uid}`} x="-200%" y="-200%" width="500%" height="500%">
             <feGaussianBlur stdDeviation="3.5" />
           </filter>
+          {segCount > 0 && !reducedMotion && (
+            <clipPath id={`weekly-trend-area-clip-${uid}`}>
+              <rect x={padL} y={padT} width={innerW} height={innerH}>
+                <animate
+                  attributeName="width"
+                  dur={`${CYCLE_SECONDS}s`}
+                  repeatCount="indefinite"
+                  keyTimes={`0;${drawFrac.toFixed(4)};1`}
+                  values={`0;${innerW.toFixed(1)};${innerW.toFixed(1)}`}
+                />
+              </rect>
+            </clipPath>
+          )}
         </defs>
 
         {Array.from({ length: yTicks + 1 }).map((_, i) => {
@@ -432,8 +498,45 @@ export function WeeklyTrendChart({
           ) : null
         )}
 
-        <path d={areaPath} fill="url(#weekly-trend-fill)" />
-        <path d={linePath} fill="none" stroke="#14C7C7" strokeWidth="2.25" strokeLinejoin="round" strokeLinecap="round" />
+        {segCount > 0 && !reducedMotion ? (
+          <>
+            <g clipPath={`url(#weekly-trend-area-clip-${uid})`}>
+              <path d={areaPath} fill={`url(#weekly-trend-fill-${uid})`} />
+            </g>
+            {lineSegments.map((d, i) => {
+              const segStart = ((i / segCount) * drawFrac).toFixed(4);
+              const segEnd = (((i + 1) / segCount) * drawFrac).toFixed(4);
+              const keyTimes = i === 0 ? `0;${segEnd};1` : `0;${segStart};${segEnd};1`;
+              const values = i === 0 ? "1;0;0" : "1;1;0;0";
+              return (
+                <path
+                  key={i}
+                  d={d}
+                  fill="none"
+                  stroke={segColors[i]}
+                  strokeWidth="2.25"
+                  strokeLinejoin="round"
+                  strokeLinecap="round"
+                  pathLength={1}
+                  strokeDasharray={1}
+                >
+                  <animate
+                    attributeName="stroke-dashoffset"
+                    dur={`${CYCLE_SECONDS}s`}
+                    repeatCount="indefinite"
+                    keyTimes={keyTimes}
+                    values={values}
+                  />
+                </path>
+              );
+            })}
+          </>
+        ) : (
+          <>
+            <path d={areaPath} fill={`url(#weekly-trend-fill-${uid})`} />
+            <path d={linePath} fill="none" stroke="#14C7C7" strokeWidth="2.25" strokeLinejoin="round" strokeLinecap="round" />
+          </>
+        )}
 
         {hoverIndex !== null && (
           <line
@@ -595,7 +698,7 @@ export function WeeklyTrendChart({
             );
           })()}
 
-        {travelDot}
+        {drawInDot}
       </svg>
     </div>
   );
