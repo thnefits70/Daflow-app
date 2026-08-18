@@ -11,6 +11,16 @@ type Props = {
   onCancel?: () => void;
 };
 
+// Confirmado 2026-08-18: pedido explícito del usuario — sin estas
+// restricciones, en celulares con varias cámaras traseras el navegador a
+// veces elige sola la lente ultra gran angular (efecto "ojo de pez",
+// bordes/esquinas curvos). Pedir un ancho/alto ideal es lo que hace que
+// elija la lente principal en vez de esa.
+const CAMERA_CONSTRAINTS: MediaStreamConstraints = {
+  video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 960 } },
+  audio: false,
+};
+
 // Confirmado 2026-08-18: pedido explícito del usuario — la foto de una
 // compra personal tiene que ser tomada EN VIVO, nunca elegida de la
 // galería. Ningún sistema web puede garantizarlo al 100% (alguien podría
@@ -29,7 +39,7 @@ export function LiveCameraCapture({ folder, onCaptured, onCancel }: Props) {
   useEffect(() => {
     let cancelled = false;
     navigator.mediaDevices
-      .getUserMedia({ video: { facingMode: "environment" }, audio: false })
+      .getUserMedia(CAMERA_CONSTRAINTS)
       .then((stream) => {
         if (cancelled) {
           stream.getTracks().forEach((t) => t.stop());
@@ -83,7 +93,7 @@ export function LiveCameraCapture({ folder, onCaptured, onCancel }: Props) {
     setPreviewUrl(null);
     setUploadError("");
     navigator.mediaDevices
-      .getUserMedia({ video: { facingMode: "environment" }, audio: false })
+      .getUserMedia(CAMERA_CONSTRAINTS)
       .then((stream) => {
         streamRef.current = stream;
         if (videoRef.current) videoRef.current.srcObject = stream;
@@ -98,7 +108,7 @@ export function LiveCameraCapture({ folder, onCaptured, onCancel }: Props) {
       ) : previewUrl ? (
         <div>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={previewUrl} alt="Foto tomada" className="w-full max-w-xs rounded-md" />
+          <img src={previewUrl} alt="Foto tomada" className="w-full max-w-xs aspect-[4/3] object-cover rounded-md" />
           {uploading && <div className="text-[11.5px] text-steel-dim mt-2">Subiendo…</div>}
           {uploadError && (
             <div className="mt-2">
@@ -111,7 +121,7 @@ export function LiveCameraCapture({ folder, onCaptured, onCancel }: Props) {
         </div>
       ) : (
         <div>
-          <video ref={videoRef} autoPlay playsInline muted className="w-full max-w-xs rounded-md bg-black" />
+          <video ref={videoRef} autoPlay playsInline muted className="w-full max-w-xs aspect-[4/3] object-cover rounded-md bg-black" />
           <div className="flex items-center gap-2 mt-2.5">
             <button
               type="button"
