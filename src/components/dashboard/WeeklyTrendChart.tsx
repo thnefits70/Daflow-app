@@ -187,6 +187,16 @@ export function WeeklyTrendChart({
   const [metaZoomed, setMetaZoomed] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const uid = useId();
+  // Real per-segment pixel lengths for the draw-in stroke-dashoffset reveal,
+  // measured after mount. Confirmed 2026-08-18: the `pathLength` SVG
+  // attribute (which would let dasharray/dashoffset use normalized 0..1
+  // units without measuring anything) is NOT rescaling stroke-dasharray in
+  // practice — the computed dash pattern stayed a literal "1px" regardless
+  // of the segment's real length, rendering every segment as a trail of tiny
+  // dots instead of a solid line. getTotalLength() + real pixel units is the
+  // reliable, widely-supported approach, so that's what this measures.
+  const segPathRefs = useRef<(SVGPathElement | null)[]>([]);
+  const [segLens, setSegLens] = useState<number[]>([]);
 
   useEffect(() => {
     function onClickOutside(e: MouseEvent) {
@@ -206,6 +216,10 @@ export function WeeklyTrendChart({
   useEffect(() => {
     setReducedMotion(window.matchMedia("(prefers-reduced-motion: reduce)").matches);
   }, []);
+
+  useEffect(() => {
+    setSegLens(segPathRefs.current.map((el) => el?.getTotalLength() ?? 0));
+  }, [points, reducedMotion]);
 
   if (points.length === 0) return null;
 
@@ -523,9 +537,16 @@ export function WeeklyTrendChart({
               const segStart = ((i / segCount) * drawFrac).toFixed(4);
               const segEnd = (((i + 1) / segCount) * drawFrac).toFixed(4);
               const keyTimes = i === 0 ? `0;${segEnd};1` : `0;${segStart};${segEnd};1`;
-              const values = i === 0 ? "1;0;0" : "1;1;0;0";
+              // Real measured length (falls back to a value larger than any
+              // realistic segment so it stays fully hidden pre-measurement,
+              // instead of flashing fully drawn for a frame).
+              const len = segLens[i] || 99999;
+              const values = i === 0 ? `${len};0;0` : `${len};${len};0;0`;
               return (
                 <path
+                  ref={(el) => {
+                    segPathRefs.current[i] = el;
+                  }}
                   key={i}
                   d={d}
                   fill="none"
@@ -533,8 +554,8 @@ export function WeeklyTrendChart({
                   strokeWidth="2.25"
                   strokeLinejoin="round"
                   strokeLinecap="round"
-                  pathLength={1}
-                  strokeDasharray={1}
+                  strokeDasharray={len}
+                  strokeDashoffset={len}
                 >
                   <animate
                     attributeName="stroke-dashoffset"
