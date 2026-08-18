@@ -12,13 +12,22 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ req
   if (!(await canConfirmMarketingDesign()) || !session) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
   const { requestId } = await params;
+  const existing = await prisma.purchaseRequest.findUnique({ where: { id: requestId }, select: { id: true } });
+  if (!existing) return NextResponse.json({ error: "No encontrada." }, { status: 404 });
+
   const isAdmin = session.user.role === "admin";
-  const followUp = await prisma.purchaseReceiptFollowUp.update({
+  const confirmedById = isAdmin ? null : session.user.id;
+  // Fix confirmado 2026-08-18: pedidos recibidos ANTES de que existiera esta
+  // función (2026-08-08) nunca tuvieron su fila PurchaseReceiptFollowUp
+  // creada — el .update de antes fallaba en silencio para esos y el botón
+  // se quedaba "pendiente" para siempre. upsert la crea si falta.
+  const followUp = await prisma.purchaseReceiptFollowUp.upsert({
     where: { requestId },
-    data: { designConfirmedAt: new Date(), designConfirmedById: isAdmin ? null : session.user.id },
+    update: { designConfirmedAt: new Date(), designConfirmedById: confirmedById },
+    create: { requestId, designConfirmedAt: new Date(), designConfirmedById: confirmedById },
     include: { designConfirmedBy: { select: { name: true } } },
   }).catch(() => null);
-  if (!followUp) return NextResponse.json({ error: "No encontrada." }, { status: 404 });
+  if (!followUp) return NextResponse.json({ error: "No se pudo confirmar." }, { status: 500 });
 
   return NextResponse.json(followUp);
 }
