@@ -20,7 +20,7 @@ type Row = {
   id: string;
   groupId: string;
   requestNumber: number | null;
-  status: "PENDING_APPROVAL" | "REJECTED" | "APPROVED" | "PAID" | "RECEIVED";
+  status: "PENDING_APPROVAL" | "REJECTED" | "APPROVED" | "PAID" | "RECEIVED_PENDING_REVIEW" | "RECEIVED";
   quantity: number;
   unitCost: number;
   totalCost: number;
@@ -67,6 +67,10 @@ const STEPS: { key: Row["status"]; label: string }[] = [
   { key: "PENDING_APPROVAL", label: "Enviado" },
   { key: "APPROVED", label: "Aprobado" },
   { key: "PAID", label: "Pagado" },
+  // Confirmado 2026-08-18: pedido explícito del usuario — el equipo de
+  // Inventario ya recibió (foto+video), pero todavía falta la aprobación
+  // final de Daniel antes de considerarse RECIBIDO de verdad.
+  { key: "RECEIVED_PENDING_REVIEW", label: "Pendiente aprobación" },
   { key: "RECEIVED", label: "Recibido" },
 ];
 
@@ -594,7 +598,7 @@ function GroupCard({
           <div className="text-[10px] text-steel-dim mt-1.5">
             {groupIdx >= 1 && <>Aprobada por {actorName(g[0].reviewedBy?.name)} · </>}
             {groupIdx >= 2 && <>Pagada por {actorName(g[0].paidBy?.name)} · </>}
-            {groupIdx >= 3 && <>Recibida por {[...new Set(g.map((r) => actorName(r.receipt?.confirmedBy?.name)))].join(", ")}</>}
+            {groupIdx >= 4 && <>Recibida por {[...new Set(g.map((r) => actorName(r.receipt?.confirmedBy?.name)))].join(", ")}</>}
           </div>
           {groupIdx === 1 && (
             <button

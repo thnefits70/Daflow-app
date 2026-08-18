@@ -12,7 +12,7 @@ import { PurchaseOperationDocuments, type OperationDocRow } from "./PurchaseOper
 type Row = {
   id: string;
   groupId: string;
-  status: "PAID" | "RECEIVED";
+  status: "PAID" | "RECEIVED_PENDING_REVIEW" | "RECEIVED";
   quantity: number;
   unitCost: number;
   totalCost: number;
@@ -29,10 +29,14 @@ type Row = {
   invoiceDocUrl: string | null;
   receipt: {
     photoUrls: string[];
+    videoUrls: string[];
     receivedQuantity: number;
+    comment: string | null;
     aiPhotoMatch: boolean | null;
     aiPhotoNote: string | null;
     confirmedBy: { name: string } | null;
+    confirmedAt: string;
+    approvedBy: { name: string } | null;
   } | null;
   // Fix confirmado 2026-08-11: reportado por el usuario — sin esto, el
   // botón "Informar urgente" volvía a mostrar el formulario vacío como si
@@ -50,10 +54,40 @@ type Row = {
   }[];
 };
 
+// Confirmado 2026-08-18: cola de Daniel — "Informar urgente" que su equipo
+// subió y todavía no revisó (ver urgent-reports/pending-review/route.ts).
+type PendingUrgentReport = {
+  id: string;
+  damagedQty: number;
+  incompleteQty: number;
+  differentQty: number;
+  missingQty: number;
+  description: string;
+  mediaUrls: string[];
+  reportedAt: string;
+  reportedBy: { name: string } | null;
+  request: {
+    quantity: number;
+    unitCost: number;
+    totalCost: number;
+    catalogItem: { name: string; photos: string[] };
+    supplier: { name: string };
+  };
+};
+
 type PendingReplacement = {
   id: string;
   quantity: number;
   replacementDueDate: string | null;
+  // Confirmado 2026-08-18: pedido explícito del usuario — mismo patrón de
+  // equipo/Daniel que la recepción normal. Mientras replacementSubmittedAt
+  // sea null, falta que el equipo suba fotos; con valor, falta que Daniel
+  // apruebe (ver approve-replacement/route.ts).
+  replacementSubmittedAt: string | null;
+  replacementSubmittedBy: { name: string } | null;
+  replacementPhotoUrls: string[];
+  replacementAiMatch: boolean | null;
+  replacementAiNote: string | null;
   report: {
     request: { id: string; catalogItem: { name: string; photos: string[] }; supplier: { name: string } };
   };
@@ -100,14 +134,15 @@ function goodQuantity(r: Row): number {
 
 const CREDIT_CLAIM_WINDOW_DAYS = 7;
 
-// Fix confirmado 2026-08-11: pedido explícito del usuario — admin puede ver
-// esta pestaña (para supervisar) pero nunca debe poder confirmar que llegó,
-// informar urgente, ni verificar cambios recibidos — eso es exclusivo del
-// líder de Inventario. Los botones quedan visibles pero deshabilitados para
-// admin, nunca ocultos del todo (así sabe que existen, solo no los puede
-// usar). El servidor también lo bloquea (canActOnPurchaseReceiving), así
-// que esto no es solo cosmético.
-export function PurchaseReceivingPanel({ isAdmin = false }: { isAdmin?: boolean }) {
+// Fix confirmado 2026-08-11 (ampliado 2026-08-18): admin puede ver esta
+// pestaña (para supervisar) pero nunca debe poder recibir, aprobar,
+// informar urgente, ni verificar cambios recibidos — eso es del equipo de
+// Inventario (recibir/informar) y de Daniel (aprobar/verificar cambios). Los
+// botones quedan visibles pero deshabilitados para admin, nunca ocultos del
+// todo (así sabe que existen, solo no los puede usar). El servidor también
+// lo bloquea (canReceivePurchasesTeam/canActOnPurchaseReceiving), así que
+// esto no es solo cosmético.
+export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false, canApprove = false }: { isAdmin?: boolean; canReceiveTeam?: boolean; canApprove?: boolean }) {
   const router = useRouter();
   const [rows, setRows] = useState<Row[] | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
@@ -120,9 +155,21 @@ export function PurchaseReceivingPanel({ isAdmin = false }: { isAdmin?: boolean 
   const [minorDifferenceConfirmed, setMinorDifferenceConfirmed] = useState(false);
   const { onPaste: onPastePhoto, onMouseEnter: onPasteHoverIn, onMouseLeave: onPasteHoverOut } = usePasteFile((file) => addPhoto(file));
   const photoFileInputRef = useRef<HTMLInputElement>(null);
+  const photoCameraInputRef = useRef<HTMLInputElement>(null);
   const [comment, setComment] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+
+  // Confirmado 2026-08-18: pedido explícito del usuario — video de evidencia
+  // ADEMÁS de la foto (que sigue siendo obligatoria), opcional, útil sobre
+  // todo cuando llegan muchos bultos.
+  const [receivedVideoUrls, setReceivedVideoUrls] = useState<string[]>([]);
+  const [uploadingVideo, setUploadingVideo] = useState(false);
+  const videoFileInputRef = useRef<HTMLInputElement>(null);
+  const videoCameraInputRef = useRef<HTMLInputElement>(null);
+
+  // Cola de Daniel: "Informar urgente" que el equipo subió y todavía no revisó.
+  const [pendingUrgentReports, setPendingUrgentReports] = useState<PendingUrgentReport[]>([]);
 
   // Informar urgente — cantidades desglosadas por tipo + evidencia.
   const [urgentDamagedQty, setUrgentDamagedQty] = useState("");
@@ -144,8 +191,12 @@ export function PurchaseReceivingPanel({ isAdmin = false }: { isAdmin?: boolean 
   function load() {
     fetch("/api/purchase-requests?view=receiving").then((r) => (r.ok ? r.json() : [])).then(setRows).catch(() => setRows([]));
     fetch("/api/purchase-requests/urgent-resolutions/pending-replacements").then((r) => (r.ok ? r.json() : [])).then(setPendingReplacements).catch(() => setPendingReplacements([]));
+    if (canApprove) {
+      fetch("/api/purchase-requests/urgent-reports/pending-review").then((r) => (r.ok ? r.json() : [])).then(setPendingUrgentReports).catch(() => setPendingUrgentReports([]));
+    }
   }
-  useEffect(load, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(load, [canApprove]);
 
   async function addPhoto(file: File) {
     if (receivedPhotoUrls.length >= 3) return;
@@ -169,6 +220,27 @@ export function PurchaseReceivingPanel({ isAdmin = false }: { isAdmin?: boolean 
     setReceivedPhotoUrls((ps) => ps.filter((_, i) => i !== idx));
     setAiResult(null);
     setMinorDifferenceConfirmed(false);
+  }
+
+  // Confirmado 2026-08-18: video no se comprime (no es viable en el
+  // navegador sin una librería pesada) — mismo criterio que ya usa
+  // addUrgentMedia más abajo, el límite de 15 MB de /api/upload/sign sigue
+  // aplicando igual.
+  async function addVideo(file: File) {
+    if (receivedVideoUrls.length >= 2) return;
+    setUploadingVideo(true);
+    setErr("");
+    const uploaded = await uploadFile(file, "purchase-request-receipts");
+    setUploadingVideo(false);
+    if (!uploaded.ok) {
+      setErr(uploaded.error);
+      return;
+    }
+    setReceivedVideoUrls((vs) => [...vs, uploaded.url]);
+  }
+
+  function removeVideo(idx: number) {
+    setReceivedVideoUrls((vs) => vs.filter((_, i) => i !== idx));
   }
 
   async function verifyPhotos(requestId: string, photos: string[]) {
@@ -198,6 +270,7 @@ export function PurchaseReceivingPanel({ isAdmin = false }: { isAdmin?: boolean 
       body: JSON.stringify({
         receivedQuantity: Number(receivedQty),
         photoUrls: receivedPhotoUrls,
+        videoUrls: receivedVideoUrls,
         comment: comment.trim() || undefined,
         aiPhotoMatch: aiResult?.likelyMatch ?? null,
         aiPhotoNote: aiResult?.note ?? null,
@@ -214,11 +287,42 @@ export function PurchaseReceivingPanel({ isAdmin = false }: { isAdmin?: boolean 
     setOpenId(null);
     setReceivedQty("");
     setReceivedPhotoUrls([]);
+    setReceivedVideoUrls([]);
     setAiResult(null);
     setMinorDifferenceConfirmed(false);
     setComment("");
     load();
     router.refresh();
+  }
+
+  // Confirmado 2026-08-18: pedido explícito del usuario — aprobación final
+  // de Daniel sobre una recepción que ya hizo su equipo, recién acá pasa a
+  // RECEIVED de verdad.
+  async function approveReceipt(id: string) {
+    setBusy(true);
+    setErr("");
+    const res = await fetch(`/api/purchase-requests/${id}/approve-receipt`, { method: "POST" });
+    setBusy(false);
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      setErr(data?.error ?? "No se pudo aprobar.");
+      return;
+    }
+    load();
+    router.refresh();
+  }
+
+  async function approveUrgentReport(id: string) {
+    setBusy(true);
+    setErr("");
+    const res = await fetch(`/api/purchase-requests/urgent-reports/${id}/approve`, { method: "POST" });
+    setBusy(false);
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      setErr(data?.error ?? "No se pudo aprobar.");
+      return;
+    }
+    setPendingUrgentReports((rs) => rs.filter((r) => r.id !== id));
   }
 
   function openUrgent(id: string) {
@@ -325,12 +429,65 @@ export function PurchaseReceivingPanel({ isAdmin = false }: { isAdmin?: boolean 
     router.refresh();
   }
 
+  // Confirmado 2026-08-18: pedido explícito del usuario — aprobación final
+  // de Daniel sobre un cambio de mercadería que ya subió su equipo.
+  async function approveReplacement(resolutionId: string) {
+    setBusy(true);
+    setErr("");
+    const res = await fetch(`/api/purchase-requests/urgent-resolutions/${resolutionId}/approve-replacement`, { method: "POST" });
+    setBusy(false);
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      setErr(data?.error ?? "No se pudo aprobar.");
+      return;
+    }
+    load();
+    router.refresh();
+  }
+
   if (!rows) return <div className="text-steel text-[13px]">Cargando…</div>;
 
   const groups = groupRows(rows);
 
   return (
     <div className="flex flex-col gap-2.5">
+      {canApprove && pendingUrgentReports.length > 0 && (
+        <div className="bg-surface border border-red/40 rounded-md p-4 mb-1">
+          <div className="flex items-center gap-1.5 text-[12px] font-bold mb-2 text-red">
+            <AlertTriangle size={14} /> Reportes urgentes pendientes de tu revisión
+          </div>
+          <div className="flex flex-col gap-2.5">
+            {pendingUrgentReports.map((pr) => {
+              const total = pr.damagedQty + pr.incompleteQty + pr.differentQty + pr.missingQty;
+              return (
+                <div key={pr.id} className="bg-cloud rounded-md p-3">
+                  <div className="text-[13px] font-bold">{pr.request.catalogItem.name}</div>
+                  <div className="text-[11.5px] text-steel mb-2">
+                    {pr.request.supplier.name} — {total} un. afectadas · reportado por {actorName(pr.reportedBy?.name)} · {new Date(pr.reportedAt).toLocaleDateString("es-MX")}
+                  </div>
+                  <div className="text-[11.5px] text-ink mb-2">&quot;{pr.description}&quot;</div>
+                  <div className="grid grid-cols-4 gap-2 mb-2.5">
+                    {pr.mediaUrls.map((url, i) =>
+                      isVideoUrl(url) ? (
+                        <video key={i} src={url} controls className="w-full h-32 rounded object-contain border border-rule bg-navy" />
+                      ) : (
+                        <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="bg-navy rounded border border-rule flex items-center justify-center h-32">
+                          <img src={url} alt="" className="max-w-full max-h-full object-contain" />
+                        </a>
+                      )
+                    )}
+                  </div>
+                  {err && <div className="text-red text-[12px] mb-2">{err}</div>}
+                  <button type="button" disabled={busy} className="rounded border border-red bg-red px-3.5 py-1.5 text-[12px] font-semibold text-white cursor-pointer disabled:opacity-60" onClick={() => approveUrgentReport(pr.id)}>
+                    ✓ Revisar y enviar a Compras
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {pendingReplacements.length > 0 && (
         <div className="bg-surface border border-gold/40 rounded-md p-4 mb-1">
           <div className="flex items-center gap-1.5 text-[12px] font-bold mb-2" style={{ color: "#D9A441" }}>
@@ -378,11 +535,39 @@ export function PurchaseReceivingPanel({ isAdmin = false }: { isAdmin?: boolean 
                       <button type="button" className="text-steel text-[12px] cursor-pointer" onClick={() => { setOpenReplacementId(null); setReplacementPhotoUrls([]); }}>Cancelar</button>
                     </div>
                   </div>
+                ) : pr.replacementSubmittedAt ? (
+                  // Confirmado 2026-08-18: pedido explícito del usuario — el equipo ya
+                  // subió las fotos del cambio, falta la aprobación final de Daniel.
+                  <div>
+                    <div className="text-[11px] text-steel mb-1.5">
+                      Subido por {actorName(pr.replacementSubmittedBy?.name)} · {new Date(pr.replacementSubmittedAt).toLocaleDateString("es-MX")}
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 mb-2.5">
+                      {pr.replacementPhotoUrls.map((url, i) => (
+                        <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="bg-navy rounded border border-rule flex items-center justify-center h-24">
+                          <img src={url} alt="" className="max-w-full max-h-full object-contain" />
+                        </a>
+                      ))}
+                    </div>
+                    {pr.replacementAiNote && (
+                      <div className={`text-[11px] mb-2 ${pr.replacementAiMatch ? "text-teal" : "text-red font-semibold"}`}>🤖 {pr.replacementAiNote}</div>
+                    )}
+                    {err && <div className="text-red text-[12px] mb-2">{err}</div>}
+                    <button
+                      type="button"
+                      disabled={!canApprove || busy}
+                      title={!canApprove ? "Exclusivo del líder de Inventario" : undefined}
+                      className="rounded border border-teal bg-teal px-3.5 py-1.5 text-[12px] font-bold text-navy cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                      onClick={() => approveReplacement(pr.id)}
+                    >
+                      ✓ Aprobar cambio recibido
+                    </button>
+                  </div>
                 ) : (
                   <button
                     type="button"
-                    disabled={isAdmin}
-                    title={isAdmin ? "Exclusivo del líder de Inventario" : undefined}
+                    disabled={!canReceiveTeam}
+                    title={!canReceiveTeam ? "Exclusivo del equipo de Inventario" : undefined}
                     className="rounded border border-teal bg-teal px-3.5 py-1.5 text-[12px] font-bold text-navy cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                     onClick={() => { setOpenReplacementId(pr.id); setReplacementPhotoUrls([]); setErr(""); }}
                   >
@@ -431,6 +616,12 @@ export function PurchaseReceivingPanel({ isAdmin = false }: { isAdmin?: boolean 
                 const creditDeadline = r.paidAt ? new Date(new Date(r.paidAt).getTime() + CREDIT_CLAIM_WINDOW_DAYS * 86400000) : null;
                 const pastCreditWindow = creditDeadline ? new Date() > creditDeadline : false;
                 const urgentTotal = (Number(urgentDamagedQty) || 0) + (Number(urgentDifferentQty) || 0) + (Number(urgentIncompleteQty) || 0);
+                // Confirmado 2026-08-18: pedido explícito del usuario — Daniel debe ver
+                // lado a lado lo que declaró Inventario vs lo que se compró/pagó antes
+                // de aprobar. Si hay reportes urgentes, lo esperado es la cantidad buena,
+                // no lo pedido originalmente.
+                const expectedReceivedQty = r.urgentReports.length > 0 ? goodQuantity(r) : r.quantity;
+                const receivedQtyMatches = r.receipt?.receivedQuantity === expectedReceivedQty;
                 return (
                 <div key={r.id}>
                   <div className="flex items-center justify-between gap-3 flex-wrap mb-0.5">
@@ -439,14 +630,28 @@ export function PurchaseReceivingPanel({ isAdmin = false }: { isAdmin?: boolean 
                       <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide bg-green/15 text-green border border-green/40 rounded-full px-2.5 py-1">
                         <CheckCircle2 size={11} /> Recibido
                       </span>
+                    ) : r.status === "RECEIVED_PENDING_REVIEW" ? (
+                      <span className="text-[10px] font-bold uppercase tracking-wide bg-teal/15 text-teal border border-teal/40 rounded-full px-2.5 py-1">
+                        Pendiente de aprobación
+                      </span>
                     ) : (
                       <span className="text-[10px] font-bold uppercase tracking-wide bg-gold/15 border border-gold/40 rounded-full px-2.5 py-1" style={{ color: "#D9A441" }}>
                         Pendiente
                       </span>
                     )}
                   </div>
-                  {!isMulti && <div className="text-[11.5px] text-steel mb-1">{r.supplier.name} — se pidieron y pagaron {r.quantity} un. · ${r.totalCost.toFixed(2)}</div>}
-                  {isMulti && <div className="text-[11.5px] text-steel mb-1">{r.quantity} un. · ${r.totalCost.toFixed(2)}</div>}
+                  {!isMulti && (
+                    <div className="text-[11.5px] text-steel mb-1">
+                      {r.supplier.name} — se pidieron y pagaron {r.quantity} un. · ${r.totalCost.toFixed(2)}
+                      {r.paidAt && ` · pagado ${new Date(r.paidAt).toLocaleDateString("es-MX")}`}
+                    </div>
+                  )}
+                  {isMulti && (
+                    <div className="text-[11.5px] text-steel mb-1">
+                      {r.quantity} un. · ${r.totalCost.toFixed(2)}
+                      {r.paidAt && ` · pagado ${new Date(r.paidAt).toLocaleDateString("es-MX")}`}
+                    </div>
+                  )}
 
                   {r.status === "PAID" && !missingPurchaseOrder && (
                     <>
@@ -529,10 +734,56 @@ export function PurchaseReceivingPanel({ isAdmin = false }: { isAdmin?: boolean 
                               >
                                 {uploadingPhoto ? <span className="w-4 h-4 rounded-full border-2 border-rule border-t-teal animate-spin" /> : <Camera size={16} />}
                                 Pegar (Ctrl+V)
-                                <button type="button" className="text-[10px] underline decoration-dotted opacity-80 hover:opacity-100 cursor-pointer" onClick={(e) => { e.stopPropagation(); photoFileInputRef.current?.click(); }}>
-                                  o seleccionar
-                                </button>
+                                <span className="flex items-center gap-2">
+                                  <button type="button" className="text-[10px] underline decoration-dotted opacity-80 hover:opacity-100 cursor-pointer" onClick={(e) => { e.stopPropagation(); photoFileInputRef.current?.click(); }}>
+                                    o seleccionar
+                                  </button>
+                                  <button type="button" className="text-[10px] underline decoration-dotted opacity-80 hover:opacity-100 cursor-pointer" onClick={(e) => { e.stopPropagation(); photoCameraInputRef.current?.click(); }}>
+                                    o usar cámara
+                                  </button>
+                                </span>
                                 <input ref={photoFileInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && addPhoto(e.target.files[0])} />
+                                <input ref={photoCameraInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => e.target.files?.[0] && addPhoto(e.target.files[0])} />
+                              </label>
+                            )}
+                          </div>
+
+                          {/* Confirmado 2026-08-18: pedido explícito del usuario — video de
+                              evidencia ADEMÁS de la foto (que sigue siendo obligatoria arriba),
+                              opcional, útil sobre todo cuando llegan muchos bultos a la vez. */}
+                          <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">
+                            Video de evidencia — opcional ({receivedVideoUrls.length}/2)
+                          </label>
+                          <div className="grid grid-cols-3 gap-2 mb-2.5">
+                            {receivedVideoUrls.map((url, i) => (
+                              <div key={i} className="relative">
+                                <video src={url} controls className="w-full h-40 rounded object-contain border border-rule bg-cloud" />
+                                <button
+                                  type="button"
+                                  className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red text-white flex items-center justify-center cursor-pointer"
+                                  onClick={() => removeVideo(i)}
+                                >
+                                  <X size={11} />
+                                </button>
+                              </div>
+                            ))}
+                            {receivedVideoUrls.length < 2 && (
+                              <label
+                                tabIndex={0}
+                                onClick={(e) => e.preventDefault()}
+                                className="flex flex-col items-center justify-center gap-1 h-40 border-[1.5px] border-dashed border-rule rounded text-[11px] text-steel cursor-pointer hover:border-teal"
+                              >
+                                {uploadingVideo ? <span className="w-4 h-4 rounded-full border-2 border-rule border-t-teal animate-spin" /> : <Camera size={16} />}
+                                <span className="flex items-center gap-2">
+                                  <button type="button" className="text-[10px] underline decoration-dotted opacity-80 hover:opacity-100 cursor-pointer" onClick={(e) => { e.stopPropagation(); videoFileInputRef.current?.click(); }}>
+                                    seleccionar
+                                  </button>
+                                  <button type="button" className="text-[10px] underline decoration-dotted opacity-80 hover:opacity-100 cursor-pointer" onClick={(e) => { e.stopPropagation(); videoCameraInputRef.current?.click(); }}>
+                                    o usar cámara
+                                  </button>
+                                </span>
+                                <input ref={videoFileInputRef} type="file" accept="video/*" className="hidden" onChange={(e) => e.target.files?.[0] && addVideo(e.target.files[0])} />
+                                <input ref={videoCameraInputRef} type="file" accept="video/*" capture="environment" className="hidden" onChange={(e) => e.target.files?.[0] && addVideo(e.target.files[0])} />
                               </label>
                             )}
                           </div>
@@ -592,7 +843,7 @@ export function PurchaseReceivingPanel({ isAdmin = false }: { isAdmin?: boolean 
                             >
                               ✓ Confirmar que llegó
                             </button>
-                            <button type="button" className="text-steel text-[12.5px] cursor-pointer" onClick={() => { setOpenId(null); setReceivedPhotoUrls([]); setAiResult(null); setMinorDifferenceConfirmed(false); }}>Cancelar</button>
+                            <button type="button" className="text-steel text-[12.5px] cursor-pointer" onClick={() => { setOpenId(null); setReceivedPhotoUrls([]); setReceivedVideoUrls([]); setAiResult(null); setMinorDifferenceConfirmed(false); }}>Cancelar</button>
                           </div>
                         </div>
                       ) : urgentId === r.id ? (
@@ -719,8 +970,8 @@ export function PurchaseReceivingPanel({ isAdmin = false }: { isAdmin?: boolean 
                             {r.urgentReports.length === 0 && (
                               <button
                                 type="button"
-                                disabled={isAdmin}
-                                title={isAdmin ? "Exclusivo del líder de Inventario" : undefined}
+                                disabled={!canReceiveTeam}
+                                title={!canReceiveTeam ? "Exclusivo del equipo de Inventario" : undefined}
                                 className="text-[11.5px] font-semibold border border-red/50 text-red rounded px-3 py-1.5 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                                 onClick={() => openUrgent(r.id)}
                               >
@@ -729,10 +980,10 @@ export function PurchaseReceivingPanel({ isAdmin = false }: { isAdmin?: boolean 
                             )}
                             <button
                               type="button"
-                              disabled={isAdmin}
-                              title={isAdmin ? "Exclusivo del líder de Inventario" : undefined}
+                              disabled={!canReceiveTeam}
+                              title={!canReceiveTeam ? "Exclusivo del equipo de Inventario" : undefined}
                               className="rounded border border-green bg-green px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-                              onClick={() => { setOpenId(r.id); setReceivedPhotoUrls([]); setAiResult(null); setMinorDifferenceConfirmed(false); setReceivedQty(r.urgentReports.length > 0 ? String(goodQuantity(r)) : ""); setComment(""); setErr(""); }}
+                              onClick={() => { setOpenId(r.id); setReceivedPhotoUrls([]); setReceivedVideoUrls([]); setAiResult(null); setMinorDifferenceConfirmed(false); setReceivedQty(r.urgentReports.length > 0 ? String(goodQuantity(r)) : ""); setComment(""); setErr(""); }}
                             >
                               {r.urgentReports.length > 0 ? `✓ Confirmar ${goodQuantity(r)} un. buenas` : "✓ Confirmar que llegó"}
                             </button>
@@ -740,6 +991,47 @@ export function PurchaseReceivingPanel({ isAdmin = false }: { isAdmin?: boolean 
                         </div>
                       )}
                     </>
+                  )}
+
+                  {/* Confirmado 2026-08-18: pedido explícito del usuario — el equipo ya
+                      recibió (foto+video), pero todavía no cierra el ciclo: solo lectura
+                      para todos, y solo Daniel puede aprobar de verdad. */}
+                  {r.status === "RECEIVED_PENDING_REVIEW" && r.receipt && (
+                    <div className="mt-1.5">
+                      <div className={`flex items-center gap-1.5 text-[11.5px] font-semibold mb-1 ${receivedQtyMatches ? "text-teal" : "text-red"}`}>
+                        {receivedQtyMatches ? <CheckCircle2 size={13} /> : <AlertTriangle size={13} />}
+                        Declarado por Inventario: {r.receipt.receivedQuantity} un. · Comprado y pagado: {r.quantity} un.
+                        {r.urgentReports.length > 0 && ` (cantidad buena esperada: ${expectedReceivedQty} un.)`}
+                      </div>
+                      <div className="text-[11.5px] text-steel mb-2">
+                        Recibido por {actorName(r.receipt.confirmedBy?.name)} · {new Date(r.receipt.confirmedAt).toLocaleDateString("es-MX")}
+                        {r.receipt.comment && ` — "${r.receipt.comment}"`}
+                      </div>
+                      <div className="grid grid-cols-4 gap-2 mb-2.5">
+                        {r.receipt.photoUrls.map((url, i) => (
+                          <a key={`p${i}`} href={url} target="_blank" rel="noopener noreferrer" className="bg-cloud rounded border border-rule flex items-center justify-center h-32">
+                            <img src={url} alt="" className="max-w-full max-h-full object-contain" />
+                          </a>
+                        ))}
+                        {r.receipt.videoUrls.map((url, i) => (
+                          <video key={`v${i}`} src={url} controls className="w-full h-32 rounded object-contain border border-rule bg-cloud" />
+                        ))}
+                      </div>
+                      {err && <div className="text-red text-[12px] mb-2">{err}</div>}
+                      <button
+                        type="button"
+                        disabled={!canApprove || busy}
+                        title={!canApprove ? "Exclusivo del líder de Inventario" : undefined}
+                        className="rounded border border-teal bg-teal px-3.5 py-1.5 text-[12.5px] font-bold text-navy cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                        onClick={() => approveReceipt(r.id)}
+                      >
+                        ✓ Aprobar recepción
+                      </button>
+                    </div>
+                  )}
+
+                  {r.status === "RECEIVED" && r.receipt?.approvedBy && (
+                    <div className="text-[10px] text-steel-dim mt-1">Aprobado por {actorName(r.receipt.approvedBy.name)}</div>
                   )}
                 </div>
                 );

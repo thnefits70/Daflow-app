@@ -13,6 +13,7 @@ export async function GET(_req: NextRequest) {
     where: { type: "REPLACEMENT", status: "PENDING" },
     orderBy: { replacementDueDate: "asc" },
     include: {
+      replacementSubmittedBy: { select: { name: true } },
       report: {
         include: {
           request: {

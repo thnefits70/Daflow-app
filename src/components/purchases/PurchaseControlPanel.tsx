@@ -10,8 +10,9 @@ import { PurchasePriceExplorer } from "./PurchasePriceExplorer";
 import { PurchaseUrgentReportsPanel } from "./PurchaseUrgentReportsPanel";
 import { PurchaseAuditPanel } from "./PurchaseAuditPanel";
 import { PurchaseCreditsPanel } from "./PurchaseCreditsPanel";
+import { PurchaseJustaPanel } from "./PurchaseJustaPanel";
 
-type Tab = "solicitar" | "mias" | "comparar" | "aprobacion" | "inventario" | "finanzas" | "urgentes" | "creditos" | "auditoria";
+type Tab = "solicitar" | "mias" | "comparar" | "aprobacion" | "inventario" | "justa" | "finanzas" | "urgentes" | "creditos" | "auditoria";
 
 // Confirmado 2026-07-30: una sola pantalla para todo el módulo — las
 // pestañas que ve cada persona dependen de lo que puede hacer (admin ve
@@ -22,6 +23,8 @@ export function PurchaseControlPanel({
   canSubmit,
   canReview,
   canReceive,
+  canReceiveTeam,
+  canApproveReceiving,
   canInvoice,
   isAdmin,
 }: {
@@ -29,6 +32,8 @@ export function PurchaseControlPanel({
   canSubmit: boolean;
   canReview: boolean;
   canReceive: boolean;
+  canReceiveTeam: boolean;
+  canApproveReceiving: boolean;
   canInvoice: boolean;
   isAdmin: boolean;
 }) {
@@ -42,6 +47,10 @@ export function PurchaseControlPanel({
     ...(canSubmit || canReview ? [{ key: "urgentes" as Tab, label: "Reportes urgentes" }] : []),
     ...(canSubmit || canReview ? [{ key: "creditos" as Tab, label: "Créditos pendientes" }] : []),
     ...(canReceive ? [{ key: "inventario" as Tab, label: "Inventario" }] : []),
+    // Confirmado 2026-08-18: pedido explícito del usuario — pestaña propia,
+    // separada de "Inventario", exclusiva de Daniel (canApproveReceiving) —
+    // su checklist personal para pasar lo aprobado al sistema Just.
+    ...(canApproveReceiving ? [{ key: "justa" as Tab, label: "Just" }] : []),
     ...(canInvoice ? [{ key: "finanzas" as Tab, label: "Finanzas" }] : []),
     // Confirmado 2026-08-08 (ampliado 2026-08-12): historial de solo lectura
     // de todo lo confirmado recibido, para auditar sin poder editar nada —
@@ -99,7 +108,8 @@ export function PurchaseControlPanel({
       {tab === "aprobacion" && <PurchaseApprovalInbox />}
       {tab === "urgentes" && <PurchaseUrgentReportsPanel isAdmin={isAdmin} />}
       {tab === "creditos" && <PurchaseCreditsPanel />}
-      {tab === "inventario" && <PurchaseReceivingPanel isAdmin={isAdmin} />}
+      {tab === "inventario" && <PurchaseReceivingPanel isAdmin={isAdmin} canReceiveTeam={canReceiveTeam} canApprove={canApproveReceiving} />}
+      {tab === "justa" && <PurchaseJustaPanel />}
       {tab === "finanzas" && <PurchaseInvoicingPanel />}
       {tab === "auditoria" && <PurchaseAuditPanel />}
     </div>

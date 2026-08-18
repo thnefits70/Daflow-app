@@ -1261,9 +1261,30 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       leadsDeptId: true,
       canManagePurchases: true,
       leadsDept: { select: { code: true, name: true, trackWeeklyMetric: true } },
+      department: { select: { code: true } },
     },
   });
-  if (!me?.isLeader || !me.leadsDeptId || !me.leadsDept) return null;
+  if (!me) return null;
+
+  // Confirmado 2026-08-18: pedido explícito del usuario — acceso directo en
+  // Inicio para CUALQUIER colaborador de Inventario (no solo Daniel, su
+  // líder) a la mercadería pendiente por recibir y a los cambios pendientes
+  // de verificar, ahora que ambas acciones son del equipo (ver
+  // canReceivePurchasesTeam en guards.ts). El resto de "Pendientes de esta
+  // semana" (KPIs, Control de Inventario, etc.) sigue siendo exclusivo del
+  // líder — esto es un subconjunto reducido, solo para no-líderes de INV.
+  if (!me.isLeader || !me.leadsDeptId || !me.leadsDept) {
+    if (me.department?.code !== "INV") return null;
+    const [receivingItem, replacementItem] = await Promise.all([
+      getPurchaseReceivingPendingItem("/area/workspace?tab=compras&ptab=inventario"),
+      getPurchaseReplacementVerificationPendingItem("/area/workspace?tab=compras&ptab=inventario"),
+    ]);
+    const teamItems: PendingItem[] = [];
+    if (receivingItem) teamItems.push(receivingItem);
+    if (replacementItem) teamItems.push(replacementItem);
+    if (teamItems.length === 0) return null;
+    return { title: "Pendientes de esta semana", sub: "En Inventario", items: teamItems };
+  }
 
   const items: PendingItem[] = [];
   let monthly = false;

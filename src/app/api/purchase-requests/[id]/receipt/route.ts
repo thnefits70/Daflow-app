@@ -2,13 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
-import { canActOnPurchaseReceiving } from "@/lib/guards";
+import { canReceivePurchasesTeam, getInventoryLeadId } from "@/lib/guards";
 import { sendPushToOwner } from "@/lib/webPush";
-import { getMarketingArrivalActorIds } from "@/lib/marketingArrivals";
 
 const schema = z.object({
   receivedQuantity: z.number().int().nonnegative(),
   photoUrls: z.array(z.string().url()).min(2).max(3),
+  // Confirmado 2026-08-18: pedido explícito del usuario — evidencia en video
+  // ADEMÁS de la foto (que sigue siendo obligatoria), opcional.
+  videoUrls: z.array(z.string().url()).max(2).optional(),
   comment: z.string().trim().optional(),
   aiPhotoMatch: z.boolean().nullable().optional(),
   aiPhotoNote: z.string().nullable().optional(),
@@ -22,9 +24,14 @@ const schema = z.object({
   minorDifferenceConfirmed: z.boolean().optional(),
 });
 
+// Confirmado 2026-08-18: pedido explícito del usuario — cualquiera del
+// equipo de Inventario puede recibir (no solo Daniel), pero esto ya no cierra
+// el ciclo — deja el pedido en RECEIVED_PENDING_REVIEW hasta que Daniel lo
+// aprueba (ver approve-receipt/route.ts, que es donde de verdad pasa a
+// RECEIVED y se notifica a solicitante/marketing).
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
-  if (!(await canActOnPurchaseReceiving()) || !session) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+  if (!(await canReceivePurchasesTeam()) || !session) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
   const { id } = await params;
   const body = await req.json().catch(() => null);
@@ -84,6 +91,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         requestId: id,
         receivedQuantity: parsed.data.receivedQuantity,
         photoUrls: parsed.data.photoUrls,
+        videoUrls: parsed.data.videoUrls ?? [],
         comment: parsed.data.comment || null,
         aiPhotoMatch: parsed.data.aiPhotoMatch ?? null,
         aiPhotoNote: parsed.data.aiPhotoNote ?? null,
@@ -91,42 +99,21 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         confirmedById: isAdmin ? null : session.user.id,
       },
     }),
-    prisma.purchaseRequest.update({ where: { id }, data: { status: "RECEIVED" } }),
-    // Confirmado 2026-08-08: "Mercadería recibida" — se crea vacía apenas
-    // Daniel confirma, para que Análisis de Mercado (Robert/Heidy/Jariel) la
-    // vea y la vaya confirmando cada quien su parte.
-    prisma.purchaseReceiptFollowUp.create({ data: { requestId: id } }),
+    // Confirmado 2026-08-18: pedido explícito del usuario — todavía no es
+    // RECEIVED de verdad, queda pendiente de que Daniel apruebe (ver
+    // approve-receipt/route.ts, que es donde se crea PurchaseReceiptFollowUp
+    // y se avisa a solicitante/marketing, igual que antes hacía esta ruta).
+    prisma.purchaseRequest.update({ where: { id }, data: { status: "RECEIVED_PENDING_REVIEW" } }),
   ]);
 
-  // Confirmado 2026-08-12: pedido explícito del usuario — cuando Inventario
-  // confirma pese a una diferencia menor frente a la referencia, todas las
-  // partes que ya se avisan de la llegada deben enterarse de ese detalle
-  // también, para que lo tengan en cuenta al vender/mostrar el producto.
-  const differenceNote = minorDifferenceOverride
-    ? ` ⚠️ Llegó con una diferencia menor frente a la referencia (confirmado por Inventario)${parsed.data.aiPhotoNote ? `: ${parsed.data.aiPhotoNote}` : ""}.`
-    : "";
-
-  if (existing.requestedById) {
-    await sendPushToOwner(existing.requestedById, {
-      title: "Mercadería recibida",
-      body: `${existing.catalogItem.name} — Inventario confirmó ${parsed.data.receivedQuantity} un. recibidas.${differenceNote}`,
-      url: "/area/workspace",
+  const leadId = await getInventoryLeadId();
+  if (leadId) {
+    await sendPushToOwner(leadId, {
+      title: "Recepción pendiente de tu aprobación",
+      body: `${existing.catalogItem.name} — ${parsed.data.receivedQuantity} un. recibidas por el equipo, esperando que apruebes.`,
+      url: "/area/workspace?tab=compras&ptab=inventario",
     }).catch(() => null);
   }
-
-  const arrivalBody = `${existing.catalogItem.name} · ${parsed.data.receivedQuantity} un.${differenceNote}`;
-  const [designIds, advisorIds] = await Promise.all([
-    getMarketingArrivalActorIds("design"),
-    getMarketingArrivalActorIds("advisor"),
-  ]);
-  await Promise.all([
-    ...designIds.map((uid) =>
-      sendPushToOwner(uid, { title: "Llegó mercadería a bodega", body: arrivalBody, url: "/area/workspace?tab=llegadas" }).catch(() => null)
-    ),
-    ...advisorIds.map((uid) =>
-      sendPushToOwner(uid, { title: "Llegó mercadería a bodega", body: arrivalBody, url: "/area/workspace?tab=llegadas" }).catch(() => null)
-    ),
-  ]);
 
   return NextResponse.json(updated);
 }

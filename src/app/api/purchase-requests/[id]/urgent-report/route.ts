@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
-import { canActOnPurchaseReceiving } from "@/lib/guards";
+import { canReceivePurchasesTeam, getInventoryLeadId } from "@/lib/guards";
 import { sendPushToOwner } from "@/lib/webPush";
 import { isWithinCreditClaimWindow } from "@/lib/purchaseUrgent";
 
@@ -18,14 +18,17 @@ const schema = z.object({
   mediaUrls: z.array(z.string().url()).min(1, "Sube al menos una foto de evidencia.").max(4),
 });
 
-// Confirmado 2026-08-06 (actualizado 2026-08-08): Daniel (líder de
-// Inventario) desglosa la cantidad por tipo (dañada/incompleta/diferente) y
-// sube evidencia (mínimo 1 foto, puede agregar 1 video) — el valor en
-// disputa se calcula solo con el costo real de la cotización, nunca un
-// monto escrito a mano.
+// Confirmado 2026-08-06 (actualizado 2026-08-08, ampliado 2026-08-18):
+// cualquiera del equipo de Inventario (no solo Daniel) desglosa la cantidad
+// por tipo (dañada/incompleta/diferente) y sube evidencia (mínimo 1 foto,
+// puede agregar video) — el valor en disputa se calcula solo con el costo
+// real de la cotización, nunca un monto escrito a mano. El reporte le llega
+// primero a Daniel para que lo revise (ver reviewedByLeadAt) — no notifica a
+// admin/solicitante ni aparece en la bandeja de Bryan hasta que él lo
+// aprueba (urgent-reports/[id]/approve/route.ts).
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
-  if (!(await canActOnPurchaseReceiving()) || !session) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+  if (!(await canReceivePurchasesTeam()) || !session) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
   const { id } = await params;
   const body = await req.json().catch(() => null);
@@ -63,19 +66,18 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // evidencia siempre se puede dejar), solo avisa desde ya si ese plazo ya
   // pasó, para que Bryan lo sepa antes de intentar pedir crédito.
   const withinCreditWindow = existing.paidAt ? isWithinCreditClaimWindow(existing.paidAt) : true;
-  const notifyTargets = new Set<string>(["admin"]);
-  if (existing.requestedById) notifyTargets.add(existing.requestedById);
 
-  const windowNote = withinCreditWindow ? "" : " · ⚠️ ya pasaron 7 días desde el pago, el proveedor puede no aprobar crédito";
-  await Promise.all(
-    [...notifyTargets].map((ownerId) =>
-      sendPushToOwner(ownerId, {
-        title: "🚨 Reporte urgente de mercadería",
-        body: `${existing.catalogItem.name} — ${totalAffected} un. afectadas · $${disputedValue.toFixed(2)} en disputa${windowNote}`,
-        url: ownerId === "admin" ? "/admin" : "/area/workspace",
-      }).catch(() => null)
-    )
-  );
+  // Confirmado 2026-08-18: pedido explícito del usuario — ya no se notifica
+  // a admin/solicitante al crear (eso se mueve a cuando Daniel lo revisa),
+  // solo se avisa a Daniel que tiene algo pendiente.
+  const leadId = await getInventoryLeadId();
+  if (leadId) {
+    await sendPushToOwner(leadId, {
+      title: "🚨 Reporte urgente pendiente de tu revisión",
+      body: `${existing.catalogItem.name} — ${totalAffected} un. afectadas.`,
+      url: "/area/workspace?tab=compras&ptab=inventario",
+    }).catch(() => null);
+  }
 
   return NextResponse.json({ ...report, withinCreditWindow }, { status: 201 });
 }

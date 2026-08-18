@@ -75,6 +75,8 @@ export function DeptWorkspaceTabs({
   storeFeedbackAggregates = [],
   canSubmitPurchases = false,
   canReceivePurchases = false,
+  canReceivePurchasesTeam = false,
+  canApprovePurchaseReceiving = false,
   canInvoicePurchases = false,
   canManageInventoryControl = false,
   inventoryControlData = null,
@@ -123,6 +125,13 @@ export function DeptWorkspaceTabs({
   // importar a qué departamento pertenezcan de verdad.
   canSubmitPurchases?: boolean;
   canReceivePurchases?: boolean;
+  // Confirmado 2026-08-18: canReceivePurchases sigue siendo el gate de la
+  // pestaña "Inventario" (ahora todo el equipo de INV, no solo Daniel);
+  // canReceivePurchasesTeam habilita recibir/informar urgente,
+  // canApprovePurchaseReceiving habilita la aprobación final (exclusiva de
+  // Daniel) — ver PurchaseReceivingPanel.
+  canReceivePurchasesTeam?: boolean;
+  canApprovePurchaseReceiving?: boolean;
   canInvoicePurchases?: boolean;
   // Control de Inventario — mismo patrón sin dept.code que Control de
   // Compras/Servicio Postventa (confirmado 2026-08-04): Daniel lo ve en su
@@ -273,6 +282,8 @@ export function DeptWorkspaceTabs({
           canSubmit={canSubmitPurchases}
           canReview={isAdmin}
           canReceive={canReceivePurchases}
+          canReceiveTeam={canReceivePurchasesTeam}
+          canApproveReceiving={canApprovePurchaseReceiving}
           canInvoice={canInvoicePurchases}
           isAdmin={isAdmin}
         />

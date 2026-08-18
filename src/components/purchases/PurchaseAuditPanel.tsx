@@ -27,6 +27,8 @@ type Row = Omit<OperationDocRow, "receipt"> & {
     aiPhotoNote: string | null;
     confirmedBy: { name: string } | null;
     confirmedAt: string;
+    justaUploadedBy: { name: string } | null;
+    justaUploadedAt: string | null;
   } | null;
 };
 
@@ -277,6 +279,11 @@ export function PurchaseAuditPanel() {
               <div className="text-[10px] text-steel-dim mb-1">
                 Solicitada por {actorName(r0.requestedBy?.name)} · Pagada por {actorName(r0.paidBy?.name)} · Recibida por {actorName(r0.receipt?.confirmedBy?.name)}
                 {r0.receipt?.confirmedAt ? ` · ${new Date(r0.receipt.confirmedAt).toLocaleDateString("es-MX")}` : ""}
+                {/* Confirmado 2026-08-18: pedido explícito del usuario — Auditoría
+                    es "el área ya completada" para el checklist de Just de Daniel. */}
+                {r0.receipt?.justaUploadedAt
+                  ? ` · Subido a Just por ${actorName(r0.receipt.justaUploadedBy?.name)} · ${new Date(r0.receipt.justaUploadedAt).toLocaleDateString("es-MX")}`
+                  : " · Pendiente de subir a Just"}
               </div>
               {(r0.paymentProofReceiptNumber || r0.shippingPaymentProofReceiptNumber) && (
                 <div className="text-[10px] text-steel-dim mb-2.5 font-mono">

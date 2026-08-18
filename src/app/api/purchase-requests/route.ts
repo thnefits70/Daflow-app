@@ -29,8 +29,12 @@ export async function GET(req: NextRequest) {
 
   if (view === "receiving") {
     if (!(await canConfirmPurchaseReceiving())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+    // Confirmado 2026-08-18: pedido explícito del usuario — ahora incluye
+    // RECEIVED_PENDING_REVIEW además de PAID, para que en la misma pestaña
+    // el equipo vea lo que falta recibir y Daniel vea lo que ya recibieron y
+    // está pendiente de su aprobación final.
     const pending = await prisma.purchaseRequest.findMany({
-      where: { status: "PAID" },
+      where: { status: { in: ["PAID", "RECEIVED_PENDING_REVIEW"] } },
       select: { groupId: true },
       orderBy: { paidAt: "asc" },
     });
@@ -50,8 +54,12 @@ export async function GET(req: NextRequest) {
 
   if (view === "invoicing") {
     if (!(await canRegisterPurchaseInvoices())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+    // Confirmado 2026-08-18: RECEIVED_PENDING_REVIEW se agrega para que
+    // Finanzas no pierda de vista la operación mientras está en el limbo
+    // entre PAID y RECEIVED (esperando que Daniel apruebe la recepción del
+    // equipo).
     const rows = await prisma.purchaseRequest.findMany({
-      where: { status: { in: ["APPROVED", "PAID", "RECEIVED"] } },
+      where: { status: { in: ["APPROVED", "PAID", "RECEIVED_PENDING_REVIEW", "RECEIVED"] } },
       orderBy: [{ status: "asc" }, { requestedAt: "desc" }],
       include: purchaseRequestInclude,
     });

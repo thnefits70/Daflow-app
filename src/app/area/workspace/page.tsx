@@ -3,7 +3,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { TopLine } from "@/components/ui/TopLine";
 import { DeptWorkspaceTabs } from "@/components/dept/DeptWorkspaceTabs";
-import { getUnseenFeedbackCount, canManageStoreFeedback as checkCanManageStoreFeedback, canViewStoreFeedback as checkCanViewStoreFeedback, canSubmitPurchaseRequests, canConfirmPurchaseReceiving, canRegisterPurchaseInvoices, canManageInventoryControl as checkCanManageInventoryControl, canViewInventoryKpisPanel as checkCanViewInventoryKpisPanel, canManageAdminPayments as checkCanManageAdminPayments, canViewMarketingArrivals as checkCanViewMarketingArrivals, canConfirmMarketingDesign as checkCanConfirmMarketingDesign, canConfirmMarketingAdvisor as checkCanConfirmMarketingAdvisor } from "@/lib/guards";
+import { getUnseenFeedbackCount, canManageStoreFeedback as checkCanManageStoreFeedback, canViewStoreFeedback as checkCanViewStoreFeedback, canSubmitPurchaseRequests, canConfirmPurchaseReceiving, canReceivePurchasesTeam, canActOnPurchaseReceiving, canRegisterPurchaseInvoices, canManageInventoryControl as checkCanManageInventoryControl, canViewInventoryKpisPanel as checkCanViewInventoryKpisPanel, canManageAdminPayments as checkCanManageAdminPayments, canViewMarketingArrivals as checkCanViewMarketingArrivals, canConfirmMarketingDesign as checkCanConfirmMarketingDesign, canConfirmMarketingAdvisor as checkCanConfirmMarketingAdvisor } from "@/lib/guards";
 import { getFinanceKpiData } from "@/lib/financeKpis";
 import { getDeptProcessDetail } from "@/lib/processDetail";
 import { getPaymentRemindersData } from "@/lib/paymentReminders";
@@ -32,9 +32,11 @@ export default async function WorkspacePage() {
   // Bryan y Nairoby están asignados a esto sin ser líderes formales del
   // departamento "Control de Compras", así que se ve en su propia "Mi área
   // de trabajo" sin importar a cuál pertenecen de verdad).
-  const [canSubmitPurchases, canReceivePurchases, canInvoicePurchases] = await Promise.all([
+  const [canSubmitPurchases, canReceivePurchases, canReceivePurchasesTeamFlag, canApprovePurchaseReceivingFlag, canInvoicePurchases] = await Promise.all([
     canSubmitPurchaseRequests(),
     canConfirmPurchaseReceiving(),
+    canReceivePurchasesTeam(),
+    canActOnPurchaseReceiving(),
     canRegisterPurchaseInvoices(),
   ]);
 
@@ -144,6 +146,8 @@ export default async function WorkspacePage() {
         storeFeedbackAggregates={storeFeedbackAggregates}
         canSubmitPurchases={canSubmitPurchases}
         canReceivePurchases={canReceivePurchases}
+        canReceivePurchasesTeam={canReceivePurchasesTeamFlag}
+        canApprovePurchaseReceiving={canApprovePurchaseReceivingFlag}
         canInvoicePurchases={canInvoicePurchases}
         canManageInventoryControl={canManageInventoryControl}
         inventoryControlData={inventoryControlData}

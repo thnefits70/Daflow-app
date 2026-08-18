@@ -242,7 +242,9 @@ model User {
   purchaseCatalogItemDeleteRequests            PurchaseCatalogItemDeleteRequest[] @relation("PurchaseCatalogItemDeleteRequestedBy")
   supplierCreditsCreated                       SupplierCredit[]                   @relation("SupplierCreditCreatedBy")
   urgentResolutionsCreated                     PurchaseUrgentResolution[]         @relation("UrgentResolutionCreatedBy")
+  urgentResolutionsReplacementSubmitted        PurchaseUrgentResolution[]         @relation("UrgentResolutionReplacementSubmittedBy")
   urgentResolutionsReplacementVerified         PurchaseUrgentResolution[]         @relation("UrgentResolutionReplacementVerifiedBy")
+  urgentResolutionsJustaUploaded               PurchaseUrgentResolution[]         @relation("UrgentResolutionJustaUploadedBy")
   urgentResolutionsBankConfirmed               PurchaseUrgentResolution[]         @relation("UrgentResolutionBankConfirmedBy")
   purchaseRequestsFinanceFlagged               PurchaseRequest[]                  @relation("PurchaseRequestFinanceFlaggedBy")
   adminPaymentTemplatesCreated                 AdminPaymentTemplate[]             @relation("AdminPaymentTemplateCreatedBy")
@@ -263,6 +265,7 @@ model User {
   purchaseRequestsReviewed                     PurchaseRequest[]                  @relation("PurchaseRequestReviewedBy")
   purchaseRequestReceiptsConfirmed             PurchaseRequestReceipt[]           @relation("PurchaseRequestReceiptConfirmedBy")
   purchaseRequestReceiptsApproved              PurchaseRequestReceipt[]           @relation("PurchaseRequestReceiptApprovedBy")
+  purchaseRequestReceiptsJustaUploaded         PurchaseRequestReceipt[]           @relation("PurchaseRequestReceiptJustaUploadedBy")
   marketingFollowUpsDesignConfirmed            PurchaseReceiptFollowUp[]          @relation("PurchaseReceiptFollowUpDesignConfirmedBy")
   marketingFollowUpsAdvisorConfirmed           PurchaseReceiptFollowUp[]          @relation("PurchaseReceiptFollowUpAdvisorConfirmedBy")
   purchaseRequestUrgentReports                 PurchaseRequestUrgentReport[]      @relation("PurchaseRequestUrgentReportedBy")
@@ -1457,6 +1460,13 @@ model PurchaseRequestReceipt {
   approvedById String?
   approvedBy   User?     @relation("PurchaseRequestReceiptApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
   approvedAt   DateTime?
+
+  // Confirmado 2026-08-18: pedido explícito del usuario — checklist personal
+  // de Daniel para pasar lo ya aprobado al sistema Justa. Independiente de
+  // approvedAt: algo puede estar RECEIVED hace rato y seguir sin subir.
+  justaUploadedById String?
+  justaUploadedBy   User?     @relation("PurchaseRequestReceiptJustaUploadedBy", fields: [justaUploadedById], references: [id], onDelete: SetNull)
+  justaUploadedAt   DateTime?
 }
 
 // Confirmado 2026-08-08: "Mercadería recibida" — pedido explícito del
@@ -1565,15 +1575,29 @@ model PurchaseUrgentResolution {
 
   status UrgentResolutionStatus @default(PENDING)
 
-  // REPLACEMENT — Bryan pone la fecha máxima; cuando llega, Daniel la
-  // verifica con la misma metodología de fotos + IA que la recepción normal.
-  replacementDueDate      DateTime?
-  replacementArrivedAt    DateTime?
-  replacementPhotoUrls    String[]
-  replacementAiMatch      Boolean?
-  replacementAiNote       String?
-  replacementVerifiedById String?
-  replacementVerifiedBy   User?     @relation("UrgentResolutionReplacementVerifiedBy", fields: [replacementVerifiedById], references: [id], onDelete: SetNull)
+  // REPLACEMENT — Bryan pone la fecha máxima; cuando llega, el equipo de
+  // Inventario sube fotos + IA (mismo criterio que la recepción normal) y
+  // Daniel da la aprobación final. Confirmado 2026-08-18: pedido explícito
+  // del usuario — antes era un solo paso exclusivo de Daniel; ahora
+  // replacementSubmittedAt/By es el sello del equipo (status se queda
+  // PENDING) y replacementVerifiedAt/By es la aprobación final de Daniel
+  // (recién ahí status pasa a COMPLETED).
+  replacementDueDate       DateTime?
+  replacementSubmittedById String?
+  replacementSubmittedBy   User?     @relation("UrgentResolutionReplacementSubmittedBy", fields: [replacementSubmittedById], references: [id], onDelete: SetNull)
+  replacementSubmittedAt   DateTime?
+  replacementArrivedAt     DateTime?
+  replacementPhotoUrls     String[]
+  replacementAiMatch       Boolean?
+  replacementAiNote        String?
+  replacementVerifiedById  String?
+  replacementVerifiedBy    User?     @relation("UrgentResolutionReplacementVerifiedBy", fields: [replacementVerifiedById], references: [id], onDelete: SetNull)
+  // Confirmado 2026-08-18: mismo checklist de Justa que
+  // PurchaseRequestReceipt.justaUploadedAt — un reemplazo aprobado también
+  // es mercadería física nueva que hay que cargar en Justa.
+  justaUploadedById        String?
+  justaUploadedBy          User?     @relation("UrgentResolutionJustaUploadedBy", fields: [justaUploadedById], references: [id], onDelete: SetNull)
+  justaUploadedAt          DateTime?
 
   // REFUND — precio fijo (el mismo de la cotización), solo la cantidad se
   // ingresa; la IA cruza cantidad×precio contra el comprobante que suba el

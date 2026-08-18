@@ -15,7 +15,7 @@ type Row = {
   id: string;
   groupId: string;
   requestNumber: number | null;
-  status: "APPROVED" | "PAID" | "RECEIVED";
+  status: "APPROVED" | "PAID" | "RECEIVED_PENDING_REVIEW" | "RECEIVED";
   quantity: number;
   totalCost: number;
   invoiceStatus: InvoiceStatus;

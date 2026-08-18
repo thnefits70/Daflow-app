@@ -14,6 +14,10 @@ export async function GET(_req: NextRequest) {
   }
 
   const reports = await prisma.purchaseRequestUrgentReport.findMany({
+    // Confirmado 2026-08-18: pedido explícito del usuario — un reporte que
+    // subió el equipo de Inventario le llega primero a Daniel; Bryan/admin
+    // solo ven lo que él ya revisó (ver urgent-reports/[id]/approve).
+    where: { reviewedByLeadAt: { not: null } },
     orderBy: { reportedAt: "desc" },
     include: {
       reportedBy: { select: { name: true } },

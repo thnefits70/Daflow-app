@@ -81,6 +81,10 @@ export default async function DeptWorkspacePage({ params }: { params: Promise<{ 
         storeFeedbackStores={storeFeedbackStores}
         canSubmitPurchases={dept.code === "COM"}
         canReceivePurchases={dept.code === "COM"}
+        // Confirmado 2026-08-18: esta página es siempre isAdmin — admin
+        // nunca recibe ni aprueba, solo supervisa (ver PurchaseReceivingPanel).
+        canReceivePurchasesTeam={false}
+        canApprovePurchaseReceiving={false}
         canInvoicePurchases={dept.code === "COM"}
         canManageInventoryControl={dept.code === "INV"}
         inventoryControlData={inventoryControlData}
