@@ -4,9 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Camera, CheckCircle2, X, AlertTriangle, Truck } from "lucide-react";
 import { uploadFile } from "@/lib/uploadFile";
-import { compressImage } from "@/lib/compressImage";
-import { usePasteFile } from "@/lib/usePasteFile";
 import { actorName } from "@/lib/actorName";
+import { LiveCameraCapture } from "@/components/shared/LiveCameraCapture";
 import { PurchaseOperationDocuments, type OperationDocRow } from "./PurchaseOperationDocuments";
 
 type Row = {
@@ -149,24 +148,30 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
   const [urgentId, setUrgentId] = useState<string | null>(null);
   const [receivedQty, setReceivedQty] = useState("");
   const [receivedPhotoUrls, setReceivedPhotoUrls] = useState<string[]>([]);
-  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [takingPhoto, setTakingPhoto] = useState(false);
   const [aiChecking, setAiChecking] = useState(false);
   const [aiResult, setAiResult] = useState<{ likelyMatch: boolean | null; note: string; minorDifferenceOnly?: boolean } | null>(null);
   const [minorDifferenceConfirmed, setMinorDifferenceConfirmed] = useState(false);
-  const { onPaste: onPastePhoto, onMouseEnter: onPasteHoverIn, onMouseLeave: onPasteHoverOut } = usePasteFile((file) => addPhoto(file));
-  const photoFileInputRef = useRef<HTMLInputElement>(null);
-  const photoCameraInputRef = useRef<HTMLInputElement>(null);
   const [comment, setComment] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
 
-  // Confirmado 2026-08-18: pedido explícito del usuario — video de evidencia
-  // ADEMÁS de la foto (que sigue siendo obligatoria), opcional, útil sobre
-  // todo cuando llegan muchos bultos.
+  // Confirmado 2026-08-18 (ampliado el mismo día): pedido explícito del
+  // usuario — la foto obligatoria SOLO se puede tomar en vivo dentro de esta
+  // pantalla (LiveCameraCapture, con getUserMedia + canvas), nunca elegida de
+  // galería/portapapeles — así se garantiza que es del momento real, no una
+  // foto vieja o de otro producto. Video de evidencia ADEMÁS de la foto,
+  // opcional, útil sobre todo cuando llegan muchos bultos — pero el atributo
+  // `capture` del input nativo solo lo respeta el celular (en laptop cae al
+  // explorador de archivos normal), así que esa opción solo se ofrece si
+  // isMobileDevice.
   const [receivedVideoUrls, setReceivedVideoUrls] = useState<string[]>([]);
   const [uploadingVideo, setUploadingVideo] = useState(false);
-  const videoFileInputRef = useRef<HTMLInputElement>(null);
   const videoCameraInputRef = useRef<HTMLInputElement>(null);
+  const [isMobileDevice, setIsMobileDevice] = useState(false);
+  useEffect(() => {
+    setIsMobileDevice(/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent));
+  }, []);
 
   // Cola de Daniel: "Informar urgente" que el equipo subió y todavía no revisó.
   const [pendingUrgentReports, setPendingUrgentReports] = useState<PendingUrgentReport[]>([]);
@@ -177,16 +182,13 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
   const [urgentIncompleteQty, setUrgentIncompleteQty] = useState("");
   const [urgentDesc, setUrgentDesc] = useState("");
   const [urgentMediaUrls, setUrgentMediaUrls] = useState<string[]>([]);
+  const [takingUrgentPhoto, setTakingUrgentPhoto] = useState(false);
   const [uploadingUrgentMedia, setUploadingUrgentMedia] = useState(false);
-  const { onPaste: onPasteUrgentMedia, onMouseEnter: onUrgentMediaHoverIn, onMouseLeave: onUrgentMediaHoverOut } = usePasteFile((file) => addUrgentMedia(file));
-  const urgentMediaFileInputRef = useRef<HTMLInputElement>(null);
 
   const [pendingReplacements, setPendingReplacements] = useState<PendingReplacement[]>([]);
   const [openReplacementId, setOpenReplacementId] = useState<string | null>(null);
   const [replacementPhotoUrls, setReplacementPhotoUrls] = useState<string[]>([]);
-  const [uploadingReplacementPhoto, setUploadingReplacementPhoto] = useState(false);
-  const { onPaste: onPasteReplacement, onMouseEnter: onReplacementHoverIn, onMouseLeave: onReplacementHoverOut } = usePasteFile((file) => addReplacementPhoto(file));
-  const replacementFileInputRef = useRef<HTMLInputElement>(null);
+  const [takingReplacementPhoto, setTakingReplacementPhoto] = useState(false);
 
   function load() {
     fetch("/api/purchase-requests?view=receiving").then((r) => (r.ok ? r.json() : [])).then(setRows).catch(() => setRows([]));
@@ -198,19 +200,13 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(load, [canApprove]);
 
-  async function addPhoto(file: File) {
-    if (receivedPhotoUrls.length >= 3) return;
-    setUploadingPhoto(true);
-    setErr("");
-    const compressed = await compressImage(file);
-    const uploaded = await uploadFile(compressed, "purchase-request-receipts");
-    setUploadingPhoto(false);
-    if (!uploaded.ok) {
-      setErr(uploaded.error);
-      return;
-    }
-    const next = [...receivedPhotoUrls, uploaded.url];
+  // Confirmado 2026-08-18: LiveCameraCapture ya sube el archivo (comprime +
+  // uploadFile internamente) y entrega la URL final — acá solo se agrega al
+  // arreglo y se dispara la verificación de IA, mismo criterio de siempre.
+  function handlePhotoCaptured(url: string) {
+    const next = [...receivedPhotoUrls, url];
     setReceivedPhotoUrls(next);
+    setTakingPhoto(false);
     // Confirmado 2026-08-06: apenas hay 2 fotos, la IA las compara contra las
     // de referencia del catálogo — apoyo visual, nunca bloquea la confirmación.
     if (next.length >= 2 && openId) verifyPhotos(openId, next);
@@ -335,21 +331,27 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
     setErr("");
   }
 
-  async function addUrgentMedia(file: File) {
+  // Confirmado 2026-08-18: la foto va por LiveCameraCapture (handler abajo);
+  // esta función queda exclusiva para el video opcional, capturado con el
+  // input nativo `capture="environment"` — video no se comprime (no es
+  // viable en el navegador sin una librería pesada), el límite de 15 MB de
+  // /api/upload/sign sigue aplicando igual.
+  async function addUrgentVideo(file: File) {
     if (urgentMediaUrls.length >= 4) return;
     setUploadingUrgentMedia(true);
     setErr("");
-    // Confirmado 2026-08-06: el video se sube tal cual (comprimir video de
-    // verdad en el navegador no es viable sin una librería pesada) — el
-    // límite de 15 MB de /api/upload/sign sigue aplicando igual.
-    const toUpload = file.type.startsWith("image/") ? await compressImage(file) : file;
-    const uploaded = await uploadFile(toUpload, "purchase-request-receipts");
+    const uploaded = await uploadFile(file, "purchase-request-receipts");
     setUploadingUrgentMedia(false);
     if (!uploaded.ok) {
       setErr(uploaded.error);
       return;
     }
     setUrgentMediaUrls((m) => [...m, uploaded.url]);
+  }
+
+  function handleUrgentPhotoCaptured(url: string) {
+    setUrgentMediaUrls((m) => [...m, url]);
+    setTakingUrgentPhoto(false);
   }
 
   function removeUrgentMedia(idx: number) {
@@ -391,18 +393,9 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
     load();
   }
 
-  async function addReplacementPhoto(file: File) {
-    if (replacementPhotoUrls.length >= 3) return;
-    setUploadingReplacementPhoto(true);
-    setErr("");
-    const compressed = await compressImage(file);
-    const uploaded = await uploadFile(compressed, "purchase-request-receipts");
-    setUploadingReplacementPhoto(false);
-    if (!uploaded.ok) {
-      setErr(uploaded.error);
-      return;
-    }
-    setReplacementPhotoUrls((p) => [...p, uploaded.url]);
+  function handleReplacementPhotoCaptured(url: string) {
+    setReplacementPhotoUrls((p) => [...p, url]);
+    setTakingReplacementPhoto(false);
   }
 
   async function confirmReplacement(resolutionId: string) {
@@ -498,35 +491,37 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
               <div key={pr.id} className="bg-cloud rounded-md p-3">
                 <div className="text-[13px] font-bold">{pr.report.request.catalogItem.name}</div>
                 <div className="text-[11.5px] text-steel mb-2">
-                  {pr.report.request.supplier.name} — {pr.quantity} un. · llega hasta {pr.replacementDueDate ? new Date(pr.replacementDueDate).toLocaleDateString("es-MX") : "—"}
+                  {pr.report.request.supplier.name}
+                  {(canApprove || isAdmin) && ` — ${pr.quantity} un.`}
+                  {" "}· llega hasta {pr.replacementDueDate ? new Date(pr.replacementDueDate).toLocaleDateString("es-MX") : "—"}
                 </div>
                 {openReplacementId === pr.id ? (
                   <div>
                     <div className="text-[11px] text-steel mb-1.5">Mínimo 2 fotos, igual que una recepción normal.</div>
-                    <div className="grid grid-cols-3 gap-2 mb-2.5">
-                      {replacementPhotoUrls.map((url, i) => (
-                        <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="bg-cloud rounded border border-rule flex items-center justify-center h-24">
-                          <img src={url} alt="" className="max-w-full max-h-full object-contain" />
-                        </a>
-                      ))}
-                      {replacementPhotoUrls.length < 3 && (
-                        <label
-                          tabIndex={0}
-                          onPaste={onPasteReplacement}
-                          onMouseEnter={onReplacementHoverIn}
-                          onMouseLeave={onReplacementHoverOut}
-                          onClick={(e) => e.preventDefault()}
-                          className="flex flex-col items-center justify-center gap-1 h-24 border-[1.5px] border-dashed border-rule rounded text-[11px] text-steel cursor-pointer hover:border-teal"
+                    {replacementPhotoUrls.length > 0 && (
+                      <div className="grid grid-cols-3 gap-2 mb-2.5">
+                        {replacementPhotoUrls.map((url, i) => (
+                          <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="bg-cloud rounded border border-rule flex items-center justify-center h-24">
+                            <img src={url} alt="" className="max-w-full max-h-full object-contain" />
+                          </a>
+                        ))}
+                      </div>
+                    )}
+                    {replacementPhotoUrls.length < 3 && (
+                      takingReplacementPhoto ? (
+                        <div className="mb-2.5">
+                          <LiveCameraCapture folder="purchase-request-receipts" onCaptured={handleReplacementPhotoCaptured} onCancel={() => setTakingReplacementPhoto(false)} />
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          className="flex items-center gap-1.5 text-[12px] font-semibold border-[1.5px] border-dashed border-rule rounded-md px-3 py-2 cursor-pointer hover:border-teal mb-2.5"
+                          onClick={() => setTakingReplacementPhoto(true)}
                         >
-                          {uploadingReplacementPhoto ? <span className="w-4 h-4 rounded-full border-2 border-rule border-t-teal animate-spin" /> : <Camera size={16} />}
-                          Pegar (Ctrl+V)
-                          <button type="button" className="text-[9.5px] underline decoration-dotted opacity-80 hover:opacity-100 cursor-pointer" onClick={(e) => { e.stopPropagation(); replacementFileInputRef.current?.click(); }}>
-                            o seleccionar
-                          </button>
-                          <input ref={replacementFileInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && addReplacementPhoto(e.target.files[0])} />
-                        </label>
-                      )}
-                    </div>
+                          <Camera size={14} /> Tomar foto
+                        </button>
+                      )
+                    )}
                     {err && <div className="text-red text-[12px] mb-2">{err}</div>}
                     <div className="flex items-center gap-2">
                       <button type="button" disabled={busy || replacementPhotoUrls.length < 2} className="rounded border border-green bg-green px-3.5 py-1.5 text-[12px] font-semibold text-white cursor-pointer disabled:opacity-60" onClick={() => confirmReplacement(pr.id)}>
@@ -640,17 +635,24 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                       </span>
                     )}
                   </div>
+                  {/* Confirmado 2026-08-18: pedido explícito del usuario — unidades y
+                      valor pagado son exclusivos de Daniel (líder) y admin; el resto del
+                      equipo de Inventario nunca los ve, en ningún lado de esta pantalla. */}
                   {!isMulti && (
                     <div className="text-[11.5px] text-steel mb-1">
-                      {r.supplier.name} — se pidieron y pagaron {r.quantity} un. · ${r.totalCost.toFixed(2)}
+                      {r.supplier.name}
+                      {(canApprove || isAdmin) && ` — se pidieron y pagaron ${r.quantity} un. · $${r.totalCost.toFixed(2)}`}
                       {r.paidAt && ` · pagado ${new Date(r.paidAt).toLocaleDateString("es-MX")}`}
                     </div>
                   )}
-                  {isMulti && (
+                  {isMulti && (canApprove || isAdmin) && (
                     <div className="text-[11.5px] text-steel mb-1">
                       {r.quantity} un. · ${r.totalCost.toFixed(2)}
                       {r.paidAt && ` · pagado ${new Date(r.paidAt).toLocaleDateString("es-MX")}`}
                     </div>
+                  )}
+                  {isMulti && !(canApprove || isAdmin) && r.paidAt && (
+                    <div className="text-[11.5px] text-steel mb-1">pagado {new Date(r.paidAt).toLocaleDateString("es-MX")}</div>
                   )}
 
                   {r.status === "PAID" && !missingPurchaseOrder && (
@@ -659,17 +661,21 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                         <div className="mt-2">
                           <div className="mb-2.5">
                             <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">
-                              {r.urgentReports.length > 0
-                                ? `Cantidad buena a confirmar — ${goodQuantity(r)} un. (de ${r.quantity} pedidas, ya reportadas ${r.quantity - goodQuantity(r)} dañada/incompleta/diferente)`
-                                : `Cantidad recibida — se pidieron ${r.quantity} un.`}
+                              {canApprove || isAdmin
+                                ? r.urgentReports.length > 0
+                                  ? `Cantidad buena a confirmar — ${goodQuantity(r)} un. (de ${r.quantity} pedidas, ya reportadas ${r.quantity - goodQuantity(r)} dañada/incompleta/diferente)`
+                                  : `Cantidad recibida — se pidieron ${r.quantity} un.`
+                                : "Cantidad recibida — cuenta las unidades que llegaron"}
                             </label>
                             <input type="number" className="w-full rounded border border-rule px-2.5 py-2 text-[13.5px]" value={receivedQty} onChange={(e) => setReceivedQty(e.target.value)} />
                             {receivedQty !== "" && Number(receivedQty) !== (r.urgentReports.length > 0 ? goodQuantity(r) : r.quantity) && (
                               <div className="flex items-center gap-1.5 text-[11px] text-red mt-1.5">
                                 <AlertTriangle size={12} className="shrink-0" />
-                                {r.urgentReports.length > 0
-                                  ? `Debe ser ${goodQuantity(r)} un. — la cantidad buena según lo ya reportado.`
-                                  : `No coincide con lo pedido (${r.quantity} un.) — no se puede confirmar así. Usa "🚨 Informar urgente" para reportar la diferencia.`}
+                                {canApprove || isAdmin
+                                  ? r.urgentReports.length > 0
+                                    ? `Debe ser ${goodQuantity(r)} un. — la cantidad buena según lo ya reportado.`
+                                    : `No coincide con lo pedido (${r.quantity} un.) — no se puede confirmar así. Usa "🚨 Informar urgente" para reportar la diferencia.`
+                                  : `No coincide con lo registrado — vuelve a contar. Si de verdad llegó una cantidad distinta, usa "🚨 Informar urgente" para reportarlo.`}
                               </div>
                             )}
                           </div>
@@ -708,85 +714,81 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                             compáralas contra las de referencia de arriba antes de confirmar; la IA también las revisa apenas subas la 2da.
                           </div>
 
-                          <div className="grid grid-cols-3 gap-2 mb-2.5">
-                            {receivedPhotoUrls.map((url, i) => (
-                              <div key={i} className="relative">
-                                <a href={url} target="_blank" rel="noopener noreferrer" className="bg-cloud rounded border border-rule flex items-center justify-center h-56">
-                                  <img src={url} alt="" className="max-w-full max-h-full object-contain" />
-                                </a>
-                                <button
-                                  type="button"
-                                  className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red text-white flex items-center justify-center cursor-pointer"
-                                  onClick={() => removePhoto(i)}
-                                >
-                                  <X size={11} />
-                                </button>
+                          {receivedPhotoUrls.length > 0 && (
+                            <div className="grid grid-cols-3 gap-2 mb-2.5">
+                              {receivedPhotoUrls.map((url, i) => (
+                                <div key={i} className="relative">
+                                  <a href={url} target="_blank" rel="noopener noreferrer" className="bg-cloud rounded border border-rule flex items-center justify-center h-56">
+                                    <img src={url} alt="" className="max-w-full max-h-full object-contain" />
+                                  </a>
+                                  <button
+                                    type="button"
+                                    className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red text-white flex items-center justify-center cursor-pointer"
+                                    onClick={() => removePhoto(i)}
+                                  >
+                                    <X size={11} />
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          {/* Confirmado 2026-08-18: pedido explícito del usuario — la foto
+                              obligatoria solo se toma en vivo dentro de esta pantalla, nunca
+                              elegida de galería/portapapeles. */}
+                          {receivedPhotoUrls.length < 3 && (
+                            takingPhoto ? (
+                              <div className="mb-2.5">
+                                <LiveCameraCapture folder="purchase-request-receipts" onCaptured={handlePhotoCaptured} onCancel={() => setTakingPhoto(false)} />
                               </div>
-                            ))}
-                            {receivedPhotoUrls.length < 3 && (
-                              <label
-                                tabIndex={0}
-                                onPaste={onPastePhoto}
-                                onMouseEnter={onPasteHoverIn}
-                                onMouseLeave={onPasteHoverOut}
-                                onClick={(e) => e.preventDefault()}
-                                className="flex flex-col items-center justify-center gap-1 h-56 border-[1.5px] border-dashed border-rule rounded text-[11px] text-steel cursor-pointer hover:border-teal focus:border-teal focus:outline-none"
+                            ) : (
+                              <button
+                                type="button"
+                                className="flex items-center gap-1.5 text-[12.5px] font-semibold border-[1.5px] border-dashed border-rule rounded-md px-3.5 py-2.5 cursor-pointer hover:border-teal mb-2.5"
+                                onClick={() => setTakingPhoto(true)}
                               >
-                                {uploadingPhoto ? <span className="w-4 h-4 rounded-full border-2 border-rule border-t-teal animate-spin" /> : <Camera size={16} />}
-                                Pegar (Ctrl+V)
-                                <span className="flex items-center gap-2">
-                                  <button type="button" className="text-[10px] underline decoration-dotted opacity-80 hover:opacity-100 cursor-pointer" onClick={(e) => { e.stopPropagation(); photoFileInputRef.current?.click(); }}>
-                                    o seleccionar
-                                  </button>
-                                  <button type="button" className="text-[10px] underline decoration-dotted opacity-80 hover:opacity-100 cursor-pointer" onClick={(e) => { e.stopPropagation(); photoCameraInputRef.current?.click(); }}>
-                                    o usar cámara
-                                  </button>
-                                </span>
-                                <input ref={photoFileInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && addPhoto(e.target.files[0])} />
-                                <input ref={photoCameraInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => e.target.files?.[0] && addPhoto(e.target.files[0])} />
-                              </label>
-                            )}
-                          </div>
+                                <Camera size={16} /> Tomar foto
+                              </button>
+                            )
+                          )}
 
                           {/* Confirmado 2026-08-18: pedido explícito del usuario — video de
                               evidencia ADEMÁS de la foto (que sigue siendo obligatoria arriba),
-                              opcional, útil sobre todo cuando llegan muchos bultos a la vez. */}
-                          <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">
-                            Video de evidencia — opcional ({receivedVideoUrls.length}/2)
-                          </label>
-                          <div className="grid grid-cols-3 gap-2 mb-2.5">
-                            {receivedVideoUrls.map((url, i) => (
-                              <div key={i} className="relative">
-                                <video src={url} controls className="w-full h-40 rounded object-contain border border-rule bg-cloud" />
-                                <button
-                                  type="button"
-                                  className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red text-white flex items-center justify-center cursor-pointer"
-                                  onClick={() => removeVideo(i)}
-                                >
-                                  <X size={11} />
-                                </button>
-                              </div>
-                            ))}
-                            {receivedVideoUrls.length < 2 && (
-                              <label
-                                tabIndex={0}
-                                onClick={(e) => e.preventDefault()}
-                                className="flex flex-col items-center justify-center gap-1 h-40 border-[1.5px] border-dashed border-rule rounded text-[11px] text-steel cursor-pointer hover:border-teal"
-                              >
-                                {uploadingVideo ? <span className="w-4 h-4 rounded-full border-2 border-rule border-t-teal animate-spin" /> : <Camera size={16} />}
-                                <span className="flex items-center gap-2">
-                                  <button type="button" className="text-[10px] underline decoration-dotted opacity-80 hover:opacity-100 cursor-pointer" onClick={(e) => { e.stopPropagation(); videoFileInputRef.current?.click(); }}>
-                                    seleccionar
-                                  </button>
-                                  <button type="button" className="text-[10px] underline decoration-dotted opacity-80 hover:opacity-100 cursor-pointer" onClick={(e) => { e.stopPropagation(); videoCameraInputRef.current?.click(); }}>
-                                    o usar cámara
-                                  </button>
-                                </span>
-                                <input ref={videoFileInputRef} type="file" accept="video/*" className="hidden" onChange={(e) => e.target.files?.[0] && addVideo(e.target.files[0])} />
-                                <input ref={videoCameraInputRef} type="file" accept="video/*" capture="environment" className="hidden" onChange={(e) => e.target.files?.[0] && addVideo(e.target.files[0])} />
+                              opcional, útil sobre todo cuando llegan muchos bultos a la vez. El
+                              atributo `capture` del input nativo solo lo respeta el celular —
+                              en laptop caería al explorador de archivos normal, así que esta
+                              opción solo se ofrece desde el celular. */}
+                          {isMobileDevice && (
+                            <>
+                              <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">
+                                Video de evidencia — opcional ({receivedVideoUrls.length}/2)
                               </label>
-                            )}
-                          </div>
+                              <div className="grid grid-cols-3 gap-2 mb-2.5">
+                                {receivedVideoUrls.map((url, i) => (
+                                  <div key={i} className="relative">
+                                    <video src={url} controls className="w-full h-40 rounded object-contain border border-rule bg-cloud" />
+                                    <button
+                                      type="button"
+                                      className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red text-white flex items-center justify-center cursor-pointer"
+                                      onClick={() => removeVideo(i)}
+                                    >
+                                      <X size={11} />
+                                    </button>
+                                  </div>
+                                ))}
+                                {receivedVideoUrls.length < 2 && (
+                                  <label
+                                    tabIndex={0}
+                                    onClick={(e) => e.preventDefault()}
+                                    className="flex flex-col items-center justify-center gap-1 h-40 border-[1.5px] border-dashed border-rule rounded text-[11px] text-steel cursor-pointer hover:border-teal"
+                                  >
+                                    {uploadingVideo ? <span className="w-4 h-4 rounded-full border-2 border-rule border-t-teal animate-spin" /> : <Camera size={16} />}
+                                    Grabar video
+                                    <input ref={videoCameraInputRef} type="file" accept="video/*" capture="environment" className="hidden" onChange={(e) => e.target.files?.[0] && addVideo(e.target.files[0])} />
+                                  </label>
+                                )}
+                              </div>
+                            </>
+                          )}
 
                           {aiChecking && <div className="text-[11.5px] text-steel mb-2">🤖 Comparando con las fotos de referencia del catálogo…</div>}
                           {aiResult && (
@@ -891,46 +893,61 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                           </div>
                           {urgentTotal > 0 && (
                             <div className="text-[12px] font-semibold text-ink mb-2.5">
-                              {urgentTotal} un. afectadas · ${(urgentTotal * r.unitCost).toFixed(2)} en disputa (costo de la cotización)
+                              {canApprove || isAdmin
+                                ? `${urgentTotal} un. afectadas · $${(urgentTotal * r.unitCost).toFixed(2)} en disputa (costo de la cotización)`
+                                : `${urgentTotal} un. afectadas`}
                             </div>
                           )}
 
                           <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">
-                            Evidencia ({urgentMediaUrls.length}/4) — mínimo 1 foto, puedes agregar 1 video
+                            Evidencia ({urgentMediaUrls.length}/4) — mínimo 1 foto{isMobileDevice && ", puedes agregar video"}
                           </label>
-                          <div className="grid grid-cols-4 gap-2 mb-2.5">
-                            {urgentMediaUrls.map((url, i) => (
-                              <div key={i} className="relative">
-                                {isVideoUrl(url) ? (
-                                  <video src={url} controls className="w-full h-48 rounded object-contain border border-rule bg-cloud" />
-                                ) : (
-                                  <a href={url} target="_blank" rel="noopener noreferrer" className="bg-cloud rounded border border-rule flex items-center justify-center h-48">
-                                    <img src={url} alt="" className="max-w-full max-h-full object-contain" />
-                                  </a>
-                                )}
-                                <button type="button" className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red text-white flex items-center justify-center cursor-pointer" onClick={() => removeUrgentMedia(i)}>
-                                  <X size={11} />
-                                </button>
+                          {urgentMediaUrls.length > 0 && (
+                            <div className="grid grid-cols-4 gap-2 mb-2.5">
+                              {urgentMediaUrls.map((url, i) => (
+                                <div key={i} className="relative">
+                                  {isVideoUrl(url) ? (
+                                    <video src={url} controls className="w-full h-48 rounded object-contain border border-rule bg-cloud" />
+                                  ) : (
+                                    <a href={url} target="_blank" rel="noopener noreferrer" className="bg-cloud rounded border border-rule flex items-center justify-center h-48">
+                                      <img src={url} alt="" className="max-w-full max-h-full object-contain" />
+                                    </a>
+                                  )}
+                                  <button type="button" className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red text-white flex items-center justify-center cursor-pointer" onClick={() => removeUrgentMedia(i)}>
+                                    <X size={11} />
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          {/* Confirmado 2026-08-18: pedido explícito del usuario — la foto solo
+                              se toma en vivo, nunca elegida de galería/portapapeles; el video
+                              (opcional) solo se ofrece desde el celular, mismo criterio que la
+                              recepción normal. */}
+                          {urgentMediaUrls.length < 4 && (
+                            takingUrgentPhoto ? (
+                              <div className="mb-2.5">
+                                <LiveCameraCapture folder="purchase-request-receipts" onCaptured={handleUrgentPhotoCaptured} onCancel={() => setTakingUrgentPhoto(false)} />
                               </div>
-                            ))}
-                            {urgentMediaUrls.length < 4 && (
-                              <label
-                                tabIndex={0}
-                                onPaste={onPasteUrgentMedia}
-                                onMouseEnter={onUrgentMediaHoverIn}
-                                onMouseLeave={onUrgentMediaHoverOut}
-                                onClick={(e) => e.preventDefault()}
-                                className="flex flex-col items-center justify-center gap-1 h-48 border-[1.5px] border-dashed border-red/40 rounded text-[10.5px] text-red cursor-pointer hover:border-red"
-                              >
-                                {uploadingUrgentMedia ? <span className="w-4 h-4 rounded-full border-2 border-rule border-t-red animate-spin" /> : <Camera size={15} />}
-                                Foto o video — Pegar (Ctrl+V)
-                                <button type="button" className="text-[9.5px] underline decoration-dotted opacity-80 hover:opacity-100 cursor-pointer" onClick={(e) => { e.stopPropagation(); urgentMediaFileInputRef.current?.click(); }}>
-                                  o seleccionar
+                            ) : (
+                              <div className="flex items-center gap-2 mb-2.5">
+                                <button
+                                  type="button"
+                                  className="flex items-center gap-1.5 text-[12px] font-semibold border-[1.5px] border-dashed border-red/40 text-red rounded-md px-3 py-2 cursor-pointer hover:border-red"
+                                  onClick={() => setTakingUrgentPhoto(true)}
+                                >
+                                  <Camera size={14} /> Tomar foto
                                 </button>
-                                <input ref={urgentMediaFileInputRef} type="file" accept="image/*,video/*" className="hidden" onChange={(e) => e.target.files?.[0] && addUrgentMedia(e.target.files[0])} />
-                              </label>
-                            )}
-                          </div>
+                                {isMobileDevice && (
+                                  <label className="flex items-center gap-1.5 text-[12px] font-semibold border-[1.5px] border-dashed border-red/40 text-red rounded-md px-3 py-2 cursor-pointer hover:border-red">
+                                    {uploadingUrgentMedia ? <span className="w-4 h-4 rounded-full border-2 border-rule border-t-red animate-spin" /> : <Camera size={14} />}
+                                    Grabar video
+                                    <input type="file" accept="video/*" capture="environment" className="hidden" onChange={(e) => e.target.files?.[0] && addUrgentVideo(e.target.files[0])} />
+                                  </label>
+                                )}
+                              </div>
+                            )
+                          )}
 
                           <textarea className="w-full rounded border border-rule px-2.5 py-2 text-[12.5px] mb-2.5" rows={2} placeholder="Describe qué pasó" value={urgentDesc} onChange={(e) => setUrgentDesc(e.target.value)} />
                           {err && <div className="text-red text-[12px] mb-2">{err}</div>}
@@ -998,11 +1015,13 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                       para todos, y solo Daniel puede aprobar de verdad. */}
                   {r.status === "RECEIVED_PENDING_REVIEW" && r.receipt && (
                     <div className="mt-1.5">
-                      <div className={`flex items-center gap-1.5 text-[11.5px] font-semibold mb-1 ${receivedQtyMatches ? "text-teal" : "text-red"}`}>
-                        {receivedQtyMatches ? <CheckCircle2 size={13} /> : <AlertTriangle size={13} />}
-                        Declarado por Inventario: {r.receipt.receivedQuantity} un. · Comprado y pagado: {r.quantity} un.
-                        {r.urgentReports.length > 0 && ` (cantidad buena esperada: ${expectedReceivedQty} un.)`}
-                      </div>
+                      {(canApprove || isAdmin) && (
+                        <div className={`flex items-center gap-1.5 text-[11.5px] font-semibold mb-1 ${receivedQtyMatches ? "text-teal" : "text-red"}`}>
+                          {receivedQtyMatches ? <CheckCircle2 size={13} /> : <AlertTriangle size={13} />}
+                          Declarado por Inventario: {r.receipt.receivedQuantity} un. · Comprado y pagado: {r.quantity} un.
+                          {r.urgentReports.length > 0 && ` (cantidad buena esperada: ${expectedReceivedQty} un.)`}
+                        </div>
+                      )}
                       <div className="text-[11.5px] text-steel mb-2">
                         Recibido por {actorName(r.receipt.confirmedBy?.name)} · {new Date(r.receipt.confirmedAt).toLocaleDateString("es-MX")}
                         {r.receipt.comment && ` — "${r.receipt.comment}"`}

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
-import { canReceivePurchasesTeam, getInventoryLeadId } from "@/lib/guards";
+import { canReceivePurchasesTeam, canActOnPurchaseReceiving, getInventoryLeadId } from "@/lib/guards";
 import { sendPushToOwner } from "@/lib/webPush";
 
 const schema = z.object({
@@ -32,6 +32,11 @@ const schema = z.object({
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!(await canReceivePurchasesTeam()) || !session) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+  const isAdmin = session.user.role === "admin";
+  // Confirmado 2026-08-18: pedido explícito del usuario — unidades y valor
+  // pagado son exclusivos de Daniel/admin, el resto del equipo nunca los ve
+  // ni siquiera en un mensaje de error.
+  const canSeeAmounts = isAdmin || (await canActOnPurchaseReceiving());
 
   const { id } = await params;
   const body = await req.json().catch(() => null);
@@ -78,13 +83,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "Ya se reportó como afectado el 100% de lo pedido — no hay cantidad buena que confirmar." }, { status: 409 });
   }
   if (parsed.data.receivedQuantity !== expectedQuantity) {
-    const msg = totalAffected > 0
-      ? `La cantidad buena a confirmar es ${expectedQuantity} un. (${existing.quantity} pedidas menos ${totalAffected} ya reportadas).`
-      : `La cantidad recibida no coincide con lo pedido (${existing.quantity} un.) — usa 'Informar urgente' para reportar la diferencia.`;
+    const msg = canSeeAmounts
+      ? totalAffected > 0
+        ? `La cantidad buena a confirmar es ${expectedQuantity} un. (${existing.quantity} pedidas menos ${totalAffected} ya reportadas).`
+        : `La cantidad recibida no coincide con lo pedido (${existing.quantity} un.) — usa 'Informar urgente' para reportar la diferencia.`
+      : "La cantidad no coincide con lo registrado — vuelve a contar. Si de verdad llegó una cantidad distinta, usa 'Informar urgente' para reportarlo.";
     return NextResponse.json({ error: msg }, { status: 409 });
   }
 
-  const isAdmin = session.user.role === "admin";
   const [, updated] = await prisma.$transaction([
     prisma.purchaseRequestReceipt.create({
       data: {

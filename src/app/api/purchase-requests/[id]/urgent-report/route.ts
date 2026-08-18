@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
-import { canReceivePurchasesTeam, getInventoryLeadId } from "@/lib/guards";
+import { canReceivePurchasesTeam, canActOnPurchaseReceiving, getInventoryLeadId } from "@/lib/guards";
 import { sendPushToOwner } from "@/lib/webPush";
 import { isWithinCreditClaimWindow } from "@/lib/purchaseUrgent";
 
@@ -29,6 +29,10 @@ const schema = z.object({
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!(await canReceivePurchasesTeam()) || !session) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+  const isAdmin = session.user.role === "admin";
+  // Confirmado 2026-08-18: pedido explícito del usuario — unidades y valor
+  // pagado son exclusivos de Daniel/admin.
+  const canSeeAmounts = isAdmin || (await canActOnPurchaseReceiving());
 
   const { id } = await params;
   const body = await req.json().catch(() => null);
@@ -43,10 +47,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const existing = await prisma.purchaseRequest.findUnique({ where: { id }, include: { catalogItem: { select: { name: true } } } });
   if (!existing) return NextResponse.json({ error: "No encontrada." }, { status: 404 });
   if (totalAffected > existing.quantity) {
-    return NextResponse.json({ error: `No puede ser mayor a lo pedido (${existing.quantity} un.).` }, { status: 400 });
+    const msg = canSeeAmounts ? `No puede ser mayor a lo pedido (${existing.quantity} un.).` : "La cantidad afectada no puede ser mayor a lo pedido — revisa el conteo.";
+    return NextResponse.json({ error: msg }, { status: 400 });
   }
 
-  const isAdmin = session.user.role === "admin";
   const report = await prisma.purchaseRequestUrgentReport.create({
     data: {
       requestId: id,
