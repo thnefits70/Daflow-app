@@ -9,7 +9,7 @@ type Item = {
   buyerRelation: string;
   buyerNote: string | null;
   employee: { name: string };
-  product: { name: string };
+  product: { name: string; costPrice: number; dropiPrice: number };
 };
 
 function money(n: number) {
@@ -31,8 +31,23 @@ export function PersonalPurchasesFinancePanel() {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<Record<string, string>>({});
 
+  // Confirmado 2026-08-18: el precio arranca precargado desde el catálogo
+  // que mantiene Nairoby (según el modo declarado) — ella lo puede pisar si
+  // ese valor quedó desactualizado, "puede cambiar de cuando en cuando".
   function load() {
-    fetch("/api/personal-purchases/pending-finance").then((r) => (r.ok ? r.json() : [])).then(setItems);
+    fetch("/api/personal-purchases/pending-finance").then((r) => (r.ok ? r.json() : [])).then((rows: Item[]) => {
+      setItems(rows);
+      setPrices((prev) => {
+        const next = { ...prev };
+        for (const it of rows) {
+          if (next[it.id] === undefined) {
+            const catalogPrice = it.priceMode === "COST" ? it.product.costPrice : it.product.dropiPrice;
+            next[it.id] = catalogPrice > 0 ? String(catalogPrice) : "";
+          }
+        }
+        return next;
+      });
+    });
   }
   useEffect(load, []);
 
@@ -85,7 +100,7 @@ export function PersonalPurchasesFinancePanel() {
                 <span className={it.priceMode === "COST" ? "text-green font-semibold" : "font-semibold"}>{it.priceMode === "COST" ? "Precio al costo" : "Precio Dropi"}</span> · {RELATION_LABEL[it.buyerRelation]}{it.buyerNote ? ` — ${it.buyerNote}` : ""}
               </div>
               <div className="flex items-center gap-2 flex-wrap">
-                <label className="text-[11.5px] text-steel">Precio unitario</label>
+                <label className="text-[11.5px] text-steel">Precio unitario (precargado del catálogo, editable)</label>
                 <input
                   className="text-[12px] rounded border border-rule bg-cloud px-2 py-1 w-24"
                   type="number"

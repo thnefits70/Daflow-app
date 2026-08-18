@@ -299,6 +299,7 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   horas_extra_aprobacion: "Horas extra por aprobar",
   comisiones_bonos_aprobacion: "Comisiones y bonos por aprobar",
   anticipos_aprobacion: "Anticipos por aprobar",
+  descuentos_sin_aceptar: "Descuentos por mala gestión sin aceptar",
   cumpleanos: "Cumpleaños de tu equipo (aviso 1 día antes)",
   compras_rechazadas: "Tus solicitudes de compra rechazadas — corregir y reenviar",
   compras_orden_compra: "Tus solicitudes de compra — falta subir orden de compra",
@@ -1148,6 +1149,30 @@ async function getSalaryAdvancePendingItem(href: string): Promise<PendingItem | 
   };
 }
 
+// Confirmado 2026-08-18: pedido explícito del usuario — si un descuento por
+// mala gestión sigue sin ser aceptado por el colaborador afectado, tanto
+// Andrés (admin) como Nairoby (FIN) tienen que verlo en sus Pendientes, para
+// saber que esa gestión todavía no fue aceptada.
+async function getManagementDeductionUnacceptedPendingItem(href: string): Promise<PendingItem | null> {
+  const rows = await prisma.managementDeduction.findMany({
+    where: { acceptedAt: null },
+    select: { totalAmount: true, createdAt: true, employee: { select: { name: true } } },
+  });
+  if (rows.length === 0) return null;
+
+  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const overdue = rows.some((r) => r.createdAt < cutoff);
+  const names = rows.map((r) => r.employee.name).join(", ");
+  return {
+    type: "descuentos_sin_aceptar",
+    icon: "⚠️",
+    label: "Descuentos por mala gestión sin aceptar",
+    meta: `${rows.length === 1 ? names : `${rows.length} colaboradores`}${overdue ? " · atrasado" : ""}`,
+    overdue,
+    href,
+  };
+}
+
 // Confirmado 2026-08-06: aviso 1 día antes de la fecha en que se va a
 // felicitar (que puede ser el cumpleaños real o el último día laborable
 // antes, si cae sábado/domingo/feriado — ver celebrationDateFor en
@@ -1195,7 +1220,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     const comDept = await prisma.department.findUnique({ where: { code: "COM" }, select: { id: true } });
     const comPaymentsHref = comDept ? `/admin/dept/${comDept.id}?tab=compras&ptab=finanzas` : "/admin";
     const comCreditsHref = comDept ? `/admin/dept/${comDept.id}?tab=compras&ptab=urgentes` : "/admin";
-    const [feedbackItems, recognitionItem, pettyCashLow, pettyCashUnconfirmed, adminPaymentsItem, purchaseMerchandiseItem, purchaseShippingItem, purchaseCreditsItem, overtimeApprovalItem, commissionBonusApprovalItem, salaryAdvanceItem, birthdayItems] = await Promise.all([
+    const [feedbackItems, recognitionItem, pettyCashLow, pettyCashUnconfirmed, adminPaymentsItem, purchaseMerchandiseItem, purchaseShippingItem, purchaseCreditsItem, overtimeApprovalItem, commissionBonusApprovalItem, salaryAdvanceItem, managementDeductionItem, birthdayItems] = await Promise.all([
       getFeedbackPendingItems(),
       getRecognitionAdminPendingItem("/admin/colaborador-destacado"),
       getPettyCashLowBalanceItems(financeHref),
@@ -1207,6 +1232,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       getOvertimeApprovalPendingItem("/admin/nomina?tab=pagos"),
       getCommissionAndBonusApprovalPendingItem("/admin/nomina"),
       getSalaryAdvancePendingItem("/admin/nomina?tab=pagos&ptab=anticipos"),
+      getManagementDeductionUnacceptedPendingItem("/admin/nomina?tab=pagos&ptab=descuentos"),
       getUpcomingBirthdayPendingItems("/admin/nomina"),
     ]);
     const items = [
@@ -1221,6 +1247,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       ...(overtimeApprovalItem ? [overtimeApprovalItem] : []),
       ...(commissionBonusApprovalItem ? [commissionBonusApprovalItem] : []),
       ...(salaryAdvanceItem ? [salaryAdvanceItem] : []),
+      ...(managementDeductionItem ? [managementDeductionItem] : []),
       ...birthdayItems,
     ];
     if (items.length === 0) return null;
@@ -1243,7 +1270,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
 
   if (me.leadsDept.code === "FIN") {
     monthly = true;
-    const [payStub, returnRate, warranty, paymentReminders, storeFeedback, pettyCashLow, pettyCashUnconfirmed, purchaseShippingItem] = await Promise.all([
+    const [payStub, returnRate, warranty, paymentReminders, storeFeedback, pettyCashLow, pettyCashUnconfirmed, purchaseShippingItem, managementDeductionItem] = await Promise.all([
       getPayStubPendingItem("/area/roles-de-pago"),
       getReturnRatePendingItem("/area/kpis-generales"),
       getWarrantyPendingItem("/area/kpis-generales"),
@@ -1252,6 +1279,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       getPettyCashLowBalanceItems("/area/workspace"),
       getPettyCashUnconfirmedFunderItems(actor.userId, "/area/workspace"),
       getPurchaseShippingPendingItem("/area/workspace?tab=compras&ptab=finanzas"),
+      getManagementDeductionUnacceptedPendingItem("/area/nomina?tab=pagos&ptab=descuentos"),
     ]);
     items.push(...pettyCashLow, ...pettyCashUnconfirmed);
     if (payStub) items.push(payStub);
@@ -1260,6 +1288,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     items.push(...paymentReminders);
     if (storeFeedback) items.push(storeFeedback);
     if (purchaseShippingItem) items.push(purchaseShippingItem);
+    if (managementDeductionItem) items.push(managementDeductionItem);
   }
 
   if (me.leadsDept.trackWeeklyMetric) {

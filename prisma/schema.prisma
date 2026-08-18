@@ -2661,14 +2661,17 @@ model CeoBonusGrantSeen {
 // del equipo) — lo mantiene Daniel (Inventario) o el admin, el colaborador
 // solo elige. Precio al costo vs. precio Dropi, distinto de PurchaseCatalogItem
 // (que es para comprar A proveedores, no para vender/retirar del propio stock).
-// Confirmado 2026-08-18: ajustado el mismo día — el catálogo NO guarda
-// precio. Nairoby es quien digita el valor en dólares al cerrar cada
-// compra (confirm-finance), nunca un precio fijo de catálogo — el
-// colaborador solo declara para quién es la compra.
+// Confirmado 2026-08-18: ajustado dos veces el mismo día. Versión final —
+// el catálogo SÍ guarda los dos precios (costo y Dropi), pero lo mantiene
+// exclusivamente Nairoby (nunca Daniel) porque pueden cambiar de a poco.
+// El colaborador JAMÁS ve estos valores — ni al comprar ni en su propio
+// historial — el único lugar donde ve el monto es su Rol de pago.
 model RetailProduct {
-  id    String  @id @default(cuid())
-  name  String  @unique
-  photo String?
+  id         String  @id @default(cuid())
+  name       String  @unique
+  photo      String?
+  costPrice  Float   @default(0)
+  dropiPrice Float   @default(0)
 
   createdById String?
   createdBy   User?    @relation("RetailProductCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)

@@ -12,7 +12,10 @@ function currentMonthStr(): string {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 
-// Historial propio del colaborador que está logueado.
+// Historial propio del colaborador que está logueado. Confirmado
+// 2026-08-18: el precio NUNCA se le muestra acá — ni unitPrice ni
+// totalAmount van en la respuesta, a propósito, aunque la fila ya los
+// tenga cargados. El único lugar donde ve el monto es su Rol de pago.
 export async function GET() {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "No autorizado." }, { status: 401 });
@@ -20,7 +23,14 @@ export async function GET() {
 
   const purchases = await prisma.personalPurchase.findMany({
     where: { employeeId: session.user.id },
-    include: { product: { select: { name: true, photo: true } } },
+    select: {
+      id: true,
+      quantity: true,
+      status: true,
+      rejectionReason: true,
+      createdAt: true,
+      product: { select: { name: true, photo: true } },
+    },
     orderBy: { createdAt: "desc" },
   });
   return NextResponse.json(purchases);

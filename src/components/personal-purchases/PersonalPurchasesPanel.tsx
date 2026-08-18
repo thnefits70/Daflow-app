@@ -6,27 +6,22 @@ import { LiveCameraCapture } from "@/components/shared/LiveCameraCapture";
 
 type RetailProduct = { id: string; name: string; photo: string | null };
 type BuyerRelation = "SELF" | "MINOR_CHILD" | "OTHER_FAMILY";
+// Confirmado 2026-08-18: a propósito, esta fila NUNCA trae precio — ni la
+// API lo manda. El único lugar donde el colaborador ve el monto es su Rol
+// de pago.
 type Purchase = {
   id: string;
   quantity: number;
-  totalAmount: number | null;
-  installments: number;
-  priceMode: string;
   status: string;
   rejectionReason: string | null;
-  firstPayoutMonth: string | null;
   product: { name: string; photo: string | null };
   createdAt: string;
 };
 
-function money(n: number) {
-  return `$${n.toFixed(2)}`;
-}
-
 const STATUS_LABEL: Record<string, { label: string; color: string }> = {
   PENDING_INVENTORY: { label: "Esperando confirmación de bodega", color: "#D9A441" },
   PENDING_FINANCE: { label: "Ya podés retirarlo — falta que Nairoby cierre el precio", color: "#1E5EFF" },
-  APPROVED: { label: "Aprobada", color: "#22C55E" },
+  APPROVED: { label: "Aprobada — vas a ver el descuento en tu Rol de pago", color: "#22C55E" },
   REJECTED: { label: "Rechazada", color: "#C4453A" },
 };
 
@@ -168,9 +163,6 @@ export function PersonalPurchasesPanel() {
             return (
               <div key={p.id} className="flex items-center gap-3 text-[12.5px] py-2 border-b border-rule last:border-0 flex-wrap">
                 <span className="font-semibold flex-1 min-w-[140px]">{p.product.name} × {p.quantity}</span>
-                <span className="font-bold tabular-nums">
-                  {p.totalAmount != null ? `${money(p.totalAmount)}${p.installments > 1 ? ` (${p.installments} cuotas)` : ""}` : "Precio por confirmar"}
-                </span>
                 <span className="text-[10.5px] font-semibold rounded-full px-2 py-0.5" style={{ color: s.color, border: `1px solid ${s.color}` }}>{s.label}</span>
                 {p.rejectionReason && <span className="text-[11px] text-red">{p.rejectionReason}</span>}
               </div>
