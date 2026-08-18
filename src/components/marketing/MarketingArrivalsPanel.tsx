@@ -17,6 +17,8 @@ type Row = {
   } | null;
 };
 
+type Confirmer = { id: string; name: string; role: "design" | "advisor" };
+
 function PhotoRow({ label, urls }: { label: string; urls: string[] }) {
   if (urls.length === 0) return null;
   return (
@@ -59,12 +61,28 @@ function ConfirmButton({ label, icon, onConfirm, busy }: { label: string; icon: 
   );
 }
 
+// Confirmado 2026-08-18: pedido explícito del usuario — filtrar por
+// persona muestra solo lo que ESA persona (por su rol: diseño o asesoría)
+// todavía no ha confirmado, ordenado de lo más antiguo a lo más nuevo para
+// priorizar. Sin filtro (Todos), el orden por defecto sigue siendo lo más
+// reciente arriba.
 export function MarketingArrivalsPanel({ canConfirmDesign, canConfirmAdvisor }: { canConfirmDesign: boolean; canConfirmAdvisor: boolean }) {
   const [rows, setRows] = useState<Row[] | null>(null);
+  const [confirmers, setConfirmers] = useState<Confirmer[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [filter, setFilter] = useState<string>("all");
 
   function load() {
-    fetch("/api/marketing-arrivals").then((r) => (r.ok ? r.json() : [])).then(setRows).catch(() => setRows([]));
+    fetch("/api/marketing-arrivals")
+      .then((r) => (r.ok ? r.json() : { rows: [], confirmers: [] }))
+      .then((data) => {
+        setRows(data.rows ?? []);
+        setConfirmers(data.confirmers ?? []);
+      })
+      .catch(() => {
+        setRows([]);
+        setConfirmers([]);
+      });
   }
   useEffect(load, []);
 
@@ -80,9 +98,62 @@ export function MarketingArrivalsPanel({ canConfirmDesign, canConfirmAdvisor }: 
     return <div className="border-[1.5px] border-dashed border-rule rounded-md p-8 text-center text-steel text-[13.5px]">Todavía no ha llegado nada a bodega.</div>;
   }
 
+  const selected = filter === "all" ? null : confirmers.find((c) => `${c.role}:${c.id}` === filter) ?? null;
+  const pendingKey = (r: Row, role: "design" | "advisor") =>
+    role === "design" ? r.marketingFollowUp?.designConfirmedAt : r.marketingFollowUp?.advisorConfirmedAt;
+
+  const visibleRows = selected
+    ? rows
+        .filter((r) => !pendingKey(r, selected.role))
+        .sort((a, b) => {
+          const ta = a.receipt?.confirmedAt ? new Date(a.receipt.confirmedAt).getTime() : 0;
+          const tb = b.receipt?.confirmedAt ? new Date(b.receipt.confirmedAt).getTime() : 0;
+          return ta - tb; // más antiguo primero
+        })
+    : rows; // orden por defecto de la API: más reciente primero
+
   return (
     <div className="flex flex-col gap-3">
-      {rows.map((r) => {
+      {confirmers.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => setFilter("all")}
+            className={`rounded-full border px-3 py-1 text-[11.5px] font-semibold cursor-pointer transition-colors ${
+              filter === "all" ? "border-blue bg-blue text-white" : "border-rule text-steel hover:border-blue/50"
+            }`}
+          >
+            Todos
+          </button>
+          {confirmers.map((c) => {
+            const key = `${c.role}:${c.id}`;
+            const pendingCount = rows.filter((r) => !pendingKey(r, c.role)).length;
+            return (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setFilter(key)}
+                className={`rounded-full border px-3 py-1 text-[11.5px] font-semibold cursor-pointer transition-colors ${
+                  filter === key ? "border-blue bg-blue text-white" : "border-rule text-steel hover:border-blue/50"
+                }`}
+              >
+                {c.name}
+                {pendingCount > 0 && (
+                  <span className={`ml-1.5 ${filter === key ? "text-white/80" : "text-steel"}`}>({pendingCount})</span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {selected && visibleRows.length === 0 && (
+        <div className="border-[1.5px] border-dashed border-rule rounded-md p-8 text-center text-steel text-[13.5px]">
+          {selected.name} ya confirmó todo lo que tenía pendiente.
+        </div>
+      )}
+
+      {visibleRows.map((r) => {
         const fu = r.marketingFollowUp;
         return (
           <div key={r.id} className="bg-surface border border-rule rounded-md p-4">

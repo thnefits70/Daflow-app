@@ -26,6 +26,22 @@ export async function getMarketingArrivals() {
   return rows;
 }
 
+// Confirmado 2026-08-18: lista de quién puede confirmar cada rol, para que
+// el panel arme filtros por persona ("lo que Jariel todavía no confirma") y
+// pueda priorizar lo más antiguo primero sin tener que adivinar nombres.
+export async function getMarketingArrivalConfirmers(): Promise<{ id: string; name: string; role: "design" | "advisor" }[]> {
+  const users = await prisma.user.findMany({
+    where: { isActive: true, OR: [{ canConfirmMarketingDesign: true }, { canConfirmMarketingAdvisor: true }] },
+    select: { id: true, name: true, canConfirmMarketingDesign: true, canConfirmMarketingAdvisor: true },
+  });
+  const confirmers: { id: string; name: string; role: "design" | "advisor" }[] = [];
+  for (const u of users) {
+    if (u.canConfirmMarketingDesign) confirmers.push({ id: u.id, name: u.name, role: "design" });
+    if (u.canConfirmMarketingAdvisor) confirmers.push({ id: u.id, name: u.name, role: "advisor" });
+  }
+  return confirmers;
+}
+
 // Confirmado 2026-08-08: se le avisa a TODOS los que puedan confirmar ese
 // rol (Robert es el único diseñador hoy, pero puede haber más de un
 // asesor — Heidy Y Jariel se enteran de toda llegada, aunque en la
