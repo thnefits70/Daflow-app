@@ -102,6 +102,21 @@ const emptyForm = {
   notes: "",
   contacts: [{ label: "", whatsapp: "" }],
   channels: [] as SupplierChannelDTO[],
+  // Confirmado 2026-08-18: pedido explícito del usuario — poder cargar la
+  // cuenta bancaria del proveedor en el mismo formulario de creación, no
+  // solo después desde la ficha. Opcional (un transportista puede no tenerla
+  // todavía), pero si se llena algo, se exige completo — ver save().
+  bankName: "",
+  bankAccountType: "",
+  bankAccountNumber: "",
+  bankAccountHolder: "",
+  holderIdType: "" as "" | "RUC" | "CEDULA",
+  holderIdNumber: "",
+};
+
+const emptyAccountForm = {
+  bankName: "", bankAccountType: "", bankAccountNumber: "", bankAccountHolder: "",
+  holderIdType: "" as "" | "RUC" | "CEDULA", holderIdNumber: "",
 };
 
 export function SuppliersPanel({
@@ -140,6 +155,10 @@ export function SuppliersPanel({
   const [newContact, setNewContact] = useState({ label: "", whatsapp: "" });
   const [contactErr, setContactErr] = useState("");
   const [revealedAccountIds, setRevealedAccountIds] = useState<Set<string>>(new Set());
+  const [addingAccountId, setAddingAccountId] = useState<string | null>(null);
+  const [accountForm, setAccountForm] = useState(emptyAccountForm);
+  const [accountBusy, setAccountBusy] = useState(false);
+  const [accountErr, setAccountErr] = useState("");
 
   const toggleRevealAccount = (id: string) => {
     setRevealedAccountIds((prev) => {
@@ -176,6 +195,12 @@ export function SuppliersPanel({
       notes: s.notes ?? "",
       contacts: s.contacts.length ? s.contacts.map((c) => ({ label: c.label, whatsapp: c.whatsapp })) : [{ label: "", whatsapp: "" }],
       channels: s.channels.map((c) => ({ platform: c.platform, url: c.url })),
+      bankName: "",
+      bankAccountType: "",
+      bankAccountNumber: "",
+      bankAccountHolder: "",
+      holderIdType: "",
+      holderIdNumber: "",
     });
     setFormOpen(true);
     setErr("");
@@ -199,6 +224,16 @@ export function SuppliersPanel({
     const noun = formType === "CARRIER" ? "transportista" : "proveedor";
     if (!form.name.trim() || !form.notes.trim() || contacts.length === 0) {
       setErr(`Completa el nombre del ${noun}, la descripción en Notas, y al menos un contacto de WhatsApp.`);
+      return;
+    }
+    // Confirmado 2026-08-18: la cuenta bancaria es opcional al crear (un
+    // transportista puede no tenerla todavía), pero si se llenó algo, se
+    // exige completo — para no guardar una cuenta a medias.
+    const bankFields = [form.bankName, form.bankAccountType, form.bankAccountNumber, form.bankAccountHolder, form.holderIdType, form.holderIdNumber];
+    const bankStarted = bankFields.some((v) => v.trim());
+    const bankComplete = bankFields.every((v) => v.trim());
+    if (!editingId && bankStarted && !bankComplete) {
+      setErr("Completa todos los datos de la cuenta bancaria, o déjalos todos vacíos si todavía no la tiene.");
       return;
     }
     setErr("");
@@ -225,12 +260,36 @@ export function SuppliersPanel({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
         });
-    setBusy(false);
     if (!res.ok) {
+      setBusy(false);
       const data = await res.json().catch(() => null);
       setErr(data?.error ?? `No se pudo guardar el ${noun}.`);
       return;
     }
+    if (!editingId && bankComplete) {
+      const created = await res.json().catch(() => null);
+      if (created?.id) {
+        const bankRes = await fetch(`/api/purchase-suppliers/${created.id}/bank-accounts`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            bankName: form.bankName.trim(),
+            bankAccountType: form.bankAccountType.trim(),
+            bankAccountNumber: form.bankAccountNumber.trim(),
+            bankAccountHolder: form.bankAccountHolder.trim(),
+            holderIdType: form.holderIdType,
+            holderIdNumber: form.holderIdNumber.trim(),
+          }),
+        });
+        if (!bankRes.ok) {
+          setBusy(false);
+          const data = await bankRes.json().catch(() => null);
+          setErr(`El ${noun} se guardó, pero no se pudo agregar la cuenta bancaria: ${data?.error ?? "intenta agregarla después desde su ficha."}`);
+          return;
+        }
+      }
+    }
+    setBusy(false);
     setFormOpen(false);
     setEditingId(null);
     router.refresh();
@@ -265,6 +324,36 @@ export function SuppliersPanel({
     }
     setAddingContactId(null);
     setNewContact({ label: "", whatsapp: "" });
+    router.refresh();
+  };
+
+  // Confirmado 2026-08-18: pedido explícito del usuario — desde el
+  // directorio de Proveedores también se puede agregar una cuenta bancaria
+  // nueva a un proveedor ya existente (mismo patrón que "Agregar asesor":
+  // solo se suma, nunca se edita ni se elimina una ya registrada desde
+  // aquí). Reusa el mismo endpoint que ya usa el picker de Control de
+  // Compras, porque ambas pantallas leen/escriben la misma tabla de
+  // proveedores y cuentas bancarias.
+  const addBankAccount = async (supplierId: string) => {
+    if (!accountForm.bankName.trim() || !accountForm.bankAccountType.trim() || !accountForm.bankAccountNumber.trim() || !accountForm.bankAccountHolder.trim() || !accountForm.holderIdType || !accountForm.holderIdNumber.trim()) {
+      setAccountErr("Completa todos los campos.");
+      return;
+    }
+    setAccountErr("");
+    setAccountBusy(true);
+    const res = await fetch(`/api/purchase-suppliers/${supplierId}/bank-accounts`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(accountForm),
+    });
+    setAccountBusy(false);
+    if (!res.ok) {
+      const data = await res.json().catch(() => null);
+      setAccountErr(data?.error ?? "No se pudo guardar la cuenta.");
+      return;
+    }
+    setAddingAccountId(null);
+    setAccountForm(emptyAccountForm);
     router.refresh();
   };
 
@@ -344,6 +433,7 @@ export function SuppliersPanel({
           {formOpen && (
             <SupplierForm
               type={formType}
+              isAdmin={isAdmin}
               form={form}
               setForm={setForm}
               updateContact={updateContact}
@@ -485,44 +575,92 @@ export function SuppliersPanel({
                   </div>
                 )}
 
-                {s.bankAccounts && s.bankAccounts.length > 0 && (
+                {isAdmin && s.bankAccounts && (
                   <div className="mt-3 pt-3 border-t border-rule">
                     <div className="flex items-center gap-1.5 mb-2">
                       <Lock size={12} className="text-steel" />
                       <span className="text-[11.5px] font-semibold text-ink">Datos bancarios</span>
                       <span className="text-[10px] font-semibold text-steel border border-rule rounded-full px-2 py-0.5">Exclusivo · admin</span>
                     </div>
-                    <div className="flex flex-col gap-2">
-                      {s.bankAccounts.map((b) => {
-                        const revealed = revealedAccountIds.has(b.id);
-                        return (
-                          <div key={b.id} className="bg-cloud border border-rule rounded px-3 py-2.5">
-                            <div className="flex items-center justify-between gap-2">
-                              <span className="text-[12.5px] font-semibold text-ink">
-                                {b.bankName} · {b.bankAccountType}
-                              </span>
-                              <button
-                                type="button"
-                                className="inline-flex items-center gap-1 text-[11px] font-semibold text-steel hover:text-ink cursor-pointer shrink-0"
-                                onClick={() => toggleRevealAccount(b.id)}
-                              >
-                                {revealed ? <EyeOff size={12} /> : <Eye size={12} />} {revealed ? "Ocultar" : "Revelar"}
-                              </button>
+                    {s.bankAccounts.length === 0 && addingAccountId !== s.id && (
+                      <div className="text-[11.5px] text-steel mb-2">Sin cuentas bancarias registradas.</div>
+                    )}
+                    {s.bankAccounts.length > 0 && (
+                      <div className="flex flex-col gap-2 mb-2">
+                        {s.bankAccounts.map((b) => {
+                          const revealed = revealedAccountIds.has(b.id);
+                          return (
+                            <div key={b.id} className="bg-cloud border border-rule rounded px-3 py-2.5">
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-[12.5px] font-semibold text-ink">
+                                  {b.bankName} · {b.bankAccountType}
+                                </span>
+                                <button
+                                  type="button"
+                                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-steel hover:text-ink cursor-pointer shrink-0"
+                                  onClick={() => toggleRevealAccount(b.id)}
+                                >
+                                  {revealed ? <EyeOff size={12} /> : <Eye size={12} />} {revealed ? "Ocultar" : "Revelar"}
+                                </button>
+                              </div>
+                              <div className="text-[13px] font-mono text-ink mt-1.5">
+                                {revealed ? b.bankAccountNumber : maskAccountNumber(b.bankAccountNumber)}
+                              </div>
+                              <div className="text-[11px] text-steel mt-1.5">
+                                Titular: {b.bankAccountHolder}
+                                {b.holderIdType && b.holderIdNumber ? ` · ${b.holderIdType === "RUC" ? "RUC" : "Cédula"} ${b.holderIdNumber}` : ""}
+                              </div>
+                              <div className="text-[10.5px] text-steel-dim mt-1">
+                                Agregada por {b.createdByName ?? "—"} · {new Date(b.createdAt).toLocaleDateString("es-EC", { day: "numeric", month: "short", year: "numeric" })}
+                              </div>
                             </div>
-                            <div className="text-[13px] font-mono text-ink mt-1.5">
-                              {revealed ? b.bankAccountNumber : maskAccountNumber(b.bankAccountNumber)}
-                            </div>
-                            <div className="text-[11px] text-steel mt-1.5">
-                              Titular: {b.bankAccountHolder}
-                              {b.holderIdType && b.holderIdNumber ? ` · ${b.holderIdType === "RUC" ? "RUC" : "Cédula"} ${b.holderIdNumber}` : ""}
-                            </div>
-                            <div className="text-[10.5px] text-steel-dim mt-1">
-                              Agregada por {b.createdByName ?? "—"} · {new Date(b.createdAt).toLocaleDateString("es-EC", { day: "numeric", month: "short", year: "numeric" })}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {addingAccountId === s.id ? (
+                      <div className="bg-cloud border border-rule rounded-md p-2.5">
+                        <div className="text-[10.5px] text-steel mb-1.5">
+                          Solo se agrega — no se puede editar ni eliminar una cuenta ya existente desde aquí.
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 mb-2">
+                          <input className="rounded border border-rule px-2 py-1.5 text-[12px]" placeholder="Banco" value={accountForm.bankName} onChange={(e) => setAccountForm((f) => ({ ...f, bankName: e.target.value }))} />
+                          <input className="rounded border border-rule px-2 py-1.5 text-[12px]" placeholder="N° de cuenta" value={accountForm.bankAccountNumber} onChange={(e) => setAccountForm((f) => ({ ...f, bankAccountNumber: e.target.value }))} />
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 mb-2">
+                          <select className="rounded border border-rule bg-surface px-2 py-1.5 text-[12px]" value={accountForm.bankAccountType} onChange={(e) => setAccountForm((f) => ({ ...f, bankAccountType: e.target.value }))}>
+                            <option value="">Tipo de cuenta…</option>
+                            <option value="Ahorro">Ahorro</option>
+                            <option value="Corriente">Corriente</option>
+                          </select>
+                          <select className="rounded border border-rule bg-surface px-2 py-1.5 text-[12px]" value={accountForm.holderIdType} onChange={(e) => setAccountForm((f) => ({ ...f, holderIdType: e.target.value as "" | "RUC" | "CEDULA" }))}>
+                            <option value="">RUC o cédula…</option>
+                            <option value="RUC">RUC</option>
+                            <option value="CEDULA">Cédula</option>
+                          </select>
+                        </div>
+                        <input className="w-full rounded border border-rule px-2 py-1.5 text-[12px] mb-2" placeholder="Titular de la cuenta" value={accountForm.bankAccountHolder} onChange={(e) => setAccountForm((f) => ({ ...f, bankAccountHolder: e.target.value }))} />
+                        <input className="w-full rounded border border-rule px-2 py-1.5 text-[12px] mb-2" placeholder={accountForm.holderIdType === "CEDULA" ? "N° de cédula" : "N° de RUC"} value={accountForm.holderIdNumber} onChange={(e) => setAccountForm((f) => ({ ...f, holderIdNumber: e.target.value }))} />
+                        {accountErr && <div className="text-red text-[11.5px] mb-2">{accountErr}</div>}
+                        <div className="flex items-center gap-2">
+                          <button type="button" disabled={accountBusy} className="rounded border border-teal bg-teal px-3 py-1.5 text-[11.5px] font-bold text-navy cursor-pointer disabled:opacity-60" onClick={() => addBankAccount(s.id)}>
+                            Guardar cuenta
+                          </button>
+                          <button type="button" className="text-steel text-[11.5px] cursor-pointer" onClick={() => { setAddingAccountId(null); setAccountErr(""); }}>
+                            Cancelar
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-1 text-[11.5px] text-blue font-semibold cursor-pointer"
+                        onClick={() => { setAddingAccountId(s.id); setAccountForm(emptyAccountForm); setAccountErr(""); }}
+                      >
+                        <Plus size={12} /> Agregar cuenta bancaria nueva
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
@@ -640,6 +778,7 @@ export function SuppliersPanel({
 
 function SupplierForm({
   type,
+  isAdmin,
   form,
   setForm,
   updateContact,
@@ -655,6 +794,7 @@ function SupplierForm({
   onCancel,
 }: {
   type: SupplierType;
+  isAdmin: boolean;
   form: typeof emptyForm;
   setForm: React.Dispatch<React.SetStateAction<typeof emptyForm>>;
   updateContact: (idx: number, field: "label" | "whatsapp", value: string) => void;
@@ -737,6 +877,37 @@ function SupplierForm({
           placeholder={isCarrier ? "Ej. Entregas dentro de Guayaquil, moto propia, disponible de lunes a sábado…" : "Ej. Ropa y juguetes para niños, artículos escolares, bisutería, productos de limpieza para el hogar…"}
         />
       </div>
+
+      {isAdmin && !editing && (
+        <div className="mb-3.5 bg-cloud border border-rule rounded-md p-3">
+          <div className="flex items-center gap-1.5 mb-1">
+            <Lock size={12} className="text-steel" />
+            <span className="text-[11.5px] font-semibold text-ink">Datos bancarios</span>
+            <span className="text-[10px] font-semibold text-steel border border-rule rounded-full px-2 py-0.5">Opcional</span>
+          </div>
+          <div className="text-[10.5px] text-steel mb-2">
+            Si {isCarrier ? "el transportista" : "el proveedor"} ya tiene cuenta, complétala aquí de una vez — si no, se puede agregar después desde su ficha en el directorio. Una vez guardada no se puede editar ni eliminar desde aquí, solo agregar cuentas nuevas.
+          </div>
+          <div className="grid grid-cols-2 gap-2 mb-2">
+            <input className="rounded border border-rule px-2.5 py-1.5 text-[12.5px]" placeholder="Banco" value={form.bankName} onChange={(e) => setForm((f) => ({ ...f, bankName: e.target.value }))} />
+            <input className="rounded border border-rule px-2.5 py-1.5 text-[12.5px]" placeholder="N° de cuenta" value={form.bankAccountNumber} onChange={(e) => setForm((f) => ({ ...f, bankAccountNumber: e.target.value }))} />
+          </div>
+          <div className="grid grid-cols-2 gap-2 mb-2">
+            <select className="rounded border border-rule bg-surface px-2.5 py-1.5 text-[12.5px]" value={form.bankAccountType} onChange={(e) => setForm((f) => ({ ...f, bankAccountType: e.target.value }))}>
+              <option value="">Tipo de cuenta…</option>
+              <option value="Ahorro">Ahorro</option>
+              <option value="Corriente">Corriente</option>
+            </select>
+            <select className="rounded border border-rule bg-surface px-2.5 py-1.5 text-[12.5px]" value={form.holderIdType} onChange={(e) => setForm((f) => ({ ...f, holderIdType: e.target.value as "" | "RUC" | "CEDULA" }))}>
+              <option value="">RUC o cédula…</option>
+              <option value="RUC">RUC</option>
+              <option value="CEDULA">Cédula</option>
+            </select>
+          </div>
+          <input className="w-full rounded border border-rule px-2.5 py-1.5 text-[12.5px] mb-2" placeholder="Titular de la cuenta" value={form.bankAccountHolder} onChange={(e) => setForm((f) => ({ ...f, bankAccountHolder: e.target.value }))} />
+          <input className="w-full rounded border border-rule px-2.5 py-1.5 text-[12.5px]" placeholder={form.holderIdType === "CEDULA" ? "N° de cédula" : "N° de RUC"} value={form.holderIdNumber} onChange={(e) => setForm((f) => ({ ...f, holderIdNumber: e.target.value }))} />
+        </div>
+      )}
 
       <label className="block mb-1.5 text-[10.5px] font-semibold uppercase tracking-wide text-steel">Contactos de WhatsApp</label>
       {form.contacts.map((c, idx) => (

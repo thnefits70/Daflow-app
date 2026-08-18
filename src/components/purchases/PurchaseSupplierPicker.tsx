@@ -143,7 +143,10 @@ export function PurchaseSupplierPicker({
     setCreating(false);
     const supplier: PurchaseSupplierDTO = { ...data, bankAccounts: data.bankAccounts ?? [], contacts: data.contacts ?? [] };
     onChange(supplier);
-    if (supplier.bankAccounts[0]) onSelectBankAccount?.(supplier.bankAccounts[0].id);
+    // Confirmado 2026-08-18: pedido explícito del usuario — nunca se
+    // preselecciona una cuenta bancaria sola, ni siquiera si el proveedor
+    // solo tiene una. Quien solicita debe elegirla a propósito (click en el
+    // radio), para evitar que se envíe la cuenta equivocada por automático.
   }
 
   async function addBankAccount() {
@@ -447,7 +450,7 @@ export function PurchaseSupplierPicker({
               onClick={() => {
                 onChange(s);
                 setOpen(false);
-                if (s.bankAccounts[0]) onSelectBankAccount?.(s.bankAccounts[0].id);
+                // Tampoco se preselecciona aquí — mismo motivo que en save().
               }}
             >
               <CheckCircle2 size={13} className="text-teal shrink-0" />

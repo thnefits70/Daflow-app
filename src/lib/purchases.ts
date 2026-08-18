@@ -303,18 +303,20 @@ export async function checkPurchaseSubmission(d: PurchaseSubmissionData): Promis
   // Confirmado 2026-08-07: bug real — si el proveedor no tenía NINGUNA cuenta
   // registrada, bankAccountId se guardaba en null sin ningún aviso. Ahora es
   // obligatorio elegir una cuenta real del proveedor.
+  // Confirmado 2026-08-18: pedido explícito del usuario — nunca se elige la
+  // cuenta en automático, ni siquiera cuando el proveedor solo tiene una;
+  // quien solicita siempre debe elegirla a propósito en la UI.
   const supplierBankAccounts = await prisma.supplierBankAccount.findMany({ where: { supplierId: d.supplierId }, select: { id: true } });
   if (supplierBankAccounts.length === 0) {
     return { ok: false, status: 400, error: "Este proveedor no tiene ninguna cuenta bancaria registrada — agrégale una cuenta antes de enviar la solicitud." };
   }
   if (!d.bankAccountId) {
-    if (supplierBankAccounts.length > 1) {
-      return { ok: false, status: 400, error: "Este proveedor tiene varias cuentas bancarias — elige a cuál se le paga." };
-    }
-  } else if (!supplierBankAccounts.some((a) => a.id === d.bankAccountId)) {
+    return { ok: false, status: 400, error: "Elige la cuenta bancaria del proveedor a la que se le paga." };
+  }
+  if (!supplierBankAccounts.some((a) => a.id === d.bankAccountId)) {
     return { ok: false, status: 400, error: "La cuenta bancaria elegida no pertenece a este proveedor." };
   }
-  const resolvedBankAccountId = d.bankAccountId || supplierBankAccounts[0].id;
+  const resolvedBankAccountId = d.bankAccountId;
 
   const groupTotal = d.items.reduce((sum, it) => sum + it.quantity * it.unitCost, 0);
   const matches = d.quoteReadTotal !== null && Math.abs(d.quoteReadTotal - groupTotal) < 0.01;

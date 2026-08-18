@@ -605,8 +605,8 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
       setErr("Este proveedor no tiene ninguna cuenta bancaria registrada — agrégale una cuenta antes de enviar la solicitud.");
       return;
     }
-    if (supplierAccounts.length > 1 && !bankAccountId) {
-      setErr("Este proveedor tiene varias cuentas bancarias — elige a cuál se le paga.");
+    if (!bankAccountId) {
+      setErr("Elige la cuenta bancaria del proveedor a la que se le paga.");
       return;
     }
     if (needsJustification && !justification.trim()) {
@@ -624,7 +624,7 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
     const body = {
       items: lines.map((l) => ({ catalogItemId: l.catalogItem!.id, quantity: Number(l.quantity), unitCost: effectiveLineUnitCost(l) })),
       supplierId: supplier.id,
-      bankAccountId: bankAccountId ?? (supplier.bankAccounts ?? [])[0]?.id ?? null,
+      bankAccountId,
       quoteImageUrl,
       quoteReadTotal: verifyResult?.readTotal ?? null,
       quoteReferenceCode: verifyResult?.referenceCodeFound ?? null,
