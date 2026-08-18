@@ -11,10 +11,25 @@ import {
   canProposeCommissionAmounts,
   canApproveCommissionAmounts,
   canGrantCeoBonus,
+  canConfirmPersonalPurchaseFinance,
+  canManageSalaryAdvances,
+  canCreateManagementDeduction,
 } from "@/lib/guards";
 
 export default async function AreaNominaPage() {
-  const [canManage, canLogOvertime, canApproveOvertime, canViewRoles, canEditRoles, canProposeCommissions, canApproveCommissions, canGrantBonus] = await Promise.all([
+  const [
+    canManage,
+    canLogOvertime,
+    canApproveOvertime,
+    canViewRoles,
+    canEditRoles,
+    canProposeCommissions,
+    canApproveCommissions,
+    canGrantBonus,
+    canConfirmPurchasesFinance,
+    canAdvances,
+    canDeductions,
+  ] = await Promise.all([
     canManageNomina(),
     canLogOvertimeHours(),
     canApproveOvertimeHours(),
@@ -23,6 +38,9 @@ export default async function AreaNominaPage() {
     canProposeCommissionAmounts(),
     canApproveCommissionAmounts(),
     canGrantCeoBonus(),
+    canConfirmPersonalPurchaseFinance(),
+    canManageSalaryAdvances(),
+    canCreateManagementDeduction(),
   ]);
   // Confirmado 2026-08-13: un líder de área habilitada (Inventario,
   // Fulfillment) necesita entrar acá para registrar horas extra aunque no
@@ -63,6 +81,9 @@ export default async function AreaNominaPage() {
         canProposeCommissions={canProposeCommissions}
         canApproveCommissions={canApproveCommissions}
         canGrantCeoBonus={canGrantBonus}
+        canConfirmPersonalPurchaseFinance={canConfirmPurchasesFinance}
+        canManageSalaryAdvances={canAdvances}
+        canCreateManagementDeduction={canDeductions}
       />
     </div>
   );

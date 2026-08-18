@@ -144,3 +144,38 @@ export function computeMonthlyLegalRole(iessDeclaredSalary: number, companyAbsor
   const iessDeduction = computeIessDeduction(iessDeclaredSalary, companyAbsorbsIess);
   return { declaredSalary: iessDeclaredSalary, iessDeduction, netTotal: iessDeclaredSalary - iessDeduction };
 }
+
+// Confirmado 2026-08-18: mecanismo compartido por los 3 egresos automáticos
+// (compras personales, anticipos, descuentos por mala gestión) — todos
+// reparten un monto total en N cuotas mensuales iguales, empezando en un
+// mes de arranque.
+export function addMonthsToMonthStr(month: string, delta: number): string {
+  const [y, m] = month.split("-").map(Number);
+  const d = new Date(Date.UTC(y, m - 1 + delta, 1));
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+// Cantidad de meses calendario entre `from` y `to` (puede ser negativo).
+export function monthsBetween(from: string, to: string): number {
+  const [fy, fm] = from.split("-").map(Number);
+  const [ty, tm] = to.split("-").map(Number);
+  return (ty - fy) * 12 + (tm - fm);
+}
+
+// Reparte totalAmount en `installments` cuotas iguales (redondeadas a 2
+// decimales) — el resto de redondeo lo absorbe la ÚLTIMA cuota, para que la
+// suma de todas las cuotas sea exactamente igual a totalAmount.
+export function installmentAmount(totalAmount: number, installments: number, installmentIndex: number): number {
+  const base = Math.round((totalAmount / installments) * 100) / 100;
+  if (installmentIndex < installments - 1) return base;
+  return Math.round((totalAmount - base * (installments - 1)) * 100) / 100;
+}
+
+// Dado un mes de arranque y cuántas cuotas tiene el egreso, ¿corresponde
+// cobrar algo en `targetMonth`? Devuelve el índice de cuota (0-based) o
+// null si `targetMonth` cae antes del arranque o después de la última cuota.
+export function installmentIndexForMonth(firstMonth: string, installments: number, targetMonth: string): number | null {
+  const idx = monthsBetween(firstMonth, targetMonth);
+  if (idx < 0 || idx >= installments) return null;
+  return idx;
+}

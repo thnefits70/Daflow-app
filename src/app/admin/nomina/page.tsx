@@ -9,10 +9,26 @@ import {
   canProposeCommissionAmounts,
   canApproveCommissionAmounts,
   canGrantCeoBonus,
+  canConfirmPersonalPurchaseFinance,
+  canManageSalaryAdvances,
+  canCreateManagementDeduction,
 } from "@/lib/guards";
 
 export default async function NominaPage() {
-  const [users, departments, canLogOvertime, canApproveOvertime, canViewRoles, canEditRoles, canProposeCommissions, canApproveCommissions, canGrantBonus] = await Promise.all([
+  const [
+    users,
+    departments,
+    canLogOvertime,
+    canApproveOvertime,
+    canViewRoles,
+    canEditRoles,
+    canProposeCommissions,
+    canApproveCommissions,
+    canGrantBonus,
+    canConfirmPurchasesFinance,
+    canAdvances,
+    canDeductions,
+  ] = await Promise.all([
     prisma.user.findMany({
       orderBy: { name: "asc" },
       select: {
@@ -36,6 +52,9 @@ export default async function NominaPage() {
     canProposeCommissionAmounts(),
     canApproveCommissionAmounts(),
     canGrantCeoBonus(),
+    canConfirmPersonalPurchaseFinance(),
+    canManageSalaryAdvances(),
+    canCreateManagementDeduction(),
   ]);
 
   return (
@@ -51,6 +70,9 @@ export default async function NominaPage() {
         canProposeCommissions={canProposeCommissions}
         canApproveCommissions={canApproveCommissions}
         canGrantCeoBonus={canGrantBonus}
+        canConfirmPersonalPurchaseFinance={canConfirmPurchasesFinance}
+        canManageSalaryAdvances={canAdvances}
+        canCreateManagementDeduction={canDeductions}
       />
     </div>
   );

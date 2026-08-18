@@ -280,6 +280,12 @@ model User {
   fixedMonthlyBonus             FixedMonthlyBonus?      @relation("FixedMonthlyBonusUser")
   fixedMonthlyBonusesProposed   FixedMonthlyBonus[]     @relation("FixedMonthlyBonusProposedBy")
 
+  retailProductsCreated  RetailProduct[]        @relation("RetailProductCreatedBy")
+  personalPurchases      PersonalPurchase[]     @relation("PersonalPurchaseEmployee")
+  employeeBankAccount    EmployeeBankAccount?
+  salaryAdvances         SalaryAdvance[]        @relation("SalaryAdvanceEmployee")
+  managementDeductions   ManagementDeduction[]  @relation("ManagementDeductionEmployee")
+
   @@index([deptId])
   @@index([leadsDeptId])
 }
@@ -2558,4 +2564,153 @@ model CeoBonusGrantSeen {
   seenAt   DateTime @default(now())
 
   @@unique([viewerId, grantId])
+}
+
+// Confirmado 2026-08-18: pedido explícito del usuario — egresos automáticos
+// de nómina (compras personales, anticipos, descuentos por mala gestión).
+// Los tres comparten el mismo mecanismo de cuotas mensuales + desfase de un
+// mes (ver installmentAmount/installmentIndexForMonth/resolveFirstPayoutMonth
+// en payrollCalc.ts) — firstPayoutMonth se resuelve UNA sola vez, al momento
+// en que el egreso queda 100% activo, y de ahí en adelante nunca se
+// recalcula (es un hecho puntual, no un valor derivado).
+
+// Catálogo de productos propios de Provedix (para retiro/compra personal
+// del equipo) — lo mantiene Daniel (Inventario) o el admin, el colaborador
+// solo elige. Precio al costo vs. precio Dropi, distinto de PurchaseCatalogItem
+// (que es para comprar A proveedores, no para vender/retirar del propio stock).
+model RetailProduct {
+  id         String @id @default(cuid())
+  name       String @unique
+  photo      String?
+  costPrice  Float
+  dropiPrice Float
+
+  createdById String?
+  createdBy   User?    @relation("RetailProductCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+
+  purchases PersonalPurchase[]
+}
+
+// SELF/MINOR_CHILD califican para precio al costo (sujeto al enfriamiento de
+// 6 meses); OTHER_FAMILY siempre paga precio Dropi vigente, sin excepción.
+enum PurchaseBuyerRelation {
+  SELF
+  MINOR_CHILD
+  OTHER_FAMILY
+}
+
+// PENDING_INVENTORY: esperando a Daniel (su confirmación habilita el retiro
+// físico de bodega). PENDING_FINANCE: Daniel ya confirmó, esperando a
+// Nairoby/admin (ella cierra el precio final y activa el descuento real).
+enum PersonalPurchaseStatus {
+  PENDING_INVENTORY
+  PENDING_FINANCE
+  APPROVED
+  REJECTED
+}
+
+model PersonalPurchase {
+  id         String        @id @default(cuid())
+  employeeId String
+  employee   User          @relation("PersonalPurchaseEmployee", fields: [employeeId], references: [id], onDelete: Cascade)
+  productId  String
+  product    RetailProduct @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  quantity      Int
+  livePhotoUrl  String
+  buyerRelation PurchaseBuyerRelation
+  buyerNote     String? // ej. "mi hijo Juan, 8 años" — solo si no es SELF
+  priceMode     String // "COST" | "DROPI" — calculado y congelado al crear
+  unitPrice     Float
+  totalAmount   Float
+  installments  Int    @default(1) // 1 o 2 (solo si totalAmount >= 25)
+
+  status                 PersonalPurchaseStatus @default(PENDING_INVENTORY)
+  inventoryConfirmedAt   DateTime?
+  inventoryConfirmedById String?
+  financeConfirmedAt     DateTime?
+  financeConfirmedById   String?
+  rejectedAt             DateTime?
+  rejectedById           String?
+  rejectionReason        String?
+  pickedUpAt             DateTime? // Daniel marca cuando físicamente salió de bodega
+
+  eventMonth       String // "YYYY-MM" — mes en que se hizo la compra
+  firstPayoutMonth String? // resuelto al momento en que Nairoby/admin confirma
+
+  createdAt DateTime @default(now())
+
+  @@index([employeeId])
+  @@index([productId])
+}
+
+// Mismos campos que SupplierBankAccount/AdminPaymentPayeeBankAccount, pero
+// una sola cuenta por colaborador (autoservicio, sin aprobación para
+// registrarla) — reutiliza el enum HolderIdType ya existente.
+model EmployeeBankAccount {
+  id         String @id @default(cuid())
+  employeeId String @unique
+  employee   User   @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  bankName          String
+  bankAccountType   String
+  bankAccountNumber String
+  bankAccountHolder String
+  holderIdType      HolderIdType?
+  holderIdNumber    String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum SalaryAdvanceStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model SalaryAdvance {
+  id         String @id @default(cuid())
+  employeeId String
+  employee   User   @relation("SalaryAdvanceEmployee", fields: [employeeId], references: [id], onDelete: Cascade)
+
+  amount        Float
+  justification String? // obligatorio si amount > 100 (validado en la API)
+  installments  Int     @default(1) // 1, 2 o 3 (2/3 solo si amount > 50)
+
+  status           SalaryAdvanceStatus @default(PENDING)
+  approvedAt       DateTime?
+  approvedById     String?
+  transferProofUrl String?
+  rejectedAt       DateTime?
+  rejectedById     String?
+
+  firstPayoutMonth String? // resuelto al aprobar
+  createdAt        DateTime @default(now())
+
+  @@index([employeeId])
+}
+
+// Solo el admin lo ingresa. acceptedAt = constancia de que el colaborador
+// afectado lo aceptó explícitamente — mientras sea null, nunca se aplica a
+// ningún rol (el colaborador SIEMPRE debe aceptar primero).
+model ManagementDeduction {
+  id         String @id @default(cuid())
+  employeeId String
+  employee   User   @relation("ManagementDeductionEmployee", fields: [employeeId], references: [id], onDelete: Cascade)
+
+  totalAmount  Float
+  reason       String
+  evidenceUrl  String?
+  installments Int    @default(1)
+  startMonth   String // elegido por el admin al crear
+
+  acceptedAt       DateTime?
+  firstPayoutMonth String? // resuelto recién cuando se acepta
+
+  createdById String?
+  createdAt   DateTime @default(now())
+
+  @@index([employeeId])
 }

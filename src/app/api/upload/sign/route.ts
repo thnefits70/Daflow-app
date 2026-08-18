@@ -13,6 +13,7 @@ import {
   canManagePettyCashPrincipal,
   canManagePettyCashSecundaria,
   canManageAdminPayments,
+  canConfirmPersonalPurchaseInventory,
 } from "@/lib/guards";
 
 // Confirmado 2026-08-03: bug real — ninguna de estas carpetas de Control de
@@ -102,6 +103,16 @@ export async function POST(req: NextRequest) {
   }
   if (!allowed && session?.user.role === "employee" && folder === "admin-payments") {
     allowed = await canManageAdminPayments();
+  }
+  // Confirmado 2026-08-18: la foto en vivo de una compra personal la sube
+  // cualquier colaborador (no hace falta ningún permiso especial, todos
+  // pueden comprar) — el catálogo de productos en cambio solo lo mantiene
+  // quien puede confirmar compras personales en Inventario (Daniel/admin).
+  if (!allowed && session?.user.role === "employee" && folder === "personal-purchase-photos") {
+    allowed = true;
+  }
+  if (!allowed && session?.user.role === "employee" && folder === "retail-product-photos") {
+    allowed = await canConfirmPersonalPurchaseInventory();
   }
   if (!allowed) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 

@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
-import { LayoutDashboard, ClipboardList, Scale, LogOut, Truck, Rocket, Wallet, FolderLock, Gauge, Menu, X, Trophy, Users, LayoutGrid, Waypoints } from "lucide-react";
+import { LayoutDashboard, ClipboardList, Scale, LogOut, Truck, Rocket, Wallet, FolderLock, Gauge, Menu, X, Trophy, Users, LayoutGrid, Waypoints, ShoppingBag, Banknote } from "lucide-react";
 import { BrandMark } from "@/components/brand/DaflowMark";
 import { PushSettingsToggle } from "@/components/shared/PushSettingsToggle";
 
@@ -23,6 +23,7 @@ export function EmployeeSidebar({
   showRecognition = false,
   showNomina = false,
   showMyLearningPath = false,
+  showPersonalPurchasesInventory = false,
 }: {
   deptName: string;
   userName: string;
@@ -38,6 +39,7 @@ export function EmployeeSidebar({
   showRecognition?: boolean;
   showNomina?: boolean;
   showMyLearningPath?: boolean;
+  showPersonalPurchasesInventory?: boolean;
 }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
@@ -124,6 +126,17 @@ export function EmployeeSidebar({
             </span>
           )}
         </Link>
+        <Link href="/area/compras-personales" className={`${NAV_ITEM} ${pathname === "/area/compras-personales" ? NAV_ACTIVE : NAV_INACTIVE}`}>
+          <ShoppingBag size={15} /> Compras personales
+        </Link>
+        <Link href="/area/anticipos" className={`${NAV_ITEM} ${pathname.startsWith("/area/anticipos") ? NAV_ACTIVE : NAV_INACTIVE}`}>
+          <Banknote size={15} /> Anticipos
+        </Link>
+        {showPersonalPurchasesInventory && (
+          <Link href="/area/compras-personales-inventario" className={`${NAV_ITEM} ${pathname.startsWith("/area/compras-personales-inventario") ? NAV_ACTIVE : NAV_INACTIVE}`}>
+            <ShoppingBag size={15} /> Confirmar compras personales
+          </Link>
+        )}
         {showNomina && (
           <Link href="/area/nomina" className={`${NAV_ITEM} ${pathname.startsWith("/area/nomina") ? NAV_ACTIVE : NAV_INACTIVE}`}>
             <Users size={15} /> Nómina

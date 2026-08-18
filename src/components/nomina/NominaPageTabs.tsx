@@ -33,6 +33,9 @@ export function NominaPageTabs({
   canProposeCommissions,
   canApproveCommissions,
   canGrantCeoBonus,
+  canConfirmPersonalPurchaseFinance,
+  canManageSalaryAdvances,
+  canCreateManagementDeduction,
 }: {
   users: NominaUser[];
   departments: Dept[];
@@ -45,8 +48,13 @@ export function NominaPageTabs({
   canProposeCommissions: boolean;
   canApproveCommissions: boolean;
   canGrantCeoBonus: boolean;
+  canConfirmPersonalPurchaseFinance: boolean;
+  canManageSalaryAdvances: boolean;
+  canCreateManagementDeduction: boolean;
 }) {
-  const showPayrollTab = canLogOvertime || canApproveOvertime || canViewRoles || canProposeCommissions || canGrantCeoBonus;
+  const showPayrollTab =
+    canLogOvertime || canApproveOvertime || canViewRoles || canProposeCommissions || canGrantCeoBonus ||
+    canConfirmPersonalPurchaseFinance || canManageSalaryAdvances || canCreateManagementDeduction;
   const [tab, setTab] = useState<"colaboradores" | "pagos">(canManage ? "colaboradores" : "pagos");
 
   // Confirmado 2026-08-14: pedido explícito del usuario — el atajo "Ir →"
@@ -71,6 +79,9 @@ export function NominaPageTabs({
         canProposeCommissions={canProposeCommissions}
         canApproveCommissions={canApproveCommissions}
         canGrantCeoBonus={canGrantCeoBonus}
+        canConfirmPersonalPurchaseFinance={canConfirmPersonalPurchaseFinance}
+        canManageSalaryAdvances={canManageSalaryAdvances}
+        canCreateManagementDeduction={canCreateManagementDeduction}
       />
     );
   }
@@ -106,6 +117,9 @@ export function NominaPageTabs({
           canProposeCommissions={canProposeCommissions}
           canApproveCommissions={canApproveCommissions}
           canGrantCeoBonus={canGrantCeoBonus}
+          canConfirmPersonalPurchaseFinance={canConfirmPersonalPurchaseFinance}
+          canManageSalaryAdvances={canManageSalaryAdvances}
+          canCreateManagementDeduction={canCreateManagementDeduction}
         />
       )}
     </div>

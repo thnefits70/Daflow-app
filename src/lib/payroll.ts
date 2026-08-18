@@ -6,8 +6,12 @@ import {
   overtimeSourceMonthForPeriod,
   isFirstQuincenaOfMonth,
   isEndOfMonthQuincena,
+  monthOfPeriod,
   OVERTIME_NATIONAL_BASE_SALARY,
   describeOvertimeCalculation,
+  installmentAmount,
+  installmentIndexForMonth,
+  addMonthsToMonthStr,
 } from "@/lib/payrollCalc";
 import { getMonthDispatchSummary, getAchievedTier, CEO_BONUS_AMOUNTS, CEO_BONUS_LABELS } from "@/lib/commissionTiers";
 
@@ -18,6 +22,17 @@ export function isValidPeriod(period: string): boolean {
 }
 
 export type QuincenaLineItemInput = { label: string; amount: number; kind: "INCOME" | "EXPENSE"; isAutomatic: boolean; note?: string };
+
+// Confirmado 2026-08-18: decide el mes real de arranque de un egreso en
+// cuotas (compra personal, anticipo, descuento por mala gestión) — si el
+// mes "natural" ya tiene su Q1 generada, se corre un mes para no perder esa
+// cuota. Se resuelve UNA sola vez, al momento en que el egreso queda 100%
+// activo (Nairoby confirma el precio / admin aprueba / colaborador acepta)
+// — nunca se recalcula después, es un hecho puntual como approvedAt.
+export async function resolveFirstPayoutMonth(naturalFirstMonth: string): Promise<string> {
+  const existing = await prisma.payrollPeriod.findUnique({ where: { period: `${naturalFirstMonth}-Q1` } });
+  return existing ? addMonthsToMonthStr(naturalFirstMonth, 1) : naturalFirstMonth;
+}
 
 // Confirmado 2026-08-13: todo (sueldo, horas extra, bono, IESS) vive como
 // línea suelta desde el arranque — Nairoby puede editar o quitar cualquiera,
@@ -98,6 +113,49 @@ export async function buildAutomaticLineItems(employeeId: string, period: string
       const fixedBonus = await prisma.fixedMonthlyBonus.findUnique({ where: { userId: employeeId } });
       if (fixedBonus && fixedBonus.amount > 0) {
         items.push({ label: `Bonos especiales fijos (${sourceMonth})`, amount: fixedBonus.amount, kind: "INCOME", isAutomatic: true });
+      }
+
+      // Confirmado 2026-08-18: los 3 egresos automáticos (compras
+      // personales, anticipos, descuentos por mala gestión) NO usan
+      // sourceMonth (el mes anterior) — usan periodMonth (el mes propio de
+      // este período), porque firstPayoutMonth ya está expresado como "el
+      // mes cuya Q1 paga la primera cuota", no como un mes de origen a
+      // desfasar de nuevo.
+      const periodMonth = monthOfPeriod(period);
+
+      const purchases = await prisma.personalPurchase.findMany({
+        where: { employeeId, status: "APPROVED", firstPayoutMonth: { not: null } },
+        include: { product: { select: { name: true } } },
+      });
+      for (const p of purchases) {
+        const idx = installmentIndexForMonth(p.firstPayoutMonth!, p.installments, periodMonth);
+        if (idx === null) continue;
+        const amt = installmentAmount(p.totalAmount, p.installments, idx);
+        const cuota = p.installments > 1 ? ` (cuota ${idx + 1}/${p.installments})` : "";
+        items.push({ label: `Compra personal — ${p.product.name}${cuota}`, amount: amt, kind: "EXPENSE", isAutomatic: true });
+      }
+
+      const advances = await prisma.salaryAdvance.findMany({
+        where: { employeeId, status: "APPROVED", firstPayoutMonth: { not: null } },
+      });
+      for (const a of advances) {
+        const idx = installmentIndexForMonth(a.firstPayoutMonth!, a.installments, periodMonth);
+        if (idx === null) continue;
+        const amt = installmentAmount(a.amount, a.installments, idx);
+        const cuota = a.installments > 1 ? ` (cuota ${idx + 1}/${a.installments})` : "";
+        items.push({ label: `Anticipo${cuota}`, amount: amt, kind: "EXPENSE", isAutomatic: true });
+      }
+
+      const deductions = await prisma.managementDeduction.findMany({
+        where: { employeeId, acceptedAt: { not: null }, firstPayoutMonth: { not: null } },
+      });
+      for (const d of deductions) {
+        const idx = installmentIndexForMonth(d.firstPayoutMonth!, d.installments, periodMonth);
+        if (idx === null) continue;
+        const amt = installmentAmount(d.totalAmount, d.installments, idx);
+        const cuota = d.installments > 1 ? ` (cuota ${idx + 1}/${d.installments})` : "";
+        const shortReason = d.reason.length > 40 ? `${d.reason.slice(0, 40)}…` : d.reason;
+        items.push({ label: `Descuento — ${shortReason}${cuota}`, amount: amt, kind: "EXPENSE", isAutomatic: true });
       }
     }
   }

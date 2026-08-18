@@ -7,8 +7,11 @@ import { OvertimeHistoryPanel } from "./OvertimeHistoryPanel";
 import { PayrollRolesPanel } from "./PayrollRolesPanel";
 import { CommissionTiersPanel } from "./CommissionTiersPanel";
 import { CeoBonusesPanel } from "./CeoBonusesPanel";
+import { PersonalPurchasesFinancePanel } from "@/components/personal-purchases/PersonalPurchasesFinancePanel";
+import { SalaryAdvanceApprovalPanel } from "@/components/salary-advances/SalaryAdvanceApprovalPanel";
+import { ManagementDeductionsPanel } from "./ManagementDeductionsPanel";
 
-type Tab = "horas" | "aprobar" | "historial" | "roles" | "comisiones" | "bonosceo";
+type Tab = "horas" | "aprobar" | "historial" | "roles" | "comisiones" | "bonosceo" | "comprasfinanzas" | "anticipos" | "descuentos";
 
 // Confirmado 2026-08-13: pedido explícito del usuario — todo esto vive
 // dentro de la misma sección "Nómina" que ya existía, como pestañas nuevas,
@@ -22,6 +25,9 @@ export function PayrollWorkspace({
   canProposeCommissions,
   canApproveCommissions,
   canGrantCeoBonus,
+  canConfirmPersonalPurchaseFinance,
+  canManageSalaryAdvances,
+  canCreateManagementDeduction,
 }: {
   canLogOvertime: boolean;
   canApproveOvertime: boolean;
@@ -30,6 +36,9 @@ export function PayrollWorkspace({
   canProposeCommissions: boolean;
   canApproveCommissions: boolean;
   canGrantCeoBonus: boolean;
+  canConfirmPersonalPurchaseFinance: boolean;
+  canManageSalaryAdvances: boolean;
+  canCreateManagementDeduction: boolean;
 }) {
   const tabs: { key: Tab; label: string }[] = [
     ...(canLogOvertime ? [{ key: "horas" as Tab, label: "Registrar horas extra" }] : []),
@@ -38,16 +47,20 @@ export function PayrollWorkspace({
     ...(canViewRoles ? [{ key: "roles" as Tab, label: "Rol de pago" }] : []),
     ...(canProposeCommissions ? [{ key: "comisiones" as Tab, label: "Comisiones de equipo" }] : []),
     ...(canGrantCeoBonus ? [{ key: "bonosceo" as Tab, label: "Bonos discrecionales" }] : []),
+    ...(canConfirmPersonalPurchaseFinance ? [{ key: "comprasfinanzas" as Tab, label: "Compras personales" }] : []),
+    ...(canManageSalaryAdvances ? [{ key: "anticipos" as Tab, label: "Anticipos" }] : []),
+    ...(canCreateManagementDeduction ? [{ key: "descuentos" as Tab, label: "Descuentos" }] : []),
   ];
   const [tab, setTab] = useState<Tab>(tabs[0]?.key ?? "roles");
 
   // Confirmado 2026-08-18: pedido explícito del usuario — el atajo "Ir →" de
-  // Pendientes en Inicio ("Comisiones y bonos por aprobar") llega con
-  // ?tab=pagos&ptab=comisiones|roles y debe abrir directo esa sub-pestaña,
-  // mismo espíritu que el "tab=pagos" que ya lee NominaPageTabs.
+  // Pendientes en Inicio ("Comisiones y bonos por aprobar", "Compras
+  // personales por confirmar", "Anticipos pendientes", "Descuentos por
+  // aceptar") llega con ?tab=pagos&ptab=X y debe abrir directo esa
+  // sub-pestaña, mismo espíritu que el "tab=pagos" que ya lee NominaPageTabs.
   useEffect(() => {
     const ptab = new URLSearchParams(window.location.search).get("ptab");
-    if ((ptab === "comisiones" || ptab === "roles") && tabs.some((t) => t.key === ptab)) setTab(ptab);
+    if (tabs.some((t) => t.key === ptab)) setTab(ptab as Tab);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -76,6 +89,9 @@ export function PayrollWorkspace({
       )}
       {tab === "comisiones" && canProposeCommissions && <CommissionTiersPanel canPropose={canProposeCommissions} canApprove={canApproveCommissions} />}
       {tab === "bonosceo" && canGrantCeoBonus && <CeoBonusesPanel />}
+      {tab === "comprasfinanzas" && canConfirmPersonalPurchaseFinance && <PersonalPurchasesFinancePanel />}
+      {tab === "anticipos" && canManageSalaryAdvances && <SalaryAdvanceApprovalPanel />}
+      {tab === "descuentos" && canCreateManagementDeduction && <ManagementDeductionsPanel />}
     </div>
   );
 }

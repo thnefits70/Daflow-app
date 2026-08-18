@@ -298,6 +298,7 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   pagos_flete: "Fletes pendientes de pago",
   horas_extra_aprobacion: "Horas extra por aprobar",
   comisiones_bonos_aprobacion: "Comisiones y bonos por aprobar",
+  anticipos_aprobacion: "Anticipos por aprobar",
   cumpleanos: "Cumpleaños de tu equipo (aviso 1 día antes)",
   compras_rechazadas: "Tus solicitudes de compra rechazadas — corregir y reenviar",
   compras_orden_compra: "Tus solicitudes de compra — falta subir orden de compra",
@@ -1127,6 +1128,26 @@ async function getCommissionAndBonusApprovalPendingItem(hrefBase: string): Promi
   };
 }
 
+// Confirmado 2026-08-18: mismo patrón que getCommissionAndBonusApprovalPendingItem
+// — anticipos que siguen esperando la aprobación del admin (y el
+// comprobante de transferencia).
+async function getSalaryAdvancePendingItem(href: string): Promise<PendingItem | null> {
+  const rows = await prisma.salaryAdvance.findMany({ where: { status: "PENDING" }, select: { amount: true, createdAt: true } });
+  if (rows.length === 0) return null;
+
+  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const overdue = rows.some((r) => r.createdAt < cutoff);
+  const total = rows.reduce((s, r) => s + r.amount, 0);
+  return {
+    type: "anticipos_aprobacion",
+    icon: "💵",
+    label: "Anticipos por aprobar",
+    meta: `${rows.length} solicitud${rows.length === 1 ? "" : "es"} · $${total.toFixed(2)}${overdue ? " · atrasado" : ""}`,
+    overdue,
+    href,
+  };
+}
+
 // Confirmado 2026-08-06: aviso 1 día antes de la fecha en que se va a
 // felicitar (que puede ser el cumpleaños real o el último día laborable
 // antes, si cae sábado/domingo/feriado — ver celebrationDateFor en
@@ -1174,7 +1195,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     const comDept = await prisma.department.findUnique({ where: { code: "COM" }, select: { id: true } });
     const comPaymentsHref = comDept ? `/admin/dept/${comDept.id}?tab=compras&ptab=finanzas` : "/admin";
     const comCreditsHref = comDept ? `/admin/dept/${comDept.id}?tab=compras&ptab=urgentes` : "/admin";
-    const [feedbackItems, recognitionItem, pettyCashLow, pettyCashUnconfirmed, adminPaymentsItem, purchaseMerchandiseItem, purchaseShippingItem, purchaseCreditsItem, overtimeApprovalItem, commissionBonusApprovalItem, birthdayItems] = await Promise.all([
+    const [feedbackItems, recognitionItem, pettyCashLow, pettyCashUnconfirmed, adminPaymentsItem, purchaseMerchandiseItem, purchaseShippingItem, purchaseCreditsItem, overtimeApprovalItem, commissionBonusApprovalItem, salaryAdvanceItem, birthdayItems] = await Promise.all([
       getFeedbackPendingItems(),
       getRecognitionAdminPendingItem("/admin/colaborador-destacado"),
       getPettyCashLowBalanceItems(financeHref),
@@ -1185,6 +1206,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       getPurchaseCreditsPendingItem(comCreditsHref),
       getOvertimeApprovalPendingItem("/admin/nomina?tab=pagos"),
       getCommissionAndBonusApprovalPendingItem("/admin/nomina"),
+      getSalaryAdvancePendingItem("/admin/nomina?tab=pagos&ptab=anticipos"),
       getUpcomingBirthdayPendingItems("/admin/nomina"),
     ]);
     const items = [
@@ -1198,6 +1220,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       ...(purchaseCreditsItem ? [purchaseCreditsItem] : []),
       ...(overtimeApprovalItem ? [overtimeApprovalItem] : []),
       ...(commissionBonusApprovalItem ? [commissionBonusApprovalItem] : []),
+      ...(salaryAdvanceItem ? [salaryAdvanceItem] : []),
       ...birthdayItems,
     ];
     if (items.length === 0) return null;

@@ -260,6 +260,34 @@ export async function canApproveFixedMonthlyBonus() {
   return !!session && session.user.role === "admin";
 }
 
+// Confirmado 2026-08-18: la confirmación de Daniel (Inventario) es lo que
+// habilita el retiro físico de una compra personal — mismo criterio que ya
+// gatea su pantalla de "Control de Inventario".
+export async function canConfirmPersonalPurchaseInventory() {
+  return canManageInventoryControl();
+}
+
+// La confirmación de precio final (Nairoby o admin) es lo que activa el
+// descuento real en el rol — mismo criterio que canEditPayrollRoles.
+export async function canConfirmPersonalPurchaseFinance() {
+  const session = await auth();
+  if (!session) return false;
+  if (session.user.role === "admin") return true;
+  return canEditPayrollRoles();
+}
+
+// Anticipos y descuentos por mala gestión — solo el admin los aprueba/crea,
+// sin excepción (pedido explícito del usuario).
+export async function canManageSalaryAdvances() {
+  const session = await auth();
+  return !!session && session.user.role === "admin";
+}
+
+export async function canCreateManagementDeduction() {
+  const session = await auth();
+  return !!session && session.user.role === "admin";
+}
+
 // Bonos discrecionales del CEO — solo el admin los otorga, siempre.
 export async function canGrantCeoBonus() {
   const session = await auth();

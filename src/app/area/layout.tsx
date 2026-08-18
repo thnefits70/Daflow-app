@@ -5,7 +5,7 @@ import { AreaGateShell } from "@/components/dept/AreaGateShell";
 import { MarketingArrivalAlert } from "@/components/marketing/MarketingArrivalAlert";
 import type { ProcessDTO } from "@/components/process/ProcessEditor";
 import type { RecognitionPersonDTO } from "@/components/recognition/RecognitionPanel";
-import { SUPPLIER_VIEW_DEPT_CODES, canManageNomina, canLogOvertimeHours } from "@/lib/guards";
+import { SUPPLIER_VIEW_DEPT_CODES, canManageNomina, canLogOvertimeHours, canConfirmPersonalPurchaseInventory } from "@/lib/guards";
 import { getRecognitionLockout } from "@/lib/pendingTasks";
 
 export default async function AreaLayout({ children }: { children: React.ReactNode }) {
@@ -158,6 +158,7 @@ export default async function AreaLayout({ children }: { children: React.ReactNo
   // general (esa parte de la pantalla queda oculta para él, ver
   // NominaPageTabs).
   const showNomina = (await canManageNomina()) || (await canLogOvertimeHours());
+  const showPersonalPurchasesInventory = await canConfirmPersonalPurchaseInventory();
   const myLearningPathCount = await prisma.learningPathAssignment.count({ where: { userId: session.user.id } });
 
   return (
@@ -184,6 +185,7 @@ export default async function AreaLayout({ children }: { children: React.ReactNo
       showRecognition
       showNomina={showNomina}
       showMyLearningPath={myLearningPathCount > 0}
+      showPersonalPurchasesInventory={showPersonalPurchasesInventory}
     >
       {children}
       {(currentUser.canConfirmMarketingDesign || currentUser.canConfirmMarketingAdvisor) && (
