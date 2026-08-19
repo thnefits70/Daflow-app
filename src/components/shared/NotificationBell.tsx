@@ -23,7 +23,9 @@ function relativeTime(iso: string): string {
 export function NotificationBell() {
   const [items, setItems] = useState<Notification[]>([]);
   const [open, setOpen] = useState(false);
+  const [panelPos, setPanelPos] = useState<{ top: number; left: number } | null>(null);
   const ref = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
 
   function load() {
     fetch("/api/notifications").then((r) => (r.ok ? r.json() : [])).then(setItems);
@@ -46,6 +48,16 @@ export function NotificationBell() {
     const next = !open;
     setOpen(next);
     if (next) {
+      // Confirmado 2026-08-19: el menú lateral tiene overflow-hidden (para
+      // que la navegación no scrollee de costado) — eso recortaba el
+      // desplegable. Se posiciona con `fixed` calculado desde el botón, así
+      // se dibuja por encima de todo en vez de quedar atrapado adentro.
+      const rect = buttonRef.current?.getBoundingClientRect();
+      if (rect) {
+        const panelWidth = 288; // w-72
+        const left = Math.min(Math.max(8, rect.left), window.innerWidth - panelWidth - 8);
+        setPanelPos({ top: rect.bottom + 8, left });
+      }
       const hadUnread = items.some((n) => !n.readAt);
       if (hadUnread) {
         await fetch("/api/notifications/read", { method: "POST" });
@@ -58,7 +70,7 @@ export function NotificationBell() {
 
   return (
     <div className="relative" ref={ref}>
-      <button type="button" onClick={toggle} className="relative flex items-center justify-center w-8 h-8 rounded-md text-[#C9CFC5] hover:text-white hover:bg-white/[.06] cursor-pointer" aria-label="Notificaciones">
+      <button ref={buttonRef} type="button" onClick={toggle} className="relative flex items-center justify-center w-8 h-8 rounded-md text-[#C9CFC5] hover:text-white hover:bg-white/[.06] cursor-pointer" aria-label="Notificaciones">
         <Bell size={16} />
         {unreadCount > 0 && (
           <span className="absolute -top-0.5 -right-0.5 bg-red text-white text-[9px] font-bold rounded-full min-w-[15px] h-[15px] flex items-center justify-center px-1">
@@ -67,8 +79,11 @@ export function NotificationBell() {
         )}
       </button>
 
-      {open && (
-        <div className="absolute left-0 top-full mt-2 w-72 max-h-96 overflow-y-auto bg-[#0c1524] border border-white/10 rounded-md shadow-lg z-50">
+      {open && panelPos && (
+        <div
+          style={{ position: "fixed", top: panelPos.top, left: panelPos.left }}
+          className="w-72 max-h-96 overflow-y-auto bg-[#0c1524] border border-white/10 rounded-md shadow-lg z-50"
+        >
           <div className="text-[10px] font-semibold uppercase tracking-wide text-[#8C99A6] px-3 py-2 border-b border-white/10">Notificaciones</div>
           {items.length === 0 ? (
             <div className="text-[12px] text-[#8C99A6] px-3 py-4 text-center">No hay notificaciones todavía.</div>
