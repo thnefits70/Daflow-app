@@ -199,6 +199,24 @@ function BoxCard({
   const [excReason, setExcReason] = useState("");
   const [zoomedUrl, setZoomedUrl] = useState<string | null>(null);
 
+  const [payoutAccount, setPayoutAccount] = useState(box.payoutAccount ?? "");
+  const [editingPayout, setEditingPayout] = useState(false);
+  const [payoutBusy, setPayoutBusy] = useState(false);
+
+  async function savePayoutAccount() {
+    setPayoutBusy(true);
+    setErr("");
+    const res = await fetch("/api/petty-cash/box", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ boxType: box.type, payoutAccount: payoutAccount.trim() || null }),
+    });
+    setPayoutBusy(false);
+    if (!res.ok) { const json = await res.json().catch(() => null); setErr(json?.error ?? "No se pudo guardar la cuenta."); return; }
+    setEditingPayout(false);
+    router.refresh();
+  }
+
   // Confirmado 2026-08-06: filtro de fechas para el historial de esta caja —
   // mismo patrón (desde/hasta + selector de mes + "Mes anterior") ya usado
   // en Facturación de Control de Compras y Pagos administrativos.
@@ -451,6 +469,31 @@ function BoxCard({
         </div>
       )}
 
+      {canOperate && (
+        <div className="mt-3.5 pt-3.5 border-t border-dashed border-rule">
+          <div className="text-[12px] font-semibold mb-1.5">🏦 Cuenta para recibir fondeo</div>
+          {editingPayout ? (
+            <div className="flex items-center gap-1.5">
+              <input
+                type="text"
+                placeholder="Banco, número de cuenta, titular…"
+                className="flex-1 rounded border border-rule bg-cloud px-2.5 py-2 text-[12px]"
+                value={payoutAccount}
+                onChange={(e) => setPayoutAccount(e.target.value)}
+                autoFocus
+              />
+              <button type="button" disabled={payoutBusy} className="text-teal text-[11px] font-semibold cursor-pointer disabled:opacity-60" onClick={savePayoutAccount}>Guardar</button>
+              <button type="button" className="text-steel text-[11px] cursor-pointer" onClick={() => { setPayoutAccount(box.payoutAccount ?? ""); setEditingPayout(false); }}>Cancelar</button>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between gap-2 text-[12px]">
+              <span className={box.payoutAccount ? "" : "text-steel italic"}>{box.payoutAccount || "Sin cuenta configurada"}</span>
+              <button type="button" className="text-steel hover:text-ink shrink-0 cursor-pointer" title="Editar" onClick={() => setEditingPayout(true)}><Pencil size={13} /></button>
+            </div>
+          )}
+        </div>
+      )}
+
       {canOperate && !blocked && (
         <div className="mt-4 pt-3.5 border-t border-dashed border-rule">
           <div className="text-[12px] font-semibold mb-2">Registrar solicitud de pago</div>
@@ -525,9 +568,18 @@ function BoxCard({
         </div>
       )}
 
-      {canFund && (
+      {canFund && isAdmin && (
         <div className="mt-4 pt-3.5 border-t border-dashed border-rule">
           <div className="text-[12px] font-semibold mb-2">💸 Fondear esta caja</div>
+          {box.payoutAccount ? (
+            <div className="mb-2.5 text-[11.5px] bg-teal/10 border border-teal/30 rounded-md px-2.5 py-1.5">
+              🏦 Transferir a: <span className="font-semibold">{box.payoutAccount}</span>
+            </div>
+          ) : (
+            <div className="mb-2.5 text-[11.5px] text-steel bg-cloud rounded-md px-2.5 py-1.5">
+              Aún no configuran una cuenta de destino para esta caja.
+            </div>
+          )}
           <input type="number" step="any" placeholder="Monto que entregas" className="w-full rounded border border-rule bg-cloud px-2.5 py-2 text-[12px] font-mono mb-2" value={fundAmount} onChange={(e) => setFundAmount(e.target.value)} />
           <input type="text" placeholder="Descripción (opcional)" className="w-full rounded border border-rule bg-cloud px-2.5 py-2 text-[12px] mb-2" value={fundDesc} onChange={(e) => setFundDesc(e.target.value)} />
           {fundProofUrl ? (

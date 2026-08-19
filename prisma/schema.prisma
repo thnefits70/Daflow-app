@@ -735,11 +735,15 @@ enum PettyCashEntryKind {
 // Secundaria (Bryan Ríos escribe, vive en su propia "Mi área de trabajo",
 // bajo el mando de la Principal — Nairoby la ve pero no escribe en ella).
 model PettyCashBox {
-  id           String           @id @default(cuid())
-  type         PettyCashBoxType @unique
-  minThreshold Float            @default(10)
-  createdAt    DateTime         @default(now())
-  updatedAt    DateTime         @updatedAt
+  id            String           @id @default(cuid())
+  type          PettyCashBoxType @unique
+  minThreshold  Float            @default(10)
+  // Cuenta bancaria donde quien administra la caja (no admin) quiere recibir
+  // el fondeo — la fija solo esa persona, así el dueño sabe a qué cuenta
+  // transferir en vez de adivinar (pedido explícito 2026-08-19).
+  payoutAccount String?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
 
   entries    PettyCashEntry[]
   exceptions PettyCashFreightException[]

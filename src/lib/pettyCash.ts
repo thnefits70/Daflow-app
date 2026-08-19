@@ -109,6 +109,7 @@ async function toEntryDTO(e: {
 export type PettyCashBoxDTO = {
   type: PettyCashBoxTypeStr;
   minThreshold: number;
+  payoutAccount: string | null;
   balance: number;
   isLow: boolean;
   blocked: boolean;
@@ -133,6 +134,7 @@ export async function getPettyCashBoxData(type: PettyCashBoxTypeStr): Promise<Pe
   return {
     type,
     minThreshold: box.minThreshold,
+    payoutAccount: box.payoutAccount,
     balance,
     isLow: balance <= box.minThreshold,
     blocked: pending.length > 0,
