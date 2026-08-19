@@ -845,6 +845,15 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                             >
                               ✓ Confirmar que llegó
                             </button>
+                            {r.urgentReports.length === 0 && (
+                              <button
+                                type="button"
+                                className="text-[11.5px] font-semibold border border-red/50 text-red rounded px-3 py-1.5 cursor-pointer"
+                                onClick={() => { setOpenId(null); setReceivedPhotoUrls([]); setReceivedVideoUrls([]); setAiResult(null); setMinorDifferenceConfirmed(false); openUrgent(r.id); }}
+                              >
+                                🚨 Informar urgente
+                              </button>
+                            )}
                             <button type="button" className="text-steel text-[12.5px] cursor-pointer" onClick={() => { setOpenId(null); setReceivedPhotoUrls([]); setReceivedVideoUrls([]); setAiResult(null); setMinorDifferenceConfirmed(false); }}>Cancelar</button>
                           </div>
                         </div>
@@ -1062,7 +1071,7 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
               </div>
             )}
 
-            <PurchaseOperationDocuments rows={g.map(toDocRow)} />
+            {(canApprove || isAdmin) && <PurchaseOperationDocuments rows={g.map(toDocRow)} />}
           </div>
         );
       })}
