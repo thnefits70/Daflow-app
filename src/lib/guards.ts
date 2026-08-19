@@ -610,6 +610,65 @@ export async function canRegisterPurchaseInvoices() {
   return !!user.isLeader && user.leadsDept?.code === "FIN";
 }
 
+/**
+ * ---------------- Reingreso de Mercadería ----------------
+ * Diseñado y aprobado 2026-08-19. Tres roles, mismo espíritu que Control de
+ * Compras: cualquiera del equipo de Inventario captura (mismo criterio que
+ * canReceivePurchasesTeam — sin caso especial para admin, una cuenta admin
+ * no tiene departamento real así que naturalmente no calza), solo el líder
+ * de Inventario (Daniel) aprueba, y solo el líder de Finanzas (Nairoby)
+ * cierra el ciclo — admin sí puede aprobar/cerrar como supervisión general,
+ * igual que canRegisterPurchaseInvoices.
+ */
+export async function canCaptureMerchandiseReentry() {
+  const session = await auth();
+  if (!session) return false;
+  const user = await purchasesUserContext(session.user.id);
+  if (!user) return false;
+  return isInventoryTeamMember(user);
+}
+
+export async function canApproveMerchandiseReentry() {
+  const session = await auth();
+  if (!session) return false;
+  if (session.user.role === "admin") return true;
+  const user = await purchasesUserContext(session.user.id);
+  if (!user) return false;
+  return !!user.isLeader && user.leadsDept?.code === "INV";
+}
+
+export async function canCloseMerchandiseReentry() {
+  const session = await auth();
+  if (!session) return false;
+  if (session.user.role === "admin") return true;
+  const user = await purchasesUserContext(session.user.id);
+  if (!user) return false;
+  return !!user.isLeader && user.leadsDept?.code === "FIN";
+}
+
+// Visibilidad general del módulo (ítem del sidebar, pestaña Historial) —
+// cualquiera de los tres roles de arriba.
+export async function canViewMerchandiseReentry() {
+  const session = await auth();
+  if (!session) return false;
+  if (session.user.role === "admin") return true;
+  return (
+    (await canCaptureMerchandiseReentry()) ||
+    (await canApproveMerchandiseReentry()) ||
+    (await canCloseMerchandiseReentry())
+  );
+}
+
+// Id de Nairoby (líder de Finanzas) para avisarle cuando Daniel aprueba un
+// lote — mismo estilo que getInventoryLeadId.
+export async function getFinanceLeadId(): Promise<string | null> {
+  const lead = await prisma.user.findFirst({
+    where: { isLeader: true, leadsDept: { code: "FIN" }, isActive: true },
+    select: { id: true },
+  });
+  return lead?.id ?? null;
+}
+
 // Pagos administrativos (Finanzas) — confirmado 2026-08-06: exclusivo de
 // Finanzas + admin, a diferencia de Control de Compras que también incluye a
 // Compras. canManageAdminPayments es el mismo tipo de escape hatch que

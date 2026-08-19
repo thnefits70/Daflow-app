@@ -44,6 +44,8 @@ export function AreaGateShell({
   showNomina = false,
   showMyLearningPath = false,
   showPersonalPurchasesInventory = false,
+  showMerchandiseReentry = false,
+  merchandiseReentryPendingCount = 0,
   children,
 }: {
   deptName: string;
@@ -69,6 +71,8 @@ export function AreaGateShell({
   showNomina?: boolean;
   showMyLearningPath?: boolean;
   showPersonalPurchasesInventory?: boolean;
+  showMerchandiseReentry?: boolean;
+  merchandiseReentryPendingCount?: number;
   children: React.ReactNode;
 }) {
   const router = useRouter();
@@ -184,6 +188,8 @@ export function AreaGateShell({
         showNomina={showNomina}
         showMyLearningPath={showMyLearningPath}
         showPersonalPurchasesInventory={showPersonalPurchasesInventory}
+        showMerchandiseReentry={showMerchandiseReentry}
+        merchandiseReentryPendingCount={merchandiseReentryPendingCount}
       />
       <main className="flex-1 overflow-y-auto bg-bg p-4 md:p-9">
         <TopBanner bannerUrl={bannerUrl} />

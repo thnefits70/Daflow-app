@@ -14,24 +14,28 @@ datasource db {
  * ---------------- Configuración global de la plataforma ----------------
  */
 model PlatformSettings {
-  id                        String    @id @default("singleton")
-  adminPasswordHash         String
-  adminEmail                String?
-  logoUrl                   String?
+  id                           String    @id @default("singleton")
+  adminPasswordHash            String
+  adminEmail                   String?
+  logoUrl                      String?
   // Marca de agua opcional (logo + wordmark) mostrada discretamente en la tarjeta de Inicio.
-  bannerUrl                 String?
+  bannerUrl                    String?
   // Ícono de la pestaña del navegador — si no se sube uno, se usa el /icon.svg genérico por defecto.
-  faviconUrl                String?
+  faviconUrl                   String?
   // Cumpleaños del admin — el único perfil sin un User real detrás, así que
   // vive aquí en vez de en la tabla User.
-  adminBirthDate            DateTime?
+  adminBirthDate               DateTime?
   // Confirmado 2026-08-05: contador único para el código correlativo de
   // Control de Compras (SC-001, SC-002...) — una sola secuencia para todo el
   // módulo, sin importar quién solicite. Incrementado dentro de una
   // transacción al crear el primer PurchaseRequest de un grupo nuevo, y
   // copiado a todas las filas de ese mismo grupo.
-  lastPurchaseRequestNumber Int       @default(0)
-  updatedAt                 DateTime  @updatedAt
+  lastPurchaseRequestNumber    Int       @default(0)
+  // Confirmado 2026-08-19: correlativo propio de Reingreso de Mercadería
+  // (RM-0001, RM-0002...) — mismo patrón atómico que lastPurchaseRequestNumber,
+  // una sola numeración para todo el módulo sin importar quién capture el lote.
+  lastMerchandiseReentryNumber Int       @default(0)
+  updatedAt                    DateTime  @updatedAt
 }
 
 // Token temporal para el flujo de "olvidé mi contraseña" del administrador
@@ -300,9 +304,16 @@ model User {
   fixedMonthlyBonusesProposed   FixedMonthlyBonus[]    @relation("FixedMonthlyBonusProposedBy")
 
   personalPurchaseOrders PersonalPurchaseOrder[] @relation("PersonalPurchaseOrderEmployee")
-  employeeBankAccount   EmployeeBankAccount?
-  salaryAdvances        SalaryAdvance[]       @relation("SalaryAdvanceEmployee")
-  managementDeductions  ManagementDeduction[] @relation("ManagementDeductionEmployee")
+  employeeBankAccount    EmployeeBankAccount?
+  salaryAdvances         SalaryAdvance[]         @relation("SalaryAdvanceEmployee")
+  managementDeductions   ManagementDeduction[]   @relation("ManagementDeductionEmployee")
+
+  merchandiseReentryBatchesCreated       MerchandiseReentryBatch[] @relation("MerchandiseReentryBatchCreatedBy")
+  merchandiseReentryItemsCorrected       MerchandiseReentryItem[]  @relation("MerchandiseReentryItemCorrectedBy")
+  merchandiseReentryItemsApproved        MerchandiseReentryItem[]  @relation("MerchandiseReentryItemApprovedBy")
+  merchandiseReentryItemsDamageConfirmed MerchandiseReentryItem[]  @relation("MerchandiseReentryItemDamageConfirmedBy")
+  merchandiseReentryItemsJustUploaded    MerchandiseReentryItem[]  @relation("MerchandiseReentryItemJustUploadedBy")
+  merchandiseReentryItemsWrittenOff      MerchandiseReentryItem[]  @relation("MerchandiseReentryItemWriteOffBy")
 
   @@index([deptId])
   @@index([leadsDeptId])
@@ -1206,6 +1217,12 @@ model PurchaseCatalogItem {
 
   requests      PurchaseRequest[]
   deleteRequest PurchaseCatalogItemDeleteRequest?
+
+  // Confirmado 2026-08-19: Reingreso de Mercadería reusa este mismo catálogo
+  // para el reconocimiento visual por IA (ver MerchandiseReentryItem) — un
+  // producto puede quedar registrado aquí sea porque alguien lo dio de alta
+  // para Control de Compras, o porque quedó confirmado desde un reingreso.
+  merchandiseReentryItems MerchandiseReentryItem[]
 }
 
 // La sola existencia de esta fila ES el estado "pendiente de eliminar" —
@@ -2719,10 +2736,10 @@ model PersonalPurchaseOrder {
   rejectionReason        String?
   pickedUpAt             DateTime? // Daniel marca cuando físicamente salió de bodega
 
-  eventMonth       String  // "YYYY-MM" — mes en que se hizo la compra
+  eventMonth       String // "YYYY-MM" — mes en que se hizo la compra
   installments     Int     @default(1) // libre, sin tope — lo decide Nairoby
   firstPayoutMonth String? // resuelto al confirmar Nairoby (resolveFirstPayoutMonth)
-  totalAmount      Float?  // suma de todos los ítems, se llena al confirmar Nairoby
+  totalAmount      Float? // suma de todos los ítems, se llena al confirmar Nairoby
 
   items     PersonalPurchaseItem[]
   createdAt DateTime               @default(now())
@@ -2735,7 +2752,7 @@ model PersonalPurchaseItem {
   orderId String
   order   PersonalPurchaseOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
-  employeeProductName  String  // como lo escribió el colaborador, de memoria
+  employeeProductName  String // como lo escribió el colaborador, de memoria
   confirmedProductName String? // lo corrige Daniel según JUST — null hasta que confirme
   livePhotoUrl         String
   optionalPhotoUrl     String?
@@ -2846,4 +2863,122 @@ model ManagementDeduction {
   createdAt   DateTime @default(now())
 
   @@index([employeeId])
+}
+
+/**
+ * ---------------- Reingreso de Mercadería ----------------
+ * Diseñado y aprobado 2026-08-19 (boceto iterado con el usuario antes de
+ * tocar código). Devoluciones de pedidos no entregados (Dropi/Rocket) que
+ * regresan a bodega. Flujo de 3 pasos: el equipo de Inventario captura por
+ * lote (foto en vivo + reconocimiento por IA contra PurchaseCatalogItem +
+ * cantidades buena/dañada), Daniel (líder de Inventario) aprueba, Nairoby
+ * (Finanzas) cierra el ciclo — lo bueno a Just, lo dañado a baja.
+ */
+
+// Un lote = una sesión de captura de un colaborador de Inventario. Solo
+// existe si el candado inicial ("¿ya escaneado como devolución en Dropi o
+// Rocket?") se respondió Sí — por eso scanConfirmed no tiene default false,
+// el batch nunca se crea con un No. submittedAt congela el lote entero: ni
+// el colaborador puede seguir editando items después de eso.
+model MerchandiseReentryBatch {
+  id          String @id @default(cuid())
+  code        String @unique // "RM-0007"
+  batchNumber Int    @unique
+
+  createdById String
+  createdBy   User     @relation("MerchandiseReentryBatchCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt   DateTime @default(now())
+
+  // Null mientras el colaborador sigue agregando productos (DRAFT real,
+  // visible/editable solo para quien lo creó). Se pone al confirmar el envío
+  // con doble confirmación — desde ahí el lote entero queda de solo lectura
+  // para el colaborador.
+  submittedAt DateTime?
+
+  // Se pone cuando TODOS los items del lote ya fueron resueltos por Daniel
+  // (aprobados en bloque, o con nombre corregido + decisión de daño tomada).
+  danielApprovedAt DateTime?
+
+  // Se pone cuando TODOS los items ya fueron cerrados por Nairoby (parte
+  // buena subida a Just y/o parte dañada dada de baja, según corresponda).
+  closedAt DateTime?
+
+  items MerchandiseReentryItem[]
+
+  @@index([submittedAt])
+  @@index([danielApprovedAt])
+  @@index([closedAt])
+}
+
+// Un producto dentro de un lote. goodQty/damagedQty conviven en la misma
+// fila (mismo producto, mismo lote, puede venir con unidades de ambos
+// tipos) — Nairoby cierra cada parte por separado (justUploadedAt vs
+// writeOffAt) porque siguen caminos distintos.
+model MerchandiseReentryItem {
+  id      String                  @id @default(cuid())
+  batchId String
+  batch   MerchandiseReentryBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  // Solo cámara en vivo (LiveCameraCapture) — nunca subida desde galería,
+  // pedido explícito del usuario 2026-08-19.
+  photoUrls String[]
+
+  catalogItemId String?
+  catalogItem   PurchaseCatalogItem? @relation(fields: [catalogItemId], references: [id], onDelete: SetNull)
+  aiRecognized  Boolean              @default(false)
+  aiNote        String?
+
+  // Nombre puesto a mano por el colaborador cuando la IA no reconoció el
+  // producto. correctedName es la corrección de Daniel (queda el registro de
+  // quién y cuándo) — declaredName original nunca se borra, solo se agrega
+  // la corrección al lado.
+  declaredName  String?
+  correctedName String?
+  correctedById String?
+  correctedBy   User?     @relation("MerchandiseReentryItemCorrectedBy", fields: [correctedById], references: [id], onDelete: SetNull)
+  correctedAt   DateTime?
+
+  goodQty    Int @default(0)
+  damagedQty Int @default(0)
+
+  damageReasonId    String?
+  damageReason      MerchandiseDamageReason? @relation(fields: [damageReasonId], references: [id], onDelete: SetNull)
+  damageReasonOther String?
+
+  // Daniel resolvió este item — de un clic si venía todo bien (IA reconoció +
+  // 100% bueno), o después de corregir el nombre / decidir sobre el daño.
+  approvedAt   DateTime?
+  approvedById String?
+  approvedBy   User?     @relation("MerchandiseReentryItemApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+
+  // Null mientras no se decide (solo aplica si damagedQty > 0). true = Daniel
+  // verificó físicamente que sí está dañado. false = revisó y en realidad
+  // está bueno (se trata como parte buena desde ese momento).
+  damageConfirmed     Boolean?
+  damageConfirmedAt   DateTime?
+  damageConfirmedById String?
+  damageConfirmedBy   User?     @relation("MerchandiseReentryItemDamageConfirmedBy", fields: [damageConfirmedById], references: [id], onDelete: SetNull)
+
+  justUploadedAt   DateTime?
+  justUploadedById String?
+  justUploadedBy   User?     @relation("MerchandiseReentryItemJustUploadedBy", fields: [justUploadedById], references: [id], onDelete: SetNull)
+
+  writeOffAt   DateTime?
+  writeOffById String?
+  writeOffBy   User?     @relation("MerchandiseReentryItemWriteOffBy", fields: [writeOffById], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+
+  @@index([batchId])
+  @@index([catalogItemId])
+}
+
+// Catálogo reutilizable de motivos de daño (mismo patrón que
+// WarrantyCategory/StockoutProduct) — se crea una vez, se reutiliza después.
+model MerchandiseDamageReason {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+
+  items MerchandiseReentryItem[]
 }

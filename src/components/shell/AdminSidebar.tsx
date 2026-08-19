@@ -25,6 +25,7 @@ import {
   Trophy,
   LayoutGrid,
   Waypoints,
+  PackageOpen,
 } from "lucide-react";
 import { BrandMark } from "@/components/brand/DaflowMark";
 import { NotificationBell } from "@/components/shared/NotificationBell";
@@ -176,6 +177,9 @@ export function AdminSidebar({
         </Link>
         <Link href="/admin/roles-de-pago" className={`${NAV_ITEM} ${pathname.startsWith("/admin/roles-de-pago") ? NAV_ACTIVE : NAV_INACTIVE}`}>
           <Wallet size={15} /> Roles de pago
+        </Link>
+        <Link href="/admin/reingreso-mercaderia" className={`${NAV_ITEM} ${pathname.startsWith("/admin/reingreso-mercaderia") ? NAV_ACTIVE : NAV_INACTIVE}`}>
+          <PackageOpen size={15} /> Reingreso de Mercadería
         </Link>
         <Link href="/admin/leyes" className={`${NAV_ITEM} ${pathname.startsWith("/admin/leyes") ? NAV_ACTIVE : NAV_INACTIVE}`}>
           <Scale size={15} /> Leyes y Reglamentos

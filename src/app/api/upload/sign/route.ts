@@ -14,6 +14,7 @@ import {
   canManagePettyCashSecundaria,
   canManageAdminPayments,
   canConfirmPersonalPurchaseInventory,
+  canCaptureMerchandiseReentry,
 } from "@/lib/guards";
 
 // Confirmado 2026-08-03: bug real — ninguna de estas carpetas de Control de
@@ -113,6 +114,9 @@ export async function POST(req: NextRequest) {
   }
   if (!allowed && session?.user.role === "employee" && folder === "retail-product-photos") {
     allowed = await canConfirmPersonalPurchaseInventory();
+  }
+  if (!allowed && session?.user.role === "employee" && folder === "merchandise-reentry-photos") {
+    allowed = await canCaptureMerchandiseReentry();
   }
   if (!allowed) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
