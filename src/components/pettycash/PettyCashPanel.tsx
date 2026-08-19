@@ -199,17 +199,46 @@ function BoxCard({
   const [excReason, setExcReason] = useState("");
   const [zoomedUrl, setZoomedUrl] = useState<string | null>(null);
 
-  const [payoutAccount, setPayoutAccount] = useState(box.payoutAccount ?? "");
+  const acc = box.payoutAccount;
   const [editingPayout, setEditingPayout] = useState(false);
   const [payoutBusy, setPayoutBusy] = useState(false);
+  const [bankNames, setBankNames] = useState<string[]>([]);
+  const [pBankName, setPBankName] = useState(acc?.bankName ?? "");
+  const [pBankAccountType, setPBankAccountType] = useState(acc?.bankAccountType ?? "Ahorros");
+  const [pBankAccountNumber, setPBankAccountNumber] = useState(acc?.bankAccountNumber ?? "");
+  const [pBankAccountHolder, setPBankAccountHolder] = useState(acc?.bankAccountHolder ?? "");
+  const [pHolderIdType, setPHolderIdType] = useState<"RUC" | "CEDULA">(acc?.holderIdType ?? "CEDULA");
+  const [pHolderIdNumber, setPHolderIdNumber] = useState(acc?.holderIdNumber ?? "");
+  const [pEmail, setPEmail] = useState(acc?.email ?? "");
+  const [pPhone, setPPhone] = useState(acc?.phone ?? "");
+
+  useEffect(() => {
+    if (!editingPayout || bankNames.length > 0) return;
+    fetch("/api/employee-bank-account/bank-names").then((r) => (r.ok ? r.json() : [])).then(setBankNames);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editingPayout]);
+
+  function cancelEditPayout() {
+    setPBankName(acc?.bankName ?? ""); setPBankAccountType(acc?.bankAccountType ?? "Ahorros");
+    setPBankAccountNumber(acc?.bankAccountNumber ?? ""); setPBankAccountHolder(acc?.bankAccountHolder ?? "");
+    setPHolderIdType(acc?.holderIdType ?? "CEDULA"); setPHolderIdNumber(acc?.holderIdNumber ?? "");
+    setPEmail(acc?.email ?? ""); setPPhone(acc?.phone ?? "");
+    setEditingPayout(false);
+  }
 
   async function savePayoutAccount() {
+    if (!pBankName.trim() || !pBankAccountNumber.trim() || !pBankAccountHolder.trim()) { setErr("Completa banco, número de cuenta y titular."); return; }
     setPayoutBusy(true);
     setErr("");
     const res = await fetch("/api/petty-cash/box", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ boxType: box.type, payoutAccount: payoutAccount.trim() || null }),
+      body: JSON.stringify({
+        boxType: box.type,
+        bankName: pBankName.trim(), bankAccountType: pBankAccountType, bankAccountNumber: pBankAccountNumber.trim(),
+        bankAccountHolder: pBankAccountHolder.trim(), holderIdType: pHolderIdType, holderIdNumber: pHolderIdNumber.trim() || undefined,
+        email: pEmail.trim() || undefined, phone: pPhone.trim() || undefined,
+      }),
     });
     setPayoutBusy(false);
     if (!res.ok) { const json = await res.json().catch(() => null); setErr(json?.error ?? "No se pudo guardar la cuenta."); return; }
@@ -471,25 +500,46 @@ function BoxCard({
 
       {canOperate && (
         <div className="mt-3.5 pt-3.5 border-t border-dashed border-rule">
-          <div className="text-[12px] font-semibold mb-1.5">🏦 Cuenta para recibir fondeo</div>
+          <div className="flex items-center justify-between mb-1.5">
+            <div className="text-[12px] font-semibold">🏦 Cuenta para recibir fondeo</div>
+            {!editingPayout && (
+              <button type="button" className="text-steel hover:text-ink shrink-0 cursor-pointer" title="Editar" onClick={() => setEditingPayout(true)}><Pencil size={13} /></button>
+            )}
+          </div>
           {editingPayout ? (
-            <div className="flex items-center gap-1.5">
-              <input
-                type="text"
-                placeholder="Banco, número de cuenta, titular…"
-                className="flex-1 rounded border border-rule bg-cloud px-2.5 py-2 text-[12px]"
-                value={payoutAccount}
-                onChange={(e) => setPayoutAccount(e.target.value)}
-                autoFocus
-              />
-              <button type="button" disabled={payoutBusy} className="text-teal text-[11px] font-semibold cursor-pointer disabled:opacity-60" onClick={savePayoutAccount}>Guardar</button>
-              <button type="button" className="text-steel text-[11px] cursor-pointer" onClick={() => { setPayoutAccount(box.payoutAccount ?? ""); setEditingPayout(false); }}>Cancelar</button>
+            <div className="flex flex-col gap-1.5 max-w-sm">
+              <input list="bank-names-datalist" type="text" placeholder="Banco" className="rounded border border-rule bg-cloud px-2.5 py-1.5 text-[12px]" value={pBankName} onChange={(e) => setPBankName(e.target.value)} autoFocus />
+              <datalist id="bank-names-datalist">{bankNames.map((n) => (<option key={n} value={n} />))}</datalist>
+              <div className="flex gap-1.5">
+                <button type="button" onClick={() => setPBankAccountType("Ahorros")} className={`flex-1 text-[11.5px] font-semibold rounded px-2 py-1.5 border cursor-pointer ${pBankAccountType === "Ahorros" ? "border-teal text-teal bg-teal/10" : "border-rule text-steel"}`}>Ahorros</button>
+                <button type="button" onClick={() => setPBankAccountType("Corriente")} className={`flex-1 text-[11.5px] font-semibold rounded px-2 py-1.5 border cursor-pointer ${pBankAccountType === "Corriente" ? "border-teal text-teal bg-teal/10" : "border-rule text-steel"}`}>Corriente</button>
+              </div>
+              <input type="text" placeholder="N° de cuenta" className="rounded border border-rule bg-cloud px-2.5 py-1.5 text-[12px]" value={pBankAccountNumber} onChange={(e) => setPBankAccountNumber(e.target.value)} />
+              <input type="text" placeholder="Nombre del titular" className="rounded border border-rule bg-cloud px-2.5 py-1.5 text-[12px]" value={pBankAccountHolder} onChange={(e) => setPBankAccountHolder(e.target.value)} />
+              <div className="flex gap-1.5">
+                <select className="rounded border border-rule bg-cloud px-2 py-1.5 text-[12px]" value={pHolderIdType} onChange={(e) => setPHolderIdType(e.target.value as "RUC" | "CEDULA")}>
+                  <option value="CEDULA">Cédula</option>
+                  <option value="RUC">RUC</option>
+                </select>
+                <input type="text" placeholder="N° de identificación" className="flex-1 rounded border border-rule bg-cloud px-2.5 py-1.5 text-[12px]" value={pHolderIdNumber} onChange={(e) => setPHolderIdNumber(e.target.value)} />
+              </div>
+              <input type="email" placeholder="Correo (opcional)" className="rounded border border-rule bg-cloud px-2.5 py-1.5 text-[12px]" value={pEmail} onChange={(e) => setPEmail(e.target.value)} />
+              <input type="text" placeholder="Celular (opcional)" className="rounded border border-rule bg-cloud px-2.5 py-1.5 text-[12px]" value={pPhone} onChange={(e) => setPPhone(e.target.value)} />
+              <div className="flex items-center gap-2.5 mt-0.5">
+                <button type="button" disabled={payoutBusy} className="text-teal text-[11.5px] font-semibold cursor-pointer disabled:opacity-60" onClick={savePayoutAccount}>{payoutBusy ? "Guardando…" : "Guardar"}</button>
+                <button type="button" className="text-steel text-[11.5px] cursor-pointer" onClick={cancelEditPayout}>Cancelar</button>
+              </div>
+            </div>
+          ) : acc ? (
+            <div className="text-[12px] leading-relaxed">
+              <div>{acc.bankName} — {acc.bankAccountType}</div>
+              <div className="text-steel">N° cuenta: <span className="text-ink">{acc.bankAccountNumber}</span></div>
+              <div className="text-steel">Titular: <span className="text-ink">{acc.bankAccountHolder}</span>{acc.holderIdNumber && <> — {acc.holderIdType === "RUC" ? "RUC" : "Cédula"} {acc.holderIdNumber}</>}</div>
+              {acc.email && <div className="text-steel">Correo: <span className="text-ink">{acc.email}</span></div>}
+              {acc.phone && <div className="text-steel">Celular: <span className="text-ink">{acc.phone}</span></div>}
             </div>
           ) : (
-            <div className="flex items-center justify-between gap-2 text-[12px]">
-              <span className={box.payoutAccount ? "" : "text-steel italic"}>{box.payoutAccount || "Sin cuenta configurada"}</span>
-              <button type="button" className="text-steel hover:text-ink shrink-0 cursor-pointer" title="Editar" onClick={() => setEditingPayout(true)}><Pencil size={13} /></button>
-            </div>
+            <div className="text-[12px] text-steel italic">Sin cuenta configurada</div>
           )}
         </div>
       )}
@@ -571,9 +621,13 @@ function BoxCard({
       {canFund && isAdmin && (
         <div className="mt-4 pt-3.5 border-t border-dashed border-rule">
           <div className="text-[12px] font-semibold mb-2">💸 Fondear esta caja</div>
-          {box.payoutAccount ? (
-            <div className="mb-2.5 text-[11.5px] bg-teal/10 border border-teal/30 rounded-md px-2.5 py-1.5">
-              🏦 Transferir a: <span className="font-semibold">{box.payoutAccount}</span>
+          {acc ? (
+            <div className="mb-2.5 text-[11.5px] bg-teal/10 border border-teal/30 rounded-md px-2.5 py-1.5 leading-relaxed">
+              <div className="font-semibold">🏦 Transferir a:</div>
+              <div>{acc.bankName} — {acc.bankAccountType} — {acc.bankAccountNumber}</div>
+              <div>{acc.bankAccountHolder}{acc.holderIdNumber && <> — {acc.holderIdType === "RUC" ? "RUC" : "Cédula"} {acc.holderIdNumber}</>}</div>
+              {acc.email && <div>Correo: {acc.email}</div>}
+              {acc.phone && <div>Celular: {acc.phone}</div>}
             </div>
           ) : (
             <div className="mb-2.5 text-[11.5px] text-steel bg-cloud rounded-md px-2.5 py-1.5">

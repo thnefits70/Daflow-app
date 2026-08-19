@@ -106,10 +106,21 @@ async function toEntryDTO(e: {
   };
 }
 
+export type PettyCashPayoutAccountDTO = {
+  bankName: string;
+  bankAccountType: string;
+  bankAccountNumber: string;
+  bankAccountHolder: string;
+  holderIdType: "RUC" | "CEDULA" | null;
+  holderIdNumber: string | null;
+  email: string | null;
+  phone: string | null;
+};
+
 export type PettyCashBoxDTO = {
   type: PettyCashBoxTypeStr;
   minThreshold: number;
-  payoutAccount: string | null;
+  payoutAccount: PettyCashPayoutAccountDTO | null;
   balance: number;
   isLow: boolean;
   blocked: boolean;
@@ -120,11 +131,14 @@ export type PettyCashBoxDTO = {
 
 export async function getPettyCashBoxData(type: PettyCashBoxTypeStr): Promise<PettyCashBoxDTO> {
   const box = await getOrCreateBox(type);
-  const rows = await prisma.pettyCashEntry.findMany({
-    where: { boxId: box.id },
-    include: { createdBy: { select: { name: true } }, confirmedBy: { select: { name: true } } },
-    orderBy: { requestNumber: "desc" },
-  });
+  const [rows, payoutAccount] = await Promise.all([
+    prisma.pettyCashEntry.findMany({
+      where: { boxId: box.id },
+      include: { createdBy: { select: { name: true } }, confirmedBy: { select: { name: true } } },
+      orderBy: { requestNumber: "desc" },
+    }),
+    prisma.pettyCashPayoutAccount.findUnique({ where: { boxId: box.id } }),
+  ]);
 
   const active = rows.filter((r) => !r.archived);
   const archived = rows.filter((r) => r.archived);
@@ -134,7 +148,16 @@ export async function getPettyCashBoxData(type: PettyCashBoxTypeStr): Promise<Pe
   return {
     type,
     minThreshold: box.minThreshold,
-    payoutAccount: box.payoutAccount,
+    payoutAccount: payoutAccount && {
+      bankName: payoutAccount.bankName,
+      bankAccountType: payoutAccount.bankAccountType,
+      bankAccountNumber: payoutAccount.bankAccountNumber,
+      bankAccountHolder: payoutAccount.bankAccountHolder,
+      holderIdType: payoutAccount.holderIdType,
+      holderIdNumber: payoutAccount.holderIdNumber,
+      email: payoutAccount.email,
+      phone: payoutAccount.phone,
+    },
     balance,
     isLow: balance <= box.minThreshold,
     blocked: pending.length > 0,

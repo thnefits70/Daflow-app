@@ -264,6 +264,7 @@ model User {
   pettyCashEntriesRestored                     PettyCashEntry[]                   @relation("PettyCashEntryRestoredBy")
   pettyCashEntriesConfirmed                    PettyCashEntry[]                   @relation("PettyCashEntryConfirmedBy")
   pettyCashExceptionsRequested                 PettyCashFreightException[]        @relation("PettyCashExceptionRequestedBy")
+  pettyCashPayoutAccountsUpdated                PettyCashPayoutAccount[]
   pettyCashExceptionsReviewed                  PettyCashFreightException[]        @relation("PettyCashExceptionReviewedBy")
   purchaseRequestsMade                         PurchaseRequest[]                  @relation("PurchaseRequestRequestedBy")
   purchaseRequestsReviewed                     PurchaseRequest[]                  @relation("PurchaseRequestReviewedBy")
@@ -735,18 +736,40 @@ enum PettyCashEntryKind {
 // Secundaria (Bryan Ríos escribe, vive en su propia "Mi área de trabajo",
 // bajo el mando de la Principal — Nairoby la ve pero no escribe en ella).
 model PettyCashBox {
-  id            String           @id @default(cuid())
-  type          PettyCashBoxType @unique
-  minThreshold  Float            @default(10)
-  // Cuenta bancaria donde quien administra la caja (no admin) quiere recibir
-  // el fondeo — la fija solo esa persona, así el dueño sabe a qué cuenta
-  // transferir en vez de adivinar (pedido explícito 2026-08-19).
-  payoutAccount String?
-  createdAt     DateTime         @default(now())
-  updatedAt     DateTime         @updatedAt
+  id           String           @id @default(cuid())
+  type         PettyCashBoxType @unique
+  minThreshold Float            @default(10)
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
 
-  entries    PettyCashEntry[]
-  exceptions PettyCashFreightException[]
+  entries       PettyCashEntry[]
+  exceptions    PettyCashFreightException[]
+  payoutAccount PettyCashPayoutAccount?
+}
+
+// Cuenta donde quien administra la caja (nunca admin) quiere recibir el
+// fondeo — mismos campos que EmployeeBankAccount/SupplierBankAccount, más
+// correo/celular opcionales (algunos bancos en Ecuador transfieren solo con
+// el número de celular registrado). La fija exclusivamente esa persona, así
+// el dueño sabe a qué cuenta transferir en vez de adivinar (2026-08-19).
+model PettyCashPayoutAccount {
+  id    String       @id @default(cuid())
+  boxId String       @unique
+  box   PettyCashBox @relation(fields: [boxId], references: [id], onDelete: Cascade)
+
+  bankName          String
+  bankAccountType   String
+  bankAccountNumber String
+  bankAccountHolder String
+  holderIdType      HolderIdType?
+  holderIdNumber    String?
+  email             String?
+  phone             String?
+
+  updatedById String?
+  updatedBy   User?    @relation(fields: [updatedById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
 
 // Un registro por movimiento (desembolso o recarga) — nunca se elimina,
