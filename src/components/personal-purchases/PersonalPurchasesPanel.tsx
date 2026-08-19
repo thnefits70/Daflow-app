@@ -46,6 +46,20 @@ function emptyDraft(): DraftItem {
   return { employeeProductName: "", quantity: 1, livePhotoUrl: null, optionalPhotoUrl: null, unitDeclarations: [{ relation: "SELF" }] };
 }
 
+// Confirmado 2026-08-19: pedido explícito del usuario tras probarlo real —
+// antes había que tocar "Agregar al pedido" SÍ o SÍ antes de que se
+// habilitara "Enviar compra", y no quedaba claro por qué el botón seguía
+// gris. Ahora, si solo hay un producto, alcanza con completarlo y enviar
+// directo — "Agregar al pedido" queda solo para sumar más de uno. Y si
+// falta algo, se dice exactamente qué.
+function draftMissingReason(d: DraftItem): string | null {
+  if (!d.employeeProductName.trim()) return "Falta escribir el nombre del producto.";
+  if (!d.livePhotoUrl) return "Falta tomar la foto en vivo del producto.";
+  const missingNote = d.unitDeclarations.find((decl) => decl.relation !== "SELF" && !decl.note?.trim());
+  if (missingNote) return "Falta escribir para quién es la unidad que no es para vos.";
+  return null;
+}
+
 // Confirmado 2026-08-18: rediseño completo — el colaborador arma un
 // pedido con uno o varios productos (carrito). Por producto: foto en vivo
 // obligatoria + una segunda opcional que no ocupa espacio salvo que la
@@ -99,23 +113,32 @@ export function PersonalPurchasesPanel() {
     setCart((c) => c.filter((_, i) => i !== idx));
   }
 
+  const canAddDraft = draft.employeeProductName.trim().length > 0 && !!draft.livePhotoUrl && draft.unitDeclarations.every((d) => d.relation === "SELF" || d.note?.trim());
+
   async function submitOrder() {
-    if (cart.length === 0) return;
+    // El producto que está a medio completar en el formulario se suma solo
+    // al envío si ya está completo — así no hace falta el clic de más de
+    // "Agregar al pedido" cuando es un solo producto.
+    const items = canAddDraft ? [...cart, draft] : cart;
+    if (items.length === 0) return;
     setBusy(true);
     setErr("");
     const res = await fetch("/api/personal-purchases", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ items: cart }),
+      body: JSON.stringify({ items }),
     });
     setBusy(false);
     const data = await res.json().catch(() => null);
-    if (!res.ok) { setErr(data?.error ?? "No se pudo enviar."); return; }
+    if (!res.ok) { setErr(data?.error ?? "No se pudo enviar — intentá de nuevo."); return; }
     setCart([]);
+    setDraft(emptyDraft());
+    setShowExtraPhoto(false);
     loadOrders();
   }
 
-  const canAddDraft = draft.employeeProductName.trim().length > 0 && !!draft.livePhotoUrl && draft.unitDeclarations.every((d) => d.relation === "SELF" || d.note?.trim());
+  const canSubmit = cart.length > 0 || canAddDraft;
+  const submitBlockedReason = !canSubmit ? draftMissingReason(draft) : null;
 
   return (
     <div>
@@ -224,9 +247,10 @@ export function PersonalPurchasesPanel() {
         </div>
 
         {err && <div className="text-red text-[12.5px] mt-3">{err}</div>}
-        <button type="button" disabled={busy || cart.length === 0} className="text-[13px] font-bold bg-blue text-white rounded-md px-4 py-2 cursor-pointer disabled:opacity-40 mt-3.5" onClick={submitOrder}>
-          {busy ? "Enviando…" : `Enviar compra${cart.length > 0 ? ` (${cart.length})` : ""}`}
+        <button type="button" disabled={busy || !canSubmit} className="text-[13px] font-bold bg-blue text-white rounded-md px-4 py-2 cursor-pointer disabled:opacity-40 mt-3.5" onClick={submitOrder}>
+          {busy ? "Enviando…" : `Enviar compra${cart.length > 0 ? ` (${cart.length + (canAddDraft ? 1 : 0)})` : ""}`}
         </button>
+        {submitBlockedReason && <div className="text-[11.5px] text-steel-dim mt-1.5">{submitBlockedReason}</div>}
       </div>
 
       <div className="bg-surface border border-rule rounded-md p-4">
