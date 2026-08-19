@@ -3,7 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { canManageSalaryAdvances } from "@/lib/guards";
-import { sendPushToOwner } from "@/lib/webPush";
+import { notifyOwner } from "@/lib/notifications";
 
 const schema = z.object({ reason: z.string().trim().min(1, "Contá el motivo del rechazo.") });
 
@@ -26,7 +26,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     data: { status: "REJECTED", rejectedAt: new Date(), rejectedById: isAdmin ? null : session!.user.id },
   });
 
-  await sendPushToOwner(advance.employeeId, {
+  await notifyOwner(advance.employeeId, {
     title: "❌ Tu anticipo fue rechazado",
     body: parsed.data.reason,
     url: "/area/anticipos",

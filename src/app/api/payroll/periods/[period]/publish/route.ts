@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { canEditPayrollRoles } from "@/lib/guards";
 import { isValidPeriod } from "@/lib/payroll";
 import { isEndOfMonthQuincena, monthOfPeriod, computeMonthlyLegalRole } from "@/lib/payrollCalc";
-import { sendPushToOwner } from "@/lib/webPush";
+import { notifyOwner } from "@/lib/notifications";
 import { actorName } from "@/lib/actorName";
 
 // Confirmado 2026-08-13: pedido explícito del usuario — al publicar la
@@ -49,7 +49,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ pe
     data: { status: "PUBLISHED", publishedAt: new Date(), publishedById: isAdmin ? null : session!.user.id },
   });
 
-  await sendPushToOwner("admin", {
+  await notifyOwner("admin", {
     title: "🔔 Nairoby publicó un rol de pago",
     body: `Quincena ${period} — ${payrollPeriod.roles.length} colaborador${payrollPeriod.roles.length === 1 ? "" : "es"} · publicado por ${actorName(isAdmin ? null : session!.user.name)}`,
     url: "/admin",

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { canApproveFixedMonthlyBonus } from "@/lib/guards";
-import { sendPushToOwner } from "@/lib/webPush";
+import { notifyOwner } from "@/lib/notifications";
 
 // Confirmado 2026-08-17: exclusivo del admin, sin excepción — copia
 // pendingAmount -> amount y limpia el pendiente. Confirmado 2026-08-18:
@@ -20,7 +20,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ userId
   });
 
   if (row.proposedById) {
-    await sendPushToOwner(row.proposedById, {
+    await notifyOwner(row.proposedById, {
       title: "✅ Bono fijo mensual aprobado",
       body: `${row.user.name} · $${row.pendingAmount.toFixed(2)}/mes`,
       url: "/area/nomina?tab=pagos&ptab=roles",

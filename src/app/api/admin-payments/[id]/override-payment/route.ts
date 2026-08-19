@@ -3,7 +3,7 @@ import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { markGroupFreightPaid } from "@/lib/pettyCash";
-import { sendPushToOwner } from "@/lib/webPush";
+import { notifyOwner } from "@/lib/notifications";
 
 const schema = z.object({ note: z.string().trim().min(1, "Describe brevemente por qué está bien.") });
 
@@ -44,7 +44,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
 
   if (request.createdById) {
-    await sendPushToOwner(request.createdById, {
+    await notifyOwner(request.createdById, {
       title: "✅ Ya se pagó tu solicitud",
       body: `${request.motivo} — $${request.monto.toFixed(2)} · revisa el comprobante`,
       url: "/area/workspace",

@@ -3,7 +3,7 @@ import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { canSubmitPurchaseRequests } from "@/lib/guards";
-import { sendPushToOwner } from "@/lib/webPush";
+import { notifyOwner } from "@/lib/notifications";
 import { actorName } from "@/lib/actorName";
 
 const schema = z.object({
@@ -45,7 +45,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   // Confirmado 2026-08-12: notificación privada, solo para admin — para
   // supervisar sin frenar el uso del crédito (que ya queda disponible).
-  await sendPushToOwner("admin", {
+  await notifyOwner("admin", {
     title: "🔔 Nuevo crédito manual registrado",
     body: `${supplier.name} — $${parsed.data.amount.toFixed(2)} · ${parsed.data.reason} · registrado por ${actorName(isAdmin ? null : session.user.name)}`,
     url: "/admin",

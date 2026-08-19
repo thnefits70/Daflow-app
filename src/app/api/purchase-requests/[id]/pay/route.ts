@@ -3,7 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { canRegisterPurchaseInvoices } from "@/lib/guards";
-import { sendPushToOwner } from "@/lib/webPush";
+import { notifyOwner } from "@/lib/notifications";
 
 const schema = z.object({ paymentProofUrl: z.string().url() });
 
@@ -38,7 +38,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   await Promise.all(
     [...notifyTargets].map((ownerId) =>
-      sendPushToOwner(ownerId, {
+      notifyOwner(ownerId, {
         title: ownerId === existing.requestedById ? "Tu solicitud ya fue pagada" : "Mercadería pagada — en camino",
         body: `${existing.catalogItem.name} — ${existing.quantity} un.`,
         url: ownerId === inventarioLeader?.id ? "/area/workspace" : "/admin",

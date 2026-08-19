@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { canRegisterPurchaseInvoices } from "@/lib/guards";
 import { sendPushToOwner } from "@/lib/webPush";
+import { notifyOwner } from "@/lib/notifications";
 import { findDuplicatePaymentProofUse, formatPurchaseRequestCode } from "@/lib/purchases";
 
 const schema = z.object({
@@ -55,7 +56,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ gro
   const requestedById = rows[0].requestedById;
   const names = rows.map((r) => r.catalogItem.name).join(", ");
   if (requestedById) {
-    await sendPushToOwner(requestedById, {
+    await notifyOwner(requestedById, {
       title: "Flete pagado",
       body: `Ya se pagó el flete de ${names}`,
       url: "/area/workspace",

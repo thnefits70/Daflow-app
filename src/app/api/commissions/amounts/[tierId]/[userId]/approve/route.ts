@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { canApproveCommissionAmounts } from "@/lib/guards";
-import { sendPushToOwner } from "@/lib/webPush";
+import { notifyOwner } from "@/lib/notifications";
 
 // Confirmado 2026-08-14: exclusivo del admin, sin excepción — copia
 // pendingAmount -> amount y limpia el pendiente. Confirmado 2026-08-18:
@@ -24,7 +24,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ tierId
   });
 
   if (row.proposedById) {
-    await sendPushToOwner(row.proposedById, {
+    await notifyOwner(row.proposedById, {
       title: "✅ Comisión aprobada",
       body: `${row.user.name} · ${row.tier.name} · $${row.pendingAmount.toFixed(2)}`,
       url: "/area/nomina?tab=pagos&ptab=comisiones",

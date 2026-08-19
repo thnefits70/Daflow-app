@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { canApproveFixedMonthlyBonus } from "@/lib/guards";
-import { sendPushToOwner } from "@/lib/webPush";
+import { notifyOwner } from "@/lib/notifications";
 
 // Confirmado 2026-08-18: mismo aviso que approve/route.ts pero para
 // rechazo — necesita leer la fila ANTES de limpiar pendingAmount, porque el
@@ -18,7 +18,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ userId
   });
 
   if (before?.proposedById && before.pendingAmount !== null) {
-    await sendPushToOwner(before.proposedById, {
+    await notifyOwner(before.proposedById, {
       title: "❌ Bono fijo mensual rechazado",
       body: `${before.user.name} · $${before.pendingAmount.toFixed(2)}/mes`,
       url: "/area/nomina?tab=pagos&ptab=roles",

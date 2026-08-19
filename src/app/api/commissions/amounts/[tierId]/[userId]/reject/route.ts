@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { canApproveCommissionAmounts } from "@/lib/guards";
-import { sendPushToOwner } from "@/lib/webPush";
+import { notifyOwner } from "@/lib/notifications";
 
 // Confirmado 2026-08-18: mismo aviso que approve/route.ts pero para
 // rechazo — necesita leer la fila ANTES de limpiar pendingAmount, porque el
@@ -21,7 +21,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ tierId
   });
 
   if (before?.proposedById && before.pendingAmount !== null) {
-    await sendPushToOwner(before.proposedById, {
+    await notifyOwner(before.proposedById, {
       title: "❌ Comisión rechazada",
       body: `${before.user.name} · ${before.tier.name} · $${before.pendingAmount.toFixed(2)}`,
       url: "/area/nomina?tab=pagos&ptab=comisiones",

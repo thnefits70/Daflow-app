@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { resolveFirstPayoutMonth } from "@/lib/payroll";
-import { sendPushToOwner } from "@/lib/webPush";
+import { notifyOwner } from "@/lib/notifications";
 import { actorName } from "@/lib/actorName";
 
 // Confirmado 2026-08-18: la aceptación del colaborador afectado es lo que
@@ -24,7 +24,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     data: { acceptedAt: new Date(), firstPayoutMonth },
   });
 
-  await sendPushToOwner("admin", {
+  await notifyOwner("admin", {
     title: "✅ Descuento aceptado",
     body: `${actorName(session.user.name)} aceptó el descuento de $${deduction.totalAmount.toFixed(2)}.`,
     url: "/admin/nomina?tab=pagos&ptab=descuentos",

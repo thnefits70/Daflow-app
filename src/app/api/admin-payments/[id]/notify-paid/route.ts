@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { sendPushToOwner } from "@/lib/webPush";
+import { notifyOwner } from "@/lib/notifications";
 
 // Confirmado 2026-08-06: además del aviso automático que ya se dispara al
 // subir un comprobante que calza (upload-proof/route.ts), el admin tiene acá
@@ -22,7 +22,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   });
 
   if (request.createdById) {
-    await sendPushToOwner(request.createdById, {
+    await notifyOwner(request.createdById, {
       title: "✅ Confirmación de pago",
       body: `${request.motivo} — $${request.monto.toFixed(2)} ya se pagó. Revisa el comprobante para reenviarlo si corresponde.`,
       url: "/area/workspace",

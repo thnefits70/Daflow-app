@@ -3,7 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { canRegisterPurchaseInvoices } from "@/lib/guards";
-import { sendPushToOwner } from "@/lib/webPush";
+import { notifyOwner } from "@/lib/notifications";
 import { findDuplicatePaymentProofUse, formatPurchaseRequestCode } from "@/lib/purchases";
 
 // Confirmado 2026-08-06: si el crédito disponible con el proveedor cubre
@@ -98,7 +98,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ gro
 
   await Promise.all(
     [...notifyTargets].map((ownerId) =>
-      sendPushToOwner(ownerId, {
+      notifyOwner(ownerId, {
         title: ownerId === requestedById ? "Tu solicitud ya fue pagada" : "Mercadería pagada — en camino",
         body: names,
         url: ownerId === inventarioLeader?.id || ownerId === requestedById ? "/area/workspace" : "/admin",

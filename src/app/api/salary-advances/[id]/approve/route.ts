@@ -5,7 +5,7 @@ import { auth } from "@/auth";
 import { canManageSalaryAdvances } from "@/lib/guards";
 import { resolveFirstPayoutMonth } from "@/lib/payroll";
 import { nowInEcuador, addMonthsToMonthStr } from "@/lib/payrollCalc";
-import { sendPushToOwner } from "@/lib/webPush";
+import { notifyOwner } from "@/lib/notifications";
 
 const schema = z.object({ transferProofUrl: z.string().min(1, "Subí el comprobante de transferencia.") });
 
@@ -42,7 +42,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     },
   });
 
-  await sendPushToOwner(advance.employeeId, {
+  await notifyOwner(advance.employeeId, {
     title: "✅ Tu anticipo fue aprobado",
     body: `$${advance.amount.toFixed(2)} — ya se transfirió. Se empieza a descontar en ${firstPayoutMonth}.`,
     url: "/area/anticipos",

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { canGrantCeoBonus } from "@/lib/guards";
-import { sendPushToOwner } from "@/lib/webPush";
+import { notifyOwner } from "@/lib/notifications";
 import { CEO_BONUS_LABELS } from "@/lib/commissionTiers";
 
 // Historial completo — exclusivo del admin, para su propia referencia.
@@ -39,7 +39,7 @@ export async function POST(req: NextRequest) {
     data: { userId: user.id, type: parsed.data.type, note: parsed.data.note || null },
   });
 
-  await sendPushToOwner(user.id, {
+  await notifyOwner(user.id, {
     title: "🎉 Recibiste un bono",
     body: CEO_BONUS_LABELS[parsed.data.type],
     url: "/area",

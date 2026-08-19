@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { canActOnPurchaseReceiving } from "@/lib/guards";
 import { sendPushToOwner } from "@/lib/webPush";
+import { notifyOwner } from "@/lib/notifications";
 import { getMarketingArrivalActorIds } from "@/lib/marketingArrivals";
 
 // Confirmado 2026-08-18: pedido explícito del usuario — la aprobación FINAL
@@ -44,7 +45,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     : "";
 
   if (existing.requestedById) {
-    await sendPushToOwner(existing.requestedById, {
+    await notifyOwner(existing.requestedById, {
       title: "Mercadería recibida",
       body: `${existing.catalogItem.name} — Inventario confirmó ${existing.receipt.receivedQuantity} un. recibidas.${differenceNote}`,
       url: "/area/workspace",

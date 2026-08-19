@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { readPaymentProof } from "@/lib/purchaseAi";
 import { markGroupFreightPaid } from "@/lib/pettyCash";
 import { pushOwnerId } from "@/lib/pushOwner";
-import { sendPushToOwner } from "@/lib/webPush";
+import { notifyOwner } from "@/lib/notifications";
 
 const schema = z.object({ proofUrl: z.string().url(), proofName: z.string().optional() });
 
@@ -56,7 +56,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
 
   if (matches && request.createdById) {
-    await sendPushToOwner(request.createdById, {
+    await notifyOwner(request.createdById, {
       title: "✅ Ya se pagó tu solicitud",
       body: `${request.motivo} — $${request.monto.toFixed(2)} · revisa el comprobante`,
       url: "/area/workspace",
