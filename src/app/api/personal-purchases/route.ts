@@ -43,7 +43,7 @@ const itemSchema = z.object({
   employeeProductName: z.string().trim().min(1),
   quantity: z.number().int().positive(),
   livePhotoUrl: z.string().min(1),
-  optionalPhotoUrl: z.string().optional(),
+  optionalPhotoUrl: z.string().nullable().optional(),
   unitDeclarations: z.array(declarationSchema).max(3),
 });
 const schema = z.object({ items: z.array(itemSchema).min(1) });
