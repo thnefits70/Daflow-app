@@ -293,6 +293,7 @@ function AddItemForm({ batchId, onAdded, onCancel }: { batchId: string; onAdded:
   const [damageReasonOther, setDamageReasonOther] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [confirmingAdd, setConfirmingAdd] = useState(false);
 
   async function runRecognition(urls: string[]) {
     setRecognizing(true);
@@ -334,6 +335,8 @@ function AddItemForm({ batchId, onAdded, onCancel }: { batchId: string; onAdded:
   const hasName = (match && matchConfirmed) || manualName.trim().length > 0;
   const hasDamageReason = dQty === 0 || !!damageReason;
   const canSave = !!photoUrl && hasName && gQty + dQty > 0 && hasDamageReason && !saving;
+  const finalName = match && matchConfirmed ? match.name : manualName.trim();
+  const finalDamageReason = dQty > 0 ? (damageReason === "Otro" ? damageReasonOther.trim() || "Otro (sin describir)" : damageReason) : null;
 
   async function save() {
     if (!photoUrl) return;
@@ -360,6 +363,55 @@ function AddItemForm({ batchId, onAdded, onCancel }: { batchId: string; onAdded:
 
   return (
     <div className="bg-surface border border-rule rounded-md p-3.5 flex flex-col gap-3.5 mb-2.5">
+      {confirmingAdd ? (
+        <div>
+          <div className="font-display font-bold text-[14px] mb-2.5">Revisa antes de agregar</div>
+          <div className="flex items-center gap-2 mb-3">
+            {photoUrl && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={photoUrl} alt="Foto del producto" className="w-16 h-16 object-cover rounded-md border border-rule" />
+            )}
+            {photoUrl2 && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={photoUrl2} alt="Segunda foto del producto" className="w-16 h-16 object-cover rounded-md border border-rule" />
+            )}
+          </div>
+          <div className="flex flex-col gap-2 text-[12.5px]">
+            <div className="flex items-start justify-between gap-3">
+              <span className="text-steel shrink-0">Producto</span>
+              <span className="font-semibold text-right">{finalName}</span>
+            </div>
+            {!matchConfirmed && (
+              <div className="text-[11px] text-steel -mt-1">Nombre puesto a mano — la IA no lo reconoció o se descartó el match.</div>
+            )}
+            <div className="flex items-start justify-between gap-3">
+              <span className="text-steel shrink-0">Unidades buenas</span>
+              <span className="font-semibold text-green">{gQty}</span>
+            </div>
+            <div className="flex items-start justify-between gap-3">
+              <span className="text-steel shrink-0">Unidades dañadas</span>
+              <span className="font-semibold text-red">{dQty}</span>
+            </div>
+            {finalDamageReason && (
+              <div className="flex items-start justify-between gap-3">
+                <span className="text-steel shrink-0">Motivo del daño</span>
+                <span className="font-semibold text-right">{finalDamageReason}</span>
+              </div>
+            )}
+          </div>
+          <p className="text-[11.5px] text-steel mt-3">¿Está bien detallada esta información? Una vez agregada al lote, cualquier corrección la tendrá que hacer Daniel al revisar.</p>
+          {error && <div className="text-red text-[11.5px] mt-2">{error}</div>}
+          <div className="flex gap-2 mt-3">
+            <button type="button" className="flex-1 rounded border border-rule px-3 py-2 text-[12px] font-semibold cursor-pointer" onClick={() => setConfirmingAdd(false)}>
+              Revisar de nuevo
+            </button>
+            <button type="button" disabled={saving} className="flex-1 rounded border border-teal bg-teal px-3 py-2 text-[12px] font-bold text-navy cursor-pointer disabled:opacity-60" onClick={save}>
+              {saving ? "Guardando…" : "Sí, agregar al lote"}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <>
       <div>
         <label className="block mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-steel">1 · Foto del producto</label>
         {photoUrl ? (
@@ -506,10 +558,12 @@ function AddItemForm({ batchId, onAdded, onCancel }: { batchId: string; onAdded:
         <button type="button" className="flex-1 rounded border border-rule px-3 py-2 text-[12px] font-semibold cursor-pointer" onClick={onCancel}>
           Cancelar
         </button>
-        <button type="button" disabled={!canSave} className="flex-1 rounded border border-teal bg-teal px-3 py-2 text-[12px] font-bold text-navy cursor-pointer disabled:opacity-40" onClick={save}>
-          {saving ? "Guardando…" : "Agregar al lote"}
+        <button type="button" disabled={!canSave} className="flex-1 rounded border border-teal bg-teal px-3 py-2 text-[12px] font-bold text-navy cursor-pointer disabled:opacity-40" onClick={() => setConfirmingAdd(true)}>
+          Agregar al lote
         </button>
       </div>
+      </>
+      )}
     </div>
   );
 }
