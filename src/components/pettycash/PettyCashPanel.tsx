@@ -252,6 +252,7 @@ function BoxCard({
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [monthFilter, setMonthFilter] = useState("");
+  const [kindFilter, setKindFilter] = useState<"todos" | "ingresos" | "salidas">("todos");
 
   // Fix confirmado 2026-08-11: pedido explícito del usuario — confirmar que
   // llegó el fondeo y registrar un desembolso son acciones EXCLUSIVAS de
@@ -360,14 +361,16 @@ function BoxCard({
     router.refresh();
   }
 
-  const filteredEntries = (dateFrom || dateTo)
-    ? box.entries.filter((e) => {
-        const d = e.createdAt.slice(0, 10);
-        if (dateFrom && d < dateFrom) return false;
-        if (dateTo && d > dateTo) return false;
-        return true;
-      })
-    : box.entries;
+  const filteredEntries = box.entries.filter((e) => {
+    if (kindFilter === "ingresos" && e.kind !== "RECARGA") return false;
+    if (kindFilter === "salidas" && e.kind !== "DESEMBOLSO") return false;
+    if (dateFrom || dateTo) {
+      const d = e.createdAt.slice(0, 10);
+      if (dateFrom && d < dateFrom) return false;
+      if (dateTo && d > dateTo) return false;
+    }
+    return true;
+  });
 
   return (
     <div
@@ -406,6 +409,11 @@ function BoxCard({
       <div className="mt-3.5">
         {box.entries.length > 0 && (
           <div className="flex items-center gap-1.5 mb-2.5 flex-wrap text-[11px]">
+            <div className="flex rounded border border-rule overflow-hidden">
+              <button type="button" className={`px-2 py-1 cursor-pointer ${kindFilter === "todos" ? "bg-blue text-white" : "bg-cloud text-steel"}`} onClick={() => setKindFilter("todos")}>Todos</button>
+              <button type="button" className={`px-2 py-1 cursor-pointer border-l border-rule ${kindFilter === "ingresos" ? "bg-green text-white" : "bg-cloud text-steel"}`} onClick={() => setKindFilter("ingresos")}>Ingresos</button>
+              <button type="button" className={`px-2 py-1 cursor-pointer border-l border-rule ${kindFilter === "salidas" ? "bg-red text-white" : "bg-cloud text-steel"}`} onClick={() => setKindFilter("salidas")}>Salidas</button>
+            </div>
             <select
               className="rounded border border-rule bg-cloud px-2 py-1 font-mono"
               value={monthFilter}
@@ -446,14 +454,14 @@ function BoxCard({
               Hasta
               <input type="date" className="rounded border border-rule bg-cloud px-1.5 py-1" value={dateTo} onChange={(e) => { setDateTo(e.target.value); setMonthFilter(""); }} />
             </label>
-            {(dateFrom || dateTo) && (
-              <button type="button" className="text-steel underline cursor-pointer" onClick={() => { setMonthFilter(""); setDateFrom(""); setDateTo(""); }}>Limpiar</button>
+            {(dateFrom || dateTo || kindFilter !== "todos") && (
+              <button type="button" className="text-steel underline cursor-pointer" onClick={() => { setMonthFilter(""); setDateFrom(""); setDateTo(""); setKindFilter("todos"); }}>Limpiar</button>
             )}
           </div>
         )}
         {box.entries.length === 0 && <div className="text-steel text-[12px]">Sin movimientos todavía.</div>}
         {box.entries.length > 0 && filteredEntries.length === 0 && (
-          <div className="text-steel text-[12px]">Nada en ese rango de fechas.</div>
+          <div className="text-steel text-[12px]">Nada con ese filtro.</div>
         )}
         <div className="flex flex-col gap-1.5">
           {filteredEntries.map((e) => (
