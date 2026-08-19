@@ -63,15 +63,15 @@ type Row = {
   bankAccountChangeNote: string | null;
 };
 
-const STEPS: { key: Row["status"]; label: string }[] = [
-  { key: "PENDING_APPROVAL", label: "Enviado" },
-  { key: "APPROVED", label: "Aprobado" },
-  { key: "PAID", label: "Pagado" },
+const STEPS: { key: Row["status"]; label: string; description: string }[] = [
+  { key: "PENDING_APPROVAL", label: "Enviado", description: "La solicitud fue enviada y está esperando que un administrador la revise." },
+  { key: "APPROVED", label: "Aprobado", description: "Un administrador aprobó la solicitud; ahora se gestiona el pago al proveedor." },
+  { key: "PAID", label: "Pagado", description: "El pago ya se realizó al proveedor; se espera que la mercadería llegue a bodega." },
   // Confirmado 2026-08-18: pedido explícito del usuario — el equipo de
   // Inventario ya recibió (foto+video), pero todavía falta la aprobación
   // final de Daniel antes de considerarse RECIBIDO de verdad.
-  { key: "RECEIVED_PENDING_REVIEW", label: "Pendiente aprobación" },
-  { key: "RECEIVED", label: "Recibido" },
+  { key: "RECEIVED_PENDING_REVIEW", label: "Pendiente aprobación", description: "Inventario ya recibió la mercadería (foto y video); falta que Daniel la revise y apruebe para cerrar la solicitud." },
+  { key: "RECEIVED", label: "Recibido", description: "La mercadería fue recibida y revisada. La solicitud quedó completada." },
 ];
 
 function stepIndex(status: Row["status"]) {
@@ -483,6 +483,7 @@ function GroupCard({
   const [uploading, setUploading] = useState(false);
   const [err, setErr] = useState("");
   const [reminded, setReminded] = useState(false);
+  const [openStepKey, setOpenStepKey] = useState<Row["status"] | null>(null);
   const { onPaste, onMouseEnter: onPasteHoverIn, onMouseLeave: onPasteHoverOut } = usePasteFile((file) => handleFile(file));
   const poFileInputRef = useRef<HTMLInputElement>(null);
 
@@ -590,11 +591,21 @@ function GroupCard({
         <>
           <div className="flex gap-1.5">
             {STEPS.map((s, i) => (
-              <div key={s.key} className={`flex-1 rounded-md py-1.5 text-center text-[10.5px] font-semibold border ${i <= groupIdx ? "border-green/45 text-green bg-green/10" : "border-rule text-steel bg-cloud"}`}>
+              <button
+                key={s.key}
+                type="button"
+                onClick={() => setOpenStepKey((k) => (k === s.key ? null : s.key))}
+                className={`flex-1 rounded-md py-1.5 text-center text-[10.5px] font-semibold border cursor-pointer ${i <= groupIdx ? "border-green/45 text-green bg-green/10" : "border-rule text-steel bg-cloud"} ${openStepKey === s.key ? "ring-1 ring-teal" : ""}`}
+              >
                 {s.label}
-              </div>
+              </button>
             ))}
           </div>
+          {openStepKey && (
+            <div className="mt-1.5 rounded-md border border-rule bg-cloud px-2.5 py-1.5 text-[10.5px] text-steel">
+              {STEPS.find((s) => s.key === openStepKey)?.description}
+            </div>
+          )}
           <div className="text-[10px] text-steel-dim mt-1.5">
             {groupIdx >= 1 && <>Aprobada por {actorName(g[0].reviewedBy?.name)} · </>}
             {groupIdx >= 2 && <>Pagada por {actorName(g[0].paidBy?.name)} · </>}
