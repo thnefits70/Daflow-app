@@ -29,6 +29,7 @@ export function PersonalPurchasesInventoryPanel() {
   const [rejecting, setRejecting] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState("");
   const [busy, setBusy] = useState(false);
+  const [zoomedPhoto, setZoomedPhoto] = useState<string | null>(null);
 
   function load() {
     fetch("/api/personal-purchases/pending-inventory").then((r) => (r.ok ? r.json() : [])).then((rows: Order[]) => {
@@ -83,10 +84,20 @@ export function PersonalPurchasesInventoryPanel() {
                 {o.items.map((it) => (
                   <div key={it.id} className="flex gap-3 items-start border-b border-rule last:border-0 pb-3 last:pb-0">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={it.livePhotoUrl} alt="Foto del producto" className="w-16 h-16 object-cover rounded-md border border-rule shrink-0" />
+                    <img
+                      src={it.livePhotoUrl}
+                      alt="Foto del producto"
+                      className="w-16 h-16 object-cover rounded-md border border-rule shrink-0 cursor-zoom-in"
+                      onDoubleClick={() => setZoomedPhoto(it.livePhotoUrl)}
+                    />
                     {it.optionalPhotoUrl && (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={it.optionalPhotoUrl} alt="Foto extra" className="w-16 h-16 object-cover rounded-md border border-rule shrink-0" />
+                      <img
+                        src={it.optionalPhotoUrl}
+                        alt="Foto extra"
+                        className="w-16 h-16 object-cover rounded-md border border-rule shrink-0 cursor-zoom-in"
+                        onDoubleClick={() => setZoomedPhoto(it.optionalPhotoUrl)}
+                      />
                     )}
                     <div className="flex-1 min-w-0">
                       <div className="text-[11px] text-steel-dim mb-1">Escribió: &quot;{it.employeeProductName}&quot; × {it.quantity}</div>
@@ -121,6 +132,15 @@ export function PersonalPurchasesInventoryPanel() {
           );
         })}
       </div>
+      {zoomedPhoto && (
+        <div
+          className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-6 cursor-zoom-out"
+          onClick={() => setZoomedPhoto(null)}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={zoomedPhoto} alt="Foto ampliada" className="max-w-full max-h-full object-contain rounded-md" />
+        </div>
+      )}
     </div>
   );
 }
