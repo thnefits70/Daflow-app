@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { canCaptureMerchandiseReentry } from "@/lib/guards";
 import { identifyReturnedProduct } from "@/lib/merchandiseReentryAi";
 
-const schema = z.object({ photoUrl: z.string().url() });
+const schema = z.object({ photoUrls: z.array(z.string().url()).min(1).max(2) });
 
 export async function POST(req: NextRequest) {
   const session = await auth();
@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const result = await identifyReturnedProduct({
-      photoUrl: parsed.data.photoUrl,
+      photoUrls: parsed.data.photoUrls,
       actorId: session.user.id,
       deptId: session.user.deptId ?? undefined,
     });

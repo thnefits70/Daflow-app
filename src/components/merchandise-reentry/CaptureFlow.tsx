@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Camera, Check, Plus, Send, X } from "lucide-react";
+import { Camera, Check, Plus, Send, Trash2, X } from "lucide-react";
 import { LiveCameraCapture } from "@/components/shared/LiveCameraCapture";
 
 const DAMAGE_REASONS = ["Producto roto", "Empaque abierto", "Humedad/manchado", "Golpeado", "Otro"];
@@ -40,6 +40,10 @@ export function CaptureFlow() {
   const [confirmingSubmit, setConfirmingSubmit] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [sentCode, setSentCode] = useState<string | null>(null);
+  const [confirmDeleteItemId, setConfirmDeleteItemId] = useState<string | null>(null);
+  const [deletingItem, setDeletingItem] = useState(false);
+  const [confirmDeleteBatch, setConfirmDeleteBatch] = useState(false);
+  const [deletingBatch, setDeletingBatch] = useState(false);
 
   function loadDraft() {
     fetch("/api/merchandise-reentry/draft")
@@ -74,6 +78,29 @@ export function CaptureFlow() {
       setError(e instanceof Error ? e.message : "No se pudo enviar el lote.");
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  async function deleteItem(itemId: string) {
+    setDeletingItem(true);
+    try {
+      await fetch(`/api/merchandise-reentry/items/${itemId}`, { method: "DELETE" });
+      setConfirmDeleteItemId(null);
+      loadDraft();
+    } finally {
+      setDeletingItem(false);
+    }
+  }
+
+  async function deleteBatch() {
+    if (!batch) return;
+    setDeletingBatch(true);
+    try {
+      await fetch(`/api/merchandise-reentry/batches/${batch.id}`, { method: "DELETE" });
+      setBatch(null);
+      setConfirmDeleteBatch(false);
+    } finally {
+      setDeletingBatch(false);
     }
   }
 
@@ -131,38 +158,76 @@ export function CaptureFlow() {
 
   return (
     <div className="max-w-md">
-      <div className="flex items-center gap-2 mb-3">
-        <span className="font-mono text-[11px] font-bold text-teal">{batch.code}</span>
-        <span className="font-mono text-[10px] text-steel bg-cloud rounded-full px-2 py-0.5">{batch.items.length} producto(s) agregados</span>
+      <div className="flex items-center justify-between gap-2 mb-3">
+        <div className="flex items-center gap-2">
+          <span className="font-mono text-[11px] font-bold text-teal">{batch.code}</span>
+          <span className="font-mono text-[10px] text-steel bg-cloud rounded-full px-2 py-0.5">{batch.items.length} producto(s) agregados</span>
+        </div>
+        {!adding && !confirmingSubmit && !confirmDeleteBatch && (
+          <button type="button" className="flex items-center gap-1 text-[11px] font-semibold text-steel hover:text-red cursor-pointer" onClick={() => setConfirmDeleteBatch(true)}>
+            <Trash2 size={12} /> Cancelar lote
+          </button>
+        )}
       </div>
 
-      <div className="flex flex-col gap-2 mb-3">
-        {batch.items.map((item) => (
-          <div key={item.id} className="bg-surface border border-rule rounded-md p-3 flex items-center gap-3">
-            {item.photoUrls[0] && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={item.photoUrls[0]} alt={itemName(item)} className="w-10 h-10 object-cover rounded border border-rule shrink-0" />
-            )}
-            <div className="flex-1 min-w-0">
-              <div className="text-[12.5px] font-semibold truncate">{itemName(item)}</div>
-              <div className="text-[11px] text-steel">
-                {item.goodQty > 0 && <span className="text-green font-semibold">{item.goodQty} buenas</span>}
-                {item.goodQty > 0 && item.damagedQty > 0 && " · "}
-                {item.damagedQty > 0 && <span className="text-red font-semibold">{item.damagedQty} dañadas</span>}
-              </div>
-            </div>
-            <button
-              type="button"
-              className="text-steel hover:text-red cursor-pointer shrink-0"
-              onClick={async () => {
-                await fetch(`/api/merchandise-reentry/items/${item.id}`, { method: "DELETE" });
-                loadDraft();
-              }}
-            >
-              <X size={14} />
+      {confirmDeleteBatch && (
+        <div className="bg-red/10 border border-red/40 rounded-md p-3.5 mb-3">
+          <div className="font-display font-bold text-[13.5px] mb-1">¿Eliminar todo el lote {batch.code}?</div>
+          <p className="text-[12px] text-steel mb-3">Se van a borrar los {batch.items.length} producto(s) agregados. Esto no se puede deshacer.</p>
+          <div className="flex gap-2">
+            <button type="button" className="flex-1 rounded border border-rule px-3 py-2 text-[12px] font-semibold cursor-pointer" onClick={() => setConfirmDeleteBatch(false)}>
+              No, mantener lote
+            </button>
+            <button type="button" disabled={deletingBatch} className="flex-1 rounded border border-red bg-red px-3 py-2 text-[12px] font-bold text-white cursor-pointer disabled:opacity-60" onClick={deleteBatch}>
+              {deletingBatch ? "Eliminando…" : "Sí, eliminar lote"}
             </button>
           </div>
-        ))}
+        </div>
+      )}
+
+      <div className="flex flex-col gap-2 mb-3">
+        {batch.items.map((item) =>
+          confirmDeleteItemId === item.id ? (
+            <div key={item.id} className="bg-red/10 border border-red/40 rounded-md p-3">
+              <div className="text-[12.5px] font-semibold mb-2">¿Eliminar &quot;{itemName(item)}&quot; del lote?</div>
+              <div className="flex gap-2">
+                <button type="button" className="flex-1 rounded border border-rule px-3 py-1.5 text-[11.5px] font-semibold cursor-pointer" onClick={() => setConfirmDeleteItemId(null)}>
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  disabled={deletingItem}
+                  className="flex-1 rounded border border-red bg-red px-3 py-1.5 text-[11.5px] font-bold text-white cursor-pointer disabled:opacity-60"
+                  onClick={() => deleteItem(item.id)}
+                >
+                  {deletingItem ? "Eliminando…" : "Sí, eliminar"}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div key={item.id} className="bg-surface border border-rule rounded-md p-3 flex items-center gap-3">
+              {item.photoUrls[0] && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={item.photoUrls[0]} alt={itemName(item)} className="w-10 h-10 object-cover rounded border border-rule shrink-0" />
+              )}
+              <div className="flex-1 min-w-0">
+                <div className="text-[12.5px] font-semibold truncate">{itemName(item)}</div>
+                <div className="text-[11px] text-steel">
+                  {item.goodQty > 0 && <span className="text-green font-semibold">{item.goodQty} buenas</span>}
+                  {item.goodQty > 0 && item.damagedQty > 0 && " · "}
+                  {item.damagedQty > 0 && <span className="text-red font-semibold">{item.damagedQty} dañadas</span>}
+                </div>
+              </div>
+              <button
+                type="button"
+                className="text-steel hover:text-red cursor-pointer shrink-0"
+                onClick={() => setConfirmDeleteItemId(item.id)}
+              >
+                <X size={14} />
+              </button>
+            </div>
+          )
+        )}
       </div>
 
       {error && <div className="text-red text-[12px] mb-2">{error}</div>}
@@ -215,7 +280,9 @@ export function CaptureFlow() {
 
 function AddItemForm({ batchId, onAdded, onCancel }: { batchId: string; onAdded: () => void; onCancel: () => void }) {
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+  const [photoUrl2, setPhotoUrl2] = useState<string | null>(null);
   const [taking, setTaking] = useState(false);
+  const [taking2, setTaking2] = useState(false);
   const [recognizing, setRecognizing] = useState(false);
   const [match, setMatch] = useState<{ id: string; name: string; photos: string[] } | null | undefined>(undefined);
   const [matchConfirmed, setMatchConfirmed] = useState(false);
@@ -227,9 +294,7 @@ function AddItemForm({ batchId, onAdded, onCancel }: { batchId: string; onAdded:
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
-  async function onCaptured(url: string) {
-    setPhotoUrl(url);
-    setTaking(false);
+  async function runRecognition(urls: string[]) {
     setRecognizing(true);
     setMatch(undefined);
     setMatchConfirmed(false);
@@ -237,7 +302,7 @@ function AddItemForm({ batchId, onAdded, onCancel }: { batchId: string; onAdded:
       const res = await fetch("/api/merchandise-reentry/recognize", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ photoUrl: url }),
+        body: JSON.stringify({ photoUrls: urls }),
       });
       const data = await res.json();
       setMatch(data.catalogItem ?? null);
@@ -246,6 +311,22 @@ function AddItemForm({ batchId, onAdded, onCancel }: { batchId: string; onAdded:
     } finally {
       setRecognizing(false);
     }
+  }
+
+  async function onCaptured(url: string) {
+    setPhotoUrl(url);
+    setTaking(false);
+    await runRecognition(photoUrl2 ? [url, photoUrl2] : [url]);
+  }
+
+  async function onCaptured2(url: string) {
+    setPhotoUrl2(url);
+    setTaking2(false);
+    // Solo repetimos el reconocimiento si todavía no se confirmó un match ni
+    // se puso nombre a mano — si ya se resolvió con la primera foto, la
+    // segunda solo queda como evidencia extra (p. ej. para mostrar varias
+    // unidades) y no vale la pena gastar otra llamada a la IA.
+    if (photoUrl && !matchConfirmed && !manualName) await runRecognition([photoUrl, url]);
   }
 
   const dQty = Number(damagedQty) || 0;
@@ -260,7 +341,7 @@ function AddItemForm({ batchId, onAdded, onCancel }: { batchId: string; onAdded:
     setError("");
     try {
       await postJson(`/api/merchandise-reentry/batches/${batchId}/items`, {
-        photoUrls: [photoUrl],
+        photoUrls: photoUrl2 ? [photoUrl, photoUrl2] : [photoUrl],
         catalogItemId: match && matchConfirmed ? match.id : undefined,
         aiRecognized: !!(match && matchConfirmed),
         declaredName: match && matchConfirmed ? undefined : manualName.trim(),
@@ -301,7 +382,34 @@ function AddItemForm({ batchId, onAdded, onCancel }: { batchId: string; onAdded:
 
       {photoUrl && (
         <div>
-          <label className="block mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-steel">2 · Producto</label>
+          <label className="block mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-steel">2 · Segunda foto (opcional)</label>
+          {photoUrl2 ? (
+            <div className="flex items-center gap-2">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={photoUrl2} alt="Segunda foto del producto" className="w-20 h-20 object-cover rounded-md border border-rule" />
+              <div className="flex flex-col items-start gap-1">
+                <button type="button" className="text-[11.5px] text-blue font-semibold cursor-pointer" onClick={() => { setPhotoUrl2(null); setTaking2(true); }}>
+                  Volver a tomar
+                </button>
+                <button type="button" className="text-[11.5px] text-steel font-semibold cursor-pointer" onClick={() => setPhotoUrl2(null)}>
+                  Quitar
+                </button>
+              </div>
+            </div>
+          ) : taking2 ? (
+            <LiveCameraCapture folder="merchandise-reentry-photos" onCaptured={onCaptured2} onCancel={() => setTaking2(false)} />
+          ) : (
+            <button type="button" className="flex items-center gap-1.5 text-[12.5px] font-semibold border-[1.5px] border-dashed border-rule rounded-md px-3.5 py-2 cursor-pointer" onClick={() => setTaking2(true)}>
+              <Camera size={14} /> Agregar segunda foto
+            </button>
+          )}
+          <div className="text-[10.5px] text-steel mt-1.5">Útil si son varias unidades del mismo producto, y ayuda a la IA a reconocerlo mejor.</div>
+        </div>
+      )}
+
+      {photoUrl && (
+        <div>
+          <label className="block mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-steel">3 · Producto</label>
           {recognizing ? (
             <div className="text-[12px] text-steel">Comparando con el catálogo…</div>
           ) : match && !manualName ? (
@@ -351,7 +459,7 @@ function AddItemForm({ batchId, onAdded, onCancel }: { batchId: string; onAdded:
 
       {photoUrl && (
         <div>
-          <label className="block mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-steel">3 · Cantidades</label>
+          <label className="block mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-steel">4 · Cantidades</label>
           <div className="flex gap-2.5">
             <div className="flex-1">
               <div className="text-[11px] text-steel mb-1">Unidades buenas</div>

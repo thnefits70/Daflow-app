@@ -31,7 +31,7 @@ export type ProductIdentifyResult = {
 // si es que alguno lo es — el catálogo sigue incompleto, así que "ninguno
 // coincide" es un resultado esperado y frecuente, no un error.
 export async function identifyReturnedProduct(params: {
-  photoUrl: string;
+  photoUrls: string[];
   actorId: string;
   deptId?: string;
 }): Promise<ProductIdentifyResult> {
@@ -46,9 +46,19 @@ export async function identifyReturnedProduct(params: {
   }
 
   const client = getAnthropicClient();
-  const [photoBlock, ...candidateBlocks] = await Promise.all([
-    fetchFileContentBlock(params.photoUrl),
-    ...candidates.map((c) => fetchFileContentBlock(c.photos[0])),
+  const [photoBlocks, candidateBlocks] = await Promise.all([
+    Promise.all(params.photoUrls.map((u) => fetchFileContentBlock(u))),
+    Promise.all(candidates.map((c) => fetchFileContentBlock(c.photos[0]))),
+  ]);
+
+  // Confirmado 2026-08-19: cuando el colaborador manda una segunda foto
+  // (opcional — pensada para lotes con varias unidades), se la pasamos a la
+  // IA como evidencia adicional del MISMO producto reingresado, no como un
+  // producto distinto — mejora el reconocimiento sin cambiar el contrato de
+  // salida (sigue siendo un solo match contra el catálogo).
+  const returnedPhotoContent = photoBlocks.flatMap((block, i) => [
+    { type: "text" as const, text: photoBlocks.length > 1 ? `Foto ${i + 1} del producto reingresado (mismo producto, ángulo/unidad distinta):` : "Foto del producto reingresado:" },
+    block,
   ]);
 
   const candidateContent = candidates.flatMap((c, i) => [
@@ -61,12 +71,12 @@ export async function identifyReturnedProduct(params: {
     max_tokens: 512,
     system:
       "Ayudas a Inventario de Provedix (Guayaquil, Ecuador) a reconocer mercadería devuelta comparándola contra el " +
-      "catálogo YA MATRICULADO de productos. Te doy una foto del producto que acaba de reingresar y una lista " +
-      "numerada de candidatos del catálogo, cada uno con su foto de referencia. Busca si el producto reingresado " +
-      "es VISUALMENTE el mismo que alguno de los candidatos — misma forma, mismo diseño, mismo empaque. El " +
-      "catálogo todavía está incompleto, así que 'ninguno coincide' es un resultado normal y frecuente, no un " +
-      "error — nunca elijas el candidato 'más parecido' si no estás razonablemente seguro de que es el mismo " +
-      "producto. " +
+      "catálogo YA MATRICULADO de productos. Te doy una o dos fotos del producto que acaba de reingresar (si son " +
+      "dos, son el mismo producto reingresado, no productos distintos) y una lista numerada de candidatos del " +
+      "catálogo, cada uno con su foto de referencia. Busca si el producto reingresado es VISUALMENTE el mismo que " +
+      "alguno de los candidatos — misma forma, mismo diseño, mismo empaque. El catálogo todavía está incompleto, " +
+      "así que 'ninguno coincide' es un resultado normal y frecuente, no un error — nunca elijas el candidato " +
+      "'más parecido' si no estás razonablemente seguro de que es el mismo producto. " +
       'Responde ÚNICAMENTE un JSON: {"matchedCandidateId": string|null, "note": string}. ' +
       "matchedCandidateId es el id exacto del candidato que coincide, o null si ninguno coincide con seguridad. " +
       "note es una frase breve en español explicando la conclusión.",
@@ -74,8 +84,7 @@ export async function identifyReturnedProduct(params: {
       {
         role: "user",
         content: [
-          { type: "text", text: "Foto del producto reingresado:" },
-          photoBlock,
+          ...returnedPhotoContent,
           { type: "text", text: "Candidatos del catálogo:" },
           ...candidateContent,
           { type: "text", text: "Devuelve el JSON pedido." },
