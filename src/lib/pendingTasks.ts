@@ -300,6 +300,7 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   comisiones_bonos_aprobacion: "Comisiones y bonos por aprobar",
   anticipos_aprobacion: "Anticipos por aprobar",
   descuentos_sin_aceptar: "Descuentos por mala gestión sin aceptar",
+  compras_personales_confirmar: "Compras personales — falta confirmar producto/cantidad",
   compras_personales_precio: "Compras personales — falta cerrar el precio",
   reingreso_mercaderia_revision: "Reingreso de mercadería por revisar",
   cumpleanos: "Cumpleaños de tu equipo (aviso 1 día antes)",
@@ -1198,6 +1199,31 @@ async function getMerchandiseReentryPendingItem(href: string): Promise<PendingIt
   };
 }
 
+// Confirmado 2026-08-19: pedido explícito del usuario — acceso directo en
+// Inicio para Daniel (líder de Inventario) a los pedidos de compra personal
+// recién enviados que todavía le faltan confirmar producto/cantidad — antes
+// tenía que entrar a la pantalla a ciegas para notar que había algo nuevo.
+// Mismo umbral de 24h que el resto de "atrasado" de este archivo.
+async function getPersonalPurchasePendingInventoryItem(href: string): Promise<PendingItem | null> {
+  const rows = await prisma.personalPurchaseOrder.findMany({
+    where: { status: "PENDING_INVENTORY" },
+    select: { createdAt: true, employee: { select: { name: true } } },
+  });
+  if (rows.length === 0) return null;
+
+  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const overdue = rows.some((r) => r.createdAt < cutoff);
+  const names = rows.map((r) => r.employee.name).join(", ");
+  return {
+    type: "compras_personales_confirmar",
+    icon: "🛒",
+    label: "Compras personales — falta confirmar producto/cantidad",
+    meta: `${rows.length === 1 ? names : `${rows.length} pedidos`}${overdue ? " · atrasado" : ""}`,
+    overdue,
+    href,
+  };
+}
+
 // Confirmado 2026-08-18: pedido explícito del usuario — una vez que Daniel
 // confirma un pedido de compra personal, la información completa le tiene
 // que llegar a Nairoby (o admin) como un pendiente de ACCIÓN (ella decide
@@ -1372,18 +1398,20 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
   }
 
   if (me.leadsDept.code === "INV") {
-    const [stockoutItem, receivingItem, replacementItem, inventoryControlItem, merchandiseReentryItem] = await Promise.all([
+    const [stockoutItem, receivingItem, replacementItem, inventoryControlItem, merchandiseReentryItem, personalPurchaseInventoryItem] = await Promise.all([
       getStockoutPendingItem("/area/kpis-generales"),
       getPurchaseReceivingPendingItem("/area/workspace?tab=compras&ptab=inventario"),
       getPurchaseReplacementVerificationPendingItem("/area/workspace?tab=compras&ptab=inventario"),
       getInventoryControlPendingItem("/area/workspace?tab=inventario"),
       getMerchandiseReentryPendingItem("/area/reingreso-mercaderia?tab=revision"),
+      getPersonalPurchasePendingInventoryItem("/area/compras-personales-inventario"),
     ]);
     if (stockoutItem) items.push(stockoutItem);
     if (receivingItem) items.push(receivingItem);
     if (replacementItem) items.push(replacementItem);
     if (inventoryControlItem) items.push(inventoryControlItem);
     if (merchandiseReentryItem) items.push(merchandiseReentryItem);
+    if (personalPurchaseInventoryItem) items.push(personalPurchaseInventoryItem);
   }
 
   const recognitionItem = await getRecognitionLeaderPendingItem(me.leadsDeptId, "/area/colaborador-destacado");
@@ -1451,7 +1479,7 @@ export async function getPossiblePendingTypesForActor(
     }
     if (me.leadsDept.trackWeeklyMetric) types.push("pedidos_despachados");
     if (me.leadsDept.code === "INV") {
-      types.push("ruptura_stock", "compras_recepcion", "compras_cambios_verificar", "control_inventario", "reingreso_mercaderia_revision");
+      types.push("ruptura_stock", "compras_recepcion", "compras_cambios_verificar", "control_inventario", "reingreso_mercaderia_revision", "compras_personales_confirmar");
     }
     // Mismo criterio de elegibilidad que canSubmitPurchaseRequests
     // (guards.ts) — delegado vía canManagePurchases, o líder de COM/FIN —
