@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Bell } from "lucide-react";
 
 type Notification = { id: string; title: string; body: string; url: string | null; createdAt: string; readAt: string | null };
@@ -20,12 +21,18 @@ function relativeTime(iso: string): string {
 // informativa, no reemplaza "Pendientes" (que sigue igual). Un clic
 // despliega de más reciente a más antigua; otro clic (o afuera) la cierra.
 // Disponible para todo el equipo, cada quien ve solo lo suyo.
+//
+// Confirmado 2026-08-19: el menú lateral tiene overflow-hidden. Un simple
+// `position: fixed` no alcanza — el recorte por overflow pasa por dónde
+// vive el elemento en el HTML, no por cómo se posiciona. Se saca el panel
+// del todo del árbol del sidebar con un portal a document.body.
 export function NotificationBell() {
   const [items, setItems] = useState<Notification[]>([]);
   const [open, setOpen] = useState(false);
   const [panelPos, setPanelPos] = useState<{ top: number; left: number } | null>(null);
   const ref = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
 
   function load() {
     fetch("/api/notifications").then((r) => (r.ok ? r.json() : [])).then(setItems);
@@ -38,7 +45,10 @@ export function NotificationBell() {
 
   useEffect(() => {
     function onClickOutside(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      const target = e.target as Node;
+      if (ref.current?.contains(target)) return;
+      if (panelRef.current?.contains(target)) return;
+      setOpen(false);
     }
     document.addEventListener("mousedown", onClickOutside);
     return () => document.removeEventListener("mousedown", onClickOutside);
@@ -48,10 +58,6 @@ export function NotificationBell() {
     const next = !open;
     setOpen(next);
     if (next) {
-      // Confirmado 2026-08-19: el menú lateral tiene overflow-hidden (para
-      // que la navegación no scrollee de costado) — eso recortaba el
-      // desplegable. Se posiciona con `fixed` calculado desde el botón, así
-      // se dibuja por encima de todo en vez de quedar atrapado adentro.
       const rect = buttonRef.current?.getBoundingClientRect();
       if (rect) {
         const panelWidth = 288; // w-72
@@ -79,29 +85,34 @@ export function NotificationBell() {
         )}
       </button>
 
-      {open && panelPos && (
-        <div
-          style={{ position: "fixed", top: panelPos.top, left: panelPos.left }}
-          className="w-72 max-h-96 overflow-y-auto bg-[#0c1524] border border-white/10 rounded-md shadow-lg z-50"
-        >
-          <div className="text-[10px] font-semibold uppercase tracking-wide text-[#8C99A6] px-3 py-2 border-b border-white/10">Notificaciones</div>
-          {items.length === 0 ? (
-            <div className="text-[12px] text-[#8C99A6] px-3 py-4 text-center">No hay notificaciones todavía.</div>
-          ) : (
-            items.map((n) => (
-              <a
-                key={n.id}
-                href={n.url ?? "#"}
-                className="block px-3 py-2.5 border-b border-white/5 last:border-0 hover:bg-white/[.04]"
-              >
-                <div className="text-[12.5px] font-semibold text-white">{n.title}</div>
-                <div className="text-[11.5px] text-[#C9CFC5] mt-0.5 leading-snug">{n.body}</div>
-                <div className="text-[10px] text-[#8C99A6] mt-1">{relativeTime(n.createdAt)}</div>
-              </a>
-            ))
-          )}
-        </div>
-      )}
+      {open &&
+        panelPos &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div
+            ref={panelRef}
+            style={{ position: "fixed", top: panelPos.top, left: panelPos.left }}
+            className="w-72 max-h-96 overflow-y-auto bg-[#0c1524] border border-white/10 rounded-md shadow-lg z-[9999]"
+          >
+            <div className="text-[10px] font-semibold uppercase tracking-wide text-[#8C99A6] px-3 py-2 border-b border-white/10">Notificaciones</div>
+            {items.length === 0 ? (
+              <div className="text-[12px] text-[#8C99A6] px-3 py-4 text-center">No hay notificaciones todavía.</div>
+            ) : (
+              items.map((n) => (
+                <a
+                  key={n.id}
+                  href={n.url ?? "#"}
+                  className="block px-3 py-2.5 border-b border-white/5 last:border-0 hover:bg-white/[.04]"
+                >
+                  <div className="text-[12.5px] font-semibold text-white">{n.title}</div>
+                  <div className="text-[11.5px] text-[#C9CFC5] mt-0.5 leading-snug">{n.body}</div>
+                  <div className="text-[10px] text-[#8C99A6] mt-1">{relativeTime(n.createdAt)}</div>
+                </a>
+              ))
+            )}
+          </div>,
+          document.body
+        )}
     </div>
   );
 }
