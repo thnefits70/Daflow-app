@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { computePriceMode } from "@/lib/personalPurchases";
 import { nowInEcuador } from "@/lib/payrollCalc";
 import { sendPushToOwner } from "@/lib/webPush";
 import { actorName } from "@/lib/actorName";
@@ -12,43 +11,48 @@ function currentMonthStr(): string {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 
-// Historial propio del colaborador que está logueado. Confirmado
-// 2026-08-18: el precio NUNCA se le muestra acá — ni unitPrice ni
-// totalAmount van en la respuesta, a propósito, aunque la fila ya los
-// tenga cargados. El único lugar donde ve el monto es su Rol de pago.
+// Historial propio del colaborador. Confirmado 2026-08-18: el total solo
+// se manda una vez APPROVED (ya es lo mismo que le llegó por push al
+// cerrar Nairoby el precio) — antes de eso ningún monto existe todavía.
 export async function GET() {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "No autorizado." }, { status: 401 });
   if (session.user.role === "admin") return NextResponse.json([]);
 
-  const purchases = await prisma.personalPurchase.findMany({
+  const orders = await prisma.personalPurchaseOrder.findMany({
     where: { employeeId: session.user.id },
     select: {
       id: true,
-      quantity: true,
       status: true,
       rejectionReason: true,
+      totalAmount: true,
+      installments: true,
       createdAt: true,
-      product: { select: { name: true, photo: true } },
+      items: { select: { employeeProductName: true, confirmedProductName: true, quantity: true } },
     },
     orderBy: { createdAt: "desc" },
   });
-  return NextResponse.json(purchases);
+  return NextResponse.json(orders);
 }
 
-const schema = z.object({
-  productId: z.string().min(1),
+const declarationSchema = z.object({
+  relation: z.enum(["SELF", "MINOR_CHILD", "OTHER_FAMILY"]),
+  note: z.string().trim().optional(),
+});
+const itemSchema = z.object({
+  employeeProductName: z.string().trim().min(1),
   quantity: z.number().int().positive(),
   livePhotoUrl: z.string().min(1),
-  buyerRelation: z.enum(["SELF", "MINOR_CHILD", "OTHER_FAMILY"]),
-  buyerNote: z.string().optional(),
+  optionalPhotoUrl: z.string().optional(),
+  unitDeclarations: z.array(declarationSchema).max(3),
 });
+const schema = z.object({ items: z.array(itemSchema).min(1) });
 
-// Confirmado 2026-08-18: cualquier colaborador puede pedir esto, sin guard
-// especial. Ajustado el mismo día: acá solo se declara el modo de precio
-// (costo/Dropi) — nunca un monto. Nairoby es quien digita el precio real en
-// dólares al cerrar la compra (confirm-finance); ahí también se decide si
-// se paga en cuotas, una vez que se sepa el total.
+// Confirmado 2026-08-18: rediseño completo — el colaborador ya no elige de
+// un catálogo, escribe el nombre de memoria (Daniel lo corrige después) y
+// declara, por cada producto, hasta 3 unidades y para quién es cada una.
+// No se calcula ningún precio acá — eso pasa recién al confirmar Daniel
+// (necesita el nombre ya corregido para el enfriamiento de 6 meses).
 export async function POST(req: NextRequest) {
   const session = await auth();
   if (!session || session.user.role === "admin") return NextResponse.json({ error: "No autorizado." }, { status: 401 });
@@ -57,34 +61,42 @@ export async function POST(req: NextRequest) {
   const parsed = schema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Datos inválidos." }, { status: 400 });
 
-  if (parsed.data.buyerRelation !== "SELF" && !parsed.data.buyerNote?.trim()) {
-    return NextResponse.json({ error: "Contá para quién es la compra." }, { status: 400 });
+  for (const it of parsed.data.items) {
+    if (it.unitDeclarations.length > it.quantity) {
+      return NextResponse.json({ error: "No podés declarar más unidades de las que estás llevando." }, { status: 400 });
+    }
+    for (const d of it.unitDeclarations) {
+      if (d.relation !== "SELF" && !d.note) {
+        return NextResponse.json({ error: "Contá para quién es cada unidad que no sea para vos." }, { status: 400 });
+      }
+    }
   }
 
-  const { priceMode } = await computePriceMode(session.user.id, parsed.data.productId, parsed.data.buyerRelation);
-
-  const purchase = await prisma.personalPurchase.create({
+  const order = await prisma.personalPurchaseOrder.create({
     data: {
       employeeId: session.user.id,
-      productId: parsed.data.productId,
-      quantity: parsed.data.quantity,
-      livePhotoUrl: parsed.data.livePhotoUrl,
-      buyerRelation: parsed.data.buyerRelation,
-      buyerNote: parsed.data.buyerNote?.trim(),
-      priceMode,
       eventMonth: currentMonthStr(),
+      items: {
+        create: parsed.data.items.map((it) => ({
+          employeeProductName: it.employeeProductName,
+          quantity: it.quantity,
+          livePhotoUrl: it.livePhotoUrl,
+          optionalPhotoUrl: it.optionalPhotoUrl,
+          unitDeclarations: it.unitDeclarations,
+        })),
+      },
     },
-    include: { product: { select: { name: true } } },
+    include: { items: true },
   });
 
   const invLeader = await prisma.user.findFirst({ where: { isLeader: true, leadsDept: { code: "INV" } }, select: { id: true } });
   if (invLeader) {
     await sendPushToOwner(invLeader.id, {
-      title: "🛒 Nueva compra personal — falta confirmar",
-      body: `${actorName(session.user.name)} · ${purchase.product.name} × ${purchase.quantity} · ${priceMode === "COST" ? "precio al costo" : "precio Dropi"}`,
-      url: "/area/compras-personales",
+      title: "🛒 Nuevo pedido de compra personal — falta confirmar",
+      body: `${actorName(session.user.name)} · ${order.items.length} producto${order.items.length === 1 ? "" : "s"}`,
+      url: "/area/compras-personales-inventario",
     }).catch(() => null);
   }
 
-  return NextResponse.json(purchase, { status: 201 });
+  return NextResponse.json(order, { status: 201 });
 }

@@ -7,6 +7,7 @@ import { signOut } from "next-auth/react";
 import { LayoutDashboard, ClipboardList, Scale, LogOut, Truck, Rocket, Wallet, FolderLock, Gauge, Menu, X, Trophy, Users, LayoutGrid, Waypoints, ShoppingBag, Banknote } from "lucide-react";
 import { BrandMark } from "@/components/brand/DaflowMark";
 import { PushSettingsToggle } from "@/components/shared/PushSettingsToggle";
+import { NotificationBell } from "@/components/shared/NotificationBell";
 
 export function EmployeeSidebar({
   deptName,
@@ -73,9 +74,12 @@ export function EmployeeSidebar({
             <BrandMark logoUrl={logoUrl} size={26} light chip={!!logoUrl} />
             <span className="font-display font-bold text-[15px] text-white">DAFLOW</span>
           </div>
-          <button type="button" onClick={() => setOpen(false)} className="md:hidden p-1 text-white cursor-pointer" aria-label="Cerrar menú">
-            <X size={18} />
-          </button>
+          <div className="flex items-center gap-1.5">
+            <NotificationBell />
+            <button type="button" onClick={() => setOpen(false)} className="md:hidden p-1 text-white cursor-pointer" aria-label="Cerrar menú">
+              <X size={18} />
+            </button>
+          </div>
         </div>
         <div className="flex items-center gap-2.5">
           {userPhotoUrl && (

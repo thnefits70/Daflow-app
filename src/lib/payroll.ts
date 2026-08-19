@@ -123,16 +123,32 @@ export async function buildAutomaticLineItems(employeeId: string, period: string
       // desfasar de nuevo.
       const periodMonth = monthOfPeriod(period);
 
-      const purchases = await prisma.personalPurchase.findMany({
+      // Confirmado 2026-08-18: rediseño — una compra ahora es un pedido con
+      // varios productos posibles. El label resume el pedido; el note
+      // desglosa cada producto (nombre confirmado × cantidad, cuántas
+      // unidades a costo vs. Dropi) — mismo patrón que describeOvertimeCalculation.
+      const orders = await prisma.personalPurchaseOrder.findMany({
         where: { employeeId, status: "APPROVED", firstPayoutMonth: { not: null }, totalAmount: { not: null } },
-        include: { product: { select: { name: true } } },
+        include: { items: true },
       });
-      for (const p of purchases) {
-        const idx = installmentIndexForMonth(p.firstPayoutMonth!, p.installments, periodMonth);
+      for (const o of orders) {
+        const idx = installmentIndexForMonth(o.firstPayoutMonth!, o.installments, periodMonth);
         if (idx === null) continue;
-        const amt = installmentAmount(p.totalAmount!, p.installments, idx);
-        const cuota = p.installments > 1 ? ` (cuota ${idx + 1}/${p.installments})` : "";
-        items.push({ label: `Compra personal — ${p.product.name}${cuota}`, amount: amt, kind: "EXPENSE", isAutomatic: true });
+        const amt = installmentAmount(o.totalAmount!, o.installments, idx);
+        const cuota = o.installments > 1 ? ` (cuota ${idx + 1}/${o.installments})` : "";
+        const firstName = o.items[0] ? o.items[0].confirmedProductName ?? o.items[0].employeeProductName : "producto";
+        const label = o.items.length > 1 ? `Compra personal — ${o.items.length} productos${cuota}` : `Compra personal — ${firstName}${cuota}`;
+        const note = o.items
+          .map((it) => {
+            const modes = Array.isArray(it.unitPriceModes) ? (it.unitPriceModes as string[]) : [];
+            const costCount = modes.filter((m) => m === "COST").length;
+            const dropiCount = modes.filter((m) => m === "DROPI").length;
+            const name = it.confirmedProductName ?? it.employeeProductName;
+            const split = [costCount > 0 ? `${costCount} al costo` : null, dropiCount > 0 ? `${dropiCount} Dropi` : null].filter(Boolean).join(" · ");
+            return `${name} × ${it.quantity}${split ? ` (${split})` : ""}`;
+          })
+          .join(" · ");
+        items.push({ label, amount: amt, kind: "EXPENSE", isAutomatic: true, note });
       }
 
       const advances = await prisma.salaryAdvance.findMany({

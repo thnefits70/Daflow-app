@@ -27,6 +27,7 @@ import {
   Waypoints,
 } from "lucide-react";
 import { BrandMark } from "@/components/brand/DaflowMark";
+import { NotificationBell } from "@/components/shared/NotificationBell";
 
 type Department = { id: string; name: string; code: string };
 
@@ -125,18 +126,21 @@ export function AdminSidebar({
             <BrandMark logoUrl={logoUrl} size={26} light chip={!!logoUrl} />
             <span className="font-display font-bold text-[15px] text-white">DAFLOW</span>
           </div>
-          <button type="button" onClick={() => setOpen(false)} className="md:hidden p-1 text-white cursor-pointer" aria-label="Cerrar menú">
-            <X size={18} />
-          </button>
-          <button
-            type="button"
-            onClick={() => setDesktopCollapsed(true)}
-            className="hidden md:flex p-1 text-white/70 hover:text-white cursor-pointer"
-            aria-label="Ocultar menú"
-            title="Ocultar menú"
-          >
-            <X size={16} />
-          </button>
+          <div className="flex items-center gap-1.5">
+            <NotificationBell />
+            <button type="button" onClick={() => setOpen(false)} className="md:hidden p-1 text-white cursor-pointer" aria-label="Cerrar menú">
+              <X size={18} />
+            </button>
+            <button
+              type="button"
+              onClick={() => setDesktopCollapsed(true)}
+              className="hidden md:flex p-1 text-white/70 hover:text-white cursor-pointer"
+              aria-label="Ocultar menú"
+              title="Ocultar menú"
+            >
+              <X size={16} />
+            </button>
+          </div>
         </div>
         <div className="text-[10px] tracking-[.14em] uppercase text-teal">Panel</div>
         <h1 className="text-[17px] font-bold mt-1">Administrador</h1>

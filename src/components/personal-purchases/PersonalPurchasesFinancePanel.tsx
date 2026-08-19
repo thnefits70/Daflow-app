@@ -4,66 +4,59 @@ import { useEffect, useState } from "react";
 
 type Item = {
   id: string;
+  confirmedProductName: string | null;
+  employeeProductName: string;
   quantity: number;
-  priceMode: string;
-  buyerRelation: string;
-  buyerNote: string | null;
+  unitPriceModes: string[] | null;
+};
+type Order = {
+  id: string;
   employee: { name: string };
-  product: { name: string; costPrice: number; dropiPrice: number };
+  items: Item[];
 };
 
 function money(n: number) {
   return `$${n.toFixed(2)}`;
 }
 
-const RELATION_LABEL: Record<string, string> = { SELF: "Para él/ella mismo/a", MINOR_CHILD: "Para su hijo/a menor", OTHER_FAMILY: "Para otro familiar" };
-
-// Confirmado 2026-08-18 (ajustado el mismo día): Nairoby/admin es quien
-// DIGITA el precio en dólares acá — ya confirmado por Daniel que se puede
-// retirar. Ella ve el modo declarado (costo/Dropi) y para quién es, escribe
-// el precio unitario, y si el total da $25 o más puede ofrecer 2 cuotas.
+// Confirmado 2026-08-18: Nairoby/admin digita el precio en dólares acá —
+// sin ningún catálogo, sin nada precargado. Ya se sabe (unitPriceModes,
+// calculado al confirmar Daniel) cuántas unidades de cada producto van a
+// costo y cuántas a Dropi. Cuotas libres, sin tope, decide ella.
 export function PersonalPurchasesFinancePanel() {
-  const [items, setItems] = useState<Item[] | null>(null);
-  const [prices, setPrices] = useState<Record<string, string>>({});
-  const [installmentsById, setInstallmentsById] = useState<Record<string, number>>({});
+  const [orders, setOrders] = useState<Order[] | null>(null);
+  const [prices, setPrices] = useState<Record<string, { cost: string; dropi: string }>>({});
+  const [installments, setInstallments] = useState<Record<string, string>>({});
   const [rejecting, setRejecting] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<Record<string, string>>({});
 
-  // Confirmado 2026-08-18: el precio arranca precargado desde el catálogo
-  // que mantiene Nairoby (según el modo declarado) — ella lo puede pisar si
-  // ese valor quedó desactualizado, "puede cambiar de cuando en cuando".
   function load() {
-    fetch("/api/personal-purchases/pending-finance").then((r) => (r.ok ? r.json() : [])).then((rows: Item[]) => {
-      setItems(rows);
-      setPrices((prev) => {
-        const next = { ...prev };
-        for (const it of rows) {
-          if (next[it.id] === undefined) {
-            const catalogPrice = it.priceMode === "COST" ? it.product.costPrice : it.product.dropiPrice;
-            next[it.id] = catalogPrice > 0 ? String(catalogPrice) : "";
-          }
-        }
-        return next;
-      });
-    });
+    fetch("/api/personal-purchases/pending-finance").then((r) => (r.ok ? r.json() : [])).then(setOrders);
   }
   useEffect(load, []);
 
-  async function confirm(it: Item) {
-    const unitPrice = Number(prices[it.id]);
-    if (!unitPrice || unitPrice <= 0) return;
+  function priceFor(itemId: string) {
+    return prices[itemId] ?? { cost: "", dropi: "" };
+  }
+
+  async function confirm(order: Order) {
+    const items = order.items.map((it) => {
+      const p = priceFor(it.id);
+      return { itemId: it.id, costUnitPrice: Number(p.cost || 0), dropiUnitPrice: Number(p.dropi || 0) };
+    });
+    const installmentsN = Number(installments[order.id] || 1);
     setBusy(true);
-    setErr((e) => ({ ...e, [it.id]: "" }));
-    const res = await fetch(`/api/personal-purchases/${it.id}/confirm-finance`, {
+    setErr((e) => ({ ...e, [order.id]: "" }));
+    const res = await fetch(`/api/personal-purchases/${order.id}/confirm-finance`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ unitPrice, installments: installmentsById[it.id] ?? 1 }),
+      body: JSON.stringify({ items, installments: installmentsN }),
     });
     setBusy(false);
     const data = await res.json().catch(() => null);
-    if (!res.ok) { setErr((e) => ({ ...e, [it.id]: data?.error ?? "No se pudo confirmar." })); return; }
+    if (!res.ok) { setErr((e) => ({ ...e, [order.id]: data?.error ?? "No se pudo confirmar." })); return; }
     load();
   }
 
@@ -81,56 +74,78 @@ export function PersonalPurchasesFinancePanel() {
     load();
   }
 
-  if (!items) return <div className="text-steel text-[13px]">Cargando…</div>;
+  if (!orders) return <div className="text-steel text-[13px]">Cargando…</div>;
 
   return (
     <div>
-      <div className="text-[11px] font-semibold uppercase tracking-wide text-steel mb-3">Compras personales — cerrar precio ({items.length})</div>
-      {items.length === 0 && <div className="border-[1.5px] border-dashed border-rule rounded-md p-6 text-center text-steel text-[13px]">Nada pendiente por ahora.</div>}
+      <div className="text-[11px] font-semibold uppercase tracking-wide text-steel mb-3">Compras personales — cerrar precio ({orders.length})</div>
+      {orders.length === 0 && <div className="border-[1.5px] border-dashed border-rule rounded-md p-6 text-center text-steel text-[13px]">Nada pendiente por ahora.</div>}
       <div className="flex flex-col gap-3">
-        {items.map((it) => {
-          const unitPrice = Number(prices[it.id] || 0);
-          const total = unitPrice * it.quantity;
-          const installments = installmentsById[it.id] ?? 1;
+        {orders.map((o) => {
+          let orderTotal = 0;
+          const allPriced = o.items.every((it) => {
+            const p = priceFor(it.id);
+            return Number(p.cost) > 0 || Number(p.dropi) > 0 || (it.unitPriceModes ?? []).length === 0;
+          });
           return (
-            <div key={it.id} className="bg-surface border border-rule rounded-md p-3.5">
-              <div className="font-bold text-[13px]">{it.employee.name}</div>
-              <div className="text-[12.5px]">{it.product.name} × {it.quantity}</div>
-              <div className="text-[11px] text-steel-dim mb-2">
-                <span className={it.priceMode === "COST" ? "text-green font-semibold" : "font-semibold"}>{it.priceMode === "COST" ? "Precio al costo" : "Precio Dropi"}</span> · {RELATION_LABEL[it.buyerRelation]}{it.buyerNote ? ` — ${it.buyerNote}` : ""}
+            <div key={o.id} className="bg-surface border border-rule rounded-md p-3.5">
+              <div className="font-bold text-[13px] mb-2.5">{o.employee.name}</div>
+              <div className="flex flex-col gap-3">
+                {o.items.map((it) => {
+                  const modes = it.unitPriceModes ?? [];
+                  const costCount = modes.filter((m) => m === "COST").length;
+                  const dropiCount = modes.filter((m) => m === "DROPI").length;
+                  const p = priceFor(it.id);
+                  const itemTotal = costCount * Number(p.cost || 0) + dropiCount * Number(p.dropi || 0);
+                  orderTotal += itemTotal;
+                  return (
+                    <div key={it.id} className="border-b border-rule last:border-0 pb-3 last:pb-0">
+                      <div className="text-[12.5px] font-semibold">{it.confirmedProductName ?? it.employeeProductName} × {it.quantity}</div>
+                      <div className="text-[10.5px] text-steel-dim mb-1.5">
+                        {costCount > 0 && `${costCount} al costo`}{costCount > 0 && dropiCount > 0 && " · "}{dropiCount > 0 && `${dropiCount} Dropi`}
+                      </div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {costCount > 0 && (
+                          <div className="flex items-center gap-1.5">
+                            <label className="text-[11px] text-steel">Precio al costo (c/u)</label>
+                            <input className="text-[12px] rounded border border-rule bg-cloud px-2 py-1 w-20" type="number" step="0.01" placeholder="$0.00"
+                              value={p.cost} onChange={(e) => setPrices((s) => ({ ...s, [it.id]: { ...priceFor(it.id), cost: e.target.value } }))} />
+                          </div>
+                        )}
+                        {dropiCount > 0 && (
+                          <div className="flex items-center gap-1.5">
+                            <label className="text-[11px] text-steel">Precio Dropi (c/u)</label>
+                            <input className="text-[12px] rounded border border-rule bg-cloud px-2 py-1 w-20" type="number" step="0.01" placeholder="$0.00"
+                              value={p.dropi} onChange={(e) => setPrices((s) => ({ ...s, [it.id]: { ...priceFor(it.id), dropi: e.target.value } }))} />
+                          </div>
+                        )}
+                        {itemTotal > 0 && <span className="text-[12px] font-bold">= {money(itemTotal)}</span>}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <label className="text-[11.5px] text-steel">Precio unitario (precargado del catálogo, editable)</label>
-                <input
-                  className="text-[12px] rounded border border-rule bg-cloud px-2 py-1 w-24"
-                  type="number"
-                  step="0.01"
-                  placeholder="$0.00"
-                  value={prices[it.id] ?? ""}
-                  onChange={(e) => setPrices((p) => ({ ...p, [it.id]: e.target.value }))}
-                />
-                {unitPrice > 0 && <span className="text-[12px] font-bold">Total: {money(total)}</span>}
-                {total >= 25 && (
-                  <label className="flex items-center gap-1.5 text-[11.5px]">
-                    <input type="checkbox" checked={installments === 2} onChange={(e) => setInstallmentsById((s) => ({ ...s, [it.id]: e.target.checked ? 2 : 1 }))} />
-                    Pagar en 2 cuotas
-                  </label>
-                )}
-              </div>
-              {err[it.id] && <div className="text-red text-[11.5px] mt-1.5">{err[it.id]}</div>}
 
-              {rejecting === it.id ? (
+              <div className="flex items-center gap-2 mt-3 flex-wrap">
+                {orderTotal > 0 && <span className="text-[13px] font-bold">Total: {money(orderTotal)}</span>}
+                <label className="text-[11px] text-steel ml-2">Cuotas</label>
+                <input className="text-[12px] rounded border border-rule bg-cloud px-2 py-1 w-16" type="number" min={1}
+                  value={installments[o.id] ?? "1"} onChange={(e) => setInstallments((s) => ({ ...s, [o.id]: e.target.value }))} />
+              </div>
+              {err[o.id] && <div className="text-red text-[11.5px] mt-1.5">{err[o.id]}</div>}
+
+              {rejecting === o.id ? (
                 <div className="mt-3 pt-3 border-t border-rule">
                   <input className="text-[12px] rounded border border-rule bg-cloud px-2 py-1.5 w-full mb-2" placeholder="Motivo del rechazo" value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} />
                   <div className="flex gap-2">
-                    <button type="button" disabled={busy || !rejectReason.trim()} className="text-[12px] font-bold bg-red text-white rounded px-3 py-1.5 cursor-pointer disabled:opacity-50" onClick={() => reject(it.id)}>Confirmar rechazo</button>
+                    <button type="button" disabled={busy || !rejectReason.trim()} className="text-[12px] font-bold bg-red text-white rounded px-3 py-1.5 cursor-pointer disabled:opacity-50" onClick={() => reject(o.id)}>Confirmar rechazo</button>
                     <button type="button" className="text-[12px] text-steel cursor-pointer" onClick={() => { setRejecting(null); setRejectReason(""); }}>Cancelar</button>
                   </div>
                 </div>
               ) : (
                 <div className="flex gap-2 mt-2.5">
-                  <button type="button" disabled={busy || !(unitPrice > 0)} className="text-[12px] font-bold bg-green text-white rounded-md px-3.5 py-1.5 cursor-pointer disabled:opacity-40" onClick={() => confirm(it)}>Confirmar y activar descuento</button>
-                  <button type="button" disabled={busy} className="text-[12px] font-semibold text-red cursor-pointer" onClick={() => setRejecting(it.id)}>Rechazar</button>
+                  <button type="button" disabled={busy || !allPriced || orderTotal <= 0} className="text-[12px] font-bold bg-green text-white rounded-md px-3.5 py-1.5 cursor-pointer disabled:opacity-40" onClick={() => confirm(o)}>Confirmar y activar descuento</button>
+                  <button type="button" disabled={busy} className="text-[12px] font-semibold text-red cursor-pointer" onClick={() => setRejecting(o.id)}>Rechazar</button>
                 </div>
               )}
             </div>

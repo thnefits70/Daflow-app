@@ -299,8 +299,7 @@ model User {
   fixedMonthlyBonus             FixedMonthlyBonus?     @relation("FixedMonthlyBonusUser")
   fixedMonthlyBonusesProposed   FixedMonthlyBonus[]    @relation("FixedMonthlyBonusProposedBy")
 
-  retailProductsCreated RetailProduct[]       @relation("RetailProductCreatedBy")
-  personalPurchases     PersonalPurchase[]    @relation("PersonalPurchaseEmployee")
+  personalPurchaseOrders PersonalPurchaseOrder[] @relation("PersonalPurchaseOrderEmployee")
   employeeBankAccount   EmployeeBankAccount?
   salaryAdvances        SalaryAdvance[]       @relation("SalaryAdvanceEmployee")
   managementDeductions  ManagementDeduction[] @relation("ManagementDeductionEmployee")
@@ -2681,40 +2680,12 @@ model CeoBonusGrantSeen {
 // en que el egreso queda 100% activo, y de ahí en adelante nunca se
 // recalcula (es un hecho puntual, no un valor derivado).
 
-// Catálogo de productos propios de Provedix (para retiro/compra personal
-// del equipo) — lo mantiene Daniel (Inventario) o el admin, el colaborador
-// solo elige. Precio al costo vs. precio Dropi, distinto de PurchaseCatalogItem
-// (que es para comprar A proveedores, no para vender/retirar del propio stock).
-// Confirmado 2026-08-18: ajustado dos veces el mismo día. Versión final —
-// el catálogo SÍ guarda los dos precios (costo y Dropi), pero lo mantiene
-// exclusivamente Nairoby (nunca Daniel) porque pueden cambiar de a poco.
-// El colaborador JAMÁS ve estos valores — ni al comprar ni en su propio
-// historial — el único lugar donde ve el monto es su Rol de pago.
-model RetailProduct {
-  id         String  @id @default(cuid())
-  name       String  @unique
-  photo      String?
-  costPrice  Float   @default(0)
-  dropiPrice Float   @default(0)
-
-  createdById String?
-  createdBy   User?    @relation("RetailProductCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  createdAt   DateTime @default(now())
-
-  purchases PersonalPurchase[]
-}
-
-// SELF/MINOR_CHILD califican para precio al costo (sujeto al enfriamiento de
-// 6 meses); OTHER_FAMILY siempre paga precio Dropi vigente, sin excepción.
-enum PurchaseBuyerRelation {
-  SELF
-  MINOR_CHILD
-  OTHER_FAMILY
-}
-
-// PENDING_INVENTORY: esperando a Daniel (su confirmación habilita el retiro
-// físico de bodega). PENDING_FINANCE: Daniel ya confirmó, esperando a
-// Nairoby/admin (ella cierra el precio final y activa el descuento real).
+// Confirmado 2026-08-18: rediseño completo, tercera versión del mismo día.
+// Ya NO hay catálogo — el colaborador escribe el nombre del producto de
+// memoria (sin exactitud) y Daniel lo corrige según el sistema JUST al
+// confirmar. Una compra puede llevar varios productos (pedido = orden +
+// ítems). El precio en dólares lo digita Nairoby por ítem, sin ningún
+// valor precargado — nunca existió catálogo de precios en esta versión.
 enum PersonalPurchaseStatus {
   PENDING_INVENTORY
   PENDING_FINANCE
@@ -2722,24 +2693,21 @@ enum PersonalPurchaseStatus {
   REJECTED
 }
 
-model PersonalPurchase {
-  id         String        @id @default(cuid())
-  employeeId String
-  employee   User          @relation("PersonalPurchaseEmployee", fields: [employeeId], references: [id], onDelete: Cascade)
-  productId  String
-  product    RetailProduct @relation(fields: [productId], references: [id], onDelete: Restrict)
+// Para quién es cada unidad declarada (hasta 3 por producto, ver
+// PersonalPurchaseItem.unitDeclarations). MINOR_CHILD nunca tiene
+// enfriamiento; SELF/OTHER_FAMILY (cualquier otra persona — el mismo
+// colaborador, esposa, otro familiar, sin distinción) quedan sujetos al
+// enfriamiento de 6 meses.
+enum PurchaseBuyerRelation {
+  SELF
+  MINOR_CHILD
+  OTHER_FAMILY
+}
 
-  quantity      Int
-  livePhotoUrl  String
-  buyerRelation PurchaseBuyerRelation
-  buyerNote     String? // ej. "mi hijo Juan, 8 años" — solo si no es SELF
-  priceMode     String // "COST" | "DROPI" — declarado por el colaborador al crear, según buyerRelation + enfriamiento
-  // Confirmado 2026-08-18: Nairoby es quien digita el precio en dólares al
-  // cerrar la compra (confirm-finance) — nulo hasta ese momento, nunca lo
-  // fija el colaborador ni un catálogo.
-  unitPrice     Float?
-  totalAmount   Float?
-  installments  Int                   @default(1) // 1 o 2 — lo decide Nairoby junto con el precio (solo si totalAmount >= 25)
+model PersonalPurchaseOrder {
+  id         String @id @default(cuid())
+  employeeId String
+  employee   User   @relation("PersonalPurchaseOrderEmployee", fields: [employeeId], references: [id], onDelete: Cascade)
 
   status                 PersonalPurchaseStatus @default(PENDING_INVENTORY)
   inventoryConfirmedAt   DateTime?
@@ -2751,13 +2719,63 @@ model PersonalPurchase {
   rejectionReason        String?
   pickedUpAt             DateTime? // Daniel marca cuando físicamente salió de bodega
 
-  eventMonth       String // "YYYY-MM" — mes en que se hizo la compra
-  firstPayoutMonth String? // resuelto al momento en que Nairoby/admin confirma
+  eventMonth       String  // "YYYY-MM" — mes en que se hizo la compra
+  installments     Int     @default(1) // libre, sin tope — lo decide Nairoby
+  firstPayoutMonth String? // resuelto al confirmar Nairoby (resolveFirstPayoutMonth)
+  totalAmount      Float?  // suma de todos los ítems, se llena al confirmar Nairoby
+
+  items     PersonalPurchaseItem[]
+  createdAt DateTime               @default(now())
+
+  @@index([employeeId])
+}
+
+model PersonalPurchaseItem {
+  id      String                @id @default(cuid())
+  orderId String
+  order   PersonalPurchaseOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  employeeProductName  String  // como lo escribió el colaborador, de memoria
+  confirmedProductName String? // lo corrige Daniel según JUST — null hasta que confirme
+  livePhotoUrl         String
+  optionalPhotoUrl     String?
+  quantity             Int
+
+  // Hasta 3 declaraciones (una por unidad que aspira a precio al costo):
+  // [{ relation: "SELF" }, { relation: "MINOR_CHILD", note: "mi hijo Juan" }]
+  // Las unidades que sobren de `quantity` sobre este arreglo van a Dropi
+  // directo, sin declarar nada.
+  unitDeclarations Json
+
+  // Calculado UNA SOLA VEZ al confirmar Daniel (usa confirmedProductName
+  // para el enfriamiento de 6 meses, recién confiable con el nombre ya
+  // normalizado) — array de "COST"|"DROPI", largo = quantity.
+  unitPriceModes Json?
+
+  costUnitPrice  Float? // lo digita Nairoby, sin ningún valor precargado
+  dropiUnitPrice Float? // ídem
+  itemTotal      Float? // calculado al confirmar Nairoby
 
   createdAt DateTime @default(now())
 
-  @@index([employeeId])
-  @@index([productId])
+  @@index([orderId])
+}
+
+// Confirmado 2026-08-18: campanita de notificaciones — puramente
+// informativa (nunca reemplaza "Pendientes", que sigue igual). Disponible
+// para todo el equipo, cada quien ve solo lo suyo (ownerId = User.id, o el
+// string literal "admin"). Escrita por notifyOwner() en
+// src/lib/notifications.ts, junto con el push en vivo ya existente.
+model Notification {
+  id        String    @id @default(cuid())
+  ownerId   String
+  title     String
+  body      String
+  url       String?
+  createdAt DateTime  @default(now())
+  readAt    DateTime?
+
+  @@index([ownerId, createdAt])
 }
 
 // Mismos campos que SupplierBankAccount/AdminPaymentPayeeBankAccount, pero

@@ -300,6 +300,7 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   comisiones_bonos_aprobacion: "Comisiones y bonos por aprobar",
   anticipos_aprobacion: "Anticipos por aprobar",
   descuentos_sin_aceptar: "Descuentos por mala gestión sin aceptar",
+  compras_personales_precio: "Compras personales — falta cerrar el precio",
   cumpleanos: "Cumpleaños de tu equipo (aviso 1 día antes)",
   compras_rechazadas: "Tus solicitudes de compra rechazadas — corregir y reenviar",
   compras_orden_compra: "Tus solicitudes de compra — falta subir orden de compra",
@@ -1173,6 +1174,31 @@ async function getManagementDeductionUnacceptedPendingItem(href: string): Promis
   };
 }
 
+// Confirmado 2026-08-18: pedido explícito del usuario — una vez que Daniel
+// confirma un pedido de compra personal, la información completa le tiene
+// que llegar a Nairoby (o admin) como un pendiente de ACCIÓN (ella decide
+// precio y cuotas) — a diferencia del aviso a Andrés, que es puramente
+// informativo y va a la campanita, no acá.
+async function getPersonalPurchasePendingFinanceItem(href: string): Promise<PendingItem | null> {
+  const rows = await prisma.personalPurchaseOrder.findMany({
+    where: { status: "PENDING_FINANCE" },
+    select: { inventoryConfirmedAt: true, employee: { select: { name: true } } },
+  });
+  if (rows.length === 0) return null;
+
+  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const overdue = rows.some((r) => (r.inventoryConfirmedAt ?? new Date()) < cutoff);
+  const names = rows.map((r) => r.employee.name).join(", ");
+  return {
+    type: "compras_personales_precio",
+    icon: "🛒",
+    label: "Compras personales — falta cerrar el precio",
+    meta: `${rows.length === 1 ? names : `${rows.length} pedidos`}${overdue ? " · atrasado" : ""}`,
+    overdue,
+    href,
+  };
+}
+
 // Confirmado 2026-08-06: aviso 1 día antes de la fecha en que se va a
 // felicitar (que puede ser el cumpleaños real o el último día laborable
 // antes, si cae sábado/domingo/feriado — ver celebrationDateFor en
@@ -1220,7 +1246,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     const comDept = await prisma.department.findUnique({ where: { code: "COM" }, select: { id: true } });
     const comPaymentsHref = comDept ? `/admin/dept/${comDept.id}?tab=compras&ptab=finanzas` : "/admin";
     const comCreditsHref = comDept ? `/admin/dept/${comDept.id}?tab=compras&ptab=urgentes` : "/admin";
-    const [feedbackItems, recognitionItem, pettyCashLow, pettyCashUnconfirmed, adminPaymentsItem, purchaseMerchandiseItem, purchaseShippingItem, purchaseCreditsItem, overtimeApprovalItem, commissionBonusApprovalItem, salaryAdvanceItem, managementDeductionItem, birthdayItems] = await Promise.all([
+    const [feedbackItems, recognitionItem, pettyCashLow, pettyCashUnconfirmed, adminPaymentsItem, purchaseMerchandiseItem, purchaseShippingItem, purchaseCreditsItem, overtimeApprovalItem, commissionBonusApprovalItem, salaryAdvanceItem, managementDeductionItem, personalPurchaseFinanceItem, birthdayItems] = await Promise.all([
       getFeedbackPendingItems(),
       getRecognitionAdminPendingItem("/admin/colaborador-destacado"),
       getPettyCashLowBalanceItems(financeHref),
@@ -1233,6 +1259,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       getCommissionAndBonusApprovalPendingItem("/admin/nomina"),
       getSalaryAdvancePendingItem("/admin/nomina?tab=pagos&ptab=anticipos"),
       getManagementDeductionUnacceptedPendingItem("/admin/nomina?tab=pagos&ptab=descuentos"),
+      getPersonalPurchasePendingFinanceItem("/admin/nomina?tab=pagos&ptab=comprasfinanzas"),
       getUpcomingBirthdayPendingItems("/admin/nomina"),
     ]);
     const items = [
@@ -1248,6 +1275,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       ...(commissionBonusApprovalItem ? [commissionBonusApprovalItem] : []),
       ...(salaryAdvanceItem ? [salaryAdvanceItem] : []),
       ...(managementDeductionItem ? [managementDeductionItem] : []),
+      ...(personalPurchaseFinanceItem ? [personalPurchaseFinanceItem] : []),
       ...birthdayItems,
     ];
     if (items.length === 0) return null;
@@ -1291,7 +1319,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
 
   if (me.leadsDept.code === "FIN") {
     monthly = true;
-    const [payStub, returnRate, warranty, paymentReminders, storeFeedback, pettyCashLow, pettyCashUnconfirmed, purchaseShippingItem, managementDeductionItem] = await Promise.all([
+    const [payStub, returnRate, warranty, paymentReminders, storeFeedback, pettyCashLow, pettyCashUnconfirmed, purchaseShippingItem, managementDeductionItem, personalPurchaseFinanceItem] = await Promise.all([
       getPayStubPendingItem("/area/roles-de-pago"),
       getReturnRatePendingItem("/area/kpis-generales"),
       getWarrantyPendingItem("/area/kpis-generales"),
@@ -1301,6 +1329,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       getPettyCashUnconfirmedFunderItems(actor.userId, "/area/workspace"),
       getPurchaseShippingPendingItem("/area/workspace?tab=compras&ptab=finanzas"),
       getManagementDeductionUnacceptedPendingItem("/area/nomina?tab=pagos&ptab=descuentos"),
+      getPersonalPurchasePendingFinanceItem("/area/nomina?tab=pagos&ptab=comprasfinanzas"),
     ]);
     items.push(...pettyCashLow, ...pettyCashUnconfirmed);
     if (payStub) items.push(payStub);
@@ -1310,6 +1339,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     if (storeFeedback) items.push(storeFeedback);
     if (purchaseShippingItem) items.push(purchaseShippingItem);
     if (managementDeductionItem) items.push(managementDeductionItem);
+    if (personalPurchaseFinanceItem) items.push(personalPurchaseFinanceItem);
   }
 
   if (me.leadsDept.trackWeeklyMetric) {
@@ -1381,7 +1411,7 @@ export async function getPossiblePendingTypesForActor(
   const types: string[] = [];
 
   if (actor.isAdmin) {
-    types.push("feedback", "caja_chica_saldo", "caja_chica_confirmacion", "cumpleanos", "compras_creditos_pendientes");
+    types.push("feedback", "caja_chica_saldo", "caja_chica_confirmacion", "cumpleanos", "compras_creditos_pendientes", "anticipos_aprobacion", "descuentos_sin_aceptar", "compras_personales_precio");
   } else {
     const me = await prisma.user.findUnique({
       where: { id: actor.userId },
@@ -1391,7 +1421,7 @@ export async function getPossiblePendingTypesForActor(
 
     types.push("cumpleanos");
     if (me.leadsDept.code === "FIN") {
-      types.push("roles_de_pago", "tasa_devolucion", "kpi_garantias", "pagos_recordatorios", "servicio_postventa", "caja_chica_saldo", "caja_chica_confirmacion");
+      types.push("roles_de_pago", "tasa_devolucion", "kpi_garantias", "pagos_recordatorios", "servicio_postventa", "caja_chica_saldo", "caja_chica_confirmacion", "descuentos_sin_aceptar", "compras_personales_precio");
     }
     if (me.leadsDept.trackWeeklyMetric) types.push("pedidos_despachados");
     if (me.leadsDept.code === "INV") {

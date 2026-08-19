@@ -1,85 +1,121 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { ShoppingBag, Camera } from "lucide-react";
+import { useState, useEffect } from "react";
+import { ShoppingBag, Camera, Plus, X } from "lucide-react";
 import { LiveCameraCapture } from "@/components/shared/LiveCameraCapture";
 
-type RetailProduct = { id: string; name: string; photo: string | null };
 type BuyerRelation = "SELF" | "MINOR_CHILD" | "OTHER_FAMILY";
-// Confirmado 2026-08-18: a propósito, esta fila NUNCA trae precio — ni la
-// API lo manda. El único lugar donde el colaborador ve el monto es su Rol
-// de pago.
-type Purchase = {
-  id: string;
+type Declaration = { relation: BuyerRelation; note?: string };
+type DraftItem = {
+  employeeProductName: string;
   quantity: number;
+  livePhotoUrl: string | null;
+  optionalPhotoUrl: string | null;
+  unitDeclarations: Declaration[];
+};
+type CartItem = DraftItem & { livePhotoUrl: string };
+
+type OrderHistory = {
+  id: string;
   status: string;
   rejectionReason: string | null;
-  product: { name: string; photo: string | null };
+  totalAmount: number | null;
+  installments: number;
   createdAt: string;
+  items: { employeeProductName: string; confirmedProductName: string | null; quantity: number }[];
 };
+
+function money(n: number) {
+  return `$${n.toFixed(2)}`;
+}
 
 const STATUS_LABEL: Record<string, { label: string; color: string }> = {
   PENDING_INVENTORY: { label: "Esperando confirmación de bodega", color: "#D9A441" },
   PENDING_FINANCE: { label: "Ya podés retirarlo — falta que Nairoby cierre el precio", color: "#1E5EFF" },
-  APPROVED: { label: "Aprobada — vas a ver el descuento en tu Rol de pago", color: "#22C55E" },
+  APPROVED: { label: "Aprobada", color: "#22C55E" },
   REJECTED: { label: "Rechazada", color: "#C4453A" },
 };
 
-// Confirmado 2026-08-18 (ajustado el mismo día): el colaborador solo
-// DECLARA para quién es la compra — nunca ve ni fija un monto en dólares.
-// El sistema le dice si eso califica para precio al costo o Dropi y por
-// qué; el precio real lo digita Nairoby después, al cerrar la compra.
+const RELATION_OPTIONS: [BuyerRelation, string][] = [
+  ["SELF", "Para mí"],
+  ["MINOR_CHILD", "Mi hijo/a menor de 18"],
+  ["OTHER_FAMILY", "Otra persona"],
+];
+
+function emptyDraft(): DraftItem {
+  return { employeeProductName: "", quantity: 1, livePhotoUrl: null, optionalPhotoUrl: null, unitDeclarations: [{ relation: "SELF" }] };
+}
+
+// Confirmado 2026-08-18: rediseño completo — el colaborador arma un
+// pedido con uno o varios productos (carrito). Por producto: foto en vivo
+// obligatoria + una segunda opcional que no ocupa espacio salvo que la
+// pidan, nombre de memoria (sin exactitud, Daniel lo corrige después),
+// cantidad, y hasta 3 unidades declaradas (para quién es cada una). Nunca
+// se muestra ningún precio acá — el colaborador solo se entera del monto
+// por notificación push cuando Nairoby cierra el precio.
 export function PersonalPurchasesPanel() {
-  const [products, setProducts] = useState<RetailProduct[] | null>(null);
-  const [purchases, setPurchases] = useState<Purchase[] | null>(null);
-  const [productId, setProductId] = useState("");
-  const [quantity, setQuantity] = useState(1);
-  const [buyerRelation, setBuyerRelation] = useState<BuyerRelation>("SELF");
-  const [buyerNote, setBuyerNote] = useState("");
-  const [preview, setPreview] = useState<{ priceMode: string; cooldownNote: string | null; ruleText: string | null } | null>(null);
-  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
-  const [takingPhoto, setTakingPhoto] = useState(false);
+  const [cart, setCart] = useState<CartItem[]>([]);
+  const [draft, setDraft] = useState<DraftItem>(emptyDraft());
+  const [takingPhoto, setTakingPhoto] = useState<"main" | "extra" | null>(null);
+  const [showExtraPhoto, setShowExtraPhoto] = useState(false);
+  const [orders, setOrders] = useState<OrderHistory[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
 
-  function loadPurchases() {
-    fetch("/api/personal-purchases").then((r) => (r.ok ? r.json() : [])).then(setPurchases);
+  function loadOrders() {
+    fetch("/api/personal-purchases").then((r) => (r.ok ? r.json() : [])).then(setOrders);
   }
-  useEffect(() => {
-    fetch("/api/retail-products").then((r) => (r.ok ? r.json() : [])).then(setProducts);
-    loadPurchases();
-  }, []);
+  useEffect(loadOrders, []);
 
-  useEffect(() => {
-    if (!productId) { setPreview(null); return; }
-    fetch(`/api/personal-purchases/price-preview?productId=${productId}&buyerRelation=${buyerRelation}`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then(setPreview);
-  }, [productId, buyerRelation]);
+  function setQuantity(q: number) {
+    const quantity = Math.max(1, q);
+    setDraft((d) => {
+      const capped = Math.min(quantity, 3);
+      const decl = d.unitDeclarations.slice(0, capped);
+      while (decl.length < capped) decl.push({ relation: "SELF" });
+      return { ...d, quantity, unitDeclarations: decl };
+    });
+  }
 
-  async function submit() {
-    if (!productId || !photoUrl) return;
+  function setDeclaration(idx: number, patch: Partial<Declaration>) {
+    setDraft((d) => {
+      const decl = [...d.unitDeclarations];
+      decl[idx] = { ...decl[idx], ...patch };
+      return { ...d, unitDeclarations: decl };
+    });
+  }
+
+  function addDraftToCart() {
+    if (!draft.employeeProductName.trim() || !draft.livePhotoUrl) return;
+    for (const d of draft.unitDeclarations) {
+      if (d.relation !== "SELF" && !d.note?.trim()) return;
+    }
+    setCart((c) => [...c, draft as CartItem]);
+    setDraft(emptyDraft());
+    setShowExtraPhoto(false);
+  }
+
+  function removeFromCart(idx: number) {
+    setCart((c) => c.filter((_, i) => i !== idx));
+  }
+
+  async function submitOrder() {
+    if (cart.length === 0) return;
     setBusy(true);
     setErr("");
     const res = await fetch("/api/personal-purchases", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        productId,
-        quantity,
-        livePhotoUrl: photoUrl,
-        buyerRelation,
-        buyerNote: buyerNote.trim() || undefined,
-      }),
+      body: JSON.stringify({ items: cart }),
     });
     setBusy(false);
     const data = await res.json().catch(() => null);
     if (!res.ok) { setErr(data?.error ?? "No se pudo enviar."); return; }
-    setProductId(""); setQuantity(1); setBuyerRelation("SELF"); setBuyerNote(""); setPhotoUrl(null);
-    loadPurchases();
+    setCart([]);
+    loadOrders();
   }
 
-  if (!products) return <div className="text-steel text-[13px]">Cargando…</div>;
+  const canAddDraft = draft.employeeProductName.trim().length > 0 && !!draft.livePhotoUrl && draft.unitDeclarations.every((d) => d.relation === "SELF" || d.note?.trim());
 
   return (
     <div>
@@ -88,83 +124,126 @@ export function PersonalPurchasesPanel() {
           <ShoppingBag size={13} /> Nueva compra personal
         </div>
 
-        <div className="flex flex-col gap-3">
-          <div>
-            <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Producto</label>
-            <select className="rounded border border-rule bg-cloud px-2.5 py-2 text-[13px] w-full" value={productId} onChange={(e) => setProductId(e.target.value)}>
-              <option value="">Elegí un producto…</option>
-              {products.map((p) => (<option key={p.id} value={p.id}>{p.name}</option>))}
-            </select>
-            {products.length === 0 && <div className="text-[11px] text-steel-dim mt-1">Todavía no hay productos en el catálogo — pedile a Daniel que agregue el que buscás.</div>}
-          </div>
-
-          <div>
-            <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">¿Para quién es?</label>
-            <div className="flex gap-2 flex-wrap">
-              {([["SELF", "Para mí"], ["MINOR_CHILD", "Mi hijo/a menor de 18"], ["OTHER_FAMILY", "Otro familiar"]] as [BuyerRelation, string][]).map(([v, label]) => (
-                <button key={v} type="button" onClick={() => setBuyerRelation(v)}
-                  className={`text-[12px] font-semibold rounded-md px-3 py-1.5 border-[1.5px] cursor-pointer ${buyerRelation === v ? "border-teal text-teal bg-teal/10" : "border-rule text-steel"}`}>
-                  {label}
+        {cart.length > 0 && (
+          <div className="flex flex-col gap-1.5 mb-3.5">
+            {cart.map((it, idx) => (
+              <div key={idx} className="flex items-center gap-2 text-[12.5px] bg-cloud border border-rule rounded-md px-3 py-2">
+                <span className="flex-1">{it.employeeProductName} × {it.quantity}</span>
+                <button type="button" className="text-steel-dim cursor-pointer" onClick={() => removeFromCart(idx)}>
+                  <X size={13} />
                 </button>
-              ))}
-            </div>
+              </div>
+            ))}
           </div>
+        )}
 
-          {buyerRelation !== "SELF" && (
-            <input className="rounded border border-rule bg-cloud px-2.5 py-1.5 text-[13px]" placeholder="Contá para quién es (ej. mi hijo Juan, 8 años)" value={buyerNote} onChange={(e) => setBuyerNote(e.target.value)} />
-          )}
+        <div className="flex flex-col gap-3 border-t border-rule pt-3.5">
+          <div>
+            <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Producto (de memoria, no hace falta exacto)</label>
+            <input
+              className="rounded border border-rule bg-cloud px-2.5 py-1.5 text-[13px] w-full"
+              placeholder="ej. Audífonos inalámbricos"
+              value={draft.employeeProductName}
+              onChange={(e) => setDraft((d) => ({ ...d, employeeProductName: e.target.value }))}
+            />
+          </div>
 
           <div>
             <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Cantidad</label>
-            <input className="rounded border border-rule bg-cloud px-2.5 py-1.5 text-[13px] w-20" type="number" min={1} value={quantity} onChange={(e) => setQuantity(Math.max(1, Number(e.target.value)))} />
+            <input className="rounded border border-rule bg-cloud px-2.5 py-1.5 text-[13px] w-20" type="number" min={1} value={draft.quantity} onChange={(e) => setQuantity(Number(e.target.value))} />
           </div>
 
-          {preview && (
-            <div className="text-[12.5px] bg-cloud border border-rule rounded-md p-3">
-              <div className="font-bold">
-                Esta compra califica a <span className={preview.priceMode === "COST" ? "text-green" : "text-steel"}>{preview.priceMode === "COST" ? "precio al costo" : "precio Dropi"}</span>
+          <div className="flex flex-col gap-2">
+            <label className="text-[10px] font-semibold uppercase tracking-wide text-steel">¿Para quién es cada unidad? (hasta 3 califican a precio al costo)</label>
+            {draft.unitDeclarations.map((d, idx) => (
+              <div key={idx} className="flex items-center gap-2 flex-wrap">
+                <span className="text-[11px] text-steel-dim w-14 shrink-0">Unidad {idx + 1}</span>
+                <div className="flex gap-1.5 flex-wrap">
+                  {RELATION_OPTIONS.map(([v, label]) => (
+                    <button key={v} type="button" onClick={() => setDeclaration(idx, { relation: v })}
+                      className={`text-[11.5px] font-semibold rounded-md px-2.5 py-1 border-[1.5px] cursor-pointer ${d.relation === v ? "border-teal text-teal bg-teal/10" : "border-rule text-steel"}`}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                {d.relation !== "SELF" && (
+                  <input
+                    className="rounded border border-rule bg-cloud px-2 py-1 text-[12px] flex-1 min-w-[140px]"
+                    placeholder={d.relation === "MINOR_CHILD" ? "Nombre del hijo/a" : "Para quién es"}
+                    value={d.note ?? ""}
+                    onChange={(e) => setDeclaration(idx, { note: e.target.value })}
+                  />
+                )}
               </div>
-              {preview.ruleText && <div className="text-[11.5px] text-steel-dim mt-1">{preview.ruleText}</div>}
-              {preview.cooldownNote && <div className="text-[11.5px] text-steel-dim mt-1">{preview.cooldownNote}</div>}
-              <div className="text-[11px] text-steel-dim mt-1.5 italic">El monto en dólares lo va a confirmar Nairoby al cerrar tu compra.</div>
-            </div>
-          )}
+            ))}
+            {draft.quantity > 3 && <div className="text-[11px] text-steel-dim">Las unidades de la 4ª en adelante van directo a precio Dropi.</div>}
+          </div>
 
           <div>
             <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Foto en vivo</label>
-            {photoUrl ? (
+            {draft.livePhotoUrl ? (
               <div className="flex items-center gap-2">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={photoUrl} alt="Foto de la compra" className="w-20 h-20 object-cover rounded-md border border-rule" />
-                <button type="button" className="text-[11.5px] text-blue font-semibold cursor-pointer" onClick={() => { setPhotoUrl(null); setTakingPhoto(true); }}>Volver a tomar</button>
+                <img src={draft.livePhotoUrl} alt="Foto del producto" className="w-20 h-20 object-cover rounded-md border border-rule" />
+                <button type="button" className="text-[11.5px] text-blue font-semibold cursor-pointer" onClick={() => { setDraft((d) => ({ ...d, livePhotoUrl: null })); setTakingPhoto("main"); }}>Volver a tomar</button>
               </div>
-            ) : takingPhoto ? (
-              <LiveCameraCapture folder="personal-purchase-photos" onCaptured={(url) => { setPhotoUrl(url); setTakingPhoto(false); }} onCancel={() => setTakingPhoto(false)} />
+            ) : takingPhoto === "main" ? (
+              <LiveCameraCapture folder="personal-purchase-photos" onCaptured={(url) => { setDraft((d) => ({ ...d, livePhotoUrl: url })); setTakingPhoto(null); }} onCancel={() => setTakingPhoto(null)} />
             ) : (
-              <button type="button" className="flex items-center gap-1.5 text-[12.5px] font-bold border-[1.5px] border-rule rounded-md px-3.5 py-2 cursor-pointer" onClick={() => setTakingPhoto(true)}>
+              <button type="button" className="flex items-center gap-1.5 text-[12.5px] font-bold border-[1.5px] border-rule rounded-md px-3.5 py-2 cursor-pointer" onClick={() => setTakingPhoto("main")}>
                 <Camera size={14} /> Tomar foto
               </button>
             )}
           </div>
 
-          {err && <div className="text-red text-[12.5px]">{err}</div>}
-          <button type="button" disabled={busy || !productId || !photoUrl} className="text-[13px] font-bold bg-blue text-white rounded-md px-4 py-2 cursor-pointer disabled:opacity-40 self-start" onClick={submit}>
-            {busy ? "Enviando…" : "Enviar compra"}
+          {!showExtraPhoto && !draft.optionalPhotoUrl && (
+            <button type="button" className="text-[11px] text-steel-dim underline cursor-pointer self-start" onClick={() => setShowExtraPhoto(true)}>
+              + agregar otra foto (opcional)
+            </button>
+          )}
+          {(showExtraPhoto || draft.optionalPhotoUrl) && (
+            <div>
+              <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Segunda foto (opcional)</label>
+              {draft.optionalPhotoUrl ? (
+                <div className="flex items-center gap-2">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={draft.optionalPhotoUrl} alt="Foto extra" className="w-16 h-16 object-cover rounded-md border border-rule" />
+                  <button type="button" className="text-[11px] text-steel-dim underline cursor-pointer" onClick={() => setDraft((d) => ({ ...d, optionalPhotoUrl: null }))}>Quitar</button>
+                </div>
+              ) : takingPhoto === "extra" ? (
+                <LiveCameraCapture folder="personal-purchase-photos" onCaptured={(url) => { setDraft((d) => ({ ...d, optionalPhotoUrl: url })); setTakingPhoto(null); }} onCancel={() => setTakingPhoto(null)} />
+              ) : (
+                <button type="button" className="text-[11.5px] font-semibold text-blue cursor-pointer" onClick={() => setTakingPhoto("extra")}>Tomar segunda foto</button>
+              )}
+            </div>
+          )}
+
+          <button type="button" disabled={!canAddDraft} className="flex items-center gap-1.5 text-[12.5px] font-bold border-[1.5px] border-teal text-teal rounded-md px-3.5 py-2 cursor-pointer disabled:opacity-40 self-start" onClick={addDraftToCart}>
+            <Plus size={14} /> Agregar este producto al pedido
           </button>
         </div>
+
+        {err && <div className="text-red text-[12.5px] mt-3">{err}</div>}
+        <button type="button" disabled={busy || cart.length === 0} className="text-[13px] font-bold bg-blue text-white rounded-md px-4 py-2 cursor-pointer disabled:opacity-40 mt-3.5" onClick={submitOrder}>
+          {busy ? "Enviando…" : `Enviar compra${cart.length > 0 ? ` (${cart.length})` : ""}`}
+        </button>
       </div>
 
       <div className="bg-surface border border-rule rounded-md p-4">
         <div className="text-[11px] font-semibold uppercase tracking-wide text-steel mb-3">Mis compras</div>
-        {(purchases?.length ?? 0) === 0 && <div className="text-steel text-[12.5px]">Todavía no registraste ninguna compra.</div>}
+        {(orders?.length ?? 0) === 0 && <div className="text-steel text-[12.5px]">Todavía no registraste ninguna compra.</div>}
         <div className="flex flex-col gap-2">
-          {purchases?.map((p) => {
-            const s = STATUS_LABEL[p.status];
+          {orders?.map((o) => {
+            const s = STATUS_LABEL[o.status];
+            const names = o.items.map((it) => `${it.confirmedProductName ?? it.employeeProductName} × ${it.quantity}`).join(", ");
             return (
-              <div key={p.id} className="flex items-center gap-3 text-[12.5px] py-2 border-b border-rule last:border-0 flex-wrap">
-                <span className="font-semibold flex-1 min-w-[140px]">{p.product.name} × {p.quantity}</span>
+              <div key={o.id} className="flex items-center gap-3 text-[12.5px] py-2 border-b border-rule last:border-0 flex-wrap">
+                <span className="font-semibold flex-1 min-w-[160px]">{names}</span>
+                {o.status === "APPROVED" && o.totalAmount != null && (
+                  <span className="font-bold tabular-nums">{money(o.totalAmount)}{o.installments > 1 ? ` (${o.installments} cuotas)` : ""}</span>
+                )}
                 <span className="text-[10.5px] font-semibold rounded-full px-2 py-0.5" style={{ color: s.color, border: `1px solid ${s.color}` }}>{s.label}</span>
-                {p.rejectionReason && <span className="text-[11px] text-red">{p.rejectionReason}</span>}
+                {o.rejectionReason && <span className="text-[11px] text-red">{o.rejectionReason}</span>}
               </div>
             );
           })}

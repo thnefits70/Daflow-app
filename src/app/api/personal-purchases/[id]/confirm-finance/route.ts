@@ -6,14 +6,18 @@ import { canConfirmPersonalPurchaseFinance } from "@/lib/guards";
 import { resolveFirstPayoutMonth } from "@/lib/payroll";
 import { addMonthsToMonthStr } from "@/lib/payrollCalc";
 import { sendPushToOwner } from "@/lib/webPush";
-import { actorName } from "@/lib/actorName";
 
-const schema = z.object({ unitPrice: z.number().positive(), installments: z.number().int().min(1).max(2) });
+const schema = z.object({
+  items: z.array(z.object({ itemId: z.string().min(1), costUnitPrice: z.number().nonnegative(), dropiUnitPrice: z.number().nonnegative() })).min(1),
+  installments: z.number().int().min(1),
+});
 
-// Confirmado 2026-08-18: ajustado el mismo día — Nairoby/admin es quien
-// DIGITA el precio en dólares acá, nunca antes. El colaborador solo
-// declaró el modo (costo/Dropi); esto es lo que activa el descuento real
-// en el rol. No bloquea el retiro (eso ya lo resolvió Daniel antes).
+// Confirmado 2026-08-18: Nairoby/admin digita el precio en dólares acá —
+// sin ningún catálogo, sin ningún valor precargado. Ya se sabe (desde que
+// Daniel confirmó) cuántas unidades de cada producto van a costo y cuántas
+// a Dropi (unitPriceModes) — con eso se arma el total. Cuotas libres, sin
+// tope. Esto es lo que activa el descuento real, y la única vez que el
+// colaborador se entera del monto (por push).
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   if (!(await canConfirmPersonalPurchaseFinance())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
@@ -23,27 +27,37 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const parsed = schema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Datos inválidos." }, { status: 400 });
 
-  const purchase = await prisma.personalPurchase.findUnique({
+  const order = await prisma.personalPurchaseOrder.findUnique({
     where: { id },
-    include: { employee: { select: { id: true, name: true } }, product: { select: { name: true } } },
+    include: { employee: { select: { id: true } }, items: true },
   });
-  if (!purchase) return NextResponse.json({ error: "No encontrada." }, { status: 404 });
-  if (purchase.status !== "PENDING_FINANCE") return NextResponse.json({ error: "Todavía no la confirmó bodega, o ya fue procesada." }, { status: 409 });
+  if (!order) return NextResponse.json({ error: "No encontrado." }, { status: 404 });
+  if (order.status !== "PENDING_FINANCE") return NextResponse.json({ error: "Todavía no lo confirmó bodega, o ya fue procesado." }, { status: 409 });
 
-  const totalAmount = parsed.data.unitPrice * purchase.quantity;
-  if (parsed.data.installments === 2 && totalAmount < 25) {
-    return NextResponse.json({ error: "Solo se puede pagar en 2 cuotas si el total es de $25 o más." }, { status: 400 });
+  const priceById = new Map(parsed.data.items.map((i) => [i.itemId, i]));
+  for (const it of order.items) {
+    if (!priceById.has(it.id)) return NextResponse.json({ error: "Falta fijar el precio de todos los productos." }, { status: 400 });
   }
 
-  const naturalFirstMonth = addMonthsToMonthStr(purchase.eventMonth, 1);
+  let totalAmount = 0;
+  for (const it of order.items) {
+    const { costUnitPrice, dropiUnitPrice } = priceById.get(it.id)!;
+    const modes = (Array.isArray(it.unitPriceModes) ? it.unitPriceModes : []) as string[];
+    const costCount = modes.filter((m) => m === "COST").length;
+    const dropiCount = modes.filter((m) => m === "DROPI").length;
+    const itemTotal = costCount * costUnitPrice + dropiCount * dropiUnitPrice;
+    totalAmount += itemTotal;
+    await prisma.personalPurchaseItem.update({ where: { id: it.id }, data: { costUnitPrice, dropiUnitPrice, itemTotal } });
+  }
+
+  const naturalFirstMonth = addMonthsToMonthStr(order.eventMonth, 1);
   const firstPayoutMonth = await resolveFirstPayoutMonth(naturalFirstMonth);
 
   const isAdmin = session!.user.role === "admin";
-  const updated = await prisma.personalPurchase.update({
+  const updated = await prisma.personalPurchaseOrder.update({
     where: { id },
     data: {
       status: "APPROVED",
-      unitPrice: parsed.data.unitPrice,
       totalAmount,
       installments: parsed.data.installments,
       firstPayoutMonth,
@@ -52,17 +66,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     },
   });
 
-  const invLeader = await prisma.user.findFirst({ where: { isLeader: true, leadsDept: { code: "INV" } }, select: { id: true } });
-  if (invLeader) {
-    await sendPushToOwner(invLeader.id, {
-      title: "✅ Compra personal cerrada por finanzas",
-      body: `${purchase.employee.name} · ${purchase.product.name} · confirmado por ${actorName(isAdmin ? null : session!.user.name)}`,
-      url: "/area/compras-personales-inventario",
-    }).catch(() => null);
-  }
-  await sendPushToOwner(purchase.employee.id, {
+  const cuotaText = parsed.data.installments > 1 ? ` en ${parsed.data.installments} cuotas` : "";
+  await sendPushToOwner(order.employee.id, {
     title: "✅ Tu compra personal quedó lista",
-    body: `${purchase.product.name} — $${totalAmount.toFixed(2)}, se va a descontar de tu rol a partir de ${firstPayoutMonth}.`,
+    body: `Total $${totalAmount.toFixed(2)}${cuotaText} — se va a descontar de tu rol a partir de ${firstPayoutMonth}.`,
     url: "/area/compras-personales",
   }).catch(() => null);
 

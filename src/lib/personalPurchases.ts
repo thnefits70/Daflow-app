@@ -1,48 +1,56 @@
 import { prisma } from "@/lib/prisma";
 
-// Confirmado 2026-08-18: pedido explícito del usuario — precio al costo
-// solo para el propio colaborador o sus hijos menores de 18 (declarado, sin
-// registro formal de familiares), y solo si pasaron 6 meses o más desde la
-// última vez que compró ESTE MISMO producto a precio al costo. Otro
-// familiar adulto siempre paga precio Dropi vigente, sin excepción, sin
-// importar el enfriamiento.
-//
-// Ajustado el mismo día: esto solo declara el MODO de precio (costo o
-// Dropi) — nunca un monto en dólares. El catálogo no guarda precio; el
-// valor real lo digita Nairoby recién al cerrar la compra (confirm-finance).
+// Confirmado 2026-08-18: rediseño completo — el precio al costo por unidad
+// se declara al momento de la compra (hasta 3 unidades por producto). Hijo
+// menor de 18: siempre precio al costo, nunca enfriamiento. Cualquier otra
+// persona (el mismo colaborador, esposa, otro familiar — sin distinción):
+// sujeta a un enfriamiento de 6 meses por (colaborador + producto), usando
+// el nombre ya CORREGIDO por Daniel (confirmedProductName) — recién ahí es
+// confiable para comparar contra compras anteriores.
 const COOLDOWN_MONTHS = 6;
+export const MAX_COST_UNITS_PER_ITEM = 3;
 
-export const COST_PRICE_RULE_TEXT =
-  "Precio al costo: solo aplica para vos o para tus hijos menores de 18 años, y solo si pasaron 6 meses o más desde tu última compra de este mismo producto a precio al costo.";
+export type BuyerRelation = "SELF" | "MINOR_CHILD" | "OTHER_FAMILY";
+export type UnitDeclaration = { relation: BuyerRelation; note?: string };
+export type PriceMode = "COST" | "DROPI";
 
 function monthsSince(date: Date, now: Date): number {
   return (now.getUTCFullYear() - date.getUTCFullYear()) * 12 + (now.getUTCMonth() - date.getUTCMonth());
 }
 
-export async function computePriceMode(
-  employeeId: string,
-  productId: string,
-  buyerRelation: "SELF" | "MINOR_CHILD" | "OTHER_FAMILY"
-): Promise<{ priceMode: "COST" | "DROPI"; cooldownNote: string | null }> {
-  const product = await prisma.retailProduct.findUnique({ where: { id: productId } });
-  if (!product) throw new Error("Producto no encontrado.");
-
-  if (buyerRelation === "OTHER_FAMILY") {
-    return { priceMode: "DROPI", cooldownNote: null };
-  }
-
-  const lastCostPurchase = await prisma.personalPurchase.findFirst({
-    where: { employeeId, productId, priceMode: "COST", status: { in: ["PENDING_INVENTORY", "PENDING_FINANCE", "APPROVED"] } },
+async function costCooldownEligible(employeeId: string, confirmedProductName: string): Promise<boolean> {
+  const lastCostItem = await prisma.personalPurchaseItem.findFirst({
+    where: {
+      confirmedProductName,
+      order: { employeeId },
+      unitPriceModes: { array_contains: "COST" },
+    },
     orderBy: { createdAt: "desc" },
+    select: { createdAt: true },
   });
+  if (!lastCostItem) return true;
+  return monthsSince(lastCostItem.createdAt, new Date()) >= COOLDOWN_MONTHS;
+}
 
-  if (!lastCostPurchase) return { priceMode: "COST", cooldownNote: null };
-
-  const elapsed = monthsSince(lastCostPurchase.createdAt, new Date());
-  if (elapsed >= COOLDOWN_MONTHS) return { priceMode: "COST", cooldownNote: null };
-
-  return {
-    priceMode: "DROPI",
-    cooldownNote: `Ya compraste este producto a precio al costo hace ${elapsed} mes${elapsed === 1 ? "" : "es"} — hay que esperar ${COOLDOWN_MONTHS} meses entre compras a precio al costo del mismo producto, así que esta vez aplica el precio de Dropi.`,
-  };
+// Se calcula UNA SOLA VEZ, al momento en que Daniel confirma el pedido (ya
+// con el nombre normalizado) — el resultado queda guardado en
+// PersonalPurchaseItem.unitPriceModes, nunca se recalcula después.
+export async function computeUnitPriceModes(
+  employeeId: string,
+  confirmedProductName: string,
+  quantity: number,
+  declarations: UnitDeclaration[]
+): Promise<PriceMode[]> {
+  const capped = declarations.slice(0, Math.min(MAX_COST_UNITS_PER_ITEM, quantity));
+  const modes: PriceMode[] = [];
+  for (const d of capped) {
+    if (d.relation === "MINOR_CHILD") {
+      modes.push("COST");
+      continue;
+    }
+    const eligible = await costCooldownEligible(employeeId, confirmedProductName);
+    modes.push(eligible ? "COST" : "DROPI");
+  }
+  while (modes.length < quantity) modes.push("DROPI");
+  return modes;
 }

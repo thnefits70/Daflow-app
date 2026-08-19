@@ -8,7 +8,6 @@ import { PayrollRolesPanel } from "./PayrollRolesPanel";
 import { CommissionTiersPanel } from "./CommissionTiersPanel";
 import { CeoBonusesPanel } from "./CeoBonusesPanel";
 import { PersonalPurchasesFinancePanel } from "@/components/personal-purchases/PersonalPurchasesFinancePanel";
-import { RetailProductCatalogPanel } from "@/components/personal-purchases/RetailProductCatalogPanel";
 import { SalaryAdvanceApprovalPanel } from "@/components/salary-advances/SalaryAdvanceApprovalPanel";
 import { ManagementDeductionsPanel } from "./ManagementDeductionsPanel";
 
@@ -90,14 +89,7 @@ export function PayrollWorkspace({
       )}
       {tab === "comisiones" && canProposeCommissions && <CommissionTiersPanel canPropose={canProposeCommissions} canApprove={canApproveCommissions} />}
       {tab === "bonosceo" && canGrantCeoBonus && <CeoBonusesPanel />}
-      {tab === "comprasfinanzas" && canConfirmPersonalPurchaseFinance && (
-        <div>
-          <PersonalPurchasesFinancePanel />
-          <div className="mt-5">
-            <RetailProductCatalogPanel />
-          </div>
-        </div>
-      )}
+      {tab === "comprasfinanzas" && canConfirmPersonalPurchaseFinance && <PersonalPurchasesFinancePanel />}
       {tab === "anticipos" && canManageSalaryAdvances && <SalaryAdvanceApprovalPanel />}
       {tab === "descuentos" && canCreateManagementDeduction && <ManagementDeductionsPanel />}
     </div>

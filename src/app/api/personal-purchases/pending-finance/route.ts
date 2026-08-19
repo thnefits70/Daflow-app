@@ -5,10 +5,10 @@ import { canConfirmPersonalPurchaseFinance } from "@/lib/guards";
 export async function GET() {
   if (!(await canConfirmPersonalPurchaseFinance())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
-  const purchases = await prisma.personalPurchase.findMany({
+  const orders = await prisma.personalPurchaseOrder.findMany({
     where: { status: "PENDING_FINANCE" },
-    include: { employee: { select: { name: true } }, product: { select: { name: true, photo: true, costPrice: true, dropiPrice: true } } },
+    include: { employee: { select: { name: true } }, items: true },
     orderBy: { createdAt: "asc" },
   });
-  return NextResponse.json(purchases);
+  return NextResponse.json(orders);
 }
