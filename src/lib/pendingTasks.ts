@@ -301,6 +301,7 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   anticipos_aprobacion: "Anticipos por aprobar",
   descuentos_sin_aceptar: "Descuentos por mala gestión sin aceptar",
   compras_personales_precio: "Compras personales — falta cerrar el precio",
+  reingreso_mercaderia_revision: "Reingreso de mercadería por revisar",
   cumpleanos: "Cumpleaños de tu equipo (aviso 1 día antes)",
   compras_rechazadas: "Tus solicitudes de compra rechazadas — corregir y reenviar",
   compras_orden_compra: "Tus solicitudes de compra — falta subir orden de compra",
@@ -1174,6 +1175,29 @@ async function getManagementDeductionUnacceptedPendingItem(href: string): Promis
   };
 }
 
+// Confirmado 2026-08-19: pedido explícito del usuario — acceso directo
+// para Daniel cuando hay lotes de Reingreso de Mercadería ya enviados por
+// el equipo y esperando su revisión (submittedAt no nulo, danielApprovedAt
+// nulo). El link entra directo a la pestaña "Revisión".
+async function getMerchandiseReentryPendingItem(href: string): Promise<PendingItem | null> {
+  const rows = await prisma.merchandiseReentryBatch.findMany({
+    where: { submittedAt: { not: null }, danielApprovedAt: null },
+    select: { code: true, submittedAt: true },
+  });
+  if (rows.length === 0) return null;
+
+  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const overdue = rows.some((r) => (r.submittedAt ?? new Date()) < cutoff);
+  return {
+    type: "reingreso_mercaderia_revision",
+    icon: "📦",
+    label: "Reingreso de mercadería por revisar",
+    meta: `${rows.length === 1 ? rows[0].code : `${rows.length} lotes`}${overdue ? " · atrasado" : ""}`,
+    overdue,
+    href,
+  };
+}
+
 // Confirmado 2026-08-18: pedido explícito del usuario — una vez que Daniel
 // confirma un pedido de compra personal, la información completa le tiene
 // que llegar a Nairoby (o admin) como un pendiente de ACCIÓN (ella decide
@@ -1348,16 +1372,18 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
   }
 
   if (me.leadsDept.code === "INV") {
-    const [stockoutItem, receivingItem, replacementItem, inventoryControlItem] = await Promise.all([
+    const [stockoutItem, receivingItem, replacementItem, inventoryControlItem, merchandiseReentryItem] = await Promise.all([
       getStockoutPendingItem("/area/kpis-generales"),
       getPurchaseReceivingPendingItem("/area/workspace?tab=compras&ptab=inventario"),
       getPurchaseReplacementVerificationPendingItem("/area/workspace?tab=compras&ptab=inventario"),
       getInventoryControlPendingItem("/area/workspace?tab=inventario"),
+      getMerchandiseReentryPendingItem("/area/reingreso-mercaderia?tab=revision"),
     ]);
     if (stockoutItem) items.push(stockoutItem);
     if (receivingItem) items.push(receivingItem);
     if (replacementItem) items.push(replacementItem);
     if (inventoryControlItem) items.push(inventoryControlItem);
+    if (merchandiseReentryItem) items.push(merchandiseReentryItem);
   }
 
   const recognitionItem = await getRecognitionLeaderPendingItem(me.leadsDeptId, "/area/colaborador-destacado");
@@ -1425,7 +1451,7 @@ export async function getPossiblePendingTypesForActor(
     }
     if (me.leadsDept.trackWeeklyMetric) types.push("pedidos_despachados");
     if (me.leadsDept.code === "INV") {
-      types.push("ruptura_stock", "compras_recepcion", "compras_cambios_verificar", "control_inventario");
+      types.push("ruptura_stock", "compras_recepcion", "compras_cambios_verificar", "control_inventario", "reingreso_mercaderia_revision");
     }
     // Mismo criterio de elegibilidad que canSubmitPurchaseRequests
     // (guards.ts) — delegado vía canManagePurchases, o líder de COM/FIN —

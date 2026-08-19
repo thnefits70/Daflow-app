@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { CaptureFlow } from "./CaptureFlow";
 import { ReviewInbox } from "./ReviewInbox";
 import { CloseQueues } from "./CloseQueues";
@@ -19,6 +19,18 @@ export function MerchandiseReentryPanel({
 }) {
   const defaultTab: Tab = canCapture ? "capturar" : canApprove ? "revision" : canClose ? "cierre" : "historial";
   const [tab, setTab] = useState<Tab>(defaultTab);
+
+  // Confirmado 2026-08-19: pedido explícito del usuario — el atajo de
+  // "Pendientes" en Inicio llega con ?tab=revision para que Daniel entre
+  // directo a lo que tiene que gestionar, sin que se quede en "Capturar"
+  // (su pestaña por defecto, ya que también es parte del equipo).
+  useEffect(() => {
+    const t = new URLSearchParams(window.location.search).get("tab") as Tab | null;
+    if (t === "revision" && canApprove) setTab("revision");
+    else if (t === "cierre" && canClose) setTab("cierre");
+    else if (t === "capturar" && canCapture) setTab("capturar");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const tabs: { id: Tab; label: string }[] = [
     ...(canCapture ? [{ id: "capturar" as const, label: "Capturar" }] : []),
