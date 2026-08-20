@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
-import { canConfirmPersonalPurchaseFinance } from "@/lib/guards";
+import { canSetPersonalPurchasePrice } from "@/lib/guards";
 import { addBusinessDays } from "@/lib/businessHours";
 import { sendPushToOwner } from "@/lib/webPush";
 
@@ -11,17 +11,19 @@ const schema = z.object({
   installments: z.number().int().min(1),
 });
 
-// Confirmado 2026-08-18/20: Nairoby/admin digita el precio en dólares acá —
+// Confirmado 2026-08-18/20: Nairoby digita el precio en dólares acá —
 // sin ningún catálogo, sin ningún valor precargado. Ya se sabe (desde que
 // Daniel confirmó) cuántas unidades de cada producto van a costo y cuántas
 // a Dropi (unitPriceModes) — con eso se arma el total. Cuotas libres, sin
 // tope (se guardan ya, por si el colaborador termina eligiendo rol).
-// Esto YA NO activa el descuento directo — deja la orden esperando que el
-// colaborador elija cómo pagar (choose-payment-method), con 3 días hábiles
-// de plazo si elige transferencia. Es la única vez que el colaborador se
-// entera del monto (por push).
+// Exclusivo de Nairoby/FIN — pedido explícito del usuario, el admin puede
+// ver la cola pero no poner precio. Esto YA NO activa el descuento
+// directo — deja la orden esperando que el colaborador elija cómo pagar
+// (choose-payment-method), con 3 días hábiles de plazo si elige
+// transferencia. Es la única vez que el colaborador se entera del monto
+// (por push).
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  if (!(await canConfirmPersonalPurchaseFinance())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+  if (!(await canSetPersonalPurchasePrice())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
   const { id } = await params;
   const session = await auth();
@@ -52,7 +54,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     await prisma.personalPurchaseItem.update({ where: { id: it.id }, data: { costUnitPrice, dropiUnitPrice, itemTotal } });
   }
 
-  const isAdmin = session!.user.role === "admin";
   const updated = await prisma.personalPurchaseOrder.update({
     where: { id },
     data: {
@@ -61,7 +62,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       installments: parsed.data.installments,
       transferDeadlineAt: addBusinessDays(new Date(), 3),
       financeConfirmedAt: new Date(),
-      financeConfirmedById: isAdmin ? null : session!.user.id,
+      financeConfirmedById: session!.user.id,
     },
   });
 

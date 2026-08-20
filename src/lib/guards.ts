@@ -286,6 +286,21 @@ export async function canConfirmPersonalPurchaseFinance() {
   return canEditPayrollRoles();
 }
 
+// Confirmado 2026-08-20: pedido explícito del usuario — poner el precio de
+// una compra personal es exclusivo de Nairoby/FIN, sin bypass de admin (a
+// diferencia de canConfirmPersonalPurchaseFinance, que sigue usándose tal
+// cual para lo demás del flujo: ver la cola, rechazar, acceso a la
+// pestaña). El admin puede ver la cola de precios, pero no editarla.
+export async function canSetPersonalPurchasePrice() {
+  const session = await auth();
+  if (!session) return false;
+  const user = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { isLeader: true, leadsDept: { select: { code: true } } },
+  });
+  return !!user?.isLeader && user.leadsDept?.code === "FIN";
+}
+
 // Confirmado 2026-08-20: confirmar que una transferencia de compra personal
 // realmente llegó exige revisar la cuenta bancaria real de la empresa —
 // exclusivo del admin, sin delegación, mismo espíritu que el paso

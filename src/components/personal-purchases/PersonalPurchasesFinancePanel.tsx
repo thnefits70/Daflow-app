@@ -19,11 +19,13 @@ function money(n: number) {
   return `$${n.toFixed(2)}`;
 }
 
-// Confirmado 2026-08-18: Nairoby/admin digita el precio en dólares acá —
-// sin ningún catálogo, sin nada precargado. Ya se sabe (unitPriceModes,
+// Confirmado 2026-08-18/20: Nairoby digita el precio en dólares acá — sin
+// ningún catálogo, sin nada precargado. Ya se sabe (unitPriceModes,
 // calculado al confirmar Daniel) cuántas unidades de cada producto van a
-// costo y cuántas a Dropi. Cuotas libres, sin tope, decide ella.
-export function PersonalPurchasesFinancePanel() {
+// costo y cuántas a Dropi. Cuotas libres, sin tope, decide ella. Pedido
+// explícito del usuario: el admin ve esta misma cola pero sin poder tocar
+// nada — ni precio, ni rechazo, ni cuotas.
+export function PersonalPurchasesFinancePanel({ isAdmin = false }: { isAdmin?: boolean }) {
   const [orders, setOrders] = useState<Order[] | null>(null);
   const [prices, setPrices] = useState<Record<string, { cost: string; dropi: string }>>({});
   const [installments, setInstallments] = useState<Record<string, string>>({});
@@ -104,49 +106,57 @@ export function PersonalPurchasesFinancePanel() {
                       <div className="text-[10.5px] text-steel-dim mb-1.5">
                         {costCount > 0 && `${costCount} al costo`}{costCount > 0 && dropiCount > 0 && " · "}{dropiCount > 0 && `${dropiCount} Dropi`}
                       </div>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        {costCount > 0 && (
-                          <div className="flex items-center gap-1.5">
-                            <label className="text-[11px] text-steel">Precio al costo (c/u)</label>
-                            <input className="text-[12px] rounded border border-rule bg-cloud px-2 py-1 w-20" type="number" step="0.01" placeholder="$0.00"
-                              value={p.cost} onChange={(e) => setPrices((s) => ({ ...s, [it.id]: { ...priceFor(it.id), cost: e.target.value } }))} />
-                          </div>
-                        )}
-                        {dropiCount > 0 && (
-                          <div className="flex items-center gap-1.5">
-                            <label className="text-[11px] text-steel">Precio Dropi (c/u)</label>
-                            <input className="text-[12px] rounded border border-rule bg-cloud px-2 py-1 w-20" type="number" step="0.01" placeholder="$0.00"
-                              value={p.dropi} onChange={(e) => setPrices((s) => ({ ...s, [it.id]: { ...priceFor(it.id), dropi: e.target.value } }))} />
-                          </div>
-                        )}
-                        {itemTotal > 0 && <span className="text-[12px] font-bold">= {money(itemTotal)}</span>}
-                      </div>
+                      {!isAdmin && (
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {costCount > 0 && (
+                            <div className="flex items-center gap-1.5">
+                              <label className="text-[11px] text-steel">Precio al costo (c/u)</label>
+                              <input className="text-[12px] rounded border border-rule bg-cloud px-2 py-1 w-20" type="number" step="0.01" placeholder="$0.00"
+                                value={p.cost} onChange={(e) => setPrices((s) => ({ ...s, [it.id]: { ...priceFor(it.id), cost: e.target.value } }))} />
+                            </div>
+                          )}
+                          {dropiCount > 0 && (
+                            <div className="flex items-center gap-1.5">
+                              <label className="text-[11px] text-steel">Precio Dropi (c/u)</label>
+                              <input className="text-[12px] rounded border border-rule bg-cloud px-2 py-1 w-20" type="number" step="0.01" placeholder="$0.00"
+                                value={p.dropi} onChange={(e) => setPrices((s) => ({ ...s, [it.id]: { ...priceFor(it.id), dropi: e.target.value } }))} />
+                            </div>
+                          )}
+                          {itemTotal > 0 && <span className="text-[12px] font-bold">= {money(itemTotal)}</span>}
+                        </div>
+                      )}
                     </div>
                   );
                 })}
               </div>
 
-              <div className="flex items-center gap-2 mt-3 flex-wrap">
-                {orderTotal > 0 && <span className="text-[13px] font-bold">Total: {money(orderTotal)}</span>}
-                <label className="text-[11px] text-steel ml-2">Cuotas</label>
-                <input className="text-[12px] rounded border border-rule bg-cloud px-2 py-1 w-16" type="number" min={1}
-                  value={installments[o.id] ?? "1"} onChange={(e) => setInstallments((s) => ({ ...s, [o.id]: e.target.value }))} />
-              </div>
-              {err[o.id] && <div className="text-red text-[11.5px] mt-1.5">{err[o.id]}</div>}
-
-              {rejecting === o.id ? (
-                <div className="mt-3 pt-3 border-t border-rule">
-                  <input className="text-[12px] rounded border border-rule bg-cloud px-2 py-1.5 w-full mb-2" placeholder="Motivo del rechazo" value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} />
-                  <div className="flex gap-2">
-                    <button type="button" disabled={busy || !rejectReason.trim()} className="text-[12px] font-bold bg-red text-white rounded px-3 py-1.5 cursor-pointer disabled:opacity-50" onClick={() => reject(o.id)}>Confirmar rechazo</button>
-                    <button type="button" className="text-[12px] text-steel cursor-pointer" onClick={() => { setRejecting(null); setRejectReason(""); }}>Cancelar</button>
-                  </div>
-                </div>
+              {isAdmin ? (
+                <div className="text-[11.5px] text-steel-dim italic mt-2">Nairoby define el precio.</div>
               ) : (
-                <div className="flex gap-2 mt-2.5">
-                  <button type="button" disabled={busy || !allPriced || orderTotal <= 0} className="text-[12px] font-bold bg-green text-white rounded-md px-3.5 py-1.5 cursor-pointer disabled:opacity-40" onClick={() => confirm(o)}>Confirmar precio</button>
-                  <button type="button" disabled={busy} className="text-[12px] font-semibold text-red cursor-pointer" onClick={() => setRejecting(o.id)}>Rechazar</button>
-                </div>
+                <>
+                  <div className="flex items-center gap-2 mt-3 flex-wrap">
+                    {orderTotal > 0 && <span className="text-[13px] font-bold">Total: {money(orderTotal)}</span>}
+                    <label className="text-[11px] text-steel ml-2">Cuotas</label>
+                    <input className="text-[12px] rounded border border-rule bg-cloud px-2 py-1 w-16" type="number" min={1}
+                      value={installments[o.id] ?? "1"} onChange={(e) => setInstallments((s) => ({ ...s, [o.id]: e.target.value }))} />
+                  </div>
+                  {err[o.id] && <div className="text-red text-[11.5px] mt-1.5">{err[o.id]}</div>}
+
+                  {rejecting === o.id ? (
+                    <div className="mt-3 pt-3 border-t border-rule">
+                      <input className="text-[12px] rounded border border-rule bg-cloud px-2 py-1.5 w-full mb-2" placeholder="Motivo del rechazo" value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} />
+                      <div className="flex gap-2">
+                        <button type="button" disabled={busy || !rejectReason.trim()} className="text-[12px] font-bold bg-red text-white rounded px-3 py-1.5 cursor-pointer disabled:opacity-50" onClick={() => reject(o.id)}>Confirmar rechazo</button>
+                        <button type="button" className="text-[12px] text-steel cursor-pointer" onClick={() => { setRejecting(null); setRejectReason(""); }}>Cancelar</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex gap-2 mt-2.5">
+                      <button type="button" disabled={busy || !allPriced || orderTotal <= 0} className="text-[12px] font-bold bg-green text-white rounded-md px-3.5 py-1.5 cursor-pointer disabled:opacity-40" onClick={() => confirm(o)}>Confirmar precio</button>
+                      <button type="button" disabled={busy} className="text-[12px] font-semibold text-red cursor-pointer" onClick={() => setRejecting(o.id)}>Rechazar</button>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           );

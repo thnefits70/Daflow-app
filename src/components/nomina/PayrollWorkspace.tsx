@@ -94,7 +94,7 @@ export function PayrollWorkspace({
       {tab === "bonosceo" && canGrantCeoBonus && <CeoBonusesPanel />}
       {tab === "comprasfinanzas" && canConfirmPersonalPurchaseFinance && (
         <div className="flex flex-col gap-5">
-          <PersonalPurchasesFinancePanel />
+          <PersonalPurchasesFinancePanel isAdmin={isAdmin} />
           <PersonalPurchasesTransferPanel isAdmin={isAdmin} />
         </div>
       )}
