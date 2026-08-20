@@ -9,6 +9,7 @@ import { CommissionTiersPanel } from "./CommissionTiersPanel";
 import { CeoBonusesPanel } from "./CeoBonusesPanel";
 import { PersonalPurchasesFinancePanel } from "@/components/personal-purchases/PersonalPurchasesFinancePanel";
 import { PersonalPurchasesTransferPanel } from "@/components/personal-purchases/PersonalPurchasesTransferPanel";
+import { PersonalPurchasesHistoryPanel } from "@/components/personal-purchases/PersonalPurchasesHistoryPanel";
 import { SalaryAdvanceApprovalPanel } from "@/components/salary-advances/SalaryAdvanceApprovalPanel";
 import { ManagementDeductionsPanel } from "./ManagementDeductionsPanel";
 
@@ -96,6 +97,7 @@ export function PayrollWorkspace({
         <div className="flex flex-col gap-5">
           <PersonalPurchasesFinancePanel isAdmin={isAdmin} />
           <PersonalPurchasesTransferPanel isAdmin={isAdmin} />
+          <PersonalPurchasesHistoryPanel />
         </div>
       )}
       {tab === "anticipos" && canManageSalaryAdvances && <SalaryAdvanceApprovalPanel />}
