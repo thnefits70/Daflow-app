@@ -305,7 +305,7 @@ model User {
   fixedMonthlyBonusesProposed   FixedMonthlyBonus[]    @relation("FixedMonthlyBonusProposedBy")
 
   personalPurchaseOrders PersonalPurchaseOrder[] @relation("PersonalPurchaseOrderEmployee")
-  employeeBankAccount    EmployeeBankAccount?
+  employeeBankAccounts   EmployeeBankAccount[]
   salaryAdvances         SalaryAdvance[]         @relation("SalaryAdvanceEmployee")
   managementDeductions   ManagementDeduction[]   @relation("ManagementDeductionEmployee")
 
@@ -2857,12 +2857,14 @@ model Notification {
   @@index([ownerId, createdAt])
 }
 
-// Mismos campos que SupplierBankAccount/AdminPaymentPayeeBankAccount, pero
-// una sola cuenta por colaborador (autoservicio, sin aprobación para
-// registrarla) — reutiliza el enum HolderIdType ya existente.
+// Mismos campos que SupplierBankAccount/AdminPaymentPayeeBankAccount.
+// Confirmado 2026-08-20: un colaborador puede registrar varias cuentas
+// (autoservicio, sin aprobación), pero solo una está marcada isSelected —
+// esa es la que se usa para transferir sus anticipos. Reutiliza el enum
+// HolderIdType ya existente.
 model EmployeeBankAccount {
   id         String @id @default(cuid())
-  employeeId String @unique
+  employeeId String
   employee   User   @relation(fields: [employeeId], references: [id], onDelete: Cascade)
 
   bankName          String
@@ -2871,9 +2873,12 @@ model EmployeeBankAccount {
   bankAccountHolder String
   holderIdType      HolderIdType?
   holderIdNumber    String?
+  isSelected        Boolean       @default(true)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([employeeId])
 }
 
 // Confirmado 2026-08-20: cuenta única de la empresa para recibir
@@ -2898,14 +2903,23 @@ enum SalaryAdvanceStatus {
   REJECTED
 }
 
+// Confirmado 2026-08-20: solo se pide arriba de $100 (validado en la API,
+// ver SALARY_ADVANCE_NO_JUSTIFICATION_MAX en payroll.ts). EMERGENCIA_FAMILIAR
+// no necesita descripción; OTRO sí (mínimo de caracteres validado en la API).
+enum SalaryAdvanceReason {
+  EMERGENCIA_FAMILIAR
+  OTRO
+}
+
 model SalaryAdvance {
   id         String @id @default(cuid())
   employeeId String
   employee   User   @relation("SalaryAdvanceEmployee", fields: [employeeId], references: [id], onDelete: Cascade)
 
   amount        Float
-  justification String? // obligatorio si amount > 100 (validado en la API)
-  installments  Int     @default(1) // 1, 2 o 3 (2/3 solo si amount > 50)
+  reason        SalaryAdvanceReason? // obligatorio si amount > 100
+  justification String? // obligatorio si amount > 100 y reason = OTRO
+  installments  Int                  @default(1) // 1, 2 o 3 (2/3 solo si amount > 50)
 
   status           SalaryAdvanceStatus @default(PENDING)
   approvedAt       DateTime?

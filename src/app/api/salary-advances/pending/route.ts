@@ -11,7 +11,7 @@ export async function GET() {
     orderBy: { createdAt: "asc" },
   });
   const accounts = await prisma.employeeBankAccount.findMany({
-    where: { employeeId: { in: advances.map((a) => a.employeeId) } },
+    where: { employeeId: { in: advances.map((a) => a.employeeId) }, isSelected: true },
   });
   const byEmployee = Object.fromEntries(accounts.map((a) => [a.employeeId, a]));
   return NextResponse.json(advances.map((a) => ({ ...a, bankAccount: byEmployee[a.employeeId] ?? null })));

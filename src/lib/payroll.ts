@@ -189,3 +189,50 @@ export function totalsFromLineItems(items: { amount: number; kind: "INCOME" | "E
   const totalExpense = items.filter((i) => i.kind === "EXPENSE").reduce((s, i) => s + i.amount, 0);
   return { totalIncome, totalExpense, netTotal: totalIncome - totalExpense };
 }
+
+// Confirmado 2026-08-20, reglas de anticipos definidas con el usuario:
+// mínimo $20, hasta $100 sin justificar, de $100 a $200 con motivo
+// obligatorio (emergencia familiar u otro con descripción breve).
+export const SALARY_ADVANCE_MIN_AMOUNT = 20;
+export const SALARY_ADVANCE_NO_JUSTIFICATION_MAX = 100;
+export const SALARY_ADVANCE_MAX_AMOUNT = 200;
+// Tope de saldo pendiente de pago (sumando varios anticipos) — una vez
+// alcanzado, se bloquean nuevas solicitudes hasta que las cuotas de los
+// anticipos actuales se terminen de pagar (ver pendingSalaryAdvanceBalance).
+export const SALARY_ADVANCE_PENDING_CAP = 150;
+
+// Cuánto le queda pendiente de pago a un colaborador en anticipos: el total
+// de los PENDING (podrían aprobarse) más el saldo sin pagar de los APPROVED
+// — una cuota cuenta como pagada solo cuando su quincena Q1 correspondiente
+// ya fue PUBLISHED (no alcanza con que el mes calendario haya pasado, un
+// período puede seguir en borrador). Mismo criterio que buildAutomaticLineItems
+// usa para decidir qué cuota corresponde a cada período.
+export async function pendingSalaryAdvanceBalance(employeeId: string): Promise<number> {
+  const advances = await prisma.salaryAdvance.findMany({
+    where: { employeeId, status: { in: ["PENDING", "APPROVED"] } },
+  });
+  if (advances.length === 0) return 0;
+
+  const publishedPeriods = await prisma.payrollPeriod.findMany({
+    where: { status: "PUBLISHED" },
+    select: { period: true },
+  });
+  const publishedSet = new Set(publishedPeriods.map((p) => p.period));
+
+  let total = 0;
+  for (const a of advances) {
+    if (a.status === "PENDING") {
+      total += a.amount;
+      continue;
+    }
+    if (!a.firstPayoutMonth) {
+      total += a.amount;
+      continue;
+    }
+    for (let idx = 0; idx < a.installments; idx++) {
+      const month = addMonthsToMonthStr(a.firstPayoutMonth, idx);
+      if (!publishedSet.has(`${month}-Q1`)) total += installmentAmount(a.amount, a.installments, idx);
+    }
+  }
+  return Math.round(total * 100) / 100;
+}

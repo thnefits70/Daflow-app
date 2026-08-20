@@ -1,17 +1,27 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Banknote } from "lucide-react";
+import { Banknote, CheckCircle2, Circle, Plus } from "lucide-react";
 
 type BankAccount = {
-  bankName: string; bankAccountType: string; bankAccountNumber: string; bankAccountHolder: string;
-  holderIdType: "RUC" | "CEDULA" | null; holderIdNumber: string | null;
-} | null;
+  id: string; bankName: string; bankAccountType: string; bankAccountNumber: string; bankAccountHolder: string;
+  holderIdType: "RUC" | "CEDULA" | null; holderIdNumber: string | null; isSelected: boolean;
+};
 
 type Advance = {
   id: string; amount: number; installments: number; status: string;
-  justification: string | null; transferProofUrl: string | null; firstPayoutMonth: string | null;
+  justification: string | null; reason: "EMERGENCIA_FAMILIAR" | "OTRO" | null;
+  transferProofUrl: string | null; firstPayoutMonth: string | null;
 };
+
+// Confirmado 2026-08-20 — reglas de anticipos: $20 mínimo, hasta $100 sin
+// justificar, de $100 a $200 con motivo obligatorio, y un tope de $150 de
+// saldo pendiente de pago (sumando varios anticipos a la vez) que bloquea
+// nuevas solicitudes hasta que las cuotas actuales se terminen de pagar.
+const MIN_AMOUNT = 20;
+const NO_REASON_MAX = 100;
+const MAX_AMOUNT = 200;
+const PENDING_CAP = 150;
 
 function money(n: number) {
   return `$${n.toFixed(2)}`;
@@ -23,15 +33,14 @@ const STATUS_LABEL: Record<string, { label: string; color: string }> = {
   REJECTED: { label: "Rechazado", color: "#C4453A" },
 };
 
-function BankAccountForm({ account, onSaved }: { account: BankAccount; onSaved: () => void }) {
-  const [bankName, setBankName] = useState(account?.bankName ?? "");
-  const [bankAccountType, setBankAccountType] = useState(account?.bankAccountType ?? "Ahorros");
-  const [bankAccountNumber, setBankAccountNumber] = useState(account?.bankAccountNumber ?? "");
-  const [bankAccountHolder, setBankAccountHolder] = useState(account?.bankAccountHolder ?? "");
-  const [holderIdNumber, setHolderIdNumber] = useState(account?.holderIdNumber ?? "");
+function BankAccountForm({ hasExisting, onSaved, onCancel }: { hasExisting: boolean; onSaved: () => void; onCancel: () => void }) {
+  const [bankName, setBankName] = useState("");
+  const [bankAccountType, setBankAccountType] = useState("Ahorros");
+  const [bankAccountNumber, setBankAccountNumber] = useState("");
+  const [bankAccountHolder, setBankAccountHolder] = useState("");
+  const [holderIdNumber, setHolderIdNumber] = useState("");
   const [bankNames, setBankNames] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
-  const [saved, setSaved] = useState(false);
 
   useEffect(() => {
     fetch("/api/employee-bank-account/bank-names").then((r) => (r.ok ? r.json() : [])).then(setBankNames);
@@ -41,18 +50,19 @@ function BankAccountForm({ account, onSaved }: { account: BankAccount; onSaved: 
     if (!bankName.trim() || !bankAccountNumber.trim() || !bankAccountHolder.trim() || !holderIdNumber.trim()) return;
     setBusy(true);
     await fetch("/api/employee-bank-account", {
-      method: "PATCH",
+      method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ bankName: bankName.trim(), bankAccountType, bankAccountNumber: bankAccountNumber.trim(), bankAccountHolder: bankAccountHolder.trim(), holderIdType: "CEDULA", holderIdNumber: holderIdNumber.trim() }),
     });
     setBusy(false);
-    setSaved(true);
     onSaved();
   }
 
   return (
     <div className="bg-surface border border-rule rounded-md p-4 mb-4">
-      <div className="text-[11px] font-semibold uppercase tracking-wide text-steel mb-3">Mi cuenta bancaria</div>
+      <div className="text-[11px] font-semibold uppercase tracking-wide text-steel mb-3">
+        {hasExisting ? "Agregar otra cuenta bancaria" : "Mi cuenta bancaria"}
+      </div>
       <div className="flex flex-col gap-2 max-w-sm">
         <input list="bank-names-datalist" className="text-[12.5px] rounded border border-rule bg-cloud px-2.5 py-1.5" placeholder="Banco" value={bankName} onChange={(e) => setBankName(e.target.value)} />
         <datalist id="bank-names-datalist">{bankNames.map((n) => (<option key={n} value={n} />))}</datalist>
@@ -63,55 +73,139 @@ function BankAccountForm({ account, onSaved }: { account: BankAccount; onSaved: 
         <input className="text-[12.5px] rounded border border-rule bg-cloud px-2.5 py-1.5" placeholder="N° de cuenta" value={bankAccountNumber} onChange={(e) => setBankAccountNumber(e.target.value)} />
         <input className="text-[12.5px] rounded border border-rule bg-cloud px-2.5 py-1.5" placeholder="Nombre del titular" value={bankAccountHolder} onChange={(e) => setBankAccountHolder(e.target.value)} />
         <input className="text-[12.5px] rounded border border-rule bg-cloud px-2.5 py-1.5" placeholder="N° de cédula" value={holderIdNumber} onChange={(e) => setHolderIdNumber(e.target.value)} />
-        <button type="button" disabled={busy} className="text-[12px] font-bold bg-blue text-white rounded px-3 py-1.5 cursor-pointer disabled:opacity-50 self-start" onClick={save}>
-          {busy ? "Guardando…" : "Guardar cuenta"}
+        <div className="flex gap-2">
+          <button type="button" disabled={busy} className="text-[12px] font-bold bg-blue text-white rounded px-3 py-1.5 cursor-pointer disabled:opacity-50" onClick={save}>
+            {busy ? "Guardando…" : "Guardar cuenta"}
+          </button>
+          {hasExisting && (
+            <button type="button" disabled={busy} className="text-[12px] font-semibold text-steel rounded px-3 py-1.5 cursor-pointer" onClick={onCancel}>
+              Cancelar
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function BankAccountList({ accounts, onSelect, onAddNew, busy }: { accounts: BankAccount[]; onSelect: (id: string) => void; onAddNew: () => void; busy: boolean }) {
+  return (
+    <div className="bg-surface border border-rule rounded-md p-4 mb-4">
+      <div className="text-[11px] font-semibold uppercase tracking-wide text-steel mb-3">Mi cuenta bancaria</div>
+      <div className="flex flex-col gap-2 max-w-sm">
+        {accounts.map((a) => (
+          <button
+            key={a.id}
+            type="button"
+            disabled={busy || a.isSelected}
+            onClick={() => onSelect(a.id)}
+            className={`text-left rounded-md border px-3 py-2.5 cursor-pointer disabled:cursor-default ${a.isSelected ? "border-teal bg-teal/10" : "border-rule hover:border-steel"}`}
+          >
+            <div className="flex items-center gap-2">
+              {a.isSelected ? <CheckCircle2 size={15} className="text-teal shrink-0" /> : <Circle size={15} className="text-steel-dim shrink-0" />}
+              <span className="text-[12.5px] font-semibold text-ink">{a.bankName}</span>
+              <span className="text-[11px] text-steel-dim">{a.bankAccountType}</span>
+              {a.isSelected && <span className="ml-auto text-[10px] font-semibold text-teal uppercase tracking-wide">Cuenta activa</span>}
+            </div>
+            <div className="text-[12px] text-steel-dim mt-0.5">{a.bankAccountNumber} · {a.bankAccountHolder}</div>
+          </button>
+        ))}
+        <button type="button" onClick={onAddNew} className="flex items-center gap-1.5 text-[12px] font-semibold text-blue cursor-pointer self-start mt-1">
+          <Plus size={13} /> Agregar otra cuenta
         </button>
-        {saved && <div className="text-green text-[11.5px]">Guardado.</div>}
+        {accounts.length > 1 && (
+          <div className="text-[11px] text-steel-dim">Solo la cuenta activa se usa para transferir tus anticipos.</div>
+        )}
       </div>
     </div>
   );
 }
 
 export function SalaryAdvancesPanel() {
-  const [account, setAccount] = useState<BankAccount>(null);
+  const [accounts, setAccounts] = useState<BankAccount[] | null>(null);
+  const [showAddAccount, setShowAddAccount] = useState(false);
+  const [accountBusy, setAccountBusy] = useState(false);
   const [advances, setAdvances] = useState<Advance[] | null>(null);
+  const [pendingTotal, setPendingTotal] = useState(0);
   const [amount, setAmount] = useState("");
+  const [reason, setReason] = useState<"EMERGENCIA_FAMILIAR" | "OTRO" | null>(null);
   const [justification, setJustification] = useState("");
   const [installments, setInstallments] = useState(1);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
 
+  function loadAccounts() {
+    fetch("/api/employee-bank-account").then((r) => (r.ok ? r.json() : [])).then((list: BankAccount[]) => {
+      setAccounts(list);
+      setShowAddAccount(false);
+    });
+  }
   function load() {
-    fetch("/api/employee-bank-account").then((r) => (r.ok ? r.json() : null)).then(setAccount);
-    fetch("/api/salary-advances").then((r) => (r.ok ? r.json() : [])).then(setAdvances);
+    loadAccounts();
+    fetch("/api/salary-advances")
+      .then((r) => (r.ok ? r.json() : { items: [], pendingTotal: 0 }))
+      .then((d) => { setAdvances(d.items); setPendingTotal(d.pendingTotal ?? 0); });
   }
   useEffect(load, []);
 
+  const account = accounts?.find((a) => a.isSelected) ?? null;
+
+  async function selectAccount(id: string) {
+    setAccountBusy(true);
+    await fetch("/api/employee-bank-account", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ selectId: id }),
+    });
+    setAccountBusy(false);
+    loadAccounts();
+  }
+
   const amt = Number(amount);
-  const needsJustification = amt > 100;
+  const amountInRange = !!amount && amt >= MIN_AMOUNT && amt <= MAX_AMOUNT;
+  const needsReason = amt > NO_REASON_MAX;
   const canInstallments = amt > 50;
+  const blocked = pendingTotal >= PENDING_CAP;
+  const reasonOk = !needsReason || reason === "EMERGENCIA_FAMILIAR" || (reason === "OTRO" && justification.trim().length >= 10);
+  const canSubmit = !blocked && amountInRange && reasonOk;
 
   async function submit() {
-    if (!amt || amt <= 0) return;
+    if (!canSubmit) return;
     setBusy(true);
     setErr("");
     const res = await fetch("/api/salary-advances", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ amount: amt, justification: justification.trim() || undefined, installments: canInstallments ? installments : 1 }),
+      body: JSON.stringify({
+        amount: amt,
+        reason: needsReason ? reason ?? undefined : undefined,
+        justification: needsReason && reason === "OTRO" ? justification.trim() : undefined,
+        installments: canInstallments ? installments : 1,
+      }),
     });
     setBusy(false);
     const data = await res.json().catch(() => null);
     if (!res.ok) { setErr(data?.error ?? "No se pudo enviar."); return; }
-    setAmount(""); setJustification(""); setInstallments(1);
+    setAmount(""); setReason(null); setJustification(""); setInstallments(1);
     load();
   }
 
-  if (!advances) return <div className="text-steel text-[13px]">Cargando…</div>;
+  if (!advances || !accounts) return <div className="text-steel text-[13px]">Cargando…</div>;
 
   return (
     <div>
-      <BankAccountForm account={account} onSaved={load} />
+      <div className="bg-surface border border-rule rounded-md p-3.5 mb-4 text-[12px] text-steel leading-relaxed">
+        Un anticipo es un adelanto de tu propio sueldo — <b className="text-ink">no es un préstamo</b> ni
+        genera intereses ni deuda aparte. Se descuenta automáticamente de tu rol, en las cuotas mensuales que
+        elijas al pedirlo.
+      </div>
+
+      {accounts.length > 0 && !showAddAccount && (
+        <BankAccountList accounts={accounts} onSelect={selectAccount} onAddNew={() => setShowAddAccount(true)} busy={accountBusy} />
+      )}
+      {(accounts.length === 0 || showAddAccount) && (
+        <BankAccountForm hasExisting={accounts.length > 0} onSaved={loadAccounts} onCancel={() => setShowAddAccount(false)} />
+      )}
 
       <div className="bg-surface border border-rule rounded-md p-4 mb-4">
         <div className="text-[11px] font-semibold uppercase tracking-wide text-steel mb-3 flex items-center gap-1.5">
@@ -119,12 +213,24 @@ export function SalaryAdvancesPanel() {
         </div>
         {!account ? (
           <div className="text-[12.5px] text-steel-dim">Primero registrá tu cuenta bancaria arriba.</div>
+        ) : blocked ? (
+          <div className="text-[12.5px] text-red leading-relaxed">
+            Tenés {money(pendingTotal)} pendientes de pago en anticipos (tope {money(PENDING_CAP)}). Se
+            habilita de nuevo cuando termines de pagar las cuotas de los anticipos actuales.
+          </div>
         ) : (
           <div className="flex flex-col gap-2 max-w-sm">
+            <div className="text-[11px] text-steel-dim">
+              Mínimo {money(MIN_AMOUNT)} · hasta {money(NO_REASON_MAX)} sin explicar el motivo · de {money(NO_REASON_MAX)} a{" "}
+              {money(MAX_AMOUNT)} con motivo obligatorio
+            </div>
             <input className="text-[13px] rounded border border-rule bg-cloud px-2.5 py-1.5" type="number" step="0.01" placeholder="Monto" value={amount} onChange={(e) => setAmount(e.target.value)} />
+            {amount && !amountInRange && (
+              <div className="text-red text-[11.5px]">El anticipo debe ser entre {money(MIN_AMOUNT)} y {money(MAX_AMOUNT)}.</div>
+            )}
             {canInstallments && (
               <div>
-                <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Pagarlo en</label>
+                <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Descontar del rol en</label>
                 <div className="flex gap-2">
                   {[1, 2, 3].map((n) => (
                     <button key={n} type="button" onClick={() => setInstallments(n)} className={`text-[12px] font-semibold rounded px-3 py-1.5 border cursor-pointer ${installments === n ? "border-teal text-teal bg-teal/10" : "border-rule text-steel"}`}>
@@ -134,11 +240,27 @@ export function SalaryAdvancesPanel() {
                 </div>
               </div>
             )}
-            {needsJustification && (
-              <textarea className="text-[12.5px] rounded border border-rule bg-cloud px-2.5 py-1.5" placeholder="Contá brevemente el motivo (obligatorio arriba de $100)" value={justification} onChange={(e) => setJustification(e.target.value)} rows={2} />
+            {needsReason && (
+              <div>
+                <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Motivo (obligatorio arriba de {money(NO_REASON_MAX)})</label>
+                <div className="flex gap-2">
+                  <button type="button" onClick={() => setReason("EMERGENCIA_FAMILIAR")} className={`text-[12px] font-semibold rounded px-3 py-1.5 border cursor-pointer ${reason === "EMERGENCIA_FAMILIAR" ? "border-teal text-teal bg-teal/10" : "border-rule text-steel"}`}>
+                    Emergencia familiar
+                  </button>
+                  <button type="button" onClick={() => setReason("OTRO")} className={`text-[12px] font-semibold rounded px-3 py-1.5 border cursor-pointer ${reason === "OTRO" ? "border-teal text-teal bg-teal/10" : "border-rule text-steel"}`}>
+                    Otro motivo
+                  </button>
+                </div>
+              </div>
+            )}
+            {needsReason && reason === "OTRO" && (
+              <textarea className="text-[12.5px] rounded border border-rule bg-cloud px-2.5 py-1.5" placeholder="Contá brevemente el motivo (mínimo 10 caracteres)" value={justification} onChange={(e) => setJustification(e.target.value)} rows={2} />
+            )}
+            {pendingTotal > 0 && (
+              <div className="text-[11px] text-steel-dim">Ya tenés {money(pendingTotal)} pendientes de pago (tope {money(PENDING_CAP)}).</div>
             )}
             {err && <div className="text-red text-[12.5px]">{err}</div>}
-            <button type="button" disabled={busy || !amt} className="text-[13px] font-bold bg-blue text-white rounded-md px-4 py-2 cursor-pointer disabled:opacity-40 self-start" onClick={submit}>
+            <button type="button" disabled={busy || !canSubmit} className="text-[13px] font-bold bg-blue text-white rounded-md px-4 py-2 cursor-pointer disabled:opacity-40 self-start" onClick={submit}>
               {busy ? "Enviando…" : "Enviar solicitud"}
             </button>
           </div>
@@ -154,7 +276,7 @@ export function SalaryAdvancesPanel() {
             return (
               <div key={a.id} className="flex items-center gap-3 text-[12.5px] py-2 border-b border-rule last:border-0 flex-wrap">
                 <span className="font-bold tabular-nums">{money(a.amount)}</span>
-                {a.installments > 1 && <span className="text-steel-dim">({a.installments} cuotas)</span>}
+                {a.installments > 1 && <span className="text-steel-dim">({a.installments} cuotas, descontado del rol)</span>}
                 <span className="text-[10.5px] font-semibold rounded-full px-2 py-0.5" style={{ color: s.color, border: `1px solid ${s.color}` }}>{s.label}</span>
               </div>
             );

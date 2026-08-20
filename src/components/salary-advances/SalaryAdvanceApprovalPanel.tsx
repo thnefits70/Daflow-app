@@ -5,10 +5,12 @@ import { compressImage } from "@/lib/compressImage";
 import { uploadFile } from "@/lib/uploadFile";
 
 type Advance = {
-  id: string; amount: number; installments: number; justification: string | null;
+  id: string; amount: number; installments: number; justification: string | null; reason: "EMERGENCIA_FAMILIAR" | "OTRO" | null;
   employee: { name: string };
   bankAccount: { bankName: string; bankAccountType: string; bankAccountNumber: string; bankAccountHolder: string; holderIdNumber: string | null } | null;
 };
+
+const REASON_LABEL: Record<string, string> = { EMERGENCIA_FAMILIAR: "Emergencia familiar", OTRO: "Otro motivo" };
 
 function money(n: number) {
   return `$${n.toFixed(2)}`;
@@ -76,6 +78,7 @@ export function SalaryAdvanceApprovalPanel() {
         {items.map((a) => (
           <div key={a.id} className="bg-surface border border-rule rounded-md p-3.5">
             <div className="font-bold text-[13px]">{a.employee.name} — {money(a.amount)}{a.installments > 1 ? ` (${a.installments} cuotas)` : ""}</div>
+            {a.reason && <div className="text-[11.5px] text-steel mt-0.5">Motivo: {REASON_LABEL[a.reason] ?? a.reason}</div>}
             {a.justification && <div className="text-[12px] text-steel-dim mt-0.5">"{a.justification}"</div>}
             {a.bankAccount ? (
               <div className="text-[11.5px] text-steel mt-1.5">
