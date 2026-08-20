@@ -15,19 +15,16 @@ type Order = {
   employee: { name: string };
   items: Item[];
 };
-type PickupOrder = {
-  id: string;
-  employee: { name: string };
-  items: { employeeProductName: string; confirmedProductName: string | null; quantity: number }[];
-};
 
 const RELATION_LABEL: Record<string, string> = { SELF: "él/ella mismo/a", MINOR_CHILD: "hijo/a menor", OTHER_FAMILY: "otra persona" };
 
-// Confirmado 2026-08-18: pantalla de Daniel — confirmar acá es lo que
-// habilita el retiro físico de bodega. Por cada producto corrige/normaliza
-// el nombre según el sistema JUST (lo que escribió el colaborador es solo
-// una referencia de memoria) — ese nombre corregido es el que se usa
-// después para el enfriamiento de 6 meses.
+// Confirmado 2026-08-20: pantalla de Daniel — confirmar acá es un solo
+// paso que hace dos cosas a la vez: corrige/normaliza el nombre de cada
+// producto según el sistema JUST (lo que escribió el colaborador es solo
+// una referencia de memoria, y ese nombre corregido es el que se usa
+// después para el enfriamiento de 6 meses) Y habilita el retiro físico —
+// el colaborador recibe el aviso de "ya podés retirarlo" en el mismo
+// momento. Ya no hay un segundo paso manual de "aprobar salida".
 export function PersonalPurchasesInventoryPanel() {
   const [orders, setOrders] = useState<Order[] | null>(null);
   const [names, setNames] = useState<Record<string, string>>({});
@@ -35,8 +32,6 @@ export function PersonalPurchasesInventoryPanel() {
   const [rejectReason, setRejectReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [zoomedPhoto, setZoomedPhoto] = useState<string | null>(null);
-  const [pickupOrders, setPickupOrders] = useState<PickupOrder[] | null>(null);
-  const [pickupBusy, setPickupBusy] = useState(false);
 
   function load() {
     fetch("/api/personal-purchases/pending-inventory").then((r) => (r.ok ? r.json() : [])).then((rows: Order[]) => {
@@ -49,18 +44,6 @@ export function PersonalPurchasesInventoryPanel() {
     });
   }
   useEffect(load, []);
-
-  function loadPickup() {
-    fetch("/api/personal-purchases/pending-pickup").then((r) => (r.ok ? r.json() : [])).then(setPickupOrders);
-  }
-  useEffect(loadPickup, []);
-
-  async function approvePickup(id: string) {
-    setPickupBusy(true);
-    await fetch(`/api/personal-purchases/${id}/mark-picked-up`, { method: "POST" });
-    setPickupBusy(false);
-    loadPickup();
-  }
 
   async function confirm(order: Order) {
     setBusy(true);
@@ -150,29 +133,6 @@ export function PersonalPurchasesInventoryPanel() {
             </div>
           );
         })}
-      </div>
-
-      <div className="mt-6 pt-5 border-t border-rule">
-        <div className="text-[11px] font-semibold uppercase tracking-wide text-steel mb-3">Listas para retirar ({pickupOrders?.length ?? 0})</div>
-        {(pickupOrders?.length ?? 0) === 0 ? (
-          <div className="border-[1.5px] border-dashed border-rule rounded-md p-6 text-center text-steel text-[13px]">Nada esperando salida por ahora.</div>
-        ) : (
-          <div className="flex flex-col gap-2.5">
-            {pickupOrders!.map((o) => (
-              <div key={o.id} className="flex items-center gap-3 bg-surface border border-rule rounded-md p-3">
-                <div className="flex-1 min-w-0">
-                  <div className="font-bold text-[12.5px]">{o.employee.name}</div>
-                  <div className="text-[11px] text-steel-dim">
-                    {o.items.map((it) => `${it.confirmedProductName ?? it.employeeProductName} × ${it.quantity}`).join(", ")}
-                  </div>
-                </div>
-                <button type="button" disabled={pickupBusy} className="text-[12px] font-bold bg-green text-white rounded-md px-3.5 py-1.5 cursor-pointer disabled:opacity-50 shrink-0" onClick={() => approvePickup(o.id)}>
-                  Aprobar salida
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
       </div>
 
       {zoomedPhoto && (

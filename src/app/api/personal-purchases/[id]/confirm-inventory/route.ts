@@ -12,13 +12,12 @@ const schema = z.object({
   items: z.array(z.object({ itemId: z.string().min(1), confirmedProductName: z.string().trim().min(1) })).min(1),
 });
 
-// Confirmado 2026-08-18/20: la confirmación de Daniel es el momento en que
-// se corrige el nombre de cada producto según JUST — recién con ese nombre
-// confiable se puede calcular qué unidades califican a precio al costo
-// (enfriamiento de 6 meses). Esto YA NO habilita el retiro físico (eso lo
-// hace mark-picked-up, cuando Daniel de verdad observa y aprueba el
-// producto que se lleva el colaborador) — acá es solo un trámite de
-// escritorio. A Andrés le llega solo un aviso informativo (campanita); a
+// Confirmado 2026-08-20 (revertido el mismo día): la confirmación de Daniel
+// es un solo paso — corrige el nombre de cada producto según JUST (con eso
+// se calculan las unidades a precio al costo, enfriamiento de 6 meses) Y
+// habilita el retiro físico al mismo tiempo. Ya no existe un segundo paso
+// manual de "aprobar salida"; el push de "ya podés retirarlo" sale acá
+// mismo. A Andrés le llega solo un aviso informativo (campanita); a
 // Nairoby le llega como pendiente de acción (ella tiene que fijar el precio).
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   if (!(await canConfirmPersonalPurchaseInventory())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
@@ -52,9 +51,16 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
 
   const isAdmin = session!.user.role === "admin";
+  const now = new Date();
   const updated = await prisma.personalPurchaseOrder.update({
     where: { id },
-    data: { status: "PENDING_FINANCE", inventoryConfirmedAt: new Date(), inventoryConfirmedById: isAdmin ? null : session!.user.id },
+    data: {
+      status: "PENDING_FINANCE",
+      inventoryConfirmedAt: now,
+      inventoryConfirmedById: isAdmin ? null : session!.user.id,
+      pickedUpAt: now,
+      pickedUpApprovedById: isAdmin ? null : session!.user.id,
+    },
   });
 
   const itemCount = order.items.length;
@@ -74,8 +80,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
 
   await sendPushToOwner(order.employee.id, {
-    title: "🛒 Tu compra personal fue confirmada",
-    body: "Daniel te avisa cuando esté lista para retirar.",
+    title: "✅ Ya podés retirarlo",
+    body: "Daniel ya lo tiene listo en bodega.",
     url: "/area/compras-personales",
   }).catch(() => null);
 
