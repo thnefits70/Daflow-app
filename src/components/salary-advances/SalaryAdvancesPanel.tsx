@@ -12,6 +12,7 @@ type Advance = {
   id: string; amount: number; installments: number; status: string;
   justification: string | null; reason: "EMERGENCIA_FAMILIAR" | "OTRO" | null;
   transferProofUrl: string | null; firstPayoutMonth: string | null;
+  createdAt: string;
 };
 
 // Confirmado 2026-08-20 — reglas de anticipos: $20 mínimo, hasta $100 sin
@@ -27,10 +28,24 @@ function money(n: number) {
   return `$${n.toFixed(2)}`;
 }
 
+function formatDate(iso: string) {
+  return new Date(iso).toLocaleDateString("es-EC", { day: "numeric", month: "short", year: "numeric" });
+}
+
+function formatMonth(ym: string) {
+  const [y, m] = ym.split("-").map(Number);
+  return new Date(y, m - 1, 1).toLocaleDateString("es-EC", { month: "long", year: "numeric" });
+}
+
 const STATUS_LABEL: Record<string, { label: string; color: string }> = {
   PENDING: { label: "Esperando aprobación", color: "#D9A441" },
   APPROVED: { label: "Aprobado y transferido", color: "#22C55E" },
   REJECTED: { label: "Rechazado", color: "#C4453A" },
+};
+
+const REASON_LABEL: Record<string, string> = {
+  EMERGENCIA_FAMILIAR: "Emergencia familiar",
+  OTRO: "Otro motivo",
 };
 
 function BankAccountForm({ hasExisting, onSaved, onCancel }: { hasExisting: boolean; onSaved: () => void; onCancel: () => void }) {
@@ -274,10 +289,19 @@ export function SalaryAdvancesPanel() {
           {advances.map((a) => {
             const s = STATUS_LABEL[a.status];
             return (
-              <div key={a.id} className="flex items-center gap-3 text-[12.5px] py-2 border-b border-rule last:border-0 flex-wrap">
-                <span className="font-bold tabular-nums">{money(a.amount)}</span>
-                {a.installments > 1 && <span className="text-steel-dim">({a.installments} cuotas, descontado del rol)</span>}
-                <span className="text-[10.5px] font-semibold rounded-full px-2 py-0.5" style={{ color: s.color, border: `1px solid ${s.color}` }}>{s.label}</span>
+              <div key={a.id} className="py-2 border-b border-rule last:border-0">
+                <div className="flex items-center gap-3 text-[12.5px] flex-wrap">
+                  <span className="font-bold tabular-nums">{money(a.amount)}</span>
+                  {a.installments > 1 && <span className="text-steel-dim">({a.installments} cuotas, descontado del rol)</span>}
+                  <span className="text-[10.5px] font-semibold rounded-full px-2 py-0.5" style={{ color: s.color, border: `1px solid ${s.color}` }}>{s.label}</span>
+                </div>
+                <div className="text-[11.5px] text-steel-dim mt-0.5">
+                  Pedido el {formatDate(a.createdAt)}
+                  {a.reason && <> · {REASON_LABEL[a.reason]}</>}
+                  {a.status === "APPROVED" && a.firstPayoutMonth && <> · Descuento empieza en {formatMonth(a.firstPayoutMonth)}</>}
+                  {a.status === "PENDING" && <> · El descuento en el rol empieza una vez que se apruebe, puede tardar</>}
+                </div>
+                {a.justification && <div className="text-[11.5px] text-steel-dim mt-0.5 italic">&ldquo;{a.justification}&rdquo;</div>}
               </div>
             );
           })}
