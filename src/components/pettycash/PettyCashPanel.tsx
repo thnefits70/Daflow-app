@@ -348,6 +348,10 @@ function BoxCard({
     router.refresh();
   }
 
+  function clearDesembolso() {
+    setAmount(""); setDescription(""); setProofUrl(null); setReason(""); setProofVerifyResult(null); setErr("");
+  }
+
   async function submitFund() {
     const n = Number(fundAmount);
     if (Number.isNaN(n) || n <= 0) { setErr("Ingresa un monto válido."); return; }
@@ -623,14 +627,26 @@ function BoxCard({
           ) : (
             <div className="mb-2.5">{uploading ? <div className="text-[11.5px] text-steel">Subiendo…</div> : <UploadBox label="📷 Subir comprobante" folder="petty-cash" onFile={(f) => doUpload(f, "desembolso")} onCaptured={(url) => applyProof("desembolso", url)} />}</div>
           )}
-          <button
-            type="button"
-            disabled={busy || proofVerifying || (!!proofUrl && proofVerifyResult?.matches === false)}
-            className="rounded bg-blue text-white px-3.5 py-2 text-[12.5px] font-semibold cursor-pointer disabled:opacity-60"
-            onClick={submitDesembolso}
-          >
-            Guardar desembolso
-          </button>
+          <div className="flex items-center gap-2.5">
+            <button
+              type="button"
+              disabled={busy || proofVerifying || (!!proofUrl && proofVerifyResult?.matches === false)}
+              className="rounded bg-blue text-white px-3.5 py-2 text-[12.5px] font-semibold cursor-pointer disabled:opacity-60"
+              onClick={submitDesembolso}
+            >
+              Guardar desembolso
+            </button>
+            {(description || amount || proofUrl) && (
+              <button
+                type="button"
+                disabled={busy}
+                className="text-steel text-[11.5px] cursor-pointer disabled:opacity-60"
+                onClick={clearDesembolso}
+              >
+                Cancelar / borrar
+              </button>
+            )}
+          </div>
 
           {showOrderLink && (
             <div className="mt-4 pt-3 border-t border-dashed border-rule">
