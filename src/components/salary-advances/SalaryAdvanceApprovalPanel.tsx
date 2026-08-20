@@ -11,10 +11,64 @@ type Advance = {
   bankAccount: { bankName: string; bankAccountType: string; bankAccountNumber: string; bankAccountHolder: string; holderIdNumber: string | null } | null;
 };
 
+type HistoryAdvance = {
+  id: string; amount: number; installments: number; status: "APPROVED" | "REJECTED";
+  reason: "EMERGENCIA_FAMILIAR" | "OTRO" | null; createdAt: string; approvedAt: string | null; rejectedAt: string | null;
+  firstPayoutMonth: string | null;
+  employee: { name: string };
+};
+
 const REASON_LABEL: Record<string, string> = { EMERGENCIA_FAMILIAR: "Emergencia familiar", OTRO: "Otro motivo" };
 
 function money(n: number) {
   return `$${n.toFixed(2)}`;
+}
+
+function fmtDate(iso: string) {
+  return new Date(iso).toLocaleDateString("es-EC", { day: "numeric", month: "short", year: "numeric" });
+}
+
+function AdvanceHistoryPanel() {
+  const [items, setItems] = useState<HistoryAdvance[] | null>(null);
+
+  useEffect(() => {
+    fetch("/api/salary-advances/history").then((r) => (r.ok ? r.json() : [])).then(setItems);
+  }, []);
+
+  if (!items) return <div className="text-steel text-[13px]">Cargando…</div>;
+
+  return (
+    <div className="mt-6 pt-5 border-t border-rule">
+      <div className="text-[11px] font-semibold uppercase tracking-wide text-steel mb-3">
+        Historial de anticipos — todas las áreas ({items.length})
+      </div>
+      {items.length === 0 && (
+        <div className="border-[1.5px] border-dashed border-rule rounded-md p-6 text-center text-steel text-[13px]">
+          Todavía no hay anticipos resueltos.
+        </div>
+      )}
+      <div className="flex flex-col gap-2">
+        {items.map((a) => (
+          <div key={a.id} className="bg-surface border border-rule rounded-md p-3 flex items-center gap-3 flex-wrap">
+            <span className="font-semibold text-[12.5px] min-w-[110px]">{fmtDate(a.createdAt)}</span>
+            <span className="font-bold text-[13px] tabular-nums">{money(a.amount)}</span>
+            {a.installments > 1 && <span className="text-[11.5px] text-steel-dim">({a.installments} cuotas)</span>}
+            <span className="text-[12px] text-steel">{a.employee.name}</span>
+            {a.reason && <span className="text-[11px] text-steel-dim">{REASON_LABEL[a.reason] ?? a.reason}</span>}
+            <span className="ml-auto">
+              {a.status === "APPROVED" ? (
+                <span className="text-[10.5px] font-semibold text-green bg-green/10 border border-green/30 rounded-full px-2 py-0.5">
+                  Aprobado{a.firstPayoutMonth ? ` · descuenta desde ${a.firstPayoutMonth}` : ""}
+                </span>
+              ) : (
+                <span className="text-[10.5px] font-semibold text-red bg-red/10 border border-red/30 rounded-full px-2 py-0.5">Rechazado</span>
+              )}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 // Confirmado 2026-08-18: admin sube el comprobante de transferencia al
@@ -178,6 +232,7 @@ export function SalaryAdvanceApprovalPanel() {
           </div>
         ))}
       </div>
+      <AdvanceHistoryPanel />
     </div>
   );
 }
