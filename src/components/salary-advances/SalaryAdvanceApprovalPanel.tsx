@@ -23,6 +23,8 @@ export function SalaryAdvanceApprovalPanel() {
   const [items, setItems] = useState<Advance[] | null>(null);
   const [proofUrls, setProofUrls] = useState<Record<string, string>>({});
   const [uploadingId, setUploadingId] = useState<string | null>(null);
+  const [verifyingId, setVerifyingId] = useState<string | null>(null);
+  const [verifyResults, setVerifyResults] = useState<Record<string, { matches: boolean; note: string } | null>>({});
   const [rejecting, setRejecting] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState("");
   const [busy, setBusy] = useState(false);
@@ -34,22 +36,45 @@ export function SalaryAdvanceApprovalPanel() {
   }
   useEffect(load, []);
 
-  async function handleProofFile(id: string, file: File) {
+  async function verifyProof(id: string, url: string, expectedAmount: number) {
+    setVerifyingId(id);
+    setVerifyResults((v) => ({ ...v, [id]: null }));
+    const res = await fetch("/api/salary-advances/verify-proof", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ proofUrl: url, expectedAmount }),
+    });
+    const data = await res.json().catch(() => null);
+    setVerifyingId(null);
+    if (res.ok) setVerifyResults((v) => ({ ...v, [id]: { matches: data.matches, note: data.note } }));
+  }
+
+  async function handleProofFile(id: string, file: File, expectedAmount: number) {
     setUploadingId(id);
     const compressed = await compressImage(file);
     const result = await uploadFile(compressed, "salary-advance-proofs");
     setUploadingId(null);
-    if (result.ok) setProofUrls((p) => ({ ...p, [id]: result.url }));
+    if (result.ok) {
+      setProofUrls((p) => ({ ...p, [id]: result.url }));
+      verifyProof(id, result.url, expectedAmount);
+    }
   }
 
   const { onPaste: onPasteProof, onMouseEnter: armProofPaste, onMouseLeave: disarmProofPaste } = usePasteFile((file) => {
     const id = proofRowIdRef.current;
-    if (id) handleProofFile(id, file);
+    const item = items?.find((a) => a.id === id);
+    if (id && item) handleProofFile(id, file, item.amount);
   });
+
+  function clearProof(id: string) {
+    setProofUrls((p) => { const rest = { ...p }; delete rest[id]; return rest; });
+    setVerifyResults((v) => ({ ...v, [id]: null }));
+  }
 
   async function approve(id: string) {
     const proof = proofUrls[id];
     if (!proof) return;
+    if (verifyResults[id]?.matches === false) return;
     setBusy(true);
     await fetch(`/api/salary-advances/${id}/approve`, {
       method: "POST",
@@ -103,37 +128,51 @@ export function SalaryAdvanceApprovalPanel() {
                 </div>
               </div>
             ) : (
-              <div className="flex items-center gap-2 mt-2.5 flex-wrap">
-                {proofUrls[a.id] ? (
-                  <span className="text-[11.5px] text-green font-semibold">Comprobante listo</span>
-                ) : (
-                  <label
-                    tabIndex={0}
-                    onPaste={onPasteProof}
-                    onMouseEnter={() => { proofRowIdRef.current = a.id; armProofPaste(); }}
-                    onMouseLeave={disarmProofPaste}
-                    onClick={(e) => e.preventDefault()}
-                    className="flex items-center gap-1.5 border-[1.5px] border-dashed border-rule rounded px-2.5 py-1.5 text-[11.5px] text-steel cursor-pointer hover:border-teal focus:border-teal focus:outline-none"
-                  >
-                    {uploadingId === a.id ? "Subiendo…" : "Pega el comprobante aquí (Ctrl+V)"}
-                    <button
-                      type="button"
-                      className="text-[11px] font-semibold text-blue underline decoration-dotted cursor-pointer"
-                      onClick={(e) => { e.stopPropagation(); proofInputRefs.current[a.id]?.click(); }}
+              <div className="flex flex-col gap-1.5 mt-2.5">
+                <div className="flex items-center gap-2 flex-wrap">
+                  {proofUrls[a.id] ? (
+                    <>
+                      {verifyingId === a.id ? (
+                        <span className="text-[11.5px] text-steel">Verificando comprobante…</span>
+                      ) : verifyResults[a.id]?.matches ? (
+                        <span className="text-[11.5px] text-green font-semibold">Comprobante listo — coincide</span>
+                      ) : verifyResults[a.id]?.matches === false ? (
+                        <span className="text-[11.5px] text-red font-semibold">No coincide</span>
+                      ) : (
+                        <span className="text-[11.5px] text-green font-semibold">Comprobante listo</span>
+                      )}
+                      <button type="button" className="text-[11px] underline decoration-dotted text-steel opacity-80 hover:opacity-100 cursor-pointer" onClick={() => clearProof(a.id)}>Cambiar</button>
+                    </>
+                  ) : (
+                    <label
+                      tabIndex={0}
+                      onPaste={onPasteProof}
+                      onMouseEnter={() => { proofRowIdRef.current = a.id; armProofPaste(); }}
+                      onMouseLeave={disarmProofPaste}
+                      onClick={(e) => e.preventDefault()}
+                      className="flex items-center gap-1.5 border-[1.5px] border-dashed border-rule rounded px-2.5 py-1.5 text-[11.5px] text-steel cursor-pointer hover:border-teal focus:border-teal focus:outline-none"
                     >
-                      o selecciona un archivo
-                    </button>
-                    <input
-                      ref={(el) => { proofInputRefs.current[a.id] = el; }}
-                      type="file"
-                      accept="image/*,application/pdf"
-                      className="hidden"
-                      onChange={(e) => e.target.files?.[0] && handleProofFile(a.id, e.target.files[0])}
-                    />
-                  </label>
-                )}
-                <button type="button" disabled={busy || !proofUrls[a.id]} className="text-[12px] font-bold bg-green text-white rounded-md px-3.5 py-1.5 cursor-pointer disabled:opacity-40" onClick={() => approve(a.id)}>Aprobar y transferir</button>
-                <button type="button" disabled={busy} className="text-[12px] font-semibold text-red cursor-pointer" onClick={() => setRejecting(a.id)}>Rechazar</button>
+                      {uploadingId === a.id ? "Subiendo…" : "Pega el comprobante aquí (Ctrl+V)"}
+                      <button
+                        type="button"
+                        className="text-[11px] font-semibold text-blue underline decoration-dotted cursor-pointer"
+                        onClick={(e) => { e.stopPropagation(); proofInputRefs.current[a.id]?.click(); }}
+                      >
+                        o selecciona un archivo
+                      </button>
+                      <input
+                        ref={(el) => { proofInputRefs.current[a.id] = el; }}
+                        type="file"
+                        accept="image/*,application/pdf"
+                        className="hidden"
+                        onChange={(e) => e.target.files?.[0] && handleProofFile(a.id, e.target.files[0], a.amount)}
+                      />
+                    </label>
+                  )}
+                  <button type="button" disabled={busy || !proofUrls[a.id] || verifyResults[a.id]?.matches === false || verifyingId === a.id} className="text-[12px] font-bold bg-green text-white rounded-md px-3.5 py-1.5 cursor-pointer disabled:opacity-40" onClick={() => approve(a.id)}>Aprobar y transferir</button>
+                  <button type="button" disabled={busy} className="text-[12px] font-semibold text-red cursor-pointer" onClick={() => setRejecting(a.id)}>Rechazar</button>
+                </div>
+                {verifyResults[a.id] && <div className={`text-[11px] ${verifyResults[a.id]?.matches ? "text-steel" : "text-red"}`}>{verifyResults[a.id]?.note}</div>}
               </div>
             )}
           </div>
