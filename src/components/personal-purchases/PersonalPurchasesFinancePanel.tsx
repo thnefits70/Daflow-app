@@ -8,6 +8,8 @@ type Item = {
   employeeProductName: string;
   quantity: number;
   unitPriceModes: string[] | null;
+  livePhotoUrl: string;
+  optionalPhotoUrl: string | null;
 };
 type Order = {
   id: string;
@@ -33,6 +35,7 @@ export function PersonalPurchasesFinancePanel({ isAdmin = false }: { isAdmin?: b
   const [rejectReason, setRejectReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<Record<string, string>>({});
+  const [zoomedPhoto, setZoomedPhoto] = useState<string | null>(null);
 
   function load() {
     fetch("/api/personal-purchases/pending-finance").then((r) => (r.ok ? r.json() : [])).then(setOrders);
@@ -102,6 +105,26 @@ export function PersonalPurchasesFinancePanel({ isAdmin = false }: { isAdmin?: b
                   orderTotal += itemTotal;
                   return (
                     <div key={it.id} className="border-b border-rule last:border-0 pb-3 last:pb-0">
+                      <div className="flex gap-2.5 mb-1.5">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={it.livePhotoUrl}
+                          alt="Foto del producto"
+                          className="w-16 h-16 object-cover rounded-md border border-rule shrink-0 cursor-zoom-in"
+                          onDoubleClick={() => setZoomedPhoto(it.livePhotoUrl)}
+                          onClick={() => setZoomedPhoto(it.livePhotoUrl)}
+                        />
+                        {it.optionalPhotoUrl && (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={it.optionalPhotoUrl}
+                            alt="Foto extra"
+                            className="w-16 h-16 object-cover rounded-md border border-rule shrink-0 cursor-zoom-in"
+                            onDoubleClick={() => setZoomedPhoto(it.optionalPhotoUrl)}
+                            onClick={() => setZoomedPhoto(it.optionalPhotoUrl)}
+                          />
+                        )}
+                      </div>
                       <div className="text-[12.5px] font-semibold">{it.confirmedProductName ?? it.employeeProductName} × {it.quantity}</div>
                       <div className="text-[10.5px] text-steel-dim mb-1.5">
                         {costCount > 0 && `${costCount} al costo`}{costCount > 0 && dropiCount > 0 && " · "}{dropiCount > 0 && `${dropiCount} Dropi`}
@@ -162,6 +185,15 @@ export function PersonalPurchasesFinancePanel({ isAdmin = false }: { isAdmin?: b
           );
         })}
       </div>
+      {zoomedPhoto && (
+        <div
+          className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-6 cursor-zoom-out"
+          onClick={() => setZoomedPhoto(null)}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={zoomedPhoto} alt="Foto ampliada" className="max-w-full max-h-full object-contain rounded-md" />
+        </div>
+      )}
     </div>
   );
 }
