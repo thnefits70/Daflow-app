@@ -16,6 +16,9 @@ type CloseOrder = {
   id: string;
   employee: { name: string };
   totalAmount: number | null;
+  transferProofUrl: string | null;
+  transferProofName: string | null;
+  items: { confirmedProductName: string | null; employeeProductName: string; quantity: number }[];
 };
 
 function money(n: number | null) {
@@ -114,18 +117,29 @@ export function PersonalPurchasesTransferPanel({ isAdmin }: { isAdmin: boolean }
           </div>
           <div className="flex flex-col gap-3">
             {closeOrders!.map((o) => (
-              <div key={o.id} className="bg-surface border border-rule rounded-md p-3.5 flex items-center justify-between gap-3">
-                <div>
-                  <div className="font-bold text-[13px]">{o.employee.name}</div>
-                  <div className="text-[12px] text-steel-dim tabular-nums">{money(o.totalAmount)}</div>
+              <div key={o.id} className="bg-surface border border-rule rounded-md p-3.5">
+                <div className="flex items-center justify-between gap-3 mb-2.5">
+                  <div>
+                    <div className="font-bold text-[13px]">{o.employee.name}</div>
+                    <div className="text-[12px] text-steel-dim tabular-nums">{money(o.totalAmount)}</div>
+                  </div>
+                  {isAdmin ? (
+                    <span className="text-[11px] text-steel-dim italic">Esperando que Nairoby cierre</span>
+                  ) : (
+                    <button type="button" disabled={busy} className="text-[12px] font-bold bg-teal text-white rounded-md px-3.5 py-1.5 cursor-pointer disabled:opacity-40" onClick={() => closeTransfer(o.id)}>
+                      Cerrar transacción
+                    </button>
+                  )}
                 </div>
-                {isAdmin ? (
-                  <span className="text-[11px] text-steel-dim italic">Esperando que Nairoby cierre</span>
-                ) : (
-                  <button type="button" disabled={busy} className="text-[12px] font-bold bg-teal text-white rounded-md px-3.5 py-1.5 cursor-pointer disabled:opacity-40" onClick={() => closeTransfer(o.id)}>
-                    Cerrar transacción
-                  </button>
-                )}
+                <div className="text-[11.5px] text-steel-dim mb-2">
+                  {o.items.map((it, i) => (
+                    <span key={i}>
+                      {it.confirmedProductName ?? it.employeeProductName} × {it.quantity}
+                      {i < o.items.length - 1 ? " · " : ""}
+                    </span>
+                  ))}
+                </div>
+                {o.transferProofUrl && <ProofPreview url={o.transferProofUrl} filename={o.transferProofName ?? undefined} />}
               </div>
             ))}
           </div>
