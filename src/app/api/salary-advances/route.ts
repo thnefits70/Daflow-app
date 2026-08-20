@@ -32,7 +32,7 @@ const schema = z
       .max(SALARY_ADVANCE_MAX_AMOUNT, `El anticipo máximo es $${SALARY_ADVANCE_MAX_AMOUNT}.`),
     reason: z.enum(["EMERGENCIA_FAMILIAR", "OTRO"]).optional(),
     justification: z.string().trim().optional(),
-    installments: z.number().int().min(1).max(3),
+    installments: z.number().int().min(1).max(4),
   })
   .refine((d) => d.amount <= SALARY_ADVANCE_NO_JUSTIFICATION_MAX || !!d.reason, {
     message: `Arriba de $${SALARY_ADVANCE_NO_JUSTIFICATION_MAX} hay que elegir un motivo.`,

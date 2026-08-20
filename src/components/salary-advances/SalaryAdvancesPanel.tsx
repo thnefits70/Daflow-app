@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Banknote, CheckCircle2, Circle, Plus } from "lucide-react";
+import { Banknote, CheckCircle2, Circle, Plus, TriangleAlert } from "lucide-react";
+import { installmentAmount } from "@/lib/payrollCalc";
 
 type BankAccount = {
   id: string; bankName: string; bankAccountType: string; bankAccountNumber: string; bankAccountHolder: string;
@@ -148,6 +149,7 @@ export function SalaryAdvancesPanel() {
   const [installments, setInstallments] = useState(1);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  const [confirming, setConfirming] = useState(false);
 
   function loadAccounts() {
     fetch("/api/employee-bank-account").then((r) => (r.ok ? r.json() : [])).then((list: BankAccount[]) => {
@@ -201,9 +203,14 @@ export function SalaryAdvancesPanel() {
     setBusy(false);
     const data = await res.json().catch(() => null);
     if (!res.ok) { setErr(data?.error ?? "No se pudo enviar."); return; }
-    setAmount(""); setReason(null); setJustification(""); setInstallments(1);
+    setAmount(""); setReason(null); setJustification(""); setInstallments(1); setConfirming(false);
     load();
   }
+
+  function updateAmount(v: string) { setAmount(v); setConfirming(false); }
+  function updateInstallments(n: number) { setInstallments(n); setConfirming(false); }
+  function updateReason(r: "EMERGENCIA_FAMILIAR" | "OTRO") { setReason(r); setConfirming(false); }
+  function updateJustification(v: string) { setJustification(v); setConfirming(false); }
 
   if (!advances || !accounts) return <div className="text-steel text-[13px]">Cargando…</div>;
 
@@ -239,7 +246,7 @@ export function SalaryAdvancesPanel() {
               Mínimo {money(MIN_AMOUNT)} · hasta {money(NO_REASON_MAX)} sin explicar el motivo · de {money(NO_REASON_MAX)} a{" "}
               {money(MAX_AMOUNT)} con motivo obligatorio
             </div>
-            <input className="text-[13px] rounded border border-rule bg-cloud px-2.5 py-1.5" type="number" step="0.01" placeholder="Monto" value={amount} onChange={(e) => setAmount(e.target.value)} />
+            <input className="text-[13px] rounded border border-rule bg-cloud px-2.5 py-1.5" type="number" step="0.01" placeholder="Monto" value={amount} onChange={(e) => updateAmount(e.target.value)} />
             {amount && !amountInRange && (
               <div className="text-red text-[11.5px]">El anticipo debe ser entre {money(MIN_AMOUNT)} y {money(MAX_AMOUNT)}.</div>
             )}
@@ -247,37 +254,77 @@ export function SalaryAdvancesPanel() {
               <div>
                 <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Descontar del rol en</label>
                 <div className="flex gap-2">
-                  {[1, 2, 3].map((n) => (
-                    <button key={n} type="button" onClick={() => setInstallments(n)} className={`text-[12px] font-semibold rounded px-3 py-1.5 border cursor-pointer ${installments === n ? "border-teal text-teal bg-teal/10" : "border-rule text-steel"}`}>
+                  {[1, 2, 3, 4].map((n) => (
+                    <button key={n} type="button" onClick={() => updateInstallments(n)} className={`text-[12px] font-semibold rounded px-3 py-1.5 border cursor-pointer ${installments === n ? "border-teal text-teal bg-teal/10" : "border-rule text-steel"}`}>
                       {n === 1 ? "1 cuota" : `${n} cuotas`}
                     </button>
                   ))}
                 </div>
+                {installments > 1 && (
+                  <div className="text-[11px] text-steel-dim mt-1.5">
+                    {Array.from({ length: installments }, (_, i) => money(installmentAmount(amt, installments, i))).join(" + ")}
+                    {" "}· una cuota por mes, empezando el mes en que se apruebe.
+                  </div>
+                )}
+              </div>
+            )}
+            {needsReason && (
+              <div className="flex items-start gap-2 rounded-md border border-[#D9A441]/50 bg-[#D9A441]/10 px-3 py-2 text-[11.5px] text-[#D9A441] leading-relaxed">
+                <TriangleAlert size={14} className="shrink-0 mt-0.5" />
+                <span>
+                  Montos arriba de {money(NO_REASON_MAX)} se revisan caso por caso y normalmente solo se aprueban por
+                  un tema de calamidad doméstica (emergencia familiar). Evitá pedir montos altos seguidos — si no es
+                  una emergencia, es mejor pedir hasta {money(NO_REASON_MAX)} sin motivo.
+                </span>
               </div>
             )}
             {needsReason && (
               <div>
                 <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Motivo (obligatorio arriba de {money(NO_REASON_MAX)})</label>
                 <div className="flex gap-2">
-                  <button type="button" onClick={() => setReason("EMERGENCIA_FAMILIAR")} className={`text-[12px] font-semibold rounded px-3 py-1.5 border cursor-pointer ${reason === "EMERGENCIA_FAMILIAR" ? "border-teal text-teal bg-teal/10" : "border-rule text-steel"}`}>
+                  <button type="button" onClick={() => updateReason("EMERGENCIA_FAMILIAR")} className={`text-[12px] font-semibold rounded px-3 py-1.5 border cursor-pointer ${reason === "EMERGENCIA_FAMILIAR" ? "border-teal text-teal bg-teal/10" : "border-rule text-steel"}`}>
                     Emergencia familiar
                   </button>
-                  <button type="button" onClick={() => setReason("OTRO")} className={`text-[12px] font-semibold rounded px-3 py-1.5 border cursor-pointer ${reason === "OTRO" ? "border-teal text-teal bg-teal/10" : "border-rule text-steel"}`}>
+                  <button type="button" onClick={() => updateReason("OTRO")} className={`text-[12px] font-semibold rounded px-3 py-1.5 border cursor-pointer ${reason === "OTRO" ? "border-teal text-teal bg-teal/10" : "border-rule text-steel"}`}>
                     Otro motivo
                   </button>
                 </div>
               </div>
             )}
             {needsReason && reason === "OTRO" && (
-              <textarea className="text-[12.5px] rounded border border-rule bg-cloud px-2.5 py-1.5" placeholder="Contá brevemente el motivo (mínimo 10 caracteres)" value={justification} onChange={(e) => setJustification(e.target.value)} rows={2} />
+              <textarea className="text-[12.5px] rounded border border-rule bg-cloud px-2.5 py-1.5" placeholder="Contá brevemente el motivo (mínimo 10 caracteres)" value={justification} onChange={(e) => updateJustification(e.target.value)} rows={2} />
             )}
             {pendingTotal > 0 && (
               <div className="text-[11px] text-steel-dim">Ya tenés {money(pendingTotal)} pendientes de pago (tope {money(PENDING_CAP)}).</div>
             )}
             {err && <div className="text-red text-[12.5px]">{err}</div>}
-            <button type="button" disabled={busy || !canSubmit} className="text-[13px] font-bold bg-blue text-white rounded-md px-4 py-2 cursor-pointer disabled:opacity-40 self-start" onClick={submit}>
-              {busy ? "Enviando…" : "Enviar solicitud"}
-            </button>
+            {confirming ? (
+              <div className="rounded-md border border-teal/50 bg-teal/10 px-3 py-2.5">
+                <div className="text-[11px] text-steel-dim mb-1">Vas a pedir</div>
+                <div className="text-[18px] font-bold text-ink tabular-nums">
+                  {money(amt)}
+                  {installments > 1 && <span className="text-[12px] font-semibold text-steel-dim"> en {installments} cuotas</span>}
+                </div>
+                {installments > 1 && (
+                  <div className="text-[11px] text-steel-dim mt-0.5">
+                    {Array.from({ length: installments }, (_, i) => money(installmentAmount(amt, installments, i))).join(" + ")}
+                  </div>
+                )}
+                <div className="text-[11px] text-steel-dim mt-1.5">Revisá que el monto sea correcto antes de confirmar.</div>
+                <div className="flex gap-2 mt-2.5">
+                  <button type="button" disabled={busy} className="text-[13px] font-bold bg-blue text-white rounded-md px-4 py-2 cursor-pointer disabled:opacity-40" onClick={submit}>
+                    {busy ? "Enviando…" : `Sí, confirmo ${money(amt)}`}
+                  </button>
+                  <button type="button" disabled={busy} className="text-[12.5px] font-semibold text-steel rounded-md px-3 py-2 cursor-pointer" onClick={() => setConfirming(false)}>
+                    Corregir
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button type="button" disabled={busy || !canSubmit} className="text-[13px] font-bold bg-blue text-white rounded-md px-4 py-2 cursor-pointer disabled:opacity-40 self-start" onClick={() => setConfirming(true)}>
+                Enviar solicitud
+              </button>
+            )}
           </div>
         )}
       </div>
