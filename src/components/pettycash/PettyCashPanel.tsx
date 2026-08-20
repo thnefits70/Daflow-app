@@ -2,10 +2,11 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, Pencil, Archive, RotateCcw, Upload } from "lucide-react";
+import { CheckCircle2, Pencil, Archive, RotateCcw, Upload, Camera } from "lucide-react";
 import { usePasteFile } from "@/lib/usePasteFile";
 import { uploadFile } from "@/lib/uploadFile";
 import { ProofPreview } from "@/components/shared/ProofPreview";
+import { LiveCameraCapture } from "@/components/shared/LiveCameraCapture";
 import type { PettyCashBoxDTO, EligiblePaymentOrderDTO } from "@/lib/pettyCash";
 
 function money(v: number) {
@@ -37,9 +38,20 @@ function monthFilterLabel(month: string) {
   return `${MONTH_NAMES[Number(m) - 1]} ${y}`;
 }
 
-function UploadBox({ label, onFile }: { label: string; onFile: (file: File) => void }) {
+// Fix confirmado 2026-08-20: en Android, accept="image/*" sin más a veces
+// abre el selector de fotos del sistema (que solo ofrece galería, sin
+// opción de cámara) en vez de un chooser con cámara — a Nairoby no le
+// abrió la cámara al tocar esa opción. "Tomar foto" evita ese selector
+// del todo y abre la cámara en vivo dentro de la página (getUserMedia).
+function UploadBox({ label, folder, onFile, onCaptured }: { label: string; folder: string; onFile: (file: File) => void; onCaptured: (url: string) => void }) {
   const { onPaste, onMouseEnter, onMouseLeave } = usePasteFile(onFile);
   const inputRef = useRef<HTMLInputElement>(null);
+  const [takingPhoto, setTakingPhoto] = useState(false);
+
+  if (takingPhoto) {
+    return <LiveCameraCapture folder={folder} onCaptured={(url) => { setTakingPhoto(false); onCaptured(url); }} onCancel={() => setTakingPhoto(false)} />;
+  }
+
   return (
     <label
       tabIndex={0}
@@ -52,9 +64,14 @@ function UploadBox({ label, onFile }: { label: string; onFile: (file: File) => v
       <Upload size={16} className="text-steel" />
       <div className="text-[11.5px] font-semibold">{label}</div>
       <div className="text-[10px] text-steel">Pega la imagen aquí (Ctrl+V)</div>
-      <button type="button" className="text-[10px] underline decoration-dotted text-steel opacity-80 hover:opacity-100 cursor-pointer" onClick={(e) => { e.stopPropagation(); inputRef.current?.click(); }}>
-        o selecciona un archivo
-      </button>
+      <div className="flex items-center gap-2.5">
+        <button type="button" className="flex items-center gap-1 text-[10px] font-semibold text-blue cursor-pointer" onClick={(e) => { e.stopPropagation(); setTakingPhoto(true); }}>
+          <Camera size={11} /> Tomar foto
+        </button>
+        <button type="button" className="text-[10px] underline decoration-dotted text-steel opacity-80 hover:opacity-100 cursor-pointer" onClick={(e) => { e.stopPropagation(); inputRef.current?.click(); }}>
+          o selecciona un archivo
+        </button>
+      </div>
       <input ref={inputRef} type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])} />
     </label>
   );
@@ -277,22 +294,26 @@ function BoxCard({
     if (target === "desembolso") setProofVerifyResult(data); else setFundVerifyResult(data);
   }
 
+  function applyProof(target: "desembolso" | "recarga", url: string) {
+    if (target === "desembolso") {
+      setProofUrl(url);
+      setProofVerifyResult(null);
+      const n = Number(amount);
+      if (!Number.isNaN(n) && n > 0) verifyProof("desembolso", url, n);
+    } else {
+      setFundProofUrl(url);
+      setFundVerifyResult(null);
+      const n = Number(fundAmount);
+      if (!Number.isNaN(n) && n > 0) verifyProof("recarga", url, n);
+    }
+  }
+
   async function doUpload(file: File, target: "desembolso" | "recarga") {
     if (target === "desembolso") setUploading(true); else setFundUploading(true);
     const res = await uploadFile(file, "petty-cash");
     if (target === "desembolso") setUploading(false); else setFundUploading(false);
     if (!res.ok) { setErr(res.error); return; }
-    if (target === "desembolso") {
-      setProofUrl(res.url);
-      setProofVerifyResult(null);
-      const n = Number(amount);
-      if (!Number.isNaN(n) && n > 0) verifyProof("desembolso", res.url, n);
-    } else {
-      setFundProofUrl(res.url);
-      setFundVerifyResult(null);
-      const n = Number(fundAmount);
-      if (!Number.isNaN(n) && n > 0) verifyProof("recarga", res.url, n);
-    }
+    applyProof(target, res.url);
   }
 
   async function confirmReceived() {
@@ -600,7 +621,7 @@ function BoxCard({
               </div>
             </div>
           ) : (
-            <div className="mb-2.5">{uploading ? <div className="text-[11.5px] text-steel">Subiendo…</div> : <UploadBox label="📷 Subir comprobante" onFile={(f) => doUpload(f, "desembolso")} />}</div>
+            <div className="mb-2.5">{uploading ? <div className="text-[11.5px] text-steel">Subiendo…</div> : <UploadBox label="📷 Subir comprobante" folder="petty-cash" onFile={(f) => doUpload(f, "desembolso")} onCaptured={(url) => applyProof("desembolso", url)} />}</div>
           )}
           <button
             type="button"
@@ -672,7 +693,7 @@ function BoxCard({
               </div>
             </div>
           ) : (
-            <div className="mb-2">{fundUploading ? <div className="text-[11.5px] text-steel">Subiendo…</div> : <UploadBox label="📷 Evidencia de entrega/retiro" onFile={(f) => doUpload(f, "recarga")} />}</div>
+            <div className="mb-2">{fundUploading ? <div className="text-[11.5px] text-steel">Subiendo…</div> : <UploadBox label="📷 Evidencia de entrega/retiro" folder="petty-cash" onFile={(f) => doUpload(f, "recarga")} onCaptured={(url) => applyProof("recarga", url)} />}</div>
           )}
           <button
             type="button"
