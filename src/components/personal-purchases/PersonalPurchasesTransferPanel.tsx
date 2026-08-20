@@ -119,9 +119,13 @@ export function PersonalPurchasesTransferPanel({ isAdmin }: { isAdmin: boolean }
                   <div className="font-bold text-[13px]">{o.employee.name}</div>
                   <div className="text-[12px] text-steel-dim tabular-nums">{money(o.totalAmount)}</div>
                 </div>
-                <button type="button" disabled={busy} className="text-[12px] font-bold bg-teal text-white rounded-md px-3.5 py-1.5 cursor-pointer disabled:opacity-40" onClick={() => closeTransfer(o.id)}>
-                  Cerrar transacción
-                </button>
+                {isAdmin ? (
+                  <span className="text-[11px] text-steel-dim italic">Esperando que Nairoby cierre</span>
+                ) : (
+                  <button type="button" disabled={busy} className="text-[12px] font-bold bg-teal text-white rounded-md px-3.5 py-1.5 cursor-pointer disabled:opacity-40" onClick={() => closeTransfer(o.id)}>
+                    Cerrar transacción
+                  </button>
+                )}
               </div>
             ))}
           </div>

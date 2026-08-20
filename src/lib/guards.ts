@@ -296,6 +296,21 @@ export async function canConfirmPersonalPurchaseTransfer() {
   return !!session && session.user.role === "admin";
 }
 
+// Confirmado 2026-08-20: pedido explícito del usuario — el cierre final de
+// una transferencia (una vez que el admin ya confirmó que la plata llegó)
+// es exclusivo de Nairoby/FIN. A diferencia del resto del flujo, acá el
+// admin NO tiene bypass — puede ver la cola, pero no cerrarla ni gestionar
+// nada ahí. Mismo criterio sin admin que canEditPayrollRoles.
+export async function canClosePersonalPurchaseTransfer() {
+  const session = await auth();
+  if (!session) return false;
+  const user = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { isLeader: true, leadsDept: { select: { code: true } } },
+  });
+  return !!user?.isLeader && user.leadsDept?.code === "FIN";
+}
+
 // Anticipos y descuentos por mala gestión — solo el admin los aprueba/crea,
 // sin excepción (pedido explícito del usuario).
 export async function canManageSalaryAdvances() {
