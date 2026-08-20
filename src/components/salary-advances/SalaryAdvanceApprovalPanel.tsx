@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { compressImage } from "@/lib/compressImage";
 import { uploadFile } from "@/lib/uploadFile";
+import { usePasteFile } from "@/lib/usePasteFile";
 
 type Advance = {
   id: string; amount: number; installments: number; justification: string | null; reason: "EMERGENCIA_FAMILIAR" | "OTRO" | null;
@@ -25,21 +26,26 @@ export function SalaryAdvanceApprovalPanel() {
   const [rejecting, setRejecting] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState("");
   const [busy, setBusy] = useState(false);
+  const proofRowIdRef = useRef<string | null>(null);
+  const proofInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
   function load() {
     fetch("/api/salary-advances/pending").then((r) => (r.ok ? r.json() : [])).then(setItems);
   }
   useEffect(load, []);
 
-  async function onProof(id: string, e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  async function handleProofFile(id: string, file: File) {
     setUploadingId(id);
     const compressed = await compressImage(file);
     const result = await uploadFile(compressed, "salary-advance-proofs");
     setUploadingId(null);
     if (result.ok) setProofUrls((p) => ({ ...p, [id]: result.url }));
   }
+
+  const { onPaste: onPasteProof, onMouseEnter: armProofPaste, onMouseLeave: disarmProofPaste } = usePasteFile((file) => {
+    const id = proofRowIdRef.current;
+    if (id) handleProofFile(id, file);
+  });
 
   async function approve(id: string) {
     const proof = proofUrls[id];
@@ -101,9 +107,29 @@ export function SalaryAdvanceApprovalPanel() {
                 {proofUrls[a.id] ? (
                   <span className="text-[11.5px] text-green font-semibold">Comprobante listo</span>
                 ) : (
-                  <label className="text-[11.5px] font-semibold text-blue cursor-pointer">
-                    {uploadingId === a.id ? "Subiendo…" : "Subir comprobante de transferencia"}
-                    <input type="file" accept="image/*,application/pdf" className="hidden" onChange={(e) => onProof(a.id, e)} />
+                  <label
+                    tabIndex={0}
+                    onPaste={onPasteProof}
+                    onMouseEnter={() => { proofRowIdRef.current = a.id; armProofPaste(); }}
+                    onMouseLeave={disarmProofPaste}
+                    onClick={(e) => e.preventDefault()}
+                    className="flex items-center gap-1.5 border-[1.5px] border-dashed border-rule rounded px-2.5 py-1.5 text-[11.5px] text-steel cursor-pointer hover:border-teal focus:border-teal focus:outline-none"
+                  >
+                    {uploadingId === a.id ? "Subiendo…" : "Pega el comprobante aquí (Ctrl+V)"}
+                    <button
+                      type="button"
+                      className="text-[11px] font-semibold text-blue underline decoration-dotted cursor-pointer"
+                      onClick={(e) => { e.stopPropagation(); proofInputRefs.current[a.id]?.click(); }}
+                    >
+                      o selecciona un archivo
+                    </button>
+                    <input
+                      ref={(el) => { proofInputRefs.current[a.id] = el; }}
+                      type="file"
+                      accept="image/*,application/pdf"
+                      className="hidden"
+                      onChange={(e) => e.target.files?.[0] && handleProofFile(a.id, e.target.files[0])}
+                    />
                   </label>
                 )}
                 <button type="button" disabled={busy || !proofUrls[a.id]} className="text-[12px] font-bold bg-green text-white rounded-md px-3.5 py-1.5 cursor-pointer disabled:opacity-40" onClick={() => approve(a.id)}>Aprobar y transferir</button>
