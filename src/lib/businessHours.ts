@@ -79,3 +79,18 @@ export function addBusinessHours(start: Date, hours: number): Date {
 
   return new Date(cur.getTime() + ECUADOR_OFFSET_MS);
 }
+
+// Suma `days` días hábiles reales a `start` y devuelve el instante UTC del
+// FIN de la jornada de ese día hábil (plazo de pago de compras personales
+// por transferencia, entre otros usos futuros de "N días hábiles" en vez de
+// "N horas laborables").
+export function addBusinessDays(start: Date, days: number): Date {
+  let cur = new Date(start.getTime() - ECUADOR_OFFSET_MS);
+  let counted = 0;
+  while (counted < days) {
+    cur = nextDayStart(cur);
+    if (dayWindow(cur)) counted++;
+  }
+  const window = dayWindow(cur)!;
+  return new Date(atHourOfDay(cur, window.end).getTime() + ECUADOR_OFFSET_MS);
+}

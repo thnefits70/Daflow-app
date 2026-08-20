@@ -1,8 +1,11 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { ShoppingBag, Camera, Plus, X } from "lucide-react";
+import { ShoppingBag, Camera, Plus, X, Landmark, Copy } from "lucide-react";
 import { LiveCameraCapture } from "@/components/shared/LiveCameraCapture";
+import { ProofPreview } from "@/components/shared/ProofPreview";
+import { usePasteFile } from "@/lib/usePasteFile";
+import { uploadFile } from "@/lib/uploadFile";
 
 type BuyerRelation = "SELF" | "MINOR_CHILD" | "OTHER_FAMILY";
 type Declaration = { relation: BuyerRelation; note?: string };
@@ -22,16 +25,39 @@ type OrderHistory = {
   totalAmount: number | null;
   installments: number;
   createdAt: string;
+  paymentMethod: "PAYROLL" | "TRANSFER" | null;
+  transferDeadlineAt: string | null;
+  transferProofUrl: string | null;
+  transferProofName: string | null;
+  transferAiMatch: boolean | null;
+  pickedUpAt: string | null;
   items: { employeeProductName: string; confirmedProductName: string | null; quantity: number }[];
 };
+
+type CompanyBankAccount = {
+  bankName: string | null;
+  bankAccountType: string | null;
+  bankAccountNumber: string | null;
+  bankAccountHolder: string | null;
+  holderIdType: "RUC" | "CEDULA" | null;
+  holderIdNumber: string | null;
+} | null;
 
 function money(n: number) {
   return `$${n.toFixed(2)}`;
 }
 
+function deadlineText(iso: string) {
+  return new Date(iso).toLocaleDateString("es-EC", { day: "numeric", month: "short" });
+}
+
 const STATUS_LABEL: Record<string, { label: string; color: string }> = {
   PENDING_INVENTORY: { label: "Esperando confirmación de bodega", color: "#D9A441" },
-  PENDING_FINANCE: { label: "Ya podés retirarlo — falta que Nairoby cierre el precio", color: "#1E5EFF" },
+  PENDING_FINANCE: { label: "Bodega confirmó — falta que Nairoby cierre el precio", color: "#1E5EFF" },
+  PENDING_PAYMENT_METHOD: { label: "Elegí cómo pagarla", color: "#D9A441" },
+  PENDING_TRANSFER_PROOF: { label: "Falta que subas el comprobante", color: "#D9A441" },
+  PENDING_ADMIN_CONFIRM: { label: "Comprobante en revisión", color: "#1E5EFF" },
+  PENDING_NAIROBY_CLOSE: { label: "Transferencia confirmada — cerrando", color: "#1E5EFF" },
   APPROVED: { label: "Aprobada", color: "#22C55E" },
   REJECTED: { label: "Rechazada", color: "#C4453A" },
 };
@@ -60,6 +86,64 @@ function draftMissingReason(d: DraftItem): string | null {
   return null;
 }
 
+// Confirmado 2026-08-20: pegar (Ctrl+V) el comprobante de la transferencia —
+// mismo mecanismo que ya usa Pagos administrativos (usePasteFile), no es
+// una foto en vivo. Componente aparte porque usePasteFile es un hook y no
+// puede llamarse dentro de un .map().
+function TransferProofUploader({ orderId, onSent }: { orderId: string; onSent: () => void }) {
+  const [proofUrl, setProofUrl] = useState<string | null>(null);
+  const [proofName, setProofName] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [err, setErr] = useState("");
+
+  async function handleFile(file: File) {
+    setUploading(true);
+    setErr("");
+    const res = await uploadFile(file, "personal-purchase-proofs");
+    setUploading(false);
+    if (!res.ok) { setErr(res.error); return; }
+    setProofUrl(res.url);
+    setProofName(res.name);
+  }
+  const { onPaste, onMouseEnter, onMouseLeave } = usePasteFile(handleFile);
+
+  async function submit() {
+    if (!proofUrl) return;
+    setSubmitting(true);
+    setErr("");
+    const res = await fetch(`/api/personal-purchases/${orderId}/transfer-proof`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ proofUrl, proofName }),
+    });
+    setSubmitting(false);
+    if (!res.ok) { setErr("No se pudo enviar el comprobante — intentá de nuevo."); return; }
+    onSent();
+  }
+
+  return (
+    <div onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave} onPaste={onPaste} className="mt-2.5">
+      <div className="text-[10px] font-semibold uppercase tracking-wide text-steel mb-1.5">Comprobante — Ctrl+V para pegar</div>
+      {proofUrl ? (
+        <div className="flex items-center gap-2">
+          <ProofPreview url={proofUrl} filename={proofName ?? undefined} />
+          <button type="button" className="text-[11px] text-steel-dim underline cursor-pointer" onClick={() => { setProofUrl(null); setProofName(null); }}>Quitar</button>
+        </div>
+      ) : (
+        <label className="flex items-center justify-center gap-1.5 text-[11.5px] text-steel-dim border-[1.5px] border-dashed border-rule rounded-md px-3 py-4 cursor-pointer text-center">
+          {uploading ? "Subiendo…" : "Pegá con Ctrl+V, o hacé clic para elegir un archivo"}
+          <input type="file" accept="image/*,application/pdf" className="hidden" onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])} />
+        </label>
+      )}
+      {err && <div className="text-red text-[11.5px] mt-1.5">{err}</div>}
+      <button type="button" disabled={!proofUrl || submitting} className="text-[12px] font-bold bg-teal text-white rounded-md px-3.5 py-1.5 cursor-pointer disabled:opacity-40 mt-2.5" onClick={submit}>
+        {submitting ? "Enviando…" : "Enviar comprobante"}
+      </button>
+    </div>
+  );
+}
+
 // Confirmado 2026-08-18: rediseño completo — el colaborador arma un
 // pedido con uno o varios productos (carrito). Por producto: foto en vivo
 // obligatoria + una segunda opcional que no ocupa espacio salvo que la
@@ -75,11 +159,27 @@ export function PersonalPurchasesPanel() {
   const [orders, setOrders] = useState<OrderHistory[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  const [bankAccount, setBankAccount] = useState<CompanyBankAccount>(null);
+  const [payBusy, setPayBusy] = useState<Record<string, boolean>>({});
 
   function loadOrders() {
     fetch("/api/personal-purchases").then((r) => (r.ok ? r.json() : [])).then(setOrders);
   }
   useEffect(loadOrders, []);
+  useEffect(() => {
+    fetch("/api/company-bank-account").then((r) => (r.ok ? r.json() : null)).then(setBankAccount);
+  }, []);
+
+  async function choosePaymentMethod(orderId: string, method: "PAYROLL" | "TRANSFER") {
+    setPayBusy((b) => ({ ...b, [orderId]: true }));
+    await fetch(`/api/personal-purchases/${orderId}/choose-payment-method`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ method }),
+    });
+    setPayBusy((b) => ({ ...b, [orderId]: false }));
+    loadOrders();
+  }
 
   function setQuantity(q: number) {
     const quantity = Math.max(1, q);
@@ -256,18 +356,75 @@ export function PersonalPurchasesPanel() {
       <div className="bg-surface border border-rule rounded-md p-4">
         <div className="text-[11px] font-semibold uppercase tracking-wide text-steel mb-3">Mis compras</div>
         {(orders?.length ?? 0) === 0 && <div className="text-steel text-[12.5px]">Todavía no registraste ninguna compra.</div>}
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-3">
           {orders?.map((o) => {
             const s = STATUS_LABEL[o.status];
             const names = o.items.map((it) => `${it.confirmedProductName ?? it.employeeProductName} × ${it.quantity}`).join(", ");
+            const isBusy = !!payBusy[o.id];
+            const showPickup = o.status !== "REJECTED";
             return (
-              <div key={o.id} className="flex items-center gap-3 text-[12.5px] py-2 border-b border-rule last:border-0 flex-wrap">
-                <span className="font-semibold flex-1 min-w-[160px]">{names}</span>
-                {o.status === "APPROVED" && o.totalAmount != null && (
-                  <span className="font-bold tabular-nums">{money(o.totalAmount)}{o.installments > 1 ? ` (${o.installments} cuotas)` : ""}</span>
+              <div key={o.id} className="py-2.5 border-b border-rule last:border-0">
+                <div className="flex items-center gap-3 text-[12.5px] flex-wrap">
+                  <span className="font-semibold flex-1 min-w-[160px]">{names}</span>
+                  {o.totalAmount != null && (
+                    <span className="font-bold tabular-nums">{money(o.totalAmount)}{o.paymentMethod === "PAYROLL" && o.installments > 1 ? ` (${o.installments} cuotas)` : ""}</span>
+                  )}
+                  <span className="text-[10.5px] font-semibold rounded-full px-2 py-0.5" style={{ color: s.color, border: `1px solid ${s.color}` }}>{s.label}</span>
+                </div>
+                {o.rejectionReason && <div className="text-[11px] text-red mt-1">{o.rejectionReason}</div>}
+                {showPickup && (
+                  <div className="text-[11px] mt-1" style={{ color: o.pickedUpAt ? "#22C55E" : "#8b96b3" }}>
+                    {o.pickedUpAt ? "✅ Listo para retirar" : "⏳ Daniel lo está preparando"}
+                  </div>
                 )}
-                <span className="text-[10.5px] font-semibold rounded-full px-2 py-0.5" style={{ color: s.color, border: `1px solid ${s.color}` }}>{s.label}</span>
-                {o.rejectionReason && <span className="text-[11px] text-red">{o.rejectionReason}</span>}
+
+                {o.status === "PENDING_PAYMENT_METHOD" && (
+                  <div className="mt-2.5">
+                    {o.transferDeadlineAt && (
+                      <div className="text-[10.5px] text-steel-dim mb-1.5">Si elegís transferencia, tenés hasta el {deadlineText(o.transferDeadlineAt)}.</div>
+                    )}
+                    <div className="flex gap-2">
+                      <button type="button" disabled={isBusy} className="text-[12px] font-bold border-[1.5px] border-teal text-teal rounded-md px-3.5 py-1.5 cursor-pointer disabled:opacity-40" onClick={() => choosePaymentMethod(o.id, "TRANSFER")}>
+                        🏦 Transferencia
+                      </button>
+                      <button type="button" disabled={isBusy} className="text-[12px] font-bold border-[1.5px] border-rule text-ink rounded-md px-3.5 py-1.5 cursor-pointer disabled:opacity-40" onClick={() => choosePaymentMethod(o.id, "PAYROLL")}>
+                        🧾 Descuento en rol
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {o.status === "PENDING_TRANSFER_PROOF" && (
+                  <div className="mt-2.5">
+                    {o.transferDeadlineAt && <div className="text-[10.5px] text-steel-dim mb-1.5">Plazo: hasta el {deadlineText(o.transferDeadlineAt)}.</div>}
+                    {bankAccount?.bankAccountNumber ? (
+                      <div className="bg-cloud border-[1.5px] border-dashed border-teal rounded-md p-3 mb-2.5">
+                        <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-teal mb-1.5">
+                          <Landmark size={11} /> Cuenta DAFLOW — transferir {o.totalAmount != null ? money(o.totalAmount) : ""}
+                        </div>
+                        <div className="text-[12px] flex flex-col gap-0.5">
+                          <div>{bankAccount.bankName} · {bankAccount.bankAccountType}</div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-semibold tabular-nums">{bankAccount.bankAccountNumber}</span>
+                            <button type="button" className="text-steel-dim cursor-pointer" title="Copiar número de cuenta" onClick={() => navigator.clipboard?.writeText(bankAccount.bankAccountNumber ?? "")}>
+                              <Copy size={12} />
+                            </button>
+                          </div>
+                          <div>{bankAccount.bankAccountHolder}{bankAccount.holderIdNumber ? ` · ${bankAccount.holderIdType === "RUC" ? "RUC" : "Cédula"} ${bankAccount.holderIdNumber}` : ""}</div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-[11.5px] text-steel-dim mb-2.5">Todavía no está cargada la cuenta bancaria — avisale al admin.</div>
+                    )}
+                    <TransferProofUploader orderId={o.id} onSent={loadOrders} />
+                  </div>
+                )}
+
+                {(o.status === "PENDING_ADMIN_CONFIRM" || o.status === "PENDING_NAIROBY_CLOSE") && o.transferProofUrl && (
+                  <div className="mt-2.5">
+                    <ProofPreview url={o.transferProofUrl} filename={o.transferProofName ?? undefined} />
+                  </div>
+                )}
               </div>
             );
           })}

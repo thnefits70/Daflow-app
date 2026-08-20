@@ -2733,8 +2733,17 @@ model CeoBonusGrantSeen {
 enum PersonalPurchaseStatus {
   PENDING_INVENTORY
   PENDING_FINANCE
+  PENDING_PAYMENT_METHOD // precio cerrado, falta que el colaborador elija cómo paga
+  PENDING_TRANSFER_PROOF // eligió transferencia, falta que pegue el comprobante
+  PENDING_ADMIN_CONFIRM // comprobante subido, falta que el admin confirme (revisando su banco real)
+  PENDING_NAIROBY_CLOSE // admin confirmó, falta que Nairoby/FIN cierre la operación
   APPROVED
   REJECTED
+}
+
+enum PersonalPurchasePaymentMethod {
+  PAYROLL
+  TRANSFER
 }
 
 // Para quién es cada unidad declarada (hasta 3 por producto, ver
@@ -2761,12 +2770,38 @@ model PersonalPurchaseOrder {
   rejectedAt             DateTime?
   rejectedById           String?
   rejectionReason        String?
-  pickedUpAt             DateTime? // Daniel marca cuando físicamente salió de bodega
 
-  eventMonth       String // "YYYY-MM" — mes en que se hizo la compra
-  installments     Int     @default(1) // libre, sin tope — lo decide Nairoby
-  firstPayoutMonth String? // resuelto al confirmar Nairoby (resolveFirstPayoutMonth)
-  totalAmount      Float? // suma de todos los ítems, se llena al confirmar Nairoby
+  // El permiso real de retiro — antes era "solo trazabilidad" (Daniel lo
+  // marcaba después, sin efecto). Ahora es el gate: Daniel lo setea cuando
+  // observa y aprueba el producto que se está llevando, y recién ahí sale
+  // el único push real de "ya podés retirarlo". Totalmente independiente
+  // del estado de pago (se puede retirar antes de que se resuelva el pago).
+  pickedUpAt           DateTime?
+  pickedUpApprovedById String?
+
+  eventMonth   String // "YYYY-MM" — mes en que se hizo la compra
+  installments Int    @default(1) // libre, sin tope — lo decide Nairoby
+  totalAmount  Float? // suma de todos los ítems, se llena al confirmar Nairoby
+
+  // Confirmado 2026-08-20: segunda forma de pago (transferencia), además del
+  // descuento en rol de siempre. paymentMethod queda null hasta que el
+  // colaborador elige. firstPayoutMonth SOLO se calcula si elige PAYROLL —
+  // si elige TRANSFER queda null para siempre, así payroll.ts (que filtra
+  // por firstPayoutMonth not null) lo ignora solo, sin poder cobrarlo dos
+  // veces. Nunca setear firstPayoutMonth fuera del paso "eligió rol".
+  paymentMethod          PersonalPurchasePaymentMethod?
+  firstPayoutMonth       String? // resuelto SOLO si eligió PAYROLL (resolveFirstPayoutMonth)
+  transferDeadlineAt     DateTime? // addBusinessDays(financeConfirmedAt, 3) — 3 días hábiles para pagar
+  transferProofUrl       String?
+  transferProofName      String?
+  transferProofUploadedAt DateTime?
+  transferAiReadAmount   Float? // lo que leyó la IA del comprobante — informativo, no bloquea
+  transferAiMatch        Boolean?
+  transferAiNote         String?
+  transferAdminConfirmedAt   DateTime? // admin revisó su cuenta real y confirmó (doble paso en la UI)
+  transferAdminConfirmedById String?
+  transferClosedAt        DateTime? // Nairoby/FIN cierra la operación
+  transferClosedById      String?
 
   items     PersonalPurchaseItem[]
   createdAt DateTime               @default(now())
@@ -2838,6 +2873,22 @@ model EmployeeBankAccount {
   holderIdNumber    String?
 
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Confirmado 2026-08-20: cuenta única de la empresa para recibir
+// transferencias de compras personales — la carga y edita solo el admin,
+// en Configuración. Singleton igual que PlatformSettings. Todo nullable
+// porque puede no estar configurada todavía.
+model CompanyBankAccount {
+  id                String        @id @default("singleton")
+  bankName          String?
+  bankAccountType   String?
+  bankAccountNumber String?
+  bankAccountHolder String?
+  holderIdType      HolderIdType?
+  holderIdNumber    String?
+
   updatedAt DateTime @updatedAt
 }
 

@@ -1,10 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Upload, X, Mail, KeyRound, Cake } from "lucide-react";
+import { Upload, X, Mail, KeyRound, Cake, Landmark } from "lucide-react";
 import { BrandMark } from "@/components/brand/DaflowMark";
 import { uploadFile } from "@/lib/uploadFile";
+
+type CompanyBankAccount = {
+  bankName: string | null;
+  bankAccountType: string | null;
+  bankAccountNumber: string | null;
+  bankAccountHolder: string | null;
+  holderIdType: "RUC" | "CEDULA" | null;
+  holderIdNumber: string | null;
+};
 
 export function SettingsPanel({
   logoUrl,
@@ -36,6 +45,58 @@ export function SettingsPanel({
   const [passwordErr, setPasswordErr] = useState("");
   const [passwordSaved, setPasswordSaved] = useState(false);
   const [busy, setBusy] = useState(false);
+
+  const [bankAccount, setBankAccount] = useState<CompanyBankAccount>({
+    bankName: "",
+    bankAccountType: "",
+    bankAccountNumber: "",
+    bankAccountHolder: "",
+    holderIdType: null,
+    holderIdNumber: "",
+  });
+  const [bankBusy, setBankBusy] = useState(false);
+  const [bankSaved, setBankSaved] = useState(false);
+  const [bankErr, setBankErr] = useState("");
+
+  useEffect(() => {
+    fetch("/api/company-bank-account").then((r) => (r.ok ? r.json() : null)).then((a: CompanyBankAccount | null) => {
+      if (a) {
+        setBankAccount({
+          bankName: a.bankName ?? "",
+          bankAccountType: a.bankAccountType ?? "",
+          bankAccountNumber: a.bankAccountNumber ?? "",
+          bankAccountHolder: a.bankAccountHolder ?? "",
+          holderIdType: a.holderIdType,
+          holderIdNumber: a.holderIdNumber ?? "",
+        });
+      }
+    });
+  }, []);
+
+  const saveBankAccount = async () => {
+    setBankErr("");
+    setBankBusy(true);
+    const res = await fetch("/api/company-bank-account", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        bankName: bankAccount.bankName,
+        bankAccountType: bankAccount.bankAccountType,
+        bankAccountNumber: bankAccount.bankAccountNumber,
+        bankAccountHolder: bankAccount.bankAccountHolder,
+        holderIdType: bankAccount.holderIdType ?? undefined,
+        holderIdNumber: bankAccount.holderIdNumber || undefined,
+      }),
+    });
+    setBankBusy(false);
+    if (!res.ok) {
+      const data = await res.json().catch(() => null);
+      setBankErr(data?.error ?? "No se pudo guardar la cuenta.");
+      return;
+    }
+    setBankSaved(true);
+    setTimeout(() => setBankSaved(false), 2500);
+  };
 
   const handleLogoFile = async (file: File) => {
     setLogoErr("");
@@ -350,6 +411,61 @@ export function SettingsPanel({
         </button>
         {passwordErr && <div className="text-red text-[12px] mt-2">{passwordErr}</div>}
         {passwordSaved && <div className="text-green text-[12px] mt-2">Contraseña actualizada.</div>}
+      </div>
+
+      <div className="bg-surface border border-rule rounded p-4.5">
+        <label className="flex items-center gap-1.5 mb-3 text-[11px] font-semibold tracking-wide uppercase text-steel">
+          <Landmark size={12} /> Cuenta para recibir transferencias
+        </label>
+        <div className="text-[12px] text-steel mb-3">
+          Es la que ven los colaboradores cuando eligen pagar una compra personal por transferencia.
+        </div>
+        <div className="grid grid-cols-2 gap-2.5 mb-2.5">
+          <input
+            className="rounded border border-rule px-2.5 py-2 text-[13.5px]"
+            placeholder="Banco"
+            value={bankAccount.bankName ?? ""}
+            onChange={(e) => setBankAccount((a) => ({ ...a, bankName: e.target.value }))}
+          />
+          <input
+            className="rounded border border-rule px-2.5 py-2 text-[13.5px]"
+            placeholder="Tipo de cuenta"
+            value={bankAccount.bankAccountType ?? ""}
+            onChange={(e) => setBankAccount((a) => ({ ...a, bankAccountType: e.target.value }))}
+          />
+          <input
+            className="rounded border border-rule px-2.5 py-2 text-[13.5px]"
+            placeholder="Número de cuenta"
+            value={bankAccount.bankAccountNumber ?? ""}
+            onChange={(e) => setBankAccount((a) => ({ ...a, bankAccountNumber: e.target.value }))}
+          />
+          <input
+            className="rounded border border-rule px-2.5 py-2 text-[13.5px]"
+            placeholder="Titular"
+            value={bankAccount.bankAccountHolder ?? ""}
+            onChange={(e) => setBankAccount((a) => ({ ...a, bankAccountHolder: e.target.value }))}
+          />
+          <select
+            className="rounded border border-rule px-2.5 py-2 text-[13.5px]"
+            value={bankAccount.holderIdType ?? ""}
+            onChange={(e) => setBankAccount((a) => ({ ...a, holderIdType: (e.target.value || null) as CompanyBankAccount["holderIdType"] }))}
+          >
+            <option value="">Cédula o RUC</option>
+            <option value="CEDULA">Cédula</option>
+            <option value="RUC">RUC</option>
+          </select>
+          <input
+            className="rounded border border-rule px-2.5 py-2 text-[13.5px]"
+            placeholder="Número de cédula/RUC"
+            value={bankAccount.holderIdNumber ?? ""}
+            onChange={(e) => setBankAccount((a) => ({ ...a, holderIdNumber: e.target.value }))}
+          />
+        </div>
+        <button type="button" disabled={bankBusy} className="rounded border border-blue bg-blue px-4 py-2 text-[13px] font-semibold text-white cursor-pointer disabled:opacity-60" onClick={saveBankAccount}>
+          Guardar
+        </button>
+        {bankErr && <div className="text-red text-[12px] mt-2">{bankErr}</div>}
+        {bankSaved && <div className="text-green text-[12px] mt-2">Cuenta guardada.</div>}
       </div>
     </div>
   );

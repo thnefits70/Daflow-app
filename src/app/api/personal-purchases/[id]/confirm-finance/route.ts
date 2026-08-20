@@ -3,8 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { canConfirmPersonalPurchaseFinance } from "@/lib/guards";
-import { resolveFirstPayoutMonth } from "@/lib/payroll";
-import { addMonthsToMonthStr } from "@/lib/payrollCalc";
+import { addBusinessDays } from "@/lib/businessHours";
 import { sendPushToOwner } from "@/lib/webPush";
 
 const schema = z.object({
@@ -12,12 +11,15 @@ const schema = z.object({
   installments: z.number().int().min(1),
 });
 
-// Confirmado 2026-08-18: Nairoby/admin digita el precio en dólares acá —
+// Confirmado 2026-08-18/20: Nairoby/admin digita el precio en dólares acá —
 // sin ningún catálogo, sin ningún valor precargado. Ya se sabe (desde que
 // Daniel confirmó) cuántas unidades de cada producto van a costo y cuántas
 // a Dropi (unitPriceModes) — con eso se arma el total. Cuotas libres, sin
-// tope. Esto es lo que activa el descuento real, y la única vez que el
-// colaborador se entera del monto (por push).
+// tope (se guardan ya, por si el colaborador termina eligiendo rol).
+// Esto YA NO activa el descuento directo — deja la orden esperando que el
+// colaborador elija cómo pagar (choose-payment-method), con 3 días hábiles
+// de plazo si elige transferencia. Es la única vez que el colaborador se
+// entera del monto (por push).
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   if (!(await canConfirmPersonalPurchaseFinance())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
@@ -50,26 +52,22 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     await prisma.personalPurchaseItem.update({ where: { id: it.id }, data: { costUnitPrice, dropiUnitPrice, itemTotal } });
   }
 
-  const naturalFirstMonth = addMonthsToMonthStr(order.eventMonth, 1);
-  const firstPayoutMonth = await resolveFirstPayoutMonth(naturalFirstMonth);
-
   const isAdmin = session!.user.role === "admin";
   const updated = await prisma.personalPurchaseOrder.update({
     where: { id },
     data: {
-      status: "APPROVED",
+      status: "PENDING_PAYMENT_METHOD",
       totalAmount,
       installments: parsed.data.installments,
-      firstPayoutMonth,
+      transferDeadlineAt: addBusinessDays(new Date(), 3),
       financeConfirmedAt: new Date(),
       financeConfirmedById: isAdmin ? null : session!.user.id,
     },
   });
 
-  const cuotaText = parsed.data.installments > 1 ? ` en ${parsed.data.installments} cuotas` : "";
   await sendPushToOwner(order.employee.id, {
-    title: "✅ Tu compra personal quedó lista",
-    body: `Total $${totalAmount.toFixed(2)}${cuotaText} — se va a descontar de tu rol a partir de ${firstPayoutMonth}.`,
+    title: "💵 Tu compra personal quedó lista",
+    body: `Total $${totalAmount.toFixed(2)} — elegí cómo pagarla.`,
     url: "/area/compras-personales",
   }).catch(() => null);
 

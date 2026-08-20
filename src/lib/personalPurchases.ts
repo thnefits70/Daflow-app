@@ -54,3 +54,46 @@ export async function computeUnitPriceModes(
   while (modes.length < quantity) modes.push("DROPI");
   return modes;
 }
+
+export type StalePersonalPurchasePush = { ownerId: string; title: string; body: string; url: string };
+
+// Confirmado 2026-08-20: recordatorio diario del cron de pendientes
+// (push-pendientes). Días 1-3 hábiles desde que Nairoby cerró el precio
+// (transferDeadlineAt todavía no vencido): recordatorio al colaborador con
+// el monto pendiente. Vencido el plazo: se apaga el aviso al colaborador y
+// empieza el aviso a Nairoby/FIN + admin, hasta que suba el comprobante —
+// cada pedido corre por separado, sin combinar plazos entre sí.
+export async function getStalePersonalPurchaseTransferPushes(): Promise<StalePersonalPurchasePush[]> {
+  const now = new Date();
+  const pushes: StalePersonalPurchasePush[] = [];
+
+  const stillDeciding = await prisma.personalPurchaseOrder.findMany({
+    where: { status: { in: ["PENDING_PAYMENT_METHOD", "PENDING_TRANSFER_PROOF"] }, transferDeadlineAt: { gt: now } },
+    select: { employeeId: true, totalAmount: true },
+  });
+  for (const o of stillDeciding) {
+    pushes.push({
+      ownerId: o.employeeId,
+      title: "💵 Tenés un pago pendiente",
+      body: `Compra personal — $${o.totalAmount?.toFixed(2)} por pagar.`,
+      url: "/area/compras-personales",
+    });
+  }
+
+  const overdue = await prisma.personalPurchaseOrder.findMany({
+    where: { status: { in: ["PENDING_PAYMENT_METHOD", "PENDING_TRANSFER_PROOF"] }, transferDeadlineAt: { lte: now } },
+    include: { employee: { select: { name: true } } },
+  });
+  if (overdue.length > 0) {
+    const finLeader = await prisma.user.findFirst({ where: { isLeader: true, leadsDept: { code: "FIN" } }, select: { id: true } });
+    for (const o of overdue) {
+      const body = `${o.employee.name} no pagó su compra personal — $${o.totalAmount?.toFixed(2)}.`;
+      pushes.push({ ownerId: "admin", title: "⏰ Pago de compra personal vencido", body, url: "/area/compras-personales" });
+      if (finLeader) {
+        pushes.push({ ownerId: finLeader.id, title: "⏰ Pago de compra personal vencido", body, url: "/area/nomina?tab=pagos&ptab=comprasfinanzas" });
+      }
+    }
+  }
+
+  return pushes;
+}

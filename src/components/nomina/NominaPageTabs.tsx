@@ -36,6 +36,7 @@ export function NominaPageTabs({
   canConfirmPersonalPurchaseFinance,
   canManageSalaryAdvances,
   canCreateManagementDeduction,
+  isAdmin = false,
 }: {
   users: NominaUser[];
   departments: Dept[];
@@ -51,6 +52,7 @@ export function NominaPageTabs({
   canConfirmPersonalPurchaseFinance: boolean;
   canManageSalaryAdvances: boolean;
   canCreateManagementDeduction: boolean;
+  isAdmin?: boolean;
 }) {
   const showPayrollTab =
     canLogOvertime || canApproveOvertime || canViewRoles || canProposeCommissions || canGrantCeoBonus ||
@@ -120,6 +122,7 @@ export function NominaPageTabs({
           canConfirmPersonalPurchaseFinance={canConfirmPersonalPurchaseFinance}
           canManageSalaryAdvances={canManageSalaryAdvances}
           canCreateManagementDeduction={canCreateManagementDeduction}
+          isAdmin={isAdmin}
         />
       )}
     </div>

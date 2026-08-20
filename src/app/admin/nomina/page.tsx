@@ -73,6 +73,7 @@ export default async function NominaPage() {
         canConfirmPersonalPurchaseFinance={canConfirmPurchasesFinance}
         canManageSalaryAdvances={canAdvances}
         canCreateManagementDeduction={canDeductions}
+        isAdmin
       />
     </div>
   );

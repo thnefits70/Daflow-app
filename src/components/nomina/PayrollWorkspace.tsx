@@ -8,6 +8,7 @@ import { PayrollRolesPanel } from "./PayrollRolesPanel";
 import { CommissionTiersPanel } from "./CommissionTiersPanel";
 import { CeoBonusesPanel } from "./CeoBonusesPanel";
 import { PersonalPurchasesFinancePanel } from "@/components/personal-purchases/PersonalPurchasesFinancePanel";
+import { PersonalPurchasesTransferPanel } from "@/components/personal-purchases/PersonalPurchasesTransferPanel";
 import { SalaryAdvanceApprovalPanel } from "@/components/salary-advances/SalaryAdvanceApprovalPanel";
 import { ManagementDeductionsPanel } from "./ManagementDeductionsPanel";
 
@@ -28,6 +29,7 @@ export function PayrollWorkspace({
   canConfirmPersonalPurchaseFinance,
   canManageSalaryAdvances,
   canCreateManagementDeduction,
+  isAdmin = false,
 }: {
   canLogOvertime: boolean;
   canApproveOvertime: boolean;
@@ -39,6 +41,7 @@ export function PayrollWorkspace({
   canConfirmPersonalPurchaseFinance: boolean;
   canManageSalaryAdvances: boolean;
   canCreateManagementDeduction: boolean;
+  isAdmin?: boolean;
 }) {
   const tabs: { key: Tab; label: string }[] = [
     ...(canLogOvertime ? [{ key: "horas" as Tab, label: "Registrar horas extra" }] : []),
@@ -89,7 +92,12 @@ export function PayrollWorkspace({
       )}
       {tab === "comisiones" && canProposeCommissions && <CommissionTiersPanel canPropose={canProposeCommissions} canApprove={canApproveCommissions} />}
       {tab === "bonosceo" && canGrantCeoBonus && <CeoBonusesPanel />}
-      {tab === "comprasfinanzas" && canConfirmPersonalPurchaseFinance && <PersonalPurchasesFinancePanel />}
+      {tab === "comprasfinanzas" && canConfirmPersonalPurchaseFinance && (
+        <div className="flex flex-col gap-5">
+          <PersonalPurchasesFinancePanel />
+          <PersonalPurchasesTransferPanel isAdmin={isAdmin} />
+        </div>
+      )}
       {tab === "anticipos" && canManageSalaryAdvances && <SalaryAdvanceApprovalPanel />}
       {tab === "descuentos" && canCreateManagementDeduction && <ManagementDeductionsPanel />}
     </div>

@@ -286,6 +286,16 @@ export async function canConfirmPersonalPurchaseFinance() {
   return canEditPayrollRoles();
 }
 
+// Confirmado 2026-08-20: confirmar que una transferencia de compra personal
+// realmente llegó exige revisar la cuenta bancaria real de la empresa —
+// exclusivo del admin, sin delegación, mismo espíritu que el paso
+// PENDING_PAYMENT→PAID de Pagos administrativos (solo quien ve el banco de
+// verdad puede confirmarlo).
+export async function canConfirmPersonalPurchaseTransfer() {
+  const session = await auth();
+  return !!session && session.user.role === "admin";
+}
+
 // Anticipos y descuentos por mala gestión — solo el admin los aprueba/crea,
 // sin excepción (pedido explícito del usuario).
 export async function canManageSalaryAdvances() {

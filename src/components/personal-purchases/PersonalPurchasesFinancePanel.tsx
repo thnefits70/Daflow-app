@@ -144,7 +144,7 @@ export function PersonalPurchasesFinancePanel() {
                 </div>
               ) : (
                 <div className="flex gap-2 mt-2.5">
-                  <button type="button" disabled={busy || !allPriced || orderTotal <= 0} className="text-[12px] font-bold bg-green text-white rounded-md px-3.5 py-1.5 cursor-pointer disabled:opacity-40" onClick={() => confirm(o)}>Confirmar y activar descuento</button>
+                  <button type="button" disabled={busy || !allPriced || orderTotal <= 0} className="text-[12px] font-bold bg-green text-white rounded-md px-3.5 py-1.5 cursor-pointer disabled:opacity-40" onClick={() => confirm(o)}>Confirmar precio</button>
                   <button type="button" disabled={busy} className="text-[12px] font-semibold text-red cursor-pointer" onClick={() => setRejecting(o.id)}>Rechazar</button>
                 </div>
               )}

@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { auth } from "@/auth";
 import { TopLine } from "@/components/ui/TopLine";
 import { NominaPageTabs } from "@/components/nomina/NominaPageTabs";
 import {
@@ -17,6 +18,8 @@ import {
 } from "@/lib/guards";
 
 export default async function AreaNominaPage() {
+  const session = await auth();
+  const isAdmin = session?.user.role === "admin";
   const [
     canManage,
     canLogOvertime,
@@ -84,6 +87,7 @@ export default async function AreaNominaPage() {
         canConfirmPersonalPurchaseFinance={canConfirmPurchasesFinance}
         canManageSalaryAdvances={canAdvances}
         canCreateManagementDeduction={canDeductions}
+        isAdmin={isAdmin}
       />
     </div>
   );
