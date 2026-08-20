@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { ShoppingBag, Camera, Plus, X, Landmark, Copy } from "lucide-react";
 import { LiveCameraCapture } from "@/components/shared/LiveCameraCapture";
 import { ProofPreview } from "@/components/shared/ProofPreview";
@@ -161,6 +161,8 @@ export function PersonalPurchasesPanel() {
   const [err, setErr] = useState("");
   const [bankAccount, setBankAccount] = useState<CompanyBankAccount>(null);
   const [payBusy, setPayBusy] = useState<Record<string, boolean>>({});
+  const [armedMethod, setArmedMethod] = useState<Record<string, "PAYROLL" | "TRANSFER" | undefined>>({});
+  const armTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   function loadOrders() {
     fetch("/api/personal-purchases").then((r) => (r.ok ? r.json() : [])).then(setOrders);
@@ -179,6 +181,27 @@ export function PersonalPurchasesPanel() {
     });
     setPayBusy((b) => ({ ...b, [orderId]: false }));
     loadOrders();
+  }
+
+  // Confirmado 2026-08-20: elegir método de pago mueve plata real (transferencia
+  // o descuento del rol), así que un solo tap no alcanza — el primer tap arma
+  // la opción ("¿Confirmar?") y solo el segundo tap sobre la misma la ejecuta.
+  // Tocar la otra opción, o no confirmar en unos segundos, desarma sin efecto.
+  function handlePaymentMethodTap(orderId: string, method: "PAYROLL" | "TRANSFER") {
+    if (armTimers.current[orderId]) {
+      clearTimeout(armTimers.current[orderId]);
+      delete armTimers.current[orderId];
+    }
+    if (armedMethod[orderId] === method) {
+      setArmedMethod((a) => ({ ...a, [orderId]: undefined }));
+      choosePaymentMethod(orderId, method);
+      return;
+    }
+    setArmedMethod((a) => ({ ...a, [orderId]: method }));
+    armTimers.current[orderId] = setTimeout(() => {
+      setArmedMethod((a) => ({ ...a, [orderId]: undefined }));
+      delete armTimers.current[orderId];
+    }, 4000);
   }
 
   function setQuantity(q: number) {
@@ -384,13 +407,26 @@ export function PersonalPurchasesPanel() {
                       <div className="text-[10.5px] text-steel-dim mb-1.5">Si elegís transferencia, tenés hasta el {deadlineText(o.transferDeadlineAt)}.</div>
                     )}
                     <div className="flex gap-2">
-                      <button type="button" disabled={isBusy} className="text-[12px] font-bold border-[1.5px] border-teal text-teal rounded-md px-3.5 py-1.5 cursor-pointer disabled:opacity-40" onClick={() => choosePaymentMethod(o.id, "TRANSFER")}>
-                        🏦 Transferencia
+                      <button
+                        type="button"
+                        disabled={isBusy}
+                        className={`text-[12px] font-bold border-[1.5px] rounded-md px-3.5 py-1.5 cursor-pointer disabled:opacity-40 ${armedMethod[o.id] === "TRANSFER" ? "bg-teal border-teal text-white" : "border-teal text-teal"}`}
+                        onClick={() => handlePaymentMethodTap(o.id, "TRANSFER")}
+                      >
+                        {armedMethod[o.id] === "TRANSFER" ? "Tocá de nuevo para confirmar" : "🏦 Transferencia"}
                       </button>
-                      <button type="button" disabled={isBusy} className="text-[12px] font-bold border-[1.5px] border-rule text-ink rounded-md px-3.5 py-1.5 cursor-pointer disabled:opacity-40" onClick={() => choosePaymentMethod(o.id, "PAYROLL")}>
-                        🧾 Descuento en rol
+                      <button
+                        type="button"
+                        disabled={isBusy}
+                        className={`text-[12px] font-bold border-[1.5px] rounded-md px-3.5 py-1.5 cursor-pointer disabled:opacity-40 ${armedMethod[o.id] === "PAYROLL" ? "bg-ink border-ink text-white" : "border-rule text-ink"}`}
+                        onClick={() => handlePaymentMethodTap(o.id, "PAYROLL")}
+                      >
+                        {armedMethod[o.id] === "PAYROLL" ? "Tocá de nuevo para confirmar" : "🧾 Descuento en rol"}
                       </button>
                     </div>
+                    {armedMethod[o.id] && (
+                      <div className="text-[10.5px] text-steel-dim mt-1.5">Volvé a tocar la misma opción para confirmar, o tocá la otra para cambiar.</div>
+                    )}
                   </div>
                 )}
 
