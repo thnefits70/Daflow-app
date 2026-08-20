@@ -12,11 +12,42 @@ type Item = {
 };
 type Order = {
   id: string;
-  employee: { name: string };
+  employee: { id: string; name: string };
   items: Item[];
+  createdAt: string;
 };
 
 const RELATION_LABEL: Record<string, string> = { SELF: "él/ella mismo/a", MINOR_CHILD: "hijo/a menor", OTHER_FAMILY: "otra persona" };
+
+function formatDateTime(iso: string) {
+  return new Date(iso).toLocaleString("es-EC", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+}
+
+function formatGapMinutes(diffMin: number) {
+  if (diffMin < 1) return "menos de 1 min";
+  if (diffMin < 60) return `${Math.round(diffMin)} min`;
+  const diffH = diffMin / 60;
+  if (diffH < 24) return `${Math.round(diffH)} h`;
+  return `${Math.round(diffH / 24)} d`;
+}
+
+// Detecta posibles duplicados: mismo empleado + mismo texto de producto en
+// otra orden pendiente. No bloquea nada, solo avisa — Daniel decide si es
+// error humano (clon) o dos compras reales según qué tan cerca estén los
+// horarios.
+function findDuplicateGap(order: Order, item: Item, orders: Order[]): string | null {
+  const norm = item.employeeProductName.trim().toLowerCase();
+  let closestGapMin: number | null = null;
+  for (const o of orders) {
+    if (o.id === order.id || o.employee.id !== order.employee.id) continue;
+    for (const it of o.items) {
+      if (it.employeeProductName.trim().toLowerCase() !== norm) continue;
+      const gapMin = Math.abs(new Date(order.createdAt).getTime() - new Date(o.createdAt).getTime()) / 60000;
+      if (closestGapMin === null || gapMin < closestGapMin) closestGapMin = gapMin;
+    }
+  }
+  return closestGapMin === null ? null : formatGapMinutes(closestGapMin);
+}
 
 // Confirmado 2026-08-20: pantalla de Daniel — confirmar acá es un solo
 // paso que hace dos cosas a la vez: corrige/normaliza el nombre de cada
@@ -81,9 +112,14 @@ export function PersonalPurchasesInventoryPanel() {
           const allNamed = o.items.every((it) => (names[it.id] ?? "").trim().length > 0);
           return (
             <div key={o.id} className="bg-surface border border-rule rounded-md p-3.5">
-              <div className="font-bold text-[13px] mb-2.5">{o.employee.name}</div>
+              <div className="flex items-baseline justify-between mb-2.5">
+                <div className="font-bold text-[13px]">{o.employee.name}</div>
+                <div className="text-[10.5px] text-steel-dim">{formatDateTime(o.createdAt)}</div>
+              </div>
               <div className="flex flex-col gap-3">
-                {o.items.map((it) => (
+                {o.items.map((it) => {
+                  const dupGap = findDuplicateGap(o, it, orders);
+                  return (
                   <div key={it.id} className="flex gap-3 items-start border-b border-rule last:border-0 pb-3 last:pb-0">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
@@ -103,6 +139,9 @@ export function PersonalPurchasesInventoryPanel() {
                     )}
                     <div className="flex-1 min-w-0">
                       <div className="text-[11px] text-steel-dim mb-1">Escribió: &quot;{it.employeeProductName}&quot; × {it.quantity}</div>
+                      {dupGap && (
+                        <div className="text-[10.5px] font-semibold text-gold mb-1.5">⚠️ Posible duplicado — {o.employee.name} tiene otra solicitud igual hace {dupGap}</div>
+                      )}
                       <input
                         className="rounded border border-rule bg-cloud px-2 py-1 text-[12.5px] w-full mb-1.5"
                         placeholder="Nombre según JUST"
@@ -114,7 +153,8 @@ export function PersonalPurchasesInventoryPanel() {
                       </div>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
               {rejecting === o.id ? (
                 <div className="mt-3 pt-3 border-t border-rule">
