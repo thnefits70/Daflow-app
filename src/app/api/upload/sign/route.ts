@@ -109,7 +109,7 @@ export async function POST(req: NextRequest) {
   // cualquier colaborador (no hace falta ningún permiso especial, todos
   // pueden comprar) — el catálogo de productos en cambio solo lo mantiene
   // quien puede confirmar compras personales en Inventario (Daniel/admin).
-  if (!allowed && session?.user.role === "employee" && folder === "personal-purchase-photos") {
+  if (!allowed && session?.user.role === "employee" && (folder === "personal-purchase-photos" || folder === "personal-purchase-proofs")) {
     allowed = true;
   }
   if (!allowed && session?.user.role === "employee" && folder === "retail-product-photos") {
