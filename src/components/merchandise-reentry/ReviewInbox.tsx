@@ -50,6 +50,7 @@ export function ReviewInbox() {
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
 
   function load() {
     fetch("/api/merchandise-reentry/batches/review")
@@ -142,7 +143,12 @@ export function ReviewInbox() {
                     <div key={it.id} className="flex items-center gap-2.5">
                       {it.photoUrls[0] && (
                         // eslint-disable-next-line @next/next/no-img-element
-                        <img src={it.photoUrls[0]} alt={itemName(it)} className="w-9 h-9 object-cover rounded border border-rule" />
+                        <img
+                          src={it.photoUrls[0]}
+                          alt={itemName(it)}
+                          className="w-9 h-9 object-cover rounded border border-rule cursor-zoom-in"
+                          onClick={() => setLightboxUrl(it.photoUrls[0])}
+                        />
                       )}
                       <div className="flex-1 text-[12px]">{itemName(it)}</div>
                       <span className="text-[11.5px] text-green font-semibold">{it.goodQty} buenas</span>
@@ -167,18 +173,28 @@ export function ReviewInbox() {
               </div>
               <div className="flex flex-col gap-2.5">
                 {b.items.map((item) => (
-                  <ReviewItemRow key={item.id} item={item} onChanged={load} />
+                  <ReviewItemRow key={item.id} item={item} onChanged={load} onExpandPhoto={setLightboxUrl} />
                 ))}
               </div>
             </div>
           ))}
         </div>
       )}
+
+      {lightboxUrl && (
+        <div
+          className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center cursor-zoom-out p-6"
+          onClick={() => setLightboxUrl(null)}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={lightboxUrl} alt="" className="max-w-[90vw] max-h-[90vh] object-contain rounded-md shadow-2xl" onClick={(e) => e.stopPropagation()} />
+        </div>
+      )}
     </div>
   );
 }
 
-function ReviewItemRow({ item, onChanged }: { item: ItemDTO; onChanged: () => void }) {
+function ReviewItemRow({ item, onChanged, onExpandPhoto }: { item: ItemDTO; onChanged: () => void; onExpandPhoto: (url: string) => void }) {
   const [name, setName] = useState(item.correctedName ?? item.declaredName ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -217,7 +233,12 @@ function ReviewItemRow({ item, onChanged }: { item: ItemDTO; onChanged: () => vo
       <div className="flex items-center gap-2.5">
         {item.photoUrls[0] && (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={item.photoUrls[0]} alt={itemName(item)} className="w-10 h-10 object-cover rounded border border-rule shrink-0" />
+          <img
+            src={item.photoUrls[0]}
+            alt={itemName(item)}
+            className="w-10 h-10 object-cover rounded border border-rule shrink-0 cursor-zoom-in"
+            onClick={() => onExpandPhoto(item.photoUrls[0])}
+          />
         )}
         <div className="flex-1 min-w-0">
           {nameNeedsReview ? (
