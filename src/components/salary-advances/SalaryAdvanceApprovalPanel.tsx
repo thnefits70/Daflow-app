@@ -160,11 +160,22 @@ export function SalaryAdvanceApprovalPanel() {
       <div className="text-[11px] font-semibold uppercase tracking-wide text-steel mb-3">Anticipos pendientes ({items.length})</div>
       {items.length === 0 && <div className="border-[1.5px] border-dashed border-rule rounded-md p-6 text-center text-steel text-[13px]">Nada pendiente por ahora.</div>}
       <div className="flex flex-col gap-3">
-        {items.map((a) => (
-          <div key={a.id} className="bg-surface border border-rule rounded-md p-3.5">
+        {items.map((a) => {
+          const isCalamidad = a.reason === "EMERGENCIA_FAMILIAR";
+          return (
+          <div key={a.id} className={`rounded-md p-3.5 ${isCalamidad ? "bg-[#D9A441]/10 border-2 border-[#D9A441]" : "bg-surface border border-rule"}`}>
             <div className="font-bold text-[13px]">{a.employee.name} — {money(a.amount)}{a.installments > 1 ? ` (${a.installments} cuotas)` : ""}</div>
-            {a.reason && <div className="text-[11.5px] text-steel mt-0.5">Motivo: {REASON_LABEL[a.reason] ?? a.reason}</div>}
-            {a.justification && <div className="text-[12px] text-steel-dim mt-0.5">"{a.justification}"</div>}
+            {a.reason && (
+              <div className={`text-[11.5px] mt-0.5 ${isCalamidad ? "text-[#D9A441] font-semibold" : "text-steel"}`}>
+                Motivo: {REASON_LABEL[a.reason] ?? a.reason}
+                {isCalamidad && " — revisá cómo está, no solo el anticipo"}
+              </div>
+            )}
+            {a.justification && (
+              <div className={`text-[12px] mt-1 ${isCalamidad ? "text-ink" : "text-steel-dim"}`}>
+                {isCalamidad && <span className="font-semibold">Detalle: </span>}"{a.justification}"
+              </div>
+            )}
             {a.bankAccount ? (
               <div className="text-[11.5px] text-steel mt-1.5">
                 {a.bankAccount.bankName} · {a.bankAccount.bankAccountType} · {a.bankAccount.bankAccountNumber} · {a.bankAccount.bankAccountHolder}{a.bankAccount.holderIdNumber ? ` · CI ${a.bankAccount.holderIdNumber}` : ""}
@@ -230,7 +241,8 @@ export function SalaryAdvanceApprovalPanel() {
               </div>
             )}
           </div>
-        ))}
+          );
+        })}
       </div>
       <AdvanceHistoryPanel />
     </div>

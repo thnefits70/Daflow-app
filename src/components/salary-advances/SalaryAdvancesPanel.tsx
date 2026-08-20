@@ -196,7 +196,7 @@ export function SalaryAdvancesPanel() {
       body: JSON.stringify({
         amount: amt,
         reason: needsReason ? reason ?? undefined : undefined,
-        justification: needsReason && reason === "OTRO" ? justification.trim() : undefined,
+        justification: needsReason && justification.trim() ? justification.trim() : undefined,
         installments: canInstallments ? installments : 1,
       }),
     });
@@ -291,8 +291,19 @@ export function SalaryAdvancesPanel() {
                 </div>
               </div>
             )}
-            {needsReason && reason === "OTRO" && (
-              <textarea className="text-[12.5px] rounded border border-rule bg-cloud px-2.5 py-1.5" placeholder="Contá brevemente el motivo (mínimo 10 caracteres)" value={justification} onChange={(e) => updateJustification(e.target.value)} rows={2} />
+            {needsReason && reason && (
+              <div>
+                <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">
+                  {reason === "OTRO" ? "Contá el motivo (obligatorio, mínimo 10 caracteres)" : "Contanos un poco más (opcional) — así te podemos ayudar, no solo dar el anticipo"}
+                </label>
+                <textarea
+                  className="text-[12.5px] rounded border border-rule bg-cloud px-2.5 py-1.5 w-full"
+                  placeholder={reason === "OTRO" ? "Mínimo 10 caracteres" : "Contá brevemente qué está pasando, si querés"}
+                  value={justification}
+                  onChange={(e) => updateJustification(e.target.value)}
+                  rows={2}
+                />
+              </div>
             )}
             {pendingTotal > 0 && (
               <div className="text-[11px] text-steel-dim">Ya tenés {money(pendingTotal)} pendientes de pago (tope {money(PENDING_CAP)}).</div>
