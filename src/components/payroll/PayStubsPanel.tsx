@@ -345,6 +345,14 @@ export function PayStubsPanel({
 
   return (
     <div>
+      {/* El líder que gestiona esta página también es colaborador — sus
+          propios descuentos por confirmar no aparecían acá porque el modo
+          "manage" nunca renderizaba este panel (bug: acceso delegado
+          tapando su propio dato). No aplica a admin: para admin, GET
+          /api/management-deductions devuelve los de TODOS, no solo los
+          propios. */}
+      {!isAdmin && <MyManagementDeductionsPanel />}
+
       <div className="flex items-center gap-3 flex-wrap mb-4.5">
         <select
           className="rounded border border-rule bg-surface px-2.5 py-2 text-[13px]"
