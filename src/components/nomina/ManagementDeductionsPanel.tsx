@@ -38,6 +38,7 @@ export function ManagementDeductionsPanel() {
   const [startMonth, setStartMonth] = useState(nextMonths(1)[0]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  const [confirming, setConfirming] = useState(false);
 
   function load() {
     fetch("/api/payroll/employees").then((r) => (r.ok ? r.json() : [])).then((rows) => setEmployees(rows.map((r: { id: string; name: string; position: string | null }) => ({ id: r.id, name: r.name, position: r.position }))));
@@ -55,9 +56,27 @@ export function ManagementDeductionsPanel() {
     if (result.ok) setEvidenceUrl(result.url);
   }
 
+  function validate(): string {
+    if (!employeeId) return "Elegí un colaborador.";
+    if (!Number(totalAmount)) return "Ingresá un monto válido.";
+    if (!reason.trim()) return "El motivo es obligatorio.";
+    return "";
+  }
+
+  function onSendClick() {
+    if (!confirming) {
+      const problem = validate();
+      if (problem) { setErr(problem); return; }
+      setErr("");
+      setConfirming(true);
+      return;
+    }
+    setConfirming(false);
+    submit();
+  }
+
   async function submit() {
     const amount = Number(totalAmount);
-    if (!employeeId || !amount || !reason.trim()) return;
     setBusy(true);
     setErr("");
     const res = await fetch("/api/management-deductions", {
@@ -77,12 +96,12 @@ export function ManagementDeductionsPanel() {
       <div className="bg-surface border border-rule rounded-md p-4 mb-4">
         <div className="text-[11px] font-semibold uppercase tracking-wide text-steel mb-3">Nuevo descuento por mala gestión</div>
         <div className="flex flex-col gap-2 max-w-sm">
-          <select className="text-[13px] rounded border border-rule bg-cloud px-2.5 py-1.5" value={employeeId} onChange={(e) => setEmployeeId(e.target.value)}>
+          <select className="text-[13px] rounded border border-rule bg-cloud px-2.5 py-1.5" value={employeeId} onChange={(e) => { setEmployeeId(e.target.value); setConfirming(false); }}>
             <option value="">Elegí al colaborador…</option>
             {employees.map((e) => (<option key={e.id} value={e.id}>{e.name}</option>))}
           </select>
-          <input className="text-[13px] rounded border border-rule bg-cloud px-2.5 py-1.5" type="number" step="0.01" placeholder="Monto total" value={totalAmount} onChange={(e) => setTotalAmount(e.target.value)} />
-          <textarea className="text-[12.5px] rounded border border-rule bg-cloud px-2.5 py-1.5" placeholder="Motivo (obligatorio)" value={reason} onChange={(e) => setReason(e.target.value)} rows={2} />
+          <input className="text-[13px] rounded border border-rule bg-cloud px-2.5 py-1.5" type="number" step="0.01" placeholder="Monto total" value={totalAmount} onChange={(e) => { setTotalAmount(e.target.value); setConfirming(false); }} />
+          <textarea className="text-[12.5px] rounded border border-rule bg-cloud px-2.5 py-1.5" placeholder="Motivo (obligatorio)" value={reason} onChange={(e) => { setReason(e.target.value); setConfirming(false); }} rows={2} />
           <label className="text-[11.5px] font-semibold text-blue cursor-pointer">
             {uploading ? "Subiendo…" : evidenceUrl ? "Evidencia lista — cambiar" : "Agregar evidencia (opcional)"}
             <input type="file" accept="image/*,application/pdf" className="hidden" onChange={onEvidence} />
@@ -102,9 +121,24 @@ export function ManagementDeductionsPanel() {
             </select>
           </div>
           {err && <div className="text-red text-[12.5px]">{err}</div>}
-          <button type="button" disabled={busy} className="text-[13px] font-bold bg-blue text-white rounded-md px-4 py-2 cursor-pointer disabled:opacity-50 self-start" onClick={submit}>
-            {busy ? "Enviando…" : "Enviar al colaborador"}
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              disabled={busy}
+              className={`text-[13px] font-bold text-white rounded-md px-4 py-2 cursor-pointer disabled:opacity-50 self-start ${confirming ? "bg-red" : "bg-blue"}`}
+              onClick={onSendClick}
+            >
+              {busy ? "Enviando…" : confirming ? "Confirmar y enviar" : "Enviar al colaborador"}
+            </button>
+            {confirming && !busy && (
+              <button type="button" className="text-[12.5px] text-steel cursor-pointer" onClick={() => setConfirming(false)}>
+                Cancelar
+              </button>
+            )}
+          </div>
+          {confirming && !busy && (
+            <div className="text-[11.5px] text-steel-dim">Esto va a descontar {money(Number(totalAmount) || 0)} del rol de {employees.find((e) => e.id === employeeId)?.name ?? "este colaborador"}. Tocá de nuevo para confirmar.</div>
+          )}
         </div>
       </div>
 

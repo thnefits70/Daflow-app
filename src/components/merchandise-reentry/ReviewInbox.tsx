@@ -109,7 +109,7 @@ export function ReviewInbox() {
           {ready.length > 1 && (
             <div className="flex items-center justify-between gap-3 bg-teal/10 border border-teal/30 rounded-md px-4 py-3">
               <div className="text-[12.5px]">
-                <b>{ready.length} lotes</b> con IA confirmada y 100% de unidades buenas.
+                <b>{ready.length} lotes</b> con todos los productos ya identificados y 100% de unidades buenas.
               </div>
               <button type="button" disabled={busy} className="rounded border border-teal bg-teal px-3.5 py-1.5 text-[12px] font-bold text-navy cursor-pointer disabled:opacity-60 whitespace-nowrap" onClick={approveAllReady}>
                 Aprobar todos los listos ({ready.length})
@@ -128,7 +128,7 @@ export function ReviewInbox() {
                   </div>
                   <div className="text-[11.5px] text-steel">{b.items.length} producto(s), todos buenos</div>
                 </div>
-                <span className="font-mono text-[9.5px] font-bold uppercase rounded-full px-2 py-0.5 bg-green/15 text-green border border-green/40 whitespace-nowrap">IA confirmó todo</span>
+                <span className="font-mono text-[9.5px] font-bold uppercase rounded-full px-2 py-0.5 bg-green/15 text-green border border-green/40 whitespace-nowrap">Todo identificado</span>
                 <button type="button" title="Ver desglose" className="w-8 h-8 rounded border border-rule flex items-center justify-center cursor-pointer text-steel hover:text-teal" onClick={() => setExpandedId(expandedId === b.id ? null : b.id)}>
                   {expandedId === b.id ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                 </button>

@@ -278,15 +278,26 @@ export function CaptureFlow() {
   );
 }
 
+type CatalogItem = { id: string; name: string; photos: string[] };
+
+// Confirmado 2026-08-20: pedido explícito del usuario — se sacó el
+// reconocimiento por IA (tenía un costo real por cada foto). Ahora se
+// busca a mano contra el catálogo ya cargado (mismo patrón de
+// PurchaseCatalogPicker.tsx: se trae la lista una vez, el filtro por
+// palabras clave es todo del lado del cliente, sin ida y vuelta al
+// servidor por cada letra — pensado para celular con conexión floja).
 function AddItemForm({ batchId, onAdded, onCancel }: { batchId: string; onAdded: () => void; onCancel: () => void }) {
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [photoUrl2, setPhotoUrl2] = useState<string | null>(null);
   const [taking, setTaking] = useState(false);
   const [taking2, setTaking2] = useState(false);
-  const [recognizing, setRecognizing] = useState(false);
-  const [match, setMatch] = useState<{ id: string; name: string; photos: string[] } | null | undefined>(undefined);
-  const [matchConfirmed, setMatchConfirmed] = useState(false);
+
+  const [catalog, setCatalog] = useState<CatalogItem[] | null>(null);
+  const [query, setQuery] = useState("");
+  const [selected, setSelected] = useState<CatalogItem | null>(null);
+  const [manualMode, setManualMode] = useState(false);
   const [manualName, setManualName] = useState("");
+
   const [goodQty, setGoodQty] = useState("");
   const [damagedQty, setDamagedQty] = useState("");
   const [damageReason, setDamageReason] = useState("");
@@ -295,47 +306,35 @@ function AddItemForm({ batchId, onAdded, onCancel }: { batchId: string; onAdded:
   const [error, setError] = useState("");
   const [confirmingAdd, setConfirmingAdd] = useState(false);
 
-  async function runRecognition(urls: string[]) {
-    setRecognizing(true);
-    setMatch(undefined);
-    setMatchConfirmed(false);
-    try {
-      const res = await fetch("/api/merchandise-reentry/recognize", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ photoUrls: urls }),
-      });
-      const data = await res.json();
-      setMatch(data.catalogItem ?? null);
-    } catch {
-      setMatch(null);
-    } finally {
-      setRecognizing(false);
-    }
-  }
+  useEffect(() => {
+    fetch("/api/merchandise-reentry/catalog-search")
+      .then((r) => (r.ok ? r.json() : []))
+      .then(setCatalog)
+      .catch(() => setCatalog([]));
+  }, []);
 
-  async function onCaptured(url: string) {
+  function onCaptured(url: string) {
     setPhotoUrl(url);
     setTaking(false);
-    await runRecognition(photoUrl2 ? [url, photoUrl2] : [url]);
   }
 
-  async function onCaptured2(url: string) {
+  function onCaptured2(url: string) {
     setPhotoUrl2(url);
     setTaking2(false);
-    // Solo repetimos el reconocimiento si todavía no se confirmó un match ni
-    // se puso nombre a mano — si ya se resolvió con la primera foto, la
-    // segunda solo queda como evidencia extra (p. ej. para mostrar varias
-    // unidades) y no vale la pena gastar otra llamada a la IA.
-    if (photoUrl && !matchConfirmed && !manualName) await runRecognition([photoUrl, url]);
   }
+
+  // Coincidencia por TODAS las palabras escritas (no solo substring exacto)
+  // — "cojin masajeador" encuentra "Almohada masajeador" sin importar orden.
+  const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const suggestions =
+    words.length === 0 ? [] : (catalog ?? []).filter((c) => words.every((w) => c.name.toLowerCase().includes(w))).slice(0, 6);
 
   const dQty = Number(damagedQty) || 0;
   const gQty = Number(goodQty) || 0;
-  const hasName = (match && matchConfirmed) || manualName.trim().length > 0;
+  const hasName = !!selected || manualName.trim().length > 0;
   const hasDamageReason = dQty === 0 || !!damageReason;
   const canSave = !!photoUrl && hasName && gQty + dQty > 0 && hasDamageReason && !saving;
-  const finalName = match && matchConfirmed ? match.name : manualName.trim();
+  const finalName = selected ? selected.name : manualName.trim();
   const finalDamageReason = dQty > 0 ? (damageReason === "Otro" ? damageReasonOther.trim() || "Otro (sin describir)" : damageReason) : null;
 
   async function save() {
@@ -345,9 +344,9 @@ function AddItemForm({ batchId, onAdded, onCancel }: { batchId: string; onAdded:
     try {
       await postJson(`/api/merchandise-reentry/batches/${batchId}/items`, {
         photoUrls: photoUrl2 ? [photoUrl, photoUrl2] : [photoUrl],
-        catalogItemId: match && matchConfirmed ? match.id : undefined,
-        aiRecognized: !!(match && matchConfirmed),
-        declaredName: match && matchConfirmed ? undefined : manualName.trim(),
+        catalogItemId: selected ? selected.id : undefined,
+        aiRecognized: !!selected,
+        declaredName: selected ? undefined : manualName.trim(),
         goodQty: gQty,
         damagedQty: dQty,
         damageReasonName: dQty > 0 ? damageReason : undefined,
@@ -381,8 +380,8 @@ function AddItemForm({ batchId, onAdded, onCancel }: { batchId: string; onAdded:
               <span className="text-steel shrink-0">Producto</span>
               <span className="font-semibold text-right">{finalName}</span>
             </div>
-            {!matchConfirmed && (
-              <div className="text-[11px] text-steel -mt-1">Nombre puesto a mano — la IA no lo reconoció o se descartó el match.</div>
+            {!selected && (
+              <div className="text-[11px] text-steel -mt-1">Nombre puesto a mano — no se encontró en el catálogo o se prefirió escribir directo.</div>
             )}
             <div className="flex items-start justify-between gap-3">
               <span className="text-steel shrink-0">Unidades buenas</span>
@@ -455,43 +454,33 @@ function AddItemForm({ batchId, onAdded, onCancel }: { batchId: string; onAdded:
               <Camera size={14} /> Agregar segunda foto
             </button>
           )}
-          <div className="text-[10.5px] text-steel mt-1.5">Útil si son varias unidades del mismo producto, y ayuda a la IA a reconocerlo mejor.</div>
+          <div className="text-[10.5px] text-steel mt-1.5">Útil como evidencia extra, por ejemplo si son varias unidades del mismo producto.</div>
         </div>
       )}
 
       {photoUrl && (
         <div>
           <label className="block mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-steel">3 · Producto</label>
-          {recognizing ? (
-            <div className="text-[12px] text-steel">Comparando con el catálogo…</div>
-          ) : match && !manualName ? (
-            matchConfirmed ? (
-              <div className="flex items-center gap-2.5 bg-green/10 border border-green/35 rounded-md p-2.5">
-                {match.photos[0] && (
+          {selected ? (
+            <div className="flex flex-col gap-2">
+              <div className="text-[10px] font-semibold uppercase tracking-wide text-steel">Tu foto vs. la del catálogo</div>
+              <div className="flex items-center gap-2.5">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={photoUrl} alt="Foto tomada" className="w-16 h-16 object-cover rounded-md border border-rule" />
+                {selected.photos[0] && (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={match.photos[0]} alt={match.name} className="w-10 h-10 object-cover rounded border border-rule shrink-0" />
+                  <img src={selected.photos[0]} alt={selected.name} className="w-16 h-16 object-cover rounded-md border border-green/40" />
                 )}
-                <div className="flex-1 min-w-0 text-[12.5px] font-semibold truncate">{match.name}</div>
-                <Check size={16} className="text-green shrink-0" />
               </div>
-            ) : (
               <div className="flex items-center gap-2.5 bg-green/10 border border-green/35 rounded-md p-2.5">
-                {match.photos[0] && (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={match.photos[0]} alt={match.name} className="w-10 h-10 object-cover rounded border border-rule shrink-0" />
-                )}
-                <div className="flex-1 min-w-0">
-                  <div className="text-[9px] font-bold uppercase tracking-wide text-green mb-0.5">Reconocido por IA</div>
-                  <div className="text-[12.5px] font-semibold truncate">{match.name}</div>
-                </div>
-                <button type="button" className="shrink-0 rounded border border-green bg-green px-2.5 py-1.5 text-[11px] font-bold text-white cursor-pointer" onClick={() => setMatchConfirmed(true)}>
-                  Confirmar
+                <div className="flex-1 min-w-0 text-[12.5px] font-semibold truncate">{selected.name}</div>
+                <button type="button" className="shrink-0 text-[11px] font-semibold text-blue cursor-pointer" onClick={() => setSelected(null)}>
+                  Cambiar
                 </button>
               </div>
-            )
-          ) : (
+            </div>
+          ) : manualMode ? (
             <div>
-              {match === null && <div className="text-[11.5px] text-steel mb-1.5">La IA no reconoció este producto.</div>}
               <input
                 type="text"
                 placeholder="Nombre de referencia (lo más cercano posible)"
@@ -499,12 +488,45 @@ function AddItemForm({ batchId, onAdded, onCancel }: { batchId: string; onAdded:
                 value={manualName}
                 onChange={(e) => setManualName(e.target.value)}
               />
+              <button type="button" className="text-[11px] text-blue font-semibold cursor-pointer mt-1.5" onClick={() => { setManualMode(false); setManualName(""); }}>
+                Buscar en el catálogo en cambio
+              </button>
             </div>
-          )}
-          {match && !matchConfirmed && !manualName && (
-            <button type="button" className="text-[11px] text-blue font-semibold cursor-pointer mt-1.5" onClick={() => setMatch(null)}>
-              No es este producto — poner nombre a mano
-            </button>
+          ) : (
+            <div>
+              <input
+                type="text"
+                placeholder="Buscá por nombre (ej. masajeador, mochila…)"
+                className="w-full rounded border border-rule bg-cloud px-2.5 py-2 text-[12.5px]"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+              />
+              {catalog === null && <div className="text-[11.5px] text-steel mt-1">Cargando catálogo…</div>}
+              {suggestions.length > 0 && (
+                <div className="flex flex-col gap-1 mt-1.5 border border-rule rounded-md overflow-hidden">
+                  {suggestions.map((c) => (
+                    <button
+                      key={c.id}
+                      type="button"
+                      className="flex items-center gap-2.5 p-2 hover:bg-cloud cursor-pointer text-left"
+                      onClick={() => { setSelected(c); setQuery(""); }}
+                    >
+                      {c.photos[0] && (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={c.photos[0]} alt={c.name} className="w-9 h-9 object-cover rounded border border-rule shrink-0" />
+                      )}
+                      <span className="text-[12.5px] font-medium">{c.name}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+              {words.length > 0 && suggestions.length === 0 && catalog !== null && (
+                <div className="text-[11.5px] text-steel mt-1">No se encontró nada con esas palabras.</div>
+              )}
+              <button type="button" className="text-[11px] text-blue font-semibold cursor-pointer mt-1.5" onClick={() => setManualMode(true)}>
+                Ninguno de estos — escribir el nombre a mano
+              </button>
+            </div>
           )}
         </div>
       )}
