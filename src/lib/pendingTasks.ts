@@ -300,6 +300,7 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   comisiones_bonos_aprobacion: "Comisiones y bonos por aprobar",
   anticipos_aprobacion: "Anticipos por aprobar",
   descuentos_sin_aceptar: "Descuentos por mala gestión sin aceptar",
+  mis_descuentos_pendientes: "Tus descuentos por mala gestión — falta aceptar",
   compras_personales_confirmar: "Compras personales — falta confirmar producto/cantidad",
   compras_personales_precio: "Compras personales — falta cerrar el precio",
   compras_personales_transferencia: "Compras personales — comprobante por confirmar",
@@ -1178,6 +1179,34 @@ async function getManagementDeductionUnacceptedPendingItem(href: string): Promis
   };
 }
 
+// Confirmado 2026-08-20: pedido explícito del usuario — cuando le crean un
+// descuento por mala gestión, el colaborador AFECTADO (no solo admin/líder
+// de FIN, que ya lo ven vía getManagementDeductionUnacceptedPendingItem)
+// tiene que verlo en su propio Inicio para aceptarlo con un solo clic, en
+// vez de enterarse solo por el push y tener que entrar a ciegas a Roles de
+// pago. A diferencia del resto de este archivo, este chequeo aplica a
+// CUALQUIER colaborador (líder o no, de cualquier departamento) — se
+// resuelve por dato propio (employeeId), no por permiso/rol.
+async function getMyManagementDeductionPendingItem(userId: string, href: string): Promise<PendingItem | null> {
+  const rows = await prisma.managementDeduction.findMany({
+    where: { employeeId: userId, acceptedAt: null },
+    select: { totalAmount: true, createdAt: true },
+  });
+  if (rows.length === 0) return null;
+
+  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const overdue = rows.some((r) => r.createdAt < cutoff);
+  const total = rows.reduce((s, r) => s + r.totalAmount, 0);
+  return {
+    type: "mis_descuentos_pendientes",
+    icon: "⚠️",
+    label: rows.length === 1 ? "Tienes un descuento por confirmar" : `Tienes ${rows.length} descuentos por confirmar`,
+    meta: `$${total.toFixed(2)}${overdue ? " · atrasado" : ""}`,
+    overdue,
+    href,
+  };
+}
+
 // Confirmado 2026-08-19: pedido explícito del usuario — acceso directo
 // para Daniel cuando hay lotes de Reingreso de Mercadería ya enviados por
 // el equipo y esperando su revisión (submittedAt no nulo, danielApprovedAt
@@ -1396,6 +1425,10 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
   });
   if (!me) return null;
 
+  // Aplica a cualquier colaborador, líder o no — ver comentario en la
+  // función.
+  const myDeductionItem = await getMyManagementDeductionPendingItem(actor.userId, "/area/roles-de-pago");
+
   // Confirmado 2026-08-18: pedido explícito del usuario — acceso directo en
   // Inicio para CUALQUIER colaborador de Inventario (no solo Daniel, su
   // líder) a la mercadería pendiente por recibir y a los cambios pendientes
@@ -1404,19 +1437,22 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
   // semana" (KPIs, Control de Inventario, etc.) sigue siendo exclusivo del
   // líder — esto es un subconjunto reducido, solo para no-líderes de INV.
   if (!me.isLeader || !me.leadsDeptId || !me.leadsDept) {
-    if (me.department?.code !== "INV") return null;
-    const [receivingItem, replacementItem] = await Promise.all([
-      getPurchaseReceivingPendingItem("/area/workspace?tab=compras&ptab=inventario"),
-      getPurchaseReplacementVerificationPendingItem("/area/workspace?tab=compras&ptab=inventario"),
-    ]);
     const teamItems: PendingItem[] = [];
-    if (receivingItem) teamItems.push(receivingItem);
-    if (replacementItem) teamItems.push(replacementItem);
+    if (myDeductionItem) teamItems.push(myDeductionItem);
+    if (me.department?.code === "INV") {
+      const [receivingItem, replacementItem] = await Promise.all([
+        getPurchaseReceivingPendingItem("/area/workspace?tab=compras&ptab=inventario"),
+        getPurchaseReplacementVerificationPendingItem("/area/workspace?tab=compras&ptab=inventario"),
+      ]);
+      if (receivingItem) teamItems.push(receivingItem);
+      if (replacementItem) teamItems.push(replacementItem);
+    }
     if (teamItems.length === 0) return null;
-    return { title: "Pendientes de esta semana", sub: "En Inventario", items: teamItems };
+    return { title: "Pendientes de esta semana", sub: me.department?.code === "INV" ? "En Inventario" : "Para ti", items: teamItems };
   }
 
   const items: PendingItem[] = [];
+  if (myDeductionItem) items.push(myDeductionItem);
   let monthly = false;
 
   if (me.leadsDept.code === "FIN") {
