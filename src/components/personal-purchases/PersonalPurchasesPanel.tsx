@@ -161,7 +161,7 @@ export function PersonalPurchasesPanel() {
   const [err, setErr] = useState("");
   const [bankAccount, setBankAccount] = useState<CompanyBankAccount>(null);
   const [payBusy, setPayBusy] = useState<Record<string, boolean>>({});
-  const [armedMethod, setArmedMethod] = useState<Record<string, "PAYROLL" | "TRANSFER" | undefined>>({});
+  const [armedMethod, setArmedMethod] = useState<Record<string, "PAYROLL" | "TRANSFER" | "CANCEL_TO_PAYROLL" | undefined>>({});
   const armTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   function loadOrders() {
@@ -183,6 +183,17 @@ export function PersonalPurchasesPanel() {
     loadOrders();
   }
 
+  // Confirmado 2026-08-21: si eligió transferencia por error (o cambia de
+  // opinión) y todavía no subió el comprobante, puede cancelarla y pasarse
+  // a rol de pago directo, sin aprobación de nadie más — mismo criterio que
+  // elegir el método por primera vez.
+  async function cancelTransfer(orderId: string) {
+    setPayBusy((b) => ({ ...b, [orderId]: true }));
+    await fetch(`/api/personal-purchases/${orderId}/cancel-transfer`, { method: "POST" });
+    setPayBusy((b) => ({ ...b, [orderId]: false }));
+    loadOrders();
+  }
+
   // Confirmado 2026-08-20: elegir método de pago mueve plata real (transferencia
   // o descuento del rol), así que un solo tap no alcanza — el primer tap arma
   // la opción ("¿Confirmar?") y solo el segundo tap sobre la misma la ejecuta.
@@ -198,6 +209,23 @@ export function PersonalPurchasesPanel() {
       return;
     }
     setArmedMethod((a) => ({ ...a, [orderId]: method }));
+    armTimers.current[orderId] = setTimeout(() => {
+      setArmedMethod((a) => ({ ...a, [orderId]: undefined }));
+      delete armTimers.current[orderId];
+    }, 4000);
+  }
+
+  function handleCancelTransferTap(orderId: string) {
+    if (armTimers.current[orderId]) {
+      clearTimeout(armTimers.current[orderId]);
+      delete armTimers.current[orderId];
+    }
+    if (armedMethod[orderId] === "CANCEL_TO_PAYROLL") {
+      setArmedMethod((a) => ({ ...a, [orderId]: undefined }));
+      cancelTransfer(orderId);
+      return;
+    }
+    setArmedMethod((a) => ({ ...a, [orderId]: "CANCEL_TO_PAYROLL" }));
     armTimers.current[orderId] = setTimeout(() => {
       setArmedMethod((a) => ({ ...a, [orderId]: undefined }));
       delete armTimers.current[orderId];
@@ -453,6 +481,19 @@ export function PersonalPurchasesPanel() {
                       <div className="text-[11.5px] text-steel-dim mb-2.5">Todavía no está cargada la cuenta bancaria — avisale al admin.</div>
                     )}
                     <TransferProofUploader orderId={o.id} onSent={loadOrders} />
+                    <div className="mt-2.5 pt-2.5 border-t border-rule">
+                      <button
+                        type="button"
+                        disabled={isBusy}
+                        className={`text-[11.5px] font-bold border-[1.5px] rounded-md px-3 py-1.5 cursor-pointer disabled:opacity-40 ${armedMethod[o.id] === "CANCEL_TO_PAYROLL" ? "bg-ink border-ink text-bg" : "border-rule text-steel-dim"}`}
+                        onClick={() => handleCancelTransferTap(o.id)}
+                      >
+                        {armedMethod[o.id] === "CANCEL_TO_PAYROLL" ? "Tocá de nuevo para confirmar" : "🧾 Mejor descontarlo del rol"}
+                      </button>
+                      {armedMethod[o.id] === "CANCEL_TO_PAYROLL" && (
+                        <div className="text-[10.5px] text-steel-dim mt-1.5">Cancela la transferencia y pasa a descuento en rol. Volvé a tocar para confirmar.</div>
+                      )}
+                    </div>
                   </div>
                 )}
 
