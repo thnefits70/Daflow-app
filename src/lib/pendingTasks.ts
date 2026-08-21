@@ -306,6 +306,7 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   compras_personales_transferencia: "Compras personales — comprobante por confirmar",
   compras_personales_cierre: "Compras personales — transferencia confirmada, falta cerrar",
   compras_personales_metodo_pago: "Tus compras personales — falta que elijas cómo pagar o subas el comprobante",
+  compras_personales_estado: "Tus compras personales — seguimiento del estado (mientras esperás a bodega o Finanzas)",
   compras_personales_pago_seguimiento: "Compras personales — seguimiento de pagos pendientes del colaborador",
   reingreso_mercaderia_revision: "Reingreso de mercadería por revisar",
   cumpleanos: "Cumpleaños de tu equipo (aviso 1 día antes)",
@@ -1364,6 +1365,35 @@ async function getMyPersonalPurchasePaymentPendingItem(employeeId: string, href:
   };
 }
 
+// Confirmado 2026-08-21: pedido explícito del usuario — mientras la compra
+// personal espera que OTROS actúen (bodega confirmando el producto, o
+// Nairoby/FIN fijando el precio una vez que bodega ya confirmó), el
+// colaborador no tenía forma de ver ese avance sin entrar a ciegas a Compras
+// personales — el único aviso era el push puntual de "ya podés retirarlo",
+// que se puede perder. A diferencia de getMyPersonalPurchasePaymentPendingItem
+// (una acción PROPIA pendiente), esto es puramente informativo — nunca
+// "atrasado", solo mantiene visible el estado actual en Inicio. Mismo texto
+// de estado que ya usa STATUS_LABEL en PersonalPurchasesPanel.tsx. Aplica a
+// cualquier colaborador, líder o no.
+async function getMyPersonalPurchaseStatusPendingItem(employeeId: string, href: string): Promise<PendingItem | null> {
+  const rows = await prisma.personalPurchaseOrder.findMany({
+    where: { employeeId, status: { in: ["PENDING_INVENTORY", "PENDING_FINANCE"] } },
+    select: { status: true },
+  });
+  if (rows.length === 0) return null;
+
+  const statusLabel = (s: string) => (s === "PENDING_INVENTORY" ? "Esperando confirmación de bodega" : "Bodega confirmó — falta que Nairoby cierre el precio");
+  const meta = rows.length === 1 ? statusLabel(rows[0].status) : `${rows.length} pedidos en curso`;
+  return {
+    type: "compras_personales_estado",
+    icon: "🛒",
+    label: "Compras personales — seguimiento",
+    meta,
+    overdue: false,
+    href,
+  };
+}
+
 // Confirmado 2026-08-21: pedido explícito del usuario — a diferencia del
 // pendiente anterior (que es del colaborador, es su acción), esto es
 // puramente de lectura para Nairoby/FIN y admin: quién sigue sin resolver el
@@ -1497,6 +1527,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
   // función.
   const myDeductionItem = await getMyManagementDeductionPendingItem(actor.userId, "/area/roles-de-pago");
   const myPersonalPurchasePaymentItem = await getMyPersonalPurchasePaymentPendingItem(actor.userId, "/area/compras-personales");
+  const myPersonalPurchaseStatusItem = await getMyPersonalPurchaseStatusPendingItem(actor.userId, "/area/compras-personales");
 
   // Confirmado 2026-08-18: pedido explícito del usuario — acceso directo en
   // Inicio para CUALQUIER colaborador de Inventario (no solo Daniel, su
@@ -1509,6 +1540,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     const teamItems: PendingItem[] = [];
     if (myDeductionItem) teamItems.push(myDeductionItem);
     if (myPersonalPurchasePaymentItem) teamItems.push(myPersonalPurchasePaymentItem);
+    if (myPersonalPurchaseStatusItem) teamItems.push(myPersonalPurchaseStatusItem);
     if (me.department?.code === "INV") {
       const [receivingItem, replacementItem] = await Promise.all([
         getPurchaseReceivingPendingItem("/area/workspace?tab=compras&ptab=inventario"),
@@ -1524,6 +1556,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
   const items: PendingItem[] = [];
   if (myDeductionItem) items.push(myDeductionItem);
   if (myPersonalPurchasePaymentItem) items.push(myPersonalPurchasePaymentItem);
+  if (myPersonalPurchaseStatusItem) items.push(myPersonalPurchaseStatusItem);
   let monthly = false;
 
   if (me.leadsDept.code === "FIN") {
