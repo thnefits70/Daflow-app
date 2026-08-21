@@ -18,6 +18,7 @@ export default async function NominaPage() {
   const [
     users,
     departments,
+    payStubDepartments,
     canLogOvertime,
     canApproveOvertime,
     canViewRoles,
@@ -45,6 +46,11 @@ export default async function NominaPage() {
       },
     }),
     prisma.department.findMany({ orderBy: { order: "asc" }, select: { id: true, name: true, code: true } }),
+    prisma.department.findMany({
+      where: { isSpecial: false },
+      orderBy: { order: "asc" },
+      select: { id: true, name: true, code: true },
+    }),
     canLogOvertimeHours(),
     canApproveOvertimeHours(),
     canViewPayrollRoles(),
@@ -63,6 +69,8 @@ export default async function NominaPage() {
       <NominaPageTabs
         users={users}
         departments={departments}
+        payStubDepartments={payStubDepartments}
+        canManagePayStubs
         canLogOvertime={canLogOvertime}
         canApproveOvertime={canApproveOvertime}
         canViewRoles={canViewRoles}

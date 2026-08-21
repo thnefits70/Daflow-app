@@ -1,18 +1,7 @@
-import { prisma } from "@/lib/prisma";
-import { TopLine } from "@/components/ui/TopLine";
-import { PayStubsPanel } from "@/components/payroll/PayStubsPanel";
+import { redirect } from "next/navigation";
 
-export default async function AdminRolesDePagoPage() {
-  const departments = await prisma.department.findMany({
-    where: { isSpecial: false },
-    orderBy: { order: "asc" },
-    select: { id: true, name: true, code: true },
-  });
-
-  return (
-    <div>
-      <TopLine eyebrow="Nómina" title="Roles de pago" />
-      <PayStubsPanel mode="manage" departments={departments} isAdmin />
-    </div>
-  );
+// Confirmado 2026-08-21: pedido explícito del usuario — "Roles de pago" ya
+// no es una pantalla aparte, ahora vive como pestaña dentro de Nómina.
+export default function AdminRolesDePagoRedirect() {
+  redirect("/admin/nomina?tab=rolesdepago");
 }

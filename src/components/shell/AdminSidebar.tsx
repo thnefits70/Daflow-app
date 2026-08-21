@@ -17,7 +17,6 @@ import {
   Sparkles,
   Truck,
   Rocket,
-  Wallet,
   FolderLock,
   Gauge,
   Menu,
@@ -173,9 +172,6 @@ export function AdminSidebar({
 
         <Link href="/admin/nomina" className={`${NAV_ITEM} ${pathname.startsWith("/admin/nomina") ? NAV_ACTIVE : NAV_INACTIVE}`}>
           <UsersIcon size={15} /> Nómina
-        </Link>
-        <Link href="/admin/roles-de-pago" className={`${NAV_ITEM} ${pathname.startsWith("/admin/roles-de-pago") ? NAV_ACTIVE : NAV_INACTIVE}`}>
-          <Wallet size={15} /> Roles de pago
         </Link>
         <Link href="/admin/leyes" className={`${NAV_ITEM} ${pathname.startsWith("/admin/leyes") ? NAV_ACTIVE : NAV_INACTIVE}`}>
           <Scale size={15} /> Leyes y Reglamentos
