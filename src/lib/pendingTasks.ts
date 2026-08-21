@@ -305,6 +305,8 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   compras_personales_precio: "Compras personales — falta cerrar el precio",
   compras_personales_transferencia: "Compras personales — comprobante por confirmar",
   compras_personales_cierre: "Compras personales — transferencia confirmada, falta cerrar",
+  compras_personales_metodo_pago: "Tus compras personales — falta que elijas cómo pagar o subas el comprobante",
+  compras_personales_pago_seguimiento: "Compras personales — seguimiento de pagos pendientes del colaborador",
   reingreso_mercaderia_revision: "Reingreso de mercadería por revisar",
   cumpleanos: "Cumpleaños de tu equipo (aviso 1 día antes)",
   compras_rechazadas: "Tus solicitudes de compra rechazadas — corregir y reenviar",
@@ -1326,6 +1328,70 @@ async function getPersonalPurchaseTransferClosePendingItem(href: string): Promis
   };
 }
 
+// Confirmado 2026-08-21: pedido explícito del usuario — una vez que Nairoby
+// cierra el precio, el colaborador tiene que elegir cómo paga
+// (PENDING_PAYMENT_METHOD) o, si eligió transferencia, subir el comprobante
+// (PENDING_TRANSFER_PROOF) — pero ese pendiente no aparecía en su propio
+// Inicio, así que solo se enteraba por el push diario (ver
+// getStalePersonalPurchaseTransferPushes en personalPurchases.ts) o entrando
+// a ciegas a Compras personales. Mismo agrupado de estados y mismo
+// transferDeadlineAt (3 días hábiles desde que se cerró el precio) que ya
+// usa ese push, para que "atrasado" acá coincida exactamente con el momento
+// en que ese push dejaría de mandarse al colaborador. A diferencia del
+// resto de este archivo, aplica a CUALQUIER colaborador (líder o no) — se
+// resuelve por dato propio (employeeId), no por permiso/rol.
+async function getMyPersonalPurchasePaymentPendingItem(employeeId: string, href: string): Promise<PendingItem | null> {
+  const rows = await prisma.personalPurchaseOrder.findMany({
+    where: { employeeId, status: { in: ["PENDING_PAYMENT_METHOD", "PENDING_TRANSFER_PROOF"] } },
+    select: { status: true, totalAmount: true, transferDeadlineAt: true },
+  });
+  if (rows.length === 0) return null;
+
+  const now = new Date();
+  const overdue = rows.some((r) => r.transferDeadlineAt != null && r.transferDeadlineAt <= now);
+  const total = rows.reduce((s, r) => s + (r.totalAmount ?? 0), 0);
+  const meta =
+    rows.length === 1
+      ? `$${total.toFixed(2)} · ${rows[0].status === "PENDING_PAYMENT_METHOD" ? "falta elegir cómo pagar" : "falta subir comprobante"}${overdue ? " · atrasado" : ""}`
+      : `${rows.length} pedidos · $${total.toFixed(2)}${overdue ? " · atrasado" : ""}`;
+  return {
+    type: "compras_personales_metodo_pago",
+    icon: "💵",
+    label: "Compras personales — pago pendiente",
+    meta,
+    overdue,
+    href,
+  };
+}
+
+// Confirmado 2026-08-21: pedido explícito del usuario — a diferencia del
+// pendiente anterior (que es del colaborador, es su acción), esto es
+// puramente de lectura para Nairoby/FIN y admin: quién sigue sin resolver el
+// pago de su compra personal, para poder darle seguimiento oportuno en vez
+// de enterarse recién cuando ya está atrasado (el único aviso que tenían
+// antes era el push de "vencido", que solo dispara una vez pasado el plazo).
+// Mismo agrupado de estados y mismo transferDeadlineAt que el pendiente del
+// colaborador arriba.
+async function getPersonalPurchasePaymentWatchItem(href: string): Promise<PendingItem | null> {
+  const rows = await prisma.personalPurchaseOrder.findMany({
+    where: { status: { in: ["PENDING_PAYMENT_METHOD", "PENDING_TRANSFER_PROOF"] } },
+    select: { transferDeadlineAt: true, employee: { select: { name: true } } },
+  });
+  if (rows.length === 0) return null;
+
+  const now = new Date();
+  const overdue = rows.some((r) => r.transferDeadlineAt != null && r.transferDeadlineAt <= now);
+  const names = rows.map((r) => r.employee.name).join(", ");
+  return {
+    type: "compras_personales_pago_seguimiento",
+    icon: "👀",
+    label: "Compras personales — esperando que el colaborador resuelva el pago",
+    meta: `${rows.length === 1 ? names : `${rows.length} colaboradores`}${overdue ? " · atrasado" : ""}`,
+    overdue,
+    href,
+  };
+}
+
 // Confirmado 2026-08-06: aviso 1 día antes de la fecha en que se va a
 // felicitar (que puede ser el cumpleaños real o el último día laborable
 // antes, si cae sábado/domingo/feriado — ver celebrationDateFor en
@@ -1373,7 +1439,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     const comDept = await prisma.department.findUnique({ where: { code: "COM" }, select: { id: true } });
     const comPaymentsHref = comDept ? `/admin/dept/${comDept.id}?tab=compras&ptab=finanzas` : "/admin";
     const comCreditsHref = comDept ? `/admin/dept/${comDept.id}?tab=compras&ptab=urgentes` : "/admin";
-    const [feedbackItems, recognitionItem, pettyCashLow, pettyCashUnconfirmed, adminPaymentsItem, purchaseMerchandiseItem, purchaseShippingItem, purchaseCreditsItem, overtimeApprovalItem, commissionBonusApprovalItem, salaryAdvanceItem, managementDeductionItem, personalPurchaseFinanceItem, personalPurchaseTransferConfirmItem, personalPurchaseTransferCloseItem, birthdayItems] = await Promise.all([
+    const [feedbackItems, recognitionItem, pettyCashLow, pettyCashUnconfirmed, adminPaymentsItem, purchaseMerchandiseItem, purchaseShippingItem, purchaseCreditsItem, overtimeApprovalItem, commissionBonusApprovalItem, salaryAdvanceItem, managementDeductionItem, personalPurchaseFinanceItem, personalPurchaseTransferConfirmItem, personalPurchaseTransferCloseItem, personalPurchasePaymentWatchItem, birthdayItems] = await Promise.all([
       getFeedbackPendingItems(),
       getRecognitionAdminPendingItem("/admin/colaborador-destacado"),
       getPettyCashLowBalanceItems(financeHref),
@@ -1389,6 +1455,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       getPersonalPurchasePendingFinanceItem("/admin/nomina?tab=pagos&ptab=comprasfinanzas"),
       getPersonalPurchaseTransferConfirmPendingItem("/admin/nomina?tab=pagos&ptab=comprasfinanzas"),
       getPersonalPurchaseTransferClosePendingItem("/admin/nomina?tab=pagos&ptab=comprasfinanzas"),
+      getPersonalPurchasePaymentWatchItem("/admin/nomina?tab=pagos&ptab=comprasfinanzas"),
       getUpcomingBirthdayPendingItems("/admin/nomina"),
     ]);
     const items = [
@@ -1407,6 +1474,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       ...(personalPurchaseFinanceItem ? [personalPurchaseFinanceItem] : []),
       ...(personalPurchaseTransferConfirmItem ? [personalPurchaseTransferConfirmItem] : []),
       ...(personalPurchaseTransferCloseItem ? [personalPurchaseTransferCloseItem] : []),
+      ...(personalPurchasePaymentWatchItem ? [personalPurchasePaymentWatchItem] : []),
       ...birthdayItems,
     ];
     if (items.length === 0) return null;
@@ -1428,6 +1496,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
   // Aplica a cualquier colaborador, líder o no — ver comentario en la
   // función.
   const myDeductionItem = await getMyManagementDeductionPendingItem(actor.userId, "/area/roles-de-pago");
+  const myPersonalPurchasePaymentItem = await getMyPersonalPurchasePaymentPendingItem(actor.userId, "/area/compras-personales");
 
   // Confirmado 2026-08-18: pedido explícito del usuario — acceso directo en
   // Inicio para CUALQUIER colaborador de Inventario (no solo Daniel, su
@@ -1439,6 +1508,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
   if (!me.isLeader || !me.leadsDeptId || !me.leadsDept) {
     const teamItems: PendingItem[] = [];
     if (myDeductionItem) teamItems.push(myDeductionItem);
+    if (myPersonalPurchasePaymentItem) teamItems.push(myPersonalPurchasePaymentItem);
     if (me.department?.code === "INV") {
       const [receivingItem, replacementItem] = await Promise.all([
         getPurchaseReceivingPendingItem("/area/workspace?tab=compras&ptab=inventario"),
@@ -1453,11 +1523,12 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
 
   const items: PendingItem[] = [];
   if (myDeductionItem) items.push(myDeductionItem);
+  if (myPersonalPurchasePaymentItem) items.push(myPersonalPurchasePaymentItem);
   let monthly = false;
 
   if (me.leadsDept.code === "FIN") {
     monthly = true;
-    const [payStub, returnRate, warranty, paymentReminders, storeFeedback, pettyCashLow, pettyCashUnconfirmed, purchaseShippingItem, managementDeductionItem, personalPurchaseFinanceItem, personalPurchaseTransferCloseItem] = await Promise.all([
+    const [payStub, returnRate, warranty, paymentReminders, storeFeedback, pettyCashLow, pettyCashUnconfirmed, purchaseShippingItem, managementDeductionItem, personalPurchaseFinanceItem, personalPurchaseTransferCloseItem, personalPurchasePaymentWatchItem] = await Promise.all([
       getPayStubPendingItem("/area/roles-de-pago"),
       getReturnRatePendingItem("/area/kpis-generales"),
       getWarrantyPendingItem("/area/kpis-generales"),
@@ -1469,6 +1540,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       getManagementDeductionUnacceptedPendingItem("/area/nomina?tab=pagos&ptab=descuentos"),
       getPersonalPurchasePendingFinanceItem("/area/nomina?tab=pagos&ptab=comprasfinanzas"),
       getPersonalPurchaseTransferClosePendingItem("/area/nomina?tab=pagos&ptab=comprasfinanzas"),
+      getPersonalPurchasePaymentWatchItem("/area/nomina?tab=pagos&ptab=comprasfinanzas"),
     ]);
     items.push(...pettyCashLow, ...pettyCashUnconfirmed);
     if (payStub) items.push(payStub);
@@ -1477,6 +1549,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     items.push(...paymentReminders);
     if (storeFeedback) items.push(storeFeedback);
     if (purchaseShippingItem) items.push(purchaseShippingItem);
+    if (personalPurchasePaymentWatchItem) items.push(personalPurchasePaymentWatchItem);
     if (managementDeductionItem) items.push(managementDeductionItem);
     if (personalPurchaseFinanceItem) items.push(personalPurchaseFinanceItem);
     if (personalPurchaseTransferCloseItem) items.push(personalPurchaseTransferCloseItem);
