@@ -85,7 +85,14 @@ export async function buildAutomaticLineItems(employeeId: string, period: string
             where: { tierId_userId: { tierId: tier.id, userId: employeeId } },
           });
           if (ta && ta.amount > 0) {
-            items.push({ label: `Comisión de equipo (${tier.name} — ${sourceMonth})`, amount: ta.amount, kind: "INCOME", isAutomatic: true });
+            const range = `${tier.minDailyAvg}${tier.maxDailyAvg ? `-${tier.maxDailyAvg}` : "+"} pedidos/día`;
+            items.push({
+              label: `Comisión de equipo (${tier.name} — ${sourceMonth})`,
+              amount: ta.amount,
+              kind: "INCOME",
+              isAutomatic: true,
+              note: `Promedio real ${sourceMonth}: ${dispatchSummary.dailyAvg.toFixed(0)} pedidos/día — nivel ${tier.name} (${range})`,
+            });
           }
         }
       }
@@ -148,7 +155,9 @@ export async function buildAutomaticLineItems(employeeId: string, period: string
             return `${name} × ${it.quantity}${split ? ` (${split})` : ""}`;
           })
           .join(" · ");
-        items.push({ label, amount: amt, kind: "EXPENSE", isAutomatic: true, note });
+        const confirmedDate = o.financeConfirmedAt ? new Date(o.financeConfirmedAt).toLocaleDateString("es-EC") : null;
+        const fullNote = `${note} — total $${o.totalAmount!.toFixed(2)} en ${o.installments} cuota(s)${confirmedDate ? ` — confirmada el ${confirmedDate}` : ""}`;
+        items.push({ label, amount: amt, kind: "EXPENSE", isAutomatic: true, note: fullNote });
       }
 
       const advances = await prisma.salaryAdvance.findMany({
@@ -159,7 +168,14 @@ export async function buildAutomaticLineItems(employeeId: string, period: string
         if (idx === null) continue;
         const amt = installmentAmount(a.amount, a.installments, idx);
         const cuota = a.installments > 1 ? ` (cuota ${idx + 1}/${a.installments})` : "";
-        items.push({ label: `Anticipo${cuota}`, amount: amt, kind: "EXPENSE", isAutomatic: true });
+        const approvedDate = a.approvedAt ? new Date(a.approvedAt).toLocaleDateString("es-EC") : null;
+        items.push({
+          label: `Anticipo${cuota}`,
+          amount: amt,
+          kind: "EXPENSE",
+          isAutomatic: true,
+          note: `Anticipo total $${a.amount.toFixed(2)} en ${a.installments} cuota(s)${approvedDate ? ` — aprobado el ${approvedDate}` : ""}`,
+        });
       }
 
       const deductions = await prisma.managementDeduction.findMany({
@@ -171,7 +187,14 @@ export async function buildAutomaticLineItems(employeeId: string, period: string
         const amt = installmentAmount(d.totalAmount, d.installments, idx);
         const cuota = d.installments > 1 ? ` (cuota ${idx + 1}/${d.installments})` : "";
         const shortReason = d.reason.length > 40 ? `${d.reason.slice(0, 40)}…` : d.reason;
-        items.push({ label: `Descuento — ${shortReason}${cuota}`, amount: amt, kind: "EXPENSE", isAutomatic: true });
+        const acceptedDate = d.acceptedAt ? new Date(d.acceptedAt).toLocaleDateString("es-EC") : null;
+        items.push({
+          label: `Descuento — ${shortReason}${cuota}`,
+          amount: amt,
+          kind: "EXPENSE",
+          isAutomatic: true,
+          note: `Motivo completo: "${d.reason}" — total $${d.totalAmount.toFixed(2)} en ${d.installments} cuota(s)${acceptedDate ? ` — aceptado el ${acceptedDate}` : ""}`,
+        });
       }
     }
   }

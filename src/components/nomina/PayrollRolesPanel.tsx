@@ -138,7 +138,9 @@ function RoleCard({ role, published, canEdit, monthlyRoleId, onChanged }: { role
     onChanged();
   }
 
-  const total = items.filter((i) => i.kind === "INCOME").reduce((s, i) => s + i.amount, 0) - items.filter((i) => i.kind === "EXPENSE").reduce((s, i) => s + i.amount, 0);
+  const totalIncome = items.filter((i) => i.kind === "INCOME").reduce((s, i) => s + i.amount, 0);
+  const totalExpense = items.filter((i) => i.kind === "EXPENSE").reduce((s, i) => s + i.amount, 0);
+  const total = totalIncome - totalExpense;
   const editingEnabled = canEdit && (!published || correcting);
 
   return (
@@ -168,6 +170,12 @@ function RoleCard({ role, published, canEdit, monthlyRoleId, onChanged }: { role
             {it.note && <div className="text-[10.5px] text-steel-dim mt-0.5">{it.note}</div>}
           </div>
         ))}
+      </div>
+
+      <div className="mt-2.5 pt-2 border-t border-rule flex flex-col gap-1 text-[12px]">
+        <div className="flex justify-between text-steel"><span>Total ingresos</span><span className="text-green font-semibold tabular-nums">{money(totalIncome)}</span></div>
+        <div className="flex justify-between text-steel"><span>Total descuentos</span><span className="text-red font-semibold tabular-nums">{money(totalExpense)}</span></div>
+        <div className="flex justify-between font-bold text-[13px] mt-0.5"><span>Líquido a pagar</span><span className="tabular-nums">{money(total)}</span></div>
       </div>
 
       {editingEnabled && <NewConceptForm onAdd={(item) => saveDraft([...items, item])} />}
