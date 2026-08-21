@@ -61,6 +61,65 @@ export async function maybeMarkBatchApproved(batchId: string) {
   }
 }
 
+export type MerchandiseReentryItemForGrouping = {
+  id: string;
+  batchId: string;
+  createdAt: Date;
+  goodQty: number;
+  damagedQty: number;
+  photoUrls: string[];
+  correctedName: string | null;
+  declaredName: string | null;
+  catalogItem: { name: string } | null;
+  damageReason: { name: string } | null;
+  damageReasonOther: string | null;
+  batch: { code: string };
+};
+
+// Nairoby ya no confirma item por item: productos con el mismo nombre final
+// (misma lógica que itemDisplayName, sin importar de qué lote RM vengan) se
+// agrupan en una sola tarjeta con la suma de unidades, para un solo clic en
+// vez de repetir la acción por cada ocurrencia del mismo producto.
+export function groupItemsForJustUpload(items: MerchandiseReentryItemForGrouping[]) {
+  const groups = new Map<string, { name: string; totalGoodQty: number; earliestAt: Date; itemIds: string[]; breakdown: { id: string; batchCode: string; goodQty: number; createdAt: Date }[] }>();
+  for (const item of items) {
+    const name = itemDisplayName(item);
+    const g = groups.get(name) ?? { name, totalGoodQty: 0, earliestAt: item.createdAt, itemIds: [], breakdown: [] };
+    g.totalGoodQty += item.goodQty;
+    if (item.createdAt < g.earliestAt) g.earliestAt = item.createdAt;
+    g.itemIds.push(item.id);
+    g.breakdown.push({ id: item.id, batchCode: item.batch.code, goodQty: item.goodQty, createdAt: item.createdAt });
+    groups.set(name, g);
+  }
+  return [...groups.values()].sort((a, b) => a.earliestAt.getTime() - b.earliestAt.getTime());
+}
+
+export function groupItemsForWriteOff(items: MerchandiseReentryItemForGrouping[]) {
+  const groups = new Map<
+    string,
+    { name: string; totalDamagedQty: number; earliestAt: Date; damageReasonLabel: string | null; photoUrl: string | null; itemIds: string[]; breakdown: { id: string; batchCode: string; damagedQty: number; createdAt: Date }[] }
+  >();
+  for (const item of items) {
+    const name = itemDisplayName(item);
+    const g = groups.get(name) ?? {
+      name,
+      totalDamagedQty: 0,
+      earliestAt: item.createdAt,
+      damageReasonLabel: item.damageReason?.name ?? item.damageReasonOther ?? null,
+      photoUrl: item.photoUrls[0] ?? null,
+      itemIds: [],
+      breakdown: [],
+    };
+    g.totalDamagedQty += item.damagedQty;
+    if (item.createdAt < g.earliestAt) g.earliestAt = item.createdAt;
+    if (!g.photoUrl && item.photoUrls[0]) g.photoUrl = item.photoUrls[0];
+    g.itemIds.push(item.id);
+    g.breakdown.push({ id: item.id, batchCode: item.batch.code, damagedQty: item.damagedQty, createdAt: item.createdAt });
+    groups.set(name, g);
+  }
+  return [...groups.values()].sort((a, b) => a.earliestAt.getTime() - b.earliestAt.getTime());
+}
+
 // Una vez que TODA parte relevante de TODOS los items de un lote está
 // cerrada por Nairoby (buena subida a Just si goodQty>0, dañada dada de
 // baja si quedó damageConfirmed=true), el lote entero se cierra.
