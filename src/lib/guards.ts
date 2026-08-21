@@ -677,6 +677,20 @@ export async function canApproveMerchandiseReentry() {
   return !!user.isLeader && user.leadsDept?.code === "INV";
 }
 
+// Fix confirmado 2026-08-21: mismo patrón que canActOnPurchaseReceiving —
+// admin puede VER la pestaña "Revisión" (canApproveMerchandiseReentry
+// arriba sigue igual, se usa para eso), pero aprobar lotes, corregir
+// nombre+aprobar, y resolver daño son EXCLUSIVOS del líder de Inventario
+// (Daniel), ni siquiera admin. Las rutas que ejecutan la acción usan esta
+// en su lugar.
+export async function canActOnMerchandiseReentry() {
+  const session = await auth();
+  if (!session) return false;
+  const user = await purchasesUserContext(session.user.id);
+  if (!user) return false;
+  return !!user.isLeader && user.leadsDept?.code === "INV";
+}
+
 export async function canCloseMerchandiseReentry() {
   const session = await auth();
   if (!session) return false;

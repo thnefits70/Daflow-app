@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { canApproveMerchandiseReentry } from "@/lib/guards";
+import { canActOnMerchandiseReentry } from "@/lib/guards";
 import { itemNeedsReview, maybeMarkBatchApproved } from "@/lib/merchandiseReentry";
 
 // "Aprobar lote" (uno) y "Aprobar todos los listos" (en bucle desde el
@@ -11,7 +11,7 @@ import { itemNeedsReview, maybeMarkBatchApproved } from "@/lib/merchandiseReentr
 // toca — se resuelve aparte vía correct-and-approve / resolve-damage.
 export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
-  if (!(await canApproveMerchandiseReentry()) || !session) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+  if (!(await canActOnMerchandiseReentry()) || !session) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
   const { id } = await params;
   const batch = await prisma.merchandiseReentryBatch.findUnique({
@@ -25,7 +25,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   if (toApprove.length > 0) {
     await prisma.merchandiseReentryItem.updateMany({
       where: { id: { in: toApprove.map((i) => i.id) } },
-      data: { approvedAt: new Date(), approvedById: session.user.role === "admin" ? null : session.user.id },
+      data: { approvedAt: new Date(), approvedById: session.user.id },
     });
   }
   await maybeMarkBatchApproved(id);

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { canApproveMerchandiseReentry } from "@/lib/guards";
+import { canActOnMerchandiseReentry } from "@/lib/guards";
 import { itemNeedsReview, maybeMarkBatchApproved } from "@/lib/merchandiseReentry";
 
 const schema = z.object({ name: z.string().trim().min(1).max(200) });
@@ -13,7 +13,7 @@ const schema = z.object({ name: z.string().trim().min(1).max(200) });
 // SOLO guarda el nombre — la aprobación real espera a resolve-damage.
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
-  if (!(await canApproveMerchandiseReentry()) || !session) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+  if (!(await canActOnMerchandiseReentry()) || !session) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
   const { id } = await params;
   const body = await req.json().catch(() => null);
@@ -29,11 +29,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     where: { id },
     data: {
       correctedName: parsed.data.name,
-      correctedById: session.user.role === "admin" ? null : session.user.id,
+      correctedById: session.user.id,
       correctedAt: new Date(),
       ...(stillNeedsReview
         ? {}
-        : { approvedAt: item.approvedAt ?? new Date(), approvedById: item.approvedById ?? (session.user.role === "admin" ? null : session.user.id) }),
+        : { approvedAt: item.approvedAt ?? new Date(), approvedById: item.approvedById ?? session.user.id }),
     },
   });
 

@@ -3,7 +3,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { TopLine } from "@/components/ui/TopLine";
 import { DeptWorkspaceTabs } from "@/components/dept/DeptWorkspaceTabs";
-import { getUnseenFeedbackCount, canManageStoreFeedback as checkCanManageStoreFeedback, canViewStoreFeedback as checkCanViewStoreFeedback, canSubmitPurchaseRequests, canConfirmPurchaseReceiving, canReceivePurchasesTeam, canActOnPurchaseReceiving, canRegisterPurchaseInvoices, canManageInventoryControl as checkCanManageInventoryControl, canViewInventoryKpisPanel as checkCanViewInventoryKpisPanel, canManageAdminPayments as checkCanManageAdminPayments, canViewMarketingArrivals as checkCanViewMarketingArrivals, canConfirmMarketingDesign as checkCanConfirmMarketingDesign, canConfirmMarketingAdvisor as checkCanConfirmMarketingAdvisor } from "@/lib/guards";
+import { getUnseenFeedbackCount, canManageStoreFeedback as checkCanManageStoreFeedback, canViewStoreFeedback as checkCanViewStoreFeedback, canSubmitPurchaseRequests, canConfirmPurchaseReceiving, canReceivePurchasesTeam, canActOnPurchaseReceiving, canRegisterPurchaseInvoices, canManageInventoryControl as checkCanManageInventoryControl, canViewInventoryKpisPanel as checkCanViewInventoryKpisPanel, canManageAdminPayments as checkCanManageAdminPayments, canViewMarketingArrivals as checkCanViewMarketingArrivals, canConfirmMarketingDesign as checkCanConfirmMarketingDesign, canConfirmMarketingAdvisor as checkCanConfirmMarketingAdvisor, canCaptureMerchandiseReentry, canApproveMerchandiseReentry, canActOnMerchandiseReentry, canCloseMerchandiseReentry } from "@/lib/guards";
 import { getFinanceKpiData } from "@/lib/financeKpis";
 import { getDeptProcessDetail } from "@/lib/processDetail";
 import { getPaymentRemindersData } from "@/lib/paymentReminders";
@@ -48,6 +48,31 @@ export default async function WorkspacePage() {
   // 2026-08-05: solo Daniel (INV) y Bryan (MKT), Nairoby/admin ya lo ven vía
   // KPIs financieros → Inventario (ver canViewInventoryKpisPanel en guards.ts).
   const canViewInventoryKpisPanel = await checkCanViewInventoryKpisPanel();
+  // Reingreso de Mercadería — movido de su propio ítem de sidebar a esta
+  // pestaña (confirmado 2026-08-21), mismo patrón sin dept.code que Control
+  // de Inventario.
+  const [canCaptureReentry, canApproveReentry, canActReentry, canCloseReentry] = await Promise.all([
+    canCaptureMerchandiseReentry(),
+    canApproveMerchandiseReentry(),
+    canActOnMerchandiseReentry(),
+    canCloseMerchandiseReentry(),
+  ]);
+  let merchandiseReentryPendingCount = 0;
+  if (canApproveReentry) {
+    merchandiseReentryPendingCount = await prisma.merchandiseReentryBatch.count({
+      where: { submittedAt: { not: null }, danielApprovedAt: null },
+    });
+  } else if (canCloseReentry) {
+    const [pendingJust, pendingWriteOff] = await Promise.all([
+      prisma.merchandiseReentryItem.count({
+        where: { goodQty: { gt: 0 }, justUploadedAt: null, batch: { danielApprovedAt: { not: null } } },
+      }),
+      prisma.merchandiseReentryItem.count({
+        where: { damagedQty: { gt: 0 }, damageConfirmed: true, writeOffAt: null, batch: { danielApprovedAt: { not: null } } },
+      }),
+    ]);
+    merchandiseReentryPendingCount = pendingJust + pendingWriteOff;
+  }
   // Pagos administrativos — mismo patrón sin dept.code que Control de
   // Compras (confirmado 2026-08-06).
   const canManageAdminPayments = await checkCanManageAdminPayments();
@@ -153,6 +178,11 @@ export default async function WorkspacePage() {
         inventoryControlData={inventoryControlData}
         canViewInventoryKpisPanel={canViewInventoryKpisPanel}
         inventoryKpisData={inventoryKpisData}
+        canCaptureMerchandiseReentry={canCaptureReentry}
+        canApproveMerchandiseReentry={canApproveReentry}
+        canActOnMerchandiseReentry={canActReentry}
+        canCloseMerchandiseReentry={canCloseReentry}
+        merchandiseReentryPendingCount={merchandiseReentryPendingCount}
         pettyCashData={pettyCashData}
         canManageAdminPayments={canManageAdminPayments}
         canViewMarketingArrivals={canViewMarketingArrivals}

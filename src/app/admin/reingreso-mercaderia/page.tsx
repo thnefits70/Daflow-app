@@ -1,8 +1,10 @@
 import { MerchandiseReentryPanel } from "@/components/merchandise-reentry/MerchandiseReentryPanel";
 
-// El admin nunca captura (no tiene departamento real), pero sí puede
-// aprobar/cerrar como supervisión general — mismo criterio que
-// canRegisterPurchaseInvoices.
+// El admin nunca captura (no tiene departamento real). Puede ver
+// "Revisión"/"Cierre" para supervisar, pero fix 2026-08-21: aprobar lotes es
+// exclusivo de Daniel (líder de Inventario), ni siquiera admin — mismo
+// criterio que canActOnPurchaseReceiving. Cerrar el ciclo (Nairoby, FIN)
+// sigue abierto a admin como supervisión general.
 export default function AdminMerchandiseReentryPage() {
-  return <MerchandiseReentryPanel canCapture={false} canApprove canClose />;
+  return <MerchandiseReentryPanel canCapture={false} canApprove canAct={false} canClose />;
 }

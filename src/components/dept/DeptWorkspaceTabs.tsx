@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { GitBranch, FileText, GraduationCap, LineChart, TrendingUp, MessageSquare, CalendarClock, BellRing, Heart, ShoppingCart, Package, Pin, Wallet, BarChart3, Landmark, PackageCheck } from "lucide-react";
+import { GitBranch, FileText, GraduationCap, LineChart, TrendingUp, MessageSquare, CalendarClock, BellRing, Heart, ShoppingCart, Package, Pin, Wallet, BarChart3, Landmark, PackageCheck, PackageOpen } from "lucide-react";
 import { ProcessEmbeddedPanel } from "@/components/process/ProcessEmbeddedPanel";
 import type { ProcessDTO } from "@/components/process/ProcessEditor";
 import type { ProcessUpdateDTO } from "@/components/process/ProcessHistoryPanel";
@@ -28,6 +28,7 @@ import { PettyCashExceptionsPanel } from "@/components/pettycash/PettyCashExcept
 import type { PettyCashViewerData } from "@/lib/pettyCash";
 import { AdminPaymentsPanel } from "@/components/finance/AdminPaymentsPanel";
 import { MarketingArrivalsPanel } from "@/components/marketing/MarketingArrivalsPanel";
+import { MerchandiseReentryPanel } from "@/components/merchandise-reentry/MerchandiseReentryPanel";
 
 type DocumentDTO = { id: string; title: string; content: string; link: string; fileUrl: string | null; fileName: string | null };
 type ExamSummary = { id: string; title: string; questionCount: number };
@@ -43,6 +44,7 @@ const ALL_TABS = [
   { key: "compras", label: "Control de Compras", icon: ShoppingCart },
   { key: "llegadas", label: "Mercadería recibida", icon: PackageCheck },
   { key: "inventario", label: "Control de Inventario", icon: Package },
+  { key: "reingreso", label: "Reingreso de Mercadería", icon: PackageOpen },
   { key: "inventoriokpis", label: "KPIs de Inventario", icon: BarChart3 },
   { key: "cajachica", label: "Caja Chica", icon: Wallet },
   { key: "pagosadmin", label: "Pagos administrativos", icon: Landmark },
@@ -82,6 +84,11 @@ export function DeptWorkspaceTabs({
   inventoryControlData = null,
   canViewInventoryKpisPanel = false,
   inventoryKpisData = null,
+  canCaptureMerchandiseReentry = false,
+  canApproveMerchandiseReentry = false,
+  canActOnMerchandiseReentry = false,
+  canCloseMerchandiseReentry = false,
+  merchandiseReentryPendingCount = 0,
   pettyCashData = null,
   canManageAdminPayments = false,
   canViewMarketingArrivals = false,
@@ -144,6 +151,16 @@ export function DeptWorkspaceTabs({
   // así que esta pestaña no se les agrega ahí para no duplicar la vista.
   canViewInventoryKpisPanel?: boolean;
   inventoryKpisData?: InventoryKpisDataDTO | null;
+  // Reingreso de Mercadería — movido a esta pestaña (confirmado 2026-08-21,
+  // antes era su propio ítem de sidebar "propio, no anidado"; ahora vive
+  // junto a Control de Inventario). Mismos tres roles que
+  // `/area/reingreso-mercaderia` (ver guards.ts): captura = equipo INV,
+  // aprueba = Daniel (o admin), cierra = Nairoby (o admin).
+  canCaptureMerchandiseReentry?: boolean;
+  canApproveMerchandiseReentry?: boolean;
+  canActOnMerchandiseReentry?: boolean;
+  canCloseMerchandiseReentry?: boolean;
+  merchandiseReentryPendingCount?: number;
   // Caja Chica — confirmado 2026-08-05: null si la persona no ve ninguna de
   // las dos cajas (ni Principal ni Secundaria le corresponde).
   pettyCashData?: PettyCashViewerData | null;
@@ -179,6 +196,7 @@ export function DeptWorkspaceTabs({
     if (t.key === "compras") return canSubmitPurchases || canReceivePurchases || canInvoicePurchases;
     if (t.key === "llegadas") return canViewMarketingArrivals;
     if (t.key === "inventario") return canManageInventoryControl;
+    if (t.key === "reingreso") return canCaptureMerchandiseReentry || canApproveMerchandiseReentry || canCloseMerchandiseReentry;
     if (t.key === "inventoriokpis") return canViewInventoryKpisPanel;
     if (t.key === "cajachica") return !!(pettyCashData?.principal || pettyCashData?.secundaria);
     if (t.key === "postventa") return canManageStoreFeedback || canViewStoreFeedback;
@@ -251,6 +269,11 @@ export function DeptWorkspaceTabs({
                 {unseenFeedbackCount}
               </span>
             )}
+            {t.key === "reingreso" && merchandiseReentryPendingCount > 0 && (
+              <span className="font-mono text-[10px] font-semibold bg-red/20 text-red rounded-full px-1.5 py-0.5">
+                {merchandiseReentryPendingCount}
+              </span>
+            )}
           </button>
         ))}
         {currentUserId && (
@@ -295,6 +318,14 @@ export function DeptWorkspaceTabs({
         <InventoryControlPanel
           currentPeriodDefault={inventoryControlData.currentPeriod}
           periods={inventoryControlData.periods}
+        />
+      )}
+      {tab === "reingreso" && (canCaptureMerchandiseReentry || canApproveMerchandiseReentry || canCloseMerchandiseReentry) && (
+        <MerchandiseReentryPanel
+          canCapture={canCaptureMerchandiseReentry}
+          canApprove={canApproveMerchandiseReentry}
+          canAct={canActOnMerchandiseReentry}
+          canClose={canCloseMerchandiseReentry}
         />
       )}
       {tab === "inventoriokpis" && canViewInventoryKpisPanel && inventoryKpisData && (

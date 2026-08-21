@@ -90,6 +90,16 @@ export default async function DeptWorkspacePage({ params }: { params: Promise<{ 
         inventoryControlData={inventoryControlData}
         canViewInventoryKpisPanel={dept.code === "INV" || dept.code === "MKT"}
         inventoryKpisData={inventoryKpisData}
+        // Reingreso de Mercadería — admin no captura (no tiene departamento
+        // real, ver guards.ts canCaptureMerchandiseReentry), solo supervisa
+        // aprobación/cierre, igual que el resto de esta página de solo
+        // oversight. Fix 2026-08-21: aprobar lotes es exclusivo de Daniel
+        // (líder de Inventario), ni siquiera admin — mismo criterio que
+        // canApprovePurchaseReceiving arriba.
+        canCaptureMerchandiseReentry={false}
+        canApproveMerchandiseReentry={dept.code === "INV"}
+        canActOnMerchandiseReentry={false}
+        canCloseMerchandiseReentry={dept.code === "INV"}
         pettyCashData={pettyCashData}
         canManageAdminPayments={dept.code === "FIN"}
         canViewMarketingArrivals={dept.code === "MKT"}

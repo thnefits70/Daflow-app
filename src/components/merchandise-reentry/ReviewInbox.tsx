@@ -43,7 +43,7 @@ async function postJson(url: string, body?: unknown) {
   return data;
 }
 
-export function ReviewInbox() {
+export function ReviewInbox({ canAct }: { canAct: boolean }) {
   const [tab, setTab] = useState<"ready" | "review">("ready");
   const [ready, setReady] = useState<BatchDTO[]>([]);
   const [needsReview, setNeedsReview] = useState<BatchDTO[]>([]);
@@ -112,7 +112,13 @@ export function ReviewInbox() {
               <div className="text-[12.5px]">
                 <b>{ready.length} lotes</b> con todos los productos ya identificados y 100% de unidades buenas.
               </div>
-              <button type="button" disabled={busy} className="rounded border border-teal bg-teal px-3.5 py-1.5 text-[12px] font-bold text-navy cursor-pointer disabled:opacity-60 whitespace-nowrap" onClick={approveAllReady}>
+              <button
+                type="button"
+                disabled={busy || !canAct}
+                title={!canAct ? "Exclusivo del líder de Inventario" : undefined}
+                className="rounded border border-teal bg-teal px-3.5 py-1.5 text-[12px] font-bold text-navy cursor-pointer disabled:opacity-60 whitespace-nowrap"
+                onClick={approveAllReady}
+              >
                 Aprobar todos los listos ({ready.length})
               </button>
             </div>
@@ -133,7 +139,13 @@ export function ReviewInbox() {
                 <button type="button" title="Ver desglose" className="w-8 h-8 rounded border border-rule flex items-center justify-center cursor-pointer text-steel hover:text-teal" onClick={() => setExpandedId(expandedId === b.id ? null : b.id)}>
                   {expandedId === b.id ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                 </button>
-                <button type="button" disabled={busy} className="rounded border border-teal px-3 py-1.5 text-[12px] font-bold text-teal cursor-pointer disabled:opacity-60 whitespace-nowrap" onClick={() => approveBatch(b.id)}>
+                <button
+                  type="button"
+                  disabled={busy || !canAct}
+                  title={!canAct ? "Exclusivo del líder de Inventario" : undefined}
+                  className="rounded border border-teal px-3 py-1.5 text-[12px] font-bold text-teal cursor-pointer disabled:opacity-60 whitespace-nowrap"
+                  onClick={() => approveBatch(b.id)}
+                >
                   Aprobar lote
                 </button>
               </div>
@@ -173,7 +185,7 @@ export function ReviewInbox() {
               </div>
               <div className="flex flex-col gap-2.5">
                 {b.items.map((item) => (
-                  <ReviewItemRow key={item.id} item={item} onChanged={load} onExpandPhoto={setLightboxUrl} />
+                  <ReviewItemRow key={item.id} item={item} canAct={canAct} onChanged={load} onExpandPhoto={setLightboxUrl} />
                 ))}
               </div>
             </div>
@@ -194,7 +206,7 @@ export function ReviewInbox() {
   );
 }
 
-function ReviewItemRow({ item, onChanged, onExpandPhoto }: { item: ItemDTO; onChanged: () => void; onExpandPhoto: (url: string) => void }) {
+function ReviewItemRow({ item, canAct, onChanged, onExpandPhoto }: { item: ItemDTO; canAct: boolean; onChanged: () => void; onExpandPhoto: (url: string) => void }) {
   const [name, setName] = useState(item.correctedName ?? item.declaredName ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -244,7 +256,7 @@ function ReviewItemRow({ item, onChanged, onExpandPhoto }: { item: ItemDTO; onCh
           {nameNeedsReview ? (
             <div>
               <div className="text-[10.5px] text-steel mb-1">Nombre declarado por el colaborador</div>
-              <input className="w-full rounded border border-rule bg-surface px-2.5 py-1.5 text-[12.5px]" value={name} onChange={(e) => setName(e.target.value)} />
+              <input disabled={!canAct} className="w-full rounded border border-rule bg-surface px-2.5 py-1.5 text-[12.5px] disabled:opacity-60" value={name} onChange={(e) => setName(e.target.value)} />
             </div>
           ) : (
             <div className="text-[12.5px] font-semibold truncate">{itemName(item)}</div>
@@ -268,16 +280,34 @@ function ReviewItemRow({ item, onChanged, onExpandPhoto }: { item: ItemDTO; onCh
         {item.goodQty > 0 && <span className="text-[11.5px] text-green font-semibold shrink-0">{item.goodQty} buenas</span>}
 
         {nameNeedsReview && !damageNeedsReview && (
-          <button type="button" disabled={busy || !name.trim()} className="shrink-0 rounded border border-teal bg-teal px-3 py-1.5 text-[11.5px] font-bold text-navy cursor-pointer disabled:opacity-50" onClick={saveName}>
+          <button
+            type="button"
+            disabled={busy || !name.trim() || !canAct}
+            title={!canAct ? "Exclusivo del líder de Inventario" : undefined}
+            className="shrink-0 rounded border border-teal bg-teal px-3 py-1.5 text-[11.5px] font-bold text-navy cursor-pointer disabled:opacity-50"
+            onClick={saveName}
+          >
             Guardar y aprobar
           </button>
         )}
         {damageNeedsReview && (
           <div className="shrink-0 flex gap-1.5">
-            <button type="button" disabled={busy} className="rounded border border-rule px-2.5 py-1.5 text-[11px] font-semibold cursor-pointer disabled:opacity-50" onClick={() => resolveDamage(false)}>
+            <button
+              type="button"
+              disabled={busy || !canAct}
+              title={!canAct ? "Exclusivo del líder de Inventario" : undefined}
+              className="rounded border border-rule px-2.5 py-1.5 text-[11px] font-semibold cursor-pointer disabled:opacity-50"
+              onClick={() => resolveDamage(false)}
+            >
               No está dañado
             </button>
-            <button type="button" disabled={busy} className="rounded border border-red bg-red px-2.5 py-1.5 text-[11px] font-bold text-white cursor-pointer disabled:opacity-50" onClick={() => resolveDamage(true)}>
+            <button
+              type="button"
+              disabled={busy || !canAct}
+              title={!canAct ? "Exclusivo del líder de Inventario" : undefined}
+              className="rounded border border-red bg-red px-2.5 py-1.5 text-[11px] font-bold text-white cursor-pointer disabled:opacity-50"
+              onClick={() => resolveDamage(true)}
+            >
               Confirmar daño y dar de baja
             </button>
           </div>
@@ -285,7 +315,13 @@ function ReviewItemRow({ item, onChanged, onExpandPhoto }: { item: ItemDTO; onCh
       </div>
       {nameNeedsReview && damageNeedsReview && (
         <div className="mt-2 pl-[52px]">
-          <button type="button" disabled={busy || !name.trim()} className="rounded border border-teal bg-teal px-3 py-1.5 text-[11.5px] font-bold text-navy cursor-pointer disabled:opacity-50" onClick={saveName}>
+          <button
+            type="button"
+            disabled={busy || !name.trim() || !canAct}
+            title={!canAct ? "Exclusivo del líder de Inventario" : undefined}
+            className="rounded border border-teal bg-teal px-3 py-1.5 text-[11.5px] font-bold text-navy cursor-pointer disabled:opacity-50"
+            onClick={saveName}
+          >
             Guardar nombre
           </button>
           <div className="text-[10.5px] text-steel mt-1">Resuelve también el daño para poder aprobar este producto.</div>

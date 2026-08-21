@@ -10,9 +10,6 @@ import {
   canManageNomina,
   canLogOvertimeHours,
   canConfirmPersonalPurchaseInventory,
-  canViewMerchandiseReentry,
-  canApproveMerchandiseReentry,
-  canCloseMerchandiseReentry,
 } from "@/lib/guards";
 import { getRecognitionLockout } from "@/lib/pendingTasks";
 
@@ -169,26 +166,6 @@ export default async function AreaLayout({ children }: { children: React.ReactNo
   const showPersonalPurchasesInventory = await canConfirmPersonalPurchaseInventory();
   const myLearningPathCount = await prisma.learningPathAssignment.count({ where: { userId: session.user.id } });
 
-  const showMerchandiseReentry = await canViewMerchandiseReentry();
-  let merchandiseReentryPendingCount = 0;
-  if (showMerchandiseReentry) {
-    if (await canApproveMerchandiseReentry()) {
-      merchandiseReentryPendingCount = await prisma.merchandiseReentryBatch.count({
-        where: { submittedAt: { not: null }, danielApprovedAt: null },
-      });
-    } else if (await canCloseMerchandiseReentry()) {
-      const [pendingJust, pendingWriteOff] = await Promise.all([
-        prisma.merchandiseReentryItem.count({
-          where: { goodQty: { gt: 0 }, justUploadedAt: null, batch: { danielApprovedAt: { not: null } } },
-        }),
-        prisma.merchandiseReentryItem.count({
-          where: { damagedQty: { gt: 0 }, damageConfirmed: true, writeOffAt: null, batch: { danielApprovedAt: { not: null } } },
-        }),
-      ]);
-      merchandiseReentryPendingCount = pendingJust + pendingWriteOff;
-    }
-  }
-
   return (
     <AreaGateShell
       deptName={dept.name}
@@ -214,8 +191,6 @@ export default async function AreaLayout({ children }: { children: React.ReactNo
       showNomina={showNomina}
       showMyLearningPath={myLearningPathCount > 0}
       showPersonalPurchasesInventory={showPersonalPurchasesInventory}
-      showMerchandiseReentry={showMerchandiseReentry}
-      merchandiseReentryPendingCount={merchandiseReentryPendingCount}
     >
       {children}
       {(currentUser.canConfirmMarketingDesign || currentUser.canConfirmMarketingAdvisor) && (

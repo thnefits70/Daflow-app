@@ -11,10 +11,12 @@ type Tab = "capturar" | "revision" | "cierre" | "historial";
 export function MerchandiseReentryPanel({
   canCapture,
   canApprove,
+  canAct = false,
   canClose,
 }: {
   canCapture: boolean;
   canApprove: boolean;
+  canAct?: boolean;
   canClose: boolean;
 }) {
   const defaultTab: Tab = canCapture ? "capturar" : canApprove ? "revision" : canClose ? "cierre" : "historial";
@@ -58,7 +60,7 @@ export function MerchandiseReentryPanel({
       </div>
 
       {tab === "capturar" && canCapture && <CaptureFlow />}
-      {tab === "revision" && canApprove && <ReviewInbox />}
+      {tab === "revision" && canApprove && <ReviewInbox canAct={canAct} />}
       {tab === "cierre" && canClose && <CloseQueues />}
       {tab === "historial" && <HistoryList />}
     </div>

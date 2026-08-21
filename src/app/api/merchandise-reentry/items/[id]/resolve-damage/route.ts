@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { canApproveMerchandiseReentry } from "@/lib/guards";
+import { canActOnMerchandiseReentry } from "@/lib/guards";
 import { maybeMarkBatchApproved } from "@/lib/merchandiseReentry";
 
 const schema = z.object({ confirmed: z.boolean() });
@@ -14,7 +14,7 @@ const schema = z.object({ confirmed: z.boolean() });
 // en 0 (ya no hay nada que dar de baja).
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
-  if (!(await canApproveMerchandiseReentry()) || !session) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+  if (!(await canActOnMerchandiseReentry()) || !session) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
   const { id } = await params;
   const body = await req.json().catch(() => null);
@@ -26,7 +26,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (!item.batch.submittedAt) return NextResponse.json({ error: "Este lote todavía no fue enviado." }, { status: 409 });
   if (item.damagedQty <= 0) return NextResponse.json({ error: "Este producto no tiene unidades dañadas declaradas." }, { status: 409 });
 
-  const actorId = session.user.role === "admin" ? null : session.user.id;
+  const actorId = session.user.id;
   // La pregunta del daño ya queda resuelta con esta respuesta sea cual sea
   // — lo único que puede seguir faltando para aprobar el item es el nombre.
   const nameStillMissing = !item.aiRecognized && !item.correctedName;
