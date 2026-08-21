@@ -12,6 +12,7 @@ import {
   installmentAmount,
   installmentIndexForMonth,
   addMonthsToMonthStr,
+  monthsBetween,
 } from "@/lib/payrollCalc";
 import { getMonthDispatchSummary, getAchievedTier, CEO_BONUS_AMOUNTS, CEO_BONUS_LABELS } from "@/lib/commissionTiers";
 
@@ -58,6 +59,10 @@ export async function buildAutomaticLineItems(employeeId: string, period: string
         (s, e) => s + computeOvertimeAmount(OVERTIME_NATIONAL_BASE_SALARY, e.minutesExtra, e.date),
         0
       );
+      // Confirmado 2026-08-21: pedido explícito del usuario — todo concepto
+      // automático se muestra SIEMPRE, incluso en $0, con una nota que
+      // explica por qué no aplicó — para que nunca quede ambiguo si algo
+      // "no salió" porque no correspondía o porque se olvidó calcular.
       if (overtimeAmount > 0) {
         items.push({
           label: `Horas extra (${sourceMonth})`,
@@ -66,11 +71,27 @@ export async function buildAutomaticLineItems(employeeId: string, period: string
           isAutomatic: true,
           note: describeOvertimeCalculation(approvedEntries, OVERTIME_NATIONAL_BASE_SALARY),
         });
+      } else {
+        items.push({
+          label: `Horas extra (${sourceMonth})`,
+          amount: 0,
+          kind: "INCOME",
+          isAutomatic: true,
+          note: `No se registraron horas extra aprobadas en ${sourceMonth}.`,
+        });
       }
 
       const winner = await prisma.monthlyRecognitionResult.findUnique({ where: { month_rank: { month: sourceMonth, rank: 1 } } });
       if (winner?.userId === employeeId) {
         items.push({ label: `Bono colaborador destacado (${sourceMonth})`, amount: 50, kind: "INCOME", isAutomatic: true });
+      } else {
+        items.push({
+          label: `Bono colaborador destacado (${sourceMonth})`,
+          amount: 0,
+          kind: "INCOME",
+          isAutomatic: true,
+          note: winner ? `No fue el colaborador destacado de ${sourceMonth}.` : `Todavía no se definió el colaborador destacado de ${sourceMonth}.`,
+        });
       }
 
       // Confirmado 2026-08-14: comisión de equipo por nivel — el nivel
@@ -78,23 +99,53 @@ export async function buildAutomaticLineItems(employeeId: string, period: string
       // aprobado (>0) para ese nivel. Mismo desfase de un mes que horas
       // extra/bono destacado arriba.
       const dispatchSummary = await getMonthDispatchSummary(sourceMonth);
+      let commissionShown = false;
       if (dispatchSummary) {
         const tier = await getAchievedTier(dispatchSummary.dailyAvg);
+        const avgLabel = `Promedio real ${sourceMonth}: ${dispatchSummary.dailyAvg.toFixed(0)} pedidos/día`;
         if (tier) {
           const ta = await prisma.commissionTierAmount.findUnique({
             where: { tierId_userId: { tierId: tier.id, userId: employeeId } },
           });
+          const range = `${tier.minDailyAvg}${tier.maxDailyAvg ? `-${tier.maxDailyAvg}` : "+"} pedidos/día`;
           if (ta && ta.amount > 0) {
-            const range = `${tier.minDailyAvg}${tier.maxDailyAvg ? `-${tier.maxDailyAvg}` : "+"} pedidos/día`;
             items.push({
               label: `Comisión de equipo (${tier.name} — ${sourceMonth})`,
               amount: ta.amount,
               kind: "INCOME",
               isAutomatic: true,
-              note: `Promedio real ${sourceMonth}: ${dispatchSummary.dailyAvg.toFixed(0)} pedidos/día — nivel ${tier.name} (${range})`,
+              note: `${avgLabel} — nivel ${tier.name} (${range})`,
             });
+            commissionShown = true;
+          } else {
+            items.push({
+              label: `Comisión de equipo (${sourceMonth})`,
+              amount: 0,
+              kind: "INCOME",
+              isAutomatic: true,
+              note: `${avgLabel} — alcanzó el nivel ${tier.name} (${range}), pero no tiene un monto de comisión configurado para ese nivel.`,
+            });
+            commissionShown = true;
           }
+        } else {
+          items.push({
+            label: `Comisión de equipo (${sourceMonth})`,
+            amount: 0,
+            kind: "INCOME",
+            isAutomatic: true,
+            note: `${avgLabel} — no alcanzó ningún nivel de comisión ese mes.`,
+          });
+          commissionShown = true;
         }
+      }
+      if (!commissionShown) {
+        items.push({
+          label: `Comisión de equipo (${sourceMonth})`,
+          amount: 0,
+          kind: "INCOME",
+          isAutomatic: true,
+          note: `No hay datos de despachos cargados para ${sourceMonth}.`,
+        });
       }
 
       // Bonos discrecionales del CEO otorgados durante el mes fuente —
@@ -111,6 +162,15 @@ export async function buildAutomaticLineItems(employeeId: string, period: string
           isAutomatic: true,
         });
       }
+      if (bonuses.length === 0) {
+        items.push({
+          label: `Bonos discrecionales del CEO (${sourceMonth})`,
+          amount: 0,
+          kind: "INCOME",
+          isAutomatic: true,
+          note: `No se otorgaron bonos discrecionales del CEO en ${sourceMonth}.`,
+        });
+      }
 
       // Confirmado 2026-08-17: bono especial fijo mensual (aprobado por el
       // admin) — mismo desfase de un mes que todo lo demás en este bloque,
@@ -120,6 +180,14 @@ export async function buildAutomaticLineItems(employeeId: string, period: string
       const fixedBonus = await prisma.fixedMonthlyBonus.findUnique({ where: { userId: employeeId } });
       if (fixedBonus && fixedBonus.amount > 0) {
         items.push({ label: `Bonos especiales fijos (${sourceMonth})`, amount: fixedBonus.amount, kind: "INCOME", isAutomatic: true });
+      } else {
+        items.push({
+          label: `Bonos especiales fijos (${sourceMonth})`,
+          amount: 0,
+          kind: "INCOME",
+          isAutomatic: true,
+          note: "No tiene un bono especial fijo configurado.",
+        });
       }
 
       // Confirmado 2026-08-18: los 3 egresos automáticos (compras
@@ -138,63 +206,109 @@ export async function buildAutomaticLineItems(employeeId: string, period: string
         where: { employeeId, status: "APPROVED", firstPayoutMonth: { not: null }, totalAmount: { not: null } },
         include: { items: true },
       });
+      let ordersShown = false;
       for (const o of orders) {
         const idx = installmentIndexForMonth(o.firstPayoutMonth!, o.installments, periodMonth);
-        if (idx === null) continue;
-        const amt = installmentAmount(o.totalAmount!, o.installments, idx);
-        const cuota = o.installments > 1 ? ` (cuota ${idx + 1}/${o.installments})` : "";
-        const firstName = o.items[0] ? o.items[0].confirmedProductName ?? o.items[0].employeeProductName : "producto";
-        const label = o.items.length > 1 ? `Compra personal — ${o.items.length} productos${cuota}` : `Compra personal — ${firstName}${cuota}`;
-        const note = o.items
-          .map((it) => {
-            const modes = Array.isArray(it.unitPriceModes) ? (it.unitPriceModes as string[]) : [];
-            const costCount = modes.filter((m) => m === "COST").length;
-            const dropiCount = modes.filter((m) => m === "DROPI").length;
-            const name = it.confirmedProductName ?? it.employeeProductName;
-            const split = [costCount > 0 ? `${costCount} al costo` : null, dropiCount > 0 ? `${dropiCount} Dropi` : null].filter(Boolean).join(" · ");
-            return `${name} × ${it.quantity}${split ? ` (${split})` : ""}`;
-          })
-          .join(" · ");
-        const confirmedDate = o.financeConfirmedAt ? new Date(o.financeConfirmedAt).toLocaleDateString("es-EC") : null;
-        const fullNote = `${note} — total $${o.totalAmount!.toFixed(2)} en ${o.installments} cuota(s)${confirmedDate ? ` — confirmada el ${confirmedDate}` : ""}`;
-        items.push({ label, amount: amt, kind: "EXPENSE", isAutomatic: true, note: fullNote });
+        if (idx !== null) {
+          const amt = installmentAmount(o.totalAmount!, o.installments, idx);
+          const cuota = o.installments > 1 ? ` (cuota ${idx + 1}/${o.installments})` : "";
+          const firstName = o.items[0] ? o.items[0].confirmedProductName ?? o.items[0].employeeProductName : "producto";
+          const label = o.items.length > 1 ? `Compra personal — ${o.items.length} productos${cuota}` : `Compra personal — ${firstName}${cuota}`;
+          const note = o.items
+            .map((it) => {
+              const modes = Array.isArray(it.unitPriceModes) ? (it.unitPriceModes as string[]) : [];
+              const costCount = modes.filter((m) => m === "COST").length;
+              const dropiCount = modes.filter((m) => m === "DROPI").length;
+              const name = it.confirmedProductName ?? it.employeeProductName;
+              const split = [costCount > 0 ? `${costCount} al costo` : null, dropiCount > 0 ? `${dropiCount} Dropi` : null].filter(Boolean).join(" · ");
+              return `${name} × ${it.quantity}${split ? ` (${split})` : ""}`;
+            })
+            .join(" · ");
+          const confirmedDate = o.financeConfirmedAt ? new Date(o.financeConfirmedAt).toLocaleDateString("es-EC") : null;
+          const fullNote = `${note} — total $${o.totalAmount!.toFixed(2)} en ${o.installments} cuota(s)${confirmedDate ? ` — confirmada el ${confirmedDate}` : ""}`;
+          items.push({ label, amount: amt, kind: "EXPENSE", isAutomatic: true, note: fullNote });
+          ordersShown = true;
+        } else if (monthsBetween(periodMonth, o.firstPayoutMonth!) > 0) {
+          items.push({
+            label: "Compra personal (pendiente)",
+            amount: 0,
+            kind: "EXPENSE",
+            isAutomatic: true,
+            note: `Compra aprobada de $${o.totalAmount!.toFixed(2)} en ${o.installments} cuota(s) — la primera cuota corresponde a ${o.firstPayoutMonth}, no a este período.`,
+          });
+          ordersShown = true;
+        }
+      }
+      if (!ordersShown) {
+        items.push({ label: "Compras personales", amount: 0, kind: "EXPENSE", isAutomatic: true, note: "No tiene compras personales activas en rol." });
       }
 
       const advances = await prisma.salaryAdvance.findMany({
         where: { employeeId, status: "APPROVED", firstPayoutMonth: { not: null } },
       });
+      let advancesShown = false;
       for (const a of advances) {
         const idx = installmentIndexForMonth(a.firstPayoutMonth!, a.installments, periodMonth);
-        if (idx === null) continue;
-        const amt = installmentAmount(a.amount, a.installments, idx);
-        const cuota = a.installments > 1 ? ` (cuota ${idx + 1}/${a.installments})` : "";
-        const approvedDate = a.approvedAt ? new Date(a.approvedAt).toLocaleDateString("es-EC") : null;
-        items.push({
-          label: `Anticipo${cuota}`,
-          amount: amt,
-          kind: "EXPENSE",
-          isAutomatic: true,
-          note: `Anticipo total $${a.amount.toFixed(2)} en ${a.installments} cuota(s)${approvedDate ? ` — aprobado el ${approvedDate}` : ""}`,
-        });
+        if (idx !== null) {
+          const amt = installmentAmount(a.amount, a.installments, idx);
+          const cuota = a.installments > 1 ? ` (cuota ${idx + 1}/${a.installments})` : "";
+          const approvedDate = a.approvedAt ? new Date(a.approvedAt).toLocaleDateString("es-EC") : null;
+          items.push({
+            label: `Anticipo${cuota}`,
+            amount: amt,
+            kind: "EXPENSE",
+            isAutomatic: true,
+            note: `Anticipo total $${a.amount.toFixed(2)} en ${a.installments} cuota(s)${approvedDate ? ` — aprobado el ${approvedDate}` : ""}`,
+          });
+          advancesShown = true;
+        } else if (monthsBetween(periodMonth, a.firstPayoutMonth!) > 0) {
+          items.push({
+            label: "Anticipo (pendiente)",
+            amount: 0,
+            kind: "EXPENSE",
+            isAutomatic: true,
+            note: `Anticipo aprobado de $${a.amount.toFixed(2)} en ${a.installments} cuota(s) — la primera cuota corresponde a ${a.firstPayoutMonth}, no a este período.`,
+          });
+          advancesShown = true;
+        }
+      }
+      if (!advancesShown) {
+        items.push({ label: "Anticipos", amount: 0, kind: "EXPENSE", isAutomatic: true, note: "No tiene anticipos activos." });
       }
 
       const deductions = await prisma.managementDeduction.findMany({
         where: { employeeId, acceptedAt: { not: null }, firstPayoutMonth: { not: null } },
       });
+      let deductionsShown = false;
       for (const d of deductions) {
         const idx = installmentIndexForMonth(d.firstPayoutMonth!, d.installments, periodMonth);
-        if (idx === null) continue;
-        const amt = installmentAmount(d.totalAmount, d.installments, idx);
-        const cuota = d.installments > 1 ? ` (cuota ${idx + 1}/${d.installments})` : "";
-        const shortReason = d.reason.length > 40 ? `${d.reason.slice(0, 40)}…` : d.reason;
-        const acceptedDate = d.acceptedAt ? new Date(d.acceptedAt).toLocaleDateString("es-EC") : null;
-        items.push({
-          label: `Descuento — ${shortReason}${cuota}`,
-          amount: amt,
-          kind: "EXPENSE",
-          isAutomatic: true,
-          note: `Motivo completo: "${d.reason}" — total $${d.totalAmount.toFixed(2)} en ${d.installments} cuota(s)${acceptedDate ? ` — aceptado el ${acceptedDate}` : ""}`,
-        });
+        if (idx !== null) {
+          const amt = installmentAmount(d.totalAmount, d.installments, idx);
+          const cuota = d.installments > 1 ? ` (cuota ${idx + 1}/${d.installments})` : "";
+          const shortReason = d.reason.length > 40 ? `${d.reason.slice(0, 40)}…` : d.reason;
+          const acceptedDate = d.acceptedAt ? new Date(d.acceptedAt).toLocaleDateString("es-EC") : null;
+          items.push({
+            label: `Descuento — ${shortReason}${cuota}`,
+            amount: amt,
+            kind: "EXPENSE",
+            isAutomatic: true,
+            note: `Motivo completo: "${d.reason}" — total $${d.totalAmount.toFixed(2)} en ${d.installments} cuota(s)${acceptedDate ? ` — aceptado el ${acceptedDate}` : ""}`,
+          });
+          deductionsShown = true;
+        } else if (monthsBetween(periodMonth, d.firstPayoutMonth!) > 0) {
+          const shortReason = d.reason.length > 40 ? `${d.reason.slice(0, 40)}…` : d.reason;
+          items.push({
+            label: `Descuento — ${shortReason} (pendiente)`,
+            amount: 0,
+            kind: "EXPENSE",
+            isAutomatic: true,
+            note: `Descuento aceptado de $${d.totalAmount.toFixed(2)} en ${d.installments} cuota(s) — la primera cuota corresponde a ${d.firstPayoutMonth}, no a este período.`,
+          });
+          deductionsShown = true;
+        }
+      }
+      if (!deductionsShown) {
+        items.push({ label: "Descuentos por mala gestión", amount: 0, kind: "EXPENSE", isAutomatic: true, note: "No tiene descuentos activos." });
       }
     }
   }
