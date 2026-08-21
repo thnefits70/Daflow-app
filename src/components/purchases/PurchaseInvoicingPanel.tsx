@@ -190,6 +190,18 @@ export function PurchaseInvoicingPanel() {
   const [busyGroup, setBusyGroup] = useState<string | null>(null);
   const [err, setErr] = useState("");
 
+  // Confirmado 2026-08-21: "volver a subir factura" es para CORREGIR el
+  // documento de una factura que ya quedó registrada — a propósito separado
+  // del flujo de arriba (que registra por primera vez). Como reemplaza algo
+  // que ya se dio por bueno, exige confirmar dos veces en el mismo botón en
+  // vez de guardar apenas se sube el archivo, para que no se reemplace por
+  // accidente al pegar/seleccionar la foto equivocada.
+  const [reuploadOpenGroupId, setReuploadOpenGroupId] = useState<string | null>(null);
+  const [replaceDocUrl, setReplaceDocUrl] = useState<Record<string, string>>({});
+  const [uploadingReplaceDoc, setUploadingReplaceDoc] = useState<string | null>(null);
+  const [replaceConfirming, setReplaceConfirming] = useState<Record<string, boolean>>({});
+  const [replacingDoc, setReplacingDoc] = useState<string | null>(null);
+
   const [payingShippingGroup, setPayingShippingGroup] = useState<string | null>(null);
   const [shippingProofUrl, setShippingProofUrl] = useState<string | null>(null);
   const [uploadingShippingProof, setUploadingShippingProof] = useState(false);
@@ -435,6 +447,58 @@ export function PurchaseInvoicingPanel() {
       return;
     }
     setInvoiceDocUrl((m) => ({ ...m, [groupId]: uploaded.url }));
+  }
+
+  function openReupload(groupId: string) {
+    setReuploadOpenGroupId(groupId);
+    setReplaceDocUrl((m) => { const next = { ...m }; delete next[groupId]; return next; });
+    setReplaceConfirming((m) => ({ ...m, [groupId]: false }));
+    setErr("");
+  }
+
+  function cancelReupload(groupId: string) {
+    setReuploadOpenGroupId(null);
+    setReplaceDocUrl((m) => { const next = { ...m }; delete next[groupId]; return next; });
+    setReplaceConfirming((m) => ({ ...m, [groupId]: false }));
+  }
+
+  async function uploadReplaceDoc(groupId: string, file: File) {
+    setErr("");
+    setUploadingReplaceDoc(groupId);
+    const compressed = await compressImage(file);
+    const uploaded = await uploadFile(compressed, "purchase-invoices");
+    setUploadingReplaceDoc(null);
+    if (!uploaded.ok) {
+      setErr(uploaded.error);
+      return;
+    }
+    setReplaceDocUrl((m) => ({ ...m, [groupId]: uploaded.url }));
+    setReplaceConfirming((m) => ({ ...m, [groupId]: false }));
+  }
+
+  async function confirmReplaceDoc(groupId: string) {
+    // Primer clic: solo pide la confirmación final, no guarda nada todavía.
+    if (!replaceConfirming[groupId]) {
+      setReplaceConfirming((m) => ({ ...m, [groupId]: true }));
+      return;
+    }
+    const url = replaceDocUrl[groupId];
+    if (!url) return;
+    setReplacingDoc(groupId);
+    setErr("");
+    const res = await fetch(`/api/purchase-requests/group/${groupId}/invoice-doc`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ invoiceDocUrl: url }),
+    });
+    setReplacingDoc(null);
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      setErr(data?.error ?? "No se pudo reemplazar el documento.");
+      return;
+    }
+    cancelReupload(groupId);
+    load();
   }
 
   if (!rows) return <div className="text-steel text-[13px]">Cargando…</div>;
@@ -988,6 +1052,81 @@ export function PurchaseInvoicingPanel() {
                     <div className="flex items-center gap-1.5 text-[11px] mt-1.5 pt-1.5 border-t border-rule" style={{ color: "#D9A441" }}>
                       <AlertTriangle size={12} className="shrink-0" /> Sigue aquí hasta que Inventario confirme que llegó todo — recién ahí pasa a Auditoría.
                     </div>
+                  )}
+
+                  {reuploadOpenGroupId === groupId ? (
+                    <div className="mt-2 pt-2 border-t border-rule">
+                      {replaceDocUrl[groupId] ? (
+                        <div className="mb-2">
+                          <div className="flex items-center gap-1.5 text-[11.5px] text-teal mb-1.5">
+                            <CheckCircle2 size={13} /> Nuevo documento listo — revísalo antes de reemplazar
+                          </div>
+                          {isImageUrl(replaceDocUrl[groupId]) ? (
+                            <a href={replaceDocUrl[groupId]} target="_blank" rel="noopener noreferrer" className="block w-fit">
+                              <img src={replaceDocUrl[groupId]} alt="Vista previa del nuevo documento" className="max-h-52 rounded border border-rule" />
+                            </a>
+                          ) : (
+                            <iframe src={replaceDocUrl[groupId]} className="w-full h-52 rounded border border-rule bg-white" title="Vista previa del nuevo documento" />
+                          )}
+                          <a href={replaceDocUrl[groupId]} target="_blank" rel="noopener noreferrer" className="block text-[11px] text-blue font-semibold mt-1.5 w-fit">Ver en pestaña nueva</a>
+                          <button
+                            type="button"
+                            className="text-steel text-[11px] underline cursor-pointer mt-1.5 block"
+                            onClick={() => { setReplaceDocUrl((m) => { const next = { ...m }; delete next[groupId]; return next; }); setReplaceConfirming((m) => ({ ...m, [groupId]: false })); }}
+                          >
+                            Subir otro archivo
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="mb-2">
+                          <label className="flex items-center gap-1.5 border-[1.5px] border-dashed border-rule rounded px-3 py-2 text-[11.5px] text-steel cursor-pointer hover:border-teal w-fit">
+                            {uploadingReplaceDoc === groupId ? <span className="w-3.5 h-3.5 rounded-full border-2 border-rule border-t-teal animate-spin" /> : <Upload size={12} />} Selecciona el nuevo documento
+                            <input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && uploadReplaceDoc(groupId, e.target.files[0])} />
+                          </label>
+                          <label className="flex items-center gap-1 mt-1 text-[10.5px] text-steel cursor-pointer hover:text-teal w-fit">
+                            ¿Es un PDF? Subir documento
+                            <input type="file" accept="application/pdf" className="hidden" onChange={(e) => e.target.files?.[0] && uploadReplaceDoc(groupId, e.target.files[0])} />
+                          </label>
+                        </div>
+                      )}
+                      {err && <div className="text-red text-[12px] mb-2">{err}</div>}
+                      <div className="flex items-center gap-2">
+                        {replaceConfirming[groupId] ? (
+                          <>
+                            <span className="text-[11.5px] text-red font-semibold">¿Seguro? Esto reemplaza el documento ya guardado.</span>
+                            <button
+                              type="button"
+                              disabled={replacingDoc === groupId}
+                              className="rounded border border-red/60 bg-red/10 px-3 py-1.5 text-[11.5px] font-semibold text-red cursor-pointer disabled:opacity-60"
+                              onClick={() => confirmReplaceDoc(groupId)}
+                            >
+                              Sí, reemplazar
+                            </button>
+                            <button type="button" className="text-steel text-[11.5px] cursor-pointer" onClick={() => setReplaceConfirming((m) => ({ ...m, [groupId]: false }))}>Cancelar</button>
+                          </>
+                        ) : (
+                          <>
+                            <button
+                              type="button"
+                              disabled={!replaceDocUrl[groupId]}
+                              className="rounded border border-blue bg-blue px-3 py-1.5 text-[11.5px] font-semibold text-white cursor-pointer disabled:opacity-60"
+                              onClick={() => confirmReplaceDoc(groupId)}
+                            >
+                              Reemplazar documento
+                            </button>
+                            <button type="button" className="text-steel text-[11.5px] cursor-pointer" onClick={() => cancelReupload(groupId)}>Cancelar</button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      className="text-blue text-[11px] font-semibold underline cursor-pointer mt-1.5"
+                      onClick={() => openReupload(groupId)}
+                    >
+                      Volver a subir el documento de factura
+                    </button>
                   )}
                 </div>
               )}
