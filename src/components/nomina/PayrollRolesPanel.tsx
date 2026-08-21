@@ -96,6 +96,7 @@ function RoleCard({ role, published, canEdit, monthlyRoleId, onChanged }: { role
   const [correctingMonthly, setCorrectingMonthly] = useState(false);
   const [monthlyChangeNote, setMonthlyChangeNote] = useState("");
   const [savingMonthly, setSavingMonthly] = useState(false);
+  const [showZero, setShowZero] = useState(false);
 
   async function submitMonthlyCorrection() {
     if (!monthlyRoleId || !monthlyChangeNote.trim()) return;
@@ -143,21 +144,30 @@ function RoleCard({ role, published, canEdit, monthlyRoleId, onChanged }: { role
   const total = totalIncome - totalExpense;
   const editingEnabled = canEdit && (!published || correcting);
 
+  const indexed = items.map((it, idx) => ({ it, idx }));
+  const withValue = indexed.filter(({ it }) => it.amount !== 0);
+  const withoutValue = indexed.filter(({ it }) => it.amount === 0);
+
   return (
     <div className="bg-surface border border-rule rounded-md p-3.5">
-      <div className="flex items-center justify-between gap-2 mb-2">
+      <div className="flex items-center justify-between gap-2 mb-2.5">
         <div>
-          <div className="font-bold text-[13px]">{role.employee.name}</div>
+          <div className="font-bold text-[13.5px]">{role.employee.name}</div>
           {role.employee.position && <div className="text-[10.5px] text-steel">{role.employee.position}</div>}
         </div>
-        <div className="text-[15px] font-extrabold tabular-nums">{money(total)}</div>
+        <div className="text-right">
+          <div className="text-[16px] font-extrabold tabular-nums">{money(total)}</div>
+          <div className="text-[9.5px] text-steel-dim uppercase tracking-wide">Líquido a pagar</div>
+        </div>
       </div>
 
-      <div className="flex flex-col gap-1">
-        {items.map((it, idx) => (
+      {withValue.length === 0 && <div className="text-[11.5px] text-steel-dim italic">Sin conceptos con valor este período.</div>}
+
+      <div className="flex flex-col gap-2">
+        {withValue.map(({ it, idx }) => (
           <div key={idx}>
-            <div className="flex items-center gap-2 text-[12px]">
-              <span className="flex-1 text-ink">{it.label}</span>
+            <div className="flex items-center gap-2 text-[12.5px]">
+              <span className="flex-1 text-ink font-medium">{it.label}</span>
               <span className={`font-bold tabular-nums ${it.kind === "INCOME" ? "text-green" : "text-red"}`}>
                 {it.kind === "INCOME" ? "+" : "−"}{money(it.amount)}
               </span>
@@ -167,10 +177,39 @@ function RoleCard({ role, published, canEdit, monthlyRoleId, onChanged }: { role
                 </button>
               )}
             </div>
-            {it.note && <div className="text-[10.5px] text-steel-dim mt-0.5">{it.note}</div>}
+            {it.note && <div className="text-[11px] text-steel-dim mt-0.5 leading-snug">{it.note}</div>}
           </div>
         ))}
       </div>
+
+      {withoutValue.length > 0 && (
+        <div className={withValue.length > 0 ? "mt-2.5 pt-2 border-t border-rule" : "mt-1"}>
+          <button
+            type="button"
+            className="text-[11px] text-blue font-semibold cursor-pointer flex items-center gap-1"
+            onClick={() => setShowZero((s) => !s)}
+          >
+            {showZero ? "Ocultar" : "Ver"} {withoutValue.length} concepto{withoutValue.length > 1 ? "s" : ""} sin novedad {showZero ? "▴" : "▾"}
+          </button>
+          {showZero && (
+            <div className="mt-2 flex flex-col gap-2 pl-2.5 border-l-2 border-rule">
+              {withoutValue.map(({ it, idx }) => (
+                <div key={idx} className="text-[11px]">
+                  <div className="flex items-center gap-2">
+                    <span className="flex-1 text-steel font-medium">{it.label}</span>
+                    {editingEnabled && (
+                      <button type="button" className="text-steel-dim cursor-pointer" onClick={() => saveDraft(items.filter((_, i) => i !== idx))}>
+                        <X size={10} />
+                      </button>
+                    )}
+                  </div>
+                  {it.note && <div className="text-steel-dim mt-0.5 leading-snug">{it.note}</div>}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="mt-2.5 pt-2 border-t border-rule flex flex-col gap-1 text-[12px]">
         <div className="flex justify-between text-steel"><span>Total ingresos</span><span className="text-green font-semibold tabular-nums">{money(totalIncome)}</span></div>
