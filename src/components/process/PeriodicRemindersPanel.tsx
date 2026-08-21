@@ -11,7 +11,7 @@ type ReminderDTO = {
   title: string;
   detail: string;
   recurrence: "DAILY" | "WEEKLY" | "ONCE";
-  weekday: number | null;
+  weekdays: number[];
   date: string | null;
   timeOfDay: string | null;
   isActive: boolean;
@@ -29,22 +29,17 @@ function pad2(n: number) {
 function todayStr(d: Date) {
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 }
-function isoWeekOf(d: Date): string {
-  const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
-  const dayNum = date.getUTCDay() || 7;
-  date.setUTCDate(date.getUTCDate() + 4 - dayNum);
-  const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
-  const weekNum = Math.ceil(((date.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
-  return `${date.getUTCFullYear()}-W${pad2(weekNum)}`;
-}
 function currentPeriodFor(r: { recurrence: ReminderDTO["recurrence"] }): string {
   if (r.recurrence === "DAILY") return todayStr(new Date());
-  if (r.recurrence === "WEEKLY") return isoWeekOf(new Date());
+  if (r.recurrence === "WEEKLY") return todayStr(new Date());
   return "once";
 }
 function recurrenceLabel(r: ReminderDTO): string {
   if (r.recurrence === "DAILY") return `Diario${r.timeOfDay ? ` · ${r.timeOfDay}` : ""}`;
-  if (r.recurrence === "WEEKLY") return `Semanal · ${WEEKDAY_NAMES[r.weekday ?? 0]}${r.timeOfDay ? ` · ${r.timeOfDay}` : ""}`;
+  if (r.recurrence === "WEEKLY") {
+    const days = r.weekdays.length > 0 ? r.weekdays.slice().sort((a, b) => a - b).map((d) => WEEKDAY_NAMES[d]).join(", ") : "todos los días";
+    return `Semanal · ${days}${r.timeOfDay ? ` · ${r.timeOfDay}` : ""}`;
+  }
   const d = r.date ? new Date(r.date) : null;
   const dateLabel = d ? `${pad2(d.getUTCDate())}/${pad2(d.getUTCMonth() + 1)}/${d.getUTCFullYear()}` : "";
   return `Una vez · ${dateLabel}${r.timeOfDay ? ` · ${r.timeOfDay}` : ""}`;
@@ -54,7 +49,7 @@ const emptyForm = {
   title: "",
   detail: "",
   recurrence: "DAILY" as ReminderDTO["recurrence"],
-  weekday: "1",
+  weekdays: [1] as number[],
   date: "",
   timeOfDay: "",
   notifyPush: false,
@@ -107,7 +102,7 @@ export function PeriodicRemindersPanel({
       title: r.title,
       detail: r.detail,
       recurrence: r.recurrence,
-      weekday: String(r.weekday ?? 1),
+      weekdays: r.weekdays.length > 0 ? r.weekdays : [1],
       date: r.date ? r.date.slice(0, 10) : "",
       timeOfDay: r.timeOfDay ?? "",
       notifyPush: r.notifyPush,
@@ -119,6 +114,7 @@ export function PeriodicRemindersPanel({
   const save = async () => {
     if (!form.title.trim()) return setErr("Ponle un título al recordatorio.");
     if (form.recurrence === "ONCE" && !form.date) return setErr("Elige la fecha.");
+    if (form.recurrence === "WEEKLY" && form.weekdays.length === 0) return setErr("Elige al menos un día de la semana.");
     setErr("");
     setBusy(true);
     const body = {
@@ -126,7 +122,7 @@ export function PeriodicRemindersPanel({
       title: form.title.trim(),
       detail: form.detail.trim() || undefined,
       recurrence: form.recurrence,
-      weekday: form.recurrence === "WEEKLY" ? Number(form.weekday) : undefined,
+      weekdays: form.recurrence === "WEEKLY" ? form.weekdays : undefined,
       date: form.recurrence === "ONCE" ? form.date : undefined,
       timeOfDay: form.timeOfDay || undefined,
       notifyPush: form.notifyPush,
@@ -264,17 +260,29 @@ export function PeriodicRemindersPanel({
               />
             </div>
             {form.recurrence === "WEEKLY" && (
-              <div>
-                <label className="block mb-1 text-[10.5px] font-semibold uppercase tracking-wide text-steel">Día de la semana</label>
-                <select
-                  className="w-full rounded border border-rule px-2.5 py-2 text-[13.5px] bg-surface"
-                  value={form.weekday}
-                  onChange={(e) => setForm((f) => ({ ...f, weekday: e.target.value }))}
-                >
-                  {WEEKDAY_NAMES.slice(1).map((name, i) => (
-                    <option key={i + 1} value={i + 1}>{name}</option>
-                  ))}
-                </select>
+              <div className="sm:col-span-2">
+                <label className="block mb-1 text-[10.5px] font-semibold uppercase tracking-wide text-steel">Días de la semana</label>
+                <div className="flex flex-wrap gap-1.5">
+                  {WEEKDAY_NAMES.slice(1, 7).map((name, i) => {
+                    const day = i + 1;
+                    const checked = form.weekdays.includes(day);
+                    return (
+                      <button
+                        key={day}
+                        type="button"
+                        onClick={() =>
+                          setForm((f) => ({
+                            ...f,
+                            weekdays: checked ? f.weekdays.filter((d) => d !== day) : [...f.weekdays, day].sort((a, b) => a - b),
+                          }))
+                        }
+                        className={`rounded-full px-3 py-1.5 text-[12px] font-semibold border cursor-pointer ${checked ? "bg-blue border-blue text-white" : "border-rule text-steel hover:border-blue"}`}
+                      >
+                        {name.slice(0, 3)}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             )}
             {form.recurrence === "ONCE" && (

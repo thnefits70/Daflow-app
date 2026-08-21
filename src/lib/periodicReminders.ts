@@ -21,15 +21,6 @@ function todayStr(d: Date): string {
 function isoWeekdayOf(d: Date): number {
   return d.getUTCDay() || 7;
 }
-function isoWeekOf(d: Date): string {
-  const date = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
-  const dayNum = date.getUTCDay() || 7;
-  date.setUTCDate(date.getUTCDate() + 4 - dayNum);
-  const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
-  const weekNum = Math.ceil(((date.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
-  return `${date.getUTCFullYear()}-W${pad2(weekNum)}`;
-}
-
 export type PeriodicReminderCompletionDTO = {
   period: string;
   completedAt: string;
@@ -41,7 +32,7 @@ export type PeriodicReminderDTO = {
   title: string;
   detail: string;
   recurrence: "DAILY" | "WEEKLY" | "ONCE";
-  weekday: number | null;
+  weekdays: number[];
   date: string | null;
   timeOfDay: string | null;
   isActive: boolean;
@@ -70,7 +61,7 @@ export async function getPeriodicReminders(deptId: string, viewerId: string | nu
     title: r.title,
     detail: r.detail,
     recurrence: r.recurrence,
-    weekday: r.weekday,
+    weekdays: r.weekdays,
     date: r.date ? r.date.toISOString() : null,
     timeOfDay: r.timeOfDay,
     isActive: r.isActive,
@@ -96,16 +87,23 @@ export type DuePeriodicReminderDTO = {
   period: string;
 };
 
+// Confirmado 2026-08-21: al pasar WEEKLY de un solo día a varios (weekdays[]),
+// el período pasó de "por semana ISO" a "por día" — igual que DAILY — porque
+// un recordatorio de Lun/Mié/Vie debe volver a aparecer CADA uno de esos
+// días, no solo una vez por semana. Efecto secundario esperado y aceptado:
+// completions viejas (guardadas con period tipo "2026-W34") quedan huérfanas
+// y el recordatorio se ve "pendiente" una vez más tras el deploy — se queda
+// como historial, no se pierde nada, solo no hace match con el nuevo formato.
 function currentPeriodFor(recurrence: "DAILY" | "WEEKLY" | "ONCE", now: Date): string {
   if (recurrence === "DAILY") return todayStr(now);
-  if (recurrence === "WEEKLY") return isoWeekOf(now);
+  if (recurrence === "WEEKLY") return todayStr(now);
   return "once";
 }
 
 // Confirmed 2026-07-23: shown on Inicio so the person sees "what do I need
 // to do right now" at a glance — only genuinely due items, not the whole
 // catalog (that full list lives in the Recordatorios tab itself).
-function isDueNow(r: { recurrence: "DAILY" | "WEEKLY" | "ONCE"; weekday: number | null; date: Date | null; timeOfDay: string | null }, now: Date): boolean {
+function isDueNow(r: { recurrence: "DAILY" | "WEEKLY" | "ONCE"; weekdays: number[]; date: Date | null; timeOfDay: string | null }, now: Date): boolean {
   if (r.recurrence === "ONCE") {
     if (!r.date) return false;
     const dueAt = new Date(Date.UTC(r.date.getUTCFullYear(), r.date.getUTCMonth(), r.date.getUTCDate()));
@@ -116,10 +114,7 @@ function isDueNow(r: { recurrence: "DAILY" | "WEEKLY" | "ONCE"; weekday: number 
     return now >= dueAt;
   }
   if (r.recurrence === "WEEKLY") {
-    const todayWd = isoWeekdayOf(now);
-    if (r.weekday == null) return true;
-    if (todayWd < r.weekday) return false;
-    if (todayWd > r.weekday) return true;
+    if (r.weekdays.length > 0 && !r.weekdays.includes(isoWeekdayOf(now))) return false;
     if (!r.timeOfDay) return true;
     const [h, m] = r.timeOfDay.split(":").map(Number);
     const t = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), h, m));
@@ -142,7 +137,7 @@ function isDueNow(r: { recurrence: "DAILY" | "WEEKLY" | "ONCE"; weekday: number 
 // se ignora la hora por completo — ya no hay forma de respetarla con un solo
 // chequeo diario, así que se avisa en cuanto el período esté vigente y no
 // se haya marcado como hecho, tal como ya prometía el comentario de abajo.
-function isDueForPush(r: { recurrence: "DAILY" | "WEEKLY" | "ONCE"; weekday: number | null; date: Date | null }, now: Date): boolean {
+function isDueForPush(r: { recurrence: "DAILY" | "WEEKLY" | "ONCE"; weekdays: number[]; date: Date | null }, now: Date): boolean {
   if (r.recurrence === "ONCE") {
     if (!r.date) return false;
     const dueDate = new Date(Date.UTC(r.date.getUTCFullYear(), r.date.getUTCMonth(), r.date.getUTCDate()));
@@ -150,8 +145,7 @@ function isDueForPush(r: { recurrence: "DAILY" | "WEEKLY" | "ONCE"; weekday: num
     return today >= dueDate;
   }
   if (r.recurrence === "WEEKLY") {
-    if (r.weekday == null) return true;
-    return isoWeekdayOf(now) >= r.weekday;
+    return r.weekdays.length === 0 || r.weekdays.includes(isoWeekdayOf(now));
   }
   return true; // DAILY
 }

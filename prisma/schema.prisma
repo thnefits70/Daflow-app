@@ -264,7 +264,7 @@ model User {
   pettyCashEntriesRestored                     PettyCashEntry[]                   @relation("PettyCashEntryRestoredBy")
   pettyCashEntriesConfirmed                    PettyCashEntry[]                   @relation("PettyCashEntryConfirmedBy")
   pettyCashExceptionsRequested                 PettyCashFreightException[]        @relation("PettyCashExceptionRequestedBy")
-  pettyCashPayoutAccountsUpdated                PettyCashPayoutAccount[]
+  pettyCashPayoutAccountsUpdated               PettyCashPayoutAccount[]
   pettyCashExceptionsReviewed                  PettyCashFreightException[]        @relation("PettyCashExceptionReviewedBy")
   purchaseRequestsMade                         PurchaseRequest[]                  @relation("PurchaseRequestRequestedBy")
   purchaseRequestsReviewed                     PurchaseRequest[]                  @relation("PurchaseRequestReviewedBy")
@@ -359,7 +359,7 @@ model PeriodicReminder {
   title       String
   detail      String                     @default("")
   recurrence  PeriodicReminderRecurrence
-  weekday     Int? // 1-7 (ISO, lunes=1) — solo para WEEKLY
+  weekdays    Int[]                      @default([]) // 1-6 (ISO, lunes=1, sábado=6) — solo para WEEKLY, uno o varios días
   date        DateTime? // fecha exacta — solo para ONCE
   timeOfDay   String? // "HH:MM" opcional — desde qué hora del día debe aparecer
   isActive    Boolean                    @default(true)
@@ -2789,19 +2789,19 @@ model PersonalPurchaseOrder {
   // si elige TRANSFER queda null para siempre, así payroll.ts (que filtra
   // por firstPayoutMonth not null) lo ignora solo, sin poder cobrarlo dos
   // veces. Nunca setear firstPayoutMonth fuera del paso "eligió rol".
-  paymentMethod          PersonalPurchasePaymentMethod?
-  firstPayoutMonth       String? // resuelto SOLO si eligió PAYROLL (resolveFirstPayoutMonth)
-  transferDeadlineAt     DateTime? // addBusinessDays(financeConfirmedAt, 3) — 3 días hábiles para pagar
-  transferProofUrl       String?
-  transferProofName      String?
-  transferProofUploadedAt DateTime?
-  transferAiReadAmount   Float? // lo que leyó la IA del comprobante — informativo, no bloquea
-  transferAiMatch        Boolean?
-  transferAiNote         String?
+  paymentMethod              PersonalPurchasePaymentMethod?
+  firstPayoutMonth           String? // resuelto SOLO si eligió PAYROLL (resolveFirstPayoutMonth)
+  transferDeadlineAt         DateTime? // addBusinessDays(financeConfirmedAt, 3) — 3 días hábiles para pagar
+  transferProofUrl           String?
+  transferProofName          String?
+  transferProofUploadedAt    DateTime?
+  transferAiReadAmount       Float? // lo que leyó la IA del comprobante — informativo, no bloquea
+  transferAiMatch            Boolean?
+  transferAiNote             String?
   transferAdminConfirmedAt   DateTime? // admin revisó su cuenta real y confirmó (doble paso en la UI)
   transferAdminConfirmedById String?
-  transferClosedAt        DateTime? // Nairoby/FIN cierra la operación
-  transferClosedById      String?
+  transferClosedAt           DateTime? // Nairoby/FIN cierra la operación
+  transferClosedById         String?
 
   items     PersonalPurchaseItem[]
   createdAt DateTime               @default(now())

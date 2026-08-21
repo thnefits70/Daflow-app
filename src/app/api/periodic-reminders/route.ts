@@ -10,14 +10,14 @@ const createSchema = z
     title: z.string().trim().min(1, "El título es obligatorio."),
     detail: z.string().trim().optional(),
     recurrence: z.enum(["DAILY", "WEEKLY", "ONCE"]),
-    weekday: z.number().int().min(1).max(7).optional(),
+    weekdays: z.array(z.number().int().min(1).max(6)).optional(),
     date: z.string().optional(),
     timeOfDay: z.string().regex(/^\d{2}:\d{2}$/).optional(),
     notifyPush: z.boolean().optional(),
   })
-  .refine((v) => v.recurrence !== "WEEKLY" || v.weekday !== undefined, {
-    message: "Elige el día de la semana.",
-    path: ["weekday"],
+  .refine((v) => v.recurrence !== "WEEKLY" || (v.weekdays && v.weekdays.length > 0), {
+    message: "Elige al menos un día de la semana.",
+    path: ["weekdays"],
   })
   .refine((v) => v.recurrence !== "ONCE" || !!v.date, {
     message: "Elige la fecha.",
@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
       title: d.title,
       detail: d.detail || "",
       recurrence: d.recurrence,
-      weekday: d.recurrence === "WEEKLY" ? d.weekday : null,
+      weekdays: d.recurrence === "WEEKLY" ? d.weekdays! : [],
       date: d.recurrence === "ONCE" && d.date ? new Date(d.date) : null,
       timeOfDay: d.timeOfDay || null,
       createdById,
