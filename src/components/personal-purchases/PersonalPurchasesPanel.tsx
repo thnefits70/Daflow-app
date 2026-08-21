@@ -418,7 +418,7 @@ export function PersonalPurchasesPanel() {
                       <button
                         type="button"
                         disabled={isBusy}
-                        className={`text-[12px] font-bold border-[1.5px] rounded-md px-3.5 py-1.5 cursor-pointer disabled:opacity-40 ${armedMethod[o.id] === "PAYROLL" ? "bg-ink border-ink text-white" : "border-rule text-ink"}`}
+                        className={`text-[12px] font-bold border-[1.5px] rounded-md px-3.5 py-1.5 cursor-pointer disabled:opacity-40 ${armedMethod[o.id] === "PAYROLL" ? "bg-ink border-ink text-bg" : "border-rule text-ink"}`}
                         onClick={() => handlePaymentMethodTap(o.id, "PAYROLL")}
                       >
                         {armedMethod[o.id] === "PAYROLL" ? "Tocá de nuevo para confirmar" : "🧾 Descuento en rol"}
