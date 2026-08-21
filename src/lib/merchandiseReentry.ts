@@ -1,6 +1,28 @@
 import { prisma } from "@/lib/prisma";
 import { getFinanceLeadId } from "@/lib/guards";
 import { sendPushToOwner } from "@/lib/webPush";
+import { notifyOwner } from "@/lib/notifications";
+
+// Mismo truco de desplazamiento que src/lib/businessHours.ts: restar el
+// offset antes de leer con getUTC* hace que esos getters devuelvan la hora
+// de Ecuador; sumar el offset de vuelta convierte a instante UTC real.
+const ECUADOR_OFFSET_MS = 5 * 60 * 60 * 1000;
+
+// Semana calendario lunes-sábado (confirmado 2026-08-21) en la que cae `d`,
+// medida en hora de Ecuador. weekEnd es el último instante del sábado
+// (23:59:59.999) — pasado ese instante la semana ya se puede cerrar.
+export function getEcuadorWeekBounds(d: Date): { weekStart: Date; weekEnd: Date } {
+  const shifted = new Date(d.getTime() - ECUADOR_OFFSET_MS);
+  const day = shifted.getUTCDay(); // 0=domingo..6=sábado
+  const diffToMonday = day === 0 ? 6 : day - 1;
+  const monday = new Date(shifted);
+  monday.setUTCDate(monday.getUTCDate() - diffToMonday);
+  monday.setUTCHours(0, 0, 0, 0);
+  const saturday = new Date(monday);
+  saturday.setUTCDate(saturday.getUTCDate() + 5);
+  saturday.setUTCHours(23, 59, 59, 999);
+  return { weekStart: new Date(monday.getTime() + ECUADOR_OFFSET_MS), weekEnd: new Date(saturday.getTime() + ECUADOR_OFFSET_MS) };
+}
 
 // Confirmado 2026-08-19: mismo patrón atómico que nextPurchaseRequestNumber
 // — contador único en PlatformSettings, incrementado dentro de una
@@ -16,6 +38,32 @@ export async function nextMerchandiseReentryNumber(): Promise<number> {
 
 export function formatMerchandiseReentryCode(batchNumber: number): string {
   return `RM-${String(batchNumber).padStart(4, "0")}`;
+}
+
+// Bolsa semanal donde caen las unidades "no solucionadas" (ver
+// MerchandiseReentryItem.damageSolved) hasta el corte del sábado. Si la
+// bolsa natural de la semana actual ya fue cerrada por Daniel
+// (justWrittenOffAt), no le sigue metiendo ítems nuevos — los manda a la
+// semana siguiente, para no reabrir un lote que Nairoby ya puede estar
+// verificando.
+export async function getOrCreateCurrentWeekWriteOffBatch() {
+  let { weekStart, weekEnd } = getEcuadorWeekBounds(new Date());
+  for (let guard = 0; guard < 52; guard++) {
+    const existing = await prisma.merchandiseWeeklyWriteOffBatch.findUnique({ where: { weekStart } });
+    if (existing && !existing.justWrittenOffAt) return existing;
+    if (!existing) {
+      const created = await prisma.merchandiseWeeklyWriteOffBatch
+        .create({ data: { weekStart, weekEnd } })
+        .catch(() => null);
+      if (created) return created;
+      continue; // carrera con otro request creando la misma semana — reintenta la lectura
+    }
+    // la semana natural ya fue cerrada por Daniel — pasa a la siguiente
+    const nextMonday = new Date(weekStart);
+    nextMonday.setUTCDate(nextMonday.getUTCDate() + 7);
+    ({ weekStart, weekEnd } = getEcuadorWeekBounds(nextMonday));
+  }
+  throw new Error("No se pudo asignar un lote semanal de baja.");
 }
 
 // Un item está "resuelto" para efectos de que Daniel pueda terminar de
@@ -138,5 +186,32 @@ export async function maybeMarkBatchClosed(batchId: string) {
   await prisma.merchandiseReentryBatch.update({
     where: { id: batchId, closedAt: null },
     data: { closedAt: new Date() },
+  }).catch(() => null);
+}
+
+function fmtShortDate(d: Date): string {
+  return d.toLocaleDateString("es-EC", { day: "2-digit", month: "short", timeZone: "America/Guayaquil" });
+}
+
+// Daniel solucionó una unidad dañada con un repuesto — el admin queda al
+// tanto de la explicación para supervisar la operación (pedido explícito
+// 2026-08-21).
+export async function notifyAdminDamageSolved(productName: string, note: string) {
+  await notifyOwner("admin", {
+    title: "Producto dañado solucionado",
+    body: `${productName} — se rehabilitó con un repuesto: ${note}`,
+    url: "/admin/reingreso-mercaderia?tab=revision",
+  }).catch(() => null);
+}
+
+// Daniel cerró el corte semanal (ya dio de baja en Just) — le toca a
+// Nairoby verificar físicamente y hacer la doble confirmación.
+export async function notifyFinanceLeadWeeklyBatchReady(batch: { id: string; weekStart: Date; weekEnd: Date }) {
+  const leadId = await getFinanceLeadId();
+  if (!leadId) return;
+  await notifyOwner(leadId, {
+    title: "Lote semanal de productos dañados listo para verificar",
+    body: `Semana ${fmtShortDate(batch.weekStart)}–${fmtShortDate(batch.weekEnd)} — Daniel ya dio de baja en Just, falta tu verificación.`,
+    url: "/area/reingreso-mercaderia?tab=danos",
   }).catch(() => null);
 }

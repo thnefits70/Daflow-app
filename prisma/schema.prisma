@@ -315,6 +315,10 @@ model User {
   merchandiseReentryItemsDamageConfirmed MerchandiseReentryItem[]  @relation("MerchandiseReentryItemDamageConfirmedBy")
   merchandiseReentryItemsJustUploaded    MerchandiseReentryItem[]  @relation("MerchandiseReentryItemJustUploadedBy")
   merchandiseReentryItemsWrittenOff      MerchandiseReentryItem[]  @relation("MerchandiseReentryItemWriteOffBy")
+  merchandiseReentryItemsDamageSolved    MerchandiseReentryItem[]  @relation("MerchandiseReentryItemDamageSolvedBy")
+  merchandiseReentryItemsDisposalDecided MerchandiseReentryItem[]  @relation("MerchandiseReentryItemDisposalDecidedBy")
+  merchandiseWeeklyWriteOffBatchesJust     MerchandiseWeeklyWriteOffBatch[] @relation("MerchandiseWeeklyWriteOffBatchJustBy")
+  merchandiseWeeklyWriteOffBatchesNairoby  MerchandiseWeeklyWriteOffBatch[] @relation("MerchandiseWeeklyWriteOffBatchNairobyBy")
 
   @@index([deptId])
   @@index([leadsDeptId])
@@ -3051,10 +3055,42 @@ model MerchandiseReentryItem {
   damageConfirmedById String?
   damageConfirmedBy   User?     @relation("MerchandiseReentryItemDamageConfirmedBy", fields: [damageConfirmedById], references: [id], onDelete: SetNull)
 
+  // Bifurcación de Daniel una vez confirmado el daño (pedido 2026-08-21,
+  // evita el doble proceso reingreso+baja cuando el daño se puede
+  // solucionar con un repuesto). Null mientras no decide (solo aplica si
+  // damageConfirmed=true). true = solucionado — la unidad vuelve a sumarse
+  // a goodQty y sigue el reingreso normal como si nunca se hubiera dañado;
+  // el admin recibe la explicación por notificación. false = no
+  // solucionado — entra al acumulado semanal de baja
+  // (weeklyWriteOffBatch).
+  damageSolved       Boolean?
+  damageSolvedAt     DateTime?
+  damageSolvedById   String?
+  damageSolvedBy     User?     @relation("MerchandiseReentryItemDamageSolvedBy", fields: [damageSolvedById], references: [id], onDelete: SetNull)
+  damageSolutionNote String? // qué se hizo para habilitarlo de nuevo, solo si damageSolved=true
+
+  // Lote semanal (lunes-sábado) al que queda asignada esta unidad no
+  // solucionada, para el corte y la baja en Just.
+  weeklyWriteOffBatchId String?
+  weeklyWriteOffBatch   MerchandiseWeeklyWriteOffBatch? @relation(fields: [weeklyWriteOffBatchId], references: [id], onDelete: SetNull)
+
+  // Decisión física final de Nairoby, por unidad, después del corte
+  // semanal, la baja en Just de Daniel y su propia doble confirmación.
+  // Null mientras no decide. true = percha de repuestos. false =
+  // destruido. Al decidir se marca writeOffAt (abajo).
+  disposalDecision    Boolean?
+  disposalDecidedAt   DateTime?
+  disposalDecidedById String?
+  disposalDecidedBy   User?     @relation("MerchandiseReentryItemDisposalDecidedBy", fields: [disposalDecidedById], references: [id], onDelete: SetNull)
+
   justUploadedAt   DateTime?
   justUploadedById String?
   justUploadedBy   User?     @relation("MerchandiseReentryItemJustUploadedBy", fields: [justUploadedById], references: [id], onDelete: SetNull)
 
+  // Cierre completo de la parte dañada. Las unidades solucionadas nunca
+  // pasan por acá (van por goodQty/justUploadedAt); las no solucionadas lo
+  // marcan cuando Nairoby termina su decisión de disposición tras el ciclo
+  // semanal.
   writeOffAt   DateTime?
   writeOffById String?
   writeOffBy   User?     @relation("MerchandiseReentryItemWriteOffBy", fields: [writeOffById], references: [id], onDelete: SetNull)
@@ -3073,4 +3109,33 @@ model MerchandiseDamageReason {
   createdAt DateTime @default(now())
 
   items MerchandiseReentryItem[]
+}
+
+// Acumulado semanal (lunes-sábado) de unidades dañadas "no solucionadas"
+// (ver MerchandiseReentryItem.damageSolved). Nairoby lo ve en tiempo real
+// y de solo lectura mientras se acumula. Al terminar la semana, Daniel
+// hace la baja en Just (sistema externo) y marca justWrittenOffAt — desde
+// ahí Nairoby verifica físicamente el listado contra los productos reales
+// y hace la doble confirmación (nairobyConfirmedAt) antes de decidir, por
+// unidad, destruir o pasar a la percha de repuestos
+// (MerchandiseReentryItem.disposalDecision).
+model MerchandiseWeeklyWriteOffBatch {
+  id        String   @id @default(cuid())
+  weekStart DateTime // lunes 00:00 de esa semana calendario
+  weekEnd   DateTime // sábado 23:59:59.999 de esa semana calendario
+  createdAt DateTime @default(now())
+
+  justWrittenOffAt   DateTime?
+  justWrittenOffById String?
+  justWrittenOffBy   User?     @relation("MerchandiseWeeklyWriteOffBatchJustBy", fields: [justWrittenOffById], references: [id], onDelete: SetNull)
+
+  nairobyConfirmedAt   DateTime?
+  nairobyConfirmedById String?
+  nairobyConfirmedBy   User?     @relation("MerchandiseWeeklyWriteOffBatchNairobyBy", fields: [nairobyConfirmedById], references: [id], onDelete: SetNull)
+
+  items MerchandiseReentryItem[]
+
+  @@unique([weekStart])
+  @@index([justWrittenOffAt])
+  @@index([nairobyConfirmedAt])
 }

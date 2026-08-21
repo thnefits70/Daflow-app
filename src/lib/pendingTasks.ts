@@ -309,6 +309,8 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   compras_personales_estado: "Tus compras personales — seguimiento del estado (mientras esperás a bodega o Finanzas)",
   compras_personales_pago_seguimiento: "Compras personales — seguimiento de pagos pendientes del colaborador",
   reingreso_mercaderia_revision: "Reingreso de mercadería por revisar",
+  reingreso_mercaderia_baja_just: "Reingreso de mercadería — semana de dañados por dar de baja en Just",
+  reingreso_mercaderia_verificacion_semanal: "Reingreso de mercadería — lote semanal de dañados por verificar",
   cumpleanos: "Cumpleaños de tu equipo (aviso 1 día antes)",
   compras_rechazadas: "Tus solicitudes de compra rechazadas — corregir y reenviar",
   compras_orden_compra: "Tus solicitudes de compra — falta subir orden de compra",
@@ -1233,6 +1235,47 @@ async function getMerchandiseReentryPendingItem(href: string): Promise<PendingIt
   };
 }
 
+// Confirmado 2026-08-21: pedido explícito del usuario — acceso directo para
+// Daniel cuando ya pasó el corte del sábado de una semana y todavía le
+// falta dar de baja en Just el acumulado de productos "no solucionados"
+// (ver damageSolved en MerchandiseReentryItem).
+async function getMerchandiseWeeklyWriteOffJustPendingItem(href: string): Promise<PendingItem | null> {
+  const rows = await prisma.merchandiseWeeklyWriteOffBatch.findMany({
+    where: { justWrittenOffAt: null, weekEnd: { lt: new Date() } },
+    select: { weekStart: true },
+  });
+  if (rows.length === 0) return null;
+  return {
+    type: "reingreso_mercaderia_baja_just",
+    icon: "🗑️",
+    label: "Semana de productos dañados por dar de baja en Just",
+    meta: `${rows.length === 1 ? "1 semana" : `${rows.length} semanas`} · atrasado`,
+    overdue: true,
+    href,
+  };
+}
+
+// Confirmado 2026-08-21: pedido explícito del usuario — acceso directo con
+// un solo clic para Nairoby cuando Daniel ya dio de baja en Just un lote
+// semanal y le falta a ella la verificación física + doble confirmación.
+async function getMerchandiseWeeklyWriteOffVerificationPendingItem(href: string): Promise<PendingItem | null> {
+  const rows = await prisma.merchandiseWeeklyWriteOffBatch.findMany({
+    where: { justWrittenOffAt: { not: null }, nairobyConfirmedAt: null },
+    select: { justWrittenOffAt: true },
+  });
+  if (rows.length === 0) return null;
+  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const overdue = rows.some((r) => (r.justWrittenOffAt ?? new Date()) < cutoff);
+  return {
+    type: "reingreso_mercaderia_verificacion_semanal",
+    icon: "🔎",
+    label: "Lote semanal de productos dañados por verificar",
+    meta: `${rows.length === 1 ? "1 lote" : `${rows.length} lotes`}${overdue ? " · atrasado" : ""}`,
+    overdue,
+    href,
+  };
+}
+
 // Confirmado 2026-08-19: pedido explícito del usuario — acceso directo en
 // Inicio para Daniel (líder de Inventario) a los pedidos de compra personal
 // recién enviados que todavía le faltan confirmar producto/cantidad — antes
@@ -1561,7 +1604,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
 
   if (me.leadsDept.code === "FIN") {
     monthly = true;
-    const [payStub, returnRate, warranty, paymentReminders, storeFeedback, pettyCashLow, pettyCashUnconfirmed, purchaseShippingItem, managementDeductionItem, personalPurchaseFinanceItem, personalPurchaseTransferCloseItem, personalPurchasePaymentWatchItem] = await Promise.all([
+    const [payStub, returnRate, warranty, paymentReminders, storeFeedback, pettyCashLow, pettyCashUnconfirmed, purchaseShippingItem, managementDeductionItem, personalPurchaseFinanceItem, personalPurchaseTransferCloseItem, personalPurchasePaymentWatchItem, merchandiseWeeklyVerificationItem] = await Promise.all([
       getPayStubPendingItem("/area/roles-de-pago"),
       getReturnRatePendingItem("/area/kpis-generales"),
       getWarrantyPendingItem("/area/kpis-generales"),
@@ -1574,6 +1617,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       getPersonalPurchasePendingFinanceItem("/area/nomina?tab=pagos&ptab=comprasfinanzas"),
       getPersonalPurchaseTransferClosePendingItem("/area/nomina?tab=pagos&ptab=comprasfinanzas"),
       getPersonalPurchasePaymentWatchItem("/area/nomina?tab=pagos&ptab=comprasfinanzas"),
+      getMerchandiseWeeklyWriteOffVerificationPendingItem("/area/reingreso-mercaderia?tab=danos"),
     ]);
     items.push(...pettyCashLow, ...pettyCashUnconfirmed);
     if (payStub) items.push(payStub);
@@ -1586,6 +1630,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     if (managementDeductionItem) items.push(managementDeductionItem);
     if (personalPurchaseFinanceItem) items.push(personalPurchaseFinanceItem);
     if (personalPurchaseTransferCloseItem) items.push(personalPurchaseTransferCloseItem);
+    if (merchandiseWeeklyVerificationItem) items.push(merchandiseWeeklyVerificationItem);
   }
 
   if (me.leadsDept.trackWeeklyMetric) {
@@ -1594,12 +1639,13 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
   }
 
   if (me.leadsDept.code === "INV") {
-    const [stockoutItem, receivingItem, replacementItem, inventoryControlItem, merchandiseReentryItem, personalPurchaseInventoryItem] = await Promise.all([
+    const [stockoutItem, receivingItem, replacementItem, inventoryControlItem, merchandiseReentryItem, merchandiseWeeklyJustItem, personalPurchaseInventoryItem] = await Promise.all([
       getStockoutPendingItem("/area/kpis-generales"),
       getPurchaseReceivingPendingItem("/area/workspace?tab=compras&ptab=inventario"),
       getPurchaseReplacementVerificationPendingItem("/area/workspace?tab=compras&ptab=inventario"),
       getInventoryControlPendingItem("/area/workspace?tab=inventario"),
       getMerchandiseReentryPendingItem("/area/reingreso-mercaderia?tab=revision"),
+      getMerchandiseWeeklyWriteOffJustPendingItem("/area/reingreso-mercaderia?tab=danos"),
       getPersonalPurchasePendingInventoryItem("/area/compras-personales-inventario"),
     ]);
     if (stockoutItem) items.push(stockoutItem);
@@ -1607,6 +1653,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     if (replacementItem) items.push(replacementItem);
     if (inventoryControlItem) items.push(inventoryControlItem);
     if (merchandiseReentryItem) items.push(merchandiseReentryItem);
+    if (merchandiseWeeklyJustItem) items.push(merchandiseWeeklyJustItem);
     if (personalPurchaseInventoryItem) items.push(personalPurchaseInventoryItem);
   }
 
@@ -1671,11 +1718,11 @@ export async function getPossiblePendingTypesForActor(
 
     types.push("cumpleanos");
     if (me.leadsDept.code === "FIN") {
-      types.push("roles_de_pago", "tasa_devolucion", "kpi_garantias", "pagos_recordatorios", "servicio_postventa", "caja_chica_saldo", "caja_chica_confirmacion", "descuentos_sin_aceptar", "compras_personales_precio", "compras_personales_cierre");
+      types.push("roles_de_pago", "tasa_devolucion", "kpi_garantias", "pagos_recordatorios", "servicio_postventa", "caja_chica_saldo", "caja_chica_confirmacion", "descuentos_sin_aceptar", "compras_personales_precio", "compras_personales_cierre", "reingreso_mercaderia_verificacion_semanal");
     }
     if (me.leadsDept.trackWeeklyMetric) types.push("pedidos_despachados");
     if (me.leadsDept.code === "INV") {
-      types.push("ruptura_stock", "compras_recepcion", "compras_cambios_verificar", "control_inventario", "reingreso_mercaderia_revision", "compras_personales_confirmar");
+      types.push("ruptura_stock", "compras_recepcion", "compras_cambios_verificar", "control_inventario", "reingreso_mercaderia_revision", "reingreso_mercaderia_baja_just", "compras_personales_confirmar");
     }
     // Mismo criterio de elegibilidad que canSubmitPurchaseRequests
     // (guards.ts) — delegado vía canManagePurchases, o líder de COM/FIN —

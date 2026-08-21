@@ -4,9 +4,10 @@ import { useEffect, useState } from "react";
 import { CaptureFlow } from "./CaptureFlow";
 import { ReviewInbox } from "./ReviewInbox";
 import { CloseQueues } from "./CloseQueues";
+import { WeeklyDamageControl } from "./WeeklyDamageControl";
 import { HistoryList } from "./HistoryList";
 
-type Tab = "capturar" | "revision" | "cierre" | "historial";
+type Tab = "capturar" | "revision" | "cierre" | "danos" | "historial";
 
 export function MerchandiseReentryPanel({
   canCapture,
@@ -30,6 +31,7 @@ export function MerchandiseReentryPanel({
     const t = new URLSearchParams(window.location.search).get("tab") as Tab | null;
     if (t === "revision" && canApprove) setTab("revision");
     else if (t === "cierre" && canClose) setTab("cierre");
+    else if (t === "danos" && (canApprove || canClose)) setTab("danos");
     else if (t === "capturar" && canCapture) setTab("capturar");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -38,6 +40,7 @@ export function MerchandiseReentryPanel({
     ...(canCapture ? [{ id: "capturar" as const, label: "Capturar" }] : []),
     ...(canApprove ? [{ id: "revision" as const, label: "Revisión" }] : []),
     ...(canClose ? [{ id: "cierre" as const, label: "Cierre" }] : []),
+    ...(canApprove || canClose ? [{ id: "danos" as const, label: "Control de Daños" }] : []),
     { id: "historial" as const, label: "Historial" },
   ];
 
@@ -62,6 +65,7 @@ export function MerchandiseReentryPanel({
       {tab === "capturar" && canCapture && <CaptureFlow />}
       {tab === "revision" && canApprove && <ReviewInbox canAct={canAct} />}
       {tab === "cierre" && canClose && <CloseQueues />}
+      {tab === "danos" && (canApprove || canClose) && <WeeklyDamageControl canAct={canAct} canClose={canClose} />}
       {tab === "historial" && <HistoryList />}
     </div>
   );

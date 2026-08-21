@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AlertTriangle, ChevronDown, ChevronUp, Pencil } from "lucide-react";
+import { AlertTriangle, ChevronDown, ChevronUp, Pencil, Wrench } from "lucide-react";
 
 type ItemDTO = {
   id: string;
@@ -210,6 +210,8 @@ function ReviewItemRow({ item, canAct, onChanged, onExpandPhoto }: { item: ItemD
   const [name, setName] = useState(item.correctedName ?? item.declaredName ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [solving, setSolving] = useState(false);
+  const [solutionNote, setSolutionNote] = useState("");
 
   const nameNeedsReview = !item.aiRecognized && !item.correctedName;
   const damageNeedsReview = item.damagedQty > 0 && item.damageConfirmed === null;
@@ -227,11 +229,11 @@ function ReviewItemRow({ item, canAct, onChanged, onExpandPhoto }: { item: ItemD
     }
   }
 
-  async function resolveDamage(confirmed: boolean) {
+  async function resolveDamage(outcome: "not_damaged" | "solved" | "unsolved") {
     setBusy(true);
     setError("");
     try {
-      await postJson(`/api/merchandise-reentry/items/${item.id}/resolve-damage`, { confirmed });
+      await postJson(`/api/merchandise-reentry/items/${item.id}/resolve-damage`, { outcome, solutionNote: outcome === "solved" ? solutionNote.trim() : undefined });
       onChanged();
     } catch (e) {
       setError(e instanceof Error ? e.message : "No se pudo guardar.");
@@ -290,30 +292,66 @@ function ReviewItemRow({ item, canAct, onChanged, onExpandPhoto }: { item: ItemD
             Guardar y aprobar
           </button>
         )}
-        {damageNeedsReview && (
+        {damageNeedsReview && !solving && (
           <div className="shrink-0 flex gap-1.5">
             <button
               type="button"
               disabled={busy || !canAct}
               title={!canAct ? "Exclusivo del líder de Inventario" : undefined}
               className="rounded border border-rule px-2.5 py-1.5 text-[11px] font-semibold cursor-pointer disabled:opacity-50"
-              onClick={() => resolveDamage(false)}
+              onClick={() => resolveDamage("not_damaged")}
             >
               No está dañado
             </button>
             <button
               type="button"
               disabled={busy || !canAct}
-              title={!canAct ? "Exclusivo del líder de Inventario" : undefined}
-              className="rounded border border-red bg-red px-2.5 py-1.5 text-[11px] font-bold text-white cursor-pointer disabled:opacity-50"
-              onClick={() => resolveDamage(true)}
+              title={!canAct ? "Exclusivo del líder de Inventario" : "Se encontró un repuesto y se pudo reparar"}
+              className="rounded border border-teal px-2.5 py-1.5 text-[11px] font-semibold text-teal cursor-pointer disabled:opacity-50 flex items-center gap-1"
+              onClick={() => setSolving(true)}
             >
-              Confirmar daño y dar de baja
+              <Wrench size={11} /> Solucionado
+            </button>
+            <button
+              type="button"
+              disabled={busy || !canAct}
+              title={!canAct ? "Exclusivo del líder de Inventario" : "Se mantiene dañado, entra al acumulado semanal de baja"}
+              className="rounded border border-red bg-red px-2.5 py-1.5 text-[11px] font-bold text-white cursor-pointer disabled:opacity-50"
+              onClick={() => resolveDamage("unsolved")}
+            >
+              No solucionado
             </button>
           </div>
         )}
       </div>
-      {nameNeedsReview && damageNeedsReview && (
+      {damageNeedsReview && solving && (
+        <div className="mt-2 pl-[52px] flex flex-col gap-1.5">
+          <div className="text-[10.5px] text-steel">¿Qué se hizo para volver a habilitar el producto? El admin verá esta explicación.</div>
+          <textarea
+            autoFocus
+            disabled={busy || !canAct}
+            className="w-full rounded border border-rule bg-surface px-2.5 py-1.5 text-[12px] disabled:opacity-60"
+            rows={2}
+            placeholder="Ej: se cambió el vidrio dañado por un repuesto de bodega."
+            value={solutionNote}
+            onChange={(e) => setSolutionNote(e.target.value)}
+          />
+          <div className="flex gap-1.5">
+            <button
+              type="button"
+              disabled={busy || !canAct || !solutionNote.trim()}
+              className="rounded border border-teal bg-teal px-3 py-1.5 text-[11.5px] font-bold text-navy cursor-pointer disabled:opacity-50"
+              onClick={() => resolveDamage("solved")}
+            >
+              Confirmar solución
+            </button>
+            <button type="button" disabled={busy} className="rounded border border-rule px-3 py-1.5 text-[11.5px] font-semibold cursor-pointer disabled:opacity-50" onClick={() => setSolving(false)}>
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
+      {nameNeedsReview && damageNeedsReview && !solving && (
         <div className="mt-2 pl-[52px]">
           <button
             type="button"
