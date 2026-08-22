@@ -167,7 +167,7 @@ function SalaryRow({ employee, canEdit, canProposeBonus, canApproveBonus, onSave
 // editar desde cualquiera de los dos lados queda sincronizado al instante.
 export function PayrollEmployeeSalariesPanel({ canEdit, canProposeBonus, canApproveBonus }: { canEdit: boolean; canProposeBonus: boolean; canApproveBonus: boolean }) {
   const [employees, setEmployees] = useState<EmployeeProfile[] | null>(null);
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
 
   function load() {
     fetch("/api/payroll/employees").then((r) => (r.ok ? r.json() : [])).then(setEmployees);
