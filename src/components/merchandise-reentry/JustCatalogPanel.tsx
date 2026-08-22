@@ -8,7 +8,7 @@ type CatalogItemDTO = { id: string; name: string; justCode: string | null; photo
 type LastImportDTO = { importedAt: string; importedByName: string; totalRows: number; createdCount: number; linkedCount: number; renamedCount: number } | null;
 
 type NameChangedRow = { code: string; itemId: string; currentName: string; justName: string };
-type SuggestedLinkRow = { code: string; name: string; itemId: string; existingName: string };
+type SuggestedLinkRow = { code: string; name: string; itemId: string; existingName: string; matchType: "exact" | "similar" };
 type Preview = {
   totalRows: number;
   unchangedCount: number;
@@ -81,10 +81,12 @@ export function JustCatalogPanel({ canManage }: { canManage: boolean }) {
     setPreview(json.preview);
     setWarnings(json.warnings ?? []);
     // Defaults: nombre nuevo diferente NO se aplica solo (mantener el actual
-    // hasta que Daniel lo confirme); coincidencia de nombre exacta SÍ se
-    // vincula por defecto (es una igualdad exacta normalizada, señal fuerte).
+    // hasta que Daniel lo confirme); coincidencia EXACTA sí se vincula por
+    // defecto (señal fuerte); coincidencia por PALABRAS PARECIDAS no se
+    // vincula por defecto (más riesgo de ser dos productos distintos que
+    // comparten palabras) — Daniel confirma activamente cada una.
     setNameDecisions(Object.fromEntries((json.preview.nameChangedRows as NameChangedRow[]).map((r) => [r.itemId, false])));
-    setLinkDecisions(Object.fromEntries((json.preview.suggestedLinkRows as SuggestedLinkRow[]).map((r) => [r.itemId, true])));
+    setLinkDecisions(Object.fromEntries((json.preview.suggestedLinkRows as SuggestedLinkRow[]).map((r) => [r.itemId, r.matchType === "exact"])));
     setPhase("preview");
   }
 
@@ -231,6 +233,11 @@ export function JustCatalogPanel({ canManage }: { canManage: boolean }) {
                   <div key={r.itemId} className="bg-cloud rounded-md p-2.5">
                     <div className="text-[11.5px] mb-1.5">
                       <span className="font-mono text-steel">{r.code}</span> — <b>{r.name}</b> coincide con <b>{r.existingName}</b> (sin código de Just todavía)
+                      {r.matchType === "exact" ? (
+                        <span className="ml-1.5 font-mono text-[9px] font-bold uppercase rounded-full px-1.5 py-0.5 bg-teal/15 border border-teal/40 text-teal">Nombre idéntico</span>
+                      ) : (
+                        <span className="ml-1.5 font-mono text-[9px] font-bold uppercase rounded-full px-1.5 py-0.5 bg-gold/15 border border-gold/40" style={{ color: "#D9A441" }}>Palabras parecidas — revisa</span>
+                      )}
                     </div>
                     <div className="flex gap-1.5">
                       <button

@@ -6,8 +6,43 @@ function normalize(s: string): string {
   return s.trim().replace(/\s+/g, " ").toUpperCase();
 }
 
+// Palabras de relleno sin valor para reconocer un producto — se ignoran al
+// comparar nombres por palabras en común (ver findSimilarUnlinkedItem).
+const STOPWORDS = new Set(["DE", "DEL", "LA", "EL", "LOS", "LAS", "UN", "UNA", "UNOS", "UNAS", "Y", "O", "CON", "PARA", "POR", "EN", "A", "AL", "TIPO"]);
+
+function significantWords(name: string): Set<string> {
+  return new Set(normalize(name).split(/\s+/).filter((w) => w.length >= 2 && !STOPWORDS.has(w)));
+}
+
+// Confirmado 2026-08-21 (pedido explícito del usuario tras revisar el primer
+// resultado): la coincidencia EXACTA sola dejaba fuera casos reales como
+// Just "PISTOLA DE AGUA TIPO MOCHILA" vs DAFLOW "Pistola de agua" — mismo
+// producto, nombre más corto/distinto. En vez de IA (costo real por fila,
+// mismo motivo que ya sacó el reconocimiento por IA de Reingreso), se
+// compara por palabras significativas en común: si al menos el 60% de las
+// palabras del nombre más corto (mínimo 2 coincidencias) están en el otro
+// nombre, se sugiere como posible vínculo — nunca se auto-vincula, Daniel
+// siempre confirma o rechaza fila por fila en la vista previa.
+function findSimilarUnlinkedItem(
+  rowWords: Set<string>,
+  candidates: { id: string; name: string; words: Set<string> }[]
+): { id: string; name: string } | null {
+  let best: { id: string; name: string; score: number } | null = null;
+  for (const c of candidates) {
+    const smaller = Math.min(rowWords.size, c.words.size);
+    if (smaller < 2) continue;
+    let intersection = 0;
+    for (const w of rowWords) if (c.words.has(w)) intersection++;
+    const needed = Math.max(2, Math.ceil(smaller * 0.6));
+    if (intersection < needed) continue;
+    const score = intersection / smaller;
+    if (!best || score > best.score) best = { id: c.id, name: c.name, score };
+  }
+  return best ? { id: best.id, name: best.name } : null;
+}
+
 export type NameChangedPreviewRow = { code: string; itemId: string; currentName: string; justName: string };
-export type SuggestedLinkPreviewRow = { code: string; name: string; itemId: string; existingName: string };
+export type SuggestedLinkPreviewRow = { code: string; name: string; itemId: string; existingName: string; matchType: "exact" | "similar" };
 
 export type JustCatalogPreview = {
   totalRows: number;
@@ -26,12 +61,18 @@ export type JustCatalogPreview = {
 //   Daniel decide fila por fila si actualiza el nombre en DAFLOW o lo deja
 //   como está (nunca se auto-decide, para no romper fotos/historial de un
 //   producto por un cambio de nombre en Just).
-// - código nuevo pero el nombre coincide EXACTO (sin distinguir mayúsculas/
-//   espacios extra) con un producto existente sin justCode -> "suggestedLink",
-//   Daniel confirma el vínculo o lo trata como un producto aparte. Solo
-//   coincidencia exacta normalizada, sin IA/fuzzy — barato y determinístico,
-//   igual criterio que llevó a sacar el reconocimiento por IA de Reingreso
-//   (ver catalog-search/route.ts).
+// - código nuevo y el nombre coincide, exacto o por palabras significativas
+//   en común (ver findSimilarUnlinkedItem), con un producto existente sin
+//   justCode -> "suggestedLink" (matchType "exact"/"similar"), Daniel
+//   confirma el vínculo o lo trata como un producto aparte. Sin IA — mismo
+//   criterio de costo que ya sacó el reconocimiento por IA de Reingreso (ver
+//   catalog-search/route.ts) — pero desde 2026-08-21 ya no es SOLO
+//   coincidencia exacta: el usuario pidió explícitamente que se detecten
+//   nombres parecidos (ej. "PISTOLA DE AGUA TIPO MOCHILA" en Just vs
+//   "Pistola de agua" ya matriculado en DAFLOW), porque la coincidencia
+//   exacta sola dejaba fuera casi todos los productos ya matriculados con un
+//   nombre distinto al de Just. Nunca se auto-vincula ninguno de los dos
+//   tipos — solo cambia el valor por defecto en la UI (ver JustCatalogPanel).
 // - código nuevo, nombre sin coincidencia -> "new", se crea automático como
 //   esqueleto (sin fotos, pendingRegistration=true) — no necesita decisión
 //   fila por fila, solo aparece contado/listado en la vista previa.
@@ -40,7 +81,10 @@ export async function classifyJustCatalogRows(rows: JustCatalogParsedRow[]): Pro
     select: { id: true, name: true, justCode: true, pendingRegistration: true },
   });
   const byJustCode = new Map(existingItems.filter((i) => i.justCode).map((i) => [i.justCode as string, i]));
-  const byNormalizedName = new Map(existingItems.filter((i) => !i.justCode).map((i) => [normalize(i.name), i]));
+  const unlinkedItems = existingItems.filter((i) => !i.justCode);
+  const byNormalizedName = new Map(unlinkedItems.map((i) => [normalize(i.name), i]));
+  const unlinkedWithWords = unlinkedItems.map((i) => ({ id: i.id, name: i.name, words: significantWords(i.name) }));
+  const linkedThisImport = new Set<string>(); // evita sugerir el mismo item existente a dos filas distintas del archivo
 
   const nameCounts = new Map<string, string[]>();
   for (const row of rows) {
@@ -69,9 +113,19 @@ export async function classifyJustCatalogRows(rows: JustCatalogParsedRow[]): Pro
       }
       continue;
     }
-    const suggested = byNormalizedName.get(normalize(row.name));
-    if (suggested) {
-      suggestedLinkRows.push({ code: row.code, name: row.name, itemId: suggested.id, existingName: suggested.name });
+    const exact = byNormalizedName.get(normalize(row.name));
+    if (exact && !linkedThisImport.has(exact.id)) {
+      linkedThisImport.add(exact.id);
+      suggestedLinkRows.push({ code: row.code, name: row.name, itemId: exact.id, existingName: exact.name, matchType: "exact" });
+      continue;
+    }
+    const similar = findSimilarUnlinkedItem(
+      significantWords(row.name),
+      unlinkedWithWords.filter((c) => !linkedThisImport.has(c.id))
+    );
+    if (similar) {
+      linkedThisImport.add(similar.id);
+      suggestedLinkRows.push({ code: row.code, name: row.name, itemId: similar.id, existingName: similar.name, matchType: "similar" });
       continue;
     }
     newRows.push(row);
