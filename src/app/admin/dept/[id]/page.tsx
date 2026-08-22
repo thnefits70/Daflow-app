@@ -129,6 +129,7 @@ export default async function DeptWorkspacePage({ params }: { params: Promise<{ 
         canApproveMerchandiseReentry={dept.code === "INV"}
         canActOnMerchandiseReentry={false}
         canCloseMerchandiseReentry={dept.code === "INV"}
+        canManageJustCatalog={false}
         pettyCashData={pettyCashData}
         canManageAdminPayments={dept.code === "FIN"}
         canViewMarketingArrivals={dept.code === "MKT"}

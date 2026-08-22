@@ -97,6 +97,7 @@ export function DeptWorkspaceTabs({
   canApproveMerchandiseReentry = false,
   canActOnMerchandiseReentry = false,
   canCloseMerchandiseReentry = false,
+  canManageJustCatalog = false,
   merchandiseReentryPendingCount = 0,
   pettyCashData = null,
   canManageAdminPayments = false,
@@ -183,6 +184,7 @@ export function DeptWorkspaceTabs({
   canApproveMerchandiseReentry?: boolean;
   canActOnMerchandiseReentry?: boolean;
   canCloseMerchandiseReentry?: boolean;
+  canManageJustCatalog?: boolean;
   merchandiseReentryPendingCount?: number;
   // Caja Chica — confirmado 2026-08-05: null si la persona no ve ninguna de
   // las dos cajas (ni Principal ni Secundaria le corresponde).
@@ -366,6 +368,7 @@ export function DeptWorkspaceTabs({
           canApprove={canApproveMerchandiseReentry}
           canAct={canActOnMerchandiseReentry}
           canClose={canCloseMerchandiseReentry}
+          canManageJustCatalog={canManageJustCatalog}
         />
       )}
       {tab === "inventoriokpis" && canViewInventoryKpisPanel && inventoryKpisData && (

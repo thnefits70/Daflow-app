@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Search, Plus, Camera, AlertTriangle, CheckCircle2, Trash2, Flag, X } from "lucide-react";
+import { Search, Plus, Camera, AlertTriangle, CheckCircle2, Trash2, Flag, X, Clock } from "lucide-react";
 import { uploadFile } from "@/lib/uploadFile";
 import { compressImage } from "@/lib/compressImage";
 import { usePasteFile } from "@/lib/usePasteFile";
+import { CompleteCatalogRegistration } from "@/components/shared/CompleteCatalogRegistration";
 
 // Confirmado 2026-08-14: bug real reportado por Bryan — mientras se está
 // "creando" un producto nuevo (nombre, fotos, descripción, código), todo eso
@@ -23,6 +24,8 @@ export type CatalogItemDTO = {
   photos: string[];
   description?: string | null;
   code?: string | null;
+  justCode?: string | null;
+  pendingRegistration?: boolean;
   canDelete?: boolean;
   canRequestDelete?: boolean;
   hasPendingDelete?: boolean;
@@ -65,6 +68,7 @@ export function PurchaseCatalogPicker({
   const [requestDeleteBusy, setRequestDeleteBusy] = useState(false);
   const [requestedDeleteIds, setRequestedDeleteIds] = useState<string[]>([]);
   const [reviewingId, setReviewingId] = useState<string | null>(null);
+  const [completingItem, setCompletingItem] = useState<CatalogItemDTO | null>(null);
 
   const [creating, setCreating] = useState(defaultCreateDraft?.creating ?? false);
   const [newName, setNewName] = useState(defaultCreateDraft?.newName ?? "");
@@ -113,7 +117,10 @@ export function PurchaseCatalogPicker({
   }, [value]);
 
   const filtered = query.trim()
-    ? results.filter((r) => r.name.toLowerCase().includes(query.trim().toLowerCase()))
+    ? results.filter((r) => {
+        const q = query.trim().toLowerCase();
+        return r.name.toLowerCase().includes(q) || (!!r.justCode && r.justCode.toLowerCase().includes(q));
+      })
     : results;
 
   async function startCreate() {
@@ -146,8 +153,8 @@ export function PurchaseCatalogPicker({
       setErr("Escribe el nombre del producto, mercadería o insumo.");
       return;
     }
-    if (photos.length === 0) {
-      setErr("Agrega al menos 1 foto del producto.");
+    if (photos.length < 3) {
+      setErr("Agrega mínimo 3 fotos del producto.");
       return;
     }
     if (uploadingPhoto) {
@@ -311,7 +318,7 @@ export function PurchaseCatalogPicker({
               onChange={(e) => setNewName(e.target.value)}
               placeholder="Ej. Rollos de cinta roja"
             />
-            <label className="block mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-steel">Fotos (1 a 3)</label>
+            <label className="block mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-steel">Fotos (mínimo 3)</label>
             <div className="flex gap-2 mb-3">
               {photos.map((p, i) => (
                 <div key={i} className="relative">
@@ -452,12 +459,25 @@ export function PurchaseCatalogPicker({
                     type="button"
                     className="flex-1 min-w-0 flex items-center gap-2.5 px-3 py-2 text-left text-[13px] hover:bg-cloud cursor-pointer"
                     onClick={() => {
+                      if (item.pendingRegistration) {
+                        setCompletingItem(item);
+                        return;
+                      }
                       onChange(item);
                       setOpen(false);
                     }}
                   >
-                    <CheckCircle2 size={13} className="text-teal shrink-0" />
+                    {item.pendingRegistration ? (
+                      <Clock size={13} className="text-gold shrink-0" style={{ color: "#D9A441" }} />
+                    ) : (
+                      <CheckCircle2 size={13} className="text-teal shrink-0" />
+                    )}
                     <span className="truncate">{item.name}</span>
+                    {item.pendingRegistration && (
+                      <span className="shrink-0 font-mono text-[9px] font-bold uppercase rounded-full px-1.5 py-0.5 bg-gold/15 border border-gold/40" style={{ color: "#D9A441" }}>
+                        Sin fotos — matricular
+                      </span>
+                    )}
                   </button>
                   {item.canDelete && (
                     <button
@@ -551,6 +571,18 @@ export function PurchaseCatalogPicker({
             <Plus size={13} /> Crear {query.trim() ? `"${query.trim()}"` : "producto, mercadería o insumo nuevo"} — solo si de verdad es distinto
           </button>
         </div>
+      )}
+      {completingItem && (
+        <CompleteCatalogRegistration
+          item={completingItem}
+          onCancel={() => setCompletingItem(null)}
+          onDone={(updated) => {
+            setCompletingItem(null);
+            setResults((rs) => rs.map((r) => (r.id === updated.id ? { ...r, ...updated, pendingRegistration: false } : r)));
+            onChange({ ...updated, pendingRegistration: false });
+            setOpen(false);
+          }}
+        />
       )}
     </div>
   );

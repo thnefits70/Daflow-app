@@ -15,6 +15,7 @@ import {
   canManageAdminPayments,
   canConfirmPersonalPurchaseInventory,
   canCaptureMerchandiseReentry,
+  canManageJustCatalog,
 } from "@/lib/guards";
 
 // Confirmado 2026-08-03: bug real — ninguna de estas carpetas de Control de
@@ -91,6 +92,11 @@ export async function POST(req: NextRequest) {
   }
   if (!allowed && session?.user.role === "employee" && PURCHASE_MODULE_FOLDERS.includes(folder)) {
     allowed = (await canSubmitPurchaseRequests()) || (await canConfirmPurchaseReceiving()) || (await canRegisterPurchaseInvoices());
+    // Confirmado 2026-08-21: "matricular" un producto (mínimo 3 fotos) ahora
+    // también se puede disparar desde Reingreso de Mercadería, no solo desde
+    // Control de Compras — el equipo de Inventario necesita poder subir a la
+    // misma carpeta "purchase-catalog".
+    if (!allowed && folder === "purchase-catalog") allowed = await canCaptureMerchandiseReentry();
   }
   // Confirmado 2026-08-05: mismo bug de nuevo — Control de Inventario y Caja
   // Chica se lanzaron con carpetas propias que nunca se agregaron aquí, así
@@ -117,6 +123,9 @@ export async function POST(req: NextRequest) {
   }
   if (!allowed && session?.user.role === "employee" && folder === "merchandise-reentry-photos") {
     allowed = await canCaptureMerchandiseReentry();
+  }
+  if (!allowed && session?.user.role === "employee" && folder === "just-catalog-import") {
+    allowed = await canManageJustCatalog();
   }
   if (!allowed) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 

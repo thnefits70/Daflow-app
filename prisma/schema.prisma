@@ -244,6 +244,7 @@ model User {
   periodicRemindersCreated                     PeriodicReminder[]                 @relation("PeriodicReminderCreatedBy")
   purchaseCatalogItemsCreated                  PurchaseCatalogItem[]              @relation("PurchaseCatalogItemCreatedBy")
   purchaseCatalogItemDeleteRequests            PurchaseCatalogItemDeleteRequest[] @relation("PurchaseCatalogItemDeleteRequestedBy")
+  justCatalogImports                           JustCatalogImport[]                @relation("JustCatalogImportImportedBy")
   supplierCreditsCreated                       SupplierCredit[]                   @relation("SupplierCreditCreatedBy")
   urgentResolutionsCreated                     PurchaseUrgentResolution[]         @relation("UrgentResolutionCreatedBy")
   urgentResolutionsReplacementSubmitted        PurchaseUrgentResolution[]         @relation("UrgentResolutionReplacementSubmittedBy")
@@ -1242,6 +1243,21 @@ model PurchaseCatalogItem {
   // confirmarlo a mano cada vez.
   code        String?
 
+  // Confirmado 2026-08-21: código del producto en el sistema Just (distinto
+  // de `code`, que es el SKU del proveedor) — clave real de la "Base de
+  // datos de productos" importada desde el export de Just (ver
+  // JustCatalogImport). Único porque en Just cada código es un producto.
+  justCode String? @unique
+
+  // true SOLO en los renglones "esqueleto" que crea la importación de Just
+  // para un producto que todavía no existe en DAFLOW (código+nombre
+  // conocidos, sin fotos). No selecionable en los pickers de Compras/
+  // Reingreso hasta que alguien lo "matricule" (mínimo 3 fotos reales o de
+  // referencia del proveedor — ver complete-registration). Nunca se
+  // recalcula retroactivamente sobre productos ya existentes creados antes
+  // de esta regla, aunque tengan menos de 3 fotos.
+  pendingRegistration Boolean @default(false)
+
   createdById String?
   createdBy   User?    @relation("PurchaseCatalogItemCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   createdAt   DateTime @default(now())
@@ -1250,10 +1266,28 @@ model PurchaseCatalogItem {
   deleteRequest PurchaseCatalogItemDeleteRequest?
 
   // Confirmado 2026-08-19: Reingreso de Mercadería reusa este mismo catálogo
-  // para el reconocimiento visual por IA (ver MerchandiseReentryItem) — un
-  // producto puede quedar registrado aquí sea porque alguien lo dio de alta
-  // para Control de Compras, o porque quedó confirmado desde un reingreso.
+  // — un producto puede quedar registrado aquí sea porque alguien lo dio de
+  // alta para Control de Compras, porque quedó confirmado desde un
+  // reingreso, o porque vino de la importación de Just.
   merchandiseReentryItems MerchandiseReentryItem[]
+}
+
+// Registro de auditoría de cada vez que Daniel sube el export de Just —
+// también sirve para mostrar "última actualización" en la pestaña Base de
+// datos de productos. Confirmado 2026-08-21: exclusivo de Daniel (líder de
+// Inventario), ni siquiera admin.
+model JustCatalogImport {
+  id           String   @id @default(cuid())
+  importedById String?
+  importedBy   User?    @relation("JustCatalogImportImportedBy", fields: [importedById], references: [id], onDelete: SetNull)
+  importedAt   DateTime @default(now())
+
+  totalRows     Int
+  createdCount  Int // productos nuevos creados como esqueleto (pendientes de matricular)
+  linkedCount   Int // productos existentes vinculados a un justCode por coincidencia de nombre
+  renamedCount  Int // productos ya vinculados cuyo nombre se actualizó al de Just en esta importación
+
+  @@index([importedAt])
 }
 
 // La sola existencia de esta fila ES el estado "pendiente de eliminar" —

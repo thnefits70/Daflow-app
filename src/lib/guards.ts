@@ -700,6 +700,20 @@ export async function canCloseMerchandiseReentry() {
   return !!user.isLeader && user.leadsDept?.code === "FIN";
 }
 
+// Confirmado 2026-08-21: pedido explícito del usuario — solo Daniel (líder
+// de Inventario) puede subir el export de Just que alimenta la Base de
+// datos de productos, ni siquiera admin. Mismo criterio "ni siquiera admin"
+// que canActOnMerchandiseReentry — admin ve la pestaña (gateada con
+// canApproveMerchandiseReentry || canCloseMerchandiseReentry, igual que
+// Control de Daños) pero no el botón de subir.
+export async function canManageJustCatalog() {
+  const session = await auth();
+  if (!session) return false;
+  const user = await purchasesUserContext(session.user.id);
+  if (!user) return false;
+  return !!user.isLeader && user.leadsDept?.code === "INV";
+}
+
 // Visibilidad general del módulo (ítem del sidebar, pestaña Historial) —
 // cualquiera de los tres roles de arriba.
 export async function canViewMerchandiseReentry() {

@@ -47,6 +47,8 @@ export async function GET(req: NextRequest) {
       photos: i.photos,
       description: i.description,
       code: i.code,
+      justCode: i.justCode,
+      pendingRegistration: i.pendingRegistration,
       hasPendingDelete: !!i.deleteRequest,
       canDelete: canDelete(i),
       canRequestDelete: canRequestDelete(i) && !canDelete(i),
@@ -68,7 +70,13 @@ export async function GET(req: NextRequest) {
 
 const createSchema = z.object({
   name: z.string().trim().min(1, "Falta el nombre del producto, mercadería o insumo."),
-  photos: z.array(z.string().url()).min(1, "Agrega al menos una foto del producto.").max(3),
+  // Confirmado 2026-08-21: pedido explícito del usuario — mínimo 3 fotos
+  // reales o de referencia del proveedor, para que nadie en Compras/
+  // Reingreso se equivoque de producto por no tener con qué reconocerlo.
+  // Mismo criterio que complete-registration (matricular un esqueleto de
+  // Just). No es retroactivo — productos creados antes con menos fotos
+  // siguen funcionando igual.
+  photos: z.array(z.string().url()).min(3, "Agrega mínimo 3 fotos del producto.").max(3),
   description: z.string().trim().max(500).optional(),
   code: z.string().trim().max(100).optional(),
 });

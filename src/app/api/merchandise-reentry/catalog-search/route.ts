@@ -14,7 +14,7 @@ export async function GET() {
 
   const items = await prisma.purchaseCatalogItem.findMany({
     orderBy: { name: "asc" },
-    select: { id: true, name: true, photos: true },
+    select: { id: true, name: true, photos: true, justCode: true, pendingRegistration: true },
   });
   return NextResponse.json(items);
 }

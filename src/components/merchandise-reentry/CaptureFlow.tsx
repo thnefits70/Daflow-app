@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Camera, Check, Plus, Send, Trash2, X } from "lucide-react";
+import { Camera, Check, Clock, Plus, Send, Trash2, X } from "lucide-react";
 import { LiveCameraCapture } from "@/components/shared/LiveCameraCapture";
+import { CompleteCatalogRegistration } from "@/components/shared/CompleteCatalogRegistration";
 
 const DAMAGE_REASONS = ["Producto roto", "Empaque abierto", "Humedad/manchado", "Golpeado", "Otro"];
 
@@ -278,7 +279,7 @@ export function CaptureFlow() {
   );
 }
 
-type CatalogItem = { id: string; name: string; photos: string[] };
+type CatalogItem = { id: string; name: string; photos: string[]; justCode: string | null; pendingRegistration: boolean };
 
 // Confirmado 2026-08-20: pedido explícito del usuario — se sacó el
 // reconocimiento por IA (tenía un costo real por cada foto). Ahora se
@@ -297,6 +298,7 @@ function AddItemForm({ batchId, onAdded, onCancel }: { batchId: string; onAdded:
   const [selected, setSelected] = useState<CatalogItem | null>(null);
   const [manualMode, setManualMode] = useState(false);
   const [manualName, setManualName] = useState("");
+  const [completingItem, setCompletingItem] = useState<CatalogItem | null>(null);
 
   const [goodQty, setGoodQty] = useState("");
   const [damagedQty, setDamagedQty] = useState("");
@@ -327,7 +329,11 @@ function AddItemForm({ batchId, onAdded, onCancel }: { batchId: string; onAdded:
   // — "cojin masajeador" encuentra "Almohada masajeador" sin importar orden.
   const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
   const suggestions =
-    words.length === 0 ? [] : (catalog ?? []).filter((c) => words.every((w) => c.name.toLowerCase().includes(w))).slice(0, 6);
+    words.length === 0
+      ? []
+      : (catalog ?? [])
+          .filter((c) => words.every((w) => c.name.toLowerCase().includes(w) || (!!c.justCode && c.justCode.toLowerCase().includes(w))))
+          .slice(0, 6);
 
   const dQty = Number(damagedQty) || 0;
   const gQty = Number(goodQty) || 0;
@@ -509,13 +515,31 @@ function AddItemForm({ batchId, onAdded, onCancel }: { batchId: string; onAdded:
                       key={c.id}
                       type="button"
                       className="flex items-center gap-2.5 p-2 hover:bg-cloud cursor-pointer text-left"
-                      onClick={() => { setSelected(c); setQuery(""); }}
+                      onClick={() => {
+                        if (c.pendingRegistration) {
+                          setCompletingItem(c);
+                          return;
+                        }
+                        setSelected(c);
+                        setQuery("");
+                      }}
                     >
-                      {c.photos[0] && (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={c.photos[0]} alt={c.name} className="w-9 h-9 object-cover rounded border border-rule shrink-0" />
+                      {c.pendingRegistration ? (
+                        <div className="w-9 h-9 rounded border border-dashed border-rule shrink-0 flex items-center justify-center text-gold" style={{ color: "#D9A441" }}>
+                          <Clock size={14} />
+                        </div>
+                      ) : (
+                        c.photos[0] && (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={c.photos[0]} alt={c.name} className="w-9 h-9 object-cover rounded border border-rule shrink-0" />
+                        )
                       )}
-                      <span className="text-[12.5px] font-medium">{c.name}</span>
+                      <span className="text-[12.5px] font-medium flex-1">{c.name}</span>
+                      {c.pendingRegistration && (
+                        <span className="shrink-0 font-mono text-[9px] font-bold uppercase rounded-full px-1.5 py-0.5 bg-gold/15 border border-gold/40" style={{ color: "#D9A441" }}>
+                          Matricular
+                        </span>
+                      )}
                     </button>
                   ))}
                 </div>
@@ -585,6 +609,18 @@ function AddItemForm({ batchId, onAdded, onCancel }: { batchId: string; onAdded:
         </button>
       </div>
       </>
+      )}
+      {completingItem && (
+        <CompleteCatalogRegistration
+          item={completingItem}
+          onCancel={() => setCompletingItem(null)}
+          onDone={(updated) => {
+            setCompletingItem(null);
+            setCatalog((cat) => (cat ?? []).map((c) => (c.id === updated.id ? { ...c, ...updated, pendingRegistration: false } : c)));
+            setSelected({ ...updated, justCode: completingItem.justCode, pendingRegistration: false });
+            setQuery("");
+          }}
+        />
       )}
     </div>
   );

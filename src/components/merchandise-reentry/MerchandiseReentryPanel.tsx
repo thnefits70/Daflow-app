@@ -6,19 +6,22 @@ import { ReviewInbox } from "./ReviewInbox";
 import { CloseQueues } from "./CloseQueues";
 import { WeeklyDamageControl } from "./WeeklyDamageControl";
 import { HistoryList } from "./HistoryList";
+import { JustCatalogPanel } from "./JustCatalogPanel";
 
-type Tab = "capturar" | "revision" | "cierre" | "danos" | "historial";
+type Tab = "capturar" | "revision" | "cierre" | "danos" | "productos" | "historial";
 
 export function MerchandiseReentryPanel({
   canCapture,
   canApprove,
   canAct = false,
   canClose,
+  canManageJustCatalog = false,
 }: {
   canCapture: boolean;
   canApprove: boolean;
   canAct?: boolean;
   canClose: boolean;
+  canManageJustCatalog?: boolean;
 }) {
   const defaultTab: Tab = canCapture ? "capturar" : canApprove ? "revision" : canClose ? "cierre" : "historial";
   const [tab, setTab] = useState<Tab>(defaultTab);
@@ -32,6 +35,7 @@ export function MerchandiseReentryPanel({
     if (t === "revision" && canApprove) setTab("revision");
     else if (t === "cierre" && canClose) setTab("cierre");
     else if (t === "danos" && (canApprove || canClose)) setTab("danos");
+    else if (t === "productos" && (canApprove || canClose)) setTab("productos");
     else if (t === "capturar" && canCapture) setTab("capturar");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -41,6 +45,7 @@ export function MerchandiseReentryPanel({
     ...(canApprove ? [{ id: "revision" as const, label: "Revisión" }] : []),
     ...(canClose ? [{ id: "cierre" as const, label: "Cierre" }] : []),
     ...(canApprove || canClose ? [{ id: "danos" as const, label: "Control de Daños" }] : []),
+    ...(canApprove || canClose ? [{ id: "productos" as const, label: "Base de datos de productos" }] : []),
     { id: "historial" as const, label: "Historial" },
   ];
 
@@ -66,6 +71,7 @@ export function MerchandiseReentryPanel({
       {tab === "revision" && canApprove && <ReviewInbox canAct={canAct} />}
       {tab === "cierre" && canClose && <CloseQueues />}
       {tab === "danos" && (canApprove || canClose) && <WeeklyDamageControl canAct={canAct} canClose={canClose} />}
+      {tab === "productos" && (canApprove || canClose) && <JustCatalogPanel canManage={canManageJustCatalog} />}
       {tab === "historial" && <HistoryList />}
     </div>
   );
