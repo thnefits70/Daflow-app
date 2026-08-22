@@ -9,13 +9,25 @@ import { getPeriodicReminders } from "@/lib/periodicReminders";
 import { getStoreFeedbackData } from "@/lib/storeFeedback";
 import { getInventoryControlData, getInventoryKpisData } from "@/lib/inventoryKpis";
 import { getPettyCashViewerData } from "@/lib/pettyCash";
+import { toSupplierDTO } from "@/lib/suppliers";
+import { SUPPLIER_VIEW_DEPT_CODES, SUPPLIER_ADD_DEPT_CODES } from "@/lib/guards";
+
+const supplierInclude = {
+  contacts: { orderBy: { id: "asc" as const } },
+  channels: { orderBy: { id: "asc" as const } },
+  createdBy: { select: { name: true } },
+  approvedBy: { select: { name: true } },
+  bankAccounts: { orderBy: { createdAt: "asc" as const }, include: { createdBy: { select: { name: true } } } },
+};
 
 export default async function DeptWorkspacePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const dept = await prisma.department.findUnique({ where: { id } });
   if (!dept) notFound();
 
-  const [processDetail, periodicReminders, documents, exams, financeKpiData, paymentReminders, weeklyMetricRecords, weeklyReviewRecords, storeFeedbackStores, inventoryControlData, inventoryKpisData, pettyCashData] = await Promise.all([
+  const canAccessSuppliers = SUPPLIER_VIEW_DEPT_CODES.includes(dept.code);
+
+  const [processDetail, periodicReminders, documents, exams, financeKpiData, paymentReminders, weeklyMetricRecords, weeklyReviewRecords, storeFeedbackStores, inventoryControlData, inventoryKpisData, pettyCashData, supplierList, supplierPending] = await Promise.all([
     getDeptProcessDetail(id),
     getPeriodicReminders(id, null),
     prisma.document.findMany({ where: { deptId: id }, orderBy: { createdAt: "asc" } }),
@@ -36,6 +48,16 @@ export default async function DeptWorkspacePage({ params }: { params: Promise<{ 
     dept.code === "INV" ? getInventoryControlData() : Promise.resolve(null),
     dept.code === "INV" || dept.code === "MKT" ? getInventoryKpisData() : Promise.resolve(null),
     dept.code === "FIN" ? getPettyCashViewerData(true) : Promise.resolve(null),
+    canAccessSuppliers
+      ? prisma.supplier.findMany({ where: { status: "APPROVED" }, orderBy: { name: "asc" }, include: supplierInclude })
+      : Promise.resolve([]),
+    canAccessSuppliers
+      ? prisma.supplier.findMany({
+          where: { status: { in: ["PENDING", "REJECTED"] }, createdByDeptId: id },
+          orderBy: { createdAt: "desc" },
+          include: supplierInclude,
+        })
+      : Promise.resolve([]),
   ]);
 
   return (
@@ -86,6 +108,13 @@ export default async function DeptWorkspacePage({ params }: { params: Promise<{ 
         canReceivePurchasesTeam={false}
         canApprovePurchaseReceiving={false}
         canInvoicePurchases={dept.code === "COM"}
+        canAccessSuppliers={canAccessSuppliers}
+        supplierList={supplierList.map((s) => toSupplierDTO(s, true))}
+        supplierPending={supplierPending.map((s) => toSupplierDTO(s, true))}
+        canAddSupplier={SUPPLIER_ADD_DEPT_CODES.includes(dept.code)}
+        canAddSupplierCarrier={dept.code === "MKT" || dept.code === "COM"}
+        canReviewSuppliers={canAccessSuppliers}
+        canAddSupplierBankAccounts={canAccessSuppliers}
         canManageInventoryControl={dept.code === "INV"}
         inventoryControlData={inventoryControlData}
         canViewInventoryKpisPanel={dept.code === "INV" || dept.code === "MKT"}

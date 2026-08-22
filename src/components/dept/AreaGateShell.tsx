@@ -33,8 +33,6 @@ export function AreaGateShell({
   snoozeUntil,
   leaderAlerts,
   ledDeptName,
-  showSuppliers = false,
-  pendingSuppliersCount = 0,
   unseenFeedbackCount = 0,
   unseenPayStubCount = 0,
   showConfidential = false,
@@ -58,8 +56,6 @@ export function AreaGateShell({
   snoozeUntil: string | null;
   leaderAlerts: LeaderAlert[];
   ledDeptName: string | null;
-  showSuppliers?: boolean;
-  pendingSuppliersCount?: number;
   unseenFeedbackCount?: number;
   unseenPayStubCount?: number;
   showConfidential?: boolean;
@@ -173,8 +169,6 @@ export function AreaGateShell({
         userName={userName}
         userPhotoUrl={userPhotoUrl}
         logoUrl={logoUrl}
-        showSuppliers={showSuppliers}
-        pendingSuppliersCount={pendingSuppliersCount}
         unseenFeedbackCount={unseenFeedbackCount}
         unseenPayStubCount={unseenPayStubCount}
         showConfidential={showConfidential}

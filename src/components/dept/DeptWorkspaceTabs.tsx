@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { GitBranch, FileText, GraduationCap, LineChart, TrendingUp, MessageSquare, CalendarClock, BellRing, Heart, ShoppingCart, Package, Pin, Wallet, BarChart3, Landmark, PackageCheck, PackageOpen } from "lucide-react";
+import { GitBranch, FileText, GraduationCap, LineChart, TrendingUp, MessageSquare, CalendarClock, BellRing, Heart, ShoppingCart, Package, Pin, Wallet, BarChart3, Landmark, PackageCheck, PackageOpen, Truck } from "lucide-react";
 import { ProcessEmbeddedPanel } from "@/components/process/ProcessEmbeddedPanel";
 import type { ProcessDTO } from "@/components/process/ProcessEditor";
 import type { ProcessUpdateDTO } from "@/components/process/ProcessHistoryPanel";
@@ -29,6 +29,7 @@ import type { PettyCashViewerData } from "@/lib/pettyCash";
 import { AdminPaymentsPanel } from "@/components/finance/AdminPaymentsPanel";
 import { MarketingArrivalsPanel } from "@/components/marketing/MarketingArrivalsPanel";
 import { MerchandiseReentryPanel } from "@/components/merchandise-reentry/MerchandiseReentryPanel";
+import { SuppliersPanel, type SupplierDTO } from "@/components/suppliers/SuppliersPanel";
 
 type DocumentDTO = { id: string; title: string; content: string; link: string; fileUrl: string | null; fileName: string | null };
 type ExamSummary = { id: string; title: string; questionCount: number };
@@ -42,6 +43,7 @@ const ALL_TABS = [
   { key: "feedback", label: "Feedback semanal", icon: MessageSquare },
   { key: "procesos", label: "Procesos", icon: GitBranch },
   { key: "compras", label: "Control de Compras", icon: ShoppingCart },
+  { key: "proveedores", label: "Proveedores", icon: Truck },
   { key: "llegadas", label: "Mercadería recibida", icon: PackageCheck },
   { key: "inventario", label: "Control de Inventario", icon: Package },
   { key: "reingreso", label: "Reingreso de Mercadería", icon: PackageOpen },
@@ -80,6 +82,13 @@ export function DeptWorkspaceTabs({
   canReceivePurchasesTeam = false,
   canApprovePurchaseReceiving = false,
   canInvoicePurchases = false,
+  canAccessSuppliers = false,
+  supplierList = [],
+  supplierPending = [],
+  canAddSupplier = false,
+  canAddSupplierCarrier = false,
+  canReviewSuppliers = false,
+  canAddSupplierBankAccounts = false,
   canManageInventoryControl = false,
   inventoryControlData = null,
   canViewInventoryKpisPanel = false,
@@ -140,6 +149,20 @@ export function DeptWorkspaceTabs({
   canReceivePurchasesTeam?: boolean;
   canApprovePurchaseReceiving?: boolean;
   canInvoicePurchases?: boolean;
+  // Proveedores — movido de su propio ítem de sidebar a esta pestaña
+  // (confirmado 2026-08-21), entre "Control de Compras" y "Documentos".
+  // canAccessSuppliers gatea si la pestaña se ve (ver access.canView /
+  // access.canAdd / canReview en getSupplierAccess, guards.ts);
+  // canAddSupplier/canAddSupplierCarrier/canReviewSuppliers/
+  // canAddSupplierBankAccounts controlan qué puede hacer dentro del panel,
+  // igual que en la extinta /area/proveedores.
+  canAccessSuppliers?: boolean;
+  supplierList?: SupplierDTO[];
+  supplierPending?: SupplierDTO[];
+  canAddSupplier?: boolean;
+  canAddSupplierCarrier?: boolean;
+  canReviewSuppliers?: boolean;
+  canAddSupplierBankAccounts?: boolean;
   // Control de Inventario — mismo patrón sin dept.code que Control de
   // Compras/Servicio Postventa (confirmado 2026-08-04): Daniel lo ve en su
   // propia "Mi área de trabajo" sin importar si su departamento real es INV.
@@ -194,6 +217,7 @@ export function DeptWorkspaceTabs({
     if (t.key === "semanal") return trackWeeklyMetric;
     if (t.key === "feedback") return trackWeeklyReview;
     if (t.key === "compras") return canSubmitPurchases || canReceivePurchases || canInvoicePurchases;
+    if (t.key === "proveedores") return canAccessSuppliers;
     if (t.key === "llegadas") return canViewMarketingArrivals;
     if (t.key === "inventario") return canManageInventoryControl;
     if (t.key === "reingreso") return canCaptureMerchandiseReentry || canApproveMerchandiseReentry || canCloseMerchandiseReentry;
@@ -274,6 +298,11 @@ export function DeptWorkspaceTabs({
                 {merchandiseReentryPendingCount}
               </span>
             )}
+            {t.key === "proveedores" && canReviewSuppliers && supplierPending.length > 0 && (
+              <span className="font-mono text-[10px] font-semibold bg-red/20 text-red rounded-full px-1.5 py-0.5">
+                {supplierPending.length}
+              </span>
+            )}
           </button>
         ))}
         {currentUserId && (
@@ -309,6 +338,17 @@ export function DeptWorkspaceTabs({
           canApproveReceiving={canApprovePurchaseReceiving}
           canInvoice={canInvoicePurchases}
           isAdmin={isAdmin}
+        />
+      )}
+      {tab === "proveedores" && canAccessSuppliers && (
+        <SuppliersPanel
+          suppliers={supplierList}
+          pending={supplierPending}
+          canAdd={canAddSupplier}
+          canAddCarrier={canAddSupplierCarrier}
+          canReview={canReviewSuppliers}
+          isAdmin={isAdmin}
+          canAddBankAccounts={canAddSupplierBankAccounts}
         />
       )}
       {tab === "llegadas" && canViewMarketingArrivals && (

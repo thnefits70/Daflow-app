@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
-import { LayoutDashboard, ClipboardList, Scale, LogOut, Truck, Rocket, Wallet, FolderLock, Gauge, Menu, X, Trophy, Users, LayoutGrid, Waypoints, ShoppingBag, Banknote } from "lucide-react";
+import { LayoutDashboard, ClipboardList, Scale, LogOut, Rocket, Wallet, FolderLock, Gauge, Menu, X, Trophy, Users, LayoutGrid, Waypoints, ShoppingBag, Banknote } from "lucide-react";
 import { BrandMark } from "@/components/brand/DaflowMark";
 import { PushSettingsToggle } from "@/components/shared/PushSettingsToggle";
 import { NotificationBell } from "@/components/shared/NotificationBell";
@@ -14,8 +14,6 @@ export function EmployeeSidebar({
   userName,
   userPhotoUrl,
   logoUrl,
-  showSuppliers = false,
-  pendingSuppliersCount = 0,
   unseenFeedbackCount = 0,
   unseenPayStubCount = 0,
   showConfidential = false,
@@ -30,8 +28,6 @@ export function EmployeeSidebar({
   userName: string;
   userPhotoUrl?: string | null;
   logoUrl?: string | null;
-  showSuppliers?: boolean;
-  pendingSuppliersCount?: number;
   unseenFeedbackCount?: number;
   unseenPayStubCount?: number;
   showConfidential?: boolean;
@@ -144,16 +140,6 @@ export function EmployeeSidebar({
         {showNomina && (
           <Link href="/area/nomina" className={`${NAV_ITEM} ${pathname.startsWith("/area/nomina") ? NAV_ACTIVE : NAV_INACTIVE}`}>
             <Users size={15} /> Nómina
-          </Link>
-        )}
-        {showSuppliers && (
-          <Link href="/area/proveedores" className={`${NAV_ITEM} ${pathname.startsWith("/area/proveedores") ? NAV_ACTIVE : NAV_INACTIVE}`}>
-            <Truck size={15} /> Proveedores
-            {pendingSuppliersCount > 0 && (
-              <span className="ml-auto font-mono text-[10px] font-semibold bg-red/20 text-red rounded-full px-1.5 py-0.5">
-                {pendingSuppliersCount}
-              </span>
-            )}
           </Link>
         )}
         {showConfidential && (

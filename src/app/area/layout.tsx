@@ -6,7 +6,6 @@ import { MarketingArrivalAlert } from "@/components/marketing/MarketingArrivalAl
 import type { ProcessDTO } from "@/components/process/ProcessEditor";
 import type { RecognitionPersonDTO } from "@/components/recognition/RecognitionPanel";
 import {
-  SUPPLIER_VIEW_DEPT_CODES,
   canManageNomina,
   canLogOvertimeHours,
   canConfirmPersonalPurchaseInventory,
@@ -129,15 +128,6 @@ export default async function AreaLayout({ children }: { children: React.ReactNo
     }
   }
 
-  const pendingSuppliersCount =
-    currentUser.isLeader && currentUser.leadsDeptId
-      ? await prisma.supplier.count({ where: { status: "PENDING", createdByDeptId: currentUser.leadsDeptId } })
-      : 0;
-  // Proveedores is only for Compras/Análisis de Mercado, whoever was granted
-  // canAddSuppliers directly, or a leader who actually has something of
-  // their team's waiting to approve — not every leader company-wide.
-  const showSuppliers =
-    SUPPLIER_VIEW_DEPT_CODES.includes(dept.code) || currentUser.canAddSuppliers || pendingSuppliersCount > 0;
   const unseenFeedbackCount =
     currentUser.isLeader && currentUser.leadsDeptId
       ? await prisma.weeklyReviewRecord.count({
@@ -180,8 +170,6 @@ export default async function AreaLayout({ children }: { children: React.ReactNo
       snoozeUntil={snoozeUntil}
       leaderAlerts={leaderAlerts}
       ledDeptName={ledDeptName}
-      showSuppliers={showSuppliers}
-      pendingSuppliersCount={pendingSuppliersCount}
       unseenFeedbackCount={unseenFeedbackCount}
       unseenPayStubCount={unseenPayStubCount}
       showConfidential={confidentialAccessCount > 0}

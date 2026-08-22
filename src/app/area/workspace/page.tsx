@@ -3,7 +3,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { TopLine } from "@/components/ui/TopLine";
 import { DeptWorkspaceTabs } from "@/components/dept/DeptWorkspaceTabs";
-import { getUnseenFeedbackCount, canManageStoreFeedback as checkCanManageStoreFeedback, canViewStoreFeedback as checkCanViewStoreFeedback, canSubmitPurchaseRequests, canConfirmPurchaseReceiving, canReceivePurchasesTeam, canActOnPurchaseReceiving, canRegisterPurchaseInvoices, canManageInventoryControl as checkCanManageInventoryControl, canViewInventoryKpisPanel as checkCanViewInventoryKpisPanel, canManageAdminPayments as checkCanManageAdminPayments, canViewMarketingArrivals as checkCanViewMarketingArrivals, canConfirmMarketingDesign as checkCanConfirmMarketingDesign, canConfirmMarketingAdvisor as checkCanConfirmMarketingAdvisor, canCaptureMerchandiseReentry, canApproveMerchandiseReentry, canActOnMerchandiseReentry, canCloseMerchandiseReentry } from "@/lib/guards";
+import { getUnseenFeedbackCount, canManageStoreFeedback as checkCanManageStoreFeedback, canViewStoreFeedback as checkCanViewStoreFeedback, canSubmitPurchaseRequests, canConfirmPurchaseReceiving, canReceivePurchasesTeam, canActOnPurchaseReceiving, canRegisterPurchaseInvoices, canManageInventoryControl as checkCanManageInventoryControl, canViewInventoryKpisPanel as checkCanViewInventoryKpisPanel, canManageAdminPayments as checkCanManageAdminPayments, canViewMarketingArrivals as checkCanViewMarketingArrivals, canConfirmMarketingDesign as checkCanConfirmMarketingDesign, canConfirmMarketingAdvisor as checkCanConfirmMarketingAdvisor, canCaptureMerchandiseReentry, canApproveMerchandiseReentry, canActOnMerchandiseReentry, canCloseMerchandiseReentry, getSupplierAccess, canAddSupplierBankAccounts } from "@/lib/guards";
 import { getFinanceKpiData } from "@/lib/financeKpis";
 import { getDeptProcessDetail } from "@/lib/processDetail";
 import { getPaymentRemindersData } from "@/lib/paymentReminders";
@@ -11,6 +11,15 @@ import { getPeriodicReminders } from "@/lib/periodicReminders";
 import { getStoreFeedbackData, getStoreFeedbackMonthlyAggregates } from "@/lib/storeFeedback";
 import { getInventoryControlData, getInventoryKpisData } from "@/lib/inventoryKpis";
 import { getPettyCashViewerData } from "@/lib/pettyCash";
+import { toSupplierDTO } from "@/lib/suppliers";
+
+const supplierInclude = {
+  contacts: { orderBy: { id: "asc" as const } },
+  channels: { orderBy: { id: "asc" as const } },
+  createdBy: { select: { name: true } },
+  approvedBy: { select: { name: true } },
+  _count: { select: { bankAccounts: true } },
+};
 
 export default async function WorkspacePage() {
   const session = await auth();
@@ -39,6 +48,18 @@ export default async function WorkspacePage() {
     canActOnPurchaseReceiving(),
     canRegisterPurchaseInvoices(),
   ]);
+
+  // Proveedores — movido de su propio ítem de sidebar a la pestaña
+  // "Proveedores" de Mi área de trabajo (confirmado 2026-08-21), mismo
+  // criterio de acceso que la extinta /area/proveedores.
+  const [supplierAccess, canAddSupplierBankAccountsFlag] = await Promise.all([
+    getSupplierAccess(),
+    canAddSupplierBankAccounts(),
+  ]);
+  const canReviewSuppliers = supplierAccess.isLeader && !!supplierAccess.leadsDeptId;
+  const canViewSuppliersAny = supplierAccess.canView || canSubmitPurchases || canAddSupplierBankAccountsFlag;
+  const canAddSupplierCarrier = supplierAccess.canAdd || canSubmitPurchases;
+  const canAccessSuppliers = canViewSuppliersAny || supplierAccess.canAdd || canReviewSuppliers;
 
   // Control de Inventario — mismo patrón sin dept.code (confirmado
   // 2026-08-04): Daniel lo ve desde su propia "Mi área de trabajo" sin
@@ -85,7 +106,7 @@ export default async function WorkspacePage() {
     checkCanConfirmMarketingAdvisor(),
   ]);
 
-  const [processDetail, periodicReminders, documents, exams, financeKpiData, paymentReminders, weeklyMetricRecords, weeklyReviewRecords, currentUser, unseenFeedbackCount, storeFeedbackStores, inventoryControlData, inventoryKpisData, pettyCashData, storeFeedbackAggregates] = await Promise.all([
+  const [processDetail, periodicReminders, documents, exams, financeKpiData, paymentReminders, weeklyMetricRecords, weeklyReviewRecords, currentUser, unseenFeedbackCount, storeFeedbackStores, inventoryControlData, inventoryKpisData, pettyCashData, storeFeedbackAggregates, supplierList, supplierPending] = await Promise.all([
     getDeptProcessDetail(dept.id),
     getPeriodicReminders(dept.id, session.user.id),
     prisma.document.findMany({ where: { deptId: dept.id }, orderBy: { createdAt: "asc" } }),
@@ -118,6 +139,16 @@ export default async function WorkspacePage() {
     // Fix confirmado 2026-08-11: canViewStoreFeedback (Bryan) ya no ve el
     // detalle por tienda — solo el resultado agregado por mes.
     canManageStoreFeedback || canViewStoreFeedback ? getStoreFeedbackMonthlyAggregates() : Promise.resolve([]),
+    canViewSuppliersAny
+      ? prisma.supplier.findMany({ where: { status: "APPROVED" }, orderBy: { name: "asc" }, include: supplierInclude })
+      : Promise.resolve([]),
+    canReviewSuppliers
+      ? prisma.supplier.findMany({
+          where: { status: { in: ["PENDING", "REJECTED"] }, createdByDeptId: supplierAccess.leadsDeptId },
+          orderBy: { createdAt: "desc" },
+          include: supplierInclude,
+        })
+      : Promise.resolve([]),
   ]);
 
   const kpisEditable = !!currentUser?.isLeader && currentUser.leadsDeptId === dept.id;
@@ -174,6 +205,13 @@ export default async function WorkspacePage() {
         canReceivePurchasesTeam={canReceivePurchasesTeamFlag}
         canApprovePurchaseReceiving={canApprovePurchaseReceivingFlag}
         canInvoicePurchases={canInvoicePurchases}
+        canAccessSuppliers={canAccessSuppliers}
+        supplierList={supplierList.map((s) => toSupplierDTO(s, false, canAddSupplierBankAccountsFlag))}
+        supplierPending={supplierPending.map((s) => toSupplierDTO(s, false, canAddSupplierBankAccountsFlag))}
+        canAddSupplier={supplierAccess.canAdd}
+        canAddSupplierCarrier={canAddSupplierCarrier}
+        canReviewSuppliers={canReviewSuppliers}
+        canAddSupplierBankAccounts={canAddSupplierBankAccountsFlag}
         canManageInventoryControl={canManageInventoryControl}
         inventoryControlData={inventoryControlData}
         canViewInventoryKpisPanel={canViewInventoryKpisPanel}
