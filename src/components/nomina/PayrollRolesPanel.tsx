@@ -97,8 +97,8 @@ function NewConceptForm({ onAdd }: { onAdd: (item: LineItem) => void }) {
 }
 
 const ROLE_CARD_ACCENTS = [
-  "border-l-blue/70 bg-blue/[0.035]",
-  "border-l-teal/70 bg-teal/[0.035]",
+  "bg-surface border-l-blue/70",
+  "bg-cloud border-l-teal/70",
 ] as const;
 
 function RoleCard({ role, index, published, canEdit, monthlyRoleId, onChanged }: { role: Role; index: number; published: boolean; canEdit: boolean; monthlyRoleId?: string; onChanged: () => void }) {
@@ -164,7 +164,7 @@ function RoleCard({ role, index, published, canEdit, monthlyRoleId, onChanged }:
   const withoutValue = indexed.filter(({ it }) => it.amount === 0);
 
   return (
-    <div className={`bg-surface border border-rule border-l-[3px] rounded-md p-3.5 ${ROLE_CARD_ACCENTS[index % ROLE_CARD_ACCENTS.length]}`}>
+    <div className={`border border-rule border-l-[3px] rounded-md p-3.5 ${ROLE_CARD_ACCENTS[index % ROLE_CARD_ACCENTS.length]}`}>
       <div className="flex items-center justify-between gap-2 mb-2.5">
         <div>
           <div className="font-bold text-[13.5px]">{role.employee.name}</div>
