@@ -1,11 +1,19 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { X, ShieldCheck } from "lucide-react";
+import { X, ShieldCheck, Landmark, ChevronDown } from "lucide-react";
 import { PayrollEmployeeSalariesPanel } from "./PayrollEmployeeSalariesPanel";
 import { CeoBonusesForNairobyPanel } from "./CeoBonusesForNairobyPanel";
 
 type LineItem = { id?: string; label: string; amount: number; kind: "INCOME" | "EXPENSE"; isAutomatic?: boolean; note?: string | null };
+type EmployeeBankAccount = {
+  bankName: string;
+  bankAccountType: string;
+  bankAccountNumber: string;
+  bankAccountHolder: string;
+  holderIdType: "RUC" | "CEDULA" | null;
+  holderIdNumber: string | null;
+};
 type Role = {
   id: string;
   employeeId: string;
@@ -14,7 +22,7 @@ type Role = {
   totalIncome: number;
   totalExpense: number;
   netTotal: number;
-  employee: { id: string; name: string; position: string | null };
+  employee: { id: string; name: string; position: string | null; employeeBankAccounts: EmployeeBankAccount[] };
   lineItems: LineItem[];
 };
 type PeriodDetail = {
@@ -88,7 +96,12 @@ function NewConceptForm({ onAdd }: { onAdd: (item: LineItem) => void }) {
   );
 }
 
-function RoleCard({ role, published, canEdit, monthlyRoleId, onChanged }: { role: Role; published: boolean; canEdit: boolean; monthlyRoleId?: string; onChanged: () => void }) {
+const ROLE_CARD_ACCENTS = [
+  "border-l-blue/70 bg-blue/[0.035]",
+  "border-l-teal/70 bg-teal/[0.035]",
+] as const;
+
+function RoleCard({ role, index, published, canEdit, monthlyRoleId, onChanged }: { role: Role; index: number; published: boolean; canEdit: boolean; monthlyRoleId?: string; onChanged: () => void }) {
   const [items, setItems] = useState<LineItem[]>(role.lineItems);
   const [saving, setSaving] = useState(false);
   const [correcting, setCorrecting] = useState(false);
@@ -97,6 +110,8 @@ function RoleCard({ role, published, canEdit, monthlyRoleId, onChanged }: { role
   const [monthlyChangeNote, setMonthlyChangeNote] = useState("");
   const [savingMonthly, setSavingMonthly] = useState(false);
   const [showZero, setShowZero] = useState(false);
+  const [showBank, setShowBank] = useState(false);
+  const bankAccount = role.employee.employeeBankAccounts[0];
 
   async function submitMonthlyCorrection() {
     if (!monthlyRoleId || !monthlyChangeNote.trim()) return;
@@ -149,17 +164,45 @@ function RoleCard({ role, published, canEdit, monthlyRoleId, onChanged }: { role
   const withoutValue = indexed.filter(({ it }) => it.amount === 0);
 
   return (
-    <div className="bg-surface border border-rule rounded-md p-3.5">
+    <div className={`bg-surface border border-rule border-l-[3px] rounded-md p-3.5 ${ROLE_CARD_ACCENTS[index % ROLE_CARD_ACCENTS.length]}`}>
       <div className="flex items-center justify-between gap-2 mb-2.5">
         <div>
           <div className="font-bold text-[13.5px]">{role.employee.name}</div>
           {role.employee.position && <div className="text-[10.5px] text-steel">{role.employee.position}</div>}
         </div>
-        <div className="text-right">
-          <div className="text-[16px] font-extrabold tabular-nums">{money(total)}</div>
-          <div className="text-[9.5px] text-steel-dim uppercase tracking-wide">Líquido a pagar</div>
+        <div className="flex flex-col items-end gap-0.5 bg-teal/15 border border-teal/40 rounded-md px-2.5 py-1">
+          <div className="text-[17px] font-extrabold tabular-nums text-teal">{money(total)}</div>
+          <div className="text-[9.5px] text-teal/90 uppercase tracking-wide font-semibold">Líquido a pagar</div>
         </div>
       </div>
+
+      <button
+        type="button"
+        className={`flex items-center gap-1.5 text-[11px] font-semibold rounded px-2 py-1 mb-2.5 cursor-pointer border ${bankAccount ? "text-steel border-rule" : "text-gold border-gold/40"}`}
+        style={bankAccount ? undefined : { color: "#D9A441" }}
+        onClick={() => setShowBank((s) => !s)}
+      >
+        <Landmark size={12} />
+        {bankAccount ? "Cuenta bancaria" : "Sin cuenta bancaria registrada"}
+        <ChevronDown size={12} className={showBank ? "rotate-180" : ""} />
+      </button>
+      {showBank && (
+        <div className="mb-2.5 -mt-1.5 p-2.5 rounded bg-cloud border border-rule text-[12px] flex flex-col gap-1">
+          {bankAccount ? (
+            <>
+              <div className="flex justify-between"><span className="text-steel">Banco</span><span className="font-semibold">{bankAccount.bankName}</span></div>
+              <div className="flex justify-between"><span className="text-steel">Tipo de cuenta</span><span className="font-semibold">{bankAccount.bankAccountType}</span></div>
+              <div className="flex justify-between"><span className="text-steel">N° de cuenta</span><span className="font-semibold tabular-nums">{bankAccount.bankAccountNumber}</span></div>
+              <div className="flex justify-between"><span className="text-steel">Titular</span><span className="font-semibold">{bankAccount.bankAccountHolder}</span></div>
+              {bankAccount.holderIdNumber && (
+                <div className="flex justify-between"><span className="text-steel">{bankAccount.holderIdType === "RUC" ? "RUC" : "Cédula"}</span><span className="font-semibold tabular-nums">{bankAccount.holderIdNumber}</span></div>
+              )}
+            </>
+          ) : (
+            <span className="text-steel-dim italic">Este colaborador todavía no registró su cuenta bancaria en Mi Nómina.</span>
+          )}
+        </div>
+      )}
 
       {withValue.length === 0 && <div className="text-[11.5px] text-steel-dim italic">Sin conceptos con valor este período.</div>}
 
@@ -350,10 +393,11 @@ export function PayrollRolesPanel({ canEdit, canProposeFixedBonus, canApproveFix
       {detail && detail.status !== "NOT_GENERATED" && (
         <>
           <div className="flex flex-col gap-2.5 mb-4">
-            {detail.roles.map((r) => (
+            {detail.roles.map((r, i) => (
               <RoleCard
                 key={r.id}
                 role={r}
+                index={i}
                 published={detail.status === "PUBLISHED"}
                 canEdit={canEdit}
                 monthlyRoleId={detail.monthlyRoleIdByEmployee?.[r.employeeId]}

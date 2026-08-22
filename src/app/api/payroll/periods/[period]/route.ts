@@ -16,7 +16,21 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ per
       roles: {
         where: { isCurrent: true },
         orderBy: { employee: { name: "asc" } },
-        include: { employee: { select: { id: true, name: true, position: true } }, lineItems: true },
+        include: {
+          employee: {
+            select: {
+              id: true,
+              name: true,
+              position: true,
+              employeeBankAccounts: {
+                where: { isSelected: true },
+                select: { bankName: true, bankAccountType: true, bankAccountNumber: true, bankAccountHolder: true, holderIdType: true, holderIdNumber: true },
+                take: 1,
+              },
+            },
+          },
+          lineItems: true,
+        },
       },
     },
   });

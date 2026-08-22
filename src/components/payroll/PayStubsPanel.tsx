@@ -6,6 +6,7 @@ import { uploadFile as uploadToStorage } from "@/lib/uploadFile";
 import { compressImage } from "@/lib/compressImage";
 import { PayrollChat } from "@/components/payroll/PayrollChat";
 import { MonthlyLegalRolePanel } from "@/components/payroll/MonthlyLegalRolePanel";
+import { MyBankAccountPanel } from "@/components/payroll/MyBankAccountPanel";
 import { MyCeoBonusesPanel } from "@/components/payroll/MyCeoBonusesPanel";
 import { MyManagementDeductionsPanel } from "@/components/payroll/MyManagementDeductionsPanel";
 
@@ -268,6 +269,7 @@ export function PayStubsPanel({
     return (
       <div>
         <MonthlyLegalRolePanel />
+        <MyBankAccountPanel />
         <MyManagementDeductionsPanel />
         <MyCeoBonusesPanel />
 
