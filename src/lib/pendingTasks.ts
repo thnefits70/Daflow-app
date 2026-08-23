@@ -301,6 +301,7 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   anticipos_aprobacion: "Anticipos por aprobar",
   descuentos_sin_aceptar: "Descuentos por mala gestión sin aceptar",
   mis_descuentos_pendientes: "Tus descuentos por mala gestión — falta aceptar",
+  mi_cuenta_bancaria: "Tu cuenta bancaria — falta registrarla",
   compras_personales_confirmar: "Compras personales — falta confirmar producto/cantidad",
   compras_personales_precio: "Compras personales — falta cerrar el precio",
   compras_personales_transferencia: "Compras personales — comprobante por confirmar",
@@ -1212,6 +1213,27 @@ async function getMyManagementDeductionPendingItem(userId: string, href: string)
   };
 }
 
+// Confirmado 2026-08-23: pedido explícito del usuario — cualquier
+// colaborador que todavía no matriculó su cuenta bancaria (ver
+// MyBankAccountPanel, /area/roles-de-pago) lo ve como pendiente en Inicio,
+// con una descripción breve de para qué sirve, hasta que la registre. Mismo
+// patrón "por dato propio" que getMyManagementDeductionPendingItem — aplica
+// a cualquiera, líder o no, de cualquier departamento. Admin queda afuera a
+// propósito: /api/employee-bank-account nunca deja registrar cuenta al rol
+// admin, no cobra por este sistema.
+async function getMyBankAccountPendingItem(userId: string, href: string): Promise<PendingItem | null> {
+  const hasAccount = (await prisma.employeeBankAccount.count({ where: { employeeId: userId } })) > 0;
+  if (hasAccount) return null;
+  return {
+    type: "mi_cuenta_bancaria",
+    icon: "🏦",
+    label: "Registra tu cuenta bancaria",
+    meta: "Es a donde Nairoby te transfiere el sueldo, anticipos y bonos — sin ella no te puede pagar.",
+    overdue: true,
+    href,
+  };
+}
+
 // Confirmado 2026-08-19: pedido explícito del usuario — acceso directo
 // para Daniel cuando hay lotes de Reingreso de Mercadería ya enviados por
 // el equipo y esperando su revisión (submittedAt no nulo, danielApprovedAt
@@ -1569,6 +1591,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
   // Aplica a cualquier colaborador, líder o no — ver comentario en la
   // función.
   const myDeductionItem = await getMyManagementDeductionPendingItem(actor.userId, "/area/roles-de-pago");
+  const myBankAccountItem = await getMyBankAccountPendingItem(actor.userId, "/area/roles-de-pago");
   const myPersonalPurchasePaymentItem = await getMyPersonalPurchasePaymentPendingItem(actor.userId, "/area/compras-personales");
   const myPersonalPurchaseStatusItem = await getMyPersonalPurchaseStatusPendingItem(actor.userId, "/area/compras-personales");
 
@@ -1582,6 +1605,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
   if (!me.isLeader || !me.leadsDeptId || !me.leadsDept) {
     const teamItems: PendingItem[] = [];
     if (myDeductionItem) teamItems.push(myDeductionItem);
+    if (myBankAccountItem) teamItems.push(myBankAccountItem);
     if (myPersonalPurchasePaymentItem) teamItems.push(myPersonalPurchasePaymentItem);
     if (myPersonalPurchaseStatusItem) teamItems.push(myPersonalPurchaseStatusItem);
     if (me.department?.code === "INV") {
@@ -1598,6 +1622,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
 
   const items: PendingItem[] = [];
   if (myDeductionItem) items.push(myDeductionItem);
+  if (myBankAccountItem) items.push(myBankAccountItem);
   if (myPersonalPurchasePaymentItem) items.push(myPersonalPurchasePaymentItem);
   if (myPersonalPurchaseStatusItem) items.push(myPersonalPurchaseStatusItem);
   let monthly = false;
