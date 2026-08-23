@@ -7,11 +7,16 @@ type JustGroupDTO = {
   name: string;
   totalGoodQty: number;
   itemIds: string[];
+  canUploadNow: boolean;
   breakdown: { id: string; batchCode: string; goodQty: number; createdAt: string }[];
 };
 
 function fmt(iso: string) {
   return new Date(iso).toLocaleString("es-EC", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+}
+
+function fmtDay(iso: string) {
+  return new Date(iso).toLocaleDateString("es-EC", { weekday: "long", day: "2-digit", month: "short" });
 }
 
 // Confirmado 2026-08-21: lo dañado ("no solucionado") ya no se cierra acá
@@ -20,6 +25,8 @@ function fmt(iso: string) {
 // proceso reingreso+baja.
 export function CloseQueues() {
   const [forJust, setForJust] = useState<JustGroupDTO[]>([]);
+  const [justUploadMinQty, setJustUploadMinQty] = useState(10);
+  const [nextEligibleDay, setNextEligibleDay] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [busyName, setBusyName] = useState<string | null>(null);
   const [expandedJust, setExpandedJust] = useState<string | null>(null);
@@ -27,7 +34,11 @@ export function CloseQueues() {
   function load() {
     fetch("/api/merchandise-reentry/batches/close")
       .then((r) => r.json())
-      .then((data) => setForJust(data.forJust ?? []))
+      .then((data) => {
+        setForJust(data.forJust ?? []);
+        setJustUploadMinQty(data.justUploadMinQty ?? 10);
+        setNextEligibleDay(data.nextEligibleDay ?? null);
+      })
       .catch(() => setForJust([]))
       .finally(() => setLoading(false));
   }
@@ -54,6 +65,7 @@ export function CloseQueues() {
         <span className="text-[13.5px] font-bold">Para ingresar a Just</span>
         <span className="font-mono text-[10px] font-bold text-teal bg-teal/15 border border-teal/40 rounded-full px-2 py-0.5">{forJust.length}</span>
       </div>
+      <div className="text-[11px] text-steel mb-3">Ordenado de mayor a menor cantidad. Más de {justUploadMinQty} unidades se sube apenas esté listo; con {justUploadMinQty} o menos, se junta y se sube el último día laboral de la semana.</div>
       <div className="flex flex-col gap-2.5 max-w-xl">
         {forJust.length === 0 && <div className="text-[12px] text-steel border-[1.5px] border-dashed border-rule rounded-md p-5 text-center">Nada pendiente por ahora.</div>}
         {forJust.map((group) => (
@@ -74,14 +86,23 @@ export function CloseQueues() {
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-[12px] text-green font-semibold">{group.totalGoodQty} unidades buenas{group.breakdown.length > 1 ? ` · ${group.breakdown.length} lotes` : ""}</span>
-                <button
-                  type="button"
-                  disabled={busyName === group.name}
-                  className="rounded border border-teal bg-teal px-3 py-1.5 text-[11.5px] font-bold text-navy cursor-pointer disabled:opacity-60"
-                  onClick={() => markJustUploaded(group)}
-                >
-                  ✓ Subido a Just
-                </button>
+                {group.canUploadNow ? (
+                  <button
+                    type="button"
+                    disabled={busyName === group.name}
+                    className="rounded border border-teal bg-teal px-3 py-1.5 text-[11.5px] font-bold text-navy cursor-pointer disabled:opacity-60"
+                    onClick={() => markJustUploaded(group)}
+                  >
+                    ✓ Subido a Just
+                  </button>
+                ) : (
+                  <span
+                    title={`${justUploadMinQty} unidades o menos — se habilita el último día laboral de la semana`}
+                    className="font-mono text-[10px] font-semibold text-steel bg-cloud border border-rule rounded-full px-2 py-1 whitespace-nowrap"
+                  >
+                    Se habilita {nextEligibleDay ? fmtDay(nextEligibleDay) : "el último día laboral"}
+                  </span>
+                )}
               </div>
             </div>
             {expandedJust === group.name && (

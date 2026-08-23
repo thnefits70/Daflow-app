@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { getFinanceLeadId } from "@/lib/guards";
 import { sendPushToOwner } from "@/lib/webPush";
 import { notifyOwner } from "@/lib/notifications";
+import { isBusinessDay } from "@/lib/recognition";
 
 // Mismo truco de desplazamiento que src/lib/businessHours.ts: restar el
 // offset antes de leer con getUTC* hace que esos getters devuelvan la hora
@@ -38,6 +39,35 @@ export async function nextMerchandiseReentryNumber(): Promise<number> {
 
 export function formatMerchandiseReentryCode(batchNumber: number): string {
   return `RM-${String(batchNumber).padStart(4, "0")}`;
+}
+
+// Confirmado 2026-08-23: para no subir a Just en lotes chicos uno por uno,
+// un producto con MÁS de esta cantidad de unidades buenas se puede subir
+// apenas esté listo; con esta cantidad o menos, espera al último día
+// laboral de la semana (ver isTodayLastBusinessDayOfWeek) para juntarse
+// con el resto de lo chico y subirse todo junto.
+export const JUST_UPLOAD_MIN_QTY = 10;
+
+function todayEcuadorMidnightUTC(): Date {
+  const now = new Date(Date.now() - ECUADOR_OFFSET_MS);
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+}
+
+// Semana laboral administrativa lunes-viernes (distinta del horario real de
+// tienda que sí abre el sábado — ver businessHours.ts) para la regla de
+// "subir lo chico a Just una vez por semana". Si el viernes es feriado
+// ecuatoriano, retrocede al día laboral anterior — mismo patrón que
+// celebrationDateFor() en birthdays.ts.
+export function lastBusinessDayOfWeek(d: Date): Date {
+  const daysSinceMonday = (d.getUTCDay() + 6) % 7; // lunes=0 .. domingo=6
+  let friday = new Date(d.getTime() + (4 - daysSinceMonday) * 86400000);
+  while (!isBusinessDay(friday)) friday = new Date(friday.getTime() - 86400000);
+  return friday;
+}
+
+export function isTodayLastBusinessDayOfWeek(): boolean {
+  const today = todayEcuadorMidnightUTC();
+  return lastBusinessDayOfWeek(today).getTime() === today.getTime();
 }
 
 // Bolsa semanal donde caen las unidades "no solucionadas" (ver
@@ -127,7 +157,10 @@ export type MerchandiseReentryItemForGrouping = {
 // Nairoby ya no confirma item por item: productos con el mismo nombre final
 // (misma lógica que itemDisplayName, sin importar de qué lote RM vengan) se
 // agrupan en una sola tarjeta con la suma de unidades, para un solo clic en
-// vez de repetir la acción por cada ocurrencia del mismo producto.
+// vez de repetir la acción por cada ocurrencia del mismo producto. Orden
+// confirmado 2026-08-23: de mayor a menor cantidad — los lotes grandes (que
+// se pueden subir de inmediato) quedan arriba, los chicos (que esperan al
+// último día laboral) abajo.
 export function groupItemsForJustUpload(items: MerchandiseReentryItemForGrouping[]) {
   const groups = new Map<string, { name: string; totalGoodQty: number; earliestAt: Date; itemIds: string[]; breakdown: { id: string; batchCode: string; goodQty: number; createdAt: Date }[] }>();
   for (const item of items) {
@@ -139,7 +172,7 @@ export function groupItemsForJustUpload(items: MerchandiseReentryItemForGrouping
     g.breakdown.push({ id: item.id, batchCode: item.batch.code, goodQty: item.goodQty, createdAt: item.createdAt });
     groups.set(name, g);
   }
-  return [...groups.values()].sort((a, b) => a.earliestAt.getTime() - b.earliestAt.getTime());
+  return [...groups.values()].sort((a, b) => b.totalGoodQty - a.totalGoodQty);
 }
 
 export function groupItemsForWriteOff(items: MerchandiseReentryItemForGrouping[]) {

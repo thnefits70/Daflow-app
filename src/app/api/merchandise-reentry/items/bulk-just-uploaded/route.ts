@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { canCloseMerchandiseReentry } from "@/lib/guards";
-import { maybeMarkBatchClosed } from "@/lib/merchandiseReentry";
+import { maybeMarkBatchClosed, JUST_UPLOAD_MIN_QTY, isTodayLastBusinessDayOfWeek } from "@/lib/merchandiseReentry";
 
 // Confirma de un solo clic el consolidado de un producto: mismo efecto que
 // marcar "Subido a Just" item por item, pero para todas las unidades
@@ -27,6 +27,14 @@ export async function POST(req: Request) {
     if (!item.batch.danielApprovedAt) return NextResponse.json({ error: "Hay un lote que todavía no fue aprobado por Daniel." }, { status: 409 });
     if (item.goodQty <= 0) return NextResponse.json({ error: "Hay un producto sin unidades buenas." }, { status: 409 });
     if (item.justUploadedAt) return NextResponse.json({ error: "Ya estaba marcado como subido a Just." }, { status: 409 });
+  }
+
+  // Confirmado 2026-08-23: los grupos de JUST_UPLOAD_MIN_QTY unidades o
+  // menos solo se pueden subir el último día laboral de la semana — se
+  // valida acá también, no solo ocultando el botón en el cliente.
+  const totalGoodQty = items.reduce((s, i) => s + i.goodQty, 0);
+  if (totalGoodQty <= JUST_UPLOAD_MIN_QTY && !isTodayLastBusinessDayOfWeek()) {
+    return NextResponse.json({ error: `Este producto tiene ${JUST_UPLOAD_MIN_QTY} unidades o menos — solo se puede subir a Just el último día laboral de la semana.` }, { status: 409 });
   }
 
   await prisma.merchandiseReentryItem.updateMany({
