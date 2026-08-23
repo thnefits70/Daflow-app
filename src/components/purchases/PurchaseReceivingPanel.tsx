@@ -835,15 +835,17 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                               type="button"
                               disabled={
                                 busy ||
+                                aiChecking ||
                                 receivedPhotoUrls.length < 2 ||
                                 !receivedQty ||
                                 Number(receivedQty) !== (r.urgentReports.length > 0 ? goodQuantity(r) : r.quantity) ||
                                 (aiResult?.likelyMatch === false && !(aiResult.minorDifferenceOnly && minorDifferenceConfirmed))
                               }
+                              title={aiChecking ? "Espera a que la IA termine de comparar las fotos" : undefined}
                               className="rounded border border-green bg-green px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer disabled:opacity-60"
                               onClick={() => confirmReceipt(r.id)}
                             >
-                              ✓ Confirmar que llegó
+                              {aiChecking ? "Verificando fotos…" : "✓ Confirmar que llegó"}
                             </button>
                             {r.urgentReports.length === 0 && (
                               <button
