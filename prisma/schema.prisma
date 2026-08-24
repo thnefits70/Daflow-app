@@ -2627,9 +2627,15 @@ enum PayrollTransferStatus {
   COMPLETED
 }
 
+// Confirmado 2026-08-24: el destino dejó de ser 100% automático por
+// quincena — Nairoby elige entre estas 3 al enviar el total (con un
+// default sugerido según el período), para poder evitar una cuenta sin
+// fondos. ADMIN_COMPANY reusa la misma cuenta de CompanyBankAccount que ya
+// se usa para compras personales (Pichincha) — no es una cuenta nueva.
 enum PayrollTransferDestination {
   NAIROBY
   ADMIN_PRODUBANCO
+  ADMIN_COMPANY
 }
 
 // Confirmado 2026-08-23: transferencia real de fondos por quincena — no es

@@ -524,11 +524,12 @@ export function SettingsPanel({
 
       <div className="bg-surface border border-rule rounded p-4.5">
         <label className="flex items-center gap-1.5 mb-3 text-[11px] font-semibold tracking-wide uppercase text-steel">
-          <Landmark size={12} /> Cuenta Produbanco para nómina (fin de mes)
+          <Landmark size={12} /> Cuenta Produbanco para nómina
         </label>
         <div className="text-[12px] text-steel mb-3">
-          A esta cuenta se transfiere el total de la 2da quincena/fin de mes — Nairoby entra ahí y paga a cada
-          colaborador. Confidencial: solo vos y Nairoby la ven, nunca los demás colaboradores.
+          Una de las 3 cuentas que Nairoby puede elegir como destino al enviar el total de una quincena (ella entra
+          ahí y paga a cada colaborador) — no es automática, ella decide cuál usar según cuál tenga fondos.
+          Confidencial: solo vos y Nairoby la ven, nunca los demás colaboradores.
         </div>
         <div className="grid grid-cols-2 gap-2.5 mb-2.5">
           <input

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Landmark, ChevronDown, Send } from "lucide-react";
 import { ProofPreview } from "@/components/shared/ProofPreview";
 import { usePasteFile } from "@/lib/usePasteFile";
@@ -15,10 +15,12 @@ type BankAccount = {
   holderIdNumber: string | null;
 };
 
+export type Destination = "NAIROBY" | "ADMIN_PRODUBANCO" | "ADMIN_COMPANY";
+
 export type Transfer = {
   status: "PENDING_APPROVAL" | "APPROVED" | "REJECTED" | "COMPLETED";
   totalAmount: number;
-  destination: "NAIROBY" | "ADMIN_PRODUBANCO";
+  destination: Destination;
   rejectionReason: string | null;
   proofUrl: string | null;
   proofName: string | null;
@@ -35,6 +37,12 @@ const STATUS_LABEL: Record<Transfer["status"], string> = {
   APPROVED: "Aprobado — falta transferir",
   REJECTED: "Rechazado",
   COMPLETED: "Completado",
+};
+
+const DESTINATION_LABEL: Record<Destination, string> = {
+  NAIROBY: "Cuenta de Nairoby",
+  ADMIN_PRODUBANCO: "Cuenta Produbanco de nómina",
+  ADMIN_COMPANY: "Cuenta para recibir transferencias",
 };
 
 function BankAccountBlock({ account }: { account: BankAccount | null }) {
@@ -160,14 +168,83 @@ function ProofUploader({ period, onSent }: { period: string; onSent: () => void 
   );
 }
 
+// Confirmado 2026-08-24: pedido explícito del usuario — la cuenta destino
+// dejó de ser 100% automática por quincena. Nairoby elige entre las 3
+// cuentas ya existentes en la app (nunca inventa una nueva acá): su propia
+// cuenta, la Produbanco de nómina, y la de la empresa para recibir
+// transferencias (la misma que usan las compras personales). El default
+// preseleccionado sigue el criterio de siempre (fin de mes -> Produbanco,
+// si no -> Nairoby) pero es editable — así puede esquivar una cuenta que
+// se quedó sin fondos sin tener que avisarle al admin por otro lado.
+function DestinationPicker({ destination, onChange }: { destination: Destination; onChange: (d: Destination) => void }) {
+  const [nairobyAccount, setNairobyAccount] = useState<BankAccount | null | undefined>(undefined);
+  const [produbanco, setProdubanco] = useState<BankAccount | null | undefined>(undefined);
+  const [company, setCompany] = useState<BankAccount | null | undefined>(undefined);
+
+  useEffect(() => {
+    fetch("/api/employee-bank-account")
+      .then((r) => (r.ok ? r.json() : []))
+      .then((accs: (BankAccount & { isSelected: boolean })[]) => setNairobyAccount(accs.find((a) => a.isSelected) ?? accs[0] ?? null));
+    fetch("/api/admin-payroll-bank-account").then((r) => (r.ok ? r.json() : null)).then(setProdubanco);
+    fetch("/api/company-bank-account").then((r) => (r.ok ? r.json() : null)).then(setCompany);
+  }, []);
+
+  const options: { value: Destination; account: BankAccount | null | undefined }[] = [
+    { value: "ADMIN_PRODUBANCO", account: produbanco },
+    { value: "ADMIN_COMPANY", account: company },
+    { value: "NAIROBY", account: nairobyAccount },
+  ];
+
+  return (
+    <div className="mb-2.5">
+      <div className="text-[10px] font-semibold uppercase tracking-wide text-steel mb-1.5">¿A qué cuenta transferís?</div>
+      <div className="flex flex-col gap-1.5">
+        {options.map((opt) => {
+          const loaded = opt.account !== undefined;
+          const configured = !!opt.account?.bankAccountNumber;
+          const disabled = loaded && !configured;
+          return (
+            <label
+              key={opt.value}
+              className={`flex items-center gap-2 text-[12px] rounded border px-2.5 py-1.5 ${
+                disabled ? "opacity-50 cursor-not-allowed border-rule" : "cursor-pointer"
+              } ${destination === opt.value && !disabled ? "border-teal bg-teal/10" : "border-rule"}`}
+            >
+              <input
+                type="radio"
+                name="payroll-destination"
+                disabled={disabled}
+                checked={destination === opt.value}
+                onChange={() => onChange(opt.value)}
+              />
+              <span className="flex-1">
+                <span className="font-semibold">{DESTINATION_LABEL[opt.value]}</span>
+                {loaded && configured && (
+                  <span className="text-steel-dim"> — {opt.account!.bankName} ····{opt.account!.bankAccountNumber.slice(-4)}</span>
+                )}
+                {loaded && !configured && <span className="text-gold"> — sin registrar</span>}
+              </span>
+            </label>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function ResendButton({ period, onSent }: { period: string; onSent: () => void }) {
+  const [destination, setDestination] = useState<Destination>(period.endsWith("-Q2") ? "ADMIN_PRODUBANCO" : "NAIROBY");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
 
   async function send() {
     setBusy(true);
     setErr("");
-    const res = await fetch(`/api/payroll/periods/${period}/transfer/confirm`, { method: "POST" });
+    const res = await fetch(`/api/payroll/periods/${period}/transfer/confirm`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ destination }),
+    });
     setBusy(false);
     if (!res.ok) {
       const data = await res.json().catch(() => null);
@@ -179,6 +256,7 @@ function ResendButton({ period, onSent }: { period: string; onSent: () => void }
 
   return (
     <div className="mt-2">
+      <DestinationPicker destination={destination} onChange={setDestination} />
       {err && <div className="text-red text-[12px] mb-1.5">{err}</div>}
       <button type="button" disabled={busy} className="text-[12px] font-bold bg-teal text-white rounded-md px-3.5 py-1.5 cursor-pointer disabled:opacity-50" onClick={send}>
         {busy ? "Enviando…" : "Enviar total para transferir"}
@@ -258,7 +336,7 @@ export function PayrollTransferPanel({
     return null;
   }
 
-  const destinationLabel = transfer.destination === "NAIROBY" ? "Cuenta de Nairoby (1ra quincena)" : "Cuenta Produbanco del admin (fin de mes)";
+  const destinationLabel = DESTINATION_LABEL[transfer.destination];
 
   return (
     <div className="bg-surface border border-rule rounded-md p-3.5 mb-4">
