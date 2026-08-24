@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { FileText, Upload, CheckCircle2, AlertTriangle, Lock, Landmark, LineChart, ChevronDown, Award } from "lucide-react";
 import { actorName } from "@/lib/actorName";
@@ -204,9 +204,7 @@ export function PurchaseApprovalInbox() {
   }
 
   const { onPaste: onPasteProof, onMouseEnter: onPasteProofHoverIn, onMouseLeave: onPasteProofHoverOut, onTapPaste: onTapPasteProof, tapHint: tapHintProof } = usePasteFile((file) => uploadProof(file));
-  const proofFileInputRef = useRef<HTMLInputElement>(null);
   const { onPaste: onPasteShippingProof, onMouseEnter: onPasteShippingProofHoverIn, onMouseLeave: onPasteShippingProofHoverOut, onTapPaste: onTapPasteShippingProof, tapHint: tapHintShippingProof } = usePasteFile((file) => uploadShippingProof(file));
-  const shippingProofFileInputRef = useRef<HTMLInputElement>(null);
 
   function toggleHistory(groupId: string, catalogItemId: string) {
     setOpenSupplierId(null);
@@ -768,15 +766,11 @@ export function PurchaseApprovalInbox() {
                     >
                       {uploadingProof ? <span className="w-3.5 h-3.5 rounded-full border-2 border-rule border-t-teal animate-spin" /> : <Upload size={14} />}
                       Pega la foto aquí (Ctrl+V, o toca la casilla en celular)
-                      <input ref={proofFileInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && uploadProof(e.target.files[0])} />
                     </div>
-                    <button
-                      type="button"
-                      className="block w-full mt-1.5 py-1.5 text-center text-[12px] font-medium text-teal underline decoration-dotted cursor-pointer"
-                      onClick={() => proofFileInputRef.current?.click()}
-                    >
+                    <label className="block w-full mt-1.5 py-1.5 text-center text-[12px] font-medium text-teal underline decoration-dotted cursor-pointer">
                       o selecciona un archivo
-                    </button>
+                      <input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && uploadProof(e.target.files[0])} />
+                    </label>
                     {tapHintProof && <p className="mt-1 text-[10.5px] text-red text-center">{tapHintProof}</p>}
                     <label className="flex items-center justify-center gap-1.5 mt-1.5 text-[10.5px] text-steel cursor-pointer hover:text-teal">
                       <FileText size={10.5} /> ¿Es un PDF? Subir documento
@@ -829,15 +823,11 @@ export function PurchaseApprovalInbox() {
                         >
                           {uploadingShippingProof ? <span className="w-3.5 h-3.5 rounded-full border-2 border-rule border-t-teal animate-spin" /> : <Upload size={14} />}
                           Pega la foto aquí (Ctrl+V, o toca la casilla en celular)
-                          <input ref={shippingProofFileInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && uploadShippingProof(e.target.files[0])} />
                         </div>
-                        <button
-                          type="button"
-                          className="block w-full mt-1.5 py-1.5 text-center text-[12px] font-medium text-teal underline decoration-dotted cursor-pointer"
-                          onClick={() => shippingProofFileInputRef.current?.click()}
-                        >
+                        <label className="block w-full mt-1.5 py-1.5 text-center text-[12px] font-medium text-teal underline decoration-dotted cursor-pointer">
                           o selecciona un archivo
-                        </button>
+                          <input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && uploadShippingProof(e.target.files[0])} />
+                        </label>
                         {tapHintShippingProof && <p className="mt-1 text-[10.5px] text-red text-center">{tapHintShippingProof}</p>}
                         <label className="flex items-center justify-center gap-1.5 mt-1.5 text-[10.5px] text-steel cursor-pointer hover:text-teal">
                           <FileText size={10.5} /> ¿Es un PDF? Subir documento
