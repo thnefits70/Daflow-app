@@ -9,6 +9,7 @@ import { compressImage } from "@/lib/compressImage";
 import { usePasteFile } from "@/lib/usePasteFile";
 import { actorName } from "@/lib/actorName";
 import { ProofPreview } from "@/components/shared/ProofPreview";
+import { TabGuide } from "@/components/shared/TabGuide";
 import { AdminPayeePicker, type AdminPaymentPayeeDTO, type PayeeBankAccountDTO } from "@/components/finance/AdminPayeePicker";
 import type { EligiblePaymentOrderDTO } from "@/lib/pettyCash";
 
@@ -444,6 +445,13 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
 
   return (
     <div>
+      <TabGuide storageKey="pagos-administrativos">
+        {isAdmin ? (
+          <>Acá pagas lo que Nairoby registra: sube el comprobante de la transferencia para cada solicitud pendiente. Ella confirma después que quedó correcto para cerrar el ciclo.</>
+        ) : (
+          <>Registra acá los pagos administrativos recurrentes (luz, agua, etc.) y variables, con la declaración de lo que hay que pagar. Cuando el admin transfiera y suba el comprobante, confirma que está correcto para cerrar el ciclo.</>
+        )}
+      </TabGuide>
       {pendingThisMonth.length > 0 && (
         <div className="mb-4">
           <div className="text-[11px] font-semibold uppercase tracking-wide text-steel mb-2">Pendientes de registrar este mes</div>

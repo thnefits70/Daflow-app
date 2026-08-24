@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, Trash2, Pencil, MessageCircle, MapPin, Tag, Check, X, Search, Globe, Lock, Eye, EyeOff } from "lucide-react";
 import { LocationPicker } from "./LocationPicker";
+import { TabGuide } from "@/components/shared/TabGuide";
 
 export type SupplierContactDTO = { id?: string; label: string; whatsapp: string };
 export type ChannelPlatform = "TELEGRAM" | "INSTAGRAM" | "FACEBOOK" | "OTHER";
@@ -412,6 +413,13 @@ export function SuppliersPanel({
 
       {(tab === "directorio" || tab === "transportistas") && (
         <div>
+          <TabGuide storageKey="proveedores-directorio">
+            {(listType === "CARRIER" ? canAddCarrier : canAdd) ? (
+              <>Acá vive el directorio de contactos ya aprobados. Agrega uno nuevo con el botón de arriba — si lo propones sin ser admin, queda pendiente de aprobación en la pestaña &quot;Pendientes&quot; antes de aparecer aquí.</>
+            ) : (
+              <>Consulta acá los contactos ya aprobados de proveedores y transportistas.</>
+            )}
+          </TabGuide>
           <div className="flex items-center justify-between gap-3 mb-4">
             <div className="text-[13px] text-steel">
               {listType === "CARRIER" ? "Transportistas y sus contactos de WhatsApp." : "Directorio de proveedores y sus contactos de WhatsApp."}
@@ -688,6 +696,9 @@ export function SuppliersPanel({
 
       {tab === "pendientes" && canReview && (
         <div>
+          <TabGuide storageKey="proveedores-pendientes">
+            Aprueba o rechaza acá lo que el equipo de Análisis de Mercado propone antes de que entre al directorio.
+          </TabGuide>
           {pending.length === 0 && (
             <div className="border-[1.5px] border-dashed border-rule rounded-md p-8.5 text-center text-steel text-[13.5px]">
               No hay propuestas pendientes ni rechazadas.

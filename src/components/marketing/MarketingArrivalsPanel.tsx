@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Camera, ClipboardCheck, CheckCircle2 } from "lucide-react";
 import { actorName } from "@/lib/actorName";
+import { TabGuide } from "@/components/shared/TabGuide";
 
 type Row = {
   id: string;
@@ -114,6 +115,13 @@ export function MarketingArrivalsPanel({ canConfirmDesign, canConfirmAdvisor }: 
 
   return (
     <div className="flex flex-col gap-3">
+      <TabGuide storageKey="mercaderia-recibida">
+        {canConfirmDesign || canConfirmAdvisor ? (
+          <>Acá aparece cada producto nuevo que llegó a bodega. Confirma tu parte (diseño o asesor, según te toque) cuando ya la hiciste — el filtro de arriba te muestra solo lo que tienes pendiente.</>
+        ) : (
+          <>Vista de solo lectura de la mercadería nueva que va llegando y en qué paso va: confirmación de diseño y confirmación de asesor.</>
+        )}
+      </TabGuide>
       {confirmers.length > 0 && (
         <div className="flex flex-wrap items-center gap-1.5">
           <button
