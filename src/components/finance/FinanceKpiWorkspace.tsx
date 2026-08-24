@@ -4,6 +4,7 @@ import { useState } from "react";
 import { FinanceDashboard } from "./FinanceDashboard";
 import { FinanceUploadPanel } from "./FinanceUploadPanel";
 import { InventoryKpisPanel } from "./InventoryKpisPanel";
+import { TabGuide } from "@/components/shared/TabGuide";
 import type { FinanceKpiDataDTO } from "@/lib/financeKpis";
 
 // Owns the Dashboard / Cargar plantilla sub-tab, nested inside the existing
@@ -55,9 +56,27 @@ export function FinanceKpiWorkspace({
         )}
       </div>
 
-      {subTab === "dashboard" && <FinanceDashboard deptId={deptId} data={data} editable={editable} />}
+      {subTab === "dashboard" && (
+        <>
+          <TabGuide storageKey="kpis-dashboard">
+            {editable ? (
+              <>Vista de los KPIs financieros de esta área, calculados a partir de lo que subes cada mes en &quot;Cargar plantilla&quot;.</>
+            ) : (
+              <>Vista de solo lectura de los KPIs financieros de esta área.</>
+            )}
+          </TabGuide>
+          <FinanceDashboard deptId={deptId} data={data} editable={editable} />
+        </>
+      )}
       {subTab === "inventario" && <InventoryKpisPanel data={data.inventoryKpis} />}
-      {subTab === "plantilla" && editable && <FinanceUploadPanel deptId={deptId} data={data} />}
+      {subTab === "plantilla" && editable && (
+        <>
+          <TabGuide storageKey="kpis-plantilla">
+            Sube acá cada mes la plantilla de ventas y costos por operación — el sistema recalcula todos los KPIs del dashboard con esos datos.
+          </TabGuide>
+          <FinanceUploadPanel deptId={deptId} data={data} />
+        </>
+      )}
     </div>
   );
 }
