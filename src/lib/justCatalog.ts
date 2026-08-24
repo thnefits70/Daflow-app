@@ -95,7 +95,7 @@ export async function classifyJustCatalogRows(rows: JustCatalogParsedRow[]): Pro
     .filter(([, codes]) => codes.length > 1)
     .map(([, codes]) => {
       const sample = rows.find((r) => r.code === codes[0]);
-      return `"${sample?.name ?? ""}" aparece ${codes.length} veces con códigos distintos (${codes.join(", ")}) — revisa que no sea el mismo producto repetido.`;
+      return `"${sample?.name ?? ""}" aparece ${codes.length} veces EN EL ARCHIVO DE JUST con códigos distintos (${codes.join(", ")}) — revisa en Just si es el mismo producto repetido por error o son productos distintos.`;
     });
 
   const newRows: JustCatalogParsedRow[] = [];
