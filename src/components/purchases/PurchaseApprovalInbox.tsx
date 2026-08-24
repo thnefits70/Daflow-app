@@ -43,7 +43,7 @@ type Row = {
   shippingPaymentTiming: "WITH_PURCHASE" | "ON_DELIVERY" | null;
   shippingCostTotal: number | null;
   catalogItemId: string;
-  catalogItem: { name: string };
+  catalogItem: { name: string; photos: string[] };
   supplier: { id: string; name: string };
   bankAccount: BankAccount | null;
   bankAccountChangeRequestedAt: string | null;
@@ -130,6 +130,7 @@ export function PurchaseApprovalInbox() {
   const [requestingAccountChangeFor, setRequestingAccountChangeFor] = useState<string | null>(null);
   const [accountChangeNote, setAccountChangeNote] = useState("");
   const [busyAccountGroup, setBusyAccountGroup] = useState<string | null>(null);
+  const [zoomedPhoto, setZoomedPhoto] = useState<string | null>(null);
 
   // Confirmado 2026-08-13: fix — esta pantalla no tenía en cuenta el
   // crédito que ya quedó reservado para esta solicitud desde que se pidió
@@ -407,7 +408,18 @@ export function PurchaseApprovalInbox() {
             <div className="flex items-start justify-between gap-3 flex-wrap mb-1.5">
               <div>
                 {g.map((r) => (
-                  <div key={r.id} className="text-[14px] font-bold">{r.catalogItem.name} · {r.quantity} un. — ${r.unitCost.toFixed(2)}/un.</div>
+                  <div key={r.id} className="flex items-center gap-1.5 text-[14px] font-bold">
+                    {r.catalogItem.photos[0] && (
+                      <img
+                        src={r.catalogItem.photos[0]}
+                        alt=""
+                        title="Doble clic para ampliar"
+                        onDoubleClick={() => setZoomedPhoto(r.catalogItem.photos[0])}
+                        className="w-6 h-6 rounded object-cover border border-rule cursor-zoom-in shrink-0"
+                      />
+                    )}
+                    <span>{r.catalogItem.name} · {r.quantity} un. — ${r.unitCost.toFixed(2)}/un.</span>
+                  </div>
                 ))}
                 <div className="text-[11.5px] text-steel mt-0.5">{g[0].supplier.name}</div>
                 <div className="text-[10px] text-steel-dim mt-0.5">
@@ -810,6 +822,15 @@ export function PurchaseApprovalInbox() {
           </div>
         );
       })}
+
+      {zoomedPhoto && (
+        <div
+          className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-6 cursor-zoom-out"
+          onClick={() => setZoomedPhoto(null)}
+        >
+          <img src={zoomedPhoto} alt="" className="max-w-full max-h-full rounded-md object-contain" />
+        </div>
+      )}
     </div>
   );
 }
