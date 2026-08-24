@@ -768,11 +768,15 @@ export function PurchaseApprovalInbox() {
                     >
                       {uploadingProof ? <span className="w-3.5 h-3.5 rounded-full border-2 border-rule border-t-teal animate-spin" /> : <Upload size={14} />}
                       Pega la foto aquí (Ctrl+V, o toca la casilla en celular)
-                      <button type="button" className="text-[10.5px] underline decoration-dotted opacity-80 hover:opacity-100 cursor-pointer" onClick={(e) => { e.stopPropagation(); proofFileInputRef.current?.click(); }}>
-                        o selecciona un archivo
-                      </button>
                       <input ref={proofFileInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && uploadProof(e.target.files[0])} />
                     </div>
+                    <button
+                      type="button"
+                      className="block w-full mt-1.5 py-1.5 text-center text-[12px] font-medium text-teal underline decoration-dotted cursor-pointer"
+                      onClick={() => proofFileInputRef.current?.click()}
+                    >
+                      o selecciona un archivo
+                    </button>
                     {tapHintProof && <p className="mt-1 text-[10.5px] text-red text-center">{tapHintProof}</p>}
                     <label className="flex items-center justify-center gap-1.5 mt-1.5 text-[10.5px] text-steel cursor-pointer hover:text-teal">
                       <FileText size={10.5} /> ¿Es un PDF? Subir documento
@@ -825,11 +829,15 @@ export function PurchaseApprovalInbox() {
                         >
                           {uploadingShippingProof ? <span className="w-3.5 h-3.5 rounded-full border-2 border-rule border-t-teal animate-spin" /> : <Upload size={14} />}
                           Pega la foto aquí (Ctrl+V, o toca la casilla en celular)
-                          <button type="button" className="text-[10.5px] underline decoration-dotted opacity-80 hover:opacity-100 cursor-pointer" onClick={(e) => { e.stopPropagation(); shippingProofFileInputRef.current?.click(); }}>
-                            o selecciona un archivo
-                          </button>
                           <input ref={shippingProofFileInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && uploadShippingProof(e.target.files[0])} />
                         </div>
+                        <button
+                          type="button"
+                          className="block w-full mt-1.5 py-1.5 text-center text-[12px] font-medium text-teal underline decoration-dotted cursor-pointer"
+                          onClick={() => shippingProofFileInputRef.current?.click()}
+                        >
+                          o selecciona un archivo
+                        </button>
                         {tapHintShippingProof && <p className="mt-1 text-[10.5px] text-red text-center">{tapHintShippingProof}</p>}
                         <label className="flex items-center justify-center gap-1.5 mt-1.5 text-[10.5px] text-steel cursor-pointer hover:text-teal">
                           <FileText size={10.5} /> ¿Es un PDF? Subir documento
