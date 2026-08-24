@@ -107,7 +107,7 @@ function CurrentWeekCard({ batch }: { batch: WeeklyBatchDTO | null }) {
   );
 }
 
-function JustWriteOffCard({ batch, onChanged }: { batch: WeeklyBatchDTO; onChanged: () => void }) {
+function JustWriteOffCard({ batch, canAct, onChanged }: { batch: WeeklyBatchDTO; canAct: boolean; onChanged: () => void }) {
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -129,7 +129,13 @@ function JustWriteOffCard({ batch, onChanged }: { batch: WeeklyBatchDTO; onChang
       <div className="text-[12.5px] font-semibold mb-2">{weekLabel(batch)}</div>
       <GroupList groups={batch.groups} totalLabel={(g) => `${g.totalDamagedQty} unidades${g.breakdown.length > 1 ? ` · ${g.breakdown.length} lotes` : ""}`} />
       {!confirming ? (
-        <button type="button" disabled={busy} className="mt-3 rounded border border-red bg-red px-3 py-1.5 text-[11.5px] font-bold text-white cursor-pointer disabled:opacity-60" onClick={() => setConfirming(true)}>
+        <button
+          type="button"
+          disabled={busy || !canAct}
+          title={!canAct ? "Exclusivo del líder de Inventario" : undefined}
+          className="mt-3 rounded border border-red bg-red px-3 py-1.5 text-[11.5px] font-bold text-white cursor-pointer disabled:opacity-60"
+          onClick={() => setConfirming(true)}
+        >
           Lote dado de baja por producto dañado
         </button>
       ) : (
@@ -275,7 +281,7 @@ function DisposalCard({ batch, onChanged }: { batch: WeeklyBatchDTO; onChanged: 
 // el daño). Pedido 2026-08-21: evita el doble proceso reingreso+baja,
 // deja constancia semanal antes de dar de baja en Just, y agrega
 // verificación física + disposición final a cargo de Nairoby.
-export function WeeklyDamageControl({ canAct, canClose }: { canAct: boolean; canClose: boolean }) {
+export function WeeklyDamageControl({ canAct, canApprove, canClose }: { canAct: boolean; canApprove: boolean; canClose: boolean }) {
   const [data, setData] = useState<SummaryDTO | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -295,16 +301,17 @@ export function WeeklyDamageControl({ canAct, canClose }: { canAct: boolean; can
     <div className="flex flex-col gap-6">
       <CurrentWeekCard batch={data.currentWeek} />
 
-      {canAct && data.needsJustWriteOff.length > 0 && (
+      {(canAct || canApprove) && data.needsJustWriteOff.length > 0 && (
         <div>
           <div className="flex items-center gap-2 mb-2.5">
             <PackageMinus size={15} className="text-red" />
             <span className="text-[13.5px] font-bold">Semanas cerradas, pendientes de baja en Just</span>
             <span className="font-mono text-[10px] font-bold text-red bg-red/15 border border-red/40 rounded-full px-2 py-0.5">{data.needsJustWriteOff.length}</span>
+            {!canAct && <span className="font-mono text-[9.5px] text-steel bg-cloud rounded-full px-1.5 py-0.5">solo lectura</span>}
           </div>
           <div className="flex flex-col gap-2.5">
             {data.needsJustWriteOff.map((b) => (
-              <JustWriteOffCard key={b.id} batch={b} onChanged={load} />
+              <JustWriteOffCard key={b.id} batch={b} canAct={canAct} onChanged={load} />
             ))}
           </div>
         </div>

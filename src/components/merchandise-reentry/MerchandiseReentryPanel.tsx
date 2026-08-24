@@ -70,7 +70,7 @@ export function MerchandiseReentryPanel({
       {tab === "capturar" && canCapture && <CaptureFlow />}
       {tab === "revision" && canApprove && <ReviewInbox canAct={canAct} />}
       {tab === "cierre" && canClose && <CloseQueues />}
-      {tab === "danos" && (canApprove || canClose) && <WeeklyDamageControl canAct={canAct} canClose={canClose} />}
+      {tab === "danos" && (canApprove || canClose) && <WeeklyDamageControl canAct={canAct} canApprove={canApprove} canClose={canClose} />}
       {tab === "productos" && (canApprove || canClose) && <JustCatalogPanel canManage={canManageJustCatalog} />}
       {tab === "historial" && <HistoryList />}
     </div>

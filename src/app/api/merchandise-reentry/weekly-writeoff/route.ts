@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { canActOnMerchandiseReentry, canCloseMerchandiseReentry } from "@/lib/guards";
+import { canActOnMerchandiseReentry, canApproveMerchandiseReentry, canCloseMerchandiseReentry } from "@/lib/guards";
 import { getEcuadorWeekBounds, groupItemsForWriteOff, type MerchandiseReentryItemForGrouping } from "@/lib/merchandiseReentry";
 
 const ITEM_INCLUDE = { catalogItem: { select: { name: true } }, damageReason: { select: { name: true } }, batch: { select: { code: true } } } as const;
@@ -37,8 +37,8 @@ function serialize(b: BatchWithItems) {
 // del sábado por Daniel, verificación + doble confirmación + disposición
 // por Nairoby. Pedido 2026-08-21.
 export async function GET() {
-  const [canAct, canClose] = await Promise.all([canActOnMerchandiseReentry(), canCloseMerchandiseReentry()]);
-  if (!canAct && !canClose) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+  const [canAct, canApprove, canClose] = await Promise.all([canActOnMerchandiseReentry(), canApproveMerchandiseReentry(), canCloseMerchandiseReentry()]);
+  if (!canAct && !canApprove && !canClose) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
   const { weekStart: currentWeekStart } = getEcuadorWeekBounds(new Date());
 
@@ -55,7 +55,10 @@ export async function GET() {
 
   return NextResponse.json({
     currentWeek: currentWeek && currentWeek.items.length > 0 ? serialize(currentWeek) : null,
-    needsJustWriteOff: canAct ? needsJustWriteOff.map(serialize) : [],
+    // canApprove (admin oversight) también ve esta cola, igual que en
+    // Revisión — solo lectura, sin el botón habilitado (ver
+    // WeeklyDamageControl.tsx / ReviewInbox.tsx, mismo patrón).
+    needsJustWriteOff: canAct || canApprove ? needsJustWriteOff.map(serialize) : [],
     needsNairobyVerification: canClose ? needsNairobyVerification.map(serialize) : [],
     needsDisposalDecision: canClose ? needsDisposalDecision.map(serialize) : [],
   });
