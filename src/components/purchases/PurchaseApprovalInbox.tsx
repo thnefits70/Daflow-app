@@ -50,12 +50,27 @@ type Row = {
   bankAccountChangeNote: string | null;
   requestedBy: { name: string } | null;
   attemptNumber: number;
+  requestedAt: string;
 };
 
 function attemptLabel(n: number) {
   if (n === 2) return "2do intento";
   if (n === 3) return "3er intento";
   return `${n}to intento`;
+}
+
+// Confirmado 2026-08-24: pedido explícito del usuario — quiere ver cuánto
+// tiempo lleva sin gestionar cada solicitud, en poco espacio y de un
+// vistazo (color escala con la demora), sin abrir nada más.
+function pendingInfo(requestedAt: string) {
+  const totalMinutes = Math.max(0, Math.floor((Date.now() - new Date(requestedAt).getTime()) / 60000));
+  const days = Math.floor(totalMinutes / 1440);
+  const hours = Math.floor((totalMinutes % 1440) / 60);
+  const minutes = totalMinutes % 60;
+  const label = days > 0 ? `${days}d ${hours}h` : hours > 0 ? `${hours}h ${minutes}min` : `${minutes} min`;
+  const urgency = totalMinutes >= 2880 ? "text-red" : totalMinutes >= 1440 ? "text-gold" : "text-steel-dim";
+  const dateStr = new Date(requestedAt).toLocaleString("es-EC", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+  return { label, urgency, dateStr };
 }
 
 function isPdf(url: string) {
@@ -399,6 +414,14 @@ export function PurchaseApprovalInbox() {
                   Solicitada por {actorName(g[0].requestedBy?.name)}
                   {g[0].attemptNumber > 1 && <span className="text-gold"> — {attemptLabel(g[0].attemptNumber)}</span>}
                 </div>
+                {(() => {
+                  const p = pendingInfo(g[0].requestedAt);
+                  return (
+                    <div className={`text-[10px] font-semibold mt-0.5 ${p.urgency}`}>
+                      Ingresó {p.dateStr} · {p.label} sin gestionar
+                    </div>
+                  );
+                })()}
               </div>
               <div className="flex flex-col items-end gap-1">
                 {justification && (
