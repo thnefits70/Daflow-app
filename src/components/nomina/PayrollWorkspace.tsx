@@ -12,6 +12,7 @@ import { PersonalPurchasesTransferPanel } from "@/components/personal-purchases/
 import { PersonalPurchasesHistoryPanel } from "@/components/personal-purchases/PersonalPurchasesHistoryPanel";
 import { SalaryAdvanceApprovalPanel } from "@/components/salary-advances/SalaryAdvanceApprovalPanel";
 import { ManagementDeductionsPanel } from "./ManagementDeductionsPanel";
+import { TabGuide } from "@/components/shared/TabGuide";
 
 type Tab = "horas" | "aprobar" | "historial" | "roles" | "comisiones" | "bonosceo" | "comprasfinanzas" | "anticipos" | "descuentos";
 
@@ -85,11 +86,41 @@ export function PayrollWorkspace({
         ))}
       </div>
 
-      {tab === "horas" && canLogOvertime && <OvertimeEntryPanel />}
-      {tab === "aprobar" && canApproveOvertime && <OvertimeApprovalPanel />}
-      {tab === "historial" && canViewRoles && <OvertimeHistoryPanel />}
+      {tab === "horas" && canLogOvertime && (
+        <>
+          <TabGuide storageKey="nomina-horas">
+            Registra acá las horas extra de tu equipo, día por día. Quedan pendientes de aprobación del admin antes de contar para el cálculo del rol.
+          </TabGuide>
+          <OvertimeEntryPanel />
+        </>
+      )}
+      {tab === "aprobar" && canApproveOvertime && (
+        <>
+          <TabGuide storageKey="nomina-aprobar">
+            Aprueba día por día las horas extra que reportan los líderes. Sin tu aprobación, ninguna hora cuenta para el cálculo del rol de pago.
+          </TabGuide>
+          <OvertimeApprovalPanel />
+        </>
+      )}
+      {tab === "historial" && canViewRoles && (
+        <>
+          <TabGuide storageKey="nomina-historial">
+            Consulta acá el historial completo de horas extra ya aprobadas, para revisar o auditar.
+          </TabGuide>
+          <OvertimeHistoryPanel />
+        </>
+      )}
       {tab === "roles" && canViewRoles && (
-        <PayrollRolesPanel canEdit={canEditRoles} canProposeFixedBonus={canProposeCommissions} canApproveFixedBonus={canApproveCommissions} isAdmin={isAdmin} />
+        <>
+          <TabGuide storageKey="nomina-roles">
+            {canEditRoles ? (
+              <>Acá se arma el rol de pago de cada quincena: genera los roles, agrega conceptos (bonos, descuentos, anticipos), envía el total a transferir y publícalo cuando el admin confirme el pago. Cada colaborador solo ve su propio &quot;Rol del mes&quot; simplificado.</>
+            ) : (
+              <>Vista de solo lectura del rol de pago de la quincena. Armar los roles, agregar conceptos y publicar es exclusivo de Nairoby — tu parte es aprobar o rechazar la transferencia y subir el comprobante cuando corresponda.</>
+            )}
+          </TabGuide>
+          <PayrollRolesPanel canEdit={canEditRoles} canProposeFixedBonus={canProposeCommissions} canApproveFixedBonus={canApproveCommissions} isAdmin={isAdmin} />
+        </>
       )}
       {tab === "comisiones" && canProposeCommissions && <CommissionTiersPanel canPropose={canProposeCommissions} canApprove={canApproveCommissions} />}
       {tab === "bonosceo" && canGrantCeoBonus && <CeoBonusesPanel />}
