@@ -757,7 +757,8 @@ export function PurchaseApprovalInbox() {
                   </div>
                 ) : (
                   <div className="mb-3">
-                    <label
+                    <div
+                      role="button"
                       tabIndex={0}
                       onPaste={onPasteProof}
                       onMouseEnter={onPasteProofHoverIn}
@@ -771,7 +772,7 @@ export function PurchaseApprovalInbox() {
                         o selecciona un archivo
                       </button>
                       <input ref={proofFileInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && uploadProof(e.target.files[0])} />
-                    </label>
+                    </div>
                     {tapHintProof && <p className="mt-1 text-[10.5px] text-red text-center">{tapHintProof}</p>}
                     <label className="flex items-center justify-center gap-1.5 mt-1.5 text-[10.5px] text-steel cursor-pointer hover:text-teal">
                       <FileText size={10.5} /> ¿Es un PDF? Subir documento
@@ -813,7 +814,8 @@ export function PurchaseApprovalInbox() {
                       </div>
                     ) : (
                       <div className="mb-3">
-                        <label
+                        <div
+                          role="button"
                           tabIndex={0}
                           onPaste={onPasteShippingProof}
                           onMouseEnter={onPasteShippingProofHoverIn}
@@ -827,7 +829,7 @@ export function PurchaseApprovalInbox() {
                             o selecciona un archivo
                           </button>
                           <input ref={shippingProofFileInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && uploadShippingProof(e.target.files[0])} />
-                        </label>
+                        </div>
                         {tapHintShippingProof && <p className="mt-1 text-[10.5px] text-red text-center">{tapHintShippingProof}</p>}
                         <label className="flex items-center justify-center gap-1.5 mt-1.5 text-[10.5px] text-steel cursor-pointer hover:text-teal">
                           <FileText size={10.5} /> ¿Es un PDF? Subir documento

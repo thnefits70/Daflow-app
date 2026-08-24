@@ -92,12 +92,16 @@ export function usePasteFile(onFile: (file: File) => void) {
     async (e: React.MouseEvent | React.TouchEvent) => {
       e.preventDefault();
       if (!isTouchDevice()) return;
+      if (!navigator.clipboard?.read) {
+        showHint('Este navegador no permite pegar así en celular — usa "seleccionar archivo"');
+        return;
+      }
       try {
         const file = await readImageFromSystemClipboard();
         if (file) {
           onFile(file);
         } else {
-          showHint('No hay ninguna imagen copiada — usa "seleccionar archivo"');
+          showHint('No se encontró una imagen en el portapapeles — usa "seleccionar archivo"');
         }
       } catch {
         showHint('No se pudo abrir el portapapeles — usa "seleccionar archivo"');
