@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { X, ShieldCheck, Landmark, ChevronDown } from "lucide-react";
 import { PayrollEmployeeSalariesPanel } from "./PayrollEmployeeSalariesPanel";
 import { CeoBonusesForNairobyPanel } from "./CeoBonusesForNairobyPanel";
+import { PayrollTransferPanel } from "./PayrollTransferPanel";
 
 type LineItem = { id?: string; label: string; amount: number; kind: "INCOME" | "EXPENSE"; isAutomatic?: boolean; note?: string | null };
 type EmployeeBankAccount = {
@@ -321,7 +322,7 @@ function RoleCard({ role, index, published, canEdit, monthlyRoleId, onChanged }:
 // Confirmado 2026-08-13: pantalla de gestión de Nómina — Nairoby edita
 // (canEdit), admin solo ve exactamente esto sin ningún control de
 // escritura (canEdit=false, todos los botones desaparecen).
-export function PayrollRolesPanel({ canEdit, canProposeFixedBonus, canApproveFixedBonus }: { canEdit: boolean; canProposeFixedBonus: boolean; canApproveFixedBonus: boolean }) {
+export function PayrollRolesPanel({ canEdit, canProposeFixedBonus, canApproveFixedBonus, isAdmin = false }: { canEdit: boolean; canProposeFixedBonus: boolean; canApproveFixedBonus: boolean; isAdmin?: boolean }) {
   const periods = useMemo(recentPeriods, []);
   const [period, setPeriod] = useState(currentPeriod);
   const [detail, setDetail] = useState<PeriodDetail | null>(null);
@@ -405,6 +406,8 @@ export function PayrollRolesPanel({ canEdit, canProposeFixedBonus, canApproveFix
               />
             ))}
           </div>
+
+          {detail.status === "PUBLISHED" && <PayrollTransferPanel period={period} isAdmin={isAdmin} />}
 
           {detail.status === "DRAFT" && canEdit && (
             <div>

@@ -55,5 +55,17 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ pe
     url: "/admin",
   }).catch(() => null);
 
+  // Confirmado 2026-08-23: la propuesta de transferencia (total + cuenta
+  // destino) se crea sola al publicar — nunca antes (los roles deben estar
+  // generados y publicados a mano primero) y nunca se recalcula sola
+  // después de esto (ver roles/[roleId]/correct/route.ts para el único caso
+  // en que sí se actualiza: una corrección mientras sigue sin aprobar).
+  const totalAmount = payrollPeriod.roles.reduce((s, r) => s + r.netTotal, 0);
+  await prisma.payrollTransfer.upsert({
+    where: { periodId: payrollPeriod.id },
+    update: {},
+    create: { periodId: payrollPeriod.id, totalAmount, destination: isEndOfMonthQuincena(period) ? "ADMIN_PRODUBANCO" : "NAIROBY" },
+  });
+
   return NextResponse.json(updated);
 }

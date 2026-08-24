@@ -310,16 +310,16 @@ model User {
   salaryAdvances         SalaryAdvance[]         @relation("SalaryAdvanceEmployee")
   managementDeductions   ManagementDeduction[]   @relation("ManagementDeductionEmployee")
 
-  merchandiseReentryBatchesCreated       MerchandiseReentryBatch[] @relation("MerchandiseReentryBatchCreatedBy")
-  merchandiseReentryItemsCorrected       MerchandiseReentryItem[]  @relation("MerchandiseReentryItemCorrectedBy")
-  merchandiseReentryItemsApproved        MerchandiseReentryItem[]  @relation("MerchandiseReentryItemApprovedBy")
-  merchandiseReentryItemsDamageConfirmed MerchandiseReentryItem[]  @relation("MerchandiseReentryItemDamageConfirmedBy")
-  merchandiseReentryItemsJustUploaded    MerchandiseReentryItem[]  @relation("MerchandiseReentryItemJustUploadedBy")
-  merchandiseReentryItemsWrittenOff      MerchandiseReentryItem[]  @relation("MerchandiseReentryItemWriteOffBy")
-  merchandiseReentryItemsDamageSolved    MerchandiseReentryItem[]  @relation("MerchandiseReentryItemDamageSolvedBy")
-  merchandiseReentryItemsDisposalDecided MerchandiseReentryItem[]  @relation("MerchandiseReentryItemDisposalDecidedBy")
-  merchandiseWeeklyWriteOffBatchesJust     MerchandiseWeeklyWriteOffBatch[] @relation("MerchandiseWeeklyWriteOffBatchJustBy")
-  merchandiseWeeklyWriteOffBatchesNairoby  MerchandiseWeeklyWriteOffBatch[] @relation("MerchandiseWeeklyWriteOffBatchNairobyBy")
+  merchandiseReentryBatchesCreated        MerchandiseReentryBatch[]        @relation("MerchandiseReentryBatchCreatedBy")
+  merchandiseReentryItemsCorrected        MerchandiseReentryItem[]         @relation("MerchandiseReentryItemCorrectedBy")
+  merchandiseReentryItemsApproved         MerchandiseReentryItem[]         @relation("MerchandiseReentryItemApprovedBy")
+  merchandiseReentryItemsDamageConfirmed  MerchandiseReentryItem[]         @relation("MerchandiseReentryItemDamageConfirmedBy")
+  merchandiseReentryItemsJustUploaded     MerchandiseReentryItem[]         @relation("MerchandiseReentryItemJustUploadedBy")
+  merchandiseReentryItemsWrittenOff       MerchandiseReentryItem[]         @relation("MerchandiseReentryItemWriteOffBy")
+  merchandiseReentryItemsDamageSolved     MerchandiseReentryItem[]         @relation("MerchandiseReentryItemDamageSolvedBy")
+  merchandiseReentryItemsDisposalDecided  MerchandiseReentryItem[]         @relation("MerchandiseReentryItemDisposalDecidedBy")
+  merchandiseWeeklyWriteOffBatchesJust    MerchandiseWeeklyWriteOffBatch[] @relation("MerchandiseWeeklyWriteOffBatchJustBy")
+  merchandiseWeeklyWriteOffBatchesNairoby MerchandiseWeeklyWriteOffBatch[] @relation("MerchandiseWeeklyWriteOffBatchNairobyBy")
 
   @@index([deptId])
   @@index([leadsDeptId])
@@ -1282,10 +1282,10 @@ model JustCatalogImport {
   importedBy   User?    @relation("JustCatalogImportImportedBy", fields: [importedById], references: [id], onDelete: SetNull)
   importedAt   DateTime @default(now())
 
-  totalRows     Int
-  createdCount  Int // productos nuevos creados como esqueleto (pendientes de matricular)
-  linkedCount   Int // productos existentes vinculados a un justCode por coincidencia de nombre
-  renamedCount  Int // productos ya vinculados cuyo nombre se actualizó al de Just en esta importación
+  totalRows    Int
+  createdCount Int // productos nuevos creados como esqueleto (pendientes de matricular)
+  linkedCount  Int // productos existentes vinculados a un justCode por coincidencia de nombre
+  renamedCount Int // productos ya vinculados cuyo nombre se actualizó al de Just en esta importación
 
   @@index([importedAt])
 }
@@ -2596,9 +2596,74 @@ model PayrollPeriod {
   publishedById String?
   publishedBy   User?     @relation("PayrollPeriodPublishedBy", fields: [publishedById], references: [id], onDelete: SetNull)
 
-  roles PayrollQuincenaRole[]
+  roles    PayrollQuincenaRole[]
+  transfer PayrollTransfer?
 
   @@index([status])
+}
+
+enum PayrollTransferStatus {
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+  COMPLETED
+}
+
+enum PayrollTransferDestination {
+  NAIROBY
+  ADMIN_PRODUBANCO
+}
+
+// Confirmado 2026-08-23: transferencia real de fondos por quincena — no es
+// solo un registro contable. El admin transfiere el TOTAL de la quincena
+// (suma de Líquido a pagar de todos los roles) a una de dos cuentas fijas
+// según el período: 1ra quincena (Q1) -> cuenta bancaria de Nairoby (ella
+// distribuye), 2da quincena/fin de mes (Q2) -> cuenta Produbanco propia del
+// admin (Nairoby entra ahí y paga uno por uno). Se crea/actualiza
+// automáticamente al publicar el período — nunca antes (los roles deben
+// estar generados y publicados primero, nunca estimados). Confidencial:
+// mismo criterio de acceso que PayrollQuincenaRole (canViewPayrollRoles /
+// canEditPayrollRoles) — ningún colaborador lo ve jamás. Aprobar/rechazar
+// es exclusivo del admin; una corrección posterior de un rol (ver
+// roles/[roleId]/correct) recalcula totalAmount y saca a esto de REJECTED,
+// pero nunca toca un registro ya APPROVED/COMPLETED — esa plata ya se movió.
+model PayrollTransfer {
+  id       String        @id @default(cuid())
+  periodId String        @unique
+  period   PayrollPeriod @relation(fields: [periodId], references: [id], onDelete: Cascade)
+
+  totalAmount Float
+  destination PayrollTransferDestination
+
+  status PayrollTransferStatus @default(PENDING_APPROVAL)
+
+  rejectionReason String?
+  rejectedAt      DateTime?
+  approvedAt      DateTime?
+
+  proofUrl    String?
+  proofName   String?
+  completedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+}
+
+// Mismo patrón singleton que CompanyBankAccount, pero confidencial (solo
+// Nairoby/admin la leen, nunca pública) — cuenta Produbanco personal del
+// admin, usada solo para recibir la nómina de la 2da quincena/fin de mes;
+// Nairoby entra a esta cuenta y paga a cada colaborador desde ahí.
+model AdminPayrollBankAccount {
+  id                String        @id @default("singleton")
+  bankName          String?
+  bankAccountType   String?
+  bankAccountNumber String?
+  bankAccountHolder String?
+  holderIdType      HolderIdType?
+  holderIdNumber    String?
+  updatedAt         DateTime      @updatedAt
 }
 
 // El detalle real completo de lo que se le paga a cada persona esa

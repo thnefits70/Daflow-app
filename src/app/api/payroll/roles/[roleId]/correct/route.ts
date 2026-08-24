@@ -60,5 +60,18 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ rol
     }),
   ]);
 
+  // Confirmado 2026-08-23: si ya existe una propuesta de transferencia para
+  // este período y todavía no se aprobó, esta corrección la mantiene al
+  // día — y si el admin la había rechazado, esta corrección es justamente
+  // la respuesta a ese rechazo, así que vuelve a PENDING_APPROVAL sola, sin
+  // un botón "reenviar" aparte. Una vez APPROVED/COMPLETED, esa plata ya se
+  // movió — nunca se toca acá.
+  const transfer = await prisma.payrollTransfer.findUnique({ where: { periodId: current.periodId } });
+  if (transfer && (transfer.status === "PENDING_APPROVAL" || transfer.status === "REJECTED")) {
+    const currentRoles = await prisma.payrollQuincenaRole.findMany({ where: { periodId: current.periodId, isCurrent: true }, select: { netTotal: true } });
+    const totalAmount = currentRoles.reduce((s, r) => s + r.netTotal, 0);
+    await prisma.payrollTransfer.update({ where: { id: transfer.id }, data: { totalAmount, status: "PENDING_APPROVAL" } });
+  }
+
   return NextResponse.json(created);
 }

@@ -5,6 +5,7 @@ import { addBusinessHours } from "@/lib/businessHours";
 import { getPettyCashBoxData, type PettyCashBoxTypeStr } from "@/lib/pettyCash";
 import { getUpcomingBirthdays } from "@/lib/birthdays";
 import { getFinanzasDeptId } from "@/lib/inventoryKpis";
+import { isEndOfMonthQuincena, monthOfPeriod } from "@/lib/payrollCalc";
 
 // ---------------- Date helpers ----------------
 // Deadline rule confirmed by the user 2026-07-20: work week is Mon-Sat, and
@@ -191,6 +192,34 @@ function rollToNextBusinessDay(date: Date): Date {
   return d;
 }
 
+function rollToPreviousBusinessDay(date: Date): Date {
+  let d = date;
+  while (!isCompanyBusinessDay(d)) d = new Date(d.getTime() - 86400000);
+  return d;
+}
+
+// Confirmado 2026-08-23: fecha real de pago de una quincena — el 15 (Q1) o
+// el último día calendario del mes (Q2/fin de mes), corrido al día hábil
+// ANTERIOR si cae domingo/feriado (nunca al siguiente — a diferencia de
+// fixedDayDeadlinePassed arriba, acá lo que importa es cuándo hay que tener
+// la plata transferida, no cuándo empieza a valer un aviso).
+function payDateForPeriod(period: string): Date {
+  const [y, m, q] = period.split("-");
+  if (q === "Q1") return rollToPreviousBusinessDay(nthDayOfMonth(`${y}-${m}`, 15));
+  const lastDay = new Date(Date.UTC(Number(y), Number(m), 0)).getUTCDate();
+  return rollToPreviousBusinessDay(nthDayOfMonth(`${y}-${m}`, lastDay));
+}
+
+function businessDaysBefore(date: Date, n: number): Date {
+  let d = date;
+  let counted = 0;
+  while (counted < n) {
+    d = new Date(d.getTime() - 86400000);
+    if (isCompanyBusinessDay(d)) counted++;
+  }
+  return d;
+}
+
 // Some monthly items have their own fixed check-in day instead of "first
 // Monday of next month" — e.g. Roles de pago (día 3) and Tasa de Devolución
 // (día 4) for Nairoby, confirmed 2026-07-22. If that day itself isn't a
@@ -285,6 +314,7 @@ export type PendingTasks = { title: string; sub: string; items: PendingItem[] };
 export const PENDING_TYPE_CATALOG: Record<string, string> = {
   feedback: "Feedback semanal/mensual de departamentos",
   roles_de_pago: "Roles de pago",
+  nomina_transferencia: "Transferencia de nómina",
   tasa_devolucion: "Tasa de Devolución General",
   kpi_garantias: "KPI de Garantías",
   pagos_recordatorios: "Pagos recordatorios",
@@ -1161,6 +1191,49 @@ async function getSalaryAdvancePendingItem(href: string): Promise<PendingItem | 
   };
 }
 
+// Confirmado 2026-08-23: pedido explícito del usuario — 3 días hábiles
+// antes de la fecha de pago de cada quincena (ver payDateForPeriod), tanto
+// el admin como Nairoby ven en Inicio la transferencia real pendiente (el
+// total de la quincena + a qué cuenta corresponde). El admin ve una versión
+// accionable (falta aprobar/transferir, o corrigió algo tras un rechazo);
+// Nairoby la ve de solo lectura, salvo cuando el admin la rechazó — ahí es
+// ella quien tiene que corregir el rol señalado. Desaparece sola en cuanto
+// el admin sube el comprobante (status COMPLETED).
+async function getPayrollTransferPendingItem(forAdmin: boolean, href: string): Promise<PendingItem | null> {
+  const now = nowInEcuador();
+  const transfers = await prisma.payrollTransfer.findMany({
+    where: { status: { in: ["PENDING_APPROVAL", "REJECTED"] } },
+    include: { period: { select: { period: true } } },
+  });
+
+  for (const t of transfers) {
+    const payDate = payDateForPeriod(t.period.period);
+    if (now < businessDaysBefore(payDate, 3)) continue;
+
+    const overdue = forAdmin ? now >= payDate : t.status === "REJECTED";
+    const acctLabel = t.destination === "NAIROBY" ? "cuenta de Nairoby" : "tu cuenta Produbanco";
+    const quincenaLabel = `${isEndOfMonthQuincena(t.period.period) ? "Fin de mes" : "Quincena"} · ${formatMonthLabel(monthOfPeriod(t.period.period))}`;
+
+    const label = forAdmin
+      ? t.status === "REJECTED"
+        ? "Rechazaste la transferencia de nómina — falta que Nairoby corrija"
+        : `Transferir nómina a ${acctLabel}`
+      : t.status === "REJECTED"
+        ? "El admin rechazó la transferencia de nómina — corregí el rol señalado"
+        : "Transferencia de nómina — esperando aprobación del admin";
+
+    return {
+      type: "nomina_transferencia",
+      icon: "💸",
+      label,
+      meta: `${quincenaLabel} · $${t.totalAmount.toFixed(2)}${overdue ? " · atrasado" : ""}`,
+      overdue,
+      href,
+    };
+  }
+  return null;
+}
+
 // Confirmado 2026-08-18: pedido explícito del usuario — si un descuento por
 // mala gestión sigue sin ser aceptado por el colaborador afectado, tanto
 // Andrés (admin) como Nairoby (FIN) tienen que verlo en sus Pendientes, para
@@ -1534,7 +1607,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     const comDept = await prisma.department.findUnique({ where: { code: "COM" }, select: { id: true } });
     const comPaymentsHref = comDept ? `/admin/dept/${comDept.id}?tab=compras&ptab=finanzas` : "/admin";
     const comCreditsHref = comDept ? `/admin/dept/${comDept.id}?tab=compras&ptab=urgentes` : "/admin";
-    const [feedbackItems, recognitionItem, pettyCashLow, pettyCashUnconfirmed, adminPaymentsItem, purchaseMerchandiseItem, purchaseShippingItem, purchaseCreditsItem, overtimeApprovalItem, commissionBonusApprovalItem, salaryAdvanceItem, managementDeductionItem, personalPurchaseFinanceItem, personalPurchaseTransferConfirmItem, personalPurchaseTransferCloseItem, personalPurchasePaymentWatchItem, birthdayItems] = await Promise.all([
+    const [feedbackItems, recognitionItem, pettyCashLow, pettyCashUnconfirmed, adminPaymentsItem, purchaseMerchandiseItem, purchaseShippingItem, purchaseCreditsItem, overtimeApprovalItem, commissionBonusApprovalItem, salaryAdvanceItem, managementDeductionItem, personalPurchaseFinanceItem, personalPurchaseTransferConfirmItem, personalPurchaseTransferCloseItem, personalPurchasePaymentWatchItem, payrollTransferItem, birthdayItems] = await Promise.all([
       getFeedbackPendingItems(),
       getRecognitionAdminPendingItem("/admin/colaborador-destacado"),
       getPettyCashLowBalanceItems(financeHref),
@@ -1551,6 +1624,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       getPersonalPurchaseTransferConfirmPendingItem("/admin/nomina?tab=pagos&ptab=comprasfinanzas"),
       getPersonalPurchaseTransferClosePendingItem("/admin/nomina?tab=pagos&ptab=comprasfinanzas"),
       getPersonalPurchasePaymentWatchItem("/admin/nomina?tab=pagos&ptab=comprasfinanzas"),
+      getPayrollTransferPendingItem(true, "/admin/nomina?tab=pagos&ptab=roles"),
       getUpcomingBirthdayPendingItems("/admin/nomina"),
     ]);
     const items = [
@@ -1570,6 +1644,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       ...(personalPurchaseTransferConfirmItem ? [personalPurchaseTransferConfirmItem] : []),
       ...(personalPurchaseTransferCloseItem ? [personalPurchaseTransferCloseItem] : []),
       ...(personalPurchasePaymentWatchItem ? [personalPurchasePaymentWatchItem] : []),
+      ...(payrollTransferItem ? [payrollTransferItem] : []),
       ...birthdayItems,
     ];
     if (items.length === 0) return null;
@@ -1629,7 +1704,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
 
   if (me.leadsDept.code === "FIN") {
     monthly = true;
-    const [payStub, returnRate, warranty, paymentReminders, storeFeedback, pettyCashLow, pettyCashUnconfirmed, purchaseShippingItem, managementDeductionItem, personalPurchaseFinanceItem, personalPurchaseTransferCloseItem, personalPurchasePaymentWatchItem, merchandiseWeeklyVerificationItem] = await Promise.all([
+    const [payStub, returnRate, warranty, paymentReminders, storeFeedback, pettyCashLow, pettyCashUnconfirmed, purchaseShippingItem, managementDeductionItem, personalPurchaseFinanceItem, personalPurchaseTransferCloseItem, personalPurchasePaymentWatchItem, merchandiseWeeklyVerificationItem, payrollTransferItem] = await Promise.all([
       getPayStubPendingItem("/area/roles-de-pago"),
       getReturnRatePendingItem("/area/kpis-generales"),
       getWarrantyPendingItem("/area/kpis-generales"),
@@ -1643,6 +1718,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       getPersonalPurchaseTransferClosePendingItem("/area/nomina?tab=pagos&ptab=comprasfinanzas"),
       getPersonalPurchasePaymentWatchItem("/area/nomina?tab=pagos&ptab=comprasfinanzas"),
       getMerchandiseWeeklyWriteOffVerificationPendingItem("/area/reingreso-mercaderia?tab=danos"),
+      getPayrollTransferPendingItem(false, "/area/nomina?tab=pagos&ptab=roles"),
     ]);
     items.push(...pettyCashLow, ...pettyCashUnconfirmed);
     if (payStub) items.push(payStub);
@@ -1656,6 +1732,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     if (personalPurchaseFinanceItem) items.push(personalPurchaseFinanceItem);
     if (personalPurchaseTransferCloseItem) items.push(personalPurchaseTransferCloseItem);
     if (merchandiseWeeklyVerificationItem) items.push(merchandiseWeeklyVerificationItem);
+    if (payrollTransferItem) items.push(payrollTransferItem);
   }
 
   if (me.leadsDept.trackWeeklyMetric) {
@@ -1733,7 +1810,7 @@ export async function getPossiblePendingTypesForActor(
   const types: string[] = [];
 
   if (actor.isAdmin) {
-    types.push("feedback", "caja_chica_saldo", "caja_chica_confirmacion", "cumpleanos", "compras_creditos_pendientes", "anticipos_aprobacion", "descuentos_sin_aceptar", "compras_personales_precio", "compras_personales_transferencia", "compras_personales_cierre");
+    types.push("feedback", "caja_chica_saldo", "caja_chica_confirmacion", "cumpleanos", "compras_creditos_pendientes", "anticipos_aprobacion", "descuentos_sin_aceptar", "compras_personales_precio", "compras_personales_transferencia", "compras_personales_cierre", "nomina_transferencia");
   } else {
     const me = await prisma.user.findUnique({
       where: { id: actor.userId },
@@ -1743,7 +1820,7 @@ export async function getPossiblePendingTypesForActor(
 
     types.push("cumpleanos");
     if (me.leadsDept.code === "FIN") {
-      types.push("roles_de_pago", "tasa_devolucion", "kpi_garantias", "pagos_recordatorios", "servicio_postventa", "caja_chica_saldo", "caja_chica_confirmacion", "descuentos_sin_aceptar", "compras_personales_precio", "compras_personales_cierre", "reingreso_mercaderia_verificacion_semanal");
+      types.push("roles_de_pago", "tasa_devolucion", "kpi_garantias", "pagos_recordatorios", "servicio_postventa", "caja_chica_saldo", "caja_chica_confirmacion", "descuentos_sin_aceptar", "compras_personales_precio", "compras_personales_cierre", "reingreso_mercaderia_verificacion_semanal", "nomina_transferencia");
     }
     if (me.leadsDept.trackWeeklyMetric) types.push("pedidos_despachados");
     if (me.leadsDept.code === "INV") {

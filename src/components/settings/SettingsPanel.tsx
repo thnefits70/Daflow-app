@@ -15,6 +15,8 @@ type CompanyBankAccount = {
   holderIdNumber: string | null;
 };
 
+type AdminPayrollBankAccount = CompanyBankAccount;
+
 export function SettingsPanel({
   logoUrl,
   bannerUrl,
@@ -96,6 +98,58 @@ export function SettingsPanel({
     }
     setBankSaved(true);
     setTimeout(() => setBankSaved(false), 2500);
+  };
+
+  const [payrollBankAccount, setPayrollBankAccount] = useState<AdminPayrollBankAccount>({
+    bankName: "",
+    bankAccountType: "",
+    bankAccountNumber: "",
+    bankAccountHolder: "",
+    holderIdType: null,
+    holderIdNumber: "",
+  });
+  const [payrollBankBusy, setPayrollBankBusy] = useState(false);
+  const [payrollBankSaved, setPayrollBankSaved] = useState(false);
+  const [payrollBankErr, setPayrollBankErr] = useState("");
+
+  useEffect(() => {
+    fetch("/api/admin-payroll-bank-account").then((r) => (r.ok ? r.json() : null)).then((a: AdminPayrollBankAccount | null) => {
+      if (a) {
+        setPayrollBankAccount({
+          bankName: a.bankName ?? "",
+          bankAccountType: a.bankAccountType ?? "",
+          bankAccountNumber: a.bankAccountNumber ?? "",
+          bankAccountHolder: a.bankAccountHolder ?? "",
+          holderIdType: a.holderIdType,
+          holderIdNumber: a.holderIdNumber ?? "",
+        });
+      }
+    });
+  }, []);
+
+  const savePayrollBankAccount = async () => {
+    setPayrollBankErr("");
+    setPayrollBankBusy(true);
+    const res = await fetch("/api/admin-payroll-bank-account", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        bankName: payrollBankAccount.bankName,
+        bankAccountType: payrollBankAccount.bankAccountType,
+        bankAccountNumber: payrollBankAccount.bankAccountNumber,
+        bankAccountHolder: payrollBankAccount.bankAccountHolder,
+        holderIdType: payrollBankAccount.holderIdType ?? undefined,
+        holderIdNumber: payrollBankAccount.holderIdNumber || undefined,
+      }),
+    });
+    setPayrollBankBusy(false);
+    if (!res.ok) {
+      const data = await res.json().catch(() => null);
+      setPayrollBankErr(data?.error ?? "No se pudo guardar la cuenta.");
+      return;
+    }
+    setPayrollBankSaved(true);
+    setTimeout(() => setPayrollBankSaved(false), 2500);
   };
 
   const handleLogoFile = async (file: File) => {
@@ -466,6 +520,62 @@ export function SettingsPanel({
         </button>
         {bankErr && <div className="text-red text-[12px] mt-2">{bankErr}</div>}
         {bankSaved && <div className="text-green text-[12px] mt-2">Cuenta guardada.</div>}
+      </div>
+
+      <div className="bg-surface border border-rule rounded p-4.5">
+        <label className="flex items-center gap-1.5 mb-3 text-[11px] font-semibold tracking-wide uppercase text-steel">
+          <Landmark size={12} /> Cuenta Produbanco para nómina (fin de mes)
+        </label>
+        <div className="text-[12px] text-steel mb-3">
+          A esta cuenta se transfiere el total de la 2da quincena/fin de mes — Nairoby entra ahí y paga a cada
+          colaborador. Confidencial: solo vos y Nairoby la ven, nunca los demás colaboradores.
+        </div>
+        <div className="grid grid-cols-2 gap-2.5 mb-2.5">
+          <input
+            className="rounded border border-rule px-2.5 py-2 text-[13.5px]"
+            placeholder="Banco"
+            value={payrollBankAccount.bankName ?? ""}
+            onChange={(e) => setPayrollBankAccount((a) => ({ ...a, bankName: e.target.value }))}
+          />
+          <input
+            className="rounded border border-rule px-2.5 py-2 text-[13.5px]"
+            placeholder="Tipo de cuenta"
+            value={payrollBankAccount.bankAccountType ?? ""}
+            onChange={(e) => setPayrollBankAccount((a) => ({ ...a, bankAccountType: e.target.value }))}
+          />
+          <input
+            className="rounded border border-rule px-2.5 py-2 text-[13.5px]"
+            placeholder="Número de cuenta"
+            value={payrollBankAccount.bankAccountNumber ?? ""}
+            onChange={(e) => setPayrollBankAccount((a) => ({ ...a, bankAccountNumber: e.target.value }))}
+          />
+          <input
+            className="rounded border border-rule px-2.5 py-2 text-[13.5px]"
+            placeholder="Titular"
+            value={payrollBankAccount.bankAccountHolder ?? ""}
+            onChange={(e) => setPayrollBankAccount((a) => ({ ...a, bankAccountHolder: e.target.value }))}
+          />
+          <select
+            className="rounded border border-rule px-2.5 py-2 text-[13.5px]"
+            value={payrollBankAccount.holderIdType ?? ""}
+            onChange={(e) => setPayrollBankAccount((a) => ({ ...a, holderIdType: (e.target.value || null) as AdminPayrollBankAccount["holderIdType"] }))}
+          >
+            <option value="">Cédula o RUC</option>
+            <option value="CEDULA">Cédula</option>
+            <option value="RUC">RUC</option>
+          </select>
+          <input
+            className="rounded border border-rule px-2.5 py-2 text-[13.5px]"
+            placeholder="Número de cédula/RUC"
+            value={payrollBankAccount.holderIdNumber ?? ""}
+            onChange={(e) => setPayrollBankAccount((a) => ({ ...a, holderIdNumber: e.target.value }))}
+          />
+        </div>
+        <button type="button" disabled={payrollBankBusy} className="rounded border border-blue bg-blue px-4 py-2 text-[13px] font-semibold text-white cursor-pointer disabled:opacity-60" onClick={savePayrollBankAccount}>
+          Guardar
+        </button>
+        {payrollBankErr && <div className="text-red text-[12px] mt-2">{payrollBankErr}</div>}
+        {payrollBankSaved && <div className="text-green text-[12px] mt-2">Cuenta guardada.</div>}
       </div>
     </div>
   );
