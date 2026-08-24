@@ -943,7 +943,11 @@ export function PurchaseInvoicingPanel({ isAdmin = false }: { isAdmin?: boolean 
                 </button>
               )}
 
-              {r0.invoiceStatus === "PENDING" ? (
+              {r0.invoiceStatus === "PENDING" && isAdmin ? (
+                <div className="flex items-center gap-1.5 border-[1.5px] border-dashed border-rule rounded-md px-3 py-3 text-[12px] text-steel">
+                  <Lock size={13} className="shrink-0" /> Pendiente de que Nairoby registre la factura — {ADMIN_LOCK_TITLE.toLowerCase()}.
+                </div>
+              ) : r0.invoiceStatus === "PENDING" ? (
                 <div>
                   <div className="flex gap-2 mb-2.5">
                     <button
