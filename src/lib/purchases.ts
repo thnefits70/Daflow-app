@@ -191,8 +191,21 @@ export async function getStalePurchaseRequestPushes(): Promise<StalePurchaseRequ
       where: { status: "APPROVED", reviewedAt: { lt: cutoff } },
       select: { id: true, totalCost: true, catalogItem: { select: { name: true } } },
     }),
+    // Fix confirmado 2026-08-24 (reportado por Daniel): esto solo miraba
+    // status "PAID" (nadie del equipo subió fotos/video todavía). En cuanto
+    // alguien de Inventario las sube, el status pasa a
+    // RECEIVED_PENDING_REVIEW esperando la aprobación final de Daniel — pero
+    // como ese status no estaba incluido acá, el aviso se apagaba justo
+    // cuando a Daniel le tocaba actuar. Ahora también cubre ese estado,
+    // usando receipt.confirmedAt (cuándo se subió la recepción) como
+    // referencia de "24h sin avanzar" en vez de paidAt.
     prisma.purchaseRequest.findMany({
-      where: { status: "PAID", paidAt: { lt: cutoff } },
+      where: {
+        OR: [
+          { status: "PAID", paidAt: { lt: cutoff } },
+          { status: "RECEIVED_PENDING_REVIEW", receipt: { confirmedAt: { lt: cutoff } } },
+        ],
+      },
       select: { id: true, totalCost: true, catalogItem: { select: { name: true } } },
     }),
     // Confirmado 2026-08-14: pedido explícito del usuario — desde que el
@@ -224,7 +237,7 @@ export async function getStalePurchaseRequestPushes(): Promise<StalePurchaseRequ
     if (finLeader) pushes.push({ ownerId: finLeader.id, title: "⏰ Falta pagar una compra aprobada", body, url: "/area/workspace" });
   }
   for (const r of paidUnreceived) {
-    const body = `${r.catalogItem.name} — pagado hace más de 24h, Inventario todavía no confirma que llegó`;
+    const body = `${r.catalogItem.name} — pagado hace más de 24h, todavía sin quedar con la recepción aprobada`;
     pushes.push({ ownerId: "admin", title: "⏰ Falta confirmar que llegó una compra", body, url: "/admin" });
     if (invLeader) pushes.push({ ownerId: invLeader.id, title: "⏰ Falta confirmar que llegó una compra", body, url: "/area/workspace" });
   }

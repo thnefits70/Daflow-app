@@ -1000,22 +1000,33 @@ async function getPurchaseRequesterPendingItems(userId: string, href: string): P
 // getStalePurchaseRequestPushes (paidUnreceived) para "atrasado", y mismo
 // agrupado por groupId que getPurchaseMerchandisePaymentsSummary — una
 // cotización con varias líneas cuenta como una sola operación pendiente.
+// Fix confirmado 2026-08-24 (reportado por Daniel): esto solo miraba status
+// "PAID" (nadie del equipo subió todavía fotos/video de recepción). En
+// cuanto alguien del equipo las sube, el status pasa a
+// RECEIVED_PENDING_REVIEW (ver PurchaseRequestReceipt.approvedAt, null en
+// ese estado) esperando la aprobación final de Daniel — pero como ese status
+// no estaba incluido acá, el pendiente desaparecía de Inicio justo cuando a
+// Daniel le tocaba actuar ("Aprobar recepción"), aunque siguiera pendiente
+// de verdad. Ahora cuenta ambos estados; el timestamp para "atrasado" usa
+// receipt.confirmedAt (cuándo se subió la recepción) si ya existe, si no
+// paidAt.
 async function getPurchaseReceivingPendingItem(href: string): Promise<PendingItem | null> {
   const rows = await prisma.purchaseRequest.findMany({
-    where: { status: "PAID" },
-    select: { groupId: true, totalCost: true, paidAt: true },
+    where: { status: { in: ["PAID", "RECEIVED_PENDING_REVIEW"] } },
+    select: { groupId: true, totalCost: true, paidAt: true, receipt: { select: { confirmedAt: true } } },
   });
   if (rows.length === 0) return null;
 
-  const byGroup = new Map<string, { total: number; paidAt: Date | null }>();
+  const byGroup = new Map<string, { total: number; at: Date | null }>();
   for (const r of rows) {
-    const cur = byGroup.get(r.groupId) ?? { total: 0, paidAt: r.paidAt };
+    const at = r.receipt?.confirmedAt ?? r.paidAt;
+    const cur = byGroup.get(r.groupId) ?? { total: 0, at };
     cur.total += r.totalCost;
     byGroup.set(r.groupId, cur);
   }
   const groups = [...byGroup.values()];
   const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
-  const overdue = groups.some((g) => g.paidAt && g.paidAt < cutoff);
+  const overdue = groups.some((g) => g.at && g.at < cutoff);
   const total = groups.reduce((s, g) => s + g.total, 0);
   return {
     type: "compras_recepcion",

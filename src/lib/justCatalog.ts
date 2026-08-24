@@ -183,56 +183,75 @@ export async function applyJustCatalogImport(decisions: JustCatalogApplyDecision
   let linkedCount = 0;
   let renamedCount = 0;
 
-  await prisma.$transaction(async (tx) => {
-    // `PurchaseCatalogItem.name` es @unique — el export real de Just trae
-    // algunos nombres repetidos con código distinto (mismo nombre, dos SKU
-    // reales). En vez de que la fila que llega segunda reviente la
-    // transacción, se le agrega el código entre paréntesis para que ambas
-    // queden registradas — Daniel puede renombrarla después si hace falta.
-    const taken = new Set<string>();
-    async function resolveUniqueName(desiredName: string, code: string): Promise<string> {
-      const norm = normalize(desiredName);
-      const collides = taken.has(norm) || !!(await tx.purchaseCatalogItem.findUnique({ where: { name: desiredName } }));
-      if (!collides) {
-        taken.add(norm);
-        return desiredName;
+  // `PurchaseCatalogItem.name` es @unique — el export real de Just trae
+  // algunos nombres repetidos con código distinto (mismo nombre, dos SKU
+  // reales). En vez de que la fila que llega segunda reviente la creación,
+  // se le agrega el código entre paréntesis para que ambas queden
+  // registradas — Daniel puede renombrarla después si hace falta.
+  //
+  // La verificación de nombres se hace UNA sola vez con un findMany antes de
+  // la transacción (antes era un findUnique por cada fila nueva — con los
+  // ~400 productos nuevos típicos de un export de Just eso eran cientos de
+  // consultas secuenciales dentro de la transacción, superaba el timeout de
+  // 5s de Prisma y la transacción entera se revertía sin guardar nada,
+  // aunque Daniel hubiera confirmado todas las decisiones). Igual, las
+  // creaciones masivas (newRows, duplicateGroupDecisions) se agrupan en un
+  // solo createMany en vez de una fila a la vez.
+  const existingNames = new Set((await prisma.purchaseCatalogItem.findMany({ select: { name: true } })).map((i) => normalize(i.name)));
+  const taken = new Set<string>();
+  function resolveUniqueName(desiredName: string, code: string): string {
+    const norm = normalize(desiredName);
+    if (!existingNames.has(norm) && !taken.has(norm)) {
+      taken.add(norm);
+      return desiredName;
+    }
+    const candidate = `${desiredName} (${code})`;
+    taken.add(normalize(candidate));
+    return candidate;
+  }
+
+  const newItemsData = decisions.newRows.map((row) => ({
+    name: resolveUniqueName(row.name, row.code),
+    justCode: row.code,
+    photos: [] as string[],
+    pendingRegistration: true,
+  }));
+  const duplicateItemsData = decisions.duplicateGroupDecisions.map((d) => ({
+    name: resolveUniqueName(d.name, d.code),
+    justCode: d.code,
+    photos: [] as string[],
+    pendingRegistration: true,
+  }));
+
+  await prisma.$transaction(
+    async (tx) => {
+      if (newItemsData.length > 0) await tx.purchaseCatalogItem.createMany({ data: newItemsData });
+      createdCount += newItemsData.length;
+
+      for (const d of decisions.suggestedLinkDecisions) {
+        if (d.link) {
+          await tx.purchaseCatalogItem.update({ where: { id: d.itemId }, data: { justCode: d.code } });
+          linkedCount++;
+        } else {
+          const name = resolveUniqueName(d.name, d.code);
+          await tx.purchaseCatalogItem.create({ data: { name, justCode: d.code, photos: [], pendingRegistration: true } });
+          createdCount++;
+        }
       }
-      const candidate = `${desiredName} (${code})`;
-      taken.add(normalize(candidate));
-      return candidate;
-    }
 
-    for (const row of decisions.newRows) {
-      const name = await resolveUniqueName(row.name, row.code);
-      await tx.purchaseCatalogItem.create({ data: { name, justCode: row.code, photos: [], pendingRegistration: true } });
-      createdCount++;
-    }
-
-    for (const d of decisions.suggestedLinkDecisions) {
-      if (d.link) {
-        await tx.purchaseCatalogItem.update({ where: { id: d.itemId }, data: { justCode: d.code } });
-        linkedCount++;
-      } else {
-        const name = await resolveUniqueName(d.name, d.code);
-        await tx.purchaseCatalogItem.create({ data: { name, justCode: d.code, photos: [], pendingRegistration: true } });
-        createdCount++;
+      for (const d of decisions.nameChangedDecisions) {
+        if (d.useJustName) {
+          const name = resolveUniqueName(d.justName, d.code);
+          await tx.purchaseCatalogItem.update({ where: { id: d.itemId }, data: { name } });
+          renamedCount++;
+        }
       }
-    }
 
-    for (const d of decisions.nameChangedDecisions) {
-      if (d.useJustName) {
-        const name = await resolveUniqueName(d.justName, d.code);
-        await tx.purchaseCatalogItem.update({ where: { id: d.itemId }, data: { name } });
-        renamedCount++;
-      }
-    }
-
-    for (const d of decisions.duplicateGroupDecisions) {
-      const name = await resolveUniqueName(d.name, d.code);
-      await tx.purchaseCatalogItem.create({ data: { name, justCode: d.code, photos: [], pendingRegistration: true } });
-      createdCount++;
-    }
-  });
+      if (duplicateItemsData.length > 0) await tx.purchaseCatalogItem.createMany({ data: duplicateItemsData });
+      createdCount += duplicateItemsData.length;
+    },
+    { timeout: 30000 }
+  );
 
   await prisma.justCatalogImport.create({
     data: {

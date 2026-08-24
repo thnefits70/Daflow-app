@@ -1,8 +1,24 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Upload, CheckCircle2, AlertTriangle, Clock, Search, ChevronDown, ChevronUp } from "lucide-react";
+import { Upload, CheckCircle2, AlertTriangle, Clock, Search, ChevronDown, ChevronUp, Copy, Check } from "lucide-react";
 import { uploadFile } from "@/lib/uploadFile";
+
+function CopyCodeButton({ code, copied, onCopy }: { code: string; copied: boolean; onCopy: (code: string) => void }) {
+  return (
+    <button
+      type="button"
+      title="Copiar código"
+      className="text-steel hover:text-teal cursor-pointer shrink-0"
+      onClick={(e) => {
+        e.stopPropagation();
+        onCopy(code);
+      }}
+    >
+      {copied ? <Check size={11} /> : <Copy size={11} />}
+    </button>
+  );
+}
 
 type CatalogItemDTO = { id: string; name: string; justCode: string | null; photos: string[]; pendingRegistration: boolean };
 type ImportDTO = {
@@ -54,6 +70,13 @@ export function JustCatalogPanel({ canManage }: { canManage: boolean }) {
   const [toast, setToast] = useState("");
   const [showNewRows, setShowNewRows] = useState(false);
   const [showMissing, setShowMissing] = useState(false);
+  const [copiedCode, setCopiedCode] = useState<string | null>(null);
+
+  function copyCode(code: string) {
+    navigator.clipboard.writeText(code).catch(() => {});
+    setCopiedCode(code);
+    setTimeout(() => setCopiedCode((c) => (c === code ? null : c)), 1200);
+  }
 
   // itemId -> true significa "usar el nombre de Just" (nameChanged) / "vincular" (suggestedLink)
   const [nameDecisions, setNameDecisions] = useState<Record<string, boolean>>({});
@@ -268,14 +291,20 @@ export function JustCatalogPanel({ canManage }: { canManage: boolean }) {
                     </div>
                     <div className="flex flex-wrap gap-1.5">
                       {g.rows.map((r) => (
-                        <button
+                        <div
                           key={r.code}
-                          type="button"
-                          className={`text-[11px] font-semibold rounded-full px-2.5 py-1 border cursor-pointer ${duplicateDecisions[gi] === r.code ? "border-teal text-teal bg-teal/15" : "border-rule text-steel"}`}
-                          onClick={() => setDuplicateDecisions((d) => ({ ...d, [gi]: r.code }))}
+                          className={`flex items-center rounded-full border ${duplicateDecisions[gi] === r.code ? "border-teal text-teal bg-teal/15" : "border-rule text-steel"}`}
                         >
-                          Mantener {r.code}{r.alreadyLinked ? ` (ya existe: ${r.existingName})` : ""}
-                        </button>
+                          <button
+                            type="button"
+                            className="text-[11px] font-semibold pl-2.5 pr-1.5 py-1 cursor-pointer"
+                            onClick={() => setDuplicateDecisions((d) => ({ ...d, [gi]: r.code }))}
+                          >
+                            Mantener {r.code}{r.alreadyLinked ? ` (ya existe: ${r.existingName})` : ""}
+                          </button>
+                          <CopyCodeButton code={r.code} copied={copiedCode === r.code} onCopy={copyCode} />
+                          <span className="pr-2" />
+                        </div>
                       ))}
                       <button
                         type="button"
@@ -306,8 +335,10 @@ export function JustCatalogPanel({ canManage }: { canManage: boolean }) {
               <div className="flex flex-col gap-2">
                 {preview.nameChangedRows.map((r) => (
                   <div key={r.itemId} className="bg-cloud rounded-md p-2.5">
-                    <div className="text-[11.5px] mb-1.5">
-                      <span className="font-mono text-steel">{r.code}</span> — actual: <b>{r.currentName}</b> → Just: <b>{r.justName}</b>
+                    <div className="text-[11.5px] mb-1.5 flex items-center gap-1 flex-wrap">
+                      <span className="font-mono text-steel">{r.code}</span>
+                      <CopyCodeButton code={r.code} copied={copiedCode === r.code} onCopy={copyCode} />
+                      <span>— actual: <b>{r.currentName}</b> → Just: <b>{r.justName}</b></span>
                     </div>
                     <div className="flex gap-1.5">
                       <button
@@ -337,8 +368,10 @@ export function JustCatalogPanel({ canManage }: { canManage: boolean }) {
               <div className="flex flex-col gap-2">
                 {preview.suggestedLinkRows.map((r) => (
                   <div key={r.itemId} className="bg-cloud rounded-md p-2.5">
-                    <div className="text-[11.5px] mb-1.5">
-                      <span className="font-mono text-steel">{r.code}</span> — <b>{r.name}</b> coincide con <b>{r.existingName}</b> (sin código de Just todavía)
+                    <div className="text-[11.5px] mb-1.5 flex items-center gap-1 flex-wrap">
+                      <span className="font-mono text-steel">{r.code}</span>
+                      <CopyCodeButton code={r.code} copied={copiedCode === r.code} onCopy={copyCode} />
+                      <span>— <b>{r.name}</b> coincide con <b>{r.existingName}</b> (sin código de Just todavía)</span>
                       {r.matchType === "exact" ? (
                         <span className="ml-1.5 font-mono text-[9px] font-bold uppercase rounded-full px-1.5 py-0.5 bg-teal/15 border border-teal/40 text-teal">Nombre idéntico</span>
                       ) : (
@@ -375,9 +408,10 @@ export function JustCatalogPanel({ canManage }: { canManage: boolean }) {
               {showNewRows && (
                 <div className="mt-2 max-h-56 overflow-y-auto flex flex-col gap-1">
                   {preview.newRows.map((r) => (
-                    <div key={r.code} className="text-[11.5px] flex items-center gap-2">
+                    <div key={r.code} className="text-[11.5px] flex items-center gap-1">
                       <span className="font-mono text-steel">{r.code}</span>
-                      <span>{r.name}</span>
+                      <CopyCodeButton code={r.code} copied={copiedCode === r.code} onCopy={copyCode} />
+                      <span className="ml-1">{r.name}</span>
                     </div>
                   ))}
                 </div>
@@ -394,9 +428,10 @@ export function JustCatalogPanel({ canManage }: { canManage: boolean }) {
                 <div className="mt-2 max-h-56 overflow-y-auto flex flex-col gap-1">
                   <div className="text-[11px] text-steel mb-1">No se borran ni desvinculan solos — revisa en Just si fueron descontinuados o cambiaron de código.</div>
                   {preview.missingItems.map((m) => (
-                    <div key={m.id} className="text-[11.5px] flex items-center gap-2">
+                    <div key={m.id} className="text-[11.5px] flex items-center gap-1">
                       <span className="font-mono text-steel">{m.justCode}</span>
-                      <span>{m.name}</span>
+                      <CopyCodeButton code={m.justCode} copied={copiedCode === m.justCode} onCopy={copyCode} />
+                      <span className="ml-1">{m.name}</span>
                       {m.hasPhotos && (
                         <span className="font-mono text-[9px] font-bold uppercase rounded-full px-1.5 py-0.5 bg-teal/15 border border-teal/40 text-teal">Matriculado</span>
                       )}
@@ -450,7 +485,12 @@ export function JustCatalogPanel({ canManage }: { canManage: boolean }) {
                 <Clock size={13} />
               </div>
             )}
-            <span className="font-mono text-[10.5px] text-teal shrink-0">{item.justCode}</span>
+            {item.justCode && (
+              <>
+                <span className="font-mono text-[10.5px] text-teal shrink-0">{item.justCode}</span>
+                <CopyCodeButton code={item.justCode} copied={copiedCode === item.justCode} onCopy={copyCode} />
+              </>
+            )}
             <span className="text-[12.5px] flex-1 min-w-0 truncate">{item.name}</span>
             {item.pendingRegistration && (
               <span className="shrink-0 font-mono text-[9px] font-bold uppercase rounded-full px-1.5 py-0.5 bg-gold/15 border border-gold/40" style={{ color: "#D9A441" }}>
