@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Upload, CheckCircle2, Lock, Bell, Trash2, Landmark, Send } from "lucide-react";
+import { Upload, CheckCircle2, Lock, Bell, Trash2, Landmark, Send, ChevronDown, ChevronUp } from "lucide-react";
 import { Combobox } from "@/components/ui/Combobox";
 import { uploadFile } from "@/lib/uploadFile";
 import { compressImage } from "@/lib/compressImage";
@@ -134,6 +134,7 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [monthFilter, setMonthFilter] = useState("");
+  const [showPaid, setShowPaid] = useState(false);
 
   function load() {
     fetch("/api/admin-payments")
@@ -430,19 +431,16 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
       })
     : requests;
 
-  // Confirmado 2026-08-12: pedido explícito del usuario — los pendientes de
-  // pago con más de 24h desde que se solicitaron (mismo umbral que ya usa
-  // el aviso de Inicio) van primero, arriba de todo sin hacer scroll; los
-  // demás pendientes después; lo ya pagado/confirmado va bajando al fondo
-  // según avanza en el proceso, en vez de mezclarse por fecha de creación.
-  function paymentPriority(r: RequestDTO): number {
-    if (r.status === "PENDING_PAYMENT") {
-      const overdue = Date.now() - new Date(r.createdAt).getTime() > 24 * 60 * 60 * 1000;
-      return overdue ? 0 : 1;
-    }
-    return r.status === "PAID" ? 2 : 3;
-  }
-  const sorted = [...filtered].sort((a, b) => paymentPriority(a) - paymentPriority(b));
+  // Confirmado 2026-08-24: pedido explícito del usuario — lo pendiente de
+  // pago se separa visualmente de lo ya pagado/confirmado para no
+  // confundirlos. Lo pendiente siempre está visible, ordenado de más
+  // antiguo a más reciente (así lo atrasado queda arriba sin necesidad de
+  // un criterio aparte). Lo pagado/confirmado queda oculto por defecto y
+  // se despliega con un clic.
+  const byOldestFirst = (a: RequestDTO, b: RequestDTO) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+  const pending = filtered.filter((r) => r.status === "PENDING_PAYMENT").sort(byOldestFirst);
+  const settled = filtered.filter((r) => r.status !== "PENDING_PAYMENT").sort(byOldestFirst);
+  const visibleList = showPaid ? [...pending, ...settled] : pending;
 
   return (
     <div>
@@ -647,12 +645,28 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
         </div>
       )}
 
+      {pending.length === 0 && settled.length > 0 && (
+        <div className="border-[1.5px] border-dashed border-rule rounded-md p-4 text-center text-steel text-[12.5px] mb-2.5">
+          No hay nada pendiente de pago.
+        </div>
+      )}
+
       <div className="flex flex-col gap-2.5">
-        {sorted.map((r) => {
+        {visibleList.map((r, idx) => {
           const canDelete = !r.declarationFileUrl && !r.paymentProofUrl;
           const overdue = r.status === "PENDING_PAYMENT" && Date.now() - new Date(r.createdAt).getTime() > 24 * 60 * 60 * 1000;
           return (
-            <div key={r.id} className="bg-surface border border-rule rounded-md p-4">
+            <Fragment key={r.id}>
+              {showPaid && settled.length > 0 && idx === pending.length && (
+                <button
+                  type="button"
+                  onClick={() => setShowPaid(false)}
+                  className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-steel mt-2 mb-0.5 cursor-pointer hover:text-teal"
+                >
+                  <ChevronUp size={13} /> Pagados y confirmados ({settled.length}) — ocultar
+                </button>
+              )}
+            <div className="bg-surface border border-rule rounded-md p-4">
               <div className="flex items-start justify-between gap-3 flex-wrap mb-1">
                 <div>
                   <div className="flex items-center gap-1.5 mb-0.5">
@@ -955,9 +969,19 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
                 </button>
               )}
             </div>
+            </Fragment>
           );
         })}
       </div>
+      {settled.length > 0 && !showPaid && (
+        <button
+          type="button"
+          onClick={() => setShowPaid(true)}
+          className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-steel mt-2.5 cursor-pointer hover:text-teal"
+        >
+          <ChevronDown size={13} /> Ver pagados y confirmados ({settled.length})
+        </button>
+      )}
       {err && <div className="text-red text-[12px] mt-3">{err}</div>}
     </div>
   );
