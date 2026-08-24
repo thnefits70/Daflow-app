@@ -8,7 +8,7 @@ import { itemNeedsReview, maybeMarkBatchApproved } from "@/lib/merchandiseReentr
 // cliente) llaman esto mismo — aprueba de un clic únicamente los items que
 // NO necesitan revisión manual (IA reconoció + nada dañado). Si el lote
 // tuviera algún item que sí necesita revisión, esta ruta simplemente no lo
-// toca — se resuelve aparte vía correct-and-approve / resolve-damage.
+// toca — se resuelve aparte vía relink / resolve-damage.
 export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!(await canActOnMerchandiseReentry()) || !session) return NextResponse.json({ error: "No autorizado." }, { status: 403 });

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { AlertTriangle, ChevronDown, ChevronUp, Pencil, Wrench } from "lucide-react";
+import { ProductMatchPicker, type ProductMatchResult } from "./ProductMatchPicker";
 
 type ItemDTO = {
   id: string;
@@ -207,20 +208,29 @@ export function ReviewInbox({ canAct }: { canAct: boolean }) {
 }
 
 function ReviewItemRow({ item, canAct, onChanged, onExpandPhoto }: { item: ItemDTO; canAct: boolean; onChanged: () => void; onExpandPhoto: (url: string) => void }) {
-  const [name, setName] = useState(item.correctedName ?? item.declaredName ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [solving, setSolving] = useState(false);
   const [solutionNote, setSolutionNote] = useState("");
+  // Daniel puede abrir esto para corregir un producto que Inventario ya
+  // vinculó (bien o mal) — pedido explícito del usuario: "Daniel conoce
+  // todos los productos" y debe poder desvincular/re-vincular incluso lo
+  // que ya no "necesita revisión" a simple vista. Una vez aprobado
+  // (item.approvedAt) ya no se puede abrir — el vínculo queda fijo.
+  const [editingProduct, setEditingProduct] = useState(false);
 
   const nameNeedsReview = !item.aiRecognized && !item.correctedName;
   const damageNeedsReview = item.damagedQty > 0 && item.damageConfirmed === null;
 
-  async function saveName() {
+  async function relink(result: ProductMatchResult) {
     setBusy(true);
     setError("");
     try {
-      await postJson(`/api/merchandise-reentry/items/${item.id}/correct-and-approve`, { name });
+      await postJson(
+        `/api/merchandise-reentry/items/${item.id}/relink`,
+        "catalogItem" in result ? { catalogItemId: result.catalogItem.id } : { manualName: result.manualName }
+      );
+      setEditingProduct(false);
       onChanged();
     } catch (e) {
       setError(e instanceof Error ? e.message : "No se pudo guardar.");
@@ -256,14 +266,18 @@ function ReviewItemRow({ item, canAct, onChanged, onExpandPhoto }: { item: ItemD
         )}
         <div className="flex-1 min-w-0">
           {nameNeedsReview ? (
-            <div>
-              <div className="text-[10.5px] text-steel mb-1">Nombre declarado por el colaborador</div>
-              <input disabled={!canAct} className="w-full rounded border border-rule bg-surface px-2.5 py-1.5 text-[12.5px] disabled:opacity-60" value={name} onChange={(e) => setName(e.target.value)} />
-            </div>
+            <div className="text-[10.5px] text-steel mb-1">Nombre declarado por el colaborador — vincula el producto correcto abajo</div>
           ) : (
-            <div className="text-[12.5px] font-semibold truncate">{itemName(item)}</div>
+            <div className="flex items-center gap-1.5">
+              <div className="text-[12.5px] font-semibold truncate">{itemName(item)}</div>
+              {!item.approvedAt && canAct && !editingProduct && (
+                <button type="button" title="Corregir el producto vinculado" className="shrink-0 text-steel hover:text-teal cursor-pointer" onClick={() => setEditingProduct(true)}>
+                  <Pencil size={11} />
+                </button>
+              )}
+            </div>
           )}
-          {item.correctedName && item.correctedBy && (
+          {item.correctedBy && (
             <div className="text-[10px] text-steel mt-1 flex items-center gap-1">
               <Pencil size={10} /> Corregido por {item.correctedBy.name}
               {item.correctedAt && ` · ${fmt(item.correctedAt)}`}
@@ -281,17 +295,6 @@ function ReviewItemRow({ item, canAct, onChanged, onExpandPhoto }: { item: ItemD
         </div>
         {item.goodQty > 0 && <span className="text-[11.5px] text-green font-semibold shrink-0">{item.goodQty} buenas</span>}
 
-        {nameNeedsReview && !damageNeedsReview && (
-          <button
-            type="button"
-            disabled={busy || !name.trim() || !canAct}
-            title={!canAct ? "Exclusivo del líder de Inventario" : undefined}
-            className="shrink-0 rounded border border-teal bg-teal px-3 py-1.5 text-[11.5px] font-bold text-navy cursor-pointer disabled:opacity-50"
-            onClick={saveName}
-          >
-            Guardar y aprobar
-          </button>
-        )}
         {damageNeedsReview && !solving && (
           <div className="shrink-0 flex gap-1.5">
             <button
@@ -351,18 +354,14 @@ function ReviewItemRow({ item, canAct, onChanged, onExpandPhoto }: { item: ItemD
           </div>
         </div>
       )}
-      {nameNeedsReview && damageNeedsReview && !solving && (
+      {(nameNeedsReview || editingProduct) && (
         <div className="mt-2 pl-[52px]">
-          <button
-            type="button"
-            disabled={busy || !name.trim() || !canAct}
-            title={!canAct ? "Exclusivo del líder de Inventario" : undefined}
-            className="rounded border border-teal bg-teal px-3 py-1.5 text-[11.5px] font-bold text-navy cursor-pointer disabled:opacity-50"
-            onClick={saveName}
-          >
-            Guardar nombre
-          </button>
-          <div className="text-[10.5px] text-steel mt-1">Resuelve también el daño para poder aprobar este producto.</div>
+          {canAct ? (
+            <ProductMatchPicker referencePhotoUrl={item.photoUrls[0] ?? null} onConfirm={relink} onCancel={editingProduct ? () => setEditingProduct(false) : undefined} />
+          ) : (
+            <div className="text-[11.5px] text-steel">Nombre pendiente de vincular — exclusivo del líder de Inventario.</div>
+          )}
+          {nameNeedsReview && damageNeedsReview && <div className="text-[10.5px] text-steel mt-1.5">Resuelve también el daño para poder aprobar este producto.</div>}
         </div>
       )}
       {error && <div className="text-red text-[11px] mt-1.5">{error}</div>}

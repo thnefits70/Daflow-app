@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Camera, Check, Clock, Plus, Send, Trash2, X } from "lucide-react";
+import { Camera, Check, Pencil, Plus, Send, Trash2, X } from "lucide-react";
 import { LiveCameraCapture } from "@/components/shared/LiveCameraCapture";
-import { CompleteCatalogRegistration } from "@/components/shared/CompleteCatalogRegistration";
+import { ProductMatchPicker, type MatchCatalogItem, type ProductMatchResult } from "./ProductMatchPicker";
 
 const DAMAGE_REASONS = ["Producto roto", "Empaque abierto", "Humedad/manchado", "Golpeado", "Otro"];
 
@@ -45,6 +45,12 @@ export function CaptureFlow() {
   const [deletingItem, setDeletingItem] = useState(false);
   const [confirmDeleteBatch, setConfirmDeleteBatch] = useState(false);
   const [deletingBatch, setDeletingBatch] = useState(false);
+  // Confirmado 2026-08-23 (pedido explícito del usuario): mientras el lote
+  // sigue en borrador, cualquier producto ya agregado se puede desvincular y
+  // volver a vincular las veces que haga falta — no solo elegir bien la
+  // primera vez.
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
+  const [relinkError, setRelinkError] = useState("");
 
   function loadDraft() {
     fetch("/api/merchandise-reentry/draft")
@@ -90,6 +96,17 @@ export function CaptureFlow() {
       loadDraft();
     } finally {
       setDeletingItem(false);
+    }
+  }
+
+  async function relinkItem(itemId: string, result: ProductMatchResult) {
+    setRelinkError("");
+    try {
+      await postJson(`/api/merchandise-reentry/items/${itemId}/relink`, "catalogItem" in result ? { catalogItemId: result.catalogItem.id } : { manualName: result.manualName });
+      setEditingItemId(null);
+      loadDraft();
+    } catch (e) {
+      setRelinkError(e instanceof Error ? e.message : "No se pudo cambiar el producto.");
     }
   }
 
@@ -206,26 +223,42 @@ export function CaptureFlow() {
               </div>
             </div>
           ) : (
-            <div key={item.id} className="bg-surface border border-rule rounded-md p-3 flex items-center gap-3">
-              {item.photoUrls[0] && (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={item.photoUrls[0]} alt={itemName(item)} className="w-10 h-10 object-cover rounded border border-rule shrink-0" />
-              )}
-              <div className="flex-1 min-w-0">
-                <div className="text-[12.5px] font-semibold truncate">{itemName(item)}</div>
-                <div className="text-[11px] text-steel">
-                  {item.goodQty > 0 && <span className="text-green font-semibold">{item.goodQty} buenas</span>}
-                  {item.goodQty > 0 && item.damagedQty > 0 && " · "}
-                  {item.damagedQty > 0 && <span className="text-red font-semibold">{item.damagedQty} dañadas</span>}
+            <div key={item.id} className="bg-surface border border-rule rounded-md p-3">
+              <div className="flex items-center gap-3">
+                {item.photoUrls[0] && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={item.photoUrls[0]} alt={itemName(item)} className="w-10 h-10 object-cover rounded border border-rule shrink-0" />
+                )}
+                <div className="flex-1 min-w-0">
+                  <div className="text-[12.5px] font-semibold truncate">{itemName(item)}</div>
+                  <div className="text-[11px] text-steel">
+                    {item.goodQty > 0 && <span className="text-green font-semibold">{item.goodQty} buenas</span>}
+                    {item.goodQty > 0 && item.damagedQty > 0 && " · "}
+                    {item.damagedQty > 0 && <span className="text-red font-semibold">{item.damagedQty} dañadas</span>}
+                  </div>
                 </div>
+                <button
+                  type="button"
+                  title="Cambiar el producto vinculado"
+                  className="text-steel hover:text-teal cursor-pointer shrink-0"
+                  onClick={() => { setEditingItemId(editingItemId === item.id ? null : item.id); setRelinkError(""); }}
+                >
+                  <Pencil size={14} />
+                </button>
+                <button
+                  type="button"
+                  className="text-steel hover:text-red cursor-pointer shrink-0"
+                  onClick={() => setConfirmDeleteItemId(item.id)}
+                >
+                  <X size={14} />
+                </button>
               </div>
-              <button
-                type="button"
-                className="text-steel hover:text-red cursor-pointer shrink-0"
-                onClick={() => setConfirmDeleteItemId(item.id)}
-              >
-                <X size={14} />
-              </button>
+              {editingItemId === item.id && (
+                <div className="mt-2.5">
+                  <ProductMatchPicker referencePhotoUrl={item.photoUrls[0] ?? null} onConfirm={(r) => relinkItem(item.id, r)} onCancel={() => setEditingItemId(null)} />
+                  {relinkError && <div className="text-red text-[11.5px] mt-1.5">{relinkError}</div>}
+                </div>
+              )}
             </div>
           )
         )}
@@ -279,26 +312,19 @@ export function CaptureFlow() {
   );
 }
 
-type CatalogItem = { id: string; name: string; photos: string[]; justCode: string | null; pendingRegistration: boolean };
-
 // Confirmado 2026-08-20: pedido explícito del usuario — se sacó el
 // reconocimiento por IA (tenía un costo real por cada foto). Ahora se
-// busca a mano contra el catálogo ya cargado (mismo patrón de
-// PurchaseCatalogPicker.tsx: se trae la lista una vez, el filtro por
-// palabras clave es todo del lado del cliente, sin ida y vuelta al
-// servidor por cada letra — pensado para celular con conexión floja).
+// busca a mano contra el catálogo ya cargado, vía ProductMatchPicker
+// (mismo componente compartido con la edición de un producto ya agregado y
+// con la re-vinculación de Daniel en Revisión).
 function AddItemForm({ batchId, onAdded, onCancel }: { batchId: string; onAdded: () => void; onCancel: () => void }) {
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [photoUrl2, setPhotoUrl2] = useState<string | null>(null);
   const [taking, setTaking] = useState(false);
   const [taking2, setTaking2] = useState(false);
 
-  const [catalog, setCatalog] = useState<CatalogItem[] | null>(null);
-  const [query, setQuery] = useState("");
-  const [selected, setSelected] = useState<CatalogItem | null>(null);
-  const [manualMode, setManualMode] = useState(false);
+  const [selected, setSelected] = useState<MatchCatalogItem | null>(null);
   const [manualName, setManualName] = useState("");
-  const [completingItem, setCompletingItem] = useState<CatalogItem | null>(null);
 
   const [goodQty, setGoodQty] = useState("");
   const [damagedQty, setDamagedQty] = useState("");
@@ -307,13 +333,6 @@ function AddItemForm({ batchId, onAdded, onCancel }: { batchId: string; onAdded:
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [confirmingAdd, setConfirmingAdd] = useState(false);
-
-  useEffect(() => {
-    fetch("/api/merchandise-reentry/catalog-search")
-      .then((r) => (r.ok ? r.json() : []))
-      .then(setCatalog)
-      .catch(() => setCatalog([]));
-  }, []);
 
   function onCaptured(url: string) {
     setPhotoUrl(url);
@@ -325,15 +344,15 @@ function AddItemForm({ batchId, onAdded, onCancel }: { batchId: string; onAdded:
     setTaking2(false);
   }
 
-  // Coincidencia por TODAS las palabras escritas (no solo substring exacto)
-  // — "cojin masajeador" encuentra "Almohada masajeador" sin importar orden.
-  const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
-  const suggestions =
-    words.length === 0
-      ? []
-      : (catalog ?? [])
-          .filter((c) => words.every((w) => c.name.toLowerCase().includes(w) || (!!c.justCode && c.justCode.toLowerCase().includes(w))))
-          .slice(0, 6);
+  function onMatchConfirmed(result: ProductMatchResult) {
+    if ("catalogItem" in result) {
+      setSelected(result.catalogItem);
+      setManualName("");
+    } else {
+      setManualName(result.manualName);
+      setSelected(null);
+    }
+  }
 
   const dQty = Number(damagedQty) || 0;
   const gQty = Number(goodQty) || 0;
@@ -485,72 +504,15 @@ function AddItemForm({ batchId, onAdded, onCancel }: { batchId: string; onAdded:
                 </button>
               </div>
             </div>
-          ) : manualMode ? (
-            <div>
-              <input
-                type="text"
-                placeholder="Nombre de referencia (lo más cercano posible)"
-                className="w-full rounded border border-rule bg-cloud px-2.5 py-2 text-[12.5px]"
-                value={manualName}
-                onChange={(e) => setManualName(e.target.value)}
-              />
-              <button type="button" className="text-[11px] text-blue font-semibold cursor-pointer mt-1.5" onClick={() => { setManualMode(false); setManualName(""); }}>
-                Buscar en el catálogo en cambio
+          ) : manualName ? (
+            <div className="flex items-center gap-2.5 bg-cloud rounded-md p-2.5">
+              <div className="flex-1 min-w-0 text-[12.5px] font-medium truncate">{manualName}</div>
+              <button type="button" className="shrink-0 text-[11px] font-semibold text-blue cursor-pointer" onClick={() => setManualName("")}>
+                Cambiar
               </button>
             </div>
           ) : (
-            <div>
-              <input
-                type="text"
-                placeholder="Buscá por nombre (ej. masajeador, mochila…)"
-                className="w-full rounded border border-rule bg-cloud px-2.5 py-2 text-[12.5px]"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-              />
-              {catalog === null && <div className="text-[11.5px] text-steel mt-1">Cargando catálogo…</div>}
-              {suggestions.length > 0 && (
-                <div className="flex flex-col gap-1 mt-1.5 border border-rule rounded-md overflow-hidden">
-                  {suggestions.map((c) => (
-                    <button
-                      key={c.id}
-                      type="button"
-                      className="flex items-center gap-2.5 p-2 hover:bg-cloud cursor-pointer text-left"
-                      onClick={() => {
-                        if (c.pendingRegistration) {
-                          setCompletingItem(c);
-                          return;
-                        }
-                        setSelected(c);
-                        setQuery("");
-                      }}
-                    >
-                      {c.pendingRegistration ? (
-                        <div className="w-9 h-9 rounded border border-dashed border-rule shrink-0 flex items-center justify-center text-gold" style={{ color: "#D9A441" }}>
-                          <Clock size={14} />
-                        </div>
-                      ) : (
-                        c.photos[0] && (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={c.photos[0]} alt={c.name} className="w-9 h-9 object-cover rounded border border-rule shrink-0" />
-                        )
-                      )}
-                      <span className="text-[12.5px] font-medium flex-1">{c.name}</span>
-                      {c.pendingRegistration && (
-                        <span className="shrink-0 font-mono text-[9px] font-bold uppercase rounded-full px-1.5 py-0.5 bg-gold/15 border border-gold/40" style={{ color: "#D9A441" }}>
-                          Matricular
-                        </span>
-                      )}
-                    </button>
-                  ))}
-                </div>
-              )}
-              {words.length > 0 && suggestions.length === 0 && catalog !== null && (
-                <div className="text-[11.5px] text-steel mt-1">No se encontró nada con esas palabras.</div>
-              )}
-              <button type="button" className="text-[11px] text-blue font-semibold cursor-pointer mt-1.5" onClick={() => setManualMode(true)}>
-                Ninguno de estos — escribir el nombre a mano
-              </button>
-            </div>
+            <ProductMatchPicker referencePhotoUrl={photoUrl} onConfirm={onMatchConfirmed} />
           )}
         </div>
       )}
@@ -609,18 +571,6 @@ function AddItemForm({ batchId, onAdded, onCancel }: { batchId: string; onAdded:
         </button>
       </div>
       </>
-      )}
-      {completingItem && (
-        <CompleteCatalogRegistration
-          item={completingItem}
-          onCancel={() => setCompletingItem(null)}
-          onDone={(updated) => {
-            setCompletingItem(null);
-            setCatalog((cat) => (cat ?? []).map((c) => (c.id === updated.id ? { ...c, ...updated, pendingRegistration: false } : c)));
-            setSelected({ ...updated, justCode: completingItem.justCode, pendingRegistration: false });
-            setQuery("");
-          }}
-        />
       )}
     </div>
   );
