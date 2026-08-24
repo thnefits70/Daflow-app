@@ -436,11 +436,11 @@ export function PurchaseCatalogPicker({
           className="w-full rounded border border-rule pl-8.5 pr-3 py-2 text-[13.5px]"
           placeholder="Buscar o crear producto, mercadería o insumo"
           value={query}
-          onChange={(e) => { setQuery(e.target.value); onQueryChange?.(e.target.value); }}
-          onFocus={() => setOpen(true)}
+          onChange={(e) => { setQuery(e.target.value); onQueryChange?.(e.target.value); setOpen(true); }}
+          onFocus={() => { if (query.trim()) setOpen(true); }}
         />
       </div>
-      {open && (
+      {open && query.trim() && (
         <div className="mt-1.5 bg-surface2 border border-rule rounded-md overflow-hidden max-h-56 overflow-y-auto">
           {deleteErr && (
             <div className="flex items-start justify-between gap-2 px-3 py-2 text-[11.5px] text-red border-b border-rule bg-red/5">
