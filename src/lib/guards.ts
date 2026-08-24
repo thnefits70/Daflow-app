@@ -700,6 +700,21 @@ export async function canCloseMerchandiseReentry() {
   return !!user.isLeader && user.leadsDept?.code === "FIN";
 }
 
+// Verificación física + confirmar baja + disposición final ("Control de
+// Daños" → "Pendiente de tu verificación" / "Pendiente de disposición
+// final") — exclusivo de Nairoby (líder de FIN), ni siquiera admin. Pedido
+// 2026-08-24: admin veía y podía accionar estas dos colas por el bypass de
+// canCloseMerchandiseReentry; ahora admin solo las ve en modo lectura
+// (canCloseMerchandiseReentry sigue dando esa visibilidad — ver
+// WeeklyDamageControl.tsx).
+export async function canVerifyDamageDisposal() {
+  const session = await auth();
+  if (!session) return false;
+  const user = await purchasesUserContext(session.user.id);
+  if (!user) return false;
+  return !!user.isLeader && user.leadsDept?.code === "FIN";
+}
+
 // Subir a Just ("Cierre" → Para ingresar a Just) — exclusivo de Nairoby
 // (líder de FIN). Revertido 2026-08-24: se había ampliado a Daniel (INV)
 // el mismo día, pero el usuario pidió bloquearlo de nuevo — Daniel ve la

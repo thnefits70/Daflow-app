@@ -159,7 +159,7 @@ function JustWriteOffCard({ batch, canAct, onChanged }: { batch: WeeklyBatchDTO;
   );
 }
 
-function VerificationCard({ batch, onChanged }: { batch: WeeklyBatchDTO; onChanged: () => void }) {
+function VerificationCard({ batch, canVerify, onChanged }: { batch: WeeklyBatchDTO; canVerify: boolean; onChanged: () => void }) {
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -185,7 +185,16 @@ function VerificationCard({ batch, onChanged }: { batch: WeeklyBatchDTO; onChang
       <GroupList groups={batch.groups} totalLabel={(g) => `${g.totalDamagedQty} unidades${g.breakdown.length > 1 ? ` · ${g.breakdown.length} lotes` : ""}`} />
       <div className="text-[11px] text-steel mt-2">Verifica físicamente estos productos en el área de dañados antes de confirmar.</div>
       {!confirming ? (
-        <button type="button" disabled={busy} className="mt-2.5 rounded border border-teal bg-teal px-3 py-1.5 text-[11.5px] font-bold text-navy cursor-pointer disabled:opacity-60 flex items-center gap-1.5" onClick={() => setConfirming(true)}>
+        <button
+          type="button"
+          disabled={busy || !canVerify}
+          title={!canVerify ? "Exclusivo de Nairoby" : undefined}
+          className="mt-2.5 rounded border border-teal bg-teal px-3 py-1.5 text-[11.5px] font-bold text-navy cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-1.5"
+          onClick={() => {
+            if (!canVerify) return;
+            setConfirming(true);
+          }}
+        >
           <ShieldCheck size={13} /> Ya verifiqué, confirmar baja
         </button>
       ) : (
@@ -206,11 +215,12 @@ function VerificationCard({ batch, onChanged }: { batch: WeeklyBatchDTO; onChang
   );
 }
 
-function DisposalCard({ batch, onChanged }: { batch: WeeklyBatchDTO; onChanged: () => void }) {
+function DisposalCard({ batch, canVerify, onChanged }: { batch: WeeklyBatchDTO; canVerify: boolean; onChanged: () => void }) {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState("");
 
   async function decide(group: GroupDTO, decision: boolean) {
+    if (!canVerify) return;
     const pendingIds = group.breakdown.filter((b) => b.disposalDecision === null).map((b) => b.id);
     if (pendingIds.length === 0) return;
     setBusyId(group.name);
@@ -248,16 +258,18 @@ function DisposalCard({ batch, onChanged }: { batch: WeeklyBatchDTO; onChanged: 
                   <div className="shrink-0 flex gap-1.5">
                     <button
                       type="button"
-                      disabled={busyId === g.name}
-                      className="rounded border border-red bg-red px-2.5 py-1.5 text-[11px] font-bold text-white cursor-pointer disabled:opacity-50 flex items-center gap-1"
+                      disabled={busyId === g.name || !canVerify}
+                      title={!canVerify ? "Exclusivo de Nairoby" : undefined}
+                      className="rounded border border-red bg-red px-2.5 py-1.5 text-[11px] font-bold text-white cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
                       onClick={() => decide(g, false)}
                     >
                       <Flame size={11} /> Destruir
                     </button>
                     <button
                       type="button"
-                      disabled={busyId === g.name}
-                      className="rounded border border-teal bg-teal px-2.5 py-1.5 text-[11px] font-bold text-navy cursor-pointer disabled:opacity-50 flex items-center gap-1"
+                      disabled={busyId === g.name || !canVerify}
+                      title={!canVerify ? "Exclusivo de Nairoby" : undefined}
+                      className="rounded border border-teal bg-teal px-2.5 py-1.5 text-[11px] font-bold text-navy cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
                       onClick={() => decide(g, true)}
                     >
                       <Wrench size={11} /> Percha de repuestos
@@ -281,7 +293,7 @@ function DisposalCard({ batch, onChanged }: { batch: WeeklyBatchDTO; onChanged: 
 // el daño). Pedido 2026-08-21: evita el doble proceso reingreso+baja,
 // deja constancia semanal antes de dar de baja en Just, y agrega
 // verificación física + disposición final a cargo de Nairoby.
-export function WeeklyDamageControl({ canAct, canApprove, canClose }: { canAct: boolean; canApprove: boolean; canClose: boolean }) {
+export function WeeklyDamageControl({ canAct, canApprove, canClose, canVerify }: { canAct: boolean; canApprove: boolean; canClose: boolean; canVerify: boolean }) {
   const [data, setData] = useState<SummaryDTO | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -323,10 +335,11 @@ export function WeeklyDamageControl({ canAct, canApprove, canClose }: { canAct: 
             <ShieldCheck size={15} className="text-red" />
             <span className="text-[13.5px] font-bold">Pendiente de tu verificación</span>
             <span className="font-mono text-[10px] font-bold text-red bg-red/15 border border-red/40 rounded-full px-2 py-0.5">{data.needsNairobyVerification.length}</span>
+            {!canVerify && <span className="font-mono text-[9.5px] text-steel bg-cloud rounded-full px-1.5 py-0.5">solo lectura</span>}
           </div>
           <div className="flex flex-col gap-2.5">
             {data.needsNairobyVerification.map((b) => (
-              <VerificationCard key={b.id} batch={b} onChanged={load} />
+              <VerificationCard key={b.id} batch={b} canVerify={canVerify} onChanged={load} />
             ))}
           </div>
         </div>
@@ -338,10 +351,11 @@ export function WeeklyDamageControl({ canAct, canApprove, canClose }: { canAct: 
             <Flame size={15} className="text-red" />
             <span className="text-[13.5px] font-bold">Pendiente de disposición final</span>
             <span className="font-mono text-[10px] font-bold text-red bg-red/15 border border-red/40 rounded-full px-2 py-0.5">{data.needsDisposalDecision.length}</span>
+            {!canVerify && <span className="font-mono text-[9.5px] text-steel bg-cloud rounded-full px-1.5 py-0.5">solo lectura</span>}
           </div>
           <div className="flex flex-col gap-2.5">
             {data.needsDisposalDecision.map((b) => (
-              <DisposalCard key={b.id} batch={b} onChanged={load} />
+              <DisposalCard key={b.id} batch={b} canVerify={canVerify} onChanged={load} />
             ))}
           </div>
         </div>

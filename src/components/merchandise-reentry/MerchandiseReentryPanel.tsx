@@ -16,6 +16,7 @@ export function MerchandiseReentryPanel({
   canApprove,
   canAct = false,
   canClose,
+  canVerifyDamageDisposal = false,
   canManageJustUpload = false,
   canManageJustCatalog = false,
 }: {
@@ -23,6 +24,7 @@ export function MerchandiseReentryPanel({
   canApprove: boolean;
   canAct?: boolean;
   canClose: boolean;
+  canVerifyDamageDisposal?: boolean;
   canManageJustUpload?: boolean;
   canManageJustCatalog?: boolean;
 }) {
@@ -110,20 +112,20 @@ export function MerchandiseReentryPanel({
       {tab === "danos" && (canApprove || canClose) && (
         <>
           <TabGuide storageKey="merchreentry-danos">
-            {canAct && !canClose && (
+            {canAct && !canVerifyDamageDisposal && (
               <>Cada semana se cierra el sábado con lo dañado que no se pudo solucionar. Te toca darlo de baja en el sistema Just — al confirmar, el lote pasa a Nairoby para la verificación física y la disposición final.</>
             )}
-            {canClose && !canAct && (
+            {canVerifyDamageDisposal && !canAct && (
               <>Acá verificas físicamente lo que ya se dio de baja en Just, y decides si cada producto se destruye o pasa a la percha de repuestos.</>
             )}
-            {canAct && canClose && (
+            {canAct && canVerifyDamageDisposal && (
               <>Ves las dos partes del ciclo semanal: dar de baja en Just lo que no se solucionó, y luego verificar físicamente + decidir destrucción o percha de repuestos.</>
             )}
-            {!canAct && !canClose && (
+            {!canAct && !canVerifyDamageDisposal && (
               <>Vista de solo lectura del ciclo semanal de productos dañados: baja en Just (Daniel), verificación física y disposición final (Nairoby).</>
             )}
           </TabGuide>
-          <WeeklyDamageControl canAct={canAct} canApprove={canApprove} canClose={canClose} />
+          <WeeklyDamageControl canAct={canAct} canApprove={canApprove} canClose={canClose} canVerify={canVerifyDamageDisposal} />
         </>
       )}
       {tab === "productos" && (canApprove || canClose) && (

@@ -97,6 +97,7 @@ export function DeptWorkspaceTabs({
   canApproveMerchandiseReentry = false,
   canActOnMerchandiseReentry = false,
   canCloseMerchandiseReentry = false,
+  canVerifyDamageDisposal = false,
   canManageJustUpload = false,
   canManageJustCatalog = false,
   merchandiseReentryPendingCount = 0,
@@ -185,9 +186,14 @@ export function DeptWorkspaceTabs({
   canApproveMerchandiseReentry?: boolean;
   canActOnMerchandiseReentry?: boolean;
   canCloseMerchandiseReentry?: boolean;
-  // Subir a Just ("Cierre") — pedido 2026-08-24: Nairoby (FIN) y Daniel
-  // (INV) lo gestionan; admin solo ve la pestaña en modo lectura (ver
-  // canCloseMerchandiseReentry, que sigue dando esa visibilidad).
+  // Verificación física + disposición final en "Control de Daños" —
+  // exclusivo de Nairoby (FIN), ni siquiera admin (ver
+  // canVerifyDamageDisposal en guards.ts); canCloseMerchandiseReentry
+  // sigue dando visibilidad de solo lectura de esas colas.
+  canVerifyDamageDisposal?: boolean;
+  // Subir a Just ("Cierre") — exclusivo de Nairoby (FIN); admin y Daniel
+  // solo ven la pestaña en modo lectura (ver canManageJustUpload en
+  // guards.ts, que sigue dando esa visibilidad vía canApprove/canClose).
   canManageJustUpload?: boolean;
   canManageJustCatalog?: boolean;
   merchandiseReentryPendingCount?: number;
@@ -373,6 +379,7 @@ export function DeptWorkspaceTabs({
           canApprove={canApproveMerchandiseReentry}
           canAct={canActOnMerchandiseReentry}
           canClose={canCloseMerchandiseReentry}
+          canVerifyDamageDisposal={canVerifyDamageDisposal}
           canManageJustUpload={canManageJustUpload}
           canManageJustCatalog={canManageJustCatalog}
         />

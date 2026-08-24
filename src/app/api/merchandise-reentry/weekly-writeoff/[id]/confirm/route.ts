@@ -1,14 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { canCloseMerchandiseReentry } from "@/lib/guards";
+import { canVerifyDamageDisposal } from "@/lib/guards";
 
 // Doble confirmación de Nairoby: ya verificó físicamente el listado que
 // Daniel dio de baja en Just contra los productos reales guardados en el
-// área designada, y declara que efectivamente se dan de baja.
+// área designada, y declara que efectivamente se dan de baja. Exclusivo de
+// Nairoby, ni siquiera admin — ver canVerifyDamageDisposal en guards.ts.
 export async function POST(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
-  if (!(await canCloseMerchandiseReentry()) || !session) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+  if (!(await canVerifyDamageDisposal()) || !session) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
   const { id } = await params;
   const batch = await prisma.merchandiseWeeklyWriteOffBatch.findUnique({ where: { id } });
@@ -19,7 +20,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   const updated = await prisma.merchandiseWeeklyWriteOffBatch
     .update({
       where: { id, nairobyConfirmedAt: null },
-      data: { nairobyConfirmedAt: new Date(), nairobyConfirmedById: session.user.role === "admin" ? null : session.user.id },
+      data: { nairobyConfirmedAt: new Date(), nairobyConfirmedById: session.user.id },
     })
     .catch(() => null);
   if (!updated) return NextResponse.json({ error: "Ya estaba confirmado." }, { status: 409 });

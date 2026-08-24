@@ -2,17 +2,18 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { canCloseMerchandiseReentry } from "@/lib/guards";
+import { canVerifyDamageDisposal } from "@/lib/guards";
 import { maybeMarkBatchClosed } from "@/lib/merchandiseReentry";
 
 const schema = z.object({ itemIds: z.array(z.string()).min(1), decision: z.boolean() }); // true = percha de repuestos, false = destruido
 
 // Decisión física final de Nairoby, por unidad, tras la doble confirmación
 // del lote semanal. Marca writeOffAt en el item — recién ahí queda
-// completamente cerrada la parte dañada del reingreso original.
+// completamente cerrada la parte dañada del reingreso original. Exclusivo
+// de Nairoby, ni siquiera admin — ver canVerifyDamageDisposal en guards.ts.
 export async function POST(req: Request) {
   const session = await auth();
-  if (!(await canCloseMerchandiseReentry()) || !session) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+  if (!(await canVerifyDamageDisposal()) || !session) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
   const parsed = schema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Datos inválidos." }, { status: 400 });
@@ -28,10 +29,9 @@ export async function POST(req: Request) {
   }
 
   const now = new Date();
-  const actorId = session.user.role === "admin" ? null : session.user.id;
   await prisma.merchandiseReentryItem.updateMany({
     where: { id: { in: parsed.data.itemIds } },
-    data: { disposalDecision: parsed.data.decision, disposalDecidedAt: now, disposalDecidedById: actorId, writeOffAt: now, writeOffById: actorId },
+    data: { disposalDecision: parsed.data.decision, disposalDecidedAt: now, disposalDecidedById: session.user.id, writeOffAt: now, writeOffById: session.user.id },
   });
 
   const batchIds = [...new Set(items.map((i) => i.batchId))];
