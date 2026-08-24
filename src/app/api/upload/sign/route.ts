@@ -16,6 +16,7 @@ import {
   canConfirmPersonalPurchaseInventory,
   canCaptureMerchandiseReentry,
   canManageJustCatalog,
+  canEditPayrollRoles,
 } from "@/lib/guards";
 
 // Confirmado 2026-08-03: bug real — ninguna de estas carpetas de Control de
@@ -121,6 +122,13 @@ export async function POST(req: NextRequest) {
   }
   if (!allowed && session?.user.role === "employee" && folder === "just-catalog-import") {
     allowed = await canManageJustCatalog();
+  }
+  // Comprobante del pago individual a cada colaborador (después de que
+  // Nairoby ya tiene el total en su poder) — lo sube ella, no el admin, a
+  // diferencia de payroll-transfer-proofs (esa la sube el admin, cubierto
+  // por el bypass de role==="admin" arriba, nunca tuvo entrada propia acá).
+  if (!allowed && session?.user.role === "employee" && folder === "payroll-individual-payment-proofs") {
+    allowed = await canEditPayrollRoles();
   }
   if (!allowed) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 

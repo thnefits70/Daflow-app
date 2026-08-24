@@ -5,6 +5,7 @@ import { X, ShieldCheck, Landmark, ChevronDown } from "lucide-react";
 import { PayrollEmployeeSalariesPanel } from "./PayrollEmployeeSalariesPanel";
 import { CeoBonusesForNairobyPanel } from "./CeoBonusesForNairobyPanel";
 import { PayrollTransferPanel, type Transfer } from "./PayrollTransferPanel";
+import { IndividualPayoutsPanel } from "./IndividualPayoutsPanel";
 
 type LineItem = { id?: string; label: string; amount: number; kind: "INCOME" | "EXPENSE"; isAutomatic?: boolean; note?: string | null };
 type EmployeeBankAccount = {
@@ -25,6 +26,9 @@ type Role = {
   netTotal: number;
   employee: { id: string; name: string; position: string | null; employeeBankAccounts: EmployeeBankAccount[] };
   lineItems: LineItem[];
+  paidAt: string | null;
+  paidProofUrl: string | null;
+  paidProofName: string | null;
 };
 type PeriodDetail = {
   period: string;
@@ -418,6 +422,23 @@ export function PayrollRolesPanel({ canEdit, canProposeFixedBonus, canApproveFix
 
           {transfer && !(isAdmin && transfer.status === "REJECTED") && (
             <PayrollTransferPanel period={period} isAdmin={isAdmin} canEdit={canEdit} transfer={transfer} onChanged={loadTransfer} />
+          )}
+
+          {transfer?.status === "COMPLETED" && (
+            <IndividualPayoutsPanel
+              roles={detail.roles.map((r) => ({
+                id: r.id,
+                employeeName: r.employee.name,
+                position: r.employee.position,
+                netTotal: r.netTotal,
+                bankAccount: r.employee.employeeBankAccounts[0] ?? null,
+                paidAt: r.paidAt,
+                paidProofUrl: r.paidProofUrl,
+                paidProofName: r.paidProofName,
+              }))}
+              canEdit={canEdit}
+              onChanged={loadDetail}
+            />
           )}
 
           <button

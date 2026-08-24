@@ -2716,6 +2716,15 @@ model PayrollQuincenaRole {
   createdById String?
   createdBy   User?    @relation("PayrollQuincenaRoleCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
 
+  // Pago individual a este colaborador (después de que Nairoby ya tiene el
+  // total en su poder / cuenta correspondiente — ver PayrollTransfer). La IA
+  // lee el monto del comprobante y se compara contra netTotal antes de dejar
+  // confirmar, mismo patrón bloqueante que PayrollTransfer.proof.
+  paidAt              DateTime?
+  paidProofUrl        String?
+  paidProofName       String?
+  paidProofReadAmount Float?
+
   lineItems PayrollLineItem[]
 
   @@index([periodId])

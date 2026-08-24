@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { computeCostUsd } from "@/lib/aiPricing";
 
-export type AiUsageFeature = "nancy" | "fernick" | "rutas_conocimiento" | "control_compras_cotizacion" | "control_compras_catalogo" | "control_compras_comprobante_pago" | "control_compras_orden_compra" | "control_compras_recepcion_fotos" | "caja_chica_comprobante" | "control_inventario_comprobante" | "pagos_admin_declaracion" | "reingreso_mercaderia_reconocimiento" | "anticipos_comprobante" | "nomina_transferencia_comprobante";
+export type AiUsageFeature = "nancy" | "fernick" | "rutas_conocimiento" | "control_compras_cotizacion" | "control_compras_catalogo" | "control_compras_comprobante_pago" | "control_compras_orden_compra" | "control_compras_recepcion_fotos" | "caja_chica_comprobante" | "control_inventario_comprobante" | "pagos_admin_declaracion" | "reingreso_mercaderia_reconocimiento" | "anticipos_comprobante" | "nomina_transferencia_comprobante" | "nomina_pago_individual_comprobante";
 
 const FEATURE_LABELS: Record<AiUsageFeature, string> = {
   nancy: "Nancy · chat financiero",
@@ -18,6 +18,7 @@ const FEATURE_LABELS: Record<AiUsageFeature, string> = {
   reingreso_mercaderia_reconocimiento: "Reingreso de Mercadería · reconocer producto",
   anticipos_comprobante: "Anticipos · verificar comprobante de transferencia",
   nomina_transferencia_comprobante: "Nómina · verificar comprobante de transferencia",
+  nomina_pago_individual_comprobante: "Nómina · verificar comprobante de pago individual",
 };
 
 // Confirmado 2026-07-29: no debe poder tumbar el flujo principal (Nancy o la
