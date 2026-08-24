@@ -69,7 +69,19 @@ function pendingInfo(requestedAt: string) {
   const minutes = totalMinutes % 60;
   const label = days > 0 ? `${days}d ${hours}h` : hours > 0 ? `${hours}h ${minutes}min` : `${minutes} min`;
   const urgency = totalMinutes >= 2880 ? "text-red" : totalMinutes >= 1440 ? "text-gold" : "text-steel-dim";
-  const dateStr = new Date(requestedAt).toLocaleString("es-EC", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+  const requestedDate = new Date(requestedAt);
+  const timeStr = requestedDate.toLocaleString("es-EC", { hour: "2-digit", minute: "2-digit" });
+  const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const dayDiff = Math.round((startOfDay(new Date()) - startOfDay(requestedDate)) / 86400000);
+  const dayLabel =
+    dayDiff === 0
+      ? "Hoy"
+      : dayDiff === 1
+        ? "Ayer"
+        : dayDiff === 2
+          ? "Antes de ayer"
+          : requestedDate.toLocaleString("es-EC", { day: "2-digit", month: "2-digit" });
+  const dateStr = `${dayLabel}, ${timeStr}`;
   return { label, urgency, dateStr };
 }
 
@@ -191,9 +203,9 @@ export function PurchaseApprovalInbox() {
       .catch(() => setPriceHistoryPoints((m) => ({ ...m, [catalogItemId]: [] })));
   }
 
-  const { onPaste: onPasteProof, onMouseEnter: onPasteProofHoverIn, onMouseLeave: onPasteProofHoverOut } = usePasteFile((file) => uploadProof(file));
+  const { onPaste: onPasteProof, onMouseEnter: onPasteProofHoverIn, onMouseLeave: onPasteProofHoverOut, onTapPaste: onTapPasteProof, tapHint: tapHintProof } = usePasteFile((file) => uploadProof(file));
   const proofFileInputRef = useRef<HTMLInputElement>(null);
-  const { onPaste: onPasteShippingProof, onMouseEnter: onPasteShippingProofHoverIn, onMouseLeave: onPasteShippingProofHoverOut } = usePasteFile((file) => uploadShippingProof(file));
+  const { onPaste: onPasteShippingProof, onMouseEnter: onPasteShippingProofHoverIn, onMouseLeave: onPasteShippingProofHoverOut, onTapPaste: onTapPasteShippingProof, tapHint: tapHintShippingProof } = usePasteFile((file) => uploadShippingProof(file));
   const shippingProofFileInputRef = useRef<HTMLInputElement>(null);
 
   function toggleHistory(groupId: string, catalogItemId: string) {
@@ -749,16 +761,17 @@ export function PurchaseApprovalInbox() {
                       onPaste={onPasteProof}
                       onMouseEnter={onPasteProofHoverIn}
                       onMouseLeave={onPasteProofHoverOut}
-                      onClick={(e) => e.preventDefault()}
+                      onClick={onTapPasteProof}
                       className="flex items-center justify-center gap-2 border-[1.5px] border-dashed border-rule rounded-md py-2.5 cursor-pointer text-[12px] text-steel hover:border-teal focus:border-teal focus:outline-none"
                     >
                       {uploadingProof ? <span className="w-3.5 h-3.5 rounded-full border-2 border-rule border-t-teal animate-spin" /> : <Upload size={14} />}
-                      Pega la foto aquí (Ctrl+V)
+                      Pega la foto aquí (Ctrl+V, o toca la casilla en celular)
                       <button type="button" className="text-[10.5px] underline decoration-dotted opacity-80 hover:opacity-100 cursor-pointer" onClick={(e) => { e.stopPropagation(); proofFileInputRef.current?.click(); }}>
                         o selecciona un archivo
                       </button>
                       <input ref={proofFileInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && uploadProof(e.target.files[0])} />
                     </label>
+                    {tapHintProof && <p className="mt-1 text-[10.5px] text-red text-center">{tapHintProof}</p>}
                     <label className="flex items-center justify-center gap-1.5 mt-1.5 text-[10.5px] text-steel cursor-pointer hover:text-teal">
                       <FileText size={10.5} /> ¿Es un PDF? Subir documento
                       <input type="file" accept="application/pdf" className="hidden" onChange={(e) => e.target.files?.[0] && uploadProof(e.target.files[0])} />
@@ -804,16 +817,17 @@ export function PurchaseApprovalInbox() {
                           onPaste={onPasteShippingProof}
                           onMouseEnter={onPasteShippingProofHoverIn}
                           onMouseLeave={onPasteShippingProofHoverOut}
-                          onClick={(e) => e.preventDefault()}
+                          onClick={onTapPasteShippingProof}
                           className="flex items-center justify-center gap-2 border-[1.5px] border-dashed border-rule rounded-md py-2.5 cursor-pointer text-[12px] text-steel hover:border-teal focus:border-teal focus:outline-none"
                         >
                           {uploadingShippingProof ? <span className="w-3.5 h-3.5 rounded-full border-2 border-rule border-t-teal animate-spin" /> : <Upload size={14} />}
-                          Pega la foto aquí (Ctrl+V)
+                          Pega la foto aquí (Ctrl+V, o toca la casilla en celular)
                           <button type="button" className="text-[10.5px] underline decoration-dotted opacity-80 hover:opacity-100 cursor-pointer" onClick={(e) => { e.stopPropagation(); shippingProofFileInputRef.current?.click(); }}>
                             o selecciona un archivo
                           </button>
                           <input ref={shippingProofFileInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && uploadShippingProof(e.target.files[0])} />
                         </label>
+                        {tapHintShippingProof && <p className="mt-1 text-[10.5px] text-red text-center">{tapHintShippingProof}</p>}
                         <label className="flex items-center justify-center gap-1.5 mt-1.5 text-[10.5px] text-steel cursor-pointer hover:text-teal">
                           <FileText size={10.5} /> ¿Es un PDF? Subir documento
                           <input type="file" accept="application/pdf" className="hidden" onChange={(e) => e.target.files?.[0] && uploadShippingProof(e.target.files[0])} />
