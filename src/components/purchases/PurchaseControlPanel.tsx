@@ -11,6 +11,7 @@ import { PurchaseUrgentReportsPanel } from "./PurchaseUrgentReportsPanel";
 import { PurchaseAuditPanel } from "./PurchaseAuditPanel";
 import { PurchaseCreditsPanel } from "./PurchaseCreditsPanel";
 import { PurchaseJustaPanel } from "./PurchaseJustaPanel";
+import { TabGuide } from "@/components/shared/TabGuide";
 
 type Tab = "solicitar" | "mias" | "comparar" | "aprobacion" | "inventario" | "justa" | "finanzas" | "urgentes" | "creditos" | "auditoria";
 
@@ -102,16 +103,92 @@ export function PurchaseControlPanel({
         ))}
       </div>
 
-      {tab === "solicitar" && <PurchaseRequestForm deptId={deptId} isAdmin={isAdmin} />}
-      {tab === "mias" && <MyPurchaseRequests onResubmit={handleResubmit} isAdmin={isAdmin} />}
-      {tab === "comparar" && <PurchasePriceExplorer />}
-      {tab === "aprobacion" && <PurchaseApprovalInbox />}
-      {tab === "urgentes" && <PurchaseUrgentReportsPanel isAdmin={isAdmin} />}
-      {tab === "creditos" && <PurchaseCreditsPanel />}
-      {tab === "inventario" && <PurchaseReceivingPanel isAdmin={isAdmin} canReceiveTeam={canReceiveTeam} canApprove={canApproveReceiving} />}
-      {tab === "justa" && <PurchaseJustaPanel />}
-      {tab === "finanzas" && <PurchaseInvoicingPanel />}
-      {tab === "auditoria" && <PurchaseAuditPanel />}
+      {tab === "solicitar" && (
+        <>
+          <TabGuide storageKey="compras-solicitar">
+            Arma acá una nueva solicitud de compra: producto, cantidad, costo, proveedor y la cotización. Se envía a aprobación del admin.
+          </TabGuide>
+          <PurchaseRequestForm deptId={deptId} isAdmin={isAdmin} />
+        </>
+      )}
+      {tab === "mias" && (
+        <>
+          <TabGuide storageKey="compras-mias">
+            Sigue acá el estado de tus solicitudes ya enviadas. Si el admin rechaza una, la puedes corregir y reenviar desde aquí sin perder lo que ya llenaste.
+          </TabGuide>
+          <MyPurchaseRequests onResubmit={handleResubmit} isAdmin={isAdmin} />
+        </>
+      )}
+      {tab === "comparar" && (
+        <>
+          <TabGuide storageKey="compras-comparar">
+            Busca acá el historial de precios de un producto entre todos los proveedores a los que se le ha comprado, para saber a quién conviene comprarle antes de solicitar.
+          </TabGuide>
+          <PurchasePriceExplorer />
+        </>
+      )}
+      {tab === "aprobacion" && (
+        <>
+          <TabGuide storageKey="compras-aprobacion">
+            Apruebas o rechazas las solicitudes de compra. El sistema lee la cotización subida con IA y te avisa si el total no coincide con lo declarado — revísalo antes de aprobar.
+          </TabGuide>
+          <PurchaseApprovalInbox />
+        </>
+      )}
+      {tab === "urgentes" && (
+        <>
+          <TabGuide storageKey="compras-urgentes">
+            Acá resuelves los &quot;informar urgente&quot; que sube Daniel cuando algo llega mal: reparte la cantidad afectada entre crédito, cambio, reembolso o pérdida — nunca a mano, siempre según el costo real de la cotización. El reembolso lo confirma el admin en su banco.
+          </TabGuide>
+          <PurchaseUrgentReportsPanel isAdmin={isAdmin} />
+        </>
+      )}
+      {tab === "creditos" && (
+        <>
+          <TabGuide storageKey="compras-creditos">
+            Consulta acá todo el crédito vivo con proveedores, de cualquier operación. Desaparece de la lista en cuanto se aplica realmente a un pago.
+          </TabGuide>
+          <PurchaseCreditsPanel />
+        </>
+      )}
+      {tab === "inventario" && (
+        <>
+          <TabGuide storageKey="compras-inventario">
+            {canApproveReceiving ? (
+              <>Acá el equipo registra la recepción con foto y video de cada pedido pagado. Como líder, tu aprobación final es la que cierra cada recepción — sin eso, el pedido queda pendiente de revisión.</>
+            ) : canReceiveTeam ? (
+              <>Registra acá la recepción de cada pedido pagado: foto y video del producto que llega. Daniel da la aprobación final.</>
+            ) : (
+              <>Vista de solo lectura de lo que el equipo de Inventario va recibiendo y aprobando. Recibir y aprobar es exclusivo del equipo de Inventario y su líder.</>
+            )}
+          </TabGuide>
+          <PurchaseReceivingPanel isAdmin={isAdmin} canReceiveTeam={canReceiveTeam} canApprove={canApproveReceiving} />
+        </>
+      )}
+      {tab === "justa" && (
+        <>
+          <TabGuide storageKey="compras-justa">
+            Tu checklist personal: marca acá, uno por uno, lo que ya aprobaste y ya ingresaste al sistema Just. Es solo tuyo, no del equipo.
+          </TabGuide>
+          <PurchaseJustaPanel />
+        </>
+      )}
+      {tab === "finanzas" && (
+        <>
+          <TabGuide storageKey="compras-finanzas">
+            Sube acá la factura de cada pedido ya recibido — con eso se cierra el ciclo de la compra.
+          </TabGuide>
+          <PurchaseInvoicingPanel />
+        </>
+      )}
+      {tab === "auditoria" && (
+        <>
+          <TabGuide storageKey="compras-auditoria">
+            Historial de solo lectura de todo lo recibido y facturado, para buscar o auditar algo pasado sin poder editarlo.
+          </TabGuide>
+          <PurchaseAuditPanel />
+        </>
+      )}
     </div>
   );
 }
