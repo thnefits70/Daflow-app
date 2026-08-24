@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 function isEditableFocused() {
   const el = document.activeElement as HTMLElement | null;
@@ -19,6 +19,23 @@ function extractImageFile(items: DataTransferItemList | undefined) {
   return null;
 }
 
+function isTouchDevice() {
+  return typeof window !== "undefined" && !!window.matchMedia?.("(hover: none)").matches;
+}
+
+async function readImageFromSystemClipboard(): Promise<File | null> {
+  if (!navigator.clipboard?.read) return null;
+  const items = await navigator.clipboard.read();
+  for (const item of items) {
+    const imageType = item.types.find((t) => t.startsWith("image/"));
+    if (imageType) {
+      const blob = await item.getType(imageType);
+      return new File([blob], `pegado-${Date.now()}.png`, { type: imageType });
+    }
+  }
+  return null;
+}
+
 // Confirmado 2026-08-03: antes solo se podía pegar haciendo clic primero (el
 // evento paste nativo solo dispara sobre el elemento con foco) — ahora basta
 // con pasar el mouse por encima de la caja para "armarla", sin necesidad de
@@ -27,6 +44,8 @@ function extractImageFile(items: DataTransferItemList | undefined) {
 // campo), se ignora aunque el mouse esté encima, para no robarle ese pegado.
 export function usePasteFile(onFile: (file: File) => void) {
   const armed = useRef(false);
+  const [tapHint, setTapHint] = useState<string | null>(null);
+  const hintTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     function handleGlobalPaste(e: ClipboardEvent) {
@@ -58,5 +77,34 @@ export function usePasteFile(onFile: (file: File) => void) {
     armed.current = false;
   }, []);
 
-  return { onPaste, onMouseEnter, onMouseLeave };
+  const showHint = useCallback((msg: string) => {
+    setTapHint(msg);
+    if (hintTimer.current) clearTimeout(hintTimer.current);
+    hintTimer.current = setTimeout(() => setTapHint(null), 3000);
+  }, []);
+
+  // En celular no hay Ctrl+V ni hover para "armar" la caja, así que un toque
+  // lee la imagen directamente del portapapeles del sistema (Clipboard API,
+  // requiere gesto del usuario + HTTPS). En desktop el toque no hace nada
+  // (se mantiene el flujo de hover + Ctrl+V) para no disparar el permiso del
+  // portapapeles cada vez que alguien hace clic en la caja para enfocarla.
+  const onTapPaste = useCallback(
+    async (e: React.MouseEvent | React.TouchEvent) => {
+      e.preventDefault();
+      if (!isTouchDevice()) return;
+      try {
+        const file = await readImageFromSystemClipboard();
+        if (file) {
+          onFile(file);
+        } else {
+          showHint('No hay ninguna imagen copiada — usa "seleccionar archivo"');
+        }
+      } catch {
+        showHint('No se pudo abrir el portapapeles — usa "seleccionar archivo"');
+      }
+    },
+    [onFile, showHint]
+  );
+
+  return { onPaste, onMouseEnter, onMouseLeave, onTapPaste, tapHint };
 }
