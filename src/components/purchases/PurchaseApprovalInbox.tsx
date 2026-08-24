@@ -8,7 +8,7 @@ import { uploadFile } from "@/lib/uploadFile";
 import { compressImage } from "@/lib/compressImage";
 import { usePasteFile } from "@/lib/usePasteFile";
 import { PriceTrendChart } from "./PriceTrendChart";
-import type { SupplierPriceHistory, PriceHistoryStats } from "@/lib/purchases";
+import type { SupplierPriceHistory, PriceHistoryStats, SupplierPricePoint } from "@/lib/purchases";
 
 // Copiada de lib/purchases.ts (no se puede importar el original: arrastra
 // prisma/pg al bundle del cliente y rompe el build — ver commit que lo
@@ -165,6 +165,31 @@ export function PurchaseApprovalInbox() {
   // last3Avg real (el mismo que usó el servidor para exigir justificación)
   // para mostrarlo junto al precio efectivo de esta solicitud, sin abrir nada.
   const [statsByCatalogItem, setStatsByCatalogItem] = useState<Record<string, PriceHistoryStats | null>>({});
+
+  // Confirmado 2026-08-24: pedido explícito del usuario — un botón chico y
+  // discreto (no un badge llamativo) en cada producto de la tarjeta, visible
+  // pero sin protagonismo, que solo con doble clic abre la tendencia de
+  // precio combinada (todos los proveedores, últimas 12 compras) — a
+  // diferencia del panel "Sobre el historial" de arriba, este está siempre
+  // disponible sin importar si la solicitud vino con sobreprecio o no.
+  const [priceHistoryFor, setPriceHistoryFor] = useState<{ catalogItemId: string; name: string } | null>(null);
+  const [priceHistoryPoints, setPriceHistoryPoints] = useState<Record<string, SupplierPricePoint[] | null>>({});
+
+  function openPriceHistory(catalogItemId: string, name: string) {
+    setPriceHistoryFor({ catalogItemId, name });
+    if (priceHistoryPoints[catalogItemId] !== undefined) return;
+    setPriceHistoryPoints((m) => ({ ...m, [catalogItemId]: null }));
+    fetch(`/api/purchase-catalog/${catalogItemId}/supplier-comparison`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((data: SupplierPriceHistory[]) => {
+        const merged = data
+          .flatMap((s) => s.history)
+          .sort((a, b) => new Date(a.paidAt ?? a.date).getTime() - new Date(b.paidAt ?? b.date).getTime())
+          .slice(-12);
+        setPriceHistoryPoints((m) => ({ ...m, [catalogItemId]: merged }));
+      })
+      .catch(() => setPriceHistoryPoints((m) => ({ ...m, [catalogItemId]: [] })));
+  }
 
   const { onPaste: onPasteProof, onMouseEnter: onPasteProofHoverIn, onMouseLeave: onPasteProofHoverOut } = usePasteFile((file) => uploadProof(file));
   const proofFileInputRef = useRef<HTMLInputElement>(null);
@@ -419,6 +444,14 @@ export function PurchaseApprovalInbox() {
                       />
                     )}
                     <span>{r.catalogItem.name} · {r.quantity} un. — ${r.unitCost.toFixed(2)}/un.</span>
+                    <button
+                      type="button"
+                      title="Doble clic para ver el historial de precio"
+                      onDoubleClick={() => openPriceHistory(r.catalogItemId, r.catalogItem.name)}
+                      className="text-[9px] font-normal normal-case tracking-normal text-steel-dim/50 hover:text-steel-dim cursor-pointer select-none shrink-0"
+                    >
+                      Historial de precio
+                    </button>
                   </div>
                 ))}
                 <div className="text-[11.5px] text-steel mt-0.5">{g[0].supplier.name}</div>
@@ -829,6 +862,34 @@ export function PurchaseApprovalInbox() {
           onClick={() => setZoomedPhoto(null)}
         >
           <img src={zoomedPhoto} alt="" className="max-w-full max-h-full rounded-md object-contain" />
+        </div>
+      )}
+
+      {priceHistoryFor && (
+        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-6" onClick={() => setPriceHistoryFor(null)}>
+          <div className="bg-surface border border-rule rounded-md p-4 max-w-[620px] w-full" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between gap-3 mb-2">
+              <div className="flex items-center gap-1.5 text-[13px] font-bold">
+                <LineChart size={14} className="text-teal shrink-0" />
+                Historial de precio — {priceHistoryFor.name}
+              </div>
+              <button type="button" className="text-steel text-[12px] cursor-pointer shrink-0" onClick={() => setPriceHistoryFor(null)}>
+                Cerrar
+              </button>
+            </div>
+            {priceHistoryPoints[priceHistoryFor.catalogItemId] === undefined || priceHistoryPoints[priceHistoryFor.catalogItemId] === null ? (
+              <div className="text-steel text-[12px] py-8 text-center">Cargando historial…</div>
+            ) : priceHistoryPoints[priceHistoryFor.catalogItemId]!.length === 0 ? (
+              <div className="text-steel text-[12px] py-8 text-center">Todavía no hay compras registradas de este insumo.</div>
+            ) : (
+              <>
+                <PriceTrendChart points={priceHistoryPoints[priceHistoryFor.catalogItemId]!} />
+                <div className="text-[10px] text-steel-dim text-center mt-1">
+                  Últimas {priceHistoryPoints[priceHistoryFor.catalogItemId]!.length} compras · todos los proveedores
+                </div>
+              </>
+            )}
+          </div>
         </div>
       )}
     </div>
