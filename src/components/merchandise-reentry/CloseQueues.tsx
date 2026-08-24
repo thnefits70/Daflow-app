@@ -12,7 +12,7 @@ type JustGroupDTO = {
 };
 
 function fmt(iso: string) {
-  return new Date(iso).toLocaleString("es-EC", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+  return new Date(iso).toLocaleString("es-EC", { weekday: "short", day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
 }
 
 function fmtDay(iso: string) {
