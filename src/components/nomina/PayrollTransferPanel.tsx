@@ -346,6 +346,16 @@ export function PayrollTransferPanel({
     onChanged();
   }
 
+  async function undoCompletion() {
+    if (!window.confirm("¿Seguro que el comprobante subido no corresponde? Esto vuelve la transferencia a \"Aprobado — falta transferir\" y borra el comprobante actual.")) return;
+    setBusy(true);
+    setErr("");
+    const res = await fetch(`/api/payroll/periods/${period}/transfer/undo-completion`, { method: "POST" });
+    setBusy(false);
+    if (!res.ok) { setErr("No se pudo deshacer la confirmación."); return; }
+    onChanged();
+  }
+
   if (transfer === undefined) return null;
   if (transfer === null) {
     if (canEdit) return <SendTotalPrompt period={period} onSent={onChanged} />;
@@ -386,6 +396,11 @@ export function PayrollTransferPanel({
             <div className="mt-1.5">
               <ProofPreview url={transfer.proofUrl} filename={transfer.proofName ?? undefined} />
             </div>
+          )}
+          {isAdmin && (
+            <button type="button" disabled={busy} className="text-[11px] text-red underline cursor-pointer mt-1.5 block disabled:opacity-50" onClick={undoCompletion}>
+              ¿Comprobante equivocado? Deshacer confirmación
+            </button>
           )}
         </div>
       )}
