@@ -122,17 +122,56 @@ export function PayrollWorkspace({
           <PayrollRolesPanel canEdit={canEditRoles} canProposeFixedBonus={canProposeCommissions} canApproveFixedBonus={canApproveCommissions} isAdmin={isAdmin} />
         </>
       )}
-      {tab === "comisiones" && canProposeCommissions && <CommissionTiersPanel canPropose={canProposeCommissions} canApprove={canApproveCommissions} />}
-      {tab === "bonosceo" && canGrantCeoBonus && <CeoBonusesPanel />}
+      {tab === "comisiones" && canProposeCommissions && (
+        <>
+          <TabGuide storageKey="nomina-comisiones">
+            {canApproveCommissions ? (
+              <>Aprueba los montos de comisión que Nairoby propone por colaborador y nivel (Raíz/Cosecha/Provedix, según el promedio de pedidos/día del mes). Sin tu aprobación, ningún monto propuesto cuenta para el rol de pago.</>
+            ) : (
+              <>Propón acá el monto de comisión de cada colaborador según el nivel que alcanzó (Raíz/Cosecha/Provedix). Queda pendiente hasta que el admin lo apruebe.</>
+            )}
+          </TabGuide>
+          <CommissionTiersPanel canPropose={canProposeCommissions} canApprove={canApproveCommissions} />
+        </>
+      )}
+      {tab === "bonosceo" && canGrantCeoBonus && (
+        <>
+          <TabGuide storageKey="nomina-bonosceo">
+            Elige a quién quieres reconocer y el tipo de bono — el monto es fijo por tipo. Al otorgarlo queda aprobado al instante: se le notifica y entra directo a su rol de pago.
+          </TabGuide>
+          <CeoBonusesPanel />
+        </>
+      )}
       {tab === "comprasfinanzas" && canConfirmPersonalPurchaseFinance && (
         <div className="flex flex-col gap-5">
+          <TabGuide storageKey="nomina-comprasfinanzas">
+            {isAdmin ? (
+              <>Confirma acá que llegó el pago de un colaborador por su compra personal (dos pasos: &quot;Confirmar recibido&quot; y confirmar de nuevo en el cartel), revisando tu cuenta real. Una vez confirmado, se cierra y el colaborador puede pasar a retirar.</>
+            ) : (
+              <>Pon el precio en dólares de cada compra personal que Daniel ya confirmó (costo y Dropi según corresponda, en las cuotas que decidas). Una vez que el admin confirme que llegó el pago, cierra la operación desde acá para habilitar el retiro.</>
+            )}
+          </TabGuide>
           <PersonalPurchasesFinancePanel isAdmin={isAdmin} />
           <PersonalPurchasesTransferPanel isAdmin={isAdmin} />
           <PersonalPurchasesHistoryPanel />
         </div>
       )}
-      {tab === "anticipos" && canManageSalaryAdvances && <SalaryAdvanceApprovalPanel />}
-      {tab === "descuentos" && canCreateManagementDeduction && <ManagementDeductionsPanel />}
+      {tab === "anticipos" && canManageSalaryAdvances && (
+        <>
+          <TabGuide storageKey="nomina-anticipos">
+            Aprueba o rechaza acá los anticipos de sueldo que piden los colaboradores. Al aprobar, sube el comprobante de pago a la cuenta bancaria que ya tienen registrada.
+          </TabGuide>
+          <SalaryAdvanceApprovalPanel />
+        </>
+      )}
+      {tab === "descuentos" && canCreateManagementDeduction && (
+        <>
+          <TabGuide storageKey="nomina-descuentos">
+            Crea acá un descuento administrativo a un colaborador, con motivo y evidencia. No se aplica al rol de pago hasta que el colaborador lo acepte explícitamente.
+          </TabGuide>
+          <ManagementDeductionsPanel />
+        </>
+      )}
     </div>
   );
 }
