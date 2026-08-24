@@ -129,7 +129,11 @@ export default async function DeptWorkspacePage({ params }: { params: Promise<{ 
         canApproveMerchandiseReentry={dept.code === "INV"}
         canActOnMerchandiseReentry={false}
         canCloseMerchandiseReentry={dept.code === "INV"}
-        canManageJustCatalog={false}
+        // Ampliado 2026-08-24: admin ahora también puede subir la base de
+        // datos de Just (antes exclusivo de Daniel, ver guards.ts
+        // canManageJustCatalog) — la pestaña "Base de datos de productos"
+        // solo aparece en el contexto de INV de todos modos.
+        canManageJustCatalog={dept.code === "INV"}
         pettyCashData={pettyCashData}
         canManageAdminPayments={dept.code === "FIN"}
         canViewMarketingArrivals={dept.code === "MKT"}

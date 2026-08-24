@@ -6,5 +6,5 @@ import { MerchandiseReentryPanel } from "@/components/merchandise-reentry/Mercha
 // criterio que canActOnPurchaseReceiving. Cerrar el ciclo (Nairoby, FIN)
 // sigue abierto a admin como supervisión general.
 export default function AdminMerchandiseReentryPage() {
-  return <MerchandiseReentryPanel canCapture={false} canApprove canAct={false} canClose />;
+  return <MerchandiseReentryPanel canCapture={false} canApprove canAct={false} canClose canManageJustCatalog />;
 }
