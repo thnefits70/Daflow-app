@@ -7,6 +7,7 @@ import { usePasteFile } from "@/lib/usePasteFile";
 import { uploadFile } from "@/lib/uploadFile";
 import { ProofPreview } from "@/components/shared/ProofPreview";
 import { LiveCameraCapture } from "@/components/shared/LiveCameraCapture";
+import { TabGuide } from "@/components/shared/TabGuide";
 import type { PettyCashBoxDTO, EligiblePaymentOrderDTO } from "@/lib/pettyCash";
 
 function money(v: number) {
@@ -743,10 +744,25 @@ export function PettyCashPanel({
   // scroll y resalta esa caja cuando se llega desde un aviso de Pendientes.
   focusBox?: string | null;
 }) {
+  const operates = (canManagePrincipal || canManageSecundaria) && !isAdmin;
+
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-      {principal && <BoxCard box={principal} canManage={canManagePrincipal} canFund={canFundPrincipal} showOrderLink={false} eligibleOrders={[]} isAdmin={isAdmin} highlight={focusBox === "principal"} />}
-      {secundaria && <BoxCard box={secundaria} canManage={canManageSecundaria} canFund={canFundSecundaria} showOrderLink={true} eligibleOrders={eligibleOrders} isAdmin={isAdmin} highlight={focusBox === "secundaria"} />}
+    <div>
+      <TabGuide storageKey="cajachica">
+        {isAdmin ? (
+          <>Ves ambas cajas. Fondéalas cuando alguien te pida transferir, y puedes editar o archivar movimientos del historial si hace falta corregir algo — pero registrar un desembolso o confirmar que llegó el fondeo es exclusivo de quien administra cada caja el día a día (Nairoby en Principal, Bryan en Secundaria).</>
+        ) : operates && canManageSecundaria ? (
+          <>Esta es tu caja del día a día. Confirma cuando te fondeen, y registra cada desembolso con su comprobante — la IA verifica que el monto coincida. Puedes vincular el pago a una orden con flete pendiente o escribir el motivo a mano; si una orden ya tiene el flete pagado y necesitas un segundo pago, pide la excepción al dueño.</>
+        ) : operates ? (
+          <>Esta es tu caja del día a día. Confirma cuando te fondeen, registra cada desembolso con su comprobante (la IA verifica que el monto coincida), y configura la cuenta donde quieres recibir el fondeo.</>
+        ) : (
+          <>Vista de solo lectura de las cajas chicas. Fondear, registrar desembolsos y confirmar recargas es exclusivo de quien administra cada caja.</>
+        )}
+      </TabGuide>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {principal && <BoxCard box={principal} canManage={canManagePrincipal} canFund={canFundPrincipal} showOrderLink={false} eligibleOrders={[]} isAdmin={isAdmin} highlight={focusBox === "principal"} />}
+        {secundaria && <BoxCard box={secundaria} canManage={canManageSecundaria} canFund={canFundSecundaria} showOrderLink={true} eligibleOrders={eligibleOrders} isAdmin={isAdmin} highlight={focusBox === "secundaria"} />}
+      </div>
     </div>
   );
 }
