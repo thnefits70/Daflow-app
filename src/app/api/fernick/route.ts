@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
     data: { conversationId, role: "user", content: lastMessage.content },
   });
 
-  const context = await buildFernickContext();
+  const context = await buildFernickContext(ownerId, conversationId);
   const priorMessages = messages.slice(0, -1);
 
   const client = getAnthropicClient();
