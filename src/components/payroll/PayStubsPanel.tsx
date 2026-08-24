@@ -291,11 +291,13 @@ export function PayStubsPanel({
   return (
     <div>
       {/* El líder que gestiona esta página también es colaborador — sus
-          propios descuentos por confirmar no aparecían acá porque el modo
-          "manage" nunca renderizaba este panel (bug: acceso delegado
-          tapando su propio dato). No aplica a admin: para admin, GET
-          /api/management-deductions devuelve los de TODOS, no solo los
-          propios. */}
+          propios descuentos por confirmar y su propia cuenta bancaria no
+          aparecían acá porque el modo "manage" nunca renderizaba estos
+          paneles (bug: acceso delegado tapando su propio dato). No aplica a
+          admin: para admin, GET /api/management-deductions y
+          /api/employee-bank-account devuelven [] / los de TODOS, nunca los
+          propios (el admin no es colaborador). */}
+      {!isAdmin && <MyBankAccountPanel />}
       {!isAdmin && <MyManagementDeductionsPanel />}
 
       <div className="flex items-center gap-3 flex-wrap mb-4.5">

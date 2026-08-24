@@ -96,7 +96,7 @@ export function MyBankAccountPanel() {
         <Landmark size={12} /> Mi cuenta bancaria
       </div>
       <div className="text-[12px] text-steel-dim mb-3">
-        La cuenta activa es a donde Nairoby transfiere tu sueldo y anticipos. Regístrala una sola vez y mantenla actualizada.
+        La cuenta activa es a donde se transfiere tu sueldo y anticipos. Regístrala una sola vez y mantenla actualizada.
       </div>
 
       {accounts.length > 0 && !showForm && (
