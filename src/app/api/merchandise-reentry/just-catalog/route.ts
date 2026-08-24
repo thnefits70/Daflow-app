@@ -35,6 +35,7 @@ export async function GET() {
     renamedCount: imp.renamedCount,
     duplicateGroupsTotal: imp.duplicateGroupsTotal,
     duplicateGroupsResolved: imp.duplicateGroupsResolved,
+    missingCount: imp.missingCount,
   }));
 
   return NextResponse.json({

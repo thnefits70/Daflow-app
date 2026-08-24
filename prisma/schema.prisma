@@ -1297,6 +1297,14 @@ model JustCatalogImport {
   duplicateGroupsTotal    Int @default(0)
   duplicateGroupsResolved Int @default(0)
 
+  // Confirmado 2026-08-24: productos que ya tenían justCode vinculado pero
+  // su código no apareció en ESTA subida — probablemente Just lo
+  // descontinuó o le cambió el código sin que se note como "cambio de
+  // nombre". No se borra ni se desvincula nada automáticamente, solo se
+  // cuenta para que Daniel lo revise (ver missingItems en
+  // classifyJustCatalogRows).
+  missingCount Int @default(0)
+
   @@index([importedAt])
 }
 

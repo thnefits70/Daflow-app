@@ -45,6 +45,7 @@ export type NameChangedPreviewRow = { code: string; itemId: string; currentName:
 export type SuggestedLinkPreviewRow = { code: string; name: string; itemId: string; existingName: string; matchType: "exact" | "similar" };
 export type DuplicateGroupRow = { code: string; name: string; alreadyLinked: boolean; existingName: string | null };
 export type DuplicateGroupPreviewRow = { groupName: string; rows: DuplicateGroupRow[] };
+export type MissingItemRow = { id: string; name: string; justCode: string; hasPhotos: boolean };
 
 export type JustCatalogPreview = {
   totalRows: number;
@@ -53,6 +54,7 @@ export type JustCatalogPreview = {
   nameChangedRows: NameChangedPreviewRow[];
   suggestedLinkRows: SuggestedLinkPreviewRow[];
   duplicateGroups: DuplicateGroupPreviewRow[];
+  missingItems: MissingItemRow[];
 };
 
 // Clasifica cada fila del export de Just contra el catálogo ya existente —
@@ -92,9 +94,13 @@ export type JustCatalogPreview = {
 //   subida hasta que se resuelva, ese reintento constante ES el
 //   seguimiento: no hay forma de que un duplicado quede enterrado en
 //   silencio.
+// - producto que YA tenía justCode vinculado pero su código no aparece en
+//   ESTE archivo -> "missingItems" (confirmado 2026-08-24, pedido del
+//   usuario). No se borra ni se desvincula nada automático — solo se lista
+//   para que Daniel revise si Just lo descontinuó o le cambió el código.
 export async function classifyJustCatalogRows(rows: JustCatalogParsedRow[]): Promise<JustCatalogPreview> {
   const existingItems = await prisma.purchaseCatalogItem.findMany({
-    select: { id: true, name: true, justCode: true, pendingRegistration: true },
+    select: { id: true, name: true, justCode: true, pendingRegistration: true, photos: true },
   });
   const byJustCode = new Map(existingItems.filter((i) => i.justCode).map((i) => [i.justCode as string, i]));
   const unlinkedItems = existingItems.filter((i) => !i.justCode);
@@ -151,7 +157,12 @@ export async function classifyJustCatalogRows(rows: JustCatalogParsedRow[]): Pro
     newRows.push(row);
   }
 
-  return { totalRows: rows.length, unchangedCount, newRows, nameChangedRows, suggestedLinkRows, duplicateGroups };
+  const uploadedCodes = new Set(rows.map((r) => r.code));
+  const missingItems: MissingItemRow[] = existingItems
+    .filter((i) => i.justCode && !uploadedCodes.has(i.justCode))
+    .map((i) => ({ id: i.id, name: i.name, justCode: i.justCode as string, hasPhotos: i.photos.length > 0 }));
+
+  return { totalRows: rows.length, unchangedCount, newRows, nameChangedRows, suggestedLinkRows, duplicateGroups, missingItems };
 }
 
 export type JustCatalogApplyDecisions = {
@@ -164,6 +175,7 @@ export type JustCatalogApplyDecisions = {
   duplicateGroupDecisions: { code: string; name: string }[];
   duplicateGroupsTotal: number;
   duplicateGroupsResolved: number;
+  missingCount: number;
 };
 
 export async function applyJustCatalogImport(decisions: JustCatalogApplyDecisions, totalRows: number, importedById: string | null) {
@@ -231,6 +243,7 @@ export async function applyJustCatalogImport(decisions: JustCatalogApplyDecision
       renamedCount,
       duplicateGroupsTotal: decisions.duplicateGroupsTotal,
       duplicateGroupsResolved: decisions.duplicateGroupsResolved,
+      missingCount: decisions.missingCount,
     },
   });
 

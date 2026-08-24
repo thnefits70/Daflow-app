@@ -12,6 +12,7 @@ const schema = z.object({
   duplicateGroupDecisions: z.array(z.object({ code: z.string().min(1), name: z.string().min(1) })),
   duplicateGroupsTotal: z.number().int().nonnegative(),
   duplicateGroupsResolved: z.number().int().nonnegative(),
+  missingCount: z.number().int().nonnegative(),
 });
 
 export async function POST(req: NextRequest) {

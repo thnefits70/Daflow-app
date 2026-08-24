@@ -15,6 +15,7 @@ type ImportDTO = {
   renamedCount: number;
   duplicateGroupsTotal: number;
   duplicateGroupsResolved: number;
+  missingCount: number;
 };
 type LastImportDTO = ImportDTO | null;
 
@@ -22,6 +23,7 @@ type NameChangedRow = { code: string; itemId: string; currentName: string; justN
 type SuggestedLinkRow = { code: string; name: string; itemId: string; existingName: string; matchType: "exact" | "similar" };
 type DuplicateGroupRow = { code: string; name: string; alreadyLinked: boolean; existingName: string | null };
 type DuplicateGroup = { groupName: string; rows: DuplicateGroupRow[] };
+type MissingItem = { id: string; name: string; justCode: string; hasPhotos: boolean };
 type Preview = {
   totalRows: number;
   unchangedCount: number;
@@ -29,6 +31,7 @@ type Preview = {
   nameChangedRows: NameChangedRow[];
   suggestedLinkRows: SuggestedLinkRow[];
   duplicateGroups: DuplicateGroup[];
+  missingItems: MissingItem[];
 };
 
 const DISTINCT = "__distinct__";
@@ -50,6 +53,7 @@ export function JustCatalogPanel({ canManage }: { canManage: boolean }) {
   const [err, setErr] = useState("");
   const [toast, setToast] = useState("");
   const [showNewRows, setShowNewRows] = useState(false);
+  const [showMissing, setShowMissing] = useState(false);
 
   // itemId -> true significa "usar el nombre de Just" (nameChanged) / "vincular" (suggestedLink)
   const [nameDecisions, setNameDecisions] = useState<Record<string, boolean>>({});
@@ -150,6 +154,7 @@ export function JustCatalogPanel({ canManage }: { canManage: boolean }) {
         duplicateGroupDecisions,
         duplicateGroupsTotal: preview.duplicateGroups.length,
         duplicateGroupsResolved,
+        missingCount: preview.missingItems.length,
       }),
     });
     const json = await res.json().catch(() => null);
@@ -210,6 +215,7 @@ export function JustCatalogPanel({ canManage }: { canManage: boolean }) {
                         {imp.duplicateGroupsResolved < imp.duplicateGroupsTotal ? " (quedaron pendientes)" : ""}
                       </span>
                     )}
+                    {imp.missingCount > 0 && <span style={{ color: "#D9A441" }}>· {imp.missingCount} ya no aparecían en Just</span>}
                   </div>
                 ))}
               </div>
@@ -372,6 +378,28 @@ export function JustCatalogPanel({ canManage }: { canManage: boolean }) {
                     <div key={r.code} className="text-[11.5px] flex items-center gap-2">
                       <span className="font-mono text-steel">{r.code}</span>
                       <span>{r.name}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {preview.missingItems.length > 0 && (
+            <div className="mb-4">
+              <button type="button" className="flex items-center gap-1.5 text-[11px] font-semibold text-steel hover:text-teal cursor-pointer" onClick={() => setShowMissing((s) => !s)}>
+                {showMissing ? <ChevronUp size={13} /> : <ChevronDown size={13} />} {preview.missingItems.length} producto(s) ya no aparecen en este archivo de Just — revisar
+              </button>
+              {showMissing && (
+                <div className="mt-2 max-h-56 overflow-y-auto flex flex-col gap-1">
+                  <div className="text-[11px] text-steel mb-1">No se borran ni desvinculan solos — revisa en Just si fueron descontinuados o cambiaron de código.</div>
+                  {preview.missingItems.map((m) => (
+                    <div key={m.id} className="text-[11.5px] flex items-center gap-2">
+                      <span className="font-mono text-steel">{m.justCode}</span>
+                      <span>{m.name}</span>
+                      {m.hasPhotos && (
+                        <span className="font-mono text-[9px] font-bold uppercase rounded-full px-1.5 py-0.5 bg-teal/15 border border-teal/40 text-teal">Matriculado</span>
+                      )}
                     </div>
                   ))}
                 </div>
