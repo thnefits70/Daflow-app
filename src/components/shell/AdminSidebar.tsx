@@ -24,6 +24,7 @@ import {
   Trophy,
   LayoutGrid,
   Waypoints,
+  TrendingUp,
 } from "lucide-react";
 import { BrandMark } from "@/components/brand/DaflowMark";
 import { NotificationBell } from "@/components/shared/NotificationBell";
@@ -148,6 +149,9 @@ export function AdminSidebar({
       <div className="flex-1 overflow-y-auto py-2.5 min-h-0" onClick={() => setOpen(false)}>
         <Link href="/admin" className={`${NAV_ITEM} ${isActive("/admin") && pathname === "/admin" ? NAV_ACTIVE : NAV_INACTIVE}`}>
           <LayoutDashboard size={15} /> Inicio
+        </Link>
+        <Link href="/admin/fernick" className={`${NAV_ITEM} ${pathname.startsWith("/admin/fernick") ? NAV_ACTIVE : NAV_INACTIVE}`}>
+          <TrendingUp size={15} /> FERNICK
         </Link>
         <Link href="/admin/modulos" className={`${NAV_ITEM} ${pathname.startsWith("/admin/modulos") ? NAV_ACTIVE : NAV_INACTIVE}`}>
           <LayoutGrid size={15} /> Módulos

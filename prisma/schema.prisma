@@ -2237,6 +2237,34 @@ model NancyMessage {
   @@index([conversationId])
 }
 
+// Confirmado 2026-08-24: FERNICK, el asistente empresarial estratégico
+// (crecimiento de facturación) — exclusivo de admin, sin deptId porque
+// razona sobre TODA la empresa (finanzas, inventario, operación, compras),
+// no un departamento puntual. Mismo patrón sin FK de ownerId que
+// NancyConversation (hoy siempre "admin", ver fernickOwnerId en fernick.ts).
+model FernickConversation {
+  id        String   @id @default(cuid())
+  ownerId   String
+  title     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  messages FernickMessage[]
+
+  @@index([ownerId])
+}
+
+model FernickMessage {
+  id             String              @id @default(cuid())
+  conversationId String
+  conversation   FernickConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role           String // "user" | "assistant"
+  content        String
+  createdAt      DateTime            @default(now())
+
+  @@index([conversationId])
+}
+
 // Confirmado 2026-07-29: panel de gasto de IA, solo visible para admin (ve
 // /admin/gasto-ia). Registra cada llamada real a la IA (Nancy, generación de
 // preguntas de Rutas de conocimiento) con sus tokens reales reportados por

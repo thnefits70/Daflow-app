@@ -1,10 +1,11 @@
 import { prisma } from "@/lib/prisma";
 import { computeCostUsd } from "@/lib/aiPricing";
 
-export type AiUsageFeature = "nancy" | "rutas_conocimiento" | "control_compras_cotizacion" | "control_compras_catalogo" | "control_compras_comprobante_pago" | "control_compras_orden_compra" | "control_compras_recepcion_fotos" | "caja_chica_comprobante" | "control_inventario_comprobante" | "pagos_admin_declaracion" | "reingreso_mercaderia_reconocimiento" | "anticipos_comprobante";
+export type AiUsageFeature = "nancy" | "fernick" | "rutas_conocimiento" | "control_compras_cotizacion" | "control_compras_catalogo" | "control_compras_comprobante_pago" | "control_compras_orden_compra" | "control_compras_recepcion_fotos" | "caja_chica_comprobante" | "control_inventario_comprobante" | "pagos_admin_declaracion" | "reingreso_mercaderia_reconocimiento" | "anticipos_comprobante";
 
 const FEATURE_LABELS: Record<AiUsageFeature, string> = {
   nancy: "Nancy · chat financiero",
+  fernick: "FERNICK · asistente empresarial",
   rutas_conocimiento: "Rutas de conocimiento · generar preguntas",
   control_compras_cotizacion: "Control de Compras · verificar cotización",
   control_compras_catalogo: "Control de Compras · chequeo de catálogo",
