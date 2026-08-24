@@ -6,6 +6,7 @@ import type { InventoryKpisDataDTO } from "@/lib/inventoryKpis";
 import type { StaleStreakBucket } from "@/lib/inventoryKpisCalc";
 import { TrendSpark } from "@/components/shared/TrendSpark";
 import { KpiInfoTip } from "@/components/shared/KpiInfoTip";
+import { TabGuide } from "@/components/shared/TabGuide";
 
 const BUCKET_STYLE: Record<StaleStreakBucket, { label: string; color: string }> = {
   "1": { label: "recién detectado", color: "#92a3c0" },
@@ -41,6 +42,9 @@ export function InventoryKpisPanel({ data }: { data: InventoryKpisDataDTO }) {
 
   return (
     <div className="flex flex-col gap-3.5">
+    <TabGuide storageKey="inventoriokpis">
+      Estos KPIs se calculan solos a partir de lo que Daniel carga cada mes en &quot;Control de Inventario&quot;. Toca el ícono de información de cada tarjeta para ver cómo se calcula y qué significa el color.
+    </TabGuide>
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
       {/* 1. Rotación / DIO */}
       <div className="bg-surface border border-rule rounded-md p-4.5" style={{ borderTop: "2px solid #14c7c7" }}>

@@ -6,6 +6,7 @@ import { CheckCircle2, Upload, AlertTriangle, TrendingDown, Minus } from "lucide
 import type { InventoryControlPeriodDTO } from "@/lib/inventoryKpis";
 import { usePasteFile } from "@/lib/usePasteFile";
 import { uploadFile } from "@/lib/uploadFile";
+import { TabGuide } from "@/components/shared/TabGuide";
 
 const MONTH_NAMES = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
 function monthLabel(period: string) {
@@ -190,6 +191,9 @@ export function InventoryControlPanel({
 
   return (
     <div className="flex flex-col gap-4.5">
+      <TabGuide storageKey="control-inventario">
+        Carga acá dos cosas cada mes: el valor total de inventario (con la captura de tu reporte de saldos costeados y valorizados) y ese mismo reporte en Excel, para que DAFLOW arme solo el ranking de productos sin movimiento. Con esto se calculan los KPIs de Inventario.
+      </TabGuide>
       {err && <div className="text-red text-[12.5px]">{err}</div>}
       {toast && <div className="flex items-center gap-2 text-teal text-[12.5px] bg-teal/10 border border-teal/30 rounded-md px-3 py-2"><CheckCircle2 size={14} /> {toast}</div>}
 
