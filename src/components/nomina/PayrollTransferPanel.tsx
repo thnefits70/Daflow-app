@@ -117,9 +117,10 @@ function ProofUploader({ period, onSent }: { period: string; onSent: () => void 
     if (verifyRes.ok && verifyData) setVerify(verifyData);
   }
   const { onPaste, onMouseEnter, onMouseLeave } = usePasteFile(handleFile);
+  const blockedByMismatch = !!verify && !verify.matches;
 
   async function submit() {
-    if (!proofUrl) return;
+    if (!proofUrl || blockedByMismatch) return;
     setSubmitting(true);
     setErr("");
     const res = await fetch(`/api/payroll/periods/${period}/transfer/proof`, {
@@ -128,7 +129,11 @@ function ProofUploader({ period, onSent }: { period: string; onSent: () => void 
       body: JSON.stringify({ proofUrl, proofName }),
     });
     setSubmitting(false);
-    if (!res.ok) { setErr("No se pudo enviar el comprobante — intentá de nuevo."); return; }
+    if (!res.ok) {
+      const data = await res.json().catch(() => null);
+      setErr(data?.error ?? "No se pudo enviar el comprobante — intentá de nuevo.");
+      return;
+    }
     onSent();
   }
 
@@ -169,9 +174,12 @@ function ProofUploader({ period, onSent }: { period: string; onSent: () => void 
           {verify.matches ? "✓ " : verify.readAmount === null ? "" : "⚠ "}{verify.note}
         </div>
       )}
-      <button type="button" disabled={!proofUrl || submitting} className="text-[12px] font-bold bg-teal text-white rounded-md px-3.5 py-1.5 cursor-pointer disabled:opacity-40 mt-2.5" onClick={submit}>
+      <button type="button" disabled={!proofUrl || submitting || blockedByMismatch} className="text-[12px] font-bold bg-teal text-white rounded-md px-3.5 py-1.5 cursor-pointer disabled:opacity-40 mt-2.5" onClick={submit}>
         {submitting ? "Enviando…" : "Confirmar transferencia hecha"}
       </button>
+      {blockedByMismatch && (
+        <div className="text-[11px] text-steel-dim mt-1">Quitá el comprobante y subí uno que sí coincida para poder confirmar.</div>
+      )}
     </div>
   );
 }
