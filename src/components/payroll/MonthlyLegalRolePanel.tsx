@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { FileText } from "lucide-react";
 
 type Role = {
   id: string;
@@ -69,6 +70,15 @@ export function MonthlyLegalRolePanel() {
                 <div className="flex justify-between"><span className="text-steel">Descuento IESS (9.45%)</span><span className="text-red">{money(current.iessDeduction)}</span></div>
                 <div className="flex justify-between font-bold border-t border-rule pt-1.5 mt-0.5"><span>Total a recibir</span><span>{money(current.netTotal)}</span></div>
               </div>
+
+              <a
+                href={`/rol-del-mes/${current.id}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-blue mt-2.5"
+              >
+                <FileText size={12} /> Descargar / imprimir PDF
+              </a>
 
               {current.changeNote && (
                 <div className="mt-3 p-2.5 rounded bg-gold/10 border border-gold/30 text-[11.5px]" style={{ color: "#D9A441" }}>

@@ -1,9 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Upload, FileText, Download, Trash2, ChevronLeft, ChevronRight, MessageSquare } from "lucide-react";
-import { uploadFile as uploadToStorage } from "@/lib/uploadFile";
-import { compressImage } from "@/lib/compressImage";
+import { FileText, Download, Trash2, ChevronLeft, ChevronRight, MessageSquare } from "lucide-react";
 import { PayrollChat } from "@/components/payroll/PayrollChat";
 import { MonthlyLegalRolePanel } from "@/components/payroll/MonthlyLegalRolePanel";
 import { MyBankAccountPanel } from "@/components/payroll/MyBankAccountPanel";
@@ -20,15 +18,6 @@ function fileKind(name: string): "pdf" | "image" | "other" {
   if (n.endsWith(".pdf")) return "pdf";
   if (/\.(png|jpe?g|gif|webp)$/.test(n)) return "image";
   return "other";
-}
-
-async function uploadFile(file: File): Promise<{ url: string; name: string } | null> {
-  // Comprime si es imagen (no-op para PDF) — confirmado 2026-07-31: reducir
-  // peso de almacenamiento sin perder contenido.
-  const compressed = await compressImage(file);
-  const result = await uploadToStorage(compressed, "pay-stubs");
-  if (!result.ok) return null;
-  return { url: result.url, name: result.name };
 }
 
 type Dept = { id: string; name: string; code: string };
@@ -50,16 +39,12 @@ function StubPreview({ url, name }: { url: string; name: string }) {
 
 function RosterRow({
   entry,
-  onUpload,
   onDelete,
-  busy,
   isAdmin,
   unreadCount,
 }: {
   entry: RosterEntry;
-  onUpload: (userId: string, file: File) => void;
   onDelete: (id: string) => void;
-  busy: boolean;
   isAdmin: boolean;
   unreadCount: number;
 }) {
@@ -93,16 +78,6 @@ function RosterRow({
               <a href={stub.fileUrl} download={stub.fileName} className="text-steel hover:text-ink">
                 <Download size={14} />
               </a>
-              <label className="inline-flex items-center gap-1.5 text-[12px] font-semibold border border-blue text-blue rounded px-2.5 py-1.5 cursor-pointer">
-                <Upload size={12} /> Reemplazar
-                <input
-                  type="file"
-                  accept=".pdf,image/*"
-                  className="hidden"
-                  disabled={busy}
-                  onChange={(e) => e.target.files?.[0] && onUpload(user.id, e.target.files[0])}
-                />
-              </label>
               {confirmingDelete ? (
                 <div className="flex items-center gap-1.5">
                   <button
@@ -127,16 +102,7 @@ function RosterRow({
               )}
             </>
           ) : (
-            <label className="inline-flex items-center gap-1.5 text-[12px] font-semibold border border-blue bg-blue text-white rounded px-2.5 py-1.5 cursor-pointer">
-              <Upload size={12} /> {busy ? "Subiendo…" : "Subir"}
-              <input
-                type="file"
-                accept=".pdf,image/*"
-                className="hidden"
-                disabled={busy}
-                onChange={(e) => e.target.files?.[0] && onUpload(user.id, e.target.files[0])}
-              />
-            </label>
+            <span className="text-[11.5px] text-steel-dim italic">Sin comprobantes anteriores.</span>
           )}
           <button
             type="button"
@@ -177,7 +143,6 @@ export function PayStubsPanel({
   const [roster, setRoster] = useState<RosterEntry[] | null>(null);
   const [ownStubs, setOwnStubs] = useState<OwnStub[] | null>(null);
   const [loading, setLoading] = useState(false);
-  const [uploadingFor, setUploadingFor] = useState<string | null>(null);
   const [err, setErr] = useState("");
   const [viewingOwnId, setViewingOwnId] = useState<string | null>(null);
   const [filterMonth, setFilterMonth] = useState(0); // 0 = todos
@@ -222,28 +187,6 @@ export function PayStubsPanel({
     else loadOwn();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, deptId, month, year]);
-
-  const handleUpload = async (userId: string, file: File) => {
-    setUploadingFor(userId);
-    setErr("");
-    const uploaded = await uploadFile(file);
-    if (!uploaded) {
-      setErr("No se pudo subir el archivo.");
-      setUploadingFor(null);
-      return;
-    }
-    const res = await fetch("/api/pay-stubs", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userId, month, year, fileUrl: uploaded.url, fileName: uploaded.name }),
-    });
-    setUploadingFor(null);
-    if (!res.ok) {
-      setErr("No se pudo guardar el comprobante.");
-      return;
-    }
-    loadRoster();
-  };
 
   const handleDelete = async (id: string) => {
     if (!confirm("¿Eliminar este rol de pago? Esta acción no se puede deshacer.")) return;
@@ -408,9 +351,7 @@ export function PayStubsPanel({
           <RosterRow
             key={entry.user.id}
             entry={entry}
-            onUpload={handleUpload}
             onDelete={handleDelete}
-            busy={uploadingFor === entry.user.id}
             isAdmin={isAdmin}
             unreadCount={unreadByEmployee[entry.user.id] ?? 0}
           />
