@@ -12,29 +12,32 @@ export async function GET() {
     return NextResponse.json({ error: "No autorizado." }, { status: 403 });
   }
 
-  const [items, lastImport] = await Promise.all([
+  const [items, imports] = await Promise.all([
     prisma.purchaseCatalogItem.findMany({
       where: { justCode: { not: null } },
       orderBy: { name: "asc" },
       select: { id: true, name: true, justCode: true, photos: true, pendingRegistration: true },
     }),
-    prisma.justCatalogImport.findFirst({
+    prisma.justCatalogImport.findMany({
       orderBy: { importedAt: "desc" },
+      take: 30,
       include: { importedBy: { select: { name: true } } },
     }),
   ]);
 
+  const importsDTO = imports.map((imp) => ({
+    id: imp.id,
+    importedAt: imp.importedAt,
+    importedByName: actorName(imp.importedBy?.name),
+    totalRows: imp.totalRows,
+    createdCount: imp.createdCount,
+    linkedCount: imp.linkedCount,
+    renamedCount: imp.renamedCount,
+  }));
+
   return NextResponse.json({
     items,
-    lastImport: lastImport
-      ? {
-          importedAt: lastImport.importedAt,
-          importedByName: actorName(lastImport.importedBy?.name),
-          totalRows: lastImport.totalRows,
-          createdCount: lastImport.createdCount,
-          linkedCount: lastImport.linkedCount,
-          renamedCount: lastImport.renamedCount,
-        }
-      : null,
+    lastImport: importsDTO[0] ?? null,
+    imports: importsDTO,
   });
 }

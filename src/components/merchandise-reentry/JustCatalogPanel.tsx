@@ -5,7 +5,8 @@ import { Upload, CheckCircle2, AlertTriangle, Clock, Search, ChevronDown, Chevro
 import { uploadFile } from "@/lib/uploadFile";
 
 type CatalogItemDTO = { id: string; name: string; justCode: string | null; photos: string[]; pendingRegistration: boolean };
-type LastImportDTO = { importedAt: string; importedByName: string; totalRows: number; createdCount: number; linkedCount: number; renamedCount: number } | null;
+type ImportDTO = { id: string; importedAt: string; importedByName: string; totalRows: number; createdCount: number; linkedCount: number; renamedCount: number };
+type LastImportDTO = ImportDTO | null;
 
 type NameChangedRow = { code: string; itemId: string; currentName: string; justName: string };
 type SuggestedLinkRow = { code: string; name: string; itemId: string; existingName: string; matchType: "exact" | "similar" };
@@ -26,6 +27,8 @@ export function JustCatalogPanel({ canManage }: { canManage: boolean }) {
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<CatalogItemDTO[]>([]);
   const [lastImport, setLastImport] = useState<LastImportDTO>(null);
+  const [imports, setImports] = useState<ImportDTO[]>([]);
+  const [showHistory, setShowHistory] = useState(false);
   const [query, setQuery] = useState("");
   const [phase, setPhase] = useState<"idle" | "reading" | "preview" | "applying">("idle");
   const [preview, setPreview] = useState<Preview | null>(null);
@@ -40,14 +43,16 @@ export function JustCatalogPanel({ canManage }: { canManage: boolean }) {
 
   function load() {
     fetch("/api/merchandise-reentry/just-catalog")
-      .then((r) => (r.ok ? r.json() : { items: [], lastImport: null }))
+      .then((r) => (r.ok ? r.json() : { items: [], lastImport: null, imports: [] }))
       .then((data) => {
         setItems(data.items ?? []);
         setLastImport(data.lastImport ?? null);
+        setImports(data.imports ?? []);
       })
       .catch(() => {
         setItems([]);
         setLastImport(null);
+        setImports([]);
       })
       .finally(() => setLoading(false));
   }
@@ -130,6 +135,11 @@ export function JustCatalogPanel({ canManage }: { canManage: boolean }) {
         <div className="text-[12.5px] text-steel mb-1">
           Código y nombre de cada producto tal como están en Just — se usa para que Compras y Reingreso sugieran siempre el nombre correcto, y para que un producto que aún no está registrado en DAFLOW se pueda matricular con fotos sin escribir el nombre a mano.
         </div>
+        {canManage && (
+          <div className="text-[12.5px] mb-2.5 bg-teal/10 border border-teal/25 rounded px-2.5 py-2">
+            <b>Qué hacer aquí:</b> descarga desde Just el listado de código y nombre de producto (lunes, miércoles y sábado), guárdalo como Excel y súbelo con el botón de abajo. DAFLOW compara con lo que ya existe y solo te pide confirmar los casos dudosos — el resto se actualiza solo.
+          </div>
+        )}
         {lastImport ? (
           <div className="flex items-center gap-1.5 text-[11.5px] text-teal">
             <CheckCircle2 size={13} />
@@ -138,6 +148,29 @@ export function JustCatalogPanel({ canManage }: { canManage: boolean }) {
         ) : (
           <div className="flex items-center gap-1.5 text-[11.5px] text-steel">
             <AlertTriangle size={13} /> Todavía no se ha subido ninguna base de datos.
+          </div>
+        )}
+        {imports.length > 0 && (
+          <div className="mt-1.5">
+            <button
+              type="button"
+              className="flex items-center gap-1 text-[11px] font-semibold text-steel hover:text-teal cursor-pointer"
+              onClick={() => setShowHistory((s) => !s)}
+            >
+              {showHistory ? <ChevronUp size={12} /> : <ChevronDown size={12} />} Historial de actualizaciones ({imports.length})
+            </button>
+            {showHistory && (
+              <div className="mt-2 flex flex-col gap-1 max-h-48 overflow-y-auto">
+                {imports.map((imp) => (
+                  <div key={imp.id} className="text-[11px] text-steel flex flex-wrap items-center gap-x-1.5">
+                    <span className="font-mono">{fmt(imp.importedAt)}</span>
+                    <span>—</span>
+                    <span className="font-semibold text-ink">{imp.importedByName}</span>
+                    <span>· {imp.totalRows} filas, {imp.createdCount} nuevos, {imp.linkedCount} vinculados, {imp.renamedCount} renombrados</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
         {canManage && <div className="text-[10.5px] text-steel mt-1">Se puede actualizar lunes, miércoles y sábado con el export de Just.</div>}
