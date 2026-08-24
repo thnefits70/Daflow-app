@@ -9,6 +9,9 @@ const schema = z.object({
   newRows: z.array(z.object({ code: z.string().min(1), name: z.string().min(1) })),
   nameChangedDecisions: z.array(z.object({ itemId: z.string(), code: z.string().min(1), justName: z.string().min(1), useJustName: z.boolean() })),
   suggestedLinkDecisions: z.array(z.object({ itemId: z.string(), code: z.string().min(1), name: z.string().min(1), link: z.boolean() })),
+  duplicateGroupDecisions: z.array(z.object({ code: z.string().min(1), name: z.string().min(1) })),
+  duplicateGroupsTotal: z.number().int().nonnegative(),
+  duplicateGroupsResolved: z.number().int().nonnegative(),
 });
 
 export async function POST(req: NextRequest) {

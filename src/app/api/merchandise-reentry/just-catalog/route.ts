@@ -33,6 +33,8 @@ export async function GET() {
     createdCount: imp.createdCount,
     linkedCount: imp.linkedCount,
     renamedCount: imp.renamedCount,
+    duplicateGroupsTotal: imp.duplicateGroupsTotal,
+    duplicateGroupsResolved: imp.duplicateGroupsResolved,
   }));
 
   return NextResponse.json({

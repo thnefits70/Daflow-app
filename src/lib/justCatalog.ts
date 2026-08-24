@@ -43,6 +43,8 @@ function findSimilarUnlinkedItem(
 
 export type NameChangedPreviewRow = { code: string; itemId: string; currentName: string; justName: string };
 export type SuggestedLinkPreviewRow = { code: string; name: string; itemId: string; existingName: string; matchType: "exact" | "similar" };
+export type DuplicateGroupRow = { code: string; name: string; alreadyLinked: boolean; existingName: string | null };
+export type DuplicateGroupPreviewRow = { groupName: string; rows: DuplicateGroupRow[] };
 
 export type JustCatalogPreview = {
   totalRows: number;
@@ -50,7 +52,7 @@ export type JustCatalogPreview = {
   newRows: JustCatalogParsedRow[];
   nameChangedRows: NameChangedPreviewRow[];
   suggestedLinkRows: SuggestedLinkPreviewRow[];
-  duplicateNameWarnings: string[];
+  duplicateGroups: DuplicateGroupPreviewRow[];
 };
 
 // Clasifica cada fila del export de Just contra el catálogo ya existente —
@@ -76,6 +78,20 @@ export type JustCatalogPreview = {
 // - código nuevo, nombre sin coincidencia -> "new", se crea automático como
 //   esqueleto (sin fotos, pendingRegistration=true) — no necesita decisión
 //   fila por fila, solo aparece contado/listado en la vista previa.
+// - mismo nombre repetido 2+ veces DENTRO del propio archivo de Just con
+//   códigos distintos -> "duplicateGroup" (confirmado 2026-08-24, pedido
+//   explícito del usuario tras ver que antes esto se creaba solo con un
+//   "(código)" pegado al nombre sin que nadie lo revisara — riesgo real de
+//   que Bryan/Reingreso terminen vinculando el mismo producto físico a dos
+//   entradas distintas de DAFLOW). Estas filas quedan totalmente FUERA de
+//   la clasificación normal de arriba hasta que Daniel decide por grupo:
+//   "mantener un solo código" (los demás códigos del grupo no se crean —
+//   Daniel debe ir a corregir/eliminar el duplicado en Just para que no
+//   vuelva a aparecer) o "son productos distintos" (se crean todos). Sin
+//   decisión, el grupo no crea nada — vuelve a aparecer en la próxima
+//   subida hasta que se resuelva, ese reintento constante ES el
+//   seguimiento: no hay forma de que un duplicado quede enterrado en
+//   silencio.
 export async function classifyJustCatalogRows(rows: JustCatalogParsedRow[]): Promise<JustCatalogPreview> {
   const existingItems = await prisma.purchaseCatalogItem.findMany({
     select: { id: true, name: true, justCode: true, pendingRegistration: true },
@@ -86,17 +102,20 @@ export async function classifyJustCatalogRows(rows: JustCatalogParsedRow[]): Pro
   const unlinkedWithWords = unlinkedItems.map((i) => ({ id: i.id, name: i.name, words: significantWords(i.name) }));
   const linkedThisImport = new Set<string>(); // evita sugerir el mismo item existente a dos filas distintas del archivo
 
-  const nameCounts = new Map<string, string[]>();
+  const nameGroups = new Map<string, JustCatalogParsedRow[]>();
   for (const row of rows) {
     const key = normalize(row.name);
-    nameCounts.set(key, [...(nameCounts.get(key) ?? []), row.code]);
+    nameGroups.set(key, [...(nameGroups.get(key) ?? []), row]);
   }
-  const duplicateNameWarnings = [...nameCounts.entries()]
-    .filter(([, codes]) => codes.length > 1)
-    .map(([, codes]) => {
-      const sample = rows.find((r) => r.code === codes[0]);
-      return `"${sample?.name ?? ""}" aparece ${codes.length} veces EN EL ARCHIVO DE JUST con códigos distintos (${codes.join(", ")}) — revisa en Just si es el mismo producto repetido por error o son productos distintos.`;
-    });
+  const duplicateGroupEntries = [...nameGroups.values()].filter((groupRows) => groupRows.length > 1);
+  const dupedCodes = new Set(duplicateGroupEntries.flatMap((groupRows) => groupRows.map((r) => r.code)));
+  const duplicateGroups: DuplicateGroupPreviewRow[] = duplicateGroupEntries.map((groupRows) => ({
+    groupName: groupRows[0].name,
+    rows: groupRows.map((r) => {
+      const linked = byJustCode.get(r.code);
+      return { code: r.code, name: r.name, alreadyLinked: !!linked, existingName: linked?.name ?? null };
+    }),
+  }));
 
   const newRows: JustCatalogParsedRow[] = [];
   const nameChangedRows: NameChangedPreviewRow[] = [];
@@ -104,6 +123,7 @@ export async function classifyJustCatalogRows(rows: JustCatalogParsedRow[]): Pro
   let unchangedCount = 0;
 
   for (const row of rows) {
+    if (dupedCodes.has(row.code)) continue;
     const linked = byJustCode.get(row.code);
     if (linked) {
       if (normalize(linked.name) === normalize(row.name)) {
@@ -131,13 +151,19 @@ export async function classifyJustCatalogRows(rows: JustCatalogParsedRow[]): Pro
     newRows.push(row);
   }
 
-  return { totalRows: rows.length, unchangedCount, newRows, nameChangedRows, suggestedLinkRows, duplicateNameWarnings };
+  return { totalRows: rows.length, unchangedCount, newRows, nameChangedRows, suggestedLinkRows, duplicateGroups };
 }
 
 export type JustCatalogApplyDecisions = {
   newRows: JustCatalogParsedRow[];
   nameChangedDecisions: { itemId: string; code: string; justName: string; useJustName: boolean }[];
   suggestedLinkDecisions: { itemId: string; code: string; name: string; link: boolean }[];
+  // Códigos que Daniel confirmó crear a partir de un grupo duplicado
+  // (uno solo si eligió "mantener este código", todos los no vinculados
+  // si confirmó "son productos distintos") — ver classifyJustCatalogRows.
+  duplicateGroupDecisions: { code: string; name: string }[];
+  duplicateGroupsTotal: number;
+  duplicateGroupsResolved: number;
 };
 
 export async function applyJustCatalogImport(decisions: JustCatalogApplyDecisions, totalRows: number, importedById: string | null) {
@@ -188,10 +214,24 @@ export async function applyJustCatalogImport(decisions: JustCatalogApplyDecision
         renamedCount++;
       }
     }
+
+    for (const d of decisions.duplicateGroupDecisions) {
+      const name = await resolveUniqueName(d.name, d.code);
+      await tx.purchaseCatalogItem.create({ data: { name, justCode: d.code, photos: [], pendingRegistration: true } });
+      createdCount++;
+    }
   });
 
   await prisma.justCatalogImport.create({
-    data: { importedById, totalRows, createdCount, linkedCount, renamedCount },
+    data: {
+      importedById,
+      totalRows,
+      createdCount,
+      linkedCount,
+      renamedCount,
+      duplicateGroupsTotal: decisions.duplicateGroupsTotal,
+      duplicateGroupsResolved: decisions.duplicateGroupsResolved,
+    },
   });
 
   return { createdCount, linkedCount, renamedCount };

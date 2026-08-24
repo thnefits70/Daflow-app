@@ -5,19 +5,33 @@ import { Upload, CheckCircle2, AlertTriangle, Clock, Search, ChevronDown, Chevro
 import { uploadFile } from "@/lib/uploadFile";
 
 type CatalogItemDTO = { id: string; name: string; justCode: string | null; photos: string[]; pendingRegistration: boolean };
-type ImportDTO = { id: string; importedAt: string; importedByName: string; totalRows: number; createdCount: number; linkedCount: number; renamedCount: number };
+type ImportDTO = {
+  id: string;
+  importedAt: string;
+  importedByName: string;
+  totalRows: number;
+  createdCount: number;
+  linkedCount: number;
+  renamedCount: number;
+  duplicateGroupsTotal: number;
+  duplicateGroupsResolved: number;
+};
 type LastImportDTO = ImportDTO | null;
 
 type NameChangedRow = { code: string; itemId: string; currentName: string; justName: string };
 type SuggestedLinkRow = { code: string; name: string; itemId: string; existingName: string; matchType: "exact" | "similar" };
+type DuplicateGroupRow = { code: string; name: string; alreadyLinked: boolean; existingName: string | null };
+type DuplicateGroup = { groupName: string; rows: DuplicateGroupRow[] };
 type Preview = {
   totalRows: number;
   unchangedCount: number;
   newRows: { code: string; name: string }[];
   nameChangedRows: NameChangedRow[];
   suggestedLinkRows: SuggestedLinkRow[];
-  duplicateNameWarnings: string[];
+  duplicateGroups: DuplicateGroup[];
 };
+
+const DISTINCT = "__distinct__";
 
 function fmt(iso: string) {
   return new Date(iso).toLocaleString("es-EC", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
@@ -40,6 +54,8 @@ export function JustCatalogPanel({ canManage }: { canManage: boolean }) {
   // itemId -> true significa "usar el nombre de Just" (nameChanged) / "vincular" (suggestedLink)
   const [nameDecisions, setNameDecisions] = useState<Record<string, boolean>>({});
   const [linkDecisions, setLinkDecisions] = useState<Record<string, boolean>>({});
+  // índice del grupo -> código elegido para mantener, o DISTINCT si son productos distintos
+  const [duplicateDecisions, setDuplicateDecisions] = useState<Record<number, string>>({});
 
   function load() {
     fetch("/api/merchandise-reentry/just-catalog")
@@ -92,6 +108,7 @@ export function JustCatalogPanel({ canManage }: { canManage: boolean }) {
     // comparten palabras) — Daniel confirma activamente cada una.
     setNameDecisions(Object.fromEntries((json.preview.nameChangedRows as NameChangedRow[]).map((r) => [r.itemId, false])));
     setLinkDecisions(Object.fromEntries((json.preview.suggestedLinkRows as SuggestedLinkRow[]).map((r) => [r.itemId, r.matchType === "exact"])));
+    setDuplicateDecisions({});
     setPhase("preview");
   }
 
@@ -101,10 +118,27 @@ export function JustCatalogPanel({ canManage }: { canManage: boolean }) {
     setErr("");
   }
 
+  const pendingDuplicateGroups = preview ? preview.duplicateGroups.filter((_, gi) => !duplicateDecisions[gi]).length : 0;
+
   async function confirmApply() {
     if (!preview) return;
     setPhase("applying");
     setErr("");
+    const duplicateGroupDecisions: { code: string; name: string }[] = [];
+    let duplicateGroupsResolved = 0;
+    preview.duplicateGroups.forEach((g, gi) => {
+      const decision = duplicateDecisions[gi];
+      if (!decision) return;
+      duplicateGroupsResolved++;
+      if (decision === DISTINCT) {
+        g.rows.forEach((r) => {
+          if (!r.alreadyLinked) duplicateGroupDecisions.push({ code: r.code, name: r.name });
+        });
+      } else {
+        const row = g.rows.find((r) => r.code === decision);
+        if (row && !row.alreadyLinked) duplicateGroupDecisions.push({ code: row.code, name: row.name });
+      }
+    });
     const res = await fetch("/api/merchandise-reentry/just-catalog/apply", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -113,6 +147,9 @@ export function JustCatalogPanel({ canManage }: { canManage: boolean }) {
         newRows: preview.newRows,
         nameChangedDecisions: preview.nameChangedRows.map((r) => ({ itemId: r.itemId, code: r.code, justName: r.justName, useJustName: !!nameDecisions[r.itemId] })),
         suggestedLinkDecisions: preview.suggestedLinkRows.map((r) => ({ itemId: r.itemId, code: r.code, name: r.name, link: !!linkDecisions[r.itemId] })),
+        duplicateGroupDecisions,
+        duplicateGroupsTotal: preview.duplicateGroups.length,
+        duplicateGroupsResolved,
       }),
     });
     const json = await res.json().catch(() => null);
@@ -167,6 +204,12 @@ export function JustCatalogPanel({ canManage }: { canManage: boolean }) {
                     <span>—</span>
                     <span className="font-semibold text-ink">{imp.importedByName}</span>
                     <span>· {imp.totalRows} filas, {imp.createdCount} nuevos, {imp.linkedCount} vinculados, {imp.renamedCount} renombrados</span>
+                    {imp.duplicateGroupsTotal > 0 && (
+                      <span style={{ color: "#D9A441" }}>
+                        · {imp.duplicateGroupsResolved}/{imp.duplicateGroupsTotal} nombres repetidos resueltos
+                        {imp.duplicateGroupsResolved < imp.duplicateGroupsTotal ? " (quedaron pendientes)" : ""}
+                      </span>
+                    )}
                   </div>
                 ))}
               </div>
@@ -201,20 +244,44 @@ export function JustCatalogPanel({ canManage }: { canManage: boolean }) {
           <div className="flex flex-wrap gap-2 mb-3.5">
             <span className="font-mono text-[10.5px] bg-cloud rounded-full px-2.5 py-1">{preview.unchangedCount} sin cambios</span>
             <span className="font-mono text-[10.5px] bg-teal/15 border border-teal/40 text-teal rounded-full px-2.5 py-1">{preview.newRows.length} nuevos (se crean automático, sin fotos)</span>
-            {(preview.nameChangedRows.length > 0 || preview.suggestedLinkRows.length > 0) && (
+            {(preview.nameChangedRows.length > 0 || preview.suggestedLinkRows.length > 0 || preview.duplicateGroups.length > 0) && (
               <span className="font-mono text-[10.5px] bg-gold/15 border border-gold/40 rounded-full px-2.5 py-1" style={{ color: "#D9A441" }}>
-                {preview.nameChangedRows.length + preview.suggestedLinkRows.length} necesitan tu decisión
+                {preview.nameChangedRows.length + preview.suggestedLinkRows.length + preview.duplicateGroups.length} necesitan tu decisión
               </span>
             )}
           </div>
 
-          {preview.duplicateNameWarnings.length > 0 && (
-            <div className="flex flex-col gap-1 mb-3.5">
-              {preview.duplicateNameWarnings.map((w, i) => (
-                <div key={i} className="text-[11.5px] flex items-start gap-1.5" style={{ color: "#D9A441" }}>
-                  <AlertTriangle size={13} className="mt-0.5 shrink-0" /> {w}
-                </div>
-              ))}
+          {preview.duplicateGroups.length > 0 && (
+            <div className="mb-4">
+              <div className="text-[11px] font-semibold uppercase tracking-wide text-steel mb-1.5">Mismo nombre repetido en el archivo de Just — elige uno por grupo</div>
+              <div className="flex flex-col gap-2">
+                {preview.duplicateGroups.map((g, gi) => (
+                  <div key={gi} className="bg-cloud rounded-md p-2.5">
+                    <div className="text-[11.5px] mb-1.5">
+                      <b>&quot;{g.groupName}&quot;</b> aparece {g.rows.length} veces en Just con códigos distintos — revisa si es el mismo producto repetido por error (corrígelo en Just después) o si de verdad son productos distintos.
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {g.rows.map((r) => (
+                        <button
+                          key={r.code}
+                          type="button"
+                          className={`text-[11px] font-semibold rounded-full px-2.5 py-1 border cursor-pointer ${duplicateDecisions[gi] === r.code ? "border-teal text-teal bg-teal/15" : "border-rule text-steel"}`}
+                          onClick={() => setDuplicateDecisions((d) => ({ ...d, [gi]: r.code }))}
+                        >
+                          Mantener {r.code}{r.alreadyLinked ? ` (ya existe: ${r.existingName})` : ""}
+                        </button>
+                      ))}
+                      <button
+                        type="button"
+                        className={`text-[11px] font-semibold rounded-full px-2.5 py-1 border cursor-pointer ${duplicateDecisions[gi] === DISTINCT ? "border-teal text-teal bg-teal/15" : "border-rule text-steel"}`}
+                        onClick={() => setDuplicateDecisions((d) => ({ ...d, [gi]: DISTINCT }))}
+                      >
+                        Son productos distintos
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
           {warnings.length > 0 && (
@@ -313,12 +380,22 @@ export function JustCatalogPanel({ canManage }: { canManage: boolean }) {
           )}
 
           <div className="flex items-center gap-2.5">
-            <button type="button" disabled={phase === "applying"} className="rounded border border-teal bg-teal px-3.5 py-2 text-[12.5px] font-bold text-navy cursor-pointer disabled:opacity-60" onClick={confirmApply}>
+            <button
+              type="button"
+              disabled={phase === "applying" || pendingDuplicateGroups > 0}
+              className="rounded border border-teal bg-teal px-3.5 py-2 text-[12.5px] font-bold text-navy cursor-pointer disabled:opacity-60"
+              onClick={confirmApply}
+            >
               {phase === "applying" ? "Aplicando…" : "Aplicar actualización"}
             </button>
             <button type="button" className="text-steel text-[12.5px] cursor-pointer" onClick={cancelPreview}>
               Cancelar
             </button>
+            {pendingDuplicateGroups > 0 && (
+              <span className="text-[11.5px]" style={{ color: "#D9A441" }}>
+                Resuelve los {pendingDuplicateGroups} nombre(s) repetido(s) antes de aplicar.
+              </span>
+            )}
           </div>
         </div>
       )}

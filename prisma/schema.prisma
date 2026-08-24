@@ -1287,6 +1287,16 @@ model JustCatalogImport {
   linkedCount  Int // productos existentes vinculados a un justCode por coincidencia de nombre
   renamedCount Int // productos ya vinculados cuyo nombre se actualizó al de Just en esta importación
 
+  // Confirmado 2026-08-24: mismo nombre repetido 2+ veces en el propio
+  // archivo de Just con códigos distintos — Daniel debe decidir por grupo
+  // (mantener un solo código o confirmar que son productos distintos) antes
+  // de poder aplicar. Se guardan los totales de cada subida para poder dar
+  // seguimiento en el historial de si el duplicado real se sigue
+  // repitiendo en Just (si Daniel no lo corrigió ahí, vuelve a aparecer en
+  // la siguiente subida).
+  duplicateGroupsTotal    Int @default(0)
+  duplicateGroupsResolved Int @default(0)
+
   @@index([importedAt])
 }
 
