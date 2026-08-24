@@ -330,6 +330,7 @@ export function PayrollRolesPanel({ canEdit, canProposeFixedBonus, canApproveFix
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [confirmingPublish, setConfirmingPublish] = useState(false);
+  const [showFullBreakdown, setShowFullBreakdown] = useState(false);
 
   function loadDetail() {
     fetch(`/api/payroll/periods/${period}`).then((r) => (r.ok ? r.json() : null)).then(setDetail);
@@ -399,21 +400,47 @@ export function PayrollRolesPanel({ canEdit, canProposeFixedBonus, canApproveFix
 
       {detail && detail.status !== "NOT_GENERATED" && (
         <>
-          <div className="flex flex-col gap-2.5 mb-4">
-            {detail.roles.map((r, i) => (
-              <RoleCard
-                key={r.id}
-                role={r}
-                index={i}
-                published={detail.status === "PUBLISHED"}
-                canEdit={canEdit}
-                monthlyRoleId={detail.monthlyRoleIdByEmployee?.[r.employeeId]}
-                onChanged={loadDetail}
-              />
-            ))}
+          <div className="bg-surface border border-rule rounded-md p-3.5 mb-4">
+            <div className="text-[11px] font-semibold uppercase tracking-wide text-steel mb-0.5">Resumen de la quincena</div>
+            <div className="text-[13px] font-bold mb-2">{periodLabel(period)}</div>
+            <div className="flex flex-col gap-1">
+              {detail.roles.map((r) => (
+                <div key={r.id} className="flex justify-between text-[12.5px]">
+                  <span className="text-ink">{r.employee.name}</span>
+                  <span className="font-semibold tabular-nums">{money(r.netTotal)}</span>
+                </div>
+              ))}
+            </div>
+            <div className="flex justify-between font-bold text-[13.5px] mt-2 pt-2 border-t border-rule">
+              <span>Total</span>
+              <span className="tabular-nums">{money(detail.roles.reduce((s, r) => s + r.netTotal, 0))}</span>
+            </div>
           </div>
 
           <PayrollTransferPanel period={period} isAdmin={isAdmin} canEdit={canEdit} transfer={transfer} onChanged={loadTransfer} />
+
+          <button
+            type="button"
+            className="text-[11.5px] text-blue font-semibold cursor-pointer mb-2.5"
+            onClick={() => setShowFullBreakdown((s) => !s)}
+          >
+            {showFullBreakdown ? "Ocultar" : "Ver"} desglose completo por colaborador {showFullBreakdown ? "▴" : "▾"}
+          </button>
+          {showFullBreakdown && (
+            <div className="flex flex-col gap-2.5 mb-4">
+              {detail.roles.map((r, i) => (
+                <RoleCard
+                  key={r.id}
+                  role={r}
+                  index={i}
+                  published={detail.status === "PUBLISHED"}
+                  canEdit={canEdit}
+                  monthlyRoleId={detail.monthlyRoleIdByEmployee?.[r.employeeId]}
+                  onChanged={loadDetail}
+                />
+              ))}
+            </div>
+          )}
 
           {detail.status === "DRAFT" && canEdit && transfer?.status === "COMPLETED" && (
             <div>
