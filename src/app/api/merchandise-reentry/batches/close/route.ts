@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { canCloseMerchandiseReentry, canManageJustUpload } from "@/lib/guards";
+import { canCloseMerchandiseReentry, canManageJustUpload, canApproveMerchandiseReentry } from "@/lib/guards";
 import { groupItemsForJustUpload, JUST_UPLOAD_MIN_QTY, isTodayLastBusinessDayOfWeek, lastBusinessDayOfWeek } from "@/lib/merchandiseReentry";
 
 const ITEM_INCLUDE = { catalogItem: { select: { name: true, photos: true } }, damageReason: { select: { name: true } }, batch: { select: { code: true, danielApprovedAt: true } } } as const;
@@ -13,8 +13,15 @@ const ITEM_INCLUDE = { catalogItem: { select: { name: true, photos: true } }, da
 // excepción, para evitar el doble proceso reingreso+baja que reportó
 // Daniel.
 export async function GET() {
-  const [canClose, canManage] = await Promise.all([canCloseMerchandiseReentry(), canManageJustUpload()]);
-  if (!canClose && !canManage) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+  // Daniel (canApprove, líder de Inventario) ve esta bandeja en modo solo
+  // lectura desde 2026-08-24 — bloqueado el 24-08-24 tras revertirle el
+  // botón de acción (ver canManageJustUpload en guards.ts).
+  const [canClose, canManage, canApprove] = await Promise.all([
+    canCloseMerchandiseReentry(),
+    canManageJustUpload(),
+    canApproveMerchandiseReentry(),
+  ]);
+  if (!canClose && !canManage && !canApprove) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
   const forJustItems = await prisma.merchandiseReentryItem.findMany({
     where: { goodQty: { gt: 0 }, justUploadedAt: null, batch: { danielApprovedAt: { not: null } } },

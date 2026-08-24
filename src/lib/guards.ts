@@ -700,17 +700,18 @@ export async function canCloseMerchandiseReentry() {
   return !!user.isLeader && user.leadsDept?.code === "FIN";
 }
 
-// Subir a Just ("Cierre" → Para ingresar a Just) — pedido 2026-08-24: en la
-// práctica lo gestionan tanto Nairoby (FIN) como Daniel (INV), no solo
-// Nairoby. Admin queda deliberadamente fuera: solo supervisión de solo
-// lectura (canCloseMerchandiseReentry sigue dando visibilidad de la
-// pestaña, pero ya no el botón de acción — ver CloseQueues.tsx).
+// Subir a Just ("Cierre" → Para ingresar a Just) — exclusivo de Nairoby
+// (líder de FIN). Revertido 2026-08-24: se había ampliado a Daniel (INV)
+// el mismo día, pero el usuario pidió bloquearlo de nuevo — Daniel ve la
+// pestaña "Cierre" en modo solo lectura, igual que admin (ver
+// canCloseMerchandiseReentry, que sigue dando visibilidad sin el botón de
+// acción — ver CloseQueues.tsx).
 export async function canManageJustUpload() {
   const session = await auth();
   if (!session) return false;
   const user = await purchasesUserContext(session.user.id);
   if (!user) return false;
-  return !!user.isLeader && (user.leadsDept?.code === "FIN" || user.leadsDept?.code === "INV");
+  return !!user.isLeader && user.leadsDept?.code === "FIN";
 }
 
 // Confirmado 2026-08-21, ampliado 2026-08-23: Daniel (líder de Inventario)

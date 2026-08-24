@@ -26,7 +26,11 @@ export function MerchandiseReentryPanel({
   canManageJustUpload?: boolean;
   canManageJustCatalog?: boolean;
 }) {
-  const canSeeCierre = canClose || canManageJustUpload;
+  // canApprove (Daniel, líder de Inventario) da visibilidad de solo lectura
+  // a "Cierre" — bloqueado 2026-08-24: podía gestionar el botón "Subido a
+  // Just" desde esa misma mañana, pero se revirtió a exclusivo de Nairoby
+  // (ver canManageJustUpload en guards.ts). Daniel sigue viendo la cola.
+  const canSeeCierre = canClose || canManageJustUpload || canApprove;
   const defaultTab: Tab = canCapture ? "capturar" : canApprove ? "revision" : canSeeCierre ? "cierre" : "historial";
   const [tab, setTab] = useState<Tab>(defaultTab);
 
@@ -97,7 +101,7 @@ export function MerchandiseReentryPanel({
             {canManageJustUpload ? (
               <>Acá se agrupan por producto las unidades buenas ya aprobadas. Cuando un producto llega a la cantidad mínima puedes subir su stock a Just — solo en el día habilitado de la semana.</>
             ) : (
-              <>Vista de solo lectura de las unidades buenas ya aprobadas, agrupadas por producto y listas para subir a Just. Subir el stock es exclusivo de Nairoby o Daniel.</>
+              <>Vista de solo lectura de las unidades buenas ya aprobadas, agrupadas por producto y listas para subir a Just. Subir el stock es exclusivo de Nairoby.</>
             )}
           </TabGuide>
           <CloseQueues canManage={canManageJustUpload} />

@@ -99,14 +99,21 @@ export function CloseQueues({ canManage }: { canManage: boolean }) {
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-[12px] text-green font-semibold">
-                  <span className="font-mono text-teal">{group.breakdown.map((b) => b.batchCode).join(", ")}</span> · {group.totalGoodQty} unidades buenas
+                  {group.breakdown.map((b, i) => (
+                    <span key={b.id}>
+                      {i > 0 && <span className="text-steel font-normal">, </span>}
+                      <span className="font-mono text-teal">{b.batchCode}</span>{" "}
+                      <span className="font-mono text-[10px] text-steel font-normal">({fmt(b.createdAt)})</span>
+                    </span>
+                  ))}{" "}
+                  · {group.totalGoodQty} unidades buenas
                 </span>
                 {group.canUploadNow ? (
                   confirmingName !== group.name && (
                     <button
                       type="button"
                       disabled={!canManage}
-                      title={!canManage ? "Exclusivo de Nairoby o el líder de Inventario" : undefined}
+                      title={!canManage ? "Exclusivo de Nairoby" : undefined}
                       className="rounded border border-teal bg-teal px-3 py-1.5 text-[11.5px] font-bold text-navy cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                       onClick={() => {
                         if (!canManage) return;
