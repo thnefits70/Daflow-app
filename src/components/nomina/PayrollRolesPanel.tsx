@@ -330,7 +330,7 @@ export function PayrollRolesPanel({ canEdit, canProposeFixedBonus, canApproveFix
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [confirmingPublish, setConfirmingPublish] = useState(false);
-  const [showFullBreakdown, setShowFullBreakdown] = useState(false);
+  const [showDetails, setShowDetails] = useState(false);
 
   function loadDetail() {
     fetch(`/api/payroll/periods/${period}`).then((r) => (r.ok ? r.json() : null)).then(setDetail);
@@ -365,15 +365,6 @@ export function PayrollRolesPanel({ canEdit, canProposeFixedBonus, canApproveFix
 
   return (
     <div>
-      <PayrollEmployeeSalariesPanel canEdit={canEdit} canProposeBonus={canProposeFixedBonus} canApproveBonus={canApproveFixedBonus} />
-      <CeoBonusesForNairobyPanel />
-
-      <div className="bg-surface border border-rule rounded-md p-4 mb-4">
-        <div className="text-[11px] font-semibold uppercase tracking-wide text-steel mb-2">Sueldo básico nacional</div>
-        <div className="text-[15px] font-bold tabular-nums">$482.00</div>
-        <span className="text-[11px] text-steel-dim block mt-1">Fijo por ahora — el cálculo de horas extra siempre usa este valor, sin excepción.</span>
-      </div>
-
       <div className="flex items-center gap-3 mb-4 flex-wrap">
         <select className="rounded border border-rule bg-surface px-2.5 py-2 text-[13px]" value={period} onChange={(e) => setPeriod(e.target.value)}>
           {periods.map((p) => (
@@ -400,45 +391,69 @@ export function PayrollRolesPanel({ canEdit, canProposeFixedBonus, canApproveFix
 
       {detail && detail.status !== "NOT_GENERATED" && (
         <>
-          <div className="bg-surface border border-rule rounded-md p-3.5 mb-4">
-            <div className="text-[11px] font-semibold uppercase tracking-wide text-steel mb-0.5">Resumen de la quincena</div>
-            <div className="text-[13px] font-bold mb-2">{periodLabel(period)}</div>
-            <div className="flex flex-col gap-1">
-              {detail.roles.map((r) => (
-                <div key={r.id} className="flex justify-between text-[12.5px]">
-                  <span className="text-ink">{r.employee.name}</span>
-                  <span className="font-semibold tabular-nums">{money(r.netTotal)}</span>
+          {!transfer && (
+            <div className="bg-surface border border-rule rounded-md p-3.5 mb-4">
+              <div className="text-[11px] font-semibold uppercase tracking-wide text-steel mb-2">Resumen de la quincena</div>
+              <div className="flex items-center justify-between gap-2">
+                <div className="text-[13px] font-bold">{periodLabel(period)}</div>
+                <div className="flex flex-col items-end gap-0.5 bg-teal/15 border-2 border-teal/50 rounded-md px-3 py-1.5">
+                  <div className="text-[24px] font-extrabold tabular-nums text-teal leading-none">{money(detail.roles.reduce((s, r) => s + r.netTotal, 0))}</div>
+                  <div className="text-[9.5px] text-teal/90 uppercase tracking-wide font-semibold">Total a transferir</div>
                 </div>
-              ))}
+              </div>
             </div>
-            <div className="flex justify-between font-bold text-[13.5px] mt-2 pt-2 border-t border-rule">
-              <span>Total</span>
-              <span className="tabular-nums">{money(detail.roles.reduce((s, r) => s + r.netTotal, 0))}</span>
-            </div>
-          </div>
+          )}
 
           <PayrollTransferPanel period={period} isAdmin={isAdmin} canEdit={canEdit} transfer={transfer} onChanged={loadTransfer} />
 
           <button
             type="button"
             className="text-[11.5px] text-blue font-semibold cursor-pointer mb-2.5"
-            onClick={() => setShowFullBreakdown((s) => !s)}
+            onClick={() => setShowDetails((s) => !s)}
           >
-            {showFullBreakdown ? "Ocultar" : "Ver"} desglose completo por colaborador {showFullBreakdown ? "▴" : "▾"}
+            {showDetails ? "Ocultar" : "Desplegar"} detalles — sueldos, bonos y desglose por colaborador {showDetails ? "▴" : "▾"}
           </button>
-          {showFullBreakdown && (
-            <div className="flex flex-col gap-2.5 mb-4">
-              {detail.roles.map((r, i) => (
-                <RoleCard
-                  key={r.id}
-                  role={r}
-                  index={i}
-                  published={detail.status === "PUBLISHED"}
-                  canEdit={canEdit}
-                  monthlyRoleId={detail.monthlyRoleIdByEmployee?.[r.employeeId]}
-                  onChanged={loadDetail}
-                />
-              ))}
+          {showDetails && (
+            <div className="mb-4">
+              <PayrollEmployeeSalariesPanel canEdit={canEdit} canProposeBonus={canProposeFixedBonus} canApproveBonus={canApproveFixedBonus} />
+              <CeoBonusesForNairobyPanel />
+
+              <div className="bg-surface border border-rule rounded-md p-4 mb-4">
+                <div className="text-[11px] font-semibold uppercase tracking-wide text-steel mb-2">Sueldo básico nacional</div>
+                <div className="text-[15px] font-bold tabular-nums">$482.00</div>
+                <span className="text-[11px] text-steel-dim block mt-1">Fijo por ahora — el cálculo de horas extra siempre usa este valor, sin excepción.</span>
+              </div>
+
+              <div className="bg-surface border border-rule rounded-md p-3.5 mb-4">
+                <div className="text-[11px] font-semibold uppercase tracking-wide text-steel mb-0.5">Resumen por colaborador</div>
+                <div className="text-[13px] font-bold mb-2">{periodLabel(period)}</div>
+                <div className="flex flex-col gap-1">
+                  {detail.roles.map((r) => (
+                    <div key={r.id} className="flex justify-between text-[12.5px]">
+                      <span className="text-ink">{r.employee.name}</span>
+                      <span className="font-semibold tabular-nums">{money(r.netTotal)}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex justify-between font-bold text-[13.5px] mt-2 pt-2 border-t border-rule">
+                  <span>Total</span>
+                  <span className="tabular-nums">{money(detail.roles.reduce((s, r) => s + r.netTotal, 0))}</span>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-2.5">
+                {detail.roles.map((r, i) => (
+                  <RoleCard
+                    key={r.id}
+                    role={r}
+                    index={i}
+                    published={detail.status === "PUBLISHED"}
+                    canEdit={canEdit}
+                    monthlyRoleId={detail.monthlyRoleIdByEmployee?.[r.employeeId]}
+                    onChanged={loadDetail}
+                  />
+                ))}
+              </div>
             </div>
           )}
 

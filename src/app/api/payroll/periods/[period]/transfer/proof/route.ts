@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { requireAdminSession } from "@/lib/guards";
+import { requireAdminSession, getFinanceLeadId } from "@/lib/guards";
 import { isValidPeriod } from "@/lib/payroll";
+import { notifyOwner } from "@/lib/notifications";
 
 const schema = z.object({
   proofUrl: z.string().trim().min(1),
@@ -29,5 +30,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ per
     where: { id: payrollPeriod.transfer.id },
     data: { status: "COMPLETED", proofUrl: parsed.data.proofUrl, proofName: parsed.data.proofName, completedAt: new Date() },
   });
+
+  const financeLeadId = await getFinanceLeadId();
+  if (financeLeadId) {
+    await notifyOwner(financeLeadId, {
+      title: "✅ El admin ya transfirió la nómina",
+      body: `Quincena ${period} — $${updated.totalAmount.toFixed(2)} transferido, comprobante subido. Ya podés publicar.`,
+      url: "/area/nomina?tab=pagos&ptab=roles",
+    }).catch(() => null);
+  }
+
   return NextResponse.json(updated);
 }

@@ -38,7 +38,12 @@ const STATUS_LABEL: Record<Transfer["status"], string> = {
 };
 
 function BankAccountBlock({ account }: { account: BankAccount | null }) {
-  const [show, setShow] = useState(false);
+  // Confirmado 2026-08-24: pedido explícito del usuario — la cuenta destino
+  // tiene que verse de una, sin un clic extra, porque es el dato que más
+  // importa para no transferir mal. Antes arrancaba oculta como la cuenta
+  // bancaria de cada colaborador en RoleCard, pero acá el propósito del
+  // panel entero es justamente hacer la transferencia.
+  const [show, setShow] = useState(true);
   return (
     <div className="mb-2.5">
       <button
@@ -72,21 +77,36 @@ function BankAccountBlock({ account }: { account: BankAccount | null }) {
   );
 }
 
+type VerifyResult = { readAmount: number | null; matches: boolean; note: string };
+
 function ProofUploader({ period, onSent }: { period: string; onSent: () => void }) {
   const [proofUrl, setProofUrl] = useState<string | null>(null);
   const [proofName, setProofName] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [err, setErr] = useState("");
+  const [verifying, setVerifying] = useState(false);
+  const [verify, setVerify] = useState<VerifyResult | null>(null);
 
   async function handleFile(file: File) {
     setUploading(true);
     setErr("");
+    setVerify(null);
     const res = await uploadFile(file, "payroll-transfer-proofs");
     setUploading(false);
     if (!res.ok) { setErr(res.error); return; }
     setProofUrl(res.url);
     setProofName(res.name);
+
+    setVerifying(true);
+    const verifyRes = await fetch(`/api/payroll/periods/${period}/transfer/verify-proof`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ proofUrl: res.url }),
+    });
+    setVerifying(false);
+    const verifyData = await verifyRes.json().catch(() => null);
+    if (verifyRes.ok && verifyData) setVerify(verifyData);
   }
   const { onPaste, onMouseEnter, onMouseLeave } = usePasteFile(handleFile);
 
@@ -110,7 +130,7 @@ function ProofUploader({ period, onSent }: { period: string; onSent: () => void 
       {proofUrl ? (
         <div className="flex items-center gap-2">
           <ProofPreview url={proofUrl} filename={proofName ?? undefined} />
-          <button type="button" className="text-[11px] text-steel-dim underline cursor-pointer" onClick={() => { setProofUrl(null); setProofName(null); }}>Quitar</button>
+          <button type="button" className="text-[11px] text-steel-dim underline cursor-pointer" onClick={() => { setProofUrl(null); setProofName(null); setVerify(null); }}>Quitar</button>
         </div>
       ) : (
         <label className="flex items-center justify-center gap-1.5 text-[11.5px] text-steel-dim border-[1.5px] border-dashed border-rule rounded-md px-3 py-4 cursor-pointer text-center">
@@ -119,6 +139,20 @@ function ProofUploader({ period, onSent }: { period: string; onSent: () => void 
         </label>
       )}
       {err && <div className="text-red text-[11.5px] mt-1.5">{err}</div>}
+      {verifying && <div className="text-[11.5px] text-steel-dim mt-1.5">Verificando el comprobante con IA…</div>}
+      {verify && (
+        <div
+          className={`text-[11.5px] rounded px-2.5 py-1.5 mt-1.5 border ${
+            verify.readAmount === null
+              ? "text-steel bg-cloud border-rule"
+              : verify.matches
+              ? "text-green bg-green/10 border-green/30"
+              : "text-red bg-red/10 border-red/30"
+          }`}
+        >
+          {verify.matches ? "✓ " : verify.readAmount === null ? "" : "⚠ "}{verify.note}
+        </div>
+      )}
       <button type="button" disabled={!proofUrl || submitting} className="text-[12px] font-bold bg-teal text-white rounded-md px-3.5 py-1.5 cursor-pointer disabled:opacity-40 mt-2.5" onClick={submit}>
         {submitting ? "Enviando…" : "Confirmar transferencia hecha"}
       </button>
@@ -233,9 +267,9 @@ export function PayrollTransferPanel({
           <div className="font-bold text-[13.5px]">Transferencia de nómina</div>
           <div className="text-[10.5px] text-steel">{destinationLabel}</div>
         </div>
-        <div className="flex flex-col items-end gap-0.5 bg-teal/15 border border-teal/40 rounded-md px-2.5 py-1">
-          <div className="text-[17px] font-extrabold tabular-nums text-teal">{money(transfer.totalAmount)}</div>
-          <div className="text-[9.5px] text-teal/90 uppercase tracking-wide font-semibold">Total de la quincena</div>
+        <div className="flex flex-col items-end gap-0.5 bg-teal/15 border-2 border-teal/50 rounded-md px-3 py-1.5">
+          <div className="text-[24px] font-extrabold tabular-nums text-teal leading-none">{money(transfer.totalAmount)}</div>
+          <div className="text-[9.5px] text-teal/90 uppercase tracking-wide font-semibold">Monto a transferir</div>
         </div>
       </div>
 
