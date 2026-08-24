@@ -97,6 +97,7 @@ export function DeptWorkspaceTabs({
   canApproveMerchandiseReentry = false,
   canActOnMerchandiseReentry = false,
   canCloseMerchandiseReentry = false,
+  canManageJustUpload = false,
   canManageJustCatalog = false,
   merchandiseReentryPendingCount = 0,
   pettyCashData = null,
@@ -184,6 +185,10 @@ export function DeptWorkspaceTabs({
   canApproveMerchandiseReentry?: boolean;
   canActOnMerchandiseReentry?: boolean;
   canCloseMerchandiseReentry?: boolean;
+  // Subir a Just ("Cierre") — pedido 2026-08-24: Nairoby (FIN) y Daniel
+  // (INV) lo gestionan; admin solo ve la pestaña en modo lectura (ver
+  // canCloseMerchandiseReentry, que sigue dando esa visibilidad).
+  canManageJustUpload?: boolean;
   canManageJustCatalog?: boolean;
   merchandiseReentryPendingCount?: number;
   // Caja Chica — confirmado 2026-08-05: null si la persona no ve ninguna de
@@ -368,6 +373,7 @@ export function DeptWorkspaceTabs({
           canApprove={canApproveMerchandiseReentry}
           canAct={canActOnMerchandiseReentry}
           canClose={canCloseMerchandiseReentry}
+          canManageJustUpload={canManageJustUpload}
           canManageJustCatalog={canManageJustCatalog}
         />
       )}

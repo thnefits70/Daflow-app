@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { canCloseMerchandiseReentry } from "@/lib/guards";
+import { canManageJustUpload } from "@/lib/guards";
 import { maybeMarkBatchClosed, JUST_UPLOAD_MIN_QTY, isTodayLastBusinessDayOfWeek } from "@/lib/merchandiseReentry";
 
 // Confirma de un solo clic el consolidado de un producto: mismo efecto que
@@ -10,7 +10,7 @@ import { maybeMarkBatchClosed, JUST_UPLOAD_MIN_QTY, isTodayLastBusinessDayOfWeek
 // RM distintos) — ver groupJust en batches/close/route.ts.
 export async function POST(req: Request) {
   const session = await auth();
-  if (!(await canCloseMerchandiseReentry()) || !session) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+  if (!(await canManageJustUpload()) || !session) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
   const body = await req.json().catch(() => null);
   const itemIds: unknown = body?.itemIds;
@@ -39,7 +39,7 @@ export async function POST(req: Request) {
 
   await prisma.merchandiseReentryItem.updateMany({
     where: { id: { in: itemIds } },
-    data: { justUploadedAt: new Date(), justUploadedById: session.user.role === "admin" ? null : session.user.id },
+    data: { justUploadedAt: new Date(), justUploadedById: session.user.id },
   });
 
   const batchIds = [...new Set(items.map((i) => i.batchId))];

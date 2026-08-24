@@ -700,6 +700,19 @@ export async function canCloseMerchandiseReentry() {
   return !!user.isLeader && user.leadsDept?.code === "FIN";
 }
 
+// Subir a Just ("Cierre" → Para ingresar a Just) — pedido 2026-08-24: en la
+// práctica lo gestionan tanto Nairoby (FIN) como Daniel (INV), no solo
+// Nairoby. Admin queda deliberadamente fuera: solo supervisión de solo
+// lectura (canCloseMerchandiseReentry sigue dando visibilidad de la
+// pestaña, pero ya no el botón de acción — ver CloseQueues.tsx).
+export async function canManageJustUpload() {
+  const session = await auth();
+  if (!session) return false;
+  const user = await purchasesUserContext(session.user.id);
+  if (!user) return false;
+  return !!user.isLeader && (user.leadsDept?.code === "FIN" || user.leadsDept?.code === "INV");
+}
+
 // Confirmado 2026-08-21, ampliado 2026-08-23: Daniel (líder de Inventario)
 // y admin pueden subir el export de Just que alimenta la Base de datos de
 // productos. Originalmente era exclusivo de Daniel ("ni siquiera admin",

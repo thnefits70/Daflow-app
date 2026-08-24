@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { canCloseMerchandiseReentry } from "@/lib/guards";
+import { canCloseMerchandiseReentry, canManageJustUpload } from "@/lib/guards";
 import { groupItemsForJustUpload, JUST_UPLOAD_MIN_QTY, isTodayLastBusinessDayOfWeek, lastBusinessDayOfWeek } from "@/lib/merchandiseReentry";
 
 const ITEM_INCLUDE = { catalogItem: { select: { name: true, photos: true } }, damageReason: { select: { name: true } }, batch: { select: { code: true, danielApprovedAt: true } } } as const;
@@ -13,7 +13,8 @@ const ITEM_INCLUDE = { catalogItem: { select: { name: true, photos: true } }, da
 // excepción, para evitar el doble proceso reingreso+baja que reportó
 // Daniel.
 export async function GET() {
-  if (!(await canCloseMerchandiseReentry())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+  const [canClose, canManage] = await Promise.all([canCloseMerchandiseReentry(), canManageJustUpload()]);
+  if (!canClose && !canManage) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
   const forJustItems = await prisma.merchandiseReentryItem.findMany({
     where: { goodQty: { gt: 0 }, justUploadedAt: null, batch: { danielApprovedAt: { not: null } } },

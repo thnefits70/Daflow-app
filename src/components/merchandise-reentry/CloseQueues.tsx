@@ -30,7 +30,7 @@ async function postJson(url: string, body?: unknown) {
 // item por item — sigue el ciclo semanal en la pestaña "Control de Daños"
 // (ver WeeklyDamageControl.tsx), sin excepción, para evitar el doble
 // proceso reingreso+baja.
-export function CloseQueues() {
+export function CloseQueues({ canManage }: { canManage: boolean }) {
   const [forJust, setForJust] = useState<JustGroupDTO[]>([]);
   const [justUploadMinQty, setJustUploadMinQty] = useState(10);
   const [nextEligibleDay, setNextEligibleDay] = useState<string | null>(null);
@@ -76,6 +76,7 @@ export function CloseQueues() {
         <CheckCircle2 size={15} className="text-teal" />
         <span className="text-[13.5px] font-bold">Para ingresar a Just</span>
         <span className="font-mono text-[10px] font-bold text-teal bg-teal/15 border border-teal/40 rounded-full px-2 py-0.5">{forJust.length}</span>
+        {!canManage && <span className="font-mono text-[9.5px] text-steel bg-cloud rounded-full px-1.5 py-0.5">solo lectura</span>}
       </div>
       <div className="text-[11px] text-steel mb-3">Ordenado de mayor a menor cantidad. Más de {justUploadMinQty} unidades se sube apenas esté listo; con {justUploadMinQty} o menos, se junta y se sube el último día laboral de la semana.</div>
       <div className="flex flex-col gap-2.5 max-w-xl">
@@ -104,8 +105,11 @@ export function CloseQueues() {
                   confirmingName !== group.name && (
                     <button
                       type="button"
-                      className="rounded border border-teal bg-teal px-3 py-1.5 text-[11.5px] font-bold text-navy cursor-pointer"
+                      disabled={!canManage}
+                      title={!canManage ? "Exclusivo de Nairoby o el líder de Inventario" : undefined}
+                      className="rounded border border-teal bg-teal px-3 py-1.5 text-[11.5px] font-bold text-navy cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                       onClick={() => {
+                        if (!canManage) return;
                         setConfirmingName(group.name);
                         setErrorName(null);
                       }}

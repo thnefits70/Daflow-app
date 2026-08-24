@@ -124,11 +124,14 @@ export default async function DeptWorkspacePage({ params }: { params: Promise<{ 
         // aprobación/cierre, igual que el resto de esta página de solo
         // oversight. Fix 2026-08-21: aprobar lotes es exclusivo de Daniel
         // (líder de Inventario), ni siquiera admin — mismo criterio que
-        // canApprovePurchaseReceiving arriba.
+        // canApprovePurchaseReceiving arriba. Fix 2026-08-24: subir a Just
+        // también quedó exclusivo de Nairoby/Daniel — admin ve "Cierre" en
+        // modo solo lectura (canManageJustUpload=false).
         canCaptureMerchandiseReentry={false}
         canApproveMerchandiseReentry={dept.code === "INV"}
         canActOnMerchandiseReentry={false}
         canCloseMerchandiseReentry={dept.code === "INV"}
+        canManageJustUpload={false}
         // Ampliado 2026-08-24: admin ahora también puede subir la base de
         // datos de Just (antes exclusivo de Daniel, ver guards.ts
         // canManageJustCatalog) — la pestaña "Base de datos de productos"

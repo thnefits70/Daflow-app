@@ -15,15 +15,18 @@ export function MerchandiseReentryPanel({
   canApprove,
   canAct = false,
   canClose,
+  canManageJustUpload = false,
   canManageJustCatalog = false,
 }: {
   canCapture: boolean;
   canApprove: boolean;
   canAct?: boolean;
   canClose: boolean;
+  canManageJustUpload?: boolean;
   canManageJustCatalog?: boolean;
 }) {
-  const defaultTab: Tab = canCapture ? "capturar" : canApprove ? "revision" : canClose ? "cierre" : "historial";
+  const canSeeCierre = canClose || canManageJustUpload;
+  const defaultTab: Tab = canCapture ? "capturar" : canApprove ? "revision" : canSeeCierre ? "cierre" : "historial";
   const [tab, setTab] = useState<Tab>(defaultTab);
 
   // Confirmado 2026-08-19: pedido explícito del usuario — el atajo de
@@ -33,7 +36,7 @@ export function MerchandiseReentryPanel({
   useEffect(() => {
     const t = new URLSearchParams(window.location.search).get("tab") as Tab | null;
     if (t === "revision" && canApprove) setTab("revision");
-    else if (t === "cierre" && canClose) setTab("cierre");
+    else if (t === "cierre" && canSeeCierre) setTab("cierre");
     else if (t === "danos" && (canApprove || canClose)) setTab("danos");
     else if (t === "productos" && (canApprove || canClose)) setTab("productos");
     else if (t === "capturar" && canCapture) setTab("capturar");
@@ -43,7 +46,7 @@ export function MerchandiseReentryPanel({
   const tabs: { id: Tab; label: string }[] = [
     ...(canCapture ? [{ id: "capturar" as const, label: "Capturar" }] : []),
     ...(canApprove ? [{ id: "revision" as const, label: "Revisión" }] : []),
-    ...(canClose ? [{ id: "cierre" as const, label: "Cierre" }] : []),
+    ...(canSeeCierre ? [{ id: "cierre" as const, label: "Cierre" }] : []),
     ...(canApprove || canClose ? [{ id: "danos" as const, label: "Control de Daños" }] : []),
     ...(canApprove || canClose ? [{ id: "productos" as const, label: "Base de datos de productos" }] : []),
     { id: "historial" as const, label: "Historial" },
@@ -69,7 +72,7 @@ export function MerchandiseReentryPanel({
 
       {tab === "capturar" && canCapture && <CaptureFlow />}
       {tab === "revision" && canApprove && <ReviewInbox canAct={canAct} />}
-      {tab === "cierre" && canClose && <CloseQueues />}
+      {tab === "cierre" && canSeeCierre && <CloseQueues canManage={canManageJustUpload} />}
       {tab === "danos" && (canApprove || canClose) && <WeeklyDamageControl canAct={canAct} canApprove={canApprove} canClose={canClose} />}
       {tab === "productos" && (canApprove || canClose) && <JustCatalogPanel canManage={canManageJustCatalog} />}
       {tab === "historial" && <HistoryList />}
