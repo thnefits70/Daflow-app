@@ -391,20 +391,34 @@ export function PayrollRolesPanel({ canEdit, canProposeFixedBonus, canApproveFix
 
       {detail && detail.status !== "NOT_GENERATED" && (
         <>
-          {!transfer && (
+          {(!transfer || (isAdmin && transfer.status === "REJECTED")) && (
             <div className="bg-surface border border-rule rounded-md p-3.5 mb-4">
               <div className="text-[11px] font-semibold uppercase tracking-wide text-steel mb-2">Resumen de la quincena</div>
               <div className="flex items-center justify-between gap-2">
                 <div className="text-[13px] font-bold">{periodLabel(period)}</div>
                 <div className="flex flex-col items-end gap-0.5 bg-teal/15 border-2 border-teal/50 rounded-md px-3 py-1.5">
-                  <div className="text-[24px] font-extrabold tabular-nums text-teal leading-none">{money(detail.roles.reduce((s, r) => s + r.netTotal, 0))}</div>
+                  <div className="text-[24px] font-extrabold tabular-nums text-teal leading-none">{money(transfer?.totalAmount ?? detail.roles.reduce((s, r) => s + r.netTotal, 0))}</div>
                   <div className="text-[9.5px] text-teal/90 uppercase tracking-wide font-semibold">Total a transferir</div>
                 </div>
               </div>
+              {/* Confirmado 2026-08-24: pedido explícito del usuario — un envío
+                  rechazado no debe quedar como una tarjeta grande dominando la
+                  pantalla del admin (no hay nada que él tenga que hacer ahí,
+                  la pelota está del lado de Nairoby). Se reduce a esta línea
+                  y el resto (motivo completo, cuenta, botón de reenviar) sigue
+                  viviendo en PayrollTransferPanel para quien sí puede actuar
+                  (Nairoby, canEdit). */}
+              {transfer?.status === "REJECTED" && (
+                <div className="text-[11.5px] text-red mt-2 pt-2 border-t border-rule">
+                  Rechazaste el envío anterior — {transfer.rejectionReason}. Esperando que Nairoby corrija y reenvíe.
+                </div>
+              )}
             </div>
           )}
 
-          <PayrollTransferPanel period={period} isAdmin={isAdmin} canEdit={canEdit} transfer={transfer} onChanged={loadTransfer} />
+          {transfer && !(isAdmin && transfer.status === "REJECTED") && (
+            <PayrollTransferPanel period={period} isAdmin={isAdmin} canEdit={canEdit} transfer={transfer} onChanged={loadTransfer} />
+          )}
 
           <button
             type="button"
