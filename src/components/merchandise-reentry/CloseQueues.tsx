@@ -97,7 +97,9 @@ export function CloseQueues() {
                 )}
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-[12px] text-green font-semibold">{group.totalGoodQty} unidades buenas{group.breakdown.length > 1 ? ` · ${group.breakdown.length} lotes` : ""}</span>
+                <span className="text-[12px] text-green font-semibold">
+                  <span className="font-mono text-teal">{group.breakdown.map((b) => b.batchCode).join(", ")}</span> · {group.totalGoodQty} unidades buenas
+                </span>
                 {group.canUploadNow ? (
                   confirmingName !== group.name && (
                     <button
