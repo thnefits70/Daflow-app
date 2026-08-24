@@ -266,7 +266,9 @@ function ReviewItemRow({ item, canAct, onChanged, onExpandPhoto }: { item: ItemD
         )}
         <div className="flex-1 min-w-0">
           {nameNeedsReview ? (
-            <div className="text-[10.5px] text-steel mb-1">Nombre declarado por el colaborador — vincula el producto correcto abajo</div>
+            <div className="text-[10.5px] text-steel mb-1">
+              Nombre declarado por el colaborador{item.declaredName ? <>: <b className="text-ink">&quot;{item.declaredName}&quot;</b></> : ""} — vincula el producto correcto abajo
+            </div>
           ) : (
             <div className="flex items-center gap-1.5">
               <div className="text-[12.5px] font-semibold truncate">{itemName(item)}</div>
@@ -357,7 +359,12 @@ function ReviewItemRow({ item, canAct, onChanged, onExpandPhoto }: { item: ItemD
       {(nameNeedsReview || editingProduct) && (
         <div className="mt-2 pl-[52px]">
           {canAct ? (
-            <ProductMatchPicker referencePhotoUrl={item.photoUrls[0] ?? null} onConfirm={relink} onCancel={editingProduct ? () => setEditingProduct(false) : undefined} />
+            <ProductMatchPicker
+              referencePhotoUrl={item.photoUrls[0] ?? null}
+              initialQuery={editingProduct ? "" : item.declaredName ?? ""}
+              onConfirm={relink}
+              onCancel={editingProduct ? () => setEditingProduct(false) : undefined}
+            />
           ) : (
             <div className="text-[11.5px] text-steel">Nombre pendiente de vincular — exclusivo del líder de Inventario.</div>
           )}

@@ -71,6 +71,8 @@ export function JustCatalogPanel({ canManage }: { canManage: boolean }) {
   const [showNewRows, setShowNewRows] = useState(false);
   const [showMissing, setShowMissing] = useState(false);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  const [dragOver, setDragOver] = useState(false);
 
   function copyCode(code: string) {
     navigator.clipboard.writeText(code).catch(() => {});
@@ -252,10 +254,23 @@ export function JustCatalogPanel({ canManage }: { canManage: boolean }) {
       {err && <div className="text-red text-[12.5px] mb-3">{err}</div>}
 
       {canManage && phase === "idle" && (
-        <label className="flex flex-col items-center justify-center gap-1.5 border-[1.5px] border-dashed border-rule rounded-md py-6 cursor-pointer hover:border-teal transition-colors mb-5">
+        <label
+          className={`flex flex-col items-center justify-center gap-1.5 border-[1.5px] border-dashed rounded-md py-6 cursor-pointer transition-colors mb-5 ${dragOver ? "border-teal bg-teal/10" : "border-rule hover:border-teal"}`}
+          onDragOver={(e) => {
+            e.preventDefault();
+            setDragOver(true);
+          }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setDragOver(false);
+            const file = e.dataTransfer.files?.[0];
+            if (file) handleFile(file);
+          }}
+        >
           <Upload size={20} className="text-steel" />
           <div className="text-[13px] font-semibold">Subir base de datos de Just</div>
-          <div className="text-[11px] text-steel">Formato .xlsx o .xls — código del producto y nombre/descripción</div>
+          <div className="text-[11px] text-steel">Formato .xlsx o .xls — código del producto y nombre/descripción, o arrastra el archivo aquí</div>
           <input type="file" accept=".xlsx,.xls" className="hidden" onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])} />
         </label>
       )}
@@ -479,7 +494,12 @@ export function JustCatalogPanel({ canManage }: { canManage: boolean }) {
           <div key={item.id} className="flex items-center gap-2.5 bg-surface border border-rule rounded-md px-3 py-2">
             {item.photos[0] ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={item.photos[0]} alt={item.name} className="w-8 h-8 object-cover rounded border border-rule shrink-0" />
+              <img
+                src={item.photos[0]}
+                alt={item.name}
+                className="w-8 h-8 object-cover rounded border border-rule shrink-0 cursor-zoom-in"
+                onClick={() => setLightboxUrl(item.photos[0])}
+              />
             ) : (
               <div className="w-8 h-8 rounded border border-dashed border-rule shrink-0 flex items-center justify-center text-steel">
                 <Clock size={13} />
@@ -500,6 +520,16 @@ export function JustCatalogPanel({ canManage }: { canManage: boolean }) {
           </div>
         ))}
       </div>
+
+      {lightboxUrl && (
+        <div
+          className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center cursor-zoom-out p-6"
+          onClick={() => setLightboxUrl(null)}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={lightboxUrl} alt="" className="max-w-[90vw] max-h-[90vh] object-contain rounded-md shadow-2xl" onClick={(e) => e.stopPropagation()} />
+        </div>
+      )}
     </div>
   );
 }
