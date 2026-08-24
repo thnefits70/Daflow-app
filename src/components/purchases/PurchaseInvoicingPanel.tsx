@@ -150,7 +150,16 @@ function monthFilterLabel(month: string) {
   return `${MONTH_NAMES[Number(m) - 1]} ${y}`;
 }
 
-export function PurchaseInvoicingPanel() {
+// Confirmado 2026-08-24: fix de un bug real reportado por el usuario —
+// admin veía esta pantalla totalmente editable (Guardar, marcar como
+// pagado, subir factura, etc.) aunque registrar factura es exclusivo de
+// Nairoby (líder de Finanzas). Mismo patrón que canApprove en
+// PurchaseReceivingPanel: admin sigue viendo todo (isAdmin=false por
+// defecto solo cuando de verdad es Nairoby), pero cada botón que muta algo
+// queda disabled con un tooltip cuando isAdmin=true.
+const ADMIN_LOCK_TITLE = "Exclusivo de Nairoby (líder de Finanzas)";
+
+export function PurchaseInvoicingPanel({ isAdmin = false }: { isAdmin?: boolean }) {
   const router = useRouter();
   const [rows, setRows] = useState<Row[] | null>(null);
   const [pettyCash, setPettyCash] = useState<{ count: number; total: number } | null>(null);
@@ -561,6 +570,11 @@ export function PurchaseInvoicingPanel() {
 
   return (
     <div>
+      {isAdmin && (
+        <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-steel mb-3">
+          <Lock size={13} /> Vista de solo lectura — registrar factura y marcar pagos es exclusivo de Nairoby (líder de Finanzas)
+        </div>
+      )}
       {pettyCash && pettyCash.count > 0 && (
         <div className="bg-surface border border-rule rounded-md p-4 mb-4">
           <div className="text-[11px] font-semibold uppercase tracking-wide text-steel mb-2.5">
@@ -694,7 +708,8 @@ export function PurchaseInvoicingPanel() {
                       <div className="flex items-center gap-2">
                         <button
                           type="button"
-                          disabled={busyGroup === groupId || (netAmountFor(groupId) > 0 && (!proofUrl || proofVerifying || !proofVerifyResult?.matches))}
+                          disabled={isAdmin || busyGroup === groupId || (netAmountFor(groupId) > 0 && (!proofUrl || proofVerifying || !proofVerifyResult?.matches))}
+                          title={isAdmin ? ADMIN_LOCK_TITLE : undefined}
                           className="rounded border border-blue bg-blue px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer disabled:opacity-60"
                           onClick={() => pay(groupId)}
                         >
@@ -706,7 +721,7 @@ export function PurchaseInvoicingPanel() {
                   ) : (
                     <>
                       <div className="text-[11px] text-steel mb-1.5">Paso 1 de 2: transfiere el monto a la cuenta de arriba (o usa el crédito, si aplica). Después haz clic aquí para subir el comprobante y cerrar la solicitud.</div>
-                      <button type="button" className="rounded border border-blue bg-blue px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer" onClick={() => openPay(groupId, g[0].supplier.id)}>
+                      <button type="button" disabled={isAdmin} title={isAdmin ? ADMIN_LOCK_TITLE : undefined} className="rounded border border-blue bg-blue px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed" onClick={() => openPay(groupId, g[0].supplier.id)}>
                         💳 Ya transferí, cerrar solicitud
                       </button>
                     </>
@@ -804,7 +819,8 @@ export function PurchaseInvoicingPanel() {
                       <div className="flex items-center gap-2">
                         <button
                           type="button"
-                          disabled={busyGroup === groupId || shippingProofVerifying || (!!shippingProofUrl && !shippingProofVerifyResult?.matches)}
+                          disabled={isAdmin || busyGroup === groupId || shippingProofVerifying || (!!shippingProofUrl && !shippingProofVerifyResult?.matches)}
+                          title={isAdmin ? ADMIN_LOCK_TITLE : undefined}
                           className="rounded border border-blue bg-blue px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer disabled:opacity-60"
                           onClick={() => payShipping(groupId)}
                         >
@@ -816,7 +832,7 @@ export function PurchaseInvoicingPanel() {
                   ) : (
                     <>
                       <div className="text-[11px] text-steel mb-1.5">Paso 1 de 2: transfiere el monto a la cuenta de arriba. Después haz clic aquí para cerrar la solicitud.</div>
-                      <button type="button" className="rounded border border-blue bg-blue px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer" onClick={() => { setPayingShippingGroup(groupId); setShippingProofUrl(null); setShippingProofVerifyResult(null); setErr(""); }}>
+                      <button type="button" disabled={isAdmin} title={isAdmin ? ADMIN_LOCK_TITLE : undefined} className="rounded border border-blue bg-blue px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed" onClick={() => { setPayingShippingGroup(groupId); setShippingProofUrl(null); setShippingProofVerifyResult(null); setErr(""); }}>
                         💳 Ya transferí, cerrar solicitud
                       </button>
                     </>
@@ -909,20 +925,20 @@ export function PurchaseInvoicingPanel() {
                     <div className="font-semibold">⚠️ Revisar: {r0.financeFlagNote}</div>
                     <div className="text-steel mt-0.5">Marcado por {actorName(r0.financeFlaggedBy?.name)}{r0.financeFlaggedAt ? ` · ${new Date(r0.financeFlaggedAt).toLocaleDateString("es-MX")}` : ""}</div>
                   </div>
-                  <button type="button" className="text-steel underline text-[11px] cursor-pointer shrink-0" onClick={() => saveFinanceFlag(groupId, null)}>quitar</button>
+                  <button type="button" disabled={isAdmin} title={isAdmin ? ADMIN_LOCK_TITLE : undefined} className="text-steel underline text-[11px] cursor-pointer shrink-0 disabled:opacity-60 disabled:cursor-not-allowed" onClick={() => saveFinanceFlag(groupId, null)}>quitar</button>
                 </div>
               ) : flagOpenGroupId === groupId ? (
                 <div className="bg-cloud rounded-md p-2.5 mb-2.5">
                   <textarea className="w-full rounded border border-rule px-2.5 py-2 text-[12px] mb-2" rows={2} placeholder="¿Qué hay que revisar en esta operación?" value={flagNote} onChange={(e) => setFlagNote(e.target.value)} />
                   <div className="flex items-center gap-2">
-                    <button type="button" disabled={busyGroup === groupId || !flagNote.trim()} className="rounded border border-gold/50 px-2.5 py-1.5 text-[11.5px] font-semibold cursor-pointer disabled:opacity-60" style={{ color: "#D9A441" }} onClick={() => saveFinanceFlag(groupId, flagNote.trim())}>
+                    <button type="button" disabled={isAdmin || busyGroup === groupId || !flagNote.trim()} title={isAdmin ? ADMIN_LOCK_TITLE : undefined} className="rounded border border-gold/50 px-2.5 py-1.5 text-[11.5px] font-semibold cursor-pointer disabled:opacity-60" style={{ color: "#D9A441" }} onClick={() => saveFinanceFlag(groupId, flagNote.trim())}>
                       Marcar para revisar
                     </button>
                     <button type="button" className="text-steel text-[11.5px] cursor-pointer" onClick={() => setFlagOpenGroupId(null)}>Cancelar</button>
                   </div>
                 </div>
               ) : (
-                <button type="button" className="text-steel text-[11px] underline cursor-pointer mb-2.5" onClick={() => { setFlagOpenGroupId(groupId); setFlagNote(""); }}>
+                <button type="button" disabled={isAdmin} title={isAdmin ? ADMIN_LOCK_TITLE : undefined} className="text-steel text-[11px] underline cursor-pointer mb-2.5 disabled:opacity-60 disabled:cursor-not-allowed" onClick={() => { setFlagOpenGroupId(groupId); setFlagNote(""); }}>
                   ⚠️ Algo no cuadra — marcar para revisar
                 </button>
               )}
@@ -1018,7 +1034,8 @@ export function PurchaseInvoicingPanel() {
                       <div>
                         <button
                           type="button"
-                          disabled={busyGroup === groupId || (invoiceType[groupId] === "PARTIAL" && !partialAmounts[groupId])}
+                          disabled={isAdmin || busyGroup === groupId || (invoiceType[groupId] === "PARTIAL" && !partialAmounts[groupId])}
+                          title={isAdmin ? ADMIN_LOCK_TITLE : undefined}
                           className="rounded border border-blue bg-blue px-3.5 py-1.5 text-[12px] font-semibold text-white cursor-pointer disabled:opacity-60"
                           onClick={() => finalizeYes(groupId)}
                         >
@@ -1028,10 +1045,10 @@ export function PurchaseInvoicingPanel() {
                     </div>
                   ) : (
                     <div className="flex gap-2">
-                      <button type="button" disabled={busyGroup === groupId} className="flex-1 rounded border border-rule px-3 py-2 text-[12px] font-semibold text-steel cursor-pointer disabled:opacity-60" onClick={() => setInvoice(groupId, "NON_FISCAL")}>
+                      <button type="button" disabled={isAdmin || busyGroup === groupId} title={isAdmin ? ADMIN_LOCK_TITLE : undefined} className="flex-1 rounded border border-rule px-3 py-2 text-[12px] font-semibold text-steel cursor-pointer disabled:opacity-60" onClick={() => setInvoice(groupId, "NON_FISCAL")}>
                         Me dieron comprobante (no fiscal)
                       </button>
-                      <button type="button" disabled={busyGroup === groupId} className="flex-1 rounded border border-red/50 text-red px-3 py-2 text-[12px] font-semibold cursor-pointer disabled:opacity-60" onClick={() => setInvoice(groupId, "NONE")}>
+                      <button type="button" disabled={isAdmin || busyGroup === groupId} title={isAdmin ? ADMIN_LOCK_TITLE : undefined} className="flex-1 rounded border border-red/50 text-red px-3 py-2 text-[12px] font-semibold cursor-pointer disabled:opacity-60" onClick={() => setInvoice(groupId, "NONE")}>
                         No entregaron nada
                       </button>
                     </div>
@@ -1122,7 +1139,9 @@ export function PurchaseInvoicingPanel() {
                   ) : (
                     <button
                       type="button"
-                      className="text-blue text-[11px] font-semibold underline cursor-pointer mt-1.5"
+                      disabled={isAdmin}
+                      title={isAdmin ? ADMIN_LOCK_TITLE : undefined}
+                      className="text-blue text-[11px] font-semibold underline cursor-pointer mt-1.5 disabled:opacity-60 disabled:cursor-not-allowed"
                       onClick={() => openReupload(groupId)}
                     >
                       Volver a subir el documento de factura

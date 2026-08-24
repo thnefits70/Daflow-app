@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { canRegisterPurchaseInvoices } from "@/lib/guards";
+import { canActOnPurchaseInvoices } from "@/lib/guards";
 
 const schema = z.object({ note: z.string().trim().min(1).nullable() });
 
@@ -10,7 +10,7 @@ const schema = z.object({ note: z.string().trim().min(1).nullable() });
 // algo no cuadra en su revisión final de la operación. note: null la quita.
 export async function POST(req: NextRequest, { params }: { params: Promise<{ groupId: string }> }) {
   const session = await auth();
-  if (!(await canRegisterPurchaseInvoices()) || !session) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+  if (!(await canActOnPurchaseInvoices()) || !session) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
   const { groupId } = await params;
   const body = await req.json().catch(() => null);

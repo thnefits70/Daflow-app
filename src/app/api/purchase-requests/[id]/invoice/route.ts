@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { canRegisterPurchaseInvoices } from "@/lib/guards";
+import { canActOnPurchaseInvoices } from "@/lib/guards";
 
 const schema = z.object({
   invoiceStatus: z.enum(["PENDING", "COMPLETE", "PARTIAL", "NON_FISCAL", "NONE"]),
@@ -10,7 +10,7 @@ const schema = z.object({
 });
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  if (!(await canRegisterPurchaseInvoices())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+  if (!(await canActOnPurchaseInvoices())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
   const { id } = await params;
   const body = await req.json().catch(() => null);

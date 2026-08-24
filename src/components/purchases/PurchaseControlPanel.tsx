@@ -176,9 +176,13 @@ export function PurchaseControlPanel({
       {tab === "finanzas" && (
         <>
           <TabGuide storageKey="compras-finanzas">
-            Sube acá la factura de cada pedido ya recibido — con eso se cierra el ciclo de la compra.
+            {isAdmin ? (
+              <>Vista de solo lectura de las facturas y pagos que va cerrando Finanzas. Registrar factura y marcar pagos es exclusivo de Nairoby (líder de Finanzas).</>
+            ) : (
+              <>Sube acá la factura de cada pedido ya recibido — con eso se cierra el ciclo de la compra.</>
+            )}
           </TabGuide>
-          <PurchaseInvoicingPanel />
+          <PurchaseInvoicingPanel isAdmin={isAdmin} />
         </>
       )}
       {tab === "auditoria" && (

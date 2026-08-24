@@ -650,6 +650,21 @@ export async function canRegisterPurchaseInvoices() {
   return !!user.isLeader && user.leadsDept?.code === "FIN";
 }
 
+// Fix confirmado 2026-08-24: mismo patrón que canActOnPurchaseReceiving —
+// admin puede VER la pestaña Finanzas (canRegisterPurchaseInvoices arriba
+// sigue igual, se usa en las rutas GET/vista), pero registrar factura,
+// marcar como pagado, pagar flete y marcar para revisar es EXCLUSIVO de
+// Nairoby (líder de Finanzas), ni siquiera admin — el usuario reportó que
+// esa pantalla le salía editable siendo admin cuando debería verse bloqueada
+// en modo lectura.
+export async function canActOnPurchaseInvoices() {
+  const session = await auth();
+  if (!session) return false;
+  const user = await purchasesUserContext(session.user.id);
+  if (!user) return false;
+  return !!user.isLeader && user.leadsDept?.code === "FIN";
+}
+
 /**
  * ---------------- Reingreso de Mercadería ----------------
  * Diseñado y aprobado 2026-08-19. Tres roles, mismo espíritu que Control de
