@@ -19,6 +19,13 @@ function fmtDay(iso: string) {
   return new Date(iso).toLocaleDateString("es-EC", { weekday: "long", day: "2-digit", month: "short" });
 }
 
+async function postJson(url: string, body?: unknown) {
+  const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
+  const data = await res.json().catch(() => null);
+  if (!res.ok) throw new Error(data?.error ?? "Ocurrió un error.");
+  return data;
+}
+
 // Confirmado 2026-08-21: lo dañado ("no solucionado") ya no se cierra acá
 // item por item — sigue el ciclo semanal en la pestaña "Control de Daños"
 // (ver WeeklyDamageControl.tsx), sin excepción, para evitar el doble
@@ -29,6 +36,8 @@ export function CloseQueues() {
   const [nextEligibleDay, setNextEligibleDay] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [busyName, setBusyName] = useState<string | null>(null);
+  const [confirmingName, setConfirmingName] = useState<string | null>(null);
+  const [errorName, setErrorName] = useState<string | null>(null);
   const [expandedJust, setExpandedJust] = useState<string | null>(null);
 
   function load() {
@@ -47,13 +56,16 @@ export function CloseQueues() {
 
   async function markJustUploaded(group: JustGroupDTO) {
     setBusyName(group.name);
-    await fetch("/api/merchandise-reentry/items/bulk-just-uploaded", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ itemIds: group.itemIds }),
-    }).catch(() => null);
-    setBusyName(null);
-    load();
+    setErrorName(null);
+    try {
+      await postJson("/api/merchandise-reentry/items/bulk-just-uploaded", { itemIds: group.itemIds });
+      setConfirmingName(null);
+      load();
+    } catch (e) {
+      setErrorName(e instanceof Error ? e.message : "No se pudo guardar.");
+    } finally {
+      setBusyName(null);
+    }
   }
 
   if (loading) return <div className="text-[13px] text-steel">Cargando…</div>;
@@ -87,14 +99,18 @@ export function CloseQueues() {
               <div className="flex items-center justify-between">
                 <span className="text-[12px] text-green font-semibold">{group.totalGoodQty} unidades buenas{group.breakdown.length > 1 ? ` · ${group.breakdown.length} lotes` : ""}</span>
                 {group.canUploadNow ? (
-                  <button
-                    type="button"
-                    disabled={busyName === group.name}
-                    className="rounded border border-teal bg-teal px-3 py-1.5 text-[11.5px] font-bold text-navy cursor-pointer disabled:opacity-60"
-                    onClick={() => markJustUploaded(group)}
-                  >
-                    ✓ Subido a Just
-                  </button>
+                  confirmingName !== group.name && (
+                    <button
+                      type="button"
+                      className="rounded border border-teal bg-teal px-3 py-1.5 text-[11.5px] font-bold text-navy cursor-pointer"
+                      onClick={() => {
+                        setConfirmingName(group.name);
+                        setErrorName(null);
+                      }}
+                    >
+                      ✓ Subido a Just
+                    </button>
+                  )
                 ) : (
                   <span
                     title={`${justUploadMinQty} unidades o menos — se habilita el último día laboral de la semana`}
@@ -104,6 +120,35 @@ export function CloseQueues() {
                   </span>
                 )}
               </div>
+              {confirmingName === group.name && (
+                <div className="mt-2.5 bg-cloud border border-rule rounded-md p-3">
+                  <div className="text-[11.5px] mb-2">
+                    ¿Confirmas que ya subiste <b>{group.name}</b> ({group.totalGoodQty} unidades) al sistema Just? Esto marca el producto como cerrado en Reingreso de Mercadería.
+                  </div>
+                  {errorName && <div className="text-[11px] text-red mb-2">{errorName}</div>}
+                  <div className="flex gap-1.5">
+                    <button
+                      type="button"
+                      disabled={busyName === group.name}
+                      className="rounded border border-teal bg-teal px-3 py-1.5 text-[11.5px] font-bold text-navy cursor-pointer disabled:opacity-60"
+                      onClick={() => markJustUploaded(group)}
+                    >
+                      Sí, confirmar
+                    </button>
+                    <button
+                      type="button"
+                      disabled={busyName === group.name}
+                      className="rounded border border-rule px-3 py-1.5 text-[11.5px] font-semibold cursor-pointer disabled:opacity-60"
+                      onClick={() => {
+                        setConfirmingName(null);
+                        setErrorName(null);
+                      }}
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
             {expandedJust === group.name && (
               <div className="bg-cloud border-t border-rule p-3 flex flex-col gap-1.5">
