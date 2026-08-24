@@ -2781,6 +2781,15 @@ model MonthlyLegalRole {
   publishedById String?
   publishedBy   User?    @relation("MonthlyLegalRolePublishedBy", fields: [publishedById], references: [id], onDelete: SetNull)
 
+  // Comprobante del pago individual de fin de mes — SOLO se copia acá (y por
+  // lo tanto solo se le muestra al colaborador) cuando el monto real
+  // transferido coincidía exacto con netTotal (declaredSalary − IESS). Si no
+  // coincidía, estos quedan null a propósito — ver publish/route.ts. Nunca
+  // se copia el de la primera quincena (esta tabla no existe para Q1).
+  paidAt          DateTime?
+  payoutProofUrl  String?
+  payoutProofName String?
+
   @@unique([employeeId, month, version])
   @@index([employeeId])
   @@index([employeeId, isCurrent])

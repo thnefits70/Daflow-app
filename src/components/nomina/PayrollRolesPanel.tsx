@@ -7,6 +7,7 @@ import { PayrollEmployeeSalariesPanel } from "./PayrollEmployeeSalariesPanel";
 import { CeoBonusesForNairobyPanel } from "./CeoBonusesForNairobyPanel";
 import { PayrollTransferPanel, type Transfer } from "./PayrollTransferPanel";
 import { PayoutUploader } from "./PayrollIndividualPayment";
+import { isEndOfMonthQuincena } from "@/lib/payrollCalc";
 
 type LineItem = { id?: string; label: string; amount: number; kind: "INCOME" | "EXPENSE"; isAutomatic?: boolean; note?: string | null };
 type EmployeeBankAccount = {
@@ -372,6 +373,9 @@ export function PayrollRolesPanel({ canEdit, canProposeFixedBonus, canApproveFix
   const [confirmingPublish, setConfirmingPublish] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
 
+  const publishLabel = isEndOfMonthQuincena(period) ? "Generar rol de pago" : "Publicar";
+  const pendingPayoutCount = detail?.roles.filter((r) => !r.paidAt).length ?? 0;
+
   function loadDetail() {
     fetch(`/api/payroll/periods/${period}`).then((r) => (r.ok ? r.json() : null)).then(setDetail);
   }
@@ -512,25 +516,30 @@ export function PayrollRolesPanel({ canEdit, canProposeFixedBonus, canApproveFix
             </div>
           )}
 
-          {detail.status === "DRAFT" && canEdit && transfer?.status === "COMPLETED" && (
+          {detail.status === "DRAFT" && canEdit && transfer?.status === "COMPLETED" && pendingPayoutCount === 0 && (
             <div>
               {!confirmingPublish ? (
                 <button type="button" className="text-[13px] font-bold bg-green text-white rounded-md px-4 py-2 cursor-pointer" onClick={() => setConfirmingPublish(true)}>
-                  Publicar
+                  {publishLabel}
                 </button>
               ) : (
                 <div className="max-w-sm border-[1.5px] border-green rounded-md bg-cloud p-4">
-                  <div className="text-[13px] font-bold mb-3">¿Seguro que está todo bien antes de publicar?</div>
+                  <div className="text-[13px] font-bold mb-3">¿Seguro que está todo bien antes de {publishLabel.toLowerCase()}?</div>
                   <div className="flex gap-2">
                     <button type="button" className="text-[12px] font-semibold border border-rule rounded px-3 py-1.5 cursor-pointer" onClick={() => setConfirmingPublish(false)}>
                       No, seguir revisando
                     </button>
                     <button type="button" disabled={busy} className="text-[12px] font-bold bg-green text-white rounded px-3 py-1.5 cursor-pointer disabled:opacity-60" onClick={publish}>
-                      {busy ? "Publicando…" : "Sí, publicar"}
+                      {busy ? `${publishLabel}…` : `Sí, ${publishLabel.toLowerCase()}`}
                     </button>
                   </div>
                 </div>
               )}
+            </div>
+          )}
+          {detail.status === "DRAFT" && canEdit && transfer?.status === "COMPLETED" && pendingPayoutCount > 0 && (
+            <div className="text-[12px] text-steel-dim italic">
+              Todavía falta confirmar el comprobante individual de {pendingPayoutCount} colaborador{pendingPayoutCount === 1 ? "" : "es"} (ver arriba, en cada tarjeta) para poder {publishLabel.toLowerCase()}.
             </div>
           )}
           {detail.status === "DRAFT" && canEdit && transfer?.status !== "COMPLETED" && (

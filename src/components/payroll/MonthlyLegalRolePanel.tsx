@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { FileText } from "lucide-react";
+import { ProofPreview } from "@/components/shared/ProofPreview";
 
 type Role = {
   id: string;
@@ -13,6 +14,9 @@ type Role = {
   iessDeduction: number;
   netTotal: number;
   publishedAt: string;
+  paidAt: string | null;
+  payoutProofUrl: string | null;
+  payoutProofName: string | null;
 };
 
 const MONTHS = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
@@ -70,6 +74,13 @@ export function MonthlyLegalRolePanel() {
                 <div className="flex justify-between"><span className="text-steel">Descuento IESS (9.45%)</span><span className="text-red">{money(current.iessDeduction)}</span></div>
                 <div className="flex justify-between font-bold border-t border-rule pt-1.5 mt-0.5"><span>Total a recibir</span><span>{money(current.netTotal)}</span></div>
               </div>
+
+              {current.payoutProofUrl && (
+                <div className="mt-2.5 pt-2.5 border-t border-rule">
+                  <div className="text-[10px] font-semibold uppercase tracking-wide text-steel mb-1.5">Comprobante de tu pago</div>
+                  <ProofPreview url={current.payoutProofUrl} filename={current.payoutProofName ?? undefined} />
+                </div>
+              )}
 
               <a
                 href={`/rol-del-mes/${current.id}`}

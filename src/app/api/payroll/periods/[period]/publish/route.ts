@@ -34,6 +34,19 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ pe
     return NextResponse.json({ error: "Primero hay que enviar el total, que lo aprueben, transferir y subir el comprobante." }, { status: 409 });
   }
 
+  // Confirmado 2026-08-24: pedido explícito del usuario — no alcanza con que
+  // el TOTAL de la quincena ya se haya transferido (arriba); antes de
+  // publicar (entregarle el rol a cada colaborador), Nairoby también tiene
+  // que haber confirmado, con comprobante verificado por IA, el pago
+  // individual a CADA colaborador (ver individual-payment/route.ts).
+  const pendingCount = payrollPeriod.roles.filter((r) => !r.paidAt).length;
+  if (pendingCount > 0) {
+    return NextResponse.json(
+      { error: `Todavía falta confirmar el comprobante individual de ${pendingCount} colaborador${pendingCount === 1 ? "" : "es"} antes de publicar.` },
+      { status: 409 }
+    );
+  }
+
   const isAdmin = session!.user.role === "admin";
 
   if (isEndOfMonthQuincena(period)) {
@@ -42,12 +55,26 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ pe
       const profile = await prisma.payrollProfile.findUnique({ where: { userId: role.employeeId } });
       if (!profile?.iessDeclaredSalary) continue;
       const legal = computeMonthlyLegalRole(profile.iessDeclaredSalary, profile.companyAbsorbsIess);
+
+      // Confirmado 2026-08-24: pedido explícito del usuario — el
+      // comprobante real de la transferencia individual SOLO se le muestra
+      // al colaborador (copiado a MonthlyLegalRole) cuando el monto real
+      // que se le transfirió coincide exacto con lo que este "Rol del mes"
+      // le calcula (sueldo declarado − IESS). Si no coincide (sueldo real
+      // > declarado, la estrategia de formalización gradual), el
+      // comprobante se queda 100% interno — nunca se copia acá — para que
+      // el colaborador no vea la diferencia entre lo real y lo declarado.
+      const proofMatchesDeclared = role.paidProofUrl && Math.abs(role.netTotal - legal.netTotal) < 0.01;
+
       await prisma.monthlyLegalRole.create({
         data: {
           employeeId: role.employeeId,
           month,
           ...legal,
           publishedById: isAdmin ? null : session!.user.id,
+          ...(proofMatchesDeclared
+            ? { paidAt: role.paidAt, payoutProofUrl: role.paidProofUrl, payoutProofName: role.paidProofName }
+            : {}),
         },
       });
     }

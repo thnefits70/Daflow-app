@@ -5,6 +5,7 @@ import { OvertimeEntryPanel } from "./OvertimeEntryPanel";
 import { OvertimeApprovalPanel } from "./OvertimeApprovalPanel";
 import { OvertimeHistoryPanel } from "./OvertimeHistoryPanel";
 import { PayrollRolesPanel } from "./PayrollRolesPanel";
+import { PayrollPaymentHistoryPanel } from "./PayrollPaymentHistoryPanel";
 import { CommissionTiersPanel } from "./CommissionTiersPanel";
 import { CeoBonusesPanel } from "./CeoBonusesPanel";
 import { PersonalPurchasesFinancePanel } from "@/components/personal-purchases/PersonalPurchasesFinancePanel";
@@ -14,7 +15,7 @@ import { SalaryAdvanceApprovalPanel } from "@/components/salary-advances/SalaryA
 import { ManagementDeductionsPanel } from "./ManagementDeductionsPanel";
 import { TabGuide } from "@/components/shared/TabGuide";
 
-type Tab = "horas" | "aprobar" | "historial" | "roles" | "comisiones" | "bonosceo" | "comprasfinanzas" | "anticipos" | "descuentos";
+type Tab = "horas" | "aprobar" | "historial" | "roles" | "historialpagos" | "comisiones" | "bonosceo" | "comprasfinanzas" | "anticipos" | "descuentos";
 
 // Confirmado 2026-08-13: pedido explícito del usuario — todo esto vive
 // dentro de la misma sección "Nómina" que ya existía, como pestañas nuevas,
@@ -50,6 +51,7 @@ export function PayrollWorkspace({
     ...(canApproveOvertime ? [{ key: "aprobar" as Tab, label: "Aprobar horas extra" }] : []),
     ...(canViewRoles ? [{ key: "historial" as Tab, label: "Historial de horas extra" }] : []),
     ...(canViewRoles ? [{ key: "roles" as Tab, label: "Rol de pago" }] : []),
+    ...(canViewRoles ? [{ key: "historialpagos" as Tab, label: "Historial de pagos" }] : []),
     ...(canProposeCommissions ? [{ key: "comisiones" as Tab, label: "Comisiones de equipo" }] : []),
     ...(canGrantCeoBonus ? [{ key: "bonosceo" as Tab, label: "Bonos discrecionales" }] : []),
     ...(canConfirmPersonalPurchaseFinance ? [{ key: "comprasfinanzas" as Tab, label: "Compras personales" }] : []),
@@ -120,6 +122,14 @@ export function PayrollWorkspace({
             )}
           </TabGuide>
           <PayrollRolesPanel canEdit={canEditRoles} canProposeFixedBonus={canProposeCommissions} canApproveFixedBonus={canApproveCommissions} isAdmin={isAdmin} />
+        </>
+      )}
+      {tab === "historialpagos" && canViewRoles && (
+        <>
+          <TabGuide storageKey="nomina-historialpagos">
+            Registro mensual de los pagos individuales que se van confirmando en cada quincena — quién ya está pagado y quién falta, con su comprobante. Solo Nairoby y el admin lo ven.
+          </TabGuide>
+          <PayrollPaymentHistoryPanel />
         </>
       )}
       {tab === "comisiones" && canProposeCommissions && (

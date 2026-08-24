@@ -65,6 +65,14 @@ export default async function RolDelMesPrintPage({ params }: { params: Promise<{
           </tbody>
         </table>
 
+        {role.payoutProofUrl && (
+          <div className="mt-8 pt-6 border-t border-gray-300">
+            <div className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-2">Comprobante de pago</div>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={role.payoutProofUrl} alt="Comprobante de pago" className="max-w-full rounded border border-gray-300" />
+          </div>
+        )}
+
         <div className="mt-10 text-[10.5px] text-gray-400 text-center">
           Emitido el {new Date().toLocaleDateString("es-EC")}
         </div>
