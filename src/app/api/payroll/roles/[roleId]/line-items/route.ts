@@ -45,6 +45,18 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ ro
     }),
   ]);
 
+  // Confirmado 2026-08-24: si Nairoby ya envió el total (PENDING_APPROVAL)
+  // y sigue editando antes de que el admin decida, el monto se mantiene al
+  // día solo — sin esto, el admin podría estar viendo un total viejo. Nunca
+  // toca REJECTED (eso necesita el clic explícito de "Enviar total" para
+  // reenviar) ni APPROVED/COMPLETED (esa plata ya se movió).
+  const transfer = await prisma.payrollTransfer.findUnique({ where: { periodId: role.periodId } });
+  if (transfer?.status === "PENDING_APPROVAL") {
+    const currentRoles = await prisma.payrollQuincenaRole.findMany({ where: { periodId: role.periodId, isCurrent: true }, select: { netTotal: true } });
+    const totalAmount = currentRoles.reduce((s, r) => s + r.netTotal, 0);
+    await prisma.payrollTransfer.update({ where: { id: transfer.id }, data: { totalAmount } });
+  }
+
   const updated = await prisma.payrollQuincenaRole.findUnique({ where: { id: roleId }, include: { lineItems: true } });
   return NextResponse.json(updated);
 }

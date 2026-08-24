@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { X, ShieldCheck, Landmark, ChevronDown } from "lucide-react";
 import { PayrollEmployeeSalariesPanel } from "./PayrollEmployeeSalariesPanel";
 import { CeoBonusesForNairobyPanel } from "./CeoBonusesForNairobyPanel";
-import { PayrollTransferPanel } from "./PayrollTransferPanel";
+import { PayrollTransferPanel, type Transfer } from "./PayrollTransferPanel";
 
 type LineItem = { id?: string; label: string; amount: number; kind: "INCOME" | "EXPENSE"; isAutomatic?: boolean; note?: string | null };
 type EmployeeBankAccount = {
@@ -326,6 +326,7 @@ export function PayrollRolesPanel({ canEdit, canProposeFixedBonus, canApproveFix
   const periods = useMemo(recentPeriods, []);
   const [period, setPeriod] = useState(currentPeriod);
   const [detail, setDetail] = useState<PeriodDetail | null>(null);
+  const [transfer, setTransfer] = useState<Transfer | null | undefined>(undefined);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [confirmingPublish, setConfirmingPublish] = useState(false);
@@ -334,6 +335,11 @@ export function PayrollRolesPanel({ canEdit, canProposeFixedBonus, canApproveFix
     fetch(`/api/payroll/periods/${period}`).then((r) => (r.ok ? r.json() : null)).then(setDetail);
   }
   useEffect(loadDetail, [period]);
+
+  function loadTransfer() {
+    fetch(`/api/payroll/periods/${period}/transfer`).then((r) => (r.ok ? r.json() : null)).then(setTransfer);
+  }
+  useEffect(loadTransfer, [period]);
 
   async function generate() {
     setBusy(true);
@@ -407,9 +413,9 @@ export function PayrollRolesPanel({ canEdit, canProposeFixedBonus, canApproveFix
             ))}
           </div>
 
-          {detail.status === "PUBLISHED" && <PayrollTransferPanel period={period} isAdmin={isAdmin} />}
+          <PayrollTransferPanel period={period} isAdmin={isAdmin} canEdit={canEdit} transfer={transfer} onChanged={loadTransfer} />
 
-          {detail.status === "DRAFT" && canEdit && (
+          {detail.status === "DRAFT" && canEdit && transfer?.status === "COMPLETED" && (
             <div>
               {!confirmingPublish ? (
                 <button type="button" className="text-[13px] font-bold bg-green text-white rounded-md px-4 py-2 cursor-pointer" onClick={() => setConfirmingPublish(true)}>
@@ -428,6 +434,14 @@ export function PayrollRolesPanel({ canEdit, canProposeFixedBonus, canApproveFix
                   </div>
                 </div>
               )}
+            </div>
+          )}
+          {detail.status === "DRAFT" && canEdit && transfer?.status !== "COMPLETED" && (
+            <div className="text-[12px] text-steel-dim italic">
+              {!transfer && "Enviá el total arriba para poder publicar — primero se paga, después se publica."}
+              {transfer?.status === "PENDING_APPROVAL" && "Esperando que el admin apruebe la transferencia para poder publicar."}
+              {transfer?.status === "REJECTED" && "El admin rechazó la transferencia — corregí y reenviá para poder publicar."}
+              {transfer?.status === "APPROVED" && "Falta que el admin suba el comprobante de la transferencia para poder publicar."}
             </div>
           )}
         </>

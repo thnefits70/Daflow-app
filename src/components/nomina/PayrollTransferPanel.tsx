@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Landmark, ChevronDown, Send } from "lucide-react";
 import { ProofPreview } from "@/components/shared/ProofPreview";
 import { usePasteFile } from "@/lib/usePasteFile";
@@ -15,7 +15,7 @@ type BankAccount = {
   holderIdNumber: string | null;
 };
 
-type Transfer = {
+export type Transfer = {
   status: "PENDING_APPROVAL" | "APPROVED" | "REJECTED" | "COMPLETED";
   totalAmount: number;
   destination: "NAIROBY" | "ADMIN_PRODUBANCO";
@@ -126,26 +126,72 @@ function ProofUploader({ period, onSent }: { period: string; onSent: () => void 
   );
 }
 
-// Confirmado 2026-08-23: pedido explícito del usuario — el total de la
-// quincena (suma de "Líquido a pagar" de todos los roles) + a qué cuenta
-// hay que transferirlo (automática según el período — ver
-// isEndOfMonthQuincena en payrollCalc.ts), con 3 pasos separados para el
-// admin: Aprobar, Rechazar (con motivo) y, por separado, subir el
-// comprobante ya transferido. Nairoby ve exactamente lo mismo en modo
+function ResendButton({ period, onSent }: { period: string; onSent: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+
+  async function send() {
+    setBusy(true);
+    setErr("");
+    const res = await fetch(`/api/payroll/periods/${period}/transfer/confirm`, { method: "POST" });
+    setBusy(false);
+    if (!res.ok) {
+      const data = await res.json().catch(() => null);
+      setErr(data?.error ?? "No se pudo enviar.");
+      return;
+    }
+    onSent();
+  }
+
+  return (
+    <div className="mt-2">
+      {err && <div className="text-red text-[12px] mb-1.5">{err}</div>}
+      <button type="button" disabled={busy} className="text-[12px] font-bold bg-teal text-white rounded-md px-3.5 py-1.5 cursor-pointer disabled:opacity-50" onClick={send}>
+        {busy ? "Enviando…" : "Enviar total para transferir"}
+      </button>
+    </div>
+  );
+}
+
+function SendTotalPrompt({ period, onSent }: { period: string; onSent: () => void }) {
+  return (
+    <div className="bg-surface border border-rule rounded-md p-3.5 mb-4">
+      <div className="font-bold text-[13.5px] mb-1">Transferencia de nómina</div>
+      <div className="text-[12px] text-steel mb-2.5">
+        Cuando ya revisaste todo y está listo, enviá el total al admin para que transfiera — recién después de eso se puede publicar.
+      </div>
+      <ResendButton period={period} onSent={onSent} />
+    </div>
+  );
+}
+
+// Confirmado 2026-08-24: pedido explícito del usuario — el orden real es
+// primero pagar, después publicar/entregar el rol a cada colaborador.
+// Nairoby envía el total (suma de "Líquido a pagar" de todos los roles)
+// mientras el período sigue en borrador — la cuenta destino es automática
+// según el período (ver isEndOfMonthQuincena en payrollCalc.ts). El admin
+// tiene 3 pasos separados: Aprobar, Rechazar (con motivo) y, aparte, subir
+// el comprobante ya transferido — recién con el comprobante subido se
+// habilita "Publicar" en PayrollRolesPanel. Nairoby ve todo esto en modo
 // solo lectura (necesita ver también la cuenta Produbanco del admin en la
-// 2da quincena, porque es ella quien entra ahí a pagar). Solo aparece una
-// vez publicado el período — se crea solo al publicar, nunca antes.
-export function PayrollTransferPanel({ period, isAdmin }: { period: string; isAdmin: boolean }) {
-  const [transfer, setTransfer] = useState<Transfer | null | undefined>(undefined);
+// 2da quincena, porque es ella quien entra ahí a pagar).
+export function PayrollTransferPanel({
+  period,
+  isAdmin,
+  canEdit,
+  transfer,
+  onChanged,
+}: {
+  period: string;
+  isAdmin: boolean;
+  canEdit: boolean;
+  transfer: Transfer | null | undefined;
+  onChanged: () => void;
+}) {
   const [rejecting, setRejecting] = useState(false);
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
-
-  function load() {
-    fetch(`/api/payroll/periods/${period}/transfer`).then((r) => (r.ok ? r.json() : null)).then(setTransfer);
-  }
-  useEffect(load, [period]);
 
   async function approve() {
     setBusy(true);
@@ -153,7 +199,7 @@ export function PayrollTransferPanel({ period, isAdmin }: { period: string; isAd
     const res = await fetch(`/api/payroll/periods/${period}/transfer/approve`, { method: "POST" });
     setBusy(false);
     if (!res.ok) { setErr("No se pudo aprobar."); return; }
-    load();
+    onChanged();
   }
 
   async function reject() {
@@ -169,11 +215,14 @@ export function PayrollTransferPanel({ period, isAdmin }: { period: string; isAd
     if (!res.ok) { setErr("No se pudo rechazar."); return; }
     setRejecting(false);
     setReason("");
-    load();
+    onChanged();
   }
 
   if (transfer === undefined) return null;
-  if (transfer === null) return null;
+  if (transfer === null) {
+    if (canEdit) return <SendTotalPrompt period={period} onSent={onChanged} />;
+    return null;
+  }
 
   const destinationLabel = transfer.destination === "NAIROBY" ? "Cuenta de Nairoby (1ra quincena)" : "Cuenta Produbanco del admin (fin de mes)";
 
@@ -197,9 +246,10 @@ export function PayrollTransferPanel({ period, isAdmin }: { period: string; isAd
       {transfer.status === "REJECTED" && transfer.rejectionReason && (
         <div className="text-[12px] text-red bg-red/10 border border-red/30 rounded px-2.5 py-2 mb-2">
           Motivo: {transfer.rejectionReason}
-          {!isAdmin && <div className="text-steel mt-1">Corregí el rol señalado — la corrección vuelve a mandar esto a aprobación sola.</div>}
+          {canEdit && <div className="text-steel mt-1">Corregí el rol señalado y volvé a enviar el total.</div>}
         </div>
       )}
+      {canEdit && transfer.status === "REJECTED" && <ResendButton period={period} onSent={onChanged} />}
 
       {transfer.status === "COMPLETED" && (
         <div className="text-[12px] text-steel">
@@ -243,7 +293,7 @@ export function PayrollTransferPanel({ period, isAdmin }: { period: string; isAd
         </div>
       )}
 
-      {isAdmin && transfer.status === "APPROVED" && <ProofUploader period={period} onSent={load} />}
+      {isAdmin && transfer.status === "APPROVED" && <ProofUploader period={period} onSent={onChanged} />}
 
       {!isAdmin && transfer.status === "PENDING_APPROVAL" && (
         <div className="text-[11.5px] text-steel-dim flex items-center gap-1.5"><Send size={11} /> Esperando aprobación del admin.</div>

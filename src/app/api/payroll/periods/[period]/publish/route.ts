@@ -20,10 +20,19 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ pe
 
   const payrollPeriod = await prisma.payrollPeriod.findUnique({
     where: { period },
-    include: { roles: { where: { isCurrent: true }, include: { employee: { select: { id: true } } } } },
+    include: { roles: { where: { isCurrent: true }, include: { employee: { select: { id: true } } } }, transfer: true },
   });
   if (!payrollPeriod) return NextResponse.json({ error: "Primero hay que generar los roles de este período." }, { status: 404 });
   if (payrollPeriod.status === "PUBLISHED") return NextResponse.json({ error: "Ya estaba publicado." }, { status: 409 });
+
+  // Confirmado 2026-08-24: pedido explícito del usuario — primero se paga,
+  // recién después se publica/entrega el rol a cada colaborador (nunca al
+  // revés). "Publicar" queda bloqueado hasta que la transferencia real ya
+  // se completó (comprobante subido) — ver transfer/confirm/route.ts para
+  // dónde se envía el total, mucho antes de este paso.
+  if (payrollPeriod.transfer?.status !== "COMPLETED") {
+    return NextResponse.json({ error: "Primero hay que enviar el total, que lo aprueben, transferir y subir el comprobante." }, { status: 409 });
+  }
 
   const isAdmin = session!.user.role === "admin";
 
@@ -54,18 +63,6 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ pe
     body: `Quincena ${period} — ${payrollPeriod.roles.length} colaborador${payrollPeriod.roles.length === 1 ? "" : "es"} · publicado por ${actorName(isAdmin ? null : session!.user.name)}`,
     url: "/admin",
   }).catch(() => null);
-
-  // Confirmado 2026-08-23: la propuesta de transferencia (total + cuenta
-  // destino) se crea sola al publicar — nunca antes (los roles deben estar
-  // generados y publicados a mano primero) y nunca se recalcula sola
-  // después de esto (ver roles/[roleId]/correct/route.ts para el único caso
-  // en que sí se actualiza: una corrección mientras sigue sin aprobar).
-  const totalAmount = payrollPeriod.roles.reduce((s, r) => s + r.netTotal, 0);
-  await prisma.payrollTransfer.upsert({
-    where: { periodId: payrollPeriod.id },
-    update: {},
-    create: { periodId: payrollPeriod.id, totalAmount, destination: isEndOfMonthQuincena(period) ? "ADMIN_PRODUBANCO" : "NAIROBY" },
-  });
 
   return NextResponse.json(updated);
 }
