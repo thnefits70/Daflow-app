@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { X, ShieldCheck, Landmark, ChevronDown } from "lucide-react";
+import { X, ShieldCheck, Landmark, ChevronDown, CheckCircle2 } from "lucide-react";
+import { ProofPreview } from "@/components/shared/ProofPreview";
 import { PayrollEmployeeSalariesPanel } from "./PayrollEmployeeSalariesPanel";
 import { CeoBonusesForNairobyPanel } from "./CeoBonusesForNairobyPanel";
 import { PayrollTransferPanel, type Transfer } from "./PayrollTransferPanel";
-import { IndividualPayoutsPanel } from "./IndividualPayoutsPanel";
+import { PayoutUploader } from "./PayrollIndividualPayment";
 
 type LineItem = { id?: string; label: string; amount: number; kind: "INCOME" | "EXPENSE"; isAutomatic?: boolean; note?: string | null };
 type EmployeeBankAccount = {
@@ -106,7 +107,7 @@ const ROLE_CARD_ACCENTS = [
   "bg-cloud border-l-teal/70",
 ] as const;
 
-function RoleCard({ role, index, published, canEdit, monthlyRoleId, onChanged }: { role: Role; index: number; published: boolean; canEdit: boolean; monthlyRoleId?: string; onChanged: () => void }) {
+function RoleCard({ role, index, published, canEdit, monthlyRoleId, showPayout, onChanged }: { role: Role; index: number; published: boolean; canEdit: boolean; monthlyRoleId?: string; showPayout: boolean; onChanged: () => void }) {
   const [items, setItems] = useState<LineItem[]>(role.lineItems);
   const [saving, setSaving] = useState(false);
   const [correcting, setCorrecting] = useState(false);
@@ -116,7 +117,15 @@ function RoleCard({ role, index, published, canEdit, monthlyRoleId, onChanged }:
   const [savingMonthly, setSavingMonthly] = useState(false);
   const [showZero, setShowZero] = useState(false);
   const [showBank, setShowBank] = useState(false);
+  const [undoingPayout, setUndoingPayout] = useState(false);
   const bankAccount = role.employee.employeeBankAccounts[0];
+
+  async function undoPayout() {
+    setUndoingPayout(true);
+    await fetch(`/api/payroll/roles/${role.id}/individual-payment`, { method: "DELETE" });
+    setUndoingPayout(false);
+    onChanged();
+  }
 
   async function submitMonthlyCorrection() {
     if (!monthlyRoleId || !monthlyChangeNote.trim()) return;
@@ -264,6 +273,33 @@ function RoleCard({ role, index, published, canEdit, monthlyRoleId, onChanged }:
         <div className="flex justify-between text-steel"><span>Total descuentos</span><span className="text-red font-semibold tabular-nums">{money(totalExpense)}</span></div>
         <div className="flex justify-between font-bold text-[13px] mt-0.5"><span>Líquido a pagar</span><span className="tabular-nums">{money(total)}</span></div>
       </div>
+
+      {showPayout && (
+        <div className="mt-2.5 pt-2.5 border-t border-rule">
+          <div className="text-[10px] font-semibold uppercase tracking-wide text-steel mb-1.5">Comprobante de pago a {role.employee.name.split(" ")[0]}</div>
+          {role.paidAt ? (
+            <div>
+              <div className="text-[11.5px] text-green font-semibold flex items-center gap-1.5">
+                <CheckCircle2 size={13} /> Pagado — {new Date(role.paidAt).toLocaleDateString("es-EC")}
+              </div>
+              {role.paidProofUrl && (
+                <div className="mt-1.5">
+                  <ProofPreview url={role.paidProofUrl} filename={role.paidProofName ?? undefined} />
+                </div>
+              )}
+              {canEdit && (
+                <button type="button" disabled={undoingPayout} className="text-[10.5px] text-steel-dim underline cursor-pointer mt-1.5 disabled:opacity-50" onClick={undoPayout}>
+                  {undoingPayout ? "Deshaciendo…" : "Deshacer — subí un comprobante equivocado"}
+                </button>
+              )}
+            </div>
+          ) : canEdit ? (
+            <PayoutUploader roleId={role.id} expectedAmount={total} onSent={onChanged} />
+          ) : (
+            <div className="text-[11px]" style={{ color: "#D9A441" }}>Pendiente de pago</div>
+          )}
+        </div>
+      )}
 
       {editingEnabled && <NewConceptForm onAdd={(item) => saveDraft([...items, item])} />}
       {saving && <div className="text-[10.5px] text-steel-dim mt-1">Guardando…</div>}
@@ -424,23 +460,6 @@ export function PayrollRolesPanel({ canEdit, canProposeFixedBonus, canApproveFix
             <PayrollTransferPanel period={period} isAdmin={isAdmin} canEdit={canEdit} transfer={transfer} onChanged={loadTransfer} />
           )}
 
-          {transfer?.status === "COMPLETED" && (
-            <IndividualPayoutsPanel
-              roles={detail.roles.map((r) => ({
-                id: r.id,
-                employeeName: r.employee.name,
-                position: r.employee.position,
-                netTotal: r.netTotal,
-                bankAccount: r.employee.employeeBankAccounts[0] ?? null,
-                paidAt: r.paidAt,
-                paidProofUrl: r.paidProofUrl,
-                paidProofName: r.paidProofName,
-              }))}
-              canEdit={canEdit}
-              onChanged={loadDetail}
-            />
-          )}
-
           <button
             type="button"
             className="text-[11.5px] text-blue font-semibold cursor-pointer mb-2.5"
@@ -485,6 +504,7 @@ export function PayrollRolesPanel({ canEdit, canProposeFixedBonus, canApproveFix
                     published={detail.status === "PUBLISHED"}
                     canEdit={canEdit}
                     monthlyRoleId={detail.monthlyRoleIdByEmployee?.[r.employeeId]}
+                    showPayout={transfer?.status === "COMPLETED"}
                     onChanged={loadDetail}
                   />
                 ))}
