@@ -125,6 +125,7 @@ export function InventoryControlPanel({
   const [snapErr, setSnapErr] = useState("");
   const [snapBusy, setSnapBusy] = useState(false);
   const [snapToast, setSnapToast] = useState("");
+  const [snapDragOver, setSnapDragOver] = useState(false);
 
   function resetSnapUpload() {
     setSnapPhase("idle");
@@ -332,7 +333,25 @@ export function InventoryControlPanel({
         )}
 
         {snapPhase === "idle" && (
-          <label className="flex flex-col items-center justify-center gap-1.5 border-[1.5px] border-dashed border-rule rounded-md py-7 cursor-pointer hover:border-teal transition-colors">
+          <label
+            className={`flex flex-col items-center justify-center gap-1.5 border-[1.5px] border-dashed rounded-md py-7 cursor-pointer transition-colors ${
+              snapDragOver ? "border-teal bg-teal/5" : "border-rule hover:border-teal"
+            }`}
+            onDragOver={(e) => {
+              e.preventDefault();
+              setSnapDragOver(true);
+            }}
+            onDragLeave={(e) => {
+              e.preventDefault();
+              setSnapDragOver(false);
+            }}
+            onDrop={(e) => {
+              e.preventDefault();
+              setSnapDragOver(false);
+              const file = e.dataTransfer.files?.[0];
+              if (file) handleSnapFile(file);
+            }}
+          >
             <Upload size={22} className="text-steel" />
             <div className="text-[13px] font-semibold">Arrastra tu reporte aquí o haz clic para elegirlo</div>
             <div className="text-[11px] text-steel">Formato .xlsx o .xls — código, costo promedio, descripción, stock actual</div>
