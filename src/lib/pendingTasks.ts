@@ -89,6 +89,27 @@ export function prevMonthStr(month: string): string {
   return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}`;
 }
 
+// Last UTC instant of `month` — used to test whether someone had already
+// been hired (startDate) by the time a given past month happened, so people
+// who joined later don't count toward that month's requirement.
+function monthEndUTC(month: string): Date {
+  const [y, m] = month.split("-").map(Number);
+  return new Date(Date.UTC(y, m, 0, 23, 59, 59, 999));
+}
+
+// Fix confirmado 2026-08-25 (reportado por Daniel): quién "cuenta" para
+// completar un mes pasado no puede ser la plantilla ACTUAL del equipo — si
+// alguien se sumó después de ese mes (ej. Bryan Franco, ingresó 2026-07-20),
+// exigirle una calificación de junio no tiene sentido y obligaba al líder a
+// inventarse un 0/0/0 solo para destrabar el mes siguiente, con el mismo
+// problema repitiéndose hacia atrás cada vez que se sume gente nueva. Si no
+// hay startDate registrada, se lo sigue incluyendo (no hay forma de saber si
+// ya estaba) — mismo comportamiento que antes.
+function eligibleForMonth<T extends { startDate: Date | null }>(cohort: T[], month: string): T[] {
+  const end = monthEndUTC(month);
+  return cohort.filter((u) => !u.startDate || u.startDate <= end);
+}
+
 // Confirmado 2026-08-07: metodología estricta mes por mes — no se puede
 // calificar un mes si el evaluador (líder o admin) todavía tiene gente sin
 // calificar de un mes ANTERIOR (ej. no se puede calificar agosto si julio
@@ -106,7 +127,7 @@ export async function getEarliestIncompleteMonthBefore(
   const where = evaluatorIsAdmin
     ? { isLeader: true as const, isActive: true, excludeFromRecognition: false }
     : { deptId: leaderDeptId!, isLeader: false as const, isActive: true, excludeFromRecognition: false };
-  const cohort = await prisma.user.findMany({ where, select: { id: true } });
+  const cohort = await prisma.user.findMany({ where, select: { id: true, startDate: true } });
   if (cohort.length === 0) return null;
   const cohortIds = cohort.map((u) => u.id);
 
@@ -119,8 +140,11 @@ export async function getEarliestIncompleteMonthBefore(
 
   let month = prevMonthStr(targetMonth);
   while (month >= genesis.month) {
-    const done = await prisma.monthlyEvaluationSummary.count({ where: { month, evaluateeId: { in: cohortIds } } });
-    if (done < cohortIds.length) return month;
+    const eligibleIds = eligibleForMonth(cohort, month).map((u) => u.id);
+    if (eligibleIds.length > 0) {
+      const done = await prisma.monthlyEvaluationSummary.count({ where: { month, evaluateeId: { in: eligibleIds } } });
+      if (done < eligibleIds.length) return month;
+    }
     month = prevMonthStr(month);
   }
   return null;
@@ -164,11 +188,13 @@ export async function getRecognitionLockout(evaluatorIsAdmin: boolean, leaderDep
   const where = evaluatorIsAdmin
     ? { isLeader: true as const, isActive: true, excludeFromRecognition: false }
     : { deptId: leaderDeptId!, isLeader: false as const, isActive: true, excludeFromRecognition: false };
-  const cohort = await prisma.user.findMany({ where, select: { id: true } });
+  const cohort = await prisma.user.findMany({ where, select: { id: true, startDate: true } });
   if (cohort.length === 0) return null;
+  const eligible = eligibleForMonth(cohort, month);
+  if (eligible.length === 0) return null;
 
-  const done = await prisma.monthlyEvaluationSummary.count({ where: { month, evaluateeId: { in: cohort.map((u) => u.id) } } });
-  if (done >= cohort.length) return null;
+  const done = await prisma.monthlyEvaluationSummary.count({ where: { month, evaluateeId: { in: eligible.map((u) => u.id) } } });
+  if (done >= eligible.length) return null;
   return { month, deadline: deadline.toISOString() };
 }
 
@@ -349,6 +375,8 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   compras_cuenta_bancaria: "Tus solicitudes de compra — cambiar cuenta bancaria",
   compras_recepcion: "Control de Compras — confirmar mercadería recibida",
   compras_cambios_verificar: "Control de Compras — verificar cambios de mercadería",
+  compras_reclamo_posterior_revision: "Reclamos posteriores al cierre por revisar",
+  compras_reclamo_posterior_just: "Reclamos posteriores al cierre por dar de baja en Just",
   compras_creditos_pendientes: "Créditos pendientes de recuperar",
   control_inventario: "Control de Inventario — captura mensual",
 };
@@ -620,14 +648,15 @@ async function getMissingEvaluatees(evaluatorIsAdmin: boolean, leaderDeptId: str
   const where = evaluatorIsAdmin
     ? { isLeader: true as const, isActive: true, excludeFromRecognition: false }
     : { deptId: leaderDeptId!, isLeader: false as const, isActive: true, excludeFromRecognition: false };
-  const evaluatees = await prisma.user.findMany({ where, select: { id: true, name: true } });
-  if (evaluatees.length === 0) return [];
+  const evaluatees = await prisma.user.findMany({ where, select: { id: true, name: true, startDate: true } });
+  const eligible = eligibleForMonth(evaluatees, month);
+  if (eligible.length === 0) return [];
   const done = await prisma.monthlyEvaluation.findMany({
-    where: { month, evaluateeId: { in: evaluatees.map((u) => u.id) } },
+    where: { month, evaluateeId: { in: eligible.map((u) => u.id) } },
     select: { evaluateeId: true },
   });
   const doneIds = new Set(done.map((e) => e.evaluateeId));
-  return evaluatees.filter((u) => !doneIds.has(u.id));
+  return eligible.filter((u) => !doneIds.has(u.id));
 }
 
 // One per leader (any department) — Bryan/Nairoby/Daniel/etc. all evaluate
@@ -690,13 +719,14 @@ async function getRecognitionAdminPendingItem(href: string): Promise<PendingItem
 
     // Non-leaders span every department, so this checks all of them at once
     // instead of the per-leader-deptId helper used elsewhere in this file.
-    const [missingLeaders, nonLeaders] = await Promise.all([
+    const [missingLeaders, nonLeadersAll] = await Promise.all([
       getMissingEvaluatees(true, null, month),
       prisma.user.findMany({
         where: { isLeader: false, isActive: true, excludeFromRecognition: false },
-        select: { id: true, name: true },
+        select: { id: true, name: true, startDate: true },
       }),
     ]);
+    const nonLeaders = eligibleForMonth(nonLeadersAll, month);
     const doneNonLeaders = await prisma.monthlyEvaluation.findMany({
       where: { month, evaluateeId: { in: nonLeaders.map((u) => u.id) } },
       select: { evaluateeId: true },
@@ -1061,6 +1091,47 @@ async function getPurchaseReplacementVerificationPendingItem(href: string): Prom
     icon: "🔄",
     label: "Verificar cambios de mercadería",
     meta: `${rows.length} cambio${rows.length === 1 ? "" : "s"} pendiente${rows.length === 1 ? "" : "s"}${overdue ? " · atrasado" : ""}`,
+    overdue,
+    href,
+  };
+}
+
+// Confirmado 2026-08-25: "Reclamo posterior al cierre" — daño descubierto
+// DÍAS después de confirmar recibido. Dos colas propias de Daniel, mismo
+// patrón que getPurchaseReceivingPendingItem: reclamos que su equipo subió
+// y todavía no revisó, y reclamos ya aprobados esperando que él confirme la
+// baja en Just.
+async function getLateClaimReviewPendingItem(href: string): Promise<PendingItem | null> {
+  const rows = await prisma.purchaseRequestUrgentReport.findMany({
+    where: { isLateClaim: true, reviewedByLeadAt: null, rejectedAt: null },
+    select: { reportedAt: true },
+  });
+  if (rows.length === 0) return null;
+  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const overdue = rows.some((r) => r.reportedAt < cutoff);
+  return {
+    type: "compras_reclamo_posterior_revision",
+    icon: "📦",
+    label: "Reclamos posteriores al cierre por revisar",
+    meta: `${rows.length} reclamo${rows.length === 1 ? "" : "s"}${overdue ? " · atrasado" : ""}`,
+    overdue,
+    href,
+  };
+}
+
+async function getLateClaimJustPendingItem(href: string): Promise<PendingItem | null> {
+  const rows = await prisma.purchaseRequestUrgentReport.findMany({
+    where: { isLateClaim: true, reviewedByLeadAt: { not: null }, rejectedAt: null, justConfirmedAt: null },
+    select: { reviewedByLeadAt: true },
+  });
+  if (rows.length === 0) return null;
+  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const overdue = rows.some((r) => r.reviewedByLeadAt && r.reviewedByLeadAt < cutoff);
+  return {
+    type: "compras_reclamo_posterior_just",
+    icon: "📦",
+    label: "Reclamos posteriores al cierre por dar de baja en Just",
+    meta: `${rows.length} reclamo${rows.length === 1 ? "" : "s"}${overdue ? " · atrasado" : ""}`,
     overdue,
     href,
   };
@@ -1752,7 +1823,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
   }
 
   if (me.leadsDept.code === "INV") {
-    const [stockoutItem, receivingItem, replacementItem, inventoryControlItem, merchandiseReentryItem, merchandiseWeeklyJustItem, personalPurchaseInventoryItem] = await Promise.all([
+    const [stockoutItem, receivingItem, replacementItem, inventoryControlItem, merchandiseReentryItem, merchandiseWeeklyJustItem, personalPurchaseInventoryItem, lateClaimReviewItem, lateClaimJustItem] = await Promise.all([
       getStockoutPendingItem("/area/kpis-generales"),
       getPurchaseReceivingPendingItem("/area/workspace?tab=compras&ptab=inventario"),
       getPurchaseReplacementVerificationPendingItem("/area/workspace?tab=compras&ptab=inventario"),
@@ -1760,6 +1831,8 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       getMerchandiseReentryPendingItem("/area/reingreso-mercaderia?tab=revision"),
       getMerchandiseWeeklyWriteOffJustPendingItem("/area/reingreso-mercaderia?tab=danos"),
       getPersonalPurchasePendingInventoryItem("/area/compras-personales-inventario"),
+      getLateClaimReviewPendingItem("/area/workspace?tab=compras&ptab=inventario"),
+      getLateClaimJustPendingItem("/area/workspace?tab=compras&ptab=inventario"),
     ]);
     if (stockoutItem) items.push(stockoutItem);
     if (receivingItem) items.push(receivingItem);
@@ -1768,6 +1841,8 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     if (merchandiseReentryItem) items.push(merchandiseReentryItem);
     if (merchandiseWeeklyJustItem) items.push(merchandiseWeeklyJustItem);
     if (personalPurchaseInventoryItem) items.push(personalPurchaseInventoryItem);
+    if (lateClaimReviewItem) items.push(lateClaimReviewItem);
+    if (lateClaimJustItem) items.push(lateClaimJustItem);
   }
 
   const recognitionItem = await getRecognitionLeaderPendingItem(me.leadsDeptId, "/area/colaborador-destacado");
@@ -1835,7 +1910,7 @@ export async function getPossiblePendingTypesForActor(
     }
     if (me.leadsDept.trackWeeklyMetric) types.push("pedidos_despachados");
     if (me.leadsDept.code === "INV") {
-      types.push("ruptura_stock", "compras_recepcion", "compras_cambios_verificar", "control_inventario", "reingreso_mercaderia_revision", "reingreso_mercaderia_baja_just", "compras_personales_confirmar");
+      types.push("ruptura_stock", "compras_recepcion", "compras_cambios_verificar", "control_inventario", "reingreso_mercaderia_revision", "reingreso_mercaderia_baja_just", "compras_personales_confirmar", "compras_reclamo_posterior_revision", "compras_reclamo_posterior_just");
     }
     // Mismo criterio de elegibilidad que canSubmitPurchaseRequests
     // (guards.ts) — delegado vía canManagePurchases, o líder de COM/FIN —
