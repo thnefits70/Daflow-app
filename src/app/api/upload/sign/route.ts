@@ -37,12 +37,22 @@ const PURCHASE_MODULE_FOLDERS = [
 ];
 
 const BUCKET = "daflow-files";
-const MAX_BYTES = 15 * 1024 * 1024;
+// Confirmado 2026-08-25: 15 MB dejaba fuera videos de recepción de más de
+// 2-4 segundos (el celular graba sin comprimir, ver PurchaseReceivingPanel).
+// La subida va directo navegador -> Supabase, así que no hay límite técnico
+// de Vercel de por medio — 50 MB es solo cuánto storage se permite gastar.
+const MAX_BYTES = 50 * 1024 * 1024;
 
 async function ensureBucket() {
   const supabase = supabaseAdmin();
   const { data: buckets } = await supabase.storage.listBuckets();
-  if (buckets?.some((b) => b.name === BUCKET)) return;
+  if (buckets?.some((b) => b.name === BUCKET)) {
+    // El bucket ya existía con el fileSizeLimit viejo (15 MB) — sin este
+    // update, Supabase seguiría rechazando la subida real aunque nuestro
+    // chequeo de arriba ya deje pasar hasta MAX_BYTES.
+    await supabase.storage.updateBucket(BUCKET, { public: true, fileSizeLimit: MAX_BYTES });
+    return;
+  }
   await supabase.storage.createBucket(BUCKET, { public: true, fileSizeLimit: MAX_BYTES });
 }
 
@@ -133,7 +143,7 @@ export async function POST(req: NextRequest) {
   if (!allowed) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
   if (size > MAX_BYTES) {
-    return NextResponse.json({ error: "El archivo es muy pesado (máximo 15 MB)." }, { status: 400 });
+    return NextResponse.json({ error: "El archivo es muy pesado (máximo 50 MB)." }, { status: 400 });
   }
 
   const safeFolder = folder.replace(/[^a-z0-9-]/gi, "_");
