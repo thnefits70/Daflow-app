@@ -375,6 +375,8 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   compras_cuenta_bancaria: "Tus solicitudes de compra — cambiar cuenta bancaria",
   compras_recepcion: "Control de Compras — confirmar mercadería recibida",
   compras_cambios_verificar: "Control de Compras — verificar cambios de mercadería",
+  compras_reclamo_posterior_revision: "Reclamos posteriores al cierre por revisar",
+  compras_reclamo_posterior_just: "Reclamos posteriores al cierre por dar de baja en Just",
   compras_creditos_pendientes: "Créditos pendientes de recuperar",
   control_inventario: "Control de Inventario — captura mensual",
 };
@@ -1094,6 +1096,47 @@ async function getPurchaseReplacementVerificationPendingItem(href: string): Prom
   };
 }
 
+// Confirmado 2026-08-25: "Reclamo posterior al cierre" — daño descubierto
+// DÍAS después de confirmar recibido. Dos colas propias de Daniel, mismo
+// patrón que getPurchaseReceivingPendingItem: reclamos que su equipo subió
+// y todavía no revisó, y reclamos ya aprobados esperando que él confirme la
+// baja en Just.
+async function getLateClaimReviewPendingItem(href: string): Promise<PendingItem | null> {
+  const rows = await prisma.purchaseRequestUrgentReport.findMany({
+    where: { isLateClaim: true, reviewedByLeadAt: null, rejectedAt: null },
+    select: { reportedAt: true },
+  });
+  if (rows.length === 0) return null;
+  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const overdue = rows.some((r) => r.reportedAt < cutoff);
+  return {
+    type: "compras_reclamo_posterior_revision",
+    icon: "📦",
+    label: "Reclamos posteriores al cierre por revisar",
+    meta: `${rows.length} reclamo${rows.length === 1 ? "" : "s"}${overdue ? " · atrasado" : ""}`,
+    overdue,
+    href,
+  };
+}
+
+async function getLateClaimJustPendingItem(href: string): Promise<PendingItem | null> {
+  const rows = await prisma.purchaseRequestUrgentReport.findMany({
+    where: { isLateClaim: true, reviewedByLeadAt: { not: null }, rejectedAt: null, justConfirmedAt: null },
+    select: { reviewedByLeadAt: true },
+  });
+  if (rows.length === 0) return null;
+  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const overdue = rows.some((r) => r.reviewedByLeadAt && r.reviewedByLeadAt < cutoff);
+  return {
+    type: "compras_reclamo_posterior_just",
+    icon: "📦",
+    label: "Reclamos posteriores al cierre por dar de baja en Just",
+    meta: `${rows.length} reclamo${rows.length === 1 ? "" : "s"}${overdue ? " · atrasado" : ""}`,
+    overdue,
+    href,
+  };
+}
+
 // Confirmado 2026-08-17: pedido explícito del usuario — un enlace de un
 // clic en Inicio para que Bryan (o quien coordina con el proveedor) le dé
 // seguimiento a los créditos ya acordados (tipo CREDIT, resueltos en
@@ -1780,7 +1823,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
   }
 
   if (me.leadsDept.code === "INV") {
-    const [stockoutItem, receivingItem, replacementItem, inventoryControlItem, merchandiseReentryItem, merchandiseWeeklyJustItem, personalPurchaseInventoryItem] = await Promise.all([
+    const [stockoutItem, receivingItem, replacementItem, inventoryControlItem, merchandiseReentryItem, merchandiseWeeklyJustItem, personalPurchaseInventoryItem, lateClaimReviewItem, lateClaimJustItem] = await Promise.all([
       getStockoutPendingItem("/area/kpis-generales"),
       getPurchaseReceivingPendingItem("/area/workspace?tab=compras&ptab=inventario"),
       getPurchaseReplacementVerificationPendingItem("/area/workspace?tab=compras&ptab=inventario"),
@@ -1788,6 +1831,8 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       getMerchandiseReentryPendingItem("/area/reingreso-mercaderia?tab=revision"),
       getMerchandiseWeeklyWriteOffJustPendingItem("/area/reingreso-mercaderia?tab=danos"),
       getPersonalPurchasePendingInventoryItem("/area/compras-personales-inventario"),
+      getLateClaimReviewPendingItem("/area/workspace?tab=compras&ptab=inventario"),
+      getLateClaimJustPendingItem("/area/workspace?tab=compras&ptab=inventario"),
     ]);
     if (stockoutItem) items.push(stockoutItem);
     if (receivingItem) items.push(receivingItem);
@@ -1796,6 +1841,8 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     if (merchandiseReentryItem) items.push(merchandiseReentryItem);
     if (merchandiseWeeklyJustItem) items.push(merchandiseWeeklyJustItem);
     if (personalPurchaseInventoryItem) items.push(personalPurchaseInventoryItem);
+    if (lateClaimReviewItem) items.push(lateClaimReviewItem);
+    if (lateClaimJustItem) items.push(lateClaimJustItem);
   }
 
   const recognitionItem = await getRecognitionLeaderPendingItem(me.leadsDeptId, "/area/colaborador-destacado");
@@ -1863,7 +1910,7 @@ export async function getPossiblePendingTypesForActor(
     }
     if (me.leadsDept.trackWeeklyMetric) types.push("pedidos_despachados");
     if (me.leadsDept.code === "INV") {
-      types.push("ruptura_stock", "compras_recepcion", "compras_cambios_verificar", "control_inventario", "reingreso_mercaderia_revision", "reingreso_mercaderia_baja_just", "compras_personales_confirmar");
+      types.push("ruptura_stock", "compras_recepcion", "compras_cambios_verificar", "control_inventario", "reingreso_mercaderia_revision", "reingreso_mercaderia_baja_just", "compras_personales_confirmar", "compras_reclamo_posterior_revision", "compras_reclamo_posterior_just");
     }
     // Mismo criterio de elegibilidad que canSubmitPurchaseRequests
     // (guards.ts) — delegado vía canManagePurchases, o líder de COM/FIN —

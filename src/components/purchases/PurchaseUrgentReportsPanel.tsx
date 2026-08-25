@@ -46,7 +46,19 @@ type Report = {
   creditClaimDeadline: string | null;
   resolutions: Resolution[];
   request: { quantity: number; unitCost: number; totalCost: number; catalogItem: { name: string }; supplier: { id: string; name: string } };
+  // Confirmado 2026-08-25: "Reclamo posterior al cierre" — mismo modelo,
+  // isLateClaim distingue este camino del "Informar urgente" normal. Ya
+  // solo llega acá una vez que Daniel confirmó la baja en Just.
+  isLateClaim: boolean;
+  lateClaimCode: string | null;
+  originUncertain: boolean;
+  estimatedUnitCost: number | null;
+  stockStatus: "IN_STOCK" | "SOLD" | null;
 };
+
+function claimUnitCost(r: Report) {
+  return r.isLateClaim && r.originUncertain && r.estimatedUnitCost != null ? r.estimatedUnitCost : r.request.unitCost;
+}
 
 function money(n: number) {
   return `$${n.toFixed(2)}`;
@@ -199,9 +211,15 @@ export function PurchaseUrgentReportsPanel({ isAdmin }: { isAdmin: boolean }) {
             {openReports.map((r) => {
               const remaining = totalReported(r) - claimedQty(r.resolutions);
               return (
-                <div key={r.id} className="bg-surface border border-red/40 rounded-md p-4">
+                <div key={r.id} className={`bg-surface border rounded-md p-4 ${r.isLateClaim ? "border-teal/40" : "border-red/40"}`}>
                   <div className="flex items-center justify-between gap-2 flex-wrap mb-1">
-                    <div className="text-[13.5px] font-bold">{r.request.catalogItem.name}</div>
+                    <div className="text-[13.5px] font-bold flex items-center gap-2">
+                      {r.request.catalogItem.name}
+                      {r.isLateClaim && (
+                        <span className="text-[10px] font-bold uppercase tracking-wide bg-teal/15 text-teal border border-teal/40 rounded-full px-2 py-0.5">Reclamo posterior</span>
+                      )}
+                      {r.lateClaimCode && <span className="text-[10px] font-mono text-steel">{r.lateClaimCode}</span>}
+                    </div>
                     <span className="text-[10px] font-bold uppercase tracking-wide bg-red/15 text-red border border-red/40 rounded-full px-2.5 py-1">
                       {remaining} un. sin resolver
                     </span>
@@ -209,12 +227,20 @@ export function PurchaseUrgentReportsPanel({ isAdmin }: { isAdmin: boolean }) {
                   <div className="text-[11.5px] text-steel mb-1">
                     {r.request.supplier.name} — pagado {money(r.request.totalCost)} · {r.request.quantity} un. pedidas
                   </div>
+                  {r.isLateClaim && r.originUncertain && (
+                    <div className="flex items-center gap-1.5 text-[11px] mb-1" style={{ color: "#D9A441" }}>
+                      <AlertTriangle size={11} /> Origen incierto — usando costo promedio ${r.estimatedUnitCost?.toFixed(2)}/un.
+                    </div>
+                  )}
+                  {r.isLateClaim && r.stockStatus === "SOLD" && (
+                    <div className="text-[11px] text-steel mb-1">Estas unidades ya se habían vendido al momento del reclamo.</div>
+                  )}
                   <div className="text-[11px] text-steel mb-1">
                     {r.damagedQty > 0 && <>Dañada: {r.damagedQty} · </>}
                     {r.incompleteQty > 0 && <>Incompleta: {r.incompleteQty} · </>}
                     {r.differentQty > 0 && <>Diferente: {r.differentQty} · </>}
                     {r.missingQty > 0 && <>Faltante: {r.missingQty} · </>}
-                    ${(totalReported(r) * r.request.unitCost).toFixed(2)} en disputa
+                    ${(totalReported(r) * claimUnitCost(r)).toFixed(2)} en disputa
                   </div>
                   <div className="text-[12px] mb-2">{r.description}</div>
 
@@ -270,7 +296,7 @@ export function PurchaseUrgentReportsPanel({ isAdmin }: { isAdmin: boolean }) {
                         <textarea className="w-full rounded border border-rule px-2.5 py-2 text-[12.5px] mb-2.5" rows={2} placeholder="¿Por qué no se recupera?" value={resNote} onChange={(e) => setResNote(e.target.value)} />
                       )}
                       {resQty && Number(resQty) > 0 && (
-                        <div className="text-[12px] font-semibold mb-2.5">Monto: {money(Number(resQty) * r.request.unitCost)}</div>
+                        <div className="text-[12px] font-semibold mb-2.5">Monto: {money(Number(resQty) * claimUnitCost(r))}</div>
                       )}
                       {err && <div className="text-red text-[12px] mb-2">{err}</div>}
                       <div className="flex items-center gap-2">

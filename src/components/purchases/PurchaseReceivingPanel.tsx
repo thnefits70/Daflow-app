@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Camera, CheckCircle2, X, AlertTriangle, Truck } from "lucide-react";
+import { Camera, CheckCircle2, X, AlertTriangle, Truck, Package } from "lucide-react";
 import { actorName } from "@/lib/actorName";
 import { LiveCameraCapture } from "@/components/shared/LiveCameraCapture";
 import { LiveVideoCapture } from "@/components/shared/LiveVideoCapture";
@@ -90,6 +90,52 @@ type PendingReplacement = {
   report: {
     request: { id: string; catalogItem: { name: string; photos: string[] }; supplier: { name: string } };
   };
+};
+
+// Confirmado 2026-08-25: "Reclamo posterior al cierre" — daño descubierto
+// DÍAS después de confirmar recibido (ej. al despachar). Reutiliza
+// PurchaseRequestUrgentReport (isLateClaim=true) en vez de un modelo aparte.
+type ReceivedRow = {
+  id: string;
+  requestNumber: number | null;
+  quantity: number;
+  unitCost: number;
+  supplierId: string;
+  catalogItem: { id: string; name: string; photos: string[] };
+  supplier: { id: string; name: string };
+  receipt: { confirmedAt: string } | null;
+  urgentReports: {
+    id: string;
+    lateClaimCode: string | null;
+    damagedQty: number;
+    rejectedAt: string | null;
+    reviewedByLeadAt: string | null;
+    justConfirmedAt: string | null;
+    reportedAt: string;
+  }[];
+};
+
+type LateClaimCandidate = { id: string; code: string | null; quantity: number; unitCost: number; totalCost: number; receivedAt: string | null };
+
+type LateClaimReview = {
+  id: string;
+  lateClaimCode: string | null;
+  damagedQty: number;
+  stockStatus: "IN_STOCK" | "SOLD" | null;
+  originUncertain: boolean;
+  estimatedUnitCost: number | null;
+  description: string;
+  mediaUrls: string[];
+  reportedAt: string;
+  reportedBy: { name: string } | null;
+  request: { requestNumber: number | null; unitCost: number; catalogItem: { name: string; photos: string[] }; supplier: { name: string } };
+};
+
+type LateClaimJust = {
+  id: string;
+  lateClaimCode: string | null;
+  justWriteOffQty: number | null;
+  request: { catalogItem: { name: string }; supplier: { name: string } };
 };
 
 function groupRows(rows: Row[]) {
@@ -191,15 +237,143 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
   const [replacementPhotoUrls, setReplacementPhotoUrls] = useState<string[]>([]);
   const [takingReplacementPhoto, setTakingReplacementPhoto] = useState(false);
 
+  // ---------------- Reclamo posterior al cierre ----------------
+  const [receivedRows, setReceivedRows] = useState<ReceivedRow[]>([]);
+  const [lateClaimsReview, setLateClaimsReview] = useState<LateClaimReview[]>([]);
+  const [lateClaimsJust, setLateClaimsJust] = useState<LateClaimJust[]>([]);
+
+  const [lateOpenId, setLateOpenId] = useState<string | null>(null); // ReceivedRow.id con el formulario abierto
+  const [lateCandidates, setLateCandidates] = useState<LateClaimCandidate[]>([]);
+  const [lateAverageCost, setLateAverageCost] = useState<number | null>(null);
+  const [lateLoadingCandidates, setLateLoadingCandidates] = useState(false);
+  const [lateOriginId, setLateOriginId] = useState<string | null>(null);
+  const [lateOriginUncertain, setLateOriginUncertain] = useState(false);
+  const [lateDamagedQty, setLateDamagedQty] = useState("");
+  const [lateStockStatus, setLateStockStatus] = useState<"IN_STOCK" | "SOLD">("IN_STOCK");
+  const [lateWhy, setLateWhy] = useState("");
+  const [lateMediaUrls, setLateMediaUrls] = useState<string[]>([]);
+  const [lateTakingPhoto, setLateTakingPhoto] = useState(false);
+
+  const [lateRejectId, setLateRejectId] = useState<string | null>(null);
+  const [lateRejectReason, setLateRejectReason] = useState("");
+
+  const [justOpenId, setJustOpenId] = useState<string | null>(null);
+  const [justQtyInput, setJustQtyInput] = useState("");
+  const [justAffirmed, setJustAffirmed] = useState(false);
+  const [justDoubleConfirm, setJustDoubleConfirm] = useState(false);
+
   function load() {
     fetch("/api/purchase-requests?view=receiving").then((r) => (r.ok ? r.json() : [])).then(setRows).catch(() => setRows([]));
     fetch("/api/purchase-requests/urgent-resolutions/pending-replacements").then((r) => (r.ok ? r.json() : [])).then(setPendingReplacements).catch(() => setPendingReplacements([]));
-    if (canApprove) {
+    if (canApprove || canReceiveTeam || isAdmin) {
+      fetch("/api/purchase-requests?view=received").then((r) => (r.ok ? r.json() : [])).then(setReceivedRows).catch(() => setReceivedRows([]));
+    }
+    if (canApprove || isAdmin) {
       fetch("/api/purchase-requests/urgent-reports/pending-review").then((r) => (r.ok ? r.json() : [])).then(setPendingUrgentReports).catch(() => setPendingUrgentReports([]));
+      fetch("/api/purchase-requests/late-claims/pending-review").then((r) => (r.ok ? r.json() : [])).then(setLateClaimsReview).catch(() => setLateClaimsReview([]));
+      fetch("/api/purchase-requests/late-claims/pending-just").then((r) => (r.ok ? r.json() : [])).then(setLateClaimsJust).catch(() => setLateClaimsJust([]));
     }
   }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(load, [canApprove]);
+  useEffect(load, [canApprove, canReceiveTeam, isAdmin]);
+
+  async function openLateClaim(row: ReceivedRow) {
+    setLateOpenId(row.id);
+    setLateCandidates([]);
+    setLateAverageCost(null);
+    setLateOriginId(row.id);
+    setLateOriginUncertain(false);
+    setLateDamagedQty("");
+    setLateStockStatus("IN_STOCK");
+    setLateWhy("");
+    setLateMediaUrls([]);
+    setErr("");
+    setLateLoadingCandidates(true);
+    const res = await fetch(`/api/purchase-requests/late-claim-candidates?catalogItemId=${row.catalogItem.id}&supplierId=${row.supplierId}`);
+    setLateLoadingCandidates(false);
+    const data = await res.json().catch(() => null);
+    if (res.ok && data) {
+      setLateCandidates(data.candidates);
+      setLateAverageCost(data.averageUnitCost);
+    }
+  }
+
+  function handleLatePhotoCaptured(url: string) {
+    setLateMediaUrls((m) => [...m, url]);
+    setLateTakingPhoto(false);
+  }
+
+  function removeLateMedia(idx: number) {
+    setLateMediaUrls((m) => m.filter((_, i) => i !== idx));
+  }
+
+  async function submitLateClaim() {
+    const damaged = Number(lateDamagedQty) || 0;
+    if (damaged <= 0) { setErr("Ingresa la cantidad dañada."); return; }
+    if (!lateOriginId) { setErr("Elige a qué solicitud pertenece, o marca que no estás seguro."); return; }
+    if (!lateWhy.trim()) { setErr("Explica por qué no se detectó al recibir."); return; }
+    if (lateMediaUrls.length === 0) { setErr("Sube al menos una foto de evidencia."); return; }
+    if (lateOriginUncertain && lateAverageCost == null) { setErr("No hay costo promedio disponible para este producto/proveedor."); return; }
+    setBusy(true);
+    setErr("");
+    const res = await fetch(`/api/purchase-requests/${lateOriginId}/late-claim`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        damagedQty: damaged,
+        stockStatus: lateStockStatus,
+        whyNotDetected: lateWhy.trim(),
+        mediaUrls: lateMediaUrls,
+        originUncertain: lateOriginUncertain,
+        estimatedUnitCost: lateOriginUncertain ? lateAverageCost : undefined,
+      }),
+    });
+    setBusy(false);
+    const data = await res.json().catch(() => null);
+    if (!res.ok) { setErr(data?.error ?? "No se pudo enviar el reclamo."); return; }
+    setLateOpenId(null);
+    load();
+  }
+
+  async function reviewLateClaim(id: string, action: "approve" | "reject") {
+    setBusy(true);
+    setErr("");
+    const body: Record<string, unknown> = action === "approve" ? { action } : { action, reason: lateRejectReason.trim() };
+    const res = await fetch(`/api/purchase-requests/late-claims/${id}/review`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    setBusy(false);
+    const data = await res.json().catch(() => null);
+    if (!res.ok) { setErr(data?.error ?? "No se pudo procesar."); return; }
+    setLateRejectId(null);
+    setLateRejectReason("");
+    load();
+  }
+
+  function openJustConfirm(claim: LateClaimJust) {
+    setJustOpenId(claim.id);
+    setJustQtyInput("");
+    setJustAffirmed(false);
+    setJustDoubleConfirm(false);
+    setErr("");
+  }
+
+  async function submitJustConfirm(id: string) {
+    setBusy(true);
+    setErr("");
+    const res = await fetch(`/api/purchase-requests/late-claims/${id}/just-confirm`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ confirmedQty: Number(justQtyInput) }),
+    });
+    setBusy(false);
+    const data = await res.json().catch(() => null);
+    if (!res.ok) { setErr(data?.error ?? "No se pudo confirmar."); return; }
+    setJustOpenId(null);
+    load();
+  }
 
   // Confirmado 2026-08-18: LiveCameraCapture ya sube el archivo (comprime +
   // uploadFile internamente) y entrega la URL final — acá solo se agrega al
@@ -426,7 +600,7 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
 
   return (
     <div className="flex flex-col gap-2.5">
-      {canApprove && pendingUrgentReports.length > 0 && (
+      {(canApprove || isAdmin) && pendingUrgentReports.length > 0 && (
         <div className="bg-surface border border-red/40 rounded-md p-4 mb-1">
           <div className="flex items-center gap-1.5 text-[12px] font-bold mb-2 text-red">
             <AlertTriangle size={14} /> Reportes urgentes pendientes de tu revisión
@@ -453,12 +627,163 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                     )}
                   </div>
                   {err && <div className="text-red text-[12px] mb-2">{err}</div>}
-                  <button type="button" disabled={busy} className="rounded border border-red bg-red px-3.5 py-1.5 text-[12px] font-semibold text-white cursor-pointer disabled:opacity-60" onClick={() => approveUrgentReport(pr.id)}>
+                  <button
+                    type="button"
+                    disabled={!canApprove || busy}
+                    title={!canApprove ? "Exclusivo del líder de Inventario" : undefined}
+                    className="rounded border border-red bg-red px-3.5 py-1.5 text-[12px] font-semibold text-white cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                    onClick={() => approveUrgentReport(pr.id)}
+                  >
                     ✓ Revisar y enviar a Compras
                   </button>
                 </div>
               );
             })}
+          </div>
+        </div>
+      )}
+
+      {(canApprove || isAdmin) && lateClaimsReview.length > 0 && (
+        <div className="bg-surface border border-teal/40 rounded-md p-4 mb-1">
+          <div className="flex items-center gap-1.5 text-[12px] font-bold mb-2 text-teal">
+            <Package size={14} /> Reclamos posteriores al cierre pendientes de tu revisión
+          </div>
+          <div className="flex flex-col gap-2.5">
+            {lateClaimsReview.map((c) => (
+              <div key={c.id} className="bg-cloud rounded-md p-3">
+                <div className="flex items-center justify-between gap-2 flex-wrap mb-1">
+                  <div className="text-[13px] font-bold">{c.request.catalogItem.name}</div>
+                  <span className="text-[10px] font-mono font-bold text-teal bg-teal/10 border border-teal/40 rounded px-1.5 py-0.5">{c.lateClaimCode}</span>
+                </div>
+                <div className="text-[11.5px] text-steel mb-2">
+                  {c.request.supplier.name} — {c.damagedQty} un. dañadas · reportado por {actorName(c.reportedBy?.name)} · {new Date(c.reportedAt).toLocaleDateString("es-MX")}
+                  {c.stockStatus === "SOLD" && " · ya se vendieron"}
+                </div>
+                {c.originUncertain && (
+                  <div className="flex items-center gap-1.5 text-[11px] text-gold mb-2" style={{ color: "#D9A441" }}>
+                    <AlertTriangle size={12} /> Origen incierto — costo promedio ${c.estimatedUnitCost?.toFixed(2)}/un. en vez del de {c.request.requestNumber ? `SC-${String(c.request.requestNumber).padStart(3, "0")}` : "la solicitud"}.
+                  </div>
+                )}
+                <div className="bg-navy rounded px-3 py-2 mb-2">
+                  <div className="text-[10px] font-semibold uppercase tracking-wide text-steel mb-1">¿Por qué no se detectó al recibir?</div>
+                  <div className="text-[11.5px] text-ink italic">&quot;{c.description}&quot;</div>
+                </div>
+                <div className="grid grid-cols-4 gap-2 mb-2.5">
+                  {c.mediaUrls.map((url, i) =>
+                    isVideoUrl(url) ? (
+                      <video key={i} src={url} controls className="w-full h-32 rounded object-contain border border-rule bg-navy" />
+                    ) : (
+                      <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="bg-navy rounded border border-rule flex items-center justify-center h-32">
+                        <img src={url} alt="" className="max-w-full max-h-full object-contain" />
+                      </a>
+                    )
+                  )}
+                </div>
+                {err && <div className="text-red text-[12px] mb-2">{err}</div>}
+                {lateRejectId === c.id ? (
+                  <div>
+                    <textarea className="w-full rounded border border-rule px-2.5 py-2 text-[12.5px] mb-2" rows={2} placeholder="Explica por qué no procede..." value={lateRejectReason} onChange={(e) => setLateRejectReason(e.target.value)} />
+                    <div className="flex items-center gap-2">
+                      <button type="button" disabled={busy || !lateRejectReason.trim()} className="rounded border border-red bg-red px-3.5 py-1.5 text-[12px] font-semibold text-white cursor-pointer disabled:opacity-60" onClick={() => reviewLateClaim(c.id, "reject")}>
+                        Confirmar rechazo
+                      </button>
+                      <button type="button" className="text-steel text-[12px] cursor-pointer" onClick={() => { setLateRejectId(null); setLateRejectReason(""); }}>Cancelar</button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      disabled={!canApprove || busy}
+                      title={!canApprove ? "Exclusivo del líder de Inventario" : undefined}
+                      className="rounded border border-green bg-green px-3.5 py-1.5 text-[12px] font-semibold text-white cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                      onClick={() => reviewLateClaim(c.id, "approve")}
+                    >
+                      ✓ Aprobar
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!canApprove || busy}
+                      title={!canApprove ? "Exclusivo del líder de Inventario" : undefined}
+                      className="text-[11.5px] font-semibold border border-red/50 text-red rounded px-3 py-1.5 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                      onClick={() => { setLateRejectId(c.id); setLateRejectReason(""); }}
+                    >
+                      ✗ Rechazar
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {(canApprove || isAdmin) && lateClaimsJust.length > 0 && (
+        <div className="bg-surface border border-gold/40 rounded-md p-4 mb-1">
+          <div className="flex items-center gap-1.5 text-[12px] font-bold mb-2" style={{ color: "#D9A441" }}>
+            <Package size={14} /> Dar de baja en Just
+          </div>
+          <div className="flex flex-col gap-2.5">
+            {lateClaimsJust.map((c) => (
+              <div key={c.id} className="bg-cloud rounded-md p-3">
+                <div className="flex items-center justify-between gap-2 flex-wrap mb-2">
+                  <div className="text-[13px] font-bold">{c.request.catalogItem.name}</div>
+                  <span className="text-[10px] font-mono font-bold" style={{ color: "#D9A441" }}>{c.lateClaimCode}</span>
+                </div>
+                {justOpenId === c.id ? (
+                  <div>
+                    {!justDoubleConfirm ? (
+                      <>
+                        <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">
+                          Confirma cuántas unidades diste de baja en Just
+                        </label>
+                        <input type="number" className="w-full rounded border border-rule px-2.5 py-2 text-[13.5px] mb-2.5" style={{ maxWidth: 160 }} value={justQtyInput} onChange={(e) => setJustQtyInput(e.target.value)} />
+                        <label className="flex items-start gap-2 text-[12px] text-steel mb-2.5 cursor-pointer">
+                          <input type="checkbox" className="mt-0.5" checked={justAffirmed} onChange={(e) => setJustAffirmed(e.target.checked)} />
+                          Confirmo que entré a Just y descarté físicamente estas unidades del inventario disponible
+                        </label>
+                        {justQtyInput !== "" && Number(justQtyInput) !== c.justWriteOffQty && (
+                          <div className="flex items-center gap-1.5 text-[11px] text-red mb-2.5">
+                            <AlertTriangle size={12} /> Debe ser {c.justWriteOffQty} un. — la cantidad aprobada en el reclamo.
+                          </div>
+                        )}
+                        <button
+                          type="button"
+                          disabled={Number(justQtyInput) !== c.justWriteOffQty || !justAffirmed}
+                          className="rounded border border-green bg-green px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                          onClick={() => setJustDoubleConfirm(true)}
+                        >
+                          Confirmar baja en Just
+                        </button>
+                      </>
+                    ) : (
+                      <div className="bg-navy rounded-md p-3">
+                        <div className="text-[13px] font-bold mb-1.5">¿Seguro?</div>
+                        <div className="text-[12px] text-steel mb-3">Vas a marcar {c.lateClaimCode} como dado de baja en Just — esta acción no se puede deshacer.</div>
+                        {err && <div className="text-red text-[12px] mb-2">{err}</div>}
+                        <div className="flex items-center gap-2">
+                          <button type="button" disabled={busy} className="rounded border border-green bg-green px-3.5 py-1.5 text-[12px] font-semibold text-white cursor-pointer disabled:opacity-60" onClick={() => submitJustConfirm(c.id)}>
+                            Sí, confirmar
+                          </button>
+                          <button type="button" className="text-steel text-[12px] cursor-pointer" onClick={() => setJustDoubleConfirm(false)}>Cancelar</button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={!canApprove}
+                    title={!canApprove ? "Exclusivo del líder de Inventario" : undefined}
+                    className="rounded border border-gold/50 px-3.5 py-1.5 text-[12px] font-semibold cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                    style={{ color: "#D9A441" }}
+                    onClick={() => openJustConfirm(c)}
+                  >
+                    Dar de baja en Just
+                  </button>
+                )}
+              </div>
+            ))}
           </div>
         </div>
       )}
@@ -1071,6 +1396,134 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
           </div>
         );
       })}
+
+      {(canReceiveTeam || canApprove || isAdmin) && receivedRows.length > 0 && (
+        <div className="mt-4">
+          <div className="text-[11px] font-semibold uppercase tracking-wide text-steel mb-2">
+            Mercadería recibida — reportar daño encontrado después
+          </div>
+          <div className="flex flex-col gap-2.5">
+            {receivedRows.map((row) => {
+              const openClaim = row.urgentReports.find((c) => !c.rejectedAt);
+              return (
+                <div key={row.id} className="bg-surface border border-rule rounded-md p-4">
+                  <div className="flex items-center justify-between gap-3 flex-wrap mb-0.5">
+                    <div className="text-[14px] font-bold">{row.catalogItem.name}</div>
+                    <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide bg-green/15 text-green border border-green/40 rounded-full px-2.5 py-1">
+                      <CheckCircle2 size={11} /> Recibido
+                    </span>
+                  </div>
+                  <div className="text-[11.5px] text-steel mb-2">
+                    {row.supplier.name}
+                    {row.receipt?.confirmedAt && ` — recibido ${new Date(row.receipt.confirmedAt).toLocaleDateString("es-MX")}`}
+                  </div>
+
+                  {openClaim ? (
+                    <div className="bg-teal/10 border border-teal/30 rounded-md px-3 py-2 text-[11.5px] text-teal">
+                      Ya reportado — <span className="font-mono font-bold">{openClaim.lateClaimCode}</span>
+                      {" · "}
+                      {openClaim.justConfirmedAt ? "en gestión con el proveedor" : openClaim.reviewedByLeadAt ? "aprobado, pendiente de dar de baja en Just" : "pendiente de revisión de Daniel"}
+                    </div>
+                  ) : lateOpenId === row.id ? (
+                    <div className="mt-2">
+                      <div className="flex items-center gap-1.5 text-[11px] text-steel mb-3">
+                        <Package size={12} /> Sin plazo límite para reportar.
+                      </div>
+
+                      <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">¿A qué solicitud de compra pertenece?</label>
+                      {lateLoadingCandidates ? (
+                        <div className="text-[12px] text-steel mb-2.5">Buscando solicitudes recibidas de este producto…</div>
+                      ) : (
+                        <div className="flex flex-col gap-1.5 mb-3">
+                          {lateCandidates.map((c) => (
+                            <label key={c.id} className={`flex items-center gap-2.5 rounded-md px-3 py-2 cursor-pointer border ${!lateOriginUncertain && lateOriginId === c.id ? "border-teal bg-cloud" : "border-rule bg-cloud/60"}`}>
+                              <input type="radio" name={`origin-${row.id}`} checked={!lateOriginUncertain && lateOriginId === c.id} onChange={() => { setLateOriginId(c.id); setLateOriginUncertain(false); }} />
+                              <span className="text-[12.5px]">
+                                <span className="font-mono text-teal font-semibold">{c.code ?? "—"}</span> · {c.quantity} un. recibidas
+                                {c.receivedAt && ` ${new Date(c.receivedAt).toLocaleDateString("es-MX")}`} · ${c.totalCost.toFixed(2)}
+                              </span>
+                            </label>
+                          ))}
+                          <label className={`flex items-center gap-2.5 rounded-md px-3 py-2 cursor-pointer border border-dashed ${lateOriginUncertain ? "border-teal bg-cloud" : "border-rule"}`}>
+                            <input type="radio" name={`origin-${row.id}`} checked={lateOriginUncertain} onChange={() => setLateOriginUncertain(true)} />
+                            <span className="text-[12.5px] text-steel italic">No estoy seguro / mercadería mezclada</span>
+                          </label>
+                          {lateOriginUncertain && (
+                            <div className="text-[11px] text-steel px-1">
+                              {lateAverageCost != null ? `Se usará el costo promedio: $${lateAverageCost.toFixed(2)}/un.` : "No hay costo promedio disponible."}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Cantidad dañada</label>
+                      <input type="number" min={1} className="rounded border border-rule px-2.5 py-2 text-[13.5px] mb-3" style={{ maxWidth: 160 }} value={lateDamagedQty} onChange={(e) => setLateDamagedQty(e.target.value)} />
+
+                      <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">¿Esas unidades siguen en bodega o ya se vendieron?</label>
+                      <div className="flex items-center gap-4 mb-3 text-[12.5px]">
+                        <label className="flex items-center gap-1.5 cursor-pointer"><input type="radio" checked={lateStockStatus === "IN_STOCK"} onChange={() => setLateStockStatus("IN_STOCK")} /> Siguen en bodega</label>
+                        <label className="flex items-center gap-1.5 cursor-pointer"><input type="radio" checked={lateStockStatus === "SOLD"} onChange={() => setLateStockStatus("SOLD")} /> Ya se vendieron</label>
+                      </div>
+
+                      <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">¿Por qué no se detectó al recibir?</label>
+                      <textarea className="w-full rounded border border-rule px-2.5 py-2 text-[12.5px] mb-3" rows={2} placeholder="Describe qué pasó..." value={lateWhy} onChange={(e) => setLateWhy(e.target.value)} />
+
+                      <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Evidencia ({lateMediaUrls.length}/4) — mínimo 1 foto</label>
+                      {lateMediaUrls.length > 0 && (
+                        <div className="grid grid-cols-4 gap-2 mb-2.5">
+                          {lateMediaUrls.map((url, i) => (
+                            <div key={i} className="relative">
+                              {isVideoUrl(url) ? (
+                                <video src={url} controls className="w-full h-32 rounded object-contain border border-rule bg-cloud" />
+                              ) : (
+                                <a href={url} target="_blank" rel="noopener noreferrer" className="bg-cloud rounded border border-rule flex items-center justify-center h-32">
+                                  <img src={url} alt="" className="max-w-full max-h-full object-contain" />
+                                </a>
+                              )}
+                              <button type="button" className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red text-white flex items-center justify-center cursor-pointer" onClick={() => removeLateMedia(i)}>
+                                <X size={11} />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {lateMediaUrls.length < 4 && (
+                        lateTakingPhoto ? (
+                          <div className="mb-2.5">
+                            <LiveCameraCapture folder="purchase-request-receipts" onCaptured={handleLatePhotoCaptured} onCancel={() => setLateTakingPhoto(false)} />
+                          </div>
+                        ) : (
+                          <button type="button" className="flex items-center gap-1.5 text-[12px] font-semibold border-[1.5px] border-dashed border-red/40 text-red rounded-md px-3 py-2 cursor-pointer hover:border-red mb-2.5" onClick={() => setLateTakingPhoto(true)}>
+                            <Camera size={14} /> Tomar foto
+                          </button>
+                        )
+                      )}
+
+                      {err && <div className="text-red text-[12px] mb-2">{err}</div>}
+                      <div className="flex items-center gap-2">
+                        <button type="button" disabled={busy} className="rounded border border-red bg-red px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer disabled:opacity-60" onClick={submitLateClaim}>
+                          Enviar reporte
+                        </button>
+                        <button type="button" className="text-steel text-[12.5px] cursor-pointer" onClick={() => setLateOpenId(null)}>Cancelar</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled={!canReceiveTeam}
+                      title={!canReceiveTeam ? "Exclusivo del equipo de Inventario" : undefined}
+                      className="flex items-center gap-1.5 rounded border border-red/50 text-red px-3.5 py-1.5 text-[12.5px] font-semibold cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                      onClick={() => openLateClaim(row)}
+                    >
+                      <Package size={14} /> Reportar daño encontrado después
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -17,7 +17,17 @@ export async function GET(_req: NextRequest) {
     // Confirmado 2026-08-18: pedido explícito del usuario — un reporte que
     // subió el equipo de Inventario le llega primero a Daniel; Bryan/admin
     // solo ven lo que él ya revisó (ver urgent-reports/[id]/approve).
-    where: { reviewedByLeadAt: { not: null } },
+    // Confirmado 2026-08-25: un "Reclamo posterior al cierre" (isLateClaim)
+    // pasa además por dar de baja en Just antes de poder gestionarse con el
+    // proveedor — recién visible acá una vez justConfirmedAt (ver
+    // late-claims/[id]/just-confirm). rejectedAt siempre lo excluye.
+    where: {
+      rejectedAt: null,
+      OR: [
+        { isLateClaim: false, reviewedByLeadAt: { not: null } },
+        { isLateClaim: true, justConfirmedAt: { not: null } },
+      ],
+    },
     orderBy: { reportedAt: "desc" },
     include: {
       reportedBy: { select: { name: true } },

@@ -52,6 +52,36 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(rows);
   }
 
+  // Confirmado 2026-08-25: mercadería ya RECIBIDA, para el bloque de
+  // "Reclamo posterior al cierre" en la pestaña Inventario — lista liviana
+  // (no purchaseRequestInclude completo, no hace falta info bancaria acá),
+  // con los reclamos posteriores ya existentes de cada fila embebidos para
+  // que el botón sepa si ya hay uno en curso.
+  if (view === "received") {
+    if (!(await canConfirmPurchaseReceiving())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+    const rows = await prisma.purchaseRequest.findMany({
+      where: { status: "RECEIVED" },
+      orderBy: { receipt: { confirmedAt: "desc" } },
+      take: 40,
+      select: {
+        id: true,
+        requestNumber: true,
+        quantity: true,
+        unitCost: true,
+        supplierId: true,
+        catalogItem: { select: { id: true, name: true, photos: true } },
+        supplier: { select: { id: true, name: true } },
+        receipt: { select: { confirmedAt: true } },
+        urgentReports: {
+          where: { isLateClaim: true },
+          orderBy: { reportedAt: "desc" },
+          select: { id: true, lateClaimCode: true, damagedQty: true, rejectedAt: true, reviewedByLeadAt: true, justConfirmedAt: true, reportedAt: true },
+        },
+      },
+    });
+    return NextResponse.json(rows);
+  }
+
   if (view === "invoicing") {
     if (!(await canRegisterPurchaseInvoices())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
     // Confirmado 2026-08-18: RECEIVED_PENDING_REVIEW se agrega para que

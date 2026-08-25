@@ -39,13 +39,25 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     },
   });
   if (!report) return NextResponse.json({ error: "No encontrado." }, { status: 404 });
+  // Confirmado 2026-08-25: un "Reclamo posterior al cierre" solo se puede
+  // gestionar con el proveedor después de que Daniel confirmó la baja en
+  // Just — la UI ya no lo ofrece antes de eso (ver el filtro en
+  // urgent-reports/route.ts), esto es la validación real server-side.
+  if (report.isLateClaim && !report.justConfirmedAt) {
+    return NextResponse.json({ error: "Este reclamo todavía no está confirmado como dado de baja en Just." }, { status: 409 });
+  }
 
   const remaining = totalReportedQty(report) - claimedQty(report.resolutions);
   if (parsed.data.quantity > remaining) {
     return NextResponse.json({ error: `Solo quedan ${remaining} un. sin resolver en este reporte.` }, { status: 409 });
   }
 
-  const amount = parsed.data.quantity * report.request.unitCost;
+  // Confirmado 2026-08-25: un "Reclamo posterior al cierre" con origen
+  // incierto usa el costo promedio (estimatedUnitCost) en vez del unitCost
+  // puntual de la solicitud elegida — mismo criterio que ya se le mostró a
+  // Inventario al reportar.
+  const effectiveUnitCost = report.isLateClaim && report.originUncertain && report.estimatedUnitCost != null ? report.estimatedUnitCost : report.request.unitCost;
+  const amount = parsed.data.quantity * effectiveUnitCost;
   const createdById = isAdmin ? null : session.user.id;
 
   const resolution = await prisma.$transaction(async (tx) => {
