@@ -5,4 +5,5 @@ export const OUTFLOW_REASON_LABELS: Record<string, string> = {
   GARANTIA: "Garantía",
   DETERIORO: "Deterioro",
   COMPRA_PERSONAL: "Compra personal",
+  CAMBIO_PROVEEDOR: "Cambio con proveedor",
 };

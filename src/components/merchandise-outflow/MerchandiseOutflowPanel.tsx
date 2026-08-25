@@ -4,11 +4,13 @@ import { useState } from "react";
 import { DocumentCaptureFlow } from "./DocumentCaptureFlow";
 import { DeteriorCapture } from "./DeteriorCapture";
 import { DeteriorResolutionInbox } from "./DeteriorResolutionInbox";
+import { SupplierExchangeCapture } from "./SupplierExchangeCapture";
+import { SupplierExchangeResolutionInbox } from "./SupplierExchangeResolutionInbox";
 import { WriteOffQueue } from "./WriteOffQueue";
 import { HistoryList } from "./HistoryList";
 import { TabGuide } from "@/components/shared/TabGuide";
 
-type Tab = "despacho" | "garantia" | "deterioro" | "baja" | "historial";
+type Tab = "despacho" | "garantia" | "deterioro" | "proveedor" | "baja" | "historial";
 
 export function MerchandiseOutflowPanel({ canCapture, canAct = false }: { canCapture: boolean; canAct?: boolean }) {
   const defaultTab: Tab = canCapture ? "despacho" : "baja";
@@ -21,7 +23,7 @@ export function MerchandiseOutflowPanel({ canCapture, canAct = false }: { canCap
   const [tab, setTab] = useState<Tab>(() => {
     if (typeof window === "undefined") return defaultTab;
     const t = new URLSearchParams(window.location.search).get("otab");
-    if (t === "baja" || t === "deterioro") return t;
+    if (t === "baja" || t === "deterioro" || t === "proveedor") return t;
     return defaultTab;
   });
 
@@ -29,6 +31,7 @@ export function MerchandiseOutflowPanel({ canCapture, canAct = false }: { canCap
     ...(canCapture ? [{ id: "despacho" as const, label: "Despacho" }] : []),
     ...(canCapture ? [{ id: "garantia" as const, label: "Garantía" }] : []),
     ...(canCapture ? [{ id: "deterioro" as const, label: "Deterioro" }] : []),
+    ...(canAct ? [{ id: "proveedor" as const, label: "Cambio con proveedor" }] : []),
     { id: "baja" as const, label: "Dar de baja en Just" },
     { id: "historial" as const, label: "Historial" },
   ];
@@ -79,6 +82,20 @@ export function MerchandiseOutflowPanel({ canCapture, canAct = false }: { canCap
             <div>
               <div className="font-display font-bold text-[14px] mb-2.5">Pendientes de resolución</div>
               <DeteriorResolutionInbox canAct={canAct} />
+            </div>
+          </div>
+        </>
+      )}
+      {tab === "proveedor" && canAct && (
+        <>
+          <TabGuide storageKey="merchoutflow-proveedor">
+            Registra acá cuando mandes mercadería ya registrada en Just de vuelta a un proveedor para cambio — sale de Just en ese momento, así que cae directo en la cola de baja. Abajo ves los pendientes de saber si el proveedor cambió el producto o dio crédito.
+          </TabGuide>
+          <div className="flex flex-col gap-6">
+            <SupplierExchangeCapture />
+            <div>
+              <div className="font-display font-bold text-[14px] mb-2.5">Pendientes de resolución</div>
+              <SupplierExchangeResolutionInbox />
             </div>
           </div>
         </>

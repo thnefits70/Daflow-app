@@ -1166,6 +1166,7 @@ model Supplier {
   purchaseRequestsAsCarrier  PurchaseRequest[]     @relation("PurchaseRequestCarrier")
   bankAccounts               SupplierBankAccount[]
   credits                    SupplierCredit[]
+  merchandiseOutflowBatches  MerchandiseOutflowBatch[]
 
   @@index([status])
   @@index([createdByDeptId])
@@ -1760,6 +1761,12 @@ model SupplierCredit {
 
   urgentResolutionId String?                   @unique
   urgentResolution   PurchaseUrgentResolution? @relation(fields: [urgentResolutionId], references: [id], onDelete: SetNull)
+
+  // Confirmado 2026-08-25 (Fase 2 de Registro de Egresos): crédito nacido de
+  // un cambio de mercadería con proveedor resuelto como CREDIT_ISSUED —
+  // mismo patrón que urgentResolutionId (null en los demás orígenes).
+  outflowItemId String?                  @unique
+  outflowItem   MerchandiseOutflowItem? @relation(fields: [outflowItemId], references: [id], onDelete: SetNull)
 
   // Confirmado 2026-08-12: pedido explícito del usuario — un crédito también
   // se puede registrar A MANO (sin pasar por un reporte urgente), siempre
@@ -3315,15 +3322,30 @@ enum OutflowReason {
   GARANTIA
   DETERIORO
   COMPRA_PERSONAL
+  // Confirmado 2026-08-25 (Fase 2): mercadería YA registrada en Just que
+  // Daniel envía de vuelta a un proveedor para cambio. Sale de Just en el
+  // momento en que se manda (por eso entra a la cola de baja de inmediato,
+  // no espera la respuesta del proveedor) — la resolución (reemplazo físico
+  // o crédito) se rastrea aparte en el item, ver OutflowItemResolution.
+  CAMBIO_PROVEEDOR
 }
 
-// Null mientras está pendiente de que Daniel resuelva un item de deterioro.
-// SOLVED_ONSITE no entra a la cola de baja en Just — pedido explícito del
-// usuario, un daño chico arreglado ahí mismo no deja rastro en el sistema.
+// Null mientras está pendiente de que Daniel resuelva un item de deterioro
+// (o, en Fase 2, un cambio con proveedor). SOLVED_ONSITE no entra a la cola
+// de baja en Just — pedido explícito del usuario, un daño chico arreglado
+// ahí mismo no deja rastro en el sistema.
 enum OutflowItemResolution {
   SOLVED_ONSITE
   WRITE_OFF
   ESCALATED_TO_PURCHASES
+  // Fase 2 — CAMBIO_PROVEEDOR: el proveedor mandó el producto de reemplazo
+  // (la llegada física se maneja por la recepción normal de Compras, esto
+  // solo cierra el seguimiento acá).
+  REPLACED
+  // Fase 2 — CAMBIO_PROVEEDOR: el proveedor no cambia el producto, da
+  // crédito en su lugar — crea/vincula un SupplierCredit (ver
+  // MerchandiseOutflowItem.credit).
+  CREDIT_ISSUED
 }
 
 model MerchandiseOutflowBatch {
@@ -3357,6 +3379,10 @@ model MerchandiseOutflowBatch {
   personalPurchaseItemId String?               @unique
   personalPurchaseItem   PersonalPurchaseItem? @relation(fields: [personalPurchaseItemId], references: [id], onDelete: SetNull)
 
+  // CAMBIO_PROVEEDOR (Fase 2): a qué proveedor se le envía la mercadería.
+  supplierId String?
+  supplier   Supplier? @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+
   items MerchandiseOutflowItem[]
 
   @@index([reason])
@@ -3388,6 +3414,10 @@ model MerchandiseOutflowItem {
   resolvedAt     DateTime?
   resolvedById   String?
   resolvedBy     User?     @relation("MerchandiseOutflowItemResolvedBy", fields: [resolvedById], references: [id], onDelete: SetNull)
+
+  // Fase 2 — CAMBIO_PROVEEDOR resuelto como CREDIT_ISSUED: el crédito
+  // creado con el proveedor por este item.
+  credit SupplierCredit?
 
   createdAt DateTime @default(now())
 

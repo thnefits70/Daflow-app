@@ -19,7 +19,7 @@ export async function GET() {
     where: {
       justWrittenOffAt: null,
       OR: [
-        { reason: { in: ["DESPACHO", "GARANTIA", "COMPRA_PERSONAL"] }, submittedAt: { not: null } },
+        { reason: { in: ["DESPACHO", "GARANTIA", "COMPRA_PERSONAL", "CAMBIO_PROVEEDOR"] }, submittedAt: { not: null } },
         { reason: "DETERIORO", items: { some: { resolution: "WRITE_OFF" } } },
       ],
     },
