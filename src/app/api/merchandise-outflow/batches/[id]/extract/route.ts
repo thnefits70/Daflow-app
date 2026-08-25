@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { canCaptureMerchandiseOutflow } from "@/lib/guards";
 import { readOutflowManifest } from "@/lib/merchandiseOutflowAi";
 
-const schema = z.object({ photoUrls: z.array(z.string().min(1)).min(1).max(6) });
+const schema = z.object({ photoUrls: z.array(z.string().min(1)).min(1).max(20) });
 
 // Daniel sube las fotos de la hoja/manifiesto — la IA arma un consolidado
 // SUGERIDO (nunca persistido acá) para que revise fila por fila antes de

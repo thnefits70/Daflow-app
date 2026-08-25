@@ -7,7 +7,15 @@ import { ProductMatchPicker, type MatchCatalogItem, type ProductMatchResult } fr
 
 type ItemDTO = { id: string; declaredName: string; quantity: number; catalogItem: { name: string; photos: string[] } | null };
 type BatchDTO = { id: string; code: string; documentPhotoUrls: string[]; items: ItemDTO[] };
-type SuggestedRow = { name: string; quantity: number; selected: MatchCatalogItem | null; manualName: string; adding?: boolean; added?: boolean };
+type Confidence = "alta" | "media" | "baja";
+type SuggestedRow = { name: string; quantity: number; confidence: Confidence; selected: MatchCatalogItem | null; manualName: string; adding?: boolean; added?: boolean };
+
+const CONFIDENCE_LABEL: Record<Confidence, string> = { alta: "Lectura clara", media: "Revisar: letra poco clara", baja: "Revisar: dudosa" };
+const CONFIDENCE_STYLE: Record<Confidence, string> = {
+  alta: "bg-green/10 text-green border-green/35",
+  media: "bg-yellow/10 text-yellow border-yellow/35",
+  baja: "bg-red/10 text-red border-red/35",
+};
 
 async function postJson(url: string, body?: unknown) {
   const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
@@ -66,7 +74,15 @@ export function DocumentCaptureFlow({ reason }: { reason: "DESPACHO" | "GARANTIA
     try {
       const result = await postJson(`/api/merchandise-outflow/batches/${batch.id}/extract`, { photoUrls: photos });
       if (result.error) setError(result.error);
-      setRows((result.rows ?? []).map((r: { name: string; quantity: number }) => ({ name: r.name, quantity: r.quantity, selected: null, manualName: "" })));
+      setRows(
+        (result.rows ?? []).map((r: { name: string; quantity: number; confidence?: Confidence }) => ({
+          name: r.name,
+          quantity: r.quantity,
+          confidence: r.confidence ?? "media",
+          selected: null,
+          manualName: "",
+        }))
+      );
     } catch (e) {
       setError(e instanceof Error ? e.message : "No se pudo leer el documento.");
     } finally {
@@ -278,8 +294,13 @@ export function DocumentCaptureFlow({ reason }: { reason: "DESPACHO" | "GARANTIA
               </div>
             ) : (
               <div key={i} className="bg-cloud rounded-md p-2.5">
-                <div className="text-[12.5px] font-semibold mb-1.5">
-                  IA leyó: &quot;{row.name}&quot; · {row.quantity} un.
+                <div className="flex items-center justify-between gap-2 mb-1.5">
+                  <div className="text-[12.5px] font-semibold">
+                    IA leyó: &quot;{row.name}&quot; · {row.quantity} un.
+                  </div>
+                  <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-bold whitespace-nowrap ${CONFIDENCE_STYLE[row.confidence]}`}>
+                    {CONFIDENCE_LABEL[row.confidence]}
+                  </span>
                 </div>
                 {row.selected ? (
                   <div className="flex items-center gap-2.5 bg-green/10 border border-green/35 rounded-md p-2 mb-2">
