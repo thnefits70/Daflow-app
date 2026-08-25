@@ -3,6 +3,7 @@ import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { canSendPayrollMessage, canViewPayrollMessages } from "@/lib/guards";
+import { notifyOwner } from "@/lib/notifications";
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ employeeId: string }> }) {
   const session = await auth();
@@ -60,6 +61,35 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ emp
     data: { employeeId, senderId: session.user.id, body: parsed.data.body },
     include: { sender: { select: { name: true } } },
   });
+
+  const preview = created.body.length > 100 ? `${created.body.slice(0, 100)}…` : created.body;
+
+  if (session.user.id === employeeId) {
+    // El colaborador le escribió a Nómina: avisar a quien gestiona nómina
+    // (líder de Finanzas) con acceso directo a esa conversación.
+    const managers = await prisma.user.findMany({
+      where: { isLeader: true, leadsDept: { code: "FIN" } },
+      select: { id: true },
+    });
+    const employee = await prisma.user.findUnique({ where: { id: employeeId }, select: { deptId: true } });
+    await Promise.all(
+      managers.map((m) =>
+        notifyOwner(m.id, {
+          title: `${created.sender.name} te escribió`,
+          body: preview,
+          url: `/area/roles-de-pago?employee=${employeeId}${employee?.deptId ? `&dept=${employee.deptId}` : ""}`,
+        })
+      )
+    );
+  } else {
+    // Nómina le escribió al colaborador: avisar con acceso directo a su
+    // propia conversación ("Mensajes con Nómina" en Roles de pago).
+    await notifyOwner(employeeId, {
+      title: "Nómina te escribió",
+      body: preview,
+      url: "/area/roles-de-pago",
+    });
+  }
 
   return NextResponse.json(
     {

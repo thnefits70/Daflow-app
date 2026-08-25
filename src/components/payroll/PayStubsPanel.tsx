@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { FileText, Download, Trash2, ChevronLeft, ChevronRight, MessageSquare } from "lucide-react";
 import { PayrollChat } from "@/components/payroll/PayrollChat";
 import { MonthlyLegalRolePanel } from "@/components/payroll/MonthlyLegalRolePanel";
@@ -42,19 +42,27 @@ function RosterRow({
   onDelete,
   isAdmin,
   unreadCount,
+  autoOpen,
 }: {
   entry: RosterEntry;
   onDelete: (id: string) => void;
   isAdmin: boolean;
   unreadCount: number;
+  autoOpen: boolean;
 }) {
   const [viewing, setViewing] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
-  const [chatOpen, setChatOpen] = useState(false);
+  const [chatOpen, setChatOpen] = useState(autoOpen);
+  const rowRef = useRef<HTMLDivElement>(null);
   const { user, stub } = entry;
 
+  useEffect(() => {
+    if (autoOpen) rowRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
-    <div className="bg-surface border border-rule rounded p-3.5 mb-2.5">
+    <div ref={rowRef} className="bg-surface border border-rule rounded p-3.5 mb-2.5">
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
           <div className="font-semibold text-[13.5px]">{user.name}</div>
@@ -148,10 +156,25 @@ export function PayStubsPanel({
   const [filterMonth, setFilterMonth] = useState(0); // 0 = todos
   const [filterYear, setFilterYear] = useState(0); // 0 = todos
   const [unreadByEmployee, setUnreadByEmployee] = useState<Record<string, number>>({});
+  const [autoOpenEmployeeId, setAutoOpenEmployeeId] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/me/seen-pay-stubs", { method: "POST" });
   }, []);
+
+  // Confirmado 2026-08-25: pedido explícito del usuario — un mensaje nuevo
+  // debe poder abrirse con un solo clic desde Inicio, así que la campanita
+  // enlaza acá con ?employee=&dept= y esta pestaña salta directo a esa
+  // conversación en vez de dejar a Nairoby a buscarla a mano.
+  useEffect(() => {
+    if (mode !== "manage") return;
+    const params = new URLSearchParams(window.location.search);
+    const employee = params.get("employee");
+    const dept = params.get("dept");
+    if (employee) setAutoOpenEmployeeId(employee);
+    if (dept) setDeptId(dept);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode]);
 
   const loadUnreadSummary = async () => {
     const res = await fetch("/api/payroll-messages/unread-summary");
@@ -356,6 +379,7 @@ export function PayStubsPanel({
             onDelete={handleDelete}
             isAdmin={isAdmin}
             unreadCount={unreadByEmployee[entry.user.id] ?? 0}
+            autoOpen={autoOpenEmployeeId === entry.user.id}
           />
         ))}
     </div>
