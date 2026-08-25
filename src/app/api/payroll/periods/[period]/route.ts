@@ -27,6 +27,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ per
                 select: { bankName: true, bankAccountType: true, bankAccountNumber: true, bankAccountHolder: true, holderIdType: true, holderIdNumber: true },
                 take: 1,
               },
+              payrollProfile: { select: { iessDeclaredSalary: true } },
             },
           },
           lineItems: true,

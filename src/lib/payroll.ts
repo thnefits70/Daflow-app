@@ -56,7 +56,7 @@ export async function buildAutomaticLineItems(employeeId: string, period: string
       });
     }
   } else {
-    items.push({ label: "Sueldo (quincena)", amount: quincenalSalaryPortion(realSalary), kind: "INCOME", isAutomatic: true });
+    items.push({ label: "Sueldo", amount: quincenalSalaryPortion(realSalary), kind: "INCOME", isAutomatic: true });
   }
 
   if (isFirstQuincenaOfMonth(period)) {

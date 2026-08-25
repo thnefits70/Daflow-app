@@ -26,7 +26,7 @@ type Role = {
   totalIncome: number;
   totalExpense: number;
   netTotal: number;
-  employee: { id: string; name: string; position: string | null; employeeBankAccounts: EmployeeBankAccount[] };
+  employee: { id: string; name: string; position: string | null; employeeBankAccounts: EmployeeBankAccount[]; payrollProfile: { iessDeclaredSalary: number | null } | null };
   lineItems: LineItem[];
   paidAt: string | null;
   paidProofUrl: string | null;
@@ -120,6 +120,15 @@ function RoleCard({ role, index, published, canEdit, monthlyRoleId, showPayout, 
   const [showBank, setShowBank] = useState(false);
   const [undoingPayout, setUndoingPayout] = useState(false);
   const bankAccount = role.employee.employeeBankAccounts[0];
+  // Confirmado 2026-08-25: pedido de Nairoby — en la línea "Sueldo" no se
+  // debe mostrar el sueldo real quincenal, sino el sueldo declarado al IESS
+  // (es lo que ella usa como referencia). Es solo un cambio visual: el
+  // monto real de la línea (usado en totales y en el líquido a pagar que se
+  // transfiere) no cambia.
+  const declaredSalary = role.employee.payrollProfile?.iessDeclaredSalary ?? null;
+  function displayAmount(it: LineItem) {
+    return it.isAutomatic && it.label === "Sueldo" && declaredSalary != null ? declaredSalary : it.amount;
+  }
 
   async function undoPayout() {
     setUndoingPayout(true);
@@ -227,7 +236,7 @@ function RoleCard({ role, index, published, canEdit, monthlyRoleId, showPayout, 
             <div className="flex items-center gap-2 text-[12.5px]">
               <span className="flex-1 text-ink font-medium">{it.label}</span>
               <span className={`font-bold tabular-nums ${it.kind === "INCOME" ? "text-green" : "text-red"}`}>
-                {it.kind === "INCOME" ? "+" : "−"}{money(it.amount)}
+                {it.kind === "INCOME" ? "+" : "−"}{money(displayAmount(it))}
               </span>
               {editingEnabled && (
                 <button type="button" className="text-steel-dim cursor-pointer" onClick={() => saveDraft(items.filter((_, i) => i !== idx))}>
