@@ -7,7 +7,12 @@ import { sendPushToOwner } from "@/lib/webPush";
 import { totalReportedQty, claimedQty } from "@/lib/purchaseUrgent";
 
 const schema = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("CREDIT"), quantity: z.number().int().positive() }),
+  // Confirmado 2026-08-25: pedido explícito del usuario — el comprobante que
+  // manda el proveedor (chat, correo, nota de crédito) queda adjunto al
+  // crédito desde que se registra, para trazabilidad de punta a punta —
+  // mismo campo (SupplierCredit.proofUrl/proofName) que ya usan los créditos
+  // manuales, ahora también en los automáticos que salen de un reporte.
+  z.object({ type: z.literal("CREDIT"), quantity: z.number().int().positive(), proofUrl: z.string().url("Sube el comprobante del proveedor."), proofName: z.string().trim().optional() }),
   z.object({ type: z.literal("REPLACEMENT"), quantity: z.number().int().positive(), dueDate: z.string() }),
   z.object({ type: z.literal("REFUND"), quantity: z.number().int().positive() }),
   z.object({ type: z.literal("WRITE_OFF"), quantity: z.number().int().positive(), note: z.string().trim().min(1, "Explica por qué no se recupera.") }),
@@ -73,6 +78,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           urgentResolutionId: res.id,
           status: "AVAILABLE",
           createdById,
+          proofUrl: parsed.data.proofUrl,
+          proofName: parsed.data.proofName || null,
         },
       });
       return res;

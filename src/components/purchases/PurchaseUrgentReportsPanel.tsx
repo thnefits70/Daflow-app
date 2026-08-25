@@ -28,7 +28,7 @@ type Resolution = {
   refundAiMatch: boolean | null;
   refundAiNote: string | null;
   bankConfirmedAt: string | null;
-  credit: { id: string; amount: number; status: "AVAILABLE" | "APPLIED" | "REFUNDED" } | null;
+  credit: { id: string; amount: number; status: "AVAILABLE" | "APPLIED" | "REFUNDED"; proofUrl: string | null; proofName: string | null } | null;
   createdAt: string;
 };
 
@@ -97,6 +97,13 @@ export function PurchaseUrgentReportsPanel({ isAdmin }: { isAdmin: boolean }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
 
+  // Confirmado 2026-08-25: pedido explícito del usuario — el comprobante que
+  // manda el proveedor cuando acepta dar crédito queda adjunto desde que se
+  // registra, para trazabilidad de punta a punta.
+  const [resProofUrl, setResProofUrl] = useState("");
+  const [resProofName, setResProofName] = useState("");
+  const [resProofUploading, setResProofUploading] = useState(false);
+
   const [refundUploadingFor, setRefundUploadingFor] = useState<string | null>(null);
   const [confirmBankId, setConfirmBankId] = useState<string | null>(null);
 
@@ -111,7 +118,20 @@ export function PurchaseUrgentReportsPanel({ isAdmin }: { isAdmin: boolean }) {
     setResQty("");
     setResDueDate("");
     setResNote("");
+    setResProofUrl("");
+    setResProofName("");
     setErr("");
+  }
+
+  async function uploadCreditProof(file: File) {
+    setResProofUploading(true);
+    setErr("");
+    const compressed = await compressImage(file);
+    const uploaded = await uploadFile(compressed, "purchase-payments");
+    setResProofUploading(false);
+    if (!uploaded.ok) { setErr(uploaded.error); return; }
+    setResProofUrl(uploaded.url);
+    setResProofName(file.name);
   }
 
   async function submitResolution(reportId: string) {
@@ -119,11 +139,13 @@ export function PurchaseUrgentReportsPanel({ isAdmin }: { isAdmin: boolean }) {
     if (!qty || qty <= 0) { setErr("Ingresa una cantidad válida."); return; }
     if (resType === "REPLACEMENT" && !resDueDate) { setErr("Elige la fecha máxima del cambio."); return; }
     if (resType === "WRITE_OFF" && !resNote.trim()) { setErr("Explica por qué no se recupera."); return; }
+    if (resType === "CREDIT" && !resProofUrl) { setErr("Sube el comprobante del proveedor."); return; }
     setBusy(true);
     setErr("");
     const body: Record<string, unknown> = { type: resType, quantity: qty };
     if (resType === "REPLACEMENT") body.dueDate = resDueDate;
     if (resType === "WRITE_OFF") body.note = resNote.trim();
+    if (resType === "CREDIT") { body.proofUrl = resProofUrl; body.proofName = resProofName; }
     const res = await fetch(`/api/purchase-requests/urgent-reports/${reportId}/resolutions`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -295,12 +317,32 @@ export function PurchaseUrgentReportsPanel({ isAdmin }: { isAdmin: boolean }) {
                       {resType === "WRITE_OFF" && (
                         <textarea className="w-full rounded border border-rule px-2.5 py-2 text-[12.5px] mb-2.5" rows={2} placeholder="¿Por qué no se recupera?" value={resNote} onChange={(e) => setResNote(e.target.value)} />
                       )}
+                      {resType === "CREDIT" && (
+                        <div className="mb-2.5">
+                          <label className="block mb-1 text-[10px] text-steel">Comprobante del proveedor (chat, correo, nota de crédito)</label>
+                          {!resProofUrl ? (
+                            <label className="flex items-center gap-1.5 border-[1.5px] border-dashed border-rule rounded px-2.5 py-1.5 text-[11px] text-steel cursor-pointer hover:border-teal w-fit">
+                              {resProofUploading ? <span className="w-3.5 h-3.5 rounded-full border-2 border-rule border-t-teal animate-spin" /> : <Upload size={12} />}
+                              Subir comprobante
+                              <input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && uploadCreditProof(e.target.files[0])} />
+                            </label>
+                          ) : (
+                            <div className="flex items-center gap-2">
+                              <ProofPreview url={resProofUrl} size={36} filename={resProofName || "comprobante-credito"} />
+                              <label className="text-steel underline cursor-pointer text-[11px]">
+                                cambiar
+                                <input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && uploadCreditProof(e.target.files[0])} />
+                              </label>
+                            </div>
+                          )}
+                        </div>
+                      )}
                       {resQty && Number(resQty) > 0 && (
                         <div className="text-[12px] font-semibold mb-2.5">Monto: {money(Number(resQty) * claimUnitCost(r))}</div>
                       )}
                       {err && <div className="text-red text-[12px] mb-2">{err}</div>}
                       <div className="flex items-center gap-2">
-                        <button type="button" disabled={busy} className="rounded border border-blue bg-blue px-3.5 py-1.5 text-[12px] font-semibold text-white cursor-pointer disabled:opacity-60" onClick={() => submitResolution(r.id)}>
+                        <button type="button" disabled={busy || resProofUploading} className="rounded border border-blue bg-blue px-3.5 py-1.5 text-[12px] font-semibold text-white cursor-pointer disabled:opacity-60" onClick={() => submitResolution(r.id)}>
                           Registrar
                         </button>
                         <button type="button" className="text-steel text-[12px] cursor-pointer" onClick={() => setOpenReportId(null)}>Cancelar</button>
@@ -362,7 +404,12 @@ function ResolutionRow({
       </div>
 
       {res.type === "CREDIT" && res.credit && (
-        <div className="text-steel mt-0.5">{res.credit.status === "AVAILABLE" ? "Disponible para la próxima compra a este proveedor" : res.credit.status === "APPLIED" ? "Ya aplicado a una compra" : "Reembolsado"}</div>
+        <div className="mt-0.5">
+          <div className="text-steel">{res.credit.status === "AVAILABLE" ? "Disponible para la próxima compra a este proveedor" : res.credit.status === "APPLIED" ? "Ya aplicado a una compra" : "Reembolsado"}</div>
+          {res.credit.proofUrl && (
+            <div className="mt-1.5"><ProofPreview url={res.credit.proofUrl} size={36} filename={res.credit.proofName ?? "comprobante-credito"} /></div>
+          )}
+        </div>
       )}
 
       {res.type === "WRITE_OFF" && res.note && <div className="text-steel mt-0.5">{res.note}</div>}
