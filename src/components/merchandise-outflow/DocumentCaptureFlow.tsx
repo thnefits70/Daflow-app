@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Camera, Check, Plus, Send, Sparkles, Trash2, X } from "lucide-react";
 import { LiveCameraCapture } from "@/components/shared/LiveCameraCapture";
 import { ProductMatchPicker, type MatchCatalogItem, type ProductMatchResult } from "@/components/merchandise-reentry/ProductMatchPicker";
@@ -39,6 +39,8 @@ export function DocumentCaptureFlow({ reason }: { reason: "DESPACHO" | "GARANTIA
   const [confirmDeleteBatch, setConfirmDeleteBatch] = useState(false);
 
   const [photos, setPhotos] = useState<string[]>([]);
+  const [zoomedPhoto, setZoomedPhoto] = useState<string | null>(null);
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [taking, setTaking] = useState(false);
   const [extracting, setExtracting] = useState(false);
   const [rows, setRows] = useState<SuggestedRow[]>([]);
@@ -46,6 +48,14 @@ export function DocumentCaptureFlow({ reason }: { reason: "DESPACHO" | "GARANTIA
   const [manualName, setManualName] = useState("");
   const [manualQty, setManualQty] = useState("");
   const [manualSelected, setManualSelected] = useState<MatchCatalogItem | null>(null);
+
+  function startLongPress(url: string) {
+    longPressTimer.current = setTimeout(() => setZoomedPhoto(url), 450);
+  }
+  function cancelLongPress() {
+    if (longPressTimer.current) clearTimeout(longPressTimer.current);
+    longPressTimer.current = null;
+  }
 
   function loadDraft() {
     fetch(`/api/merchandise-outflow/draft?reason=${reason}`)
@@ -253,7 +263,18 @@ export function DocumentCaptureFlow({ reason }: { reason: "DESPACHO" | "GARANTIA
           {photos.map((p, i) => (
             <div key={i} className="relative">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={p} alt={`Foto ${i + 1}`} className="w-16 h-16 object-cover rounded border border-rule" />
+              <img
+                src={p}
+                alt={`Foto ${i + 1}`}
+                className="w-16 h-16 object-cover rounded border border-rule select-none"
+                onContextMenu={(e) => e.preventDefault()}
+                onTouchStart={() => startLongPress(p)}
+                onTouchEnd={cancelLongPress}
+                onTouchCancel={cancelLongPress}
+                onMouseDown={() => startLongPress(p)}
+                onMouseUp={cancelLongPress}
+                onMouseLeave={cancelLongPress}
+              />
               <button
                 type="button"
                 title="Quitar esta foto"
@@ -396,6 +417,13 @@ export function DocumentCaptureFlow({ reason }: { reason: "DESPACHO" | "GARANTIA
               {submitting ? "Enviando…" : "Sí, enviar lote"}
             </button>
           </div>
+        </div>
+      )}
+
+      {zoomedPhoto && (
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center cursor-zoom-out p-6" onClick={() => setZoomedPhoto(null)}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={zoomedPhoto} alt="" className="max-w-[90vw] max-h-[90vh] object-contain rounded-md shadow-2xl" onClick={(e) => e.stopPropagation()} />
         </div>
       )}
     </div>
