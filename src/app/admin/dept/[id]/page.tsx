@@ -154,6 +154,14 @@ export default async function DeptWorkspacePage({ params }: { params: Promise<{ 
         canCaptureMerchandiseOutflow={false}
         canActOnMerchandiseOutflow={false}
         canViewMerchandiseOutflow={dept.code === "INV"}
+        // Ventas Externas (Fase 3) — Bryan revisa (MKT), Nairoby cierra
+        // (FIN), admin confirma pago SIEMPRE (no es de ningún departamento
+        // en particular, así que no se apaga al navegar otras áreas).
+        canDeclareExternalSales={false}
+        canReviewExternalSales={dept.code === "MKT"}
+        canConfirmExternalSalePayment={true}
+        canCloseExternalSale={dept.code === "FIN"}
+        canViewExternalSales={true}
         pettyCashData={pettyCashData}
         canManageAdminPayments={dept.code === "FIN"}
         canViewMarketingArrivals={dept.code === "MKT"}

@@ -20,6 +20,20 @@ export function formatMerchandiseOutflowCode(batchNumber: number): string {
   return `EG-${String(batchNumber).padStart(4, "0")}`;
 }
 
+// Confirmado 2026-08-25 (Fase 3): correlativo propio de Ventas Externas
+// (VE-0001, VE-0002...) — mismo patrón atómico que los anteriores.
+export async function nextExternalSaleNumber(): Promise<number> {
+  const updated = await prisma.platformSettings.update({
+    where: { id: "singleton" },
+    data: { lastExternalSaleNumber: { increment: 1 } },
+  });
+  return updated.lastExternalSaleNumber;
+}
+
+export function formatExternalSaleCode(saleNumber: number): string {
+  return `VE-${String(saleNumber).padStart(4, "0")}`;
+}
+
 // Nombre final a mostrarle a Daniel: el producto del catálogo si quedó
 // vinculado, si no el nombre declarado (a mano o leído por IA sin confirmar).
 export function outflowItemDisplayName(item: { declaredName: string; catalogItem: { name: string } | null }): string {

@@ -1,0 +1,20 @@
+import { NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
+import { canViewExternalSales } from "@/lib/guards";
+
+export async function GET() {
+  if (!(await canViewExternalSales())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+  const sales = await prisma.externalSale.findMany({
+    include: {
+      catalogItem: { select: { name: true, photos: true } },
+      advisor: { select: { name: true } },
+      reviewedBy: { select: { name: true } },
+      dispatchAssignedTo: { select: { name: true } },
+      deliveredBy: { select: { name: true } },
+      nairobyClosedBy: { select: { name: true } },
+    },
+    orderBy: { createdAt: "desc" },
+    take: 200,
+  });
+  return NextResponse.json(sales);
+}

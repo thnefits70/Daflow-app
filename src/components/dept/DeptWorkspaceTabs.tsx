@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { GitBranch, FileText, GraduationCap, LineChart, TrendingUp, MessageSquare, CalendarClock, BellRing, Heart, ShoppingCart, Package, Pin, Wallet, BarChart3, Landmark, PackageCheck, PackageOpen, PackageMinus, Truck } from "lucide-react";
+import { GitBranch, FileText, GraduationCap, LineChart, TrendingUp, MessageSquare, CalendarClock, BellRing, Heart, ShoppingCart, Package, Pin, Wallet, BarChart3, Landmark, PackageCheck, PackageOpen, PackageMinus, Truck, HandCoins } from "lucide-react";
 import { ProcessEmbeddedPanel } from "@/components/process/ProcessEmbeddedPanel";
 import type { ProcessDTO } from "@/components/process/ProcessEditor";
 import type { ProcessUpdateDTO } from "@/components/process/ProcessHistoryPanel";
@@ -30,6 +30,7 @@ import { AdminPaymentsPanel } from "@/components/finance/AdminPaymentsPanel";
 import { MarketingArrivalsPanel } from "@/components/marketing/MarketingArrivalsPanel";
 import { MerchandiseReentryPanel } from "@/components/merchandise-reentry/MerchandiseReentryPanel";
 import { MerchandiseOutflowPanel } from "@/components/merchandise-outflow/MerchandiseOutflowPanel";
+import { ExternalSalesPanel } from "@/components/external-sales/ExternalSalesPanel";
 import { SuppliersPanel, type SupplierDTO } from "@/components/suppliers/SuppliersPanel";
 
 type DocumentDTO = { id: string; title: string; content: string; link: string; fileUrl: string | null; fileName: string | null };
@@ -49,6 +50,7 @@ const ALL_TABS = [
   { key: "inventario", label: "Control de Inventario", icon: Package },
   { key: "reingreso", label: "Reingreso de Mercadería", icon: PackageOpen },
   { key: "egresos", label: "Registro de Egresos", icon: PackageMinus },
+  { key: "ventas-externas", label: "Ventas Externas", icon: HandCoins },
   { key: "inventoriokpis", label: "KPIs de Inventario", icon: BarChart3 },
   { key: "cajachica", label: "Caja Chica", icon: Wallet },
   { key: "pagosadmin", label: "Pagos administrativos", icon: Landmark },
@@ -107,6 +109,11 @@ export function DeptWorkspaceTabs({
   canCaptureMerchandiseOutflow = false,
   canActOnMerchandiseOutflow = false,
   canViewMerchandiseOutflow = false,
+  canDeclareExternalSales = false,
+  canReviewExternalSales = false,
+  canConfirmExternalSalePayment = false,
+  canCloseExternalSale = false,
+  canViewExternalSales = false,
   pettyCashData = null,
   canManageAdminPayments = false,
   canViewMarketingArrivals = false,
@@ -211,6 +218,14 @@ export function DeptWorkspaceTabs({
   canCaptureMerchandiseOutflow?: boolean;
   canActOnMerchandiseOutflow?: boolean;
   canViewMerchandiseOutflow?: boolean;
+  // Ventas Externas (Fase 3) — declarar/revisión/pagos/cierre viven en la
+  // misma pestaña sin dept.code (Bryan revisa, admin confirma pago, Nairoby
+  // cierra); despacho/entregas reusan las guards de Registro de Egresos.
+  canDeclareExternalSales?: boolean;
+  canReviewExternalSales?: boolean;
+  canConfirmExternalSalePayment?: boolean;
+  canCloseExternalSale?: boolean;
+  canViewExternalSales?: boolean;
   // Caja Chica — confirmado 2026-08-05: null si la persona no ve ninguna de
   // las dos cajas (ni Principal ni Secundaria le corresponde).
   pettyCashData?: PettyCashViewerData | null;
@@ -249,6 +264,7 @@ export function DeptWorkspaceTabs({
     if (t.key === "inventario") return canManageInventoryControl;
     if (t.key === "reingreso") return canCaptureMerchandiseReentry || canApproveMerchandiseReentry || canCloseMerchandiseReentry;
     if (t.key === "egresos") return canViewMerchandiseOutflow;
+    if (t.key === "ventas-externas") return canViewExternalSales;
     if (t.key === "inventoriokpis") return canViewInventoryKpisPanel;
     if (t.key === "cajachica") return !!(pettyCashData?.principal || pettyCashData?.secundaria);
     if (t.key === "postventa") return canManageStoreFeedback || canViewStoreFeedback;
@@ -402,6 +418,16 @@ export function DeptWorkspaceTabs({
       )}
       {tab === "egresos" && canViewMerchandiseOutflow && (
         <MerchandiseOutflowPanel canCapture={canCaptureMerchandiseOutflow} canAct={canActOnMerchandiseOutflow} />
+      )}
+      {tab === "ventas-externas" && canViewExternalSales && (
+        <ExternalSalesPanel
+          canDeclare={canDeclareExternalSales}
+          canReview={canReviewExternalSales}
+          canConfirmPayment={canConfirmExternalSalePayment}
+          canAssignDispatch={canActOnMerchandiseOutflow}
+          canDeliver={canCaptureMerchandiseOutflow}
+          canClose={canCloseExternalSale}
+        />
       )}
       {tab === "inventoriokpis" && canViewInventoryKpisPanel && inventoryKpisData && (
         <InventoryKpisPanel data={inventoryKpisData} />

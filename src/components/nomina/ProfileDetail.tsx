@@ -6,7 +6,7 @@ import Link from "next/link";
 import {
   ArrowLeft, Upload, X, Download, Plus, Trash2, KeyRound,
   User, Building2, Briefcase, Mail, Phone, Calendar, Award, FileText, Truck,
-  Copy, Check, RefreshCw, Cake, Power, Receipt, Heart,
+  Copy, Check, RefreshCw, Cake, Power, Receipt, Heart, HandCoins,
 } from "lucide-react";
 import { PositionPicker } from "@/components/users/PositionPicker";
 import { PayrollProfileFields } from "@/components/nomina/PayrollProfileFields";
@@ -39,6 +39,7 @@ type UserProfile = {
   canManageAdminPayments: boolean;
   canAddSupplierBankAccounts: boolean;
   canManagePettyCashSecundaria: boolean;
+  canDeclareExternalSales: boolean;
   canConfirmMarketingDesign: boolean;
   canConfirmMarketingAdvisor: boolean;
   marketingAdvisorBrand: string | null;
@@ -789,6 +790,31 @@ export function ProfileDetail({
                 type="button"
                 className={`flex-1 py-1.5 text-[12.5px] font-semibold cursor-pointer ${!p.canManagePettyCashSecundaria ? "bg-blue text-white" : "bg-surface text-steel"}`}
                 onClick={() => save({ canManagePettyCashSecundaria: false })}
+              >
+                No
+              </button>
+            </div>
+          </div>
+
+          <div className="bg-cloud border border-rule rounded p-3.5 mt-3.5">
+            <label className="flex items-center gap-1 mb-2 text-[10.5px] font-semibold uppercase tracking-wide text-steel">
+              <HandCoins size={11} /> ¿Puede declarar Ventas Externas?
+            </label>
+            <div className="text-[11px] text-steel mb-2">
+              Ventas por fuera de Dropi/Rocket (hoy Heidy, Jariel, Yair, Marcos) — declara producto, cantidad y precio para que Bryan lo apruebe. Aparece en su propia &quot;Mi área de trabajo&quot;.
+            </div>
+            <div className="flex border border-rule rounded overflow-hidden max-w-[220px]">
+              <button
+                type="button"
+                className={`flex-1 py-1.5 text-[12.5px] font-semibold cursor-pointer ${p.canDeclareExternalSales ? "bg-blue text-white" : "bg-surface text-steel"}`}
+                onClick={() => save({ canDeclareExternalSales: true })}
+              >
+                Sí
+              </button>
+              <button
+                type="button"
+                className={`flex-1 py-1.5 text-[12.5px] font-semibold cursor-pointer ${!p.canDeclareExternalSales ? "bg-blue text-white" : "bg-surface text-steel"}`}
+                onClick={() => save({ canDeclareExternalSales: false })}
               >
                 No
               </button>

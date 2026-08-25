@@ -840,6 +840,59 @@ export async function getMarketingLeadId(): Promise<string | null> {
   return lead?.id ?? null;
 }
 
+/**
+ * ---------------- Ventas Externas (Fase 3 de Registro de Egresos) ----------------
+ * Confirmado 2026-08-25: declarar es un flag delegado puntual (hoy Heidy,
+ * Jariel, Yair, Marcos) — ninguno lidera Análisis de Mercado, mismo patrón
+ * que canManagePurchases. Aprobar/rechazar es de Bryan (líder de Análisis de
+ * Mercado). Confirmar que llegó el pago es EXCLUSIVO del admin (pedido
+ * explícito del usuario — "yo apruebo el recibido"). Asignar despacho y
+ * entregar reusan las guards de Registro de Egresos (mismo equipo de
+ * Inventario, mismo Daniel exclusivo). Cerrar la venta es de Nairoby (líder
+ * de Finanzas).
+ */
+export async function canDeclareExternalSales() {
+  const session = await auth();
+  if (!session) return false;
+  if (session.user.role === "admin") return true;
+  const user = await prisma.user.findUnique({ where: { id: session.user.id }, select: { canDeclareExternalSales: true } });
+  return !!user?.canDeclareExternalSales;
+}
+
+export async function canReviewExternalSales() {
+  const session = await auth();
+  if (!session) return false;
+  if (session.user.role === "admin") return true;
+  const user = await prisma.user.findUnique({ where: { id: session.user.id }, select: { isLeader: true, leadsDept: { select: { code: true } } } });
+  return !!user?.isLeader && user.leadsDept?.code === "MKT";
+}
+
+export async function canConfirmExternalSalePayment() {
+  const session = await auth();
+  return !!session && session.user.role === "admin";
+}
+
+export async function canCloseExternalSale() {
+  const session = await auth();
+  if (!session) return false;
+  if (session.user.role === "admin") return true;
+  const user = await prisma.user.findUnique({ where: { id: session.user.id }, select: { isLeader: true, leadsDept: { select: { code: true } } } });
+  return !!user?.isLeader && user.leadsDept?.code === "FIN";
+}
+
+// Visibilidad general de la pestaña — cualquiera de los roles del flujo.
+export async function canViewExternalSales() {
+  const session = await auth();
+  if (!session) return false;
+  if (session.user.role === "admin") return true;
+  return (
+    (await canDeclareExternalSales()) ||
+    (await canReviewExternalSales()) ||
+    (await canCloseExternalSale()) ||
+    (await canCaptureMerchandiseOutflow())
+  );
+}
+
 // Pagos administrativos (Finanzas) — confirmado 2026-08-06: exclusivo de
 // Finanzas + admin, a diferencia de Control de Compras que también incluye a
 // Compras. canManageAdminPayments es el mismo tipo de escape hatch que

@@ -39,6 +39,9 @@ model PlatformSettings {
   // (EG-0001, EG-0002...) — mismo patrón atómico que los anteriores, una
   // sola numeración para todo el módulo sin importar el motivo.
   lastMerchandiseOutflowNumber Int       @default(0)
+  // Confirmado 2026-08-25: correlativo propio de Ventas Externas (VE-0001,
+  // VE-0002...) — mismo patrón atómico que los anteriores.
+  lastExternalSaleNumber       Int       @default(0)
   updatedAt                    DateTime  @updatedAt
 }
 
@@ -187,6 +190,13 @@ model User {
   // el acceso vive en este flag directo. Admin siempre puede, sin el flag.
   canManagePettyCashSecundaria Boolean @default(false)
 
+  // Confirmado 2026-08-25 (Fase 3 de Registro de Egresos — Ventas Externas):
+  // delegado puntual a los "asesores" que venden por fuera de Dropi/Rocket
+  // (hoy Heidy, Jariel, Yair, Marcos) — ninguno lidera Análisis de Mercado,
+  // así que el acceso vive en este flag directo, mismo patrón que
+  // canManagePurchases. Admin siempre puede, sin el flag.
+  canDeclareExternalSales Boolean @default(false)
+
   // Confirmado 2026-08-08: "Mercadería recibida" (Análisis de Mercado) —
   // dos flags separados porque son dos tareas totalmente distintas sobre la
   // misma llegada. canConfirmMarketingDesign = el diseñador de AMBAS marcas
@@ -328,6 +338,14 @@ model User {
   merchandiseOutflowBatchesCreated        MerchandiseOutflowBatch[]        @relation("MerchandiseOutflowBatchCreatedBy")
   merchandiseOutflowBatchesJustWrittenOff MerchandiseOutflowBatch[]        @relation("MerchandiseOutflowBatchJustWrittenOffBy")
   merchandiseOutflowItemsResolved         MerchandiseOutflowItem[]         @relation("MerchandiseOutflowItemResolvedBy")
+
+  externalSalesAdvised           ExternalSale[] @relation("ExternalSaleAdvisor")
+  externalSalesReviewed          ExternalSale[] @relation("ExternalSaleReviewedBy")
+  externalSalesPaymentConfirmed  ExternalSale[] @relation("ExternalSalePaymentConfirmedBy")
+  externalSalesDispatchAssignedTo ExternalSale[] @relation("ExternalSaleDispatchAssignedTo")
+  externalSalesDispatchAssignedBy ExternalSale[] @relation("ExternalSaleDispatchAssignedBy")
+  externalSalesDelivered         ExternalSale[] @relation("ExternalSaleDeliveredBy")
+  externalSalesClosed            ExternalSale[] @relation("ExternalSaleNairobyClosedBy")
 
   @@index([deptId])
   @@index([leadsDeptId])
@@ -1282,6 +1300,9 @@ model PurchaseCatalogItem {
   // Confirmado 2026-08-25: Registro de Egresos (despacho/garantía/deterioro)
   // reusa este mismo catálogo compartido.
   merchandiseOutflowItems MerchandiseOutflowItem[]
+  // Confirmado 2026-08-25: Ventas Externas (Fase 3) también reusa este
+  // catálogo compartido.
+  externalSales           ExternalSale[]
 }
 
 // Registro de auditoría de cada vez que Daniel sube el export de Just —
@@ -3328,6 +3349,10 @@ enum OutflowReason {
   // no espera la respuesta del proveedor) — la resolución (reemplazo físico
   // o crédito) se rastrea aparte en el item, ver OutflowItemResolution.
   CAMBIO_PROVEEDOR
+  // Confirmado 2026-08-25 (Fase 3): ventas por fuera de Dropi/Rocket (ver
+  // modelo ExternalSale) — el enganche automático a este batch pasa recién
+  // cuando el colaborador de Inventario confirma la entrega física.
+  VENTA_EXTERNA
 }
 
 // Null mientras está pendiente de que Daniel resuelva un item de deterioro
@@ -3383,6 +3408,10 @@ model MerchandiseOutflowBatch {
   supplierId String?
   supplier   Supplier? @relation(fields: [supplierId], references: [id], onDelete: SetNull)
 
+  // VENTA_EXTERNA (Fase 3): enganche automático, un batch = una venta
+  // externa ya entregada — nunca se crea a mano.
+  externalSale ExternalSale?
+
   items MerchandiseOutflowItem[]
 
   @@index([reason])
@@ -3423,6 +3452,93 @@ model MerchandiseOutflowItem {
 
   @@index([batchId])
   @@index([resolution])
+}
+
+enum ExternalSaleReviewStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+/**
+ * ---------------- Ventas Externas (Fase 3 de Registro de Egresos) ----------------
+ * Confirmado 2026-08-25, diseñado con el usuario en varias rondas: ventas por
+ * fuera de Dropi/Rocket — hoy 4 "asesores" (Heidy → Importadora Damián,
+ * Jariel → Provedix, Yair → Shanghai, Marcos → contra-entrega con
+ * motorizados propios), un solo flujo para los 4 (canDeclareExternalSales).
+ * Después de la aprobación de Bryan, pago y despacho son DOS PISTAS
+ * INDEPENDIENTES (no un orden fijo) — necesario porque Marcos cobra contra
+ * entrega (el pago llega DESPUÉS del despacho) mientras los demás asesores
+ * suben el comprobante ANTES. Nairoby solo cierra cuando ambas están listas.
+ */
+model ExternalSale {
+  id         String @id @default(cuid())
+  code       String @unique // "VE-0001"
+  saleNumber Int    @unique
+
+  advisorId String
+  advisor   User   @relation("ExternalSaleAdvisor", fields: [advisorId], references: [id], onDelete: Restrict)
+
+  catalogItemId       String?
+  catalogItem         PurchaseCatalogItem? @relation(fields: [catalogItemId], references: [id], onDelete: SetNull)
+  declaredProductName String
+  quantity             Int
+  unitPrice            Float
+  totalAmount          Float // quantity * unitPrice, calculado al declarar
+
+  // A quién debe entregarle bodega el pedido (motorizado o cliente) — el
+  // colaborador de Inventario que despacha ve SOLO esto, nunca los montos.
+  pickupPersonName String
+
+  // Informativo — cuando recoge un courier distinto al habitual (ej. caso
+  // del aceite de batana). Nunca cambia el proceso, solo trazabilidad.
+  courierNote String?
+
+  createdAt DateTime @default(now())
+
+  reviewStatus    ExternalSaleReviewStatus @default(PENDING)
+  reviewedAt      DateTime?
+  reviewedById    String?
+  reviewedBy      User?                    @relation("ExternalSaleReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
+  rejectionReason String?
+
+  // Pista 1 — pago. El asesor sube el comprobante (Pichincha o wallet a
+  // wallet Dropi, o lo que transfiera el motorizado de Marcos ya
+  // descontado su flete); admin confirma con doble check que llegó.
+  paymentProofUrl        String?
+  paymentProofName       String?
+  paymentProofUploadedAt DateTime?
+  paymentConfirmedAt     DateTime?
+  paymentConfirmedById   String?
+  paymentConfirmedBy     User?     @relation("ExternalSalePaymentConfirmedBy", fields: [paymentConfirmedById], references: [id], onDelete: SetNull)
+
+  // Pista 2 — despacho. Daniel asigna a un colaborador de su equipo, que
+  // sube foto de la entrega para cerrar (dispara el enganche a Egresos).
+  dispatchAssignedToId String?
+  dispatchAssignedTo   User?     @relation("ExternalSaleDispatchAssignedTo", fields: [dispatchAssignedToId], references: [id], onDelete: SetNull)
+  dispatchAssignedAt   DateTime?
+  dispatchAssignedById String?
+  dispatchAssignedBy   User?     @relation("ExternalSaleDispatchAssignedBy", fields: [dispatchAssignedById], references: [id], onDelete: SetNull)
+
+  deliveryPhotoUrl String?
+  deliveredAt      DateTime?
+  deliveredById    String?
+  deliveredBy      User?     @relation("ExternalSaleDeliveredBy", fields: [deliveredById], references: [id], onDelete: SetNull)
+
+  // Nairoby cierra la venta — solo posible cuando pago Y despacho ya están
+  // resueltos, sin importar el orden en que hayan pasado.
+  nairobyClosedAt   DateTime?
+  nairobyClosedById String?
+  nairobyClosedBy   User?     @relation("ExternalSaleNairobyClosedBy", fields: [nairobyClosedById], references: [id], onDelete: SetNull)
+
+  // Enganche automático a Registro de Egresos — se crea apenas el
+  // colaborador confirma la entrega (ahí es cuando el stock sale de verdad).
+  outflowBatchId String?                  @unique
+  outflowBatch   MerchandiseOutflowBatch? @relation(fields: [outflowBatchId], references: [id], onDelete: SetNull)
+
+  @@index([reviewStatus])
+  @@index([dispatchAssignedToId])
+  @@index([advisorId])
 }
 
 // Acumulado semanal (lunes-sábado) de unidades dañadas "no solucionadas"

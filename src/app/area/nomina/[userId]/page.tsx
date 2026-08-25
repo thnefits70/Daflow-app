@@ -48,6 +48,7 @@ export default async function AreaNominaProfilePage({ params }: { params: Promis
         canManageAdminPayments: user.canManageAdminPayments,
         canAddSupplierBankAccounts: user.canAddSupplierBankAccounts,
         canManagePettyCashSecundaria: user.canManagePettyCashSecundaria,
+        canDeclareExternalSales: user.canDeclareExternalSales,
         canConfirmMarketingDesign: user.canConfirmMarketingDesign,
         canConfirmMarketingAdvisor: user.canConfirmMarketingAdvisor,
         marketingAdvisorBrand: user.marketingAdvisorBrand,

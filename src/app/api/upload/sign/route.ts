@@ -16,6 +16,7 @@ import {
   canConfirmPersonalPurchaseInventory,
   canCaptureMerchandiseReentry,
   canCaptureMerchandiseOutflow,
+  canDeclareExternalSales,
   canManageJustCatalog,
   canEditPayrollRoles,
 } from "@/lib/guards";
@@ -132,6 +133,12 @@ export async function POST(req: NextRequest) {
     allowed = await canCaptureMerchandiseReentry();
   }
   if (!allowed && session?.user.role === "employee" && folder === "merchandise-outflow-photos") {
+    allowed = await canCaptureMerchandiseOutflow();
+  }
+  if (!allowed && session?.user.role === "employee" && folder === "external-sale-payment-proofs") {
+    allowed = await canDeclareExternalSales();
+  }
+  if (!allowed && session?.user.role === "employee" && folder === "external-sale-delivery-photos") {
     allowed = await canCaptureMerchandiseOutflow();
   }
   if (!allowed && session?.user.role === "employee" && folder === "just-catalog-import") {
