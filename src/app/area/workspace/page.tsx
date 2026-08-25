@@ -3,7 +3,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { TopLine } from "@/components/ui/TopLine";
 import { DeptWorkspaceTabs } from "@/components/dept/DeptWorkspaceTabs";
-import { getUnseenFeedbackCount, canManageStoreFeedback as checkCanManageStoreFeedback, canViewStoreFeedback as checkCanViewStoreFeedback, canSubmitPurchaseRequests, canConfirmPurchaseReceiving, canReceivePurchasesTeam, canActOnPurchaseReceiving, canRegisterPurchaseInvoices, canPayMerchandisePurchases, canManageInventoryControl as checkCanManageInventoryControl, canViewInventoryKpisPanel as checkCanViewInventoryKpisPanel, canManageAdminPayments as checkCanManageAdminPayments, canViewMarketingArrivals as checkCanViewMarketingArrivals, canConfirmMarketingDesign as checkCanConfirmMarketingDesign, canConfirmMarketingAdvisor as checkCanConfirmMarketingAdvisor, canCaptureMerchandiseReentry, canApproveMerchandiseReentry, canActOnMerchandiseReentry, canCloseMerchandiseReentry, canVerifyDamageDisposal, canManageJustUpload, canManageJustCatalog, getSupplierAccess, canAddSupplierBankAccounts } from "@/lib/guards";
+import { getUnseenFeedbackCount, canManageStoreFeedback as checkCanManageStoreFeedback, canViewStoreFeedback as checkCanViewStoreFeedback, canSubmitPurchaseRequests, canConfirmPurchaseReceiving, canReceivePurchasesTeam, canActOnPurchaseReceiving, canRegisterPurchaseInvoices, canPayMerchandisePurchases, canManageInventoryControl as checkCanManageInventoryControl, canViewInventoryKpisPanel as checkCanViewInventoryKpisPanel, canManageAdminPayments as checkCanManageAdminPayments, canViewMarketingArrivals as checkCanViewMarketingArrivals, canConfirmMarketingDesign as checkCanConfirmMarketingDesign, canConfirmMarketingAdvisor as checkCanConfirmMarketingAdvisor, canCaptureMerchandiseReentry, canApproveMerchandiseReentry, canActOnMerchandiseReentry, canCloseMerchandiseReentry, canVerifyDamageDisposal, canManageJustUpload, canManageJustCatalog, canCaptureMerchandiseOutflow, canActOnMerchandiseOutflow, canViewMerchandiseOutflow, getSupplierAccess, canAddSupplierBankAccounts } from "@/lib/guards";
 import { getFinanceKpiData } from "@/lib/financeKpis";
 import { getDeptProcessDetail } from "@/lib/processDetail";
 import { getPaymentRemindersData } from "@/lib/paymentReminders";
@@ -98,6 +98,13 @@ export default async function WorkspacePage() {
     ]);
     merchandiseReentryPendingCount = pendingJust + pendingWriteOff;
   }
+  // Registro de Egresos — mismo patrón sin dept.code que Reingreso
+  // (confirmado 2026-08-25).
+  const [canCaptureOutflow, canActOutflow, canViewOutflow] = await Promise.all([
+    canCaptureMerchandiseOutflow(),
+    canActOnMerchandiseOutflow(),
+    canViewMerchandiseOutflow(),
+  ]);
   // Pagos administrativos — mismo patrón sin dept.code que Control de
   // Compras (confirmado 2026-08-06).
   const canManageAdminPayments = await checkCanManageAdminPayments();
@@ -229,6 +236,9 @@ export default async function WorkspacePage() {
         canManageJustUpload={canManageReentryJustUpload}
         canManageJustCatalog={canManageReentryJustCatalog}
         merchandiseReentryPendingCount={merchandiseReentryPendingCount}
+        canCaptureMerchandiseOutflow={canCaptureOutflow}
+        canActOnMerchandiseOutflow={canActOutflow}
+        canViewMerchandiseOutflow={canViewOutflow}
         pettyCashData={pettyCashData}
         canManageAdminPayments={canManageAdminPayments}
         canViewMarketingArrivals={canViewMarketingArrivals}

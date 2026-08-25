@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { GitBranch, FileText, GraduationCap, LineChart, TrendingUp, MessageSquare, CalendarClock, BellRing, Heart, ShoppingCart, Package, Pin, Wallet, BarChart3, Landmark, PackageCheck, PackageOpen, Truck } from "lucide-react";
+import { GitBranch, FileText, GraduationCap, LineChart, TrendingUp, MessageSquare, CalendarClock, BellRing, Heart, ShoppingCart, Package, Pin, Wallet, BarChart3, Landmark, PackageCheck, PackageOpen, PackageMinus, Truck } from "lucide-react";
 import { ProcessEmbeddedPanel } from "@/components/process/ProcessEmbeddedPanel";
 import type { ProcessDTO } from "@/components/process/ProcessEditor";
 import type { ProcessUpdateDTO } from "@/components/process/ProcessHistoryPanel";
@@ -29,6 +29,7 @@ import type { PettyCashViewerData } from "@/lib/pettyCash";
 import { AdminPaymentsPanel } from "@/components/finance/AdminPaymentsPanel";
 import { MarketingArrivalsPanel } from "@/components/marketing/MarketingArrivalsPanel";
 import { MerchandiseReentryPanel } from "@/components/merchandise-reentry/MerchandiseReentryPanel";
+import { MerchandiseOutflowPanel } from "@/components/merchandise-outflow/MerchandiseOutflowPanel";
 import { SuppliersPanel, type SupplierDTO } from "@/components/suppliers/SuppliersPanel";
 
 type DocumentDTO = { id: string; title: string; content: string; link: string; fileUrl: string | null; fileName: string | null };
@@ -47,6 +48,7 @@ const ALL_TABS = [
   { key: "llegadas", label: "Mercadería recibida", icon: PackageCheck },
   { key: "inventario", label: "Control de Inventario", icon: Package },
   { key: "reingreso", label: "Reingreso de Mercadería", icon: PackageOpen },
+  { key: "egresos", label: "Registro de Egresos", icon: PackageMinus },
   { key: "inventoriokpis", label: "KPIs de Inventario", icon: BarChart3 },
   { key: "cajachica", label: "Caja Chica", icon: Wallet },
   { key: "pagosadmin", label: "Pagos administrativos", icon: Landmark },
@@ -102,6 +104,9 @@ export function DeptWorkspaceTabs({
   canManageJustUpload = false,
   canManageJustCatalog = false,
   merchandiseReentryPendingCount = 0,
+  canCaptureMerchandiseOutflow = false,
+  canActOnMerchandiseOutflow = false,
+  canViewMerchandiseOutflow = false,
   pettyCashData = null,
   canManageAdminPayments = false,
   canViewMarketingArrivals = false,
@@ -199,6 +204,13 @@ export function DeptWorkspaceTabs({
   canManageJustUpload?: boolean;
   canManageJustCatalog?: boolean;
   merchandiseReentryPendingCount?: number;
+  // Registro de Egresos — mismo patrón sin dept.code que Reingreso
+  // (confirmado 2026-08-25): captura (despacho/garantía/deterioro) = equipo
+  // INV, dar de baja en Just + resolver deterioro = exclusivo de Daniel (o
+  // admin en modo lectura).
+  canCaptureMerchandiseOutflow?: boolean;
+  canActOnMerchandiseOutflow?: boolean;
+  canViewMerchandiseOutflow?: boolean;
   // Caja Chica — confirmado 2026-08-05: null si la persona no ve ninguna de
   // las dos cajas (ni Principal ni Secundaria le corresponde).
   pettyCashData?: PettyCashViewerData | null;
@@ -236,6 +248,7 @@ export function DeptWorkspaceTabs({
     if (t.key === "llegadas") return canViewMarketingArrivals;
     if (t.key === "inventario") return canManageInventoryControl;
     if (t.key === "reingreso") return canCaptureMerchandiseReentry || canApproveMerchandiseReentry || canCloseMerchandiseReentry;
+    if (t.key === "egresos") return canViewMerchandiseOutflow;
     if (t.key === "inventoriokpis") return canViewInventoryKpisPanel;
     if (t.key === "cajachica") return !!(pettyCashData?.principal || pettyCashData?.secundaria);
     if (t.key === "postventa") return canManageStoreFeedback || canViewStoreFeedback;
@@ -386,6 +399,9 @@ export function DeptWorkspaceTabs({
           canManageJustUpload={canManageJustUpload}
           canManageJustCatalog={canManageJustCatalog}
         />
+      )}
+      {tab === "egresos" && canViewMerchandiseOutflow && (
+        <MerchandiseOutflowPanel canCapture={canCaptureMerchandiseOutflow} canAct={canActOnMerchandiseOutflow} />
       )}
       {tab === "inventoriokpis" && canViewInventoryKpisPanel && inventoryKpisData && (
         <InventoryKpisPanel data={inventoryKpisData} />

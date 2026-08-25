@@ -147,6 +147,13 @@ export default async function DeptWorkspacePage({ params }: { params: Promise<{ 
         // canManageJustCatalog) — la pestaña "Base de datos de productos"
         // solo aparece en el contexto de INV de todos modos.
         canManageJustCatalog={dept.code === "INV"}
+        // Registro de Egresos — mismo criterio que Reingreso arriba: admin
+        // nunca captura ni actúa (ni siquiera dar de baja en Just, ver
+        // guards.ts canActOnMerchandiseOutflow), solo supervisa en modo
+        // lectura cuando navega el departamento de Inventario.
+        canCaptureMerchandiseOutflow={false}
+        canActOnMerchandiseOutflow={false}
+        canViewMerchandiseOutflow={dept.code === "INV"}
         pettyCashData={pettyCashData}
         canManageAdminPayments={dept.code === "FIN"}
         canViewMarketingArrivals={dept.code === "MKT"}

@@ -7,6 +7,7 @@ import { computeUnitPriceModes, type UnitDeclaration } from "@/lib/personalPurch
 import { sendPushToOwner } from "@/lib/webPush";
 import { notifyOwner } from "@/lib/notifications";
 import { actorName } from "@/lib/actorName";
+import { createOutflowForPersonalPurchaseItem, notifyInventoryLeadOutflowPending } from "@/lib/merchandiseOutflow";
 
 const schema = z.object({
   items: z.array(z.object({ itemId: z.string().min(1), confirmedProductName: z.string().trim().min(1) })).min(1),
@@ -62,6 +63,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       pickedUpApprovedById: isAdmin ? null : session!.user.id,
     },
   });
+
+  // Confirmado 2026-08-25: enganche automático a Registro de Egresos — en
+  // cuanto Daniel aprueba el retiro físico, cada producto de la orden cae
+  // solo a la cola de "dar de baja en Just", sin que nadie lo vuelva a
+  // registrar a mano en otro lugar.
+  for (const it of order.items) {
+    await createOutflowForPersonalPurchaseItem({ itemId: it.id, productName: nameById.get(it.id)!, quantity: it.quantity }).catch(() => null);
+  }
+  await notifyInventoryLeadOutflowPending({ code: `compras personales · ${order.employee.name}`, reason: "COMPRA_PERSONAL" });
 
   const itemCount = order.items.length;
   await notifyOwner("admin", {

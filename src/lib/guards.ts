@@ -797,6 +797,49 @@ export async function getFinanceLeadId(): Promise<string | null> {
   return lead?.id ?? null;
 }
 
+/**
+ * ---------------- Registro de Egresos ----------------
+ * Confirmado 2026-08-25, mismo espíritu que Reingreso de Mercadería: cualquier
+ * miembro del equipo de Inventario captura (despacho/garantía/deterioro),
+ * solo Daniel (líder de Inventario) resuelve deterioro y confirma la baja en
+ * Just — ni siquiera admin, mismo criterio que canActOnMerchandiseReentry.
+ * Admin puede VER el módulo (supervisión) igual que en el resto de flujos de
+ * Inventario.
+ */
+export async function canCaptureMerchandiseOutflow() {
+  const session = await auth();
+  if (!session) return false;
+  const user = await purchasesUserContext(session.user.id);
+  if (!user) return false;
+  return isInventoryTeamMember(user);
+}
+
+export async function canActOnMerchandiseOutflow() {
+  const session = await auth();
+  if (!session) return false;
+  const user = await purchasesUserContext(session.user.id);
+  if (!user) return false;
+  return !!user.isLeader && user.leadsDept?.code === "INV";
+}
+
+export async function canViewMerchandiseOutflow() {
+  const session = await auth();
+  if (!session) return false;
+  if (session.user.role === "admin") return true;
+  return canCaptureMerchandiseOutflow();
+}
+
+// Confirmado 2026-08-25: id de Bryan (líder de Análisis de Mercado/MKT) para
+// avisarle cuando Daniel escala un deterioro de mercadería reciente — mismo
+// estilo que getInventoryLeadId/getFinanceLeadId.
+export async function getMarketingLeadId(): Promise<string | null> {
+  const lead = await prisma.user.findFirst({
+    where: { isLeader: true, leadsDept: { code: "MKT" }, isActive: true },
+    select: { id: true },
+  });
+  return lead?.id ?? null;
+}
+
 // Pagos administrativos (Finanzas) — confirmado 2026-08-06: exclusivo de
 // Finanzas + admin, a diferencia de Control de Compras que también incluye a
 // Compras. canManageAdminPayments es el mismo tipo de escape hatch que

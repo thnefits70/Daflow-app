@@ -35,6 +35,10 @@ model PlatformSettings {
   // (RM-0001, RM-0002...) — mismo patrón atómico que lastPurchaseRequestNumber,
   // una sola numeración para todo el módulo sin importar quién capture el lote.
   lastMerchandiseReentryNumber Int       @default(0)
+  // Confirmado 2026-08-25: correlativo propio de Registro de Egresos
+  // (EG-0001, EG-0002...) — mismo patrón atómico que los anteriores, una
+  // sola numeración para todo el módulo sin importar el motivo.
+  lastMerchandiseOutflowNumber Int       @default(0)
   updatedAt                    DateTime  @updatedAt
 }
 
@@ -320,6 +324,10 @@ model User {
   merchandiseReentryItemsDisposalDecided  MerchandiseReentryItem[]         @relation("MerchandiseReentryItemDisposalDecidedBy")
   merchandiseWeeklyWriteOffBatchesJust    MerchandiseWeeklyWriteOffBatch[] @relation("MerchandiseWeeklyWriteOffBatchJustBy")
   merchandiseWeeklyWriteOffBatchesNairoby MerchandiseWeeklyWriteOffBatch[] @relation("MerchandiseWeeklyWriteOffBatchNairobyBy")
+
+  merchandiseOutflowBatchesCreated        MerchandiseOutflowBatch[]        @relation("MerchandiseOutflowBatchCreatedBy")
+  merchandiseOutflowBatchesJustWrittenOff MerchandiseOutflowBatch[]        @relation("MerchandiseOutflowBatchJustWrittenOffBy")
+  merchandiseOutflowItemsResolved         MerchandiseOutflowItem[]         @relation("MerchandiseOutflowItemResolvedBy")
 
   @@index([deptId])
   @@index([leadsDeptId])
@@ -1270,6 +1278,9 @@ model PurchaseCatalogItem {
   // alta para Control de Compras, porque quedó confirmado desde un
   // reingreso, o porque vino de la importación de Just.
   merchandiseReentryItems MerchandiseReentryItem[]
+  // Confirmado 2026-08-25: Registro de Egresos (despacho/garantía/deterioro)
+  // reusa este mismo catálogo compartido.
+  merchandiseOutflowItems MerchandiseOutflowItem[]
 }
 
 // Registro de auditoría de cada vez que Daniel sube el export de Just —
@@ -3010,6 +3021,11 @@ model PersonalPurchaseItem {
 
   createdAt DateTime @default(now())
 
+  // Confirmado 2026-08-25: enganche automático a Registro de Egresos — en
+  // cuanto Daniel aprueba el retiro físico (ver PersonalPurchaseOrder.
+  // pickedUpAt), se crea solo, sin que nadie lo vuelva a capturar a mano.
+  outflowBatch MerchandiseOutflowBatch?
+
   @@index([orderId])
 }
 
@@ -3277,7 +3293,106 @@ model MerchandiseDamageReason {
   name      String   @unique
   createdAt DateTime @default(now())
 
-  items MerchandiseReentryItem[]
+  items        MerchandiseReentryItem[]
+  outflowItems MerchandiseOutflowItem[]
+}
+
+/**
+ * ---------------- Registro de Egresos ----------------
+ * Confirmado 2026-08-25, diseñado con el usuario en varias rondas: mercadería
+ * que SALE del inventario físico por vías que Just no registra solo (no es un
+ * despacho normal ya contabilizado como venta) — a diferencia de Reingreso
+ * (que es solo devoluciones que VUELVEN), este módulo es la salida. Fase 1
+ * cubre despacho (hojas físicas fotografiadas), garantía (manifiesto de
+ * Fulfillment), deterioro (encontrado en bodega, no en una devolución) y
+ * compras personales (enganche automático). Motivos futuros (cambio con
+ * proveedor, ventas externas, guías canceladas) se agregan más adelante al
+ * mismo enum/modelo, mismo espíritu: todo cae en UNA sola cola de "dar de
+ * baja en Just" para que Daniel no salte entre módulos ni se le olvide.
+ */
+enum OutflowReason {
+  DESPACHO
+  GARANTIA
+  DETERIORO
+  COMPRA_PERSONAL
+}
+
+// Null mientras está pendiente de que Daniel resuelva un item de deterioro.
+// SOLVED_ONSITE no entra a la cola de baja en Just — pedido explícito del
+// usuario, un daño chico arreglado ahí mismo no deja rastro en el sistema.
+enum OutflowItemResolution {
+  SOLVED_ONSITE
+  WRITE_OFF
+  ESCALATED_TO_PURCHASES
+}
+
+model MerchandiseOutflowBatch {
+  id          String        @id @default(cuid())
+  code        String        @unique // "EG-0001"
+  batchNumber Int           @unique
+  reason      OutflowReason
+
+  createdById String?
+  createdBy   User?    @relation("MerchandiseOutflowBatchCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+
+  // DESPACHO/GARANTIA: fotos del documento físico (hoja de despacho o
+  // manifiesto de garantía) que la IA lee para armar el consolidado editable.
+  documentPhotoUrls String[]
+
+  // Congela el lote (mismo patrón que Reingreso) una vez se confirma que el
+  // consolidado de items es correcto — doble confirmación antes de esto.
+  submittedAt DateTime?
+
+  // Checklist final compartido por TODOS los motivos — confirmación humana
+  // reforzada de que Daniel ya hizo la baja de verdad en Just (sistema
+  // externo, sin integración real).
+  justWrittenOffAt   DateTime?
+  justWrittenOffById String?
+  justWrittenOffBy   User?     @relation("MerchandiseOutflowBatchJustWrittenOffBy", fields: [justWrittenOffById], references: [id], onDelete: SetNull)
+
+  // COMPRA_PERSONAL: enganche automático, un batch = un ítem de compra
+  // personal ya aprobado para retiro — nunca se crea a mano, nunca se
+  // recaptura desde este módulo.
+  personalPurchaseItemId String?               @unique
+  personalPurchaseItem   PersonalPurchaseItem? @relation(fields: [personalPurchaseItemId], references: [id], onDelete: SetNull)
+
+  items MerchandiseOutflowItem[]
+
+  @@index([reason])
+  @@index([submittedAt])
+  @@index([justWrittenOffAt])
+}
+
+model MerchandiseOutflowItem {
+  id      String                  @id @default(cuid())
+  batchId String
+  batch   MerchandiseOutflowBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  catalogItemId String?
+  catalogItem   PurchaseCatalogItem? @relation(fields: [catalogItemId], references: [id], onDelete: SetNull)
+  declaredName  String
+  quantity      Int
+
+  // DETERIORO: foto del producto encontrado dañado + motivo (mismo catálogo
+  // fijo de chips que ya usa Reingreso, "Otro" siempre queda como texto
+  // libre y nunca crea una fila nueva en el catálogo).
+  photoUrls         String[]
+  damageReasonId    String?
+  damageReason      MerchandiseDamageReason? @relation(fields: [damageReasonId], references: [id], onDelete: SetNull)
+  damageReasonOther String?
+
+  // DETERIORO: resolución de Daniel — null mientras está pendiente.
+  resolution     OutflowItemResolution?
+  resolutionNote String?
+  resolvedAt     DateTime?
+  resolvedById   String?
+  resolvedBy     User?     @relation("MerchandiseOutflowItemResolvedBy", fields: [resolvedById], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+
+  @@index([batchId])
+  @@index([resolution])
 }
 
 // Acumulado semanal (lunes-sábado) de unidades dañadas "no solucionadas"

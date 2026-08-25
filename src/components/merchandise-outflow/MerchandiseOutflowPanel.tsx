@@ -1,0 +1,104 @@
+"use client";
+
+import { useState } from "react";
+import { DocumentCaptureFlow } from "./DocumentCaptureFlow";
+import { DeteriorCapture } from "./DeteriorCapture";
+import { DeteriorResolutionInbox } from "./DeteriorResolutionInbox";
+import { WriteOffQueue } from "./WriteOffQueue";
+import { HistoryList } from "./HistoryList";
+import { TabGuide } from "@/components/shared/TabGuide";
+
+type Tab = "despacho" | "garantia" | "deterioro" | "baja" | "historial";
+
+export function MerchandiseOutflowPanel({ canCapture, canAct = false }: { canCapture: boolean; canAct?: boolean }) {
+  const defaultTab: Tab = canCapture ? "despacho" : "baja";
+  // Confirmado 2026-08-25: pedido explícito del usuario — todos los
+  // motivos de egreso viven en una sola sesión para que Daniel no salte
+  // entre módulos. Los atajos de Inicio/notificaciones llegan con
+  // ?tab=egresos&otab=X para entrar directo a lo que hay que gestionar —
+  // resuelto en el inicializador de useState (no en un efecto) para no
+  // disparar un setState extra apenas monta.
+  const [tab, setTab] = useState<Tab>(() => {
+    if (typeof window === "undefined") return defaultTab;
+    const t = new URLSearchParams(window.location.search).get("otab");
+    if (t === "baja" || t === "deterioro") return t;
+    return defaultTab;
+  });
+
+  const tabs: { id: Tab; label: string }[] = [
+    ...(canCapture ? [{ id: "despacho" as const, label: "Despacho" }] : []),
+    ...(canCapture ? [{ id: "garantia" as const, label: "Garantía" }] : []),
+    ...(canCapture ? [{ id: "deterioro" as const, label: "Deterioro" }] : []),
+    { id: "baja" as const, label: "Dar de baja en Just" },
+    { id: "historial" as const, label: "Historial" },
+  ];
+
+  return (
+    <div>
+      <h1 className="font-display text-[22px] font-bold mb-1">Registro de Egresos</h1>
+      <p className="text-[13px] text-steel mb-5">Mercadería que sale del inventario físico por vías que Just no registra solo.</p>
+
+      <div className="flex gap-6 border-b border-rule mb-5">
+        {tabs.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            onClick={() => setTab(t.id)}
+            className={`pb-2.5 text-[13.5px] font-semibold cursor-pointer border-b-2 ${tab === t.id ? "border-teal text-ink" : "border-transparent text-steel hover:text-ink"}`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {tab === "despacho" && canCapture && (
+        <>
+          <TabGuide storageKey="merchoutflow-despacho">
+            Fotografía la hoja física de despacho — la IA lee cada renglón (producto + cantidad) y arma un consolidado editable. Confirma cada fila contra el catálogo antes de enviar el lote.
+          </TabGuide>
+          <DocumentCaptureFlow reason="DESPACHO" />
+        </>
+      )}
+      {tab === "garantia" && canCapture && (
+        <>
+          <TabGuide storageKey="merchoutflow-garantia">
+            Fotografía el manifiesto de garantía que genera Fulfillment — mismo mecanismo que despacho, la IA arma el consolidado y confirmas cada renglón.
+          </TabGuide>
+          <DocumentCaptureFlow reason="GARANTIA" />
+        </>
+      )}
+      {tab === "deterioro" && canCapture && (
+        <>
+          <TabGuide storageKey="merchoutflow-deterioro">
+            {canAct
+              ? "Reporta acá un producto encontrado dañado en bodega (no una devolución). Abajo ves los reportes pendientes de tu resolución: solucionado ahí mismo (no deja rastro), dar de baja, o escalar a Compras si es mercadería recién llegada."
+              : "Reporta acá un producto encontrado dañado en bodega (no una devolución). Daniel decide qué hacer con cada reporte."}
+          </TabGuide>
+          <div className="flex flex-col gap-6">
+            <DeteriorCapture />
+            <div>
+              <div className="font-display font-bold text-[14px] mb-2.5">Pendientes de resolución</div>
+              <DeteriorResolutionInbox canAct={canAct} />
+            </div>
+          </div>
+        </>
+      )}
+      {tab === "baja" && (
+        <>
+          <TabGuide storageKey="merchoutflow-baja">
+            {canAct
+              ? "Acá cae TODO lo que está listo para dar de baja en Just, sin importar el motivo — despacho, garantía, deterioro dado de baja, y compras personales (enganche automático). Confirma solo cuando ya lo hayas hecho de verdad en Just."
+              : "Vista de solo lectura de lo pendiente de dar de baja en Just. Confirmar es exclusivo de Daniel."}
+          </TabGuide>
+          <WriteOffQueue canAct={canAct} />
+        </>
+      )}
+      {tab === "historial" && (
+        <>
+          <TabGuide storageKey="merchoutflow-historial">Consulta acá el registro completo de egresos, con trazabilidad de quién capturó y quién dio de baja.</TabGuide>
+          <HistoryList />
+        </>
+      )}
+    </div>
+  );
+}
