@@ -3,7 +3,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { TopLine } from "@/components/ui/TopLine";
 import { DeptWorkspaceTabs } from "@/components/dept/DeptWorkspaceTabs";
-import { getUnseenFeedbackCount, canManageStoreFeedback as checkCanManageStoreFeedback, canViewStoreFeedback as checkCanViewStoreFeedback, canSubmitPurchaseRequests, canConfirmPurchaseReceiving, canReceivePurchasesTeam, canActOnPurchaseReceiving, canRegisterPurchaseInvoices, canPayMerchandisePurchases, canManageInventoryControl as checkCanManageInventoryControl, canViewInventoryKpisPanel as checkCanViewInventoryKpisPanel, canManageAdminPayments as checkCanManageAdminPayments, canViewMarketingArrivals as checkCanViewMarketingArrivals, canConfirmMarketingDesign as checkCanConfirmMarketingDesign, canConfirmMarketingAdvisor as checkCanConfirmMarketingAdvisor, canCaptureMerchandiseReentry, canApproveMerchandiseReentry, canActOnMerchandiseReentry, canCloseMerchandiseReentry, canVerifyDamageDisposal, canManageJustUpload, canManageJustCatalog, canCaptureMerchandiseOutflow, canActOnMerchandiseOutflow, canViewMerchandiseOutflow, canDeclareExternalSales, canReviewExternalSales, canConfirmExternalSalePayment, canCloseExternalSale, canViewExternalSales, getSupplierAccess, canAddSupplierBankAccounts } from "@/lib/guards";
+import { getUnseenFeedbackCount, canManageStoreFeedback as checkCanManageStoreFeedback, canViewStoreFeedback as checkCanViewStoreFeedback, canSubmitPurchaseRequests, canConfirmPurchaseReceiving, canReceivePurchasesTeam, canActOnPurchaseReceiving, canRegisterPurchaseInvoices, canPayMerchandisePurchases, canManageInventoryControl as checkCanManageInventoryControl, canViewInventoryKpisPanel as checkCanViewInventoryKpisPanel, canManageAdminPayments as checkCanManageAdminPayments, canViewMarketingArrivals as checkCanViewMarketingArrivals, canConfirmMarketingDesign as checkCanConfirmMarketingDesign, canConfirmMarketingAdvisor as checkCanConfirmMarketingAdvisor, canCaptureMerchandiseReentry, canApproveMerchandiseReentry, canActOnMerchandiseReentry, canCloseMerchandiseReentry, canVerifyDamageDisposal, canManageJustUpload, canManageJustCatalog, canCaptureMerchandiseOutflow, canActOnMerchandiseOutflow, canViewMerchandiseOutflow, canSubmitCancelledGuide, canConfirmCancelledGuideFulfillment, canManageCancelledGuideCutoff, canDeclareExternalSales, canReviewExternalSales, canConfirmExternalSalePayment, canCloseExternalSale, canViewExternalSales, getSupplierAccess, canAddSupplierBankAccounts } from "@/lib/guards";
 import { getFinanceKpiData } from "@/lib/financeKpis";
 import { getDeptProcessDetail } from "@/lib/processDetail";
 import { getPaymentRemindersData } from "@/lib/paymentReminders";
@@ -105,6 +105,14 @@ export default async function WorkspacePage() {
     canActOnMerchandiseOutflow(),
     canViewMerchandiseOutflow(),
   ]);
+  // Guías Canceladas (Fase 4) — canConfirmCancelled combina Fulfillment
+  // (dedicado) con el equipo de Inventario (ya calculado como canCaptureOutflow).
+  const [canSubmitGuide, canConfirmFulfillmentGuide, canCutoffGuide] = await Promise.all([
+    canSubmitCancelledGuide(),
+    canConfirmCancelledGuideFulfillment(),
+    canManageCancelledGuideCutoff(),
+  ]);
+  const canConfirmGuide = canConfirmFulfillmentGuide || canCaptureOutflow;
   // Ventas Externas (Fase 3) — mismo patrón sin dept.code que lo anterior.
   const [canDeclareSales, canReviewSales, canConfirmSalePayment, canCloseSale, canViewSales] = await Promise.all([
     canDeclareExternalSales(),
@@ -247,6 +255,9 @@ export default async function WorkspacePage() {
         canCaptureMerchandiseOutflow={canCaptureOutflow}
         canActOnMerchandiseOutflow={canActOutflow}
         canViewMerchandiseOutflow={canViewOutflow}
+        canSubmitCancelledGuide={canSubmitGuide}
+        canConfirmCancelledGuide={canConfirmGuide}
+        canCutoffCancelledGuide={canCutoffGuide}
         canDeclareExternalSales={canDeclareSales}
         canReviewExternalSales={canReviewSales}
         canConfirmExternalSalePayment={canConfirmSalePayment}

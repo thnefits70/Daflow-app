@@ -109,6 +109,9 @@ export function DeptWorkspaceTabs({
   canCaptureMerchandiseOutflow = false,
   canActOnMerchandiseOutflow = false,
   canViewMerchandiseOutflow = false,
+  canSubmitCancelledGuide = false,
+  canConfirmCancelledGuide = false,
+  canCutoffCancelledGuide = false,
   canDeclareExternalSales = false,
   canReviewExternalSales = false,
   canConfirmExternalSalePayment = false,
@@ -218,6 +221,13 @@ export function DeptWorkspaceTabs({
   canCaptureMerchandiseOutflow?: boolean;
   canActOnMerchandiseOutflow?: boolean;
   canViewMerchandiseOutflow?: boolean;
+  // Guías Canceladas (Fase 4) — vive dentro de la pestaña de Egresos, pero
+  // trae gente que no es de Inventario (Bryan/MKT, equipo de FUL), así que
+  // amplía la visibilidad de esa pestaña sin tocar canViewMerchandiseOutflow
+  // (que sigue gateando las rutas propias de Egresos).
+  canSubmitCancelledGuide?: boolean;
+  canConfirmCancelledGuide?: boolean;
+  canCutoffCancelledGuide?: boolean;
   // Ventas Externas (Fase 3) — declarar/revisión/pagos/cierre viven en la
   // misma pestaña sin dept.code (Bryan revisa, admin confirma pago, Nairoby
   // cierra); despacho/entregas reusan las guards de Registro de Egresos.
@@ -263,7 +273,7 @@ export function DeptWorkspaceTabs({
     if (t.key === "llegadas") return canViewMarketingArrivals;
     if (t.key === "inventario") return canManageInventoryControl;
     if (t.key === "reingreso") return canCaptureMerchandiseReentry || canApproveMerchandiseReentry || canCloseMerchandiseReentry;
-    if (t.key === "egresos") return canViewMerchandiseOutflow;
+    if (t.key === "egresos") return canViewMerchandiseOutflow || canSubmitCancelledGuide || canConfirmCancelledGuide || canCutoffCancelledGuide;
     if (t.key === "ventas-externas") return canViewExternalSales;
     if (t.key === "inventoriokpis") return canViewInventoryKpisPanel;
     if (t.key === "cajachica") return !!(pettyCashData?.principal || pettyCashData?.secundaria);
@@ -416,8 +426,14 @@ export function DeptWorkspaceTabs({
           canManageJustCatalog={canManageJustCatalog}
         />
       )}
-      {tab === "egresos" && canViewMerchandiseOutflow && (
-        <MerchandiseOutflowPanel canCapture={canCaptureMerchandiseOutflow} canAct={canActOnMerchandiseOutflow} />
+      {tab === "egresos" && (canViewMerchandiseOutflow || canSubmitCancelledGuide || canConfirmCancelledGuide || canCutoffCancelledGuide) && (
+        <MerchandiseOutflowPanel
+          canCapture={canCaptureMerchandiseOutflow}
+          canAct={canActOnMerchandiseOutflow}
+          canSubmitCancelledGuide={canSubmitCancelledGuide}
+          canConfirmCancelledGuide={canConfirmCancelledGuide}
+          canCutoffCancelledGuide={canCutoffCancelledGuide}
+        />
       )}
       {tab === "ventas-externas" && canViewExternalSales && (
         <ExternalSalesPanel

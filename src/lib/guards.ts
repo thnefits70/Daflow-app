@@ -880,6 +880,62 @@ export async function canCloseExternalSale() {
   return !!user?.isLeader && user.leadsDept?.code === "FIN";
 }
 
+/**
+ * ---------------- Guías Canceladas (Fase 4 de Registro de Egresos) ----------------
+ * Confirmado 2026-08-25: lo sube cualquiera de Análisis de Mercado (MKT) o
+ * Fulfillment (FUL) — sin exigir liderazgo, mismo criterio de membresía de
+ * equipo que Reingreso/Egresos. Fulfillment e Inventario confirman por
+ * separado (cualquier miembro de su equipo, no solo el líder). El corte
+ * semanal es de Bryan (líder de MKT); reingresar a Just es de Daniel
+ * (reusa canActOnMerchandiseOutflow, mismo Daniel exclusivo).
+ */
+async function cancelledGuideUserContext(userId: string) {
+  return prisma.user.findUnique({
+    where: { id: userId },
+    select: { isLeader: true, leadsDept: { select: { code: true } }, department: { select: { code: true } } },
+  });
+}
+
+export async function canSubmitCancelledGuide() {
+  const session = await auth();
+  if (!session) return false;
+  const user = await cancelledGuideUserContext(session.user.id);
+  if (!user) return false;
+  return user.department?.code === "MKT" || user.department?.code === "FUL";
+}
+
+export async function canConfirmCancelledGuideFulfillment() {
+  const session = await auth();
+  if (!session) return false;
+  const user = await cancelledGuideUserContext(session.user.id);
+  return user?.department?.code === "FUL";
+}
+
+export async function canManageCancelledGuideCutoff() {
+  const session = await auth();
+  if (!session) return false;
+  if (session.user.role === "admin") return true;
+  const user = await cancelledGuideUserContext(session.user.id);
+  return !!user?.isLeader && user.leadsDept?.code === "MKT";
+}
+
+// Ve TODAS las solicitudes (no solo las propias) — líderes de MKT/FUL/INV y
+// admin, pedido explícito del usuario ("Bryan sepa todas las guías...").
+export async function canViewAllCancelledGuides() {
+  const session = await auth();
+  if (!session) return false;
+  if (session.user.role === "admin") return true;
+  const user = await cancelledGuideUserContext(session.user.id);
+  return !!user?.isLeader && !!user.leadsDept && ["MKT", "FUL", "INV"].includes(user.leadsDept.code);
+}
+
+export async function canViewCancelledGuides() {
+  const session = await auth();
+  if (!session) return false;
+  if (session.user.role === "admin") return true;
+  return (await canSubmitCancelledGuide()) || (await canViewAllCancelledGuides()) || (await canCaptureMerchandiseOutflow());
+}
+
 // Visibilidad general de la pestaña — cualquiera de los roles del flujo.
 export async function canViewExternalSales() {
   const session = await auth();

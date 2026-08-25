@@ -42,6 +42,9 @@ model PlatformSettings {
   // Confirmado 2026-08-25: correlativo propio de Ventas Externas (VE-0001,
   // VE-0002...) — mismo patrón atómico que los anteriores.
   lastExternalSaleNumber       Int       @default(0)
+  // Confirmado 2026-08-25: correlativo propio de Guías Canceladas (GC-0001,
+  // GC-0002...) — mismo patrón atómico que los anteriores.
+  lastCancelledGuideNumber     Int       @default(0)
   updatedAt                    DateTime  @updatedAt
 }
 
@@ -346,6 +349,12 @@ model User {
   externalSalesDispatchAssignedBy ExternalSale[] @relation("ExternalSaleDispatchAssignedBy")
   externalSalesDelivered         ExternalSale[] @relation("ExternalSaleDeliveredBy")
   externalSalesClosed            ExternalSale[] @relation("ExternalSaleNairobyClosedBy")
+
+  cancelledGuidesSubmitted            CancelledGuideReport[] @relation("CancelledGuideSubmittedBy")
+  cancelledGuidesFulfillmentConfirmed CancelledGuideReport[] @relation("CancelledGuideFulfillmentConfirmedBy")
+  cancelledGuidesInventoryConfirmed   CancelledGuideReport[] @relation("CancelledGuideInventoryConfirmedBy")
+  cancelledGuidesCutoffDecided        CancelledGuideReport[] @relation("CancelledGuideCutoffDecidedBy")
+  cancelledGuidesReingresado          CancelledGuideReport[] @relation("CancelledGuideReingresadoBy")
 
   @@index([deptId])
   @@index([leadsDeptId])
@@ -1303,6 +1312,9 @@ model PurchaseCatalogItem {
   // Confirmado 2026-08-25: Ventas Externas (Fase 3) también reusa este
   // catálogo compartido.
   externalSales           ExternalSale[]
+  // Confirmado 2026-08-25: Guías Canceladas (Fase 4) también reusa este
+  // catálogo compartido.
+  cancelledGuideItems     CancelledGuideItem[]
 }
 
 // Registro de auditoría de cada vez que Daniel sube el export de Just —
@@ -3568,4 +3580,95 @@ model MerchandiseWeeklyWriteOffBatch {
   @@unique([weekStart])
   @@index([justWrittenOffAt])
   @@index([nairobyConfirmedAt])
+}
+
+enum CancelledGuideSourceArea {
+  // Análisis de Mercado — el remitente elige a mano de qué bodega es (no se
+  // infiere del nombre de la persona, decisión deliberada para no atar el
+  // código a que "Heidy siempre es Damián" si eso cambia algún día).
+  MKT_DAMIAN
+  MKT_PROVEDIX
+  FULFILLMENT
+}
+
+enum CancelledGuideCarrier {
+  SERVIENTREGA
+  URBANO
+  GINTRANCOM
+  LAARCOURIER
+  VELOCES
+}
+
+/**
+ * ---------------- Guías Canceladas (Fase 4 de Registro de Egresos) ----------------
+ * Confirmado 2026-08-25: aunque el resultado final sea una ENTRADA (la
+ * mercadería nunca salió, hay que reingresarla a Just), el usuario pidió
+ * explícitamente que viva dentro de Registro de Egresos, junto a los demás
+ * motivos, para no tener a Daniel saltando entre módulos.
+ *
+ * Lo sube cualquiera de Análisis de Mercado (Heidy/Jariel, bodega
+ * Damián/Provedix) o de Fulfillment (Yair) — motivos distintos según el
+ * área. Fulfillment e Inventario confirman por separado que hicieron su
+ * gestión (no despachar); Bryan hace el corte semanal decidiendo, guía por
+ * guía, si realmente se canceló o si se despachó igual por otro motivo —
+ * eso no lo puede saber el sistema solo, es juicio humano contra lo que
+ * pasó de verdad en Dropi/Rocket. Solo lo realmente cancelado entra a la
+ * cola de Daniel para reingresar a Just.
+ */
+model CancelledGuideReport {
+  id           String @id @default(cuid())
+  code         String @unique // "GC-0001"
+  reportNumber Int    @unique
+
+  submittedById String
+  submittedBy   User                     @relation("CancelledGuideSubmittedBy", fields: [submittedById], references: [id], onDelete: Restrict)
+  sourceArea    CancelledGuideSourceArea
+
+  guideNumber String
+  carrier     CancelledGuideCarrier
+  // "Solicitud del dropshipper" / "Falta de stock" (MKT) o "No cumple
+  // medidas o peso" (Fulfillment) / texto libre si elige "Otro".
+  reason      String
+
+  createdAt DateTime @default(now())
+
+  items CancelledGuideItem[]
+
+  // Cada área responsable confirma POR SEPARADO que hizo su parte (no
+  // despachar) — un botón, sin más detalle que pedir.
+  fulfillmentConfirmedAt   DateTime?
+  fulfillmentConfirmedById String?
+  fulfillmentConfirmedBy   User?     @relation("CancelledGuideFulfillmentConfirmedBy", fields: [fulfillmentConfirmedById], references: [id], onDelete: SetNull)
+
+  inventoryConfirmedAt   DateTime?
+  inventoryConfirmedById String?
+  inventoryConfirmedBy   User?     @relation("CancelledGuideInventoryConfirmedBy", fields: [inventoryConfirmedById], references: [id], onDelete: SetNull)
+
+  // Corte semanal de Bryan — null mientras está pendiente de decidir.
+  reallyCancelled   Boolean?
+  cutoffDecidedAt   DateTime?
+  cutoffDecidedById String?
+  cutoffDecidedBy   User?     @relation("CancelledGuideCutoffDecidedBy", fields: [cutoffDecidedById], references: [id], onDelete: SetNull)
+
+  // Daniel reingresa a Just — solo aplica cuando reallyCancelled = true.
+  reingresadoAt   DateTime?
+  reingresadoById String?
+  reingresadoBy   User?     @relation("CancelledGuideReingresadoBy", fields: [reingresadoById], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([reallyCancelled])
+  @@index([submittedById])
+}
+
+model CancelledGuideItem {
+  id       String               @id @default(cuid())
+  reportId String
+  report   CancelledGuideReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  catalogItemId String?
+  catalogItem   PurchaseCatalogItem? @relation(fields: [catalogItemId], references: [id], onDelete: SetNull)
+  declaredName  String
+  quantity      Int
+
+  @@index([reportId])
 }

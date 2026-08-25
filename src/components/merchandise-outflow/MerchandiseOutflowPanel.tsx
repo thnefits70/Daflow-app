@@ -8,12 +8,34 @@ import { SupplierExchangeCapture } from "./SupplierExchangeCapture";
 import { SupplierExchangeResolutionInbox } from "./SupplierExchangeResolutionInbox";
 import { WriteOffQueue } from "./WriteOffQueue";
 import { HistoryList } from "./HistoryList";
+import { CancelledGuidesPanel } from "@/components/cancelled-guides/CancelledGuidesPanel";
 import { TabGuide } from "@/components/shared/TabGuide";
 
-type Tab = "despacho" | "garantia" | "deterioro" | "proveedor" | "baja" | "historial";
+type Tab = "despacho" | "garantia" | "deterioro" | "proveedor" | "guias" | "baja" | "historial";
 
-export function MerchandiseOutflowPanel({ canCapture, canAct = false }: { canCapture: boolean; canAct?: boolean }) {
-  const defaultTab: Tab = canCapture ? "despacho" : "baja";
+export function MerchandiseOutflowPanel({
+  canCapture,
+  canAct = false,
+  canSubmitCancelledGuide = false,
+  canConfirmCancelledGuide = false,
+  canCutoffCancelledGuide = false,
+}: {
+  canCapture: boolean;
+  canAct?: boolean;
+  // Guías Canceladas (Fase 4) — vive como pestaña acá adentro (pedido
+  // explícito del usuario), aunque su resultado final sea una entrada, no
+  // una salida. Reingresar reusa `canAct` (Daniel exclusivo, ya pasado).
+  canSubmitCancelledGuide?: boolean;
+  canConfirmCancelledGuide?: boolean;
+  canCutoffCancelledGuide?: boolean;
+}) {
+  const defaultTab: Tab = canCapture
+    ? "despacho"
+    : canAct
+      ? "baja"
+      : canSubmitCancelledGuide || canConfirmCancelledGuide || canCutoffCancelledGuide
+        ? "guias"
+        : "historial";
   // Confirmado 2026-08-25: pedido explícito del usuario — todos los
   // motivos de egreso viven en una sola sesión para que Daniel no salte
   // entre módulos. Los atajos de Inicio/notificaciones llegan con
@@ -23,7 +45,7 @@ export function MerchandiseOutflowPanel({ canCapture, canAct = false }: { canCap
   const [tab, setTab] = useState<Tab>(() => {
     if (typeof window === "undefined") return defaultTab;
     const t = new URLSearchParams(window.location.search).get("otab");
-    if (t === "baja" || t === "deterioro" || t === "proveedor") return t;
+    if (t === "baja" || t === "deterioro" || t === "proveedor" || t === "guias") return t;
     return defaultTab;
   });
 
@@ -32,6 +54,7 @@ export function MerchandiseOutflowPanel({ canCapture, canAct = false }: { canCap
     ...(canCapture ? [{ id: "garantia" as const, label: "Garantía" }] : []),
     ...(canCapture ? [{ id: "deterioro" as const, label: "Deterioro" }] : []),
     ...(canAct ? [{ id: "proveedor" as const, label: "Cambio con proveedor" }] : []),
+    ...(canSubmitCancelledGuide || canConfirmCancelledGuide || canCutoffCancelledGuide || canAct ? [{ id: "guias" as const, label: "Guías canceladas" }] : []),
     { id: "baja" as const, label: "Dar de baja en Just" },
     { id: "historial" as const, label: "Historial" },
   ];
@@ -98,6 +121,14 @@ export function MerchandiseOutflowPanel({ canCapture, canAct = false }: { canCap
               <SupplierExchangeResolutionInbox />
             </div>
           </div>
+        </>
+      )}
+      {tab === "guias" && (canSubmitCancelledGuide || canConfirmCancelledGuide || canCutoffCancelledGuide || canAct) && (
+        <>
+          <TabGuide storageKey="merchoutflow-guias">
+            Aunque el resultado final sea reingresar mercadería a Just (no darla de baja), las guías canceladas viven acá junto a los demás motivos para no saltar entre módulos.
+          </TabGuide>
+          <CancelledGuidesPanel canSubmit={canSubmitCancelledGuide} canConfirm={canConfirmCancelledGuide} canCutoff={canCutoffCancelledGuide} canReingreso={canAct} />
         </>
       )}
       {tab === "baja" && (
