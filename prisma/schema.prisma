@@ -35,6 +35,11 @@ model PlatformSettings {
   // (RM-0001, RM-0002...) — mismo patrón atómico que lastPurchaseRequestNumber,
   // una sola numeración para todo el módulo sin importar quién capture el lote.
   lastMerchandiseReentryNumber Int       @default(0)
+  // Confirmado 2026-08-25: correlativo propio de "Reclamo posterior al
+  // cierre" (RPC-0001, RPC-0002...) — mismo patrón atómico que los dos de
+  // arriba, distinto de lastPurchaseRequestNumber porque el reclamo puede no
+  // tener un origen exacto (mercadería mezclada).
+  lastLateClaimNumber          Int       @default(0)
   // Confirmado 2026-08-25: correlativo propio de Registro de Egresos
   // (EG-0001, EG-0002...) — mismo patrón atómico que los anteriores, una
   // sola numeración para todo el módulo sin importar el motivo.
@@ -293,6 +298,8 @@ model User {
   marketingFollowUpsAdvisorConfirmed           PurchaseReceiptFollowUp[]          @relation("PurchaseReceiptFollowUpAdvisorConfirmedBy")
   purchaseRequestUrgentReports                 PurchaseRequestUrgentReport[]      @relation("PurchaseRequestUrgentReportedBy")
   purchaseRequestUrgentReportsReviewed         PurchaseRequestUrgentReport[]      @relation("PurchaseRequestUrgentReportReviewedByLead")
+  purchaseRequestUrgentReportsRejected         PurchaseRequestUrgentReport[]      @relation("PurchaseRequestUrgentReportRejectedBy")
+  purchaseRequestUrgentReportsJustConfirmed    PurchaseRequestUrgentReport[]      @relation("PurchaseRequestUrgentReportJustConfirmedBy")
   storeFeedbackEvaluations                     StoreFeedbackEvaluation[]          @relation("StoreFeedbackEvaluatedBy")
   confidentialAccess                           ConfidentialDocumentAccess[]
   monthlyEvaluationsReceived                   MonthlyEvaluation[]
@@ -1680,9 +1687,56 @@ model PurchaseRequestUrgentReport {
   reviewedByLead   User?     @relation("PurchaseRequestUrgentReportReviewedByLead", fields: [reviewedByLeadId], references: [id], onDelete: SetNull)
   reviewedByLeadAt DateTime?
 
+  // ---------------- Reclamo posterior al cierre ----------------
+  // Confirmado 2026-08-25: diseñado con el usuario paso a paso — daño
+  // descubierto DÍAS después de que la mercadería ya se confirmó RECIBIDA
+  // (ej. al despachar). Reutiliza este mismo modelo/resolución/crédito en
+  // vez de una tabla aparte; isLateClaim distingue este camino del
+  // "Informar urgente" normal (que solo existe antes de confirmar
+  // recepción). Sin plazo límite para reportar — decisión explícita.
+  isLateClaim Boolean @default(false)
+  // RPC-0001, RPC-0002... — numeración propia, independiente del SC-XXX de
+  // la solicitud de origen porque el origen puede no ser exacto.
+  lateClaimCode String? @unique
+
+  // Si Inventario no puede saber con certeza de qué solicitud de compra
+  // viene físicamente lo dañado (mercadería mezclada en bodega, sin lote
+  // rastreable), requestId igual apunta a la más probable (elegida a mano),
+  // pero el valor en disputa usa estimatedUnitCost (promedio de compras
+  // recientes de ese producto+proveedor) en vez de request.unitCost.
+  originUncertain   Boolean @default(false)
+  estimatedUnitCost Float?
+
+  stockStatus LateClaimStockStatus?
+
+  // Revisión de Daniel con posibilidad de RECHAZAR (el "Informar urgente"
+  // normal no tiene rechazo — reviewedByLeadAt siempre implicó aprobado).
+  // Un reclamo rechazado queda igual visible, con el motivo, nunca se borra.
+  rejectedAt      DateTime?
+  rejectedById    String?
+  rejectedBy      User?     @relation("PurchaseRequestUrgentReportRejectedBy", fields: [rejectedById], references: [id], onDelete: SetNull)
+  rejectionReason String?
+
+  // Dar de baja en Just — DAFLOW no tiene integración con Just (nunca se
+  // toca directamente), así que esto es una confirmación humana reforzada:
+  // Daniel re-escribe la cantidad exacta (debe coincidir con justWriteOffQty
+  // o la UI no deja confirmar) + declaración afirmativa, pedido explícito
+  // del usuario para que no sea un clic ciego. Las resoluciones con el
+  // proveedor (créditos/cambio) solo se pueden coordinar después de esto.
+  justWriteOffQty   Int?
+  justConfirmedById String?
+  justConfirmedBy   User?     @relation("PurchaseRequestUrgentReportJustConfirmedBy", fields: [justConfirmedById], references: [id], onDelete: SetNull)
+  justConfirmedAt   DateTime?
+
   resolutions PurchaseUrgentResolution[]
 
   @@index([requestId])
+  @@index([isLateClaim])
+}
+
+enum LateClaimStockStatus {
+  IN_STOCK
+  SOLD
 }
 
 enum UrgentResolutionType {
@@ -2599,6 +2653,13 @@ model PayrollProfile {
   // turno normal, no extra). Se activa persona por persona a medida que se
   // pueda costear pagar así a todos.
   usesFullLegalOvertimeSchedule Boolean @default(false)
+
+  // Confirmado 2026-08-25: excepción para Mercedes Espinoza, asesora
+  // externa que se paga completo al fin de mes en vez de dividirse en dos
+  // quincenas — un solo concepto "Sueldo (mensual)" con el sueldo real
+  // completo en Q2, nada en Q1. Persona por persona, igual que
+  // companyAbsorbsIess.
+  monthlySalaryOnly Boolean @default(false)
 
   updatedAt DateTime @updatedAt
 

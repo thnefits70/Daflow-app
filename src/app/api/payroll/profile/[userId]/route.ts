@@ -16,6 +16,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ use
       companyAbsorbsIess: false,
       canLogOvertimeHours: false,
       usesFullLegalOvertimeSchedule: false,
+      monthlySalaryOnly: false,
     }
   );
 }
@@ -26,6 +27,7 @@ const schema = z.object({
   companyAbsorbsIess: z.boolean().optional(),
   canLogOvertimeHours: z.boolean().optional(),
   usesFullLegalOvertimeSchedule: z.boolean().optional(),
+  monthlySalaryOnly: z.boolean().optional(),
 });
 
 // Confirmado 2026-08-13: exclusivo de Nairoby (canEditPayrollRoles) — el

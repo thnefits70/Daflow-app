@@ -43,7 +43,21 @@ export async function buildAutomaticLineItems(employeeId: string, period: string
 
   const items: QuincenaLineItemInput[] = [];
   const realSalary = profile?.realSalary ?? 0;
-  items.push({ label: "Sueldo (quincena)", amount: quincenalSalaryPortion(realSalary), kind: "INCOME", isAutomatic: true });
+  if (profile?.monthlySalaryOnly) {
+    if (isEndOfMonthQuincena(period)) {
+      items.push({ label: "Sueldo (mensual)", amount: realSalary, kind: "INCOME", isAutomatic: true });
+    } else {
+      items.push({
+        label: "Sueldo (mensual)",
+        amount: 0,
+        kind: "INCOME",
+        isAutomatic: true,
+        note: "Pago mensual único — se paga completo a fin de mes, no en este período.",
+      });
+    }
+  } else {
+    items.push({ label: "Sueldo (quincena)", amount: quincenalSalaryPortion(realSalary), kind: "INCOME", isAutomatic: true });
+  }
 
   if (isFirstQuincenaOfMonth(period)) {
     const sourceMonth = overtimeSourceMonthForPeriod(period);

@@ -9,6 +9,7 @@ type Profile = {
   companyAbsorbsIess: boolean;
   canLogOvertimeHours: boolean;
   usesFullLegalOvertimeSchedule: boolean;
+  monthlySalaryOnly: boolean;
 };
 
 function ToggleRow({ label, hint, value, onChange, disabled }: { label: string; hint: string; value: boolean; onChange: (v: boolean) => void; disabled: boolean }) {
@@ -46,7 +47,7 @@ export function PayrollProfileFields({ userId, canEdit }: { userId: string; canE
     });
   }, [userId]);
 
-  async function save(patch: Partial<{ realSalary: number; iessDeclaredSalary: number; companyAbsorbsIess: boolean; canLogOvertimeHours: boolean; usesFullLegalOvertimeSchedule: boolean }>) {
+  async function save(patch: Partial<{ realSalary: number; iessDeclaredSalary: number; companyAbsorbsIess: boolean; canLogOvertimeHours: boolean; usesFullLegalOvertimeSchedule: boolean; monthlySalaryOnly: boolean }>) {
     setSaving(true);
     const res = await fetch(`/api/payroll/profile/${userId}`, {
       method: "PATCH",
@@ -114,6 +115,13 @@ export function PayrollProfileFields({ userId, canEdit }: { userId: string; canE
         hint="Cuenta extra después de las 5pm entre semana y todo el sábado 8:30-12:30, en vez del umbral por defecto (6:30pm)."
         value={profile.usesFullLegalOvertimeSchedule}
         onChange={(v) => save({ usesFullLegalOvertimeSchedule: v })}
+        disabled={!canEdit}
+      />
+      <ToggleRow
+        label="Pago mensual único (asesor externo)"
+        hint="Un solo pago completo a fin de mes en vez de dividir el sueldo en dos partes (hoy: Mercedes)."
+        value={profile.monthlySalaryOnly}
+        onChange={(v) => save({ monthlySalaryOnly: v })}
         disabled={!canEdit}
       />
       {saving && <div className="text-[10.5px] text-steel-dim mt-2">Guardando…</div>}
