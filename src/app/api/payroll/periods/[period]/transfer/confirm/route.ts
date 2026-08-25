@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { canEditPayrollRoles, getFinanceLeadId } from "@/lib/guards";
 import { isValidPeriod } from "@/lib/payroll";
 import { isEndOfMonthQuincena } from "@/lib/payrollCalc";
-import { notifyOwner } from "@/lib/notifications";
+import { notifyOwner, resolveNotifications } from "@/lib/notifications";
 
 const schema = z.object({ destination: z.enum(["NAIROBY", "ADMIN_PRODUBANCO", "ADMIN_COMPANY"]).optional() });
 
@@ -63,6 +63,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ per
     create: { periodId: payrollPeriod.id, totalAmount, destination },
   });
 
+  await resolveNotifications("admin", "🔔 Nairoby te envió el total de nómina", `Quincena ${period}`);
   await notifyOwner("admin", {
     title: "🔔 Nairoby te envió el total de nómina",
     body: `Quincena ${period} — $${totalAmount.toFixed(2)} · falta tu aprobación`,

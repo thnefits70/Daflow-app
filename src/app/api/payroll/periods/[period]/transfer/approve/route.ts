@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAdminSession } from "@/lib/guards";
 import { isValidPeriod } from "@/lib/payroll";
+import { resolveNotifications } from "@/lib/notifications";
 
 // Confirmado 2026-08-23: aprobar es un paso propio, distinto de subir el
 // comprobante (ver proof/route.ts) — el admin primero confirma que el total
@@ -23,5 +24,6 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ pe
     where: { id: payrollPeriod.transfer.id },
     data: { status: "APPROVED", approvedAt: new Date() },
   });
+  await resolveNotifications("admin", "🔔 Nairoby te envió el total de nómina", `Quincena ${period}`);
   return NextResponse.json(updated);
 }

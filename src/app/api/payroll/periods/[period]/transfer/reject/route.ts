@@ -3,7 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireAdminSession, getFinanceLeadId } from "@/lib/guards";
 import { isValidPeriod } from "@/lib/payroll";
-import { notifyOwner } from "@/lib/notifications";
+import { notifyOwner, resolveNotifications } from "@/lib/notifications";
 
 const schema = z.object({ reason: z.string().trim().min(1, "Contá el motivo del rechazo.") });
 
@@ -32,6 +32,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ per
     where: { id: payrollPeriod.transfer.id },
     data: { status: "REJECTED", rejectionReason: parsed.data.reason.trim(), rejectedAt: new Date() },
   });
+  await resolveNotifications("admin", "🔔 Nairoby te envió el total de nómina", `Quincena ${period}`);
 
   const financeLeadId = await getFinanceLeadId();
   if (financeLeadId) {

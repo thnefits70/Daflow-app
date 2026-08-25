@@ -13,3 +13,17 @@ export async function notifyOwner(ownerId: string, payload: PushPayload): Promis
   });
   await sendPushToOwner(ownerId, payload).catch(() => null);
 }
+
+// Confirmado 2026-08-25: bug real — notifyOwner solo inserta, así que un
+// mismo aviso reenviado (p.ej. Nairoby reenviando el total de nómina tras un
+// rechazo) se apilaba sin fin, y nada marcaba el aviso viejo como resuelto
+// cuando el admin aprobaba/rechazaba, así que la campanita seguía diciendo
+// "falta tu aprobación" de algo que ya no estaba pendiente. Usar esto antes
+// de emitir un aviso de reemplazo, y también en el momento en que el estado
+// que anunciaba deja de ser cierto.
+export async function resolveNotifications(ownerId: string, title: string, bodyPrefix: string): Promise<void> {
+  await prisma.notification.updateMany({
+    where: { ownerId, title, body: { startsWith: bodyPrefix }, readAt: null },
+    data: { readAt: new Date() },
+  });
+}
