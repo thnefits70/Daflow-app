@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Camera, CheckCircle2, X, AlertTriangle, Truck } from "lucide-react";
-import { uploadFile } from "@/lib/uploadFile";
 import { actorName } from "@/lib/actorName";
 import { LiveCameraCapture } from "@/components/shared/LiveCameraCapture";
+import { LiveVideoCapture } from "@/components/shared/LiveVideoCapture";
 import { PurchaseOperationDocuments, type OperationDocRow } from "./PurchaseOperationDocuments";
 
 type Row = {
@@ -161,13 +161,14 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
   // pantalla (LiveCameraCapture, con getUserMedia + canvas), nunca elegida de
   // galería/portapapeles — así se garantiza que es del momento real, no una
   // foto vieja o de otro producto. Video de evidencia ADEMÁS de la foto,
-  // opcional, útil sobre todo cuando llegan muchos bultos — pero el atributo
-  // `capture` del input nativo solo lo respeta el celular (en laptop cae al
-  // explorador de archivos normal), así que esa opción solo se ofrece si
-  // isMobileDevice.
+  // opcional, útil sobre todo cuando llegan muchos bultos.
+  // Confirmado 2026-08-25: el video también se graba en vivo (LiveVideoCapture,
+  // MediaRecorder con resolución/bitrate bajos), ya no con el selector nativo
+  // de cámara del celular — ese grababa a máxima calidad y no había forma de
+  // comprimirlo después en el navegador. getUserMedia solo funciona con
+  // cámara trasera real, así que esta opción solo se ofrece si isMobileDevice.
   const [receivedVideoUrls, setReceivedVideoUrls] = useState<string[]>([]);
-  const [uploadingVideo, setUploadingVideo] = useState(false);
-  const videoCameraInputRef = useRef<HTMLInputElement>(null);
+  const [takingVideo, setTakingVideo] = useState(false);
   const [isMobileDevice, setIsMobileDevice] = useState(false);
   useEffect(() => {
     setIsMobileDevice(/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent));
@@ -183,7 +184,7 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
   const [urgentDesc, setUrgentDesc] = useState("");
   const [urgentMediaUrls, setUrgentMediaUrls] = useState<string[]>([]);
   const [takingUrgentPhoto, setTakingUrgentPhoto] = useState(false);
-  const [uploadingUrgentMedia, setUploadingUrgentMedia] = useState(false);
+  const [takingUrgentVideo, setTakingUrgentVideo] = useState(false);
 
   const [pendingReplacements, setPendingReplacements] = useState<PendingReplacement[]>([]);
   const [openReplacementId, setOpenReplacementId] = useState<string | null>(null);
@@ -218,21 +219,12 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
     setMinorDifferenceConfirmed(false);
   }
 
-  // Confirmado 2026-08-18: video no se comprime (no es viable en el
-  // navegador sin una librería pesada) — mismo criterio que ya usa
-  // addUrgentMedia más abajo, el límite de 15 MB de /api/upload/sign sigue
-  // aplicando igual.
-  async function addVideo(file: File) {
-    if (receivedVideoUrls.length >= 2) return;
-    setUploadingVideo(true);
-    setErr("");
-    const uploaded = await uploadFile(file, "purchase-request-receipts");
-    setUploadingVideo(false);
-    if (!uploaded.ok) {
-      setErr(uploaded.error);
-      return;
-    }
-    setReceivedVideoUrls((vs) => [...vs, uploaded.url]);
+  // Confirmado 2026-08-25: LiveVideoCapture ya sube el archivo (graba
+  // comprimido con MediaRecorder + uploadFile internamente) y entrega la URL
+  // final — acá solo se agrega al arreglo, mismo criterio que las fotos.
+  function handleVideoCaptured(url: string) {
+    setReceivedVideoUrls((vs) => [...vs, url]);
+    setTakingVideo(false);
   }
 
   function removeVideo(idx: number) {
@@ -331,22 +323,12 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
     setErr("");
   }
 
-  // Confirmado 2026-08-18: la foto va por LiveCameraCapture (handler abajo);
-  // esta función queda exclusiva para el video opcional, capturado con el
-  // input nativo `capture="environment"` — video no se comprime (no es
-  // viable en el navegador sin una librería pesada), el límite de 15 MB de
-  // /api/upload/sign sigue aplicando igual.
-  async function addUrgentVideo(file: File) {
-    if (urgentMediaUrls.length >= 4) return;
-    setUploadingUrgentMedia(true);
-    setErr("");
-    const uploaded = await uploadFile(file, "purchase-request-receipts");
-    setUploadingUrgentMedia(false);
-    if (!uploaded.ok) {
-      setErr(uploaded.error);
-      return;
-    }
-    setUrgentMediaUrls((m) => [...m, uploaded.url]);
+  // Confirmado 2026-08-25: la foto va por LiveCameraCapture y el video
+  // opcional por LiveVideoCapture (ambos suben el archivo internamente) —
+  // acá solo se agrega la URL final al arreglo.
+  function handleUrgentVideoCaptured(url: string) {
+    setUrgentMediaUrls((m) => [...m, url]);
+    setTakingUrgentVideo(false);
   }
 
   function handleUrgentPhotoCaptured(url: string) {
@@ -762,31 +744,37 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                               <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">
                                 Video de evidencia — opcional ({receivedVideoUrls.length}/2)
                               </label>
-                              <div className="grid grid-cols-3 gap-2 mb-2.5">
-                                {receivedVideoUrls.map((url, i) => (
-                                  <div key={i} className="relative">
-                                    <video src={url} controls className="w-full h-40 rounded object-contain border border-rule bg-cloud" />
-                                    <button
-                                      type="button"
-                                      className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red text-white flex items-center justify-center cursor-pointer"
-                                      onClick={() => removeVideo(i)}
-                                    >
-                                      <X size={11} />
-                                    </button>
+                              {receivedVideoUrls.length > 0 && (
+                                <div className="grid grid-cols-3 gap-2 mb-2.5">
+                                  {receivedVideoUrls.map((url, i) => (
+                                    <div key={i} className="relative">
+                                      <video src={url} controls className="w-full h-40 rounded object-contain border border-rule bg-cloud" />
+                                      <button
+                                        type="button"
+                                        className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red text-white flex items-center justify-center cursor-pointer"
+                                        onClick={() => removeVideo(i)}
+                                      >
+                                        <X size={11} />
+                                      </button>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                              {receivedVideoUrls.length < 2 && (
+                                takingVideo ? (
+                                  <div className="mb-2.5">
+                                    <LiveVideoCapture folder="purchase-request-receipts" onCaptured={handleVideoCaptured} onCancel={() => setTakingVideo(false)} />
                                   </div>
-                                ))}
-                                {receivedVideoUrls.length < 2 && (
-                                  <label
-                                    tabIndex={0}
-                                    onClick={(e) => e.preventDefault()}
-                                    className="flex flex-col items-center justify-center gap-1 h-40 border-[1.5px] border-dashed border-rule rounded text-[11px] text-steel cursor-pointer hover:border-teal"
+                                ) : (
+                                  <button
+                                    type="button"
+                                    className="flex items-center gap-1.5 text-[12.5px] font-semibold border-[1.5px] border-dashed border-rule rounded-md px-3.5 py-2.5 cursor-pointer hover:border-teal mb-2.5"
+                                    onClick={() => setTakingVideo(true)}
                                   >
-                                    {uploadingVideo ? <span className="w-4 h-4 rounded-full border-2 border-rule border-t-teal animate-spin" /> : <Camera size={16} />}
-                                    Grabar video
-                                    <input ref={videoCameraInputRef} type="file" accept="video/*" capture="environment" className="hidden" onChange={(e) => e.target.files?.[0] && addVideo(e.target.files[0])} />
-                                  </label>
-                                )}
-                              </div>
+                                    <Camera size={16} /> Grabar video
+                                  </button>
+                                )
+                              )}
                             </>
                           )}
 
@@ -940,6 +928,10 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                               <div className="mb-2.5">
                                 <LiveCameraCapture folder="purchase-request-receipts" onCaptured={handleUrgentPhotoCaptured} onCancel={() => setTakingUrgentPhoto(false)} />
                               </div>
+                            ) : takingUrgentVideo ? (
+                              <div className="mb-2.5">
+                                <LiveVideoCapture folder="purchase-request-receipts" onCaptured={handleUrgentVideoCaptured} onCancel={() => setTakingUrgentVideo(false)} />
+                              </div>
                             ) : (
                               <div className="flex items-center gap-2 mb-2.5">
                                 <button
@@ -950,11 +942,13 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                                   <Camera size={14} /> Tomar foto
                                 </button>
                                 {isMobileDevice && (
-                                  <label className="flex items-center gap-1.5 text-[12px] font-semibold border-[1.5px] border-dashed border-red/40 text-red rounded-md px-3 py-2 cursor-pointer hover:border-red">
-                                    {uploadingUrgentMedia ? <span className="w-4 h-4 rounded-full border-2 border-rule border-t-red animate-spin" /> : <Camera size={14} />}
-                                    Grabar video
-                                    <input type="file" accept="video/*" capture="environment" className="hidden" onChange={(e) => e.target.files?.[0] && addUrgentVideo(e.target.files[0])} />
-                                  </label>
+                                  <button
+                                    type="button"
+                                    className="flex items-center gap-1.5 text-[12px] font-semibold border-[1.5px] border-dashed border-red/40 text-red rounded-md px-3 py-2 cursor-pointer hover:border-red"
+                                    onClick={() => setTakingUrgentVideo(true)}
+                                  >
+                                    <Camera size={14} /> Grabar video
+                                  </button>
                                 )}
                               </div>
                             )
