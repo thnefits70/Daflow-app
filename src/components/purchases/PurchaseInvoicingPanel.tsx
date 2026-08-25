@@ -159,7 +159,15 @@ function monthFilterLabel(month: string) {
 // queda disabled con un tooltip cuando isAdmin=true.
 const ADMIN_LOCK_TITLE = "Exclusivo de Nairoby (líder de Finanzas)";
 
-export function PurchaseInvoicingPanel({ isAdmin = false }: { isAdmin?: boolean }) {
+// Fix confirmado 2026-08-25: pedido explícito del usuario — admin sí
+// transfiere la plata de mercadería (Bryan solo solicita), así que pagar
+// esa parte ya no debe quedar bloqueado para admin, a diferencia de
+// registrar factura, pagar flete y marcar para revisar, que siguen
+// exclusivos de Nairoby. Por defecto sigue igual que antes (bloqueado
+// cuando isAdmin) para no romper algún caller que no pase el prop nuevo.
+export function PurchaseInvoicingPanel({ isAdmin = false, canPayMerchandise }: { isAdmin?: boolean; canPayMerchandise?: boolean }) {
+  const canPay = canPayMerchandise ?? !isAdmin;
+  const payLocked = !canPay;
   const router = useRouter();
   const [rows, setRows] = useState<Row[] | null>(null);
   const [pettyCash, setPettyCash] = useState<{ count: number; total: number } | null>(null);
@@ -572,7 +580,10 @@ export function PurchaseInvoicingPanel({ isAdmin = false }: { isAdmin?: boolean 
     <div>
       {isAdmin && (
         <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-steel mb-3">
-          <Lock size={13} /> Vista de solo lectura — registrar factura y marcar pagos es exclusivo de Nairoby (líder de Finanzas)
+          <Lock size={13} />
+          {canPay
+            ? "Puedes pagar mercadería tú mismo. Registrar factura, pagar flete y marcar para revisar sigue siendo exclusivo de Nairoby (líder de Finanzas)"
+            : "Vista de solo lectura — registrar factura y marcar pagos es exclusivo de Nairoby (líder de Finanzas)"}
         </div>
       )}
       {pettyCash && pettyCash.count > 0 && (
@@ -708,8 +719,8 @@ export function PurchaseInvoicingPanel({ isAdmin = false }: { isAdmin?: boolean 
                       <div className="flex items-center gap-2">
                         <button
                           type="button"
-                          disabled={isAdmin || busyGroup === groupId || (netAmountFor(groupId) > 0 && (!proofUrl || proofVerifying || !proofVerifyResult?.matches))}
-                          title={isAdmin ? ADMIN_LOCK_TITLE : undefined}
+                          disabled={payLocked || busyGroup === groupId || (netAmountFor(groupId) > 0 && (!proofUrl || proofVerifying || !proofVerifyResult?.matches))}
+                          title={payLocked ? ADMIN_LOCK_TITLE : undefined}
                           className="rounded border border-blue bg-blue px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer disabled:opacity-60"
                           onClick={() => pay(groupId)}
                         >
@@ -721,7 +732,7 @@ export function PurchaseInvoicingPanel({ isAdmin = false }: { isAdmin?: boolean 
                   ) : (
                     <>
                       <div className="text-[11px] text-steel mb-1.5">Paso 1 de 2: transfiere el monto a la cuenta de arriba (o usa el crédito, si aplica). Después haz clic aquí para subir el comprobante y cerrar la solicitud.</div>
-                      <button type="button" disabled={isAdmin} title={isAdmin ? ADMIN_LOCK_TITLE : undefined} className="rounded border border-blue bg-blue px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed" onClick={() => openPay(groupId, g[0].supplier.id)}>
+                      <button type="button" disabled={payLocked} title={payLocked ? ADMIN_LOCK_TITLE : undefined} className="rounded border border-blue bg-blue px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed" onClick={() => openPay(groupId, g[0].supplier.id)}>
                         💳 Ya transferí, cerrar solicitud
                       </button>
                     </>

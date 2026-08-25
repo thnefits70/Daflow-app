@@ -665,6 +665,22 @@ export async function canActOnPurchaseInvoices() {
   return !!user.isLeader && user.leadsDept?.code === "FIN";
 }
 
+// Fix confirmado 2026-08-25: pedido explícito del usuario — quien de
+// verdad transfiere la plata a mercadería es admin (Bryan solo solicita
+// desde Compras), así que admin debe poder cerrar/pagar esas solicitudes
+// él mismo, a diferencia de registrar factura, pagar flete y marcar para
+// revisar, que siguen exclusivos de Nairoby (canActOnPurchaseInvoices
+// arriba, sin cambios) — por eso es una función aparte y no un ajuste a
+// esa.
+export async function canPayMerchandisePurchases() {
+  const session = await auth();
+  if (!session) return false;
+  if (session.user.role === "admin") return true;
+  const user = await purchasesUserContext(session.user.id);
+  if (!user) return false;
+  return !!user.isLeader && user.leadsDept?.code === "FIN";
+}
+
 /**
  * ---------------- Reingreso de Mercadería ----------------
  * Diseñado y aprobado 2026-08-19. Tres roles, mismo espíritu que Control de

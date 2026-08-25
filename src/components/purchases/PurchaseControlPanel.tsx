@@ -27,6 +27,7 @@ export function PurchaseControlPanel({
   canReceiveTeam,
   canApproveReceiving,
   canInvoice,
+  canPayMerchandise,
   isAdmin,
 }: {
   deptId: string;
@@ -36,6 +37,7 @@ export function PurchaseControlPanel({
   canReceiveTeam: boolean;
   canApproveReceiving: boolean;
   canInvoice: boolean;
+  canPayMerchandise: boolean;
   isAdmin: boolean;
 }) {
   // Confirmado 2026-08-08: "Comparar precios" va primera de izquierda a
@@ -177,12 +179,16 @@ export function PurchaseControlPanel({
         <>
           <TabGuide storageKey="compras-finanzas">
             {isAdmin ? (
-              <>Vista de solo lectura de las facturas y pagos que va cerrando Finanzas. Registrar factura y marcar pagos es exclusivo de Nairoby (líder de Finanzas).</>
+              canPayMerchandise ? (
+                <>Acá pagas la mercadería ya aprobada tú mismo. Registrar factura, pagar flete y marcar para revisar sigue siendo exclusivo de Nairoby (líder de Finanzas), vista de solo lectura para el resto.</>
+              ) : (
+                <>Vista de solo lectura de las facturas y pagos que va cerrando Finanzas. Registrar factura y marcar pagos es exclusivo de Nairoby (líder de Finanzas).</>
+              )
             ) : (
               <>Sube acá la factura de cada pedido ya recibido — con eso se cierra el ciclo de la compra.</>
             )}
           </TabGuide>
-          <PurchaseInvoicingPanel isAdmin={isAdmin} />
+          <PurchaseInvoicingPanel isAdmin={isAdmin} canPayMerchandise={canPayMerchandise} />
         </>
       )}
       {tab === "auditoria" && (

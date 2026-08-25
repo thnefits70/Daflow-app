@@ -2,14 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
-import { canActOnPurchaseInvoices } from "@/lib/guards";
+import { canPayMerchandisePurchases } from "@/lib/guards";
 import { notifyOwner } from "@/lib/notifications";
 
 const schema = z.object({ paymentProofUrl: z.string().url() });
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
-  if (!(await canActOnPurchaseInvoices()) || !session) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+  if (!(await canPayMerchandisePurchases()) || !session) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
   const { id } = await params;
   const body = await req.json().catch(() => null);

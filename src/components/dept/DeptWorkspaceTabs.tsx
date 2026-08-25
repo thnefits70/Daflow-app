@@ -82,6 +82,7 @@ export function DeptWorkspaceTabs({
   canReceivePurchasesTeam = false,
   canApprovePurchaseReceiving = false,
   canInvoicePurchases = false,
+  canPayMerchandisePurchases = false,
   canAccessSuppliers = false,
   supplierList = [],
   supplierPending = [],
@@ -152,6 +153,7 @@ export function DeptWorkspaceTabs({
   canReceivePurchasesTeam?: boolean;
   canApprovePurchaseReceiving?: boolean;
   canInvoicePurchases?: boolean;
+  canPayMerchandisePurchases?: boolean;
   // Proveedores — movido de su propio ítem de sidebar a esta pestaña
   // (confirmado 2026-08-21), entre "Control de Compras" y "Documentos".
   // canAccessSuppliers gatea si la pestaña se ve (ver access.canView /
@@ -350,6 +352,7 @@ export function DeptWorkspaceTabs({
           canReceiveTeam={canReceivePurchasesTeam}
           canApproveReceiving={canApprovePurchaseReceiving}
           canInvoice={canInvoicePurchases}
+          canPayMerchandise={canPayMerchandisePurchases}
           isAdmin={isAdmin}
         />
       )}

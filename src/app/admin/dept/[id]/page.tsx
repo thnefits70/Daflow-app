@@ -108,6 +108,13 @@ export default async function DeptWorkspacePage({ params }: { params: Promise<{ 
         canReceivePurchasesTeam={false}
         canApprovePurchaseReceiving={false}
         canInvoicePurchases={dept.code === "COM"}
+        // Confirmado 2026-08-25: pedido explícito del usuario — admin
+        // transfiere realmente la plata de mercadería (Bryan solo
+        // solicita), así que puede pagar/cerrar esas solicitudes él mismo.
+        // Registrar factura, pagar flete y marcar para revisar siguen
+        // exclusivos de Nairoby (ver canPayMerchandisePurchases en
+        // guards.ts).
+        canPayMerchandisePurchases={dept.code === "COM"}
         canAccessSuppliers={canAccessSuppliers}
         supplierList={supplierList.map((s) => toSupplierDTO(s, true))}
         supplierPending={supplierPending.map((s) => toSupplierDTO(s, true))}
