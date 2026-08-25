@@ -235,8 +235,18 @@ export function DocumentCaptureFlow({ reason }: { reason: "DESPACHO" | "GARANTIA
         </label>
         <div className="flex gap-2 flex-wrap mb-2">
           {photos.map((p, i) => (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img key={i} src={p} alt={`Foto ${i + 1}`} className="w-16 h-16 object-cover rounded border border-rule" />
+            <div key={i} className="relative">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={p} alt={`Foto ${i + 1}`} className="w-16 h-16 object-cover rounded border border-rule" />
+              <button
+                type="button"
+                title="Quitar esta foto"
+                className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red text-white flex items-center justify-center cursor-pointer"
+                onClick={() => setPhotos((ps) => ps.filter((_, idx) => idx !== i))}
+              >
+                <X size={11} />
+              </button>
+            </div>
           ))}
         </div>
         {taking ? (
