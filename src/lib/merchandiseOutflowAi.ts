@@ -10,7 +10,7 @@ function extractJson<T>(text: string): T {
   return JSON.parse(match[0]) as T;
 }
 
-export type OutflowManifestRow = { name: string; quantity: number; confidence: "alta" | "media" | "baja" };
+export type OutflowManifestRow = { name: string; quantity: number; confidence: "alta" | "media" | "baja"; catalogMatch: string | null };
 export type OutflowManifestReadResult = { rows: OutflowManifestRow[] };
 
 // Confirmado 2026-08-25: Daniel fotografía la hoja física de despacho (o el
@@ -20,7 +20,24 @@ export type OutflowManifestReadResult = { rows: OutflowManifestRow[] };
 // el catálogo (ProductMatchPicker) antes de quedar en el lote. Mismo
 // criterio que readPurchaseQuote: solo extrae lo que de verdad está en la
 // imagen, nunca inventa.
-export async function readOutflowManifest(params: { photoUrls: string[]; documentKind: "despacho" | "garantía"; actorId: string; deptId?: string }): Promise<OutflowManifestReadResult> {
+//
+// Confirmado 2026-08-26: además de leer nombre+cantidad, la misma llamada
+// intenta emparejar cada renglón contra el catálogo ya cargado (Just) para
+// que Daniel no tenga que buscar cada producto a mano — esto NO es la
+// búsqueda por IA que se descartó en Reingreso por costo (esa hacía una
+// llamada de reconocimiento por CADA foto); acá es una sola llamada por
+// lote que ya se hace de todos modos para leer el documento, solo se le
+// pide que además compare contra la lista de nombres. El emparejamiento
+// sigue sin ser definitivo: el servidor valida que el nombre devuelto
+// exista tal cual en el catálogo antes de confiar en él (ver extract/route.ts),
+// y Daniel igual confirma cada fila antes de agregarla al lote.
+export async function readOutflowManifest(params: {
+  photoUrls: string[];
+  documentKind: "despacho" | "garantía";
+  catalogNames: string[];
+  actorId: string;
+  deptId?: string;
+}): Promise<OutflowManifestReadResult> {
   const client = getAnthropicClient();
   const fileBlocks = await Promise.all(params.photoUrls.map((u) => fetchFileContentBlock(u)));
 
@@ -33,7 +50,14 @@ export async function readOutflowManifest(params: { photoUrls: string[]; documen
       "cantidad — nunca inventes un producto ni una cantidad que no esté escrita. Si el documento trae varias " +
       "fotos (varias hojas o continuación), combina todos los renglones en una sola lista. Si la misma foto " +
       "repite el mismo nombre de producto en más de un renglón, súmalos en una sola fila con la cantidad total. " +
-      'Responde ÚNICAMENTE un JSON: {"rows": [{"name": string, "quantity": number, "confidence": "alta"|"media"|"baja"}]}. ' +
+      "También te doy la lista de nombres de productos ya registrados en el catálogo (ver más abajo). Para cada " +
+      "renglón, si corresponde con confianza a uno de esa lista — aunque en el papel esté escrito distinto " +
+      "(abreviado, mal escrito, en otro orden, con o sin tildes) — copia en \"catalogMatch\" el nombre EXACTO tal " +
+      "como aparece en la lista del catálogo, letra por letra. Si dos renglones distintos del documento " +
+      "corresponden al mismo producto del catálogo (aunque estén escritos distinto entre sí), igual súmalos en " +
+      "una sola fila. Si ningún nombre del catálogo corresponde con confianza real, deja \"catalogMatch\": null — " +
+      "nunca fuerces una coincidencia dudosa. " +
+      'Responde ÚNICAMENTE un JSON: {"rows": [{"name": string, "quantity": number, "confidence": "alta"|"media"|"baja", "catalogMatch": string|null}]}. ' +
       "name es el nombre del producto tal como está escrito en el documento (no lo traduzcas ni lo normalices). " +
       "quantity es el número de unidades de ese renglón. confidence describe qué tan segura estás de haber leído " +
       "bien ESE renglón puntual: \"alta\" si la letra/número es clara y no da lugar a dudas, \"media\" si hay algo " +
@@ -43,7 +67,16 @@ export async function readOutflowManifest(params: { photoUrls: string[]; documen
     messages: [
       {
         role: "user" as const,
-        content: [...fileBlocks, { type: "text" as const, text: "Lee este documento y devuelve el JSON pedido." }],
+        content: [
+          ...fileBlocks,
+          {
+            type: "text" as const,
+            text:
+              "Catálogo de productos ya registrados (usa estos nombres EXACTOS en \"catalogMatch\" cuando corresponda):\n" +
+              params.catalogNames.join("\n"),
+          },
+          { type: "text" as const, text: "Lee este documento y devuelve el JSON pedido." },
+        ],
       },
     ],
   };
@@ -74,7 +107,11 @@ export async function readOutflowManifest(params: { photoUrls: string[]; documen
     rows: Array.isArray(result.rows)
       ? result.rows
           .filter((r) => r.name && r.quantity > 0)
-          .map((r) => ({ ...r, confidence: r.confidence === "alta" || r.confidence === "media" || r.confidence === "baja" ? r.confidence : "media" }))
+          .map((r) => ({
+            ...r,
+            confidence: r.confidence === "alta" || r.confidence === "media" || r.confidence === "baja" ? r.confidence : "media",
+            catalogMatch: typeof r.catalogMatch === "string" && r.catalogMatch.trim() ? r.catalogMatch : null,
+          }))
       : [],
   };
 }

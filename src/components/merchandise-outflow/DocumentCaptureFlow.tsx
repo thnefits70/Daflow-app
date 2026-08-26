@@ -86,11 +86,11 @@ export function DocumentCaptureFlow({ reason }: { reason: "DESPACHO" | "GARANTIA
       const result = await postJson(`/api/merchandise-outflow/batches/${batch.id}/extract`, { photoUrls: photos });
       if (result.error) setError(result.error);
       setRows(
-        (result.rows ?? []).map((r: { name: string; quantity: number; confidence?: Confidence }) => ({
+        (result.rows ?? []).map((r: { name: string; quantity: number; confidence?: Confidence; catalogItem?: MatchCatalogItem | null }) => ({
           name: r.name,
           quantity: r.quantity,
           confidence: r.confidence ?? "media",
-          selected: null,
+          selected: r.catalogItem ?? null,
           manualName: "",
         }))
       );
@@ -116,6 +116,12 @@ export function DocumentCaptureFlow({ reason }: { reason: "DESPACHO" | "GARANTIA
     } catch (e) {
       setError(e instanceof Error ? e.message : "No se pudo agregar el producto.");
       setRows((rs) => rs.map((r, i) => (i === index ? { ...r, adding: false } : r)));
+    }
+  }
+
+  async function addAllMatched() {
+    for (let i = 0; i < rows.length; i++) {
+      if (rows[i].selected && !rows[i].added && !rows[i].adding) await addRow(i);
     }
   }
 
@@ -310,7 +316,21 @@ export function DocumentCaptureFlow({ reason }: { reason: "DESPACHO" | "GARANTIA
 
       {rows.length > 0 && (
         <div className="flex flex-col gap-2 mb-3">
-          <div className="text-[10px] font-semibold uppercase tracking-wide text-steel">Confirma cada renglón antes de agregarlo</div>
+          <div className="bg-cloud rounded-md p-2.5 text-[12px]">
+            <span className="font-semibold">{rows.length} producto(s) detectado(s)</span>
+            {" · "}
+            {rows.reduce((sum, r) => sum + r.quantity, 0)} unidad(es) en total
+            {" · "}
+            {rows.filter((r) => r.selected).length} coincidieron con el catálogo
+          </div>
+          <div className="flex items-center justify-between gap-2">
+            <div className="text-[10px] font-semibold uppercase tracking-wide text-steel">Confirma cada renglón antes de agregarlo</div>
+            {rows.some((r) => r.selected && !r.added) && (
+              <button type="button" className="text-[11px] font-bold text-teal cursor-pointer shrink-0" onClick={addAllMatched}>
+                Agregar todos los que coincidieron
+              </button>
+            )}
+          </div>
           {rows.map((row, i) =>
             row.added ? (
               <div key={i} className="bg-green/10 border border-green/35 rounded-md p-2.5 text-[12px] flex items-center gap-1.5">
