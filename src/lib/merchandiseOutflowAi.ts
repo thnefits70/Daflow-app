@@ -26,7 +26,7 @@ const SUBMIT_OUTFLOW_ROWS_TOOL = {
             code: {
               type: "string",
               description:
-                "El código interno del producto (mismo código de Just/Dropi) SOLO si aparece escrito junto a este renglón en el documento — cópialo tal cual, dígitos/letras exactos, sin espacios. Omite este campo por completo si no hay ningún código visible para este renglón — nunca lo inventes ni lo copies de otro renglón.",
+                "El código interno del producto (mismo código de Just/Dropi), SOLO si aparece escrito junto a este renglón. La forma más común en estos documentos es entre paréntesis junto al nombre, como \"(ID: 101104)\" — en ese caso transcribe SOLO los dígitos (ej. \"101104\"), sin las palabras \"ID\" ni los paréntesis. Si en cambio el código no es numérico (ej. unas letras tipo \"CCM\"), cópialo tal cual está escrito. Omite este campo por completo si no hay ningún código visible para este renglón — nunca lo inventes ni lo copies de otro renglón.",
             },
             confidence: {
               type: "string",
@@ -77,9 +77,12 @@ export async function readOutflowManifest(params: { photoUrls: string[]; documen
       "fotos (varias hojas o continuación), combina todos los renglones en una sola lista. Si la misma foto " +
       "repite el mismo nombre de producto en más de un renglón, súmalos en una sola fila con la cantidad total. " +
       "Algunos documentos traen, junto a cada renglón, el código interno del producto (el mismo código que usa " +
-      "Just/Dropi) — si lo ves, transcríbelo en \"code\" tal cual, sin mezclarlo con el nombre ni con el código de " +
-      "otro renglón. Si no se distingue con claridad algún renglón, omítelo de la lista en vez de adivinar. Llama " +
-      "a submit_outflow_rows con el resultado — es la única forma de responder.",
+      "Just/Dropi) — casi siempre entre paréntesis junto al nombre, como \"(ID: 101104)\". Cuando lo veas así, " +
+      "transcribe en \"code\" SOLO los dígitos (ej. \"101104\"), sin la palabra \"ID\" ni los paréntesis — ese " +
+      "número es la referencia principal para identificar el producto exacto. Si en vez de un número ves un " +
+      "código de letras (ej. \"CCM\"), transcríbelo tal cual está escrito. Nunca mezcles el código de un renglón " +
+      "con el nombre o el código de otro renglón. Si no se distingue con claridad algún renglón, omítelo de la " +
+      "lista en vez de adivinar. Llama a submit_outflow_rows con el resultado — es la única forma de responder.",
     tools: [SUBMIT_OUTFLOW_ROWS_TOOL],
     tool_choice: { type: "tool" as const, name: "submit_outflow_rows" },
     messages: [{ role: "user" as const, content: [...fileBlocks, { type: "text" as const, text: "Lee este documento y llama a submit_outflow_rows con el resultado." }] }],
