@@ -395,6 +395,16 @@ export function PayrollRolesPanel({ canEdit, canProposeFixedBonus, canApproveFix
   }
   useEffect(loadTransfer, [period]);
 
+  // Confirmado 2026-08-25: bug real encontrado por el usuario — editar las
+  // líneas de un rol solo refrescaba `detail`, nunca `transfer`, así que el
+  // "Total a transferir" se quedaba congelado con el monto de antes del
+  // cambio mientras el período seguía en PENDING_APPROVAL (el backend sí
+  // recalculaba `totalAmount`, pero el front nunca lo volvía a pedir).
+  function refreshAfterRoleEdit() {
+    loadDetail();
+    loadTransfer();
+  }
+
   async function generate() {
     setBusy(true);
     setErr("");
@@ -518,7 +528,7 @@ export function PayrollRolesPanel({ canEdit, canProposeFixedBonus, canApproveFix
                     canEdit={canEdit}
                     monthlyRoleId={detail.monthlyRoleIdByEmployee?.[r.employeeId]}
                     showPayout={transfer?.status === "COMPLETED"}
-                    onChanged={loadDetail}
+                    onChanged={refreshAfterRoleEdit}
                   />
                 ))}
               </div>
