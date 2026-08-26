@@ -87,7 +87,7 @@ function BankAccountBlock({ account }: { account: BankAccount | null }) {
 
 type VerifyResult = { readAmount: number | null; matches: boolean; note: string };
 
-function ProofUploader({ period, onSent }: { period: string; onSent: () => void }) {
+function ProofUploader({ apiBase, onSent }: { apiBase: string; onSent: () => void }) {
   const [proofUrl, setProofUrl] = useState<string | null>(null);
   const [proofName, setProofName] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -107,7 +107,7 @@ function ProofUploader({ period, onSent }: { period: string; onSent: () => void 
     setProofName(res.name);
 
     setVerifying(true);
-    const verifyRes = await fetch(`/api/payroll/periods/${period}/transfer/verify-proof`, {
+    const verifyRes = await fetch(`${apiBase}/verify-proof`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ proofUrl: res.url }),
@@ -123,7 +123,7 @@ function ProofUploader({ period, onSent }: { period: string; onSent: () => void 
     if (!proofUrl || blockedByMismatch) return;
     setSubmitting(true);
     setErr("");
-    const res = await fetch(`/api/payroll/periods/${period}/transfer/proof`, {
+    const res = await fetch(`${apiBase}/proof`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ proofUrl, proofName }),
@@ -248,15 +248,15 @@ function DestinationPicker({ destination, onChange }: { destination: Destination
   );
 }
 
-function ResendButton({ period, onSent }: { period: string; onSent: () => void }) {
-  const [destination, setDestination] = useState<Destination>(period.endsWith("-Q2") ? "ADMIN_PRODUBANCO" : "NAIROBY");
+function ResendButton({ apiBase, defaultDestination, onSent }: { apiBase: string; defaultDestination: Destination; onSent: () => void }) {
+  const [destination, setDestination] = useState<Destination>(defaultDestination);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
 
   async function send() {
     setBusy(true);
     setErr("");
-    const res = await fetch(`/api/payroll/periods/${period}/transfer/confirm`, {
+    const res = await fetch(`${apiBase}/confirm`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ destination }),
@@ -281,14 +281,12 @@ function ResendButton({ period, onSent }: { period: string; onSent: () => void }
   );
 }
 
-function SendTotalPrompt({ period, onSent }: { period: string; onSent: () => void }) {
+function SendTotalPrompt({ apiBase, defaultDestination, title, description, onSent }: { apiBase: string; defaultDestination: Destination; title: string; description: string; onSent: () => void }) {
   return (
     <div className="bg-surface border border-rule rounded-md p-3.5 mb-4">
-      <div className="font-bold text-[13.5px] mb-1">Transferencia de nómina</div>
-      <div className="text-[12px] text-steel mb-2.5">
-        Cuando ya revisaste todo y está listo, enviá el total al admin para que transfiera — recién después de eso se puede publicar.
-      </div>
-      <ResendButton period={period} onSent={onSent} />
+      <div className="font-bold text-[13.5px] mb-1">{title}</div>
+      <div className="text-[12px] text-steel mb-2.5">{description}</div>
+      <ResendButton apiBase={apiBase} defaultDestination={defaultDestination} onSent={onSent} />
     </div>
   );
 }
@@ -303,14 +301,20 @@ function SendTotalPrompt({ period, onSent }: { period: string; onSent: () => voi
 // habilita "Publicar" en PayrollRolesPanel. Nairoby ve todo esto en modo
 // solo lectura (necesita ver también la cuenta Produbanco del admin en la
 // 2da quincena, porque es ella quien entra ahí a pagar).
-export function PayrollTransferPanel({
-  period,
+function TransferPanel({
+  apiBase,
+  title,
+  description,
+  defaultDestination,
   isAdmin,
   canEdit,
   transfer,
   onChanged,
 }: {
-  period: string;
+  apiBase: string;
+  title: string;
+  description: string;
+  defaultDestination: Destination;
   isAdmin: boolean;
   canEdit: boolean;
   transfer: Transfer | null | undefined;
@@ -324,7 +328,7 @@ export function PayrollTransferPanel({
   async function approve() {
     setBusy(true);
     setErr("");
-    const res = await fetch(`/api/payroll/periods/${period}/transfer/approve`, { method: "POST" });
+    const res = await fetch(`${apiBase}/approve`, { method: "POST" });
     setBusy(false);
     if (!res.ok) { setErr("No se pudo aprobar."); return; }
     onChanged();
@@ -334,7 +338,7 @@ export function PayrollTransferPanel({
     if (!reason.trim()) return;
     setBusy(true);
     setErr("");
-    const res = await fetch(`/api/payroll/periods/${period}/transfer/reject`, {
+    const res = await fetch(`${apiBase}/reject`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ reason: reason.trim() }),
@@ -350,7 +354,7 @@ export function PayrollTransferPanel({
     if (!window.confirm("¿Seguro que el comprobante subido no corresponde? Esto vuelve la transferencia a \"Aprobado — falta transferir\" y borra el comprobante actual.")) return;
     setBusy(true);
     setErr("");
-    const res = await fetch(`/api/payroll/periods/${period}/transfer/undo-completion`, { method: "POST" });
+    const res = await fetch(`${apiBase}/undo-completion`, { method: "POST" });
     setBusy(false);
     if (!res.ok) { setErr("No se pudo deshacer la confirmación."); return; }
     onChanged();
@@ -358,7 +362,7 @@ export function PayrollTransferPanel({
 
   if (transfer === undefined) return null;
   if (transfer === null) {
-    if (canEdit) return <SendTotalPrompt period={period} onSent={onChanged} />;
+    if (canEdit) return <SendTotalPrompt apiBase={apiBase} defaultDestination={defaultDestination} title={title} description={description} onSent={onChanged} />;
     return null;
   }
 
@@ -368,7 +372,7 @@ export function PayrollTransferPanel({
     <div className="bg-surface border border-rule rounded-md p-3.5 mb-4">
       <div className="flex items-center justify-between gap-2 mb-2.5">
         <div>
-          <div className="font-bold text-[13.5px]">Transferencia de nómina</div>
+          <div className="font-bold text-[13.5px]">{title}</div>
           <div className="text-[10.5px] text-steel">{destinationLabel}</div>
         </div>
         <div className="flex flex-col items-end gap-0.5 bg-teal/15 border-2 border-teal/50 rounded-md px-3 py-1.5">
@@ -387,7 +391,7 @@ export function PayrollTransferPanel({
           {canEdit && <div className="text-steel mt-1">Corregí el rol señalado y volvé a enviar el total.</div>}
         </div>
       )}
-      {canEdit && transfer.status === "REJECTED" && <ResendButton period={period} onSent={onChanged} />}
+      {canEdit && transfer.status === "REJECTED" && <ResendButton apiBase={apiBase} defaultDestination={defaultDestination} onSent={onChanged} />}
 
       {transfer.status === "COMPLETED" && (
         <div className="text-[12px] text-steel">
@@ -436,7 +440,7 @@ export function PayrollTransferPanel({
         </div>
       )}
 
-      {isAdmin && transfer.status === "APPROVED" && <ProofUploader period={period} onSent={onChanged} />}
+      {isAdmin && transfer.status === "APPROVED" && <ProofUploader apiBase={apiBase} onSent={onChanged} />}
 
       {!isAdmin && transfer.status === "PENDING_APPROVAL" && (
         <div className="text-[11.5px] text-steel-dim flex items-center gap-1.5"><Send size={11} /> Esperando aprobación del admin.</div>
@@ -445,5 +449,76 @@ export function PayrollTransferPanel({
         <div className="text-[11.5px] text-steel-dim flex items-center gap-1.5"><Send size={11} /> Aprobado — el admin va a transferir.</div>
       )}
     </div>
+  );
+}
+
+// Confirmado 2026-08-24: pedido explícito del usuario — el orden real es
+// primero pagar, después publicar/entregar el rol a cada colaborador.
+// Nairoby envía el total (suma de "Líquido a pagar" de todos los roles)
+// mientras el período sigue en borrador — la cuenta destino es automática
+// según el período (ver isEndOfMonthQuincena en payrollCalc.ts). El admin
+// tiene 3 pasos separados: Aprobar, Rechazar (con motivo) y, aparte, subir
+// el comprobante ya transferido — recién con el comprobante subido se
+// habilita "Publicar" en PayrollRolesPanel. Nairoby ve todo esto en modo
+// solo lectura (necesita ver también la cuenta Produbanco del admin en la
+// 2da quincena, porque es ella quien entra ahí a pagar).
+export function PayrollTransferPanel({
+  period,
+  isAdmin,
+  canEdit,
+  transfer,
+  onChanged,
+}: {
+  period: string;
+  isAdmin: boolean;
+  canEdit: boolean;
+  transfer: Transfer | null | undefined;
+  onChanged: () => void;
+}) {
+  return (
+    <TransferPanel
+      apiBase={`/api/payroll/periods/${period}/transfer`}
+      title="Transferencia de nómina"
+      description="Cuando ya revisaste todo y está listo, enviá el total al admin para que transfiera — recién después de eso se puede publicar."
+      defaultDestination={period.endsWith("-Q2") ? "ADMIN_PRODUBANCO" : "NAIROBY"}
+      isAdmin={isAdmin}
+      canEdit={canEdit}
+      transfer={transfer}
+      onChanged={onChanged}
+    />
+  );
+}
+
+// Confirmado 2026-08-26: pedido explícito del usuario — segundo total
+// aparte del de nómina, con lo retenido de IESS de todos los colaboradores
+// esa quincena (siempre fin de mes). Mismo ciclo completo de
+// envío/aprobación/comprobante que la nómina, pero un registro
+// (PayrollIessTransfer) totalmente independiente — nunca se mezclan. La
+// cuenta destino por default es "Cuenta para recibir transferencias"
+// (Pichincha), confirmado con el usuario.
+export function PayrollIessTransferPanel({
+  period,
+  isAdmin,
+  canEdit,
+  transfer,
+  onChanged,
+}: {
+  period: string;
+  isAdmin: boolean;
+  canEdit: boolean;
+  transfer: Transfer | null | undefined;
+  onChanged: () => void;
+}) {
+  return (
+    <TransferPanel
+      apiBase={`/api/payroll/periods/${period}/iess-transfer`}
+      title="Transferencia de IESS"
+      description="Total retenido de IESS a todos los colaboradores este fin de mes. Cuando esté listo, enviá el total al admin para que transfiera a la cuenta desde la que se paga al IESS."
+      defaultDestination="ADMIN_COMPANY"
+      isAdmin={isAdmin}
+      canEdit={canEdit}
+      transfer={transfer}
+      onChanged={onChanged}
+    />
   );
 }

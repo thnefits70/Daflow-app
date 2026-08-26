@@ -66,3 +66,10 @@ export async function readPayrollTransferProof(params: { proofUrl: string; actor
 export async function readIndividualPayrollProof(params: { proofUrl: string; actorId: string }): Promise<PayrollTransferProofReadResult> {
   return readTransferProofAmount({ ...params, feature: "nomina_pago_individual_comprobante" });
 }
+
+// Mismo lector, para el total aparte de IESS retenido de todos los
+// colaboradores (ver totalIessFromRoles en payroll.ts) — comparado contra
+// PayrollIessTransfer.totalAmount, nunca contra el total de nómina.
+export async function readIessTransferProof(params: { proofUrl: string; actorId: string }): Promise<PayrollTransferProofReadResult> {
+  return readTransferProofAmount({ ...params, feature: "nomina_iess_comprobante" });
+}

@@ -2794,8 +2794,9 @@ model PayrollPeriod {
   publishedById String?
   publishedBy   User?     @relation("PayrollPeriodPublishedBy", fields: [publishedById], references: [id], onDelete: SetNull)
 
-  roles    PayrollQuincenaRole[]
-  transfer PayrollTransfer?
+  roles        PayrollQuincenaRole[]
+  transfer     PayrollTransfer?
+  iessTransfer PayrollIessTransfer?
 
   @@index([status])
 }
@@ -2832,6 +2833,38 @@ enum PayrollTransferDestination {
 // roles/[roleId]/correct) recalcula totalAmount y saca a esto de REJECTED,
 // pero nunca toca un registro ya APPROVED/COMPLETED — esa plata ya se movió.
 model PayrollTransfer {
+  id       String        @id @default(cuid())
+  periodId String        @unique
+  period   PayrollPeriod @relation(fields: [periodId], references: [id], onDelete: Cascade)
+
+  totalAmount Float
+  destination PayrollTransferDestination
+
+  status PayrollTransferStatus @default(PENDING_APPROVAL)
+
+  rejectionReason String?
+  rejectedAt      DateTime?
+  approvedAt      DateTime?
+
+  proofUrl    String?
+  proofName   String?
+  completedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+}
+
+// Confirmado 2026-08-26: pedido explícito del usuario — total aparte del de
+// nómina, con lo retenido de IESS de TODOS los colaboradores esa quincena
+// (siempre fin de mes, ver totalIessFromRoles en payroll.ts). Mismo ciclo
+// de vida y mismas 3 cuentas destino que PayrollTransfer (reusa
+// PayrollTransferStatus/PayrollTransferDestination), pero es un registro
+// totalmente aparte — un envío/aprobación/comprobante de nómina no afecta
+// al de IESS y viceversa. Default sugerido de cuenta: "Cuenta para recibir
+// transferencias" (Pichincha 0970), confirmado con el usuario.
+model PayrollIessTransfer {
   id       String        @id @default(cuid())
   periodId String        @unique
   period   PayrollPeriod @relation(fields: [periodId], references: [id], onDelete: Cascade)

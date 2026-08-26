@@ -5,9 +5,9 @@ import { X, ShieldCheck, Landmark, ChevronDown, CheckCircle2 } from "lucide-reac
 import { ProofPreview } from "@/components/shared/ProofPreview";
 import { PayrollEmployeeSalariesPanel } from "./PayrollEmployeeSalariesPanel";
 import { CeoBonusesForNairobyPanel } from "./CeoBonusesForNairobyPanel";
-import { PayrollTransferPanel, type Transfer } from "./PayrollTransferPanel";
+import { PayrollTransferPanel, PayrollIessTransferPanel, type Transfer } from "./PayrollTransferPanel";
 import { PayoutUploader } from "./PayrollIndividualPayment";
-import { isEndOfMonthQuincena } from "@/lib/payrollCalc";
+import { isEndOfMonthQuincena, IESS_LINE_ITEM_LABEL } from "@/lib/payrollCalc";
 
 type LineItem = { id?: string; label: string; amount: number; kind: "INCOME" | "EXPENSE"; isAutomatic?: boolean; note?: string | null };
 type EmployeeBankAccount = {
@@ -42,6 +42,10 @@ type PeriodDetail = {
 
 function money(n: number) {
   return `$${n.toFixed(2)}`;
+}
+
+function iessTotalFromRoles(roles: { lineItems: LineItem[] }[]): number {
+  return roles.reduce((sum, r) => sum + r.lineItems.filter((li) => li.label === IESS_LINE_ITEM_LABEL).reduce((s, li) => s + li.amount, 0), 0);
 }
 
 const ECUADOR_UTC_OFFSET_HOURS = 5; // UTC-5, sin horario de verano en Ecuador
@@ -440,6 +444,7 @@ export function PayrollRolesPanel({ canEdit, canProposeFixedBonus, canApproveFix
   const [period, setPeriod] = useState(currentPeriod);
   const [detail, setDetail] = useState<PeriodDetail | null>(null);
   const [transfer, setTransfer] = useState<Transfer | null | undefined>(undefined);
+  const [iessTransfer, setIessTransfer] = useState<Transfer | null | undefined>(undefined);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [confirmingPublish, setConfirmingPublish] = useState(false);
@@ -459,14 +464,21 @@ export function PayrollRolesPanel({ canEdit, canProposeFixedBonus, canApproveFix
   }
   useEffect(loadTransfer, [period]);
 
+  function loadIessTransfer() {
+    fetch(`/api/payroll/periods/${period}/iess-transfer`).then((r) => (r.ok ? r.json() : null)).then(setIessTransfer);
+  }
+  useEffect(loadIessTransfer, [period]);
+
   // Confirmado 2026-08-25: bug real encontrado por el usuario — editar las
   // líneas de un rol solo refrescaba `detail`, nunca `transfer`, así que el
   // "Total a transferir" se quedaba congelado con el monto de antes del
   // cambio mientras el período seguía en PENDING_APPROVAL (el backend sí
-  // recalculaba `totalAmount`, pero el front nunca lo volvía a pedir).
+  // recalculaba `totalAmount`, pero el front nunca lo volvía a pedir). El
+  // total de IESS tiene el mismo problema — se refresca junto con el resto.
   function refreshAfterRoleEdit() {
     loadDetail();
     loadTransfer();
+    loadIessTransfer();
   }
 
   async function generate() {
@@ -532,30 +544,53 @@ export function PayrollRolesPanel({ canEdit, canProposeFixedBonus, canApproveFix
 
       {detail && detail.status !== "NOT_GENERATED" && (
         <>
-          {(!transfer || (isAdmin && transfer.status === "REJECTED")) && (
-            <div className="bg-surface border border-rule rounded-md p-3.5 mb-4">
-              <div className="text-[11px] font-semibold uppercase tracking-wide text-steel mb-2">Resumen de la quincena</div>
-              <div className="flex items-center justify-between gap-2">
-                <div className="text-[13px] font-bold">{periodLabel(period)}</div>
-                <div className="flex flex-col items-end gap-0.5 bg-teal/15 border-2 border-teal/50 rounded-md px-3 py-1.5">
-                  <div className="text-[24px] font-extrabold tabular-nums text-teal leading-none">{money(transfer?.totalAmount ?? detail.roles.reduce((s, r) => s + r.netTotal, 0))}</div>
-                  <div className="text-[9.5px] text-teal/90 uppercase tracking-wide font-semibold">Total a transferir</div>
+          {(() => {
+            const nominaPending = !transfer || (isAdmin && transfer.status === "REJECTED");
+            const iessPending =
+              isEndOfMonthQuincena(period) &&
+              (!iessTransfer || (isAdmin && iessTransfer.status === "REJECTED")) &&
+              (iessTransfer || iessTotalFromRoles(detail.roles) > 0);
+            if (!nominaPending && !iessPending) return null;
+            return (
+              <div className="bg-surface border border-rule rounded-md p-3.5 mb-4">
+                <div className="text-[11px] font-semibold uppercase tracking-wide text-steel mb-2">Resumen de la quincena</div>
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <div className="text-[13px] font-bold">{periodLabel(period)}</div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {iessPending && (
+                      <div className="flex flex-col items-end gap-0.5 bg-gold/15 border-2 border-gold/50 rounded-md px-3 py-1.5">
+                        <div className="text-[24px] font-extrabold tabular-nums text-gold leading-none">{money(iessTransfer?.totalAmount ?? iessTotalFromRoles(detail.roles))}</div>
+                        <div className="text-[9.5px] text-gold/90 uppercase tracking-wide font-semibold">Total IESS a transferir</div>
+                      </div>
+                    )}
+                    {nominaPending && (
+                      <div className="flex flex-col items-end gap-0.5 bg-teal/15 border-2 border-teal/50 rounded-md px-3 py-1.5">
+                        <div className="text-[24px] font-extrabold tabular-nums text-teal leading-none">{money(transfer?.totalAmount ?? detail.roles.reduce((s, r) => s + r.netTotal, 0))}</div>
+                        <div className="text-[9.5px] text-teal/90 uppercase tracking-wide font-semibold">Total a transferir</div>
+                      </div>
+                    )}
+                  </div>
                 </div>
+                {/* Confirmado 2026-08-24: pedido explícito del usuario — un envío
+                    rechazado no debe quedar como una tarjeta grande dominando la
+                    pantalla del admin (no hay nada que él tenga que hacer ahí,
+                    la pelota está del lado de Nairoby). Se reduce a esta línea
+                    y el resto (motivo completo, cuenta, botón de reenviar) sigue
+                    viviendo en PayrollTransferPanel/PayrollIessTransferPanel
+                    para quien sí puede actuar (Nairoby, canEdit). */}
+                {transfer?.status === "REJECTED" && (
+                  <div className="text-[11.5px] text-red mt-2 pt-2 border-t border-rule">
+                    Rechazaste el envío anterior — {transfer.rejectionReason}. Esperando que Nairoby corrija y reenvíe.
+                  </div>
+                )}
+                {iessTransfer?.status === "REJECTED" && (
+                  <div className="text-[11.5px] text-red mt-2 pt-2 border-t border-rule">
+                    Rechazaste el envío de IESS anterior — {iessTransfer.rejectionReason}. Esperando que Nairoby corrija y reenvíe.
+                  </div>
+                )}
               </div>
-              {/* Confirmado 2026-08-24: pedido explícito del usuario — un envío
-                  rechazado no debe quedar como una tarjeta grande dominando la
-                  pantalla del admin (no hay nada que él tenga que hacer ahí,
-                  la pelota está del lado de Nairoby). Se reduce a esta línea
-                  y el resto (motivo completo, cuenta, botón de reenviar) sigue
-                  viviendo en PayrollTransferPanel para quien sí puede actuar
-                  (Nairoby, canEdit). */}
-              {transfer?.status === "REJECTED" && (
-                <div className="text-[11.5px] text-red mt-2 pt-2 border-t border-rule">
-                  Rechazaste el envío anterior — {transfer.rejectionReason}. Esperando que Nairoby corrija y reenvíe.
-                </div>
-              )}
-            </div>
-          )}
+            );
+          })()}
 
           {/* Confirmado 2026-08-25: bug real encontrado por el usuario — esto
               exigía `transfer` (el objeto ya creado), así que cuando todavía
@@ -568,6 +603,13 @@ export function PayrollRolesPanel({ canEdit, canProposeFixedBonus, canApproveFix
           {transfer !== undefined && !(isAdmin && transfer?.status === "REJECTED") && (
             <PayrollTransferPanel period={period} isAdmin={isAdmin} canEdit={canEdit} transfer={transfer} onChanged={loadTransfer} />
           )}
+
+          {isEndOfMonthQuincena(period) &&
+            iessTransfer !== undefined &&
+            !(isAdmin && iessTransfer?.status === "REJECTED") &&
+            (iessTransfer || iessTotalFromRoles(detail.roles) > 0) && (
+              <PayrollIessTransferPanel period={period} isAdmin={isAdmin} canEdit={canEdit} transfer={iessTransfer} onChanged={loadIessTransfer} />
+            )}
 
           <button
             type="button"

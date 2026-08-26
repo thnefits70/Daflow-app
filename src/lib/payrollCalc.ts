@@ -12,6 +12,12 @@ export const OVERTIME_WEEKDAY_MULTIPLIER = 1.5; // lunes a viernes (suplementari
 export const OVERTIME_SATURDAY_MULTIPLIER = 2.0; // sábado (como feriado)
 export const IESS_RATE = 0.0945;
 
+// Confirmado 2026-08-26: label exacto de la línea automática de IESS (ver
+// buildAutomaticLineItems en payroll.ts) — se usa como identificador para
+// sumar el total de IESS de un período (ver iess-transfer), ya que
+// PayrollLineItem no tiene una categoría propia más allá de INCOME/EXPENSE.
+export const IESS_LINE_ITEM_LABEL = "Descuento IESS (9.45%)";
+
 // Solo informativo para la pantalla del líder — el umbral de horario no se
 // usa para calcular el monto (el líder ya reporta directamente los minutos
 // extra), solo para que sepa desde cuándo cuenta.

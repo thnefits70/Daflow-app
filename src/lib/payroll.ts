@@ -13,6 +13,7 @@ import {
   installmentIndexForMonth,
   addMonthsToMonthStr,
   monthsBetween,
+  IESS_LINE_ITEM_LABEL,
 } from "@/lib/payrollCalc";
 import { getMonthDispatchSummary, getAchievedTier, CEO_BONUS_AMOUNTS, CEO_BONUS_LABELS } from "@/lib/commissionTiers";
 
@@ -329,7 +330,7 @@ export async function buildAutomaticLineItems(employeeId: string, period: string
 
   if (isEndOfMonthQuincena(period) && profile?.iessDeclaredSalary && !profile.companyAbsorbsIess) {
     const iess = computeIessDeduction(profile.iessDeclaredSalary, profile.companyAbsorbsIess);
-    if (iess > 0) items.push({ label: "Descuento IESS (9.45%)", amount: iess, kind: "EXPENSE", isAutomatic: true });
+    if (iess > 0) items.push({ label: IESS_LINE_ITEM_LABEL, amount: iess, kind: "EXPENSE", isAutomatic: true });
   }
 
   return items;
@@ -339,6 +340,17 @@ export function totalsFromLineItems(items: { amount: number; kind: "INCOME" | "E
   const totalIncome = items.filter((i) => i.kind === "INCOME").reduce((s, i) => s + i.amount, 0);
   const totalExpense = items.filter((i) => i.kind === "EXPENSE").reduce((s, i) => s + i.amount, 0);
   return { totalIncome, totalExpense, netTotal: totalIncome - totalExpense };
+}
+
+// Confirmado 2026-08-26: pedido explícito del usuario — además del total de
+// nómina a transferir, un segundo total con lo retenido de IESS a TODOS los
+// colaboradores ese período (suma de la línea automática "Descuento IESS
+// (9.45%)" de cada rol vigente, respetando cualquier corrección manual que
+// Nairoby le haya hecho a esa línea). Solo tiene sentido en la quincena de
+// fin de mes (Q2) — es cuando se genera esa línea (ver isEndOfMonthQuincena
+// arriba en buildAutomaticLineItems).
+export function totalIessFromRoles(roles: { lineItems: { label: string; amount: number }[] }[]): number {
+  return roles.reduce((sum, r) => sum + r.lineItems.filter((li) => li.label === IESS_LINE_ITEM_LABEL).reduce((s, li) => s + li.amount, 0), 0);
 }
 
 // Confirmado 2026-08-20, reglas de anticipos definidas con el usuario:
