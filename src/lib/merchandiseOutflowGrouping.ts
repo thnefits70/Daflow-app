@@ -6,7 +6,19 @@ const RANK_TO_CONFIDENCE: Confidence[] = ["baja", "media", "alta"];
 
 export type CatalogItemLite = { id: string; name: string; photos: string[]; justCode: string | null; pendingRegistration: boolean };
 export type ComboLite = { code: string; components: { quantity: number; catalogItem: CatalogItemLite }[] };
-export type OutflowRowGroup = { name: string; quantity: number; confidence: Confidence; catalogItem: CatalogItemLite | null; sourceCode: string | null; fromCombo: string | null };
+export type OutflowRowGroup = {
+  name: string;
+  quantity: number;
+  confidence: Confidence;
+  catalogItem: CatalogItemLite | null;
+  sourceCode: string | null;
+  fromCombo: string | null;
+  // Cuántas unidades del COMBO (no del producto) generaron esta fila — se
+  // necesita para poder recalcular las cantidades si Daniel corrige la
+  // receta del combo a mitad de una lectura (ver DocumentCaptureFlow). Solo
+  // se llena en el camino de combo; null en match directo/manual.
+  comboUnits: number | null;
+};
 
 // Extraído de extract/route.ts para poder probarlo directo (sin servidor
 // HTTP ni sesión) contra datos marcados (ZZDBG_...) — ver
@@ -25,14 +37,18 @@ export function groupOutflowRows(
 ): OutflowRowGroup[] {
   const groups = new Map<string, OutflowRowGroup>();
 
-  function addToGroup(key: string, value: Omit<OutflowRowGroup, "sourceCode" | "fromCombo"> & { sourceCode?: string | null; fromCombo?: string | null }) {
+  function addToGroup(
+    key: string,
+    value: Omit<OutflowRowGroup, "sourceCode" | "fromCombo" | "comboUnits"> & { sourceCode?: string | null; fromCombo?: string | null; comboUnits?: number | null }
+  ) {
     const existing = groups.get(key);
     if (existing) {
       existing.quantity += value.quantity;
       existing.confidence = RANK_TO_CONFIDENCE[Math.min(CONFIDENCE_RANK[existing.confidence], CONFIDENCE_RANK[value.confidence])];
       if (!existing.sourceCode && value.sourceCode) existing.sourceCode = value.sourceCode;
+      if (value.comboUnits != null) existing.comboUnits = (existing.comboUnits ?? 0) + value.comboUnits;
     } else {
-      groups.set(key, { sourceCode: null, fromCombo: null, ...value });
+      groups.set(key, { sourceCode: null, fromCombo: null, comboUnits: null, ...value });
     }
   }
 
@@ -46,6 +62,7 @@ export function groupOutflowRows(
           confidence: row.confidence,
           catalogItem: comp.catalogItem,
           fromCombo: combo.code,
+          comboUnits: row.quantity,
         });
       }
       continue;

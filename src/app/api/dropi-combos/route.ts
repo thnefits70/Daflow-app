@@ -45,17 +45,33 @@ export async function POST(req: NextRequest) {
   const parsed = createSchema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Datos inválidos." }, { status: 400 });
 
+  // Confirmado 2026-08-26 (pedido explícito del usuario): si el código ya
+  // existe, se ACTUALIZA en vez de rechazar — Daniel puede darse cuenta a
+  // mitad de una lectura que un combo ya registrado tiene la receta
+  // equivocada (ver "Corregir este combo" en DocumentCaptureFlow) y esto
+  // deja corregirlo sin tener que ir a buscarlo aparte en Base de datos de
+  // productos.
   const existing = await prisma.dropiCombo.findUnique({ where: { code: parsed.data.code } });
-  if (existing) return NextResponse.json({ error: "Ya existe un combo con ese código." }, { status: 409 });
-
-  const combo = await prisma.dropiCombo.create({
-    data: {
-      code: parsed.data.code,
-      label: parsed.data.label || null,
-      createdById: session.user.id,
-      components: { create: parsed.data.components.map((c) => ({ catalogItemId: c.catalogItemId, quantity: c.quantity })) },
-    },
-    include: { components: { include: { catalogItem: { select: CATALOG_ITEM_SELECT } } } },
-  });
+  const combo = existing
+    ? await prisma.$transaction(async (tx) => {
+        await tx.dropiComboComponent.deleteMany({ where: { comboId: existing.id } });
+        return tx.dropiCombo.update({
+          where: { id: existing.id },
+          data: {
+            label: parsed.data.label || existing.label,
+            components: { create: parsed.data.components.map((c) => ({ catalogItemId: c.catalogItemId, quantity: c.quantity })) },
+          },
+          include: { components: { include: { catalogItem: { select: CATALOG_ITEM_SELECT } } } },
+        });
+      })
+    : await prisma.dropiCombo.create({
+        data: {
+          code: parsed.data.code,
+          label: parsed.data.label || null,
+          createdById: session.user.id,
+          components: { create: parsed.data.components.map((c) => ({ catalogItemId: c.catalogItemId, quantity: c.quantity })) },
+        },
+        include: { components: { include: { catalogItem: { select: CATALOG_ITEM_SELECT } } } },
+      });
   return NextResponse.json(combo);
 }

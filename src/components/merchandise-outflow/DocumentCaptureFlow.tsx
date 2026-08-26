@@ -19,6 +19,7 @@ type SuggestedRow = {
   added?: boolean;
   sourceCode?: string | null;
   fromCombo?: string | null;
+  comboUnits?: number | null;
   comboBuilderOpen?: boolean;
   comboDraft?: ComboDraftComponent[];
   savingCombo?: boolean;
@@ -101,7 +102,15 @@ export function DocumentCaptureFlow({ reason, canManageJustCatalog = false }: { 
       if (result.error) setError(result.error);
       setRows(
         (result.rows ?? []).map(
-          (r: { name: string; quantity: number; confidence?: Confidence; catalogItem?: MatchCatalogItem | null; sourceCode?: string | null; fromCombo?: string | null }) => ({
+          (r: {
+            name: string;
+            quantity: number;
+            confidence?: Confidence;
+            catalogItem?: MatchCatalogItem | null;
+            sourceCode?: string | null;
+            fromCombo?: string | null;
+            comboUnits?: number | null;
+          }) => ({
             name: r.name,
             quantity: r.quantity,
             confidence: r.confidence ?? "media",
@@ -109,6 +118,7 @@ export function DocumentCaptureFlow({ reason, canManageJustCatalog = false }: { 
             manualName: "",
             sourceCode: r.sourceCode ?? null,
             fromCombo: r.fromCombo ?? null,
+            comboUnits: r.comboUnits ?? null,
           })
         )
       );
@@ -167,8 +177,67 @@ export function DocumentCaptureFlow({ reason, canManageJustCatalog = false }: { 
         confidence: row.confidence,
         selected: comp.catalogItem,
         manualName: "",
+        fromCombo: combo.code,
+        comboUnits: row.quantity,
       }));
       setRows((rs) => [...rs.slice(0, index), ...expanded, ...rs.slice(index + 1)]);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "No se pudo guardar el combo.");
+      setRows((rs) => rs.map((r, i) => (i === index ? { ...r, savingCombo: false } : r)));
+    }
+  }
+
+  // Confirmado 2026-08-26 (reportado por Daniel): un combo YA registrado
+  // puede tener la receta equivocada (ej. le falta un producto, o trae uno
+  // que no es) — abre el mismo builder pero precargado con los componentes
+  // actuales de ese combo, para que Daniel los corrija.
+  async function openComboCorrection(index: number) {
+    const row = rows[index];
+    if (!row.fromCombo) return;
+    setRows((rs) => rs.map((r, i) => (i === index ? { ...r, comboBuilderOpen: true, comboDraft: [] } : r)));
+    try {
+      const combos = await fetch("/api/dropi-combos").then((r) => (r.ok ? r.json() : []));
+      const combo = (combos as { code: string; components: { quantity: number; catalogItem: MatchCatalogItem }[] }[]).find((c) => c.code === row.fromCombo);
+      if (combo) {
+        const draft: ComboDraftComponent[] = combo.components.map((c) => ({ catalogItem: c.catalogItem, quantity: c.quantity }));
+        setRows((rs) => rs.map((r, i) => (i === index ? { ...r, comboDraft: draft } : r)));
+      }
+    } catch {
+      // Si falla la precarga, Daniel igual puede armar la lista desde cero.
+    }
+  }
+
+  // Confirmado 2026-08-26: al corregir un combo YA registrado, se actualiza
+  // la receta estándar (para futuras lecturas) Y de una vez se reemplazan
+  // TODAS las filas de ESTE lote que vinieron de ese mismo combo por la
+  // versión corregida — usando comboUnits (cuántos combos se despacharon
+  // según el papel) para recalcular las cantidades correctas.
+  async function saveComboCorrectionAndReexpand(index: number) {
+    const row = rows[index];
+    const code = row.fromCombo;
+    if (!code || !row.comboDraft || row.comboDraft.length === 0) return;
+    const units = row.comboUnits ?? 1;
+    setRows((rs) => rs.map((r, i) => (i === index ? { ...r, savingCombo: true } : r)));
+    try {
+      const combo = await postJson("/api/dropi-combos", {
+        code,
+        components: row.comboDraft.map((c) => ({ catalogItemId: c.catalogItem.id, quantity: c.quantity })),
+      });
+      const expanded: SuggestedRow[] = combo.components.map((comp: { quantity: number; catalogItem: MatchCatalogItem }) => ({
+        name: comp.catalogItem.name,
+        quantity: comp.quantity * units,
+        confidence: row.confidence,
+        selected: comp.catalogItem,
+        manualName: "",
+        fromCombo: code,
+        comboUnits: units,
+      }));
+      setRows((rs) => {
+        const firstIdx = rs.findIndex((r) => r.fromCombo === code);
+        const others = rs.filter((r) => r.fromCombo !== code);
+        const insertAt = rs.slice(0, firstIdx).filter((r) => r.fromCombo !== code).length;
+        return [...others.slice(0, insertAt), ...expanded, ...others.slice(insertAt)];
+      });
     } catch (e) {
       setError(e instanceof Error ? e.message : "No se pudo guardar el combo.");
       setRows((rs) => rs.map((r, i) => (i === index ? { ...r, savingCombo: false } : r)));
@@ -398,12 +467,23 @@ export function DocumentCaptureFlow({ reason, canManageJustCatalog = false }: { 
                   <div className="text-[12.5px] font-semibold">
                     IA leyó: &quot;{row.name}&quot; · {row.quantity} un.
                   </div>
-                  <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-bold whitespace-nowrap ${CONFIDENCE_STYLE[row.confidence]}`}>
-                    {CONFIDENCE_LABEL[row.confidence]}
-                  </span>
+                  {row.fromCombo ? (
+                    <span className="shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-bold whitespace-nowrap bg-cloud text-steel border-rule">Del combo registrado</span>
+                  ) : (
+                    <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-bold whitespace-nowrap ${CONFIDENCE_STYLE[row.confidence]}`}>
+                      {CONFIDENCE_LABEL[row.confidence]}
+                    </span>
+                  )}
                 </div>
                 {row.fromCombo && (
-                  <div className="text-[11px] text-steel mb-1.5">Desglosado del combo Dropi {row.fromCombo}.</div>
+                  <div className="text-[11px] text-steel mb-1.5">
+                    Desglosado del combo Dropi {row.fromCombo}.
+                    {canManageJustCatalog && !row.comboBuilderOpen && (
+                      <button type="button" className="ml-1.5 font-bold text-teal cursor-pointer" onClick={() => openComboCorrection(i)}>
+                        ¿La receta está mal? Corregir
+                      </button>
+                    )}
+                  </div>
                 )}
                 {!row.selected && row.sourceCode && (
                   <div className="text-[11.5px] bg-yellow/10 border border-yellow/35 rounded px-2 py-1.5 mb-2">
@@ -473,7 +553,7 @@ export function DocumentCaptureFlow({ reason, canManageJustCatalog = false }: { 
                         type="button"
                         disabled={row.savingCombo || !row.comboDraft?.length}
                         className="flex-1 rounded border border-teal bg-teal px-3 py-1.5 text-[12px] font-bold text-navy cursor-pointer disabled:opacity-50"
-                        onClick={() => saveComboAndExpand(i)}
+                        onClick={() => (row.fromCombo ? saveComboCorrectionAndReexpand(i) : saveComboAndExpand(i))}
                       >
                         {row.savingCombo ? "Guardando…" : "Guardar combo y aplicar"}
                       </button>
