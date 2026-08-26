@@ -17,7 +17,7 @@ const schema = z.object({
         note: z.string().optional(),
       })
     )
-    .min(1),
+    .min(1, "El rol no puede quedar sin ningún concepto — dejá al menos uno."),
 });
 
 // Confirmado 2026-08-13: pedido explícito del usuario — nunca se
