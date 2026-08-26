@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { CheckCircle2, DollarSign, Upload } from "lucide-react";
+import { CheckCircle2, DollarSign, ExternalLink, Upload } from "lucide-react";
 import { uploadFile } from "@/lib/uploadFile";
 
 type ItemDTO = {
@@ -9,8 +9,15 @@ type ItemDTO = {
   declaredName: string;
   quantity: number;
   catalogItem: { name: string; photos: string[] } | null;
-  batch: { code: string; createdAt: string; supplier: { id: string; name: string } | null };
+  unitCostAtExchange: number | null;
+  expectedCreditAmount: number | null;
+  linkedPurchaseRequest: { requestNumber: number | null; requestedAt: string; requestedBy: { name: string } | null } | null;
+  batch: { id: string; code: string; createdAt: string; supplier: { id: string; name: string } | null };
 };
+
+function money(n: number) {
+  return `$${n.toFixed(2)}`;
+}
 
 type Choice = "REPLACED" | "CREDIT_ISSUED";
 
@@ -45,10 +52,13 @@ export function SupplierExchangeResolutionInbox() {
   }
   useEffect(load, []);
 
-  function startChoosing(id: string, choice: Choice) {
+  function startChoosing(id: string, choice: Choice, expectedCreditAmount: number | null) {
     setChoosing({ id, choice });
     setNote("");
-    setAmount("");
+    // Precarga el monto con el crédito estimado (según la última compra a
+    // este proveedor) — Daniel lo puede corregir si el proveedor ofrece un
+    // monto distinto al final.
+    setAmount(choice === "CREDIT_ISSUED" && expectedCreditAmount !== null ? expectedCreditAmount.toFixed(2) : "");
     setProofUrl(null);
     setProofName(null);
     setError("");
@@ -110,7 +120,19 @@ export function SupplierExchangeResolutionInbox() {
             <div className="flex-1 min-w-0">
               <div className="text-[13px] font-semibold truncate">{itemName(item)}</div>
               <div className="text-[11px] text-steel">{item.quantity} un. · {item.batch.supplier?.name ?? "—"}</div>
-              <div className="text-[10.5px] text-steel">{item.batch.code}</div>
+              <div className="flex items-center gap-1.5 text-[10.5px] text-steel">
+                <span>{item.batch.code}</span>
+                <a href={`/cambio-proveedor/${item.batch.id}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-0.5 text-blue font-semibold cursor-pointer">
+                  <ExternalLink size={10} /> Ver guía
+                </a>
+              </div>
+              {item.expectedCreditAmount !== null ? (
+                <div className="text-[10.5px] text-steel mt-0.5">
+                  Pagado: <span className="font-semibold text-ink">{money(item.unitCostAtExchange!)}/un.</span> · crédito estimado: <span className="font-semibold text-blue">{money(item.expectedCreditAmount)}</span>
+                </div>
+              ) : (
+                <div className="text-[10.5px] text-steel mt-0.5">Sin historial de compra a este proveedor.</div>
+              )}
             </div>
           </div>
 
@@ -150,10 +172,10 @@ export function SupplierExchangeResolutionInbox() {
             </div>
           ) : (
             <div className="flex gap-1.5 flex-wrap">
-              <button type="button" className="flex items-center gap-1 text-[11.5px] font-semibold border border-green/40 text-green rounded-full px-2.5 py-1 cursor-pointer" onClick={() => startChoosing(item.id, "REPLACED")}>
+              <button type="button" className="flex items-center gap-1 text-[11.5px] font-semibold border border-green/40 text-green rounded-full px-2.5 py-1 cursor-pointer" onClick={() => startChoosing(item.id, "REPLACED", item.expectedCreditAmount)}>
                 <CheckCircle2 size={12} /> El proveedor cambió el producto
               </button>
-              <button type="button" className="flex items-center gap-1 text-[11.5px] font-semibold border border-blue/40 text-blue rounded-full px-2.5 py-1 cursor-pointer" onClick={() => startChoosing(item.id, "CREDIT_ISSUED")}>
+              <button type="button" className="flex items-center gap-1 text-[11.5px] font-semibold border border-blue/40 text-blue rounded-full px-2.5 py-1 cursor-pointer" onClick={() => startChoosing(item.id, "CREDIT_ISSUED", item.expectedCreditAmount)}>
                 <DollarSign size={12} /> El proveedor dio crédito
               </button>
             </div>

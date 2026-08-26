@@ -353,17 +353,17 @@ model User {
   merchandiseWeeklyWriteOffBatchesJust    MerchandiseWeeklyWriteOffBatch[] @relation("MerchandiseWeeklyWriteOffBatchJustBy")
   merchandiseWeeklyWriteOffBatchesNairoby MerchandiseWeeklyWriteOffBatch[] @relation("MerchandiseWeeklyWriteOffBatchNairobyBy")
 
-  merchandiseOutflowBatchesCreated        MerchandiseOutflowBatch[]        @relation("MerchandiseOutflowBatchCreatedBy")
-  merchandiseOutflowBatchesJustWrittenOff MerchandiseOutflowBatch[]        @relation("MerchandiseOutflowBatchJustWrittenOffBy")
-  merchandiseOutflowItemsResolved         MerchandiseOutflowItem[]         @relation("MerchandiseOutflowItemResolvedBy")
+  merchandiseOutflowBatchesCreated        MerchandiseOutflowBatch[] @relation("MerchandiseOutflowBatchCreatedBy")
+  merchandiseOutflowBatchesJustWrittenOff MerchandiseOutflowBatch[] @relation("MerchandiseOutflowBatchJustWrittenOffBy")
+  merchandiseOutflowItemsResolved         MerchandiseOutflowItem[]  @relation("MerchandiseOutflowItemResolvedBy")
 
-  externalSalesAdvised           ExternalSale[] @relation("ExternalSaleAdvisor")
-  externalSalesReviewed          ExternalSale[] @relation("ExternalSaleReviewedBy")
-  externalSalesPaymentConfirmed  ExternalSale[] @relation("ExternalSalePaymentConfirmedBy")
+  externalSalesAdvised            ExternalSale[] @relation("ExternalSaleAdvisor")
+  externalSalesReviewed           ExternalSale[] @relation("ExternalSaleReviewedBy")
+  externalSalesPaymentConfirmed   ExternalSale[] @relation("ExternalSalePaymentConfirmedBy")
   externalSalesDispatchAssignedTo ExternalSale[] @relation("ExternalSaleDispatchAssignedTo")
   externalSalesDispatchAssignedBy ExternalSale[] @relation("ExternalSaleDispatchAssignedBy")
-  externalSalesDelivered         ExternalSale[] @relation("ExternalSaleDeliveredBy")
-  externalSalesClosed            ExternalSale[] @relation("ExternalSaleNairobyClosedBy")
+  externalSalesDelivered          ExternalSale[] @relation("ExternalSaleDeliveredBy")
+  externalSalesClosed             ExternalSale[] @relation("ExternalSaleNairobyClosedBy")
 
   cancelledGuidesSubmitted            CancelledGuideReport[] @relation("CancelledGuideSubmittedBy")
   cancelledGuidesFulfillmentConfirmed CancelledGuideReport[] @relation("CancelledGuideFulfillmentConfirmedBy")
@@ -1230,8 +1230,8 @@ model Supplier {
 
   contacts                   SupplierContact[]
   channels                   SupplierChannel[]
-  purchaseRequestsAsSupplier PurchaseRequest[]     @relation("PurchaseRequestSupplier")
-  purchaseRequestsAsCarrier  PurchaseRequest[]     @relation("PurchaseRequestCarrier")
+  purchaseRequestsAsSupplier PurchaseRequest[]         @relation("PurchaseRequestSupplier")
+  purchaseRequestsAsCarrier  PurchaseRequest[]         @relation("PurchaseRequestCarrier")
   bankAccounts               SupplierBankAccount[]
   credits                    SupplierCredit[]
   merchandiseOutflowBatches  MerchandiseOutflowBatch[]
@@ -1582,9 +1582,10 @@ model PurchaseRequest {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  receipt           PurchaseRequestReceipt?
-  urgentReports     PurchaseRequestUrgentReport[]
-  marketingFollowUp PurchaseReceiptFollowUp?
+  receipt              PurchaseRequestReceipt?
+  urgentReports        PurchaseRequestUrgentReport[]
+  marketingFollowUp    PurchaseReceiptFollowUp?
+  linkedByOutflowItems MerchandiseOutflowItem[]      @relation("OutflowItemLinkedPurchase")
 
   @@index([deptId])
   @@index([status])
@@ -1728,7 +1729,7 @@ model PurchaseRequestUrgentReport {
   // vez de una tabla aparte; isLateClaim distingue este camino del
   // "Informar urgente" normal (que solo existe antes de confirmar
   // recepción). Sin plazo límite para reportar — decisión explícita.
-  isLateClaim Boolean @default(false)
+  isLateClaim   Boolean @default(false)
   // RPC-0001, RPC-0002... — numeración propia, independiente del SC-XXX de
   // la solicitud de origen porque el origen puede no ser exacto.
   lateClaimCode String? @unique
@@ -1886,7 +1887,7 @@ model SupplierCredit {
   // Confirmado 2026-08-25 (Fase 2 de Registro de Egresos): crédito nacido de
   // un cambio de mercadería con proveedor resuelto como CREDIT_ISSUED —
   // mismo patrón que urgentResolutionId (null en los demás orígenes).
-  outflowItemId String?                  @unique
+  outflowItemId String?                 @unique
   outflowItem   MerchandiseOutflowItem? @relation(fields: [outflowItemId], references: [id], onDelete: SetNull)
 
   // Confirmado 2026-08-12: pedido explícito del usuario — un crédito también
@@ -3616,16 +3617,32 @@ model MerchandiseOutflowItem {
   resolutionNote String?
   resolvedAt     DateTime?
   resolvedById   String?
-  resolvedBy     User?     @relation("MerchandiseOutflowItemResolvedBy", fields: [resolvedById], references: [id], onDelete: SetNull)
+  resolvedBy     User?                  @relation("MerchandiseOutflowItemResolvedBy", fields: [resolvedById], references: [id], onDelete: SetNull)
 
   // Fase 2 — CAMBIO_PROVEEDOR resuelto como CREDIT_ISSUED: el crédito
   // creado con el proveedor por este item.
   credit SupplierCredit?
 
+  // CAMBIO_PROVEEDOR (multi-producto, confirmado 2026-08-26): al agregar el
+  // producto se busca sola la última compra REAL (ver PRICED_STATUSES en
+  // purchases.ts) hecha a ese mismo proveedor por ese mismo producto del
+  // catálogo, para saber cuánto se le pagó — así el crédito que se le puede
+  // reclamar si no cambia el producto queda estimado de una vez, sin que
+  // Daniel tenga que buscarlo a mano. unitCostAtExchange/expectedCreditAmount
+  // quedan congelados en el momento de agregar el ítem (no se recalculan si
+  // el historial de compras cambia después). Null si no hubo compra previa
+  // registrada con ese proveedor para ese producto, o si el producto no está
+  // en el catálogo (nombre declarado a mano).
+  linkedPurchaseRequestId String?
+  linkedPurchaseRequest   PurchaseRequest? @relation("OutflowItemLinkedPurchase", fields: [linkedPurchaseRequestId], references: [id], onDelete: SetNull)
+  unitCostAtExchange      Float?
+  expectedCreditAmount    Float?
+
   createdAt DateTime @default(now())
 
   @@index([batchId])
   @@index([resolution])
+  @@index([linkedPurchaseRequestId])
 }
 
 enum ExternalSaleReviewStatus {
@@ -3656,9 +3673,9 @@ model ExternalSale {
   catalogItemId       String?
   catalogItem         PurchaseCatalogItem? @relation(fields: [catalogItemId], references: [id], onDelete: SetNull)
   declaredProductName String
-  quantity             Int
-  unitPrice            Float
-  totalAmount          Float // quantity * unitPrice, calculado al declarar
+  quantity            Int
+  unitPrice           Float
+  totalAmount         Float // quantity * unitPrice, calculado al declarar
 
   // A quién debe entregarle bodega el pedido (motorizado o cliente) — el
   // colaborador de Inventario que despacha ve SOLO esto, nunca los montos.
@@ -3767,7 +3784,6 @@ enum CancelledGuideCarrier {
  * mercadería nunca salió, hay que reingresarla a Just), el usuario pidió
  * explícitamente que viva dentro de Registro de Egresos, junto a los demás
  * motivos, para no tener a Daniel saltando entre módulos.
- *
  * Lo sube cualquiera de Análisis de Mercado (Heidy/Jariel, bodega
  * Damián/Provedix) o de Fulfillment (Yair) — motivos distintos según el
  * área. Fulfillment e Inventario confirman por separado que hicieron su

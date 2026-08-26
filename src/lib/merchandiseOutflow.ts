@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { notifyOwner } from "@/lib/notifications";
 import { getInventoryLeadId, getMarketingLeadId } from "@/lib/guards";
 import { OUTFLOW_REASON_LABELS } from "@/lib/merchandiseOutflowLabels";
+import { PRICED_STATUSES, effectiveUnitCost } from "@/lib/purchases";
 
 export { OUTFLOW_REASON_LABELS };
 
@@ -59,11 +60,30 @@ export async function createOutflowForPersonalPurchaseItem(params: { itemId: str
   });
 }
 
+// CAMBIO_PROVEEDOR (confirmado 2026-08-26): al agregar un producto ya
+// vinculado al catálogo, se busca sola la última compra REAL (mismo criterio
+// que el historial de precios de Compras) hecha a ese proveedor por ese
+// producto, para congelar cuánto se le pagó — así el crédito reclamable
+// queda estimado sin que Daniel tenga que ir a buscarlo a Control de
+// Compras. Null si nunca se le compró ese producto a ese proveedor.
+export async function findMostRecentSupplierPurchase(supplierId: string, catalogItemId: string) {
+  const req = await prisma.purchaseRequest.findFirst({
+    where: { supplierId, catalogItemId, status: { in: PRICED_STATUSES } },
+    orderBy: { requestedAt: "desc" },
+    select: { id: true, unitCost: true, quantity: true, shippingIncluded: true, shippingCostTotal: true, requestedAt: true },
+  });
+  if (!req) return null;
+  return { purchaseRequestId: req.id, unitCost: effectiveUnitCost(req), requestedAt: req.requestedAt };
+}
+
 // Avisa a Daniel que hay algo nuevo esperando en la cola de baja en Just —
 // se llama cada vez que un batch queda "submitted" (despacho/garantía
 // confirmados, deterioro dado de baja, o el enganche automático de compra
 // personal), para que no dependa de que él entre a revisar por su cuenta.
+// CAMBIO_PROVEEDOR queda afuera a propósito: lo captura el propio Daniel, no
+// tiene sentido avisarle de algo que él mismo acaba de armar.
 export async function notifyInventoryLeadOutflowPending(batch: { code: string; reason: string }): Promise<void> {
+  if (batch.reason === "CAMBIO_PROVEEDOR") return;
   const leadId = await getInventoryLeadId();
   if (!leadId) return;
   await notifyOwner(leadId, {

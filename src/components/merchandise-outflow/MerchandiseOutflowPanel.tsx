@@ -112,7 +112,7 @@ export function MerchandiseOutflowPanel({
       {tab === "proveedor" && canAct && (
         <>
           <TabGuide storageKey="merchoutflow-proveedor">
-            Registra acá cuando mandes mercadería ya registrada en Just de vuelta a un proveedor para cambio — sale de Just en ese momento, así que cae directo en la cola de baja. Abajo ves los pendientes de saber si el proveedor cambió el producto o dio crédito.
+            Elige el proveedor y agrega todos los productos que le vas a devolver en un mismo paquete — cada uno se cruza solo contra la última compra a ese proveedor para estimar el crédito reclamable. Toma foto de la lista física como evidencia y deja lista la solicitud: sale de Just en ese momento (cae directo en la cola de baja) y te da un código para imprimir la guía y pegarla en el paquete. Abajo ves los pendientes de saber si el proveedor cambió cada producto o dio crédito.
           </TabGuide>
           <div className="flex flex-col gap-6">
             <SupplierExchangeCapture />

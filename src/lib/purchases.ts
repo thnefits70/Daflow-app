@@ -5,7 +5,7 @@ import type { PurchaseRequestStatus } from "@/generated/prisma/client";
 // Estados que cuentan como "compra real" para el historial de precio — no
 // las que todavía están pendientes de aprobar (no son un precio confirmado
 // todavía) ni las rechazadas.
-const PRICED_STATUSES: PurchaseRequestStatus[] = ["APPROVED", "PAID", "RECEIVED"];
+export const PRICED_STATUSES: PurchaseRequestStatus[] = ["APPROVED", "PAID", "RECEIVED"];
 
 // Confirmado 2026-08-05: código correlativo para toda solicitud de compra
 // (SC-001, SC-002...) — una sola numeración compartida por TODO el módulo,
