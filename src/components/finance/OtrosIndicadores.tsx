@@ -14,6 +14,35 @@ function monthLabel(period: string) {
   return `${MONTH_NAMES[Number(m) - 1] ?? m} ${y}`;
 }
 
+const WORKING_CAPITAL_EXPLAIN: Record<string, string> = {
+  dso: "Es cuántos días tarda un cliente en pagarte después de comprar. Si el número baja, ¡bien! Te están pagando más rápido.",
+  dio: "Es cuántos días se quedan guardados los productos en la bodega antes de venderse. Si baja, se está vendiendo más rápido.",
+  dpo: "Es cuántos días te tardas tú en pagarle a quien te vende cosas. Si sube, es bueno para ti: tienes más tiempo para pagar.",
+  ccc: "Es el total de días que el dinero queda 'atrapado' desde que se compra algo hasta que se cobra. Mientras más bajo, más rápido vuelve el dinero a tu bolsillo.",
+};
+
+function InfoToggle({ id, openInfo, setOpenInfo }: { id: string; openInfo: string | null; setOpenInfo: (id: string | null) => void }) {
+  return (
+    <button
+      type="button"
+      onClick={() => setOpenInfo(openInfo === id ? null : id)}
+      className="inline-flex items-center justify-center w-3.5 h-3.5 rounded-full border border-steel/50 text-steel text-[8px] leading-none ml-1 align-middle hover:bg-steel/10"
+      aria-label="¿Qué significa esto?"
+    >
+      ?
+    </button>
+  );
+}
+
+function InfoBox({ id, openInfo }: { id: string; openInfo: string | null }) {
+  if (openInfo !== id) return null;
+  return (
+    <div className="text-[10px] text-steel leading-relaxed mt-1.5 pt-1.5 border-t border-dashed border-rule">
+      {WORKING_CAPITAL_EXPLAIN[id]}
+    </div>
+  );
+}
+
 export function OtrosIndicadores({
   deptId,
   brand,
@@ -34,6 +63,7 @@ export function OtrosIndicadores({
   const router = useRouter();
   const [rate, setRate] = useState(String(taxRatePct));
   const [savingRate, setSavingRate] = useState(false);
+  const [openInfo, setOpenInfo] = useState<string | null>(null);
 
   async function saveRate() {
     const v = Number(rate);
@@ -56,7 +86,7 @@ export function OtrosIndicadores({
   const balPrevious = previous ? sharedBalances.find((b) => b.period === previous.period) ?? null : null;
   const isConsolidado = brand === "consolidado";
 
-  function workingCapitalTile(label: string, balanceKey: "inventarioFinal" | "cuentasPorCobrar" | "cuentasPorPagar", flow: number) {
+  function workingCapitalTile(id: string, label: string, balanceKey: "inventarioFinal" | "cuentasPorCobrar" | "cuentasPorPagar", flow: number) {
     const curVal = balCurrent?.[balanceKey];
     if (isConsolidado && curVal !== undefined && curVal !== null) {
       const prevVal = balPrevious?.[balanceKey] ?? null;
@@ -64,31 +94,34 @@ export function OtrosIndicadores({
       const trend = prevVal !== null ? (curVal >= prevVal ? `▲ subió de ${money(prevVal)}` : `▼ bajó de ${money(prevVal)}`) : "sin mes anterior para comparar";
       return { days, node: (
         <div className="bg-cloud rounded-md p-3" style={{ background: "rgba(20,199,199,.08)" }}>
-          <div className="text-[9.5px] uppercase tracking-wide text-steel mb-1.5">{label} — real</div>
+          <div className="text-[9.5px] uppercase tracking-wide text-steel mb-1.5">{label} — real<InfoToggle id={id} openInfo={openInfo} setOpenInfo={setOpenInfo} /></div>
           <div className="font-display text-[19px] font-bold text-teal">{days !== null ? days.toFixed(0) : "—"}</div>
           <div className="text-[10px] text-steel mt-1">{monthLabel(current.period)}: {money(curVal)} ({trend})</div>
+          <InfoBox id={id} openInfo={openInfo} />
         </div>
       ) };
     }
     if (!isConsolidado) {
       return { days: null, node: (
         <div className="bg-cloud rounded-md p-3 text-left">
-          <div className="text-[9.5px] uppercase tracking-wide text-steel mb-1.5">{label}</div>
+          <div className="text-[9.5px] uppercase tracking-wide text-steel mb-1.5">{label}<InfoToggle id={id} openInfo={openInfo} setOpenInfo={setOpenInfo} /></div>
           <div className="text-[11px] text-steel leading-relaxed">No se puede calcular por marca — es una sola operación compartida. Cambia a &quot;Consolidado&quot; para verlo.</div>
+          <InfoBox id={id} openInfo={openInfo} />
         </div>
       ) };
     }
     return { days: null, node: (
       <div className="bg-cloud rounded-md p-3">
-        <div className="text-[9.5px] uppercase tracking-wide text-steel mb-1.5">{label}</div>
+        <div className="text-[9.5px] uppercase tracking-wide text-steel mb-1.5">{label}<InfoToggle id={id} openInfo={openInfo} setOpenInfo={setOpenInfo} /></div>
         <div className="font-display text-[19px] font-bold">—</div>
+        <InfoBox id={id} openInfo={openInfo} />
       </div>
     ) };
   }
 
-  const dio = workingCapitalTile("Días de inventario (DIO)", "inventarioFinal", current.costoVentas);
-  const dso = workingCapitalTile("Días de cartera (DSO)", "cuentasPorCobrar", current.ventas);
-  const dpo = workingCapitalTile("Días a proveedores (DPO)", "cuentasPorPagar", current.costoVentas);
+  const dio = workingCapitalTile("dio", "Días de inventario (DIO)", "inventarioFinal", current.costoVentas);
+  const dso = workingCapitalTile("dso", "Días de cartera (DSO)", "cuentasPorCobrar", current.ventas);
+  const dpo = workingCapitalTile("dpo", "Días a proveedores (DPO)", "cuentasPorPagar", current.costoVentas);
   const ccc = dio.days !== null && dso.days !== null && dpo.days !== null ? dio.days + dso.days - dpo.days : null;
 
   return (
@@ -133,9 +166,10 @@ export function OtrosIndicadores({
           {dio.node}
           {dpo.node}
           <div className="rounded-md p-3" style={{ background: "rgba(217,164,65,.08)" }}>
-            <div className="text-[9.5px] uppercase tracking-wide text-steel mb-1.5">Ciclo de conversión de efectivo</div>
+            <div className="text-[9.5px] uppercase tracking-wide text-steel mb-1.5">Ciclo de conversión de efectivo<InfoToggle id="ccc" openInfo={openInfo} setOpenInfo={setOpenInfo} /></div>
             <div className="font-display text-[19px] font-bold" style={{ color: "#D9A441" }}>{ccc !== null ? `${ccc.toFixed(0)} días` : "—"}</div>
             {ccc !== null && <div className="text-[9.5px] text-steel mt-1">DIO + DSO − DPO</div>}
+            <InfoBox id="ccc" openInfo={openInfo} />
           </div>
         </div>
       </div>
