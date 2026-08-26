@@ -37,7 +37,11 @@ export function WriteOffQueue({ canAct }: { canAct: boolean }) {
   function load() {
     fetch("/api/merchandise-outflow/writeoff-queue")
       .then((r) => r.json())
-      .then(setBatches)
+      // Fix confirmado 2026-08-26: un 403 (sin canViewMerchandiseOutflow)
+      // llega igual como JSON ({error: "..."}) — sin este chequeo,
+      // setBatches recibía un objeto en vez de un arreglo y el .map de
+      // abajo crasheaba la pantalla en vez de mostrar un estado vacío.
+      .then((data) => setBatches(Array.isArray(data) ? data : []))
       .catch(() => setBatches([]));
   }
   useEffect(load, []);

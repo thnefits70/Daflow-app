@@ -16,6 +16,7 @@ type Tab = "despacho" | "garantia" | "deterioro" | "proveedor" | "guias" | "baja
 export function MerchandiseOutflowPanel({
   canCapture,
   canAct = false,
+  canView = false,
   canViewSupplierExchangeResolution = false,
   canSubmitCancelledGuide = false,
   canConfirmCancelledGuide = false,
@@ -23,6 +24,16 @@ export function MerchandiseOutflowPanel({
 }: {
   canCapture: boolean;
   canAct?: boolean;
+  // Fix confirmado 2026-08-26 (reportado por el usuario: "se le cae" a
+  // Bryan) — "Dar de baja en Just" e "Historial" son de TODOS los motivos
+  // de Egresos, no solo de lo que Bryan puede ver por su acceso a Guías
+  // Canceladas. Antes se mostraban sin este gate, y como sus endpoints SÍ
+  // exigen canViewMerchandiseOutflow (equipo de Inventario o admin), a
+  // Bryan el fetch le devolvía 403 y el componente crasheaba tratando de
+  // hacer `.map()` sobre `{error: "No autorizado."}`. Ahora esas dos
+  // pestañas dependen de este prop, y además WriteOffQueue/HistoryList ya
+  // no crashean ante una respuesta que no sea un arreglo.
+  canView?: boolean;
   // Confirmado 2026-08-26: pedido explícito del usuario — quien resuelve
   // cada producto de "Cambio con proveedor" (cambio o crédito) ya NO es
   // Daniel, es quien solicitó esa compra originalmente (o Bryan si el
@@ -73,8 +84,7 @@ export function MerchandiseOutflowPanel({
     ...(canCapture ? [{ id: "deterioro" as const, label: "Deterioro" }] : []),
     ...(canSeeProveedorTab ? [{ id: "proveedor" as const, label: "Cambio con proveedor" }] : []),
     ...(canSubmitCancelledGuide || canConfirmCancelledGuide || canCutoffCancelledGuide || canAct ? [{ id: "guias" as const, label: "Guías canceladas" }] : []),
-    { id: "baja" as const, label: "Dar de baja en Just" },
-    { id: "historial" as const, label: "Historial" },
+    ...(canView ? [{ id: "baja" as const, label: "Dar de baja en Just" }, { id: "historial" as const, label: "Historial" }] : []),
   ];
 
   return (
@@ -153,7 +163,7 @@ export function MerchandiseOutflowPanel({
           <CancelledGuidesPanel canSubmit={canSubmitCancelledGuide} canConfirm={canConfirmCancelledGuide} canCutoff={canCutoffCancelledGuide} canReingreso={canAct} />
         </>
       )}
-      {tab === "baja" && (
+      {tab === "baja" && canView && (
         <>
           <TabGuide storageKey="merchoutflow-baja">
             {canAct
@@ -163,7 +173,7 @@ export function MerchandiseOutflowPanel({
           <WriteOffQueue canAct={canAct} />
         </>
       )}
-      {tab === "historial" && (
+      {tab === "historial" && canView && (
         <>
           <TabGuide storageKey="merchoutflow-historial">Consulta acá el registro completo de egresos, con trazabilidad de quién capturó y quién dio de baja.</TabGuide>
           <HistoryList />

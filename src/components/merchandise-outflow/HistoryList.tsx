@@ -33,7 +33,10 @@ export function HistoryList() {
   useEffect(() => {
     fetch("/api/merchandise-outflow/history")
       .then((r) => r.json())
-      .then(setBatches)
+      // Fix confirmado 2026-08-26: un 403 llega igual como JSON de error, no
+      // como arreglo — sin este chequeo el componente crasheaba tratando de
+      // iterar sobre un objeto en vez de mostrar un estado vacío.
+      .then((data) => setBatches(Array.isArray(data) ? data : []))
       .catch(() => setBatches([]));
   }, []);
 
