@@ -77,8 +77,12 @@ model Department {
   trackKpis             Boolean  @default(false)
   // Habilita el registro semanal (ej. pedidos despachados) que se muestra en el Inicio para todos.
   trackWeeklyMetric     Boolean  @default(false)
-  // Habilita la bitácora de feedback semanal (reunión admin-líder): problemas y plan de acción.
-  // Solo el admin puede escribir en ella; el área solo puede verla.
+  // Habilita la bitácora de feedback semanal: problemas y plan de acción.
+  // El admin puede escribir manualmente; el asistente de check-in semanal
+  // también escribe (por su propio camino, ver CheckinConversation) cuando
+  // el empleado reporta directo. El líder del área puede ver siempre, y
+  // cambiar el estado (Pendiente/Solucionado/Rechazado) de sus propios
+  // registros — ver canEditDeptKpis.
   trackWeeklyReview     Boolean  @default(false)
   // Habilita "Pagos recordatorios" (facturas/suscripciones mensuales que vencen en fechas
   // variables) — confirmado 2026-07-22: solo Finanzas y Contabilidad, por ahora.
@@ -98,10 +102,12 @@ model Department {
   inventoryProductSnapshots InventoryProductSnapshot[]
   financeKpiSettings        FinanceKpiSettings?
   weeklyMetrics             WeeklyMetricRecord[]
-  weeklyReviews             WeeklyReviewRecord[]
+  weeklyReviews             WeeklyReviewRecord[]          @relation("WeeklyReviewDept")
+  involvedInWeeklyReviews   WeeklyReviewRecord[]          @relation("WeeklyReviewInvolvesDept")
   paymentReminders          PaymentReminder[]
   periodicReminders         PeriodicReminder[]
   nancyConversations        NancyConversation[]
+  checkinConversations      CheckinConversation[]
   purchaseRequests          PurchaseRequest[]
 
   @@index([order])
@@ -259,6 +265,8 @@ model User {
   purchaseRequestsShippingPaidBy               PurchaseRequest[]                  @relation("PurchaseRequestShippingPaidBy")
   payStubs                                     PayStub[]                          @relation("PayStubOwner")
   payStubsUploaded                             PayStub[]                          @relation("PayStubUploadedBy")
+  weeklyReviewsReported                        WeeklyReviewRecord[]               @relation("WeeklyReviewReportedBy")
+  weeklyReviewsInvolvingMe                     WeeklyReviewRecord[]               @relation("WeeklyReviewInvolvesUser")
   financeKpiRecordsUploaded                    FinanceKpiRecord[]                 @relation("FinanceKpiRecordUploadedBy")
   financeKpiUploadsBy                          FinanceKpiUpload[]                 @relation("FinanceKpiUploadUploadedBy")
   paymentReminderRecordsCompleted              PaymentReminderRecord[]            @relation("PaymentReminderCompletedBy")
@@ -1120,7 +1128,7 @@ enum ReviewStatus {
 model WeeklyReviewRecord {
   id         String     @id @default(cuid())
   deptId     String
-  department Department @relation(fields: [deptId], references: [id], onDelete: Cascade)
+  department Department @relation("WeeklyReviewDept", fields: [deptId], references: [id], onDelete: Cascade)
 
   // Semana ISO, formato "YYYY-Www" (lo que entrega <input type="week">)
   week       String
@@ -1128,10 +1136,36 @@ model WeeklyReviewRecord {
   actionPlan String
   status     ReviewStatus @default(PENDING)
 
+  // De dónde salió este registro: escrito a mano por el admin, o generado
+  // por el asistente de check-in semanal a partir de lo que reportó el
+  // propio empleado (ver CheckinConversation / src/lib/weeklyCheckin.ts).
+  source       ReviewSource @default(ADMIN_MANUAL)
+  reportedById String?
+  reportedBy   User?        @relation("WeeklyReviewReportedBy", fields: [reportedById], references: [id], onDelete: SetNull)
+
+  // Cuando el plan de acción depende de otra área o de un colaborador
+  // específico de otro equipo — el asistente intenta resolverlo a un FK
+  // real por nombre; involvesRaw guarda el texto crudo aunque no se logre
+  // resolver, para que el admin no pierda la mención. involvedNotifiedAt
+  // queda null si no aplica o si no había líder activo a quien avisar.
+  involvesDeptId     String?
+  involvesDept       Department? @relation("WeeklyReviewInvolvesDept", fields: [involvesDeptId], references: [id], onDelete: SetNull)
+  involvesUserId     String?
+  involvesUser       User?       @relation("WeeklyReviewInvolvesUser", fields: [involvesUserId], references: [id], onDelete: SetNull)
+  involvesRaw        String?
+  involvedNotifiedAt DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([deptId])
+  @@index([reportedById])
+  @@index([involvesDeptId])
+}
+
+enum ReviewSource {
+  ADMIN_MANUAL
+  ASSISTANT
 }
 
 enum SupplierStatus {
@@ -2356,6 +2390,40 @@ model NancyMessage {
   role           String // "user" | "assistant"
   content        String
   createdAt      DateTime          @default(now())
+
+  @@index([conversationId])
+}
+
+// Check-in semanal — asistente separado de Nancy/FERNICK, uno por empleado
+// por semana (reemplaza la reunión 1:1 admin-líder). Mismo patrón deptId +
+// ownerId escopado que Nancy; a diferencia de Nancy, ownerId aquí siempre es
+// un User real (este asistente es exclusivo de empleados, nunca admin), pero
+// se deja sin FK, mismo estilo que NancyConversation.ownerId.
+model CheckinConversation {
+  id         String     @id @default(cuid())
+  ownerId    String
+  deptId     String
+  department Department @relation(fields: [deptId], references: [id], onDelete: Cascade)
+  // Semana ISO "YYYY-Www" — un hilo nuevo por semana, coherente con el
+  // recordatorio fijo de los viernes (ver getWeeklyCheckinPushes).
+  weekOf     String
+  title      String
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+
+  messages CheckinMessage[]
+
+  @@index([ownerId, weekOf])
+  @@index([deptId])
+}
+
+model CheckinMessage {
+  id             String              @id @default(cuid())
+  conversationId String
+  conversation   CheckinConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role           String // "user" | "assistant"
+  content        String
+  createdAt      DateTime            @default(now())
 
   @@index([conversationId])
 }

@@ -9,6 +9,7 @@ import { getDeptProcessDetail } from "@/lib/processDetail";
 import { getPaymentRemindersData } from "@/lib/paymentReminders";
 import { getPeriodicReminders } from "@/lib/periodicReminders";
 import { getStoreFeedbackData, getStoreFeedbackMonthlyAggregates } from "@/lib/storeFeedback";
+import { getReviewsInvolvingUser } from "@/lib/weeklyCheckin";
 import { getInventoryControlData, getInventoryKpisData } from "@/lib/inventoryKpis";
 import { getPettyCashViewerData } from "@/lib/pettyCash";
 import { toSupplierDTO } from "@/lib/suppliers";
@@ -148,7 +149,11 @@ export default async function WorkspacePage() {
       ? prisma.weeklyMetricRecord.findMany({ where: { deptId: dept.id }, orderBy: { week: "asc" } })
       : Promise.resolve([]),
     dept.trackWeeklyReview
-      ? prisma.weeklyReviewRecord.findMany({ where: { deptId: dept.id }, orderBy: { week: "asc" } })
+      ? prisma.weeklyReviewRecord.findMany({
+          where: { deptId: dept.id },
+          orderBy: { week: "asc" },
+          include: { reportedBy: { select: { name: true } }, involvesDept: { select: { name: true } } },
+        })
       : Promise.resolve([]),
     prisma.user.findUnique({
       where: { id: session.user.id },
@@ -179,6 +184,8 @@ export default async function WorkspacePage() {
   ]);
 
   const kpisEditable = !!currentUser?.isLeader && currentUser.leadsDeptId === dept.id;
+  const weeklyReviewInvolvingMe =
+    kpisEditable && dept.trackWeeklyReview ? await getReviewsInvolvingUser(dept.id) : [];
 
   return (
     <div>
@@ -220,9 +227,15 @@ export default async function WorkspacePage() {
                 problem: w.problem,
                 actionPlan: w.actionPlan,
                 status: w.status,
+                source: w.source,
+                reportedByName: w.reportedBy?.name ?? null,
+                involvesDeptName: w.involvesDept?.name ?? null,
+                involvesRaw: w.involvesRaw,
+                involvedNotifiedAt: w.involvedNotifiedAt?.toISOString() ?? null,
               }))
             : []
         }
+        weeklyReviewInvolvingMe={weeklyReviewInvolvingMe}
         canManageStoreFeedback={canManageStoreFeedback}
         canViewStoreFeedback={canViewStoreFeedback}
         storeFeedbackStores={storeFeedbackStores}

@@ -787,6 +787,37 @@ export async function canViewMerchandiseReentry() {
   );
 }
 
+// Versión genérica de getInventoryLeadId/getFinanceLeadId/getMarketingLeadId
+// — sirve para CUALQUIER departamento por id, no solo INV/FIN/MKT. Agregado
+// para el enrutamiento entre áreas del check-in semanal, que debe funcionar
+// para todos los departamentos, no una lista fija corta.
+export async function getDeptLeadId(deptId: string): Promise<string | null> {
+  const lead = await prisma.user.findFirst({
+    where: { isLeader: true, leadsDeptId: deptId, isActive: true },
+    select: { id: true },
+  });
+  return lead?.id ?? null;
+}
+
+// Resuelve al líder del departamento AL QUE PERTENECE un usuario dado (no el
+// que esa persona lidera) — usado cuando el check-in semanal nombra a un
+// colaborador específico de otro equipo: se avisa a SU líder, nunca al
+// colaborador directo, para que nadie reciba una tarea sin que su jefe se
+// entere.
+export async function getLeadIdOfUsersDept(userId: string): Promise<string | null> {
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { deptId: true } });
+  if (!user?.deptId) return null;
+  return getDeptLeadId(user.deptId);
+}
+
+// Check-in semanal — cualquier empleado activo con departamento puede
+// reportarle al asistente (admin no reporta, no tiene departamento real).
+export async function canUseWeeklyCheckin() {
+  const session = await auth();
+  if (!session || session.user.role !== "employee") return false;
+  return !!session.user.deptId;
+}
+
 // Id de Nairoby (líder de Finanzas) para avisarle cuando Daniel aprueba un
 // lote — mismo estilo que getInventoryLeadId.
 export async function getFinanceLeadId(): Promise<string | null> {

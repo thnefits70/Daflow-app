@@ -42,7 +42,11 @@ export default async function DeptWorkspacePage({ params }: { params: Promise<{ 
       ? prisma.weeklyMetricRecord.findMany({ where: { deptId: id }, orderBy: { week: "asc" } })
       : Promise.resolve([]),
     dept.trackWeeklyReview
-      ? prisma.weeklyReviewRecord.findMany({ where: { deptId: id }, orderBy: { week: "asc" } })
+      ? prisma.weeklyReviewRecord.findMany({
+          where: { deptId: id },
+          orderBy: { week: "asc" },
+          include: { reportedBy: { select: { name: true } }, involvesDept: { select: { name: true } } },
+        })
       : Promise.resolve([]),
     dept.code === "MKT" ? getStoreFeedbackData() : Promise.resolve([]),
     dept.code === "INV" ? getInventoryControlData() : Promise.resolve(null),
@@ -98,6 +102,11 @@ export default async function DeptWorkspacePage({ params }: { params: Promise<{ 
           problem: w.problem,
           actionPlan: w.actionPlan,
           status: w.status,
+          source: w.source,
+          reportedByName: w.reportedBy?.name ?? null,
+          involvesDeptName: w.involvesDept?.name ?? null,
+          involvesRaw: w.involvesRaw,
+          involvedNotifiedAt: w.involvedNotifiedAt?.toISOString() ?? null,
         }))}
         canManageStoreFeedback={dept.code === "MKT"}
         storeFeedbackStores={storeFeedbackStores}

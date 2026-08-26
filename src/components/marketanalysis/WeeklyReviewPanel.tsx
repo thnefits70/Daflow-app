@@ -11,6 +11,22 @@ export type WeeklyReviewDTO = {
   problem: string;
   actionPlan: string;
   status: "PENDING" | "RESOLVED" | "REJECTED";
+  // Campos del check-in semanal (ver src/lib/weeklyCheckin.ts) — opcionales
+  // porque un registro manual del admin no los trae.
+  source?: "ADMIN_MANUAL" | "ASSISTANT";
+  reportedByName?: string | null;
+  involvesDeptName?: string | null;
+  involvesRaw?: string | null;
+  involvedNotifiedAt?: string | null;
+};
+
+export type InvolvingMeReviewDTO = {
+  id: string;
+  week: string;
+  problem: string;
+  actionPlan: string;
+  status: "PENDING" | "RESOLVED" | "REJECTED";
+  fromDeptName: string;
 };
 
 const STATUS_META: Record<WeeklyReviewDTO["status"], { label: string; color: string }> = {
@@ -28,10 +44,20 @@ export function WeeklyReviewPanel({
   deptId,
   records,
   editable,
+  canChangeStatus = false,
+  involvingMe = [],
 }: {
   deptId: string;
   records: WeeklyReviewDTO[];
   editable: boolean;
+  // El líder del área ahora puede cambiar el estado de sus propios
+  // registros (Pendiente/Solucionado/Rechazado) aunque no tenga el CRUD
+  // completo que sí tiene el admin (editable) — crear/editar contenido/
+  // eliminar sigue siendo exclusivo de él.
+  canChangeStatus?: boolean;
+  // Registros de OTRAS áreas que nombraron a este departamento o a uno de
+  // sus colaboradores — solo lectura.
+  involvingMe?: InvolvingMeReviewDTO[];
 }) {
   const router = useRouter();
   const sorted = [...records].sort((a, b) => (a.week < b.week ? 1 : -1));
@@ -237,11 +263,31 @@ export function WeeklyReviewPanel({
             <tbody>
               {sorted.map((r) => (
                 <tr key={r.id} className="border-b border-rule align-top">
-                  <td className="py-3 pr-3 text-[13px] font-semibold whitespace-nowrap">{formatWeek(r.week)}</td>
-                  <td className="py-3 pr-3 text-[13px] text-ink/90 max-w-[280px]">{r.problem}</td>
+                  <td className="py-3 pr-3 text-[13px] font-semibold whitespace-nowrap">
+                    {formatWeek(r.week)}
+                    {r.source === "ASSISTANT" && (
+                      <div className="mt-1 font-mono text-[9.5px] font-normal normal-case text-teal">🤖 {r.reportedByName ?? "Asistente"}</div>
+                    )}
+                  </td>
+                  <td className="py-3 pr-3 text-[13px] text-ink/90 max-w-[280px]">
+                    {r.problem}
+                    {(r.involvesDeptName || r.involvesRaw) && (
+                      <div
+                        className="mt-1.5 inline-flex items-center gap-1 font-mono text-[9.5px] font-semibold px-2 py-0.5 rounded-full"
+                        style={
+                          r.involvedNotifiedAt
+                            ? { color: "#92A3C0", border: "1px solid #92A3C0", background: "#92A3C01a" }
+                            : { color: "#C4453A", border: "1px solid #C4453A", background: "#C4453A1a" }
+                        }
+                        title={r.involvedNotifiedAt ? "Ya se avisó" : "Sin líder a quien avisar — seguimiento manual"}
+                      >
+                        ↔ Implica a {r.involvesDeptName ?? r.involvesRaw}
+                      </div>
+                    )}
+                  </td>
                   <td className="py-3 pr-3 text-[13px] text-ink/90 max-w-[280px]">{r.actionPlan}</td>
                   <td className="py-3 pr-3 whitespace-nowrap">
-                    {editable ? (
+                    {editable || canChangeStatus ? (
                       <select
                         className="rounded-full border px-2.5 py-1 text-[11px] font-semibold cursor-pointer bg-transparent"
                         style={{ color: STATUS_META[r.status].color, borderColor: STATUS_META[r.status].color }}
@@ -306,6 +352,38 @@ export function WeeklyReviewPanel({
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {involvingMe.length > 0 && (
+        <div className="mt-6">
+          <div className="text-[13px] font-semibold mb-1">Reportes que me involucran</div>
+          <div className="text-[12px] text-steel mb-3">
+            Problemas de otras áreas cuyo plan de acción menciona a tu equipo — solo lectura, el cierre le corresponde al área dueña.
+          </div>
+          <div className="space-y-2">
+            {involvingMe.map((r) => (
+              <div key={r.id} className="border border-rule rounded-md p-3 bg-cloud/40">
+                <div className="flex items-center justify-between gap-2 mb-1">
+                  <span className="text-[11px] font-mono font-semibold text-steel">
+                    {formatWeek(r.week)} · {r.fromDeptName}
+                  </span>
+                  <span
+                    className="font-mono text-[10px] font-semibold px-2 py-0.5 rounded-full"
+                    style={{
+                      color: STATUS_META[r.status].color,
+                      border: `1px solid ${STATUS_META[r.status].color}`,
+                      background: `${STATUS_META[r.status].color}1a`,
+                    }}
+                  >
+                    {STATUS_META[r.status].label}
+                  </span>
+                </div>
+                <div className="text-[12.5px] text-ink/90 mb-1">{r.problem}</div>
+                <div className="text-[12px] text-steel">{r.actionPlan}</div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>

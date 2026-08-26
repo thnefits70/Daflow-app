@@ -6,6 +6,7 @@ import { getStalePurchaseRequestPushes } from "@/lib/purchases";
 import { getStaleSupplierCreditPushes } from "@/lib/supplierCredits";
 import { getStaleAdminPaymentPushes } from "@/lib/adminPayments";
 import { getStalePersonalPurchaseTransferPushes } from "@/lib/personalPurchases";
+import { getWeeklyCheckinPushes } from "@/lib/weeklyCheckin";
 import { sendPushToOwner } from "@/lib/webPush";
 
 // Disparado por Vercel Cron (ver vercel.json) una vez al día. Protegido por
@@ -81,6 +82,15 @@ export async function GET(req: NextRequest) {
 
   const stalePersonalPurchaseTransfers = await getStalePersonalPurchaseTransferPushes();
   for (const r of stalePersonalPurchaseTransfers) {
+    await sendPushToOwner(r.ownerId, { title: r.title, body: r.body, url: r.url });
+    notified++;
+  }
+
+  // Check-in semanal — reemplaza la reunión 1:1: solo se activa los
+  // viernes (ver getWeeklyCheckinPushes), a todo empleado activo de un
+  // área con trackWeeklyReview que todavía no reportó esta semana.
+  const weeklyCheckinPushes = await getWeeklyCheckinPushes();
+  for (const r of weeklyCheckinPushes) {
     await sendPushToOwner(r.ownerId, { title: r.title, body: r.body, url: r.url });
     notified++;
   }

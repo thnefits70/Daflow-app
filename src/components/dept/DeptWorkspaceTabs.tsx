@@ -18,7 +18,7 @@ import type { FinanceKpiDataDTO } from "@/lib/financeKpis";
 import { PaymentRemindersPanel } from "@/components/finance/PaymentRemindersPanel";
 import type { PaymentReminderDTO } from "@/lib/paymentReminders";
 import { WeeklyMetricPanel, type WeeklyMetricDTO } from "@/components/fulfillment/WeeklyMetricPanel";
-import { WeeklyReviewPanel, type WeeklyReviewDTO } from "@/components/marketanalysis/WeeklyReviewPanel";
+import { WeeklyReviewPanel, type WeeklyReviewDTO, type InvolvingMeReviewDTO } from "@/components/marketanalysis/WeeklyReviewPanel";
 import { PurchaseControlPanel } from "@/components/purchases/PurchaseControlPanel";
 import { InventoryControlPanel } from "@/components/inventory/InventoryControlPanel";
 import { InventoryKpisPanel } from "@/components/finance/InventoryKpisPanel";
@@ -77,6 +77,7 @@ export function DeptWorkspaceTabs({
   weeklyMetricRecords = [],
   trackWeeklyReview = false,
   weeklyReviewRecords = [],
+  weeklyReviewInvolvingMe = [],
   canManageStoreFeedback = false,
   canViewStoreFeedback = false,
   storeFeedbackStores = [],
@@ -143,6 +144,7 @@ export function DeptWorkspaceTabs({
   weeklyMetricRecords?: WeeklyMetricDTO[];
   trackWeeklyReview?: boolean;
   weeklyReviewRecords?: WeeklyReviewDTO[];
+  weeklyReviewInvolvingMe?: InvolvingMeReviewDTO[];
   // Servicio Postventa (Análisis de Mercado) — per-viewer gate pattern, not
   // a per-department trackXxx flag. Two
   // tiers: canManageStoreFeedback (full edit, incluye el detalle de cada
@@ -498,7 +500,13 @@ export function DeptWorkspaceTabs({
         />
       )}
       {tab === "feedback" && trackWeeklyReview && (
-        <WeeklyReviewPanel deptId={deptId} records={weeklyReviewRecords} editable={editable} />
+        <WeeklyReviewPanel
+          deptId={deptId}
+          records={weeklyReviewRecords}
+          editable={editable}
+          canChangeStatus={kpisEditable ?? editable}
+          involvingMe={weeklyReviewInvolvingMe}
+        />
       )}
     </div>
   );
