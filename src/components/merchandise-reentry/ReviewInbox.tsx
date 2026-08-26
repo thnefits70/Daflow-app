@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AlertTriangle, ChevronDown, ChevronUp, Pencil, Wrench } from "lucide-react";
+import { AlertTriangle, ChevronDown, ChevronUp, Pencil, Trash2, Wrench } from "lucide-react";
 import { ProductMatchPicker, type ProductMatchResult } from "./ProductMatchPicker";
 
 type ItemDTO = {
@@ -52,6 +52,28 @@ export function ReviewInbox({ canAct }: { canAct: boolean }) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  // Quitar un producto duplicado que quedó por un doble-tap en la captura
+  // (bug corregido 2026-08-26) — exclusivo de Daniel (canAct) y solo antes
+  // de aprobar, ver DELETE /api/merchandise-reentry/items/[id].
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState("");
+
+  async function deleteDuplicate(itemId: string) {
+    setDeletingId(itemId);
+    setDeleteError("");
+    try {
+      const res = await fetch(`/api/merchandise-reentry/items/${itemId}`, { method: "DELETE" });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error ?? "No se pudo quitar el producto.");
+      setConfirmDeleteId(null);
+      load();
+    } catch (e) {
+      setDeleteError(e instanceof Error ? e.message : "No se pudo quitar el producto.");
+    } finally {
+      setDeletingId(null);
+    }
+  }
 
   function load() {
     fetch("/api/merchandise-reentry/batches/review")
@@ -152,21 +174,49 @@ export function ReviewInbox({ canAct }: { canAct: boolean }) {
               </div>
               {expandedId === b.id && (
                 <div className="bg-cloud border-t border-rule p-3.5 flex flex-col gap-2">
-                  {b.items.map((it) => (
-                    <div key={it.id} className="flex items-center gap-2.5">
-                      {it.photoUrls[0] && (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={it.photoUrls[0]}
-                          alt={itemName(it)}
-                          className="w-9 h-9 object-cover rounded border border-rule cursor-zoom-in"
-                          onClick={() => setLightboxUrl(it.photoUrls[0])}
-                        />
-                      )}
-                      <div className="flex-1 text-[12px]">{itemName(it)}</div>
-                      <span className="text-[11.5px] text-green font-semibold">{it.goodQty} buenas</span>
-                    </div>
-                  ))}
+                  {deleteError && <div className="text-red text-[11px]">{deleteError}</div>}
+                  {b.items.map((it) =>
+                    confirmDeleteId === it.id ? (
+                      <div key={it.id} className="flex items-center gap-2 bg-red/10 border border-red/40 rounded-md p-2">
+                        <span className="flex-1 text-[11.5px]">¿Quitar &quot;{itemName(it)}&quot; de este lote?</span>
+                        <button type="button" className="text-[11px] font-semibold text-steel cursor-pointer" onClick={() => setConfirmDeleteId(null)}>
+                          Cancelar
+                        </button>
+                        <button
+                          type="button"
+                          disabled={deletingId === it.id}
+                          className="rounded border border-red bg-red px-2.5 py-1 text-[11px] font-bold text-white cursor-pointer disabled:opacity-60"
+                          onClick={() => deleteDuplicate(it.id)}
+                        >
+                          {deletingId === it.id ? "Quitando…" : "Sí, quitar"}
+                        </button>
+                      </div>
+                    ) : (
+                      <div key={it.id} className="flex items-center gap-2.5">
+                        {it.photoUrls[0] && (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={it.photoUrls[0]}
+                            alt={itemName(it)}
+                            className="w-9 h-9 object-cover rounded border border-rule cursor-zoom-in"
+                            onClick={() => setLightboxUrl(it.photoUrls[0])}
+                          />
+                        )}
+                        <div className="flex-1 text-[12px]">{itemName(it)}</div>
+                        <span className="text-[11.5px] text-green font-semibold">{it.goodQty} buenas</span>
+                        {canAct && (
+                          <button
+                            type="button"
+                            title="Quitar producto duplicado de este lote"
+                            className="text-steel hover:text-red cursor-pointer shrink-0"
+                            onClick={() => { setConfirmDeleteId(it.id); setDeleteError(""); }}
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        )}
+                      </div>
+                    )
+                  )}
                 </div>
               )}
             </div>
