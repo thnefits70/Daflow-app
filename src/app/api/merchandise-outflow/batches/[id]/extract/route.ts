@@ -5,7 +5,8 @@ import { prisma } from "@/lib/prisma";
 import { canCaptureMerchandiseOutflow } from "@/lib/guards";
 import { readOutflowManifest } from "@/lib/merchandiseOutflowAi";
 
-const schema = z.object({ photoUrls: z.array(z.string().min(1)).min(1).max(20) });
+const MAX_PHOTOS = 40;
+const schema = z.object({ photoUrls: z.array(z.string().min(1)).min(1).max(MAX_PHOTOS) });
 
 // Daniel sube las fotos de la hoja/manifiesto — la IA arma un consolidado
 // SUGERIDO (nunca persistido acá) para que revise fila por fila antes de
@@ -18,7 +19,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const { id } = await params;
   const body = await req.json().catch(() => null);
   const parsed = schema.safeParse(body);
-  if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Datos inválidos." }, { status: 400 });
+  if (!parsed.success) {
+    const tooMany = parsed.error.issues.some((i) => i.path[0] === "photoUrls" && i.code === "too_big");
+    return NextResponse.json({ error: tooMany ? `Máximo ${MAX_PHOTOS} fotos por lote. Quita algunas o envía el resto en un lote aparte.` : "Datos inválidos." }, { status: 400 });
+  }
 
   const batch = await prisma.merchandiseOutflowBatch.findUnique({ where: { id } });
   if (!batch) return NextResponse.json({ error: "No encontrado." }, { status: 404 });

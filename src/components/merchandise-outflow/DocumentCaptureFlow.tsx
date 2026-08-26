@@ -10,6 +10,7 @@ type BatchDTO = { id: string; code: string; documentPhotoUrls: string[]; items: 
 type Confidence = "alta" | "media" | "baja";
 type SuggestedRow = { name: string; quantity: number; confidence: Confidence; selected: MatchCatalogItem | null; manualName: string; adding?: boolean; added?: boolean };
 
+const MAX_PHOTOS = 40;
 const CONFIDENCE_LABEL: Record<Confidence, string> = { alta: "Lectura clara", media: "Revisar: letra poco clara", baja: "Revisar: dudosa" };
 const CONFIDENCE_STYLE: Record<Confidence, string> = {
   alta: "bg-green/10 text-green border-green/35",
@@ -288,6 +289,8 @@ export function DocumentCaptureFlow({ reason }: { reason: "DESPACHO" | "GARANTIA
         </div>
         {taking ? (
           <LiveCameraCapture folder="merchandise-outflow-photos" onCaptured={(url) => { setPhotos((p) => [...p, url]); setTaking(false); }} onCancel={() => setTaking(false)} />
+        ) : photos.length >= MAX_PHOTOS ? (
+          <div className="text-[11.5px] text-steel">Máximo {MAX_PHOTOS} fotos por lote. Quita alguna para agregar otra, o envía el resto en un lote aparte.</div>
         ) : (
           <button type="button" className="flex items-center gap-1.5 text-[12.5px] font-bold border-[1.5px] border-rule rounded-md px-3.5 py-2 cursor-pointer" onClick={() => setTaking(true)}>
             <Camera size={14} /> {photos.length === 0 ? "Tomar foto" : "Agregar otra foto"}
