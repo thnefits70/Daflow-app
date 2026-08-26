@@ -4,12 +4,17 @@ import { prisma } from "@/lib/prisma";
 import { canEditPayrollRoles } from "@/lib/guards";
 import { totalsFromLineItems } from "@/lib/payroll";
 
+// amount admite 0: los placeholders automáticos ("Anticipos" / "Compras
+// personales" / "Descuentos por mala gestión" sin nada activo) se generan
+// con monto 0 — antes exigía > 0 y esto hacía fallar CADA guardado de un
+// rol que todavía tuviera uno de esos placeholders sin tocar (silencioso:
+// el front no revisaba el status de la respuesta).
 const schema = z.object({
   lineItems: z
     .array(
       z.object({
         label: z.string().trim().min(1),
-        amount: z.number().positive(),
+        amount: z.number().min(0),
         kind: z.enum(["INCOME", "EXPENSE"]),
         isAutomatic: z.boolean().optional(),
         note: z.string().optional(),

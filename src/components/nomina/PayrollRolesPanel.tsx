@@ -112,6 +112,7 @@ function RoleCard({ role, index, published, canEdit, monthlyRoleId, showPayout, 
   const [items, setItems] = useState<LineItem[]>(role.lineItems);
   const [savedItems, setSavedItems] = useState<LineItem[]>(role.lineItems);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
   const [correcting, setCorrecting] = useState(false);
   const [changeNote, setChangeNote] = useState("");
   const [correctingMonthly, setCorrectingMonthly] = useState(false);
@@ -159,19 +160,32 @@ function RoleCard({ role, index, published, canEdit, monthlyRoleId, showPayout, 
   // disparando varios guardados sueltos).
   function stageChange(next: LineItem[]) {
     setItems(next);
+    setSaveError("");
   }
 
   const isDirty = !published && JSON.stringify(items) !== JSON.stringify(savedItems);
 
+  // Confirmado 2026-08-25: bug real encontrado por el usuario — el schema
+  // del backend rechazaba amount=0 (placeholders automáticos como
+  // "Anticipos" sin nada activo), así que este PATCH fallaba con 400 en
+  // silencio: el botón desaparecía como si hubiera guardado, pero el
+  // servidor nunca actualizaba nada. Ahora si la respuesta no es ok, se
+  // mantiene el aviso de "cambios sin guardar" y se muestra el error.
   async function saveChanges() {
     if (published) return;
     setSaving(true);
-    await fetch(`/api/payroll/roles/${role.id}/line-items`, {
+    setSaveError("");
+    const res = await fetch(`/api/payroll/roles/${role.id}/line-items`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ lineItems: items }),
     });
     setSaving(false);
+    if (!res.ok) {
+      const data = await res.json().catch(() => null);
+      setSaveError(data?.error ?? "No se pudo guardar — intentá de nuevo.");
+      return;
+    }
     setSavedItems(items);
     onChanged();
   }
@@ -179,12 +193,18 @@ function RoleCard({ role, index, published, canEdit, monthlyRoleId, showPayout, 
   async function submitCorrection() {
     if (!changeNote.trim()) return;
     setSaving(true);
-    await fetch(`/api/payroll/roles/${role.id}/correct`, {
+    setSaveError("");
+    const res = await fetch(`/api/payroll/roles/${role.id}/correct`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ lineItems: items, changeNote: changeNote.trim() }),
     });
     setSaving(false);
+    if (!res.ok) {
+      const data = await res.json().catch(() => null);
+      setSaveError(data?.error ?? "No se pudo guardar la corrección — intentá de nuevo.");
+      return;
+    }
     setCorrecting(false);
     setChangeNote("");
     onChanged();
@@ -340,6 +360,7 @@ function RoleCard({ role, index, published, canEdit, monthlyRoleId, showPayout, 
           <span className="text-[10.5px] text-gold">Cambios sin guardar</span>
         </div>
       )}
+      {saveError && <div className="text-[11px] text-red mt-1.5">{saveError}</div>}
 
       {published && !correcting && canEdit && (
         <button type="button" className="text-[11px] text-blue font-semibold cursor-pointer mt-2.5" onClick={() => setCorrecting(true)}>
