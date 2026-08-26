@@ -110,6 +110,7 @@ const ROLE_CARD_ACCENTS = [
 
 function RoleCard({ role, index, published, canEdit, monthlyRoleId, showPayout, onChanged }: { role: Role; index: number; published: boolean; canEdit: boolean; monthlyRoleId?: string; showPayout: boolean; onChanged: () => void }) {
   const [items, setItems] = useState<LineItem[]>(role.lineItems);
+  const [savedItems, setSavedItems] = useState<LineItem[]>(role.lineItems);
   const [saving, setSaving] = useState(false);
   const [correcting, setCorrecting] = useState(false);
   const [changeNote, setChangeNote] = useState("");
@@ -151,16 +152,27 @@ function RoleCard({ role, index, published, canEdit, monthlyRoleId, showPayout, 
     onChanged();
   }
 
-  async function saveDraft(next: LineItem[]) {
+  // Confirmado 2026-08-25: pedido del usuario — antes cada click en "x" o
+  // "+Agregar" guardaba solo (un PATCH por click). Ahora esos clicks solo
+  // actualizan la lista en memoria; recién "Guardar cambios" persiste todo
+  // junto y refresca el total de arriba (evita ediciones a medias
+  // disparando varios guardados sueltos).
+  function stageChange(next: LineItem[]) {
     setItems(next);
+  }
+
+  const isDirty = !published && JSON.stringify(items) !== JSON.stringify(savedItems);
+
+  async function saveChanges() {
     if (published) return;
     setSaving(true);
     await fetch(`/api/payroll/roles/${role.id}/line-items`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ lineItems: next }),
+      body: JSON.stringify({ lineItems: items }),
     });
     setSaving(false);
+    setSavedItems(items);
     onChanged();
   }
 
@@ -239,7 +251,7 @@ function RoleCard({ role, index, published, canEdit, monthlyRoleId, showPayout, 
                 {it.kind === "INCOME" ? "+" : "−"}{money(displayAmount(it))}
               </span>
               {editingEnabled && (
-                <button type="button" className="text-steel-dim cursor-pointer" onClick={() => saveDraft(items.filter((_, i) => i !== idx))}>
+                <button type="button" className="text-steel-dim cursor-pointer" onClick={() => stageChange(items.filter((_, i) => i !== idx))}>
                   <X size={12} />
                 </button>
               )}
@@ -265,7 +277,7 @@ function RoleCard({ role, index, published, canEdit, monthlyRoleId, showPayout, 
                   <div className="flex items-center gap-2">
                     <span className="flex-1 text-steel font-medium">{it.label}</span>
                     {editingEnabled && (
-                      <button type="button" className="text-steel-dim cursor-pointer" onClick={() => saveDraft(items.filter((_, i) => i !== idx))}>
+                      <button type="button" className="text-steel-dim cursor-pointer" onClick={() => stageChange(items.filter((_, i) => i !== idx))}>
                         <X size={10} />
                       </button>
                     )}
@@ -311,8 +323,23 @@ function RoleCard({ role, index, published, canEdit, monthlyRoleId, showPayout, 
         </div>
       )}
 
-      {editingEnabled && <NewConceptForm onAdd={(item) => saveDraft([...items, item])} />}
-      {saving && <div className="text-[10.5px] text-steel-dim mt-1">Guardando…</div>}
+      {editingEnabled && <NewConceptForm onAdd={(item) => stageChange([...items, item])} />}
+      {isDirty && (
+        <div className="flex items-center gap-2 mt-2">
+          <button
+            type="button"
+            disabled={saving}
+            className="text-[12px] font-bold bg-teal text-white rounded-md px-3.5 py-1.5 cursor-pointer disabled:opacity-50"
+            onClick={saveChanges}
+          >
+            {saving ? "Guardando…" : "Guardar cambios"}
+          </button>
+          <button type="button" disabled={saving} className="text-[11.5px] text-steel cursor-pointer disabled:opacity-50" onClick={() => setItems(savedItems)}>
+            Descartar
+          </button>
+          <span className="text-[10.5px] text-gold">Cambios sin guardar</span>
+        </div>
+      )}
 
       {published && !correcting && canEdit && (
         <button type="button" className="text-[11px] text-blue font-semibold cursor-pointer mt-2.5" onClick={() => setCorrecting(true)}>
