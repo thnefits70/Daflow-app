@@ -6,7 +6,7 @@ const RANK_TO_CONFIDENCE: Confidence[] = ["baja", "media", "alta"];
 
 export type CatalogItemLite = { id: string; name: string; photos: string[]; justCode: string | null; pendingRegistration: boolean };
 export type ComboLite = { code: string; components: { quantity: number; catalogItem: CatalogItemLite }[] };
-export type OutflowRowGroup = { name: string; quantity: number; confidence: Confidence; catalogItem: CatalogItemLite | null; unrecognizedCode: string | null; fromCombo: string | null };
+export type OutflowRowGroup = { name: string; quantity: number; confidence: Confidence; catalogItem: CatalogItemLite | null; sourceCode: string | null; fromCombo: string | null };
 
 // Extraído de extract/route.ts para poder probarlo directo (sin servidor
 // HTTP ni sesión) contra datos marcados (ZZDBG_...) — ver
@@ -25,14 +25,14 @@ export function groupOutflowRows(
 ): OutflowRowGroup[] {
   const groups = new Map<string, OutflowRowGroup>();
 
-  function addToGroup(key: string, value: Omit<OutflowRowGroup, "unrecognizedCode" | "fromCombo"> & { unrecognizedCode?: string | null; fromCombo?: string | null }) {
+  function addToGroup(key: string, value: Omit<OutflowRowGroup, "sourceCode" | "fromCombo"> & { sourceCode?: string | null; fromCombo?: string | null }) {
     const existing = groups.get(key);
     if (existing) {
       existing.quantity += value.quantity;
       existing.confidence = RANK_TO_CONFIDENCE[Math.min(CONFIDENCE_RANK[existing.confidence], CONFIDENCE_RANK[value.confidence])];
-      if (!existing.unrecognizedCode && value.unrecognizedCode) existing.unrecognizedCode = value.unrecognizedCode;
+      if (!existing.sourceCode && value.sourceCode) existing.sourceCode = value.sourceCode;
     } else {
-      groups.set(key, { unrecognizedCode: null, fromCombo: null, ...value });
+      groups.set(key, { sourceCode: null, fromCombo: null, ...value });
     }
   }
 
@@ -58,7 +58,13 @@ export function groupOutflowRows(
       quantity: row.quantity,
       confidence: row.confidence,
       catalogItem: matched ?? null,
-      unrecognizedCode: !matched && row.code ? row.code : null,
+      // Confirmado 2026-08-26 (reportado por Daniel): un código a veces
+      // coincide con el producto EQUIVOCADO del catálogo (ej. un ID de
+      // combo que por error del import de Just también quedó linkeado a un
+      // producto real) — se expone el código SIEMPRE, no solo cuando no
+      // hubo match, para que Daniel pueda corregir/enseñar el combo real
+      // incluso cuando el sistema "resolvió" con confianza pero mal.
+      sourceCode: row.code ?? null,
     });
   }
 

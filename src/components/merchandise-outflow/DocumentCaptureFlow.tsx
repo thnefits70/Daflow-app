@@ -17,7 +17,7 @@ type SuggestedRow = {
   manualName: string;
   adding?: boolean;
   added?: boolean;
-  unrecognizedCode?: string | null;
+  sourceCode?: string | null;
   fromCombo?: string | null;
   comboBuilderOpen?: boolean;
   comboDraft?: ComboDraftComponent[];
@@ -101,13 +101,13 @@ export function DocumentCaptureFlow({ reason, canManageJustCatalog = false }: { 
       if (result.error) setError(result.error);
       setRows(
         (result.rows ?? []).map(
-          (r: { name: string; quantity: number; confidence?: Confidence; catalogItem?: MatchCatalogItem | null; unrecognizedCode?: string | null; fromCombo?: string | null }) => ({
+          (r: { name: string; quantity: number; confidence?: Confidence; catalogItem?: MatchCatalogItem | null; sourceCode?: string | null; fromCombo?: string | null }) => ({
             name: r.name,
             quantity: r.quantity,
             confidence: r.confidence ?? "media",
             selected: r.catalogItem ?? null,
             manualName: "",
-            unrecognizedCode: r.unrecognizedCode ?? null,
+            sourceCode: r.sourceCode ?? null,
             fromCombo: r.fromCombo ?? null,
           })
         )
@@ -148,13 +148,17 @@ export function DocumentCaptureFlow({ reason, canManageJustCatalog = false }: { 
   // reconoce, en vez de tener que ir a Base de datos de productos — se
   // guarda para reutilizarse solo en próximas lecturas (DropiCombo) y de
   // una vez reemplaza este renglón por sus productos reales ya resueltos.
+  // Corregido el mismo día (reportado por Daniel): un código a veces
+  // coincide CON CONFIANZA pero MAL contra un producto real del catálogo
+  // (colisión de datos) — por eso esto también se ofrece cuando la fila ya
+  // tiene un `selected`, no solo cuando quedó sin reconocer.
   async function saveComboAndExpand(index: number) {
     const row = rows[index];
-    if (!row.unrecognizedCode || !row.comboDraft || row.comboDraft.length === 0) return;
+    if (!row.sourceCode || !row.comboDraft || row.comboDraft.length === 0) return;
     setRows((rs) => rs.map((r, i) => (i === index ? { ...r, savingCombo: true } : r)));
     try {
       const combo = await postJson("/api/dropi-combos", {
-        code: row.unrecognizedCode,
+        code: row.sourceCode,
         components: row.comboDraft.map((c) => ({ catalogItemId: c.catalogItem.id, quantity: c.quantity })),
       });
       const expanded: SuggestedRow[] = combo.components.map((comp: { quantity: number; catalogItem: MatchCatalogItem }) => ({
@@ -368,10 +372,10 @@ export function DocumentCaptureFlow({ reason, canManageJustCatalog = false }: { 
             {rows.reduce((sum, r) => sum + r.quantity, 0)} unidad(es) en total
             {" · "}
             {rows.filter((r) => r.selected).length} coincidieron con el catálogo
-            {rows.some((r) => r.unrecognizedCode) && (
+            {rows.some((r) => !r.selected && r.sourceCode) && (
               <>
                 {" · "}
-                <span className="text-yellow font-semibold">{rows.filter((r) => r.unrecognizedCode).length} con código no reconocido</span>
+                <span className="text-yellow font-semibold">{rows.filter((r) => !r.selected && r.sourceCode).length} con código no reconocido</span>
               </>
             )}
           </div>
@@ -401,10 +405,10 @@ export function DocumentCaptureFlow({ reason, canManageJustCatalog = false }: { 
                 {row.fromCombo && (
                   <div className="text-[11px] text-steel mb-1.5">Desglosado del combo Dropi {row.fromCombo}.</div>
                 )}
-                {row.unrecognizedCode && (
+                {!row.selected && row.sourceCode && (
                   <div className="text-[11.5px] bg-yellow/10 border border-yellow/35 rounded px-2 py-1.5 mb-2">
                     <div>
-                      Código &quot;{row.unrecognizedCode}&quot; no reconocido — ¿puede ser un combo nuevo?
+                      Código &quot;{row.sourceCode}&quot; no reconocido — ¿puede ser un combo nuevo?
                       {!canManageJustCatalog && " Avísale a Daniel para que lo registre en Base de datos de productos."} Mientras tanto, busca el producto a mano abajo.
                     </div>
                     {canManageJustCatalog && !row.comboBuilderOpen && (
@@ -416,37 +420,26 @@ export function DocumentCaptureFlow({ reason, canManageJustCatalog = false }: { 
                         Sí, desglosar este combo ahora
                       </button>
                     )}
-                    {row.comboBuilderOpen && (
-                      <div className="mt-2">
-                        <div className="text-[11px] font-semibold text-steel mb-1">¿Qué productos reales trae este combo, y en qué cantidad cada uno?</div>
-                        <ComboComponentBuilder components={row.comboDraft ?? []} onChange={(next) => setRows((rs) => rs.map((r, j) => (j === i ? { ...r, comboDraft: next } : r)))} />
-                        <div className="flex gap-2 mt-2">
-                          <button
-                            type="button"
-                            className="flex-1 rounded border border-rule px-3 py-1.5 text-[12px] font-semibold cursor-pointer"
-                            onClick={() => setRows((rs) => rs.map((r, j) => (j === i ? { ...r, comboBuilderOpen: false } : r)))}
-                          >
-                            Cancelar
-                          </button>
-                          <button
-                            type="button"
-                            disabled={row.savingCombo || !row.comboDraft?.length}
-                            className="flex-1 rounded border border-teal bg-teal px-3 py-1.5 text-[12px] font-bold text-navy cursor-pointer disabled:opacity-50"
-                            onClick={() => saveComboAndExpand(i)}
-                          >
-                            {row.savingCombo ? "Guardando…" : "Guardar combo y aplicar"}
-                          </button>
-                        </div>
-                      </div>
-                    )}
                   </div>
                 )}
                 {row.selected ? (
-                  <div className="flex items-center gap-2.5 bg-green/10 border border-green/35 rounded-md p-2 mb-2">
-                    <div className="flex-1 min-w-0 text-[12px] font-semibold truncate">{row.selected.name}</div>
-                    <button type="button" className="text-[11px] font-semibold text-blue cursor-pointer" onClick={() => setRows((rs) => rs.map((r, j) => (j === i ? { ...r, selected: null } : r)))}>
-                      Cambiar
-                    </button>
+                  <div className="mb-2">
+                    <div className="flex items-center gap-2.5 bg-green/10 border border-green/35 rounded-md p-2">
+                      <div className="flex-1 min-w-0 text-[12px] font-semibold truncate">{row.selected.name}</div>
+                      <button type="button" className="text-[11px] font-semibold text-blue cursor-pointer" onClick={() => setRows((rs) => rs.map((r, j) => (j === i ? { ...r, selected: null } : r)))}>
+                        Cambiar
+                      </button>
+                    </div>
+                    {/* Confirmado 2026-08-26 (reportado por Daniel): un código a veces coincide CON CONFIANZA pero MAL contra un producto real (colisión de datos del catálogo) — se ofrece corregir/enseñar el combo real aunque ya haya un match. */}
+                    {row.sourceCode && canManageJustCatalog && !row.comboBuilderOpen && (
+                      <button
+                        type="button"
+                        className="mt-1 text-[11px] font-semibold text-steel hover:text-teal cursor-pointer"
+                        onClick={() => setRows((rs) => rs.map((r, j) => (j === i ? { ...r, comboBuilderOpen: true, comboDraft: [] } : r)))}
+                      >
+                        ¿El código &quot;{row.sourceCode}&quot; es en realidad un combo? Corregir
+                      </button>
+                    )}
                   </div>
                 ) : row.manualName ? (
                   <div className="flex items-center gap-2.5 bg-surface rounded-md p-2 mb-2">
@@ -463,6 +456,29 @@ export function DocumentCaptureFlow({ reason, canManageJustCatalog = false }: { 
                       setRows((rs) => rs.map((r, j) => (j === i ? ("catalogItem" in result ? { ...r, selected: result.catalogItem, manualName: "" } : { ...r, manualName: result.manualName, selected: null }) : r)))
                     }
                   />
+                )}
+                {row.comboBuilderOpen && (
+                  <div className="bg-yellow/10 border border-yellow/35 rounded-md p-2.5 mb-2">
+                    <div className="text-[11px] font-semibold text-steel mb-1">¿Qué productos reales trae este combo, y en qué cantidad cada uno?</div>
+                    <ComboComponentBuilder components={row.comboDraft ?? []} onChange={(next) => setRows((rs) => rs.map((r, j) => (j === i ? { ...r, comboDraft: next } : r)))} />
+                    <div className="flex gap-2 mt-2">
+                      <button
+                        type="button"
+                        className="flex-1 rounded border border-rule px-3 py-1.5 text-[12px] font-semibold cursor-pointer"
+                        onClick={() => setRows((rs) => rs.map((r, j) => (j === i ? { ...r, comboBuilderOpen: false } : r)))}
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        type="button"
+                        disabled={row.savingCombo || !row.comboDraft?.length}
+                        className="flex-1 rounded border border-teal bg-teal px-3 py-1.5 text-[12px] font-bold text-navy cursor-pointer disabled:opacity-50"
+                        onClick={() => saveComboAndExpand(i)}
+                      >
+                        {row.savingCombo ? "Guardando…" : "Guardar combo y aplicar"}
+                      </button>
+                    </div>
+                  </div>
                 )}
                 <div className="flex items-center gap-2 mb-2">
                   <span className="text-[11px] text-steel">Cantidad</span>
