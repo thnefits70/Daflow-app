@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Camera, Check, Pencil, Plus, Send, Trash2, X } from "lucide-react";
 import { LiveCameraCapture } from "@/components/shared/LiveCameraCapture";
 import { ProductMatchPicker, type MatchCatalogItem, type ProductMatchResult } from "./ProductMatchPicker";
@@ -331,6 +331,7 @@ function AddItemForm({ batchId, onAdded, onCancel }: { batchId: string; onAdded:
   const [damageReason, setDamageReason] = useState("");
   const [damageReasonOther, setDamageReasonOther] = useState("");
   const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
   const [error, setError] = useState("");
   const [confirmingAdd, setConfirmingAdd] = useState(false);
 
@@ -363,7 +364,11 @@ function AddItemForm({ batchId, onAdded, onCancel }: { batchId: string; onAdded:
   const finalDamageReason = dQty > 0 ? (damageReason === "Otro" ? damageReasonOther.trim() || "Otro (sin describir)" : damageReason) : null;
 
   async function save() {
-    if (!photoUrl) return;
+    // Guard con ref (no solo state) porque un doble-tap táctil dispara dos
+    // onClick antes de que React re-renderice el botón con disabled=true,
+    // creando dos POST y un producto duplicado en el lote.
+    if (!photoUrl || savingRef.current) return;
+    savingRef.current = true;
     setSaving(true);
     setError("");
     try {
@@ -381,6 +386,7 @@ function AddItemForm({ batchId, onAdded, onCancel }: { batchId: string; onAdded:
     } catch (e) {
       setError(e instanceof Error ? e.message : "No se pudo guardar el producto.");
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   }
