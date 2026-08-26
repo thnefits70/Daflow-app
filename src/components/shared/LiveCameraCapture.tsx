@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Camera, RefreshCw, X } from "lucide-react";
+import { Camera, RefreshCw, Upload, X } from "lucide-react";
 import { compressImage } from "@/lib/compressImage";
 import { uploadFile } from "@/lib/uploadFile";
 
@@ -9,6 +9,15 @@ type Props = {
   folder: string;
   onCaptured: (url: string) => void;
   onCancel?: () => void;
+  // Confirmado 2026-08-26 (pedido explícito del usuario): SOLO para
+  // fotografiar un documento físico (ej. la hoja de despacho en Registro
+  // de Egresos) — ahí no hay nada que "probar" con una captura en vivo, es
+  // simplemente leer un papel, y forzar la cámara del navegador no
+  // funciona en desktop (webcam) ni cuando el documento ya llegó como
+  // foto (ej. por WhatsApp). Sigue en false por defecto en todos los
+  // demás usos (compras personales, recepción de mercadería, etc.) donde
+  // la captura en vivo SÍ es una restricción a propósito.
+  allowUpload?: boolean;
 };
 
 // Confirmado 2026-08-18: pedido explícito del usuario — sin estas
@@ -28,13 +37,15 @@ const CAMERA_CONSTRAINTS: MediaStreamConstraints = {
 // DENTRO de esta pantalla con getUserMedia y la captura se hace sobre un
 // <canvas> — en ningún momento se ofrece un selector de archivos, así que
 // la galería del dispositivo queda inaccesible en todo momento.
-export function LiveCameraCapture({ folder, onCaptured, onCancel }: Props) {
+export function LiveCameraCapture({ folder, onCaptured, onCancel, allowUpload = false }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState("");
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
+  const [previewSource, setPreviewSource] = useState<"camera" | "upload">("camera");
 
   useEffect(() => {
     let cancelled = false;
@@ -61,6 +72,19 @@ export function LiveCameraCapture({ folder, onCaptured, onCancel }: Props) {
     streamRef.current = null;
   }
 
+  async function uploadPhoto(file: File) {
+    setUploading(true);
+    setUploadError("");
+    const compressed = await compressImage(file);
+    const result = await uploadFile(compressed, folder);
+    setUploading(false);
+    if (!result.ok) {
+      setUploadError(result.error);
+      return;
+    }
+    onCaptured(result.url);
+  }
+
   async function takePhoto() {
     const video = videoRef.current;
     if (!video || video.videoWidth === 0) return;
@@ -74,24 +98,28 @@ export function LiveCameraCapture({ folder, onCaptured, onCancel }: Props) {
     const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.9));
     if (!blob) return;
     stopStream();
+    setPreviewSource("camera");
     setPreviewUrl(URL.createObjectURL(blob));
+    await uploadPhoto(new File([blob], `foto-${Date.now()}.jpg`, { type: "image/jpeg" }));
+  }
 
-    setUploading(true);
-    setUploadError("");
-    const file = new File([blob], `foto-${Date.now()}.jpg`, { type: "image/jpeg" });
-    const compressed = await compressImage(file);
-    const result = await uploadFile(compressed, folder);
-    setUploading(false);
-    if (!result.ok) {
-      setUploadError(result.error);
-      return;
-    }
-    onCaptured(result.url);
+  function handleFilePicked(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    stopStream();
+    setPreviewSource("upload");
+    setPreviewUrl(URL.createObjectURL(file));
+    uploadPhoto(file);
   }
 
   function retake() {
     setPreviewUrl(null);
     setUploadError("");
+    if (previewSource === "upload") {
+      fileInputRef.current?.click();
+      return;
+    }
     navigator.mediaDevices
       .getUserMedia(CAMERA_CONSTRAINTS)
       .then((stream) => {
@@ -103,8 +131,20 @@ export function LiveCameraCapture({ folder, onCaptured, onCancel }: Props) {
 
   return (
     <div className="bg-cloud border border-rule rounded-md p-3">
+      {allowUpload && <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFilePicked} />}
       {error ? (
-        <div className="text-red text-[12.5px]">{error}</div>
+        <div>
+          <div className="text-red text-[12.5px] mb-2">{error}</div>
+          {allowUpload && (
+            <button
+              type="button"
+              className="flex items-center gap-1.5 text-[12.5px] font-bold bg-blue text-white rounded-md px-3.5 py-2 cursor-pointer"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <Upload size={14} /> Subir foto
+            </button>
+          )}
+        </div>
       ) : previewUrl ? (
         <div>
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -130,6 +170,15 @@ export function LiveCameraCapture({ folder, onCaptured, onCancel }: Props) {
             >
               <Camera size={14} /> Tomar foto
             </button>
+            {allowUpload && (
+              <button
+                type="button"
+                className="flex items-center gap-1.5 text-[12.5px] font-bold border-[1.5px] border-rule rounded-md px-3.5 py-2 cursor-pointer"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <Upload size={14} /> Subir foto
+              </button>
+            )}
             {onCancel && (
               <button type="button" className="flex items-center gap-1 text-[12px] text-steel cursor-pointer" onClick={() => { stopStream(); onCancel(); }}>
                 <X size={12} /> Cancelar

@@ -344,7 +344,7 @@ export function DocumentCaptureFlow({ reason, canManageJustCatalog = false }: { 
           ))}
         </div>
         {taking ? (
-          <LiveCameraCapture folder="merchandise-outflow-photos" onCaptured={(url) => { setPhotos((p) => [...p, url]); setTaking(false); }} onCancel={() => setTaking(false)} />
+          <LiveCameraCapture allowUpload folder="merchandise-outflow-photos" onCaptured={(url) => { setPhotos((p) => [...p, url]); setTaking(false); }} onCancel={() => setTaking(false)} />
         ) : photos.length >= MAX_PHOTOS ? (
           <div className="text-[11.5px] text-steel">Máximo {MAX_PHOTOS} fotos por lote. Quita alguna para agregar otra, o envía el resto en un lote aparte.</div>
         ) : (
