@@ -17,7 +17,7 @@ const schema = z.object({
         amount: z.number().min(0),
         kind: z.enum(["INCOME", "EXPENSE"]),
         isAutomatic: z.boolean().optional(),
-        note: z.string().optional(),
+        note: z.string().nullable().optional(),
       })
     )
     .min(1, "El rol no puede quedar sin ningún concepto — dejá al menos uno."),
