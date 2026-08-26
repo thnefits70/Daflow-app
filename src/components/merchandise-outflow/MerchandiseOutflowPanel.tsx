@@ -49,6 +49,13 @@ export function MerchandiseOutflowPanel({
     return defaultTab;
   });
 
+  // Fix confirmado 2026-08-26: SupplierExchangeResolutionInbox solo cargaba
+  // una vez al montar, así que una solicitud recién enviada no aparecía en
+  // "Pendientes de resolución" hasta refrescar la página a mano. El `key`
+  // fuerza que se remonte (y vuelva a pedir la lista) cada vez que se envía
+  // una solicitud nueva.
+  const [proveedorRefreshKey, setProveedorRefreshKey] = useState(0);
+
   const tabs: { id: Tab; label: string }[] = [
     ...(canCapture ? [{ id: "despacho" as const, label: "Despacho" }] : []),
     ...(canCapture ? [{ id: "garantia" as const, label: "Garantía" }] : []),
@@ -115,10 +122,10 @@ export function MerchandiseOutflowPanel({
             Elige el proveedor y agrega todos los productos que le vas a devolver en un mismo paquete — cada uno se cruza solo contra la última compra a ese proveedor para estimar el crédito reclamable. Toma foto de la lista física como evidencia y deja lista la solicitud: sale de Just en ese momento (cae directo en la cola de baja) y te da un código para imprimir la guía y pegarla en el paquete. Abajo ves los pendientes de saber si el proveedor cambió cada producto o dio crédito.
           </TabGuide>
           <div className="flex flex-col gap-6">
-            <SupplierExchangeCapture />
+            <SupplierExchangeCapture onSent={() => setProveedorRefreshKey((k) => k + 1)} />
             <div>
               <div className="font-display font-bold text-[14px] mb-2.5">Pendientes de resolución</div>
-              <SupplierExchangeResolutionInbox />
+              <SupplierExchangeResolutionInbox key={proveedorRefreshKey} />
             </div>
           </div>
         </>
