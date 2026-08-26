@@ -4,13 +4,10 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { canCaptureMerchandiseOutflow } from "@/lib/guards";
 import { readOutflowManifest } from "@/lib/merchandiseOutflowAi";
+import { groupOutflowRows } from "@/lib/merchandiseOutflowGrouping";
 
 const MAX_PHOTOS = 40;
 const schema = z.object({ photoUrls: z.array(z.string().min(1)).min(1).max(MAX_PHOTOS) });
-
-const CONFIDENCE_RANK = { alta: 2, media: 1, baja: 0 } as const;
-type Confidence = keyof typeof CONFIDENCE_RANK;
-const RANK_TO_CONFIDENCE: Confidence[] = ["baja", "media", "alta"];
 
 // Daniel sube las fotos de la hoja/manifiesto — la IA arma un consolidado
 // SUGERIDO (nunca persistido acá) para que revise fila por fila antes de
@@ -49,6 +46,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // prioriza sobre el match por nombre cuando ambos vienen en la misma fila.
   const catalogByJustCode = new Map(catalog.filter((c) => c.justCode).map((c) => [c.justCode!.trim().toLowerCase(), c]));
 
+  // Confirmado 2026-08-26 (pedido explícito del usuario): un ID de combo de
+  // Dropi NO es un producto real — empaqueta varios productos reales de
+  // Just en cantidades fijas (ver DropiCombo/DropiComboManager, tribal
+  // knowledge de Daniel). Si el código leído en un renglón es un combo
+  // conocido, ese renglón se desglosa en sus componentes reales ANTES de
+  // agruparse, en vez de tratarse como un solo producto.
+  const combos = await prisma.dropiCombo.findMany({
+    include: { components: { include: { catalogItem: { select: { id: true, name: true, photos: true, justCode: true, pendingRegistration: true } } } } },
+  });
+  const combosByCode = new Map(combos.map((c) => [c.code.trim().toLowerCase(), c]));
+
   try {
     const result = await readOutflowManifest({
       photoUrls: parsed.data.photoUrls,
@@ -61,23 +69,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     // si no hubo match) — así dos renglones escritos distinto en el papel
     // pero que la IA emparejó al mismo producto quedan en una sola fila con
     // la cantidad sumada, que es justo el resumen que Daniel necesita ver
-    // antes de mandarlo a dar de baja en Just.
-    const groups = new Map<string, { name: string; quantity: number; confidence: Confidence; catalogItem: (typeof catalog)[number] | null }>();
-    for (const row of result.rows) {
-      const matched =
-        (row.code ? catalogByJustCode.get(row.code.trim().toLowerCase()) : undefined) ??
-        (row.catalogMatch ? catalogByName.get(row.catalogMatch.trim().toLowerCase()) : undefined);
-      const key = matched ? `cat:${matched.id}` : `manual:${row.name.trim().toLowerCase()}`;
-      const existing = groups.get(key);
-      if (existing) {
-        existing.quantity += row.quantity;
-        existing.confidence = RANK_TO_CONFIDENCE[Math.min(CONFIDENCE_RANK[existing.confidence], CONFIDENCE_RANK[row.confidence])];
-      } else {
-        groups.set(key, { name: matched ? matched.name : row.name, quantity: row.quantity, confidence: row.confidence, catalogItem: matched ?? null });
-      }
-    }
-
-    return NextResponse.json({ rows: Array.from(groups.values()) });
+    // antes de mandarlo a dar de baja en Just. Ver merchandiseOutflowGrouping.ts.
+    const rows = groupOutflowRows(result.rows, { catalogByJustCode, catalogByName, combosByCode });
+    return NextResponse.json({ rows });
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : "No se pudo leer el documento.", rows: [] }, { status: 200 });
   }

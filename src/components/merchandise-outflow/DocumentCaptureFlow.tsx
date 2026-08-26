@@ -8,7 +8,17 @@ import { ProductMatchPicker, type MatchCatalogItem, type ProductMatchResult } fr
 type ItemDTO = { id: string; declaredName: string; quantity: number; catalogItem: { name: string; photos: string[] } | null };
 type BatchDTO = { id: string; code: string; documentPhotoUrls: string[]; items: ItemDTO[] };
 type Confidence = "alta" | "media" | "baja";
-type SuggestedRow = { name: string; quantity: number; confidence: Confidence; selected: MatchCatalogItem | null; manualName: string; adding?: boolean; added?: boolean };
+type SuggestedRow = {
+  name: string;
+  quantity: number;
+  confidence: Confidence;
+  selected: MatchCatalogItem | null;
+  manualName: string;
+  adding?: boolean;
+  added?: boolean;
+  unrecognizedCode?: string | null;
+  fromCombo?: string | null;
+};
 
 const MAX_PHOTOS = 40;
 const CONFIDENCE_LABEL: Record<Confidence, string> = { alta: "Lectura clara", media: "Revisar: letra poco clara", baja: "Revisar: dudosa" };
@@ -86,13 +96,17 @@ export function DocumentCaptureFlow({ reason }: { reason: "DESPACHO" | "GARANTIA
       const result = await postJson(`/api/merchandise-outflow/batches/${batch.id}/extract`, { photoUrls: photos });
       if (result.error) setError(result.error);
       setRows(
-        (result.rows ?? []).map((r: { name: string; quantity: number; confidence?: Confidence; catalogItem?: MatchCatalogItem | null }) => ({
-          name: r.name,
-          quantity: r.quantity,
-          confidence: r.confidence ?? "media",
-          selected: r.catalogItem ?? null,
-          manualName: "",
-        }))
+        (result.rows ?? []).map(
+          (r: { name: string; quantity: number; confidence?: Confidence; catalogItem?: MatchCatalogItem | null; unrecognizedCode?: string | null; fromCombo?: string | null }) => ({
+            name: r.name,
+            quantity: r.quantity,
+            confidence: r.confidence ?? "media",
+            selected: r.catalogItem ?? null,
+            manualName: "",
+            unrecognizedCode: r.unrecognizedCode ?? null,
+            fromCombo: r.fromCombo ?? null,
+          })
+        )
       );
     } catch (e) {
       setError(e instanceof Error ? e.message : "No se pudo leer el documento.");
@@ -322,6 +336,12 @@ export function DocumentCaptureFlow({ reason }: { reason: "DESPACHO" | "GARANTIA
             {rows.reduce((sum, r) => sum + r.quantity, 0)} unidad(es) en total
             {" · "}
             {rows.filter((r) => r.selected).length} coincidieron con el catálogo
+            {rows.some((r) => r.unrecognizedCode) && (
+              <>
+                {" · "}
+                <span className="text-yellow font-semibold">{rows.filter((r) => r.unrecognizedCode).length} con código no reconocido</span>
+              </>
+            )}
           </div>
           <div className="flex items-center justify-between gap-2">
             <div className="text-[10px] font-semibold uppercase tracking-wide text-steel">Confirma cada renglón antes de agregarlo</div>
@@ -346,6 +366,14 @@ export function DocumentCaptureFlow({ reason }: { reason: "DESPACHO" | "GARANTIA
                     {CONFIDENCE_LABEL[row.confidence]}
                   </span>
                 </div>
+                {row.fromCombo && (
+                  <div className="text-[11px] text-steel mb-1.5">Desglosado del combo Dropi {row.fromCombo}.</div>
+                )}
+                {row.unrecognizedCode && (
+                  <div className="text-[11.5px] bg-yellow/10 border border-yellow/35 rounded px-2 py-1.5 mb-2">
+                    Código &quot;{row.unrecognizedCode}&quot; no reconocido — ¿puede ser un combo nuevo? Regístralo en Base de datos de productos. Mientras tanto, busca el producto a mano abajo.
+                  </div>
+                )}
                 {row.selected ? (
                   <div className="flex items-center gap-2.5 bg-green/10 border border-green/35 rounded-md p-2 mb-2">
                     <div className="flex-1 min-w-0 text-[12px] font-semibold truncate">{row.selected.name}</div>

@@ -275,6 +275,7 @@ model User {
   purchaseCatalogItemsCreated                  PurchaseCatalogItem[]              @relation("PurchaseCatalogItemCreatedBy")
   purchaseCatalogItemDeleteRequests            PurchaseCatalogItemDeleteRequest[] @relation("PurchaseCatalogItemDeleteRequestedBy")
   justCatalogImports                           JustCatalogImport[]                @relation("JustCatalogImportImportedBy")
+  dropiCombosCreated                           DropiCombo[]                       @relation("DropiComboCreatedBy")
   supplierCreditsCreated                       SupplierCredit[]                   @relation("SupplierCreditCreatedBy")
   urgentResolutionsCreated                     PurchaseUrgentResolution[]         @relation("UrgentResolutionCreatedBy")
   urgentResolutionsReplacementSubmitted        PurchaseUrgentResolution[]         @relation("UrgentResolutionReplacementSubmittedBy")
@@ -1356,6 +1357,49 @@ model PurchaseCatalogItem {
   // Confirmado 2026-08-25: Guías Canceladas (Fase 4) también reusa este
   // catálogo compartido.
   cancelledGuideItems     CancelledGuideItem[]
+  // Confirmado 2026-08-26: un producto real puede ser componente de uno o
+  // más combos de Dropi (ver DropiCombo).
+  dropiComboComponents    DropiComboComponent[]
+}
+
+// Confirmado 2026-08-26 (pedido explícito del usuario): un ID de combo de
+// Dropi NO es un producto físico real — Dropi los crea con nombres
+// distintos por tema publicitario (para atraer clientes), pero por dentro
+// empaquetan varios productos reales de Just en cantidades fijas. Solo
+// Daniel sabe cómo se desglosa cada combo (tribal knowledge real); una vez
+// registrado acá, el lector de manifiestos de Registro de Egresos
+// (readOutflowManifest) lo aplica solo cada vez que ese código aparece en
+// una hoja de despacho/garantía, en vez de que Daniel tenga que
+// desglosarlo a mano cada vez. Gestionado desde "Base de datos de
+// productos" (mismo canManageJustCatalog: Daniel o admin).
+model DropiCombo {
+  id    String  @id @default(cuid())
+  code  String  @unique
+  // Nombre que usa Dropi para este combo — solo referencia, nunca se confía
+  // en él para identificar el producto real (por eso existe este modelo).
+  label String?
+
+  createdById String?
+  createdBy   User?    @relation("DropiComboCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+
+  components DropiComboComponent[]
+}
+
+model DropiComboComponent {
+  id      String     @id @default(cuid())
+  comboId String
+  combo   DropiCombo @relation(fields: [comboId], references: [id], onDelete: Cascade)
+
+  catalogItemId String
+  catalogItem   PurchaseCatalogItem @relation(fields: [catalogItemId], references: [id], onDelete: Restrict)
+
+  // Cuántas unidades de este producto real vienen en 1 unidad despachada
+  // de este combo.
+  quantity Int
+
+  @@index([comboId])
+  @@index([catalogItemId])
 }
 
 // Registro de auditoría de cada vez que Daniel sube el export de Just —
