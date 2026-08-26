@@ -43,6 +43,53 @@ function unitMoney(v: number) {
   return "$" + v.toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 3 });
 }
 
+// Explicación en lenguaje simple de un punto del gráfico de DIO — se arma
+// acá (no en inventoryKpis.ts) porque data.series ya trae todo lo necesario
+// (inventario, costoVentas) y esto es puro texto de presentación.
+function explainDioPoint(idx: number, series: InventoryKpisDataDTO["series"], dioSeries: (number | null)[]): string | null {
+  const pt = series[idx];
+  const dio = dioSeries[idx];
+  if (dio === null || pt.inventario === null) return "Ese mes no tiene inventario cargado, así que no se puede calcular.";
+  const prev = idx > 0 ? series[idx - 1] : null;
+  if (!prev || prev.inventario === null) {
+    return `Había ${money(pt.inventario)} guardado en la bodega y ese mes se vendió ${money(pt.costoVentas)} en costo. Con ese ritmo, tardarías ${dio.toFixed(0)} días en vender todo lo que había.`;
+  }
+  const invDir = pt.inventario > prev.inventario ? "subió" : pt.inventario < prev.inventario ? "bajó" : "se mantuvo igual";
+  const cvDir = pt.costoVentas > prev.costoVentas ? "subió" : pt.costoVentas < prev.costoVentas ? "bajó" : "se mantuvo igual";
+  const prevDio = dioSeries[idx - 1];
+  const verdict =
+    prevDio === null
+      ? ""
+      : dio > prevDio
+        ? " Eso es peor que el mes anterior: se tarda más en vender lo guardado."
+        : dio < prevDio
+          ? " Eso es mejor que el mes anterior: se vende más rápido."
+          : " Quedó igual que el mes anterior.";
+  return `El inventario ${invDir} (de ${money(prev.inventario)} a ${money(pt.inventario)}) y lo que se vendió en costo ${cvDir} (de ${money(prev.costoVentas)} a ${money(pt.costoVentas)}). Por eso ese mes tardarías ${dio.toFixed(0)} días en vender todo lo que había guardado.${verdict}`;
+}
+
+function explainGmroiPoint(idx: number, series: InventoryKpisDataDTO["series"], gmroiSeries: (number | null)[]): string | null {
+  const pt = series[idx];
+  const g = gmroiSeries[idx];
+  if (g === null || pt.inventario === null) return "Ese mes no tiene inventario cargado, así que no se puede calcular.";
+  const prev = idx > 0 ? series[idx - 1] : null;
+  if (!prev || prev.inventario === null) {
+    return `Había ${money(pt.inventario)} guardado y ese mes se ganó ${money(pt.utilidadBruta)} de ganancia bruta. Por cada $1 guardado en inventario, generaste $${g.toFixed(1)} de ganancia.`;
+  }
+  const invDir = pt.inventario > prev.inventario ? "subió" : pt.inventario < prev.inventario ? "bajó" : "se mantuvo igual";
+  const ubDir = pt.utilidadBruta > prev.utilidadBruta ? "subió" : pt.utilidadBruta < prev.utilidadBruta ? "bajó" : "se mantuvo igual";
+  const prevG = gmroiSeries[idx - 1];
+  const verdict =
+    prevG === null
+      ? ""
+      : g > prevG
+        ? " Eso es mejor que el mes anterior: cada dólar guardado generó más ganancia."
+        : g < prevG
+          ? " Eso es peor que el mes anterior: cada dólar guardado generó menos ganancia."
+          : " Quedó igual que el mes anterior.";
+  return `El inventario ${invDir} (de ${money(prev.inventario)} a ${money(pt.inventario)}) y la ganancia bruta del mes ${ubDir} (de ${money(prev.utilidadBruta)} a ${money(pt.utilidadBruta)}). Por eso ese mes generaste $${g.toFixed(1)} de ganancia por cada $1 guardado en inventario.${verdict}`;
+}
+
 export function InventoryKpisPanel({ data }: { data: InventoryKpisDataDTO }) {
   if (!data.hasData) {
     return (
@@ -86,6 +133,7 @@ export function InventoryKpisPanel({ data }: { data: InventoryKpisDataDTO }) {
           detailed
           periods={data.series.map((p) => p.period)}
           valueFormatter={(v) => `${v.toFixed(0)}d`}
+          explanations={data.series.map((_, i) => explainDioPoint(i, data.series, data.dioSeries))}
         />
       </div>
 
@@ -151,6 +199,7 @@ export function InventoryKpisPanel({ data }: { data: InventoryKpisDataDTO }) {
           detailed
           periods={data.series.map((p) => p.period)}
           valueFormatter={(v) => `${v.toFixed(1)}x`}
+          explanations={data.series.map((_, i) => explainGmroiPoint(i, data.series, data.gmroiFullSeries))}
         />
       </div>
 
