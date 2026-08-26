@@ -561,12 +561,14 @@ export function PayrollRolesPanel({ canEdit, canProposeFixedBonus, canApproveFix
                       <div className="flex flex-col items-end gap-0.5 bg-gold/15 border-2 border-gold/50 rounded-md px-3 py-1.5">
                         <div className="text-[24px] font-extrabold tabular-nums text-gold leading-none">{money(iessTransfer?.totalAmount ?? iessTotalFromRoles(detail.roles))}</div>
                         <div className="text-[9.5px] text-gold/90 uppercase tracking-wide font-semibold">Total IESS a transferir</div>
+                        <div className="text-[9px] text-gold/70">Pago al IESS</div>
                       </div>
                     )}
                     {nominaPending && (
                       <div className="flex flex-col items-end gap-0.5 bg-teal/15 border-2 border-teal/50 rounded-md px-3 py-1.5">
                         <div className="text-[24px] font-extrabold tabular-nums text-teal leading-none">{money(transfer?.totalAmount ?? detail.roles.reduce((s, r) => s + r.netTotal, 0))}</div>
                         <div className="text-[9.5px] text-teal/90 uppercase tracking-wide font-semibold">Total a transferir</div>
+                        <div className="text-[9px] text-teal/70">Pago a nómina</div>
                       </div>
                     )}
                   </div>
