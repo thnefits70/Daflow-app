@@ -520,19 +520,20 @@ export async function canViewPettyCashSecundaria() {
 }
 
 // Servicio Postventa (feedback de tiendas) — confirmado 2026-07-25: vive en
-// Análisis de Mercado (visible a asesores/líder de venta). Admin, quien lidera
-// Análisis de Mercado, o quien el admin delegue puntualmente vía
-// User.canManageStoreFeedback, puede log/editar evaluaciones y el catálogo.
+// Análisis de Mercado. Solo admin o quien el admin delegue puntualmente vía
+// User.canManageStoreFeedback puede log/editar evaluaciones y el catálogo.
+// Confirmado 2026-08-26: el liderazgo de MKT (Bryan) YA NO da manage
+// automático — se le bajó a solo-lectura (canViewStoreFeedback), así que
+// esta función ya no mira isLeader/leadsDept en absoluto.
 export async function canManageStoreFeedback() {
   const session = await auth();
   if (!session) return false;
   if (session.user.role === "admin") return true;
   const user = await prisma.user.findUnique({
     where: { id: session.user.id },
-    select: { isLeader: true, leadsDept: { select: { code: true } }, canManageStoreFeedback: true },
+    select: { canManageStoreFeedback: true },
   });
-  if (user?.canManageStoreFeedback) return true;
-  return !!user?.isLeader && user.leadsDept?.code === "MKT";
+  return !!user?.canManageStoreFeedback;
 }
 
 // Nivel de acceso separado, solo lectura — confirmado 2026-07-25: para
