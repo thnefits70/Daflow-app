@@ -37,6 +37,7 @@ type PeriodDetail = {
   status: "DRAFT" | "PUBLISHED" | "NOT_GENERATED";
   roles: Role[];
   monthlyRoleIdByEmployee?: Record<string, string>;
+  missingEmployees?: { id: string; name: string; position: string | null }[];
 };
 
 function money(n: number) {
@@ -443,6 +444,7 @@ export function PayrollRolesPanel({ canEdit, canProposeFixedBonus, canApproveFix
   const [err, setErr] = useState("");
   const [confirmingPublish, setConfirmingPublish] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
+  const [addingEmployeeId, setAddingEmployeeId] = useState<string | null>(null);
 
   const publishLabel = isEndOfMonthQuincena(period) ? "Generar rol de pago" : "Publicar";
   const pendingPayoutCount = detail?.roles.filter((r) => !r.paidAt).length ?? 0;
@@ -474,6 +476,20 @@ export function PayrollRolesPanel({ canEdit, canProposeFixedBonus, canApproveFix
     setBusy(false);
     const data = await res.json().catch(() => null);
     if (!res.ok) { setErr(data?.error ?? "No se pudo generar."); return; }
+    loadDetail();
+  }
+
+  async function addMissingEmployee(employeeId: string) {
+    setAddingEmployeeId(employeeId);
+    setErr("");
+    const res = await fetch(`/api/payroll/periods/${period}/add-employee`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ employeeId }),
+    });
+    setAddingEmployeeId(null);
+    const data = await res.json().catch(() => null);
+    if (!res.ok) { setErr(data?.error ?? "No se pudo agregar."); return; }
     loadDetail();
   }
 
@@ -570,6 +586,35 @@ export function PayrollRolesPanel({ canEdit, canProposeFixedBonus, canApproveFix
                 <div className="text-[15px] font-bold tabular-nums">$482.00</div>
                 <span className="text-[11px] text-steel-dim block mt-1">Fijo por ahora — el cálculo de horas extra siempre usa este valor, sin excepción.</span>
               </div>
+
+              {canEdit && detail.status === "DRAFT" && (detail.missingEmployees?.length ?? 0) > 0 && (
+                <div className="bg-red/10 border border-red rounded-md p-3.5 mb-4">
+                  <div className="text-[11.5px] font-semibold text-red mb-1.5">
+                    Colaboradores sin rol en este período
+                  </div>
+                  <div className="text-[11px] text-steel mb-2.5">
+                    Se les configuró sueldo en Nómina después de generar este período, así que no salieron incluidos. Agrégalos manualmente.
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    {detail.missingEmployees!.map((e) => (
+                      <div key={e.id} className="flex items-center justify-between gap-2 bg-cloud border border-rule rounded px-2.5 py-1.5">
+                        <span className="text-[12.5px] text-ink">
+                          {e.name}
+                          {e.position && <span className="text-steel-dim"> — {e.position}</span>}
+                        </span>
+                        <button
+                          type="button"
+                          disabled={addingEmployeeId === e.id}
+                          className="text-[11.5px] font-semibold text-blue cursor-pointer disabled:opacity-60"
+                          onClick={() => addMissingEmployee(e.id)}
+                        >
+                          {addingEmployeeId === e.id ? "Agregando…" : "+ Agregar"}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <div className="bg-surface border border-rule rounded-md p-3.5 mb-4">
                 <div className="text-[11px] font-semibold uppercase tracking-wide text-steel mb-0.5">Resumen por colaborador</div>

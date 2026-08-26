@@ -51,5 +51,22 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ per
     monthlyRoleIdByEmployee = Object.fromEntries(monthlyRoles.map((m) => [m.employeeId, m.id]));
   }
 
-  return NextResponse.json({ ...record, monthlyRoleIdByEmployee });
+  // Confirmado 2026-08-26: bug real encontrado por el usuario — "Generar
+  // roles" es idempotente (no recalcula un período ya existente), así que
+  // un colaborador a quien recién se le configura sueldo en Nómina DESPUÉS
+  // de que el período ya se generó se queda sin rol para siempre, sin
+  // ninguna señal de que falta. Mientras el período siga en DRAFT, se lista
+  // aparte para que Nairoby/admin puedan sumarlo con un clic.
+  let missingEmployees: { id: string; name: string; position: string | null }[] = [];
+  if (record.status === "DRAFT") {
+    const existingIds = new Set(record.roles.map((r) => r.employeeId));
+    const configured = await prisma.user.findMany({
+      where: { isActive: true, payrollProfile: { realSalary: { not: null } } },
+      select: { id: true, name: true, position: true },
+      orderBy: { name: "asc" },
+    });
+    missingEmployees = configured.filter((u) => !existingIds.has(u.id));
+  }
+
+  return NextResponse.json({ ...record, monthlyRoleIdByEmployee, missingEmployees });
 }
