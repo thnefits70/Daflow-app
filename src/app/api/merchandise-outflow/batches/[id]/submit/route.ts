@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { canCaptureMerchandiseOutflow, canActOnMerchandiseOutflow } from "@/lib/guards";
-import { notifyInventoryLeadOutflowPending } from "@/lib/merchandiseOutflow";
+import { notifyInventoryLeadOutflowPending, notifySupplierExchangeGestors } from "@/lib/merchandiseOutflow";
 
 const MIN_DOCUMENT_PHOTOS_BY_REASON: Partial<Record<string, number>> = { CAMBIO_PROVEEDOR: 1 };
 
@@ -29,5 +29,15 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
 
   const updated = await prisma.merchandiseOutflowBatch.update({ where: { id }, data: { submittedAt: new Date() } });
   await notifyInventoryLeadOutflowPending(updated);
+  if (updated.reason === "CAMBIO_PROVEEDOR") {
+    const withDetails = await prisma.merchandiseOutflowBatch.findUnique({
+      where: { id },
+      include: {
+        supplier: { select: { name: true } },
+        items: { include: { catalogItem: { select: { name: true } }, linkedPurchaseRequest: { select: { requestedById: true } } } },
+      },
+    });
+    if (withDetails) await notifySupplierExchangeGestors(withDetails);
+  }
   return NextResponse.json(updated);
 }

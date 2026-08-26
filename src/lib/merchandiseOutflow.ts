@@ -93,6 +93,51 @@ export async function notifyInventoryLeadOutflowPending(batch: { code: string; r
   }).catch(() => null);
 }
 
+// Confirmado 2026-08-26, pedido explícito del usuario: quien resuelve un
+// producto de CAMBIO_PROVEEDOR (cambio o crédito, y sube el comprobante) es
+// quien solicitó ORIGINALMENTE esa compra a ese proveedor
+// (linkedPurchaseRequest.requestedById) — no Daniel ni un rol fijo. Si el
+// producto no tiene compra vinculada (nombre a mano, o nunca se le compró
+// antes a ese proveedor) o quien la pidió ya no existe, Bryan (líder de
+// Análisis de Mercado) es el responsable de respaldo — "por ahora", el
+// usuario ya avisó que esto lo hará otra persona más adelante. Daniel y
+// admin quedan siempre en modo lectura sobre esta resolución (ver
+// canViewSupplierExchangeResolution en MerchandiseOutflowPanel).
+export async function resolveOutflowItemGestorId(item: { linkedPurchaseRequest: { requestedById: string | null } | null }): Promise<string | null> {
+  if (item.linkedPurchaseRequest?.requestedById) return item.linkedPurchaseRequest.requestedById;
+  return getMarketingLeadId();
+}
+
+// Se llama al dejar lista una solicitud de CAMBIO_PROVEEDOR — agrupa los
+// ítems por gestor (para no mandar una notificación por producto si la
+// misma persona tiene varios en el mismo paquete) y avisa a cada quien que
+// tiene que negociar con el proveedor. Apunta a una página propia dentro de
+// /area (no una pestaña de Registro de Egresos) porque el gestor puede no
+// tener ningún otro acceso a ese módulo — mismo criterio que
+// /area/compras-personales (solo requiere ser empleado activo, sin permiso
+// de departamento).
+export async function notifySupplierExchangeGestors(batch: {
+  code: string;
+  supplier: { name: string } | null;
+  items: { quantity: number; declaredName: string; catalogItem: { name: string } | null; linkedPurchaseRequest: { requestedById: string | null } | null }[];
+}): Promise<void> {
+  const byGestor = new Map<string, number>();
+  for (const item of batch.items) {
+    const gestorId = await resolveOutflowItemGestorId(item);
+    if (!gestorId) continue;
+    byGestor.set(gestorId, (byGestor.get(gestorId) ?? 0) + 1);
+  }
+  await Promise.all(
+    Array.from(byGestor.entries()).map(([gestorId, count]) =>
+      notifyOwner(gestorId, {
+        title: "Cambio con proveedor pendiente de tu gestión",
+        body: `${batch.code} — ${count} producto(s) de ${batch.supplier?.name ?? "un proveedor"} esperan que negocies el cambio o crédito.`,
+        url: "/area/cambio-proveedor-gestiones",
+      }).catch(() => null)
+    )
+  );
+}
+
 // Deterioro escalado a Compras (mercadería recién llegada) — por ahora solo
 // avisa a Bryan con el detalle; el enganche real con "Reclamo posterior al
 // cierre" / créditos con proveedor se conecta en una fase posterior, una vez

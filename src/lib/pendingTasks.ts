@@ -6,6 +6,7 @@ import { getPettyCashBoxData, type PettyCashBoxTypeStr } from "@/lib/pettyCash";
 import { getUpcomingBirthdays } from "@/lib/birthdays";
 import { getFinanzasDeptId, recentInventorySnapshotPeriods, isSnapshotPeriodOverdue, snapshotPeriodLabel } from "@/lib/inventoryKpis";
 import { isEndOfMonthQuincena, monthOfPeriod } from "@/lib/payrollCalc";
+import { getMarketingLeadId } from "@/lib/guards";
 
 // ---------------- Date helpers ----------------
 // Deadline rule confirmed by the user 2026-07-20: work week is Mon-Sat, and
@@ -1024,6 +1025,32 @@ async function getPurchaseRequesterPendingItems(userId: string, href: string): P
   return items;
 }
 
+// Confirmado 2026-08-26, pedido explícito del usuario: quien resuelve un
+// producto de "Cambio con proveedor" (Registro de Egresos) ya no es Daniel —
+// es quien solicitó ORIGINALMENTE la compra de ese producto a ese proveedor
+// (requestedById), o Bryan si el producto no tenía compra vinculada. Filtra
+// por dato de dueño (mismo espíritu que getPurchaseRequesterPendingItems),
+// no por permiso de departamento — por eso vive en /area/cambio-proveedor-gestiones,
+// no dentro del módulo de Egresos.
+async function getSupplierExchangeGestorPendingItem(userId: string, href: string): Promise<PendingItem | null> {
+  const marketingLeadId = await getMarketingLeadId();
+  const or: Record<string, unknown>[] = [{ linkedPurchaseRequest: { requestedById: userId } }];
+  if (marketingLeadId === userId) or.push({ linkedPurchaseRequestId: null });
+
+  const count = await prisma.merchandiseOutflowItem.count({
+    where: { batch: { reason: "CAMBIO_PROVEEDOR", submittedAt: { not: null } }, resolution: null, OR: or },
+  });
+  if (count === 0) return null;
+  return {
+    type: "cambio_proveedor_gestion",
+    icon: "🔁",
+    label: "Cambio con proveedor pendiente de tu gestión",
+    meta: `${count} producto${count === 1 ? "" : "s"}`,
+    overdue: false,
+    href,
+  };
+}
+
 // Confirmado 2026-08-17: pedido explícito del usuario — Daniel (líder de
 // Inventario) ve en Inicio, con un solo clic, las solicitudes de compra ya
 // pagadas (PAID) que le faltan confirmar como recibidas en Control de
@@ -1895,6 +1922,9 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
   // verdad tiene solicitudes de compra propias con algo pendiente.
   const purchaseRequesterItems = await getPurchaseRequesterPendingItems(actor.userId, "/area/workspace?tab=compras&ptab=mias");
   items.push(...purchaseRequesterItems);
+
+  const supplierExchangeGestorItem = await getSupplierExchangeGestorPendingItem(actor.userId, "/area/cambio-proveedor-gestiones");
+  if (supplierExchangeGestorItem) items.push(supplierExchangeGestorItem);
 
   // Confirmado 2026-08-17: pedido explícito del usuario — a diferencia de lo
   // anterior, esto NO es un dato propio del líder, es company-wide (todos

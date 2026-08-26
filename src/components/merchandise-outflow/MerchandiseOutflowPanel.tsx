@@ -16,12 +16,21 @@ type Tab = "despacho" | "garantia" | "deterioro" | "proveedor" | "guias" | "baja
 export function MerchandiseOutflowPanel({
   canCapture,
   canAct = false,
+  canViewSupplierExchangeResolution = false,
   canSubmitCancelledGuide = false,
   canConfirmCancelledGuide = false,
   canCutoffCancelledGuide = false,
 }: {
   canCapture: boolean;
   canAct?: boolean;
+  // Confirmado 2026-08-26: pedido explícito del usuario — quien resuelve
+  // cada producto de "Cambio con proveedor" (cambio o crédito) ya NO es
+  // Daniel, es quien solicitó esa compra originalmente (o Bryan si el
+  // producto no tiene compra vinculada) — ver /area/cambio-proveedor-gestiones.
+  // Daniel y admin quedan en modo LECTURA acá — antes ni siquiera admin veía
+  // esta pestaña (canAct es exclusivo de Daniel, "ni siquiera admin"), así
+  // que esto amplía visibilidad de solo lectura sin tocar quién actúa.
+  canViewSupplierExchangeResolution?: boolean;
   // Guías Canceladas (Fase 4) — vive como pestaña acá adentro (pedido
   // explícito del usuario), aunque su resultado final sea una entrada, no
   // una salida. Reingresar reusa `canAct` (Daniel exclusivo, ya pasado).
@@ -56,11 +65,13 @@ export function MerchandiseOutflowPanel({
   // una solicitud nueva.
   const [proveedorRefreshKey, setProveedorRefreshKey] = useState(0);
 
+  const canSeeProveedorTab = canAct || canViewSupplierExchangeResolution;
+
   const tabs: { id: Tab; label: string }[] = [
     ...(canCapture ? [{ id: "despacho" as const, label: "Despacho" }] : []),
     ...(canCapture ? [{ id: "garantia" as const, label: "Garantía" }] : []),
     ...(canCapture ? [{ id: "deterioro" as const, label: "Deterioro" }] : []),
-    ...(canAct ? [{ id: "proveedor" as const, label: "Cambio con proveedor" }] : []),
+    ...(canSeeProveedorTab ? [{ id: "proveedor" as const, label: "Cambio con proveedor" }] : []),
     ...(canSubmitCancelledGuide || canConfirmCancelledGuide || canCutoffCancelledGuide || canAct ? [{ id: "guias" as const, label: "Guías canceladas" }] : []),
     { id: "baja" as const, label: "Dar de baja en Just" },
     { id: "historial" as const, label: "Historial" },
@@ -116,15 +127,19 @@ export function MerchandiseOutflowPanel({
           </div>
         </>
       )}
-      {tab === "proveedor" && canAct && (
+      {tab === "proveedor" && canSeeProveedorTab && (
         <>
           <TabGuide storageKey="merchoutflow-proveedor">
-            Elige el proveedor y agrega todos los productos que le vas a devolver en un mismo paquete — cada uno se cruza solo contra la última compra a ese proveedor para estimar el crédito reclamable. Toma foto de la lista física como evidencia y deja lista la solicitud: sale de Just en ese momento (cae directo en la cola de baja) y te da un código para imprimir la guía y pegarla en el paquete. Abajo ves los pendientes de saber si el proveedor cambió cada producto o dio crédito.
+            {canAct ? (
+              <>Elige el proveedor y agrega todos los productos que le vas a devolver en un mismo paquete — cada uno se cruza solo contra la última compra a ese proveedor para estimar el crédito reclamable. Toma foto de la lista física como evidencia y deja lista la solicitud: sale de Just en ese momento (cae directo en la cola de baja) y te da un código para imprimir la guía y pegarla en el paquete. Quien resuelve cada producto (cambio o crédito) es quien solicitó esa compra originalmente, no tú — abajo ves el estado en modo lectura.</>
+            ) : (
+              <>Vista de solo lectura de las solicitudes de cambio con proveedor que arma Daniel. Cada producto lo resuelve (cambio o crédito) quien solicitó esa compra originalmente, no Daniel — esa persona gestiona desde su propia pantalla de pendientes.</>
+            )}
           </TabGuide>
           <div className="flex flex-col gap-6">
-            <SupplierExchangeCapture onSent={() => setProveedorRefreshKey((k) => k + 1)} />
+            {canAct && <SupplierExchangeCapture onSent={() => setProveedorRefreshKey((k) => k + 1)} />}
             <div>
-              <div className="font-display font-bold text-[14px] mb-2.5">Pendientes de resolución</div>
+              <div className="font-display font-bold text-[14px] mb-2.5">Estado de resolución</div>
               <SupplierExchangeResolutionInbox key={proveedorRefreshKey} />
             </div>
           </div>

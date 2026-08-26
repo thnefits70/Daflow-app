@@ -2,8 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { canActOnMerchandiseOutflow } from "@/lib/guards";
-import { outflowItemDisplayName } from "@/lib/merchandiseOutflow";
+import { outflowItemDisplayName, resolveOutflowItemGestorId } from "@/lib/merchandiseOutflow";
 
 const schema = z.discriminatedUnion("resolution", [
   z.object({ resolution: z.literal("REPLACED"), note: z.string().trim().optional() }),
@@ -16,15 +15,18 @@ const schema = z.discriminatedUnion("resolution", [
   }),
 ]);
 
-// Daniel resuelve un cambio con proveedor — REPLACED cierra el seguimiento
-// (la llegada física del reemplazo se maneja por la recepción normal de
-// Compras). CREDIT_ISSUED crea el SupplierCredit correspondiente, mismo
-// patrón que el crédito manual de Control de Compras (comprobante
-// obligatorio) pero disparado desde acá para no hacer saltar a Daniel a
-// otro módulo.
+// Confirmado 2026-08-26, pedido explícito del usuario: quien resuelve
+// (cambio o crédito) ya no es Daniel — es quien solicitó ORIGINALMENTE la
+// compra de ese producto a ese proveedor (linkedPurchaseRequest.requestedBy),
+// o Bryan si el producto no tiene compra vinculada (ver
+// resolveOutflowItemGestorId). Daniel y admin quedan en modo lectura.
+// REPLACED cierra el seguimiento (la llegada física del reemplazo se maneja
+// por la recepción normal de Compras). CREDIT_ISSUED crea el SupplierCredit
+// correspondiente, mismo patrón que el crédito manual de Control de Compras
+// (comprobante obligatorio).
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
-  if (!(await canActOnMerchandiseOutflow()) || !session) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+  if (!session) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
   const { id } = await params;
   const body = await req.json().catch(() => null);
@@ -33,11 +35,19 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const item = await prisma.merchandiseOutflowItem.findUnique({
     where: { id },
-    include: { batch: { select: { reason: true, supplierId: true, code: true } }, catalogItem: { select: { name: true } } },
+    include: {
+      batch: { select: { reason: true, supplierId: true, submittedAt: true, code: true } },
+      catalogItem: { select: { name: true } },
+      linkedPurchaseRequest: { select: { requestedById: true } },
+    },
   });
   if (!item) return NextResponse.json({ error: "No encontrado." }, { status: 404 });
   if (item.batch.reason !== "CAMBIO_PROVEEDOR" || !item.batch.supplierId) return NextResponse.json({ error: "Este ítem no es de cambio con proveedor." }, { status: 400 });
+  if (!item.batch.submittedAt) return NextResponse.json({ error: "Esta solicitud todavía no se ha enviado." }, { status: 409 });
   if (item.resolution) return NextResponse.json({ error: "Este ítem ya fue resuelto." }, { status: 409 });
+
+  const gestorId = await resolveOutflowItemGestorId(item);
+  if (gestorId !== session.user.id) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
   if (parsed.data.resolution === "REPLACED") {
     const updated = await prisma.merchandiseOutflowItem.update({
