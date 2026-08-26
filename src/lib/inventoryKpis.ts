@@ -89,14 +89,21 @@ export function currentSnapshotPeriod(): string {
   return formatSnapshotPeriod(snapshotPeriodOfEcuadorDate(ecuadorShifted));
 }
 
-// Últimas ~12 semanas (≈3 meses) hasta la actual, más que suficiente para
-// que Daniel corrija una semana reciente sin volver la lista eterna (a
+// Semana en que arrancó la carga semanal del Excel de stock por SKU
+// (confirmado 2026-08-25, ver comentario más arriba). Antes de esa semana
+// el proceso era mensual, así que no existieron "semanas" reales — no tiene
+// sentido listarlas como si Daniel pudiera haberlas cargado.
+const WEEKLY_SNAPSHOT_START = formatSnapshotPeriod({ year: 2026, month: 8, week: 4 });
+
+// Últimas ~12 semanas (≈3 meses) hasta la actual, sin bajar del arranque del
+// proceso semanal (WEEKLY_SNAPSHOT_START) — más que suficiente para que
+// Daniel corrija una semana reciente sin volver la lista eterna (a
 // diferencia de recentInventoryPeriods(), que sí mira 12 meses completos
 // porque el valor mensual se corrige con menos frecuencia).
 export function recentInventorySnapshotPeriods(): string[] {
   let cur = parseSnapshotPeriod(currentSnapshotPeriod());
   const out: string[] = [formatSnapshotPeriod(cur)];
-  for (let i = 0; i < 11; i++) {
+  for (let i = 0; i < 11 && formatSnapshotPeriod(cur) > WEEKLY_SNAPSHOT_START; i++) {
     cur = prevSnapshotPeriod(cur);
     out.push(formatSnapshotPeriod(cur));
   }
