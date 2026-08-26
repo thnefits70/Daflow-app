@@ -4,7 +4,7 @@ import { isFixedHoliday, evaluationDeadline, adminConfirmDeadline } from "@/lib/
 import { addBusinessHours } from "@/lib/businessHours";
 import { getPettyCashBoxData, type PettyCashBoxTypeStr } from "@/lib/pettyCash";
 import { getUpcomingBirthdays } from "@/lib/birthdays";
-import { getFinanzasDeptId } from "@/lib/inventoryKpis";
+import { getFinanzasDeptId, recentInventorySnapshotPeriods, isSnapshotPeriodOverdue, snapshotPeriodLabel } from "@/lib/inventoryKpis";
 import { isEndOfMonthQuincena, monthOfPeriod } from "@/lib/payrollCalc";
 
 // ---------------- Date helpers ----------------
@@ -379,6 +379,7 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   compras_reclamo_posterior_just: "Reclamos posteriores al cierre por dar de baja en Just",
   compras_creditos_pendientes: "Créditos pendientes de recuperar",
   control_inventario: "Control de Inventario — captura mensual",
+  control_inventario_semanal: "Control de Inventario — Excel semanal de stock por SKU",
 };
 
 // "colaborador_del_mes" es obligatorio — confirmado 2026-08-05: a diferencia
@@ -1196,6 +1197,40 @@ async function getInventoryControlPendingItem(href: string): Promise<PendingItem
   };
 }
 
+// Confirmado 2026-08-25: pedido explícito de Daniel — le avise cuando ya
+// pasó la fecha límite de una semana (ver snapshotPeriodDeadline en
+// inventoryKpis.ts: último día laborable del bloque, antes de las 12 si cae
+// sábado, antes de las 4pm cualquier otro día) y todavía no subió el Excel
+// de stock por SKU de esa semana. Igual espíritu que
+// getMerchandiseWeeklyWriteOffJustPendingItem: junta TODAS las semanas
+// atrasadas sin cargar (no solo la más reciente), no solo "ya te avisé una
+// vez, no insisto más".
+async function getInventoryWeeklySnapshotPendingItem(href: string): Promise<PendingItem | null> {
+  const deptId = await getFinanzasDeptId();
+  if (!deptId) return null;
+
+  const overduePeriods = recentInventorySnapshotPeriods().filter((p) => isSnapshotPeriodOverdue(p));
+  if (overduePeriods.length === 0) return null;
+
+  const loaded = await prisma.inventoryProductSnapshot.findMany({
+    where: { deptId, period: { in: overduePeriods } },
+    select: { period: true },
+    distinct: ["period"],
+  });
+  const loadedSet = new Set(loaded.map((r) => r.period));
+  const missing = overduePeriods.filter((p) => !loadedSet.has(p)).sort();
+  if (missing.length === 0) return null;
+
+  return {
+    type: "control_inventario_semanal",
+    icon: "📊",
+    label: "Control de Inventario — Excel semanal de stock por SKU",
+    meta: `${missing.length === 1 ? snapshotPeriodLabel(missing[0]) : `${missing.length} semanas`} · atrasado`,
+    overdue: true,
+    href,
+  };
+}
+
 // Confirmado 2026-08-14: pedido explícito del usuario — quiere ver en
 // Inicio, con un solo clic, todas las horas extra que le quedaron por
 // aprobar (exclusivo admin — canApproveOvertimeHours es admin-only). Ahora
@@ -1823,11 +1858,12 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
   }
 
   if (me.leadsDept.code === "INV") {
-    const [stockoutItem, receivingItem, replacementItem, inventoryControlItem, merchandiseReentryItem, merchandiseWeeklyJustItem, personalPurchaseInventoryItem, lateClaimReviewItem, lateClaimJustItem] = await Promise.all([
+    const [stockoutItem, receivingItem, replacementItem, inventoryControlItem, inventoryWeeklySnapshotItem, merchandiseReentryItem, merchandiseWeeklyJustItem, personalPurchaseInventoryItem, lateClaimReviewItem, lateClaimJustItem] = await Promise.all([
       getStockoutPendingItem("/area/kpis-generales"),
       getPurchaseReceivingPendingItem("/area/workspace?tab=compras&ptab=inventario"),
       getPurchaseReplacementVerificationPendingItem("/area/workspace?tab=compras&ptab=inventario"),
       getInventoryControlPendingItem("/area/workspace?tab=inventario"),
+      getInventoryWeeklySnapshotPendingItem("/area/workspace?tab=inventario"),
       getMerchandiseReentryPendingItem("/area/reingreso-mercaderia?tab=revision"),
       getMerchandiseWeeklyWriteOffJustPendingItem("/area/reingreso-mercaderia?tab=danos"),
       getPersonalPurchasePendingInventoryItem("/area/compras-personales-inventario"),
@@ -1838,6 +1874,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     if (receivingItem) items.push(receivingItem);
     if (replacementItem) items.push(replacementItem);
     if (inventoryControlItem) items.push(inventoryControlItem);
+    if (inventoryWeeklySnapshotItem) items.push(inventoryWeeklySnapshotItem);
     if (merchandiseReentryItem) items.push(merchandiseReentryItem);
     if (merchandiseWeeklyJustItem) items.push(merchandiseWeeklyJustItem);
     if (personalPurchaseInventoryItem) items.push(personalPurchaseInventoryItem);
@@ -1910,7 +1947,7 @@ export async function getPossiblePendingTypesForActor(
     }
     if (me.leadsDept.trackWeeklyMetric) types.push("pedidos_despachados");
     if (me.leadsDept.code === "INV") {
-      types.push("ruptura_stock", "compras_recepcion", "compras_cambios_verificar", "control_inventario", "reingreso_mercaderia_revision", "reingreso_mercaderia_baja_just", "compras_personales_confirmar", "compras_reclamo_posterior_revision", "compras_reclamo_posterior_just");
+      types.push("ruptura_stock", "compras_recepcion", "compras_cambios_verificar", "control_inventario", "control_inventario_semanal", "reingreso_mercaderia_revision", "reingreso_mercaderia_baja_just", "compras_personales_confirmar", "compras_reclamo_posterior_revision", "compras_reclamo_posterior_just");
     }
     // Mismo criterio de elegibilidad que canSubmitPurchaseRequests
     // (guards.ts) — delegado vía canManagePurchases, o líder de COM/FIN —

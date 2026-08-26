@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import * as XLSX from "xlsx";
 import { canManageInventoryControl } from "@/lib/guards";
-import { getFinanzasDeptId, recentInventoryPeriods } from "@/lib/inventoryKpis";
+import { getFinanzasDeptId, recentInventorySnapshotPeriods } from "@/lib/inventoryKpis";
 import { prisma } from "@/lib/prisma";
 
-const PERIOD_REGEX = /^\d{4}-(0[1-9]|1[0-2])$/;
+const PERIOD_REGEX = /^\d{4}-(0[1-9]|1[0-2])-W[1-4]$/;
 
 type RawRow = Record<string, unknown>;
 
@@ -49,10 +49,10 @@ export async function POST(req: NextRequest) {
   const fileName = body?.fileName as string | undefined;
 
   if (!period || !PERIOD_REGEX.test(period)) {
-    return NextResponse.json({ error: "Formato de mes inválido." }, { status: 400 });
+    return NextResponse.json({ error: "Formato de semana inválido." }, { status: 400 });
   }
-  if (!recentInventoryPeriods().includes(period)) {
-    return NextResponse.json({ error: "Ese mes no está disponible para cargar." }, { status: 400 });
+  if (!recentInventorySnapshotPeriods().includes(period)) {
+    return NextResponse.json({ error: "Esa semana no está disponible para cargar." }, { status: 400 });
   }
   if (!fileUrl || !fileName) {
     return NextResponse.json({ error: "No se recibió ningún archivo." }, { status: 400 });

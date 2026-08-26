@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/auth";
 import { canManageInventoryControl } from "@/lib/guards";
-import { getFinanzasDeptId, recentInventoryPeriods } from "@/lib/inventoryKpis";
+import { getFinanzasDeptId, recentInventorySnapshotPeriods } from "@/lib/inventoryKpis";
 import { prisma } from "@/lib/prisma";
 
 const rowSchema = z.object({
@@ -14,13 +14,14 @@ const rowSchema = z.object({
 });
 
 const schema = z.object({
-  period: z.string().regex(/^\d{4}-\d{2}$/),
+  period: z.string().regex(/^\d{4}-\d{2}-W[1-4]$/),
   rows: z.array(rowSchema).min(1),
 });
 
-// Confirmado 2026-08-05: reemplaza por completo el mes, no hace merge fila
-// por fila — mismo criterio que "reemplazar" en la plantilla de Finanzas.
-// Si Daniel corrige un error, vuelve a subir el Excel completo del mes.
+// Confirmado 2026-08-05 (cadencia cambiada a semanal el 2026-08-25):
+// reemplaza por completo la semana, no hace merge fila por fila — mismo
+// criterio que "reemplazar" en la plantilla de Finanzas. Si Daniel corrige
+// un error, vuelve a subir el Excel completo de esa semana.
 export async function POST(req: NextRequest) {
   const session = await auth();
   if (!(await canManageInventoryControl()) || !session) {
@@ -32,8 +33,8 @@ export async function POST(req: NextRequest) {
   if (!parsed.success) return NextResponse.json({ error: "Datos inválidos." }, { status: 400 });
 
   const { period, rows } = parsed.data;
-  if (!recentInventoryPeriods().includes(period)) {
-    return NextResponse.json({ error: "Ese mes no está disponible para cargar." }, { status: 400 });
+  if (!recentInventorySnapshotPeriods().includes(period)) {
+    return NextResponse.json({ error: "Esa semana no está disponible para cargar." }, { status: 400 });
   }
 
   const deptId = await getFinanzasDeptId();

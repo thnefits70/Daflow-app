@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, Upload, AlertTriangle, TrendingDown, Minus } from "lucide-react";
-import type { InventoryControlPeriodDTO } from "@/lib/inventoryKpis";
+import type { InventoryControlPeriodDTO, InventorySnapshotPeriodDTO } from "@/lib/inventoryKpis";
 import { usePasteFile } from "@/lib/usePasteFile";
 import { uploadFile } from "@/lib/uploadFile";
 import { TabGuide } from "@/components/shared/TabGuide";
@@ -12,6 +12,18 @@ const MONTH_NAMES = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Se
 function monthLabel(period: string) {
   const [y, m] = period.split("-");
   return `${MONTH_NAMES[Number(m) - 1] ?? m} ${y}`;
+}
+const MONTH_NAMES_FULL = [
+  "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+  "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
+];
+// Formatea un período semanal "YYYY-MM-Wn" sin depender de inventoryKpis.ts
+// (ese módulo importa Prisma, no se puede traer a un componente cliente) —
+// mismo criterio que monthLabel() arriba, que ya duplica este formateo
+// localmente en vez de importarlo del server.
+function weekLabel(period: string) {
+  const [y, m, w] = period.split("-");
+  return `${MONTH_NAMES_FULL[Number(m) - 1] ?? m} ${y} (semana ${w?.replace("W", "") ?? "?"})`;
 }
 function money(v: number) {
   return "$" + v.toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -31,9 +43,13 @@ type SnapshotPreview = { period: string; previousPeriod: string | null; rows: Sn
 export function InventoryControlPanel({
   currentPeriodDefault,
   periods,
+  currentSnapshotPeriodDefault,
+  snapshotPeriods,
 }: {
   currentPeriodDefault: string;
   periods: InventoryControlPeriodDTO[];
+  currentSnapshotPeriodDefault: string;
+  snapshotPeriods: InventorySnapshotPeriodDTO[];
 }) {
   const router = useRouter();
   const [period, setPeriod] = useState(currentPeriodDefault);
@@ -116,9 +132,9 @@ export function InventoryControlPanel({
     router.refresh();
   }
 
-  // --- Sección 2: Excel mensual de stock por SKU ("Productos sin movimiento") ---
-  const [snapPeriod, setSnapPeriod] = useState(currentPeriodDefault);
-  const snapData = periods.find((p) => p.period === snapPeriod) ?? null;
+  // --- Sección 2: Excel semanal de stock por SKU ("Productos sin movimiento") ---
+  const [snapPeriod, setSnapPeriod] = useState(currentSnapshotPeriodDefault);
+  const snapData = snapshotPeriods.find((p) => p.period === snapPeriod) ?? null;
   const [snapPhase, setSnapPhase] = useState<"idle" | "processing" | "preview">("idle");
   const [snapPreview, setSnapPreview] = useState<SnapshotPreview | null>(null);
   const [snapWarnings, setSnapWarnings] = useState<string[]>([]);
@@ -186,14 +202,14 @@ export function InventoryControlPanel({
     const json = await res.json().catch(() => null);
     if (!res.ok) { setSnapErr(json?.error ?? "No se pudo guardar."); return; }
     resetSnapUpload();
-    setSnapToast(`✅ ${monthLabel(snapPreview.period)} guardado — ${json.count} productos. Los KPIs ya se actualizaron.`);
+    setSnapToast(`✅ ${weekLabel(snapPreview.period)} guardado — ${json.count} productos. Los KPIs ya se actualizaron.`);
     router.refresh();
   }
 
   return (
     <div className="flex flex-col gap-4.5">
       <TabGuide storageKey="control-inventario">
-        Carga acá dos cosas cada mes: el valor total de inventario (con la captura de tu reporte de saldos costeados y valorizados) y ese mismo reporte en Excel, para que DAFLOW arme solo el ranking de productos sin movimiento. Con esto se calculan los KPIs de Inventario.
+        Carga acá dos cosas: el valor total de inventario cada mes (con la captura de tu reporte de saldos costeados y valorizados) y ese mismo reporte en Excel cada semana, para que DAFLOW arme solo el ranking de productos sin movimiento. Con esto se calculan los KPIs de Inventario.
       </TabGuide>
       {err && <div className="text-red text-[12.5px]">{err}</div>}
       {toast && <div className="flex items-center gap-2 text-teal text-[12.5px] bg-teal/10 border border-teal/30 rounded-md px-3 py-2"><CheckCircle2 size={14} /> {toast}</div>}
@@ -298,37 +314,42 @@ export function InventoryControlPanel({
       <div className="bg-surface border border-rule rounded-md p-4.5">
         <div className="flex items-center justify-between mb-1">
           <div className="font-semibold text-[13.5px]">Productos sin movimiento — stock por SKU</div>
-          <span className="font-mono text-[10px] uppercase text-steel bg-cloud rounded-full px-2 py-0.5">Cada mes</span>
+          <span className="font-mono text-[10px] uppercase text-steel bg-cloud rounded-full px-2 py-0.5">Cada semana</span>
         </div>
         <div className="text-[11.5px] text-steel mb-3">
-          Sube el mismo reporte de saldos costeados y valorizados (código, costo promedio, descripción, stock actual). DAFLOW compara cada producto contra el mes anterior y arma el ranking de productos sin movimiento solo — ya no hace falta escribirlos a mano.
+          Sube el mismo reporte de saldos costeados y valorizados (código, costo promedio, descripción, stock actual). DAFLOW compara cada producto contra la semana anterior y arma el ranking de productos sin movimiento solo — ya no hace falta escribirlos a mano.
         </div>
 
         {snapErr && <div className="text-red text-[12.5px] mb-2.5">{snapErr}</div>}
 
         {snapPhase !== "preview" && (
           <div className="mb-3">
-            <label className="block mb-1 text-[10px] uppercase tracking-wide text-steel">Mes del reporte</label>
+            <label className="block mb-1 text-[10px] uppercase tracking-wide text-steel">Semana del reporte</label>
             <select
               className="rounded border border-rule bg-cloud px-2.5 py-2 text-[13px] font-mono"
               value={snapPeriod}
               onChange={(e) => changeSnapPeriod(e.target.value)}
             >
-              {periods.map((p) => (
+              {snapshotPeriods.map((p) => (
                 <option key={p.period} value={p.period}>
-                  {monthLabel(p.period)}{p.hasSnapshot ? " · ya cargado" : ""}{p.period === currentPeriodDefault ? " (actual)" : ""}
+                  {p.label}{p.hasSnapshot ? " · ya cargado" : ""}{p.period === currentSnapshotPeriodDefault ? " (actual)" : ""}
                 </option>
               ))}
             </select>
+            {snapData && !snapData.hasSnapshot && (
+              <div className={`mt-1.5 text-[11px] ${snapData.overdue ? "text-red" : "text-steel"}`}>
+                {snapData.overdue ? "⚠️ Atrasado — " : "Fecha límite: "}vence {snapData.deadlineLabel}
+              </div>
+            )}
           </div>
         )}
 
         {snapPhase !== "preview" && snapData?.hasSnapshot && (
           <div className="bg-gold/10 border border-gold/30 rounded-md p-3 mb-3.5 text-[12.5px]" style={{ color: "#D9A441" }}>
             <div className="flex items-center gap-1.5 font-semibold">
-              <AlertTriangle size={14} /> Ya existe un reporte cargado para {monthLabel(snapPeriod)}.
+              <AlertTriangle size={14} /> Ya existe un reporte cargado para {snapData.label}.
             </div>
-            <div className="text-steel mt-1">Si subes uno nuevo, se <b className="text-ink">reemplaza por completo</b> el mes — útil si detectaste un error.</div>
+            <div className="text-steel mt-1">Si subes uno nuevo, se <b className="text-ink">reemplaza por completo</b> la semana — útil si detectaste un error.</div>
           </div>
         )}
 
@@ -374,8 +395,8 @@ export function InventoryControlPanel({
           <div>
             <div className="text-[11.5px] text-steel mb-2.5">
               {snapPreview.previousPeriod
-                ? <>Comparando contra <b className="text-ink">{monthLabel(snapPreview.previousPeriod)}</b> (el mes anterior con datos cargados).</>
-                : <>No hay un mes anterior cargado todavía — este será el primer punto de comparación, ningún producto se marcará sin movimiento aún.</>}
+                ? <>Comparando contra <b className="text-ink">{weekLabel(snapPreview.previousPeriod)}</b> (la semana anterior con datos cargados).</>
+                : <>No hay una semana anterior cargada todavía — este será el primer punto de comparación, ningún producto se marcará sin movimiento aún.</>}
             </div>
             <div className="overflow-x-auto mb-3 max-h-96">
               <table className="w-full text-[12px] border-collapse">
@@ -426,7 +447,7 @@ export function InventoryControlPanel({
                 className="rounded border border-teal bg-teal px-4 py-2 text-[13px] font-semibold text-navy cursor-pointer disabled:opacity-60"
                 onClick={confirmSnapSave}
               >
-                {snapData?.hasSnapshot ? "Reemplazar" : "Confirmar y guardar"} {monthLabel(snapPreview.period)}
+                {snapData?.hasSnapshot ? "Reemplazar" : "Confirmar y guardar"} {weekLabel(snapPreview.period)}
               </button>
               <button type="button" className="text-steel text-[13px] cursor-pointer" onClick={resetSnapUpload}>
                 Cancelar

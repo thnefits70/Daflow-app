@@ -22,7 +22,7 @@ import { WeeklyReviewPanel, type WeeklyReviewDTO } from "@/components/marketanal
 import { PurchaseControlPanel } from "@/components/purchases/PurchaseControlPanel";
 import { InventoryControlPanel } from "@/components/inventory/InventoryControlPanel";
 import { InventoryKpisPanel } from "@/components/finance/InventoryKpisPanel";
-import type { InventoryControlPeriodDTO, InventoryKpisDataDTO } from "@/lib/inventoryKpis";
+import type { InventoryControlPeriodDTO, InventorySnapshotPeriodDTO, InventoryKpisDataDTO } from "@/lib/inventoryKpis";
 import { PettyCashPanel } from "@/components/pettycash/PettyCashPanel";
 import { PettyCashExceptionsPanel } from "@/components/pettycash/PettyCashExceptionsPanel";
 import type { PettyCashViewerData } from "@/lib/pettyCash";
@@ -187,7 +187,12 @@ export function DeptWorkspaceTabs({
   // Compras/Servicio Postventa (confirmado 2026-08-04): Daniel lo ve en su
   // propia "Mi área de trabajo" sin importar si su departamento real es INV.
   canManageInventoryControl?: boolean;
-  inventoryControlData?: { currentPeriod: string; periods: InventoryControlPeriodDTO[] } | null;
+  inventoryControlData?: {
+    currentPeriod: string;
+    periods: InventoryControlPeriodDTO[];
+    currentSnapshotPeriod: string;
+    snapshotPeriods: InventorySnapshotPeriodDTO[];
+  } | null;
   // KPIs de inventario completos (no solo la tarjeta de Inicio) — confirmado
   // 2026-08-05: Daniel (INV) y Bryan (MKT) los ven en su propia "Mi área de
   // trabajo"; Nairoby y admin ya los ven vía KPIs financieros → Inventario,
@@ -413,6 +418,8 @@ export function DeptWorkspaceTabs({
         <InventoryControlPanel
           currentPeriodDefault={inventoryControlData.currentPeriod}
           periods={inventoryControlData.periods}
+          currentSnapshotPeriodDefault={inventoryControlData.currentSnapshotPeriod}
+          snapshotPeriods={inventoryControlData.snapshotPeriods}
         />
       )}
       {tab === "reingreso" && (canCaptureMerchandiseReentry || canApproveMerchandiseReentry || canCloseMerchandiseReentry) && (

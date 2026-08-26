@@ -9,9 +9,14 @@ import { KpiInfoTip } from "@/components/shared/KpiInfoTip";
 import { TabGuide } from "@/components/shared/TabGuide";
 
 const BUCKET_STYLE: Record<StaleStreakBucket, { label: string; color: string }> = {
-  "1": { label: "recién detectado", color: "#92a3c0" },
-  "2-3": { label: "vigilar", color: "#D9A441" },
-  "4+": { label: "revisar ya", color: "#e0574a" },
+  "1-3": { label: "recién detectado", color: "#92a3c0" },
+  "4-12": { label: "vigilar", color: "#D9A441" },
+  "13+": { label: "revisar ya", color: "#e0574a" },
+};
+const BUCKET_TOOLTIP: Record<StaleStreakBucket, string> = {
+  "1-3": "1 a 3 semanas",
+  "4-12": "4 a 12 semanas",
+  "13+": "13 semanas o más",
 };
 const RANK_COLORS = ["#e0574a", "#D9A441", "#D9A441"];
 
@@ -19,6 +24,17 @@ const MONTH_NAMES = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Se
 function monthLabel(period: string) {
   const [y, m] = period.split("-");
   return `${MONTH_NAMES[Number(m) - 1] ?? m} ${y}`;
+}
+const MONTH_NAMES_FULL = [
+  "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+  "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
+];
+// Formatea un período semanal "YYYY-MM-Wn" (staleSnapshotPeriod) sin
+// depender de inventoryKpis.ts, que importa Prisma — mismo criterio que
+// monthLabel() arriba.
+function weekLabel(period: string) {
+  const [y, m, w] = period.split("-");
+  return `${MONTH_NAMES_FULL[Number(m) - 1] ?? m} ${y} (semana ${w?.replace("W", "") ?? "?"})`;
 }
 function money(v: number) {
   return "$" + Math.round(v).toLocaleString("es-MX");
@@ -43,7 +59,7 @@ export function InventoryKpisPanel({ data }: { data: InventoryKpisDataDTO }) {
   return (
     <div className="flex flex-col gap-3.5">
     <TabGuide storageKey="inventoriokpis">
-      Estos KPIs se calculan solos a partir de lo que Daniel carga cada mes en &quot;Control de Inventario&quot;. Toca el ícono de información de cada tarjeta para ver cómo se calcula y qué significa el color.
+      Estos KPIs se calculan solos a partir de lo que Daniel carga en &quot;Control de Inventario&quot; (el valor total cada mes, el Excel de stock por SKU cada semana). Toca el ícono de información de cada tarjeta para ver cómo se calcula y qué significa el color.
     </TabGuide>
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
       {/* 1. Rotación / DIO */}
@@ -144,28 +160,28 @@ export function InventoryKpisPanel({ data }: { data: InventoryKpisDataDTO }) {
           <div className="flex items-center gap-1.5">
             <div className="font-semibold text-[13.5px]">Productos que nadie compra</div>
             <KpiInfoTip>
-              <b className="text-ink">Productos cuyo stock no bajó ni un poco desde el mes pasado</b> — si el stock sigue igual (o subió), es porque no se vendió nada de ese producto. Es dinero comprado que está guardado sin convertirse en venta. Ejemplo: si el 15% de tu inventario está aquí, de cada $100 que tienes guardados en productos, $15 llevan meses sin moverse del estante.
+              <b className="text-ink">Productos cuyo stock no bajó ni un poco desde la semana pasada</b> — si el stock sigue igual (o subió), es porque no se vendió nada de ese producto. Es dinero comprado que está guardado sin convertirse en venta. Ejemplo: si el 15% de tu inventario está aquí, de cada $100 que tienes guardados en productos, $15 llevan semanas sin moverse del estante.
               <br /><br />
               <b className="text-ink">Las flechas de la lista:</b> ↑ roja = el stock siguió subiendo (cada vez peor) · ↓ verde = el stock bajó un poco (empezó a moverse) · — gris = no cambió nada.
             </KpiInfoTip>
           </div>
           <span className="font-mono text-[10px] uppercase text-steel bg-cloud rounded-full px-2 py-0.5">
-            {data.staleSnapshotPeriod ? `Corte: ${monthLabel(data.staleSnapshotPeriod)}` : "Sin datos"}
+            {data.staleSnapshotPeriod ? `Corte: ${weekLabel(data.staleSnapshotPeriod)}` : "Sin datos"}
           </span>
         </div>
         <div className="flex items-baseline gap-2 mt-2">
           <div className="font-display text-[26px] font-bold">{staleSummary.totalStalePct !== null ? `${staleSummary.totalStalePct.toFixed(1)}%` : "—"}</div>
-          <div className="text-[11px] text-steel">del valor del inventario lleva meses sin venderse</div>
+          <div className="text-[11px] text-steel">del valor del inventario lleva semanas sin venderse</div>
         </div>
         <div className="text-[11px] text-steel mt-1">
           Mientras más tiempo lleve un producto en esta lista, más urgente es moverlo (rebajarlo, promocionarlo o dejar de comprarlo).
         </div>
 
         <div className="flex items-center gap-3 mt-3 text-[11px]">
-          {(["1", "2-3", "4+"] as const).map((b) => {
-            const count = b === "1" ? staleSummary.bucket1.length : b === "2-3" ? staleSummary.bucket23.length : staleSummary.bucket4plus.length;
+          {(["1-3", "4-12", "13+"] as const).map((b) => {
+            const count = b === "1-3" ? staleSummary.bucket1.length : b === "4-12" ? staleSummary.bucket23.length : staleSummary.bucket4plus.length;
             return (
-              <div key={b} className="flex items-center gap-1.5" title={`${b === "1" ? "1 mes" : b === "2-3" ? "2 a 3 meses" : "4 meses o más"} sin venderse`}>
+              <div key={b} className="flex items-center gap-1.5" title={`${BUCKET_TOOLTIP[b]} sin venderse`}>
                 <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: BUCKET_STYLE[b].color }} />
                 <span className="text-steel">{BUCKET_STYLE[b].label}</span>
                 <span className="font-mono font-semibold">{count}</span>
@@ -174,47 +190,57 @@ export function InventoryKpisPanel({ data }: { data: InventoryKpisDataDTO }) {
           })}
         </div>
 
-        {data.staleEntries.length > 0 && (
-          <div className="flex items-center gap-2.5 mt-3 pt-1.5 text-[9.5px] uppercase tracking-wide text-steel/70">
-            <span className="w-5 shrink-0" />
-            <span className="flex-1 min-w-0">Producto</span>
-            <span className="shrink-0 w-16 text-center">Sin venderse</span>
-            <span className="font-mono w-20 text-right shrink-0">Valor guardado</span>
-            <span className="shrink-0 w-[13px] text-center">Stock</span>
-          </div>
-        )}
-        <div className="flex flex-col gap-1.5 max-h-72 overflow-y-auto">
-          {data.staleEntries.slice(0, 8).map((p, i) => (
-            <div key={p.productCode} className="flex items-center gap-2.5 border-t border-rule/50 pt-1.5 text-[11.5px]">
-              <span
-                className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold text-navy shrink-0"
-                style={{ background: i < 3 ? RANK_COLORS[i] : "#24365a", color: i < 3 ? "#0b1f3a" : "#92a3c0" }}
-                title="Puesto en el ranking de más urgente"
-              >
-                {i + 1}
-              </span>
-              <div className="flex-1 min-w-0">
-                <div className="font-semibold truncate">{p.description || p.productCode}</div>
-                <div className="text-steel font-mono text-[10px]">{p.productCode}</div>
-              </div>
-              <span
-                className="font-mono text-[10px] font-semibold rounded-full px-2 py-0.5 shrink-0 w-16 text-center"
-                style={{ background: `${BUCKET_STYLE[p.bucket].color}1f`, color: BUCKET_STYLE[p.bucket].color }}
-                title="Meses seguidos sin que baje el stock"
-              >
-                {p.streakMonths} {p.streakMonths === 1 ? "mes" : "meses"}
-              </span>
-              <span className="font-mono text-steel w-20 text-right shrink-0" title="Valor en dólares del stock guardado de este producto">{money(p.costTotal)}</span>
-              <span className="shrink-0 w-[13px] flex justify-center" title={p.trend === "up" ? "El stock siguió subiendo — cada vez peor" : p.trend === "down" ? "El stock bajó un poco — empezó a moverse" : "El stock no cambió"}>
-                {p.trend === "up" ? <TrendingUp size={13} className="text-red" /> : p.trend === "down" ? <TrendingDown size={13} className="text-teal" /> : <Minus size={13} className="text-steel" />}
-              </span>
-            </div>
-          ))}
-          {data.staleEntries.length === 0 && (
-            <div className="text-[11.5px] text-steel">
-              {data.staleSnapshotPeriod ? "Ningún producto sin movimiento este mes — todo bajó de stock vs. el mes anterior." : "Todavía no hay un Excel de stock por SKU cargado."}
+        <div className="mt-3 flex flex-col max-h-72 overflow-y-auto">
+          {data.staleEntries.length > 0 && (
+            <div className="sticky top-0 z-10 bg-surface flex items-center gap-2 pb-1.5 mb-1.5 border-b border-rule/50 text-[9.5px] uppercase tracking-wide text-steel/70">
+              <span className="w-5 shrink-0" />
+              <span className="flex-1 min-w-0">Producto</span>
+              <span className="shrink-0 w-[68px] text-center">Sin venderse</span>
+              <span className="shrink-0 w-[76px] text-right">Valor guardado</span>
             </div>
           )}
+          <div className="flex flex-col gap-1.5">
+            {data.staleEntries.slice(0, 8).map((p, i) => (
+              <div key={p.productCode} className="flex items-center gap-2 border-t border-rule/50 pt-1.5 text-[11.5px]">
+                <span
+                  className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold text-navy shrink-0"
+                  style={{ background: i < 3 ? RANK_COLORS[i] : "#24365a", color: i < 3 ? "#0b1f3a" : "#92a3c0" }}
+                  title="Puesto en el ranking de más urgente"
+                >
+                  {i + 1}
+                </span>
+                <div className="flex-1 min-w-0">
+                  <div className="font-semibold truncate">{p.description || p.productCode}</div>
+                  <div className="text-steel font-mono text-[10px]">{p.productCode}</div>
+                </div>
+                <span
+                  className="font-mono text-[10px] font-semibold rounded-full px-2 py-0.5 shrink-0 w-[68px] text-center"
+                  style={{ background: `${BUCKET_STYLE[p.bucket].color}1f`, color: BUCKET_STYLE[p.bucket].color }}
+                  title="Semanas seguidas sin que baje el stock"
+                >
+                  {p.streakWeeks} {p.streakWeeks === 1 ? "sem" : "sems"}
+                </span>
+                <span
+                  className="font-mono text-steel w-[76px] text-right shrink-0 flex items-center justify-end gap-1"
+                  title={
+                    (p.trend === "up"
+                      ? "El stock siguió subiendo — cada vez peor. "
+                      : p.trend === "down"
+                        ? "El stock bajó un poco — empezó a moverse. "
+                        : "El stock no cambió. ") + "Valor en dólares guardado en este producto."
+                  }
+                >
+                  {p.trend === "up" ? <TrendingUp size={12} className="text-red shrink-0" /> : p.trend === "down" ? <TrendingDown size={12} className="text-teal shrink-0" /> : <Minus size={12} className="text-steel shrink-0" />}
+                  {money(p.costTotal)}
+                </span>
+              </div>
+            ))}
+            {data.staleEntries.length === 0 && (
+              <div className="text-[11.5px] text-steel">
+                {data.staleSnapshotPeriod ? "Ningún producto sin movimiento esta semana — todo bajó de stock vs. la semana anterior." : "Todavía no hay un Excel de stock por SKU cargado."}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -227,10 +253,11 @@ export function InventoryKpisPanel({ data }: { data: InventoryKpisDataDTO }) {
 type SnapshotRow = { productCode: string; description: string; avgCost: number; stock: number; costTotal: number };
 type SortKey = "stock" | "costTotal" | "critical";
 
-// Confirmado 2026-08-05: vista interina — mientras solo hay UN mes cargado
-// no hay base para marcar "sin movimiento" (KPI #4 sale en 0%), así que esto
-// deja revisar/filtrar el inventario real del mes por stock o valor para
-// actuar de una vez, sin esperar el segundo mes de comparación.
+// Confirmado 2026-08-05 (cadencia cambiada a semanal el 2026-08-25): vista
+// interina — mientras solo hay UNA semana cargada no hay base para marcar
+// "sin movimiento" (KPI #4 sale en 0%), así que esto deja revisar/filtrar
+// el inventario real de la semana por stock o valor para actuar de una vez,
+// sin esperar la segunda semana de comparación.
 function AllProductsSnapshotTable({ rows, period }: { rows: SnapshotRow[]; period: string | null }) {
   const [search, setSearch] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("critical");
@@ -282,11 +309,11 @@ function AllProductsSnapshotTable({ rows, period }: { rows: SnapshotRow[]; perio
   return (
     <div className="bg-surface border border-rule rounded-md p-4.5">
       <div className="flex items-center justify-between mb-1 flex-wrap gap-y-1.5">
-        <div className="font-semibold text-[13.5px]">Todos los productos cargados{period ? ` — ${monthLabel(period)}` : ""}</div>
+        <div className="font-semibold text-[13.5px]">Todos los productos cargados{period ? ` — ${weekLabel(period)}` : ""}</div>
         <span className="font-mono text-[10px] uppercase text-steel bg-cloud rounded-full px-2 py-0.5">{filtered.length} de {rows.length}</span>
       </div>
       <div className="text-[11px] text-steel mb-3">
-        Vista de apoyo mientras se acumula un segundo mes para calcular &quot;sin movimiento&quot; de verdad. &quot;Crítico&quot; combina alto stock + alto valor a la vez, no solo uno de los dos.
+        Vista de apoyo mientras se acumula una segunda semana para calcular &quot;sin movimiento&quot; de verdad. &quot;Crítico&quot; combina alto stock + alto valor a la vez, no solo uno de los dos.
       </div>
 
       <div className="flex items-center gap-2.5 mb-3 flex-wrap">

@@ -3,14 +3,16 @@
 // componentes cliente que necesiten recomputar algo al vuelo.
 
 // Reemplaza por completo el mecanismo trimestral manual (confirmado
-// 2026-08-05) — cada mes Daniel sube un Excel con el stock valorizado por
-// SKU. "Sin movimiento" se deriva solo comparando el stock de cada producto
-// contra el mes inmediatamente anterior en que se subió información para
-// ese SKU: si NO bajó, cuenta como un mes más sin moverse. No hay venta por
-// SKU en el sistema — esto es un proxy transparente, no una medición exacta.
+// 2026-08-05) — cada semana Daniel sube un Excel con el stock valorizado por
+// SKU (cambiado de mensual a semanal el 2026-08-25, pedido de Daniel, ver
+// recentInventorySnapshotPeriods() en inventoryKpis.ts). "Sin movimiento" se
+// deriva solo comparando el stock de cada producto contra la semana
+// inmediatamente anterior en que se subió información para ese SKU: si NO
+// bajó, cuenta como una semana más sin moverse. No hay venta por SKU en el
+// sistema — esto es un proxy transparente, no una medición exacta.
 
 export type ProductSnapshotRow = {
-  period: string; // "YYYY-MM"
+  period: string; // "YYYY-MM-WN" (semana N del mes, N = 1..4)
   productCode: string;
   description: string;
   avgCost: number;
@@ -18,12 +20,16 @@ export type ProductSnapshotRow = {
   costTotal: number;
 };
 
-export type StaleStreakBucket = "1" | "2-3" | "4+";
+// Umbrales recalibrados 2026-08-25 al pasar de cadencia mensual a semanal
+// (x4 aprox., para conservar el mismo tiempo real que antes: ~1 mes / ~1-3
+// meses / ~3+ meses sin moverse) — ajustable si con datos reales resulta
+// muy sensible o muy laxo.
+export type StaleStreakBucket = "1-3" | "4-12" | "13+";
 
-export function staleStreakBucket(streakMonths: number): StaleStreakBucket {
-  if (streakMonths >= 4) return "4+";
-  if (streakMonths >= 2) return "2-3";
-  return "1";
+export function staleStreakBucket(streakWeeks: number): StaleStreakBucket {
+  if (streakWeeks >= 13) return "13+";
+  if (streakWeeks >= 4) return "4-12";
+  return "1-3";
 }
 
 export type StaleStreakEntry = {
@@ -32,16 +38,17 @@ export type StaleStreakEntry = {
   avgCost: number;
   stock: number;
   costTotal: number;
-  streakMonths: number;
+  streakWeeks: number;
   bucket: StaleStreakBucket;
   trend: "up" | "flat" | "down";
 };
 
 // Recibe TODO el historial de snapshots de un departamento (todas las
-// filas, todos los meses) y calcula, para el mes más reciente cargado, qué
-// productos llevan racha sin bajar de stock. Cada producto se compara solo
-// contra su propio historial (no todos los SKU aparecen en todos los meses
-// — ej. productos nuevos o descontinuados), ordenado por período ascendente.
+// filas, todas las semanas) y calcula, para la semana más reciente cargada,
+// qué productos llevan racha sin bajar de stock. Cada producto se compara
+// solo contra su propio historial (no todos los SKU aparecen en todas las
+// semanas — ej. productos nuevos o descontinuados), ordenado por período
+// ascendente.
 export function computeStaleStreaks(allRows: ProductSnapshotRow[]): StaleStreakEntry[] {
   const byProduct = new Map<string, ProductSnapshotRow[]>();
   for (const r of allRows) {
@@ -74,19 +81,19 @@ export function computeStaleStreaks(allRows: ProductSnapshotRow[]): StaleStreakE
       avgCost: latest.avgCost,
       stock: latest.stock,
       costTotal: latest.costTotal,
-      streakMonths: streak,
+      streakWeeks: streak,
       bucket: staleStreakBucket(streak),
       trend,
     });
   }
 
-  return entries.sort((a, b) => b.streakMonths - a.streakMonths || b.costTotal - a.costTotal);
+  return entries.sort((a, b) => b.streakWeeks - a.streakWeeks || b.costTotal - a.costTotal);
 }
 
 export function summarizeStaleStreaks(entries: StaleStreakEntry[], totalPeriodValue: number | null) {
-  const bucket1 = entries.filter((e) => e.bucket === "1");
-  const bucket23 = entries.filter((e) => e.bucket === "2-3");
-  const bucket4plus = entries.filter((e) => e.bucket === "4+");
+  const bucket1 = entries.filter((e) => e.bucket === "1-3");
+  const bucket23 = entries.filter((e) => e.bucket === "4-12");
+  const bucket4plus = entries.filter((e) => e.bucket === "13+");
   const totalStaleValue = entries.reduce((s, e) => s + e.costTotal, 0);
   const pct = totalPeriodValue && totalPeriodValue > 0 ? (totalStaleValue / totalPeriodValue) * 100 : null;
   return {

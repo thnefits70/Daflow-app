@@ -94,3 +94,25 @@ export function addBusinessDays(start: Date, days: number): Date {
   const window = dayWindow(cur)!;
   return new Date(atHourOfDay(cur, window.end).getTime() + ECUADOR_OFFSET_MS);
 }
+
+// ¿Tiene `real` (instante UTC real) horario de oficina ese día en Ecuador?
+// L-S sin feriados — a diferencia de isBusinessDay() de recognition.ts, que
+// trata sábado como no laborable para efectos de cumpleaños/reconocimientos
+// (ver comentario en birthdays.ts); acá sábado sí cuenta, igual que
+// SATURDAY_WINDOW arriba.
+export function isOfficeDay(real: Date): boolean {
+  return dayWindow(new Date(real.getTime() - ECUADOR_OFFSET_MS)) !== null;
+}
+
+// Retrocede día a día (calendario Ecuador) desde `real` hasta el último día
+// con horario de oficina — para plazos tipo "último día laborable de la
+// semana", que si cae domingo o feriado se corre hacia atrás. Devuelve un
+// instante UTC real dentro de ese día calendario (misma hora del día que
+// `real`, solo cambia la fecha si hizo falta retroceder).
+export function lastOfficeDayAtOrBefore(real: Date): Date {
+  let cur = real;
+  while (!isOfficeDay(cur)) {
+    cur = new Date(cur.getTime() - 24 * 60 * 60 * 1000);
+  }
+  return cur;
+}
