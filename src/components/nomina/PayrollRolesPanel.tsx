@@ -175,11 +175,18 @@ function RoleCard({ role, index, published, canEdit, monthlyRoleId, showPayout, 
     if (published) return;
     setSaving(true);
     setSaveError("");
-    const res = await fetch(`/api/payroll/roles/${role.id}/line-items`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ lineItems: items }),
-    });
+    let res: Response;
+    try {
+      res = await fetch(`/api/payroll/roles/${role.id}/line-items`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ lineItems: items }),
+      });
+    } catch {
+      setSaving(false);
+      setSaveError("No se pudo conectar con el servidor — revisá tu internet e intentá de nuevo.");
+      return;
+    }
     setSaving(false);
     if (!res.ok) {
       const data = await res.json().catch(() => null);
@@ -194,11 +201,18 @@ function RoleCard({ role, index, published, canEdit, monthlyRoleId, showPayout, 
     if (!changeNote.trim()) return;
     setSaving(true);
     setSaveError("");
-    const res = await fetch(`/api/payroll/roles/${role.id}/correct`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ lineItems: items, changeNote: changeNote.trim() }),
-    });
+    let res: Response;
+    try {
+      res = await fetch(`/api/payroll/roles/${role.id}/correct`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ lineItems: items, changeNote: changeNote.trim() }),
+      });
+    } catch {
+      setSaving(false);
+      setSaveError("No se pudo conectar con el servidor — revisá tu internet e intentá de nuevo.");
+      return;
+    }
     setSaving(false);
     if (!res.ok) {
       const data = await res.json().catch(() => null);
