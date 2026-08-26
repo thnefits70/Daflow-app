@@ -18,7 +18,11 @@ const BUCKET_TOOLTIP: Record<StaleStreakBucket, string> = {
   "4-12": "4 a 12 semanas",
   "13+": "13 semanas o más",
 };
-const RANK_COLORS = ["#e0574a", "#D9A441", "#D9A441"];
+// Deliberadamente NO usa los colores de BUCKET_STYLE (rojo/amarillo = urgencia
+// real por semanas sin venderse) — este es solo el puesto en la lista (1º,
+// 2º, 3º), algo distinto, y reusar esos colores confundía: un producto podía
+// verse en círculo "rojo" de puesto #1 sin estar en el grupo "revisar ya".
+const RANK_COLORS = ["#14c7c7", "#1e5eff", "#1e5eff"];
 
 const MONTH_NAMES = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
 function monthLabel(period: string) {
