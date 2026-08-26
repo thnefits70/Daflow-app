@@ -541,7 +541,15 @@ export function PayrollRolesPanel({ canEdit, canProposeFixedBonus, canApproveFix
             </div>
           )}
 
-          {transfer && !(isAdmin && transfer.status === "REJECTED") && (
+          {/* Confirmado 2026-08-25: bug real encontrado por el usuario — esto
+              exigía `transfer` (el objeto ya creado), así que cuando todavía
+              no se había enviado nada (transfer === null) este panel nunca
+              se montaba y el botón "Enviar total para transferir" (que vive
+              en PayrollTransferPanel -> SendTotalPrompt para ese caso
+              null+canEdit) quedaba inalcanzable. Ahora solo se excluye la
+              espera inicial (undefined) y el caso admin+rechazado ya
+              cubierto arriba. */}
+          {transfer !== undefined && !(isAdmin && transfer?.status === "REJECTED") && (
             <PayrollTransferPanel period={period} isAdmin={isAdmin} canEdit={canEdit} transfer={transfer} onChanged={loadTransfer} />
           )}
 
