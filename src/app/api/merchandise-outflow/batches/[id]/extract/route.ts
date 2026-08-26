@@ -37,11 +37,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   await prisma.merchandiseOutflowBatch.update({ where: { id }, data: { documentPhotoUrls: parsed.data.photoUrls } });
 
   const catalog = await prisma.purchaseCatalogItem.findMany({ select: { id: true, name: true, photos: true, justCode: true, pendingRegistration: true } });
-  // Confirmado 2026-08-26: solo se confía en un catalogMatch de la IA si el
-  // nombre devuelto existe TAL CUAL en el catálogo real (validación del lado
-  // del servidor) — evita que un nombre inventado o mal copiado por la IA
-  // termine vinculado a un producto que no es.
+  // Confirmado 2026-08-26: solo se confía en un catalogMatch/code de la IA si
+  // existe TAL CUAL en el catálogo real (validación del lado del servidor) —
+  // evita que un nombre o código inventado/mal copiado por la IA termine
+  // vinculado a un producto que no es.
   const catalogByName = new Map(catalog.map((c) => [c.name.trim().toLowerCase(), c]));
+  // Confirmado 2026-08-26 (pedido explícito del usuario): el código Just es
+  // el MISMO código que usa Dropi, así que si el documento trae ese código
+  // junto al renglón (no siempre lo trae), es una identificación exacta del
+  // producto — mucho más confiable que comparar el nombre a mano. Se
+  // prioriza sobre el match por nombre cuando ambos vienen en la misma fila.
+  const catalogByJustCode = new Map(catalog.filter((c) => c.justCode).map((c) => [c.justCode!.trim().toLowerCase(), c]));
 
   try {
     const result = await readOutflowManifest({
@@ -58,7 +64,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     // antes de mandarlo a dar de baja en Just.
     const groups = new Map<string, { name: string; quantity: number; confidence: Confidence; catalogItem: (typeof catalog)[number] | null }>();
     for (const row of result.rows) {
-      const matched = row.catalogMatch ? catalogByName.get(row.catalogMatch.trim().toLowerCase()) : undefined;
+      const matched =
+        (row.code ? catalogByJustCode.get(row.code.trim().toLowerCase()) : undefined) ??
+        (row.catalogMatch ? catalogByName.get(row.catalogMatch.trim().toLowerCase()) : undefined);
       const key = matched ? `cat:${matched.id}` : `manual:${row.name.trim().toLowerCase()}`;
       const existing = groups.get(key);
       if (existing) {

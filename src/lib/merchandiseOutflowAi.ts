@@ -23,6 +23,11 @@ const SUBMIT_OUTFLOW_ROWS_TOOL = {
           properties: {
             name: { type: "string", description: "Nombre del producto tal como está escrito en el documento, sin traducir ni normalizar." },
             quantity: { type: "number", description: "Número de unidades de ese renglón." },
+            code: {
+              type: "string",
+              description:
+                "El código interno del producto (mismo código de Just/Dropi) SOLO si aparece escrito junto a este renglón en el documento — cópialo tal cual, dígitos/letras exactos, sin espacios. Es más confiable que el nombre para identificar el producto exacto. Omite este campo por completo si no hay ningún código visible para este renglón — nunca lo inventes ni lo copies de otro renglón.",
+            },
             confidence: {
               type: "string",
               enum: ["alta", "media", "baja"],
@@ -43,7 +48,7 @@ const SUBMIT_OUTFLOW_ROWS_TOOL = {
   },
 };
 
-export type OutflowManifestRow = { name: string; quantity: number; confidence: "alta" | "media" | "baja"; catalogMatch: string | null };
+export type OutflowManifestRow = { name: string; quantity: number; confidence: "alta" | "media" | "baja"; catalogMatch: string | null; code: string | null };
 export type OutflowManifestReadResult = { rows: OutflowManifestRow[] };
 
 // Confirmado 2026-08-25: Daniel fotografía la hoja física de despacho (o el
@@ -83,6 +88,9 @@ export async function readOutflowManifest(params: {
       "cantidad — nunca inventes un producto ni una cantidad que no esté escrita. Si el documento trae varias " +
       "fotos (varias hojas o continuación), combina todos los renglones en una sola lista. Si la misma foto " +
       "repite el mismo nombre de producto en más de un renglón, súmalos en una sola fila con la cantidad total. " +
+      "Algunos documentos traen, junto a cada renglón, el código interno del producto (el mismo código que usa " +
+      "Just/Dropi) — si lo ves, transcríbelo en \"code\" tal cual, es la forma MÁS confiable de identificar el " +
+      "producto exacto porque no depende de interpretar el nombre a mano. " +
       "También te doy la lista de nombres de productos ya registrados en el catálogo (ver más abajo). Para cada " +
       "renglón, si corresponde con confianza a uno de esa lista — aunque en el papel esté escrito distinto " +
       "(abreviado, mal escrito, en otro orden, con o sin tildes) — copia en \"catalogMatch\" el nombre EXACTO tal " +
@@ -139,6 +147,7 @@ export async function readOutflowManifest(params: {
             ...r,
             confidence: r.confidence === "alta" || r.confidence === "media" || r.confidence === "baja" ? r.confidence : "media",
             catalogMatch: typeof r.catalogMatch === "string" && r.catalogMatch.trim() ? r.catalogMatch : null,
+            code: typeof r.code === "string" && r.code.trim() ? r.code.trim() : null,
           }))
       : [],
   };
