@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Camera, Check, ExternalLink, Plus, Search, Send, Trash2, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Camera, Check, ExternalLink, Plus, Search, Send, Trash2, Upload, X } from "lucide-react";
 import { LiveCameraCapture } from "@/components/shared/LiveCameraCapture";
 import { ProductMatchPicker, type MatchCatalogItem, type ProductMatchResult } from "@/components/merchandise-reentry/ProductMatchPicker";
+import { compressImage } from "@/lib/compressImage";
+import { uploadFile } from "@/lib/uploadFile";
 
 type SupplierOption = { id: string; name: string };
 
@@ -49,6 +51,8 @@ export function SupplierExchangeCapture({ onSent }: { onSent?: () => void }) {
   const [error, setError] = useState("");
   const [adding, setAdding] = useState(false);
   const [taking, setTaking] = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [confirmingSubmit, setConfirmingSubmit] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [sentCode, setSentCode] = useState<string | null>(null);
@@ -108,6 +112,25 @@ export function SupplierExchangeCapture({ onSent }: { onSent?: () => void }) {
     } catch (e) {
       setError(e instanceof Error ? e.message : "No se pudo guardar la foto.");
     }
+  }
+
+  // Confirmado 2026-08-26: pedido explícito del usuario — a diferencia del
+  // resto de fotos de la app (siempre cámara en vivo, ver LiveCameraCapture),
+  // acá SÍ se permite subir una foto ya tomada de la galería. Esta foto es
+  // evidencia del paquete/lista completa, no la identificación en vivo de un
+  // producto puntual, así que el mismo nivel de control anti-fraude no
+  // aplica igual — sigue teniendo que ser una foto real de los productos.
+  async function uploadPhotoFile(file: File) {
+    setUploadingPhoto(true);
+    setError("");
+    const compressed = await compressImage(file);
+    const result = await uploadFile(compressed, "merchandise-outflow-photos");
+    setUploadingPhoto(false);
+    if (!result.ok) {
+      setError(result.error);
+      return;
+    }
+    await addPhoto(result.url);
   }
 
   async function removePhoto(index: number) {
@@ -270,13 +293,19 @@ export function SupplierExchangeCapture({ onSent }: { onSent?: () => void }) {
               </div>
             ) : (
               <div key={item.id} className="bg-surface border border-rule rounded-md p-2.5">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-[12.5px] font-semibold">{itemName(item)}</span>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <span className="font-mono text-[11px] text-steel">{item.quantity} un.</span>
-                    <button type="button" className="text-steel hover:text-red cursor-pointer" onClick={() => setConfirmDeleteItemId(item.id)}>
-                      <X size={13} />
-                    </button>
+                <div className="flex items-center gap-2.5">
+                  {item.catalogItem?.photos[0] && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={item.catalogItem.photos[0]} alt={itemName(item)} className="w-10 h-10 object-cover rounded border border-rule shrink-0 cursor-zoom-in" onClick={() => setZoomedPhoto(item.catalogItem!.photos[0])} />
+                  )}
+                  <div className="flex-1 min-w-0 flex items-center justify-between gap-2">
+                    <span className="text-[12.5px] font-semibold truncate">{itemName(item)}</span>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="font-mono text-[11px] text-steel">{item.quantity} un.</span>
+                      <button type="button" className="text-steel hover:text-red cursor-pointer" onClick={() => setConfirmDeleteItemId(item.id)}>
+                        <X size={13} />
+                      </button>
+                    </div>
                   </div>
                 </div>
                 {item.expectedCreditAmount !== null ? (
@@ -325,11 +354,28 @@ export function SupplierExchangeCapture({ onSent }: { onSent?: () => void }) {
         ) : batch.documentPhotoUrls.length >= MAX_PHOTOS ? (
           <div className="text-[11.5px] text-steel">Máximo {MAX_PHOTOS} fotos.</div>
         ) : (
-          <button type="button" className="flex items-center gap-1.5 text-[12.5px] font-bold border-[1.5px] border-rule rounded-md px-3.5 py-2 cursor-pointer" onClick={() => setTaking(true)}>
-            <Camera size={14} /> {batch.documentPhotoUrls.length === 0 ? "Tomar foto de la lista" : "Agregar otra foto"}
-          </button>
+          <div className="flex items-center gap-2 flex-wrap">
+            <button type="button" className="flex items-center gap-1.5 text-[12.5px] font-bold border-[1.5px] border-rule rounded-md px-3.5 py-2 cursor-pointer" onClick={() => setTaking(true)}>
+              <Camera size={14} /> {batch.documentPhotoUrls.length === 0 ? "Tomar foto de la lista" : "Agregar otra foto"}
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadPhotoFile(f); e.target.value = ""; }}
+            />
+            <button
+              type="button"
+              disabled={uploadingPhoto}
+              className="flex items-center gap-1.5 text-[12.5px] font-semibold text-blue cursor-pointer disabled:opacity-60"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <Upload size={13} /> {uploadingPhoto ? "Subiendo…" : "Subir foto guardada"}
+            </button>
+          </div>
         )}
-        <div className="text-[10.5px] text-steel mt-1.5">Evidencia de qué productos declaraste para el cambio — se pega junto con el paquete físico.</div>
+        <div className="text-[10.5px] text-steel mt-1.5">Evidencia de qué productos declaraste para el cambio — se pega junto con el paquete físico. Puede ser una foto tomada en el momento o una ya guardada, siempre que muestre los productos reales.</div>
       </div>
 
       {!confirmingSubmit && (
@@ -400,6 +446,10 @@ function AddItemForm({ batchId, onAdded, onCancel }: { batchId: string; onAdded:
         <label className="block mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-steel">Producto</label>
         {selected ? (
           <div className="flex items-center gap-2.5 bg-green/10 border border-green/35 rounded-md p-2.5">
+            {selected.photos[0] && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={selected.photos[0]} alt={selected.name} className="w-10 h-10 object-cover rounded border border-green/40 shrink-0" />
+            )}
             <div className="flex-1 min-w-0 text-[12.5px] font-semibold truncate">{selected.name}</div>
             <button type="button" className="shrink-0 text-[11px] font-semibold text-blue cursor-pointer" onClick={() => setSelected(null)}>Cambiar</button>
           </div>
