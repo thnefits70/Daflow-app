@@ -3,7 +3,7 @@ import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { canCaptureMerchandiseOutflow } from "@/lib/guards";
-import { readOutflowManifest } from "@/lib/merchandiseOutflowAi";
+import { readOutflowManifest, matchOutflowNamesToCatalog } from "@/lib/merchandiseOutflowAi";
 import { groupOutflowRows } from "@/lib/merchandiseOutflowGrouping";
 
 const MAX_PHOTOS = 40;
@@ -61,16 +61,25 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const result = await readOutflowManifest({
       photoUrls: parsed.data.photoUrls,
       documentKind: batch.reason === "DESPACHO" ? "despacho" : "garantía",
+      actorId: session.user.id,
+    });
+
+    // Confirmado 2026-08-26: emparejamiento por nombre en una llamada
+    // SEPARADA (solo texto, sin fotos) — ver merchandiseOutflowAi.ts para
+    // por qué se sacó de la llamada que lee las fotos.
+    const catalogMatches = await matchOutflowNamesToCatalog({
+      names: result.rows.map((r) => r.name),
       catalogNames: catalog.map((c) => c.name),
       actorId: session.user.id,
     });
+    const rowsWithMatch = result.rows.map((r, i) => ({ ...r, catalogMatch: catalogMatches[i] ?? null }));
 
     // Agrupa por el producto de catálogo ya resuelto (o por el nombre crudo
     // si no hubo match) — así dos renglones escritos distinto en el papel
     // pero que la IA emparejó al mismo producto quedan en una sola fila con
     // la cantidad sumada, que es justo el resumen que Daniel necesita ver
     // antes de mandarlo a dar de baja en Just. Ver merchandiseOutflowGrouping.ts.
-    const rows = groupOutflowRows(result.rows, { catalogByJustCode, catalogByName, combosByCode });
+    const rows = groupOutflowRows(rowsWithMatch, { catalogByJustCode, catalogByName, combosByCode });
     return NextResponse.json({ rows });
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : "No se pudo leer el documento.", rows: [] }, { status: 200 });
