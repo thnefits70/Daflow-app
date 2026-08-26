@@ -24,9 +24,9 @@ export async function readOutflowManifest(params: { photoUrls: string[]; documen
   const client = getAnthropicClient();
   const fileBlocks = await Promise.all(params.photoUrls.map((u) => fetchFileContentBlock(u)));
 
-  const response = await client.messages.create({
+  const request = {
     model: OUTFLOW_AI_MODEL,
-    max_tokens: 2048,
+    max_tokens: 4096,
     system:
       `Lees ${params.documentKind === "despacho" ? "hojas físicas de despacho" : "manifiestos de garantía"} para el ` +
       "área de Inventario de Provedix (Guayaquil, Ecuador). Extrae CADA renglón de producto que aparece, con su " +
@@ -42,11 +42,22 @@ export async function readOutflowManifest(params: { photoUrls: string[]; documen
       "confianza. Si no se distingue con claridad algún renglón, omítelo de la lista en vez de adivinar.",
     messages: [
       {
-        role: "user",
-        content: [...fileBlocks, { type: "text", text: "Lee este documento y devuelve el JSON pedido." }],
+        role: "user" as const,
+        content: [...fileBlocks, { type: "text" as const, text: "Lee este documento y devuelve el JSON pedido." }],
       },
     ],
-  });
+  };
+
+  // Con lotes de muchas fotos el modelo, muy rara vez, devuelve una
+  // respuesta sin ningún bloque de texto (no es un error de la API, no
+  // lanza excepción). Un solo reintento resuelve ese caso sin exponerle
+  // el fallo a Daniel.
+  let response = await client.messages.create(request);
+  let textBlock = response.content.find((b) => b.type === "text");
+  if (!textBlock || textBlock.type !== "text") {
+    response = await client.messages.create(request);
+    textBlock = response.content.find((b) => b.type === "text");
+  }
 
   await logAiUsage({
     feature: "registro_egresos_manifiesto",
@@ -57,8 +68,7 @@ export async function readOutflowManifest(params: { photoUrls: string[]; documen
     outputTokens: response.usage.output_tokens,
   });
 
-  const textBlock = response.content.find((b) => b.type === "text");
-  if (!textBlock || textBlock.type !== "text") throw new Error("La IA no devolvió contenido de texto.");
+  if (!textBlock || textBlock.type !== "text") throw new Error("La IA no devolvió contenido de texto. Intenta de nuevo con menos fotos por lectura.");
   const result = extractJson<OutflowManifestReadResult>(textBlock.text);
   return {
     rows: Array.isArray(result.rows)
