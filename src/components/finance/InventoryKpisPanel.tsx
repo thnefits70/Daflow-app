@@ -190,7 +190,7 @@ export function InventoryKpisPanel({ data }: { data: InventoryKpisDataDTO }) {
           })}
         </div>
 
-        <div className="mt-3 flex flex-col max-h-72 overflow-y-auto">
+        <div className="mt-3 flex flex-col max-h-72 overflow-y-auto pr-2.5">
           {data.staleEntries.length > 0 && (
             <div className="sticky top-0 z-10 bg-surface flex items-center gap-2 pb-1.5 mb-1.5 border-b border-rule/50 text-[9.5px] uppercase tracking-wide text-steel/70">
               <span className="w-5 shrink-0" />
