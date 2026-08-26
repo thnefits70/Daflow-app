@@ -64,7 +64,13 @@ export function InventoryKpisPanel({ data }: { data: InventoryKpisDataDTO }) {
         <div className="text-[11px] text-steel mt-1">
           {data.dio.good === false ? "Subiendo = mal (rota más lento)" : data.dio.good === true ? "Bajando = bien (rota más rápido)" : "Sin tendencia todavía"}
         </div>
-        <TrendSpark values={data.dioSeries} good={data.dio.good} />
+        <TrendSpark
+          values={data.dioSeries}
+          good={data.dio.good}
+          detailed
+          periods={data.series.map((p) => p.period)}
+          valueFormatter={(v) => `${v.toFixed(0)}d`}
+        />
       </div>
 
       {/* 2. Inventario vs Ventas */}
@@ -123,32 +129,43 @@ export function InventoryKpisPanel({ data }: { data: InventoryKpisDataDTO }) {
             {data.gmroiSeries.good ? "Mejorando vs. el mes anterior" : "Cayendo vs. el mes anterior"}
           </div>
         )}
-        <TrendSpark values={data.gmroiFullSeries} good={data.gmroiSeries.good} />
+        <TrendSpark
+          values={data.gmroiFullSeries}
+          good={data.gmroiSeries.good}
+          detailed
+          periods={data.series.map((p) => p.period)}
+          valueFormatter={(v) => `${v.toFixed(1)}x`}
+        />
       </div>
 
       {/* 4. Productos sin movimiento */}
       <div className="bg-surface border border-rule rounded-md p-4.5" style={{ borderTop: "2px solid #e0574a" }}>
         <div className="flex items-center justify-between mb-1 flex-wrap gap-y-1.5">
           <div className="flex items-center gap-1.5">
-            <div className="font-semibold text-[13.5px]">Productos sin movimiento</div>
+            <div className="font-semibold text-[13.5px]">Productos que nadie compra</div>
             <KpiInfoTip>
-              <b className="text-ink">% del valor de inventario que lleva meses sin bajar de stock</b> — el mejor proxy que tenemos sin ventas por SKU: si el stock no bajó vs. el mes anterior, no hay evidencia de que se haya vendido. Ejemplo: si el 15% de tu inventario está &quot;sin movimiento&quot;, de cada $100 guardados, $15 son productos que nadie parece estar comprando.
+              <b className="text-ink">Productos cuyo stock no bajó ni un poco desde el mes pasado</b> — si el stock sigue igual (o subió), es porque no se vendió nada de ese producto. Es dinero comprado que está guardado sin convertirse en venta. Ejemplo: si el 15% de tu inventario está aquí, de cada $100 que tienes guardados en productos, $15 llevan meses sin moverse del estante.
+              <br /><br />
+              <b className="text-ink">Las flechas de la lista:</b> ↑ roja = el stock siguió subiendo (cada vez peor) · ↓ verde = el stock bajó un poco (empezó a moverse) · — gris = no cambió nada.
             </KpiInfoTip>
           </div>
           <span className="font-mono text-[10px] uppercase text-steel bg-cloud rounded-full px-2 py-0.5">
-            {data.staleSnapshotPeriod ? `Excel · ${monthLabel(data.staleSnapshotPeriod)}` : "Sin datos"}
+            {data.staleSnapshotPeriod ? `Corte: ${monthLabel(data.staleSnapshotPeriod)}` : "Sin datos"}
           </span>
         </div>
         <div className="flex items-baseline gap-2 mt-2">
           <div className="font-display text-[26px] font-bold">{staleSummary.totalStalePct !== null ? `${staleSummary.totalStalePct.toFixed(1)}%` : "—"}</div>
-          <div className="text-[11px] text-steel">del valor de inventario en riesgo</div>
+          <div className="text-[11px] text-steel">del valor del inventario lleva meses sin venderse</div>
+        </div>
+        <div className="text-[11px] text-steel mt-1">
+          Mientras más tiempo lleve un producto en esta lista, más urgente es moverlo (rebajarlo, promocionarlo o dejar de comprarlo).
         </div>
 
         <div className="flex items-center gap-3 mt-3 text-[11px]">
           {(["1", "2-3", "4+"] as const).map((b) => {
             const count = b === "1" ? staleSummary.bucket1.length : b === "2-3" ? staleSummary.bucket23.length : staleSummary.bucket4plus.length;
             return (
-              <div key={b} className="flex items-center gap-1.5">
+              <div key={b} className="flex items-center gap-1.5" title={`${b === "1" ? "1 mes" : b === "2-3" ? "2 a 3 meses" : "4 meses o más"} sin venderse`}>
                 <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: BUCKET_STYLE[b].color }} />
                 <span className="text-steel">{BUCKET_STYLE[b].label}</span>
                 <span className="font-mono font-semibold">{count}</span>
@@ -157,12 +174,22 @@ export function InventoryKpisPanel({ data }: { data: InventoryKpisDataDTO }) {
           })}
         </div>
 
-        <div className="mt-3 flex flex-col gap-1.5 max-h-72 overflow-y-auto">
+        {data.staleEntries.length > 0 && (
+          <div className="flex items-center gap-2.5 mt-3 pt-1.5 text-[9.5px] uppercase tracking-wide text-steel/70">
+            <span className="w-5 shrink-0" />
+            <span className="flex-1 min-w-0">Producto</span>
+            <span className="shrink-0 w-16 text-center">Sin venderse</span>
+            <span className="font-mono w-20 text-right shrink-0">Valor guardado</span>
+            <span className="shrink-0 w-[13px] text-center">Stock</span>
+          </div>
+        )}
+        <div className="flex flex-col gap-1.5 max-h-72 overflow-y-auto">
           {data.staleEntries.slice(0, 8).map((p, i) => (
             <div key={p.productCode} className="flex items-center gap-2.5 border-t border-rule/50 pt-1.5 text-[11.5px]">
               <span
                 className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold text-navy shrink-0"
                 style={{ background: i < 3 ? RANK_COLORS[i] : "#24365a", color: i < 3 ? "#0b1f3a" : "#92a3c0" }}
+                title="Puesto en el ranking de más urgente"
               >
                 {i + 1}
               </span>
@@ -171,13 +198,14 @@ export function InventoryKpisPanel({ data }: { data: InventoryKpisDataDTO }) {
                 <div className="text-steel font-mono text-[10px]">{p.productCode}</div>
               </div>
               <span
-                className="font-mono text-[10px] font-semibold rounded-full px-2 py-0.5 shrink-0"
+                className="font-mono text-[10px] font-semibold rounded-full px-2 py-0.5 shrink-0 w-16 text-center"
                 style={{ background: `${BUCKET_STYLE[p.bucket].color}1f`, color: BUCKET_STYLE[p.bucket].color }}
+                title="Meses seguidos sin que baje el stock"
               >
                 {p.streakMonths} {p.streakMonths === 1 ? "mes" : "meses"}
               </span>
-              <span className="font-mono text-steel w-20 text-right shrink-0">{money(p.costTotal)}</span>
-              <span className="shrink-0">
+              <span className="font-mono text-steel w-20 text-right shrink-0" title="Valor en dólares del stock guardado de este producto">{money(p.costTotal)}</span>
+              <span className="shrink-0 w-[13px] flex justify-center" title={p.trend === "up" ? "El stock siguió subiendo — cada vez peor" : p.trend === "down" ? "El stock bajó un poco — empezó a moverse" : "El stock no cambió"}>
                 {p.trend === "up" ? <TrendingUp size={13} className="text-red" /> : p.trend === "down" ? <TrendingDown size={13} className="text-teal" /> : <Minus size={13} className="text-steel" />}
               </span>
             </div>
