@@ -17,6 +17,7 @@ export function MerchandiseOutflowPanel({
   canCapture,
   canAct = false,
   canView = false,
+  canManageJustCatalog = false,
   canViewSupplierExchangeResolution = false,
   canSubmitCancelledGuide = false,
   canConfirmCancelledGuide = false,
@@ -34,6 +35,12 @@ export function MerchandiseOutflowPanel({
   // pestañas dependen de este prop, y además WriteOffQueue/HistoryList ya
   // no crashean ante una respuesta que no sea un arreglo.
   canView?: boolean;
+  // Confirmado 2026-08-26 (pedido explícito del usuario): Daniel puede
+  // desglosar un combo de Dropi directo desde la lectura del documento
+  // (ver DocumentCaptureFlow) — mismo gate que gestionar combos en Base de
+  // datos de productos (canManageJustCatalog), para que un colaborador de
+  // Inventario que no sea Daniel/admin no pueda inventar un desglose.
+  canManageJustCatalog?: boolean;
   // Confirmado 2026-08-26: pedido explícito del usuario — quien resuelve
   // cada producto de "Cambio con proveedor" (cambio o crédito) ya NO es
   // Daniel, es quien solicitó esa compra originalmente (o Bryan si el
@@ -110,7 +117,7 @@ export function MerchandiseOutflowPanel({
           <TabGuide storageKey="merchoutflow-despacho">
             Fotografía la hoja física de despacho — la IA lee cada renglón (producto + cantidad) y arma un consolidado editable. Confirma cada fila contra el catálogo antes de enviar el lote.
           </TabGuide>
-          <DocumentCaptureFlow reason="DESPACHO" />
+          <DocumentCaptureFlow reason="DESPACHO" canManageJustCatalog={canManageJustCatalog} />
         </>
       )}
       {tab === "garantia" && canCapture && (
@@ -118,7 +125,7 @@ export function MerchandiseOutflowPanel({
           <TabGuide storageKey="merchoutflow-garantia">
             Fotografía el manifiesto de garantía que genera Fulfillment — mismo mecanismo que despacho, la IA arma el consolidado y confirmas cada renglón.
           </TabGuide>
-          <DocumentCaptureFlow reason="GARANTIA" />
+          <DocumentCaptureFlow reason="GARANTIA" canManageJustCatalog={canManageJustCatalog} />
         </>
       )}
       {tab === "deterioro" && canCapture && (

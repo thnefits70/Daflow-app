@@ -440,6 +440,7 @@ export function DeptWorkspaceTabs({
           canCapture={canCaptureMerchandiseOutflow}
           canAct={canActOnMerchandiseOutflow}
           canView={canViewMerchandiseOutflow}
+          canManageJustCatalog={canManageJustCatalog}
           canViewSupplierExchangeResolution={isAdmin || canActOnMerchandiseOutflow}
           canSubmitCancelledGuide={canSubmitCancelledGuide}
           canConfirmCancelledGuide={canConfirmCancelledGuide}

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Camera, Check, Plus, Send, Sparkles, Trash2, X } from "lucide-react";
 import { LiveCameraCapture } from "@/components/shared/LiveCameraCapture";
 import { ProductMatchPicker, type MatchCatalogItem, type ProductMatchResult } from "@/components/merchandise-reentry/ProductMatchPicker";
+import { ComboComponentBuilder, type ComboDraftComponent } from "@/components/merchandise-reentry/ComboComponentBuilder";
 
 type ItemDTO = { id: string; declaredName: string; quantity: number; catalogItem: { name: string; photos: string[] } | null };
 type BatchDTO = { id: string; code: string; documentPhotoUrls: string[]; items: ItemDTO[] };
@@ -18,6 +19,9 @@ type SuggestedRow = {
   added?: boolean;
   unrecognizedCode?: string | null;
   fromCombo?: string | null;
+  comboBuilderOpen?: boolean;
+  comboDraft?: ComboDraftComponent[];
+  savingCombo?: boolean;
 };
 
 const MAX_PHOTOS = 40;
@@ -39,7 +43,7 @@ function itemName(item: ItemDTO) {
   return item.catalogItem?.name ?? item.declaredName;
 }
 
-export function DocumentCaptureFlow({ reason }: { reason: "DESPACHO" | "GARANTIA" }) {
+export function DocumentCaptureFlow({ reason, canManageJustCatalog = false }: { reason: "DESPACHO" | "GARANTIA"; canManageJustCatalog?: boolean }) {
   const [loading, setLoading] = useState(true);
   const [batch, setBatch] = useState<BatchDTO | null>(null);
   const [error, setError] = useState("");
@@ -136,6 +140,34 @@ export function DocumentCaptureFlow({ reason }: { reason: "DESPACHO" | "GARANTIA
   async function addAllMatched() {
     for (let i = 0; i < rows.length; i++) {
       if (rows[i].selected && !rows[i].added && !rows[i].adding) await addRow(i);
+    }
+  }
+
+  // Confirmado 2026-08-26 (pedido explícito del usuario): Daniel puede
+  // desglosar un combo de Dropi nuevo AHÍ MISMO cuando "Leer con IA" no lo
+  // reconoce, en vez de tener que ir a Base de datos de productos — se
+  // guarda para reutilizarse solo en próximas lecturas (DropiCombo) y de
+  // una vez reemplaza este renglón por sus productos reales ya resueltos.
+  async function saveComboAndExpand(index: number) {
+    const row = rows[index];
+    if (!row.unrecognizedCode || !row.comboDraft || row.comboDraft.length === 0) return;
+    setRows((rs) => rs.map((r, i) => (i === index ? { ...r, savingCombo: true } : r)));
+    try {
+      const combo = await postJson("/api/dropi-combos", {
+        code: row.unrecognizedCode,
+        components: row.comboDraft.map((c) => ({ catalogItemId: c.catalogItem.id, quantity: c.quantity })),
+      });
+      const expanded: SuggestedRow[] = combo.components.map((comp: { quantity: number; catalogItem: MatchCatalogItem }) => ({
+        name: comp.catalogItem.name,
+        quantity: comp.quantity * row.quantity,
+        confidence: row.confidence,
+        selected: comp.catalogItem,
+        manualName: "",
+      }));
+      setRows((rs) => [...rs.slice(0, index), ...expanded, ...rs.slice(index + 1)]);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "No se pudo guardar el combo.");
+      setRows((rs) => rs.map((r, i) => (i === index ? { ...r, savingCombo: false } : r)));
     }
   }
 
@@ -371,7 +403,42 @@ export function DocumentCaptureFlow({ reason }: { reason: "DESPACHO" | "GARANTIA
                 )}
                 {row.unrecognizedCode && (
                   <div className="text-[11.5px] bg-yellow/10 border border-yellow/35 rounded px-2 py-1.5 mb-2">
-                    Código &quot;{row.unrecognizedCode}&quot; no reconocido — ¿puede ser un combo nuevo? Regístralo en Base de datos de productos. Mientras tanto, busca el producto a mano abajo.
+                    <div>
+                      Código &quot;{row.unrecognizedCode}&quot; no reconocido — ¿puede ser un combo nuevo?
+                      {!canManageJustCatalog && " Avísale a Daniel para que lo registre en Base de datos de productos."} Mientras tanto, busca el producto a mano abajo.
+                    </div>
+                    {canManageJustCatalog && !row.comboBuilderOpen && (
+                      <button
+                        type="button"
+                        className="mt-1.5 font-bold text-teal cursor-pointer"
+                        onClick={() => setRows((rs) => rs.map((r, j) => (j === i ? { ...r, comboBuilderOpen: true, comboDraft: [] } : r)))}
+                      >
+                        Sí, desglosar este combo ahora
+                      </button>
+                    )}
+                    {row.comboBuilderOpen && (
+                      <div className="mt-2">
+                        <div className="text-[11px] font-semibold text-steel mb-1">¿Qué productos reales trae este combo, y en qué cantidad cada uno?</div>
+                        <ComboComponentBuilder components={row.comboDraft ?? []} onChange={(next) => setRows((rs) => rs.map((r, j) => (j === i ? { ...r, comboDraft: next } : r)))} />
+                        <div className="flex gap-2 mt-2">
+                          <button
+                            type="button"
+                            className="flex-1 rounded border border-rule px-3 py-1.5 text-[12px] font-semibold cursor-pointer"
+                            onClick={() => setRows((rs) => rs.map((r, j) => (j === i ? { ...r, comboBuilderOpen: false } : r)))}
+                          >
+                            Cancelar
+                          </button>
+                          <button
+                            type="button"
+                            disabled={row.savingCombo || !row.comboDraft?.length}
+                            className="flex-1 rounded border border-teal bg-teal px-3 py-1.5 text-[12px] font-bold text-navy cursor-pointer disabled:opacity-50"
+                            onClick={() => saveComboAndExpand(i)}
+                          >
+                            {row.savingCombo ? "Guardando…" : "Guardar combo y aplicar"}
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
                 {row.selected ? (

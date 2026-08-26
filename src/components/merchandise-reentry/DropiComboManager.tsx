@@ -1,13 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Plus, Trash2, Pencil, PackageSearch, X } from "lucide-react";
+import { Plus, Trash2, Pencil, PackageSearch } from "lucide-react";
+import { ComboComponentBuilder, type ComboDraftComponent } from "./ComboComponentBuilder";
 
 type CatalogItem = { id: string; name: string; photos: string[]; justCode: string | null };
 type ComboComponent = { id: string; quantity: number; catalogItem: CatalogItem };
 type Combo = { id: string; code: string; label: string | null; createdByName: string | null; createdAt: string; components: ComboComponent[] };
-
-type DraftComponent = { catalogItem: CatalogItem; quantity: number };
 
 // Confirmado 2026-08-26 (pedido explícito del usuario): un ID de combo de
 // Dropi no es un producto real — Dropi los crea con nombres distintos por
@@ -15,32 +14,25 @@ type DraftComponent = { catalogItem: CatalogItem; quantity: number };
 // cantidades fijas. Daniel registra ese desglose UNA vez acá y Registro de
 // Egresos lo aplica solo cada vez que ese código aparece en una hoja de
 // despacho/garantía, sin que Daniel tenga que desglosarlo a mano cada vez.
+// El buscador de productos (con foto — pedido explícito del usuario, es lo
+// que de verdad confirma que es el producto correcto) se comparte con
+// DocumentCaptureFlow vía ComboComponentBuilder.
 export function DropiComboManager() {
   const [loading, setLoading] = useState(true);
   const [combos, setCombos] = useState<Combo[]>([]);
-  const [catalog, setCatalog] = useState<CatalogItem[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null); // "new" o el id del combo en edición
   const [code, setCode] = useState("");
   const [label, setLabel] = useState("");
-  const [components, setComponents] = useState<DraftComponent[]>([]);
-  const [productQuery, setProductQuery] = useState("");
+  const [components, setComponents] = useState<ComboDraftComponent[]>([]);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   function load() {
-    Promise.all([
-      fetch("/api/dropi-combos").then((r) => (r.ok ? r.json() : [])),
-      fetch("/api/merchandise-reentry/just-catalog").then((r) => (r.ok ? r.json() : { items: [] })),
-    ])
-      .then(([combosData, catalogData]) => {
-        setCombos(combosData ?? []);
-        setCatalog(catalogData.items ?? []);
-      })
-      .catch(() => {
-        setCombos([]);
-        setCatalog([]);
-      })
+    fetch("/api/dropi-combos")
+      .then((r) => (r.ok ? r.json() : []))
+      .then((data) => setCombos(data ?? []))
+      .catch(() => setCombos([]))
       .finally(() => setLoading(false));
   }
 
@@ -51,7 +43,6 @@ export function DropiComboManager() {
     setCode("");
     setLabel("");
     setComponents([]);
-    setProductQuery("");
     setErr("");
   }
 
@@ -59,27 +50,13 @@ export function DropiComboManager() {
     setEditingId(combo.id);
     setCode(combo.code);
     setLabel(combo.label ?? "");
-    setComponents(combo.components.map((c) => ({ catalogItem: c.catalogItem, quantity: c.quantity })));
-    setProductQuery("");
+    setComponents(combo.components.map((c) => ({ catalogItem: { ...c.catalogItem, pendingRegistration: false }, quantity: c.quantity })));
     setErr("");
   }
 
   function cancelForm() {
     setEditingId(null);
     setErr("");
-  }
-
-  function addComponent(item: CatalogItem) {
-    setComponents((cs) => (cs.some((c) => c.catalogItem.id === item.id) ? cs : [...cs, { catalogItem: item, quantity: 1 }]));
-    setProductQuery("");
-  }
-
-  function removeComponent(itemId: string) {
-    setComponents((cs) => cs.filter((c) => c.catalogItem.id !== itemId));
-  }
-
-  function updateQty(itemId: string, qty: number) {
-    setComponents((cs) => cs.map((c) => (c.catalogItem.id === itemId ? { ...c, quantity: qty } : c)));
   }
 
   async function save() {
@@ -115,16 +92,6 @@ export function DropiComboManager() {
     setConfirmDeleteId(null);
     load();
   }
-
-  const q = productQuery.trim().toLowerCase();
-  const words = q.split(/\s+/).filter(Boolean);
-  const suggestions =
-    words.length === 0
-      ? []
-      : catalog
-          .filter((c) => !components.some((comp) => comp.catalogItem.id === c.id))
-          .filter((c) => words.every((w) => c.name.toLowerCase().includes(w) || (!!c.justCode && c.justCode.toLowerCase().includes(w))))
-          .slice(0, 6);
 
   if (loading) return null;
 
@@ -166,44 +133,7 @@ export function DropiComboManager() {
             />
           </div>
 
-          {components.length > 0 && (
-            <div className="flex flex-col gap-1.5 mb-2">
-              {components.map((c) => (
-                <div key={c.catalogItem.id} className="flex items-center gap-2 bg-surface border border-rule rounded-md p-2">
-                  <span className="flex-1 min-w-0 text-[12px] font-medium truncate">{c.catalogItem.name}</span>
-                  <input
-                    type="number"
-                    min={1}
-                    className="w-16 rounded border border-rule bg-cloud px-2 py-1 text-[12px] font-bold"
-                    value={c.quantity}
-                    onChange={(e) => updateQty(c.catalogItem.id, Number(e.target.value) || 0)}
-                  />
-                  <span className="text-[11px] text-steel shrink-0">un.</span>
-                  <button type="button" className="text-steel hover:text-red cursor-pointer shrink-0" onClick={() => removeComponent(c.catalogItem.id)}>
-                    <X size={13} />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-
-          <input
-            type="text"
-            placeholder="Buscar producto real para agregar…"
-            className="w-full rounded border border-rule bg-surface px-2.5 py-2 text-[12.5px]"
-            value={productQuery}
-            onChange={(e) => setProductQuery(e.target.value)}
-          />
-          {suggestions.length > 0 && (
-            <div className="flex flex-col gap-1 mt-1.5 border border-rule rounded-md overflow-hidden">
-              {suggestions.map((c) => (
-                <button key={c.id} type="button" className="p-2 text-left text-[12px] font-medium hover:bg-surface cursor-pointer" onClick={() => addComponent(c)}>
-                  {c.name}
-                </button>
-              ))}
-            </div>
-          )}
-          {words.length > 0 && suggestions.length === 0 && <div className="text-[11.5px] text-steel mt-1">No se encontró nada con esas palabras.</div>}
+          <ComboComponentBuilder components={components} onChange={setComponents} />
 
           <div className="flex gap-2 mt-3">
             <button type="button" className="flex-1 rounded border border-rule px-3 py-2 text-[12px] font-semibold cursor-pointer" onClick={cancelForm}>
