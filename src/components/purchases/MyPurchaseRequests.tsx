@@ -557,6 +557,7 @@ function GroupCard({
               {g[0].attemptNumber > 1 && <span className="text-steel-dim font-sans">— {attemptLabel(g[0].attemptNumber)}</span>}
             </div>
           )}
+          <div className="text-[11px] text-steel mb-0.5">Proveedor: <span className="font-semibold text-ink">{g[0].supplier.name}</span></div>
           {g.map((r) => (
             <div key={r.id} className="text-[13.5px] font-bold">
               {r.catalogItem.name} · {r.quantity} un.
