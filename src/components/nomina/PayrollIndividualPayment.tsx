@@ -75,10 +75,19 @@ export function PayoutUploader({ roleId, expectedAmount, onSent }: { roleId: str
         </div>
       ) : (
         <div>
-          <label className="flex items-center justify-center gap-1.5 text-[11.5px] text-steel-dim border-[1.5px] border-dashed border-rule rounded-md px-3 py-3 cursor-pointer text-center">
-            {uploading ? "Subiendo…" : "Pegá con Ctrl+V, o hacé clic para elegir un archivo"}
-            <input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])} />
-          </label>
+          <div className="flex items-center justify-center gap-1.5 text-[11.5px] text-steel-dim border-[1.5px] border-dashed border-rule rounded-md px-3 py-3 text-center">
+            {uploading ? (
+              "Subiendo…"
+            ) : (
+              <span>
+                Pegá con Ctrl+V, o{" "}
+                <label className="underline cursor-pointer hover:text-teal">
+                  hacé clic para elegir un archivo
+                  <input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])} />
+                </label>
+              </span>
+            )}
+          </div>
           <label className="flex items-center gap-1 mt-1 text-[10.5px] text-steel-dim cursor-pointer hover:text-teal w-fit mx-auto justify-center">
             ¿Es un PDF? Subir documento
             <input type="file" accept="application/pdf" className="hidden" onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])} />
