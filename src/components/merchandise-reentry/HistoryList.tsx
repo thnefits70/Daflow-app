@@ -54,10 +54,19 @@ export function HistoryList() {
     <div className="flex flex-col gap-2.5 max-w-2xl">
       {batches.map((b) => {
         const isOpen = expanded === b.id;
-        const closerName =
-          b.items.find((i) => i.justUploadedBy || i.writeOffBy)?.justUploadedBy?.name ??
-          b.items.find((i) => i.justUploadedBy || i.writeOffBy)?.writeOffBy?.name ??
-          "Finanzas (admin)";
+        const justUploaders = [...new Set(b.items.filter((i) => i.justUploadedBy).map((i) => i.justUploadedBy!.name))];
+        const writeOffers = [...new Set(b.items.filter((i) => i.writeOffBy).map((i) => i.writeOffBy!.name))];
+        let closedLabel = "Cerrado";
+        let closedDetail = "Finanzas (admin)";
+        if (justUploaders.length && writeOffers.length) {
+          closedDetail = `subido a Just por ${justUploaders.join(", ")} y dado de baja por ${writeOffers.join(", ")}`;
+        } else if (justUploaders.length) {
+          closedLabel = "Cerrado y subido a Just";
+          closedDetail = justUploaders.join(", ");
+        } else if (writeOffers.length) {
+          closedLabel = "Cerrado y dado de baja";
+          closedDetail = writeOffers.join(", ");
+        }
 
         return (
           <div key={b.id} className="bg-surface border border-rule rounded-md p-3.5">
@@ -109,7 +118,7 @@ export function HistoryList() {
                 <b>Aprobado</b> {b.danielApprovedAt ? (b.items.find((i) => i.approvedBy)?.approvedBy?.name ?? "Inventario (admin)") : "—"} · {b.danielApprovedAt ? fmt(b.danielApprovedAt) : "pendiente"}
               </div>
               <div className={b.closedAt ? "" : "text-steel"}>
-                <b>Cerrado</b> {b.closedAt ? closerName : "—"} · {b.closedAt ? fmt(b.closedAt) : "pendiente"}
+                <b>{b.closedAt ? closedLabel : "Cerrado"}</b> {b.closedAt ? closedDetail : "—"} · {b.closedAt ? fmt(b.closedAt) : "pendiente"}
               </div>
             </div>
           </div>
