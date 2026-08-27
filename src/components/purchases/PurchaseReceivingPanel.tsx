@@ -222,8 +222,13 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
 
   // Cola de Daniel: "Informar urgente" que el equipo subió y todavía no revisó.
   const [pendingUrgentReports, setPendingUrgentReports] = useState<PendingUrgentReport[]>([]);
+  // Confirmado 2026-08-27: pedido explícito del usuario — Daniel es quien
+  // ajusta la cantidad faltante antes de aprobar (él sí ve pr.request.quantity),
+  // el equipo que reporta nunca la escribe. Un input editable por reporte.
+  const [missingQtyEdits, setMissingQtyEdits] = useState<Record<string, string>>({});
 
-  // Informar urgente — cantidades desglosadas por tipo + evidencia.
+  // Informar urgente — cantidad contada + desglose por tipo + evidencia.
+  const [urgentCountedQty, setUrgentCountedQty] = useState("");
   const [urgentDamagedQty, setUrgentDamagedQty] = useState("");
   const [urgentDifferentQty, setUrgentDifferentQty] = useState("");
   const [urgentIncompleteQty, setUrgentIncompleteQty] = useState("");
@@ -474,10 +479,14 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
     router.refresh();
   }
 
-  async function approveUrgentReport(id: string) {
+  async function approveUrgentReport(id: string, missingQty: number) {
     setBusy(true);
     setErr("");
-    const res = await fetch(`/api/purchase-requests/urgent-reports/${id}/approve`, { method: "POST" });
+    const res = await fetch(`/api/purchase-requests/urgent-reports/${id}/approve`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ missingQty }),
+    });
     setBusy(false);
     const data = await res.json().catch(() => null);
     if (!res.ok) {
@@ -485,10 +494,19 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
       return;
     }
     setPendingUrgentReports((rs) => rs.filter((r) => r.id !== id));
+    setMissingQtyEdits((m) => {
+      const next = { ...m };
+      delete next[id];
+      return next;
+    });
   }
 
   function openUrgent(id: string) {
     setUrgentId(id);
+    // Confirmado 2026-08-27: si ya había contado antes de tocar "Informar
+    // urgente" (viene del aviso de que no coincide), se mantiene lo que ya
+    // tecleó en vez de hacerlo contar de nuevo desde cero.
+    setUrgentCountedQty(receivedQty);
     setUrgentDamagedQty("");
     setUrgentDifferentQty("");
     setUrgentIncompleteQty("");
@@ -518,8 +536,14 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
     const damaged = Number(urgentDamagedQty) || 0;
     const different = Number(urgentDifferentQty) || 0;
     const incomplete = Number(urgentIncompleteQty) || 0;
-    if (damaged + different + incomplete <= 0) {
-      setErr("Ingresa al menos una cantidad afectada.");
+    // Confirmado 2026-08-27: pedido explícito del usuario — ya no hace falta
+    // que dañada/incompleta/diferente sumen algo para poder enviar; basta con
+    // que lo contado no coincida con lo comprado. Acá no se conoce el total
+    // pedido para validarlo antes de mandar, así que la comprobación final
+    // (¿de verdad hay algo que reportar?) queda del lado del servidor, que
+    // sí lo conoce (ver [id]/urgent-report/route.ts).
+    if (urgentCountedQty === "") {
+      setErr("Ingresa la cantidad que contaste.");
       return;
     }
     if (urgentMediaUrls.length === 0) {
@@ -535,7 +559,14 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
     const res = await fetch(`/api/purchase-requests/${id}/urgent-report`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ damagedQty: damaged, differentQty: different, incompleteQty: incomplete, description: urgentDesc.trim(), mediaUrls: urgentMediaUrls }),
+      body: JSON.stringify({
+        damagedQty: damaged,
+        differentQty: different,
+        incompleteQty: incomplete,
+        countedQty: Number(urgentCountedQty),
+        description: urgentDesc.trim(),
+        mediaUrls: urgentMediaUrls,
+      }),
     });
     setBusy(false);
     const data = await res.json().catch(() => null);
@@ -544,6 +575,7 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
       return;
     }
     setUrgentId(null);
+    setUrgentCountedQty("");
     setUrgentDesc("");
     setUrgentMediaUrls([]);
     load();
@@ -607,13 +639,30 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
           </div>
           <div className="flex flex-col gap-2.5">
             {pendingUrgentReports.map((pr) => {
-              const total = pr.damagedQty + pr.incompleteQty + pr.differentQty + pr.missingQty;
+              // Confirmado 2026-08-27: pedido explícito del usuario — Bryan/Joel
+              // solo mandan lo que contaron y lo que vieron dañado/incompleto/
+              // diferente de eso; lo faltante lo calculó el servidor al crear el
+              // reporte (pr.missingQty) comparando contra lo pedido, pero es
+              // Daniel quien lo ve y ajusta acá antes de mandarlo a Compras — él
+              // sí ve pr.request.quantity, el equipo nunca lo vio.
+              const flaggedQty = pr.damagedQty + pr.incompleteQty + pr.differentQty;
+              const countedQty = pr.request.quantity - pr.missingQty;
+              const missingInput = missingQtyEdits[pr.id] ?? String(pr.missingQty);
+              const missingNum = Number(missingInput) || 0;
+              const total = flaggedQty + missingNum;
+              const overLimit = total > pr.request.quantity;
+              const parts = [
+                pr.damagedQty > 0 && `${pr.damagedQty} dañada`,
+                pr.incompleteQty > 0 && `${pr.incompleteQty} incompleta`,
+                pr.differentQty > 0 && `${pr.differentQty} diferente`,
+              ].filter(Boolean) as string[];
               return (
                 <div key={pr.id} className="bg-cloud rounded-md p-3">
                   <div className="text-[13px] font-bold">{pr.request.catalogItem.name}</div>
                   <div className="text-[11.5px] text-steel mb-2">
-                    {pr.request.supplier.name} — {total} un. afectadas · reportado por {actorName(pr.reportedBy?.name)} · {new Date(pr.reportedAt).toLocaleDateString("es-MX")}
+                    {pr.request.supplier.name} — se pidieron {pr.request.quantity} un., contó {countedQty} · reportado por {actorName(pr.reportedBy?.name)} · {new Date(pr.reportedAt).toLocaleDateString("es-MX")}
                   </div>
+                  {parts.length > 0 && <div className="text-[11.5px] text-steel mb-2">{parts.join(" · ")}</div>}
                   <div className="text-[11.5px] text-ink mb-2">&quot;{pr.description}&quot;</div>
                   <div className="grid grid-cols-4 gap-2 mb-2.5">
                     {pr.mediaUrls.map((url, i) =>
@@ -626,13 +675,35 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                       )
                     )}
                   </div>
+                  <div className="mb-2.5">
+                    <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Cantidad faltante</label>
+                    <input
+                      type="number"
+                      min={0}
+                      disabled={!canApprove}
+                      className="w-full rounded border border-rule px-2.5 py-2 text-[13px]"
+                      style={{ maxWidth: 160 }}
+                      value={missingInput}
+                      onChange={(e) => setMissingQtyEdits((m) => ({ ...m, [pr.id]: e.target.value }))}
+                    />
+                    {overLimit && (
+                      <div className="flex items-center gap-1.5 text-[11px] text-red mt-1.5">
+                        <AlertTriangle size={12} className="shrink-0" /> El total no puede superar lo pedido ({pr.request.quantity} un.).
+                      </div>
+                    )}
+                  </div>
+                  {total > 0 && (
+                    <div className="text-[12px] font-semibold text-ink mb-2.5">
+                      {total} un. afectadas · ${(total * pr.request.unitCost).toFixed(2)} en disputa
+                    </div>
+                  )}
                   {err && <div className="text-red text-[12px] mb-2">{err}</div>}
                   <button
                     type="button"
-                    disabled={!canApprove || busy}
+                    disabled={!canApprove || busy || overLimit}
                     title={!canApprove ? "Exclusivo del líder de Inventario" : undefined}
                     className="rounded border border-red bg-red px-3.5 py-1.5 text-[12px] font-semibold text-white cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-                    onClick={() => approveUrgentReport(pr.id)}
+                    onClick={() => approveUrgentReport(pr.id, missingNum)}
                   >
                     ✓ Revisar y enviar a Compras
                   </button>
@@ -1201,6 +1272,17 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                             <div className="text-[11px] text-steel-dim mb-3">Este producto no tiene fotos de referencia registradas en el catálogo.</div>
                           )}
 
+                          {/* Confirmado 2026-08-27: pedido explícito del usuario — quien cuenta
+                              no sabe cuánto se pidió comprar, así que nunca calcula cuántas
+                              faltan; solo dice lo que sí puede saber por su cuenta (cuánto contó
+                              en total, y de eso cuánto está dañado/incompleto/diferente). Lo
+                              faltante lo calcula el sistema y lo confirma Daniel al revisar. */}
+                          <div className="mb-2.5">
+                            <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Cantidad que contaste</label>
+                            <input type="number" min={0} className="w-full rounded border border-rule px-2.5 py-2 text-[13.5px]" style={{ maxWidth: 160 }} value={urgentCountedQty} onChange={(e) => setUrgentCountedQty(e.target.value)} />
+                          </div>
+
+                          <div className="text-[10px] text-steel-dim mb-1">De lo que contaste, ¿cuánto está dañado, incompleto o es un producto distinto?</div>
                           <div className="grid grid-cols-3 gap-2.5 mb-2.5">
                             <div>
                               <label className="block mb-1 text-[10px] text-steel">Dañada</label>
