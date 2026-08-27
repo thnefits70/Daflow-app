@@ -18,11 +18,17 @@ export type ProductMatchResult = { catalogItem: MatchCatalogItem } | { manualNam
 export function ProductMatchPicker({
   referencePhotoUrl,
   initialQuery = "",
+  searchUrl = "/api/merchandise-reentry/catalog-search",
   onConfirm,
   onCancel,
 }: {
   referencePhotoUrl: string | null;
   initialQuery?: string;
+  // Confirmado 2026-08-27: mismo picker reutilizado fuera de Inventario
+  // (ej. Compras Personales) — cada consumidor apunta a su propio endpoint
+  // de búsqueda porque el guard de autorización varía según quién puede
+  // usar ese flujo, aunque todos lean del mismo PurchaseCatalogItem.
+  searchUrl?: string;
   onConfirm: (result: ProductMatchResult) => void;
   onCancel?: () => void;
 }) {
@@ -33,11 +39,11 @@ export function ProductMatchPicker({
   const [confirming, setConfirming] = useState<MatchCatalogItem | null>(null);
 
   useEffect(() => {
-    fetch("/api/merchandise-reentry/catalog-search")
+    fetch(searchUrl)
       .then((r) => (r.ok ? r.json() : []))
       .then(setCatalog)
       .catch(() => setCatalog([]));
-  }, []);
+  }, [searchUrl]);
 
   const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
   const suggestions =

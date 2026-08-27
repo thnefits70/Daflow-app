@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { ShoppingBag, Camera, Plus, X, Landmark, Copy } from "lucide-react";
 import { LiveCameraCapture } from "@/components/shared/LiveCameraCapture";
 import { ProofPreview } from "@/components/shared/ProofPreview";
+import { ProductMatchPicker, type ProductMatchResult } from "@/components/merchandise-reentry/ProductMatchPicker";
 import { usePasteFile } from "@/lib/usePasteFile";
 import { uploadFile } from "@/lib/uploadFile";
 
@@ -79,7 +80,7 @@ function emptyDraft(): DraftItem {
 // directo — "Agregar al pedido" queda solo para sumar más de uno. Y si
 // falta algo, se dice exactamente qué.
 function draftMissingReason(d: DraftItem): string | null {
-  if (!d.employeeProductName.trim()) return "Falta escribir el nombre del producto.";
+  if (!d.employeeProductName.trim()) return "Falta elegir el producto.";
   if (!d.livePhotoUrl) return "Falta tomar la foto en vivo del producto.";
   const missingNote = d.unitDeclarations.find((decl) => decl.relation !== "SELF" && !decl.note?.trim());
   if (missingNote) return "Falta escribir para quién es la unidad que no es para vos.";
@@ -147,10 +148,16 @@ function TransferProofUploader({ orderId, onSent }: { orderId: string; onSent: (
 // Confirmado 2026-08-18: rediseño completo — el colaborador arma un
 // pedido con uno o varios productos (carrito). Por producto: foto en vivo
 // obligatoria + una segunda opcional que no ocupa espacio salvo que la
-// pidan, nombre de memoria (sin exactitud, Daniel lo corrige después),
-// cantidad, y hasta 3 unidades declaradas (para quién es cada una). Nunca
-// se muestra ningún precio acá — el colaborador solo se entera del monto
-// por notificación push cuando Nairoby cierra el precio.
+// pidan, cantidad, y hasta 3 unidades declaradas (para quién es cada una).
+// Nunca se muestra ningún precio acá — el colaborador solo se entera del
+// monto por notificación push cuando Nairoby cierra el precio.
+// Ajustado 2026-08-27 (pedido de Daniel): el nombre del producto ya no se
+// escribe de memoria a ciegas — se elige del mismo catálogo sincronizado
+// con Just que usan Reingreso/Registro de Egresos/Ventas Externas/Guías
+// Canceladas (ver ProductMatchPicker), con la opción de escribirlo a mano
+// si todavía no está en el catálogo. `employeeProductName` sigue siendo el
+// campo que llega al backend sin cambios — Daniel igual puede corregirlo
+// en su pantalla de confirmación, pero ahora casi siempre ya llega bien.
 export function PersonalPurchasesPanel() {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [draft, setDraft] = useState<DraftItem>(emptyDraft());
@@ -313,13 +320,27 @@ export function PersonalPurchasesPanel() {
 
         <div className="flex flex-col gap-3 border-t border-rule pt-3.5">
           <div>
-            <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Producto (de memoria, no hace falta exacto)</label>
-            <input
-              className="rounded border border-rule bg-cloud px-2.5 py-1.5 text-[13px] w-full"
-              placeholder="ej. Audífonos inalámbricos"
-              value={draft.employeeProductName}
-              onChange={(e) => setDraft((d) => ({ ...d, employeeProductName: e.target.value }))}
-            />
+            <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Producto</label>
+            {draft.employeeProductName ? (
+              <div className="flex items-center gap-2.5 bg-cloud border border-rule rounded-md px-2.5 py-2">
+                <span className="flex-1 min-w-0 text-[13px] font-medium truncate">{draft.employeeProductName}</span>
+                <button
+                  type="button"
+                  className="text-[11px] font-semibold text-blue cursor-pointer shrink-0"
+                  onClick={() => setDraft((d) => ({ ...d, employeeProductName: "" }))}
+                >
+                  Cambiar
+                </button>
+              </div>
+            ) : (
+              <ProductMatchPicker
+                referencePhotoUrl={draft.livePhotoUrl}
+                searchUrl="/api/personal-purchases/catalog-search"
+                onConfirm={(r: ProductMatchResult) =>
+                  setDraft((d) => ({ ...d, employeeProductName: "catalogItem" in r ? r.catalogItem.name : r.manualName }))
+                }
+              />
+            )}
           </div>
 
           <div>
