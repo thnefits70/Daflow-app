@@ -226,6 +226,11 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
   // ajusta la cantidad faltante antes de aprobar (él sí ve pr.request.quantity),
   // el equipo que reporta nunca la escribe. Un input editable por reporte.
   const [missingQtyEdits, setMissingQtyEdits] = useState<Record<string, string>>({});
+  // Confirmado 2026-08-27: pedido explícito del usuario — un solo clic no
+  // alcanza para mandar la cantidad faltante a Compras (riesgo de click por
+  // error); primero tiene que confirmar ese número específico en una segunda
+  // pantalla, mismo patrón que "Dar de baja en Just" (justDoubleConfirm).
+  const [confirmingMissingId, setConfirmingMissingId] = useState<string | null>(null);
 
   // Informar urgente — cantidad contada + desglose por tipo + evidencia.
   const [urgentCountedQty, setUrgentCountedQty] = useState("");
@@ -499,6 +504,7 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
       delete next[id];
       return next;
     });
+    setConfirmingMissingId(null);
   }
 
   function openUrgent(id: string) {
@@ -680,7 +686,7 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                     <input
                       type="number"
                       min={0}
-                      disabled={!canApprove}
+                      disabled={!canApprove || confirmingMissingId === pr.id}
                       className="w-full rounded border border-rule px-2.5 py-2 text-[13px]"
                       style={{ maxWidth: 160 }}
                       value={missingInput}
@@ -698,15 +704,40 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                     </div>
                   )}
                   {err && <div className="text-red text-[12px] mb-2">{err}</div>}
-                  <button
-                    type="button"
-                    disabled={!canApprove || busy || overLimit}
-                    title={!canApprove ? "Exclusivo del líder de Inventario" : undefined}
-                    className="rounded border border-red bg-red px-3.5 py-1.5 text-[12px] font-semibold text-white cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-                    onClick={() => approveUrgentReport(pr.id, missingNum)}
-                  >
-                    ✓ Revisar y enviar a Compras
-                  </button>
+                  {/* Confirmado 2026-08-27: pedido explícito del usuario — la cantidad
+                      faltante se confirma en un segundo paso aparte, para que un clic de
+                      más no mande a Compras un número que Daniel no revisó a propósito. */}
+                  {confirmingMissingId === pr.id ? (
+                    <div className="bg-navy rounded-md p-3">
+                      <div className="text-[13px] font-bold mb-1.5">¿Seguro?</div>
+                      <div className="text-[12px] text-steel mb-3">
+                        Vas a confirmar {missingNum} un. faltantes y mandar este reporte a Compras.
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          disabled={busy}
+                          className="rounded border border-red bg-red px-3.5 py-1.5 text-[12px] font-semibold text-white cursor-pointer disabled:opacity-60"
+                          onClick={() => approveUrgentReport(pr.id, missingNum)}
+                        >
+                          Sí, enviar a Compras
+                        </button>
+                        <button type="button" className="text-steel text-[12px] cursor-pointer" onClick={() => setConfirmingMissingId(null)}>
+                          Cancelar
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled={!canApprove || busy || overLimit}
+                      title={!canApprove ? "Exclusivo del líder de Inventario" : undefined}
+                      className="rounded border border-red bg-red px-3.5 py-1.5 text-[12px] font-semibold text-white cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                      onClick={() => setConfirmingMissingId(pr.id)}
+                    >
+                      ✓ Revisar y enviar a Compras
+                    </button>
+                  )}
                 </div>
               );
             })}
@@ -1289,7 +1320,7 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                               <input type="number" min={0} className="w-full rounded border border-rule px-2 py-2 text-[13px]" value={urgentDamagedQty} onChange={(e) => setUrgentDamagedQty(e.target.value)} />
                             </div>
                             <div>
-                              <label className="block mb-1 text-[10px] text-steel">Incompleta</label>
+                              <label className="block mb-1 text-[10px] text-steel">Producto incompleto (falta algo adentro)</label>
                               <input type="number" min={0} className="w-full rounded border border-rule px-2 py-2 text-[13px]" value={urgentIncompleteQty} onChange={(e) => setUrgentIncompleteQty(e.target.value)} />
                             </div>
                             <div>
