@@ -73,9 +73,14 @@ export async function readOutflowManifest(params: { photoUrls: string[]; documen
     system:
       `Lees ${params.documentKind === "despacho" ? "hojas físicas de despacho" : "manifiestos de garantía"} para el ` +
       "área de Inventario de Provedix (Guayaquil, Ecuador). Extrae CADA renglón de producto que aparece, con su " +
-      "cantidad — nunca inventes un producto ni una cantidad que no esté escrita. Si el documento trae varias " +
-      "fotos (varias hojas o continuación), combina todos los renglones en una sola lista. Si la misma foto " +
-      "repite el mismo nombre de producto en más de un renglón, súmalos en una sola fila con la cantidad total. " +
+      "cantidad — nunca inventes un producto ni una cantidad que no esté escrita. Puede que te llegue más de una " +
+      "foto — cada foto es una hoja física DISTINTA (puede ser una hoja distinta de despacho, o una página de " +
+      "continuación de la misma hoja). Lee y cuenta el contenido de CADA foto por separado, incluso si dos fotos " +
+      "muestran los mismos productos o se ven parecidas entre sí — nunca asumas que una foto es 'la misma' que " +
+      "otra ya leída ni la descartes por eso, cada una representa mercadería real que se está despachando. Al " +
+      "final, combina TODOS los renglones de TODAS las fotos en una sola lista, y si el mismo producto aparece " +
+      "más de una vez (en la misma foto o en fotos distintas), súmalo en una sola fila con la cantidad TOTAL de " +
+      "todas las apariciones. " +
       "Algunos documentos traen, junto a cada renglón, el código interno del producto (el mismo código que usa " +
       "Just/Dropi) — casi siempre entre paréntesis junto al nombre, como \"(ID: 101104)\". Cuando lo veas así, " +
       "transcribe en \"code\" SOLO los dígitos (ej. \"101104\"), sin la palabra \"ID\" ni los paréntesis — ese " +
