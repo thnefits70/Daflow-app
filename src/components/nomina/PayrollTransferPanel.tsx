@@ -29,7 +29,7 @@ export type Transfer = {
   confirmedWithoutProof: boolean;
   confirmedWithoutProofNote: string | null;
   confirmedWithoutProofAt: string | null;
-  confirmedWithoutProofBy: { name: string } | null;
+  confirmedWithoutProofByName: string | null;
 };
 
 function fmtDateTime(iso: string) {
@@ -583,7 +583,7 @@ function TransferPanel({
           )}
           {transfer.confirmedWithoutProof && (
             <div className="mt-1.5 text-[12px] text-green bg-green/10 border border-green/30 rounded px-2.5 py-2">
-              ✓ Confirmado sin comprobante por <b>{transfer.confirmedWithoutProofBy?.name ?? "el admin"}</b>
+              ✓ Confirmado sin comprobante por <b>{transfer.confirmedWithoutProofByName ?? "el admin"}</b>
               {transfer.confirmedWithoutProofAt && ` · ${fmtDateTime(transfer.confirmedWithoutProofAt)}`}
               {transfer.confirmedWithoutProofNote && <div className="mt-1 text-steel italic">&quot;{transfer.confirmedWithoutProofNote}&quot;</div>}
             </div>

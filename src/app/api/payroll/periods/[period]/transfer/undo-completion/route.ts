@@ -30,7 +30,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ per
       confirmedWithoutProof: false,
       confirmedWithoutProofNote: null,
       confirmedWithoutProofAt: null,
-      confirmedWithoutProofById: null,
+      confirmedWithoutProofByName: null,
     },
   });
 

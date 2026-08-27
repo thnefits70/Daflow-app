@@ -354,9 +354,6 @@ model User {
   merchandiseWeeklyWriteOffBatchesJust    MerchandiseWeeklyWriteOffBatch[] @relation("MerchandiseWeeklyWriteOffBatchJustBy")
   merchandiseWeeklyWriteOffBatchesNairoby MerchandiseWeeklyWriteOffBatch[] @relation("MerchandiseWeeklyWriteOffBatchNairobyBy")
 
-  payrollTransfersConfirmedWithoutProof     PayrollTransfer[]     @relation("PayrollTransferConfirmedWithoutProofBy")
-  payrollIessTransfersConfirmedWithoutProof PayrollIessTransfer[] @relation("PayrollIessTransferConfirmedWithoutProofBy")
-
   merchandiseOutflowBatchesCreated        MerchandiseOutflowBatch[] @relation("MerchandiseOutflowBatchCreatedBy")
   merchandiseOutflowBatchesJustWrittenOff MerchandiseOutflowBatch[] @relation("MerchandiseOutflowBatchJustWrittenOffBy")
   merchandiseOutflowItemsResolved         MerchandiseOutflowItem[]  @relation("MerchandiseOutflowItemResolvedBy")
@@ -2921,12 +2918,14 @@ model PayrollTransfer {
   // El admin confirma que ya transfirió a una cuenta propia sin necesitar
   // subir una foto de comprobante (pedido explícito 2026-08-27) — queda
   // marcado explícitamente distinto de un comprobante real, con quién y a
-  // qué hora hizo el clic como respaldo en su lugar.
+  // qué hora hizo el clic como respaldo en su lugar. Solo el admin usa esto
+  // (guardado en el cliente) y su sesión no es una fila de User (id fijo
+  // "admin" en auth.ts) — por eso el nombre se guarda como texto plano, sin
+  // relación a User.
   confirmedWithoutProof     Boolean   @default(false)
   confirmedWithoutProofNote String?
   confirmedWithoutProofAt   DateTime?
-  confirmedWithoutProofById String?
-  confirmedWithoutProofBy   User?     @relation("PayrollTransferConfirmedWithoutProofBy", fields: [confirmedWithoutProofById], references: [id], onDelete: SetNull)
+  confirmedWithoutProofByName String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -2964,8 +2963,7 @@ model PayrollIessTransfer {
   confirmedWithoutProof     Boolean   @default(false)
   confirmedWithoutProofNote String?
   confirmedWithoutProofAt   DateTime?
-  confirmedWithoutProofById String?
-  confirmedWithoutProofBy   User?     @relation("PayrollIessTransferConfirmedWithoutProofBy", fields: [confirmedWithoutProofById], references: [id], onDelete: SetNull)
+  confirmedWithoutProofByName String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

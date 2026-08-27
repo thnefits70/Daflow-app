@@ -18,10 +18,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ per
   const { period } = await params;
   if (!isValidPeriod(period)) return NextResponse.json({ error: "Período inválido." }, { status: 400 });
 
-  const payrollPeriod = await prisma.payrollPeriod.findUnique({
-    where: { period },
-    include: { transfer: { include: { confirmedWithoutProofBy: { select: { name: true } } } } },
-  });
+  const payrollPeriod = await prisma.payrollPeriod.findUnique({ where: { period }, include: { transfer: true } });
   if (!payrollPeriod?.transfer) return NextResponse.json(null);
 
   const transfer = payrollPeriod.transfer;

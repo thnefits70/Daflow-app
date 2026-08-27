@@ -42,7 +42,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ per
       confirmedWithoutProof: true,
       confirmedWithoutProofNote: parsed.data.note || null,
       confirmedWithoutProofAt: new Date(),
-      confirmedWithoutProofById: session.user.id,
+      confirmedWithoutProofByName: session.user.name,
     },
   });
 
