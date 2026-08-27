@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { X, ShieldCheck, Landmark, ChevronDown, CheckCircle2 } from "lucide-react";
+import { X, ShieldCheck, Landmark, ChevronDown, CheckCircle2, Eye } from "lucide-react";
 import { ProofPreview } from "@/components/shared/ProofPreview";
 import { PayrollEmployeeSalariesPanel } from "./PayrollEmployeeSalariesPanel";
 import { CeoBonusesForNairobyPanel } from "./CeoBonusesForNairobyPanel";
@@ -42,6 +42,86 @@ type PeriodDetail = {
 
 function money(n: number) {
   return `$${n.toFixed(2)}`;
+}
+
+const FULL_MONTHS = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+function monthLabel(month: string) {
+  const [y, m] = month.split("-");
+  return `${FULL_MONTHS[Number(m) - 1]} ${y}`;
+}
+
+type MonthlyPreview = { employeeName: string; employeePosition: string | null; month: string; declaredSalary: number; iessDeduction: number; netTotal: number; payoutProofUrl: string | null };
+
+// Pedido explícito del usuario 2026-08-27: antes de publicar, poder ver
+// exactamente la pantalla que le va a aparecer al colaborador (el "Rol del
+// mes"), sin publicar nada todavía — pega a monthly-preview/route.ts, que
+// solo calcula, nunca guarda. Reproduce el mismo layout que
+// /rol-del-mes/[id]/page.tsx (fondo blanco, tipografía de recibo) para que
+// sea fiel a lo que el colaborador realmente ve.
+function MonthlyRolePreview({ roleId }: { roleId: string }) {
+  const [data, setData] = useState<MonthlyPreview | null>(null);
+  const [err, setErr] = useState("");
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch(`/api/payroll/roles/${roleId}/monthly-preview`)
+      .then(async (r) => {
+        const body = await r.json().catch(() => null);
+        if (!r.ok) throw new Error(body?.error ?? "No se pudo cargar la vista previa.");
+        return body as MonthlyPreview;
+      })
+      .then(setData)
+      .catch((e) => setErr(e instanceof Error ? e.message : "No se pudo cargar la vista previa."))
+      .finally(() => setLoading(false));
+  }, [roleId]);
+
+  return (
+    <div className="mb-2.5 -mt-1.5 rounded border border-rule overflow-hidden">
+      <div className="px-3 py-1.5 text-[10.5px] font-bold uppercase tracking-wide bg-gold/15 border-b border-gold/40" style={{ color: "#D9A441" }}>
+        Vista previa — así lo va a ver el colaborador (todavía no se publicó)
+      </div>
+      {loading && <div className="bg-white text-black p-6 text-[12px] text-center">Cargando…</div>}
+      {err && <div className="bg-white text-black p-6 text-[12px] text-center text-red-600">{err}</div>}
+      {data && (
+        <div className="bg-white text-black p-6">
+          <div className="text-center mb-5">
+            <div className="text-[10px] tracking-[0.2em] font-bold text-gray-500 uppercase">Provedix</div>
+            <div className="text-[16px] font-bold mt-1">Rol de pago</div>
+            <div className="text-[12.5px] text-gray-600">{monthLabel(data.month)}</div>
+          </div>
+          <div className="border-t border-b border-gray-300 py-3 mb-4">
+            <div className="flex justify-between text-[12px]"><span className="text-gray-500">Colaborador</span><span className="font-semibold">{data.employeeName}</span></div>
+            {data.employeePosition && (
+              <div className="flex justify-between text-[12px] mt-1"><span className="text-gray-500">Cargo</span><span className="font-semibold">{data.employeePosition}</span></div>
+            )}
+          </div>
+          <table className="w-full text-[12px]">
+            <tbody>
+              <tr className="border-b border-gray-200">
+                <td className="py-1.5 text-gray-600">Sueldo</td>
+                <td className="py-1.5 text-right font-semibold">{money(data.declaredSalary)}</td>
+              </tr>
+              <tr className="border-b border-gray-200">
+                <td className="py-1.5 text-gray-600">Descuento IESS (9.45%)</td>
+                <td className="py-1.5 text-right font-semibold text-red-600">−{money(data.iessDeduction)}</td>
+              </tr>
+              <tr>
+                <td className="py-2 font-bold">Total a recibir</td>
+                <td className="py-2 text-right font-bold text-[14px]">{money(data.netTotal)}</td>
+              </tr>
+            </tbody>
+          </table>
+          {data.payoutProofUrl && (
+            <div className="mt-4 pt-3 border-t border-gray-300">
+              <div className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Comprobante de pago</div>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={data.payoutProofUrl} alt="Comprobante de pago" className="max-w-full rounded border border-gray-300" />
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export type IessBreakdownRow = {
@@ -156,13 +236,14 @@ const ROLE_CARD_ACCENTS = [
   "bg-cloud border-l-teal/70",
 ] as const;
 
-function RoleCard({ role, index, published, canEdit, monthlyRoleId, showPayout, onChanged }: { role: Role; index: number; published: boolean; canEdit: boolean; monthlyRoleId?: string; showPayout: boolean; onChanged: () => void }) {
+function RoleCard({ role, index, published, canEdit, monthlyRoleId, isEndOfMonth, showPayout, onChanged }: { role: Role; index: number; published: boolean; canEdit: boolean; monthlyRoleId?: string; isEndOfMonth: boolean; showPayout: boolean; onChanged: () => void }) {
   const [items, setItems] = useState<LineItem[]>(role.lineItems);
   const [savedItems, setSavedItems] = useState<LineItem[]>(role.lineItems);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [correcting, setCorrecting] = useState(false);
   const [changeNote, setChangeNote] = useState("");
+  const [showMonthlyPreview, setShowMonthlyPreview] = useState(false);
   const [correctingMonthly, setCorrectingMonthly] = useState(false);
   const [monthlyChangeNote, setMonthlyChangeNote] = useState("");
   const [savingMonthly, setSavingMonthly] = useState(false);
@@ -320,6 +401,21 @@ function RoleCard({ role, index, published, canEdit, monthlyRoleId, showPayout, 
             <span className="text-steel-dim italic">Este colaborador todavía no registró su cuenta bancaria en Mi Nómina.</span>
           )}
         </div>
+      )}
+
+      {isEndOfMonth && (
+        <>
+          <button
+            type="button"
+            className="flex items-center gap-1.5 text-[11px] font-semibold rounded px-2 py-1 mb-2.5 cursor-pointer border text-steel border-rule"
+            onClick={() => setShowMonthlyPreview((s) => !s)}
+          >
+            <Eye size={12} />
+            Vista previa del Rol del mes
+            <ChevronDown size={12} className={showMonthlyPreview ? "rotate-180" : ""} />
+          </button>
+          {showMonthlyPreview && <MonthlyRolePreview roleId={role.id} />}
+        </>
       )}
 
       {withValue.length === 0 && <div className="text-[11.5px] text-steel-dim italic">Sin conceptos con valor este período.</div>}
@@ -729,6 +825,7 @@ export function PayrollRolesPanel({ canEdit, canProposeFixedBonus, canApproveFix
                     published={detail.status === "PUBLISHED"}
                     canEdit={canEdit}
                     monthlyRoleId={detail.monthlyRoleIdByEmployee?.[r.employeeId]}
+                    isEndOfMonth={isEndOfMonthQuincena(period)}
                     showPayout={transfer?.status === "COMPLETED"}
                     onChanged={refreshAfterRoleEdit}
                   />
