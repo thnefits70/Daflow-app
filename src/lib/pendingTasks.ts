@@ -1033,14 +1033,23 @@ async function getPurchaseRequesterPendingItems(userId: string, href: string): P
 // por dato de dueño (mismo espíritu que getPurchaseRequesterPendingItems),
 // no por permiso de departamento — por eso vive en /area/cambio-proveedor-gestiones,
 // no dentro del módulo de Egresos.
-async function getSupplierExchangeGestorPendingItem(userId: string, href: string): Promise<PendingItem | null> {
+// Extraído a función propia (confirmado 2026-08-27) — además de alimentar la
+// tarjeta de Inicio (solo líderes, ver getPendingTasksForActor), el sidebar
+// (EmployeeSidebar/AreaLayout) necesita el mismo conteo para CUALQUIER
+// empleado, no solo líderes, porque /api/merchandise-outflow/supplier-exchange/mine
+// (el dueño real de este flujo) tampoco exige liderazgo.
+export async function getSupplierExchangeGestorCount(userId: string): Promise<number> {
   const marketingLeadId = await getMarketingLeadId();
   const or: Record<string, unknown>[] = [{ linkedPurchaseRequest: { requestedById: userId } }];
   if (marketingLeadId === userId) or.push({ linkedPurchaseRequestId: null });
 
-  const count = await prisma.merchandiseOutflowItem.count({
+  return prisma.merchandiseOutflowItem.count({
     where: { batch: { reason: "CAMBIO_PROVEEDOR", submittedAt: { not: null } }, resolution: null, OR: or },
   });
+}
+
+async function getSupplierExchangeGestorPendingItem(userId: string, href: string): Promise<PendingItem | null> {
+  const count = await getSupplierExchangeGestorCount(userId);
   if (count === 0) return null;
   return {
     type: "cambio_proveedor_gestion",

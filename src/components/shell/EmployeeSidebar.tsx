@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
-import { LayoutDashboard, ClipboardList, Scale, LogOut, Rocket, Wallet, FolderLock, Gauge, Menu, X, Trophy, Users, LayoutGrid, Waypoints, ShoppingBag, Banknote } from "lucide-react";
+import { LayoutDashboard, ClipboardList, Scale, LogOut, Rocket, Wallet, FolderLock, Gauge, Menu, X, Trophy, Users, LayoutGrid, Waypoints, ShoppingBag, Banknote, RefreshCw } from "lucide-react";
 import { BrandMark } from "@/components/brand/DaflowMark";
 import { PushSettingsToggle } from "@/components/shared/PushSettingsToggle";
 import { NotificationBell } from "@/components/shared/NotificationBell";
@@ -23,6 +23,7 @@ export function EmployeeSidebar({
   showNomina = false,
   showMyLearningPath = false,
   showPersonalPurchasesInventory = false,
+  supplierExchangePendingCount = 0,
 }: {
   deptName: string;
   userName: string;
@@ -37,6 +38,7 @@ export function EmployeeSidebar({
   showNomina?: boolean;
   showMyLearningPath?: boolean;
   showPersonalPurchasesInventory?: boolean;
+  supplierExchangePendingCount?: number;
 }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
@@ -132,6 +134,14 @@ export function EmployeeSidebar({
         <Link href="/area/anticipos" className={`${NAV_ITEM} ${pathname.startsWith("/area/anticipos") ? NAV_ACTIVE : NAV_INACTIVE}`}>
           <Banknote size={15} /> Anticipos
         </Link>
+        {supplierExchangePendingCount > 0 && (
+          <Link href="/area/cambio-proveedor-gestiones" className={`${NAV_ITEM} ${pathname.startsWith("/area/cambio-proveedor-gestiones") ? NAV_ACTIVE : NAV_INACTIVE}`}>
+            <RefreshCw size={15} /> Cambio con proveedor
+            <span className="ml-auto font-mono text-[10px] font-semibold bg-red/20 text-red rounded-full px-1.5 py-0.5">
+              {supplierExchangePendingCount}
+            </span>
+          </Link>
+        )}
         {showPersonalPurchasesInventory && (
           <Link href="/area/compras-personales-inventario" className={`${NAV_ITEM} ${pathname.startsWith("/area/compras-personales-inventario") ? NAV_ACTIVE : NAV_INACTIVE}`}>
             <ShoppingBag size={15} /> Confirmar compras personales

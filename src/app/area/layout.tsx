@@ -11,7 +11,7 @@ import {
   canLogOvertimeHours,
   canConfirmPersonalPurchaseInventory,
 } from "@/lib/guards";
-import { getRecognitionLockout } from "@/lib/pendingTasks";
+import { getRecognitionLockout, getSupplierExchangeGestorCount } from "@/lib/pendingTasks";
 
 export default async function AreaLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
@@ -156,6 +156,13 @@ export default async function AreaLayout({ children }: { children: React.ReactNo
   const showNomina = (await canManageNomina()) || (await canLogOvertimeHours());
   const showPersonalPurchasesInventory = await canConfirmPersonalPurchaseInventory();
   const myLearningPathCount = await prisma.learningPathAssignment.count({ where: { userId: session.user.id } });
+  // Confirmado 2026-08-27, pedido explícito del usuario: acceso directo y
+  // permanente en el sidebar a "Cambio con proveedor" mientras tenga algo sin
+  // gestionar — antes solo se enteraba por la tarjeta de Inicio (que además
+  // solo se calcula para líderes), y esta página es para cualquier empleado
+  // que haya sido quien pidió la compra original (ver
+  // getSupplierExchangeGestorCount). El link desaparece solo apenas queda en 0.
+  const supplierExchangePendingCount = await getSupplierExchangeGestorCount(session.user.id);
 
   return (
     <AreaGateShell
@@ -180,6 +187,7 @@ export default async function AreaLayout({ children }: { children: React.ReactNo
       showNomina={showNomina}
       showMyLearningPath={myLearningPathCount > 0}
       showPersonalPurchasesInventory={showPersonalPurchasesInventory}
+      supplierExchangePendingCount={supplierExchangePendingCount}
     >
       {children}
       {(currentUser.canConfirmMarketingDesign || currentUser.canConfirmMarketingAdvisor) && (

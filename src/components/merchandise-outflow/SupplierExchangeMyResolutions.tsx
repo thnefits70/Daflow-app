@@ -117,6 +117,9 @@ export function SupplierExchangeMyResolutions() {
 
   return (
     <div className="flex flex-col gap-2.5 max-w-lg">
+      <div className="text-[12.5px] font-semibold text-steel">
+        {items.length} solicitud{items.length === 1 ? "" : "es"} de gestión pendiente{items.length === 1 ? "" : "s"}
+      </div>
       {items.map((item) => (
         <div key={item.id} className="bg-surface border border-rule rounded-md p-3.5">
           <div className="flex items-center gap-3 mb-2.5">
