@@ -310,8 +310,8 @@ function RoleCard({ role, index, published, canEdit, monthlyRoleId, showPayout, 
             <>
               <div className="flex justify-between"><span className="text-steel">Banco</span><span className="font-semibold">{bankAccount.bankName}</span></div>
               <div className="flex justify-between"><span className="text-steel">Tipo de cuenta</span><span className="font-semibold">{bankAccount.bankAccountType}</span></div>
-              <div className="flex justify-between"><span className="text-steel">N° de cuenta</span><span className="font-semibold tabular-nums">{bankAccount.bankAccountNumber}</span></div>
-              <div className="flex justify-between"><span className="text-steel">Titular</span><span className="font-semibold">{bankAccount.bankAccountHolder}</span></div>
+              <div className="flex justify-between"><span className="text-steel">N° de cuenta</span><span className="font-extrabold tabular-nums text-teal text-[13px]">{bankAccount.bankAccountNumber}</span></div>
+              <div className="flex justify-between"><span className="text-steel">Titular</span><span className="font-extrabold text-teal text-[13px]">{bankAccount.bankAccountHolder}</span></div>
               {bankAccount.holderIdNumber && (
                 <div className="flex justify-between"><span className="text-steel">{bankAccount.holderIdType === "RUC" ? "RUC" : "Cédula"}</span><span className="font-semibold tabular-nums">{bankAccount.holderIdNumber}</span></div>
               )}
