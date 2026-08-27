@@ -7,7 +7,7 @@ import { PayrollEmployeeSalariesPanel } from "./PayrollEmployeeSalariesPanel";
 import { CeoBonusesForNairobyPanel } from "./CeoBonusesForNairobyPanel";
 import { PayrollTransferPanel, PayrollIessTransferPanel, type Transfer } from "./PayrollTransferPanel";
 import { PayoutUploader } from "./PayrollIndividualPayment";
-import { isEndOfMonthQuincena, IESS_RATE, IESS_EMPLOYER_RATE, IESS_PART_TIME_RATE } from "@/lib/payrollCalc";
+import { isEndOfMonthQuincena, IESS_RATE, IESS_EMPLOYER_RATE, IESS_PART_TIME_RATE, IESS_SPOUSE_EXTENSION_RATE } from "@/lib/payrollCalc";
 
 type LineItem = { id?: string; label: string; amount: number; kind: "INCOME" | "EXPENSE"; isAutomatic?: boolean; note?: string | null };
 type EmployeeBankAccount = {
@@ -26,7 +26,7 @@ type Role = {
   totalIncome: number;
   totalExpense: number;
   netTotal: number;
-  employee: { id: string; name: string; position: string | null; employeeBankAccounts: EmployeeBankAccount[]; payrollProfile: { iessDeclaredSalary: number | null; companyAbsorbsIess: boolean; iessPartTime: boolean } | null };
+  employee: { id: string; name: string; position: string | null; employeeBankAccounts: EmployeeBankAccount[]; payrollProfile: { iessDeclaredSalary: number | null; companyAbsorbsIess: boolean; iessPartTime: boolean; iessSpouseExtension: boolean } | null };
   lineItems: LineItem[];
   paidAt: string | null;
   paidProofUrl: string | null;
@@ -51,8 +51,10 @@ export type IessBreakdownRow = {
   employeePortion: number;
   employerPortion: number;
   partTimePremium: number;
+  spouseExtensionPremium: number;
   companyAbsorbsIess: boolean;
   iessPartTime: boolean;
+  iessSpouseExtension: boolean;
 };
 
 // Mismo cálculo que iessBreakdownFromRoles/totalIessOwedFromRoles en
@@ -60,13 +62,15 @@ export type IessBreakdownRow = {
 // PayrollIessTransfer) — aporte personal (9.45%) + patronal (11.15%) de
 // TODOS los que tienen IESS declarado, sin importar si Provedix asumió el
 // personal (Marcos, Dexi) o se le descontó a la persona, más la prima de
-// tiempo parcial (4.41%) solo para quienes tienen iessPartTime activado.
+// tiempo parcial (4.41%) y la extensión de cónyuge (3.41%) solo para quien
+// las tenga activadas.
 function iessBreakdownFromRoles(roles: Role[]): IessBreakdownRow[] {
   return roles
     .filter((r) => !!r.employee.payrollProfile?.iessDeclaredSalary)
     .map((r) => {
       const declared = r.employee.payrollProfile!.iessDeclaredSalary!;
       const partTime = r.employee.payrollProfile!.iessPartTime;
+      const spouseExtension = r.employee.payrollProfile!.iessSpouseExtension;
       return {
         employeeId: r.employeeId,
         employeeName: r.employee.name,
@@ -74,15 +78,17 @@ function iessBreakdownFromRoles(roles: Role[]): IessBreakdownRow[] {
         employeePortion: declared * IESS_RATE,
         employerPortion: declared * IESS_EMPLOYER_RATE,
         partTimePremium: partTime ? declared * IESS_PART_TIME_RATE : 0,
+        spouseExtensionPremium: spouseExtension ? declared * IESS_SPOUSE_EXTENSION_RATE : 0,
         companyAbsorbsIess: r.employee.payrollProfile!.companyAbsorbsIess,
         iessPartTime: partTime,
+        iessSpouseExtension: spouseExtension,
       };
     });
 }
 
 function totalIessOwedFromRoles(roles: Role[]): number {
   const rows = iessBreakdownFromRoles(roles);
-  return rows.reduce((s, r) => s + r.employeePortion + r.employerPortion + r.partTimePremium, 0);
+  return rows.reduce((s, r) => s + r.employeePortion + r.employerPortion + r.partTimePremium + r.spouseExtensionPremium, 0);
 }
 
 const ECUADOR_UTC_OFFSET_HOURS = 5; // UTC-5, sin horario de verano en Ecuador

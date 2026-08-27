@@ -16,6 +16,7 @@ import {
   IESS_RATE,
   IESS_EMPLOYER_RATE,
   IESS_PART_TIME_RATE,
+  IESS_SPOUSE_EXTENSION_RATE,
   IESS_LINE_ITEM_LABEL,
 } from "@/lib/payrollCalc";
 import { getMonthDispatchSummary, getAchievedTier, CEO_BONUS_AMOUNTS, CEO_BONUS_LABELS } from "@/lib/commissionTiers";
@@ -352,28 +353,35 @@ export type IessBreakdownRow = {
   employeePortion: number; // 9.45% — lo que le correspondería descontar a la persona
   employerPortion: number; // 11.15% — aporte patronal, siempre 100% de Provedix
   partTimePremium: number; // 4.41% salud/maternidad — solo si iessPartTime, siempre 100% de Provedix
+  spouseExtensionPremium: number; // 3.41% extensión de cónyuge — solo si iessSpouseExtension, siempre 100% de Provedix
   companyAbsorbsIess: boolean; // si es true, Provedix también asume el employeePortion
   iessPartTime: boolean; // si es true, se suma el partTimePremium
+  iessSpouseExtension: boolean; // si es true, se suma el spouseExtensionPremium
 };
 
 type RoleForIess = {
   employeeId: string;
-  employee: { name: string; payrollProfile: { iessDeclaredSalary: number | null; companyAbsorbsIess: boolean; iessPartTime: boolean } | null };
+  employee: {
+    name: string;
+    payrollProfile: { iessDeclaredSalary: number | null; companyAbsorbsIess: boolean; iessPartTime: boolean; iessSpouseExtension: boolean } | null;
+  };
 };
 
 // Confirmado 2026-08-27: pedido explícito del usuario — desglose real de lo
 // que se le debe al IESS por cada colaborador con sueldo declarado, sin
 // importar si a la persona se le descontó su parte o si Provedix la asumió
-// (ver companyAbsorbsIess). El aporte patronal (IESS_EMPLOYER_RATE) y la
-// prima de tiempo parcial (IESS_PART_TIME_RATE) NUNCA aparecen en el rol
-// individual de nadie — son costos aparte de la empresa, solo visibles
-// acá, en el total agregado del período.
+// (ver companyAbsorbsIess). El aporte patronal (IESS_EMPLOYER_RATE), la
+// prima de tiempo parcial (IESS_PART_TIME_RATE) y la extensión de cónyuge
+// (IESS_SPOUSE_EXTENSION_RATE) NUNCA aparecen en el rol individual de
+// nadie — son costos aparte de la empresa, solo visibles acá, en el total
+// agregado del período.
 export function iessBreakdownFromRoles(roles: RoleForIess[]): IessBreakdownRow[] {
   return roles
     .filter((r) => !!r.employee.payrollProfile?.iessDeclaredSalary)
     .map((r) => {
       const declared = r.employee.payrollProfile!.iessDeclaredSalary!;
       const partTime = r.employee.payrollProfile!.iessPartTime;
+      const spouseExtension = r.employee.payrollProfile!.iessSpouseExtension;
       return {
         employeeId: r.employeeId,
         employeeName: r.employee.name,
@@ -381,13 +389,15 @@ export function iessBreakdownFromRoles(roles: RoleForIess[]): IessBreakdownRow[]
         employeePortion: declared * IESS_RATE,
         employerPortion: declared * IESS_EMPLOYER_RATE,
         partTimePremium: partTime ? declared * IESS_PART_TIME_RATE : 0,
+        spouseExtensionPremium: spouseExtension ? declared * IESS_SPOUSE_EXTENSION_RATE : 0,
         companyAbsorbsIess: r.employee.payrollProfile!.companyAbsorbsIess,
         iessPartTime: partTime,
+        iessSpouseExtension: spouseExtension,
       };
     });
 }
 
-// Confirmado 2026-08-26, corregido 2026-08-27 dos veces el mismo día tras
+// Confirmado 2026-08-26, corregido 2026-08-27 tres veces el mismo día tras
 // casos reales del usuario: (1) Marcos y Dexi, con companyAbsorbsIess=true,
 // no generan ninguna línea "Descuento IESS" en su rol — así que sumar solo
 // esas líneas dejaba afuera lo que Provedix igual le debe al IESS por ellos
@@ -395,13 +405,15 @@ export function iessBreakdownFromRoles(roles: RoleForIess[]): IessBreakdownRow[]
 // realidad es una prima de salud/maternidad del 4.41% (IESS_PART_TIME_RATE)
 // que solo aplica a quienes están registrados a TIEMPO PARCIAL (hoy quienes
 // declaran "mitad de sueldo" — ver PayrollProfile.iessPartTime), no a todo
-// el mundo ni como monto fijo. Ahora suma, por cada colaborador con IESS
-// declarado: aporte personal (9.45%) + patronal (11.15%) + prima de tiempo
-// parcial si corresponde — sin importar quién asume cada parte en su rol
-// individual. Solo tiene sentido en la quincena de fin de mes (Q2).
+// el mundo ni como monto fijo; (3) extensión de cónyuge del 3.41%
+// (IESS_SPOUSE_EXTENSION_RATE), hoy solo Dexi. Ahora suma, por cada
+// colaborador con IESS declarado: aporte personal (9.45%) + patronal
+// (11.15%) + prima de tiempo parcial + extensión de cónyuge si
+// corresponde — sin importar quién asume cada parte en su rol individual.
+// Solo tiene sentido en la quincena de fin de mes (Q2).
 export function totalIessOwedFromRoles(roles: RoleForIess[]): number {
   const rows = iessBreakdownFromRoles(roles);
-  return rows.reduce((s, r) => s + r.employeePortion + r.employerPortion + r.partTimePremium, 0);
+  return rows.reduce((s, r) => s + r.employeePortion + r.employerPortion + r.partTimePremium + r.spouseExtensionPremium, 0);
 }
 
 // Confirmado 2026-08-20, reglas de anticipos definidas con el usuario:

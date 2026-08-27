@@ -2766,6 +2766,15 @@ model PayrollProfile {
   // transfiere para pagar el IESS (ver iessBreakdownFromRoles en payroll.ts).
   iessPartTime Boolean @default(false)
 
+  // Confirmado 2026-08-27: pedido explícito del usuario — extensión de
+  // cónyuge al IESS (3.41% del sueldo declarado, IESS_SPOUSE_EXTENSION_RATE
+  // en payrollCalc.ts). Hoy solo Dexi Villafuerte está asegurada al IESS
+  // con esa extensión (el usuario cobra su propio sueldo por medio de ella,
+  // sin figurar él mismo en Nómina). Mismo patrón que iessPartTime: se
+  // activa persona por persona, nunca se descuenta a la persona, solo se
+  // suma al total agregado que se transfiere para pagar el IESS.
+  iessSpouseExtension Boolean @default(false)
+
   // Habilita que le aparezca la pantalla de registrar horas extra — apagado
   // por defecto, se prende persona por persona (hoy Inventario y
   // Fulfillment).

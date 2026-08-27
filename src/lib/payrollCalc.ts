@@ -29,6 +29,14 @@ export const IESS_EMPLOYER_RATE = 0.1115;
 // solo se suma al total agregado que se transfiere para pagar el IESS.
 export const IESS_PART_TIME_RATE = 0.0441;
 
+// Confirmado 2026-08-27: pedido explícito del usuario — extensión de
+// cónyuge al IESS (3.41% del sueldo declarado). Hoy solo Dexi Villafuerte
+// la tiene activa. Se activa persona por persona con
+// PayrollProfile.iessSpouseExtension (mismo patrón que iessPartTime) — ver
+// iessBreakdownFromRoles en payroll.ts. Nunca se descuenta a la persona,
+// solo se suma al total agregado que se transfiere para pagar el IESS.
+export const IESS_SPOUSE_EXTENSION_RATE = 0.0341;
+
 // Confirmado 2026-08-26: label exacto de la línea automática de IESS (ver
 // buildAutomaticLineItems en payroll.ts) — se usa como identificador para
 // sumar el total de IESS de un período (ver iess-transfer), ya que

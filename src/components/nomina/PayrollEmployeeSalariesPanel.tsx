@@ -13,6 +13,7 @@ type EmployeeProfile = {
     iessDeclaredSalary: number | null;
     companyAbsorbsIess: boolean;
     iessPartTime: boolean;
+    iessSpouseExtension: boolean;
     canLogOvertimeHours: boolean;
     usesFullLegalOvertimeSchedule: boolean;
   } | null;
@@ -153,6 +154,9 @@ function SalaryRow({ employee, canEdit, canProposeBonus, canApproveBonus, onSave
         <input type="checkbox" disabled={!canEdit} checked={p?.iessPartTime ?? false} onChange={(e) => save({ iessPartTime: e.target.checked })} />
       </td>
       <td className="py-2 pr-3 text-center">
+        <input type="checkbox" disabled={!canEdit} checked={p?.iessSpouseExtension ?? false} onChange={(e) => save({ iessSpouseExtension: e.target.checked })} />
+      </td>
+      <td className="py-2 pr-3 text-center">
         <input type="checkbox" disabled={!canEdit} checked={p?.canLogOvertimeHours ?? false} onChange={(e) => save({ canLogOvertimeHours: e.target.checked })} />
       </td>
       <td className="py-2 pr-3 text-center">
@@ -197,6 +201,7 @@ export function PayrollEmployeeSalariesPanel({ canEdit, canProposeBonus, canAppr
                 <th className="pb-1.5 pr-3">Declarado IESS</th>
                 <th className="pb-1.5 pr-3 text-center">IESS 100%<br />Provedix</th>
                 <th className="pb-1.5 pr-3 text-center">Tiempo<br />parcial</th>
+                <th className="pb-1.5 pr-3 text-center">Ext.<br />cónyuge</th>
                 <th className="pb-1.5 pr-3 text-center">Horas<br />extra</th>
                 <th className="pb-1.5 pr-3 text-center">Horario<br />legal</th>
                 <th className="pb-1.5 pr-3">Bonos especiales<br />fijos</th>

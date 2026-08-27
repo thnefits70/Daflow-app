@@ -26,7 +26,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ per
     include: {
       roles: {
         where: { isCurrent: true },
-        include: { employee: { select: { name: true, payrollProfile: { select: { iessDeclaredSalary: true, companyAbsorbsIess: true, iessPartTime: true } } } } },
+        include: { employee: { select: { name: true, payrollProfile: { select: { iessDeclaredSalary: true, companyAbsorbsIess: true, iessPartTime: true, iessSpouseExtension: true } } } } },
       },
       iessTransfer: true,
     },
