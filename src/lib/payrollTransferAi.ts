@@ -10,7 +10,7 @@ function extractJson<T>(text: string): T {
   return JSON.parse(match[0]) as T;
 }
 
-export type PayrollTransferProofReadResult = { readAmount: number | null; proofNumber: string | null };
+export type PayrollTransferProofReadResult = { readAmount: number | null; proofNumber: string | null; recipientName: string | null };
 
 async function readTransferProofAmount(params: {
   proofUrl: string;
@@ -26,9 +26,10 @@ async function readTransferProofAmount(params: {
     system:
       "Lees comprobantes de transferencia bancaria de nómina para Provedix (Guayaquil, Ecuador). " +
       "Extrae SOLO lo que de verdad muestra la foto — nunca inventes un valor. " +
-      'Responde ÚNICAMENTE un JSON: {"readAmount": number|null, "proofNumber": string|null}. ' +
+      'Responde ÚNICAMENTE un JSON: {"readAmount": number|null, "proofNumber": string|null, "recipientName": string|null}. ' +
       "readAmount es el monto transferido que se ve en el comprobante (sin símbolo de moneda). " +
       'proofNumber es el número de comprobante/transacción/operación del recibo (puede decir "N° de comprobante", "Número de transacción", "Nro. de operación", "Referencia" o similar) — copialo tal cual aparece, con ceros y guiones incluidos. ' +
+      'recipientName es el nombre completo del BENEFICIARIO/DESTINATARIO de la transferencia (nunca quien la envía) — puede decir "Beneficiario", "Destinatario", "Nombre del destino", "Cuenta destino" o similar. Copialo tal cual aparece. ' +
       "Si algún dato no se distingue con claridad, pon null en ese campo.",
     messages: [
       {
@@ -74,4 +75,34 @@ export async function readIndividualPayrollProof(params: { proofUrl: string; act
 // PayrollIessTransfer.totalAmount, nunca contra el total de nómina.
 export async function readIessTransferProof(params: { proofUrl: string; actorId: string }): Promise<PayrollTransferProofReadResult> {
   return readTransferProofAmount({ ...params, feature: "nomina_iess_comprobante" });
+}
+
+const COMBINING_DIACRITICS = new RegExp("[\\u0300-\\u036f]", "g");
+
+function normalizeName(name: string): string[] {
+  return name
+    .normalize("NFD")
+    .replace(COMBINING_DIACRITICS, "")
+    .toLowerCase()
+    .replace(/[^a-z\s]/g, " ")
+    .split(/\s+/)
+    .filter((w) => w.length > 1);
+}
+
+// Pedido explícito del usuario 2026-08-27: además de monto y número de
+// comprobante, el pago individual también exige que el nombre del
+// beneficiario que lee la IA coincida con el titular de la cuenta bancaria
+// que ESE colaborador registró en su perfil — evita subir el comprobante de
+// otra persona por error. Comparación tolerante (no exacta) porque la IA
+// puede leer con acentos/orden distinto o un nombre de en medio de menos —
+// alcanza con que la mitad de las palabras del nombre más corto aparezcan
+// en el otro.
+export function namesLikelyMatch(a: string, b: string): boolean {
+  const wordsA = normalizeName(a);
+  const wordsB = normalizeName(b);
+  if (wordsA.length === 0 || wordsB.length === 0) return false;
+  const setB = new Set(wordsB);
+  const overlap = wordsA.filter((w) => setB.has(w)).length;
+  const minLen = Math.min(wordsA.length, wordsB.length);
+  return overlap / minLen >= 0.5;
 }

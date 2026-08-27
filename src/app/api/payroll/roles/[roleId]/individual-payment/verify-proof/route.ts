@@ -3,7 +3,7 @@ import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { canEditPayrollRoles } from "@/lib/guards";
-import { readIndividualPayrollProof } from "@/lib/payrollTransferAi";
+import { readIndividualPayrollProof, namesLikelyMatch } from "@/lib/payrollTransferAi";
 
 const schema = z.object({ proofUrl: z.string().url() });
 
@@ -24,18 +24,23 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ rol
 
   const role = await prisma.payrollQuincenaRole.findUnique({
     where: { id: roleId },
-    include: { period: { include: { transfer: true } } },
+    include: {
+      period: { include: { transfer: true } },
+      employee: { select: { employeeBankAccounts: { where: { isSelected: true }, select: { bankAccountHolder: true }, take: 1 } } },
+    },
   });
   if (!role) return NextResponse.json({ error: "No encontrado." }, { status: 404 });
   if (role.period.transfer?.status !== "COMPLETED") {
     return NextResponse.json({ error: "Todavía no se transfirió el total de la quincena." }, { status: 409 });
   }
   const expectedAmount = role.netTotal;
+  const registeredHolderName = role.employee.employeeBankAccounts[0]?.bankAccountHolder ?? null;
 
   try {
     const read = await readIndividualPayrollProof({ proofUrl: parsed.data.proofUrl, actorId: session.user.id });
     const amountMatches = read.readAmount !== null && Math.abs(read.readAmount - expectedAmount) < 0.01;
-    const matches = amountMatches && !!read.proofNumber;
+    const nameMatches = !registeredHolderName || (!!read.recipientName && namesLikelyMatch(read.recipientName, registeredHolderName));
+    const matches = amountMatches && !!read.proofNumber && nameMatches;
     const note =
       read.readAmount === null
         ? "No se pudo leer el monto con claridad en el comprobante — subí una imagen más clara."
@@ -43,8 +48,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ rol
         ? `Atención — el comprobante muestra $${read.readAmount.toFixed(2)}, pero a esta persona le corresponden $${expectedAmount.toFixed(2)}.`
         : !read.proofNumber
         ? `El monto coincide ($${read.readAmount.toFixed(2)}), pero no se pudo leer el número de comprobante — subí una imagen donde se vea con claridad.`
+        : registeredHolderName && !read.recipientName
+        ? `El monto y el número coinciden, pero no se pudo leer el nombre del beneficiario — subí una imagen donde se vea con claridad.`
+        : registeredHolderName && !nameMatches
+        ? `Atención — el comprobante es a nombre de "${read.recipientName}", pero la cuenta registrada de este colaborador es de "${registeredHolderName}".`
         : `Coincide — el comprobante muestra $${read.readAmount.toFixed(2)}, N° de comprobante ${read.proofNumber}.`;
-    return NextResponse.json({ readAmount: read.readAmount, proofNumber: read.proofNumber, matches, note });
+    return NextResponse.json({ readAmount: read.readAmount, proofNumber: read.proofNumber, recipientName: read.recipientName, matches, note });
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : "No se pudo verificar el comprobante." }, { status: 500 });
   }

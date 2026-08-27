@@ -3,7 +3,7 @@ import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { canEditPayrollRoles } from "@/lib/guards";
-import { readIndividualPayrollProof } from "@/lib/payrollTransferAi";
+import { readIndividualPayrollProof, namesLikelyMatch } from "@/lib/payrollTransferAi";
 
 const schema = z.object({
   proofUrl: z.string().trim().min(1),
@@ -26,7 +26,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ rol
 
   const role = await prisma.payrollQuincenaRole.findUnique({
     where: { id: roleId },
-    include: { period: { include: { transfer: true } } },
+    include: {
+      period: { include: { transfer: true } },
+      employee: { select: { employeeBankAccounts: { where: { isSelected: true }, select: { bankAccountHolder: true }, take: 1 } } },
+    },
   });
   if (!role) return NextResponse.json({ error: "No encontrado." }, { status: 404 });
   if (role.period.transfer?.status !== "COMPLETED") {
@@ -34,12 +37,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ rol
   }
 
   const expectedAmount = role.netTotal;
+  const registeredHolderName = role.employee.employeeBankAccounts[0]?.bankAccountHolder ?? null;
   let readAmount: number | null = null;
   let proofNumber: string | null = null;
+  let recipientName: string | null = null;
   try {
     const read = await readIndividualPayrollProof({ proofUrl: parsed.data.proofUrl, actorId: session.user.id });
     readAmount = read.readAmount;
     proofNumber = read.proofNumber;
+    recipientName = read.recipientName;
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : "No se pudo verificar el comprobante." }, { status: 500 });
   }
@@ -61,6 +67,25 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ rol
       { status: 409 }
     );
   }
+  // Pedido explícito del usuario 2026-08-27 (caso real: comprobante de
+  // Robert no coincidía) — además del monto y el número, el nombre del
+  // beneficiario tiene que coincidir con el titular de la cuenta que ESE
+  // colaborador registró, para evitar subir el comprobante de otra persona.
+  // Solo se exige si el colaborador ya tiene una cuenta registrada.
+  if (registeredHolderName) {
+    if (!recipientName) {
+      return NextResponse.json(
+        { error: "El monto y el número coinciden, pero no se pudo leer el nombre del beneficiario — subí una imagen donde se vea con claridad." },
+        { status: 409 }
+      );
+    }
+    if (!namesLikelyMatch(recipientName, registeredHolderName)) {
+      return NextResponse.json(
+        { error: `El comprobante es a nombre de "${recipientName}", pero la cuenta registrada de este colaborador es de "${registeredHolderName}" — verificá que sea el comprobante correcto.` },
+        { status: 409 }
+      );
+    }
+  }
 
   const updated = await prisma.payrollQuincenaRole.update({
     where: { id: roleId },
@@ -70,6 +95,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ rol
       paidProofName: parsed.data.proofName,
       paidProofReadAmount: readAmount,
       paidProofNumber: proofNumber,
+      paidProofRecipientName: recipientName,
     },
   });
 
@@ -88,7 +114,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
 
   const updated = await prisma.payrollQuincenaRole.update({
     where: { id: roleId },
-    data: { paidAt: null, paidProofUrl: null, paidProofName: null, paidProofReadAmount: null, paidProofNumber: null },
+    data: { paidAt: null, paidProofUrl: null, paidProofName: null, paidProofReadAmount: null, paidProofNumber: null, paidProofRecipientName: null },
   });
 
   return NextResponse.json(updated);

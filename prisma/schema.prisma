@@ -3032,7 +3032,12 @@ model PayrollQuincenaRole {
   // explícito 2026-08-27) — junto con paidProofReadAmount, ambos deben
   // coincidir/leerse antes de dejar confirmar el pago, ver
   // individual-payment/route.ts.
-  paidProofNumber     String?
+  paidProofNumber        String?
+  // Nombre del beneficiario que la IA lee del comprobante (pedido explícito
+  // 2026-08-27) — debe coincidir con el titular de la cuenta bancaria que
+  // este colaborador registró, para evitar subir el comprobante de otra
+  // persona por error (ver namesLikelyMatch en payrollTransferAi.ts).
+  paidProofRecipientName String?
 
   lineItems PayrollLineItem[]
 
