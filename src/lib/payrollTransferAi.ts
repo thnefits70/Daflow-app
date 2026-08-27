@@ -10,7 +10,7 @@ function extractJson<T>(text: string): T {
   return JSON.parse(match[0]) as T;
 }
 
-export type PayrollTransferProofReadResult = { readAmount: number | null };
+export type PayrollTransferProofReadResult = { readAmount: number | null; proofNumber: string | null };
 
 async function readTransferProofAmount(params: {
   proofUrl: string;
@@ -25,9 +25,11 @@ async function readTransferProofAmount(params: {
     max_tokens: 512,
     system:
       "Lees comprobantes de transferencia bancaria de nómina para Provedix (Guayaquil, Ecuador). " +
-      "Extrae SOLO el monto que de verdad muestra la foto — nunca inventes un valor. " +
-      'Responde ÚNICAMENTE un JSON: {"readAmount": number|null}. ' +
-      "readAmount es el monto transferido que se ve en el comprobante (sin símbolo de moneda). Si no se distingue con claridad, pon null.",
+      "Extrae SOLO lo que de verdad muestra la foto — nunca inventes un valor. " +
+      'Responde ÚNICAMENTE un JSON: {"readAmount": number|null, "proofNumber": string|null}. ' +
+      "readAmount es el monto transferido que se ve en el comprobante (sin símbolo de moneda). " +
+      'proofNumber es el número de comprobante/transacción/operación del recibo (puede decir "N° de comprobante", "Número de transacción", "Nro. de operación", "Referencia" o similar) — copialo tal cual aparece, con ceros y guiones incluidos. ' +
+      "Si algún dato no se distingue con claridad, pon null en ese campo.",
     messages: [
       {
         role: "user",

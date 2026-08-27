@@ -26,6 +26,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ per
       status: "APPROVED",
       proofUrl: null,
       proofName: null,
+      proofNumber: null,
       completedAt: null,
       confirmedWithoutProof: false,
       confirmedWithoutProofNote: null,

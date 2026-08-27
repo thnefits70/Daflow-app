@@ -35,9 +35,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ rol
 
   const expectedAmount = role.netTotal;
   let readAmount: number | null = null;
+  let proofNumber: string | null = null;
   try {
     const read = await readIndividualPayrollProof({ proofUrl: parsed.data.proofUrl, actorId: session.user.id });
     readAmount = read.readAmount;
+    proofNumber = read.proofNumber;
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : "No se pudo verificar el comprobante." }, { status: 500 });
   }
@@ -53,6 +55,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ rol
       { status: 409 }
     );
   }
+  if (!proofNumber) {
+    return NextResponse.json(
+      { error: "El monto coincide, pero no se pudo leer el número de comprobante — subí una imagen donde se vea con claridad." },
+      { status: 409 }
+    );
+  }
 
   const updated = await prisma.payrollQuincenaRole.update({
     where: { id: roleId },
@@ -61,6 +69,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ rol
       paidProofUrl: parsed.data.proofUrl,
       paidProofName: parsed.data.proofName,
       paidProofReadAmount: readAmount,
+      paidProofNumber: proofNumber,
     },
   });
 
@@ -79,7 +88,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
 
   const updated = await prisma.payrollQuincenaRole.update({
     where: { id: roleId },
-    data: { paidAt: null, paidProofUrl: null, paidProofName: null, paidProofReadAmount: null },
+    data: { paidAt: null, paidProofUrl: null, paidProofName: null, paidProofReadAmount: null, paidProofNumber: null },
   });
 
   return NextResponse.json(updated);

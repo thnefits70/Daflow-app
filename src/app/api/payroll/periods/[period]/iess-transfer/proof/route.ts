@@ -35,9 +35,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ per
 
   const expectedAmount = payrollPeriod.iessTransfer.totalAmount;
   let readAmount: number | null = null;
+  let proofNumber: string | null = null;
   try {
     const read = await readIessTransferProof({ proofUrl: parsed.data.proofUrl, actorId: session.user.id });
     readAmount = read.readAmount;
+    proofNumber = read.proofNumber;
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : "No se pudo verificar el comprobante." }, { status: 500 });
   }
@@ -53,10 +55,16 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ per
       { status: 409 }
     );
   }
+  if (!proofNumber) {
+    return NextResponse.json(
+      { error: "El monto coincide, pero no se pudo leer el número de comprobante — subí una imagen donde se vea con claridad." },
+      { status: 409 }
+    );
+  }
 
   const updated = await prisma.payrollIessTransfer.update({
     where: { id: payrollPeriod.iessTransfer.id },
-    data: { status: "COMPLETED", proofUrl: parsed.data.proofUrl, proofName: parsed.data.proofName, completedAt: new Date() },
+    data: { status: "COMPLETED", proofUrl: parsed.data.proofUrl, proofName: parsed.data.proofName, proofNumber, completedAt: new Date() },
   });
 
   const financeLeadId = await getFinanceLeadId();

@@ -2913,6 +2913,10 @@ model PayrollTransfer {
 
   proofUrl    String?
   proofName   String?
+  // Número de comprobante/transacción que la IA extrae del recibo (pedido
+  // explícito 2026-08-27) — no se deja confirmar el pago hasta que tanto el
+  // monto como este número se hayan podido leer, ver proof/route.ts.
+  proofNumber String?
   completedAt DateTime?
 
   // El admin confirma que ya transfirió a una cuenta propia sin necesitar
@@ -2957,6 +2961,10 @@ model PayrollIessTransfer {
 
   proofUrl    String?
   proofName   String?
+  // Número de comprobante/transacción que la IA extrae del recibo (pedido
+  // explícito 2026-08-27) — no se deja confirmar el pago hasta que tanto el
+  // monto como este número se hayan podido leer, ver proof/route.ts.
+  proofNumber String?
   completedAt DateTime?
 
   // Mismo patrón que PayrollTransfer.confirmedWithoutProof — ver ahí.
@@ -3020,6 +3028,11 @@ model PayrollQuincenaRole {
   paidProofUrl        String?
   paidProofName       String?
   paidProofReadAmount Float?
+  // Número de comprobante/transacción que la IA extrae del recibo (pedido
+  // explícito 2026-08-27) — junto con paidProofReadAmount, ambos deben
+  // coincidir/leerse antes de dejar confirmar el pago, ver
+  // individual-payment/route.ts.
+  paidProofNumber     String?
 
   lineItems PayrollLineItem[]
 

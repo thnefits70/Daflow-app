@@ -34,14 +34,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ rol
 
   try {
     const read = await readIndividualPayrollProof({ proofUrl: parsed.data.proofUrl, actorId: session.user.id });
-    const matches = read.readAmount !== null && Math.abs(read.readAmount - expectedAmount) < 0.01;
+    const amountMatches = read.readAmount !== null && Math.abs(read.readAmount - expectedAmount) < 0.01;
+    const matches = amountMatches && !!read.proofNumber;
     const note =
       read.readAmount === null
         ? "No se pudo leer el monto con claridad en el comprobante — subí una imagen más clara."
-        : matches
-        ? `Coincide — el comprobante muestra $${read.readAmount.toFixed(2)}.`
-        : `Atención — el comprobante muestra $${read.readAmount.toFixed(2)}, pero a esta persona le corresponden $${expectedAmount.toFixed(2)}.`;
-    return NextResponse.json({ readAmount: read.readAmount, matches, note });
+        : !amountMatches
+        ? `Atención — el comprobante muestra $${read.readAmount.toFixed(2)}, pero a esta persona le corresponden $${expectedAmount.toFixed(2)}.`
+        : !read.proofNumber
+        ? `El monto coincide ($${read.readAmount.toFixed(2)}), pero no se pudo leer el número de comprobante — subí una imagen donde se vea con claridad.`
+        : `Coincide — el comprobante muestra $${read.readAmount.toFixed(2)}, N° de comprobante ${read.proofNumber}.`;
+    return NextResponse.json({ readAmount: read.readAmount, proofNumber: read.proofNumber, matches, note });
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : "No se pudo verificar el comprobante." }, { status: 500 });
   }
