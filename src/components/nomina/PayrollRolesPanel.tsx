@@ -592,6 +592,11 @@ export function PayrollRolesPanel({ canEdit, canProposeFixedBonus, canApproveFix
 
   const publishLabel = isEndOfMonthQuincena(period) ? "Generar rol de pago" : "Publicar";
   const pendingPayoutCount = detail?.roles.filter((r) => !r.paidAt).length ?? 0;
+  // Pedido explícito del usuario 2026-08-27: los que todavía no tienen
+  // comprobante confirmado aparecen primero, para no tener que scrollear
+  // buscándolos — sort estable, así que dentro de cada grupo se mantiene el
+  // orden alfabético que ya devuelve la API.
+  const sortedRoles = detail ? [...detail.roles].sort((a, b) => (a.paidAt ? 1 : 0) - (b.paidAt ? 1 : 0)) : [];
 
   function loadDetail() {
     fetch(`/api/payroll/periods/${period}`).then((r) => (r.ok ? r.json() : null)).then(setDetail);
@@ -803,9 +808,9 @@ export function PayrollRolesPanel({ canEdit, canProposeFixedBonus, canApproveFix
                 <div className="text-[11px] font-semibold uppercase tracking-wide text-steel mb-0.5">Resumen por colaborador</div>
                 <div className="text-[13px] font-bold mb-2">{periodLabel(period)}</div>
                 <div className="flex flex-col gap-1">
-                  {detail.roles.map((r) => (
+                  {sortedRoles.map((r) => (
                     <div key={r.id} className="flex justify-between text-[12.5px]">
-                      <span className="text-ink">{r.employee.name}</span>
+                      <span className={r.paidAt ? "text-ink" : "text-gold font-semibold"} style={r.paidAt ? undefined : { color: "#D9A441" }}>{r.employee.name}</span>
                       <span className="font-semibold tabular-nums">{money(r.netTotal)}</span>
                     </div>
                   ))}
@@ -817,7 +822,7 @@ export function PayrollRolesPanel({ canEdit, canProposeFixedBonus, canApproveFix
               </div>
 
               <div className="flex flex-col gap-2.5">
-                {detail.roles.map((r, i) => (
+                {sortedRoles.map((r, i) => (
                   <RoleCard
                     key={r.id}
                     role={r}
