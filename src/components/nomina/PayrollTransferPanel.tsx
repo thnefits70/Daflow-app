@@ -5,7 +5,6 @@ import { Landmark, ChevronDown, Send } from "lucide-react";
 import { ProofPreview } from "@/components/shared/ProofPreview";
 import { usePasteFile } from "@/lib/usePasteFile";
 import { uploadFile } from "@/lib/uploadFile";
-import { IESS_GOVERNMENT_FLAT_FEE } from "@/lib/payrollCalc";
 
 type BankAccount = {
   bankName: string;
@@ -52,20 +51,27 @@ export type IessBreakdownRow = {
   iessDeclaredSalary: number;
   employeePortion: number;
   employerPortion: number;
+  partTimePremium: number;
   companyAbsorbsIess: boolean;
+  iessPartTime: boolean;
 };
 
 // Confirmado 2026-08-27: pedido explícito del usuario — quería ver cuánto
 // de lo que se paga al IESS lo asume Provedix vs. cuánto asume cada
 // colaboradora, con nombre y apellido en los casos donde Provedix cubre el
-// 100% (hoy Marcos y Dexi — ver companyAbsorbsIess). Colapsado por default
+// 100% (hoy Marcos y Dexi — ver companyAbsorbsIess), más la prima de
+// salud/maternidad (4.41%) de quienes están a tiempo parcial — corregido el
+// mismo día: no es una tarifa fija del gobierno, aplica solo a "mitad de
+// sueldo" (iessPartTime), nunca a los de 30 días. Colapsado por default
 // para no saturar la tarjeta chica del resumen.
 function IessBreakdownBlock({ rows }: { rows: IessBreakdownRow[] }) {
   const [show, setShow] = useState(false);
   const absorbedRows = rows.filter((r) => r.companyAbsorbsIess);
   const regularRows = rows.filter((r) => !r.companyAbsorbsIess);
+  const partTimeRows = rows.filter((r) => r.iessPartTime);
   const employerTotal = rows.reduce((s, r) => s + r.employerPortion, 0);
   const regularEmployeeTotal = regularRows.reduce((s, r) => s + r.employeePortion, 0);
+  const partTimeTotal = partTimeRows.reduce((s, r) => s + r.partTimePremium, 0);
 
   return (
     <div className="mb-2.5">
@@ -96,10 +102,12 @@ function IessBreakdownBlock({ rows }: { rows: IessBreakdownRow[] }) {
               <span className="font-semibold tabular-nums">{money(r.employeePortion)}</span>
             </div>
           ))}
-          <div className="flex justify-between pt-1.5 border-t border-rule">
-            <span className="text-steel">Tarifa adicional del gobierno</span>
-            <span className="font-semibold tabular-nums">{money(IESS_GOVERNMENT_FLAT_FEE)}</span>
-          </div>
+          {partTimeTotal > 0 && (
+            <div className="flex justify-between pt-1.5 border-t border-rule">
+              <span className="text-steel">Prima salud/maternidad 4.41% — tiempo parcial ({partTimeRows.map((r) => r.employeeName).join(", ")})</span>
+              <span className="font-semibold tabular-nums">{money(partTimeTotal)}</span>
+            </div>
+          )}
         </div>
       )}
     </div>

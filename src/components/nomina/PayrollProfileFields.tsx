@@ -7,6 +7,7 @@ type Profile = {
   realSalary: number | null;
   iessDeclaredSalary: number | null;
   companyAbsorbsIess: boolean;
+  iessPartTime: boolean;
   canLogOvertimeHours: boolean;
   usesFullLegalOvertimeSchedule: boolean;
   monthlySalaryOnly: boolean;
@@ -47,7 +48,7 @@ export function PayrollProfileFields({ userId, canEdit }: { userId: string; canE
     });
   }, [userId]);
 
-  async function save(patch: Partial<{ realSalary: number; iessDeclaredSalary: number; companyAbsorbsIess: boolean; canLogOvertimeHours: boolean; usesFullLegalOvertimeSchedule: boolean; monthlySalaryOnly: boolean }>) {
+  async function save(patch: Partial<{ realSalary: number; iessDeclaredSalary: number; companyAbsorbsIess: boolean; iessPartTime: boolean; canLogOvertimeHours: boolean; usesFullLegalOvertimeSchedule: boolean; monthlySalaryOnly: boolean }>) {
     setSaving(true);
     const res = await fetch(`/api/payroll/profile/${userId}`, {
       method: "PATCH",
@@ -101,6 +102,13 @@ export function PayrollProfileFields({ userId, canEdit }: { userId: string; canE
         hint="No se le descuenta nada de IESS en su rol (hoy: Andrés y Marcos)."
         value={profile.companyAbsorbsIess}
         onChange={(v) => save({ companyAbsorbsIess: v })}
+        disabled={!canEdit}
+      />
+      <ToggleRow
+        label="Registrado a tiempo parcial en el IESS"
+        hint="Suma la prima de salud/maternidad (4.41% del sueldo declarado) al total de IESS a pagar — no se le descuenta a la persona (hoy: quienes declaran mitad de sueldo)."
+        value={profile.iessPartTime}
+        onChange={(v) => save({ iessPartTime: v })}
         disabled={!canEdit}
       />
       <ToggleRow

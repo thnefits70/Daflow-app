@@ -19,11 +19,15 @@ export const IESS_RATE = 0.0945;
 // importar quién "asuma" cada parte en el rol individual.
 export const IESS_EMPLOYER_RATE = 0.1115;
 
-// Confirmado 2026-08-27: tarifa fija mensual que el gobierno agregó a la
-// planilla de IESS de la empresa (el usuario la ve en su propia planilla) —
-// no depende de cuántos colaboradores tengan IESS declarado ni de sus
-// sueldos, se suma una sola vez por período de fin de mes.
-export const IESS_GOVERNMENT_FLAT_FEE = 53.15;
+// Confirmado 2026-08-27: corregido el mismo día — NO es una tarifa fija.
+// El IESS cobra una prima extra de salud/maternidad del 4.41% del sueldo
+// declarado, pero SOLO a quienes están registrados a tiempo parcial (en la
+// planilla real aparecen sin los 30 días completos — hoy quienes declaran
+// "mitad de sueldo"). Se activa persona por persona con
+// PayrollProfile.iessPartTime (igual que companyAbsorbsIess) — ver
+// iessBreakdownFromRoles en payroll.ts. Nunca se descuenta a la persona,
+// solo se suma al total agregado que se transfiere para pagar el IESS.
+export const IESS_PART_TIME_RATE = 0.0441;
 
 // Confirmado 2026-08-26: label exacto de la línea automática de IESS (ver
 // buildAutomaticLineItems en payroll.ts) — se usa como identificador para

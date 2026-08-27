@@ -2755,6 +2755,17 @@ model PayrollProfile {
   // empresa lo sigue pagando por su lado.
   companyAbsorbsIess Boolean @default(false)
 
+  // Confirmado 2026-08-27: pedido explícito del usuario, corrigiendo la
+  // tarifa fija que se había asumido antes — el IESS cobra una prima extra
+  // de salud/maternidad (IESS_PART_TIME_RATE = 4.41%, ver payrollCalc.ts)
+  // SOLO a quienes están registrados a tiempo parcial (en la planilla real
+  // aparecen sin los 30 días completos). Hoy son quienes declaran "mitad de
+  // sueldo" — Andrés y Marcos, que sí están a 30 días, NO la tienen. Se
+  // activa persona por persona (mismo patrón que companyAbsorbsIess) y
+  // nunca se descuenta a la persona — solo se suma al total agregado que se
+  // transfiere para pagar el IESS (ver iessBreakdownFromRoles en payroll.ts).
+  iessPartTime Boolean @default(false)
+
   // Habilita que le aparezca la pantalla de registrar horas extra — apagado
   // por defecto, se prende persona por persona (hoy Inventario y
   // Fulfillment).

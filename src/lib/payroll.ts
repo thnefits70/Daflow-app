@@ -15,7 +15,7 @@ import {
   monthsBetween,
   IESS_RATE,
   IESS_EMPLOYER_RATE,
-  IESS_GOVERNMENT_FLAT_FEE,
+  IESS_PART_TIME_RATE,
   IESS_LINE_ITEM_LABEL,
 } from "@/lib/payrollCalc";
 import { getMonthDispatchSummary, getAchievedTier, CEO_BONUS_AMOUNTS, CEO_BONUS_LABELS } from "@/lib/commissionTiers";
@@ -351,49 +351,57 @@ export type IessBreakdownRow = {
   iessDeclaredSalary: number;
   employeePortion: number; // 9.45% — lo que le correspondería descontar a la persona
   employerPortion: number; // 11.15% — aporte patronal, siempre 100% de Provedix
+  partTimePremium: number; // 4.41% salud/maternidad — solo si iessPartTime, siempre 100% de Provedix
   companyAbsorbsIess: boolean; // si es true, Provedix también asume el employeePortion
+  iessPartTime: boolean; // si es true, se suma el partTimePremium
 };
 
 type RoleForIess = {
   employeeId: string;
-  employee: { name: string; payrollProfile: { iessDeclaredSalary: number | null; companyAbsorbsIess: boolean } | null };
+  employee: { name: string; payrollProfile: { iessDeclaredSalary: number | null; companyAbsorbsIess: boolean; iessPartTime: boolean } | null };
 };
 
 // Confirmado 2026-08-27: pedido explícito del usuario — desglose real de lo
 // que se le debe al IESS por cada colaborador con sueldo declarado, sin
 // importar si a la persona se le descontó su parte o si Provedix la asumió
-// (ver companyAbsorbsIess). El aporte patronal (IESS_EMPLOYER_RATE) NUNCA
-// aparece en el rol individual de nadie — es un costo aparte de la empresa,
-// solo visible acá, en el total agregado del período.
+// (ver companyAbsorbsIess). El aporte patronal (IESS_EMPLOYER_RATE) y la
+// prima de tiempo parcial (IESS_PART_TIME_RATE) NUNCA aparecen en el rol
+// individual de nadie — son costos aparte de la empresa, solo visibles
+// acá, en el total agregado del período.
 export function iessBreakdownFromRoles(roles: RoleForIess[]): IessBreakdownRow[] {
   return roles
     .filter((r) => !!r.employee.payrollProfile?.iessDeclaredSalary)
     .map((r) => {
       const declared = r.employee.payrollProfile!.iessDeclaredSalary!;
+      const partTime = r.employee.payrollProfile!.iessPartTime;
       return {
         employeeId: r.employeeId,
         employeeName: r.employee.name,
         iessDeclaredSalary: declared,
         employeePortion: declared * IESS_RATE,
         employerPortion: declared * IESS_EMPLOYER_RATE,
+        partTimePremium: partTime ? declared * IESS_PART_TIME_RATE : 0,
         companyAbsorbsIess: r.employee.payrollProfile!.companyAbsorbsIess,
+        iessPartTime: partTime,
       };
     });
 }
 
-// Confirmado 2026-08-26, corregido 2026-08-27 tras un caso real del
-// usuario (Marcos y Dexi, con companyAbsorbsIess=true, no generan ninguna
-// línea "Descuento IESS" en su rol — así que sumar solo esas líneas dejaba
-// afuera lo que Provedix igual le debe al IESS por ellos dos). Ahora suma
-// el aporte personal (9.45%) + patronal (11.15%) de TODOS los colaboradores
-// con IESS declarado, sin importar quién asume cada parte, más la tarifa
-// fija adicional del gobierno (IESS_GOVERNMENT_FLAT_FEE) que aparece en la
-// planilla real. Solo tiene sentido en la quincena de fin de mes (Q2).
+// Confirmado 2026-08-26, corregido 2026-08-27 dos veces el mismo día tras
+// casos reales del usuario: (1) Marcos y Dexi, con companyAbsorbsIess=true,
+// no generan ninguna línea "Descuento IESS" en su rol — así que sumar solo
+// esas líneas dejaba afuera lo que Provedix igual le debe al IESS por ellos
+// dos; (2) lo que se había asumido como "tarifa fija del gobierno" en
+// realidad es una prima de salud/maternidad del 4.41% (IESS_PART_TIME_RATE)
+// que solo aplica a quienes están registrados a TIEMPO PARCIAL (hoy quienes
+// declaran "mitad de sueldo" — ver PayrollProfile.iessPartTime), no a todo
+// el mundo ni como monto fijo. Ahora suma, por cada colaborador con IESS
+// declarado: aporte personal (9.45%) + patronal (11.15%) + prima de tiempo
+// parcial si corresponde — sin importar quién asume cada parte en su rol
+// individual. Solo tiene sentido en la quincena de fin de mes (Q2).
 export function totalIessOwedFromRoles(roles: RoleForIess[]): number {
   const rows = iessBreakdownFromRoles(roles);
-  if (rows.length === 0) return 0;
-  const contributions = rows.reduce((s, r) => s + r.employeePortion + r.employerPortion, 0);
-  return contributions + IESS_GOVERNMENT_FLAT_FEE;
+  return rows.reduce((s, r) => s + r.employeePortion + r.employerPortion + r.partTimePremium, 0);
 }
 
 // Confirmado 2026-08-20, reglas de anticipos definidas con el usuario:
