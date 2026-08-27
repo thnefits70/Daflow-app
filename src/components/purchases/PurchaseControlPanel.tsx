@@ -157,9 +157,17 @@ export function PurchaseControlPanel({
         <>
           <TabGuide storageKey="compras-inventario">
             {canApproveReceiving ? (
-              <>Acá el equipo registra la recepción con foto y video de cada pedido pagado. Como líder, tu aprobación final es la que cierra cada recepción — sin eso, el pedido queda pendiente de revisión.</>
+              <>
+                Acá el equipo registra la recepción con foto y video de cada pedido pagado. Como líder, tu aprobación final es la que cierra cada recepción — sin eso, el pedido queda pendiente de revisión.
+                <br /><br />
+                Si algo llega mal, el equipo te manda un &quot;Informar urgente&quot; con lo que ellos contaron y lo dañado/incompleto/diferente que vieron. Ahí te va a salir cuánto se pidió comprar y cuánto contaron ellos, más una casilla de <strong>Cantidad faltante</strong> ya calculada — la podés dejar igual o cambiarla, y antes de mandarla a Compras te va a pedir confirmar con un clic aparte para que no se envíe por error.
+              </>
             ) : canReceiveTeam ? (
-              <>Registra acá la recepción de cada pedido pagado: foto y video del producto que llega. Daniel da la aprobación final.</>
+              <>
+                Registra acá la recepción de cada pedido pagado: foto y video del producto que llega. Daniel da la aprobación final.
+                <br /><br />
+                Si lo que contaste no coincide con lo cargado, no hace falta que sepas por qué ni cuánto exactamente — usa &quot;🚨 Informar urgente&quot;, pon la cantidad que contaste y marca solo lo que sí podés ver (dañado, producto incompleto o distinto). No necesitás saber cuánto se pidió comprar, eso lo revisa Daniel.
+              </>
             ) : (
               <>Vista de solo lectura de lo que el equipo de Inventario va recibiendo y aprobando. Recibir y aprobar es exclusivo del equipo de Inventario y su líder.</>
             )}
