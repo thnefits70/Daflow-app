@@ -342,6 +342,7 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   feedback: "Feedback semanal/mensual de departamentos",
   roles_de_pago: "Roles de pago",
   nomina_transferencia: "Transferencia de nómina",
+  iess_transferencia: "Transferencia de IESS",
   tasa_devolucion: "Tasa de Devolución General",
   kpi_garantias: "KPI de Garantías",
   pagos_recordatorios: "Pagos recordatorios",
@@ -1335,6 +1336,12 @@ async function getSalaryAdvancePendingItem(href: string): Promise<PendingItem | 
   };
 }
 
+function payrollDestinationLabel(destination: "NAIROBY" | "ADMIN_PRODUBANCO" | "ADMIN_COMPANY"): string {
+  if (destination === "NAIROBY") return "cuenta de Nairoby";
+  if (destination === "ADMIN_PRODUBANCO") return "tu cuenta Produbanco";
+  return "tu cuenta para recibir transferencias";
+}
+
 // Confirmado 2026-08-23: pedido explícito del usuario — 3 días hábiles
 // antes de la fecha de pago de cada quincena (ver payDateForPeriod), tanto
 // el admin como Nairoby ven en Inicio la transferencia real pendiente (el
@@ -1342,32 +1349,37 @@ async function getSalaryAdvancePendingItem(href: string): Promise<PendingItem | 
 // accionable (falta aprobar/transferir, o corrigió algo tras un rechazo);
 // Nairoby la ve de solo lectura, salvo cuando el admin la rechazó — ahí es
 // ella quien tiene que corregir el rol señalado. Desaparece sola en cuanto
-// el admin sube el comprobante (status COMPLETED).
-async function getPayrollTransferPendingItem(forAdmin: boolean, href: string): Promise<PendingItem | null> {
+// el admin sube el comprobante (status COMPLETED). Compartido entre nómina
+// e IESS (agregado 2026-08-27 tras notar que el de IESS nunca se había
+// conectado a Inicio — Nairoby lo enviaba y el admin no se enteraba).
+async function getPayrollTransferKindPendingItem(opts: {
+  forAdmin: boolean;
+  href: string;
+  noun: string;
+  type: string;
+  rows: { status: string; totalAmount: number; destination: "NAIROBY" | "ADMIN_PRODUBANCO" | "ADMIN_COMPANY"; period: { period: string } }[];
+}): Promise<PendingItem | null> {
+  const { forAdmin, href, noun, type, rows } = opts;
   const now = nowInEcuador();
-  const transfers = await prisma.payrollTransfer.findMany({
-    where: { status: { in: ["PENDING_APPROVAL", "REJECTED"] } },
-    include: { period: { select: { period: true } } },
-  });
 
-  for (const t of transfers) {
+  for (const t of rows) {
     const payDate = payDateForPeriod(t.period.period);
     if (now < businessDaysBefore(payDate, 3)) continue;
 
     const overdue = forAdmin ? now >= payDate : t.status === "REJECTED";
-    const acctLabel = t.destination === "NAIROBY" ? "cuenta de Nairoby" : "tu cuenta Produbanco";
+    const acctLabel = payrollDestinationLabel(t.destination);
     const quincenaLabel = `${isEndOfMonthQuincena(t.period.period) ? "Fin de mes" : "Quincena"} · ${formatMonthLabel(monthOfPeriod(t.period.period))}`;
 
     const label = forAdmin
       ? t.status === "REJECTED"
-        ? "Rechazaste la transferencia de nómina — falta que Nairoby corrija"
-        : `Transferir nómina a ${acctLabel}`
+        ? `Rechazaste la transferencia de ${noun} — falta que Nairoby corrija`
+        : `Transferir ${noun} a ${acctLabel}`
       : t.status === "REJECTED"
-        ? "El admin rechazó la transferencia de nómina — corregí el rol señalado"
-        : "Transferencia de nómina — esperando aprobación del admin";
+        ? `El admin rechazó la transferencia de ${noun} — corregí el rol señalado`
+        : `Transferencia de ${noun} — esperando aprobación del admin`;
 
     return {
-      type: "nomina_transferencia",
+      type,
       icon: "💸",
       label,
       meta: `${quincenaLabel} · $${t.totalAmount.toFixed(2)}${overdue ? " · atrasado" : ""}`,
@@ -1376,6 +1388,22 @@ async function getPayrollTransferPendingItem(forAdmin: boolean, href: string): P
     };
   }
   return null;
+}
+
+async function getPayrollTransferPendingItem(forAdmin: boolean, href: string): Promise<PendingItem | null> {
+  const rows = await prisma.payrollTransfer.findMany({
+    where: { status: { in: ["PENDING_APPROVAL", "REJECTED"] } },
+    include: { period: { select: { period: true } } },
+  });
+  return getPayrollTransferKindPendingItem({ forAdmin, href, noun: "nómina", type: "nomina_transferencia", rows });
+}
+
+async function getPayrollIessTransferPendingItem(forAdmin: boolean, href: string): Promise<PendingItem | null> {
+  const rows = await prisma.payrollIessTransfer.findMany({
+    where: { status: { in: ["PENDING_APPROVAL", "REJECTED"] } },
+    include: { period: { select: { period: true } } },
+  });
+  return getPayrollTransferKindPendingItem({ forAdmin, href, noun: "IESS", type: "iess_transferencia", rows });
 }
 
 // Confirmado 2026-08-18: pedido explícito del usuario — si un descuento por
@@ -1751,7 +1779,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     const comDept = await prisma.department.findUnique({ where: { code: "COM" }, select: { id: true } });
     const comPaymentsHref = comDept ? `/admin/dept/${comDept.id}?tab=compras&ptab=finanzas` : "/admin";
     const comCreditsHref = comDept ? `/admin/dept/${comDept.id}?tab=compras&ptab=urgentes` : "/admin";
-    const [feedbackItems, recognitionItem, pettyCashLow, pettyCashUnconfirmed, adminPaymentsItem, purchaseMerchandiseItem, purchaseShippingItem, purchaseCreditsItem, overtimeApprovalItem, commissionBonusApprovalItem, salaryAdvanceItem, managementDeductionItem, personalPurchaseFinanceItem, personalPurchaseTransferConfirmItem, personalPurchaseTransferCloseItem, personalPurchasePaymentWatchItem, payrollTransferItem, birthdayItems] = await Promise.all([
+    const [feedbackItems, recognitionItem, pettyCashLow, pettyCashUnconfirmed, adminPaymentsItem, purchaseMerchandiseItem, purchaseShippingItem, purchaseCreditsItem, overtimeApprovalItem, commissionBonusApprovalItem, salaryAdvanceItem, managementDeductionItem, personalPurchaseFinanceItem, personalPurchaseTransferConfirmItem, personalPurchaseTransferCloseItem, personalPurchasePaymentWatchItem, payrollTransferItem, payrollIessTransferItem, birthdayItems] = await Promise.all([
       getFeedbackPendingItems(),
       getRecognitionAdminPendingItem("/admin/colaborador-destacado"),
       getPettyCashLowBalanceItems(financeHref),
@@ -1769,6 +1797,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       getPersonalPurchaseTransferClosePendingItem("/admin/nomina?tab=pagos&ptab=comprasfinanzas"),
       getPersonalPurchasePaymentWatchItem("/admin/nomina?tab=pagos&ptab=comprasfinanzas"),
       getPayrollTransferPendingItem(true, "/admin/nomina?tab=pagos&ptab=roles"),
+      getPayrollIessTransferPendingItem(true, "/admin/nomina?tab=pagos&ptab=roles"),
       getUpcomingBirthdayPendingItems("/admin/nomina"),
     ]);
     const items = [
@@ -1789,6 +1818,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       ...(personalPurchaseTransferCloseItem ? [personalPurchaseTransferCloseItem] : []),
       ...(personalPurchasePaymentWatchItem ? [personalPurchasePaymentWatchItem] : []),
       ...(payrollTransferItem ? [payrollTransferItem] : []),
+      ...(payrollIessTransferItem ? [payrollIessTransferItem] : []),
       ...birthdayItems,
     ];
     if (items.length === 0) return null;
@@ -1848,7 +1878,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
 
   if (me.leadsDept.code === "FIN") {
     monthly = true;
-    const [payStub, returnRate, warranty, paymentReminders, storeFeedback, pettyCashLow, pettyCashUnconfirmed, purchaseShippingItem, managementDeductionItem, personalPurchaseFinanceItem, personalPurchaseTransferCloseItem, personalPurchasePaymentWatchItem, merchandiseWeeklyVerificationItem, payrollTransferItem] = await Promise.all([
+    const [payStub, returnRate, warranty, paymentReminders, storeFeedback, pettyCashLow, pettyCashUnconfirmed, purchaseShippingItem, managementDeductionItem, personalPurchaseFinanceItem, personalPurchaseTransferCloseItem, personalPurchasePaymentWatchItem, merchandiseWeeklyVerificationItem, payrollTransferItem, payrollIessTransferItem] = await Promise.all([
       getPayStubPendingItem("/area/roles-de-pago"),
       getReturnRatePendingItem("/area/kpis-generales"),
       getWarrantyPendingItem("/area/kpis-generales"),
@@ -1863,6 +1893,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       getPersonalPurchasePaymentWatchItem("/area/nomina?tab=pagos&ptab=comprasfinanzas"),
       getMerchandiseWeeklyWriteOffVerificationPendingItem("/area/reingreso-mercaderia?tab=danos"),
       getPayrollTransferPendingItem(false, "/area/nomina?tab=pagos&ptab=roles"),
+      getPayrollIessTransferPendingItem(false, "/area/nomina?tab=pagos&ptab=roles"),
     ]);
     items.push(...pettyCashLow, ...pettyCashUnconfirmed);
     if (payStub) items.push(payStub);
@@ -1877,6 +1908,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     if (personalPurchaseTransferCloseItem) items.push(personalPurchaseTransferCloseItem);
     if (merchandiseWeeklyVerificationItem) items.push(merchandiseWeeklyVerificationItem);
     if (payrollTransferItem) items.push(payrollTransferItem);
+    if (payrollIessTransferItem) items.push(payrollIessTransferItem);
   }
 
   if (me.leadsDept.trackWeeklyMetric) {
@@ -1963,7 +1995,7 @@ export async function getPossiblePendingTypesForActor(
   const types: string[] = [];
 
   if (actor.isAdmin) {
-    types.push("feedback", "caja_chica_saldo", "caja_chica_confirmacion", "cumpleanos", "compras_creditos_pendientes", "anticipos_aprobacion", "descuentos_sin_aceptar", "compras_personales_precio", "compras_personales_transferencia", "compras_personales_cierre", "nomina_transferencia");
+    types.push("feedback", "caja_chica_saldo", "caja_chica_confirmacion", "cumpleanos", "compras_creditos_pendientes", "anticipos_aprobacion", "descuentos_sin_aceptar", "compras_personales_precio", "compras_personales_transferencia", "compras_personales_cierre", "nomina_transferencia", "iess_transferencia");
   } else {
     const me = await prisma.user.findUnique({
       where: { id: actor.userId },
@@ -1973,7 +2005,7 @@ export async function getPossiblePendingTypesForActor(
 
     types.push("cumpleanos");
     if (me.leadsDept.code === "FIN") {
-      types.push("roles_de_pago", "tasa_devolucion", "kpi_garantias", "pagos_recordatorios", "servicio_postventa", "caja_chica_saldo", "caja_chica_confirmacion", "descuentos_sin_aceptar", "compras_personales_precio", "compras_personales_cierre", "reingreso_mercaderia_verificacion_semanal", "nomina_transferencia");
+      types.push("roles_de_pago", "tasa_devolucion", "kpi_garantias", "pagos_recordatorios", "servicio_postventa", "caja_chica_saldo", "caja_chica_confirmacion", "descuentos_sin_aceptar", "compras_personales_precio", "compras_personales_cierre", "reingreso_mercaderia_verificacion_semanal", "nomina_transferencia", "iess_transferencia");
     }
     if (me.leadsDept.trackWeeklyMetric) types.push("pedidos_despachados");
     if (me.leadsDept.code === "INV") {
