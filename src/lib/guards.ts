@@ -602,12 +602,18 @@ export async function canConfirmPurchaseReceiving() {
 // personas ni un flag delegado nuevo). Sigue excluyendo a admin, mismo
 // criterio que canActOnPurchaseReceiving — la aprobación FINAL (ver esa
 // función más abajo) sigue siendo exclusiva del líder.
+// Corrección 2026-08-27: pedido explícito del usuario — Daniel (el líder) NO
+// recibe mercadería físicamente, solo su equipo. A diferencia de
+// isInventoryTeamMember (que sí incluye al líder, usado para VER la pestaña
+// en canConfirmPurchaseReceiving), acá se chequea solo user.department —
+// deja afuera a Daniel aunque lidere INV, porque su isLeader/leadsDept no
+// cuenta como "trabaja en el área" para efectos de recibir/reportar.
 export async function canReceivePurchasesTeam() {
   const session = await auth();
   if (!session) return false;
   const user = await purchasesUserContext(session.user.id);
   if (!user) return false;
-  return isInventoryTeamMember(user);
+  return user.department?.code === "INV";
 }
 
 // Confirmado 2026-08-18: id de Daniel (líder de Inventario) para avisarle

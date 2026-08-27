@@ -142,7 +142,7 @@ export function SupplierExchangeResolutionInbox({
       {error && <div className="text-red text-[12px]">{error}</div>}
 
       {groups.map(({ batch, items: batchItems }) => (
-        <div key={batch.id} className="flex flex-col gap-2">
+        <div key={batch.id} className="bg-surface border border-rule rounded-md p-3.5 flex flex-col gap-3">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="font-mono text-[11px] font-bold text-teal">{batch.code}</span>
             <span className="text-[12px] font-semibold">{batch.supplier?.name ?? "—"}</span>
@@ -159,9 +159,9 @@ export function SupplierExchangeResolutionInbox({
             </div>
           )}
 
-          <div className="flex flex-col gap-2.5">
+          <div className="flex flex-col divide-y divide-rule">
             {batchItems.map((item) => (
-              <div key={item.id} className="bg-surface border border-rule rounded-md p-3.5">
+              <div key={item.id} className="pt-3 first:pt-0">
                 <div className="flex items-center gap-3">
                   {item.catalogItem?.photos[0] && (
                     // eslint-disable-next-line @next/next/no-img-element

@@ -2,6 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { canActOnMerchandiseOutflow } from "@/lib/guards";
+import { resolveOutflowItemGestorId } from "@/lib/merchandiseOutflow";
 import { PrintButton } from "@/app/rol-del-mes/[id]/PrintButton";
 
 function money(n: number) {
@@ -23,8 +24,6 @@ const DATE_FMT = new Intl.DateTimeFormat("es-EC", { timeZone: "America/Guayaquil
 export default async function CambioProveedorGuiaPage({ params }: { params: Promise<{ batchId: string }> }) {
   const session = await auth();
   if (!session) redirect("/login");
-  const canView = session.user.role === "admin" || (await canActOnMerchandiseOutflow());
-  if (!canView) redirect("/area/workspace");
 
   const { batchId } = await params;
   const batch = await prisma.merchandiseOutflowBatch.findUnique({
@@ -35,13 +34,23 @@ export default async function CambioProveedorGuiaPage({ params }: { params: Prom
       items: {
         include: {
           catalogItem: { select: { name: true } },
-          linkedPurchaseRequest: { select: { requestNumber: true, requestedAt: true, requestedBy: { select: { name: true } } } },
+          linkedPurchaseRequest: { select: { requestNumber: true, requestedAt: true, requestedById: true, requestedBy: { select: { name: true } } } },
         },
         orderBy: { createdAt: "asc" },
       },
     },
   });
   if (!batch || batch.reason !== "CAMBIO_PROVEEDOR" || !batch.submittedAt) notFound();
+
+  // Fix confirmado 2026-08-27 (reportado por el usuario: "Ver guía" no
+  // dejaba entrar) — quien gestiona cada producto (ver
+  // resolveOutflowItemGestorId, típicamente quien pidió esa compra
+  // originalmente, o Bryan de respaldo) también necesita esta guía para
+  // negociar con el proveedor, no solo Daniel/admin.
+  const gestorIds = await Promise.all(batch.items.map((i) => resolveOutflowItemGestorId(i)));
+  const isGestor = gestorIds.includes(session.user.id);
+  const canView = session.user.role === "admin" || (await canActOnMerchandiseOutflow()) || isGestor;
+  if (!canView) redirect("/area/workspace");
 
   const itemsWithCost = batch.items.filter((i) => i.expectedCreditAmount !== null);
   const totalCredit = itemsWithCost.reduce((sum, i) => sum + (i.expectedCreditAmount ?? 0), 0);
