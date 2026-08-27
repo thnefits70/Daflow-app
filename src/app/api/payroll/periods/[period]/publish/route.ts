@@ -7,6 +7,12 @@ import { isEndOfMonthQuincena, monthOfPeriod, computeMonthlyLegalRole } from "@/
 import { notifyOwner } from "@/lib/notifications";
 import { actorName } from "@/lib/actorName";
 
+const MONTH_NAMES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
+function monthLabel(month: string): string {
+  const [y, m] = month.split("-");
+  return `${MONTH_NAMES[Number(m) - 1]} ${y}`;
+}
+
 // Confirmado 2026-08-13: pedido explícito del usuario — al publicar la
 // quincena de fin de mes, se genera de una el "Rol del mes" (MonthlyLegalRole)
 // que sí ve cada colaborador, calculado sobre su sueldo declarado — nunca
@@ -66,7 +72,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ pe
       // el colaborador no vea la diferencia entre lo real y lo declarado.
       const proofMatchesDeclared = role.paidProofUrl && Math.abs(role.netTotal - legal.netTotal) < 0.01;
 
-      await prisma.monthlyLegalRole.create({
+      const monthlyRole = await prisma.monthlyLegalRole.create({
         data: {
           employeeId: role.employeeId,
           month,
@@ -77,6 +83,16 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ pe
             : {}),
         },
       });
+
+      // Pedido explícito del usuario 2026-08-27: cada colaborador se entera
+      // por la campanita (notifyOwner ya guarda la notificación ahí, además
+      // del push) — deliberadamente dice "Pago generado", nunca "rol", para
+      // no exponer esa palabra interna al colaborador.
+      await notifyOwner(role.employeeId, {
+        title: "💰 Pago generado",
+        body: `Ya está disponible tu pago de ${monthLabel(month)}.`,
+        url: `/rol-del-mes/${monthlyRole.id}`,
+      }).catch(() => null);
     }
   }
 
