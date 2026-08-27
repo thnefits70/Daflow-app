@@ -10,7 +10,9 @@ type ItemDTO = {
   declaredName: string | null;
   goodQty: number;
   damagedQty: number;
+  createdAt: string;
   approvedBy: { name: string } | null;
+  justUploadedAt: string | null;
   justUploadedBy: { name: string } | null;
   writeOffBy: { name: string } | null;
 };
@@ -86,11 +88,15 @@ export function HistoryList() {
             </div>
 
             {isOpen && (
-              <div className="flex flex-wrap gap-1.5 mb-2.5 pb-2.5 border-b border-rule">
+              <div className="flex flex-col gap-1 mb-2.5 pb-2.5 border-b border-rule">
                 {b.items.map((i) => (
-                  <span key={i.id} className="text-[11px] text-steel bg-cloud border border-rule rounded px-1.5 py-0.5">
-                    {itemName(i)}
-                  </span>
+                  <div key={i.id} className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-steel bg-cloud border border-rule rounded px-1.5 py-1">
+                    <span className="font-semibold text-ink">{itemName(i)}</span>
+                    <span>· registrado en DAFLOW {fmt(i.createdAt)}</span>
+                    {i.justUploadedAt && (
+                      <span className="text-teal font-semibold">· subido a Just {fmt(i.justUploadedAt)}</span>
+                    )}
+                  </div>
                 ))}
               </div>
             )}

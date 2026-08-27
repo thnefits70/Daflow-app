@@ -70,6 +70,53 @@ function cvKind(cvUrl: string | null, cvName: string | null): "pdf" | "image" | 
   return "other";
 }
 
+// Doble confirmación para no cambiar un permiso por error al hacer scroll o
+// tocar sin querer — el cambio solo se guarda tras un segundo clic explícito.
+function PermToggle({ value, onChange, busy }: { value: boolean; onChange: (v: boolean) => void; busy?: boolean }) {
+  const [pending, setPending] = useState<boolean | null>(null);
+
+  if (pending !== null) {
+    return (
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-[11.5px] text-steel">¿Seguro de guardar?</span>
+        <button
+          type="button"
+          disabled={busy}
+          className="rounded border border-blue bg-blue px-2.5 py-1 text-[11.5px] font-semibold text-white cursor-pointer disabled:opacity-60"
+          onClick={() => {
+            onChange(pending);
+            setPending(null);
+          }}
+        >
+          Sí, guardar
+        </button>
+        <button type="button" className="text-steel text-[11.5px] cursor-pointer" onClick={() => setPending(null)}>
+          Cancelar
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex border border-rule rounded overflow-hidden max-w-[220px]">
+      <button
+        type="button"
+        className={`flex-1 py-1.5 text-[12.5px] font-semibold cursor-pointer ${value ? "bg-blue text-white" : "bg-surface text-steel"}`}
+        onClick={() => !value && setPending(true)}
+      >
+        Sí
+      </button>
+      <button
+        type="button"
+        className={`flex-1 py-1.5 text-[12.5px] font-semibold cursor-pointer ${!value ? "bg-blue text-white" : "bg-surface text-steel"}`}
+        onClick={() => value && setPending(false)}
+      >
+        No
+      </button>
+    </div>
+  );
+}
+
 
 export function ProfileDetail({
   profile,
@@ -650,22 +697,7 @@ export function ProfileDetail({
               Puede crear y editar documentos visibles para toda la empresa, pero no eliminarlos — eso solo lo
               puedes hacer tú.
             </div>
-            <div className="flex border border-rule rounded overflow-hidden max-w-[220px]">
-              <button
-                type="button"
-                className={`flex-1 py-1.5 text-[12.5px] font-semibold cursor-pointer ${p.canManageLaws ? "bg-blue text-white" : "bg-surface text-steel"}`}
-                onClick={() => save({ canManageLaws: true })}
-              >
-                Sí
-              </button>
-              <button
-                type="button"
-                className={`flex-1 py-1.5 text-[12.5px] font-semibold cursor-pointer ${!p.canManageLaws ? "bg-blue text-white" : "bg-surface text-steel"}`}
-                onClick={() => save({ canManageLaws: false })}
-              >
-                No
-              </button>
-            </div>
+            <PermToggle value={p.canManageLaws} busy={busy} onChange={(v) => save({ canManageLaws: v })} />
           </div>
 
           <div className="bg-cloud border border-rule rounded p-3.5 mt-3.5">
@@ -676,22 +708,7 @@ export function ProfileDetail({
               Puede proponer proveedores nuevos, que quedan &quot;Pendiente&quot; hasta que su líder los apruebe. No
               puede editar ni eliminar.
             </div>
-            <div className="flex border border-rule rounded overflow-hidden max-w-[220px]">
-              <button
-                type="button"
-                className={`flex-1 py-1.5 text-[12.5px] font-semibold cursor-pointer ${p.canAddSuppliers ? "bg-blue text-white" : "bg-surface text-steel"}`}
-                onClick={() => save({ canAddSuppliers: true })}
-              >
-                Sí
-              </button>
-              <button
-                type="button"
-                className={`flex-1 py-1.5 text-[12.5px] font-semibold cursor-pointer ${!p.canAddSuppliers ? "bg-blue text-white" : "bg-surface text-steel"}`}
-                onClick={() => save({ canAddSuppliers: false })}
-              >
-                No
-              </button>
-            </div>
+            <PermToggle value={p.canAddSuppliers} busy={busy} onChange={(v) => save({ canAddSuppliers: v })} />
           </div>
 
           <div className="bg-cloud border border-rule rounded p-3.5 mt-3.5">
@@ -701,22 +718,7 @@ export function ProfileDetail({
             <div className="text-[11px] text-steel mb-2">
               Puede cargar la cuenta bancaria de un proveedor (al crearlo, o después desde su ficha en el directorio) — solo agregar, nunca editar ni eliminar. No incluye ver las cuentas ya registradas de otros proveedores — eso sigue siendo exclusivo de administrador.
             </div>
-            <div className="flex border border-rule rounded overflow-hidden max-w-[220px]">
-              <button
-                type="button"
-                className={`flex-1 py-1.5 text-[12.5px] font-semibold cursor-pointer ${p.canAddSupplierBankAccounts ? "bg-blue text-white" : "bg-surface text-steel"}`}
-                onClick={() => save({ canAddSupplierBankAccounts: true })}
-              >
-                Sí
-              </button>
-              <button
-                type="button"
-                className={`flex-1 py-1.5 text-[12.5px] font-semibold cursor-pointer ${!p.canAddSupplierBankAccounts ? "bg-blue text-white" : "bg-surface text-steel"}`}
-                onClick={() => save({ canAddSupplierBankAccounts: false })}
-              >
-                No
-              </button>
-            </div>
+            <PermToggle value={p.canAddSupplierBankAccounts} busy={busy} onChange={(v) => save({ canAddSupplierBankAccounts: v })} />
           </div>
 
           <div className="bg-cloud border border-rule rounded p-3.5 mt-3.5">
@@ -726,22 +728,7 @@ export function ProfileDetail({
             <div className="text-[11px] text-steel mb-2">
               La herramienta de solicitudes de compra (catálogo, cotizaciones, aprobar, facturar) — sin necesitar ser líder formal de Compras o Finanzas. NO incluye confirmar que llegó la mercadería — eso es exclusivo del líder de Inventario. Aparece en su propia &quot;Mi área de trabajo&quot;.
             </div>
-            <div className="flex border border-rule rounded overflow-hidden max-w-[220px]">
-              <button
-                type="button"
-                className={`flex-1 py-1.5 text-[12.5px] font-semibold cursor-pointer ${p.canManagePurchases ? "bg-blue text-white" : "bg-surface text-steel"}`}
-                onClick={() => save({ canManagePurchases: true })}
-              >
-                Sí
-              </button>
-              <button
-                type="button"
-                className={`flex-1 py-1.5 text-[12.5px] font-semibold cursor-pointer ${!p.canManagePurchases ? "bg-blue text-white" : "bg-surface text-steel"}`}
-                onClick={() => save({ canManagePurchases: false })}
-              >
-                No
-              </button>
-            </div>
+            <PermToggle value={p.canManagePurchases} busy={busy} onChange={(v) => save({ canManagePurchases: v })} />
           </div>
 
           <div className="bg-cloud border border-rule rounded p-3.5 mt-3.5">
@@ -751,22 +738,7 @@ export function ProfileDetail({
             <div className="text-[11px] text-steel mb-2">
               Solicitudes de pago administrativos (IESS, sueldos, alquiler, etc.) de Finanzas — sin necesitar ser líder formal de ese departamento.
             </div>
-            <div className="flex border border-rule rounded overflow-hidden max-w-[220px]">
-              <button
-                type="button"
-                className={`flex-1 py-1.5 text-[12.5px] font-semibold cursor-pointer ${p.canManageAdminPayments ? "bg-blue text-white" : "bg-surface text-steel"}`}
-                onClick={() => save({ canManageAdminPayments: true })}
-              >
-                Sí
-              </button>
-              <button
-                type="button"
-                className={`flex-1 py-1.5 text-[12.5px] font-semibold cursor-pointer ${!p.canManageAdminPayments ? "bg-blue text-white" : "bg-surface text-steel"}`}
-                onClick={() => save({ canManageAdminPayments: false })}
-              >
-                No
-              </button>
-            </div>
+            <PermToggle value={p.canManageAdminPayments} busy={busy} onChange={(v) => save({ canManageAdminPayments: v })} />
           </div>
 
           {canViewPayroll && <PayrollProfileFields userId={p.id} canEdit={canEditPayroll} />}
@@ -778,22 +750,7 @@ export function ProfileDetail({
             <div className="text-[11px] text-steel mb-2">
               Confirmar que recibió una recarga y registrar sus propios desembolsos — sin necesitar ser líder formal de Finanzas. Aparece en su propia &quot;Mi área de trabajo&quot;.
             </div>
-            <div className="flex border border-rule rounded overflow-hidden max-w-[220px]">
-              <button
-                type="button"
-                className={`flex-1 py-1.5 text-[12.5px] font-semibold cursor-pointer ${p.canManagePettyCashSecundaria ? "bg-blue text-white" : "bg-surface text-steel"}`}
-                onClick={() => save({ canManagePettyCashSecundaria: true })}
-              >
-                Sí
-              </button>
-              <button
-                type="button"
-                className={`flex-1 py-1.5 text-[12.5px] font-semibold cursor-pointer ${!p.canManagePettyCashSecundaria ? "bg-blue text-white" : "bg-surface text-steel"}`}
-                onClick={() => save({ canManagePettyCashSecundaria: false })}
-              >
-                No
-              </button>
-            </div>
+            <PermToggle value={p.canManagePettyCashSecundaria} busy={busy} onChange={(v) => save({ canManagePettyCashSecundaria: v })} />
           </div>
 
           <div className="bg-cloud border border-rule rounded p-3.5 mt-3.5">
@@ -803,22 +760,7 @@ export function ProfileDetail({
             <div className="text-[11px] text-steel mb-2">
               Ventas por fuera de Dropi/Rocket (hoy Heidy, Jariel, Yair, Marcos) — declara producto, cantidad y precio para que Bryan lo apruebe. Aparece en su propia &quot;Mi área de trabajo&quot;.
             </div>
-            <div className="flex border border-rule rounded overflow-hidden max-w-[220px]">
-              <button
-                type="button"
-                className={`flex-1 py-1.5 text-[12.5px] font-semibold cursor-pointer ${p.canDeclareExternalSales ? "bg-blue text-white" : "bg-surface text-steel"}`}
-                onClick={() => save({ canDeclareExternalSales: true })}
-              >
-                Sí
-              </button>
-              <button
-                type="button"
-                className={`flex-1 py-1.5 text-[12.5px] font-semibold cursor-pointer ${!p.canDeclareExternalSales ? "bg-blue text-white" : "bg-surface text-steel"}`}
-                onClick={() => save({ canDeclareExternalSales: false })}
-              >
-                No
-              </button>
-            </div>
+            <PermToggle value={p.canDeclareExternalSales} busy={busy} onChange={(v) => save({ canDeclareExternalSales: v })} />
           </div>
 
           <div className="bg-cloud border border-rule rounded p-3.5 mt-3.5">
@@ -828,22 +770,7 @@ export function ProfileDetail({
             <div className="text-[11px] text-steel mb-2">
               Ve cada llegada a bodega y debe confirmar cuando ya subió fotos reales brandeadas y el video publicitario en Drive (Provedix o Importadora Damián, según corresponda).
             </div>
-            <div className="flex border border-rule rounded overflow-hidden max-w-[220px]">
-              <button
-                type="button"
-                className={`flex-1 py-1.5 text-[12.5px] font-semibold cursor-pointer ${p.canConfirmMarketingDesign ? "bg-blue text-white" : "bg-surface text-steel"}`}
-                onClick={() => save({ canConfirmMarketingDesign: true })}
-              >
-                Sí
-              </button>
-              <button
-                type="button"
-                className={`flex-1 py-1.5 text-[12.5px] font-semibold cursor-pointer ${!p.canConfirmMarketingDesign ? "bg-blue text-white" : "bg-surface text-steel"}`}
-                onClick={() => save({ canConfirmMarketingDesign: false })}
-              >
-                No
-              </button>
-            </div>
+            <PermToggle value={p.canConfirmMarketingDesign} busy={busy} onChange={(v) => save({ canConfirmMarketingDesign: v })} />
           </div>
 
           <div className="bg-cloud border border-rule rounded p-3.5 mt-3.5">
@@ -853,21 +780,8 @@ export function ProfileDetail({
             <div className="text-[11px] text-steel mb-2">
               Ve cada llegada a bodega y debe confirmar cuando ya verificó stock, precio de venta, descripción y Dropi.
             </div>
-            <div className="flex border border-rule rounded overflow-hidden max-w-[220px] mb-2.5">
-              <button
-                type="button"
-                className={`flex-1 py-1.5 text-[12.5px] font-semibold cursor-pointer ${p.canConfirmMarketingAdvisor ? "bg-blue text-white" : "bg-surface text-steel"}`}
-                onClick={() => save({ canConfirmMarketingAdvisor: true })}
-              >
-                Sí
-              </button>
-              <button
-                type="button"
-                className={`flex-1 py-1.5 text-[12.5px] font-semibold cursor-pointer ${!p.canConfirmMarketingAdvisor ? "bg-blue text-white" : "bg-surface text-steel"}`}
-                onClick={() => save({ canConfirmMarketingAdvisor: false })}
-              >
-                No
-              </button>
+            <div className="mb-2.5">
+              <PermToggle value={p.canConfirmMarketingAdvisor} busy={busy} onChange={(v) => save({ canConfirmMarketingAdvisor: v })} />
             </div>
             {p.canConfirmMarketingAdvisor && (
               <div>
@@ -889,22 +803,7 @@ export function ProfileDetail({
             <div className="text-[11px] text-steel mb-2">
               Acceso puntual a esta sección de Análisis de Mercado, aunque no sea el líder del área.
             </div>
-            <div className="flex border border-rule rounded overflow-hidden max-w-[220px]">
-              <button
-                type="button"
-                className={`flex-1 py-1.5 text-[12.5px] font-semibold cursor-pointer ${p.canManageStoreFeedback ? "bg-blue text-white" : "bg-surface text-steel"}`}
-                onClick={() => save({ canManageStoreFeedback: true })}
-              >
-                Sí
-              </button>
-              <button
-                type="button"
-                className={`flex-1 py-1.5 text-[12.5px] font-semibold cursor-pointer ${!p.canManageStoreFeedback ? "bg-blue text-white" : "bg-surface text-steel"}`}
-                onClick={() => save({ canManageStoreFeedback: false })}
-              >
-                No
-              </button>
-            </div>
+            <PermToggle value={p.canManageStoreFeedback} busy={busy} onChange={(v) => save({ canManageStoreFeedback: v })} />
           </div>
 
           <div className="bg-cloud border border-rule rounded p-3.5 mt-3.5">
@@ -915,22 +814,7 @@ export function ProfileDetail({
               Ve el detalle completo y puede contactar por WhatsApp, pero no puede crear, editar ni eliminar nada.
               Se ignora si ya tiene el permiso de gestionar arriba.
             </div>
-            <div className="flex border border-rule rounded overflow-hidden max-w-[220px]">
-              <button
-                type="button"
-                className={`flex-1 py-1.5 text-[12.5px] font-semibold cursor-pointer ${p.canViewStoreFeedback ? "bg-blue text-white" : "bg-surface text-steel"}`}
-                onClick={() => save({ canViewStoreFeedback: true })}
-              >
-                Sí
-              </button>
-              <button
-                type="button"
-                className={`flex-1 py-1.5 text-[12.5px] font-semibold cursor-pointer ${!p.canViewStoreFeedback ? "bg-blue text-white" : "bg-surface text-steel"}`}
-                onClick={() => save({ canViewStoreFeedback: false })}
-              >
-                No
-              </button>
-            </div>
+            <PermToggle value={p.canViewStoreFeedback} busy={busy} onChange={(v) => save({ canViewStoreFeedback: v })} />
           </div>
 
           <div className="bg-cloud border border-rule rounded p-3.5 mt-3.5">
@@ -940,22 +824,7 @@ export function ProfileDetail({
             <div className="text-[11px] text-steel mb-2">
               Su líder deja de verla en la lista para calificar y nunca se generan evaluaciones nuevas para ella. Las evaluaciones de meses anteriores no se borran.
             </div>
-            <div className="flex border border-rule rounded overflow-hidden max-w-[220px]">
-              <button
-                type="button"
-                className={`flex-1 py-1.5 text-[12.5px] font-semibold cursor-pointer ${p.excludeFromRecognition ? "bg-blue text-white" : "bg-surface text-steel"}`}
-                onClick={() => save({ excludeFromRecognition: true })}
-              >
-                Sí
-              </button>
-              <button
-                type="button"
-                className={`flex-1 py-1.5 text-[12.5px] font-semibold cursor-pointer ${!p.excludeFromRecognition ? "bg-blue text-white" : "bg-surface text-steel"}`}
-                onClick={() => save({ excludeFromRecognition: false })}
-              >
-                No
-              </button>
-            </div>
+            <PermToggle value={p.excludeFromRecognition} busy={busy} onChange={(v) => save({ excludeFromRecognition: v })} />
           </div>
         </div>
       </div>
