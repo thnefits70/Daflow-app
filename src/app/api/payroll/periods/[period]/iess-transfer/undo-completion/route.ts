@@ -17,7 +17,16 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ per
 
   const updated = await prisma.payrollIessTransfer.update({
     where: { id: payrollPeriod.iessTransfer.id },
-    data: { status: "APPROVED", proofUrl: null, proofName: null, completedAt: null },
+    data: {
+      status: "APPROVED",
+      proofUrl: null,
+      proofName: null,
+      completedAt: null,
+      confirmedWithoutProof: false,
+      confirmedWithoutProofNote: null,
+      confirmedWithoutProofAt: null,
+      confirmedWithoutProofById: null,
+    },
   });
 
   return NextResponse.json(updated);

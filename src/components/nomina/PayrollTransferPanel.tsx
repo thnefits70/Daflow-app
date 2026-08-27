@@ -26,7 +26,15 @@ export type Transfer = {
   proofName: string | null;
   completedAt: string | null;
   account: BankAccount | null;
+  confirmedWithoutProof: boolean;
+  confirmedWithoutProofNote: string | null;
+  confirmedWithoutProofAt: string | null;
+  confirmedWithoutProofBy: { name: string } | null;
 };
+
+function fmtDateTime(iso: string) {
+  return new Date(iso).toLocaleString("es-EC", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+}
 
 function money(n: number) {
   return `$${n.toFixed(2)}`;
@@ -386,6 +394,80 @@ function SendTotalPrompt({
   );
 }
 
+// Pedido explícito del usuario 2026-08-27: cuando la cuenta destino es
+// propia (ADMIN_COMPANY / ADMIN_PRODUBANCO), pedir un comprobante de una
+// transferencia que se hizo a sí mismo es fricción sin sentido. Esta es la
+// alternativa al ProofUploader — doble clic (revela un paso de confirmación
+// antes de ejecutar, igual que los toggles de permisos en la ficha de
+// empleado) más un comentario opcional, para no perder del todo el rastro
+// de auditoría que sí da el comprobante.
+function ConfirmWithoutProofButton({ apiBase, onSent }: { apiBase: string; onSent: () => void }) {
+  const [confirming, setConfirming] = useState(false);
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+
+  async function submit() {
+    setBusy(true);
+    setErr("");
+    const res = await fetch(`${apiBase}/confirm-without-proof`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ note: note.trim() || undefined }),
+    });
+    setBusy(false);
+    if (!res.ok) {
+      const data = await res.json().catch(() => null);
+      setErr(data?.error ?? "No se pudo confirmar — intentá de nuevo.");
+      return;
+    }
+    onSent();
+  }
+
+  if (!confirming) {
+    return (
+      <button
+        type="button"
+        className="text-[11.5px] font-semibold text-steel hover:text-ink underline underline-offset-2 cursor-pointer mt-1.5"
+        onClick={() => setConfirming(true)}
+      >
+        Ya está en mi cuenta — confirmar sin comprobante
+      </button>
+    );
+  }
+
+  return (
+    <div className="mt-2 p-2.5 rounded bg-cloud border border-rule">
+      <div className="text-[11.5px] mb-2">¿Seguro que ya transferiste? Esto marca la transferencia como completada sin foto de respaldo, con tu nombre y la hora exacta como constancia.</div>
+      <input
+        className="w-full rounded border border-rule px-2.5 py-1.5 text-[12px] mb-2"
+        placeholder="Comentario opcional (ej. ya estaba en mi cuenta)"
+        maxLength={500}
+        value={note}
+        onChange={(e) => setNote(e.target.value)}
+      />
+      {err && <div className="text-red text-[11.5px] mb-2">{err}</div>}
+      <div className="flex gap-2">
+        <button type="button" disabled={busy} className="rounded border border-teal bg-teal px-3 py-1.5 text-[11.5px] font-bold text-navy cursor-pointer disabled:opacity-60" onClick={submit}>
+          {busy ? "Confirmando…" : "Sí, confirmar transferencia"}
+        </button>
+        <button
+          type="button"
+          disabled={busy}
+          className="text-[11.5px] text-steel cursor-pointer"
+          onClick={() => {
+            setConfirming(false);
+            setNote("");
+            setErr("");
+          }}
+        >
+          Cancelar
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // Confirmado 2026-08-24: pedido explícito del usuario — el orden real es
 // primero pagar, después publicar/entregar el rol a cada colaborador.
 // Nairoby envía el total (suma de "Líquido a pagar" de todos los roles)
@@ -448,7 +530,7 @@ function TransferPanel({
   }
 
   async function undoCompletion() {
-    if (!window.confirm("¿Seguro que el comprobante subido no corresponde? Esto vuelve la transferencia a \"Aprobado — falta transferir\" y borra el comprobante actual.")) return;
+    if (!window.confirm("¿Seguro que esta confirmación fue un error? Esto vuelve la transferencia a \"Aprobado — falta transferir\" y borra el comprobante o la confirmación sin comprobante actual.")) return;
     setBusy(true);
     setErr("");
     const res = await fetch(`${apiBase}/undo-completion`, { method: "POST" });
@@ -499,9 +581,16 @@ function TransferPanel({
               <ProofPreview url={transfer.proofUrl} filename={transfer.proofName ?? undefined} />
             </div>
           )}
+          {transfer.confirmedWithoutProof && (
+            <div className="mt-1.5 text-[12px] text-green bg-green/10 border border-green/30 rounded px-2.5 py-2">
+              ✓ Confirmado sin comprobante por <b>{transfer.confirmedWithoutProofBy?.name ?? "el admin"}</b>
+              {transfer.confirmedWithoutProofAt && ` · ${fmtDateTime(transfer.confirmedWithoutProofAt)}`}
+              {transfer.confirmedWithoutProofNote && <div className="mt-1 text-steel italic">&quot;{transfer.confirmedWithoutProofNote}&quot;</div>}
+            </div>
+          )}
           {isAdmin && (
             <button type="button" disabled={busy} className="text-[11px] text-red underline cursor-pointer mt-1.5 block disabled:opacity-50" onClick={undoCompletion}>
-              ¿Comprobante equivocado? Deshacer confirmación
+              {transfer.confirmedWithoutProof ? "¿Fue un error? Deshacer confirmación" : "¿Comprobante equivocado? Deshacer confirmación"}
             </button>
           )}
         </div>
@@ -538,7 +627,14 @@ function TransferPanel({
         </div>
       )}
 
-      {isAdmin && transfer.status === "APPROVED" && <ProofUploader apiBase={apiBase} onSent={onChanged} />}
+      {isAdmin && transfer.status === "APPROVED" && (
+        <>
+          <ProofUploader apiBase={apiBase} onSent={onChanged} />
+          {(transfer.destination === "ADMIN_COMPANY" || transfer.destination === "ADMIN_PRODUBANCO") && (
+            <ConfirmWithoutProofButton apiBase={apiBase} onSent={onChanged} />
+          )}
+        </>
+      )}
 
       {!isAdmin && transfer.status === "PENDING_APPROVAL" && (
         <div className="text-[11.5px] text-steel-dim flex items-center gap-1.5"><Send size={11} /> Esperando aprobación del admin.</div>
