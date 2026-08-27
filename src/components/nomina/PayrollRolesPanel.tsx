@@ -7,7 +7,7 @@ import { PayrollEmployeeSalariesPanel } from "./PayrollEmployeeSalariesPanel";
 import { CeoBonusesForNairobyPanel } from "./CeoBonusesForNairobyPanel";
 import { PayrollTransferPanel, PayrollIessTransferPanel, type Transfer } from "./PayrollTransferPanel";
 import { PayoutUploader } from "./PayrollIndividualPayment";
-import { isEndOfMonthQuincena, IESS_LINE_ITEM_LABEL } from "@/lib/payrollCalc";
+import { isEndOfMonthQuincena, IESS_RATE, IESS_EMPLOYER_RATE, IESS_GOVERNMENT_FLAT_FEE } from "@/lib/payrollCalc";
 
 type LineItem = { id?: string; label: string; amount: number; kind: "INCOME" | "EXPENSE"; isAutomatic?: boolean; note?: string | null };
 type EmployeeBankAccount = {
@@ -26,7 +26,7 @@ type Role = {
   totalIncome: number;
   totalExpense: number;
   netTotal: number;
-  employee: { id: string; name: string; position: string | null; employeeBankAccounts: EmployeeBankAccount[]; payrollProfile: { iessDeclaredSalary: number | null } | null };
+  employee: { id: string; name: string; position: string | null; employeeBankAccounts: EmployeeBankAccount[]; payrollProfile: { iessDeclaredSalary: number | null; companyAbsorbsIess: boolean } | null };
   lineItems: LineItem[];
   paidAt: string | null;
   paidProofUrl: string | null;
@@ -44,8 +44,40 @@ function money(n: number) {
   return `$${n.toFixed(2)}`;
 }
 
-function iessTotalFromRoles(roles: { lineItems: LineItem[] }[]): number {
-  return roles.reduce((sum, r) => sum + r.lineItems.filter((li) => li.label === IESS_LINE_ITEM_LABEL).reduce((s, li) => s + li.amount, 0), 0);
+export type IessBreakdownRow = {
+  employeeId: string;
+  employeeName: string;
+  iessDeclaredSalary: number;
+  employeePortion: number;
+  employerPortion: number;
+  companyAbsorbsIess: boolean;
+};
+
+// Mismo cálculo que iessBreakdownFromRoles/totalIessOwedFromRoles en
+// lib/payroll.ts (versión cliente, para el fallback antes de que exista un
+// PayrollIessTransfer) — aporte personal (9.45%) + patronal (11.15%) de
+// TODOS los que tienen IESS declarado, sin importar si Provedix asumió el
+// personal (Marcos, Dexi) o se le descontó a la persona.
+function iessBreakdownFromRoles(roles: Role[]): IessBreakdownRow[] {
+  return roles
+    .filter((r) => !!r.employee.payrollProfile?.iessDeclaredSalary)
+    .map((r) => {
+      const declared = r.employee.payrollProfile!.iessDeclaredSalary!;
+      return {
+        employeeId: r.employeeId,
+        employeeName: r.employee.name,
+        iessDeclaredSalary: declared,
+        employeePortion: declared * IESS_RATE,
+        employerPortion: declared * IESS_EMPLOYER_RATE,
+        companyAbsorbsIess: r.employee.payrollProfile!.companyAbsorbsIess,
+      };
+    });
+}
+
+function totalIessOwedFromRoles(roles: Role[]): number {
+  const rows = iessBreakdownFromRoles(roles);
+  if (rows.length === 0) return 0;
+  return rows.reduce((s, r) => s + r.employeePortion + r.employerPortion, 0) + IESS_GOVERNMENT_FLAT_FEE;
 }
 
 const ECUADOR_UTC_OFFSET_HOURS = 5; // UTC-5, sin horario de verano en Ecuador
@@ -549,7 +581,7 @@ export function PayrollRolesPanel({ canEdit, canProposeFixedBonus, canApproveFix
             const iessPending =
               isEndOfMonthQuincena(period) &&
               (!iessTransfer || (isAdmin && iessTransfer.status === "REJECTED")) &&
-              (iessTransfer || iessTotalFromRoles(detail.roles) > 0);
+              (iessTransfer || totalIessOwedFromRoles(detail.roles) > 0);
             if (!nominaPending && !iessPending) return null;
             return (
               <div className="bg-surface border border-rule rounded-md p-3.5 mb-4">
@@ -559,7 +591,7 @@ export function PayrollRolesPanel({ canEdit, canProposeFixedBonus, canApproveFix
                   <div className="flex items-center gap-2 flex-wrap">
                     {iessPending && (
                       <div className="flex flex-col items-end gap-0.5 bg-gold/15 border-2 border-gold/50 rounded-md px-3 py-1.5">
-                        <div className="text-[24px] font-extrabold tabular-nums text-gold leading-none">{money(iessTransfer?.totalAmount ?? iessTotalFromRoles(detail.roles))}</div>
+                        <div className="text-[24px] font-extrabold tabular-nums text-gold leading-none">{money(iessTransfer?.totalAmount ?? totalIessOwedFromRoles(detail.roles))}</div>
                         <div className="text-[9.5px] text-gold/90 uppercase tracking-wide font-semibold">Total IESS a transferir</div>
                         <div className="text-[9px] text-gold/70">Pago al IESS</div>
                       </div>
@@ -609,8 +641,8 @@ export function PayrollRolesPanel({ canEdit, canProposeFixedBonus, canApproveFix
           {isEndOfMonthQuincena(period) &&
             iessTransfer !== undefined &&
             !(isAdmin && iessTransfer?.status === "REJECTED") &&
-            (iessTransfer || iessTotalFromRoles(detail.roles) > 0) && (
-              <PayrollIessTransferPanel period={period} isAdmin={isAdmin} canEdit={canEdit} transfer={iessTransfer} onChanged={loadIessTransfer} />
+            (iessTransfer || totalIessOwedFromRoles(detail.roles) > 0) && (
+              <PayrollIessTransferPanel period={period} isAdmin={isAdmin} canEdit={canEdit} transfer={iessTransfer} onChanged={loadIessTransfer} breakdown={iessBreakdownFromRoles(detail.roles)} />
             )}
 
           <button

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { canEditPayrollRoles, getFinanceLeadId } from "@/lib/guards";
-import { isValidPeriod, totalIessFromRoles } from "@/lib/payroll";
+import { isValidPeriod, totalIessOwedFromRoles } from "@/lib/payroll";
 import { notifyOwner, resolveNotifications } from "@/lib/notifications";
 
 const schema = z.object({ destination: z.enum(["NAIROBY", "ADMIN_PRODUBANCO", "ADMIN_COMPANY"]).optional() });
@@ -23,7 +23,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ per
 
   const payrollPeriod = await prisma.payrollPeriod.findUnique({
     where: { period },
-    include: { roles: { where: { isCurrent: true }, include: { lineItems: true } }, iessTransfer: true },
+    include: {
+      roles: {
+        where: { isCurrent: true },
+        include: { employee: { select: { name: true, payrollProfile: { select: { iessDeclaredSalary: true, companyAbsorbsIess: true } } } } },
+      },
+      iessTransfer: true,
+    },
   });
   if (!payrollPeriod) return NextResponse.json({ error: "Primero hay que generar los roles de este período." }, { status: 404 });
   if (payrollPeriod.status !== "DRAFT") return NextResponse.json({ error: "Ya está publicado." }, { status: 409 });
@@ -45,8 +51,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ per
     if (!acc) return NextResponse.json({ error: "Todavía no registraste tu cuenta bancaria." }, { status: 400 });
   }
 
-  const totalAmount = totalIessFromRoles(payrollPeriod.roles);
-  if (totalAmount <= 0) return NextResponse.json({ error: "No hay IESS retenido en este período todavía." }, { status: 400 });
+  const totalAmount = totalIessOwedFromRoles(payrollPeriod.roles);
+  if (totalAmount <= 0) return NextResponse.json({ error: "No hay IESS que pagar en este período todavía." }, { status: 400 });
 
   const transfer = await prisma.payrollIessTransfer.upsert({
     where: { periodId: payrollPeriod.id },

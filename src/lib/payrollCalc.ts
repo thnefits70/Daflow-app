@@ -12,6 +12,19 @@ export const OVERTIME_WEEKDAY_MULTIPLIER = 1.5; // lunes a viernes (suplementari
 export const OVERTIME_SATURDAY_MULTIPLIER = 2.0; // sábado (como feriado)
 export const IESS_RATE = 0.0945;
 
+// Confirmado 2026-08-27: pedido explícito del usuario — aporte PATRONAL,
+// siempre 100% a cargo de Provedix, nunca descontado a nadie. Es aparte del
+// aporte personal (IESS_RATE) de arriba: junto suman el 20.6% del sueldo
+// declarado que de verdad se le remite al IESS por cada colaborador, sin
+// importar quién "asuma" cada parte en el rol individual.
+export const IESS_EMPLOYER_RATE = 0.1115;
+
+// Confirmado 2026-08-27: tarifa fija mensual que el gobierno agregó a la
+// planilla de IESS de la empresa (el usuario la ve en su propia planilla) —
+// no depende de cuántos colaboradores tengan IESS declarado ni de sus
+// sueldos, se suma una sola vez por período de fin de mes.
+export const IESS_GOVERNMENT_FLAT_FEE = 53.15;
+
 // Confirmado 2026-08-26: label exacto de la línea automática de IESS (ver
 // buildAutomaticLineItems en payroll.ts) — se usa como identificador para
 // sumar el total de IESS de un período (ver iess-transfer), ya que

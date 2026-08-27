@@ -5,6 +5,7 @@ import { Landmark, ChevronDown, Send } from "lucide-react";
 import { ProofPreview } from "@/components/shared/ProofPreview";
 import { usePasteFile } from "@/lib/usePasteFile";
 import { uploadFile } from "@/lib/uploadFile";
+import { IESS_GOVERNMENT_FLAT_FEE } from "@/lib/payrollCalc";
 
 type BankAccount = {
   bankName: string;
@@ -44,6 +45,66 @@ const DESTINATION_LABEL: Record<Destination, string> = {
   ADMIN_PRODUBANCO: "Cuenta Produbanco de nómina",
   ADMIN_COMPANY: "Cuenta para recibir transferencias",
 };
+
+export type IessBreakdownRow = {
+  employeeId: string;
+  employeeName: string;
+  iessDeclaredSalary: number;
+  employeePortion: number;
+  employerPortion: number;
+  companyAbsorbsIess: boolean;
+};
+
+// Confirmado 2026-08-27: pedido explícito del usuario — quería ver cuánto
+// de lo que se paga al IESS lo asume Provedix vs. cuánto asume cada
+// colaboradora, con nombre y apellido en los casos donde Provedix cubre el
+// 100% (hoy Marcos y Dexi — ver companyAbsorbsIess). Colapsado por default
+// para no saturar la tarjeta chica del resumen.
+function IessBreakdownBlock({ rows }: { rows: IessBreakdownRow[] }) {
+  const [show, setShow] = useState(false);
+  const absorbedRows = rows.filter((r) => r.companyAbsorbsIess);
+  const regularRows = rows.filter((r) => !r.companyAbsorbsIess);
+  const employerTotal = rows.reduce((s, r) => s + r.employerPortion, 0);
+  const regularEmployeeTotal = regularRows.reduce((s, r) => s + r.employeePortion, 0);
+
+  return (
+    <div className="mb-2.5">
+      <button
+        type="button"
+        className="flex items-center gap-1.5 text-[11px] font-semibold rounded px-2 py-1 cursor-pointer border text-steel border-rule"
+        onClick={() => setShow((s) => !s)}
+      >
+        <Landmark size={12} />
+        Desglose de IESS
+        <ChevronDown size={12} className={show ? "rotate-180" : ""} />
+      </button>
+      {show && (
+        <div className="mt-1.5 p-2.5 rounded bg-cloud border border-rule text-[12px] flex flex-col gap-1.5">
+          <div className="flex justify-between">
+            <span className="text-steel">Aporte patronal (11.15%) — todo el equipo</span>
+            <span className="font-semibold tabular-nums">{money(employerTotal)}</span>
+          </div>
+          {regularRows.length > 0 && (
+            <div className="flex justify-between">
+              <span className="text-steel">Aporte personal (9.45%) — ya descontado a cada colaborador</span>
+              <span className="font-semibold tabular-nums">{money(regularEmployeeTotal)}</span>
+            </div>
+          )}
+          {absorbedRows.map((r) => (
+            <div key={r.employeeId} className="flex justify-between">
+              <span className="text-steel">{r.employeeName} — Provedix asume su aporte personal 100%</span>
+              <span className="font-semibold tabular-nums">{money(r.employeePortion)}</span>
+            </div>
+          ))}
+          <div className="flex justify-between pt-1.5 border-t border-rule">
+            <span className="text-steel">Tarifa adicional del gobierno</span>
+            <span className="font-semibold tabular-nums">{money(IESS_GOVERNMENT_FLAT_FEE)}</span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function BankAccountBlock({ account }: { account: BankAccount | null }) {
   // Confirmado 2026-08-24: pedido explícito del usuario — la cuenta destino
@@ -281,11 +342,26 @@ function ResendButton({ apiBase, defaultDestination, onSent }: { apiBase: string
   );
 }
 
-function SendTotalPrompt({ apiBase, defaultDestination, title, description, onSent }: { apiBase: string; defaultDestination: Destination; title: string; description: string; onSent: () => void }) {
+function SendTotalPrompt({
+  apiBase,
+  defaultDestination,
+  title,
+  description,
+  breakdown,
+  onSent,
+}: {
+  apiBase: string;
+  defaultDestination: Destination;
+  title: string;
+  description: string;
+  breakdown?: IessBreakdownRow[];
+  onSent: () => void;
+}) {
   return (
     <div className="bg-surface border border-rule rounded-md p-3.5 mb-4">
       <div className="font-bold text-[13.5px] mb-1">{title}</div>
       <div className="text-[12px] text-steel mb-2.5">{description}</div>
+      {breakdown && <IessBreakdownBlock rows={breakdown} />}
       <ResendButton apiBase={apiBase} defaultDestination={defaultDestination} onSent={onSent} />
     </div>
   );
@@ -310,6 +386,7 @@ function TransferPanel({
   canEdit,
   transfer,
   onChanged,
+  breakdown,
 }: {
   apiBase: string;
   title: string;
@@ -319,6 +396,7 @@ function TransferPanel({
   canEdit: boolean;
   transfer: Transfer | null | undefined;
   onChanged: () => void;
+  breakdown?: IessBreakdownRow[];
 }) {
   const [rejecting, setRejecting] = useState(false);
   const [reason, setReason] = useState("");
@@ -362,7 +440,7 @@ function TransferPanel({
 
   if (transfer === undefined) return null;
   if (transfer === null) {
-    if (canEdit) return <SendTotalPrompt apiBase={apiBase} defaultDestination={defaultDestination} title={title} description={description} onSent={onChanged} />;
+    if (canEdit) return <SendTotalPrompt apiBase={apiBase} defaultDestination={defaultDestination} title={title} description={description} breakdown={breakdown} onSent={onChanged} />;
     return null;
   }
 
@@ -381,6 +459,7 @@ function TransferPanel({
         </div>
       </div>
 
+      {breakdown && <IessBreakdownBlock rows={breakdown} />}
       <BankAccountBlock account={transfer.account} />
 
       <div className="text-[12px] font-semibold mb-1">{STATUS_LABEL[transfer.status]}</div>
@@ -502,23 +581,26 @@ export function PayrollIessTransferPanel({
   canEdit,
   transfer,
   onChanged,
+  breakdown,
 }: {
   period: string;
   isAdmin: boolean;
   canEdit: boolean;
   transfer: Transfer | null | undefined;
   onChanged: () => void;
+  breakdown?: IessBreakdownRow[];
 }) {
   return (
     <TransferPanel
       apiBase={`/api/payroll/periods/${period}/iess-transfer`}
       title="Transferencia de IESS"
-      description="Total retenido de IESS a todos los colaboradores este fin de mes. Cuando esté listo, enviá el total al admin para que transfiera a la cuenta desde la que se paga al IESS."
+      description="Total a pagar al IESS por todos los colaboradores este fin de mes (aporte personal + patronal + tarifa del gobierno). Cuando esté listo, enviá el total al admin para que transfiera a la cuenta desde la que se paga al IESS."
       defaultDestination="ADMIN_COMPANY"
       isAdmin={isAdmin}
       canEdit={canEdit}
       transfer={transfer}
       onChanged={onChanged}
+      breakdown={breakdown}
     />
   );
 }

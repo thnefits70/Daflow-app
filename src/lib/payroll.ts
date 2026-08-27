@@ -13,6 +13,9 @@ import {
   installmentIndexForMonth,
   addMonthsToMonthStr,
   monthsBetween,
+  IESS_RATE,
+  IESS_EMPLOYER_RATE,
+  IESS_GOVERNMENT_FLAT_FEE,
   IESS_LINE_ITEM_LABEL,
 } from "@/lib/payrollCalc";
 import { getMonthDispatchSummary, getAchievedTier, CEO_BONUS_AMOUNTS, CEO_BONUS_LABELS } from "@/lib/commissionTiers";
@@ -342,15 +345,55 @@ export function totalsFromLineItems(items: { amount: number; kind: "INCOME" | "E
   return { totalIncome, totalExpense, netTotal: totalIncome - totalExpense };
 }
 
-// Confirmado 2026-08-26: pedido explícito del usuario — además del total de
-// nómina a transferir, un segundo total con lo retenido de IESS a TODOS los
-// colaboradores ese período (suma de la línea automática "Descuento IESS
-// (9.45%)" de cada rol vigente, respetando cualquier corrección manual que
-// Nairoby le haya hecho a esa línea). Solo tiene sentido en la quincena de
-// fin de mes (Q2) — es cuando se genera esa línea (ver isEndOfMonthQuincena
-// arriba en buildAutomaticLineItems).
-export function totalIessFromRoles(roles: { lineItems: { label: string; amount: number }[] }[]): number {
-  return roles.reduce((sum, r) => sum + r.lineItems.filter((li) => li.label === IESS_LINE_ITEM_LABEL).reduce((s, li) => s + li.amount, 0), 0);
+export type IessBreakdownRow = {
+  employeeId: string;
+  employeeName: string;
+  iessDeclaredSalary: number;
+  employeePortion: number; // 9.45% — lo que le correspondería descontar a la persona
+  employerPortion: number; // 11.15% — aporte patronal, siempre 100% de Provedix
+  companyAbsorbsIess: boolean; // si es true, Provedix también asume el employeePortion
+};
+
+type RoleForIess = {
+  employeeId: string;
+  employee: { name: string; payrollProfile: { iessDeclaredSalary: number | null; companyAbsorbsIess: boolean } | null };
+};
+
+// Confirmado 2026-08-27: pedido explícito del usuario — desglose real de lo
+// que se le debe al IESS por cada colaborador con sueldo declarado, sin
+// importar si a la persona se le descontó su parte o si Provedix la asumió
+// (ver companyAbsorbsIess). El aporte patronal (IESS_EMPLOYER_RATE) NUNCA
+// aparece en el rol individual de nadie — es un costo aparte de la empresa,
+// solo visible acá, en el total agregado del período.
+export function iessBreakdownFromRoles(roles: RoleForIess[]): IessBreakdownRow[] {
+  return roles
+    .filter((r) => !!r.employee.payrollProfile?.iessDeclaredSalary)
+    .map((r) => {
+      const declared = r.employee.payrollProfile!.iessDeclaredSalary!;
+      return {
+        employeeId: r.employeeId,
+        employeeName: r.employee.name,
+        iessDeclaredSalary: declared,
+        employeePortion: declared * IESS_RATE,
+        employerPortion: declared * IESS_EMPLOYER_RATE,
+        companyAbsorbsIess: r.employee.payrollProfile!.companyAbsorbsIess,
+      };
+    });
+}
+
+// Confirmado 2026-08-26, corregido 2026-08-27 tras un caso real del
+// usuario (Marcos y Dexi, con companyAbsorbsIess=true, no generan ninguna
+// línea "Descuento IESS" en su rol — así que sumar solo esas líneas dejaba
+// afuera lo que Provedix igual le debe al IESS por ellos dos). Ahora suma
+// el aporte personal (9.45%) + patronal (11.15%) de TODOS los colaboradores
+// con IESS declarado, sin importar quién asume cada parte, más la tarifa
+// fija adicional del gobierno (IESS_GOVERNMENT_FLAT_FEE) que aparece en la
+// planilla real. Solo tiene sentido en la quincena de fin de mes (Q2).
+export function totalIessOwedFromRoles(roles: RoleForIess[]): number {
+  const rows = iessBreakdownFromRoles(roles);
+  if (rows.length === 0) return 0;
+  const contributions = rows.reduce((s, r) => s + r.employeePortion + r.employerPortion, 0);
+  return contributions + IESS_GOVERNMENT_FLAT_FEE;
 }
 
 // Confirmado 2026-08-20, reglas de anticipos definidas con el usuario:
