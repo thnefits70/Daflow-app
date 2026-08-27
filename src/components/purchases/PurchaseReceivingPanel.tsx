@@ -1462,7 +1462,7 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                         <div className={`flex items-center gap-1.5 text-[11.5px] font-semibold mb-1 ${receivedQtyMatches ? "text-teal" : "text-red"}`}>
                           {receivedQtyMatches ? <CheckCircle2 size={13} /> : <AlertTriangle size={13} />}
                           Declarado por Inventario: {r.receipt.receivedQuantity} un. · Comprado y pagado: {r.quantity} un.
-                          {r.urgentReports.length > 0 && ` (faltan ${r.quantity - expectedReceivedQty} un.)`}
+                          {r.urgentReports.length > 0 && <span className="text-red"> (faltan {r.quantity - expectedReceivedQty} un.)</span>}
                         </div>
                       )}
                       <div className="text-[11.5px] text-steel mb-2">
