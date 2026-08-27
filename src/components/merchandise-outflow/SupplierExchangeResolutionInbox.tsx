@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CheckCircle2, Clock, DollarSign, ExternalLink, XCircle, Wallet } from "lucide-react";
+import { CheckCircle2, Clock, DollarSign, ExternalLink, XCircle, Wallet, AlertTriangle } from "lucide-react";
 
 type ItemDTO = {
   id: string;
@@ -175,7 +175,7 @@ export function SupplierExchangeResolutionInbox({
                         Pagado: <span className="font-semibold text-ink">{money(item.unitCostAtExchange!)}/un.</span> · crédito estimado: <span className="font-semibold text-blue">{money(item.expectedCreditAmount)}</span>
                       </div>
                     ) : (
-                      <div className="text-[10.5px] text-steel mt-0.5">Sin historial de compra a este proveedor.</div>
+                      <div className="text-[10.5px] text-green mt-0.5">Sin historial de compra a este proveedor.</div>
                     )}
                   </div>
                 </div>
@@ -190,8 +190,15 @@ export function SupplierExchangeResolutionInbox({
                       <CheckCircle2 size={12} /> El proveedor cambió el producto — resuelto por {item.resolvedBy?.name ?? "—"}
                     </div>
                   ) : item.resolution === "CREDIT_ISSUED" ? (
-                    <div className="flex items-center gap-1.5 text-[11.5px] font-semibold text-blue">
-                      <DollarSign size={12} /> Crédito de {item.credit ? money(item.credit.amount) : "—"} — gestionado por {item.resolvedBy?.name ?? "—"}
+                    <div className="flex flex-col gap-1">
+                      <div className="flex items-center gap-1.5 text-[11.5px] font-semibold text-blue">
+                        <DollarSign size={12} /> Crédito de {item.credit ? money(item.credit.amount) : "—"} — gestionado por {item.resolvedBy?.name ?? "—"}
+                      </div>
+                      {item.credit && item.expectedCreditAmount !== null && item.credit.amount !== item.expectedCreditAmount && (
+                        <div className="flex items-center gap-1.5 text-[10.5px] font-semibold text-gold" style={{ color: "#D9A441" }}>
+                          <AlertTriangle size={11} /> Distinto a lo pagado ({money(item.expectedCreditAmount)}) — revisar
+                        </div>
+                      )}
                     </div>
                   ) : (
                     <div className="flex flex-col gap-1.5">

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { CheckCircle2, DollarSign, ExternalLink, Upload, XCircle, Wallet } from "lucide-react";
+import { CheckCircle2, DollarSign, ExternalLink, Upload, XCircle, Wallet, Lock, Pencil } from "lucide-react";
 import { uploadFile } from "@/lib/uploadFile";
 
 type ItemDTO = {
@@ -72,6 +72,7 @@ export function SupplierExchangeMyResolutions() {
   const [choosing, setChoosing] = useState<{ id: string; choice: Choice } | null>(null);
   const [note, setNote] = useState("");
   const [amount, setAmount] = useState("");
+  const [amountLocked, setAmountLocked] = useState(false);
   const [splitQty, setSplitQty] = useState("");
   const [proofUrl, setProofUrl] = useState<string | null>(null);
   const [proofName, setProofName] = useState<string | null>(null);
@@ -96,13 +97,22 @@ export function SupplierExchangeMyResolutions() {
     setChoosing({ id: item.id, choice });
     setNote("");
     setSplitQty(String(item.quantity));
-    // Precarga el monto con el crédito estimado (según la última compra a
-    // este proveedor) — se puede corregir si el proveedor ofrece un monto
-    // distinto al final.
-    setAmount(choice === "CREDIT_ISSUED" && item.expectedCreditAmount !== null ? item.expectedCreditAmount.toFixed(2) : "");
+    // Confirmado 2026-08-27, pedido explícito del usuario: cuando SÍ hay un
+    // costo de referencia (última compra real a este proveedor), el monto
+    // viene precargado y BLOQUEADO — no se puede escribir un número
+    // distinto a mano por defecto. Solo se desbloquea con el botón "¿El
+    // proveedor te dio un monto distinto?" (ver unlockAmount), que queda
+    // visible/comparable después en la vista de solo lectura de admin.
+    const hasReference = choice === "CREDIT_ISSUED" && item.unitCostAtExchange !== null;
+    setAmountLocked(hasReference);
+    setAmount(hasReference ? (item.unitCostAtExchange! * item.quantity).toFixed(2) : "");
     setProofUrl(null);
     setProofName(null);
     setError("");
+  }
+
+  function unlockAmount() {
+    setAmountLocked(false);
   }
 
   async function handleProofFile(file: File) {
@@ -118,6 +128,14 @@ export function SupplierExchangeMyResolutions() {
     setProofName(uploaded.name);
   }
 
+  // Monto de referencia (costo pagado × cantidad a registrar) — recalcula
+  // proporcional apenas cambia la cantidad, para que el monto bloqueado
+  // siempre coincida con la parte que se está resolviendo, no con el total
+  // original del ítem.
+  function referenceAmountFor(item: ItemDTO, qty: number) {
+    return item.unitCostAtExchange != null ? item.unitCostAtExchange * qty : null;
+  }
+
   async function resolve(item: ItemDTO) {
     if (!choosing) return;
     setSaving(true);
@@ -130,7 +148,8 @@ export function SupplierExchangeMyResolutions() {
       if (choosing.choice === "REPLACED") {
         await postJson(`/api/merchandise-outflow/items/${choosing.id}/resolve-supplier`, { resolution: "REPLACED", quantity, note: note.trim() || undefined });
       } else if (choosing.choice === "CREDIT_ISSUED") {
-        const amt = Number(amount);
+        const ref = referenceAmountFor(item, qty);
+        const amt = amountLocked && ref != null ? ref : Number(amount);
         if (!amt || amt <= 0) throw new Error("Ingresa un monto válido para el crédito.");
         if (!proofUrl) throw new Error("Sube el comprobante — captura del chat o documento donde el proveedor acepta.");
         await postJson(`/api/merchandise-outflow/items/${choosing.id}/resolve-supplier`, {
@@ -222,7 +241,7 @@ export function SupplierExchangeMyResolutions() {
                         Pagado: <span className="font-semibold text-ink">{money(item.unitCostAtExchange!)}/un.</span> · crédito estimado: <span className="font-semibold text-blue">{money(item.expectedCreditAmount)}</span>
                       </div>
                     ) : (
-                      <div className="text-[10.5px] text-steel mt-0.5">Sin historial de compra a este proveedor.</div>
+                      <div className="text-[10.5px] text-green mt-0.5">Sin historial de compra a este proveedor.</div>
                     )}
                   </div>
                 </div>
@@ -240,10 +259,29 @@ export function SupplierExchangeMyResolutions() {
                     {choosing.choice === "CREDIT_ISSUED" && (
                       <>
                         <div className="text-[12px] font-semibold mb-1.5">Monto del crédito</div>
-                        <div className="flex items-center gap-1.5 mb-2">
-                          <DollarSign size={13} className="text-steel" />
-                          <input type="number" min={0} step="0.01" className="w-28 rounded border border-rule bg-surface px-2 py-1 text-[12px] font-bold" value={amount} onChange={(e) => setAmount(e.target.value)} />
-                        </div>
+                        {amountLocked ? (
+                          <div className="flex items-center gap-1.5 mb-1">
+                            <Lock size={12} className="text-steel shrink-0" />
+                            <span className="text-[13px] font-bold text-ink">{money(referenceAmountFor(item, Number(splitQty) || item.quantity) ?? 0)}</span>
+                            <span className="text-[10.5px] text-steel">(según lo que pagaste por este producto a este proveedor)</span>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-1.5 mb-1">
+                            <DollarSign size={13} className="text-steel" />
+                            <input type="number" min={0} step="0.01" className="w-28 rounded border border-rule bg-surface px-2 py-1 text-[12px] font-bold" value={amount} onChange={(e) => setAmount(e.target.value)} />
+                          </div>
+                        )}
+                        {amountLocked && (
+                          <button type="button" className="flex items-center gap-1 text-[10.5px] font-semibold text-blue cursor-pointer mb-2" onClick={unlockAmount}>
+                            <Pencil size={10} /> ¿El proveedor te dio un monto distinto?
+                          </button>
+                        )}
+                        {!amountLocked && item.unitCostAtExchange !== null && (
+                          <div className="text-[10.5px] text-steel mb-2">Vas a registrar un monto distinto al que pagaste — queda visible para que lo revisen.</div>
+                        )}
+                        {item.unitCostAtExchange === null && (
+                          <div className="text-[10.5px] text-green mb-2">No hay compra anterior registrada con este proveedor para este producto — escribe el monto exacto que te confirme.</div>
+                        )}
                         <div className="text-[12px] font-semibold mb-1.5">Comprobante</div>
                         {proofUrl ? (
                           <div className="flex items-center gap-2 mb-2 text-[11.5px] text-green font-semibold">

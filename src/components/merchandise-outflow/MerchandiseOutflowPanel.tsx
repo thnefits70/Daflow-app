@@ -76,14 +76,19 @@ export function MerchandiseOutflowPanel({
   canConfirmCancelledGuide?: boolean;
   canCutoffCancelledGuide?: boolean;
 }) {
+  // Confirmado 2026-08-27, pedido explícito del usuario: "Cambio con
+  // proveedor" gana sobre "Guías canceladas" como pestaña por defecto en
+  // cuanto alguien (ej. Bryan) tiene algo propio pendiente de gestionar ahí
+  // — antes "guias" siempre ganaba primero para cualquiera de MKT/FUL, así
+  // que un pendiente urgente de proveedor quedaba escondido detrás.
   const defaultTab: Tab = canCapture
     ? "despacho"
     : canAct
       ? "baja"
-      : canSubmitCancelledGuide || canConfirmCancelledGuide || canCutoffCancelledGuide
-        ? "guias"
-        : supplierExchangeMineCount > 0 || financeWriteOffPendingCount > 0
-          ? "proveedor"
+      : supplierExchangeMineCount > 0 || financeWriteOffPendingCount > 0
+        ? "proveedor"
+        : canSubmitCancelledGuide || canConfirmCancelledGuide || canCutoffCancelledGuide
+          ? "guias"
           : "historial";
   // Confirmado 2026-08-25: pedido explícito del usuario — todos los
   // motivos de egreso viven en una sola sesión para que Daniel no salte
