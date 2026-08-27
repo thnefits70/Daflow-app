@@ -108,7 +108,10 @@ export default async function DeptWorkspacePage({ params }: { params: Promise<{ 
           involvesRaw: w.involvesRaw,
           involvedNotifiedAt: w.involvedNotifiedAt?.toISOString() ?? null,
         }))}
-        canManageStoreFeedback={dept.code === "MKT"}
+        // Confirmado 2026-08-26: esta data evalúa al líder de MKT, así que
+        // admin queda en solo-lectura igual que Bryan — solo Nairoby edita.
+        canManageStoreFeedback={false}
+        canViewStoreFeedback={dept.code === "MKT"}
         storeFeedbackStores={storeFeedbackStores}
         canSubmitPurchases={dept.code === "COM"}
         canReceivePurchases={dept.code === "COM"}

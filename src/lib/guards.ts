@@ -519,16 +519,14 @@ export async function canViewPettyCashSecundaria() {
   return canManagePettyCashPrincipal();
 }
 
-// Servicio Postventa (feedback de tiendas) — confirmado 2026-07-25: vive en
-// Análisis de Mercado. Solo admin o quien el admin delegue puntualmente vía
-// User.canManageStoreFeedback puede log/editar evaluaciones y el catálogo.
-// Confirmado 2026-08-26: el liderazgo de MKT (Bryan) YA NO da manage
-// automático — se le bajó a solo-lectura (canViewStoreFeedback), así que
-// esta función ya no mira isLeader/leadsDept en absoluto.
+// Servicio Postventa (feedback de tiendas) — esta data sirve para evaluar al
+// líder de Análisis de Mercado (Bryan), así que solo puede editarla quien el
+// admin delegue puntualmente vía User.canManageStoreFeedback (hoy: solo
+// Nairoby). Confirmado 2026-08-26: ni admin ni el liderazgo de MKT tienen
+// manage automático — ambos quedan en solo-lectura (canViewStoreFeedback).
 export async function canManageStoreFeedback() {
   const session = await auth();
   if (!session) return false;
-  if (session.user.role === "admin") return true;
   const user = await prisma.user.findUnique({
     where: { id: session.user.id },
     select: { canManageStoreFeedback: true },
@@ -536,15 +534,15 @@ export async function canManageStoreFeedback() {
   return !!user?.canManageStoreFeedback;
 }
 
-// Nivel de acceso separado, solo lectura — confirmado 2026-07-25: para
-// líderes de otras áreas (ej. líder de ventas) que deben poder ver el detalle
-// y contactar por WhatsApp, pero nunca crear/editar/eliminar. Independiente
-// del departamento de la persona (igual que canManageStoreFeedback) — no
-// exige que su propio deptId sea MKT, solo que se le haya delegado el flag.
+// Nivel de acceso separado, solo lectura — para admin (necesita ver el
+// detalle completo para evaluar a Bryan) y para líderes de otras áreas
+// delegados puntualmente (ej. Bryan mismo, que ve solo el agregado — ver
+// DeptWorkspaceTabs), pero nunca crear/editar/eliminar.
 export async function canViewStoreFeedback() {
-  if (await canManageStoreFeedback()) return true;
   const session = await auth();
   if (!session) return false;
+  if (session.user.role === "admin") return true;
+  if (await canManageStoreFeedback()) return true;
   const user = await prisma.user.findUnique({
     where: { id: session.user.id },
     select: { canViewStoreFeedback: true },

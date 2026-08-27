@@ -146,11 +146,13 @@ export function DeptWorkspaceTabs({
   weeklyReviewRecords?: WeeklyReviewDTO[];
   weeklyReviewInvolvingMe?: InvolvingMeReviewDTO[];
   // Servicio Postventa (Análisis de Mercado) — per-viewer gate pattern, not
-  // a per-department trackXxx flag. Two
-  // tiers: canManageStoreFeedback (full edit, incluye el detalle de cada
-  // llamada) o canViewStoreFeedback (fix confirmado 2026-08-11: ya NO ve el
-  // detalle de cada llamada — solo el resultado agregado por mes,
-  // storeFeedbackAggregates, para analizar sin exponer el detalle operativo).
+  // a per-department trackXxx flag. Esta data evalúa al líder de MKT, así
+  // que solo Nairoby (canManageStoreFeedback) edita. Solo-lectura tiene DOS
+  // variantes según quién mira (confirmado 2026-08-26): admin ve el detalle
+  // completo por tienda (StoreFeedbackPanel editable={false}) porque lo
+  // necesita para evaluar a Bryan; Bryan/otros delegados con
+  // canViewStoreFeedback ven solo el agregado mensual (StoreFeedbackKpiPanel,
+  // fix 2026-08-11) — nunca el detalle operativo sobre sí mismos.
   canManageStoreFeedback?: boolean;
   canViewStoreFeedback?: boolean;
   storeFeedbackStores?: StoreDTO[];
@@ -483,7 +485,10 @@ export function DeptWorkspaceTabs({
       {tab === "postventa" && canManageStoreFeedback && (
         <StoreFeedbackPanel stores={storeFeedbackStores} editable />
       )}
-      {tab === "postventa" && !canManageStoreFeedback && canViewStoreFeedback && (
+      {tab === "postventa" && !canManageStoreFeedback && canViewStoreFeedback && isAdmin && (
+        <StoreFeedbackPanel stores={storeFeedbackStores} editable={false} />
+      )}
+      {tab === "postventa" && !canManageStoreFeedback && canViewStoreFeedback && !isAdmin && (
         <StoreFeedbackKpiPanel aggregates={storeFeedbackAggregates} />
       )}
       {tab === "documentos" && <DocumentsPanel deptId={deptId} documents={documents} editable={editable} />}
