@@ -3,7 +3,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { TopLine } from "@/components/ui/TopLine";
 import { DeptWorkspaceTabs } from "@/components/dept/DeptWorkspaceTabs";
-import { getUnseenFeedbackCount, canManageStoreFeedback as checkCanManageStoreFeedback, canViewStoreFeedback as checkCanViewStoreFeedback, canSubmitPurchaseRequests, canConfirmPurchaseReceiving, canReceivePurchasesTeam, canActOnPurchaseReceiving, canRegisterPurchaseInvoices, canPayMerchandisePurchases, canManageInventoryControl as checkCanManageInventoryControl, canViewInventoryKpisPanel as checkCanViewInventoryKpisPanel, canManageAdminPayments as checkCanManageAdminPayments, canViewMarketingArrivals as checkCanViewMarketingArrivals, canConfirmMarketingDesign as checkCanConfirmMarketingDesign, canConfirmMarketingAdvisor as checkCanConfirmMarketingAdvisor, canCaptureMerchandiseReentry, canApproveMerchandiseReentry, canActOnMerchandiseReentry, canCloseMerchandiseReentry, canVerifyDamageDisposal, canManageJustUpload, canManageJustCatalog, canCaptureMerchandiseOutflow, canActOnMerchandiseOutflow, canViewMerchandiseOutflow, canSubmitCancelledGuide, canConfirmCancelledGuideFulfillment, canManageCancelledGuideCutoff, canDeclareExternalSales, canReviewExternalSales, canConfirmExternalSalePayment, canCloseExternalSale, canViewExternalSales, getSupplierAccess, canAddSupplierBankAccounts } from "@/lib/guards";
+import { getUnseenFeedbackCount, canManageStoreFeedback as checkCanManageStoreFeedback, canViewStoreFeedback as checkCanViewStoreFeedback, canSubmitPurchaseRequests, canConfirmPurchaseReceiving, canReceivePurchasesTeam, canActOnPurchaseReceiving, canRegisterPurchaseInvoices, canPayMerchandisePurchases, canManageInventoryControl as checkCanManageInventoryControl, canViewInventoryKpisPanel as checkCanViewInventoryKpisPanel, canManageAdminPayments as checkCanManageAdminPayments, canViewMarketingArrivals as checkCanViewMarketingArrivals, canConfirmMarketingDesign as checkCanConfirmMarketingDesign, canConfirmMarketingAdvisor as checkCanConfirmMarketingAdvisor, canCaptureMerchandiseReentry, canApproveMerchandiseReentry, canActOnMerchandiseReentry, canCloseMerchandiseReentry, canVerifyDamageDisposal, canManageJustUpload, canManageJustCatalog, canCaptureMerchandiseOutflow, canActOnMerchandiseOutflow, canViewMerchandiseOutflow, canConfirmSupplierExchangeFinanceWriteOff, canSubmitCancelledGuide, canConfirmCancelledGuideFulfillment, canManageCancelledGuideCutoff, canDeclareExternalSales, canReviewExternalSales, canConfirmExternalSalePayment, canCloseExternalSale, canViewExternalSales, getSupplierAccess, canAddSupplierBankAccounts } from "@/lib/guards";
 import { getFinanceKpiData } from "@/lib/financeKpis";
 import { getDeptProcessDetail } from "@/lib/processDetail";
 import { getPaymentRemindersData } from "@/lib/paymentReminders";
@@ -113,6 +113,15 @@ export default async function WorkspacePage() {
   // ningún otro permiso de este módulo (ej. Bryan, que solo entra acá por
   // Guías Canceladas) — ver getSupplierExchangeGestorCount en pendingTasks.ts.
   const supplierExchangeMineCount = await getSupplierExchangeGestorCount(session.user.id);
+  // Confirmado 2026-08-27, pedido explícito del usuario: Nairoby confirma la
+  // baja financiera de mercadería que un proveedor rechazó — company-wide
+  // (no es un dato propio de ella, cualquiera que tenga este permiso ve
+  // todos los rechazos pendientes), mismo espíritu que
+  // getPurchaseCreditsPendingItem un poco más abajo en este archivo.
+  const canConfirmFinanceWriteOffFlag = await canConfirmSupplierExchangeFinanceWriteOff();
+  const financeWriteOffPendingCount = canConfirmFinanceWriteOffFlag
+    ? await prisma.merchandiseOutflowItem.count({ where: { resolution: "REJECTED", financeWriteOffAt: null } })
+    : 0;
   // Guías Canceladas (Fase 4) — canConfirmCancelled combina Fulfillment
   // (dedicado) con el equipo de Inventario (ya calculado como canCaptureOutflow).
   const [canSubmitGuide, canConfirmFulfillmentGuide, canCutoffGuide] = await Promise.all([
@@ -276,6 +285,8 @@ export default async function WorkspacePage() {
         canActOnMerchandiseOutflow={canActOutflow}
         canViewMerchandiseOutflow={canViewOutflow}
         supplierExchangeMineCount={supplierExchangeMineCount}
+        canConfirmFinanceWriteOff={canConfirmFinanceWriteOffFlag}
+        financeWriteOffPendingCount={financeWriteOffPendingCount}
         canSubmitCancelledGuide={canSubmitGuide}
         canConfirmCancelledGuide={canConfirmGuide}
         canCutoffCancelledGuide={canCutoffGuide}

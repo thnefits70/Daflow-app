@@ -27,7 +27,10 @@ export async function GET() {
 
   const items = await prisma.merchandiseOutflowItem.findMany({
     where: { batch: { reason: "CAMBIO_PROVEEDOR", submittedAt: { not: null } }, resolution: null, OR: or },
-    include: { ...ITEM_INCLUDE, batch: { select: { id: true, code: true, createdAt: true, supplier: { select: { id: true, name: true } } } } },
+    include: {
+      ...ITEM_INCLUDE,
+      batch: { select: { id: true, code: true, createdAt: true, documentPhotoUrls: true, supplier: { select: { id: true, name: true } } } },
+    },
     orderBy: { createdAt: "asc" },
   });
   return NextResponse.json(items);

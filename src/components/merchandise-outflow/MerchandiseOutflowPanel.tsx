@@ -21,6 +21,8 @@ export function MerchandiseOutflowPanel({
   canManageJustCatalog = false,
   canViewSupplierExchangeResolution = false,
   supplierExchangeMineCount = 0,
+  canConfirmFinanceWriteOff = false,
+  financeWriteOffPendingCount = 0,
   canSubmitCancelledGuide = false,
   canConfirmCancelledGuide = false,
   canCutoffCancelledGuide = false,
@@ -57,6 +59,16 @@ export function MerchandiseOutflowPanel({
   // página standalone /area/cambio-proveedor-gestiones; ahora se ve también
   // acá, en "Mi área de trabajo", que es donde el usuario espera encontrarlo.
   supplierExchangeMineCount?: number;
+  // Confirmado 2026-08-27, pedido explícito del usuario: cuando un ítem de
+  // "Cambio con proveedor" queda RECHAZADO (el proveedor no cambia ni da
+  // crédito), Nairoby (Finanzas) confirma que ya dio de baja esa mercadería
+  // en la parte financiera — Daniel hace lo mismo pero en Just, reusando
+  // `canAct` (ya exclusivo de él). canConfirmFinanceWriteOff es el permiso;
+  // financeWriteOffPendingCount es cuántos tiene ella pendientes de
+  // confirmar ahora mismo — amplía la visibilidad de la pestaña igual que
+  // supplierExchangeMineCount, aunque no tenga ningún otro acceso al módulo.
+  canConfirmFinanceWriteOff?: boolean;
+  financeWriteOffPendingCount?: number;
   // Guías Canceladas (Fase 4) — vive como pestaña acá adentro (pedido
   // explícito del usuario), aunque su resultado final sea una entrada, no
   // una salida. Reingresar reusa `canAct` (Daniel exclusivo, ya pasado).
@@ -70,7 +82,7 @@ export function MerchandiseOutflowPanel({
       ? "baja"
       : canSubmitCancelledGuide || canConfirmCancelledGuide || canCutoffCancelledGuide
         ? "guias"
-        : supplierExchangeMineCount > 0
+        : supplierExchangeMineCount > 0 || financeWriteOffPendingCount > 0
           ? "proveedor"
           : "historial";
   // Confirmado 2026-08-25: pedido explícito del usuario — todos los
@@ -93,7 +105,7 @@ export function MerchandiseOutflowPanel({
   // una solicitud nueva.
   const [proveedorRefreshKey, setProveedorRefreshKey] = useState(0);
 
-  const canSeeProveedorTab = canAct || canViewSupplierExchangeResolution || supplierExchangeMineCount > 0;
+  const canSeeProveedorTab = canAct || canViewSupplierExchangeResolution || supplierExchangeMineCount > 0 || financeWriteOffPendingCount > 0;
 
   const tabs: { id: Tab; label: string }[] = [
     ...(canCapture ? [{ id: "despacho" as const, label: "Despacho" }] : []),
@@ -118,9 +130,9 @@ export function MerchandiseOutflowPanel({
             className={`pb-2.5 text-[13.5px] font-semibold cursor-pointer border-b-2 flex items-center gap-1.5 ${tab === t.id ? "border-teal text-ink" : "border-transparent text-steel hover:text-ink"}`}
           >
             {t.label}
-            {t.id === "proveedor" && supplierExchangeMineCount > 0 && (
+            {t.id === "proveedor" && supplierExchangeMineCount + financeWriteOffPendingCount > 0 && (
               <span className="font-mono text-[10px] font-semibold bg-red/20 text-red rounded-full px-1.5 py-0.5">
-                {supplierExchangeMineCount}
+                {supplierExchangeMineCount + financeWriteOffPendingCount}
               </span>
             )}
           </button>
@@ -165,9 +177,11 @@ export function MerchandiseOutflowPanel({
             {canAct ? (
               <>Elige el proveedor y agrega todos los productos que le vas a devolver en un mismo paquete — cada uno se cruza solo contra la última compra a ese proveedor para estimar el crédito reclamable. Toma foto de la lista física como evidencia y deja lista la solicitud: sale de Just en ese momento (cae directo en la cola de baja) y te da un código para imprimir la guía y pegarla en el paquete. Quien resuelve cada producto (cambio o crédito) es quien solicitó esa compra originalmente, no tú — abajo ves el estado en modo lectura.</>
             ) : canViewSupplierExchangeResolution ? (
-              <>Vista de solo lectura de las solicitudes de cambio con proveedor que arma Daniel. Cada producto lo resuelve (cambio o crédito) quien solicitó esa compra originalmente, no Daniel — esa persona gestiona desde acá abajo, en su propia sección.</>
+              <>Vista de solo lectura de las solicitudes de cambio con proveedor que arma Daniel. Cada producto lo resuelve (cambio o crédito o rechazo) quien solicitó esa compra originalmente, no Daniel — esa persona gestiona desde acá abajo, en su propia sección. Si un proveedor rechaza todo, acá abajo puedes confirmar la baja en Just.</>
+            ) : canConfirmFinanceWriteOff ? (
+              <>Acá abajo aparecen los productos que un proveedor rechazó (ni cambia ni da crédito) y que quedan pendientes de que registres la pérdida en la parte financiera.</>
             ) : (
-              <>Acá abajo están los productos que Inventario está devolviendo a un proveedor y que te toca gestionar a ti (porque pediste originalmente esa compra, o no tenía compra vinculada). Contacta al proveedor y registra si aceptó cambiarlo o dar crédito.</>
+              <>Acá abajo están los productos que Inventario está devolviendo a un proveedor y que te toca gestionar a ti (porque pediste originalmente esa compra, o no tenía compra vinculada). Contacta al proveedor y registra si aceptó cambiarlo, dio crédito, o rechazó todo.</>
             )}
           </TabGuide>
           <div className="flex flex-col gap-6">
@@ -176,10 +190,10 @@ export function MerchandiseOutflowPanel({
               <div className="font-display font-bold text-[14px] mb-2.5">Mis solicitudes de gestión pendiente</div>
               <SupplierExchangeMyResolutions />
             </div>
-            {canViewSupplierExchangeResolution && (
+            {(canViewSupplierExchangeResolution || canConfirmFinanceWriteOff) && (
               <div>
                 <div className="font-display font-bold text-[14px] mb-2.5">Estado de resolución</div>
-                <SupplierExchangeResolutionInbox key={proveedorRefreshKey} />
+                <SupplierExchangeResolutionInbox key={proveedorRefreshKey} canConfirmJustWriteOff={canAct} canConfirmFinanceWriteOff={canConfirmFinanceWriteOff} />
               </div>
             )}
           </div>

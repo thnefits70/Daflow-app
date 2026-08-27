@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { notifyOwner } from "@/lib/notifications";
-import { getInventoryLeadId, getMarketingLeadId } from "@/lib/guards";
+import { getInventoryLeadId, getMarketingLeadId, getFinanceLeadId } from "@/lib/guards";
 import { OUTFLOW_REASON_LABELS } from "@/lib/merchandiseOutflowLabels";
 import { PRICED_STATUSES, effectiveUnitCost } from "@/lib/purchases";
 
@@ -132,10 +132,63 @@ export async function notifySupplierExchangeGestors(batch: {
       notifyOwner(gestorId, {
         title: "Cambio con proveedor pendiente de tu gestión",
         body: `${batch.code} — ${count} producto(s) de ${batch.supplier?.name ?? "un proveedor"} esperan que negocies el cambio o crédito.`,
-        url: "/area/cambio-proveedor-gestiones",
+        url: "/area/workspace?tab=egresos&otab=proveedor",
       }).catch(() => null)
     )
   );
+}
+
+// Confirmado 2026-08-27, pedido explícito del usuario: si el proveedor
+// rechaza tanto el cambio como el crédito (resolution REJECTED), es una
+// pérdida real — avisa a 3 personas de una vez, cada una con su propia
+// tarea: admin (aviso urgente, nada que confirmar), Nairoby (dar de baja
+// financieramente, ver financeWriteOffAt) y Daniel (confirmar la baja en
+// Just, ver justWriteOffConfirmedAt). Cada aviso ya trae el link directo a
+// donde le toca actuar.
+export async function notifySupplierExchangeRejected(item: {
+  quantity: number;
+  declaredName: string;
+  catalogItem: { name: string } | null;
+  batch: { code: string; supplier: { name: string } | null };
+}): Promise<void> {
+  const name = item.catalogItem?.name ?? item.declaredName;
+  const supplierName = item.batch.supplier?.name ?? "un proveedor";
+  const [financeLeadId, inventoryLeadId, invDept] = await Promise.all([
+    getFinanceLeadId(),
+    getInventoryLeadId(),
+    prisma.department.findUnique({ where: { code: "INV" }, select: { id: true } }),
+  ]);
+  // "Registro de Egresos" (donde admin ve esto en modo lectura) solo se ve
+  // desde la página del departamento INV — ver canViewMerchandiseOutflow en
+  // admin/dept/[id]/page.tsx.
+  const adminUrl = invDept ? `/admin/dept/${invDept.id}?tab=egresos&otab=proveedor` : "/admin";
+
+  const notifications: Promise<void>[] = [
+    notifyOwner("admin", {
+      title: "⚠️ Proveedor rechazó un cambio con mercadería",
+      body: `${supplierName} no cambia ni da crédito por "${name}" (${item.quantity} un.) — ${item.batch.code}. Riesgo de perder la mercadería y el pago.`,
+      url: adminUrl,
+    }),
+  ];
+  if (financeLeadId) {
+    notifications.push(
+      notifyOwner(financeLeadId, {
+        title: "Mercadería rechazada por proveedor — dar de baja financiera",
+        body: `${supplierName} — "${name}" (${item.quantity} un.) — ${item.batch.code}.`,
+        url: "/area/workspace?tab=egresos&otab=proveedor",
+      })
+    );
+  }
+  if (inventoryLeadId) {
+    notifications.push(
+      notifyOwner(inventoryLeadId, {
+        title: "Mercadería rechazada por proveedor — confirmar baja en Just",
+        body: `${supplierName} — "${name}" (${item.quantity} un.) — ${item.batch.code}.`,
+        url: "/area/workspace?tab=egresos&otab=proveedor",
+      })
+    );
+  }
+  await Promise.all(notifications.map((p) => p.catch(() => null)));
 }
 
 // Deterioro escalado a Compras (mercadería recién llegada) — por ahora solo

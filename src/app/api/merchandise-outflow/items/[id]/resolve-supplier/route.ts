@@ -2,28 +2,43 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { outflowItemDisplayName, resolveOutflowItemGestorId } from "@/lib/merchandiseOutflow";
+import { outflowItemDisplayName, resolveOutflowItemGestorId, notifySupplierExchangeRejected } from "@/lib/merchandiseOutflow";
 
 const schema = z.discriminatedUnion("resolution", [
-  z.object({ resolution: z.literal("REPLACED"), note: z.string().trim().optional() }),
+  z.object({ resolution: z.literal("REPLACED"), quantity: z.number().int().positive().optional(), note: z.string().trim().optional() }),
   z.object({
     resolution: z.literal("CREDIT_ISSUED"),
+    quantity: z.number().int().positive().optional(),
     amount: z.number().positive(),
     proofUrl: z.string().url({ message: "Falta el comprobante — captura del chat o documento donde el proveedor acepta el crédito." }),
     proofName: z.string().trim().optional(),
     note: z.string().trim().optional(),
   }),
+  z.object({
+    resolution: z.literal("REJECTED"),
+    quantity: z.number().int().positive().optional(),
+    note: z.string().trim().min(1, "Cuenta qué te dijo el proveedor — esto dispara avisos urgentes."),
+    proofUrl: z.string().url().optional(),
+    proofName: z.string().trim().optional(),
+  }),
 ]);
 
-// Confirmado 2026-08-26, pedido explícito del usuario: quien resuelve
-// (cambio o crédito) ya no es Daniel — es quien solicitó ORIGINALMENTE la
-// compra de ese producto a ese proveedor (linkedPurchaseRequest.requestedBy),
-// o Bryan si el producto no tiene compra vinculada (ver
-// resolveOutflowItemGestorId). Daniel y admin quedan en modo lectura.
-// REPLACED cierra el seguimiento (la llegada física del reemplazo se maneja
-// por la recepción normal de Compras). CREDIT_ISSUED crea el SupplierCredit
-// correspondiente, mismo patrón que el crédito manual de Control de Compras
-// (comprobante obligatorio).
+// Confirmado 2026-08-26/27, pedido explícito del usuario: quien resuelve
+// (cambio, crédito o rechazo) ya no es Daniel — es quien solicitó
+// ORIGINALMENTE la compra de ese producto a ese proveedor
+// (linkedPurchaseRequest.requestedBy), o Bryan si el producto no tiene
+// compra vinculada (ver resolveOutflowItemGestorId). Daniel y admin quedan
+// en modo lectura sobre esta decisión.
+// REPLACED cierra el seguimiento. CREDIT_ISSUED crea el SupplierCredit
+// correspondiente. REJECTED (confirmado 2026-08-27) no crea crédito — es una
+// pérdida real, dispara avisos urgentes a admin/Nairoby/Daniel.
+// `quantity` (confirmado 2026-08-27, pedido explícito: "respuesta mixta") es
+// opcional — por defecto resuelve TODA la cantidad del ítem. Si se manda una
+// cantidad MENOR, se parte el ítem en dos dentro de una sola transacción: un
+// ítem nuevo, ya resuelto, con esa cantidad, y el ítem original se queda con
+// el resto, todavía pendiente — para que el mismo producto pueda tener
+// varias respuestas distintas (ej. de 3 unidades, 2 cambiadas y 1 con
+// crédito), sin dejar nunca un ítem huérfano si algo falla a mitad de camino.
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
@@ -36,7 +51,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const item = await prisma.merchandiseOutflowItem.findUnique({
     where: { id },
     include: {
-      batch: { select: { reason: true, supplierId: true, submittedAt: true, code: true } },
+      batch: { select: { reason: true, supplierId: true, submittedAt: true, code: true, supplier: { select: { name: true } } } },
       catalogItem: { select: { name: true } },
       linkedPurchaseRequest: { select: { requestedById: true } },
     },
@@ -49,32 +64,67 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const gestorId = await resolveOutflowItemGestorId(item);
   if (gestorId !== session.user.id) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
-  if (parsed.data.resolution === "REPLACED") {
-    const updated = await prisma.merchandiseOutflowItem.update({
-      where: { id },
-      data: { resolution: "REPLACED", resolutionNote: parsed.data.note?.trim() || null, resolvedAt: new Date(), resolvedById: session.user.id },
+  const resolveQty = parsed.data.quantity ?? item.quantity;
+  if (resolveQty > item.quantity) return NextResponse.json({ error: "La cantidad no puede ser mayor a la que queda pendiente." }, { status: 400 });
+  const isPartial = resolveQty < item.quantity;
+  const remainingQty = item.quantity - resolveQty;
+  const proportionalCredit = (qty: number) => (item.unitCostAtExchange != null ? item.unitCostAtExchange * qty : null);
+  const note = "note" in parsed.data ? parsed.data.note?.trim() || null : null;
+  const now = new Date();
+
+  const resolvedItemId = await prisma.$transaction(async (tx) => {
+    let targetId = id;
+    if (isPartial) {
+      const split = await tx.merchandiseOutflowItem.create({
+        data: {
+          batchId: item.batchId,
+          catalogItemId: item.catalogItemId,
+          declaredName: item.declaredName,
+          quantity: resolveQty,
+          linkedPurchaseRequestId: item.linkedPurchaseRequestId,
+          unitCostAtExchange: item.unitCostAtExchange,
+          expectedCreditAmount: proportionalCredit(resolveQty),
+        },
+      });
+      targetId = split.id;
+      await tx.merchandiseOutflowItem.update({
+        where: { id },
+        data: { quantity: remainingQty, expectedCreditAmount: proportionalCredit(remainingQty) },
+      });
+    }
+
+    await tx.merchandiseOutflowItem.update({
+      where: { id: targetId },
+      data: { resolution: parsed.data.resolution, resolutionNote: note, resolvedAt: now, resolvedById: session.user.id },
     });
-    return NextResponse.json(updated);
+
+    if (parsed.data.resolution === "CREDIT_ISSUED") {
+      await tx.supplierCredit.create({
+        data: {
+          supplierId: item.batch.supplierId!,
+          amount: parsed.data.amount,
+          reason: `Cambio con proveedor — ${outflowItemDisplayName(item)} (${item.batch.code})`,
+          proofUrl: parsed.data.proofUrl,
+          proofName: parsed.data.proofName || null,
+          status: "AVAILABLE",
+          outflowItemId: targetId,
+          createdById: session.user.id,
+        },
+      });
+    }
+
+    return targetId;
+  });
+
+  if (parsed.data.resolution === "REJECTED") {
+    await notifySupplierExchangeRejected({
+      quantity: resolveQty,
+      declaredName: item.declaredName,
+      catalogItem: item.catalogItem,
+      batch: { code: item.batch.code, supplier: item.batch.supplier },
+    }).catch(() => null);
   }
 
-  const [updated] = await prisma.$transaction([
-    prisma.merchandiseOutflowItem.update({
-      where: { id },
-      data: { resolution: "CREDIT_ISSUED", resolutionNote: parsed.data.note?.trim() || null, resolvedAt: new Date(), resolvedById: session.user.id },
-    }),
-    prisma.supplierCredit.create({
-      data: {
-        supplierId: item.batch.supplierId,
-        amount: parsed.data.amount,
-        reason: `Cambio con proveedor — ${outflowItemDisplayName(item)} (${item.batch.code})`,
-        proofUrl: parsed.data.proofUrl,
-        proofName: parsed.data.proofName || null,
-        status: "AVAILABLE",
-        outflowItemId: id,
-        createdById: session.user.id,
-      },
-    }),
-  ]);
-
-  return NextResponse.json(updated);
+  const finalItem = await prisma.merchandiseOutflowItem.findUnique({ where: { id: resolvedItemId } });
+  return NextResponse.json(finalItem);
 }

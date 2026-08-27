@@ -140,6 +140,49 @@ export async function getAllPendingCredits(): Promise<PendingCreditDTO[]> {
   }));
 }
 
+export type SupplierExchangeCreditTotal = {
+  supplierId: string;
+  supplierName: string;
+  total: number;
+  credits: { id: string; amount: number; batchCode: string; itemName: string; createdAt: string }[];
+};
+
+// Confirmado 2026-08-27, pedido explícito del usuario: total de crédito YA
+// CONFIRMADO (el proveedor ya aceptó darlo) por proveedor, sumando entre
+// TODOS los lotes separados de "Cambio con proveedor" que tenga ese
+// proveedor — sin mezclar los lotes entre sí (cada uno sigue siendo su
+// propia tarjeta), solo el total con el detalle de qué lote aportó cada
+// parte. Se identifica un crédito de este flujo por tener outflowItemId (a
+// diferencia de los créditos manuales o de reportes urgentes). Cuenta
+// cualquier estado (no solo AVAILABLE) porque lo que importa acá es "el
+// proveedor ya lo confirmó", no si todavía se puede gastar.
+export async function getConfirmedSupplierExchangeCreditTotals(): Promise<SupplierExchangeCreditTotal[]> {
+  const credits = await prisma.supplierCredit.findMany({
+    where: { outflowItemId: { not: null } },
+    include: {
+      supplier: { select: { id: true, name: true } },
+      outflowItem: { select: { declaredName: true, catalogItem: { select: { name: true } }, batch: { select: { code: true } } } },
+    },
+    orderBy: { createdAt: "asc" },
+  });
+
+  const bySupplier = new Map<string, SupplierExchangeCreditTotal>();
+  for (const c of credits) {
+    if (!c.outflowItem) continue;
+    const entry = bySupplier.get(c.supplierId) ?? { supplierId: c.supplierId, supplierName: c.supplier.name, total: 0, credits: [] };
+    entry.total += c.amount;
+    entry.credits.push({
+      id: c.id,
+      amount: c.amount,
+      batchCode: c.outflowItem.batch.code,
+      itemName: c.outflowItem.catalogItem?.name ?? c.outflowItem.declaredName,
+      createdAt: c.createdAt.toISOString(),
+    });
+    bySupplier.set(c.supplierId, entry);
+  }
+  return [...bySupplier.values()].sort((a, b) => b.total - a.total);
+}
+
 export type StaleSupplierCreditPush = { ownerId: string; title: string; body: string; url: string };
 
 // Confirmado 2026-08-06: si un crédito AVAILABLE lleva más de 30 días sin

@@ -357,6 +357,8 @@ model User {
   merchandiseOutflowBatchesCreated        MerchandiseOutflowBatch[] @relation("MerchandiseOutflowBatchCreatedBy")
   merchandiseOutflowBatchesJustWrittenOff MerchandiseOutflowBatch[] @relation("MerchandiseOutflowBatchJustWrittenOffBy")
   merchandiseOutflowItemsResolved         MerchandiseOutflowItem[]  @relation("MerchandiseOutflowItemResolvedBy")
+  merchandiseOutflowItemsFinanceWriteOff  MerchandiseOutflowItem[]  @relation("MerchandiseOutflowItemFinanceWriteOffBy")
+  merchandiseOutflowItemsJustWriteOff     MerchandiseOutflowItem[]  @relation("MerchandiseOutflowItemJustWriteOffBy")
 
   externalSalesAdvised            ExternalSale[] @relation("ExternalSaleAdvisor")
   externalSalesReviewed           ExternalSale[] @relation("ExternalSaleReviewedBy")
@@ -2926,9 +2928,9 @@ model PayrollTransfer {
   // (guardado en el cliente) y su sesión no es una fila de User (id fijo
   // "admin" en auth.ts) — por eso el nombre se guarda como texto plano, sin
   // relación a User.
-  confirmedWithoutProof     Boolean   @default(false)
-  confirmedWithoutProofNote String?
-  confirmedWithoutProofAt   DateTime?
+  confirmedWithoutProof       Boolean   @default(false)
+  confirmedWithoutProofNote   String?
+  confirmedWithoutProofAt     DateTime?
   confirmedWithoutProofByName String?
 
   createdAt DateTime @default(now())
@@ -2968,9 +2970,9 @@ model PayrollIessTransfer {
   completedAt DateTime?
 
   // Mismo patrón que PayrollTransfer.confirmedWithoutProof — ver ahí.
-  confirmedWithoutProof     Boolean   @default(false)
-  confirmedWithoutProofNote String?
-  confirmedWithoutProofAt   DateTime?
+  confirmedWithoutProof       Boolean   @default(false)
+  confirmedWithoutProofNote   String?
+  confirmedWithoutProofAt     DateTime?
   confirmedWithoutProofByName String?
 
   createdAt DateTime @default(now())
@@ -3024,10 +3026,10 @@ model PayrollQuincenaRole {
   // total en su poder / cuenta correspondiente — ver PayrollTransfer). La IA
   // lee el monto del comprobante y se compara contra netTotal antes de dejar
   // confirmar, mismo patrón bloqueante que PayrollTransfer.proof.
-  paidAt              DateTime?
-  paidProofUrl        String?
-  paidProofName       String?
-  paidProofReadAmount Float?
+  paidAt                 DateTime?
+  paidProofUrl           String?
+  paidProofName          String?
+  paidProofReadAmount    Float?
   // Número de comprobante/transacción que la IA extrae del recibo (pedido
   // explícito 2026-08-27) — junto con paidProofReadAmount, ambos deben
   // coincidir/leerse antes de dejar confirmar el pago, ver
@@ -3646,6 +3648,12 @@ enum OutflowItemResolution {
   // crédito en su lugar — crea/vincula un SupplierCredit (ver
   // MerchandiseOutflowItem.credit).
   CREDIT_ISSUED
+  // Fase 2 — CAMBIO_PROVEEDOR (confirmado 2026-08-27): el proveedor se negó
+  // tanto a cambiar el producto como a dar crédito — no crea SupplierCredit,
+  // es una pérdida real. Dispara aviso urgente a admin + dos pendientes
+  // separados: Nairoby (baja financiera) y Daniel (baja en Just), ver
+  // financeWriteOffAt/justWriteOffConfirmedAt en MerchandiseOutflowItem.
+  REJECTED
 }
 
 model MerchandiseOutflowBatch {
@@ -3737,6 +3745,20 @@ model MerchandiseOutflowItem {
   linkedPurchaseRequest   PurchaseRequest? @relation("OutflowItemLinkedPurchase", fields: [linkedPurchaseRequestId], references: [id], onDelete: SetNull)
   unitCostAtExchange      Float?
   expectedCreditAmount    Float?
+
+  // Fase 2 — CAMBIO_PROVEEDOR resuelto como REJECTED (confirmado
+  // 2026-08-27, pedido explícito del usuario): dos confirmaciones
+  // independientes, cada una de una persona distinta — null mientras están
+  // pendientes. financeWriteOffAt = Nairoby ya registró la pérdida en
+  // Finanzas. justWriteOffConfirmedAt = Daniel ya confirmó la baja de esta
+  // mercadería en el sistema Just. El aviso urgente a admin desaparece solo
+  // cuando AMBAS ya están hechas.
+  financeWriteOffAt         DateTime?
+  financeWriteOffById       String?
+  financeWriteOffBy         User?     @relation("MerchandiseOutflowItemFinanceWriteOffBy", fields: [financeWriteOffById], references: [id], onDelete: SetNull)
+  justWriteOffConfirmedAt   DateTime?
+  justWriteOffConfirmedById String?
+  justWriteOffConfirmedBy   User?     @relation("MerchandiseOutflowItemJustWriteOffBy", fields: [justWriteOffConfirmedById], references: [id], onDelete: SetNull)
 
   createdAt DateTime @default(now())
 

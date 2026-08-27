@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { canActOnMerchandiseOutflow, getMarketingLeadId } from "@/lib/guards";
+import { canActOnMerchandiseOutflow, canConfirmSupplierExchangeFinanceWriteOff, getMarketingLeadId } from "@/lib/guards";
 
 const ITEM_INCLUDE = {
   catalogItem: { select: { name: true, photos: true } },
@@ -17,15 +17,18 @@ const ITEM_INCLUDE = {
 export async function GET() {
   const session = await auth();
   const isAdmin = session?.user.role === "admin";
-  if (!session || !(isAdmin || (await canActOnMerchandiseOutflow()))) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+  if (!session || !(isAdmin || (await canActOnMerchandiseOutflow()) || (await canConfirmSupplierExchangeFinanceWriteOff())))
+    return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
   const [items, marketingLeadId] = await Promise.all([
     prisma.merchandiseOutflowItem.findMany({
       where: { batch: { reason: "CAMBIO_PROVEEDOR", submittedAt: { not: null } } },
       include: {
         ...ITEM_INCLUDE,
-        batch: { select: { id: true, code: true, createdAt: true, supplier: { select: { id: true, name: true } } } },
+        batch: { select: { id: true, code: true, createdAt: true, documentPhotoUrls: true, supplier: { select: { id: true, name: true } } } },
         resolvedBy: { select: { name: true } },
+        financeWriteOffBy: { select: { name: true } },
+        justWriteOffConfirmedBy: { select: { name: true } },
       },
       orderBy: { createdAt: "asc" },
     }),

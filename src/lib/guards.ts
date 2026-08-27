@@ -859,6 +859,19 @@ export async function canViewMerchandiseOutflow() {
   return canCaptureMerchandiseOutflow();
 }
 
+// Confirmado 2026-08-27, pedido explícito del usuario: cuando un proveedor
+// rechaza un cambio (ni cambia el producto ni da crédito), Nairoby es quien
+// registra la pérdida en la parte financiera — a propósito SIN admin de
+// respaldo (a diferencia del resto de guards de este módulo), porque el
+// usuario fue explícito en que él solo mira esto en modo lectura, no actúa.
+export async function canConfirmSupplierExchangeFinanceWriteOff() {
+  const session = await auth();
+  if (!session) return false;
+  const user = await purchasesUserContext(session.user.id);
+  if (!user) return false;
+  return !!user.isLeader && user.leadsDept?.code === "FIN";
+}
+
 // Confirmado 2026-08-25: id de Bryan (líder de Análisis de Mercado/MKT) para
 // avisarle cuando Daniel escala un deterioro de mercadería reciente — mismo
 // estilo que getInventoryLeadId/getFinanceLeadId.

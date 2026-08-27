@@ -391,7 +391,11 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
 // notificaciones" para desactivarlo) y el cron lo manda sin mirar
 // getDisabledTypes. Deja de aparecer solo/naturalmente en cuanto el líder ya
 // no tiene a nadie pendiente de calificar — nunca por elección propia.
-export const MANDATORY_PUSH_TYPES = new Set(["colaborador_del_mes"]);
+// "cambio_proveedor_rechazo" (confirmado 2026-08-27, pedido explícito del
+// usuario) es igual de obligatorio: cuando un proveedor rechaza un cambio es
+// dinero/mercadería en riesgo de perderse — nadie (admin, Nairoby, Daniel)
+// debe poder silenciarlo por accidente.
+export const MANDATORY_PUSH_TYPES = new Set(["colaborador_del_mes", "cambio_proveedor_rechazo"]);
 
 // Each department's admin-leader feedback meeting falls on a different
 // weekday — confirmed by the user 2026-07-21: Análisis de Mercado (Bryan)
@@ -1059,6 +1063,56 @@ async function getSupplierExchangeGestorPendingItem(userId: string, href: string
     label: "Cambio con proveedor pendiente de tu gestión",
     meta: `${count} producto${count === 1 ? "" : "s"}`,
     overdue: false,
+    href,
+  };
+}
+
+// Confirmado 2026-08-27, pedido explícito del usuario: si un proveedor
+// rechaza un cambio (ni cambia el producto ni da crédito), es una pérdida
+// real — admin ve un aviso urgente company-wide mientras falte CUALQUIERA de
+// las dos confirmaciones (baja financiera de Nairoby, baja en Just de
+// Daniel); desaparece solo cuando AMBAS ya están hechas.
+async function getSupplierExchangeRejectedAdminPendingItem(href: string): Promise<PendingItem | null> {
+  const rows = await prisma.merchandiseOutflowItem.findMany({
+    where: { resolution: "REJECTED", OR: [{ financeWriteOffAt: null }, { justWriteOffConfirmedAt: null }] },
+    select: { expectedCreditAmount: true },
+  });
+  if (rows.length === 0) return null;
+  const atRisk = rows.reduce((s, r) => s + (r.expectedCreditAmount ?? 0), 0);
+  return {
+    type: "cambio_proveedor_rechazo",
+    icon: "⚠️",
+    label: "Proveedor rechazó un cambio con mercadería",
+    meta: `${rows.length} producto${rows.length === 1 ? "" : "s"}${atRisk > 0 ? ` · $${atRisk.toFixed(2)} en riesgo` : ""} · atrasado`,
+    overdue: true,
+    href,
+  };
+}
+
+// Tarea puntual de Nairoby: registrar la pérdida en la parte financiera.
+async function getSupplierExchangeFinanceWriteOffPendingItem(href: string): Promise<PendingItem | null> {
+  const count = await prisma.merchandiseOutflowItem.count({ where: { resolution: "REJECTED", financeWriteOffAt: null } });
+  if (count === 0) return null;
+  return {
+    type: "cambio_proveedor_rechazo",
+    icon: "⚠️",
+    label: "Mercadería rechazada por proveedor — dar de baja financiera",
+    meta: `${count} producto${count === 1 ? "" : "s"} · atrasado`,
+    overdue: true,
+    href,
+  };
+}
+
+// Tarea puntual de Daniel: confirmar la baja en Just.
+async function getSupplierExchangeJustWriteOffPendingItem(href: string): Promise<PendingItem | null> {
+  const count = await prisma.merchandiseOutflowItem.count({ where: { resolution: "REJECTED", justWriteOffConfirmedAt: null } });
+  if (count === 0) return null;
+  return {
+    type: "cambio_proveedor_rechazo",
+    icon: "⚠️",
+    label: "Mercadería rechazada por proveedor — confirmar baja en Just",
+    meta: `${count} producto${count === 1 ? "" : "s"} · atrasado`,
+    overdue: true,
     href,
   };
 }
@@ -1790,7 +1844,12 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     const comDept = await prisma.department.findUnique({ where: { code: "COM" }, select: { id: true } });
     const comPaymentsHref = comDept ? `/admin/dept/${comDept.id}?tab=compras&ptab=finanzas` : "/admin";
     const comCreditsHref = comDept ? `/admin/dept/${comDept.id}?tab=compras&ptab=urgentes` : "/admin";
-    const [feedbackItems, recognitionItem, pettyCashLow, pettyCashUnconfirmed, adminPaymentsItem, purchaseMerchandiseItem, purchaseShippingItem, purchaseCreditsItem, overtimeApprovalItem, commissionBonusApprovalItem, salaryAdvanceItem, managementDeductionItem, personalPurchaseFinanceItem, personalPurchaseTransferConfirmItem, personalPurchaseTransferCloseItem, personalPurchasePaymentWatchItem, payrollTransferItem, payrollIessTransferItem, birthdayItems] = await Promise.all([
+    // Confirmado 2026-08-27: "Registro de Egresos" (donde vive la vista de
+    // solo lectura de Cambio con proveedor) solo se ve desde la página del
+    // departamento INV (ver canViewMerchandiseOutflow en admin/dept/[id]/page.tsx).
+    const invDept = await prisma.department.findUnique({ where: { code: "INV" }, select: { id: true } });
+    const invEgresosHref = invDept ? `/admin/dept/${invDept.id}?tab=egresos&otab=proveedor` : "/admin";
+    const [feedbackItems, recognitionItem, pettyCashLow, pettyCashUnconfirmed, adminPaymentsItem, purchaseMerchandiseItem, purchaseShippingItem, purchaseCreditsItem, supplierExchangeRejectedItem, overtimeApprovalItem, commissionBonusApprovalItem, salaryAdvanceItem, managementDeductionItem, personalPurchaseFinanceItem, personalPurchaseTransferConfirmItem, personalPurchaseTransferCloseItem, personalPurchasePaymentWatchItem, payrollTransferItem, payrollIessTransferItem, birthdayItems] = await Promise.all([
       getFeedbackPendingItems(),
       getRecognitionAdminPendingItem("/admin/colaborador-destacado"),
       getPettyCashLowBalanceItems(financeHref),
@@ -1799,6 +1858,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       getPurchaseMerchandisePendingItem(comDept?.id ?? null),
       getPurchaseShippingPendingItem(comPaymentsHref),
       getPurchaseCreditsPendingItem(comCreditsHref),
+      getSupplierExchangeRejectedAdminPendingItem(invEgresosHref),
       getOvertimeApprovalPendingItem("/admin/nomina?tab=pagos"),
       getCommissionAndBonusApprovalPendingItem("/admin/nomina"),
       getSalaryAdvancePendingItem("/admin/nomina?tab=pagos&ptab=anticipos"),
@@ -1820,6 +1880,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       ...(purchaseMerchandiseItem ? [purchaseMerchandiseItem] : []),
       ...(purchaseShippingItem ? [purchaseShippingItem] : []),
       ...(purchaseCreditsItem ? [purchaseCreditsItem] : []),
+      ...(supplierExchangeRejectedItem ? [supplierExchangeRejectedItem] : []),
       ...(overtimeApprovalItem ? [overtimeApprovalItem] : []),
       ...(commissionBonusApprovalItem ? [commissionBonusApprovalItem] : []),
       ...(salaryAdvanceItem ? [salaryAdvanceItem] : []),
@@ -1920,6 +1981,9 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     if (merchandiseWeeklyVerificationItem) items.push(merchandiseWeeklyVerificationItem);
     if (payrollTransferItem) items.push(payrollTransferItem);
     if (payrollIessTransferItem) items.push(payrollIessTransferItem);
+
+    const financeWriteOffItem = await getSupplierExchangeFinanceWriteOffPendingItem("/area/workspace?tab=egresos&otab=proveedor");
+    if (financeWriteOffItem) items.push(financeWriteOffItem);
   }
 
   if (me.leadsDept.trackWeeklyMetric) {
@@ -1950,6 +2014,9 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     if (personalPurchaseInventoryItem) items.push(personalPurchaseInventoryItem);
     if (lateClaimReviewItem) items.push(lateClaimReviewItem);
     if (lateClaimJustItem) items.push(lateClaimJustItem);
+
+    const justWriteOffItem = await getSupplierExchangeJustWriteOffPendingItem("/area/workspace?tab=egresos&otab=proveedor");
+    if (justWriteOffItem) items.push(justWriteOffItem);
   }
 
   const recognitionItem = await getRecognitionLeaderPendingItem(me.leadsDeptId, "/area/colaborador-destacado");
