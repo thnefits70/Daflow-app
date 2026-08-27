@@ -674,8 +674,16 @@ export function PurchaseApprovalInbox() {
                   {g[0].bankAccount.holderIdType && (
                     <div><span className="text-steel">{g[0].bankAccount.holderIdType === "RUC" ? "RUC" : "CI"}: </span><span className="font-semibold break-all">{g[0].bankAccount.holderIdNumber}</span></div>
                   )}
-                  <div><span className="text-steel">Titular: </span><span className="font-semibold">{g[0].bankAccount.bankAccountHolder}</span></div>
-                  <div><span className="text-steel">N°: </span><span className="font-semibold break-all">{g[0].bankAccount.bankAccountNumber}</span></div>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-2">
+                  <div className="bg-teal/10 border border-teal/30 rounded-md px-2.5 py-1.5">
+                    <div className="text-[9px] font-semibold uppercase tracking-wide text-teal/80">Titular</div>
+                    <div className="font-display text-[16px] font-bold text-teal leading-tight break-words">{g[0].bankAccount.bankAccountHolder}</div>
+                  </div>
+                  <div className="bg-teal/10 border border-teal/30 rounded-md px-2.5 py-1.5">
+                    <div className="text-[9px] font-semibold uppercase tracking-wide text-teal/80">N° de cuenta</div>
+                    <div className="font-display text-[16px] font-bold text-teal leading-tight break-all">{g[0].bankAccount.bankAccountNumber}</div>
+                  </div>
                 </div>
                 {requestingAccountChangeFor === groupId ? (
                   <div>
