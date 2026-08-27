@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Camera, Check, Plus, Send, Sparkles, Trash2, X } from "lucide-react";
+import { Camera, Check, Pencil, Plus, Send, Sparkles, Trash2, X } from "lucide-react";
 import { LiveCameraCapture } from "@/components/shared/LiveCameraCapture";
 import { ProductMatchPicker, type MatchCatalogItem, type ProductMatchResult } from "@/components/merchandise-reentry/ProductMatchPicker";
 import { ComboComponentBuilder, type ComboDraftComponent } from "@/components/merchandise-reentry/ComboComponentBuilder";
@@ -23,6 +23,7 @@ type SuggestedRow = {
   comboBuilderOpen?: boolean;
   comboDraft?: ComboDraftComponent[];
   savingCombo?: boolean;
+  editingName?: boolean;
 };
 
 const MAX_PHOTOS = 40;
@@ -464,9 +465,42 @@ export function DocumentCaptureFlow({ reason, canManageJustCatalog = false }: { 
             ) : (
               <div key={i} className="bg-cloud rounded-md p-2.5">
                 <div className="flex items-center justify-between gap-2 mb-1.5">
-                  <div className="text-[12.5px] font-semibold">
-                    IA leyó: &quot;{row.name}&quot; · {row.quantity} un.
-                  </div>
+                  {row.editingName ? (
+                    <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                      <input
+                        type="text"
+                        autoFocus
+                        className="flex-1 min-w-0 rounded border border-teal bg-surface px-2 py-1 text-[12.5px] font-semibold"
+                        value={row.name}
+                        onChange={(e) => setRows((rs) => rs.map((r, j) => (j === i ? { ...r, name: e.target.value } : r)))}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") setRows((rs) => rs.map((r, j) => (j === i ? { ...r, editingName: false } : r)));
+                        }}
+                      />
+                      <button
+                        type="button"
+                        className="text-teal cursor-pointer shrink-0"
+                        title="Listo"
+                        onClick={() => setRows((rs) => rs.map((r, j) => (j === i ? { ...r, editingName: false } : r)))}
+                      >
+                        <Check size={14} />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="text-[12.5px] font-semibold flex items-center gap-1.5 min-w-0">
+                      <span className="truncate">
+                        IA leyó: &quot;{row.name}&quot; · {row.quantity} un.
+                      </span>
+                      <button
+                        type="button"
+                        className="text-steel hover:text-teal cursor-pointer shrink-0"
+                        title="Corregir el nombre que leyó la IA"
+                        onClick={() => setRows((rs) => rs.map((r, j) => (j === i ? { ...r, editingName: true } : r)))}
+                      >
+                        <Pencil size={12} />
+                      </button>
+                    </div>
+                  )}
                   {row.fromCombo ? (
                     <span className="shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-bold whitespace-nowrap bg-cloud text-steel border-rule">Del combo registrado</span>
                   ) : (
