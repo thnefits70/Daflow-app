@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { ProofPreview } from "@/components/shared/ProofPreview";
 import { usePasteFile } from "@/lib/usePasteFile";
 import { uploadFile } from "@/lib/uploadFile";
@@ -24,6 +24,8 @@ export function PayoutUploader({ roleId, expectedAmount, onSent }: { roleId: str
   const [err, setErr] = useState("");
   const [verifying, setVerifying] = useState(false);
   const [verify, setVerify] = useState<VerifyResult | null>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const pdfInputRef = useRef<HTMLInputElement>(null);
 
   async function handleFile(file: File) {
     setUploading(true);
@@ -81,19 +83,23 @@ export function PayoutUploader({ roleId, expectedAmount, onSent }: { roleId: str
             ) : (
               <span>
                 Pegá con Ctrl+V, o{" "}
-                <label className="underline cursor-pointer hover:text-teal">
+                <button type="button" className="underline cursor-pointer hover:text-teal" onClick={() => imageInputRef.current?.click()}>
                   hacé clic para elegir un archivo
-                  <input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])} />
-                </label>
+                </button>
               </span>
             )}
           </div>
-          <label className="flex items-center gap-1 mt-1 text-[10.5px] text-steel-dim cursor-pointer hover:text-teal w-fit mx-auto justify-center">
+          <button
+            type="button"
+            className="flex items-center gap-1 mt-1 text-[10.5px] text-steel-dim cursor-pointer hover:text-teal w-fit mx-auto justify-center"
+            onClick={() => pdfInputRef.current?.click()}
+          >
             ¿Es un PDF? Subir documento
-            <input type="file" accept="application/pdf" className="hidden" onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])} />
-          </label>
+          </button>
         </div>
       )}
+      <input ref={imageInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])} />
+      <input ref={pdfInputRef} type="file" accept="application/pdf" className="hidden" onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])} />
       {err && <div className="text-red text-[11.5px] mt-1.5">{err}</div>}
       {verifying && <div className="text-[11.5px] text-steel-dim mt-1.5">Verificando con IA…</div>}
       {verify && (
