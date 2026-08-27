@@ -110,6 +110,7 @@ export function DeptWorkspaceTabs({
   canCaptureMerchandiseOutflow = false,
   canActOnMerchandiseOutflow = false,
   canViewMerchandiseOutflow = false,
+  supplierExchangeMineCount = 0,
   canSubmitCancelledGuide = false,
   canConfirmCancelledGuide = false,
   canCutoffCancelledGuide = false,
@@ -230,6 +231,13 @@ export function DeptWorkspaceTabs({
   canCaptureMerchandiseOutflow?: boolean;
   canActOnMerchandiseOutflow?: boolean;
   canViewMerchandiseOutflow?: boolean;
+  // Confirmado 2026-08-27, pedido explícito del usuario: cuántos productos
+  // de "Cambio con proveedor" tiene ESTE usuario (no Daniel/admin) pendientes
+  // de gestionar como quien pidió la compra original — ver
+  // getSupplierExchangeGestorCount en pendingTasks.ts. Amplía la visibilidad
+  // de la pestaña "egresos" (y de su sub-pestaña "proveedor") igual que
+  // canSubmitCancelledGuide, sin tocar canViewMerchandiseOutflow.
+  supplierExchangeMineCount?: number;
   // Guías Canceladas (Fase 4) — vive dentro de la pestaña de Egresos, pero
   // trae gente que no es de Inventario (Bryan/MKT, equipo de FUL), así que
   // amplía la visibilidad de esa pestaña sin tocar canViewMerchandiseOutflow
@@ -282,7 +290,7 @@ export function DeptWorkspaceTabs({
     if (t.key === "llegadas") return canViewMarketingArrivals;
     if (t.key === "inventario") return canManageInventoryControl;
     if (t.key === "reingreso") return canCaptureMerchandiseReentry || canApproveMerchandiseReentry || canCloseMerchandiseReentry;
-    if (t.key === "egresos") return canViewMerchandiseOutflow || canSubmitCancelledGuide || canConfirmCancelledGuide || canCutoffCancelledGuide;
+    if (t.key === "egresos") return canViewMerchandiseOutflow || canSubmitCancelledGuide || canConfirmCancelledGuide || canCutoffCancelledGuide || supplierExchangeMineCount > 0;
     if (t.key === "ventas-externas") return canViewExternalSales;
     if (t.key === "inventoriokpis") return canViewInventoryKpisPanel;
     if (t.key === "cajachica") return !!(pettyCashData?.principal || pettyCashData?.secundaria);
@@ -359,6 +367,11 @@ export function DeptWorkspaceTabs({
             {t.key === "reingreso" && merchandiseReentryPendingCount > 0 && (
               <span className="font-mono text-[10px] font-semibold bg-red/20 text-red rounded-full px-1.5 py-0.5">
                 {merchandiseReentryPendingCount}
+              </span>
+            )}
+            {t.key === "egresos" && supplierExchangeMineCount > 0 && (
+              <span className="font-mono text-[10px] font-semibold bg-red/20 text-red rounded-full px-1.5 py-0.5">
+                {supplierExchangeMineCount}
               </span>
             )}
             {t.key === "proveedores" && canReviewSuppliers && supplierPending.length > 0 && (
@@ -444,6 +457,7 @@ export function DeptWorkspaceTabs({
           canView={canViewMerchandiseOutflow}
           canManageJustCatalog={canManageJustCatalog}
           canViewSupplierExchangeResolution={isAdmin || canActOnMerchandiseOutflow}
+          supplierExchangeMineCount={supplierExchangeMineCount}
           canSubmitCancelledGuide={canSubmitCancelledGuide}
           canConfirmCancelledGuide={canConfirmCancelledGuide}
           canCutoffCancelledGuide={canCutoffCancelledGuide}

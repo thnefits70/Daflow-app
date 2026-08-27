@@ -8,6 +8,7 @@ import { getFinanceKpiData } from "@/lib/financeKpis";
 import { getDeptProcessDetail } from "@/lib/processDetail";
 import { getPaymentRemindersData } from "@/lib/paymentReminders";
 import { getPeriodicReminders } from "@/lib/periodicReminders";
+import { getSupplierExchangeGestorCount } from "@/lib/pendingTasks";
 import { getStoreFeedbackData, getStoreFeedbackMonthlyAggregates } from "@/lib/storeFeedback";
 import { getReviewsInvolvingUser } from "@/lib/weeklyCheckin";
 import { getInventoryControlData, getInventoryKpisData } from "@/lib/inventoryKpis";
@@ -106,6 +107,12 @@ export default async function WorkspacePage() {
     canActOnMerchandiseOutflow(),
     canViewMerchandiseOutflow(),
   ]);
+  // Confirmado 2026-08-27, pedido explícito del usuario: "Cambio con
+  // proveedor" (dentro de Registro de Egresos) debe verse desde "Mi área de
+  // trabajo" para quien tiene gestiones propias pendientes, aunque no tenga
+  // ningún otro permiso de este módulo (ej. Bryan, que solo entra acá por
+  // Guías Canceladas) — ver getSupplierExchangeGestorCount en pendingTasks.ts.
+  const supplierExchangeMineCount = await getSupplierExchangeGestorCount(session.user.id);
   // Guías Canceladas (Fase 4) — canConfirmCancelled combina Fulfillment
   // (dedicado) con el equipo de Inventario (ya calculado como canCaptureOutflow).
   const [canSubmitGuide, canConfirmFulfillmentGuide, canCutoffGuide] = await Promise.all([
@@ -268,6 +275,7 @@ export default async function WorkspacePage() {
         canCaptureMerchandiseOutflow={canCaptureOutflow}
         canActOnMerchandiseOutflow={canActOutflow}
         canViewMerchandiseOutflow={canViewOutflow}
+        supplierExchangeMineCount={supplierExchangeMineCount}
         canSubmitCancelledGuide={canSubmitGuide}
         canConfirmCancelledGuide={canConfirmGuide}
         canCutoffCancelledGuide={canCutoffGuide}

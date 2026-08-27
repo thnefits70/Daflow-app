@@ -6,6 +6,7 @@ import { DeteriorCapture } from "./DeteriorCapture";
 import { DeteriorResolutionInbox } from "./DeteriorResolutionInbox";
 import { SupplierExchangeCapture } from "./SupplierExchangeCapture";
 import { SupplierExchangeResolutionInbox } from "./SupplierExchangeResolutionInbox";
+import { SupplierExchangeMyResolutions } from "./SupplierExchangeMyResolutions";
 import { WriteOffQueue } from "./WriteOffQueue";
 import { HistoryList } from "./HistoryList";
 import { CancelledGuidesPanel } from "@/components/cancelled-guides/CancelledGuidesPanel";
@@ -19,6 +20,7 @@ export function MerchandiseOutflowPanel({
   canView = false,
   canManageJustCatalog = false,
   canViewSupplierExchangeResolution = false,
+  supplierExchangeMineCount = 0,
   canSubmitCancelledGuide = false,
   canConfirmCancelledGuide = false,
   canCutoffCancelledGuide = false,
@@ -49,6 +51,12 @@ export function MerchandiseOutflowPanel({
   // esta pestaña (canAct es exclusivo de Daniel, "ni siquiera admin"), así
   // que esto amplía visibilidad de solo lectura sin tocar quién actúa.
   canViewSupplierExchangeResolution?: boolean;
+  // Confirmado 2026-08-27, pedido explícito del usuario: cuántos productos
+  // de este tab tiene ESTE usuario pendientes de gestionar como quien pidió
+  // la compra original (o Bryan de respaldo) — antes esto solo vivía en la
+  // página standalone /area/cambio-proveedor-gestiones; ahora se ve también
+  // acá, en "Mi área de trabajo", que es donde el usuario espera encontrarlo.
+  supplierExchangeMineCount?: number;
   // Guías Canceladas (Fase 4) — vive como pestaña acá adentro (pedido
   // explícito del usuario), aunque su resultado final sea una entrada, no
   // una salida. Reingresar reusa `canAct` (Daniel exclusivo, ya pasado).
@@ -62,7 +70,9 @@ export function MerchandiseOutflowPanel({
       ? "baja"
       : canSubmitCancelledGuide || canConfirmCancelledGuide || canCutoffCancelledGuide
         ? "guias"
-        : "historial";
+        : supplierExchangeMineCount > 0
+          ? "proveedor"
+          : "historial";
   // Confirmado 2026-08-25: pedido explícito del usuario — todos los
   // motivos de egreso viven en una sola sesión para que Daniel no salte
   // entre módulos. Los atajos de Inicio/notificaciones llegan con
@@ -83,7 +93,7 @@ export function MerchandiseOutflowPanel({
   // una solicitud nueva.
   const [proveedorRefreshKey, setProveedorRefreshKey] = useState(0);
 
-  const canSeeProveedorTab = canAct || canViewSupplierExchangeResolution;
+  const canSeeProveedorTab = canAct || canViewSupplierExchangeResolution || supplierExchangeMineCount > 0;
 
   const tabs: { id: Tab; label: string }[] = [
     ...(canCapture ? [{ id: "despacho" as const, label: "Despacho" }] : []),
@@ -105,9 +115,14 @@ export function MerchandiseOutflowPanel({
             key={t.id}
             type="button"
             onClick={() => setTab(t.id)}
-            className={`pb-2.5 text-[13.5px] font-semibold cursor-pointer border-b-2 ${tab === t.id ? "border-teal text-ink" : "border-transparent text-steel hover:text-ink"}`}
+            className={`pb-2.5 text-[13.5px] font-semibold cursor-pointer border-b-2 flex items-center gap-1.5 ${tab === t.id ? "border-teal text-ink" : "border-transparent text-steel hover:text-ink"}`}
           >
             {t.label}
+            {t.id === "proveedor" && supplierExchangeMineCount > 0 && (
+              <span className="font-mono text-[10px] font-semibold bg-red/20 text-red rounded-full px-1.5 py-0.5">
+                {supplierExchangeMineCount}
+              </span>
+            )}
           </button>
         ))}
       </div>
@@ -149,16 +164,24 @@ export function MerchandiseOutflowPanel({
           <TabGuide storageKey="merchoutflow-proveedor">
             {canAct ? (
               <>Elige el proveedor y agrega todos los productos que le vas a devolver en un mismo paquete — cada uno se cruza solo contra la última compra a ese proveedor para estimar el crédito reclamable. Toma foto de la lista física como evidencia y deja lista la solicitud: sale de Just en ese momento (cae directo en la cola de baja) y te da un código para imprimir la guía y pegarla en el paquete. Quien resuelve cada producto (cambio o crédito) es quien solicitó esa compra originalmente, no tú — abajo ves el estado en modo lectura.</>
+            ) : canViewSupplierExchangeResolution ? (
+              <>Vista de solo lectura de las solicitudes de cambio con proveedor que arma Daniel. Cada producto lo resuelve (cambio o crédito) quien solicitó esa compra originalmente, no Daniel — esa persona gestiona desde acá abajo, en su propia sección.</>
             ) : (
-              <>Vista de solo lectura de las solicitudes de cambio con proveedor que arma Daniel. Cada producto lo resuelve (cambio o crédito) quien solicitó esa compra originalmente, no Daniel — esa persona gestiona desde su propia pantalla de pendientes.</>
+              <>Acá abajo están los productos que Inventario está devolviendo a un proveedor y que te toca gestionar a ti (porque pediste originalmente esa compra, o no tenía compra vinculada). Contacta al proveedor y registra si aceptó cambiarlo o dar crédito.</>
             )}
           </TabGuide>
           <div className="flex flex-col gap-6">
             {canAct && <SupplierExchangeCapture onSent={() => setProveedorRefreshKey((k) => k + 1)} />}
             <div>
-              <div className="font-display font-bold text-[14px] mb-2.5">Estado de resolución</div>
-              <SupplierExchangeResolutionInbox key={proveedorRefreshKey} />
+              <div className="font-display font-bold text-[14px] mb-2.5">Mis solicitudes de gestión pendiente</div>
+              <SupplierExchangeMyResolutions />
             </div>
+            {canViewSupplierExchangeResolution && (
+              <div>
+                <div className="font-display font-bold text-[14px] mb-2.5">Estado de resolución</div>
+                <SupplierExchangeResolutionInbox key={proveedorRefreshKey} />
+              </div>
+            )}
           </div>
         </>
       )}

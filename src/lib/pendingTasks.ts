@@ -1031,13 +1031,15 @@ async function getPurchaseRequesterPendingItems(userId: string, href: string): P
 // es quien solicitó ORIGINALMENTE la compra de ese producto a ese proveedor
 // (requestedById), o Bryan si el producto no tenía compra vinculada. Filtra
 // por dato de dueño (mismo espíritu que getPurchaseRequesterPendingItems),
-// no por permiso de departamento — por eso vive en /area/cambio-proveedor-gestiones,
-// no dentro del módulo de Egresos.
+// no por permiso de departamento.
 // Extraído a función propia (confirmado 2026-08-27) — además de alimentar la
-// tarjeta de Inicio (solo líderes, ver getPendingTasksForActor), el sidebar
-// (EmployeeSidebar/AreaLayout) necesita el mismo conteo para CUALQUIER
-// empleado, no solo líderes, porque /api/merchandise-outflow/supplier-exchange/mine
-// (el dueño real de este flujo) tampoco exige liderazgo.
+// tarjeta de Inicio (solo líderes, ver getPendingTasksForActor), la pestaña
+// "Registro de Egresos" de "Mi área de trabajo" (DeptWorkspaceTabs /
+// MerchandiseOutflowPanel) necesita el mismo conteo para CUALQUIER empleado,
+// no solo líderes, porque /api/merchandise-outflow/supplier-exchange/mine
+// (el dueño real de este flujo) tampoco exige liderazgo — así se ve la
+// sección "Mis solicitudes de gestión pendiente" ahí aunque no tenga ningún
+// otro permiso del módulo.
 export async function getSupplierExchangeGestorCount(userId: string): Promise<number> {
   const marketingLeadId = await getMarketingLeadId();
   const or: Record<string, unknown>[] = [{ linkedPurchaseRequest: { requestedById: userId } }];
@@ -1964,7 +1966,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
   const purchaseRequesterItems = await getPurchaseRequesterPendingItems(actor.userId, "/area/workspace?tab=compras&ptab=mias");
   items.push(...purchaseRequesterItems);
 
-  const supplierExchangeGestorItem = await getSupplierExchangeGestorPendingItem(actor.userId, "/area/cambio-proveedor-gestiones");
+  const supplierExchangeGestorItem = await getSupplierExchangeGestorPendingItem(actor.userId, "/area/workspace?tab=egresos&otab=proveedor");
   if (supplierExchangeGestorItem) items.push(supplierExchangeGestorItem);
 
   // Confirmado 2026-08-17: pedido explícito del usuario — a diferencia de lo
