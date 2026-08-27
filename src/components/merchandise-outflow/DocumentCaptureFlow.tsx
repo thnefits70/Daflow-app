@@ -55,7 +55,7 @@ export function DocumentCaptureFlow({ reason, canManageJustCatalog = false }: { 
   const [confirmDeleteItemId, setConfirmDeleteItemId] = useState<string | null>(null);
   const [confirmDeleteBatch, setConfirmDeleteBatch] = useState(false);
 
-  const [photos, setPhotos] = useState<string[]>([]);
+  const [photos, setPhotos] = useState<{ url: string; hash?: string }[]>([]);
   const [zoomedPhoto, setZoomedPhoto] = useState<string | null>(null);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [taking, setTaking] = useState(false);
@@ -99,7 +99,7 @@ export function DocumentCaptureFlow({ reason, canManageJustCatalog = false }: { 
     setExtracting(true);
     setError("");
     try {
-      const result = await postJson(`/api/merchandise-outflow/batches/${batch.id}/extract`, { photoUrls: photos });
+      const result = await postJson(`/api/merchandise-outflow/batches/${batch.id}/extract`, { photoUrls: photos.map((p) => p.url) });
       if (result.error) setError(result.error);
       setRows(
         (result.rows ?? []).map(
@@ -299,6 +299,17 @@ export function DocumentCaptureFlow({ reason, canManageJustCatalog = false }: { 
     }
   }
 
+  // Confirmado 2026-08-26 (pedido explícito del usuario): detecta cuando
+  // se subió el MISMO archivo de foto dos veces por error (hash SHA-256
+  // calculado en LiveCameraCapture) — evita que un despacho se cuente dos
+  // veces solo porque la foto quedó repetida en el lote, sin depender de
+  // que la IA "adivine" si dos fotos son o no la misma hoja.
+  const photoHashCounts = new Map<string, number>();
+  photos.forEach((p) => {
+    if (p.hash) photoHashCounts.set(p.hash, (photoHashCounts.get(p.hash) ?? 0) + 1);
+  });
+  const duplicatePhotoCount = photos.filter((p) => p.hash && (photoHashCounts.get(p.hash) ?? 0) > 1).length;
+
   if (loading) return <div className="text-[13px] text-steel">Cargando…</div>;
 
   if (sentCode) {
@@ -386,35 +397,56 @@ export function DocumentCaptureFlow({ reason, canManageJustCatalog = false }: { 
         <label className="block mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-steel">
           {reason === "DESPACHO" ? "Fotos de la hoja de despacho" : "Fotos del manifiesto de garantía"}
         </label>
+        {duplicatePhotoCount > 0 && (
+          <div className="text-[11.5px] bg-yellow/10 border border-yellow/35 rounded px-2 py-1.5 mb-2">
+            ⚠ {duplicatePhotoCount} foto(s) marcada(s) en rojo parecen ser el MISMO archivo subido más de una vez — si en realidad es una sola hoja, quita las repetidas antes de leer con IA para no inflar las cantidades.
+          </div>
+        )}
         <div className="flex gap-2 flex-wrap mb-2">
-          {photos.map((p, i) => (
-            <div key={i} className="relative">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={p}
-                alt={`Foto ${i + 1}`}
-                className="w-16 h-16 object-cover rounded border border-rule select-none"
-                onContextMenu={(e) => e.preventDefault()}
-                onTouchStart={() => startLongPress(p)}
-                onTouchEnd={cancelLongPress}
-                onTouchCancel={cancelLongPress}
-                onMouseDown={() => startLongPress(p)}
-                onMouseUp={cancelLongPress}
-                onMouseLeave={cancelLongPress}
-              />
-              <button
-                type="button"
-                title="Quitar esta foto"
-                className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red text-white flex items-center justify-center cursor-pointer"
-                onClick={() => setPhotos((ps) => ps.filter((_, idx) => idx !== i))}
-              >
-                <X size={11} />
-              </button>
-            </div>
-          ))}
+          {photos.map((p, i) => {
+            const isDuplicate = !!p.hash && (photoHashCounts.get(p.hash) ?? 0) > 1;
+            return (
+              <div key={i} className="relative">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={p.url}
+                  alt={`Foto ${i + 1}`}
+                  className={`w-16 h-16 object-cover rounded border select-none ${isDuplicate ? "border-2 border-red" : "border-rule"}`}
+                  onContextMenu={(e) => e.preventDefault()}
+                  onTouchStart={() => startLongPress(p.url)}
+                  onTouchEnd={cancelLongPress}
+                  onTouchCancel={cancelLongPress}
+                  onMouseDown={() => startLongPress(p.url)}
+                  onMouseUp={cancelLongPress}
+                  onMouseLeave={cancelLongPress}
+                />
+                {isDuplicate && (
+                  <span className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 rounded-full bg-red text-white text-[8.5px] font-bold px-1.5 py-0.5 whitespace-nowrap">
+                    Duplicada
+                  </span>
+                )}
+                <button
+                  type="button"
+                  title="Quitar esta foto"
+                  className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red text-white flex items-center justify-center cursor-pointer"
+                  onClick={() => setPhotos((ps) => ps.filter((_, idx) => idx !== i))}
+                >
+                  <X size={11} />
+                </button>
+              </div>
+            );
+          })}
         </div>
         {taking ? (
-          <LiveCameraCapture allowUpload folder="merchandise-outflow-photos" onCaptured={(url) => { setPhotos((p) => [...p, url]); setTaking(false); }} onCancel={() => setTaking(false)} />
+          <LiveCameraCapture
+            allowUpload
+            folder="merchandise-outflow-photos"
+            onCaptured={(url, hash) => {
+              setPhotos((p) => [...p, { url, hash }]);
+              setTaking(false);
+            }}
+            onCancel={() => setTaking(false)}
+          />
         ) : photos.length >= MAX_PHOTOS ? (
           <div className="text-[11.5px] text-steel">Máximo {MAX_PHOTOS} fotos por lote. Quita alguna para agregar otra, o envía el resto en un lote aparte.</div>
         ) : (

@@ -7,7 +7,12 @@ import { uploadFile } from "@/lib/uploadFile";
 
 type Props = {
   folder: string;
-  onCaptured: (url: string) => void;
+  // Confirmado 2026-08-26 (pedido explícito del usuario): el hash del
+  // archivo (SHA-256, calculado del lado del cliente) va aparte de la url
+  // para que quien consuma esto pueda detectar si subieron el MISMO
+  // archivo dos veces sin querer (ej. Registro de Egresos marcando fotos
+  // duplicadas) — no detecta "se ve parecido", solo "es el mismo archivo".
+  onCaptured: (url: string, hash?: string) => void;
   onCancel?: () => void;
   // Confirmado 2026-08-26 (pedido explícito del usuario): SOLO para
   // fotografiar un documento físico (ej. la hoja de despacho en Registro
@@ -72,9 +77,22 @@ export function LiveCameraCapture({ folder, onCaptured, onCancel, allowUpload = 
     streamRef.current = null;
   }
 
+  async function hashFile(file: File): Promise<string | undefined> {
+    try {
+      const buf = await file.arrayBuffer();
+      const digest = await crypto.subtle.digest("SHA-256", buf);
+      return Array.from(new Uint8Array(digest))
+        .map((b) => b.toString(16).padStart(2, "0"))
+        .join("");
+    } catch {
+      return undefined;
+    }
+  }
+
   async function uploadPhoto(file: File) {
     setUploading(true);
     setUploadError("");
+    const hash = await hashFile(file);
     const compressed = await compressImage(file);
     const result = await uploadFile(compressed, folder);
     setUploading(false);
@@ -82,7 +100,7 @@ export function LiveCameraCapture({ folder, onCaptured, onCancel, allowUpload = 
       setUploadError(result.error);
       return;
     }
-    onCaptured(result.url);
+    onCaptured(result.url, hash);
   }
 
   async function takePhoto() {
