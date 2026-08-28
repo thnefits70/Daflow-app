@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { formatDateTime } from "@/lib/formatDateTime";
 
 type Item = {
   id: string;
@@ -39,10 +40,6 @@ const STATUS_COLOR: Record<string, string> = {
   APPROVED: "#22C55E",
   REJECTED: "#EF4444",
 };
-
-function fmtDate(iso: string) {
-  return new Date(iso).toLocaleDateString("es-EC", { day: "2-digit", month: "short", year: "numeric" });
-}
 
 // Solo para ver — historial de compras personales ya resueltas (precio
 // cerrado en adelante). Sin ninguna acción, ni admin ni Nairoby pueden
@@ -83,7 +80,7 @@ export function PersonalPurchasesHistoryPanel() {
                   <div className="font-bold text-[13px] tabular-nums">{money(o.totalAmount)}</div>
                 </div>
                 <div className="flex items-center gap-2 flex-wrap mb-2">
-                  <span className="text-[11px] text-steel-dim">{fmtDate(o.createdAt)}</span>
+                  <span className="text-[11px] text-steel-dim">{formatDateTime(o.createdAt)}</span>
                   <span
                     className="text-[10.5px] font-semibold rounded-full px-2 py-0.5"
                     style={{ color: STATUS_COLOR[o.status] ?? "#D9A441", border: `1px solid ${STATUS_COLOR[o.status] ?? "#D9A441"}` }}

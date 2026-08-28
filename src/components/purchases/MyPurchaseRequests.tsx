@@ -8,6 +8,7 @@ import { usePasteFile } from "@/lib/usePasteFile";
 import { PurchaseSupplierPicker, type BankAccountDTO, type PurchaseSupplierDTO } from "./PurchaseSupplierPicker";
 import { PurchaseOperationDocuments } from "./PurchaseOperationDocuments";
 import { actorName } from "@/lib/actorName";
+import { formatDateTime } from "@/lib/formatDateTime";
 
 // Nota: formateo puro repetido a propósito (no importado de purchases.ts)
 // porque ese archivo trae `prisma` y este componente es "use client" — igual
@@ -570,10 +571,10 @@ function GroupCard({
             <div className="text-[11.5px] text-steel">
               <span className="line-through text-steel-dim">${total.toFixed(2)}</span>{" "}
               <span className="text-teal font-semibold">${netTotal.toFixed(2)} neto</span>{" "}
-              <span className="text-steel-dim">(crédito de ${reservedTotal.toFixed(2)} aplicado)</span> · {new Date(g[0].requestedAt).toLocaleDateString("es-MX")}
+              <span className="text-steel-dim">(crédito de ${reservedTotal.toFixed(2)} aplicado)</span> · {formatDateTime(g[0].requestedAt)}
             </div>
           ) : (
-            <div className="text-[11.5px] text-steel">${total.toFixed(2)} · {new Date(g[0].requestedAt).toLocaleDateString("es-MX")}</div>
+            <div className="text-[11.5px] text-steel">${total.toFixed(2)} · {formatDateTime(g[0].requestedAt)}</div>
           )}
         </div>
       </div>

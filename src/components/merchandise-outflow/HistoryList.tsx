@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { OUTFLOW_REASON_LABELS } from "@/lib/merchandiseOutflowLabels";
+import { formatDateTime } from "@/lib/formatDateTime";
 
 type ItemDTO = {
   id: string;
@@ -65,7 +66,7 @@ export function HistoryList() {
             ))}
           </div>
           <div className="text-[10.5px] text-steel">
-            Capturado por {batch.createdBy?.name ?? "—"} · {new Date(batch.submittedAt).toLocaleDateString("es-EC", { day: "2-digit", month: "short", year: "numeric" })}
+            Capturado por {batch.createdBy?.name ?? "—"} · {formatDateTime(batch.submittedAt)}
             {batch.justWrittenOffAt && batch.justWrittenOffBy && <> · Dado de baja por {batch.justWrittenOffBy.name}</>}
           </div>
         </div>

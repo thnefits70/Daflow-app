@@ -2,6 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { PrintButton } from "./PrintButton";
+import { formatDateTime } from "@/lib/formatDateTime";
 
 const MONTHS = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
 
@@ -74,7 +75,7 @@ export default async function RolDelMesPrintPage({ params }: { params: Promise<{
         )}
 
         <div className="mt-10 text-[10.5px] text-gray-400 text-center">
-          Emitido el {new Date().toLocaleDateString("es-EC")}
+          Emitido el {formatDateTime(new Date())}
         </div>
       </div>
     </div>

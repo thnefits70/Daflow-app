@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Send, Plus, Trash2, TrendingUp } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { formatDateTime } from "@/lib/formatDateTime";
 
 // Same markdown rendering as NancyPanel — FERNICK also writes in markdown
 // (bold, lists, tables) since it summarizes numbers and recommendations.
@@ -160,7 +161,7 @@ export function FernickPanel() {
               <div className="flex-1 min-w-0">
                 <div className="text-[12px] font-semibold truncate">{c.title}</div>
                 <div className="text-[10px] text-steel">
-                  {new Date(c.updatedAt).toLocaleDateString("es-EC", { day: "2-digit", month: "short" })} · {c.messageCount} mensaje
+                  {formatDateTime(c.updatedAt)} · {c.messageCount} mensaje
                   {c.messageCount === 1 ? "" : "s"}
                 </div>
               </div>

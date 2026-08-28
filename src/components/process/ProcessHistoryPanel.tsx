@@ -1,4 +1,5 @@
 import { Clock } from "lucide-react";
+import { formatDateTime } from "@/lib/formatDateTime";
 
 export type ProcessUpdateDTO = { id: string; note: string; createdAt: string; ackedCount: number; teamSize: number };
 
@@ -15,7 +16,7 @@ export function ProcessHistoryPanel({ updates }: { updates: ProcessUpdateDTO[] }
           <div key={u.id} className="bg-surface border border-rule rounded p-3.5">
             <div className="flex items-center justify-between gap-3 mb-1">
               <span className="font-mono text-[11px] text-steel">
-                {new Date(u.createdAt).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" })}
+                {formatDateTime(u.createdAt)}
               </span>
               <span className="font-mono text-[10.5px] bg-cloud border border-rule rounded-full px-2 py-0.5 text-steel shrink-0">
                 {u.ackedCount}/{u.teamSize} revisó

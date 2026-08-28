@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { compressImage } from "@/lib/compressImage";
 import { uploadFile } from "@/lib/uploadFile";
 import { usePasteFile } from "@/lib/usePasteFile";
+import { formatDateTime } from "@/lib/formatDateTime";
 
 type Advance = {
   id: string; amount: number; installments: number; justification: string | null; reason: "EMERGENCIA_FAMILIAR" | "OTRO" | null;
@@ -22,10 +23,6 @@ const REASON_LABEL: Record<string, string> = { EMERGENCIA_FAMILIAR: "Emergencia 
 
 function money(n: number) {
   return `$${n.toFixed(2)}`;
-}
-
-function fmtDate(iso: string) {
-  return new Date(iso).toLocaleDateString("es-EC", { day: "numeric", month: "short", year: "numeric" });
 }
 
 function AdvanceHistoryPanel() {
@@ -50,7 +47,7 @@ function AdvanceHistoryPanel() {
       <div className="flex flex-col gap-2">
         {items.map((a) => (
           <div key={a.id} className="bg-surface border border-rule rounded-md p-3 flex items-center gap-3 flex-wrap">
-            <span className="font-semibold text-[12.5px] min-w-[110px]">{fmtDate(a.createdAt)}</span>
+            <span className="font-semibold text-[12.5px] min-w-[110px]">{formatDateTime(a.createdAt)}</span>
             <span className="font-bold text-[13px] tabular-nums">{money(a.amount)}</span>
             {a.installments > 1 && <span className="text-[11.5px] text-steel-dim">({a.installments} cuotas)</span>}
             <span className="text-[12px] text-steel">{a.employee.name}</span>

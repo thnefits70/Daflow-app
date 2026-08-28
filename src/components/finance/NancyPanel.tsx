@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Sparkles, Send, Mic, MicOff, Volume2, VolumeX, X, History, Plus, ArrowLeft, Trash2 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { formatDateTime } from "@/lib/formatDateTime";
 
 // Nancy writes in markdown (bold, tables) — render it instead of showing raw
 // **/| syntax. Minimal component overrides since this project has no
@@ -321,7 +322,7 @@ export function NancyPanel({ deptId, brand }: { deptId: string; brand: string })
                   <div className="flex-1 min-w-0">
                     <div className="text-[12.5px] font-semibold truncate">{c.title}</div>
                     <div className="text-[10.5px] text-steel">
-                      {new Date(c.updatedAt).toLocaleDateString("es-EC", { day: "2-digit", month: "short" })} · {c.messageCount} mensaje
+                      {formatDateTime(c.updatedAt)} · {c.messageCount} mensaje
                       {c.messageCount === 1 ? "" : "s"}
                     </div>
                   </div>

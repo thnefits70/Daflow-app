@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Gift } from "lucide-react";
+import { formatDateTime } from "@/lib/formatDateTime";
 
 type Employee = { id: string; name: string; department: { name: string } | null };
 type Grant = { id: string; type: "ADICIONAL" | "PRODUCTIVIDAD" | "MERITO"; note: string | null; grantedAt: string; user: { name: string } };
@@ -11,10 +12,6 @@ const BONUS_TYPES: { type: Grant["type"]; label: string; amount: number }[] = [
   { type: "PRODUCTIVIDAD", label: "Bono de Productividad", amount: 100 },
   { type: "MERITO", label: "Bono al Mérito", amount: 150 },
 ];
-
-function fmtDate(iso: string) {
-  return new Date(iso).toLocaleDateString("es-EC", { day: "numeric", month: "short", year: "numeric" });
-}
 
 // Confirmado 2026-08-14: exclusivo del CEO — elige persona + tipo fijo +
 // nota opcional, y al otorgarlo ya queda aprobado (dispara pop-up +
@@ -129,7 +126,7 @@ export function CeoBonusesPanel() {
                 <span className="font-semibold">{g.user.name}</span> — {BONUS_TYPES.find((b) => b.type === g.type)?.label}
                 {g.note && <span className="text-steel"> · {g.note}</span>}
               </div>
-              <span className="text-steel-dim text-[11px] shrink-0">{fmtDate(g.grantedAt)}</span>
+              <span className="text-steel-dim text-[11px] shrink-0">{formatDateTime(g.grantedAt)}</span>
             </div>
           ))}
         </div>

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Banknote, CheckCircle2, Circle, Plus, TriangleAlert } from "lucide-react";
 import { installmentAmount } from "@/lib/payrollCalc";
+import { formatDateTime } from "@/lib/formatDateTime";
 
 type BankAccount = {
   id: string; bankName: string; bankAccountType: string; bankAccountNumber: string; bankAccountHolder: string;
@@ -27,10 +28,6 @@ const PENDING_CAP = 150;
 
 function money(n: number) {
   return `$${n.toFixed(2)}`;
-}
-
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString("es-EC", { day: "numeric", month: "short", year: "numeric" });
 }
 
 function formatMonth(ym: string) {
@@ -354,7 +351,7 @@ export function SalaryAdvancesPanel() {
                   <span className="text-[10.5px] font-semibold rounded-full px-2 py-0.5" style={{ color: s.color, border: `1px solid ${s.color}` }}>{s.label}</span>
                 </div>
                 <div className="text-[11.5px] text-steel-dim mt-0.5">
-                  Pedido el {formatDate(a.createdAt)}
+                  Pedido el {formatDateTime(a.createdAt)}
                   {a.reason && <> · {REASON_LABEL[a.reason]}</>}
                   {a.status === "APPROVED" && a.firstPayoutMonth && <> · Descuento empieza en {formatMonth(a.firstPayoutMonth)}</>}
                   {a.status === "PENDING" && <> · El descuento en el rol empieza una vez que se apruebe, puede tardar</>}

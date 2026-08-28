@@ -11,6 +11,7 @@ import {
 import { PositionPicker } from "@/components/users/PositionPicker";
 import { PayrollProfileFields } from "@/components/nomina/PayrollProfileFields";
 import { uploadFile as uploadToStorage } from "@/lib/uploadFile";
+import { formatDateTime } from "@/lib/formatDateTime";
 
 type Dept = { id: string; name: string; code: string };
 type Position = { id: string; deptId: string; name: string };
@@ -931,7 +932,7 @@ export function ProfileDetail({
                 )}
               </div>
               {t.note && <div className="text-[12px] text-steel mt-0.5">{t.note}</div>}
-              <div className="font-mono text-[10.5px] text-steel mt-1">{new Date(t.date).toLocaleDateString()}</div>
+              <div className="font-mono text-[10.5px] text-steel mt-1">{formatDateTime(t.date)}</div>
             </div>
           ))}
         </div>

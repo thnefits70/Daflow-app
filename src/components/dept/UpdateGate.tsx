@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { CheckCircle2 } from "lucide-react";
 import { ProcessEditor, type ProcessDTO } from "@/components/process/ProcessEditor";
+import { formatDateTime } from "@/lib/formatDateTime";
 
 export function UpdateGate({
   updateId,
@@ -52,7 +53,7 @@ export function UpdateGate({
           <div className="font-mono text-[10.5px] text-teal tracking-[.08em] mb-1">ACTUALIZACIÓN OBLIGATORIA</div>
           <h2 className="font-display text-[20px] font-bold mb-1">{processTitle}</h2>
           <div className="text-[12px] text-steel mb-3">
-            Actualizado el {new Date(createdAt).toLocaleDateString()} · Debes revisarlo para continuar
+            Actualizado el {formatDateTime(createdAt)} · Debes revisarlo para continuar
             {remaining > 1 ? ` (quedan ${remaining} actualizaciones pendientes)` : ""}
           </div>
           {note && (

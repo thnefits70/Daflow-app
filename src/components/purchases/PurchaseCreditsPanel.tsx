@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Wallet, Lock } from "lucide-react";
 import { actorName } from "@/lib/actorName";
+import { formatDateTime } from "@/lib/formatDateTime";
 import { ProofPreview } from "@/components/shared/ProofPreview";
 
 type PendingCredit = {
@@ -83,7 +84,7 @@ export function PurchaseCreditsPanel() {
                   <span className="text-[10.5px] font-semibold text-steel bg-cloud border border-rule rounded-full px-2 py-0.5">Manual</span>
                 )}
                 <span className="text-[10.5px] text-steel-dim">
-                  {c.isManual ? `Registrado por ${actorName(c.createdBy?.name)}` : "Automático — reporte urgente resuelto"} · {new Date(c.createdAt).toLocaleDateString("es-EC")}
+                  {c.isManual ? `Registrado por ${actorName(c.createdBy?.name)}` : "Automático — reporte urgente resuelto"} · {formatDateTime(c.createdAt)}
                 </span>
               </div>
               {c.proofUrl && (

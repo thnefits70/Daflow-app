@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Camera, CheckCircle2, X, AlertTriangle, Truck, Package } from "lucide-react";
 import { actorName } from "@/lib/actorName";
+import { formatDateTime } from "@/lib/formatDateTime";
 import { LiveCameraCapture } from "@/components/shared/LiveCameraCapture";
 import { LiveVideoCapture } from "@/components/shared/LiveVideoCapture";
 import { PurchaseOperationDocuments, type OperationDocRow } from "./PurchaseOperationDocuments";
@@ -666,7 +667,7 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                 <div key={pr.id} className="bg-cloud rounded-md p-3">
                   <div className="text-[13px] font-bold">{pr.request.catalogItem.name}</div>
                   <div className="text-[11.5px] text-steel mb-2">
-                    {pr.request.supplier.name} — se pidieron {pr.request.quantity} un., contó {countedQty} · reportado por {actorName(pr.reportedBy?.name)} · {new Date(pr.reportedAt).toLocaleDateString("es-MX")}
+                    {pr.request.supplier.name} — se pidieron {pr.request.quantity} un., contó {countedQty} · reportado por {actorName(pr.reportedBy?.name)} · {formatDateTime(pr.reportedAt)}
                   </div>
                   {parts.length > 0 && <div className="text-[11.5px] text-steel mb-2">{parts.join(" · ")}</div>}
                   <div className="text-[11.5px] text-ink mb-2">&quot;{pr.description}&quot;</div>
@@ -682,12 +683,12 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                     )}
                   </div>
                   <div className="mb-2.5">
-                    <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Cantidad faltante</label>
+                    <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-red">Cantidad faltante</label>
                     <input
                       type="number"
                       min={0}
                       disabled={!canApprove || confirmingMissingId === pr.id}
-                      className="w-full rounded border border-rule px-2.5 py-2 text-[13px]"
+                      className="w-full rounded border border-red px-2.5 py-2 text-[13px] font-bold text-red"
                       style={{ maxWidth: 160 }}
                       value={missingInput}
                       onChange={(e) => setMissingQtyEdits((m) => ({ ...m, [pr.id]: e.target.value }))}
@@ -758,7 +759,7 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                   <span className="text-[10px] font-mono font-bold text-teal bg-teal/10 border border-teal/40 rounded px-1.5 py-0.5">{c.lateClaimCode}</span>
                 </div>
                 <div className="text-[11.5px] text-steel mb-2">
-                  {c.request.supplier.name} — {c.damagedQty} un. dañadas · reportado por {actorName(c.reportedBy?.name)} · {new Date(c.reportedAt).toLocaleDateString("es-MX")}
+                  {c.request.supplier.name} — {c.damagedQty} un. dañadas · reportado por {actorName(c.reportedBy?.name)} · {formatDateTime(c.reportedAt)}
                   {c.stockStatus === "SOLD" && " · ya se vendieron"}
                 </div>
                 {c.originUncertain && (
@@ -944,7 +945,7 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                   // subió las fotos del cambio, falta la aprobación final de Daniel.
                   <div>
                     <div className="text-[11px] text-steel mb-1.5">
-                      Subido por {actorName(pr.replacementSubmittedBy?.name)} · {new Date(pr.replacementSubmittedAt).toLocaleDateString("es-MX")}
+                      Subido por {actorName(pr.replacementSubmittedBy?.name)} · {formatDateTime(pr.replacementSubmittedAt)}
                     </div>
                     <div className="grid grid-cols-3 gap-2 mb-2.5">
                       {pr.replacementPhotoUrls.map((url, i) => (
@@ -1051,17 +1052,17 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                     <div className="text-[11.5px] text-steel mb-1">
                       {r.supplier.name}
                       {(canApprove || isAdmin) && ` — se pidieron y pagaron ${r.quantity} un. · $${r.totalCost.toFixed(2)}`}
-                      {r.paidAt && ` · pagado ${new Date(r.paidAt).toLocaleDateString("es-MX")}`}
+                      {r.paidAt && ` · pagado ${formatDateTime(r.paidAt)}`}
                     </div>
                   )}
                   {isMulti && (canApprove || isAdmin) && (
                     <div className="text-[11.5px] text-steel mb-1">
                       {r.quantity} un. · ${r.totalCost.toFixed(2)}
-                      {r.paidAt && ` · pagado ${new Date(r.paidAt).toLocaleDateString("es-MX")}`}
+                      {r.paidAt && ` · pagado ${formatDateTime(r.paidAt)}`}
                     </div>
                   )}
                   {isMulti && !(canApprove || isAdmin) && r.paidAt && (
-                    <div className="text-[11.5px] text-steel mb-1">pagado {new Date(r.paidAt).toLocaleDateString("es-MX")}</div>
+                    <div className="text-[11.5px] text-steel mb-1">pagado {formatDateTime(r.paidAt)}</div>
                   )}
 
                   {r.status === "PAID" && !missingPurchaseOrder && (
@@ -1419,7 +1420,7 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                                   <div key={rep.id} className="text-[11.5px] text-steel mb-1.5 last:mb-0">
                                     {parts.join(" · ")}{rep.description ? ` — "${rep.description}"` : ""}
                                     <div className="text-[10px] text-steel-dim">
-                                      Reportado por {actorName(rep.reportedBy?.name)} · {new Date(rep.reportedAt).toLocaleDateString("es-MX")}
+                                      Reportado por {actorName(rep.reportedBy?.name)} · {formatDateTime(rep.reportedAt)}
                                     </div>
                                   </div>
                                 );
@@ -1466,7 +1467,7 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                         </div>
                       )}
                       <div className="text-[11.5px] text-steel mb-2">
-                        Recibido por {actorName(r.receipt.confirmedBy?.name)} · {new Date(r.receipt.confirmedAt).toLocaleDateString("es-MX")}
+                        Recibido por {actorName(r.receipt.confirmedBy?.name)} · {formatDateTime(r.receipt.confirmedAt)}
                         {r.receipt.comment && ` — "${r.receipt.comment}"`}
                       </div>
                       <div className="grid grid-cols-4 gap-2 mb-2.5">
@@ -1528,7 +1529,7 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                   </div>
                   <div className="text-[11.5px] text-steel mb-2">
                     {row.supplier.name}
-                    {row.receipt?.confirmedAt && ` — recibido ${new Date(row.receipt.confirmedAt).toLocaleDateString("es-MX")}`}
+                    {row.receipt?.confirmedAt && ` — recibido ${formatDateTime(row.receipt.confirmedAt)}`}
                   </div>
 
                   {openClaim ? (
@@ -1553,7 +1554,7 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                               <input type="radio" name={`origin-${row.id}`} checked={!lateOriginUncertain && lateOriginId === c.id} onChange={() => { setLateOriginId(c.id); setLateOriginUncertain(false); }} />
                               <span className="text-[12.5px]">
                                 <span className="font-mono text-teal font-semibold">{c.code ?? "—"}</span> · {c.quantity} un. recibidas
-                                {c.receivedAt && ` ${new Date(c.receivedAt).toLocaleDateString("es-MX")}`} · ${c.totalCost.toFixed(2)}
+                                {c.receivedAt && ` ${formatDateTime(c.receivedAt)}`} · ${c.totalCost.toFixed(2)}
                               </span>
                             </label>
                           ))}

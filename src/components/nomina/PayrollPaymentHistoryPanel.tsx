@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { CheckCircle2 } from "lucide-react";
 import { ProofPreview } from "@/components/shared/ProofPreview";
+import { formatDateTime } from "@/lib/formatDateTime";
 
 type Entry = {
   roleId: string;
@@ -92,7 +93,7 @@ export function PayrollPaymentHistoryPanel() {
                 {e.paidAt ? (
                   <div className="flex items-center gap-2">
                     <span className="text-[11px] text-green font-semibold flex items-center gap-1">
-                      <CheckCircle2 size={12} /> {new Date(e.paidAt).toLocaleDateString("es-EC")}
+                      <CheckCircle2 size={12} /> {formatDateTime(e.paidAt)}
                     </span>
                     {e.paidProofUrl && <ProofPreview url={e.paidProofUrl} filename={e.paidProofName ?? undefined} />}
                   </div>

@@ -5,6 +5,7 @@ import { Landmark, ChevronDown, Send } from "lucide-react";
 import { ProofPreview } from "@/components/shared/ProofPreview";
 import { usePasteFile } from "@/lib/usePasteFile";
 import { uploadFile } from "@/lib/uploadFile";
+import { formatDateTime } from "@/lib/formatDateTime";
 
 type BankAccount = {
   bankName: string;
@@ -592,7 +593,7 @@ function TransferPanel({
 
       {transfer.status === "COMPLETED" && (
         <div className="text-[12px] text-steel">
-          Completado{transfer.completedAt ? ` el ${new Date(transfer.completedAt).toLocaleDateString("es-EC")}` : ""}.
+          Completado{transfer.completedAt ? ` el ${formatDateTime(transfer.completedAt)}` : ""}.
           {transfer.proofUrl && (
             <div className="mt-1.5">
               <ProofPreview url={transfer.proofUrl} filename={transfer.proofName ?? undefined} />

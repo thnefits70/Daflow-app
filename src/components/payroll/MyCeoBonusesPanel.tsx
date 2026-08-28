@@ -2,14 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { Sparkles } from "lucide-react";
+import { formatDateTime } from "@/lib/formatDateTime";
 
 type Grant = { id: string; type: "ADICIONAL" | "PRODUCTIVIDAD" | "MERITO"; note: string | null; grantedAt: string };
 
 const LABELS: Record<Grant["type"], string> = { ADICIONAL: "Bono Adicional", PRODUCTIVIDAD: "Bono de Productividad", MERITO: "Bono al Mérito" };
-
-function fmtDate(iso: string) {
-  return new Date(iso).toLocaleDateString("es-EC", { day: "numeric", month: "long", year: "numeric" });
-}
 
 // Confirmado 2026-08-14: historial privado — solo la propia persona ve
 // esto, para saber que un bono le corresponde cobrar en la próxima
@@ -35,7 +32,7 @@ export function MyCeoBonusesPanel() {
               <div className="font-semibold">{LABELS[g.type]}</div>
               {g.note && <div className="text-steel text-[11.5px] mt-0.5">{g.note}</div>}
             </div>
-            <div className="text-steel-dim text-[11px] shrink-0">{fmtDate(g.grantedAt)}</div>
+            <div className="text-steel-dim text-[11px] shrink-0">{formatDateTime(g.grantedAt)}</div>
           </div>
         ))}
       </div>

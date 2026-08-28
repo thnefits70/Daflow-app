@@ -6,6 +6,7 @@ import { Plus, Trash2, ChevronDown, ChevronUp, PhoneCall, Search } from "lucide-
 import { Combobox } from "@/components/ui/Combobox";
 import { PushTypeToggle } from "@/components/shared/PushTypeToggle";
 import { retentionRiskFor } from "@/lib/storeFeedbackCalc";
+import { formatDateTime } from "@/lib/formatDateTime";
 
 type EvaluationDTO = {
   id: string;
@@ -754,7 +755,7 @@ export function StoreFeedbackPanel({ stores, editable = true }: { stores: StoreD
                                 </div>
                               )}
                               <div className="text-[10.5px] text-steel mt-1.5">
-                                {e.evaluatedByName ?? "Admin"} · {new Date(e.evaluatedAt).toLocaleDateString("es-EC")}
+                                {e.evaluatedByName ?? "Admin"} · {formatDateTime(e.evaluatedAt)}
                               </div>
                             </div>
                           );

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { ShieldCheck, Search, CheckCircle2 } from "lucide-react";
 import { actorName } from "@/lib/actorName";
+import { formatDateTime } from "@/lib/formatDateTime";
 import { PurchaseOperationDocuments, type OperationDocRow } from "./PurchaseOperationDocuments";
 
 type Row = Omit<OperationDocRow, "receipt"> & {
@@ -278,11 +279,11 @@ export function PurchaseAuditPanel() {
               <div className="text-[11.5px] text-steel">{r0.supplier.name} — {money(total)}</div>
               <div className="text-[10px] text-steel-dim mb-1">
                 Solicitada por {actorName(r0.requestedBy?.name)} · Pagada por {actorName(r0.paidBy?.name)} · Recibida por {actorName(r0.receipt?.confirmedBy?.name)}
-                {r0.receipt?.confirmedAt ? ` · ${new Date(r0.receipt.confirmedAt).toLocaleDateString("es-MX")}` : ""}
+                {r0.receipt?.confirmedAt ? ` · ${formatDateTime(r0.receipt.confirmedAt)}` : ""}
                 {/* Confirmado 2026-08-18: pedido explícito del usuario — Auditoría
                     es "el área ya completada" para el checklist de Just de Daniel. */}
                 {r0.receipt?.justaUploadedAt
-                  ? ` · Subido a Just por ${actorName(r0.receipt.justaUploadedBy?.name)} · ${new Date(r0.receipt.justaUploadedAt).toLocaleDateString("es-MX")}`
+                  ? ` · Subido a Just por ${actorName(r0.receipt.justaUploadedBy?.name)} · ${formatDateTime(r0.receipt.justaUploadedAt)}`
                   : " · Pendiente de subir a Just"}
               </div>
               {(r0.paymentProofReceiptNumber || r0.shippingPaymentProofReceiptNumber) && (

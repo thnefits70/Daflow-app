@@ -7,6 +7,7 @@ import { uploadFile } from "@/lib/uploadFile";
 import { compressImage } from "@/lib/compressImage";
 import { usePasteFile } from "@/lib/usePasteFile";
 import { actorName } from "@/lib/actorName";
+import { formatDateTime } from "@/lib/formatDateTime";
 import { PurchaseOperationDocuments, type OperationDocRow } from "./PurchaseOperationDocuments";
 
 type InvoiceStatus = "PENDING" | "COMPLETE" | "PARTIAL" | "NON_FISCAL" | "NONE";
@@ -913,7 +914,7 @@ export function PurchaseInvoicingPanel({ isAdmin = false, canPayMerchandise }: {
                   </div>
                   <span className="font-mono text-[10.5px] text-steel shrink-0">{formatPurchaseRequestCode(r0.requestNumber)}</span>
                 </div>
-                <div className="text-[11.5px] text-steel">{r0.supplier.name} — Pagado {money(total)} {r0.paidAt ? `· ${new Date(r0.paidAt).toLocaleDateString("es-MX")}` : ""}</div>
+                <div className="text-[11.5px] text-steel">{r0.supplier.name} — Pagado {money(total)} {r0.paidAt ? `· ${formatDateTime(r0.paidAt)}` : ""}</div>
                 <div className="text-[10px] text-steel-dim">
                   Solicitada por {actorName(r0.requestedBy?.name)} · Pagada por {actorName(r0.paidBy?.name)}
                 </div>
@@ -934,7 +935,7 @@ export function PurchaseInvoicingPanel({ isAdmin = false, canPayMerchandise }: {
                 <div className="flex items-start justify-between gap-2 bg-gold/10 border border-gold/35 rounded-md px-3 py-2 mb-2.5 text-[12px]" style={{ color: "#D9A441" }}>
                   <div>
                     <div className="font-semibold">⚠️ Revisar: {r0.financeFlagNote}</div>
-                    <div className="text-steel mt-0.5">Marcado por {actorName(r0.financeFlaggedBy?.name)}{r0.financeFlaggedAt ? ` · ${new Date(r0.financeFlaggedAt).toLocaleDateString("es-MX")}` : ""}</div>
+                    <div className="text-steel mt-0.5">Marcado por {actorName(r0.financeFlaggedBy?.name)}{r0.financeFlaggedAt ? ` · ${formatDateTime(r0.financeFlaggedAt)}` : ""}</div>
                   </div>
                   <button type="button" disabled={isAdmin} title={isAdmin ? ADMIN_LOCK_TITLE : undefined} className="text-steel underline text-[11px] cursor-pointer shrink-0 disabled:opacity-60 disabled:cursor-not-allowed" onClick={() => saveFinanceFlag(groupId, null)}>quitar</button>
                 </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { formatDateTime } from "@/lib/formatDateTime";
 
 type Grant = { id: string; type: "ADICIONAL" | "PRODUCTIVIDAD" | "MERITO"; note: string | null; grantedAt: string; user: { name: string } };
 
@@ -9,10 +10,6 @@ const LABELS: Record<Grant["type"], string> = { ADICIONAL: "Bono Adicional", PRO
 // commissionTiers.ts: ese archivo importa prisma (server-only) y este es un
 // componente "use client" — no se puede traer al bundle del navegador.
 const AMOUNTS: Record<Grant["type"], number> = { ADICIONAL: 50, PRODUCTIVIDAD: 100, MERITO: 150 };
-
-function fmtDate(iso: string) {
-  return new Date(iso).toLocaleDateString("es-EC", { day: "numeric", month: "short" });
-}
 
 // Confirmado 2026-08-14: solo lectura — Nairoby ve qué bonos otorgó el CEO
 // para saber que ya vienen incluidos en la próxima quincena. Nunca visible
@@ -33,7 +30,7 @@ export function CeoBonusesForNairobyPanel() {
         {grants.map((g) => (
           <div key={g.id} className="flex items-center justify-between gap-2 text-[12px] text-ink">
             <span><span className="font-semibold">{g.user.name}</span> — {LABELS[g.type]} · ${AMOUNTS[g.type]}</span>
-            <span className="text-steel-dim shrink-0">{fmtDate(g.grantedAt)}</span>
+            <span className="text-steel-dim shrink-0">{formatDateTime(g.grantedAt)}</span>
           </div>
         ))}
       </div>

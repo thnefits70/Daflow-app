@@ -8,6 +8,7 @@ import { CeoBonusesForNairobyPanel } from "./CeoBonusesForNairobyPanel";
 import { PayrollTransferPanel, PayrollIessTransferPanel, type Transfer } from "./PayrollTransferPanel";
 import { PayoutUploader } from "./PayrollIndividualPayment";
 import { isEndOfMonthQuincena, IESS_RATE, IESS_EMPLOYER_RATE, IESS_PART_TIME_RATE, IESS_SPOUSE_EXTENSION_RATE } from "@/lib/payrollCalc";
+import { formatDateTime } from "@/lib/formatDateTime";
 
 type LineItem = { id?: string; label: string; amount: number; kind: "INCOME" | "EXPENSE"; isAutomatic?: boolean; note?: string | null };
 type EmployeeBankAccount = {
@@ -480,7 +481,7 @@ function RoleCard({ role, index, published, canEdit, monthlyRoleId, isEndOfMonth
           {role.paidAt ? (
             <div>
               <div className="text-[11.5px] text-green font-semibold flex items-center gap-1.5">
-                <CheckCircle2 size={13} /> Pagado — {new Date(role.paidAt).toLocaleDateString("es-EC")}
+                <CheckCircle2 size={13} /> Pagado — {formatDateTime(role.paidAt)}
               </div>
               {role.paidProofUrl && (
                 <div className="mt-1.5">

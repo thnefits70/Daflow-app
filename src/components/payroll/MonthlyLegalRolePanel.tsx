@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { FileText } from "lucide-react";
 import { ProofPreview } from "@/components/shared/ProofPreview";
+import { formatDateTime } from "@/lib/formatDateTime";
 
 type Role = {
   id: string;
@@ -65,7 +66,7 @@ export function MonthlyLegalRolePanel() {
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <div className="font-bold text-[14px]">{monthLabel(current.month)}</div>
-                  <div className="text-[11px] text-steel-dim">Publicado el {new Date(current.publishedAt).toLocaleDateString("es-EC")}</div>
+                  <div className="text-[11px] text-steel-dim">Publicado el {formatDateTime(current.publishedAt)}</div>
                 </div>
                 <div className="text-[18px] font-extrabold text-green tabular-nums">{money(current.netTotal)}</div>
               </div>
@@ -103,7 +104,7 @@ export function MonthlyLegalRolePanel() {
               )}
               {open && previous.map((v) => (
                 <div key={v.id} className="mt-2 p-2.5 rounded bg-cloud text-[11.5px] text-steel">
-                  Versión {v.version} — {money(v.netTotal)} a recibir · publicado el {new Date(v.publishedAt).toLocaleDateString("es-EC")}
+                  Versión {v.version} — {money(v.netTotal)} a recibir · publicado el {formatDateTime(v.publishedAt)}
                 </div>
               ))}
             </div>

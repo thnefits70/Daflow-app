@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { CARRIER_LABELS, SOURCE_AREA_LABELS } from "@/lib/cancelledGuidesLabels";
+import { formatDateTime } from "@/lib/formatDateTime";
 
 type ReportDTO = {
   id: string;
@@ -51,7 +52,7 @@ export function CancelledGuideHistoryList() {
                 <div key={it.id} className="text-[12px]">{it.catalogItem?.name ?? it.declaredName} — {it.quantity} un.</div>
               ))}
             </div>
-            <div className="text-[10.5px] text-steel">{r.submittedBy?.name ?? "—"} · {new Date(r.createdAt).toLocaleDateString("es-EC", { day: "2-digit", month: "short", year: "numeric" })}</div>
+            <div className="text-[10.5px] text-steel">{r.submittedBy?.name ?? "—"} · {formatDateTime(r.createdAt)}</div>
           </div>
         );
       })}

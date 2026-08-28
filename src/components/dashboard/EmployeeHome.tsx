@@ -18,6 +18,7 @@ import { InventoryKpisHomeCard } from "./InventoryKpisHomeCard";
 import type { DashboardRow, WeeklyTrend, StockoutWeekPoint, WarrantyMonthlyChart, PieSlice, FillRateBreakdown, CommissionProgress } from "@/lib/dashboard";
 import type { StoreFeedbackAggregate, StoreFeedbackTrendPoint } from "@/lib/storeFeedback";
 import type { DuePeriodicReminderDTO } from "@/lib/periodicReminders";
+import { formatDateTime } from "@/lib/formatDateTime";
 import type { MyLearningPathSummaryDTO } from "@/lib/learningPaths";
 import type { InventoryKpisDataDTO } from "@/lib/inventoryKpis";
 
@@ -317,7 +318,7 @@ export function EmployeeHome({
             </div>
             <div className="flex items-center gap-3 shrink-0">
               <span className="text-[12px] text-steel">
-                {new Date(s.createdAt).toLocaleDateString()}
+                {formatDateTime(s.createdAt)}
               </span>
               <span
                 className="font-mono text-[11px] font-semibold px-2.5 py-1 rounded-full"

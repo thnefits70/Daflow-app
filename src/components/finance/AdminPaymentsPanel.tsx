@@ -12,6 +12,7 @@ import { ProofPreview } from "@/components/shared/ProofPreview";
 import { TabGuide } from "@/components/shared/TabGuide";
 import { AdminPayeePicker, type AdminPaymentPayeeDTO, type PayeeBankAccountDTO } from "@/components/finance/AdminPayeePicker";
 import type { EligiblePaymentOrderDTO } from "@/lib/pettyCash";
+import { formatDateTime } from "@/lib/formatDateTime";
 
 type PaymentType = "RECURRING" | "VARIABLE";
 type Status = "PENDING_PAYMENT" | "PAID" | "CONFIRMED";
@@ -690,7 +691,7 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
                   </div>
                   {r.linkedGroupLabel && <div className="text-[11px] text-steel">{r.linkedGroupLabel}</div>}
                   {r.period && <div className="text-[11.5px] text-steel">período {r.period}</div>}
-                  <div className="text-[10px] text-steel-dim mt-0.5">Solicitada por {actorName(r.createdBy?.name)} · {new Date(r.createdAt).toLocaleDateString("es-MX")}</div>
+                  <div className="text-[10px] text-steel-dim mt-0.5">Solicitada por {actorName(r.createdBy?.name)} · {formatDateTime(r.createdAt)}</div>
                 </div>
                 <div className="text-right shrink-0">
                   <div className="text-[9px] font-semibold uppercase tracking-wide text-steel">Total a pagar</div>
@@ -765,7 +766,7 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
                       ⚠️ Verificado manualmente por el admin: {r.paymentOverrideNote}
                     </div>
                   )}
-                  {r.paidBy?.name && <div className="text-[10px] text-steel-dim mt-0.5">Pagado por {actorName(r.paidBy.name)}{r.paidAt ? ` · ${new Date(r.paidAt).toLocaleDateString("es-MX")}` : ""}</div>}
+                  {r.paidBy?.name && <div className="text-[10px] text-steel-dim mt-0.5">Pagado por {actorName(r.paidBy.name)}{r.paidAt ? ` · ${formatDateTime(r.paidAt)}` : ""}</div>}
                 </div>
               )}
 
@@ -898,7 +899,7 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
                   </button>
                   {r.paymentNotifiedAt && (
                     <div className="text-[10px] text-steel-dim mt-1">
-                      Avisado el {new Date(r.paymentNotifiedAt).toLocaleDateString("es-MX")} · toca el botón para reenviar
+                      Avisado el {formatDateTime(r.paymentNotifiedAt)} · toca el botón para reenviar
                     </div>
                   )}
                 </div>
@@ -906,7 +907,7 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
 
               {r.status === "CONFIRMED" && (
                 <div className="bg-green/10 border border-green/30 rounded-md px-2.5 py-2 text-[11px] text-green">
-                  ✅ Operación finalizada — todo el proceso cuadró correctamente. Confirmado por {actorName(r.confirmedBy?.name)}{r.confirmedAt ? ` · ${new Date(r.confirmedAt).toLocaleDateString("es-MX")}` : ""}
+                  ✅ Operación finalizada — todo el proceso cuadró correctamente. Confirmado por {actorName(r.confirmedBy?.name)}{r.confirmedAt ? ` · ${formatDateTime(r.confirmedAt)}` : ""}
                 </div>
               )}
 

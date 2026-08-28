@@ -9,12 +9,10 @@ import { ProofPreview } from "@/components/shared/ProofPreview";
 import { LiveCameraCapture } from "@/components/shared/LiveCameraCapture";
 import { TabGuide } from "@/components/shared/TabGuide";
 import type { PettyCashBoxDTO, EligiblePaymentOrderDTO } from "@/lib/pettyCash";
+import { formatDateTime } from "@/lib/formatDateTime";
 
 function money(v: number) {
   return "$" + v.toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-function fmtDate(iso: string) {
-  return new Date(iso).toLocaleDateString("es-MX", { day: "2-digit", month: "short" });
 }
 function pad2(n: number) {
   return String(n).padStart(2, "0");
@@ -140,7 +138,7 @@ function EntryRow({
         ) : (
           <div className="text-steel text-[10.5px] mt-0.5">
             {entry.kind === "DESEMBOLSO" ? (entry.linkedOrderLabel ?? entry.manualReason ?? "Sin vínculo") : "Recarga"}
-            {" · "}{fmtDate(entry.createdAt)} · {entry.createdByName}
+            {" · "}{formatDateTime(entry.createdAt)} · {entry.createdByName}
             {entry.aiMatches === false && <span className="text-red"> · monto no coincide con la foto</span>}
           </div>
         )}

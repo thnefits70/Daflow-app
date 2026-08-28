@@ -6,6 +6,7 @@ import { AlertTriangle, CheckCircle2, Wallet, Upload } from "lucide-react";
 import { uploadFile } from "@/lib/uploadFile";
 import { compressImage } from "@/lib/compressImage";
 import { actorName } from "@/lib/actorName";
+import { formatDateTime } from "@/lib/formatDateTime";
 import { ProofPreview } from "@/components/shared/ProofPreview";
 
 type ResolutionType = "CREDIT" | "REPLACEMENT" | "REFUND" | "WRITE_OFF";
@@ -462,7 +463,7 @@ function ResolutionRow({
               </button>
             )
           )}
-          {res.status === "COMPLETED" && <div className="text-green mt-1 flex items-center gap-1"><CheckCircle2 size={12} /> Confirmado el {res.bankConfirmedAt ? new Date(res.bankConfirmedAt).toLocaleDateString("es-MX") : ""}</div>}
+          {res.status === "COMPLETED" && <div className="text-green mt-1 flex items-center gap-1"><CheckCircle2 size={12} /> Confirmado el {res.bankConfirmedAt ? formatDateTime(res.bankConfirmedAt) : ""}</div>}
         </div>
       )}
     </div>

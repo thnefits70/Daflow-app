@@ -20,6 +20,7 @@ import {
   IESS_LINE_ITEM_LABEL,
 } from "@/lib/payrollCalc";
 import { getMonthDispatchSummary, getAchievedTier, CEO_BONUS_AMOUNTS, CEO_BONUS_LABELS } from "@/lib/commissionTiers";
+import { formatDateTime } from "@/lib/formatDateTime";
 
 const PERIOD_RE = /^\d{4}-\d{2}-Q[12]$/;
 
@@ -243,7 +244,7 @@ export async function buildAutomaticLineItems(employeeId: string, period: string
               return `${name} × ${it.quantity}${split ? ` (${split})` : ""}`;
             })
             .join(" · ");
-          const confirmedDate = o.financeConfirmedAt ? new Date(o.financeConfirmedAt).toLocaleDateString("es-EC") : null;
+          const confirmedDate = o.financeConfirmedAt ? formatDateTime(o.financeConfirmedAt) : null;
           const fullNote = `${note} — total $${o.totalAmount!.toFixed(2)} en ${o.installments} cuota(s)${confirmedDate ? ` — confirmada el ${confirmedDate}` : ""}`;
           items.push({ label, amount: amt, kind: "EXPENSE", isAutomatic: true, note: fullNote });
           ordersShown = true;
@@ -271,7 +272,7 @@ export async function buildAutomaticLineItems(employeeId: string, period: string
         if (idx !== null) {
           const amt = installmentAmount(a.amount, a.installments, idx);
           const cuota = a.installments > 1 ? ` (cuota ${idx + 1}/${a.installments})` : "";
-          const approvedDate = a.approvedAt ? new Date(a.approvedAt).toLocaleDateString("es-EC") : null;
+          const approvedDate = a.approvedAt ? formatDateTime(a.approvedAt) : null;
           items.push({
             label: `Anticipo${cuota}`,
             amount: amt,
@@ -305,7 +306,7 @@ export async function buildAutomaticLineItems(employeeId: string, period: string
           const amt = installmentAmount(d.totalAmount, d.installments, idx);
           const cuota = d.installments > 1 ? ` (cuota ${idx + 1}/${d.installments})` : "";
           const shortReason = d.reason.length > 40 ? `${d.reason.slice(0, 40)}…` : d.reason;
-          const acceptedDate = d.acceptedAt ? new Date(d.acceptedAt).toLocaleDateString("es-EC") : null;
+          const acceptedDate = d.acceptedAt ? formatDateTime(d.acceptedAt) : null;
           items.push({
             label: `Descuento — ${shortReason}${cuota}`,
             amount: amt,

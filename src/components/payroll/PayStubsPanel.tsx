@@ -7,6 +7,7 @@ import { MonthlyLegalRolePanel } from "@/components/payroll/MonthlyLegalRolePane
 import { MyBankAccountPanel } from "@/components/payroll/MyBankAccountPanel";
 import { MyCeoBonusesPanel } from "@/components/payroll/MyCeoBonusesPanel";
 import { MyManagementDeductionsPanel } from "@/components/payroll/MyManagementDeductionsPanel";
+import { formatDateTime } from "@/lib/formatDateTime";
 
 const MONTHS = [
   "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
@@ -72,7 +73,7 @@ function RosterRow({
           {stub ? (
             <>
               <span className="font-mono text-[10.5px] text-steel">
-                Subido {new Date(stub.updatedAt).toLocaleDateString("es-MX")}
+                Subido {formatDateTime(stub.updatedAt)}
               </span>
               {fileKind(stub.fileName) !== "other" && (
                 <button

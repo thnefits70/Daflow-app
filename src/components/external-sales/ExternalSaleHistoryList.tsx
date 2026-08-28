@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { formatDateTime } from "@/lib/formatDateTime";
 
 type SaleDTO = {
   id: string;
@@ -41,7 +42,7 @@ export function ExternalSaleHistoryList() {
           </div>
           <div className="text-[12.5px] font-semibold">{s.catalogItem?.name ?? s.declaredProductName} — {s.quantity} un. · ${s.totalAmount.toFixed(2)}</div>
           {s.dispatchAssignedTo && <div className="text-[10.5px] text-steel">Despachó {s.dispatchAssignedTo.name}{s.deliveredBy ? ` · entregó ${s.deliveredBy.name}` : ""}</div>}
-          <div className="text-[10.5px] text-steel">{new Date(s.createdAt).toLocaleDateString("es-EC", { day: "2-digit", month: "short", year: "numeric" })}</div>
+          <div className="text-[10.5px] text-steel">{formatDateTime(s.createdAt)}</div>
         </div>
       ))}
     </div>

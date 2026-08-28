@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Plus, Trash2, Pencil, MessageCircle, MapPin, Tag, Check, X, Search, Globe, Lock, Eye, EyeOff } from "lucide-react";
 import { LocationPicker } from "./LocationPicker";
 import { TabGuide } from "@/components/shared/TabGuide";
+import { formatDateTime } from "@/lib/formatDateTime";
 
 export type SupplierContactDTO = { id?: string; label: string; whatsapp: string };
 export type ChannelPlatform = "TELEGRAM" | "INSTAGRAM" | "FACEBOOK" | "OTHER";
@@ -636,7 +637,7 @@ export function SuppliersPanel({
                                 {b.holderIdType && b.holderIdNumber ? ` · ${b.holderIdType === "RUC" ? "RUC" : "Cédula"} ${b.holderIdNumber}` : ""}
                               </div>
                               <div className="text-[10.5px] text-steel-dim mt-1">
-                                Agregada por {b.createdByName ?? "—"} · {new Date(b.createdAt).toLocaleDateString("es-EC", { day: "numeric", month: "short", year: "numeric" })}
+                                Agregada por {b.createdByName ?? "—"} · {formatDateTime(b.createdAt)}
                               </div>
                             </div>
                           );
