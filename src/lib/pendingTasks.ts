@@ -1090,8 +1090,10 @@ async function getSupplierExchangeRejectedAdminPendingItem(href: string): Promis
 }
 
 // Tarea puntual de Nairoby: registrar la pérdida en la parte financiera.
+// Confirmado 2026-08-28: solo cuenta una vez que Daniel ya confirmó la baja
+// en Just — antes de eso no le toca a ella todavía.
 async function getSupplierExchangeFinanceWriteOffPendingItem(href: string): Promise<PendingItem | null> {
-  const count = await prisma.merchandiseOutflowItem.count({ where: { resolution: "REJECTED", financeWriteOffAt: null } });
+  const count = await prisma.merchandiseOutflowItem.count({ where: { resolution: "REJECTED", financeWriteOffAt: null, justWriteOffConfirmedAt: { not: null } } });
   if (count === 0) return null;
   return {
     type: "cambio_proveedor_rechazo",

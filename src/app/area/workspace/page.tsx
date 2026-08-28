@@ -119,8 +119,11 @@ export default async function WorkspacePage() {
   // todos los rechazos pendientes), mismo espíritu que
   // getPurchaseCreditsPendingItem un poco más abajo en este archivo.
   const canConfirmFinanceWriteOffFlag = await canConfirmSupplierExchangeFinanceWriteOff();
+  // Confirmado 2026-08-28: pasó a depender de Daniel — solo cuenta como
+  // pendiente de Nairoby una vez que él ya confirmó la baja en Just, no
+  // antes (ver justWriteOffConfirmedAt en finance-writeoff/route.ts).
   const financeWriteOffPendingCount = canConfirmFinanceWriteOffFlag
-    ? await prisma.merchandiseOutflowItem.count({ where: { resolution: "REJECTED", financeWriteOffAt: null } })
+    ? await prisma.merchandiseOutflowItem.count({ where: { resolution: "REJECTED", financeWriteOffAt: null, justWriteOffConfirmedAt: { not: null } } })
     : 0;
   // Guías Canceladas (Fase 4) — canConfirmCancelled combina Fulfillment
   // (dedicado) con el equipo de Inventario (ya calculado como canCaptureOutflow).

@@ -140,13 +140,13 @@ export async function notifySupplierExchangeGestors(batch: {
 
 // Confirmado 2026-08-27, pedido explícito del usuario: si el proveedor
 // rechaza tanto el cambio como el crédito (resolution REJECTED), es una
-// pérdida real — avisa a 3 personas de una vez, cada una con su propia
-// tarea: admin (revisar y opcionalmente comentar, ver adminReviewedAt —
-// confirmado 2026-08-28), Nairoby (dar de baja financieramente, ver
-// financeWriteOffAt) y Daniel (confirmar la baja en Just, ver
-// justWriteOffConfirmedAt). Las tres tareas son independientes entre sí —
-// ninguna espera a las otras. Cada aviso ya trae el link directo a donde le
-// toca actuar.
+// pérdida real. Confirmado 2026-08-28: el flujo pasó a ser secuencial —
+// Daniel confirma primero la baja en Just, y SOLO ENTONCES se le avisa a
+// Nairoby para que dé de baja financieramente (ver
+// notifySupplierExchangeJustWriteOffConfirmed más abajo, disparada desde
+// just-writeoff-confirm/route.ts). Acá solo avisa a admin (revisar y
+// opcionalmente comentar, ver adminReviewedAt) y a Daniel (confirmar la
+// baja en Just, primer paso de la cadena).
 export async function notifySupplierExchangeRejected(item: {
   quantity: number;
   declaredName: string;
@@ -155,8 +155,7 @@ export async function notifySupplierExchangeRejected(item: {
 }): Promise<void> {
   const name = item.catalogItem?.name ?? item.declaredName;
   const supplierName = item.batch.supplier?.name ?? "un proveedor";
-  const [financeLeadId, inventoryLeadId, invDept] = await Promise.all([
-    getFinanceLeadId(),
+  const [inventoryLeadId, invDept] = await Promise.all([
     getInventoryLeadId(),
     prisma.department.findUnique({ where: { code: "INV" }, select: { id: true } }),
   ]);
@@ -172,15 +171,6 @@ export async function notifySupplierExchangeRejected(item: {
       url: adminUrl,
     }),
   ];
-  if (financeLeadId) {
-    notifications.push(
-      notifyOwner(financeLeadId, {
-        title: "Mercadería rechazada por proveedor — dar de baja financiera",
-        body: `${supplierName} — "${name}" (${item.quantity} un.) — ${item.batch.code}.`,
-        url: "/area/workspace?tab=egresos&otab=proveedor",
-      })
-    );
-  }
   if (inventoryLeadId) {
     notifications.push(
       notifyOwner(inventoryLeadId, {
@@ -191,6 +181,27 @@ export async function notifySupplierExchangeRejected(item: {
     );
   }
   await Promise.all(notifications.map((p) => p.catch(() => null)));
+}
+
+// Confirmado 2026-08-28, pedido explícito del usuario: recién cuando Daniel
+// confirma la baja en Just le llega el aviso a Nairoby — antes de eso ella
+// no tiene nada que hacer acá (ver justWriteOffConfirmedAt requerido en
+// finance-writeoff/route.ts).
+export async function notifySupplierExchangeJustWriteOffConfirmed(item: {
+  quantity: number;
+  declaredName: string;
+  catalogItem: { name: string } | null;
+  batch: { code: string; supplier: { name: string } | null };
+}): Promise<void> {
+  const name = item.catalogItem?.name ?? item.declaredName;
+  const supplierName = item.batch.supplier?.name ?? "un proveedor";
+  const financeLeadId = await getFinanceLeadId();
+  if (!financeLeadId) return;
+  await notifyOwner(financeLeadId, {
+    title: "Mercadería rechazada por proveedor — dar de baja financiera",
+    body: `${supplierName} — "${name}" (${item.quantity} un.) — ${item.batch.code}. Daniel ya confirmó la baja en Just.`,
+    url: "/area/workspace?tab=egresos&otab=proveedor",
+  }).catch(() => null);
 }
 
 // Deterioro escalado a Compras (mercadería recién llegada) — por ahora solo

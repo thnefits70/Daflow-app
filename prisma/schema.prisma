@@ -3756,12 +3756,13 @@ model MerchandiseOutflowItem {
   expectedCreditAmount    Float?
 
   // Fase 2 — CAMBIO_PROVEEDOR resuelto como REJECTED (confirmado
-  // 2026-08-27, pedido explícito del usuario): dos confirmaciones
-  // independientes, cada una de una persona distinta — null mientras están
-  // pendientes. financeWriteOffAt = Nairoby ya registró la pérdida en
-  // Finanzas. justWriteOffConfirmedAt = Daniel ya confirmó la baja de esta
-  // mercadería en el sistema Just. El aviso urgente a admin desaparece solo
-  // cuando AMBAS ya están hechas.
+  // 2026-08-27, pedido explícito del usuario, encadenado 2026-08-28): dos
+  // confirmaciones, cada una de una persona distinta — null mientras están
+  // pendientes. justWriteOffConfirmedAt = Daniel ya confirmó la baja de esta
+  // mercadería en el sistema Just (primer paso). financeWriteOffAt =
+  // Nairoby ya registró la pérdida en Finanzas — SOLO puede pasar después de
+  // justWriteOffConfirmedAt, nunca antes (ver finance-writeoff/route.ts). El
+  // aviso urgente a admin desaparece solo cuando AMBAS ya están hechas.
   financeWriteOffAt         DateTime?
   financeWriteOffById       String?
   financeWriteOffBy         User?     @relation("MerchandiseOutflowItemFinanceWriteOffBy", fields: [financeWriteOffById], references: [id], onDelete: SetNull)

@@ -66,12 +66,14 @@ async function postJson(url: string) {
 // Confirmado 2026-08-26/27: vista de SOLO LECTURA sobre la decisión en sí
 // (quién resuelve cada producto es quien pidió la compra, no Daniel ni
 // admin — ver SupplierExchangeMyResolutions). Cuando un ítem queda
-// RECHAZADO, hay tres acciones puntuales acá, todas independientes entre
-// sí (ninguna espera a las otras): el admin puede revisar y dejar un
-// comentario opcional que queda en el historial (canReviewAsAdmin —
-// confirmado 2026-08-28, puramente informativo, no bloquea nada), Daniel
-// confirma la baja en Just (canConfirmJustWriteOff) y Nairoby confirma la
-// baja financiera (canConfirmFinanceWriteOff).
+// RECHAZADO hay tres acciones puntuales acá. Confirmado 2026-08-28: Daniel
+// (canConfirmJustWriteOff) y Nairoby (canConfirmFinanceWriteOff) ya NO son
+// independientes — es una cadena: Nairoby ni siquiera ve el botón de
+// confirmar hasta que Daniel ya confirmó la baja en Just (el backend
+// también lo exige, ver finance-writeoff/route.ts). El admin
+// (canReviewAsAdmin) sí sigue aparte de esa cadena: puede revisar y dejar
+// un comentario opcional en cualquier momento, puramente informativo para
+// el historial, sin bloquear ni depender de Daniel/Nairoby.
 export function SupplierExchangeResolutionInbox({
   canConfirmJustWriteOff = false,
   canConfirmFinanceWriteOff = false,
@@ -273,17 +275,6 @@ export function SupplierExchangeResolutionInbox({
 
                       <div className="flex flex-col gap-1 mt-0.5">
                         <div className="flex items-center gap-1.5 text-[11px]">
-                          {item.financeWriteOffAt ? (
-                            <span className="flex items-center gap-1 text-green font-semibold"><CheckCircle2 size={11} /> Baja financiera confirmada por {item.financeWriteOffBy?.name ?? "—"}</span>
-                          ) : canConfirmFinanceWriteOff ? (
-                            <button type="button" disabled={confirming === item.id} className="rounded border border-teal bg-teal px-2 py-1 text-[10.5px] font-bold text-navy cursor-pointer disabled:opacity-40" onClick={() => confirmFinanceWriteOff(item.id)}>
-                              Confirmar baja financiera
-                            </button>
-                          ) : (
-                            <span className="text-steel font-semibold">Falta que Nairoby dé de baja financiera</span>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-1.5 text-[11px]">
                           {item.justWriteOffConfirmedAt ? (
                             <span className="flex items-center gap-1 text-green font-semibold"><CheckCircle2 size={11} /> Baja en Just confirmada por {item.justWriteOffConfirmedBy?.name ?? "—"}</span>
                           ) : canConfirmJustWriteOff ? (
@@ -292,6 +283,19 @@ export function SupplierExchangeResolutionInbox({
                             </button>
                           ) : (
                             <span className="text-steel font-semibold">Falta que Daniel confirme la baja en Just</span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1.5 text-[11px]">
+                          {item.financeWriteOffAt ? (
+                            <span className="flex items-center gap-1 text-green font-semibold"><CheckCircle2 size={11} /> Baja financiera confirmada por {item.financeWriteOffBy?.name ?? "—"}</span>
+                          ) : !item.justWriteOffConfirmedAt ? (
+                            <span className="text-steel font-semibold">Pendiente — falta que Daniel confirme la baja en Just primero</span>
+                          ) : canConfirmFinanceWriteOff ? (
+                            <button type="button" disabled={confirming === item.id} className="rounded border border-teal bg-teal px-2 py-1 text-[10.5px] font-bold text-navy cursor-pointer disabled:opacity-40" onClick={() => confirmFinanceWriteOff(item.id)}>
+                              Confirmar baja financiera
+                            </button>
+                          ) : (
+                            <span className="text-steel font-semibold">Falta que Nairoby dé de baja financiera</span>
                           )}
                         </div>
                       </div>

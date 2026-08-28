@@ -2,14 +2,17 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { canActOnMerchandiseOutflow } from "@/lib/guards";
+import { notifySupplierExchangeJustWriteOffConfirmed } from "@/lib/merchandiseOutflow";
 
 // Confirmado 2026-08-27, pedido explícito del usuario: cuando un ítem de
 // "Cambio con proveedor" quedó REJECTED (el proveedor no cambia ni da
 // crédito), Daniel confirma acá que ya dio de baja esa mercadería en el
-// sistema Just — tarea separada de la de Nairoby (ver finance-writeoff),
-// cada una con su propio responsable. Reusa canActOnMerchandiseOutflow
-// (exclusivo de Daniel, ni admin) porque es el mismo criterio que ya usa
-// el resto de "dar de baja" de este módulo.
+// sistema Just. Confirmado 2026-08-28: es el primer paso de una cadena
+// secuencial — recién al confirmar acá se avisa a Nairoby (ver
+// notifySupplierExchangeJustWriteOffConfirmed) para que dé de baja
+// financieramente; antes de esto ella no puede. Reusa
+// canActOnMerchandiseOutflow (exclusivo de Daniel, ni admin) porque es el
+// mismo criterio que ya usa el resto de "dar de baja" de este módulo.
 export async function POST(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session || !(await canActOnMerchandiseOutflow())) {
@@ -17,7 +20,17 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   }
 
   const { id } = await params;
-  const item = await prisma.merchandiseOutflowItem.findUnique({ where: { id }, select: { resolution: true, justWriteOffConfirmedAt: true } });
+  const item = await prisma.merchandiseOutflowItem.findUnique({
+    where: { id },
+    select: {
+      resolution: true,
+      justWriteOffConfirmedAt: true,
+      quantity: true,
+      declaredName: true,
+      catalogItem: { select: { name: true } },
+      batch: { select: { code: true, supplier: { select: { name: true } } } },
+    },
+  });
   if (!item) return NextResponse.json({ error: "No encontrado." }, { status: 404 });
   if (item.resolution !== "REJECTED") return NextResponse.json({ error: "Este ítem no fue rechazado por el proveedor." }, { status: 400 });
   if (item.justWriteOffConfirmedAt) return NextResponse.json({ error: "Ya se confirmó la baja en Just." }, { status: 409 });
@@ -26,5 +39,6 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     where: { id },
     data: { justWriteOffConfirmedAt: new Date(), justWriteOffConfirmedById: session.user.id },
   });
+  await notifySupplierExchangeJustWriteOffConfirmed(item);
   return NextResponse.json(updated);
 }
