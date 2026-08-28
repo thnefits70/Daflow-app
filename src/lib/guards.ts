@@ -603,16 +603,20 @@ export async function canConfirmPurchaseReceiving() {
 // criterio que canActOnPurchaseReceiving — la aprobación FINAL (ver esa
 // función más abajo) sigue siendo exclusiva del líder.
 // Corrección 2026-08-27: pedido explícito del usuario — Daniel (el líder) NO
-// recibe mercadería físicamente, solo su equipo. A diferencia de
-// isInventoryTeamMember (que sí incluye al líder, usado para VER la pestaña
-// en canConfirmPurchaseReceiving), acá se chequea solo user.department —
-// deja afuera a Daniel aunque lidere INV, porque su isLeader/leadsDept no
-// cuenta como "trabaja en el área" para efectos de recibir/reportar.
+// recibe mercadería físicamente, solo su equipo. La intención original era
+// chequear solo user.department (a diferencia de isInventoryTeamMember, que
+// sí incluye al líder) asumiendo que un líder no tendría su propio
+// department también en INV — pero en los datos reales Daniel SÍ tiene
+// department=INV además de leadsDept=INV (es su departamento real, se usa
+// en nómina/organigrama/etc., no se le puede quitar sin romper eso otro).
+// Corrección 2026-08-28: se excluye al líder de forma explícita en vez de
+// depender de esa asunción sobre los datos.
 export async function canReceivePurchasesTeam() {
   const session = await auth();
   if (!session) return false;
   const user = await purchasesUserContext(session.user.id);
   if (!user) return false;
+  if (user.isLeader && user.leadsDept?.code === "INV") return false;
   return user.department?.code === "INV";
 }
 
