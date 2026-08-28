@@ -51,3 +51,11 @@ export async function getMarketingArrivalActorIds(role: "design" | "advisor"): P
   const users = await prisma.user.findMany({ where: { ...flag, isActive: true }, select: { id: true } });
   return users.map((u) => u.id);
 }
+
+// Confirmado 2026-08-28: quién debe enterarse por push de cada llegada para
+// ir organizando el despacho (hoy Yair), sin poder confirmar diseño ni
+// asesor — ver canViewMarketingArrivalsForDispatch en guards.ts.
+export async function getMarketingArrivalDispatchViewerIds(): Promise<string[]> {
+  const users = await prisma.user.findMany({ where: { canViewMarketingArrivalsForDispatch: true, isActive: true }, select: { id: true } });
+  return users.map((u) => u.id);
+}

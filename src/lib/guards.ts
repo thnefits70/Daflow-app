@@ -1027,11 +1027,18 @@ export async function canManageAdminPayments() {
 // "Mercadería recibida" (Análisis de Mercado) — confirmado 2026-08-08.
 // Ver visible = pertenecer al departamento MKT + admin (Bryan y Andrés
 // incluidos, aunque ninguno de los dos confirma nada, solo supervisan).
+// Confirmado 2026-08-28: también visible, en modo solo lectura, para quien
+// tenga canViewMarketingArrivalsForDispatch (hoy Yair) aunque no sea de MKT —
+// mismo escape hatch "sin dept.code" que canManagePurchases.
 export async function canViewMarketingArrivals() {
   const session = await auth();
   if (!session) return false;
   if (session.user.role === "admin") return true;
-  const user = await prisma.user.findUnique({ where: { id: session.user.id }, select: { department: { select: { code: true } } } });
+  const user = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { department: { select: { code: true } }, canViewMarketingArrivalsForDispatch: true },
+  });
+  if (user?.canViewMarketingArrivalsForDispatch) return true;
   return user?.department?.code === "MKT";
 }
 

@@ -211,6 +211,14 @@ model User {
   // canManagePurchases. Admin siempre puede, sin el flag.
   canDeclareExternalSales Boolean @default(false)
 
+  // Confirmado 2026-08-28: escape hatch puntual para que alguien de
+  // despacho (hoy Yair) vea "Mercadería recibida" en su propia "Mi área de
+  // trabajo" en modo SOLO LECTURA (nunca confirma diseño ni asesor — esos
+  // siguen siendo canConfirmMarketingDesign/Advisor), para saber qué llegó a
+  // bodega y ir organizando el despacho. Recibe push cuando Daniel aprueba
+  // una recepción, igual que design/advisor.
+  canViewMarketingArrivalsForDispatch Boolean @default(false)
+
   // Confirmado 2026-08-08: "Mercadería recibida" (Análisis de Mercado) —
   // dos flags separados porque son dos tareas totalmente distintas sobre la
   // misma llegada. canConfirmMarketingDesign = el diseñador de AMBAS marcas

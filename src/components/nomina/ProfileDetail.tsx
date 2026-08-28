@@ -43,6 +43,7 @@ type UserProfile = {
   canDeclareExternalSales: boolean;
   canConfirmMarketingDesign: boolean;
   canConfirmMarketingAdvisor: boolean;
+  canViewMarketingArrivalsForDispatch: boolean;
   marketingAdvisorBrand: string | null;
   canManageStoreFeedback: boolean;
   canViewStoreFeedback: boolean;
@@ -795,6 +796,16 @@ export function ProfileDetail({
                 />
               </div>
             )}
+          </div>
+
+          <div className="bg-cloud border border-rule rounded p-3.5 mt-3.5">
+            <label className="flex items-center gap-1 mb-2 text-[10.5px] font-semibold uppercase tracking-wide text-steel">
+              <Truck size={11} /> ¿Ve Mercadería recibida para despacho?
+            </label>
+            <div className="text-[11px] text-steel mb-2">
+              Ve cada llegada a bodega (solo lectura, hoy Yair) en su propia &quot;Mi área de trabajo&quot; y recibe un aviso apenas Inventario confirma una recepción, para ir organizando el despacho. No puede confirmar diseño ni asesor.
+            </div>
+            <PermToggle value={p.canViewMarketingArrivalsForDispatch} busy={busy} onChange={(v) => save({ canViewMarketingArrivalsForDispatch: v })} />
           </div>
 
           <div className="bg-cloud border border-rule rounded p-3.5 mt-3.5">

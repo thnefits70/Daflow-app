@@ -4,7 +4,7 @@ import { auth } from "@/auth";
 import { canActOnPurchaseReceiving } from "@/lib/guards";
 import { sendPushToOwner } from "@/lib/webPush";
 import { notifyOwner } from "@/lib/notifications";
-import { getMarketingArrivalActorIds } from "@/lib/marketingArrivals";
+import { getMarketingArrivalActorIds, getMarketingArrivalDispatchViewerIds } from "@/lib/marketingArrivals";
 
 // Confirmado 2026-08-18: pedido explícito del usuario — la aprobación FINAL
 // de Daniel (líder de Inventario) sobre una recepción que ya hizo su equipo
@@ -53,9 +53,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
 
   const arrivalBody = `${existing.catalogItem.name} · ${existing.receipt.receivedQuantity} un.${differenceNote}`;
-  const [designIds, advisorIds] = await Promise.all([
+  const [designIds, advisorIds, dispatchIds] = await Promise.all([
     getMarketingArrivalActorIds("design"),
     getMarketingArrivalActorIds("advisor"),
+    getMarketingArrivalDispatchViewerIds(),
   ]);
   await Promise.all([
     ...designIds.map((uid) =>
@@ -63,6 +64,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     ),
     ...advisorIds.map((uid) =>
       sendPushToOwner(uid, { title: "Llegó mercadería a bodega", body: arrivalBody, url: "/area/workspace?tab=llegadas" }).catch(() => null)
+    ),
+    ...dispatchIds.map((uid) =>
+      sendPushToOwner(uid, { title: "Llegó mercadería a bodega", body: `${arrivalBody} — ya puedes ir organizando el despacho.`, url: "/area/workspace?tab=llegadas" }).catch(() => null)
     ),
   ]);
 
