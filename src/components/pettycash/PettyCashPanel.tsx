@@ -200,7 +200,26 @@ function BoxCard({
   const [linkMode, setLinkMode] = useState<"orden" | "motivo">("orden");
   const [groupId, setGroupId] = useState(eligibleOrders[0]?.groupId ?? "");
   const [reason, setReason] = useState("");
-  const [amount, setAmount] = useState("");
+  // Fix confirmado 2026-08-27/28 (caso real de Bryan): antes había que leer
+  // el monto del pedido en el desplegable y volver a escribirlo a mano acá
+  // abajo — un paso de copiar-a-mano que invita a errores. Ahora se
+  // autocompleta con el total correcto del pedido elegido (ver fix del
+  // total real en getEligiblePaymentOrdersForFreight, pettyCash.ts), pero
+  // sigue siendo editable por si el pago real terminó siendo distinto.
+  // Se hace en los handlers (selección del pedido / cambio de modo), no en
+  // un useEffect, para no disparar un setState síncrono dentro de un efecto.
+  function amountForGroup(id: string): string {
+    return eligibleOrders.find((o) => o.groupId === id)?.shippingCostTotal.toFixed(2) ?? "";
+  }
+  const [amount, setAmount] = useState(() => amountForGroup(eligibleOrders[0]?.groupId ?? ""));
+  function selectGroup(id: string) {
+    setGroupId(id);
+    setAmount(amountForGroup(id));
+  }
+  function selectLinkMode(mode: "orden" | "motivo") {
+    setLinkMode(mode);
+    if (mode === "orden") setAmount(amountForGroup(groupId));
+  }
   const [description, setDescription] = useState("");
   const [proofUrl, setProofUrl] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -331,6 +350,13 @@ function BoxCard({
     if (Number.isNaN(n) || n <= 0) { setErr("Ingresa un monto válido."); return; }
     if (!description.trim()) { setErr("Escribe una descripción."); return; }
     if (proofUrl && proofVerifyResult?.matches === false) { setErr("El comprobante no coincide con el monto — cambia la foto o corrige el monto antes de guardar."); return; }
+    // Confirmado 2026-08-27/28: caso real donde se registró la fracción de
+    // un solo producto pensando que era el flete completo — este chequeo
+    // deja clarísimo, en el momento de guardar, que el monto es de TODO el
+    // pedido (no de un producto) antes de que se pueda confirmar por error.
+    if (showOrderLink && linkMode === "orden" && groupId) {
+      if (!window.confirm(`$${n.toFixed(2)} es el flete de TODO el pedido, no de un solo producto. ¿Confirmas?`)) return;
+    }
     setBusy(true);
     setErr("");
     const res = await fetch("/api/petty-cash/entries", {
@@ -583,12 +609,12 @@ function BoxCard({
           <div className="text-[12px] font-semibold mb-2">Registrar solicitud de pago</div>
           {showOrderLink && (
             <div className="flex gap-1.5 mb-2.5">
-              <button type="button" className={`flex-1 rounded px-2 py-1.5 text-[11px] font-semibold cursor-pointer ${linkMode === "orden" ? "bg-blue text-white" : "bg-cloud text-steel"}`} onClick={() => setLinkMode("orden")}>🚚 Flete</button>
-              <button type="button" className={`flex-1 rounded px-2 py-1.5 text-[11px] font-semibold cursor-pointer ${linkMode === "motivo" ? "bg-blue text-white" : "bg-cloud text-steel"}`} onClick={() => setLinkMode("motivo")}>✏️ Otro gasto</button>
+              <button type="button" className={`flex-1 rounded px-2 py-1.5 text-[11px] font-semibold cursor-pointer ${linkMode === "orden" ? "bg-blue text-white" : "bg-cloud text-steel"}`} onClick={() => selectLinkMode("orden")}>🚚 Flete</button>
+              <button type="button" className={`flex-1 rounded px-2 py-1.5 text-[11px] font-semibold cursor-pointer ${linkMode === "motivo" ? "bg-blue text-white" : "bg-cloud text-steel"}`} onClick={() => selectLinkMode("motivo")}>✏️ Otro gasto</button>
             </div>
           )}
           {showOrderLink && linkMode === "orden" && (
-            <select className="w-full rounded border border-rule bg-cloud px-2.5 py-2 text-[12px] mb-2.5" value={groupId} onChange={(e) => setGroupId(e.target.value)}>
+            <select className="w-full rounded border border-rule bg-cloud px-2.5 py-2 text-[12px] mb-2.5" value={groupId} onChange={(e) => selectGroup(e.target.value)}>
               {eligibleOrders.length === 0 && <option value="">No hay órdenes con flete pendiente</option>}
               {eligibleOrders.map((o) => <option key={o.groupId} value={o.groupId}>{o.label}</option>)}
             </select>

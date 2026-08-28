@@ -173,6 +173,16 @@ export type EligiblePaymentOrderDTO = { groupId: string; label: string; shipping
 // doble pago vive aquí, contra el MISMO campo que ya usa Control de Compras
 // para el flete pagado por transferencia (shippingPaidAt), sin importar el
 // canal — así nunca se paga dos veces el mismo flete.
+//
+// Fix confirmado 2026-08-27 (reportado por Bryan, caso real): un mismo
+// groupId puede traer VARIOS productos en la misma orden, y cada fila ya
+// guarda solo SU fracción del flete (ver effectiveUnitCost/lineShipping en
+// purchases.ts). Antes esto tomaba la primera fila que encontraba y
+// mostraba esa fracción como si fuera el flete completo de la orden — Bryan
+// vio "$4.65" (la parte de un solo producto) en vez de los "$10.00" reales
+// que hay que pagarle al transportista por TODA la orden, y lo registró tal
+// cual se lo mostró la pantalla. Ahora se suman todas las filas del mismo
+// groupId para mostrar y usar el total real.
 export async function getEligiblePaymentOrdersForFreight(): Promise<EligiblePaymentOrderDTO[]> {
   const rows = await prisma.purchaseRequest.findMany({
     where: {
@@ -185,17 +195,24 @@ export async function getEligiblePaymentOrdersForFreight(): Promise<EligiblePaym
     orderBy: { requestedAt: "desc" },
   });
 
-  const byGroup = new Map<string, EligiblePaymentOrderDTO>();
+  const byGroup = new Map<string, { groupId: string; total: number; requestedAt: Date; productNames: string[] }>();
   for (const r of rows) {
-    if (byGroup.has(r.groupId)) continue;
-    byGroup.set(r.groupId, {
-      groupId: r.groupId,
-      label: `${r.catalogItem.name} — flete $${r.shippingCostTotal!.toFixed(2)}`,
-      shippingCostTotal: r.shippingCostTotal!,
-      requestedAt: r.requestedAt.toISOString(),
-    });
+    const g = byGroup.get(r.groupId);
+    if (g) {
+      g.total += r.shippingCostTotal!;
+      g.productNames.push(r.catalogItem.name);
+    } else {
+      byGroup.set(r.groupId, { groupId: r.groupId, total: r.shippingCostTotal!, requestedAt: r.requestedAt, productNames: [r.catalogItem.name] });
+    }
   }
-  return [...byGroup.values()];
+  return [...byGroup.values()].map((g) => ({
+    groupId: g.groupId,
+    label: g.productNames.length > 1
+      ? `${g.productNames[0]} y ${g.productNames.length - 1} más — flete total $${g.total.toFixed(2)}`
+      : `${g.productNames[0]} — flete $${g.total.toFixed(2)}`,
+    shippingCostTotal: g.total,
+    requestedAt: g.requestedAt.toISOString(),
+  }));
 }
 
 export type FreightPaymentCheck =
@@ -234,16 +251,38 @@ export async function hasApprovedException(boxId: string, groupId: string): Prom
 // lo que en verdad se terminó pagando. `actualAmount` (cuando viene, ej.
 // pago por caja chica) reemplaza `shippingCostTotal` en ese momento — para
 // transferencia directa (sin monto real distinto) sigue sin tocarse.
+//
+// Fix confirmado 2026-08-28: cuando el groupId tiene varios productos (ver
+// getEligiblePaymentOrdersForFreight más arriba), `actualAmount` es el flete
+// REAL de TODA la orden, no el de un solo producto — así que no se le puede
+// poner ese mismo número entero a cada fila, o cada producto quedaría con
+// muchísimo más flete del que en verdad le tocó, dañando su historial de
+// precio. Se reparte proporcional a la cantidad de cada fila, igual que se
+// hizo al crear la solicitud (lineShipping en purchases.ts).
 export async function markGroupFreightPaid(groupId: string, paidById: string | null, proofUrl: string | null, actualAmount?: number) {
-  await prisma.purchaseRequest.updateMany({
-    where: { groupId },
-    data: {
-      shippingPaidAt: new Date(),
-      shippingPaidById: paidById,
-      shippingPaymentProofUrl: proofUrl,
-      ...(actualAmount !== undefined ? { shippingCostTotal: actualAmount } : {}),
-    },
-  });
+  if (actualAmount === undefined) {
+    await prisma.purchaseRequest.updateMany({
+      where: { groupId },
+      data: { shippingPaidAt: new Date(), shippingPaidById: paidById, shippingPaymentProofUrl: proofUrl },
+    });
+    return;
+  }
+
+  const rows = await prisma.purchaseRequest.findMany({ where: { groupId }, select: { id: true, quantity: true } });
+  const totalQty = rows.reduce((s, r) => s + r.quantity, 0);
+  await prisma.$transaction(
+    rows.map((r) =>
+      prisma.purchaseRequest.update({
+        where: { id: r.id },
+        data: {
+          shippingPaidAt: new Date(),
+          shippingPaidById: paidById,
+          shippingPaymentProofUrl: proofUrl,
+          shippingCostTotal: totalQty > 0 ? (actualAmount * r.quantity) / totalQty : actualAmount,
+        },
+      })
+    )
+  );
 }
 
 
