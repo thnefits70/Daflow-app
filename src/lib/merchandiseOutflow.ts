@@ -141,10 +141,12 @@ export async function notifySupplierExchangeGestors(batch: {
 // Confirmado 2026-08-27, pedido explícito del usuario: si el proveedor
 // rechaza tanto el cambio como el crédito (resolution REJECTED), es una
 // pérdida real — avisa a 3 personas de una vez, cada una con su propia
-// tarea: admin (aviso urgente, nada que confirmar), Nairoby (dar de baja
-// financieramente, ver financeWriteOffAt) y Daniel (confirmar la baja en
-// Just, ver justWriteOffConfirmedAt). Cada aviso ya trae el link directo a
-// donde le toca actuar.
+// tarea: admin (revisar y opcionalmente comentar, ver adminReviewedAt —
+// confirmado 2026-08-28), Nairoby (dar de baja financieramente, ver
+// financeWriteOffAt) y Daniel (confirmar la baja en Just, ver
+// justWriteOffConfirmedAt). Las tres tareas son independientes entre sí —
+// ninguna espera a las otras. Cada aviso ya trae el link directo a donde le
+// toca actuar.
 export async function notifySupplierExchangeRejected(item: {
   quantity: number;
   declaredName: string;

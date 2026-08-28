@@ -29,6 +29,7 @@ export async function GET() {
         resolvedBy: { select: { name: true } },
         financeWriteOffBy: { select: { name: true } },
         justWriteOffConfirmedBy: { select: { name: true } },
+        adminReviewedBy: { select: { name: true } },
       },
       orderBy: { createdAt: "asc" },
     }),

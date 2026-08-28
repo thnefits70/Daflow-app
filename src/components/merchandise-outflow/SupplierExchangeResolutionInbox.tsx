@@ -20,6 +20,9 @@ type ItemDTO = {
   financeWriteOffBy: { name: string } | null;
   justWriteOffConfirmedAt: string | null;
   justWriteOffConfirmedBy: { name: string } | null;
+  adminReviewedAt: string | null;
+  adminReviewedBy: { name: string } | null;
+  adminReviewNote: string | null;
   batch: { id: string; code: string; createdAt: string; documentPhotoUrls: string[]; supplier: { id: string; name: string } | null };
 };
 
@@ -63,20 +66,25 @@ async function postJson(url: string) {
 // Confirmado 2026-08-26/27: vista de SOLO LECTURA sobre la decisión en sí
 // (quién resuelve cada producto es quien pidió la compra, no Daniel ni
 // admin — ver SupplierExchangeMyResolutions). Cuando un ítem queda
-// RECHAZADO, sí hay dos acciones puntuales acá: Daniel confirma la baja en
-// Just (canConfirmJustWriteOff) y Nairoby confirma la baja financiera
-// (canConfirmFinanceWriteOff) — cada una su propia tarea, admin no hace
-// ninguna de las dos, solo mira.
+// RECHAZADO, hay tres acciones puntuales acá, todas independientes entre
+// sí (ninguna espera a las otras): el admin puede revisar y dejar un
+// comentario opcional que queda en el historial (canReviewAsAdmin —
+// confirmado 2026-08-28, puramente informativo, no bloquea nada), Daniel
+// confirma la baja en Just (canConfirmJustWriteOff) y Nairoby confirma la
+// baja financiera (canConfirmFinanceWriteOff).
 export function SupplierExchangeResolutionInbox({
   canConfirmJustWriteOff = false,
   canConfirmFinanceWriteOff = false,
+  canReviewAsAdmin = false,
 }: {
   canConfirmJustWriteOff?: boolean;
   canConfirmFinanceWriteOff?: boolean;
+  canReviewAsAdmin?: boolean;
 }) {
   const [items, setItems] = useState<ItemDTO[] | null>(null);
   const [creditTotals, setCreditTotals] = useState<CreditTotal[]>([]);
   const [confirming, setConfirming] = useState<string | null>(null);
+  const [reviewNotes, setReviewNotes] = useState<Record<string, string>>({});
   const [error, setError] = useState("");
 
   function load() {
@@ -109,6 +117,30 @@ export function SupplierExchangeResolutionInbox({
     setError("");
     try {
       await postJson(`/api/merchandise-outflow/items/${id}/just-writeoff-confirm`);
+      load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "No se pudo confirmar.");
+    } finally {
+      setConfirming(null);
+    }
+  }
+
+  async function confirmAdminReview(id: string) {
+    setConfirming(id);
+    setError("");
+    try {
+      const res = await fetch(`/api/merchandise-outflow/items/${id}/admin-review`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ note: reviewNotes[id] ?? "" }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error ?? "Ocurrió un error.");
+      setReviewNotes((prev) => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
       load();
     } catch (e) {
       setError(e instanceof Error ? e.message : "No se pudo confirmar.");
@@ -206,6 +238,39 @@ export function SupplierExchangeResolutionInbox({
                         <XCircle size={12} /> El proveedor rechazó todo — registrado por {item.resolvedBy?.name ?? "—"}
                       </div>
                       {item.resolutionNote && <div className="text-[11px] text-steel">&quot;{item.resolutionNote}&quot;</div>}
+
+                      <div className="flex flex-col gap-1 mt-0.5 pb-1.5 border-b border-rule">
+                        {item.adminReviewedAt ? (
+                          <div className="flex items-start gap-1.5 text-[11px]">
+                            <CheckCircle2 size={11} className="text-green shrink-0 mt-0.5" />
+                            <div>
+                              <span className="text-green font-semibold">Revisado por {item.adminReviewedBy?.name ?? "—"}</span>
+                              {item.adminReviewNote && <div className="text-steel">&quot;{item.adminReviewNote}&quot;</div>}
+                            </div>
+                          </div>
+                        ) : canReviewAsAdmin ? (
+                          <div className="flex flex-col gap-1">
+                            <textarea
+                              value={reviewNotes[item.id] ?? ""}
+                              onChange={(e) => setReviewNotes((prev) => ({ ...prev, [item.id]: e.target.value }))}
+                              placeholder="Comentario opcional…"
+                              rows={2}
+                              className="w-full rounded border border-rule bg-transparent px-2 py-1 text-[11px] resize-none"
+                            />
+                            <button
+                              type="button"
+                              disabled={confirming === item.id}
+                              className="self-start rounded border border-teal bg-teal px-2 py-1 text-[10.5px] font-bold text-navy cursor-pointer disabled:opacity-40"
+                              onClick={() => confirmAdminReview(item.id)}
+                            >
+                              Aceptar esta resolución
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="text-[11px] text-steel font-semibold">Falta que el admin revise</span>
+                        )}
+                      </div>
+
                       <div className="flex flex-col gap-1 mt-0.5">
                         <div className="flex items-center gap-1.5 text-[11px]">
                           {item.financeWriteOffAt ? (

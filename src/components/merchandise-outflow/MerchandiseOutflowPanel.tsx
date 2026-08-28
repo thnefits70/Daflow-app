@@ -26,6 +26,7 @@ export function MerchandiseOutflowPanel({
   canSubmitCancelledGuide = false,
   canConfirmCancelledGuide = false,
   canCutoffCancelledGuide = false,
+  isAdmin = false,
 }: {
   canCapture: boolean;
   canAct?: boolean;
@@ -75,6 +76,11 @@ export function MerchandiseOutflowPanel({
   canSubmitCancelledGuide?: boolean;
   canConfirmCancelledGuide?: boolean;
   canCutoffCancelledGuide?: boolean;
+  // Confirmado 2026-08-28, pedido explícito del usuario: el admin puede
+  // revisar/comentar (opcional) un rechazo total del proveedor — puro
+  // historial, no gatea a Nairoby ni a Daniel. Ver canReviewAsAdmin en
+  // SupplierExchangeResolutionInbox.
+  isAdmin?: boolean;
 }) {
   // Confirmado 2026-08-27, pedido explícito del usuario: "Cambio con
   // proveedor" gana sobre "Guías canceladas" como pestaña por defecto en
@@ -198,7 +204,7 @@ export function MerchandiseOutflowPanel({
             {(canViewSupplierExchangeResolution || canConfirmFinanceWriteOff) && (
               <div>
                 <div className="font-display font-bold text-[14px] mb-2.5">Estado de resolución</div>
-                <SupplierExchangeResolutionInbox key={proveedorRefreshKey} canConfirmJustWriteOff={canAct} canConfirmFinanceWriteOff={canConfirmFinanceWriteOff} />
+                <SupplierExchangeResolutionInbox key={proveedorRefreshKey} canConfirmJustWriteOff={canAct} canConfirmFinanceWriteOff={canConfirmFinanceWriteOff} canReviewAsAdmin={isAdmin} />
               </div>
             )}
           </div>

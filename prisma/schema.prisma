@@ -359,6 +359,7 @@ model User {
   merchandiseOutflowItemsResolved         MerchandiseOutflowItem[]  @relation("MerchandiseOutflowItemResolvedBy")
   merchandiseOutflowItemsFinanceWriteOff  MerchandiseOutflowItem[]  @relation("MerchandiseOutflowItemFinanceWriteOffBy")
   merchandiseOutflowItemsJustWriteOff     MerchandiseOutflowItem[]  @relation("MerchandiseOutflowItemJustWriteOffBy")
+  merchandiseOutflowItemsAdminReviewed    MerchandiseOutflowItem[]  @relation("MerchandiseOutflowItemAdminReviewedBy")
 
   externalSalesAdvised            ExternalSale[] @relation("ExternalSaleAdvisor")
   externalSalesReviewed           ExternalSale[] @relation("ExternalSaleReviewedBy")
@@ -3759,6 +3760,15 @@ model MerchandiseOutflowItem {
   justWriteOffConfirmedAt   DateTime?
   justWriteOffConfirmedById String?
   justWriteOffConfirmedBy   User?     @relation("MerchandiseOutflowItemJustWriteOffBy", fields: [justWriteOffConfirmedById], references: [id], onDelete: SetNull)
+
+  // Confirmado 2026-08-28, pedido explícito del usuario: revisión del admin
+  // sobre un rechazo total del proveedor — puramente informativa/historial,
+  // NO bloquea a Nairoby ni a Daniel (ambos pueden confirmar su baja antes,
+  // después o sin que el admin haya revisado nunca). Comentario opcional.
+  adminReviewedAt   DateTime?
+  adminReviewedById String?
+  adminReviewedBy   User?     @relation("MerchandiseOutflowItemAdminReviewedBy", fields: [adminReviewedById], references: [id], onDelete: SetNull)
+  adminReviewNote   String?
 
   createdAt DateTime @default(now())
 

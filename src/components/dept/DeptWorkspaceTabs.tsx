@@ -471,6 +471,7 @@ export function DeptWorkspaceTabs({
           canSubmitCancelledGuide={canSubmitCancelledGuide}
           canConfirmCancelledGuide={canConfirmCancelledGuide}
           canCutoffCancelledGuide={canCutoffCancelledGuide}
+          isAdmin={isAdmin}
         />
       )}
       {tab === "ventas-externas" && canViewExternalSales && (

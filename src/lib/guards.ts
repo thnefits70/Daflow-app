@@ -878,6 +878,15 @@ export async function canConfirmSupplierExchangeFinanceWriteOff() {
   return !!user.isLeader && user.leadsDept?.code === "FIN";
 }
 
+// Confirmado 2026-08-28, pedido explícito del usuario: revisar/comentar un
+// rechazo total del proveedor (aviso urgente que ya recibe) es exclusivo del
+// admin — es un registro de auditoría, no una tarea que gatee a Nairoby o
+// Daniel (esas siguen corriendo en paralelo, sin depender de esto).
+export async function canReviewSupplierExchangeRejection() {
+  const session = await auth();
+  return !!session && session.user.role === "admin";
+}
+
 // Confirmado 2026-08-25: id de Bryan (líder de Análisis de Mercado/MKT) para
 // avisarle cuando Daniel escala un deterioro de mercadería reciente — mismo
 // estilo que getInventoryLeadId/getFinanceLeadId.
