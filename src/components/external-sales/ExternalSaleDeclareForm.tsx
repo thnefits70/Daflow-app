@@ -122,7 +122,11 @@ export function ExternalSaleDeclareForm() {
               <button type="button" className="shrink-0 text-[11px] font-semibold text-blue cursor-pointer" onClick={() => setManualName("")}>Cambiar</button>
             </div>
           ) : (
-            <ProductMatchPicker referencePhotoUrl={null} onConfirm={(r: ProductMatchResult) => ("catalogItem" in r ? setSelected(r.catalogItem) : setManualName(r.manualName))} />
+            <ProductMatchPicker
+              referencePhotoUrl={null}
+              searchUrl="/api/external-sales/catalog-search"
+              onConfirm={(r: ProductMatchResult) => ("catalogItem" in r ? setSelected(r.catalogItem) : setManualName(r.manualName))}
+            />
           )}
         </div>
         <div className="flex gap-2.5">
