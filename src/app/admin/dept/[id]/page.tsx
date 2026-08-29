@@ -172,12 +172,20 @@ export default async function DeptWorkspacePage({ params }: { params: Promise<{ 
         canSubmitCancelledGuide={false}
         canConfirmCancelledGuide={false}
         canCutoffCancelledGuide={dept.code === "MKT"}
-        // Ventas Externas (Fase 3) — Bryan revisa (MKT), Nairoby cierra
-        // (FIN), admin confirma pago SIEMPRE (no es de ningún departamento
-        // en particular, así que no se apaga al navegar otras áreas).
+        // Ventas Externas (Fase 3) — Nairoby factura y cierra (FIN), admin
+        // confirma pago SIEMPRE (no es de ningún departamento en
+        // particular, así que no se apaga al navegar otras áreas).
+        // Actualizado 2026-08-29: aprobar/rechazar quedó EXCLUSIVO de Bryan
+        // — ni siquiera admin, así que va siempre false acá (a diferencia
+        // de Nairoby, que sí incluye a admin en el guard real). Agrupar,
+        // preparar, asignar embalaje y embalar/entregar siguen el mismo
+        // criterio "admin nunca actúa" que el resto de Registro de Egresos.
         canDeclareExternalSales={false}
-        canReviewExternalSales={dept.code === "MKT"}
+        canReviewExternalSales={false}
         canConfirmExternalSalePayment={true}
+        canInvoiceExternalSale={dept.code === "FIN"}
+        canAssignExternalSalePack={dept.code === "FUL"}
+        canPackExternalSale={false}
         canCloseExternalSale={dept.code === "FIN"}
         canViewExternalSales={true}
         pettyCashData={pettyCashData}

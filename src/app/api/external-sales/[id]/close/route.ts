@@ -13,7 +13,18 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   const { id } = await params;
   const sale = await prisma.externalSale.findUnique({
     where: { id },
-    select: { paymentConfirmedAt: true, deliveredAt: true, nairobyClosedAt: true, code: true, advisorId: true, reviewedById: true, dispatchAssignedToId: true, deliveredById: true },
+    select: {
+      paymentConfirmedAt: true,
+      deliveredAt: true,
+      nairobyClosedAt: true,
+      code: true,
+      advisorId: true,
+      reviewedById: true,
+      invoiceUploadedById: true,
+      dispatchAssignedToId: true,
+      packAssignedToId: true,
+      deliveredById: true,
+    },
   });
   if (!sale) return NextResponse.json({ error: "No encontrado." }, { status: 404 });
   if (!sale.paymentConfirmedAt || !sale.deliveredAt) return NextResponse.json({ error: "Falta confirmar el pago y/o la entrega." }, { status: 409 });

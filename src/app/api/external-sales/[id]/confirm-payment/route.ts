@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { canConfirmExternalSalePayment } from "@/lib/guards";
-import { notifyFinanceLeadExternalSaleReadyToClose } from "@/lib/externalSales";
+import { notifyFinanceLeadExternalSaleReadyToClose, notifyFinanceLeadExternalSalePendingInvoice } from "@/lib/externalSales";
 
 // Doble confirmación (del lado del cliente) de que el admin de verdad
 // recibió el dinero — exclusivo de admin, pedido explícito del usuario.
@@ -21,6 +21,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     data: { paymentConfirmedAt: new Date(), paymentConfirmedById: session.user.id },
   });
 
+  await notifyFinanceLeadExternalSalePendingInvoice(sale.code);
   if (sale.deliveredAt) await notifyFinanceLeadExternalSaleReadyToClose(sale.code);
   return NextResponse.json(updated);
 }

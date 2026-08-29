@@ -21,7 +21,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const parsed = schema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Datos inválidos." }, { status: 400 });
 
-  const sale = await prisma.externalSale.findUnique({ where: { id }, select: { reviewStatus: true, advisorId: true, code: true } });
+  const sale = await prisma.externalSale.findUnique({ where: { id }, select: { reviewStatus: true, advisorId: true, code: true, isContraEntrega: true } });
   if (!sale) return NextResponse.json({ error: "No encontrado." }, { status: 404 });
   if (sale.reviewStatus !== "PENDING") return NextResponse.json({ error: "Ya fue revisada." }, { status: 409 });
 
@@ -33,7 +33,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   });
 
   await notifyAdvisorReviewResult(sale.advisorId, sale.code, parsed.data.approved, parsed.data.approved ? null : parsed.data.rejectionReason);
-  if (parsed.data.approved) await notifyInventoryLeadExternalSaleApproved(sale.code);
+  // Contra entrega (Marcos) pasa a Daniel de una vez; pago anticipado espera
+  // a que Nairoby facture primero (ver invoice/route.ts).
+  if (parsed.data.approved && sale.isContraEntrega) await notifyInventoryLeadExternalSaleApproved(sale.code);
 
   return NextResponse.json(updated);
 }

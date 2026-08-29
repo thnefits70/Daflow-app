@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Truck } from "lucide-react";
+import { Package, Printer } from "lucide-react";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 
 type TeamMember = { id: string; name: string };
@@ -22,7 +22,7 @@ async function postJson(url: string, body?: unknown) {
   return data;
 }
 
-export function ExternalSaleDispatchInbox() {
+export function ExternalSalePackAssignInbox() {
   const [sales, setSales] = useState<SaleDTO[] | null>(null);
   const [team, setTeam] = useState<TeamMember[]>([]);
   const [assigning, setAssigning] = useState<string | null>(null);
@@ -31,7 +31,7 @@ export function ExternalSaleDispatchInbox() {
   const [error, setError] = useState("");
 
   function load() {
-    fetch("/api/external-sales/pending-dispatch")
+    fetch("/api/external-sales/pending-pack")
       .then((r) => r.json())
       .then((data) => { setSales(data.sales ?? []); setTeam(data.team ?? []); })
       .catch(() => setSales([]));
@@ -43,7 +43,7 @@ export function ExternalSaleDispatchInbox() {
     setSaving(true);
     setError("");
     try {
-      await postJson(`/api/external-sales/${id}/assign-dispatch`, { colaboradorId });
+      await postJson(`/api/external-sales/${id}/assign-pack`, { colaboradorId });
       setAssigning(null);
       setColaboradorId("");
       load();
@@ -55,7 +55,7 @@ export function ExternalSaleDispatchInbox() {
   }
 
   if (sales === null) return <div className="text-[13px] text-steel">Cargando…</div>;
-  if (sales.length === 0) return <div className="text-[13px] text-steel">No hay ventas pendientes de asignar agrupación.</div>;
+  if (sales.length === 0) return <div className="text-[13px] text-steel">No hay ventas pendientes de asignar embalaje.</div>;
 
   return (
     <div className="flex flex-col gap-2.5 max-w-lg">
@@ -70,6 +70,15 @@ export function ExternalSaleDispatchInbox() {
             <span>{s.catalogItem?.name ?? s.declaredProductName} — {s.quantity} un.</span>
           </div>
           <div className="text-[11.5px] text-steel mb-2.5">Entrega a: {s.pickupPersonName}</div>
+
+          <a
+            href={`/area/ventas-externas/${s.id}/guia`}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-blue underline mb-2.5"
+          >
+            <Printer size={12} /> Ver / imprimir guía
+          </a>
 
           {assigning === s.id ? (
             <div className="bg-cloud rounded-md p-2.5">
@@ -89,7 +98,7 @@ export function ExternalSaleDispatchInbox() {
             </div>
           ) : (
             <button type="button" className="flex items-center gap-1.5 text-[11.5px] font-bold border border-teal text-teal rounded px-2.5 py-1.5 cursor-pointer" onClick={() => setAssigning(s.id)}>
-              <Truck size={13} /> Asignar agrupación
+              <Package size={13} /> Asignar embalaje
             </button>
           )}
         </div>

@@ -3,13 +3,17 @@ import { prisma } from "@/lib/prisma";
 import { canActOnMerchandiseOutflow } from "@/lib/guards";
 
 // Ventas aprobadas por Bryan, todavía sin asignar a un colaborador de
-// Inventario — exclusivo de Daniel, no depende de si el pago ya se
-// confirmó (son dos pistas independientes).
+// Inventario — exclusivo de Daniel. Contra entrega (Marcos) entra de una
+// vez; pago anticipado espera a que Nairoby facture primero.
 export async function GET() {
   if (!(await canActOnMerchandiseOutflow())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
   const [sales, team] = await Promise.all([
     prisma.externalSale.findMany({
-      where: { reviewStatus: "APPROVED", dispatchAssignedToId: null },
+      where: {
+        reviewStatus: "APPROVED",
+        dispatchAssignedToId: null,
+        OR: [{ isContraEntrega: true }, { invoiceUploadedAt: { not: null } }],
+      },
       include: { catalogItem: { select: { name: true, photos: true, justCode: true } }, advisor: { select: { name: true } } },
       orderBy: { reviewedAt: "asc" },
     }),

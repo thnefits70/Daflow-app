@@ -571,6 +571,10 @@ function isInventoryTeamMember(user: { isLeader: boolean; leadsDept: { code: str
   return (user.isLeader && user.leadsDept?.code === "INV") || user.department?.code === "INV";
 }
 
+function isFulfilmentTeamMember(user: { isLeader: boolean; leadsDept: { code: string } | null; department: { code: string } | null }) {
+  return (user.isLeader && user.leadsDept?.code === "FUL") || user.department?.code === "FUL";
+}
+
 export async function canSubmitPurchaseRequests() {
   const session = await auth();
   if (!session) return false;
@@ -626,6 +630,15 @@ export async function canReceivePurchasesTeam() {
 export async function getInventoryLeadId(): Promise<string | null> {
   const lead = await prisma.user.findFirst({
     where: { isLeader: true, leadsDept: { code: "INV" }, isActive: true },
+    select: { id: true },
+  });
+  return lead?.id ?? null;
+}
+
+// Yair — líder de Fulfilment, además de asesor de Ventas Externas.
+export async function getFulfilmentLeadId(): Promise<string | null> {
+  const lead = await prisma.user.findFirst({
+    where: { isLeader: true, leadsDept: { code: "FUL" }, isActive: true },
     select: { id: true },
   });
   return lead?.id ?? null;
@@ -906,12 +919,17 @@ export async function getMarketingLeadId(): Promise<string | null> {
  * ---------------- Ventas Externas (Fase 3 de Registro de Egresos) ----------------
  * Confirmado 2026-08-25: declarar es un flag delegado puntual (hoy Heidy,
  * Jariel, Yair, Marcos) — ninguno lidera Análisis de Mercado, mismo patrón
- * que canManagePurchases. Aprobar/rechazar es de Bryan (líder de Análisis de
- * Mercado). Confirmar que llegó el pago es EXCLUSIVO del admin (pedido
- * explícito del usuario — "yo apruebo el recibido"). Asignar despacho y
- * entregar reusan las guards de Registro de Egresos (mismo equipo de
- * Inventario, mismo Daniel exclusivo). Cerrar la venta es de Nairoby (líder
- * de Finanzas).
+ * que canManagePurchases. Confirmar que llegó el pago es EXCLUSIVO del admin
+ * (pedido explícito del usuario — "yo apruebo el recibido"). Facturar es de
+ * Nairoby (líder de Finanzas). Agrupar/preparar reusa las guards de Registro
+ * de Egresos (equipo de Inventario, Daniel exclusivo para asignar). Embalar
+ * y entregar es del equipo de Fulfilment (Yair exclusivo para asignar).
+ * Cerrar la venta es de Nairoby.
+ *
+ * Actualizado 2026-08-29, pedido explícito del usuario: aprobar/rechazar
+ * quedó EXCLUSIVO de Bryan (líder de Análisis de Mercado) — a diferencia del
+ * resto de este módulo, acá NI SIQUIERA ADMIN tiene el botón; admin
+ * mantiene visibilidad total en modo lectura vía canViewExternalSales.
  */
 export async function canDeclareExternalSales() {
   const session = await auth();
@@ -924,7 +942,6 @@ export async function canDeclareExternalSales() {
 export async function canReviewExternalSales() {
   const session = await auth();
   if (!session) return false;
-  if (session.user.role === "admin") return true;
   const user = await prisma.user.findUnique({ where: { id: session.user.id }, select: { isLeader: true, leadsDept: { select: { code: true } } } });
   return !!user?.isLeader && user.leadsDept?.code === "MKT";
 }
@@ -932,6 +949,37 @@ export async function canReviewExternalSales() {
 export async function canConfirmExternalSalePayment() {
   const session = await auth();
   return !!session && session.user.role === "admin";
+}
+
+// Nairoby sube la factura (obligatoria en pago anticipado, opcional en
+// contra entrega) — mismo criterio de liderazgo de Finanzas que el cierre.
+export async function canInvoiceExternalSale() {
+  const session = await auth();
+  if (!session) return false;
+  if (session.user.role === "admin") return true;
+  const user = await prisma.user.findUnique({ where: { id: session.user.id }, select: { isLeader: true, leadsDept: { select: { code: true } } } });
+  return !!user?.isLeader && user.leadsDept?.code === "FIN";
+}
+
+// Yair (líder de Fulfilment) asigna a su equipo quién embala y entrega —
+// mismo patrón que canActOnMerchandiseOutflow pero para el departamento FUL.
+// Confirmado 2026-08-29: Yair es a la vez asesor (declara ventas del canal
+// Shanghai) y líder de este equipo — los dos roles conviven.
+export async function canAssignExternalSalePack() {
+  const session = await auth();
+  if (!session) return false;
+  if (session.user.role === "admin") return true;
+  const user = await purchasesUserContext(session.user.id);
+  if (!user) return false;
+  return !!user.isLeader && user.leadsDept?.code === "FUL";
+}
+
+export async function canPackExternalSale() {
+  const session = await auth();
+  if (!session) return false;
+  const user = await purchasesUserContext(session.user.id);
+  if (!user) return false;
+  return isFulfilmentTeamMember(user);
 }
 
 export async function canCloseExternalSale() {
@@ -1007,7 +1055,8 @@ export async function canViewExternalSales() {
     (await canDeclareExternalSales()) ||
     (await canReviewExternalSales()) ||
     (await canCloseExternalSale()) ||
-    (await canCaptureMerchandiseOutflow())
+    (await canCaptureMerchandiseOutflow()) ||
+    (await canPackExternalSale())
   );
 }
 

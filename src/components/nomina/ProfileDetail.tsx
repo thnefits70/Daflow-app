@@ -41,6 +41,7 @@ type UserProfile = {
   canAddSupplierBankAccounts: boolean;
   canManagePettyCashSecundaria: boolean;
   canDeclareExternalSales: boolean;
+  externalSaleContraEntrega: boolean;
   canConfirmMarketingDesign: boolean;
   canConfirmMarketingAdvisor: boolean;
   canViewMarketingArrivalsForDispatch: boolean;
@@ -764,6 +765,18 @@ export function ProfileDetail({
             </div>
             <PermToggle value={p.canDeclareExternalSales} busy={busy} onChange={(v) => save({ canDeclareExternalSales: v })} />
           </div>
+
+          {p.canDeclareExternalSales && (
+            <div className="bg-cloud border border-rule rounded p-3.5 mt-3.5">
+              <label className="flex items-center gap-1 mb-2 text-[10.5px] font-semibold uppercase tracking-wide text-steel">
+                <HandCoins size={11} /> ¿Vende contra entrega?
+              </label>
+              <div className="text-[11px] text-steel mb-2">
+                Hoy solo Marcos — cobra después de despachar (no antes), y sus clientes son B2C. Los demás asesores de Ventas Externas venden con pago anticipado a clientes B2B.
+              </div>
+              <PermToggle value={p.externalSaleContraEntrega} busy={busy} onChange={(v) => save({ externalSaleContraEntrega: v })} />
+            </div>
+          )}
 
           <div className="bg-cloud border border-rule rounded p-3.5 mt-3.5">
             <label className="flex items-center gap-1 mb-2 text-[10.5px] font-semibold uppercase tracking-wide text-steel">

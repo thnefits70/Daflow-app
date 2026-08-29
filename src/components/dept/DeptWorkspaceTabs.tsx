@@ -119,6 +119,9 @@ export function DeptWorkspaceTabs({
   canDeclareExternalSales = false,
   canReviewExternalSales = false,
   canConfirmExternalSalePayment = false,
+  canInvoiceExternalSale = false,
+  canAssignExternalSalePack = false,
+  canPackExternalSale = false,
   canCloseExternalSale = false,
   canViewExternalSales = false,
   pettyCashData = null,
@@ -259,6 +262,9 @@ export function DeptWorkspaceTabs({
   canDeclareExternalSales?: boolean;
   canReviewExternalSales?: boolean;
   canConfirmExternalSalePayment?: boolean;
+  canInvoiceExternalSale?: boolean;
+  canAssignExternalSalePack?: boolean;
+  canPackExternalSale?: boolean;
   canCloseExternalSale?: boolean;
   canViewExternalSales?: boolean;
   // Caja Chica — confirmado 2026-08-05: null si la persona no ve ninguna de
@@ -479,8 +485,11 @@ export function DeptWorkspaceTabs({
           canDeclare={canDeclareExternalSales}
           canReview={canReviewExternalSales}
           canConfirmPayment={canConfirmExternalSalePayment}
-          canAssignDispatch={canActOnMerchandiseOutflow}
-          canDeliver={canCaptureMerchandiseOutflow}
+          canInvoice={canInvoiceExternalSale}
+          canAssignPrep={canActOnMerchandiseOutflow}
+          canPrep={canCaptureMerchandiseOutflow}
+          canAssignPack={canAssignExternalSalePack}
+          canPack={canPackExternalSale}
           canClose={canCloseExternalSale}
         />
       )}

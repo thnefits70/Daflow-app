@@ -211,6 +211,13 @@ model User {
   // canManagePurchases. Admin siempre puede, sin el flag.
   canDeclareExternalSales Boolean @default(false)
 
+  // Confirmado 2026-08-29, pedido explícito del usuario: hoy solo Marcos
+  // vende contra entrega (cobra después de despachar); los demás asesores
+  // de Ventas Externas venden con pago anticipado. Se congela en
+  // ExternalSale.isContraEntrega al declarar, para que un cambio futuro de
+  // este flag no altere ventas ya en curso.
+  externalSaleContraEntrega Boolean @default(false)
+
   // Confirmado 2026-08-28: escape hatch puntual para que alguien de
   // despacho (hoy Yair) vea "Mercadería recibida" en su propia "Mi área de
   // trabajo" en modo SOLO LECTURA (nunca confirma diseño ni asesor — esos
@@ -282,8 +289,8 @@ model User {
   periodicRemindersCreated                     PeriodicReminder[]                 @relation("PeriodicReminderCreatedBy")
   purchaseCatalogItemsCreated                  PurchaseCatalogItem[]              @relation("PurchaseCatalogItemCreatedBy")
   purchaseCatalogItemDeleteRequests            PurchaseCatalogItemDeleteRequest[] @relation("PurchaseCatalogItemDeleteRequestedBy")
-  catalogMissingReportsReported                CatalogMissingReport[]              @relation("CatalogMissingReportReportedBy")
-  catalogMissingReportsResolved                CatalogMissingReport[]              @relation("CatalogMissingReportResolvedBy")
+  catalogMissingReportsReported                CatalogMissingReport[]             @relation("CatalogMissingReportReportedBy")
+  catalogMissingReportsResolved                CatalogMissingReport[]             @relation("CatalogMissingReportResolvedBy")
   justCatalogImports                           JustCatalogImport[]                @relation("JustCatalogImportImportedBy")
   dropiCombosCreated                           DropiCombo[]                       @relation("DropiComboCreatedBy")
   supplierCreditsCreated                       SupplierCredit[]                   @relation("SupplierCreditCreatedBy")
@@ -376,7 +383,11 @@ model User {
   externalSalesPaymentConfirmed   ExternalSale[] @relation("ExternalSalePaymentConfirmedBy")
   externalSalesDispatchAssignedTo ExternalSale[] @relation("ExternalSaleDispatchAssignedTo")
   externalSalesDispatchAssignedBy ExternalSale[] @relation("ExternalSaleDispatchAssignedBy")
+  externalSalesPrepReadyBy        ExternalSale[] @relation("ExternalSalePrepReadyBy")
+  externalSalesPackAssignedTo     ExternalSale[] @relation("ExternalSalePackAssignedTo")
+  externalSalesPackAssignedBy     ExternalSale[] @relation("ExternalSalePackAssignedBy")
   externalSalesDelivered          ExternalSale[] @relation("ExternalSaleDeliveredBy")
+  externalSalesInvoiceUploadedBy  ExternalSale[] @relation("ExternalSaleInvoiceUploadedBy")
   externalSalesClosed             ExternalSale[] @relation("ExternalSaleNairobyClosedBy")
 
   cancelledGuidesSubmitted            CancelledGuideReport[] @relation("CancelledGuideSubmittedBy")
@@ -1360,25 +1371,28 @@ model PurchaseCatalogItem {
   // — un producto puede quedar registrado aquí sea porque alguien lo dio de
   // alta para Control de Compras, porque quedó confirmado desde un
   // reingreso, o porque vino de la importación de Just.
-  merchandiseReentryItems MerchandiseReentryItem[]
+  merchandiseReentryItems        MerchandiseReentryItem[]
   // Confirmado 2026-08-25: Registro de Egresos (despacho/garantía/deterioro)
   // reusa este mismo catálogo compartido.
-  merchandiseOutflowItems MerchandiseOutflowItem[]
+  merchandiseOutflowItems        MerchandiseOutflowItem[]
   // Confirmado 2026-08-25: Ventas Externas (Fase 3) también reusa este
   // catálogo compartido.
-  externalSales           ExternalSale[]
+  externalSales                  ExternalSale[]
   // Confirmado 2026-08-25: Guías Canceladas (Fase 4) también reusa este
   // catálogo compartido.
-  cancelledGuideItems     CancelledGuideItem[]
+  cancelledGuideItems            CancelledGuideItem[]
   // Confirmado 2026-08-26: un producto real puede ser componente de uno o
   // más combos de Dropi (ver DropiCombo).
-  dropiComboComponents    DropiComboComponent[]
+  dropiComboComponents           DropiComboComponent[]
   // Confirmado 2026-08-29: Compras Personales también reusa este catálogo
   // — el colaborador lo elige al declarar, Daniel lo reconfirma/relinkea al
   // aprobar bodega (dos relaciones separadas, mismo criterio que
   // employeeProductName/confirmedProductName).
-  personalPurchaseItemsPicked    PersonalPurchaseItem[] @relation("PersonalPurchaseItemCatalogItem")
-  personalPurchaseItemsConfirmed PersonalPurchaseItem[] @relation("PersonalPurchaseItemConfirmedCatalogItem")
+  personalPurchaseItemsPicked    PersonalPurchaseItem[]   @relation("PersonalPurchaseItemCatalogItem")
+  personalPurchaseItemsConfirmed PersonalPurchaseItem[]   @relation("PersonalPurchaseItemConfirmedCatalogItem")
+  // Confirmado 2026-08-29: Ruptura de Stock (KPIs Generales) también reusa
+  // este catálogo compartido.
+  stockoutProduct                StockoutProduct?
 }
 
 // Confirmado 2026-08-26 (pedido explícito del usuario): un ID de combo de
@@ -2110,6 +2124,16 @@ model StockoutProduct {
   id        String   @id @default(cuid())
   name      String   @unique
   createdAt DateTime @default(now())
+
+  // Confirmado 2026-08-29 (pedido explícito del usuario): vínculo al mismo
+  // catálogo real (Just) que usan Reingreso/Compras/Ventas Externas — ya no
+  // se escribe el nombre a mano, se busca y elige del catálogo (ver
+  // ProductMatchPicker). `name` se sigue llenando con el nombre del catálogo
+  // al momento de elegirlo, para no romper el historial de semanas que ya
+  // tenían productos guardados desde antes de este vínculo (catalogItemId
+  // null en esas filas viejas).
+  catalogItemId String?              @unique
+  catalogItem   PurchaseCatalogItem? @relation(fields: [catalogItemId], references: [id], onDelete: SetNull)
 
   weeks StockoutWeekProduct[]
 }
@@ -3357,9 +3381,9 @@ model PersonalPurchaseItem {
   confirmedCatalogItemId String?
   confirmedCatalogItem   PurchaseCatalogItem? @relation("PersonalPurchaseItemConfirmedCatalogItem", fields: [confirmedCatalogItemId], references: [id], onDelete: SetNull)
 
-  livePhotoUrl         String
-  optionalPhotoUrl     String?
-  quantity             Int
+  livePhotoUrl     String
+  optionalPhotoUrl String?
+  quantity         Int
 
   // Hasta 3 declaraciones (una por unidad que aspira a precio al costo):
   // [{ relation: "SELF" }, { relation: "MINOR_CHILD", note: "mi hijo Juan" }]
@@ -3845,6 +3869,14 @@ enum ExternalSaleReviewStatus {
  * INDEPENDIENTES (no un orden fijo) — necesario porque Marcos cobra contra
  * entrega (el pago llega DESPUÉS del despacho) mientras los demás asesores
  * suben el comprobante ANTES. Nairoby solo cierra cuando ambas están listas.
+ * Actualizado 2026-08-29, ronda larga con el usuario (idea de Bryan): la
+ * pista de despacho se partió en dos — Daniel (Inventario) agrupa y prepara
+ * primero, Yair (líder de Fulfilment) embala y entrega después, con su
+ * propio colaborador asignado. Se agregó la factura de Nairoby (obligatoria
+ * en pago anticipado, opcional en contra entrega). Aprobar/rechazar quedó
+ * EXCLUSIVO de Bryan, ni siquiera admin (ver canReviewExternalSales) — admin
+ * queda en modo lectura vía canViewExternalSales. El cierre de Nairoby sigue
+ * siendo un clic manual suyo (no automático), confirmado explícitamente.
  */
 model ExternalSale {
   id         String @id @default(cuid())
@@ -3860,6 +3892,12 @@ model ExternalSale {
   quantity            Int
   unitPrice           Float
   totalAmount         Float // quantity * unitPrice, calculado al declarar
+
+  // Congelado desde User.externalSaleContraEntrega al declarar (hoy true
+  // solo para Marcos). Define el orden del flujo: contra entrega despacha
+  // primero y cobra después (máx. 48h desde la entrega); pago anticipado
+  // espera el comprobante Y la factura de Nairoby antes de pasar a Daniel.
+  isContraEntrega Boolean @default(false)
 
   // A quién debe entregarle bodega el pedido (motorizado o cliente) — el
   // colaborador de Inventario que despacha ve SOLO esto, nunca los montos.
@@ -3887,14 +3925,43 @@ model ExternalSale {
   paymentConfirmedById   String?
   paymentConfirmedBy     User?     @relation("ExternalSalePaymentConfirmedBy", fields: [paymentConfirmedById], references: [id], onDelete: SetNull)
 
-  // Pista 2 — despacho. Daniel asigna a un colaborador de su equipo, que
-  // sube foto de la entrega para cerrar (dispara el enganche a Egresos).
+  // Factura de Nairoby — confirmado 2026-08-29: obligatoria en pago
+  // anticipado (bloquea a Daniel hasta que se sube), opcional en contra
+  // entrega (solo si el cliente final la pidió).
+  invoiceUrl          String?
+  invoiceName         String?
+  invoiceUploadedAt   DateTime?
+  invoiceUploadedById String?
+  invoiceUploadedBy   User?     @relation("ExternalSaleInvoiceUploadedBy", fields: [invoiceUploadedById], references: [id], onDelete: SetNull)
+
+  // Pista 2, paso 1 — Daniel (Inventario) asigna a un colaborador de su
+  // equipo para agrupar los productos de la venta según la guía.
   dispatchAssignedToId String?
   dispatchAssignedTo   User?     @relation("ExternalSaleDispatchAssignedTo", fields: [dispatchAssignedToId], references: [id], onDelete: SetNull)
   dispatchAssignedAt   DateTime?
   dispatchAssignedById String?
   dispatchAssignedBy   User?     @relation("ExternalSaleDispatchAssignedBy", fields: [dispatchAssignedById], references: [id], onDelete: SetNull)
 
+  // El colaborador de Daniel toma fotos de los productos según la guía y
+  // marca listo — recién ahí pasa al equipo de Fulfilment (Yair) para
+  // embalar y entregar.
+  prepPhotoUrl  String?
+  prepReadyAt   DateTime?
+  prepReadyById String?
+  prepReadyBy   User?     @relation("ExternalSalePrepReadyBy", fields: [prepReadyById], references: [id], onDelete: SetNull)
+
+  // Pista 2, paso 2 — Yair (líder de Fulfilment) asigna a alguien de su
+  // equipo para embalar; esa misma persona hace la entrega final abajo.
+  packAssignedToId String?
+  packAssignedTo   User?     @relation("ExternalSalePackAssignedTo", fields: [packAssignedToId], references: [id], onDelete: SetNull)
+  packAssignedAt   DateTime?
+  packAssignedById String?
+  packAssignedBy   User?     @relation("ExternalSalePackAssignedBy", fields: [packAssignedById], references: [id], onDelete: SetNull)
+
+  // Entrega final al motorizado — foto en tiempo real (nunca un archivo
+  // subido), la toma la misma persona que embaló. Acá es cuando el stock
+  // sale de verdad (dispara el enganche a Egresos) y arranca el reloj de
+  // los 3 días hábiles.
   deliveryPhotoUrl String?
   deliveredAt      DateTime?
   deliveredById    String?
@@ -3913,6 +3980,7 @@ model ExternalSale {
 
   @@index([reviewStatus])
   @@index([dispatchAssignedToId])
+  @@index([packAssignedToId])
   @@index([advisorId])
 }
 

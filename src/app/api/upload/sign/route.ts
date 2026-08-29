@@ -17,6 +17,8 @@ import {
   canCaptureMerchandiseReentry,
   canCaptureMerchandiseOutflow,
   canDeclareExternalSales,
+  canInvoiceExternalSale,
+  canPackExternalSale,
   canManageJustCatalog,
   canEditPayrollRoles,
 } from "@/lib/guards";
@@ -138,8 +140,17 @@ export async function POST(req: NextRequest) {
   if (!allowed && session?.user.role === "employee" && folder === "external-sale-payment-proofs") {
     allowed = await canDeclareExternalSales();
   }
-  if (!allowed && session?.user.role === "employee" && folder === "external-sale-delivery-photos") {
+  if (!allowed && session?.user.role === "employee" && folder === "external-sale-invoices") {
+    allowed = await canInvoiceExternalSale();
+  }
+  // Foto de Inventario agrupando/preparando (paso 1) vs. foto en vivo de la
+  // entrega final al motorizado, que ahora hace el equipo de Fulfilment
+  // (paso 2) — carpetas separadas, permisos separados.
+  if (!allowed && session?.user.role === "employee" && folder === "external-sale-prep-photos") {
     allowed = await canCaptureMerchandiseOutflow();
+  }
+  if (!allowed && session?.user.role === "employee" && folder === "external-sale-delivery-photos") {
+    allowed = await canPackExternalSale();
   }
   if (!allowed && session?.user.role === "employee" && folder === "just-catalog-import") {
     allowed = await canManageJustCatalog();

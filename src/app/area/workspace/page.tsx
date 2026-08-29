@@ -3,7 +3,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { TopLine } from "@/components/ui/TopLine";
 import { DeptWorkspaceTabs } from "@/components/dept/DeptWorkspaceTabs";
-import { getUnseenFeedbackCount, canManageStoreFeedback as checkCanManageStoreFeedback, canViewStoreFeedback as checkCanViewStoreFeedback, canSubmitPurchaseRequests, canConfirmPurchaseReceiving, canReceivePurchasesTeam, canActOnPurchaseReceiving, canRegisterPurchaseInvoices, canPayMerchandisePurchases, canManageInventoryControl as checkCanManageInventoryControl, canViewInventoryKpisPanel as checkCanViewInventoryKpisPanel, canManageAdminPayments as checkCanManageAdminPayments, canViewMarketingArrivals as checkCanViewMarketingArrivals, canConfirmMarketingDesign as checkCanConfirmMarketingDesign, canConfirmMarketingAdvisor as checkCanConfirmMarketingAdvisor, canCaptureMerchandiseReentry, canApproveMerchandiseReentry, canActOnMerchandiseReentry, canCloseMerchandiseReentry, canVerifyDamageDisposal, canManageJustUpload, canManageJustCatalog, canCaptureMerchandiseOutflow, canActOnMerchandiseOutflow, canViewMerchandiseOutflow, canConfirmSupplierExchangeFinanceWriteOff, canSubmitCancelledGuide, canConfirmCancelledGuideFulfillment, canManageCancelledGuideCutoff, canDeclareExternalSales, canReviewExternalSales, canConfirmExternalSalePayment, canCloseExternalSale, canViewExternalSales, getSupplierAccess, canAddSupplierBankAccounts } from "@/lib/guards";
+import { getUnseenFeedbackCount, canManageStoreFeedback as checkCanManageStoreFeedback, canViewStoreFeedback as checkCanViewStoreFeedback, canSubmitPurchaseRequests, canConfirmPurchaseReceiving, canReceivePurchasesTeam, canActOnPurchaseReceiving, canRegisterPurchaseInvoices, canPayMerchandisePurchases, canManageInventoryControl as checkCanManageInventoryControl, canViewInventoryKpisPanel as checkCanViewInventoryKpisPanel, canManageAdminPayments as checkCanManageAdminPayments, canViewMarketingArrivals as checkCanViewMarketingArrivals, canConfirmMarketingDesign as checkCanConfirmMarketingDesign, canConfirmMarketingAdvisor as checkCanConfirmMarketingAdvisor, canCaptureMerchandiseReentry, canApproveMerchandiseReentry, canActOnMerchandiseReentry, canCloseMerchandiseReentry, canVerifyDamageDisposal, canManageJustUpload, canManageJustCatalog, canCaptureMerchandiseOutflow, canActOnMerchandiseOutflow, canViewMerchandiseOutflow, canConfirmSupplierExchangeFinanceWriteOff, canSubmitCancelledGuide, canConfirmCancelledGuideFulfillment, canManageCancelledGuideCutoff, canDeclareExternalSales, canReviewExternalSales, canConfirmExternalSalePayment, canInvoiceExternalSale, canAssignExternalSalePack, canPackExternalSale, canCloseExternalSale, canViewExternalSales, getSupplierAccess, canAddSupplierBankAccounts } from "@/lib/guards";
 import { getFinanceKpiData } from "@/lib/financeKpis";
 import { getDeptProcessDetail } from "@/lib/processDetail";
 import { getPaymentRemindersData } from "@/lib/paymentReminders";
@@ -134,10 +134,13 @@ export default async function WorkspacePage() {
   ]);
   const canConfirmGuide = canConfirmFulfillmentGuide || canCaptureOutflow;
   // Ventas Externas (Fase 3) — mismo patrón sin dept.code que lo anterior.
-  const [canDeclareSales, canReviewSales, canConfirmSalePayment, canCloseSale, canViewSales] = await Promise.all([
+  const [canDeclareSales, canReviewSales, canConfirmSalePayment, canInvoiceSale, canAssignSalePack, canPackSale, canCloseSale, canViewSales] = await Promise.all([
     canDeclareExternalSales(),
     canReviewExternalSales(),
     canConfirmExternalSalePayment(),
+    canInvoiceExternalSale(),
+    canAssignExternalSalePack(),
+    canPackExternalSale(),
     canCloseExternalSale(),
     canViewExternalSales(),
   ]);
@@ -296,6 +299,9 @@ export default async function WorkspacePage() {
         canDeclareExternalSales={canDeclareSales}
         canReviewExternalSales={canReviewSales}
         canConfirmExternalSalePayment={canConfirmSalePayment}
+        canInvoiceExternalSale={canInvoiceSale}
+        canAssignExternalSalePack={canAssignSalePack}
+        canPackExternalSale={canPackSale}
         canCloseExternalSale={canCloseSale}
         canViewExternalSales={canViewSales}
         pettyCashData={pettyCashData}

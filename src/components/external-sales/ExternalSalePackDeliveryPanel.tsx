@@ -22,10 +22,11 @@ async function postJson(url: string, body?: unknown) {
   return data;
 }
 
-// Confirmado 2026-08-25, pedido explícito del usuario: acá NUNCA se
-// muestran precios ni valores económicos — solo lo que hace falta para
-// despachar bien.
-export function ExternalSaleDeliveryPanel() {
+// Confirmado 2026-08-29, pedido explícito del usuario: acá NUNCA se
+// muestran precios ni valores económicos. La misma persona que embala es
+// quien entrega al motorizado — foto en vivo obligatoria, nunca un archivo
+// subido, para que quede registro de a quién se le entregó.
+export function ExternalSalePackDeliveryPanel() {
   const [sales, setSales] = useState<SaleDTO[] | null>(null);
   const [delivering, setDelivering] = useState<string | null>(null);
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
@@ -34,7 +35,7 @@ export function ExternalSaleDeliveryPanel() {
   const [error, setError] = useState("");
 
   function load() {
-    fetch("/api/external-sales/my-deliveries").then((r) => r.json()).then(setSales).catch(() => setSales([]));
+    fetch("/api/external-sales/my-pack-deliveries").then((r) => r.json()).then(setSales).catch(() => setSales([]));
   }
   useEffect(load, []);
 
@@ -55,7 +56,7 @@ export function ExternalSaleDeliveryPanel() {
   }
 
   if (sales === null) return <div className="text-[13px] text-steel">Cargando…</div>;
-  if (sales.length === 0) return <div className="text-[13px] text-steel">No tenés despachos asignados pendientes.</div>;
+  if (sales.length === 0) return <div className="text-[13px] text-steel">No tenés embalajes asignados pendientes.</div>;
 
   return (
     <div className="flex flex-col gap-2.5 max-w-lg">

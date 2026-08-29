@@ -10,7 +10,9 @@ export async function GET() {
       catalogItem: { select: { name: true, photos: true, justCode: true } },
       advisor: { select: { name: true } },
       dispatchAssignedTo: { select: { name: true } },
+      packAssignedTo: { select: { name: true } },
       deliveredBy: { select: { name: true } },
+      invoiceUploadedBy: { select: { name: true } },
     },
     orderBy: { createdAt: "asc" },
   });
