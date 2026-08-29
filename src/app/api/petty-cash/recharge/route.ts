@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/auth";
 import { canManagePettyCashPrincipal } from "@/lib/guards";
-import { getOrCreateBox } from "@/lib/pettyCash";
+import { getOrCreateBox, hasPendingConfirmation } from "@/lib/pettyCash";
 import { hashFileFromUrl } from "@/lib/fileHash";
 import { readPettyCashProof } from "@/lib/pettyCashAi";
 import { prisma } from "@/lib/prisma";
@@ -37,6 +37,16 @@ export async function POST(req: NextRequest) {
   }
 
   const box = await getOrCreateBox(d.boxType);
+
+  // Pedido explícito del usuario 2026-08-29: no fondear a ciegas — si la
+  // recarga anterior todavía no fue confirmada por quien la recibe, se
+  // bloquea un segundo fondeo hasta que esa persona acepte el primero.
+  if (await hasPendingConfirmation(box.id)) {
+    return NextResponse.json(
+      { error: "Ya hay una recarga pendiente de confirmar en esta caja — espera a que la persona a cargo confirme que la recibió antes de fondear de nuevo." },
+      { status: 409 }
+    );
+  }
 
   let proofHash: string | null = null;
   if (d.proofUrl) {

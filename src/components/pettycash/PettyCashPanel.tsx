@@ -142,6 +142,13 @@ function EntryRow({
             {entry.aiMatches === false && <span className="text-red"> · monto no coincide con la foto</span>}
           </div>
         )}
+        {!editing && entry.kind === "RECARGA" && (
+          <div className={`mt-1 text-[10.5px] font-semibold ${entry.confirmedAt ? "text-green" : "text-red"}`}>
+            {entry.confirmedAt
+              ? `✓ Confirmado por ${entry.confirmedByName ?? "el destinatario"} · ${formatDateTime(entry.confirmedAt)}`
+              : "● El destinatario todavía no ha confirmado que recibió este fondeo"}
+          </div>
+        )}
         {!editing && entry.proofUrl && (
           <div className="mt-1.5">
             <ProofPreview url={entry.proofUrl} size={40} />
@@ -731,6 +738,11 @@ function BoxCard({
       {canFund && isAdmin && (
         <div className="mt-4 pt-3.5 border-t border-dashed border-rule">
           <div className="text-[12px] font-semibold mb-2">💸 Fondear esta caja</div>
+          {box.blocked && (
+            <div className="mb-2.5 text-[11.5px] text-red bg-red/10 border border-red/30 rounded-md px-2.5 py-1.5">
+              🔒 Ya hay un fondeo pendiente de confirmar — espera a que lo acepten antes de enviar otro.
+            </div>
+          )}
           {acc ? (
             <div className="mb-2.5 text-[11.5px] bg-teal/10 border border-teal/30 rounded-md px-2.5 py-1.5 leading-relaxed">
               <div className="font-semibold">🏦 Transferir a:</div>
@@ -778,7 +790,7 @@ function BoxCard({
           )}
           <button
             type="button"
-            disabled={busy || fundVerifying || (!!fundProofUrl && fundVerifyResult?.matches === false)}
+            disabled={busy || fundVerifying || box.blocked || (!!fundProofUrl && fundVerifyResult?.matches === false)}
             className="rounded border border-blue text-blue px-3.5 py-2 text-[12.5px] font-semibold cursor-pointer disabled:opacity-60"
             onClick={submitFund}
           >
