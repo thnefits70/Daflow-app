@@ -2,12 +2,16 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Trash2, Pencil, Check, X, ChevronDown, ChevronUp, ShieldCheck } from "lucide-react";
+import { Trash2, Pencil, ChevronDown, ChevronUp, ShieldCheck } from "lucide-react";
 import { formatWeekShort } from "@/components/dashboard/WeeklyTrendChart";
-import { Combobox } from "@/components/ui/Combobox";
+import { ProductMatchPicker, type ProductMatchResult } from "@/components/merchandise-reentry/ProductMatchPicker";
+import { CatalogCode } from "@/components/shared/CatalogCode";
 
-export type StockoutProductDTO = { id: string; name: string };
-export type StockoutWeekRowDTO = { id: string; week: string; product: { id: string; name: string } };
+export type StockoutWeekRowDTO = {
+  id: string;
+  week: string;
+  product: { id: string; name: string; catalogItem: { justCode: string | null } | null };
+};
 
 function formatWeekLabel(week: string) {
   if (!week) return "";
@@ -16,61 +20,52 @@ function formatWeekLabel(week: string) {
 }
 
 export function StockoutPanel({
-  products,
   weekRows,
   confirmedWeeks = [],
 }: {
-  products: StockoutProductDTO[];
   weekRows: StockoutWeekRowDTO[];
   confirmedWeeks?: string[];
 }) {
   const router = useRouter();
   const [week, setWeek] = useState("");
-  const [productName, setProductName] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [confirmedWeek, setConfirmedWeek] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
-  const [renamingProductId, setRenamingProductId] = useState<string | null>(null);
-  const [renameValue, setRenameValue] = useState("");
+  const [relinkingProductId, setRelinkingProductId] = useState<string | null>(null);
 
-  // Single action: identify the product by name (reusing it if it already
-  // exists, case-insensitively — never a second "+ Producto nuevo" step) and
-  // attach it to the chosen week, in one click. Doing this any other way let
-  // someone create several new products in a row and only ever attach the
-  // last one, since creating and attaching used to be two separate buttons.
-  const addToWeek = async () => {
-    const name = productName.trim();
-    if (!week || !name) {
-      setErr("Elige una semana y escribe un producto.");
+  // Confirmado 2026-08-29 (pedido explícito del usuario): el producto ya no
+  // se escribe a mano — se busca en el mismo catálogo real (Just) que usan
+  // Reingreso/Compras/Ventas Externas, mostrando su código tal cual aparece
+  // en esas otras pantallas. Elegirlo del catálogo (reutilizando el mismo
+  // StockoutProduct si ese producto ya se había marcado antes) y adjuntarlo
+  // a la semana elegida sigue siendo una sola acción, en un clic.
+  const handleAdd = async (result: ProductMatchResult) => {
+    if (!week) {
+      setErr("Elige una semana primero.");
       return;
     }
     setErr("");
     setBusy(true);
 
-    const existing = products.find((p) => p.name.toLowerCase() === name.toLowerCase());
-    let productId = existing?.id;
-
-    if (!productId) {
-      const createRes = await fetch("/api/stockout-products", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name }),
-      });
-      if (!createRes.ok) {
-        setBusy(false);
-        const data = await createRes.json().catch(() => null);
-        setErr(data?.error ?? "No se pudo crear el producto.");
-        return;
-      }
-      productId = (await createRes.json()).id;
+    const createRes = await fetch("/api/stockout-products", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ catalogItemId: result.id }),
+    });
+    if (!createRes.ok) {
+      setBusy(false);
+      const data = await createRes.json().catch(() => null);
+      setErr(data?.error ?? "No se pudo guardar el producto.");
+      return;
     }
+    const product = await createRes.json();
 
     const res = await fetch("/api/stockout-weeks", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ week, productId }),
+      body: JSON.stringify({ week, productId: product.id }),
     });
     setBusy(false);
     if (!res.ok) {
@@ -78,7 +73,6 @@ export function StockoutPanel({
       setErr(data?.error ?? "No se pudo guardar.");
       return;
     }
-    setProductName("");
     setExpanded(false);
     router.refresh();
   };
@@ -117,40 +111,24 @@ export function StockoutPanel({
     router.refresh();
   };
 
-  // Permanently removes a catalog product (blocked server-side unless it has
-  // zero week attachments) — different from `remove` above, which only
-  // detaches one week.
-  const deleteProduct = async (id: string) => {
-    if (!confirm("¿Eliminar este producto del catálogo de ruptura de stock?")) return;
+  // Re-vincula esta fila a otro producto del catálogo (corrige un match
+  // equivocado) — actualiza el nombre mostrado en todas las semanas donde ya
+  // aparece, en vez de requerir borrar y volver a crear.
+  const saveRelink = async (result: ProductMatchResult) => {
+    if (!relinkingProductId) return;
     setBusy(true);
-    const res = await fetch(`/api/stockout-products/${id}`, { method: "DELETE" });
-    setBusy(false);
-    if (!res.ok) {
-      const data = await res.json().catch(() => null);
-      setErr(data?.error ?? "No se pudo eliminar.");
-      return;
-    }
-    router.refresh();
-  };
-
-  // Renames the catalog product itself (not just this week's attachment) so
-  // a typo gets corrected everywhere that product already appears.
-  const saveRename = async () => {
-    const name = renameValue.trim();
-    if (!renamingProductId || !name) return;
-    setBusy(true);
-    const res = await fetch(`/api/stockout-products/${renamingProductId}`, {
+    const res = await fetch(`/api/stockout-products/${relinkingProductId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name }),
+      body: JSON.stringify({ catalogItemId: result.id }),
     });
     setBusy(false);
     if (!res.ok) {
       const data = await res.json().catch(() => null);
-      setErr(data?.error ?? "No se pudo renombrar.");
+      setErr(data?.error ?? "No se pudo vincular.");
       return;
     }
-    setRenamingProductId(null);
+    setRelinkingProductId(null);
     router.refresh();
   };
 
@@ -163,19 +141,13 @@ export function StockoutPanel({
   const weeks = [...byWeek.keys()].sort().reverse();
   const latestWeek = weeks[0] ?? null;
 
-  // How many weeks each catalog product is already anchored to — a product
-  // can only be permanently deleted from the Combobox once this hits zero.
-  const usageByProductId = new Map<string, number>();
-  for (const r of weekRows) usageByProductId.set(r.product.id, (usageByProductId.get(r.product.id) ?? 0) + 1);
-  const comboboxOptions = products.map((p) => ({ id: p.id, name: p.name, usageCount: usageByProductId.get(p.id) ?? 0 }));
-
   return (
     <div>
       <div className="bg-surface border border-rule rounded-md p-4.5 mb-5">
         <label className="block mb-1.5 text-[10.5px] font-semibold uppercase tracking-wide text-steel">
           Marcar un producto sin stock esa semana
         </label>
-        <div className="flex items-end gap-2.5 flex-wrap">
+        <div className="flex items-start gap-2.5 flex-wrap">
           <div>
             <label className="block mb-1 text-[10px] text-steel">Semana</label>
             <input
@@ -185,29 +157,18 @@ export function StockoutPanel({
               onChange={(e) => setWeek(e.target.value)}
             />
           </div>
-          <div>
+          <div className="flex-1 min-w-[260px]">
             <label className="block mb-1 text-[10px] text-steel">Producto</label>
-            <Combobox
-              className="rounded border border-rule px-2.5 py-2 text-[13px] bg-surface min-w-[220px]"
-              placeholder="Escribe o elige un producto…"
-              value={productName}
-              onChange={setProductName}
-              options={comboboxOptions}
-              onDelete={deleteProduct}
-            />
+            {week ? (
+              <ProductMatchPicker key={week} referencePhotoUrl={null} searchUrl="/api/stockout-catalog-search" onConfirm={handleAdd} />
+            ) : (
+              <div className="text-[12px] text-steel border border-dashed border-rule rounded px-2.5 py-2.5">Elige una semana primero.</div>
+            )}
           </div>
-          <button
-            type="button"
-            disabled={busy}
-            className="inline-flex items-center gap-1.5 rounded border border-blue bg-blue px-3.5 py-2 text-[12.5px] font-semibold text-white cursor-pointer disabled:opacity-60"
-            onClick={addToWeek}
-          >
-            <Plus size={14} /> Guardar
-          </button>
         </div>
         {err && <div className="text-red text-[12.5px] mt-2.5">{err}</div>}
         <div className="text-[11px] text-steel mt-2.5">
-          Si el producto ya existe, escribe su nombre igual y se reutiliza. Para marcar varios productos en la misma semana, repite Guardar uno por uno. El lápiz de cada producto corrige su nombre en todas las semanas donde aparece. En la lista desplegable, el bote de basura elimina un producto del catálogo para siempre — solo si no tiene historial guardado.
+          Buscá por nombre o código de Just — el mismo catálogo que usan Reingreso, Compras y Ventas Externas. Si el producto ya se había marcado antes, se reutiliza en vez de crear otro. Para marcar varios productos en la misma semana, repite la búsqueda una por una. El lápiz de cada producto corrige el vínculo en todas las semanas donde aparece.
         </div>
 
         <div className="border-t border-rule mt-3.5 pt-3.5">
@@ -264,25 +225,19 @@ export function StockoutPanel({
                 <div className="font-semibold text-[13px] mb-2">{formatWeekLabel(w)}</div>
                 <div className="flex flex-wrap gap-2">
                   {byWeek.get(w)!.map((r) =>
-                    renamingProductId === r.product.id ? (
-                      <span key={r.id} className="inline-flex items-center gap-1.5 text-[12px] bg-cloud border border-blue rounded-full px-2.5 py-1">
-                        <input
-                          autoFocus
-                          className="bg-transparent outline-none w-28"
-                          value={renameValue}
-                          onChange={(e) => setRenameValue(e.target.value)}
-                          onKeyDown={(e) => e.key === "Enter" && saveRename()}
+                    relinkingProductId === r.product.id ? (
+                      <div key={r.id} className="w-full sm:w-96">
+                        <ProductMatchPicker
+                          referencePhotoUrl={null}
+                          searchUrl="/api/stockout-catalog-search"
+                          onConfirm={saveRelink}
+                          onCancel={() => setRelinkingProductId(null)}
                         />
-                        <button type="button" disabled={busy} className="text-teal cursor-pointer" onClick={saveRename} aria-label="Guardar nombre">
-                          <Check size={12} />
-                        </button>
-                        <button type="button" className="text-steel cursor-pointer" onClick={() => setRenamingProductId(null)} aria-label="Cancelar">
-                          <X size={12} />
-                        </button>
-                      </span>
+                      </div>
                     ) : (
                       <span key={r.id} className="inline-flex items-center gap-1.5 text-[12px] bg-cloud border border-rule rounded-full px-2.5 py-1">
-                        {r.product.name}
+                        <CatalogCode code={r.product.catalogItem?.justCode ?? null} size="text-[10px]" />
+                        <span>{r.product.name}</span>
                         {confirmingDeleteId === r.id ? (
                           <span className="flex items-center gap-1">
                             <button type="button" disabled={busy} className="text-red font-semibold cursor-pointer" onClick={() => remove(r.id)}>
@@ -298,11 +253,10 @@ export function StockoutPanel({
                               type="button"
                               className="text-steel hover:text-blue cursor-pointer"
                               onClick={() => {
-                                setRenamingProductId(r.product.id);
-                                setRenameValue(r.product.name);
+                                setRelinkingProductId(r.product.id);
                                 setErr("");
                               }}
-                              aria-label="Editar nombre del producto"
+                              aria-label="Cambiar el producto vinculado"
                             >
                               <Pencil size={11} />
                             </button>

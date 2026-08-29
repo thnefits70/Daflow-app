@@ -4,12 +4,13 @@ import { prisma } from "@/lib/prisma";
 import { canManageStockouts } from "@/lib/guards";
 
 const updateSchema = z.object({
-  name: z.string().trim().min(1, "Falta el nombre del producto."),
+  catalogItemId: z.string().trim().min(1, "Falta el producto."),
 });
 
-// Renaming the catalog entry (not a per-week attachment) so a typo like
-// "PRIDUCTO 8" gets corrected everywhere it's already been used, instead of
-// requiring delete-and-recreate across every week it appears in.
+// Confirmado 2026-08-29 (pedido explícito del usuario): ya no se corrige el
+// nombre escribiéndolo a mano — se re-vincula a otro producto del catálogo
+// real (mismo picker que al agregar), para que quede corregido en todas las
+// semanas donde ya aparece sin depender de que alguien lo escriba igual.
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const canManage = await canManageStockouts();
   if (!canManage) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
@@ -21,10 +22,16 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Datos inválidos." }, { status: 400 });
   }
 
+  const catalogItem = await prisma.purchaseCatalogItem.findUnique({
+    where: { id: parsed.data.catalogItemId },
+    select: { id: true, name: true },
+  });
+  if (!catalogItem) return NextResponse.json({ error: "Producto no encontrado en el catálogo." }, { status: 404 });
+
   const product = await prisma.stockoutProduct
-    .update({ where: { id }, data: { name: parsed.data.name } })
+    .update({ where: { id }, data: { name: catalogItem.name, catalogItemId: catalogItem.id } })
     .catch(() => null);
-  if (!product) return NextResponse.json({ error: "No se pudo renombrar. ¿Ya existe otro producto con ese nombre?" }, { status: 409 });
+  if (!product) return NextResponse.json({ error: "No se pudo vincular. Ese producto del catálogo ya está en uso por otra fila." }, { status: 409 });
 
   return NextResponse.json(product);
 }

@@ -19,13 +19,12 @@ export default async function AreaKpisGeneralesPage() {
     canManageWarranties(),
   ]);
 
-  const [returnRateRecords, stockoutProducts, stockoutWeekRows, stockoutConfirmations, warrantyCategories, warrantyMonthTotals, warrantyCounts] =
+  const [returnRateRecords, stockoutWeekRows, stockoutConfirmations, warrantyCategories, warrantyMonthTotals, warrantyCounts] =
     await Promise.all([
       canReturnRate ? prisma.returnRateRecord.findMany({ orderBy: { month: "desc" } }) : Promise.resolve([]),
-      canStockouts ? prisma.stockoutProduct.findMany({ orderBy: { name: "asc" } }) : Promise.resolve([]),
       canStockouts
         ? prisma.stockoutWeekProduct.findMany({
-            include: { product: { select: { id: true, name: true } } },
+            include: { product: { select: { id: true, name: true, catalogItem: { select: { justCode: true } } } } },
             orderBy: [{ week: "desc" }, { createdAt: "asc" }],
           })
         : Promise.resolve([]),
@@ -64,10 +63,9 @@ export default async function AreaKpisGeneralesPage() {
             <PushTypeToggle type="ruptura_stock" />
           </div>
           <TabGuide storageKey="kpis-generales-stock">
-            Cada semana, marca aquí cada producto que se quedó sin stock (si escribes el mismo nombre de uno ya registrado, se reutiliza en vez de crear otro). Si esa semana no faltó ningún producto, usa el botón &quot;Confirmar: sin productos agotados esa semana&quot; en vez de dejarla en blanco — así el sistema distingue &quot;no hubo ruptura&quot; de &quot;nadie revisó&quot;.
+            Cada semana, busca y marca aquí cada producto que se quedó sin stock — el mismo catálogo (con su código de Just) que usan Reingreso, Compras y Ventas Externas, así que ya no hay que escribir el nombre a mano ni el riesgo de duplicarlo por un error de tipeo. Si esa semana no faltó ningún producto, usa el botón &quot;Confirmar: sin productos agotados esa semana&quot; en vez de dejarla en blanco — así el sistema distingue &quot;no hubo ruptura&quot; de &quot;nadie revisó&quot;.
           </TabGuide>
           <StockoutPanel
-            products={stockoutProducts}
             weekRows={stockoutWeekRows}
             confirmedWeeks={stockoutConfirmations.map((c) => c.week)}
           />
