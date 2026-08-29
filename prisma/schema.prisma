@@ -282,6 +282,8 @@ model User {
   periodicRemindersCreated                     PeriodicReminder[]                 @relation("PeriodicReminderCreatedBy")
   purchaseCatalogItemsCreated                  PurchaseCatalogItem[]              @relation("PurchaseCatalogItemCreatedBy")
   purchaseCatalogItemDeleteRequests            PurchaseCatalogItemDeleteRequest[] @relation("PurchaseCatalogItemDeleteRequestedBy")
+  catalogMissingReportsReported                CatalogMissingReport[]              @relation("CatalogMissingReportReportedBy")
+  catalogMissingReportsResolved                CatalogMissingReport[]              @relation("CatalogMissingReportResolvedBy")
   justCatalogImports                           JustCatalogImport[]                @relation("JustCatalogImportImportedBy")
   dropiCombosCreated                           DropiCombo[]                       @relation("DropiComboCreatedBy")
   supplierCreditsCreated                       SupplierCredit[]                   @relation("SupplierCreditCreatedBy")
@@ -1371,6 +1373,12 @@ model PurchaseCatalogItem {
   // Confirmado 2026-08-26: un producto real puede ser componente de uno o
   // más combos de Dropi (ver DropiCombo).
   dropiComboComponents    DropiComboComponent[]
+  // Confirmado 2026-08-29: Compras Personales también reusa este catálogo
+  // — el colaborador lo elige al declarar, Daniel lo reconfirma/relinkea al
+  // aprobar bodega (dos relaciones separadas, mismo criterio que
+  // employeeProductName/confirmedProductName).
+  personalPurchaseItemsPicked    PersonalPurchaseItem[] @relation("PersonalPurchaseItemCatalogItem")
+  personalPurchaseItemsConfirmed PersonalPurchaseItem[] @relation("PersonalPurchaseItemConfirmedCatalogItem")
 }
 
 // Confirmado 2026-08-26 (pedido explícito del usuario): un ID de combo de
@@ -1462,6 +1470,28 @@ model PurchaseCatalogItemDeleteRequest {
   requestedById String?
   requestedBy   User?    @relation("PurchaseCatalogItemDeleteRequestedBy", fields: [requestedById], references: [id], onDelete: SetNull)
   requestedAt   DateTime @default(now())
+}
+
+// Confirmado 2026-08-29: pedido explícito del usuario — se quitó la opción
+// de "escribir el nombre a mano" en los buscadores de producto (ya no tiene
+// sentido con el catálogo sincronizado desde Just), pero la sincronización
+// es manual (alguien sube el export cada cierto tiempo) así que puede pasar
+// que un producto real todavía no esté cargado. En vez de dejar a la
+// persona sin ninguna salida, puede avisarle a quien administra el
+// catálogo (Daniel/admin, ver canManageJustCatalog) — queda registrado acá
+// y notificado por campanita, sin bloquear con un nombre libre inventado.
+model CatalogMissingReport {
+  id    String  @id @default(cuid())
+  query String
+  note  String?
+
+  reportedById String
+  reportedBy   User     @relation("CatalogMissingReportReportedBy", fields: [reportedById], references: [id], onDelete: Cascade)
+  reportedAt   DateTime @default(now())
+
+  resolvedAt   DateTime?
+  resolvedById String?
+  resolvedBy   User?     @relation("CatalogMissingReportResolvedBy", fields: [resolvedById], references: [id], onDelete: SetNull)
 }
 
 enum PurchaseRequestStatus {
@@ -3314,6 +3344,19 @@ model PersonalPurchaseItem {
 
   employeeProductName  String // como lo escribió el colaborador, de memoria
   confirmedProductName String? // lo corrige Daniel según JUST — null hasta que confirme
+
+  // Confirmado 2026-08-29: vínculo real al catálogo (antes solo se guardaba
+  // el nombre como texto) — el colaborador lo elige al declarar
+  // (catalogItemId) y Daniel lo reconfirma/relinkea al aprobar bodega
+  // (confirmedCatalogItemId). employeeProductName/confirmedProductName
+  // siguen llenándose igual que antes (se usan para el enfriamiento de 6
+  // meses en personalPurchases.ts, que no se tocó) — estos dos campos son
+  // solo para mostrar el código de Just, no reemplazan esa lógica.
+  catalogItemId          String?
+  catalogItem            PurchaseCatalogItem? @relation("PersonalPurchaseItemCatalogItem", fields: [catalogItemId], references: [id], onDelete: SetNull)
+  confirmedCatalogItemId String?
+  confirmedCatalogItem   PurchaseCatalogItem? @relation("PersonalPurchaseItemConfirmedCatalogItem", fields: [confirmedCatalogItemId], references: [id], onDelete: SetNull)
+
   livePhotoUrl         String
   optionalPhotoUrl     String?
   quantity             Int
