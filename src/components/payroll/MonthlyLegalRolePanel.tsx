@@ -78,7 +78,9 @@ export function MonthlyLegalRolePanel() {
 
               {current.payoutProofUrl && (
                 <div className="mt-2.5 pt-2.5 border-t border-rule">
-                  <div className="text-[10px] font-semibold uppercase tracking-wide text-steel mb-1.5">Comprobante de tu pago</div>
+                  <div className="text-[10px] font-semibold uppercase tracking-wide text-steel mb-1.5">
+                    Comprobante de tu pago{current.paidAt ? ` · ${formatDateTime(current.paidAt)}` : ""}
+                  </div>
                   <ProofPreview url={current.payoutProofUrl} filename={current.payoutProofName ?? undefined} />
                 </div>
               )}

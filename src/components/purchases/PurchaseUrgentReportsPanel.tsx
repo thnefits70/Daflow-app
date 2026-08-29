@@ -8,7 +8,6 @@ import { compressImage } from "@/lib/compressImage";
 import { actorName } from "@/lib/actorName";
 import { formatDateTime } from "@/lib/formatDateTime";
 import { ProofPreview } from "@/components/shared/ProofPreview";
-import { CatalogCode } from "@/components/shared/CatalogCode";
 
 type ResolutionType = "CREDIT" | "REPLACEMENT" | "REFUND" | "WRITE_OFF";
 type ResolutionStatus = "PENDING" | "COMPLETED" | "CANCELLED";
@@ -47,7 +46,7 @@ type Report = {
   withinCreditWindow: boolean;
   creditClaimDeadline: string | null;
   resolutions: Resolution[];
-  request: { quantity: number; unitCost: number; totalCost: number; catalogItem: { name: string; justCode: string | null }; supplier: { id: string; name: string } };
+  request: { quantity: number; unitCost: number; totalCost: number; catalogItem: { name: string }; supplier: { id: string; name: string } };
   // Confirmado 2026-08-25: "Reclamo posterior al cierre" — mismo modelo,
   // isLateClaim distingue este camino del "Informar urgente" normal. Ya
   // solo llega acá una vez que Daniel confirmó la baja en Just.
@@ -213,10 +212,8 @@ export function PurchaseUrgentReportsPanel({ isAdmin }: { isAdmin: boolean }) {
               const stale = days > 30;
               return (
                 <div key={res.id} className="flex items-center justify-between gap-2 bg-cloud rounded px-3 py-2 text-[12px]">
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-semibold">{report.request.supplier.name}</span> —
-                    <CatalogCode code={report.request.catalogItem.justCode} />
-                    <span>{report.request.catalogItem.name}</span>
+                  <div>
+                    <span className="font-semibold">{report.request.supplier.name}</span> — {report.request.catalogItem.name}
                   </div>
                   <div className={`font-mono font-semibold ${stale ? "text-red" : "text-steel"}`}>
                     {money(res.credit!.amount)} · {days} días{stale ? " · sin recuperar" : ""}
@@ -240,7 +237,6 @@ export function PurchaseUrgentReportsPanel({ isAdmin }: { isAdmin: boolean }) {
                 <div key={r.id} className={`bg-surface border rounded-md p-4 ${r.isLateClaim ? "border-teal/40" : "border-red/40"}`}>
                   <div className="flex items-center justify-between gap-2 flex-wrap mb-1">
                     <div className="text-[13.5px] font-bold flex items-center gap-2">
-                      <CatalogCode code={r.request.catalogItem.justCode} />
                       {r.request.catalogItem.name}
                       {r.isLateClaim && (
                         <span className="text-[10px] font-bold uppercase tracking-wide bg-teal/15 text-teal border border-teal/40 rounded-full px-2 py-0.5">Reclamo posterior</span>
@@ -372,10 +368,7 @@ export function PurchaseUrgentReportsPanel({ isAdmin }: { isAdmin: boolean }) {
             {closedReports.map((r) => (
               <div key={r.id} className="bg-surface border border-rule rounded-md p-3.5 text-[12px]">
                 <div className="flex items-center justify-between gap-2">
-                  <div className="font-semibold flex items-center gap-1.5">
-                    <CatalogCode code={r.request.catalogItem.justCode} />
-                    <span>{r.request.catalogItem.name} — {r.request.supplier.name}</span>
-                  </div>
+                  <div className="font-semibold">{r.request.catalogItem.name} — {r.request.supplier.name}</div>
                   <CheckCircle2 size={14} className="text-green" />
                 </div>
                 <div className="flex flex-col gap-1 mt-1.5">

@@ -7,6 +7,7 @@ import { ProofPreview } from "@/components/shared/ProofPreview";
 import { ProductMatchPicker, type ProductMatchResult } from "@/components/merchandise-reentry/ProductMatchPicker";
 import { usePasteFile } from "@/lib/usePasteFile";
 import { uploadFile } from "@/lib/uploadFile";
+import { formatDateTime } from "@/lib/formatDateTime";
 
 type BuyerRelation = "SELF" | "MINOR_CHILD" | "OTHER_FAMILY";
 type Declaration = { relation: BuyerRelation; note?: string };
@@ -446,7 +447,7 @@ export function PersonalPurchasesPanel() {
                 {o.rejectionReason && <div className="text-[11px] text-red mt-1">{o.rejectionReason}</div>}
                 {showPickup && (
                   <div className="text-[11px] mt-1" style={{ color: o.pickedUpAt ? "#22C55E" : "#8b96b3" }}>
-                    {o.pickedUpAt ? "✅ Listo para retirar" : "⏳ Daniel lo está preparando"}
+                    {o.pickedUpAt ? `✅ Listo para retirar · ${formatDateTime(o.pickedUpAt)}` : "⏳ Daniel lo está preparando"}
                   </div>
                 )}
 

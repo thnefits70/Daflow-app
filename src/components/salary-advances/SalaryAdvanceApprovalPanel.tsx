@@ -47,7 +47,7 @@ function AdvanceHistoryPanel() {
       <div className="flex flex-col gap-2">
         {items.map((a) => (
           <div key={a.id} className="bg-surface border border-rule rounded-md p-3 flex items-center gap-3 flex-wrap">
-            <span className="font-semibold text-[12.5px] min-w-[110px]">{formatDateTime(a.createdAt)}</span>
+            <span className="font-semibold text-[12.5px] min-w-[110px]">{formatDateTime(a.approvedAt ?? a.rejectedAt ?? a.createdAt)}</span>
             <span className="font-bold text-[13px] tabular-nums">{money(a.amount)}</span>
             {a.installments > 1 && <span className="text-[11.5px] text-steel-dim">({a.installments} cuotas)</span>}
             <span className="text-[12px] text-steel">{a.employee.name}</span>

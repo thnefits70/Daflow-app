@@ -9,7 +9,7 @@ function money(n: number) {
   return `$${n.toFixed(2)}`;
 }
 
-const DATE_FMT = new Intl.DateTimeFormat("es-EC", { timeZone: "America/Guayaquil", day: "2-digit", month: "short", year: "numeric" });
+const DATE_FMT = new Intl.DateTimeFormat("es-EC", { timeZone: "America/Guayaquil", day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
 
 // Confirmado 2026-08-26: pedido explícito del usuario — al dejar lista una
 // solicitud de "Cambio con proveedor" (Registro de Egresos), esta guía se

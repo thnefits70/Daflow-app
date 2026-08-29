@@ -3,13 +3,12 @@
 import { useEffect, useState } from "react";
 import { CheckCircle2, Clock, DollarSign, ExternalLink, XCircle, Wallet, AlertTriangle } from "lucide-react";
 import { formatDateTime } from "@/lib/formatDateTime";
-import { CatalogCode } from "@/components/shared/CatalogCode";
 
 type ItemDTO = {
   id: string;
   declaredName: string;
   quantity: number;
-  catalogItem: { name: string; photos: string[]; justCode: string | null } | null;
+  catalogItem: { name: string; photos: string[] } | null;
   unitCostAtExchange: number | null;
   expectedCreditAmount: number | null;
   resolution: "REPLACED" | "CREDIT_ISSUED" | "REJECTED" | null;
@@ -204,10 +203,7 @@ export function SupplierExchangeResolutionInbox({
                     <img src={item.catalogItem.photos[0]} alt={itemName(item)} className="w-12 h-12 object-cover rounded border border-rule shrink-0" />
                   )}
                   <div className="flex-1 min-w-0">
-                    <div className="text-[13px] font-semibold flex items-center gap-1.5 min-w-0">
-                      {item.catalogItem && <CatalogCode code={item.catalogItem.justCode} />}
-                      <span className="truncate">{itemName(item)}</span>
-                    </div>
+                    <div className="text-[13px] font-semibold truncate">{itemName(item)}</div>
                     <div className="text-[11px] text-steel">{item.quantity} un.</div>
                     {item.expectedCreditAmount !== null ? (
                       <div className="text-[10.5px] text-steel mt-0.5">

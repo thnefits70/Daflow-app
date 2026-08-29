@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { compressImage } from "@/lib/compressImage";
 import { uploadFile } from "@/lib/uploadFile";
+import { formatDateTime } from "@/lib/formatDateTime";
 
 type Employee = { id: string; name: string; position: string | null };
 type Deduction = {
@@ -152,7 +153,7 @@ export function ManagementDeductionsPanel() {
               <span className="font-bold tabular-nums">{money(d.totalAmount)}</span>
               <span className="text-steel-dim">{d.reason}</span>
               <span className={`text-[10.5px] font-semibold rounded-full px-2 py-0.5 ${d.acceptedAt ? "text-green border border-green" : "text-steel border border-rule"}`}>
-                {d.acceptedAt ? "Aceptado" : "Esperando aceptación"}
+                {d.acceptedAt ? `Aceptado · ${formatDateTime(d.acceptedAt)}` : "Esperando aceptación"}
               </span>
             </div>
           ))}

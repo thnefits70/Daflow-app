@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, Check, Undo2, Trash2, Pencil, Search } from "lucide-react";
 import { PushTypeToggle } from "@/components/shared/PushTypeToggle";
+import { formatDateTime } from "@/lib/formatDateTime";
 
 type RecordDTO = { period: string; amountPaid: number; completedAt: string; completedByName: string | null };
 type ReminderDTO = {
@@ -428,7 +429,12 @@ export function PaymentRemindersPanel({
                 {/* Reference-amount / paid-amount display — editing the reference is
                     independent of this period's "Realizado" state. */}
                 {rec ? (
-                  <span className="text-green text-[18px] font-extrabold whitespace-nowrap">{fmtMoney(rec.amountPaid)}</span>
+                  <div className="flex flex-col items-end">
+                    <span className="text-green text-[18px] font-extrabold whitespace-nowrap">{fmtMoney(rec.amountPaid)}</span>
+                    <span className="text-[10px] text-steel-dim whitespace-nowrap">
+                      {rec.completedByName ? `${rec.completedByName} · ` : ""}{formatDateTime(rec.completedAt)}
+                    </span>
+                  </div>
                 ) : editable && refDraftFor === r.id ? (
                   <div className="flex items-center gap-1.5">
                     <div className="relative">

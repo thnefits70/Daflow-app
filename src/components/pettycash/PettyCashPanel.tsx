@@ -459,7 +459,7 @@ function BoxCard({
           <span className="w-1.5 h-1.5 rounded-full bg-red shrink-0" /> Saldo bajo el mínimo de {money(box.minThreshold)}.
         </div>
       )}
-      {canManage && (
+      {isAdmin && (
         <div className="mt-1.5 text-[11px] text-steel">
           {editingThreshold ? (
             <div className="flex items-center gap-1.5">

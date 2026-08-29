@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, Trash2, Pencil, FileText, Eye, Search } from "lucide-react";
 import { uploadConfidentialFile } from "@/lib/uploadConfidentialFile";
+import { formatDateTime } from "@/lib/formatDateTime";
 
 function fileKind(name: string): "pdf" | "image" | "other" {
   const n = name.toLowerCase();
@@ -192,6 +193,7 @@ export function ConfidentialDocsPanel({
                   <FileText size={14} className="text-steel" /> {d.title}
                 </div>
                 {d.category && <div className="text-[11.5px] text-steel mt-0.5 ml-5.5">{d.category}</div>}
+                <div className="text-[10.5px] text-steel mt-0.5 ml-5.5">Compartido el {formatDateTime(d.grantedAt)}</div>
               </div>
               <button
                 type="button"
@@ -321,6 +323,7 @@ export function ConfidentialDocsPanel({
                 <FileText size={15} className="text-steel" /> {d.title}
               </div>
               {d.category && <div className="text-[11.5px] text-steel mt-0.5 ml-5.5">{d.category}</div>}
+              <div className="text-[10.5px] text-steel mt-0.5 ml-5.5">Subido el {formatDateTime(d.createdAt)}</div>
               <div className="text-[11.5px] text-steel mt-1 ml-5.5">
                 {d.grants.length === 0
                   ? "Solo tú tienes acceso."

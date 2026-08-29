@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, Check, Undo2, Trash2, Pencil, Bell } from "lucide-react";
 import { PushOptIn } from "@/components/shared/PushOptIn";
+import { formatDateTime } from "@/lib/formatDateTime";
 
 type CompletionDTO = { period: string; completedAt: string; completedByName: string | null };
 type ReminderDTO = {
@@ -356,8 +357,15 @@ export function PeriodicRemindersPanel({
                     )}
                   </div>
                 </div>
-                <span className={`text-[12.5px] font-semibold whitespace-nowrap ${rec ? "text-green" : "text-steel"}`}>
-                  {rec ? "Realizado" : "Pendiente"}
+                <span className={`text-[12.5px] font-semibold whitespace-nowrap text-right ${rec ? "text-green" : "text-steel"}`}>
+                  {rec ? (
+                    <>
+                      Realizado
+                      <div className="text-[10.5px] font-normal text-steel">{formatDateTime(rec.completedAt)}</div>
+                    </>
+                  ) : (
+                    "Pendiente"
+                  )}
                 </span>
               </div>
 

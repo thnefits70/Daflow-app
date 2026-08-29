@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { formatDateTime } from "@/lib/formatDateTime";
 
 type Deduction = {
   id: string;
@@ -47,7 +48,7 @@ export function MyManagementDeductionsPanel() {
             <div className="text-[12.5px] text-steel-dim mt-1">{d.reason}</div>
             {d.evidenceUrl && <a href={d.evidenceUrl} target="_blank" rel="noopener noreferrer" className="text-[11.5px] text-blue font-semibold">Ver evidencia</a>}
             {d.acceptedAt ? (
-              <div className="text-[11px] text-green font-semibold mt-2">Aceptado</div>
+              <div className="text-[11px] text-green font-semibold mt-2">Aceptado · {formatDateTime(d.acceptedAt)}</div>
             ) : (
               <button type="button" disabled={busy} className="text-[12px] font-bold bg-blue text-white rounded px-3 py-1.5 cursor-pointer disabled:opacity-50 mt-2.5" onClick={() => accept(d.id)}>
                 Aceptar
