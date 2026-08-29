@@ -1318,14 +1318,17 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                           <div className="grid grid-cols-3 gap-2.5 mb-2.5">
                             <div>
                               <label className="block mb-1 text-[10px] text-steel">Dañada</label>
+                              <div className="text-[9.5px] text-steel-dim mb-1 leading-tight">Se ve rota, rayada, aplastada o golpeada</div>
                               <input type="number" min={0} className="w-full rounded border border-rule px-2 py-2 text-[13px]" value={urgentDamagedQty} onChange={(e) => setUrgentDamagedQty(e.target.value)} />
                             </div>
                             <div>
                               <label className="block mb-1 text-[10px] text-steel">Producto incompleto (falta algo adentro)</label>
+                              <div className="text-[9.5px] text-steel-dim mb-1 leading-tight">La caja o funda está completa, pero adentro falta una pieza o parte</div>
                               <input type="number" min={0} className="w-full rounded border border-rule px-2 py-2 text-[13px]" value={urgentIncompleteQty} onChange={(e) => setUrgentIncompleteQty(e.target.value)} />
                             </div>
                             <div>
                               <label className="block mb-1 text-[10px] text-steel">Diferente</label>
+                              <div className="text-[9.5px] text-steel-dim mb-1 leading-tight">No es el producto que debía llegar, es otro distinto</div>
                               <input type="number" min={0} className="w-full rounded border border-rule px-2 py-2 text-[13px]" value={urgentDifferentQty} onChange={(e) => setUrgentDifferentQty(e.target.value)} />
                             </div>
                           </div>
