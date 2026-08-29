@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { Plus, Trash2, Pencil, PackageSearch } from "lucide-react";
 import { ComboComponentBuilder, type ComboDraftComponent } from "./ComboComponentBuilder";
+import { formatDateTime } from "@/lib/formatDateTime";
+import { CatalogCode } from "@/components/shared/CatalogCode";
 
 type CatalogItem = { id: string; name: string; photos: string[]; justCode: string | null };
 type ComboComponent = { id: string; quantity: number; catalogItem: CatalogItem };
@@ -184,10 +186,13 @@ export function DropiComboManager() {
               </div>
               <div className="flex flex-wrap gap-1.5">
                 {combo.components.map((c) => (
-                  <span key={c.id} className="font-mono text-[10.5px] bg-cloud rounded-full px-2 py-0.5">
-                    {c.quantity}× {c.catalogItem.name}
+                  <span key={c.id} className="font-mono text-[10.5px] bg-cloud rounded-full px-2 py-0.5 inline-flex items-center gap-1">
+                    {c.quantity}× <CatalogCode code={c.catalogItem.justCode} /> {c.catalogItem.name}
                   </span>
                 ))}
+              </div>
+              <div className="text-[10px] text-steel mt-1.5">
+                Registrado por {combo.createdByName ?? "—"} · {formatDateTime(combo.createdAt)}
               </div>
             </div>
           ))}

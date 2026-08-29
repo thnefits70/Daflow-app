@@ -1,24 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Upload, CheckCircle2, AlertTriangle, Clock, Search, ChevronDown, ChevronUp, Copy, Check } from "lucide-react";
+import { Upload, CheckCircle2, AlertTriangle, Clock, Search, ChevronDown, ChevronUp } from "lucide-react";
 import { uploadFile } from "@/lib/uploadFile";
-
-function CopyCodeButton({ code, copied, onCopy }: { code: string; copied: boolean; onCopy: (code: string) => void }) {
-  return (
-    <button
-      type="button"
-      title="Copiar código"
-      className="text-steel hover:text-teal cursor-pointer shrink-0"
-      onClick={(e) => {
-        e.stopPropagation();
-        onCopy(code);
-      }}
-    >
-      {copied ? <Check size={11} /> : <Copy size={11} />}
-    </button>
-  );
-}
+import { CatalogCode, CopyCodeButton } from "@/components/shared/CatalogCode";
 
 type CatalogItemDTO = { id: string; name: string; justCode: string | null; photos: string[]; pendingRegistration: boolean };
 type ImportDTO = {
@@ -505,12 +490,7 @@ export function JustCatalogPanel({ canManage }: { canManage: boolean }) {
                 <Clock size={13} />
               </div>
             )}
-            {item.justCode && (
-              <>
-                <span className="font-mono text-[10.5px] text-teal shrink-0">{item.justCode}</span>
-                <CopyCodeButton code={item.justCode} copied={copiedCode === item.justCode} onCopy={copyCode} />
-              </>
-            )}
+            <CatalogCode code={item.justCode} />
             <span className="text-[12.5px] flex-1 min-w-0 truncate">{item.name}</span>
             {item.pendingRegistration && (
               <span className="shrink-0 font-mono text-[9px] font-bold uppercase rounded-full px-1.5 py-0.5 bg-gold/15 border border-gold/40" style={{ color: "#D9A441" }}>

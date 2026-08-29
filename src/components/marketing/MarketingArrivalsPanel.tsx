@@ -4,11 +4,13 @@ import { useEffect, useState } from "react";
 import { Camera, ClipboardCheck, CheckCircle2 } from "lucide-react";
 import { actorName } from "@/lib/actorName";
 import { TabGuide } from "@/components/shared/TabGuide";
+import { formatDateTime } from "@/lib/formatDateTime";
+import { CatalogCode } from "@/components/shared/CatalogCode";
 
 type Row = {
   id: string;
   quantity: number;
-  catalogItem: { name: string; photos: string[] };
+  catalogItem: { name: string; photos: string[]; justCode: string | null };
   receipt: { photoUrls: string[]; receivedQuantity: number; confirmedAt: string } | null;
   marketingFollowUp: {
     designConfirmedAt: string | null;
@@ -165,7 +167,10 @@ export function MarketingArrivalsPanel({ canConfirmDesign, canConfirmAdvisor }: 
         const fu = r.marketingFollowUp;
         return (
           <div key={r.id} className="bg-surface border border-rule rounded-md p-4">
-            <div className="text-[14.5px] font-bold mb-0.5">{r.catalogItem.name}</div>
+            <div className="text-[14.5px] font-bold mb-0.5 flex items-center gap-1.5">
+              <CatalogCode code={r.catalogItem.justCode} size="text-[11px]" />
+              <span>{r.catalogItem.name}</span>
+            </div>
             <div className="text-[12px] text-steel mb-3">
               {r.receipt?.receivedQuantity ?? r.quantity} un. recibidas{r.receipt ? ` · ${new Date(r.receipt.confirmedAt).toLocaleString("es-MX", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })}` : ""}
             </div>
@@ -181,7 +186,7 @@ export function MarketingArrivalsPanel({ canConfirmDesign, canConfirmAdvisor }: 
                 <div className="text-[10.5px] text-steel mb-2">Fotos reales brandeadas + video publicitario en el catálogo de Drive.</div>
                 {fu?.designConfirmedAt ? (
                   <div className="flex items-center gap-1.5 text-[12px] text-teal">
-                    <CheckCircle2 size={14} /> Confirmado — {actorName(fu.designConfirmedBy?.name)}
+                    <CheckCircle2 size={14} /> Confirmado — {actorName(fu.designConfirmedBy?.name)} · {formatDateTime(fu.designConfirmedAt)}
                   </div>
                 ) : canConfirmDesign ? (
                   <ConfirmButton label="Confirmar fotos y video subidos" icon={<Camera size={14} />} busy={busyId === r.id} onConfirm={() => confirm("design", r.id)} />
@@ -197,7 +202,7 @@ export function MarketingArrivalsPanel({ canConfirmDesign, canConfirmAdvisor }: 
                 <div className="text-[10.5px] text-steel mb-2">Verificar stock, precio de venta, descripción y Dropi.</div>
                 {fu?.advisorConfirmedAt ? (
                   <div className="flex items-center gap-1.5 text-[12px] text-teal">
-                    <CheckCircle2 size={14} /> Confirmado — {actorName(fu.advisorConfirmedBy?.name)}{fu.advisorConfirmedBy?.marketingAdvisorBrand ? ` (${fu.advisorConfirmedBy.marketingAdvisorBrand})` : ""}
+                    <CheckCircle2 size={14} /> Confirmado — {actorName(fu.advisorConfirmedBy?.name)}{fu.advisorConfirmedBy?.marketingAdvisorBrand ? ` (${fu.advisorConfirmedBy.marketingAdvisorBrand})` : ""} · {formatDateTime(fu.advisorConfirmedAt)}
                   </div>
                 ) : canConfirmAdvisor ? (
                   <ConfirmButton label="Confirmar stock, precio, descripción y Dropi" icon={<ClipboardCheck size={14} />} busy={busyId === r.id} onConfirm={() => confirm("advisor", r.id)} />

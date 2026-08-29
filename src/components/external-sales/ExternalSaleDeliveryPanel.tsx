@@ -3,12 +3,13 @@
 import { useEffect, useState } from "react";
 import { Camera, Check } from "lucide-react";
 import { LiveCameraCapture } from "@/components/shared/LiveCameraCapture";
+import { CatalogCode } from "@/components/shared/CatalogCode";
 
 type SaleDTO = {
   id: string;
   code: string;
   declaredProductName: string;
-  catalogItem: { name: string; photos: string[] } | null;
+  catalogItem: { name: string; photos: string[]; justCode: string | null } | null;
   quantity: number;
   pickupPersonName: string;
   courierNote: string | null;
@@ -68,7 +69,10 @@ export function ExternalSaleDeliveryPanel() {
                 <img src={photo} alt={s.catalogItem?.name ?? s.declaredProductName} className="w-14 h-14 object-cover rounded border border-rule shrink-0" />
               )}
               <div className="flex-1 min-w-0">
-                <div className="text-[13px] font-semibold truncate">{s.catalogItem?.name ?? s.declaredProductName}</div>
+                <div className="text-[13px] font-semibold flex items-center gap-1.5 min-w-0">
+                  {s.catalogItem && <CatalogCode code={s.catalogItem.justCode} />}
+                  <span className="truncate">{s.catalogItem?.name ?? s.declaredProductName}</span>
+                </div>
                 <div className="text-[11.5px] text-steel">{s.quantity} un.</div>
                 <div className="text-[11.5px] font-semibold">Entregar a: {s.pickupPersonName}</div>
                 {s.courierNote && <div className="text-[10.5px] text-steel">Transportadora: {s.courierNote}</div>}

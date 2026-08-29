@@ -409,7 +409,7 @@ const bankAccountSelect = { id: true, bankName: true, bankAccountType: true, ban
 // aprobar, recibir, facturar, auditar, corregir) — un solo lugar para no
 // tener 6 copias ligeramente distintas del mismo shape.
 export const purchaseRequestInclude = {
-  catalogItem: { select: { id: true, name: true, photos: true } },
+  catalogItem: { select: { id: true, name: true, photos: true, justCode: true } },
   supplier: { select: { id: true, name: true, bankAccounts: { orderBy: { createdAt: "asc" as const } } } },
   carrier: { select: { id: true, name: true, bankAccounts: { orderBy: { createdAt: "asc" as const } } } },
   bankAccount: { select: bankAccountSelect },

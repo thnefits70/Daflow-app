@@ -8,7 +8,7 @@ export async function GET() {
     where: { reallyCancelled: null },
     include: {
       submittedBy: { select: { name: true } },
-      items: { include: { catalogItem: { select: { name: true } } } },
+      items: { include: { catalogItem: { select: { name: true, justCode: true } } } },
       fulfillmentConfirmedBy: { select: { name: true } },
       inventoryConfirmedBy: { select: { name: true } },
     },

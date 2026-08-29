@@ -8,6 +8,7 @@ import { formatDateTime } from "@/lib/formatDateTime";
 import { LiveCameraCapture } from "@/components/shared/LiveCameraCapture";
 import { LiveVideoCapture } from "@/components/shared/LiveVideoCapture";
 import { PurchaseOperationDocuments, type OperationDocRow } from "./PurchaseOperationDocuments";
+import { CatalogCode } from "@/components/shared/CatalogCode";
 
 type Row = {
   id: string;
@@ -17,7 +18,7 @@ type Row = {
   unitCost: number;
   totalCost: number;
   paidAt: string | null;
-  catalogItem: { name: string; photos: string[] };
+  catalogItem: { name: string; photos: string[]; justCode: string | null };
   supplier: { name: string };
   requestedBy: { name: string } | null;
   paidBy: { name: string } | null;
@@ -70,7 +71,7 @@ type PendingUrgentReport = {
     quantity: number;
     unitCost: number;
     totalCost: number;
-    catalogItem: { name: string; photos: string[] };
+    catalogItem: { name: string; photos: string[]; justCode: string | null };
     supplier: { name: string };
   };
 };
@@ -89,7 +90,7 @@ type PendingReplacement = {
   replacementAiMatch: boolean | null;
   replacementAiNote: string | null;
   report: {
-    request: { id: string; catalogItem: { name: string; photos: string[] }; supplier: { name: string } };
+    request: { id: string; catalogItem: { name: string; photos: string[]; justCode: string | null }; supplier: { name: string } };
   };
 };
 
@@ -102,7 +103,7 @@ type ReceivedRow = {
   quantity: number;
   unitCost: number;
   supplierId: string;
-  catalogItem: { id: string; name: string; photos: string[] };
+  catalogItem: { id: string; name: string; photos: string[]; justCode: string | null };
   supplier: { id: string; name: string };
   receipt: { confirmedAt: string } | null;
   urgentReports: {
@@ -129,14 +130,14 @@ type LateClaimReview = {
   mediaUrls: string[];
   reportedAt: string;
   reportedBy: { name: string } | null;
-  request: { requestNumber: number | null; unitCost: number; catalogItem: { name: string; photos: string[] }; supplier: { name: string } };
+  request: { requestNumber: number | null; unitCost: number; catalogItem: { name: string; photos: string[]; justCode: string | null }; supplier: { name: string } };
 };
 
 type LateClaimJust = {
   id: string;
   lateClaimCode: string | null;
   justWriteOffQty: number | null;
-  request: { catalogItem: { name: string }; supplier: { name: string } };
+  request: { catalogItem: { name: string; justCode: string | null }; supplier: { name: string } };
 };
 
 function groupRows(rows: Row[]) {
@@ -665,7 +666,10 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
               ].filter(Boolean) as string[];
               return (
                 <div key={pr.id} className="bg-cloud rounded-md p-3">
-                  <div className="text-[13px] font-bold">{pr.request.catalogItem.name}</div>
+                  <div className="text-[13px] font-bold flex items-center gap-1.5">
+                    <CatalogCode code={pr.request.catalogItem.justCode} />
+                    <span>{pr.request.catalogItem.name}</span>
+                  </div>
                   <div className="text-[11.5px] text-steel mb-2">
                     {pr.request.supplier.name} — se pidieron {pr.request.quantity} un., contó {countedQty} · reportado por {actorName(pr.reportedBy?.name)} · {formatDateTime(pr.reportedAt)}
                   </div>
@@ -755,7 +759,10 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
             {lateClaimsReview.map((c) => (
               <div key={c.id} className="bg-cloud rounded-md p-3">
                 <div className="flex items-center justify-between gap-2 flex-wrap mb-1">
-                  <div className="text-[13px] font-bold">{c.request.catalogItem.name}</div>
+                  <div className="text-[13px] font-bold flex items-center gap-1.5">
+                    <CatalogCode code={c.request.catalogItem.justCode} />
+                    <span>{c.request.catalogItem.name}</span>
+                  </div>
                   <span className="text-[10px] font-mono font-bold text-teal bg-teal/10 border border-teal/40 rounded px-1.5 py-0.5">{c.lateClaimCode}</span>
                 </div>
                 <div className="text-[11.5px] text-steel mb-2">
@@ -830,7 +837,10 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
             {lateClaimsJust.map((c) => (
               <div key={c.id} className="bg-cloud rounded-md p-3">
                 <div className="flex items-center justify-between gap-2 flex-wrap mb-2">
-                  <div className="text-[13px] font-bold">{c.request.catalogItem.name}</div>
+                  <div className="text-[13px] font-bold flex items-center gap-1.5">
+                    <CatalogCode code={c.request.catalogItem.justCode} />
+                    <span>{c.request.catalogItem.name}</span>
+                  </div>
                   <span className="text-[10px] font-mono font-bold" style={{ color: "#D9A441" }}>{c.lateClaimCode}</span>
                 </div>
                 {justOpenId === c.id ? (
@@ -899,7 +909,10 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
           <div className="flex flex-col gap-2.5">
             {pendingReplacements.map((pr) => (
               <div key={pr.id} className="bg-cloud rounded-md p-3">
-                <div className="text-[13px] font-bold">{pr.report.request.catalogItem.name}</div>
+                <div className="text-[13px] font-bold flex items-center gap-1.5">
+                  <CatalogCode code={pr.report.request.catalogItem.justCode} />
+                  <span>{pr.report.request.catalogItem.name}</span>
+                </div>
                 <div className="text-[11.5px] text-steel mb-2">
                   {pr.report.request.supplier.name}
                   {(canApprove || isAdmin) && ` — ${pr.quantity} un.`}
@@ -1030,7 +1043,10 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                 return (
                 <div key={r.id}>
                   <div className="flex items-center justify-between gap-3 flex-wrap mb-0.5">
-                    <div className="text-[14px] font-bold">{r.catalogItem.name}</div>
+                    <div className="text-[14px] font-bold flex items-center gap-1.5">
+                      <CatalogCode code={r.catalogItem.justCode} />
+                      <span>{r.catalogItem.name}</span>
+                    </div>
                     {r.status === "RECEIVED" ? (
                       <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide bg-green/15 text-green border border-green/40 rounded-full px-2.5 py-1">
                         <CheckCircle2 size={11} /> Recibido
@@ -1525,7 +1541,10 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
               return (
                 <div key={row.id} className="bg-surface border border-rule rounded-md p-4">
                   <div className="flex items-center justify-between gap-3 flex-wrap mb-0.5">
-                    <div className="text-[14px] font-bold">{row.catalogItem.name}</div>
+                    <div className="text-[14px] font-bold flex items-center gap-1.5">
+                      <CatalogCode code={row.catalogItem.justCode} />
+                      <span>{row.catalogItem.name}</span>
+                    </div>
                     <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide bg-green/15 text-green border border-green/40 rounded-full px-2.5 py-1">
                       <CheckCircle2 size={11} /> Recibido
                     </span>

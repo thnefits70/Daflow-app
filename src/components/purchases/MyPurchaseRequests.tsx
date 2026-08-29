@@ -9,6 +9,7 @@ import { PurchaseSupplierPicker, type BankAccountDTO, type PurchaseSupplierDTO }
 import { PurchaseOperationDocuments } from "./PurchaseOperationDocuments";
 import { actorName } from "@/lib/actorName";
 import { formatDateTime } from "@/lib/formatDateTime";
+import { CatalogCode } from "@/components/shared/CatalogCode";
 
 // Nota: formateo puro repetido a propósito (no importado de purchases.ts)
 // porque ese archivo trae `prisma` y este componente es "use client" — igual
@@ -28,7 +29,7 @@ type Row = {
   requestedAt: string;
   rejectReason: string | null;
   attemptNumber: number;
-  catalogItem: { id: string; name: string; photos: string[] };
+  catalogItem: { id: string; name: string; photos: string[]; justCode: string | null };
   quoteImageUrl: string;
   quoteReadTotal: number | null;
   quoteReferenceCode: string | null;
@@ -280,7 +281,7 @@ function ShippingPaymentSection({ g, onUpdate }: { g: Row[]; onUpdate: (patch: P
   if (r0.shippingPaidAt) {
     return (
       <div className="mt-3 pt-3 border-t border-rule flex items-center gap-1.5 text-[12px] text-teal">
-        <CheckCircle2 size={13} /> Flete pagado
+        <CheckCircle2 size={13} /> Flete pagado · {formatDateTime(r0.shippingPaidAt)}
       </div>
     );
   }
@@ -336,7 +337,7 @@ function ShippingPaymentSection({ g, onUpdate }: { g: Row[]; onUpdate: (patch: P
       {r0.shippingPaymentMethod === "PETTY_CASH" ? (
         <div className="text-[11.5px] text-steel">Se paga con caja chica — Bryan Ríos lo registra desde su Caja Chica cuando llegue la mercadería.</div>
       ) : requested ? (
-        <div className="text-[11.5px] text-steel">✓ Ya se le pidió al administrador que pague el flete — esperando confirmación.</div>
+        <div className="text-[11.5px] text-steel">✓ Ya se le pidió al administrador que pague el flete{r0.shippingPaymentRequestedAt ? ` · ${formatDateTime(r0.shippingPaymentRequestedAt)}` : ""} — esperando confirmación.</div>
       ) : !hasAccount ? (
         <div className="text-[11.5px] text-steel">Agrega la cuenta bancaria del transportista (arriba) antes de poder pedir el pago.</div>
       ) : (
@@ -560,7 +561,8 @@ function GroupCard({
           )}
           <div className="text-[11px] text-steel mb-0.5">Proveedor: <span className="font-semibold text-ink">{g[0].supplier.name}</span></div>
           {g.map((r) => (
-            <div key={r.id} className="text-[13.5px] font-bold">
+            <div key={r.id} className="text-[13.5px] font-bold flex items-center gap-1.5 flex-wrap">
+              <CatalogCode code={r.catalogItem.justCode} />
               {r.catalogItem.name} · {r.quantity} un.
               {statusesDiffer && !rejected && (
                 <span className="ml-2 text-[10.5px] font-semibold text-steel">— {STEPS[stepIndex(r.status)]?.label ?? r.status}</span>

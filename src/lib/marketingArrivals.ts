@@ -7,7 +7,7 @@ import { prisma } from "@/lib/prisma";
 export const MKT_DEPT_CODE = "MKT";
 
 const arrivalInclude = {
-  catalogItem: { select: { name: true, photos: true } },
+  catalogItem: { select: { name: true, photos: true, justCode: true } },
   receipt: { select: { photoUrls: true, receivedQuantity: true, confirmedAt: true } },
   marketingFollowUp: {
     include: {

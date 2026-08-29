@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { CheckCircle2 } from "lucide-react";
 import { CARRIER_LABELS } from "@/lib/cancelledGuidesLabels";
+import { CatalogCode } from "@/components/shared/CatalogCode";
 
 type ReportDTO = {
   id: string;
@@ -13,7 +14,7 @@ type ReportDTO = {
   fulfillmentConfirmedAt: string | null;
   inventoryConfirmedAt: string | null;
   submittedBy: { name: string } | null;
-  items: { id: string; declaredName: string; quantity: number; catalogItem: { name: string } | null }[];
+  items: { id: string; declaredName: string; quantity: number; catalogItem: { name: string; justCode: string | null } | null }[];
 };
 
 async function postJson(url: string) {
@@ -64,7 +65,10 @@ export function CancelledGuideConfirmationsInbox() {
           </div>
           <div className="flex flex-col gap-0.5 mb-2">
             {r.items.map((it) => (
-              <div key={it.id} className="text-[12px]">{it.catalogItem?.name ?? it.declaredName} — {it.quantity} un.</div>
+              <div key={it.id} className="text-[12px] flex items-center gap-1.5">
+                {it.catalogItem && <CatalogCode code={it.catalogItem.justCode} />}
+                <span>{it.catalogItem?.name ?? it.declaredName} — {it.quantity} un.</span>
+              </div>
             ))}
           </div>
           <div className="text-[11.5px] text-steel mb-2.5">{r.reason} · reportó {r.submittedBy?.name ?? "—"}</div>

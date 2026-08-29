@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { canCaptureMerchandiseReentry } from "@/lib/guards";
 import { nextMerchandiseReentryNumber, formatMerchandiseReentryCode } from "@/lib/merchandiseReentry";
 
-const ITEM_INCLUDE = { catalogItem: { select: { name: true, photos: true } }, damageReason: { select: { name: true } } } as const;
+const ITEM_INCLUDE = { catalogItem: { select: { name: true, photos: true, justCode: true } }, damageReason: { select: { name: true } } } as const;
 
 // El lote sin enviar (submittedAt null) del usuario actual — como mucho uno
 // a la vez. La pantalla de captura llama esto primero para retomar un lote a

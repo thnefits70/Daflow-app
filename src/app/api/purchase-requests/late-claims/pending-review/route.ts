@@ -20,7 +20,7 @@ export async function GET(_req: NextRequest) {
           quantity: true,
           unitCost: true,
           requestNumber: true,
-          catalogItem: { select: { name: true, photos: true } },
+          catalogItem: { select: { name: true, photos: true, justCode: true } },
           supplier: { select: { name: true } },
         },
       },

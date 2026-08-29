@@ -4,13 +4,14 @@ import { useEffect, useRef, useState } from "react";
 import { Camera, Check, Pencil, Plus, Send, Trash2, X } from "lucide-react";
 import { LiveCameraCapture } from "@/components/shared/LiveCameraCapture";
 import { ProductMatchPicker, type MatchCatalogItem, type ProductMatchResult } from "./ProductMatchPicker";
+import { CatalogCode } from "@/components/shared/CatalogCode";
 
 const DAMAGE_REASONS = ["Producto roto", "Empaque abierto", "Humedad/manchado", "Golpeado", "Otro"];
 
 type ItemDTO = {
   id: string;
   photoUrls: string[];
-  catalogItem: { name: string; photos: string[] } | null;
+  catalogItem: { name: string; photos: string[]; justCode: string | null } | null;
   aiRecognized: boolean;
   declaredName: string | null;
   goodQty: number;
@@ -230,7 +231,10 @@ export function CaptureFlow() {
                   <img src={item.photoUrls[0]} alt={itemName(item)} className="w-10 h-10 object-cover rounded border border-rule shrink-0" />
                 )}
                 <div className="flex-1 min-w-0">
-                  <div className="text-[12.5px] font-semibold truncate">{itemName(item)}</div>
+                  <div className="text-[12.5px] font-semibold flex items-center gap-1.5 min-w-0">
+                    {item.catalogItem && <CatalogCode code={item.catalogItem.justCode} />}
+                    <span className="truncate">{itemName(item)}</span>
+                  </div>
                   <div className="text-[11px] text-steel">
                     {item.goodQty > 0 && <span className="text-green font-semibold">{item.goodQty} buenas</span>}
                     {item.goodQty > 0 && item.damagedQty > 0 && " · "}
@@ -409,7 +413,7 @@ function AddItemForm({ batchId, onAdded, onCancel }: { batchId: string; onAdded:
           <div className="flex flex-col gap-2 text-[12.5px]">
             <div className="flex items-start justify-between gap-3">
               <span className="text-steel shrink-0">Producto</span>
-              <span className="font-semibold text-right">{finalName}</span>
+              <span className="font-semibold text-right flex items-center gap-1.5">{selected && <CatalogCode code={selected.justCode} />} {finalName}</span>
             </div>
             {!selected && (
               <div className="text-[11px] text-steel -mt-1">Nombre puesto a mano — no se encontró en el catálogo o se prefirió escribir directo.</div>
@@ -504,7 +508,10 @@ function AddItemForm({ batchId, onAdded, onCancel }: { batchId: string; onAdded:
                 )}
               </div>
               <div className="flex items-center gap-2.5 bg-green/10 border border-green/35 rounded-md p-2.5">
-                <div className="flex-1 min-w-0 text-[12.5px] font-semibold truncate">{selected.name}</div>
+                <div className="flex-1 min-w-0 text-[12.5px] font-semibold flex items-center gap-1.5">
+                  <CatalogCode code={selected.justCode} />
+                  <span className="truncate">{selected.name}</span>
+                </div>
                 <button type="button" className="shrink-0 text-[11px] font-semibold text-blue cursor-pointer" onClick={() => setSelected(null)}>
                   Cambiar
                 </button>

@@ -17,7 +17,7 @@ export async function GET(_req: NextRequest) {
       report: {
         include: {
           request: {
-            select: { id: true, deptId: true, catalogItem: { select: { name: true, photos: true } }, supplier: { select: { name: true } } },
+            select: { id: true, deptId: true, catalogItem: { select: { name: true, photos: true, justCode: true } }, supplier: { select: { name: true } } },
           },
         },
       },

@@ -9,6 +9,7 @@ import { compressImage } from "@/lib/compressImage";
 import { usePasteFile } from "@/lib/usePasteFile";
 import { PriceTrendChart } from "./PriceTrendChart";
 import type { SupplierPriceHistory, PriceHistoryStats, SupplierPricePoint } from "@/lib/purchases";
+import { CatalogCode } from "@/components/shared/CatalogCode";
 
 // Copiada de lib/purchases.ts (no se puede importar el original: arrastra
 // prisma/pg al bundle del cliente y rompe el build — ver commit que lo

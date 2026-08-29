@@ -64,7 +64,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       damageReasonId,
       damageReasonOther: d.damagedQty > 0 && !damageReasonId ? d.damageReasonOther ?? d.damageReasonName ?? null : null,
     },
-    include: { catalogItem: { select: { name: true, photos: true } }, damageReason: { select: { name: true } } },
+    include: { catalogItem: { select: { name: true, photos: true, justCode: true } }, damageReason: { select: { name: true } } },
   });
   return NextResponse.json(item);
 }

@@ -5,6 +5,7 @@ import { ShieldCheck, Search, CheckCircle2 } from "lucide-react";
 import { actorName } from "@/lib/actorName";
 import { formatDateTime } from "@/lib/formatDateTime";
 import { PurchaseOperationDocuments, type OperationDocRow } from "./PurchaseOperationDocuments";
+import { CatalogCode } from "@/components/shared/CatalogCode";
 
 type Row = Omit<OperationDocRow, "receipt"> & {
   groupId: string;
@@ -249,7 +250,10 @@ export function PurchaseAuditPanel() {
               <div className="flex items-start justify-between gap-2 mb-1">
                 <div>
                   {g.map((r) => (
-                    <div key={r.id} className="text-[13.5px] font-bold">{r.catalogItem.name} · {r.quantity} un.</div>
+                    <div key={r.id} className="text-[13.5px] font-bold flex items-center gap-1.5">
+                      <CatalogCode code={r.catalogItem.justCode} />
+                      <span>{r.catalogItem.name} · {r.quantity} un.</span>
+                    </div>
                   ))}
                 </div>
                 <div className="flex flex-col items-end gap-0.5 shrink-0 max-w-[210px]">

@@ -63,7 +63,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       expectedCreditAmount,
     },
     include: {
-      catalogItem: { select: { name: true, photos: true } },
+      catalogItem: { select: { name: true, photos: true, justCode: true } },
       linkedPurchaseRequest: { select: { requestNumber: true, requestedAt: true, requestedBy: { select: { name: true } } } },
     },
   });

@@ -4,7 +4,7 @@ import { canViewMerchandiseOutflow } from "@/lib/guards";
 
 const BATCH_INCLUDE = {
   createdBy: { select: { name: true } },
-  items: { include: { catalogItem: { select: { name: true, photos: true } }, damageReason: { select: { name: true } } } },
+  items: { include: { catalogItem: { select: { name: true, photos: true, justCode: true } }, damageReason: { select: { name: true } } } },
 } as const;
 
 // Todo lo que está listo para que Daniel dé de baja en Just, sin importar el

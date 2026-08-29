@@ -7,7 +7,7 @@ const BATCH_INCLUDE = {
   justWrittenOffBy: { select: { name: true } },
   items: {
     include: {
-      catalogItem: { select: { name: true } },
+      catalogItem: { select: { name: true, justCode: true } },
       damageReason: { select: { name: true } },
       resolvedBy: { select: { name: true } },
     },

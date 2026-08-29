@@ -17,7 +17,7 @@ const schema = z.object({
 
 const ITEM_INCLUDE = {
   batch: { select: { code: true, createdAt: true, createdBy: { select: { name: true } } } },
-  catalogItem: { select: { name: true, photos: true } },
+  catalogItem: { select: { name: true, photos: true, justCode: true } },
   damageReason: { select: { name: true } },
 } as const;
 

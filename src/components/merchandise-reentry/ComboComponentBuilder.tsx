@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Clock, X } from "lucide-react";
 import type { MatchCatalogItem } from "./ProductMatchPicker";
+import { CatalogCode } from "@/components/shared/CatalogCode";
 
 export type ComboDraftComponent = { catalogItem: MatchCatalogItem; quantity: number };
 
@@ -61,7 +62,10 @@ export function ComboComponentBuilder({ components, onChange }: { components: Co
                   <Clock size={14} />
                 </div>
               )}
-              <span className="flex-1 min-w-0 text-[12px] font-medium truncate">{c.catalogItem.name}</span>
+              <span className="flex-1 min-w-0 text-[12px] font-medium flex items-center gap-1.5">
+                <CatalogCode code={c.catalogItem.justCode} />
+                <span className="truncate">{c.catalogItem.name}</span>
+              </span>
               <input
                 type="number"
                 min={1}
@@ -98,7 +102,7 @@ export function ComboComponentBuilder({ components, onChange }: { components: Co
                 </div>
               )}
               <span className="flex-1 min-w-0 text-[12px] font-medium truncate">{c.name}</span>
-              {c.justCode && <span className="font-mono text-[10.5px] text-steel shrink-0">#{c.justCode}</span>}
+              <CatalogCode code={c.justCode} />
             </button>
           ))}
         </div>

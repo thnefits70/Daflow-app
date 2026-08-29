@@ -2,9 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { CheckCircle2, ChevronDown, ChevronUp } from "lucide-react";
+import { CatalogCode } from "@/components/shared/CatalogCode";
 
 type JustGroupDTO = {
   name: string;
+  justCode: string | null;
   totalGoodQty: number;
   itemIds: string[];
   canUploadNow: boolean;
@@ -85,7 +87,10 @@ export function CloseQueues({ canManage }: { canManage: boolean }) {
           <div key={group.name} className="bg-surface border border-rule rounded-md overflow-hidden">
             <div className="p-3.5">
               <div className="flex items-center justify-between gap-2 mb-2">
-                <span className="text-[12.5px] flex-1 min-w-0">{group.name}</span>
+                <span className="text-[12.5px] flex-1 min-w-0 flex items-center gap-1.5">
+                  <CatalogCode code={group.justCode} />
+                  <span className="truncate">{group.name}</span>
+                </span>
                 {group.breakdown.length > 1 && (
                   <button
                     type="button"

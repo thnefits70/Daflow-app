@@ -6,6 +6,7 @@ import { uploadFile } from "@/lib/uploadFile";
 import { compressImage } from "@/lib/compressImage";
 import { usePasteFile } from "@/lib/usePasteFile";
 import { CompleteCatalogRegistration } from "@/components/shared/CompleteCatalogRegistration";
+import { CatalogCode } from "@/components/shared/CatalogCode";
 
 // Confirmado 2026-08-14: bug real reportado por Bryan — mientras se está
 // "creando" un producto nuevo (nombre, fotos, descripción, código), todo eso
@@ -296,7 +297,10 @@ export function PurchaseCatalogPicker({
       <div className="flex items-center gap-2.5 bg-cloud border border-rule rounded-md px-3 py-2.5">
         {value.photos[0] && <img src={value.photos[0]} alt="" className="w-9 h-9 rounded object-cover shrink-0" />}
         <div className="flex-1 min-w-0">
-          <div className="text-[13.5px] font-semibold">{value.name}</div>
+          <div className="text-[13.5px] font-semibold flex items-center gap-1.5">
+            <CatalogCode code={value.justCode} />
+            <span>{value.name}</span>
+          </div>
           {value.description && <div className="text-[11px] text-steel truncate">{value.description}</div>}
         </div>
         <button type="button" className="text-[11.5px] text-blue font-semibold cursor-pointer" onClick={() => onChange(null)}>
@@ -472,6 +476,7 @@ export function PurchaseCatalogPicker({
                     ) : (
                       <CheckCircle2 size={13} className="text-teal shrink-0" />
                     )}
+                    <CatalogCode code={item.justCode} />
                     <span className="truncate">{item.name}</span>
                     {item.pendingRegistration && (
                       <span className="shrink-0 font-mono text-[9px] font-bold uppercase rounded-full px-1.5 py-0.5 bg-gold/15 border border-gold/40" style={{ color: "#D9A441" }}>

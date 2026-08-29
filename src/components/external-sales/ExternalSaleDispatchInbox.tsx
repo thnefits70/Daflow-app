@@ -2,13 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { Truck } from "lucide-react";
+import { CatalogCode } from "@/components/shared/CatalogCode";
 
 type TeamMember = { id: string; name: string };
 type SaleDTO = {
   id: string;
   code: string;
   declaredProductName: string;
-  catalogItem: { name: string; photos: string[] } | null;
+  catalogItem: { name: string; photos: string[]; justCode: string | null } | null;
   quantity: number;
   pickupPersonName: string;
   advisor: { name: string } | null;
@@ -64,7 +65,10 @@ export function ExternalSaleDispatchInbox() {
             <span className="font-mono text-[11px] font-bold text-teal">{s.code}</span>
             <span className="text-[11px] text-steel">{s.advisor?.name ?? "—"}</span>
           </div>
-          <div className="text-[13px] font-semibold">{s.catalogItem?.name ?? s.declaredProductName} — {s.quantity} un.</div>
+          <div className="text-[13px] font-semibold flex items-center gap-1.5 flex-wrap">
+            {s.catalogItem && <CatalogCode code={s.catalogItem.justCode} />}
+            <span>{s.catalogItem?.name ?? s.declaredProductName} — {s.quantity} un.</span>
+          </div>
           <div className="text-[11.5px] text-steel mb-2.5">Entrega a: {s.pickupPersonName}</div>
 
           {assigning === s.id ? (

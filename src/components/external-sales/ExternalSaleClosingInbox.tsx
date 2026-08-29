@@ -3,12 +3,13 @@
 import { useEffect, useState } from "react";
 import { CheckCircle2 } from "lucide-react";
 import { ProofPreview } from "@/components/shared/ProofPreview";
+import { CatalogCode } from "@/components/shared/CatalogCode";
 
 type SaleDTO = {
   id: string;
   code: string;
   declaredProductName: string;
-  catalogItem: { name: string; photos: string[] } | null;
+  catalogItem: { name: string; photos: string[]; justCode: string | null } | null;
   quantity: number;
   unitPrice: number;
   totalAmount: number;
@@ -64,7 +65,10 @@ export function ExternalSaleClosingInbox() {
             <span className="font-mono text-[11px] font-bold text-teal">{s.code}</span>
             <span className="text-[11px] text-steel">{s.advisor?.name ?? "—"}</span>
           </div>
-          <div className="text-[13px] font-semibold mb-1">{s.catalogItem?.name ?? s.declaredProductName} — {s.quantity} un. × ${s.unitPrice.toFixed(2)} = <span className="text-teal">${s.totalAmount.toFixed(2)}</span></div>
+          <div className="text-[13px] font-semibold mb-1 flex items-center gap-1.5 flex-wrap">
+            {s.catalogItem && <CatalogCode code={s.catalogItem.justCode} />}
+            <span>{s.catalogItem?.name ?? s.declaredProductName} — {s.quantity} un. × ${s.unitPrice.toFixed(2)} = <span className="text-teal">${s.totalAmount.toFixed(2)}</span></span>
+          </div>
           <div className="text-[11.5px] text-steel mb-2">Despachó {s.dispatchAssignedTo?.name ?? "—"} · entregó {s.deliveredBy?.name ?? "—"}</div>
           <div className="flex gap-3 mb-2.5">
             {s.paymentProofUrl && <ProofPreview url={s.paymentProofUrl} filename={s.paymentProofName ?? undefined} size={48} />}

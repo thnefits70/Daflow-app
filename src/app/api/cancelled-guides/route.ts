@@ -8,7 +8,7 @@ import { MKT_CANCEL_REASONS, FULFILLMENT_CANCEL_REASONS } from "@/lib/cancelledG
 
 const REPORT_INCLUDE = {
   submittedBy: { select: { name: true } },
-  items: { include: { catalogItem: { select: { name: true, photos: true } } } },
+  items: { include: { catalogItem: { select: { name: true, photos: true, justCode: true } } } },
   fulfillmentConfirmedBy: { select: { name: true } },
   inventoryConfirmedBy: { select: { name: true } },
   cutoffDecidedBy: { select: { name: true } },

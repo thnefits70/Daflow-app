@@ -2,12 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { CheckCircle2, XCircle } from "lucide-react";
+import { CatalogCode } from "@/components/shared/CatalogCode";
 
 type SaleDTO = {
   id: string;
   code: string;
   declaredProductName: string;
-  catalogItem: { name: string; photos: string[] } | null;
+  catalogItem: { name: string; photos: string[]; justCode: string | null } | null;
   quantity: number;
   unitPrice: number;
   totalAmount: number;
@@ -75,7 +76,10 @@ export function ExternalSaleReviewInbox() {
             <span className="font-mono text-[11px] font-bold text-teal">{s.code}</span>
             <span className="text-[11px] text-steel">{s.advisor?.name ?? "—"}</span>
           </div>
-          <div className="text-[13px] font-semibold">{s.catalogItem?.name ?? s.declaredProductName}</div>
+          <div className="text-[13px] font-semibold flex items-center gap-1.5 flex-wrap">
+            {s.catalogItem && <CatalogCode code={s.catalogItem.justCode} />}
+            <span>{s.catalogItem?.name ?? s.declaredProductName}</span>
+          </div>
           <div className="text-[12px] text-steel mb-1">{s.quantity} un. × ${s.unitPrice.toFixed(2)} = <span className="font-bold text-ink">${s.totalAmount.toFixed(2)}</span></div>
           <div className="text-[11.5px] text-steel">Entrega a: {s.pickupPersonName}</div>
           {s.courierNote && <div className="text-[11.5px] text-steel">Transportadora: {s.courierNote}</div>}

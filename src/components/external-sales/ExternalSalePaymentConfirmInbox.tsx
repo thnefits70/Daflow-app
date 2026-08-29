@@ -3,12 +3,13 @@
 import { useEffect, useState } from "react";
 import { CheckCircle2 } from "lucide-react";
 import { ProofPreview } from "@/components/shared/ProofPreview";
+import { CatalogCode } from "@/components/shared/CatalogCode";
 
 type SaleDTO = {
   id: string;
   code: string;
   declaredProductName: string;
-  catalogItem: { name: string } | null;
+  catalogItem: { name: string; justCode: string | null } | null;
   totalAmount: number;
   paymentProofUrl: string;
   paymentProofName: string | null;
@@ -58,7 +59,10 @@ export function ExternalSalePaymentConfirmInbox() {
             <span className="font-mono text-[11px] font-bold text-teal">{s.code}</span>
             <span className="text-[11px] text-steel">{s.advisor?.name ?? "—"}</span>
           </div>
-          <div className="text-[13px] font-semibold mb-1">{s.catalogItem?.name ?? s.declaredProductName} — ${s.totalAmount.toFixed(2)}</div>
+          <div className="text-[13px] font-semibold mb-1 flex items-center gap-1.5 flex-wrap">
+            {s.catalogItem && <CatalogCode code={s.catalogItem.justCode} />}
+            <span>{s.catalogItem?.name ?? s.declaredProductName} — ${s.totalAmount.toFixed(2)}</span>
+          </div>
           <ProofPreview url={s.paymentProofUrl} filename={s.paymentProofName ?? undefined} size={56} />
 
           {confirmingId === s.id ? (

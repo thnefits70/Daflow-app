@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { CheckCircle2, Clock } from "lucide-react";
+import { CatalogCode } from "@/components/shared/CatalogCode";
 
 export type MatchCatalogItem = { id: string; name: string; photos: string[]; justCode: string | null; pendingRegistration: boolean };
 export type ProductMatchResult = { catalogItem: MatchCatalogItem } | { manualName: string };
@@ -71,7 +72,10 @@ export function ProductMatchPicker({
             </div>
           )}
         </div>
-        <div className="text-[12.5px] font-semibold mb-2.5">{confirming.name}</div>
+        <div className="text-[12.5px] font-semibold mb-2.5 flex items-center gap-1.5 flex-wrap">
+          <CatalogCode code={confirming.justCode} />
+          <span>{confirming.name}</span>
+        </div>
         <div className="flex gap-2">
           <button type="button" className="flex-1 rounded border border-teal bg-teal px-3 py-1.5 text-[12px] font-bold text-navy cursor-pointer" onClick={() => onConfirm({ catalogItem: confirming })}>
             Sí, es el mismo producto
@@ -140,7 +144,10 @@ export function ProductMatchPicker({
                   <Clock size={13} />
                 </div>
               )}
-              <span className="text-[12.5px] font-medium flex-1">{c.name}</span>
+              <span className="text-[12.5px] font-medium flex-1 flex items-center gap-1.5 flex-wrap min-w-0">
+                <CatalogCode code={c.justCode} />
+                <span className="truncate">{c.name}</span>
+              </span>
               {c.pendingRegistration && (
                 <span className="shrink-0 font-mono text-[9px] font-bold uppercase rounded-full px-1.5 py-0.5 bg-gold/15 border border-gold/40" style={{ color: "#D9A441" }}>
                   Sin foto

@@ -4,10 +4,11 @@ import { useState } from "react";
 import { FileText, Receipt, Truck, ClipboardCheck, Camera, AlertTriangle, ChevronDown, ChevronRight, Download } from "lucide-react";
 import { actorName } from "@/lib/actorName";
 import { downloadFile } from "@/components/shared/ProofPreview";
+import { CatalogCode } from "@/components/shared/CatalogCode";
 
 export type OperationDocRow = {
   id: string;
-  catalogItem: { name: string; photos: string[] };
+  catalogItem: { name: string; photos: string[]; justCode: string | null };
   quoteImageUrl: string;
   purchaseOrderUrl: string | null;
   paymentProofUrl: string | null;
@@ -142,7 +143,10 @@ export function PurchaseOperationDocuments({ rows }: { rows: OperationDocRow[] }
       <div className="flex flex-col gap-2.5">
         {rows.map((r) => (
           <div key={r.id} className="text-[12px]">
-            <div className="font-semibold text-ink mb-1">{r.catalogItem.name}</div>
+            <div className="font-semibold text-ink mb-1 flex items-center gap-1.5">
+              <CatalogCode code={r.catalogItem.justCode} />
+              <span>{r.catalogItem.name}</span>
+            </div>
             {r.receipt ? (
               <div>
                 <div className="flex flex-wrap gap-1.5 mb-1">

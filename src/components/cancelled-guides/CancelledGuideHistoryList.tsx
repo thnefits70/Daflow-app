@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { CARRIER_LABELS, SOURCE_AREA_LABELS } from "@/lib/cancelledGuidesLabels";
 import { formatDateTime } from "@/lib/formatDateTime";
+import { CatalogCode } from "@/components/shared/CatalogCode";
 
 type ReportDTO = {
   id: string;
@@ -15,13 +16,13 @@ type ReportDTO = {
   reingresadoAt: string | null;
   createdAt: string;
   submittedBy: { name: string } | null;
-  items: { id: string; declaredName: string; quantity: number; catalogItem: { name: string } | null }[];
+  items: { id: string; declaredName: string; quantity: number; catalogItem: { name: string; justCode: string | null } | null }[];
 };
 
 function statusChip(r: ReportDTO): { text: string; color: string } {
   if (r.reallyCancelled === null) return { text: "Pendiente de corte", color: "text-gold" };
   if (r.reallyCancelled === false) return { text: "Se despachó igual", color: "text-steel" };
-  if (r.reingresadoAt) return { text: "Reingresada a Just", color: "text-green" };
+  if (r.reingresadoAt) return { text: `Reingresada a Just · ${formatDateTime(r.reingresadoAt)}`, color: "text-green" };
   return { text: "Confirmada — falta reingresar", color: "text-blue" };
 }
 
@@ -49,7 +50,10 @@ export function CancelledGuideHistoryList() {
             <div className="text-[11px] text-steel mb-1">{SOURCE_AREA_LABELS[r.sourceArea]} · {r.reason}</div>
             <div className="flex flex-col gap-0.5 mb-1">
               {r.items.map((it) => (
-                <div key={it.id} className="text-[12px]">{it.catalogItem?.name ?? it.declaredName} — {it.quantity} un.</div>
+                <div key={it.id} className="text-[12px] flex items-center gap-1.5">
+                  {it.catalogItem && <CatalogCode code={it.catalogItem.justCode} />}
+                  <span>{it.catalogItem?.name ?? it.declaredName} — {it.quantity} un.</span>
+                </div>
               ))}
             </div>
             <div className="text-[10.5px] text-steel">{r.submittedBy?.name ?? "—"} · {formatDateTime(r.createdAt)}</div>

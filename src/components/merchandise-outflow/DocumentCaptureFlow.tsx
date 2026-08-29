@@ -5,8 +5,9 @@ import { Camera, Check, Pencil, Plus, Send, Sparkles, Trash2, X } from "lucide-r
 import { LiveCameraCapture } from "@/components/shared/LiveCameraCapture";
 import { ProductMatchPicker, type MatchCatalogItem, type ProductMatchResult } from "@/components/merchandise-reentry/ProductMatchPicker";
 import { ComboComponentBuilder, type ComboDraftComponent } from "@/components/merchandise-reentry/ComboComponentBuilder";
+import { CatalogCode } from "@/components/shared/CatalogCode";
 
-type ItemDTO = { id: string; declaredName: string; quantity: number; catalogItem: { name: string; photos: string[] } | null };
+type ItemDTO = { id: string; declaredName: string; quantity: number; catalogItem: { name: string; photos: string[]; justCode: string | null } | null };
 type BatchDTO = { id: string; code: string; documentPhotoUrls: string[]; items: ItemDTO[] };
 type Confidence = "alta" | "media" | "baja";
 type SuggestedRow = {
@@ -380,7 +381,10 @@ export function DocumentCaptureFlow({ reason, canManageJustCatalog = false }: { 
               </div>
             ) : (
               <div key={item.id} className="bg-surface border border-rule rounded-md p-2.5 flex items-center justify-between gap-2">
-                <span className="text-[12.5px] font-semibold">{itemName(item)}</span>
+                <span className="text-[12.5px] font-semibold flex items-center gap-1.5 min-w-0">
+                  {item.catalogItem && <CatalogCode code={item.catalogItem.justCode} />}
+                  <span className="truncate">{itemName(item)}</span>
+                </span>
                 <div className="flex items-center gap-2 shrink-0">
                   <span className="font-mono text-[11px] text-steel">{item.quantity} un.</span>
                   <button type="button" className="text-steel hover:text-red cursor-pointer" onClick={() => setConfirmDeleteItemId(item.id)}>
@@ -492,7 +496,7 @@ export function DocumentCaptureFlow({ reason, canManageJustCatalog = false }: { 
           {rows.map((row, i) =>
             row.added ? (
               <div key={i} className="bg-green/10 border border-green/35 rounded-md p-2.5 text-[12px] flex items-center gap-1.5">
-                <Check size={13} className="text-green" /> {row.selected?.name ?? row.manualName} — {row.quantity} un. agregado
+                <Check size={13} className="text-green" /> {row.selected && <CatalogCode code={row.selected.justCode} />} {row.selected?.name ?? row.manualName} — {row.quantity} un. agregado
               </div>
             ) : (
               <div key={i} className="bg-cloud rounded-md p-2.5">
@@ -571,7 +575,10 @@ export function DocumentCaptureFlow({ reason, canManageJustCatalog = false }: { 
                 {row.selected ? (
                   <div className="mb-2">
                     <div className="flex items-center gap-2.5 bg-green/10 border border-green/35 rounded-md p-2">
-                      <div className="flex-1 min-w-0 text-[12px] font-semibold truncate">{row.selected.name}</div>
+                      <div className="flex-1 min-w-0 text-[12px] font-semibold flex items-center gap-1.5">
+                        <CatalogCode code={row.selected.justCode} />
+                        <span className="truncate">{row.selected.name}</span>
+                      </div>
                       <button type="button" className="text-[11px] font-semibold text-blue cursor-pointer" onClick={() => setRows((rs) => rs.map((r, j) => (j === i ? { ...r, selected: null } : r)))}>
                         Cambiar
                       </button>
@@ -655,7 +662,10 @@ export function DocumentCaptureFlow({ reason, canManageJustCatalog = false }: { 
           <div className="text-[10px] font-semibold uppercase tracking-wide text-steel mb-1.5">Agregar producto manual</div>
           {manualSelected ? (
             <div className="flex items-center gap-2.5 bg-green/10 border border-green/35 rounded-md p-2 mb-2">
-              <div className="flex-1 min-w-0 text-[12px] font-semibold truncate">{manualSelected.name}</div>
+              <div className="flex-1 min-w-0 text-[12px] font-semibold flex items-center gap-1.5">
+                <CatalogCode code={manualSelected.justCode} />
+                <span className="truncate">{manualSelected.name}</span>
+              </div>
               <button type="button" className="text-[11px] font-semibold text-blue cursor-pointer" onClick={() => setManualSelected(null)}>Cambiar</button>
             </div>
           ) : manualName ? (

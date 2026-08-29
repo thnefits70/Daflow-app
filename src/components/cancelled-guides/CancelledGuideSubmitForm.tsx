@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Check, Plus, X } from "lucide-react";
 import { ProductMatchPicker, type MatchCatalogItem, type ProductMatchResult } from "@/components/merchandise-reentry/ProductMatchPicker";
 import { CARRIER_LABELS, SOURCE_AREA_LABELS, MKT_CANCEL_REASONS, FULFILLMENT_CANCEL_REASONS } from "@/lib/cancelledGuidesLabels";
+import { CatalogCode } from "@/components/shared/CatalogCode";
 
 type Row = { selected: MatchCatalogItem | null; manualName: string; quantity: string };
 
@@ -134,7 +135,10 @@ export function CancelledGuideSubmitForm({ onSubmitted }: { onSubmitted?: () => 
               </div>
               {row.selected ? (
                 <div className="flex items-center gap-2.5 bg-green/10 border border-green/35 rounded-md p-2 mb-2">
-                  <div className="flex-1 min-w-0 text-[12px] font-semibold truncate">{row.selected.name}</div>
+                  <div className="flex-1 min-w-0 text-[12px] font-semibold flex items-center gap-1.5">
+                    <CatalogCode code={row.selected.justCode} />
+                    <span className="truncate">{row.selected.name}</span>
+                  </div>
                   <button type="button" className="text-[11px] font-semibold text-blue cursor-pointer" onClick={() => setRows((rs) => rs.map((r, j) => (j === i ? { ...r, selected: null } : r)))}>Cambiar</button>
                 </div>
               ) : row.manualName ? (

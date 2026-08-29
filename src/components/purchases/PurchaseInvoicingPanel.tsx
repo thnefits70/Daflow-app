@@ -9,6 +9,7 @@ import { usePasteFile } from "@/lib/usePasteFile";
 import { actorName } from "@/lib/actorName";
 import { formatDateTime } from "@/lib/formatDateTime";
 import { PurchaseOperationDocuments, type OperationDocRow } from "./PurchaseOperationDocuments";
+import { CatalogCode } from "@/components/shared/CatalogCode";
 
 type InvoiceStatus = "PENDING" | "COMPLETE" | "PARTIAL" | "NON_FISCAL" | "NONE";
 
@@ -26,7 +27,7 @@ type Row = {
   paidAt: string | null;
   paidBy: { name: string } | null;
   requestedBy: { name: string } | null;
-  catalogItem: { name: string; photos: string[] };
+  catalogItem: { name: string; photos: string[]; justCode: string | null };
   supplier: { id: string; name: string };
   bankAccount: {
     bankName: string;
@@ -617,7 +618,10 @@ export function PurchaseInvoicingPanel({ isAdmin = false, canPayMerchandise }: {
                   <div className="flex items-start justify-between gap-2">
                     <div>
                       {g.map((r) => (
-                        <div key={r.id} className="text-[13.5px] font-bold">{r.catalogItem.name} · {r.quantity} un.</div>
+                        <div key={r.id} className="text-[13.5px] font-bold flex items-center gap-1.5 flex-wrap">
+                          <CatalogCode code={r.catalogItem.justCode} />
+                          <span>{r.catalogItem.name} · {r.quantity} un.</span>
+                        </div>
                       ))}
                     </div>
                     <span className="font-mono text-[10.5px] text-steel shrink-0">{formatPurchaseRequestCode(g[0].requestNumber)}</span>
@@ -755,13 +759,20 @@ export function PurchaseInvoicingPanel({ isAdmin = false, canPayMerchandise }: {
               return (
                 <div key={groupId} className="bg-surface border border-gold/40 rounded-md p-4">
                   <div className="flex items-start justify-between gap-2 mb-0.5">
-                    <div className="flex items-center gap-1.5 text-[13.5px] font-bold">
-                      <Truck size={14} /> {g.map((r) => r.catalogItem.name).join(", ")}
+                    <div className="flex items-center gap-1.5 text-[13.5px] font-bold flex-wrap">
+                      <Truck size={14} />
+                      {g.map((r, i) => (
+                        <span key={r.id} className="flex items-center gap-1.5">
+                          {i > 0 && <span className="text-steel font-normal">,</span>}
+                          <CatalogCode code={r.catalogItem.justCode} />
+                          <span>{r.catalogItem.name}</span>
+                        </span>
+                      ))}
                     </div>
                     <span className="font-mono text-[10.5px] text-steel shrink-0">{formatPurchaseRequestCode(r0.requestNumber)}</span>
                   </div>
                   <div className="text-[11.5px] text-steel">{r0.carrier?.name ?? "Transportista"} — {money(r0.shippingCostTotal ?? 0)}</div>
-                  <div className="text-[10px] text-steel-dim mb-2.5">Pedido por {actorName(r0.shippingPaymentRequestedBy?.name)}</div>
+                  <div className="text-[10px] text-steel-dim mb-2.5">Pedido por {actorName(r0.shippingPaymentRequestedBy?.name)}{r0.shippingPaymentRequestedAt ? ` · ${formatDateTime(r0.shippingPaymentRequestedAt)}` : ""}</div>
                   <div className="bg-cloud border border-rule rounded-md px-3 py-2.5 mb-2.5">
                     <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-steel mb-1.5">
                       <Landmark size={12} /> Transferir a {r0.carrier?.name ?? "transportista"}
@@ -909,7 +920,10 @@ export function PurchaseInvoicingPanel({ isAdmin = false, canPayMerchandise }: {
                 <div className="flex items-start justify-between gap-2">
                   <div>
                     {g.map((r) => (
-                      <div key={r.id} className="text-[13.5px] font-bold">{r.catalogItem.name} · {r.quantity} un.</div>
+                      <div key={r.id} className="text-[13.5px] font-bold flex items-center gap-1.5 flex-wrap">
+                        <CatalogCode code={r.catalogItem.justCode} />
+                        <span>{r.catalogItem.name} · {r.quantity} un.</span>
+                      </div>
                     ))}
                   </div>
                   <span className="font-mono text-[10.5px] text-steel shrink-0">{formatPurchaseRequestCode(r0.requestNumber)}</span>

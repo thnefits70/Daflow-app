@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { CalendarClock, CheckCircle2, ChevronDown, ChevronUp, Flame, PackageMinus, ShieldCheck, Wrench } from "lucide-react";
+import { CatalogCode } from "@/components/shared/CatalogCode";
 
 type BreakdownRow = { id: string; batchCode: string; damagedQty: number; createdAt: string; disposalDecision: boolean | null };
-type GroupDTO = { name: string; totalDamagedQty: number; damageReasonLabel: string | null; photoUrl: string | null; itemIds: string[]; breakdown: BreakdownRow[] };
+type GroupDTO = { name: string; justCode: string | null; totalDamagedQty: number; damageReasonLabel: string | null; photoUrl: string | null; itemIds: string[]; breakdown: BreakdownRow[] };
 type WeeklyBatchDTO = {
   id: string;
   weekStart: string;
@@ -48,7 +49,10 @@ function GroupList({ groups, totalLabel }: { groups: GroupDTO[]; totalLabel: (g:
               <span className="w-8 h-8 shrink-0" />
             )}
             <div className="flex-1 min-w-0">
-              <div className="text-[12px] truncate">{g.name}</div>
+              <div className="text-[12px] flex items-center gap-1.5 min-w-0">
+                <CatalogCode code={g.justCode} />
+                <span className="truncate">{g.name}</span>
+              </div>
               <div className="flex items-center gap-1.5">
                 <span className="text-[11px] text-red font-semibold">{totalLabel(g)}</span>
                 {g.damageReasonLabel && <span className="font-mono text-[9px] text-steel bg-surface rounded-full px-1.5 py-0.5">{g.damageReasonLabel}</span>}
@@ -237,7 +241,7 @@ function DisposalCard({ batch, canVerify, onChanged }: { batch: WeeklyBatchDTO; 
 
   return (
     <div className="bg-surface border border-rule rounded-md p-3.5">
-      <div className="text-[12.5px] font-semibold mb-2.5">{weekLabel(batch)} · verificado por {batch.nairobyConfirmedByName ?? "—"}</div>
+      <div className="text-[12.5px] font-semibold mb-2.5">{weekLabel(batch)} · verificado por {batch.nairobyConfirmedByName ?? "—"}{batch.nairobyConfirmedAt ? ` · ${fmtDateTime(batch.nairobyConfirmedAt)}` : ""}</div>
       <div className="flex flex-col gap-2">
         {batch.groups.map((g) => {
           const pending = g.breakdown.some((b) => b.disposalDecision === null);
@@ -251,7 +255,10 @@ function DisposalCard({ batch, canVerify, onChanged }: { batch: WeeklyBatchDTO; 
                   <span className="w-8 h-8 shrink-0" />
                 )}
                 <div className="flex-1 min-w-0">
-                  <div className="text-[12px] truncate">{g.name}</div>
+                  <div className="text-[12px] flex items-center gap-1.5 min-w-0">
+                    <CatalogCode code={g.justCode} />
+                    <span className="truncate">{g.name}</span>
+                  </div>
                   <span className="text-[11px] text-red font-semibold">{g.totalDamagedQty} unidades</span>
                 </div>
                 {pending ? (

@@ -3,11 +3,12 @@
 import { useEffect, useState } from "react";
 import { AlertTriangle, ChevronDown, ChevronUp, Pencil, Trash2, Wrench } from "lucide-react";
 import { ProductMatchPicker, type ProductMatchResult } from "./ProductMatchPicker";
+import { CatalogCode } from "@/components/shared/CatalogCode";
 
 type ItemDTO = {
   id: string;
   photoUrls: string[];
-  catalogItem: { name: string; photos: string[] } | null;
+  catalogItem: { name: string; photos: string[]; justCode: string | null } | null;
   aiRecognized: boolean;
   declaredName: string | null;
   correctedName: string | null;
@@ -202,7 +203,10 @@ export function ReviewInbox({ canAct }: { canAct: boolean }) {
                             onClick={() => setLightboxUrl(it.photoUrls[0])}
                           />
                         )}
-                        <div className="flex-1 text-[12px]">{itemName(it)}</div>
+                        <div className="flex-1 text-[12px] flex items-center gap-1.5 min-w-0">
+                          {it.catalogItem && <CatalogCode code={it.catalogItem.justCode} />}
+                          <span className="truncate">{itemName(it)}</span>
+                        </div>
                         <span className="text-[11.5px] text-green font-semibold">{it.goodQty} buenas</span>
                         {canAct && (
                           <button
@@ -321,6 +325,7 @@ function ReviewItemRow({ item, canAct, onChanged, onExpandPhoto }: { item: ItemD
             </div>
           ) : (
             <div className="flex items-center gap-1.5">
+              {item.catalogItem && <CatalogCode code={item.catalogItem.justCode} />}
               <div className="text-[12.5px] font-semibold truncate">{itemName(item)}</div>
               {!item.approvedAt && canAct && !editingProduct && (
                 <button type="button" title="Corregir el producto vinculado" className="shrink-0 text-steel hover:text-teal cursor-pointer" onClick={() => setEditingProduct(true)}>

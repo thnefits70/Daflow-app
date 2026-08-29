@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Camera, Check } from "lucide-react";
 import { LiveCameraCapture } from "@/components/shared/LiveCameraCapture";
 import { ProductMatchPicker, type MatchCatalogItem, type ProductMatchResult } from "@/components/merchandise-reentry/ProductMatchPicker";
+import { CatalogCode } from "@/components/shared/CatalogCode";
 
 const DAMAGE_REASONS = ["Producto roto", "Empaque abierto", "Humedad/manchado", "Golpeado", "Otro"];
 
@@ -93,7 +94,7 @@ export function DeteriorCapture({ onReported }: { onReported?: () => void }) {
           <img src={photoUrl} alt="Foto del producto" className="w-16 h-16 object-cover rounded-md border border-rule mb-3" />
         )}
         <div className="flex flex-col gap-2 text-[12.5px] mb-3">
-          <div className="flex items-start justify-between gap-3"><span className="text-steel shrink-0">Producto</span><span className="font-semibold text-right">{finalName}</span></div>
+          <div className="flex items-start justify-between gap-3"><span className="text-steel shrink-0">Producto</span><span className="font-semibold text-right flex items-center gap-1.5">{selected && <CatalogCode code={selected.justCode} />} {finalName}</span></div>
           <div className="flex items-start justify-between gap-3"><span className="text-steel shrink-0">Cantidad</span><span className="font-semibold">{qty}</span></div>
           <div className="flex items-start justify-between gap-3"><span className="text-steel shrink-0">Motivo</span><span className="font-semibold text-right">{damageReason === "Otro" ? damageReasonOther : damageReason}</span></div>
         </div>
@@ -132,7 +133,10 @@ export function DeteriorCapture({ onReported }: { onReported?: () => void }) {
           <label className="block mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-steel">2 · Producto</label>
           {selected ? (
             <div className="flex items-center gap-2.5 bg-green/10 border border-green/35 rounded-md p-2.5">
-              <div className="flex-1 min-w-0 text-[12.5px] font-semibold truncate">{selected.name}</div>
+              <div className="flex-1 min-w-0 text-[12.5px] font-semibold flex items-center gap-1.5">
+                <CatalogCode code={selected.justCode} />
+                <span className="truncate">{selected.name}</span>
+              </div>
               <button type="button" className="shrink-0 text-[11px] font-semibold text-blue cursor-pointer" onClick={() => setSelected(null)}>Cambiar</button>
             </div>
           ) : manualName ? (

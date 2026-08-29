@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { PackagePlus } from "lucide-react";
+import { CatalogCode } from "@/components/shared/CatalogCode";
 
-type ReportDTO = { id: string; code: string; guideNumber: string; items: { id: string; declaredName: string; quantity: number; catalogItem: { name: string } | null }[] };
+type ReportDTO = { id: string; code: string; guideNumber: string; items: { id: string; declaredName: string; quantity: number; catalogItem: { name: string; justCode: string | null } | null }[] };
 
 async function postJson(url: string) {
   const res = await fetch(url, { method: "POST" });
@@ -50,7 +51,10 @@ export function CancelledGuideReingresoQueue() {
           </div>
           <div className="flex flex-col gap-0.5 mb-2.5">
             {r.items.map((it) => (
-              <div key={it.id} className="text-[12px]">{it.catalogItem?.name ?? it.declaredName} — {it.quantity} un.</div>
+              <div key={it.id} className="text-[12px] flex items-center gap-1.5">
+                {it.catalogItem && <CatalogCode code={it.catalogItem.justCode} />}
+                <span>{it.catalogItem?.name ?? it.declaredName} — {it.quantity} un.</span>
+              </div>
             ))}
           </div>
 

@@ -19,7 +19,7 @@ export async function GET() {
       quantity: true,
       pickupPersonName: true,
       courierNote: true,
-      catalogItem: { select: { name: true, photos: true } },
+      catalogItem: { select: { name: true, photos: true, justCode: true } },
     },
     orderBy: { dispatchAssignedAt: "asc" },
   });

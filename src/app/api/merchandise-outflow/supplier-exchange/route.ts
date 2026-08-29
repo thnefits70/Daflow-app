@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { canActOnMerchandiseOutflow, canConfirmSupplierExchangeFinanceWriteOff, getMarketingLeadId } from "@/lib/guards";
 
 const ITEM_INCLUDE = {
-  catalogItem: { select: { name: true, photos: true } },
+  catalogItem: { select: { name: true, photos: true, justCode: true } },
   linkedPurchaseRequest: { select: { requestNumber: true, requestedAt: true, requestedBy: { select: { name: true } } } },
   credit: { select: { amount: true } },
 } as const;

@@ -17,7 +17,7 @@ export async function GET() {
         ...(canInventory ? [{ inventoryConfirmedAt: null }] : []),
       ],
     },
-    include: { submittedBy: { select: { name: true } }, items: { include: { catalogItem: { select: { name: true } } } } },
+    include: { submittedBy: { select: { name: true } }, items: { include: { catalogItem: { select: { name: true, justCode: true } } } } },
     orderBy: { createdAt: "asc" },
   });
   return NextResponse.json({ reports, canFulfillment, canInventory });

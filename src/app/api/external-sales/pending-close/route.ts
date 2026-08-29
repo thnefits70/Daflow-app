@@ -7,7 +7,7 @@ export async function GET() {
   const sales = await prisma.externalSale.findMany({
     where: { paymentConfirmedAt: { not: null }, deliveredAt: { not: null }, nairobyClosedAt: null },
     include: {
-      catalogItem: { select: { name: true, photos: true } },
+      catalogItem: { select: { name: true, photos: true, justCode: true } },
       advisor: { select: { name: true } },
       dispatchAssignedTo: { select: { name: true } },
       deliveredBy: { select: { name: true } },

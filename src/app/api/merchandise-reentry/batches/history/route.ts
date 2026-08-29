@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { canViewMerchandiseReentry } from "@/lib/guards";
 
 const ITEM_INCLUDE = {
-  catalogItem: { select: { name: true, photos: true } },
+  catalogItem: { select: { name: true, photos: true, justCode: true } },
   damageReason: { select: { name: true } },
   correctedBy: { select: { name: true } },
   approvedBy: { select: { name: true } },

@@ -4,18 +4,23 @@ import { useEffect, useState } from "react";
 import { Check, Upload } from "lucide-react";
 import { ProductMatchPicker, type MatchCatalogItem, type ProductMatchResult } from "@/components/merchandise-reentry/ProductMatchPicker";
 import { uploadFile } from "@/lib/uploadFile";
+import { formatDateTime } from "@/lib/formatDateTime";
+import { CatalogCode } from "@/components/shared/CatalogCode";
 
 type SaleDTO = {
   id: string;
   code: string;
   declaredProductName: string;
-  catalogItem: { name: string } | null;
+  catalogItem: { name: string; justCode: string | null } | null;
   quantity: number;
   unitPrice: number;
   totalAmount: number;
+  pickupPersonName: string;
+  courierNote: string | null;
   reviewStatus: "PENDING" | "APPROVED" | "REJECTED";
   rejectionReason: string | null;
   paymentProofUrl: string | null;
+  paymentProofName: string | null;
   paymentConfirmedAt: string | null;
   deliveredAt: string | null;
   nairobyClosedAt: string | null;
@@ -31,11 +36,11 @@ async function postJson(url: string, body?: unknown) {
 function statusLabel(s: SaleDTO): { text: string; color: string } {
   if (s.reviewStatus === "REJECTED") return { text: "Rechazada", color: "text-red" };
   if (s.reviewStatus === "PENDING") return { text: "Esperando aprobación de Bryan", color: "text-gold" };
-  if (s.nairobyClosedAt) return { text: "Cerrada", color: "text-green" };
+  if (s.nairobyClosedAt) return { text: `Cerrada · ${formatDateTime(s.nairobyClosedAt)}`, color: "text-green" };
   if (!s.paymentProofUrl) return { text: "Aprobada — falta subir comprobante", color: "text-blue" };
   if (!s.paymentConfirmedAt) return { text: "Esperando que confirmen el pago", color: "text-gold" };
-  if (!s.deliveredAt) return { text: "Pago confirmado — esperando entrega", color: "text-blue" };
-  return { text: "Pago y entrega listos — esperando cierre de Nairoby", color: "text-gold" };
+  if (!s.deliveredAt) return { text: `Pago confirmado · ${formatDateTime(s.paymentConfirmedAt)} — esperando entrega`, color: "text-blue" };
+  return { text: `Entregado · ${formatDateTime(s.deliveredAt)} — esperando cierre de Nairoby`, color: "text-gold" };
 }
 
 export function ExternalSaleDeclareForm() {
@@ -113,7 +118,10 @@ export function ExternalSaleDeclareForm() {
           <label className="block mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-steel">Producto</label>
           {selected ? (
             <div className="flex items-center gap-2.5 bg-green/10 border border-green/35 rounded-md p-2.5">
-              <div className="flex-1 min-w-0 text-[12.5px] font-semibold truncate">{selected.name}</div>
+              <div className="flex-1 min-w-0 text-[12.5px] font-semibold flex items-center gap-1.5">
+                <CatalogCode code={selected.justCode} />
+                <span className="truncate">{selected.name}</span>
+              </div>
               <button type="button" className="shrink-0 text-[11px] font-semibold text-blue cursor-pointer" onClick={() => setSelected(null)}>Cambiar</button>
             </div>
           ) : manualName ? (
@@ -170,7 +178,11 @@ export function ExternalSaleDeclareForm() {
                     <span className="font-mono text-[11px] font-bold text-teal">{s.code}</span>
                     <span className={`text-[11px] font-semibold ${status.color}`}>{status.text}</span>
                   </div>
-                  <div className="text-[12.5px] font-semibold">{s.catalogItem?.name ?? s.declaredProductName} — {s.quantity} un. · ${s.totalAmount.toFixed(2)}</div>
+                  <div className="text-[12.5px] font-semibold flex items-center gap-1.5 flex-wrap">
+                    {s.catalogItem && <CatalogCode code={s.catalogItem.justCode} />}
+                    <span>{s.catalogItem?.name ?? s.declaredProductName} — {s.quantity} un. · ${s.totalAmount.toFixed(2)}</span>
+                  </div>
+                  <div className="text-[10.5px] text-steel mt-0.5">Entrega a: {s.pickupPersonName}{s.courierNote ? ` · Transportadora: ${s.courierNote}` : ""}</div>
                   {s.reviewStatus === "REJECTED" && s.rejectionReason && <div className="text-[11.5px] text-red mt-1">{s.rejectionReason}</div>}
                   {s.reviewStatus === "APPROVED" && !s.paymentProofUrl && (
                     <label className="mt-2 inline-flex items-center gap-1.5 text-[11.5px] font-semibold border border-rule rounded px-2.5 py-1.5 cursor-pointer">
@@ -178,8 +190,13 @@ export function ExternalSaleDeclareForm() {
                       <input type="file" accept="image/*,.pdf" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadProof(s.id, f); }} />
                     </label>
                   )}
-                  {s.paymentProofUrl && !s.paymentConfirmedAt && (
-                    <div className="flex items-center gap-1.5 text-[11.5px] text-blue font-semibold mt-2"><Check size={12} /> Comprobante subido, esperando confirmación</div>
+                  {s.paymentProofUrl && (
+                    <div className="flex items-center gap-1.5 text-[11.5px] mt-2">
+                      <a href={s.paymentProofUrl} target="_blank" rel="noreferrer" className="font-semibold text-blue underline">
+                        Ver comprobante{s.paymentProofName ? ` (${s.paymentProofName})` : ""}
+                      </a>
+                      {!s.paymentConfirmedAt && <span className="flex items-center gap-1 text-blue font-semibold"><Check size={12} /> esperando confirmación</span>}
+                    </div>
                   )}
                 </div>
               );

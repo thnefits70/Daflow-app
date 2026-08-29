@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { canCloseMerchandiseReentry, canManageJustUpload, canApproveMerchandiseReentry } from "@/lib/guards";
 import { groupItemsForJustUpload, JUST_UPLOAD_MIN_QTY, isTodayLastBusinessDayOfWeek, lastBusinessDayOfWeek } from "@/lib/merchandiseReentry";
 
-const ITEM_INCLUDE = { catalogItem: { select: { name: true, photos: true } }, damageReason: { select: { name: true } }, batch: { select: { code: true, danielApprovedAt: true } } } as const;
+const ITEM_INCLUDE = { catalogItem: { select: { name: true, photos: true, justCode: true } }, damageReason: { select: { name: true } }, batch: { select: { code: true, danielApprovedAt: true } } } as const;
 
 // Bandeja de Nairoby para lo bueno: "para ingresar a Just" — agrupado por
 // nombre final de producto (ver groupItemsForJustUpload en

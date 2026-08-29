@@ -3,12 +3,13 @@
 import { useEffect, useState } from "react";
 import { OUTFLOW_REASON_LABELS } from "@/lib/merchandiseOutflowLabels";
 import { formatDateTime } from "@/lib/formatDateTime";
+import { CatalogCode } from "@/components/shared/CatalogCode";
 
 type ItemDTO = {
   id: string;
   declaredName: string;
   quantity: number;
-  catalogItem: { name: string } | null;
+  catalogItem: { name: string; justCode: string | null } | null;
   resolution: "SOLVED_ONSITE" | "WRITE_OFF" | "ESCALATED_TO_PURCHASES" | null;
   resolutionNote: string | null;
   resolvedBy: { name: string } | null;
@@ -60,14 +61,17 @@ export function HistoryList() {
           <div className="flex flex-col gap-1 mb-2">
             {batch.items.map((item) => (
               <div key={item.id} className="text-[12.5px] flex items-center justify-between gap-2">
-                <span className="truncate">{itemName(item)}</span>
+                <span className="flex items-center gap-1.5 min-w-0">
+                  {item.catalogItem && <CatalogCode code={item.catalogItem.justCode} />}
+                  <span className="truncate">{itemName(item)}</span>
+                </span>
                 <span className="font-mono text-[11px] text-steel shrink-0">{item.quantity} un.</span>
               </div>
             ))}
           </div>
           <div className="text-[10.5px] text-steel">
             Capturado por {batch.createdBy?.name ?? "—"} · {formatDateTime(batch.submittedAt)}
-            {batch.justWrittenOffAt && batch.justWrittenOffBy && <> · Dado de baja por {batch.justWrittenOffBy.name}</>}
+            {batch.justWrittenOffAt && batch.justWrittenOffBy && <> · Dado de baja por {batch.justWrittenOffBy.name} · {formatDateTime(batch.justWrittenOffAt)}</>}
           </div>
         </div>
       ))}

@@ -148,7 +148,7 @@ export type MerchandiseReentryItemForGrouping = {
   photoUrls: string[];
   correctedName: string | null;
   declaredName: string | null;
-  catalogItem: { name: string } | null;
+  catalogItem: { name: string; justCode: string | null } | null;
   damageReason: { name: string } | null;
   damageReasonOther: string | null;
   batch: { code: string };
@@ -162,10 +162,13 @@ export type MerchandiseReentryItemForGrouping = {
 // se pueden subir de inmediato) quedan arriba, los chicos (que esperan al
 // último día laboral) abajo.
 export function groupItemsForJustUpload(items: MerchandiseReentryItemForGrouping[]) {
-  const groups = new Map<string, { name: string; totalGoodQty: number; earliestAt: Date; itemIds: string[]; breakdown: { id: string; batchCode: string; goodQty: number; createdAt: Date }[] }>();
+  const groups = new Map<
+    string,
+    { name: string; justCode: string | null; totalGoodQty: number; earliestAt: Date; itemIds: string[]; breakdown: { id: string; batchCode: string; goodQty: number; createdAt: Date }[] }
+  >();
   for (const item of items) {
     const name = itemDisplayName(item);
-    const g = groups.get(name) ?? { name, totalGoodQty: 0, earliestAt: item.createdAt, itemIds: [], breakdown: [] };
+    const g = groups.get(name) ?? { name, justCode: item.catalogItem?.justCode ?? null, totalGoodQty: 0, earliestAt: item.createdAt, itemIds: [], breakdown: [] };
     g.totalGoodQty += item.goodQty;
     if (item.createdAt < g.earliestAt) g.earliestAt = item.createdAt;
     g.itemIds.push(item.id);
@@ -178,12 +181,13 @@ export function groupItemsForJustUpload(items: MerchandiseReentryItemForGrouping
 export function groupItemsForWriteOff(items: MerchandiseReentryItemForGrouping[]) {
   const groups = new Map<
     string,
-    { name: string; totalDamagedQty: number; earliestAt: Date; damageReasonLabel: string | null; photoUrl: string | null; itemIds: string[]; breakdown: { id: string; batchCode: string; damagedQty: number; createdAt: Date }[] }
+    { name: string; justCode: string | null; totalDamagedQty: number; earliestAt: Date; damageReasonLabel: string | null; photoUrl: string | null; itemIds: string[]; breakdown: { id: string; batchCode: string; damagedQty: number; createdAt: Date }[] }
   >();
   for (const item of items) {
     const name = itemDisplayName(item);
     const g = groups.get(name) ?? {
       name,
+      justCode: item.catalogItem?.justCode ?? null,
       totalDamagedQty: 0,
       earliestAt: item.createdAt,
       damageReasonLabel: item.damageReason?.name ?? item.damageReasonOther ?? null,

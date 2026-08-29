@@ -2,13 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { CheckCircle2, PackageMinus, TrendingUp } from "lucide-react";
+import { CatalogCode } from "@/components/shared/CatalogCode";
 
 type ItemDTO = {
   id: string;
   declaredName: string;
   quantity: number;
   photoUrls: string[];
-  catalogItem: { name: string; photos: string[] } | null;
+  catalogItem: { name: string; photos: string[]; justCode: string | null } | null;
   damageReason: { name: string } | null;
   damageReasonOther: string | null;
   batch: { code: string; createdAt: string; createdBy: { name: string } | null };
@@ -71,7 +72,10 @@ export function DeteriorResolutionInbox({ canAct }: { canAct: boolean }) {
               <img src={item.photoUrls[0]} alt={itemName(item)} className="w-12 h-12 object-cover rounded border border-rule shrink-0" />
             )}
             <div className="flex-1 min-w-0">
-              <div className="text-[13px] font-semibold truncate">{itemName(item)}</div>
+              <div className="text-[13px] font-semibold flex items-center gap-1.5 min-w-0">
+                {item.catalogItem && <CatalogCode code={item.catalogItem.justCode} />}
+                <span className="truncate">{itemName(item)}</span>
+              </div>
               <div className="text-[11px] text-steel">{item.quantity} un. · {item.damageReason?.name ?? item.damageReasonOther ?? "Sin motivo"}</div>
               <div className="text-[10.5px] text-steel">{item.batch.code} · {item.batch.createdBy?.name ?? "—"}</div>
             </div>

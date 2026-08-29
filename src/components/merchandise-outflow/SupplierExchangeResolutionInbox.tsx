@@ -2,12 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { CheckCircle2, Clock, DollarSign, ExternalLink, XCircle, Wallet, AlertTriangle } from "lucide-react";
+import { formatDateTime } from "@/lib/formatDateTime";
+import { CatalogCode } from "@/components/shared/CatalogCode";
 
 type ItemDTO = {
   id: string;
   declaredName: string;
   quantity: number;
-  catalogItem: { name: string; photos: string[] } | null;
+  catalogItem: { name: string; photos: string[]; justCode: string | null } | null;
   unitCostAtExchange: number | null;
   expectedCreditAmount: number | null;
   resolution: "REPLACED" | "CREDIT_ISSUED" | "REJECTED" | null;
@@ -202,7 +204,10 @@ export function SupplierExchangeResolutionInbox({
                     <img src={item.catalogItem.photos[0]} alt={itemName(item)} className="w-12 h-12 object-cover rounded border border-rule shrink-0" />
                   )}
                   <div className="flex-1 min-w-0">
-                    <div className="text-[13px] font-semibold truncate">{itemName(item)}</div>
+                    <div className="text-[13px] font-semibold flex items-center gap-1.5 min-w-0">
+                      {item.catalogItem && <CatalogCode code={item.catalogItem.justCode} />}
+                      <span className="truncate">{itemName(item)}</span>
+                    </div>
                     <div className="text-[11px] text-steel">{item.quantity} un.</div>
                     {item.expectedCreditAmount !== null ? (
                       <div className="text-[10.5px] text-steel mt-0.5">
@@ -221,12 +226,12 @@ export function SupplierExchangeResolutionInbox({
                     </div>
                   ) : item.resolution === "REPLACED" ? (
                     <div className="flex items-center gap-1.5 text-[11.5px] font-semibold text-green">
-                      <CheckCircle2 size={12} /> El proveedor cambió el producto — resuelto por {item.resolvedBy?.name ?? "—"}
+                      <CheckCircle2 size={12} /> El proveedor cambió el producto — resuelto por {item.resolvedBy?.name ?? "—"}{item.resolvedAt ? ` · ${formatDateTime(item.resolvedAt)}` : ""}
                     </div>
                   ) : item.resolution === "CREDIT_ISSUED" ? (
                     <div className="flex flex-col gap-1">
                       <div className="flex items-center gap-1.5 text-[11.5px] font-semibold text-blue">
-                        <DollarSign size={12} /> Crédito de {item.credit ? money(item.credit.amount) : "—"} — gestionado por {item.resolvedBy?.name ?? "—"}
+                        <DollarSign size={12} /> Crédito de {item.credit ? money(item.credit.amount) : "—"} — gestionado por {item.resolvedBy?.name ?? "—"}{item.resolvedAt ? ` · ${formatDateTime(item.resolvedAt)}` : ""}
                       </div>
                       {item.credit && item.expectedCreditAmount !== null && item.credit.amount !== item.expectedCreditAmount && (
                         <div className="flex items-center gap-1.5 text-[10.5px] font-semibold text-gold" style={{ color: "#D9A441" }}>
@@ -237,7 +242,7 @@ export function SupplierExchangeResolutionInbox({
                   ) : (
                     <div className="flex flex-col gap-1.5">
                       <div className="flex items-center gap-1.5 text-[11.5px] font-semibold text-red">
-                        <XCircle size={12} /> El proveedor rechazó todo — registrado por {item.resolvedBy?.name ?? "—"}
+                        <XCircle size={12} /> El proveedor rechazó todo — registrado por {item.resolvedBy?.name ?? "—"}{item.resolvedAt ? ` · ${formatDateTime(item.resolvedAt)}` : ""}
                       </div>
                       {item.resolutionNote && <div className="text-[11px] text-steel">&quot;{item.resolutionNote}&quot;</div>}
 
@@ -246,7 +251,7 @@ export function SupplierExchangeResolutionInbox({
                           <div className="flex items-start gap-1.5 text-[11px]">
                             <CheckCircle2 size={11} className="text-green shrink-0 mt-0.5" />
                             <div>
-                              <span className="text-green font-semibold">Revisado por {item.adminReviewedBy?.name ?? "—"}</span>
+                              <span className="text-green font-semibold">Revisado por {item.adminReviewedBy?.name ?? "—"}{item.adminReviewedAt ? ` · ${formatDateTime(item.adminReviewedAt)}` : ""}</span>
                               {item.adminReviewNote && <div className="text-steel">&quot;{item.adminReviewNote}&quot;</div>}
                             </div>
                           </div>
@@ -276,7 +281,7 @@ export function SupplierExchangeResolutionInbox({
                       <div className="flex flex-col gap-1 mt-0.5">
                         <div className="flex items-center gap-1.5 text-[11px]">
                           {item.justWriteOffConfirmedAt ? (
-                            <span className="flex items-center gap-1 text-green font-semibold"><CheckCircle2 size={11} /> Baja en Just confirmada por {item.justWriteOffConfirmedBy?.name ?? "—"}</span>
+                            <span className="flex items-center gap-1 text-green font-semibold"><CheckCircle2 size={11} /> Baja en Just confirmada por {item.justWriteOffConfirmedBy?.name ?? "—"}{item.justWriteOffConfirmedAt ? ` · ${formatDateTime(item.justWriteOffConfirmedAt)}` : ""}</span>
                           ) : canConfirmJustWriteOff ? (
                             <button type="button" disabled={confirming === item.id} className="rounded border border-teal bg-teal px-2 py-1 text-[10.5px] font-bold text-navy cursor-pointer disabled:opacity-40" onClick={() => confirmJustWriteOff(item.id)}>
                               Confirmar baja en Just
@@ -287,7 +292,7 @@ export function SupplierExchangeResolutionInbox({
                         </div>
                         <div className="flex items-center gap-1.5 text-[11px]">
                           {item.financeWriteOffAt ? (
-                            <span className="flex items-center gap-1 text-green font-semibold"><CheckCircle2 size={11} /> Baja financiera confirmada por {item.financeWriteOffBy?.name ?? "—"}</span>
+                            <span className="flex items-center gap-1 text-green font-semibold"><CheckCircle2 size={11} /> Baja financiera confirmada por {item.financeWriteOffBy?.name ?? "—"}{item.financeWriteOffAt ? ` · ${formatDateTime(item.financeWriteOffAt)}` : ""}</span>
                           ) : !item.justWriteOffConfirmedAt ? (
                             <span className="text-steel font-semibold">Pendiente — falta que Daniel confirme la baja en Just primero</span>
                           ) : canConfirmFinanceWriteOff ? (

@@ -6,6 +6,7 @@ import { LiveCameraCapture } from "@/components/shared/LiveCameraCapture";
 import { ProductMatchPicker, type MatchCatalogItem, type ProductMatchResult } from "@/components/merchandise-reentry/ProductMatchPicker";
 import { compressImage } from "@/lib/compressImage";
 import { uploadFile } from "@/lib/uploadFile";
+import { CatalogCode } from "@/components/shared/CatalogCode";
 
 type SupplierOption = { id: string; name: string };
 
@@ -13,7 +14,7 @@ type ItemDTO = {
   id: string;
   declaredName: string;
   quantity: number;
-  catalogItem: { name: string; photos: string[] } | null;
+  catalogItem: { name: string; photos: string[]; justCode: string | null } | null;
   unitCostAtExchange: number | null;
   expectedCreditAmount: number | null;
   linkedPurchaseRequest: { requestNumber: number | null; requestedAt: string; requestedBy: { name: string } | null } | null;
@@ -299,7 +300,10 @@ export function SupplierExchangeCapture({ onSent }: { onSent?: () => void }) {
                     <img src={item.catalogItem.photos[0]} alt={itemName(item)} className="w-10 h-10 object-cover rounded border border-rule shrink-0 cursor-zoom-in" onClick={() => setZoomedPhoto(item.catalogItem!.photos[0])} />
                   )}
                   <div className="flex-1 min-w-0 flex items-center justify-between gap-2">
-                    <span className="text-[12.5px] font-semibold truncate">{itemName(item)}</span>
+                    <span className="text-[12.5px] font-semibold flex items-center gap-1.5 min-w-0">
+                      {item.catalogItem && <CatalogCode code={item.catalogItem.justCode} />}
+                      <span className="truncate">{itemName(item)}</span>
+                    </span>
                     <div className="flex items-center gap-2 shrink-0">
                       <span className="font-mono text-[11px] text-steel">{item.quantity} un.</span>
                       <button type="button" className="text-steel hover:text-red cursor-pointer" onClick={() => setConfirmDeleteItemId(item.id)}>
@@ -450,7 +454,10 @@ function AddItemForm({ batchId, onAdded, onCancel }: { batchId: string; onAdded:
               // eslint-disable-next-line @next/next/no-img-element
               <img src={selected.photos[0]} alt={selected.name} className="w-10 h-10 object-cover rounded border border-green/40 shrink-0" />
             )}
-            <div className="flex-1 min-w-0 text-[12.5px] font-semibold truncate">{selected.name}</div>
+            <div className="flex-1 min-w-0 text-[12.5px] font-semibold flex items-center gap-1.5">
+              <CatalogCode code={selected.justCode} />
+              <span className="truncate">{selected.name}</span>
+            </div>
             <button type="button" className="shrink-0 text-[11px] font-semibold text-blue cursor-pointer" onClick={() => setSelected(null)}>Cambiar</button>
           </div>
         ) : manualName ? (

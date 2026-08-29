@@ -15,7 +15,7 @@ export async function GET(_req: NextRequest) {
     where: { isLateClaim: true, reviewedByLeadAt: { not: null }, rejectedAt: null, justConfirmedAt: null },
     orderBy: { reviewedByLeadAt: "asc" },
     include: {
-      request: { select: { catalogItem: { select: { name: true } }, supplier: { select: { name: true } } } },
+      request: { select: { catalogItem: { select: { name: true, justCode: true } }, supplier: { select: { name: true } } } },
     },
   });
   return NextResponse.json(claims);

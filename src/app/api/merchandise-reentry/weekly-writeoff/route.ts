@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { canActOnMerchandiseReentry, canApproveMerchandiseReentry, canCloseMerchandiseReentry } from "@/lib/guards";
 import { getEcuadorWeekBounds, groupItemsForWriteOff, type MerchandiseReentryItemForGrouping } from "@/lib/merchandiseReentry";
 
-const ITEM_INCLUDE = { catalogItem: { select: { name: true } }, damageReason: { select: { name: true } }, batch: { select: { code: true } } } as const;
+const ITEM_INCLUDE = { catalogItem: { select: { name: true, justCode: true } }, damageReason: { select: { name: true } }, batch: { select: { code: true } } } as const;
 
 type BatchWithItems = {
   id: string;

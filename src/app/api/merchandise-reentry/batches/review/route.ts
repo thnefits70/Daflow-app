@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { canApproveMerchandiseReentry } from "@/lib/guards";
 import { itemNeedsReview } from "@/lib/merchandiseReentry";
 
-const ITEM_INCLUDE = { catalogItem: { select: { name: true, photos: true } }, damageReason: { select: { name: true } } } as const;
+const ITEM_INCLUDE = { catalogItem: { select: { name: true, photos: true, justCode: true } }, damageReason: { select: { name: true } } } as const;
 
 // Bandeja de Daniel: lotes ya enviados y todavía no aprobados del todo,
 // separados en "listos" (ningún item necesita revisión) vs "revisión"
