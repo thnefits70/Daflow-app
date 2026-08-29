@@ -247,7 +247,7 @@ export function SupplierExchangeResolutionInbox({
                           <div className="flex items-start gap-1.5 text-[11px]">
                             <CheckCircle2 size={11} className="text-green shrink-0 mt-0.5" />
                             <div>
-                              <span className="text-green font-semibold">Revisado por {item.adminReviewedBy?.name ?? "—"}{item.adminReviewedAt ? ` · ${formatDateTime(item.adminReviewedAt)}` : ""}</span>
+                              <span className="text-green font-semibold">Revisado por {item.adminReviewedBy?.name ?? "Administrador"}{item.adminReviewedAt ? ` · ${formatDateTime(item.adminReviewedAt)}` : ""}</span>
                               {item.adminReviewNote && <div className="text-steel">&quot;{item.adminReviewNote}&quot;</div>}
                             </div>
                           </div>

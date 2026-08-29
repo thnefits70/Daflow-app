@@ -22,9 +22,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (item.resolution !== "REJECTED") return NextResponse.json({ error: "Este ítem no fue rechazado por el proveedor." }, { status: 400 });
   if (item.adminReviewedAt) return NextResponse.json({ error: "Ya quedó revisado." }, { status: 409 });
 
+  // session.user.id es el string literal "admin" cuando se entra por el
+  // login especial de admin (ver auth.ts) — no existe una fila de User con
+  // ese id, así que guardarlo tal cual rompe la foreign key de
+  // adminReviewedById. Mismo patrón que rejectedById/reviewedByLeadId en
+  // late-claims/review/route.ts.
   const updated = await prisma.merchandiseOutflowItem.update({
     where: { id },
-    data: { adminReviewedAt: new Date(), adminReviewedById: session.user.id, adminReviewNote: note || null },
+    data: { adminReviewedAt: new Date(), adminReviewedById: session.user.id === "admin" ? null : session.user.id, adminReviewNote: note || null },
   });
   return NextResponse.json(updated);
 }
