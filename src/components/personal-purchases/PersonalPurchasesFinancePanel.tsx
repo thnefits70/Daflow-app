@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { CatalogCode } from "@/components/shared/CatalogCode";
 
 type Item = {
   id: string;
@@ -10,6 +11,7 @@ type Item = {
   unitPriceModes: string[] | null;
   livePhotoUrl: string;
   optionalPhotoUrl: string | null;
+  confirmedCatalogItem: { justCode: string | null } | null;
 };
 type Order = {
   id: string;
@@ -125,7 +127,10 @@ export function PersonalPurchasesFinancePanel({ isAdmin = false }: { isAdmin?: b
                           />
                         )}
                       </div>
-                      <div className="text-[12.5px] font-semibold">{it.confirmedProductName ?? it.employeeProductName} × {it.quantity}</div>
+                      <div className="text-[12.5px] font-semibold flex items-center gap-1.5">
+                        <CatalogCode code={it.confirmedCatalogItem?.justCode} />
+                        <span>{it.confirmedProductName ?? it.employeeProductName} × {it.quantity}</span>
+                      </div>
                       <div className="text-[10.5px] text-steel-dim mb-1.5">
                         {costCount > 0 && `${costCount} al costo`}{costCount > 0 && dropiCount > 0 && " · "}{dropiCount > 0 && `${dropiCount} Dropi`}
                       </div>

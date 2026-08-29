@@ -5,17 +5,20 @@ import { CheckCircle2, Clock } from "lucide-react";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 
 export type MatchCatalogItem = { id: string; name: string; photos: string[]; justCode: string | null; pendingRegistration: boolean };
-export type ProductMatchResult = { catalogItem: MatchCatalogItem } | { manualName: string };
+// Confirmado 2026-08-29 (pedido explícito del usuario): se quitó "escribir
+// el nombre a mano" — ya no existe una salida sin vincular al catálogo real,
+// así que el resultado SIEMPRE es un producto del catálogo. Si no lo
+// encuentra, la persona reporta el faltante (ver "no encontrado" abajo) en
+// vez de inventar un nombre; el formulario que la contiene se queda sin
+// producto elegido hasta que alguien agregue el producto real.
+export type ProductMatchResult = MatchCatalogItem;
 
 // Compartido entre AddItemForm (agregar producto nuevo al lote), la edición
 // de un producto ya agregado (mientras el lote sigue en borrador) y la
 // re-vinculación de Daniel en Revisión — confirmado 2026-08-23 (pedido
 // explícito del usuario): la vinculación a un producto del catálogo SIEMPRE
 // pasa por una doble confirmación antes de quedar hecha, en los tres
-// lugares, con el mismo comportamiento. Solo escribir el nombre a mano
-// (cuando no hay coincidencia) no pasa por este segundo paso — no hay
-// "producto equivocado" que confirmar, es simplemente lo que la persona
-// escribió.
+// lugares, con el mismo comportamiento.
 export function ProductMatchPicker({
   referencePhotoUrl,
   initialQuery = "",
@@ -35,9 +38,30 @@ export function ProductMatchPicker({
 }) {
   const [catalog, setCatalog] = useState<MatchCatalogItem[] | null>(null);
   const [query, setQuery] = useState(initialQuery);
-  const [manualMode, setManualMode] = useState(false);
-  const [manualName, setManualName] = useState("");
+  const [reporting, setReporting] = useState(false);
+  const [reportNote, setReportNote] = useState("");
+  const [reportSaving, setReportSaving] = useState(false);
+  const [reportError, setReportError] = useState("");
+  const [reported, setReported] = useState(false);
   const [confirming, setConfirming] = useState<MatchCatalogItem | null>(null);
+
+  async function sendMissingReport() {
+    setReportSaving(true);
+    setReportError("");
+    try {
+      const res = await fetch("/api/catalog-missing-reports", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query, note: reportNote.trim() || undefined }),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? "No se pudo enviar el aviso.");
+      setReported(true);
+    } catch (e) {
+      setReportError(e instanceof Error ? e.message : "No se pudo enviar el aviso.");
+    } finally {
+      setReportSaving(false);
+    }
+  }
 
   useEffect(() => {
     fetch(searchUrl)
@@ -77,7 +101,7 @@ export function ProductMatchPicker({
           <span>{confirming.name}</span>
         </div>
         <div className="flex gap-2">
-          <button type="button" className="flex-1 rounded border border-teal bg-teal px-3 py-1.5 text-[12px] font-bold text-navy cursor-pointer" onClick={() => onConfirm({ catalogItem: confirming })}>
+          <button type="button" className="flex-1 rounded border border-teal bg-teal px-3 py-1.5 text-[12px] font-bold text-navy cursor-pointer" onClick={() => onConfirm(confirming)}>
             Sí, es el mismo producto
           </button>
           <button type="button" className="flex-1 rounded border border-rule px-3 py-1.5 text-[12px] font-semibold cursor-pointer" onClick={() => setConfirming(null)}>
@@ -88,27 +112,48 @@ export function ProductMatchPicker({
     );
   }
 
-  if (manualMode) {
+  if (reporting) {
+    if (reported) {
+      return (
+        <div className="bg-cloud rounded-md p-3">
+          <div className="text-[12.5px] font-semibold text-teal mb-1">Le avisamos a quien administra el catálogo.</div>
+          <div className="text-[11.5px] text-steel mb-2">Te contactamos cuando "{query}" esté agregado — mientras tanto no podés continuar con este producto.</div>
+          <button
+            type="button"
+            className="text-[11px] text-blue font-semibold cursor-pointer"
+            onClick={() => {
+              setReporting(false);
+              setReported(false);
+              setReportNote("");
+            }}
+          >
+            Buscar de nuevo
+          </button>
+        </div>
+      );
+    }
     return (
       <div className="bg-cloud rounded-md p-3">
-        <input
-          type="text"
-          autoFocus
-          placeholder="Nombre de referencia (lo más cercano posible)"
-          className="w-full rounded border border-rule bg-surface px-2.5 py-2 text-[12.5px] mb-2"
-          value={manualName}
-          onChange={(e) => setManualName(e.target.value)}
+        <div className="text-[12px] font-semibold mb-1">No encontramos "{query}" en el catálogo</div>
+        <div className="text-[11px] text-steel mb-2">Le avisamos a Daniel/admin para que lo agreguen — no se puede escribir el nombre a mano.</div>
+        <textarea
+          placeholder="Nota opcional (marca, dónde lo viste, etc.)"
+          className="w-full rounded border border-rule bg-surface px-2.5 py-2 text-[12.5px] mb-2 resize-none"
+          rows={2}
+          value={reportNote}
+          onChange={(e) => setReportNote(e.target.value)}
         />
+        {reportError && <div className="text-red text-[11px] mb-1.5">{reportError}</div>}
         <div className="flex gap-1.5 flex-wrap">
           <button
             type="button"
-            disabled={!manualName.trim()}
+            disabled={reportSaving}
             className="rounded border border-teal bg-teal px-3 py-1.5 text-[12px] font-bold text-navy cursor-pointer disabled:opacity-50"
-            onClick={() => onConfirm({ manualName: manualName.trim() })}
+            onClick={sendMissingReport}
           >
-            Usar este nombre
+            {reportSaving ? "Enviando…" : "Avisar que falta"}
           </button>
-          <button type="button" className="text-[11px] text-blue font-semibold cursor-pointer" onClick={() => setManualMode(false)}>
+          <button type="button" className="text-[11px] text-blue font-semibold cursor-pointer" onClick={() => setReporting(false)}>
             Buscar en el catálogo en cambio
           </button>
           {onCancel && (
@@ -158,11 +203,15 @@ export function ProductMatchPicker({
           ))}
         </div>
       )}
-      {words.length > 0 && suggestions.length === 0 && catalog !== null && <div className="text-[11.5px] text-steel mt-1">No se encontró nada con esas palabras.</div>}
+      {words.length > 0 && suggestions.length === 0 && catalog !== null && (
+        <div className="text-[11.5px] text-steel mt-1">No se encontró nada con esas palabras.</div>
+      )}
       <div className="flex gap-1.5 flex-wrap mt-1.5">
-        <button type="button" className="text-[11px] text-blue font-semibold cursor-pointer" onClick={() => setManualMode(true)}>
-          Ninguno de estos — escribir el nombre a mano
-        </button>
+        {words.length > 0 && suggestions.length === 0 && catalog !== null && (
+          <button type="button" className="text-[11px] text-blue font-semibold cursor-pointer" onClick={() => setReporting(true)}>
+            No lo encuentro — avisar que falta
+          </button>
+        )}
         {onCancel && (
           <button type="button" className="text-[11px] text-steel cursor-pointer" onClick={onCancel}>
             Cancelar

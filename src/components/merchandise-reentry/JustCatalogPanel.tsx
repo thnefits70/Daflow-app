@@ -41,6 +41,59 @@ function fmt(iso: string) {
   return new Date(iso).toLocaleString("es-EC", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
+type MissingReportDTO = { id: string; query: string; note: string | null; reportedAt: string; reportedBy: { name: string } };
+
+// Confirmado 2026-08-29: cola de "avisos de producto faltante" que dispara
+// ProductMatchPicker cuando alguien no encuentra un producto (reemplaza
+// "escribir el nombre a mano"). Solo la ve quien administra el catálogo.
+function MissingReportsQueue() {
+  const [reports, setReports] = useState<MissingReportDTO[] | null>(null);
+  const [resolvingId, setResolvingId] = useState<string | null>(null);
+
+  function load() {
+    fetch("/api/catalog-missing-reports")
+      .then((r) => (r.ok ? r.json() : []))
+      .then(setReports)
+      .catch(() => setReports([]));
+  }
+  useEffect(load, []);
+
+  async function resolve(id: string) {
+    setResolvingId(id);
+    await fetch(`/api/catalog-missing-reports/${id}/resolve`, { method: "POST" }).catch(() => null);
+    setResolvingId(null);
+    load();
+  }
+
+  if (!reports || reports.length === 0) return null;
+
+  return (
+    <div className="bg-gold/10 border border-gold/35 rounded-md p-3.5 mb-5">
+      <div className="flex items-center gap-1.5 text-[12px] font-bold mb-2.5" style={{ color: "#D9A441" }}>
+        <AlertTriangle size={14} /> Productos que no encontraron ({reports.length})
+      </div>
+      <div className="flex flex-col gap-1.5">
+        {reports.map((r) => (
+          <div key={r.id} className="flex items-center justify-between gap-2 bg-surface border border-rule rounded-md px-3 py-2">
+            <div className="min-w-0 text-[12px]">
+              <div className="font-semibold truncate">&quot;{r.query}&quot;</div>
+              <div className="text-[10.5px] text-steel">{r.reportedBy.name} · {fmt(r.reportedAt)}{r.note ? ` · ${r.note}` : ""}</div>
+            </div>
+            <button
+              type="button"
+              disabled={resolvingId === r.id}
+              className="shrink-0 text-[11px] font-bold text-teal cursor-pointer disabled:opacity-50"
+              onClick={() => resolve(r.id)}
+            >
+              Ya lo agregué
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function JustCatalogPanel({ canManage }: { canManage: boolean }) {
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<CatalogItemDTO[]>([]);
@@ -237,6 +290,8 @@ export function JustCatalogPanel({ canManage }: { canManage: boolean }) {
 
       {toast && <div className="flex items-center gap-2 text-teal text-[12.5px] bg-teal/10 border border-teal/30 rounded-md px-3 py-2 mb-4"><CheckCircle2 size={14} /> {toast}</div>}
       {err && <div className="text-red text-[12.5px] mb-3">{err}</div>}
+
+      {canManage && <MissingReportsQueue />}
 
       {canManage && phase === "idle" && (
         <label

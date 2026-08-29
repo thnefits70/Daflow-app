@@ -34,7 +34,15 @@ export async function GET() {
       transferProofName: true,
       transferAiMatch: true,
       pickedUpAt: true,
-      items: { select: { employeeProductName: true, confirmedProductName: true, quantity: true } },
+      items: {
+        select: {
+          employeeProductName: true,
+          confirmedProductName: true,
+          quantity: true,
+          catalogItem: { select: { justCode: true } },
+          confirmedCatalogItem: { select: { justCode: true } },
+        },
+      },
     },
     orderBy: { createdAt: "desc" },
   });
@@ -47,6 +55,7 @@ const declarationSchema = z.object({
 });
 const itemSchema = z.object({
   employeeProductName: z.string().trim().min(1),
+  catalogItemId: z.string().min(1),
   quantity: z.number().int().positive(),
   livePhotoUrl: z.string().min(1),
   optionalPhotoUrl: z.string().nullable().optional(),
@@ -85,6 +94,7 @@ export async function POST(req: NextRequest) {
       items: {
         create: parsed.data.items.map((it) => ({
           employeeProductName: it.employeeProductName,
+          catalogItemId: it.catalogItemId,
           quantity: it.quantity,
           livePhotoUrl: it.livePhotoUrl,
           optionalPhotoUrl: it.optionalPhotoUrl,

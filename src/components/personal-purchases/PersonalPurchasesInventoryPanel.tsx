@@ -1,10 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { ProductMatchPicker, type MatchCatalogItem, type ProductMatchResult } from "@/components/merchandise-reentry/ProductMatchPicker";
+import { CatalogCode } from "@/components/shared/CatalogCode";
 
 type Item = {
   id: string;
   employeeProductName: string;
+  catalogItem: MatchCatalogItem | null;
   livePhotoUrl: string;
   optionalPhotoUrl: string | null;
   quantity: number;
@@ -58,7 +61,7 @@ function findDuplicateGap(order: Order, item: Item, orders: Order[]): string | n
 // momento. Ya no hay un segundo paso manual de "aprobar salida".
 export function PersonalPurchasesInventoryPanel() {
   const [orders, setOrders] = useState<Order[] | null>(null);
-  const [names, setNames] = useState<Record<string, string>>({});
+  const [confirmed, setConfirmed] = useState<Record<string, MatchCatalogItem | null>>({});
   const [rejecting, setRejecting] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState("");
   const [busy, setBusy] = useState(false);
@@ -67,9 +70,9 @@ export function PersonalPurchasesInventoryPanel() {
   function load() {
     fetch("/api/personal-purchases/pending-inventory").then((r) => (r.ok ? r.json() : [])).then((rows: Order[]) => {
       setOrders(rows);
-      setNames((prev) => {
+      setConfirmed((prev) => {
         const next = { ...prev };
-        for (const o of rows) for (const it of o.items) if (next[it.id] === undefined) next[it.id] = it.employeeProductName;
+        for (const o of rows) for (const it of o.items) if (next[it.id] === undefined) next[it.id] = it.catalogItem;
         return next;
       });
     });
@@ -81,7 +84,7 @@ export function PersonalPurchasesInventoryPanel() {
     await fetch(`/api/personal-purchases/${order.id}/confirm-inventory`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ items: order.items.map((it) => ({ itemId: it.id, confirmedProductName: (names[it.id] ?? it.employeeProductName).trim() })) }),
+      body: JSON.stringify({ items: order.items.map((it) => ({ itemId: it.id, confirmedCatalogItemId: confirmed[it.id]!.id })) }),
     });
     setBusy(false);
     load();
@@ -109,7 +112,7 @@ export function PersonalPurchasesInventoryPanel() {
       {orders.length === 0 && <div className="border-[1.5px] border-dashed border-rule rounded-md p-6 text-center text-steel text-[13px]">Nada pendiente por ahora.</div>}
       <div className="flex flex-col gap-3">
         {orders.map((o) => {
-          const allNamed = o.items.every((it) => (names[it.id] ?? "").trim().length > 0);
+          const allNamed = o.items.every((it) => !!confirmed[it.id]);
           return (
             <div key={o.id} className="bg-surface border border-rule rounded-md p-3.5">
               <div className="flex items-baseline justify-between mb-2.5">
@@ -142,12 +145,26 @@ export function PersonalPurchasesInventoryPanel() {
                       {dupGap && (
                         <div className="text-[10.5px] font-semibold text-gold mb-1.5">⚠️ Posible duplicado — {o.employee.name} tiene otra solicitud igual hace {dupGap}</div>
                       )}
-                      <input
-                        className="rounded border border-rule bg-cloud px-2 py-1 text-[12.5px] w-full mb-1.5"
-                        placeholder="Nombre según JUST"
-                        value={names[it.id] ?? ""}
-                        onChange={(e) => setNames((n) => ({ ...n, [it.id]: e.target.value }))}
-                      />
+                      {confirmed[it.id] ? (
+                        <div className="flex items-center gap-2 bg-green/10 border border-green/35 rounded-md px-2 py-1.5 mb-1.5">
+                          <div className="flex-1 min-w-0 text-[12.5px] font-semibold flex items-center gap-1.5">
+                            <CatalogCode code={confirmed[it.id]!.justCode} />
+                            <span className="truncate">{confirmed[it.id]!.name}</span>
+                          </div>
+                          <button type="button" className="shrink-0 text-[11px] font-semibold text-blue cursor-pointer" onClick={() => setConfirmed((n) => ({ ...n, [it.id]: null }))}>
+                            Cambiar
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="mb-1.5">
+                          <ProductMatchPicker
+                            referencePhotoUrl={it.livePhotoUrl}
+                            initialQuery={it.employeeProductName}
+                            searchUrl="/api/personal-purchases/catalog-search"
+                            onConfirm={(r: ProductMatchResult) => setConfirmed((n) => ({ ...n, [it.id]: r }))}
+                          />
+                        </div>
+                      )}
                       <div className="text-[10.5px] text-steel-dim">
                         {it.unitDeclarations.map((d, i) => `Unidad ${i + 1}: ${RELATION_LABEL[d.relation]}${d.note ? ` (${d.note})` : ""}`).join(" · ")}
                       </div>

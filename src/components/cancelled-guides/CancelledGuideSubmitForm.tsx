@@ -6,7 +6,7 @@ import { ProductMatchPicker, type MatchCatalogItem, type ProductMatchResult } fr
 import { CARRIER_LABELS, SOURCE_AREA_LABELS, MKT_CANCEL_REASONS, FULFILLMENT_CANCEL_REASONS } from "@/lib/cancelledGuidesLabels";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 
-type Row = { selected: MatchCatalogItem | null; manualName: string; quantity: string };
+type Row = { selected: MatchCatalogItem | null; quantity: string };
 
 async function postJson(url: string, body?: unknown) {
   const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
@@ -21,7 +21,7 @@ export function CancelledGuideSubmitForm({ onSubmitted }: { onSubmitted?: () => 
   const [carrier, setCarrier] = useState("");
   const [reason, setReason] = useState("");
   const [reasonOther, setReasonOther] = useState("");
-  const [rows, setRows] = useState<Row[]>([{ selected: null, manualName: "", quantity: "" }]);
+  const [rows, setRows] = useState<Row[]>([{ selected: null, quantity: "" }]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [sent, setSent] = useState(false);
@@ -29,7 +29,7 @@ export function CancelledGuideSubmitForm({ onSubmitted }: { onSubmitted?: () => 
   const reasonOptions = sourceArea === "FULFILLMENT" ? FULFILLMENT_CANCEL_REASONS : sourceArea ? MKT_CANCEL_REASONS : [];
   const finalReason = reason === "Otro" ? reasonOther.trim() : reason;
 
-  const validRows = rows.filter((r) => (r.selected || r.manualName.trim()) && Number(r.quantity) > 0);
+  const validRows = rows.filter((r) => r.selected && Number(r.quantity) > 0);
   const canSave = !!sourceArea && guideNumber.trim().length > 0 && !!carrier && !!finalReason && validRows.length > 0 && !saving;
 
   function reset() {
@@ -38,7 +38,7 @@ export function CancelledGuideSubmitForm({ onSubmitted }: { onSubmitted?: () => 
     setCarrier("");
     setReason("");
     setReasonOther("");
-    setRows([{ selected: null, manualName: "", quantity: "" }]);
+    setRows([{ selected: null, quantity: "" }]);
     setSent(false);
   }
 
@@ -51,7 +51,7 @@ export function CancelledGuideSubmitForm({ onSubmitted }: { onSubmitted?: () => 
         guideNumber: guideNumber.trim(),
         carrier,
         reason: finalReason,
-        items: validRows.map((r) => ({ catalogItemId: r.selected?.id, declaredName: r.selected ? undefined : r.manualName.trim(), quantity: Number(r.quantity) })),
+        items: validRows.map((r) => ({ catalogItemId: r.selected!.id, quantity: Number(r.quantity) })),
       });
       setSent(true);
       onSubmitted?.();
@@ -141,15 +141,10 @@ export function CancelledGuideSubmitForm({ onSubmitted }: { onSubmitted?: () => 
                   </div>
                   <button type="button" className="text-[11px] font-semibold text-blue cursor-pointer" onClick={() => setRows((rs) => rs.map((r, j) => (j === i ? { ...r, selected: null } : r)))}>Cambiar</button>
                 </div>
-              ) : row.manualName ? (
-                <div className="flex items-center gap-2.5 bg-surface rounded-md p-2 mb-2">
-                  <div className="flex-1 min-w-0 text-[12px] font-medium truncate">{row.manualName}</div>
-                  <button type="button" className="text-[11px] font-semibold text-blue cursor-pointer" onClick={() => setRows((rs) => rs.map((r, j) => (j === i ? { ...r, manualName: "" } : r)))}>Cambiar</button>
-                </div>
               ) : (
                 <ProductMatchPicker
                   referencePhotoUrl={null}
-                  onConfirm={(r: ProductMatchResult) => setRows((rs) => rs.map((row2, j) => (j === i ? ("catalogItem" in r ? { ...row2, selected: r.catalogItem, manualName: "" } : { ...row2, manualName: r.manualName, selected: null }) : row2)))}
+                  onConfirm={(r: ProductMatchResult) => setRows((rs) => rs.map((row2, j) => (j === i ? { ...row2, selected: r } : row2)))}
                 />
               )}
               <div className="flex items-center gap-2">
@@ -159,7 +154,7 @@ export function CancelledGuideSubmitForm({ onSubmitted }: { onSubmitted?: () => 
             </div>
           ))}
         </div>
-        <button type="button" className="flex items-center gap-1.5 text-[11.5px] font-semibold text-blue cursor-pointer mt-1.5" onClick={() => setRows((rs) => [...rs, { selected: null, manualName: "", quantity: "" }])}>
+        <button type="button" className="flex items-center gap-1.5 text-[11.5px] font-semibold text-blue cursor-pointer mt-1.5" onClick={() => setRows((rs) => [...rs, { selected: null, quantity: "" }])}>
           <Plus size={13} /> Agregar otro producto
         </button>
       </div>

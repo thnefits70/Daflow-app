@@ -15,7 +15,6 @@ type SuggestedRow = {
   quantity: number;
   confidence: Confidence;
   selected: MatchCatalogItem | null;
-  manualName: string;
   adding?: boolean;
   added?: boolean;
   sourceCode?: string | null;
@@ -63,7 +62,6 @@ export function DocumentCaptureFlow({ reason, canManageJustCatalog = false }: { 
   const [extracting, setExtracting] = useState(false);
   const [rows, setRows] = useState<SuggestedRow[]>([]);
   const [manualMode, setManualMode] = useState(false);
-  const [manualName, setManualName] = useState("");
   const [manualQty, setManualQty] = useState("");
   const [manualSelected, setManualSelected] = useState<MatchCatalogItem | null>(null);
 
@@ -117,7 +115,6 @@ export function DocumentCaptureFlow({ reason, canManageJustCatalog = false }: { 
             quantity: r.quantity,
             confidence: r.confidence ?? "media",
             selected: r.catalogItem ?? null,
-            manualName: "",
             sourceCode: r.sourceCode ?? null,
             fromCombo: r.fromCombo ?? null,
             comboUnits: r.comboUnits ?? null,
@@ -133,12 +130,11 @@ export function DocumentCaptureFlow({ reason, canManageJustCatalog = false }: { 
 
   async function addRow(index: number) {
     const row = rows[index];
-    if (!batch || (!row.selected && !row.manualName.trim())) return;
+    if (!batch || !row.selected) return;
     setRows((rs) => rs.map((r, i) => (i === index ? { ...r, adding: true } : r)));
     try {
       await postJson(`/api/merchandise-outflow/batches/${batch.id}/items`, {
-        catalogItemId: row.selected?.id,
-        declaredName: row.selected ? undefined : row.manualName.trim(),
+        catalogItemId: row.selected.id,
         quantity: row.quantity,
       });
       setRows((rs) => rs.map((r, i) => (i === index ? { ...r, adding: false, added: true } : r)));
@@ -178,7 +174,6 @@ export function DocumentCaptureFlow({ reason, canManageJustCatalog = false }: { 
         quantity: comp.quantity * row.quantity,
         confidence: row.confidence,
         selected: comp.catalogItem,
-        manualName: "",
         fromCombo: combo.code,
         comboUnits: row.quantity,
       }));
@@ -230,7 +225,6 @@ export function DocumentCaptureFlow({ reason, canManageJustCatalog = false }: { 
         quantity: comp.quantity * units,
         confidence: row.confidence,
         selected: comp.catalogItem,
-        manualName: "",
         fromCombo: code,
         comboUnits: units,
       }));
@@ -249,16 +243,14 @@ export function DocumentCaptureFlow({ reason, canManageJustCatalog = false }: { 
   async function addManual() {
     if (!batch) return;
     const qty = Number(manualQty) || 0;
-    if (qty <= 0 || (!manualSelected && !manualName.trim())) return;
+    if (qty <= 0 || !manualSelected) return;
     setError("");
     try {
       await postJson(`/api/merchandise-outflow/batches/${batch.id}/items`, {
-        catalogItemId: manualSelected?.id,
-        declaredName: manualSelected ? undefined : manualName.trim(),
+        catalogItemId: manualSelected.id,
         quantity: qty,
       });
       setManualMode(false);
-      setManualName("");
       setManualQty("");
       setManualSelected(null);
       loadDraft();
@@ -496,7 +488,7 @@ export function DocumentCaptureFlow({ reason, canManageJustCatalog = false }: { 
           {rows.map((row, i) =>
             row.added ? (
               <div key={i} className="bg-green/10 border border-green/35 rounded-md p-2.5 text-[12px] flex items-center gap-1.5">
-                <Check size={13} className="text-green" /> {row.selected && <CatalogCode code={row.selected.justCode} />} {row.selected?.name ?? row.manualName} — {row.quantity} un. agregado
+                <Check size={13} className="text-green" /> {row.selected && <CatalogCode code={row.selected.justCode} />} {row.selected?.name} — {row.quantity} un. agregado
               </div>
             ) : (
               <div key={i} className="bg-cloud rounded-md p-2.5">
@@ -594,20 +586,11 @@ export function DocumentCaptureFlow({ reason, canManageJustCatalog = false }: { 
                       </button>
                     )}
                   </div>
-                ) : row.manualName ? (
-                  <div className="flex items-center gap-2.5 bg-surface rounded-md p-2 mb-2">
-                    <div className="flex-1 min-w-0 text-[12px] font-medium truncate">{row.manualName}</div>
-                    <button type="button" className="text-[11px] font-semibold text-blue cursor-pointer" onClick={() => setRows((rs) => rs.map((r, j) => (j === i ? { ...r, manualName: "" } : r)))}>
-                      Cambiar
-                    </button>
-                  </div>
                 ) : (
                   <ProductMatchPicker
                     referencePhotoUrl={null}
                     initialQuery={row.name}
-                    onConfirm={(result: ProductMatchResult) =>
-                      setRows((rs) => rs.map((r, j) => (j === i ? ("catalogItem" in result ? { ...r, selected: result.catalogItem, manualName: "" } : { ...r, manualName: result.manualName, selected: null }) : r)))
-                    }
+                    onConfirm={(result: ProductMatchResult) => setRows((rs) => rs.map((r, j) => (j === i ? { ...r, selected: result } : r)))}
                   />
                 )}
                 {row.comboBuilderOpen && (
@@ -645,7 +628,7 @@ export function DocumentCaptureFlow({ reason, canManageJustCatalog = false }: { 
                 </div>
                 <button
                   type="button"
-                  disabled={row.adding || (!row.selected && !row.manualName.trim()) || row.quantity <= 0}
+                  disabled={row.adding || !row.selected || row.quantity <= 0}
                   className="w-full rounded border border-teal bg-teal px-3 py-1.5 text-[12px] font-bold text-navy cursor-pointer disabled:opacity-40"
                   onClick={() => addRow(i)}
                 >
@@ -668,13 +651,8 @@ export function DocumentCaptureFlow({ reason, canManageJustCatalog = false }: { 
               </div>
               <button type="button" className="text-[11px] font-semibold text-blue cursor-pointer" onClick={() => setManualSelected(null)}>Cambiar</button>
             </div>
-          ) : manualName ? (
-            <div className="flex items-center gap-2.5 bg-surface rounded-md p-2 mb-2">
-              <div className="flex-1 min-w-0 text-[12px] font-medium truncate">{manualName}</div>
-              <button type="button" className="text-[11px] font-semibold text-blue cursor-pointer" onClick={() => setManualName("")}>Cambiar</button>
-            </div>
           ) : (
-            <ProductMatchPicker referencePhotoUrl={null} onConfirm={(r) => ("catalogItem" in r ? setManualSelected(r.catalogItem) : setManualName(r.manualName))} onCancel={() => setManualMode(false)} />
+            <ProductMatchPicker referencePhotoUrl={null} onConfirm={(r) => setManualSelected(r)} onCancel={() => setManualMode(false)} />
           )}
           <div className="flex items-center gap-2 mt-2 mb-2">
             <span className="text-[11px] text-steel">Cantidad</span>

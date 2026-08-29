@@ -46,7 +46,6 @@ function statusLabel(s: SaleDTO): { text: string; color: string } {
 export function ExternalSaleDeclareForm() {
   const [sales, setSales] = useState<SaleDTO[] | null>(null);
   const [selected, setSelected] = useState<MatchCatalogItem | null>(null);
-  const [manualName, setManualName] = useState("");
   const [quantity, setQuantity] = useState("");
   const [unitPrice, setUnitPrice] = useState("");
   const [pickupPersonName, setPickupPersonName] = useState("");
@@ -62,23 +61,21 @@ export function ExternalSaleDeclareForm() {
 
   const qty = Number(quantity) || 0;
   const price = Number(unitPrice) || 0;
-  const hasName = !!selected || manualName.trim().length > 0;
-  const canSave = hasName && qty > 0 && price > 0 && pickupPersonName.trim().length > 0 && !saving;
+  const canSave = !!selected && qty > 0 && price > 0 && pickupPersonName.trim().length > 0 && !saving;
 
   async function save() {
+    if (!selected) return;
     setSaving(true);
     setError("");
     try {
       await postJson("/api/external-sales", {
-        catalogItemId: selected?.id,
-        declaredProductName: selected ? undefined : manualName.trim(),
+        catalogItemId: selected.id,
         quantity: qty,
         unitPrice: price,
         pickupPersonName: pickupPersonName.trim(),
         courierNote: courierNote.trim() || undefined,
       });
       setSelected(null);
-      setManualName("");
       setQuantity("");
       setUnitPrice("");
       setPickupPersonName("");
@@ -124,16 +121,11 @@ export function ExternalSaleDeclareForm() {
               </div>
               <button type="button" className="shrink-0 text-[11px] font-semibold text-blue cursor-pointer" onClick={() => setSelected(null)}>Cambiar</button>
             </div>
-          ) : manualName ? (
-            <div className="flex items-center gap-2.5 bg-cloud rounded-md p-2.5">
-              <div className="flex-1 min-w-0 text-[12.5px] font-medium truncate">{manualName}</div>
-              <button type="button" className="shrink-0 text-[11px] font-semibold text-blue cursor-pointer" onClick={() => setManualName("")}>Cambiar</button>
-            </div>
           ) : (
             <ProductMatchPicker
               referencePhotoUrl={null}
               searchUrl="/api/external-sales/catalog-search"
-              onConfirm={(r: ProductMatchResult) => ("catalogItem" in r ? setSelected(r.catalogItem) : setManualName(r.manualName))}
+              onConfirm={(r: ProductMatchResult) => setSelected(r)}
             />
           )}
         </div>

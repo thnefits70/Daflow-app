@@ -7,7 +7,10 @@ export async function GET() {
 
   const orders = await prisma.personalPurchaseOrder.findMany({
     where: { status: "PENDING_FINANCE" },
-    include: { employee: { select: { name: true } }, items: true },
+    include: {
+      employee: { select: { name: true } },
+      items: { include: { confirmedCatalogItem: { select: { justCode: true } } } },
+    },
     orderBy: { createdAt: "asc" },
   });
   return NextResponse.json(orders);

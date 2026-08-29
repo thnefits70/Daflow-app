@@ -418,22 +418,19 @@ export function SupplierExchangeCapture({ onSent }: { onSent?: () => void }) {
 
 function AddItemForm({ batchId, onAdded, onCancel }: { batchId: string; onAdded: () => void; onCancel: () => void }) {
   const [selected, setSelected] = useState<MatchCatalogItem | null>(null);
-  const [manualName, setManualName] = useState("");
   const [quantity, setQuantity] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
   const qty = Number(quantity) || 0;
-  const hasName = !!selected || manualName.trim().length > 0;
-  const canSave = hasName && qty > 0 && !saving;
+  const canSave = !!selected && qty > 0 && !saving;
 
   async function save() {
     setSaving(true);
     setError("");
     try {
       await postJson(`/api/merchandise-outflow/batches/${batchId}/items`, {
-        catalogItemId: selected?.id,
-        declaredName: selected ? undefined : manualName.trim(),
+        catalogItemId: selected!.id,
         quantity: qty,
       });
       onAdded();
@@ -460,16 +457,8 @@ function AddItemForm({ batchId, onAdded, onCancel }: { batchId: string; onAdded:
             </div>
             <button type="button" className="shrink-0 text-[11px] font-semibold text-blue cursor-pointer" onClick={() => setSelected(null)}>Cambiar</button>
           </div>
-        ) : manualName ? (
-          <div className="flex items-center gap-2.5 bg-surface rounded-md p-2.5">
-            <div className="flex-1 min-w-0 text-[12.5px] font-medium truncate">{manualName}</div>
-            <button type="button" className="shrink-0 text-[11px] font-semibold text-blue cursor-pointer" onClick={() => setManualName("")}>Cambiar</button>
-          </div>
         ) : (
-          <ProductMatchPicker referencePhotoUrl={null} onConfirm={(r: ProductMatchResult) => ("catalogItem" in r ? setSelected(r.catalogItem) : setManualName(r.manualName))} />
-        )}
-        {!selected && manualName && (
-          <div className="text-[10.5px] text-steel mt-1">Nombre a mano — no se buscará historial de costo con este proveedor.</div>
+          <ProductMatchPicker referencePhotoUrl={null} onConfirm={(r: ProductMatchResult) => setSelected(r)} />
         )}
       </div>
 

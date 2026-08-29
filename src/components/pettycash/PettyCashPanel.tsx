@@ -756,46 +756,50 @@ function BoxCard({
               Aún no configuran una cuenta de destino para esta caja.
             </div>
           )}
-          <input type="number" step="any" placeholder="Monto que entregas" className="w-full rounded border border-rule bg-cloud px-2.5 py-2 text-[12px] font-mono mb-2" value={fundAmount} onChange={(e) => setFundAmount(e.target.value)} />
-          <input type="text" placeholder="Descripción (opcional)" className="w-full rounded border border-rule bg-cloud px-2.5 py-2 text-[12px] mb-2" value={fundDesc} onChange={(e) => setFundDesc(e.target.value)} />
-          {fundProofUrl ? (
-            <div className="flex items-start gap-2.5 mb-2">
-              <ProofThumb url={fundProofUrl} onZoom={() => setZoomedUrl(fundProofUrl)} />
-              <div className="flex-1 min-w-0 text-[11.5px]">
-                {fundVerifying ? (
-                  <span className="text-steel flex items-center gap-1.5"><span className="w-3 h-3 rounded-full border-2 border-rule border-t-teal animate-spin shrink-0" /> Verificando con IA…</span>
-                ) : fundVerifyResult?.matches ? (
-                  <span className="text-teal flex items-center gap-1"><CheckCircle2 size={13} /> {fundVerifyResult.note}</span>
-                ) : fundVerifyResult ? (
-                  <span className="text-red">{fundVerifyResult.note}</span>
-                ) : (
-                  <span className="text-teal flex items-center gap-1"><CheckCircle2 size={13} /> Evidencia lista — doble clic para ampliar</span>
-                )}
-                <div className="flex items-center gap-2.5 mt-1">
-                  <button type="button" className="text-steel underline cursor-pointer" onClick={() => { setFundProofUrl(null); setFundVerifyResult(null); }}>Cambiar foto</button>
-                  {!fundVerifying && (
-                    <button
-                      type="button"
-                      className="text-steel underline cursor-pointer"
-                      onClick={() => { const n = Number(fundAmount); if (!Number.isNaN(n) && n > 0) verifyProof("recarga", fundProofUrl, n); else setErr("Ingresa el monto antes de verificar."); }}
-                    >
-                      Verificar de nuevo
-                    </button>
-                  )}
+          {!box.blocked && (
+            <>
+              <input type="number" step="any" placeholder="Monto que entregas" className="w-full rounded border border-rule bg-cloud px-2.5 py-2 text-[12px] font-mono mb-2" value={fundAmount} onChange={(e) => setFundAmount(e.target.value)} />
+              <input type="text" placeholder="Descripción (opcional)" className="w-full rounded border border-rule bg-cloud px-2.5 py-2 text-[12px] mb-2" value={fundDesc} onChange={(e) => setFundDesc(e.target.value)} />
+              {fundProofUrl ? (
+                <div className="flex items-start gap-2.5 mb-2">
+                  <ProofThumb url={fundProofUrl} onZoom={() => setZoomedUrl(fundProofUrl)} />
+                  <div className="flex-1 min-w-0 text-[11.5px]">
+                    {fundVerifying ? (
+                      <span className="text-steel flex items-center gap-1.5"><span className="w-3 h-3 rounded-full border-2 border-rule border-t-teal animate-spin shrink-0" /> Verificando con IA…</span>
+                    ) : fundVerifyResult?.matches ? (
+                      <span className="text-teal flex items-center gap-1"><CheckCircle2 size={13} /> {fundVerifyResult.note}</span>
+                    ) : fundVerifyResult ? (
+                      <span className="text-red">{fundVerifyResult.note}</span>
+                    ) : (
+                      <span className="text-teal flex items-center gap-1"><CheckCircle2 size={13} /> Evidencia lista — doble clic para ampliar</span>
+                    )}
+                    <div className="flex items-center gap-2.5 mt-1">
+                      <button type="button" className="text-steel underline cursor-pointer" onClick={() => { setFundProofUrl(null); setFundVerifyResult(null); }}>Cambiar foto</button>
+                      {!fundVerifying && (
+                        <button
+                          type="button"
+                          className="text-steel underline cursor-pointer"
+                          onClick={() => { const n = Number(fundAmount); if (!Number.isNaN(n) && n > 0) verifyProof("recarga", fundProofUrl, n); else setErr("Ingresa el monto antes de verificar."); }}
+                        >
+                          Verificar de nuevo
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
-          ) : (
-            <div className="mb-2">{fundUploading ? <div className="text-[11.5px] text-steel">Subiendo…</div> : <UploadBox label="📷 Evidencia de entrega/retiro" folder="petty-cash" onFile={(f) => doUpload(f, "recarga")} onCaptured={(url) => applyProof("recarga", url)} />}</div>
+              ) : (
+                <div className="mb-2">{fundUploading ? <div className="text-[11.5px] text-steel">Subiendo…</div> : <UploadBox label="📷 Evidencia de entrega/retiro" folder="petty-cash" onFile={(f) => doUpload(f, "recarga")} onCaptured={(url) => applyProof("recarga", url)} />}</div>
+              )}
+              <button
+                type="button"
+                disabled={busy || fundVerifying || (!!fundProofUrl && fundVerifyResult?.matches === false)}
+                className="rounded border border-blue text-blue px-3.5 py-2 text-[12.5px] font-semibold cursor-pointer disabled:opacity-60"
+                onClick={submitFund}
+              >
+                Enviar — queda pendiente que confirmen
+              </button>
+            </>
           )}
-          <button
-            type="button"
-            disabled={busy || fundVerifying || box.blocked || (!!fundProofUrl && fundVerifyResult?.matches === false)}
-            className="rounded border border-blue text-blue px-3.5 py-2 text-[12.5px] font-semibold cursor-pointer disabled:opacity-60"
-            onClick={submitFund}
-          >
-            Enviar — queda pendiente que confirmen
-          </button>
         </div>
       )}
 

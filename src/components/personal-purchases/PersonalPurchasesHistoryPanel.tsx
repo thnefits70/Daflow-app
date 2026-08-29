@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { formatDateTime } from "@/lib/formatDateTime";
+import { CatalogCode } from "@/components/shared/CatalogCode";
 
 type Item = {
   id: string;
@@ -11,6 +12,7 @@ type Item = {
   costUnitPrice: number | null;
   dropiUnitPrice: number | null;
   itemTotal: number | null;
+  confirmedCatalogItem: { justCode: string | null } | null;
 };
 type Order = {
   id: string;
@@ -96,7 +98,10 @@ export function PersonalPurchasesHistoryPanel() {
                 <div className="flex flex-col gap-1">
                   {o.items.map((it) => (
                     <div key={it.id} className="flex items-center justify-between text-[12px]">
-                      <span>{it.confirmedProductName ?? it.employeeProductName} × {it.quantity}</span>
+                      <span className="flex items-center gap-1.5">
+                        <CatalogCode code={it.confirmedCatalogItem?.justCode} />
+                        <span>{it.confirmedProductName ?? it.employeeProductName} × {it.quantity}</span>
+                      </span>
                       <span className="text-steel-dim tabular-nums">
                         {it.costUnitPrice ? `${money(it.costUnitPrice)} costo` : ""}
                         {it.costUnitPrice && it.dropiUnitPrice ? " · " : ""}

@@ -8,11 +8,14 @@ import { ProductMatchPicker, type ProductMatchResult } from "@/components/mercha
 import { usePasteFile } from "@/lib/usePasteFile";
 import { uploadFile } from "@/lib/uploadFile";
 import { formatDateTime } from "@/lib/formatDateTime";
+import { CatalogCode } from "@/components/shared/CatalogCode";
 
 type BuyerRelation = "SELF" | "MINOR_CHILD" | "OTHER_FAMILY";
 type Declaration = { relation: BuyerRelation; note?: string };
 type DraftItem = {
   employeeProductName: string;
+  catalogItemId: string | null;
+  catalogItemJustCode: string | null;
   quantity: number;
   livePhotoUrl: string | null;
   optionalPhotoUrl: string | null;
@@ -33,7 +36,7 @@ type OrderHistory = {
   transferProofName: string | null;
   transferAiMatch: boolean | null;
   pickedUpAt: string | null;
-  items: { employeeProductName: string; confirmedProductName: string | null; quantity: number }[];
+  items: { employeeProductName: string; confirmedProductName: string | null; quantity: number; catalogItem: { justCode: string | null } | null; confirmedCatalogItem: { justCode: string | null } | null }[];
 };
 
 type CompanyBankAccount = {
@@ -71,7 +74,7 @@ const RELATION_OPTIONS: [BuyerRelation, string][] = [
 ];
 
 function emptyDraft(): DraftItem {
-  return { employeeProductName: "", quantity: 1, livePhotoUrl: null, optionalPhotoUrl: null, unitDeclarations: [{ relation: "SELF" }] };
+  return { employeeProductName: "", catalogItemId: null, catalogItemJustCode: null, quantity: 1, livePhotoUrl: null, optionalPhotoUrl: null, unitDeclarations: [{ relation: "SELF" }] };
 }
 
 // Confirmado 2026-08-19: pedido explícito del usuario tras probarlo real —
@@ -310,7 +313,10 @@ export function PersonalPurchasesPanel() {
           <div className="flex flex-col gap-1.5 mb-3.5">
             {cart.map((it, idx) => (
               <div key={idx} className="flex items-center gap-2 text-[12.5px] bg-cloud border border-rule rounded-md px-3 py-2">
-                <span className="flex-1">{it.employeeProductName} × {it.quantity}</span>
+                <span className="flex-1 flex items-center gap-1.5">
+                  <CatalogCode code={it.catalogItemJustCode} />
+                  <span>{it.employeeProductName} × {it.quantity}</span>
+                </span>
                 <button type="button" className="text-steel-dim cursor-pointer" onClick={() => removeFromCart(idx)}>
                   <X size={13} />
                 </button>
@@ -324,11 +330,14 @@ export function PersonalPurchasesPanel() {
             <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Producto</label>
             {draft.employeeProductName ? (
               <div className="flex items-center gap-2.5 bg-cloud border border-rule rounded-md px-2.5 py-2">
-                <span className="flex-1 min-w-0 text-[13px] font-medium truncate">{draft.employeeProductName}</span>
+                <span className="flex-1 min-w-0 text-[13px] font-medium flex items-center gap-1.5">
+                  <CatalogCode code={draft.catalogItemJustCode} />
+                  <span className="truncate">{draft.employeeProductName}</span>
+                </span>
                 <button
                   type="button"
                   className="text-[11px] font-semibold text-blue cursor-pointer shrink-0"
-                  onClick={() => setDraft((d) => ({ ...d, employeeProductName: "" }))}
+                  onClick={() => setDraft((d) => ({ ...d, employeeProductName: "", catalogItemId: null, catalogItemJustCode: null }))}
                 >
                   Cambiar
                 </button>
@@ -337,9 +346,7 @@ export function PersonalPurchasesPanel() {
               <ProductMatchPicker
                 referencePhotoUrl={draft.livePhotoUrl}
                 searchUrl="/api/personal-purchases/catalog-search"
-                onConfirm={(r: ProductMatchResult) =>
-                  setDraft((d) => ({ ...d, employeeProductName: "catalogItem" in r ? r.catalogItem.name : r.manualName }))
-                }
+                onConfirm={(r: ProductMatchResult) => setDraft((d) => ({ ...d, employeeProductName: r.name, catalogItemId: r.id, catalogItemJustCode: r.justCode }))}
               />
             )}
           </div>

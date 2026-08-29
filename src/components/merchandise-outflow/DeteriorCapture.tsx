@@ -22,7 +22,6 @@ export function DeteriorCapture({ onReported }: { onReported?: () => void }) {
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [taking, setTaking] = useState(false);
   const [selected, setSelected] = useState<MatchCatalogItem | null>(null);
-  const [manualName, setManualName] = useState("");
   const [quantity, setQuantity] = useState("");
   const [damageReason, setDamageReason] = useState("");
   const [damageReasonOther, setDamageReasonOther] = useState("");
@@ -34,7 +33,6 @@ export function DeteriorCapture({ onReported }: { onReported?: () => void }) {
   function reset() {
     setPhotoUrl(null);
     setSelected(null);
-    setManualName("");
     setQuantity("");
     setDamageReason("");
     setDamageReasonOther("");
@@ -43,20 +41,18 @@ export function DeteriorCapture({ onReported }: { onReported?: () => void }) {
   }
 
   const qty = Number(quantity) || 0;
-  const hasName = !!selected || manualName.trim().length > 0;
   const hasReason = !!damageReason && (damageReason !== "Otro" || damageReasonOther.trim().length > 0);
-  const canSave = !!photoUrl && hasName && qty > 0 && hasReason && !saving;
-  const finalName = selected ? selected.name : manualName.trim();
+  const canSave = !!photoUrl && !!selected && qty > 0 && hasReason && !saving;
+  const finalName = selected?.name ?? "";
 
   async function save() {
-    if (!photoUrl) return;
+    if (!photoUrl || !selected) return;
     setSaving(true);
     setError("");
     try {
       await postJson("/api/merchandise-outflow/deterioro", {
         photoUrl,
-        catalogItemId: selected?.id,
-        declaredName: selected ? undefined : manualName.trim(),
+        catalogItemId: selected.id,
         quantity: qty,
         damageReasonName: damageReason,
         damageReasonOther: damageReason === "Otro" ? damageReasonOther.trim() : undefined,
@@ -139,13 +135,8 @@ export function DeteriorCapture({ onReported }: { onReported?: () => void }) {
               </div>
               <button type="button" className="shrink-0 text-[11px] font-semibold text-blue cursor-pointer" onClick={() => setSelected(null)}>Cambiar</button>
             </div>
-          ) : manualName ? (
-            <div className="flex items-center gap-2.5 bg-cloud rounded-md p-2.5">
-              <div className="flex-1 min-w-0 text-[12.5px] font-medium truncate">{manualName}</div>
-              <button type="button" className="shrink-0 text-[11px] font-semibold text-blue cursor-pointer" onClick={() => setManualName("")}>Cambiar</button>
-            </div>
           ) : (
-            <ProductMatchPicker referencePhotoUrl={photoUrl} onConfirm={(r: ProductMatchResult) => ("catalogItem" in r ? setSelected(r.catalogItem) : setManualName(r.manualName))} />
+            <ProductMatchPicker referencePhotoUrl={photoUrl} onConfirm={(r: ProductMatchResult) => setSelected(r)} />
           )}
         </div>
       )}

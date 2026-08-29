@@ -280,10 +280,7 @@ function ReviewItemRow({ item, canAct, onChanged, onExpandPhoto }: { item: ItemD
     setBusy(true);
     setError("");
     try {
-      await postJson(
-        `/api/merchandise-reentry/items/${item.id}/relink`,
-        "catalogItem" in result ? { catalogItemId: result.catalogItem.id } : { manualName: result.manualName }
-      );
+      await postJson(`/api/merchandise-reentry/items/${item.id}/relink`, { catalogItemId: result.id });
       setEditingProduct(false);
       onChanged();
     } catch (e) {

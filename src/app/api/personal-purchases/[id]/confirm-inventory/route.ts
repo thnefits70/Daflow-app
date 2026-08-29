@@ -10,7 +10,7 @@ import { actorName } from "@/lib/actorName";
 import { createOutflowForPersonalPurchaseItem, notifyInventoryLeadOutflowPending } from "@/lib/merchandiseOutflow";
 
 const schema = z.object({
-  items: z.array(z.object({ itemId: z.string().min(1), confirmedProductName: z.string().trim().min(1) })).min(1),
+  items: z.array(z.object({ itemId: z.string().min(1), confirmedCatalogItemId: z.string().min(1) })).min(1),
 });
 
 // Confirmado 2026-08-20 (revertido el mismo día): la confirmación de Daniel
@@ -36,18 +36,28 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (!order) return NextResponse.json({ error: "No encontrado." }, { status: 404 });
   if (order.status !== "PENDING_INVENTORY") return NextResponse.json({ error: "Ya fue procesado." }, { status: 409 });
 
-  const nameById = new Map(parsed.data.items.map((i) => [i.itemId, i.confirmedProductName]));
+  const catalogItemIdById = new Map(parsed.data.items.map((i) => [i.itemId, i.confirmedCatalogItemId]));
   for (const it of order.items) {
-    if (!nameById.has(it.id)) return NextResponse.json({ error: "Falta confirmar el nombre de todos los productos." }, { status: 400 });
+    if (!catalogItemIdById.has(it.id)) return NextResponse.json({ error: "Falta confirmar el producto de todos los ítems." }, { status: 400 });
   }
 
+  const catalogItems = await prisma.purchaseCatalogItem.findMany({
+    where: { id: { in: [...new Set(parsed.data.items.map((i) => i.confirmedCatalogItemId))] } },
+    select: { id: true, name: true },
+  });
+  const catalogNameById = new Map(catalogItems.map((c) => [c.id, c.name]));
+
+  const nameById = new Map<string, string>();
   for (const it of order.items) {
-    const confirmedProductName = nameById.get(it.id)!;
+    const catalogItemId = catalogItemIdById.get(it.id)!;
+    const confirmedProductName = catalogNameById.get(catalogItemId);
+    if (!confirmedProductName) return NextResponse.json({ error: "Producto de catálogo no encontrado." }, { status: 400 });
+    nameById.set(it.id, confirmedProductName);
     const declarations = (Array.isArray(it.unitDeclarations) ? it.unitDeclarations : []) as unknown as UnitDeclaration[];
     const unitPriceModes = await computeUnitPriceModes(order.employeeId, confirmedProductName, it.quantity, declarations);
     await prisma.personalPurchaseItem.update({
       where: { id: it.id },
-      data: { confirmedProductName, unitPriceModes },
+      data: { confirmedProductName, confirmedCatalogItemId: catalogItemId, unitPriceModes },
     });
   }
 
@@ -69,7 +79,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // solo a la cola de "dar de baja en Just", sin que nadie lo vuelva a
   // registrar a mano en otro lugar.
   for (const it of order.items) {
-    await createOutflowForPersonalPurchaseItem({ itemId: it.id, productName: nameById.get(it.id)!, quantity: it.quantity }).catch(() => null);
+    await createOutflowForPersonalPurchaseItem({ itemId: it.id, productName: nameById.get(it.id)!, catalogItemId: catalogItemIdById.get(it.id), quantity: it.quantity }).catch(() => null);
   }
   await notifyInventoryLeadOutflowPending({ code: `compras personales · ${order.employee.name}`, reason: "COMPRA_PERSONAL" });
 

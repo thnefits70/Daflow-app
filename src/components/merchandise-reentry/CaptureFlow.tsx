@@ -103,7 +103,7 @@ export function CaptureFlow() {
   async function relinkItem(itemId: string, result: ProductMatchResult) {
     setRelinkError("");
     try {
-      await postJson(`/api/merchandise-reentry/items/${itemId}/relink`, "catalogItem" in result ? { catalogItemId: result.catalogItem.id } : { manualName: result.manualName });
+      await postJson(`/api/merchandise-reentry/items/${itemId}/relink`, { catalogItemId: result.id });
       setEditingItemId(null);
       loadDraft();
     } catch (e) {
@@ -328,7 +328,6 @@ function AddItemForm({ batchId, onAdded, onCancel }: { batchId: string; onAdded:
   const [taking2, setTaking2] = useState(false);
 
   const [selected, setSelected] = useState<MatchCatalogItem | null>(null);
-  const [manualName, setManualName] = useState("");
 
   const [goodQty, setGoodQty] = useState("");
   const [damagedQty, setDamagedQty] = useState("");
@@ -350,37 +349,29 @@ function AddItemForm({ batchId, onAdded, onCancel }: { batchId: string; onAdded:
   }
 
   function onMatchConfirmed(result: ProductMatchResult) {
-    if ("catalogItem" in result) {
-      setSelected(result.catalogItem);
-      setManualName("");
-    } else {
-      setManualName(result.manualName);
-      setSelected(null);
-    }
+    setSelected(result);
   }
 
   const dQty = Number(damagedQty) || 0;
   const gQty = Number(goodQty) || 0;
-  const hasName = !!selected || manualName.trim().length > 0;
   const hasDamageReason = dQty === 0 || !!damageReason;
-  const canSave = !!photoUrl && hasName && gQty + dQty > 0 && hasDamageReason && !saving;
-  const finalName = selected ? selected.name : manualName.trim();
+  const canSave = !!photoUrl && !!selected && gQty + dQty > 0 && hasDamageReason && !saving;
+  const finalName = selected?.name ?? "";
   const finalDamageReason = dQty > 0 ? (damageReason === "Otro" ? damageReasonOther.trim() || "Otro (sin describir)" : damageReason) : null;
 
   async function save() {
     // Guard con ref (no solo state) porque un doble-tap táctil dispara dos
     // onClick antes de que React re-renderice el botón con disabled=true,
     // creando dos POST y un producto duplicado en el lote.
-    if (!photoUrl || savingRef.current) return;
+    if (!photoUrl || !selected || savingRef.current) return;
     savingRef.current = true;
     setSaving(true);
     setError("");
     try {
       await postJson(`/api/merchandise-reentry/batches/${batchId}/items`, {
         photoUrls: photoUrl2 ? [photoUrl, photoUrl2] : [photoUrl],
-        catalogItemId: selected ? selected.id : undefined,
-        aiRecognized: !!selected,
-        declaredName: selected ? undefined : manualName.trim(),
+        catalogItemId: selected.id,
+        aiRecognized: true,
         goodQty: gQty,
         damagedQty: dQty,
         damageReasonName: dQty > 0 ? damageReason : undefined,
@@ -516,13 +507,6 @@ function AddItemForm({ batchId, onAdded, onCancel }: { batchId: string; onAdded:
                   Cambiar
                 </button>
               </div>
-            </div>
-          ) : manualName ? (
-            <div className="flex items-center gap-2.5 bg-cloud rounded-md p-2.5">
-              <div className="flex-1 min-w-0 text-[12.5px] font-medium truncate">{manualName}</div>
-              <button type="button" className="shrink-0 text-[11px] font-semibold text-blue cursor-pointer" onClick={() => setManualName("")}>
-                Cambiar
-              </button>
             </div>
           ) : (
             <ProductMatchPicker referencePhotoUrl={photoUrl} onConfirm={onMatchConfirmed} />

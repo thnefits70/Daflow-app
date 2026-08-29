@@ -46,7 +46,7 @@ export function outflowItemDisplayName(item: { declaredName: string; catalogItem
 // crea solo este batch, ya "submitted", sin que nadie lo vuelva a capturar a
 // mano. Un batch por ítem (no por orden completa), porque cada producto de
 // la orden puede tener su propia cantidad/nombre confirmado.
-export async function createOutflowForPersonalPurchaseItem(params: { itemId: string; productName: string; quantity: number }): Promise<void> {
+export async function createOutflowForPersonalPurchaseItem(params: { itemId: string; productName: string; catalogItemId?: string | null; quantity: number }): Promise<void> {
   const batchNumber = await nextMerchandiseOutflowNumber();
   await prisma.merchandiseOutflowBatch.create({
     data: {
@@ -55,7 +55,7 @@ export async function createOutflowForPersonalPurchaseItem(params: { itemId: str
       reason: "COMPRA_PERSONAL",
       submittedAt: new Date(),
       personalPurchaseItemId: params.itemId,
-      items: { create: [{ declaredName: params.productName, quantity: params.quantity }] },
+      items: { create: [{ catalogItemId: params.catalogItemId ?? undefined, declaredName: params.productName, quantity: params.quantity }] },
     },
   });
 }

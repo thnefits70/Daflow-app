@@ -4,12 +4,13 @@ import { useEffect, useState } from "react";
 import { PackageMinus } from "lucide-react";
 import { OUTFLOW_REASON_LABELS } from "@/lib/merchandiseOutflowLabels";
 import { formatDateTime } from "@/lib/formatDateTime";
+import { CatalogCode } from "@/components/shared/CatalogCode";
 
 type ItemDTO = {
   id: string;
   declaredName: string;
   quantity: number;
-  catalogItem: { name: string; photos: string[] } | null;
+  catalogItem: { name: string; photos: string[]; justCode: string | null } | null;
   damageReason: { name: string } | null;
   damageReasonOther: string | null;
 };
@@ -75,7 +76,10 @@ export function WriteOffQueue({ canAct }: { canAct: boolean }) {
           <div className="flex flex-col gap-1 mb-2.5">
             {batch.items.map((item) => (
               <div key={item.id} className="text-[12.5px] flex items-center justify-between gap-2">
-                <span className="truncate">{itemName(item)}</span>
+                <span className="flex items-center gap-1.5 min-w-0">
+                  {item.catalogItem && <CatalogCode code={item.catalogItem.justCode} />}
+                  <span className="truncate">{itemName(item)}</span>
+                </span>
                 <span className="font-mono text-[11px] text-steel shrink-0">{item.quantity} un.</span>
               </div>
             ))}

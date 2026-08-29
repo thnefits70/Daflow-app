@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { ProofPreview } from "@/components/shared/ProofPreview";
+import { CatalogCode } from "@/components/shared/CatalogCode";
 
 type ConfirmOrder = {
   id: string;
@@ -18,7 +19,7 @@ type CloseOrder = {
   totalAmount: number | null;
   transferProofUrl: string | null;
   transferProofName: string | null;
-  items: { confirmedProductName: string | null; employeeProductName: string; quantity: number }[];
+  items: { confirmedProductName: string | null; employeeProductName: string; quantity: number; confirmedCatalogItem: { justCode: string | null } | null }[];
 };
 
 function money(n: number | null) {
@@ -133,7 +134,8 @@ export function PersonalPurchasesTransferPanel({ isAdmin }: { isAdmin: boolean }
                 </div>
                 <div className="text-[11.5px] text-steel-dim mb-2">
                   {o.items.map((it, i) => (
-                    <span key={i}>
+                    <span key={i} className="inline-flex items-center gap-1">
+                      <CatalogCode code={it.confirmedCatalogItem?.justCode} />
                       {it.confirmedProductName ?? it.employeeProductName} × {it.quantity}
                       {i < o.items.length - 1 ? " · " : ""}
                     </span>
