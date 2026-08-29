@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, Pencil, Archive, RotateCcw, Upload, Camera } from "lucide-react";
+import { CheckCircle2, Pencil, Archive, RotateCcw, Upload, Camera, ChevronDown } from "lucide-react";
 import { usePasteFile } from "@/lib/usePasteFile";
 import { uploadFile } from "@/lib/uploadFile";
 import { ProofPreview } from "@/components/shared/ProofPreview";
@@ -231,6 +231,10 @@ function BoxCard({
   const [proofVerifying, setProofVerifying] = useState(false);
   const [proofVerifyResult, setProofVerifyResult] = useState<{ matches: boolean; readAmount: number | null; note: string } | null>(null);
 
+  // Pedido explícito del usuario 2026-08-29: la cuenta y el formulario de
+  // fondeo estaban hasta el fondo de la tarjeta — admin tenía que bajar todo
+  // el historial para llegar. Ahora vive arriba, colapsado por defecto.
+  const [fundOpen, setFundOpen] = useState(false);
   const [fundAmount, setFundAmount] = useState("");
   const [fundDesc, setFundDesc] = useState("");
   const [fundProofUrl, setFundProofUrl] = useState<string | null>(null);
@@ -487,6 +491,85 @@ function BoxCard({
         </div>
       )}
 
+      {canFund && isAdmin && (
+        <div className="mt-3">
+          <button
+            type="button"
+            className="w-full flex items-center justify-between rounded-md border border-rule bg-cloud px-3 py-2 text-[12px] font-semibold cursor-pointer hover:border-teal"
+            onClick={() => setFundOpen((v) => !v)}
+          >
+            <span>💸 Fondear esta caja{box.blocked && <span className="ml-1.5 font-mono text-[10px] uppercase text-red">· pendiente de confirmar</span>}</span>
+            <ChevronDown size={14} className={`transition-transform ${fundOpen ? "rotate-180" : ""}`} />
+          </button>
+          {fundOpen && (
+            <div className="mt-2.5 rounded-md border border-rule p-3">
+              {box.blocked && (
+                <div className="mb-2.5 text-[11.5px] text-red bg-red/10 border border-red/30 rounded-md px-2.5 py-1.5">
+                  🔒 Ya hay un fondeo pendiente de confirmar — espera a que lo acepten antes de enviar otro.
+                </div>
+              )}
+              {acc ? (
+                <div className="mb-2.5 text-[11.5px] bg-teal/10 border border-teal/30 rounded-md px-2.5 py-1.5 leading-relaxed">
+                  <div className="font-semibold">🏦 Transferir a:</div>
+                  <div>{acc.bankName} — {acc.bankAccountType} — {acc.bankAccountNumber}</div>
+                  <div>{acc.bankAccountHolder}{acc.holderIdNumber && <> — {acc.holderIdType === "RUC" ? "RUC" : "Cédula"} {acc.holderIdNumber}</>}</div>
+                  {acc.email && <div>Correo: {acc.email}</div>}
+                  {acc.phone && <div>Celular: {acc.phone}</div>}
+                </div>
+              ) : (
+                <div className="mb-2.5 text-[11.5px] text-steel bg-cloud rounded-md px-2.5 py-1.5">
+                  Aún no configuran una cuenta de destino para esta caja.
+                </div>
+              )}
+              {!box.blocked && (
+                <>
+                  <input type="number" step="any" placeholder="Monto que entregas" className="w-full rounded border border-rule bg-cloud px-2.5 py-2 text-[12px] font-mono mb-2" value={fundAmount} onChange={(e) => setFundAmount(e.target.value)} />
+                  <input type="text" placeholder="Descripción (opcional)" className="w-full rounded border border-rule bg-cloud px-2.5 py-2 text-[12px] mb-2" value={fundDesc} onChange={(e) => setFundDesc(e.target.value)} />
+                  {fundProofUrl ? (
+                    <div className="flex items-start gap-2.5 mb-2">
+                      <ProofThumb url={fundProofUrl} onZoom={() => setZoomedUrl(fundProofUrl)} />
+                      <div className="flex-1 min-w-0 text-[11.5px]">
+                        {fundVerifying ? (
+                          <span className="text-steel flex items-center gap-1.5"><span className="w-3 h-3 rounded-full border-2 border-rule border-t-teal animate-spin shrink-0" /> Verificando con IA…</span>
+                        ) : fundVerifyResult?.matches ? (
+                          <span className="text-teal flex items-center gap-1"><CheckCircle2 size={13} /> {fundVerifyResult.note}</span>
+                        ) : fundVerifyResult ? (
+                          <span className="text-red">{fundVerifyResult.note}</span>
+                        ) : (
+                          <span className="text-teal flex items-center gap-1"><CheckCircle2 size={13} /> Evidencia lista — doble clic para ampliar</span>
+                        )}
+                        <div className="flex items-center gap-2.5 mt-1">
+                          <button type="button" className="text-steel underline cursor-pointer" onClick={() => { setFundProofUrl(null); setFundVerifyResult(null); }}>Cambiar foto</button>
+                          {!fundVerifying && (
+                            <button
+                              type="button"
+                              className="text-steel underline cursor-pointer"
+                              onClick={() => { const n = Number(fundAmount); if (!Number.isNaN(n) && n > 0) verifyProof("recarga", fundProofUrl, n); else setErr("Ingresa el monto antes de verificar."); }}
+                            >
+                              Verificar de nuevo
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="mb-2">{fundUploading ? <div className="text-[11.5px] text-steel">Subiendo…</div> : <UploadBox label="📷 Evidencia de entrega/retiro" folder="petty-cash" onFile={(f) => doUpload(f, "recarga")} onCaptured={(url) => applyProof("recarga", url)} />}</div>
+                  )}
+                  <button
+                    type="button"
+                    disabled={busy || fundVerifying || (!!fundProofUrl && fundVerifyResult?.matches === false)}
+                    className="rounded border border-blue text-blue px-3.5 py-2 text-[12.5px] font-semibold cursor-pointer disabled:opacity-60"
+                    onClick={submitFund}
+                  >
+                    Enviar — queda pendiente que confirmen
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       {myPending && canOperate && (
         <div className="mt-3 bg-blue/10 border border-blue/30 rounded-md p-3">
           <div className="text-[12px] font-semibold mb-1">📥 Te fondearon la caja — confírmalo</div>
@@ -731,74 +814,6 @@ function BoxCard({
                 Enviar excepción al dueño
               </button>
             </div>
-          )}
-        </div>
-      )}
-
-      {canFund && isAdmin && (
-        <div className="mt-4 pt-3.5 border-t border-dashed border-rule">
-          <div className="text-[12px] font-semibold mb-2">💸 Fondear esta caja</div>
-          {box.blocked && (
-            <div className="mb-2.5 text-[11.5px] text-red bg-red/10 border border-red/30 rounded-md px-2.5 py-1.5">
-              🔒 Ya hay un fondeo pendiente de confirmar — espera a que lo acepten antes de enviar otro.
-            </div>
-          )}
-          {acc ? (
-            <div className="mb-2.5 text-[11.5px] bg-teal/10 border border-teal/30 rounded-md px-2.5 py-1.5 leading-relaxed">
-              <div className="font-semibold">🏦 Transferir a:</div>
-              <div>{acc.bankName} — {acc.bankAccountType} — {acc.bankAccountNumber}</div>
-              <div>{acc.bankAccountHolder}{acc.holderIdNumber && <> — {acc.holderIdType === "RUC" ? "RUC" : "Cédula"} {acc.holderIdNumber}</>}</div>
-              {acc.email && <div>Correo: {acc.email}</div>}
-              {acc.phone && <div>Celular: {acc.phone}</div>}
-            </div>
-          ) : (
-            <div className="mb-2.5 text-[11.5px] text-steel bg-cloud rounded-md px-2.5 py-1.5">
-              Aún no configuran una cuenta de destino para esta caja.
-            </div>
-          )}
-          {!box.blocked && (
-            <>
-              <input type="number" step="any" placeholder="Monto que entregas" className="w-full rounded border border-rule bg-cloud px-2.5 py-2 text-[12px] font-mono mb-2" value={fundAmount} onChange={(e) => setFundAmount(e.target.value)} />
-              <input type="text" placeholder="Descripción (opcional)" className="w-full rounded border border-rule bg-cloud px-2.5 py-2 text-[12px] mb-2" value={fundDesc} onChange={(e) => setFundDesc(e.target.value)} />
-              {fundProofUrl ? (
-                <div className="flex items-start gap-2.5 mb-2">
-                  <ProofThumb url={fundProofUrl} onZoom={() => setZoomedUrl(fundProofUrl)} />
-                  <div className="flex-1 min-w-0 text-[11.5px]">
-                    {fundVerifying ? (
-                      <span className="text-steel flex items-center gap-1.5"><span className="w-3 h-3 rounded-full border-2 border-rule border-t-teal animate-spin shrink-0" /> Verificando con IA…</span>
-                    ) : fundVerifyResult?.matches ? (
-                      <span className="text-teal flex items-center gap-1"><CheckCircle2 size={13} /> {fundVerifyResult.note}</span>
-                    ) : fundVerifyResult ? (
-                      <span className="text-red">{fundVerifyResult.note}</span>
-                    ) : (
-                      <span className="text-teal flex items-center gap-1"><CheckCircle2 size={13} /> Evidencia lista — doble clic para ampliar</span>
-                    )}
-                    <div className="flex items-center gap-2.5 mt-1">
-                      <button type="button" className="text-steel underline cursor-pointer" onClick={() => { setFundProofUrl(null); setFundVerifyResult(null); }}>Cambiar foto</button>
-                      {!fundVerifying && (
-                        <button
-                          type="button"
-                          className="text-steel underline cursor-pointer"
-                          onClick={() => { const n = Number(fundAmount); if (!Number.isNaN(n) && n > 0) verifyProof("recarga", fundProofUrl, n); else setErr("Ingresa el monto antes de verificar."); }}
-                        >
-                          Verificar de nuevo
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="mb-2">{fundUploading ? <div className="text-[11.5px] text-steel">Subiendo…</div> : <UploadBox label="📷 Evidencia de entrega/retiro" folder="petty-cash" onFile={(f) => doUpload(f, "recarga")} onCaptured={(url) => applyProof("recarga", url)} />}</div>
-              )}
-              <button
-                type="button"
-                disabled={busy || fundVerifying || (!!fundProofUrl && fundVerifyResult?.matches === false)}
-                className="rounded border border-blue text-blue px-3.5 py-2 text-[12.5px] font-semibold cursor-pointer disabled:opacity-60"
-                onClick={submitFund}
-              >
-                Enviar — queda pendiente que confirmen
-              </button>
-            </>
           )}
         </div>
       )}
