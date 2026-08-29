@@ -234,6 +234,26 @@ function BoxCard({
   const [excReason, setExcReason] = useState("");
   const [zoomedUrl, setZoomedUrl] = useState<string | null>(null);
 
+  const [editingThreshold, setEditingThreshold] = useState(false);
+  const [thresholdInput, setThresholdInput] = useState(box.minThreshold.toFixed(2));
+  const [thresholdBusy, setThresholdBusy] = useState(false);
+
+  async function saveThreshold() {
+    const n = Number(thresholdInput);
+    if (Number.isNaN(n) || n < 0) { setErr("Ingresa un mínimo válido."); return; }
+    setThresholdBusy(true);
+    setErr("");
+    const res = await fetch("/api/petty-cash/box/threshold", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ boxType: box.type, minThreshold: n }),
+    });
+    setThresholdBusy(false);
+    if (!res.ok) { const json = await res.json().catch(() => null); setErr(json?.error ?? "No se pudo guardar el mínimo."); return; }
+    setEditingThreshold(false);
+    router.refresh();
+  }
+
   const acc = box.payoutAccount;
   const [editingPayout, setEditingPayout] = useState(false);
   const [payoutBusy, setPayoutBusy] = useState(false);
@@ -437,6 +457,26 @@ function BoxCard({
       {box.isLow && (
         <div className="mt-1.5 flex items-center gap-2 text-[11.5px] text-red bg-red/10 border border-red/30 rounded-md px-2.5 py-1.5">
           <span className="w-1.5 h-1.5 rounded-full bg-red shrink-0" /> Saldo bajo el mínimo de {money(box.minThreshold)}.
+        </div>
+      )}
+      {canManage && (
+        <div className="mt-1.5 text-[11px] text-steel">
+          {editingThreshold ? (
+            <div className="flex items-center gap-1.5">
+              <span>Mínimo para avisar:</span>
+              <input
+                type="number" step="0.01" min="0" autoFocus
+                className="w-20 rounded border border-rule bg-cloud px-1.5 py-0.5 font-mono text-[11px]"
+                value={thresholdInput} onChange={(e) => setThresholdInput(e.target.value)}
+              />
+              <button type="button" disabled={thresholdBusy} className="text-blue font-semibold cursor-pointer disabled:opacity-60" onClick={saveThreshold}>Guardar</button>
+              <button type="button" className="text-steel cursor-pointer" onClick={() => { setThresholdInput(box.minThreshold.toFixed(2)); setEditingThreshold(false); }}>Cancelar</button>
+            </div>
+          ) : (
+            <button type="button" className="cursor-pointer hover:underline" onClick={() => setEditingThreshold(true)}>
+              Mínimo para avisar: {money(box.minThreshold)} · editar
+            </button>
+          )}
         </div>
       )}
 
