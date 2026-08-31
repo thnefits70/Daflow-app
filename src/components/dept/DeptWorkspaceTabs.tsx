@@ -546,7 +546,6 @@ export function DeptWorkspaceTabs({
           deptId={deptId}
           records={weeklyReviewRecords}
           editable={editable}
-          canChangeStatus={kpisEditable ?? editable}
           involvingMe={weeklyReviewInvolvingMe}
         />
       )}

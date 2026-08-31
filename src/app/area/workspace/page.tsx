@@ -10,7 +10,7 @@ import { getPaymentRemindersData } from "@/lib/paymentReminders";
 import { getPeriodicReminders } from "@/lib/periodicReminders";
 import { getSupplierExchangeGestorCount } from "@/lib/pendingTasks";
 import { getStoreFeedbackData, getStoreFeedbackMonthlyAggregates } from "@/lib/storeFeedback";
-import { getReviewsInvolvingUser } from "@/lib/weeklyCheckin";
+import { getReviewsInvolvingUser, weeksStaleOf } from "@/lib/weeklyCheckin";
 import { getInventoryControlData, getInventoryKpisData } from "@/lib/inventoryKpis";
 import { getPettyCashViewerData } from "@/lib/pettyCash";
 import { toSupplierDTO } from "@/lib/suppliers";
@@ -254,6 +254,8 @@ export default async function WorkspacePage() {
                 involvesDeptName: w.involvesDept?.name ?? null,
                 involvesRaw: w.involvesRaw,
                 involvedNotifiedAt: w.involvedNotifiedAt?.toISOString() ?? null,
+                resolutionNote: w.resolutionNote,
+                weeksStale: weeksStaleOf(w.week),
               }))
             : []
         }

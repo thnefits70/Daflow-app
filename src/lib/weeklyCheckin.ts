@@ -2,34 +2,49 @@ import { prisma } from "@/lib/prisma";
 import { notifyOwner } from "@/lib/notifications";
 import { getDeptLeadId, getLeadIdOfUsersDept } from "@/lib/guards";
 
-// Asistente de check-in semanal — reemplaza la reunión 1:1 admin-líder: le
-// pregunta al LÍDER de cada área (nunca al resto del equipo) qué problemas
-// tuvo esta semana y arma el registro en WeeklyReviewRecord solo. Separado
-// de Nancy/FERNICK (ver esos archivos); modelo más liviano porque esto es
-// captura de datos, no análisis financiero.
+// Mary, la asistente de check-in semanal — reemplaza la reunión 1:1
+// admin-líder: le pregunta al LÍDER de cada área (nunca al resto del
+// equipo) qué problemas tuvo esta semana, HACE SEGUIMIENTO REAL de lo que
+// quedó pendiente en semanas anteriores (nunca deja que un líder "marque
+// por marcar" sin explicar qué hizo — ver getOpenPreviousReports/
+// CLOSE_PREVIOUS_REPORT_TOOL más abajo), y arma el registro en
+// WeeklyReviewRecord sola. Separada de Nancy/FERNICK (ver esos archivos);
+// modelo más liviano porque esto es captura de datos, no análisis
+// financiero. Confirmado 2026-08-27: el único que puede cambiar el estado
+// de un registro a mano (sin pasar por Mary) sigue siendo el admin — un
+// líder ya no tiene ese dropdown, precisamente para que "Solucionado"
+// signifique algo.
 export const WEEKLY_CHECKIN_MODEL = "claude-sonnet-5";
 
-export const WEEKLY_CHECKIN_SYSTEM_PROMPT = `Eres el asistente de check-in semanal de DAFLOW para Provedix (Guayaquil, Ecuador). Tu único trabajo es conversar con el líder de un área para levantar su reporte semanal — reemplazas la reunión de 1:1 que antes se hacía en persona.
+export const MARY_SYSTEM_PROMPT = `Eres Mary, la asistente de check-in semanal de DAFLOW para Provedix (Guayaquil, Ecuador). Tu tono es femenino, profesional y cercano — cálida pero directa, nunca robótica ni acartonada. Tu trabajo es conversar con el líder de un área para levantar su reporte semanal y darle seguimiento real a lo que había quedado pendiente — reemplazas la reunión de 1:1 que antes se hacía en persona.
 
-Cómo conducir la conversación:
-- Saluda brevemente y pregunta qué problemas o dificultades tuvo esta semana.
+Al iniciar una conversación nueva, saluda por su nombre — el contexto de cada mensaje te dice con quién hablas y qué área lidera.
+
+Si el contexto trae "PENDIENTES DE SEMANAS ANTERIORES", pregunta por ESOS primero, uno por uno, antes de preguntar por problemas nuevos:
+- Si el líder explica con detalle qué hizo para resolverlo, llama a close_previous_report con esa explicación como resolutionNote (usa el id exacto que viene entre corchetes en el contexto).
+- Si solo dice "ya", "listo", "sí lo hice" o algo igual de vago sin explicar QUÉ hizo, pídele que cuente exactamente qué acción tomó — nunca cierres un pendiente con una nota vacía o genérica.
+- Si dice que sigue sin resolverlo, no llames ninguna herramienta para ese ítem — sigue tal cual, en Pendiente, y continúa la conversación con naturalidad.
+
+Después de eso (o directo, si no había pendientes), pregunta qué problemas o dificultades nuevas tuvo esta semana:
 - Si menciona un problema, pregunta cuál es su plan para resolverlo (qué va a hacer, no solo qué pasó).
 - Pregunta siempre, antes de cerrar, si resolverlo depende de que se involucre OTRA ÁREA, el LÍDER de otra área, o un COLABORADOR específico de otro equipo — y si es así, de qué área o de quién se trata (nombre).
-- Si dice que no tuvo problemas esta semana, regístralo igual como "sin novedades" — no insistas ni inventes un problema.
-- Sé breve y directo, en español, tono cercano pero profesional. No es una entrevista larga — en 2 o 3 intercambios ya deberías tener lo necesario.
+- Si dice que no tuvo problemas nuevos esta semana, regístralo igual como "sin novedades" — no insistas ni inventes un problema.
+
+Sé breve y directa, en español. No es una entrevista larga — en pocos intercambios ya deberías tener lo necesario.
 
 Cuándo registrar:
-- Llama a la herramienta submit_weekly_report SOLO cuando ya tengas claro el problema (o la ausencia de problemas) y el plan de acción — nunca antes, y nunca más de una vez por conversación.
-- No inventes nombres de áreas o personas que el líder no mencionó — si no dijo que involucra a alguien más, involvesOtherDept es false.`;
+- Llama a submit_weekly_report SOLO cuando ya tengas claro el problema nuevo (o la ausencia de problemas nuevos) y el plan de acción — nunca antes, y nunca más de una vez por conversación.
+- No inventes nombres de áreas o personas que el líder no mencionó — si no dijo que involucra a alguien más, involvesOtherDept es false.
+- submit_weekly_report y close_previous_report son independientes — puedes llamar una, la otra, ambas, o ninguna, según lo que de verdad haya pasado en la conversación.`;
 
 export const SUBMIT_WEEKLY_REPORT_TOOL = {
   name: "submit_weekly_report",
   description:
-    "Registra el reporte semanal del líder del área. Llamar solo una vez que el problema (o la ausencia de problemas) y el plan de acción están claros.",
+    "Registra el reporte semanal NUEVO del líder del área. Llamar solo una vez que el problema (o la ausencia de problemas nuevos) y el plan de acción están claros.",
   input_schema: {
     type: "object" as const,
     properties: {
-      hasIssues: { type: "boolean", description: "true si tuvo algún problema esta semana, false si no tuvo novedades." },
+      hasIssues: { type: "boolean", description: "true si tuvo algún problema nuevo esta semana, false si no tuvo novedades." },
       problem: { type: "string", description: "El problema reportado. Si hasIssues es false, describe brevemente que no hubo novedades." },
       actionPlan: { type: "string", description: "El plan de acción para resolverlo. Si hasIssues es false, puede ser una frase breve como 'Ninguno necesario'." },
       involvesOtherDept: { type: "boolean", description: "true si el plan depende de otra área, su líder, o un colaborador específico de otro equipo." },
@@ -48,6 +63,26 @@ export type SubmitWeeklyReportInput = {
   involvedDeptName?: string;
   involvedPersonName?: string;
 };
+
+// Es el mecanismo que de verdad comprueba que se hizo algo — a diferencia
+// de un dropdown que el líder controlaba directamente (revertido, ver
+// api/weekly-reviews/[id]/route.ts), Mary decide el cierre y exige una
+// explicación real, nunca un "ya" vacío.
+export const CLOSE_PREVIOUS_REPORT_TOOL = {
+  name: "close_previous_report",
+  description:
+    "Marca un reporte de una semana anterior como Solucionado. Llamar solo cuando el líder explique con detalle qué hizo exactamente — nunca si solo confirma vagamente que 'ya lo hizo'.",
+  input_schema: {
+    type: "object" as const,
+    properties: {
+      recordId: { type: "string", description: "El id (dado en el contexto entre corchetes, ej. [id: xxxx]) del pendiente que se está cerrando." },
+      resolutionNote: { type: "string", description: "Qué hizo exactamente el líder para resolverlo, en sus propias palabras — nunca vacío ni genérico." },
+    },
+    required: ["recordId", "resolutionNote"],
+  },
+};
+
+export type ClosePreviousReportInput = { recordId: string; resolutionNote: string };
 
 // Mismo truco de "Ecuador es UTC-5, sin horario de verano" que ya usan por su
 // cuenta pendingTasks.ts/periodicReminders.ts/dashboard.ts — se mantiene como
@@ -73,6 +108,63 @@ export function currentIsoWeek(): string {
   const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
   const weekNum = Math.ceil(((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
   return `${d.getUTCFullYear()}-W${pad2(weekNum)}`;
+}
+
+// Mismo cálculo de "lunes de esa semana ISO" que ya usa pendingTasks.ts
+// (mondayOfIsoWeek, privada allá) — copia local, mismo criterio de
+// duplicar date-math pequeño entre archivos que ya siguen entre sí
+// pendingTasks.ts/periodicReminders.ts.
+function mondayOfIsoWeek(week: string): Date {
+  const [yearStr, wStr] = week.split("-W");
+  const year = Number(yearStr);
+  const weekNum = Number(wStr);
+  const jan4 = new Date(Date.UTC(year, 0, 4));
+  const jan4Day = jan4.getUTCDay() || 7;
+  const week1Monday = new Date(jan4);
+  week1Monday.setUTCDate(jan4.getUTCDate() - (jan4Day - 1));
+  const target = new Date(week1Monday);
+  target.setUTCDate(week1Monday.getUTCDate() + (weekNum - 1) * 7);
+  return target;
+}
+
+// Cuántas semanas ISO de diferencia hay entre `week` y la semana actual —
+// usado tanto para armarle el contexto a Mary ("hace N semanas") como para
+// el chip de "lleva N semanas pendiente" en WeeklyReviewPanel.tsx.
+export function weeksStaleOf(week: string): number {
+  const then = mondayOfIsoWeek(week);
+  const now = mondayOfIsoWeek(currentIsoWeek());
+  return Math.round((now.getTime() - then.getTime()) / (7 * 86400000));
+}
+
+export type OpenPreviousReport = { id: string; week: string; problem: string; actionPlan: string; weeksStale: number };
+
+// Todo lo que este líder dejó Pendiente en semanas anteriores (nunca la
+// semana actual) — Mary pregunta por cada uno antes de pasar a problemas
+// nuevos, ver MARY_SYSTEM_PROMPT.
+export async function getOpenPreviousReports(leaderId: string, currentWeek: string): Promise<OpenPreviousReport[]> {
+  const rows = await prisma.weeklyReviewRecord.findMany({
+    where: { reportedById: leaderId, status: "PENDING", week: { not: currentWeek } },
+    orderBy: { week: "asc" },
+  });
+  return rows.map((r) => ({ id: r.id, week: r.week, problem: r.problem, actionPlan: r.actionPlan, weeksStale: weeksStaleOf(r.week) }));
+}
+
+// Contexto inyectado en cada mensaje enviado al modelo — mismo patrón que
+// buildNancyContext en nancy.ts (nunca confiar en que el cliente mande el
+// nombre/área; siempre resuelto server-side). Antepuesto al contenido del
+// último mensaje del usuario en la ruta.
+export function buildWeeklyCheckinContext(params: { leaderName: string; deptName: string; openPrevious: OpenPreviousReport[] }): string {
+  let ctx = `CONTEXTO\nEstás hablando con ${params.leaderName}, líder de ${params.deptName}.`;
+  if (params.openPrevious.length > 0) {
+    const lines = params.openPrevious
+      .map(
+        (r) =>
+          `- [id: ${r.id}] Semana ${r.week} (hace ${r.weeksStale} semana${r.weeksStale === 1 ? "" : "s"}): "${r.problem}" — plan: "${r.actionPlan}"`
+      )
+      .join("\n");
+    ctx += `\n\nPENDIENTES DE SEMANAS ANTERIORES (pregunta por cada uno antes de seguir con problemas nuevos):\n${lines}`;
+  }
+  return ctx;
 }
 
 // Intenta resolver el área/persona nombrada por el modelo a un FK real,

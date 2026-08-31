@@ -11,6 +11,7 @@ import { getInventoryControlData, getInventoryKpisData } from "@/lib/inventoryKp
 import { getPettyCashViewerData } from "@/lib/pettyCash";
 import { toSupplierDTO } from "@/lib/suppliers";
 import { SUPPLIER_VIEW_DEPT_CODES, SUPPLIER_ADD_DEPT_CODES } from "@/lib/guards";
+import { weeksStaleOf } from "@/lib/weeklyCheckin";
 
 const supplierInclude = {
   contacts: { orderBy: { id: "asc" as const } },
@@ -107,6 +108,8 @@ export default async function DeptWorkspacePage({ params }: { params: Promise<{ 
           involvesDeptName: w.involvesDept?.name ?? null,
           involvesRaw: w.involvesRaw,
           involvedNotifiedAt: w.involvedNotifiedAt?.toISOString() ?? null,
+          resolutionNote: w.resolutionNote,
+          weeksStale: weeksStaleOf(w.week),
         }))}
         // Confirmado 2026-08-26: esta data evalúa al líder de MKT, así que
         // admin queda en solo-lectura igual que Bryan — solo Nairoby edita.

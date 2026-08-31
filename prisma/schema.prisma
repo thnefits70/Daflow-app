@@ -1190,6 +1190,12 @@ model WeeklyReviewRecord {
   involvesRaw        String?
   involvedNotifiedAt DateTime?
 
+  // Qué hizo realmente el líder para resolverlo — solo Mary la llena, al
+  // llamar close_previous_report (nunca un simple cambio de estado sin
+  // explicación). Null mientras sigue Pendiente o si el admin lo cerró a
+  // mano desde su propio CRUD.
+  resolutionNote String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

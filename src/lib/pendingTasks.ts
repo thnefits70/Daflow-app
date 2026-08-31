@@ -376,6 +376,7 @@ export type PendingTasks = { title: string; sub: string; items: PendingItem[] };
 // usado por /api/push/preferences para armar la lista de interruptores.
 export const PENDING_TYPE_CATALOG: Record<string, string> = {
   feedback: "Feedback semanal/mensual de departamentos",
+  check_in_semanal_estancado: "Check-in semanal — líder sin gestión hace 2+ semanas",
   roles_de_pago: "Roles de pago",
   nomina_transferencia: "Transferencia de nómina",
   iess_transferencia: "Transferencia de IESS",
@@ -820,6 +821,48 @@ async function getRecognitionAdminPendingItem(href: string): Promise<PendingItem
     };
   }
   return null;
+}
+
+// Confirmado 2026-08-27: pedido explícito del usuario — el check-in semanal
+// (Mary) reemplaza la reunión 1:1, pero si un líder la ignora, alguien tiene
+// que enterarse. Cubre dos casos: (a) reportó algo pero quedó Pendiente 2+
+// semanas sin que Mary lo cerrara (nunca dio una explicación real de qué
+// hizo), o (b) no le ha dicho nada a Mary en las últimas 2 semanas — ni
+// siquiera "sin novedades". Exclusivo de admin — un líder nunca ve esto
+// sobre sí mismo, mismo criterio que getRecognitionAdminPendingItem arriba
+// (nunca se llama desde la rama de líderes de getPendingTasksForActor).
+async function getWeeklyCheckinStalledPendingItem(href: string): Promise<PendingItem | null> {
+  const twoWeeksAgo = prevIsoWeek(prevIsoWeek(isoWeekOf(nowInEcuador())));
+
+  const leaders = await prisma.user.findMany({
+    where: { isActive: true, isLeader: true, leadsDept: { trackWeeklyReview: true } },
+    select: { id: true, name: true },
+  });
+  if (leaders.length === 0) return null;
+
+  const stalled: string[] = [];
+  for (const leader of leaders) {
+    const [stalePending, recentActivity] = await Promise.all([
+      prisma.weeklyReviewRecord.findFirst({
+        where: { reportedById: leader.id, status: "PENDING", week: { lte: twoWeeksAgo } },
+      }),
+      prisma.weeklyReviewRecord.count({
+        where: { reportedById: leader.id, week: { gte: twoWeeksAgo } },
+      }),
+    ]);
+    if (stalePending || recentActivity === 0) stalled.push(leader.name);
+  }
+  if (stalled.length === 0) return null;
+
+  const names = stalled.slice(0, 3).join(", ") + (stalled.length > 3 ? ` y ${stalled.length - 3} más` : "");
+  return {
+    type: "check_in_semanal_estancado",
+    icon: "🕑",
+    label: "Check-in semanal sin gestión hace 2+ semanas",
+    meta: names,
+    overdue: true,
+    href,
+  };
 }
 
 // Confirmado 2026-08-05: el aviso de saldo bajo le llega tanto a admin como
@@ -1916,9 +1959,10 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     // departamento INV (ver canViewMerchandiseOutflow en admin/dept/[id]/page.tsx).
     const invDept = await prisma.department.findUnique({ where: { code: "INV" }, select: { id: true } });
     const invEgresosHref = invDept ? `/admin/dept/${invDept.id}?tab=egresos&otab=proveedor` : "/admin";
-    const [feedbackItems, recognitionItem, pettyCashLow, pettyCashUnconfirmed, adminPaymentsItem, purchaseMerchandiseItem, purchaseShippingItem, purchaseCreditsItem, supplierExchangeRejectedItem, overtimeApprovalItem, commissionBonusApprovalItem, salaryAdvanceItem, managementDeductionItem, personalPurchaseFinanceItem, personalPurchaseTransferConfirmItem, personalPurchaseTransferCloseItem, personalPurchasePaymentWatchItem, payrollTransferItem, payrollIessTransferItem, birthdayItems] = await Promise.all([
+    const [feedbackItems, recognitionItem, weeklyCheckinStalledItem, pettyCashLow, pettyCashUnconfirmed, adminPaymentsItem, purchaseMerchandiseItem, purchaseShippingItem, purchaseCreditsItem, supplierExchangeRejectedItem, overtimeApprovalItem, commissionBonusApprovalItem, salaryAdvanceItem, managementDeductionItem, personalPurchaseFinanceItem, personalPurchaseTransferConfirmItem, personalPurchaseTransferCloseItem, personalPurchasePaymentWatchItem, payrollTransferItem, payrollIessTransferItem, birthdayItems] = await Promise.all([
       getFeedbackPendingItems(),
       getRecognitionAdminPendingItem("/admin/colaborador-destacado"),
+      getWeeklyCheckinStalledPendingItem("/admin"),
       getPettyCashLowBalanceItems(financeHref),
       getPettyCashUnconfirmedFunderItems(null, financeHref),
       getAdminPaymentsPendingItem(`${financeHref}?tab=pagosadmin`),
@@ -1941,6 +1985,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     const items = [
       ...feedbackItems,
       ...(recognitionItem ? [recognitionItem] : []),
+      ...(weeklyCheckinStalledItem ? [weeklyCheckinStalledItem] : []),
       ...pettyCashLow,
       ...pettyCashUnconfirmed,
       ...(adminPaymentsItem ? [adminPaymentsItem] : []),

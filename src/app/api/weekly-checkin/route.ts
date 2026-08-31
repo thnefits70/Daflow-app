@@ -7,12 +7,16 @@ import { getAnthropicClient } from "@/lib/nancy";
 import { logAiUsage } from "@/lib/aiUsage";
 import {
   WEEKLY_CHECKIN_MODEL,
-  WEEKLY_CHECKIN_SYSTEM_PROMPT,
+  MARY_SYSTEM_PROMPT,
   SUBMIT_WEEKLY_REPORT_TOOL,
+  CLOSE_PREVIOUS_REPORT_TOOL,
   currentIsoWeek,
   resolveInvolvement,
   notifyInvolvedParties,
+  getOpenPreviousReports,
+  buildWeeklyCheckinContext,
   type SubmitWeeklyReportInput,
+  type ClosePreviousReportInput,
 } from "@/lib/weeklyCheckin";
 
 const messageSchema = z.object({ role: z.enum(["user", "assistant"]), content: z.string().min(1) });
@@ -25,6 +29,11 @@ const submitReportSchema = z.object({
   involvesOtherDept: z.boolean(),
   involvedDeptName: z.string().trim().optional(),
   involvedPersonName: z.string().trim().optional(),
+});
+
+const closeReportSchema = z.object({
+  recordId: z.string().min(1),
+  resolutionNote: z.string().trim().min(1),
 });
 
 // Devuelve la conversación de ESTA semana (una por líder por semana, ver
@@ -57,7 +66,12 @@ export async function POST(req: NextRequest) {
   // bitácora cae el registro y a quién se notifica. Se resuelve por
   // leadsDeptId (el área que esta persona LIDERA), no por session.user.deptId
   // — canUseWeeklyCheckin() ya garantiza que sea un líder con área asignada.
-  const leaderUser = await prisma.user.findUnique({ where: { id: session.user.id }, select: { leadsDeptId: true } });
+  // También se trae el nombre del líder y de su área acá (nunca del
+  // cliente) para que Mary pueda saludar por nombre.
+  const leaderUser = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { name: true, leadsDeptId: true, leadsDept: { select: { name: true } } },
+  });
   const deptId = leaderUser!.leadsDeptId!;
   const ownerId = session.user.id;
 
@@ -90,14 +104,28 @@ export async function POST(req: NextRequest) {
 
   await prisma.checkinMessage.create({ data: { conversationId, role: "user", content: lastMessage.content } });
 
+  // Contexto que le dice a Mary con quién habla y qué dejó pendiente en
+  // semanas anteriores — se recalcula y se antepone en CADA mensaje (mismo
+  // patrón que buildNancyContext en nancy.ts), así que si algo se cierra a
+  // mitad de la conversación, el siguiente turno ya no lo repite.
+  const openPrevious = await getOpenPreviousReports(ownerId, week);
+  const context = buildWeeklyCheckinContext({
+    leaderName: leaderUser!.name,
+    deptName: leaderUser!.leadsDept!.name,
+    openPrevious,
+  });
+
   const priorMessages = messages.slice(0, -1);
   const client = getAnthropicClient();
   const stream = client.messages.stream({
     model: WEEKLY_CHECKIN_MODEL,
     max_tokens: 1024,
-    system: WEEKLY_CHECKIN_SYSTEM_PROMPT,
-    tools: [SUBMIT_WEEKLY_REPORT_TOOL],
-    messages: [...priorMessages.map((m) => ({ role: m.role, content: m.content })), { role: "user" as const, content: lastMessage.content }],
+    system: MARY_SYSTEM_PROMPT,
+    tools: [SUBMIT_WEEKLY_REPORT_TOOL, CLOSE_PREVIOUS_REPORT_TOOL],
+    messages: [
+      ...priorMessages.map((m) => ({ role: m.role, content: m.content })),
+      { role: "user" as const, content: `${context}\n\nMENSAJE DEL LÍDER:\n${lastMessage.content}` },
+    ],
   });
 
   const encoder = new TextEncoder();
@@ -116,18 +144,26 @@ export async function POST(req: NextRequest) {
         controller.enqueue(encoder.encode("\n\n[Se perdió la conexión — intenta de nuevo.]"));
       }
 
-      // finalMessage() ya trae el input del tool call completamente
+      // finalMessage() ya trae el input de cada tool call completamente
       // parseado (el SDK acumula los content_block_delta de tipo
       // input_json_delta internamente) — no hace falta acumular JSON a
-      // mano ni hacer una segunda llamada al modelo.
+      // mano ni hacer una segunda llamada al modelo. Mary puede llamar
+      // submit_weekly_report, close_previous_report, ambas, o ninguna en
+      // el mismo turno — se procesan TODAS, no solo la primera.
       const finalMessage = await stream.finalMessage().catch(() => null);
-      const toolBlock = finalMessage?.content.find(
-        (b): b is typeof b & { type: "tool_use"; name: string; input: unknown } => b.type === "tool_use" && b.name === "submit_weekly_report"
-      );
+      const toolBlocks =
+        finalMessage?.content.filter((b): b is typeof b & { type: "tool_use"; name: string; input: unknown } => b.type === "tool_use") ?? [];
 
-      if (toolBlock) {
-        const reportParsed = submitReportSchema.safeParse(toolBlock.input);
-        if (reportParsed.success) {
+      let anyToolSucceeded = false;
+      let anyToolFailed = false;
+
+      for (const block of toolBlocks) {
+        if (block.name === "submit_weekly_report") {
+          const reportParsed = submitReportSchema.safeParse(block.input);
+          if (!reportParsed.success) {
+            anyToolFailed = true;
+            continue;
+          }
           const report: SubmitWeeklyReportInput = reportParsed.data;
           const { involvesDeptId, involvesUserId, involvesRaw } = report.involvesOtherDept
             ? await resolveInvolvement({ involvedDeptName: report.involvedDeptName, involvedPersonName: report.involvedPersonName })
@@ -148,17 +184,34 @@ export async function POST(req: NextRequest) {
             },
           });
           await notifyInvolvedParties(record).catch((err) => console.error("notifyInvolvedParties falló:", err));
-
-          if (!acc.trim()) {
-            const closing = "Gracias, quedó registrado. ¡Que tengas buena semana!";
-            acc += closing;
-            controller.enqueue(encoder.encode(closing));
+          anyToolSucceeded = true;
+        } else if (block.name === "close_previous_report") {
+          const closeParsed = closeReportSchema.safeParse(block.input);
+          if (!closeParsed.success) {
+            anyToolFailed = true;
+            continue;
           }
-        } else if (!acc.trim()) {
-          const closing = "No pude registrar el reporte completo — ¿puedes contarme de nuevo cuál fue el problema y el plan?";
-          acc += closing;
-          controller.enqueue(encoder.encode(closing));
+          const close: ClosePreviousReportInput = closeParsed.data;
+          // El where incluye reportedById para que Mary nunca pueda
+          // cerrar, ni por error del modelo, un registro que no es de
+          // este líder.
+          const { count } = await prisma.weeklyReviewRecord.updateMany({
+            where: { id: close.recordId, reportedById: ownerId, status: "PENDING" },
+            data: { status: "RESOLVED", resolutionNote: close.resolutionNote },
+          });
+          if (count > 0) anyToolSucceeded = true;
+          else anyToolFailed = true;
         }
+      }
+
+      if (anyToolSucceeded && !acc.trim()) {
+        const closing = "Gracias, quedó registrado. ¡Que tengas buena semana!";
+        acc += closing;
+        controller.enqueue(encoder.encode(closing));
+      } else if (anyToolFailed && !anyToolSucceeded && !acc.trim()) {
+        const closing = "No pude registrar eso completo — ¿puedes contarme de nuevo qué pasó?";
+        acc += closing;
+        controller.enqueue(encoder.encode(closing));
       }
 
       controller.close();

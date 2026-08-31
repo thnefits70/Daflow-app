@@ -18,6 +18,14 @@ export type WeeklyReviewDTO = {
   involvesDeptName?: string | null;
   involvesRaw?: string | null;
   involvedNotifiedAt?: string | null;
+  // Qué hizo el líder para resolverlo, según Mary (ver
+  // close_previous_report) — null si sigue Pendiente o si el admin lo
+  // cerró a mano sin pasar por el asistente.
+  resolutionNote?: string | null;
+  // Cuántas semanas ISO lleva Pendiente (0 = esta misma semana) — se
+  // computa en el servidor (weeksStaleOf en weeklyCheckin.ts), nunca en el
+  // cliente, para que no dependa de la hora local del navegador.
+  weeksStale?: number;
 };
 
 export type InvolvingMeReviewDTO = {
@@ -44,17 +52,11 @@ export function WeeklyReviewPanel({
   deptId,
   records,
   editable,
-  canChangeStatus = false,
   involvingMe = [],
 }: {
   deptId: string;
   records: WeeklyReviewDTO[];
   editable: boolean;
-  // El líder del área ahora puede cambiar el estado de sus propios
-  // registros (Pendiente/Solucionado/Rechazado) aunque no tenga el CRUD
-  // completo que sí tiene el admin (editable) — crear/editar contenido/
-  // eliminar sigue siendo exclusivo de él.
-  canChangeStatus?: boolean;
   // Registros de OTRAS áreas que nombraron a este departamento o a uno de
   // sus colaboradores — solo lectura.
   involvingMe?: InvolvingMeReviewDTO[];
@@ -268,6 +270,15 @@ export function WeeklyReviewPanel({
                     {r.source === "ASSISTANT" && (
                       <div className="mt-1 font-mono text-[9.5px] font-normal normal-case text-teal">🤖 {r.reportedByName ?? "Asistente"}</div>
                     )}
+                    {r.status === "PENDING" && !!r.weeksStale && r.weeksStale >= 2 && (
+                      <div
+                        className="mt-1 inline-flex items-center gap-1 font-mono text-[9.5px] font-semibold normal-case px-1.5 py-0.5 rounded-full"
+                        style={{ color: "#C4453A", border: "1px solid #C4453A", background: "#C4453A1a" }}
+                        title="Sigue Pendiente sin que Mary lo haya podido cerrar"
+                      >
+                        🕑 {r.weeksStale} semanas
+                      </div>
+                    )}
                   </td>
                   <td className="py-3 pr-3 text-[13px] text-ink/90 max-w-[280px]">
                     {r.problem}
@@ -287,7 +298,7 @@ export function WeeklyReviewPanel({
                   </td>
                   <td className="py-3 pr-3 text-[13px] text-ink/90 max-w-[280px]">{r.actionPlan}</td>
                   <td className="py-3 pr-3 whitespace-nowrap">
-                    {editable || canChangeStatus ? (
+                    {editable ? (
                       <select
                         className="rounded-full border px-2.5 py-1 text-[11px] font-semibold cursor-pointer bg-transparent"
                         style={{ color: STATUS_META[r.status].color, borderColor: STATUS_META[r.status].color }}
@@ -310,6 +321,11 @@ export function WeeklyReviewPanel({
                       >
                         {STATUS_META[r.status].label}
                       </span>
+                    )}
+                    {r.status === "RESOLVED" && r.resolutionNote && (
+                      <div className="mt-1.5 text-[10.5px] text-steel max-w-[160px] whitespace-normal" title="Lo que reportó al asistente">
+                        “{r.resolutionNote}”
+                      </div>
                     )}
                   </td>
                   {editable && (
