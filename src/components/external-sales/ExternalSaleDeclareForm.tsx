@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Check, Upload } from "lucide-react";
 import { ProductMatchPicker, type MatchCatalogItem, type ProductMatchResult } from "@/components/merchandise-reentry/ProductMatchPicker";
 import { uploadFile } from "@/lib/uploadFile";
+import { usePasteFile } from "@/lib/usePasteFile";
 import { formatDateTime } from "@/lib/formatDateTime";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 
@@ -54,6 +55,11 @@ export function ExternalSaleDeclareForm() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [uploadingFor, setUploadingFor] = useState<string | null>(null);
+  const armedProofSaleIdRef = useRef<string | null>(null);
+  const { onPaste: onPasteProof, onMouseEnter: onPasteProofHoverIn, onMouseLeave: onPasteProofHoverOut, onTapPaste, tapHint: tapHintProof } = usePasteFile((file) => {
+    const saleId = armedProofSaleIdRef.current;
+    if (saleId) uploadProof(saleId, file);
+  });
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editSelected, setEditSelected] = useState<MatchCatalogItem | null>(null);
@@ -285,10 +291,25 @@ export function ExternalSaleDeclareForm() {
                     </div>
                   )}
                   {s.reviewStatus === "APPROVED" && !s.paymentProofUrl && (
-                    <label className="mt-2 inline-flex items-center gap-1.5 text-[11.5px] font-semibold border border-rule rounded px-2.5 py-1.5 cursor-pointer">
-                      <Upload size={12} /> {uploadingFor === s.id ? "Subiendo…" : "Subir comprobante de pago"}
-                      <input type="file" accept="image/*,.pdf" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadProof(s.id, f); }} />
-                    </label>
+                    <div className="mt-2 max-w-xs">
+                      <div
+                        role="button"
+                        tabIndex={0}
+                        onPaste={onPasteProof}
+                        onMouseEnter={() => { armedProofSaleIdRef.current = s.id; onPasteProofHoverIn(); }}
+                        onMouseLeave={onPasteProofHoverOut}
+                        onClick={(e) => { armedProofSaleIdRef.current = s.id; onTapPaste(e); }}
+                        className="flex items-center justify-center gap-1.5 border-[1.5px] border-dashed border-rule rounded px-2.5 py-2 text-[11.5px] text-steel cursor-pointer hover:border-teal focus:border-teal focus:outline-none"
+                      >
+                        {uploadingFor === s.id ? <span className="w-3.5 h-3.5 rounded-full border-2 border-rule border-t-teal animate-spin" /> : <Upload size={12} />}
+                        Pega el comprobante aquí (Ctrl+V, o toca en celular)
+                      </div>
+                      <label className="block w-full mt-1 py-1 text-center text-[11px] font-medium text-teal underline decoration-dotted cursor-pointer">
+                        o selecciona un archivo
+                        <input type="file" accept="image/*,.pdf" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadProof(s.id, f); }} />
+                      </label>
+                      {tapHintProof && <p className="mt-1 text-[10.5px] text-red text-center">{tapHintProof}</p>}
+                    </div>
                   )}
                   {s.paymentProofUrl && (
                     <div className="flex items-center gap-1.5 text-[11.5px] mt-2">
