@@ -464,7 +464,7 @@ export function DeptWorkspaceTabs({
           canManageJustCatalog={canManageJustCatalog}
         />
       )}
-      {tab === "egresos" && (canViewMerchandiseOutflow || canSubmitCancelledGuide || canConfirmCancelledGuide || canCutoffCancelledGuide) && (
+      {tab === "egresos" && (canViewMerchandiseOutflow || canSubmitCancelledGuide || canConfirmCancelledGuide || canCutoffCancelledGuide || supplierExchangeMineCount > 0 || financeWriteOffPendingCount > 0) && (
         <MerchandiseOutflowPanel
           canCapture={canCaptureMerchandiseOutflow}
           canAct={canActOnMerchandiseOutflow}
