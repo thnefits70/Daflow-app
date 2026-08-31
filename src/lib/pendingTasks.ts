@@ -392,6 +392,7 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   pagos_administrativos: "Pagos administrativos pendientes de pago",
   pagos_mercaderia: "Pagos de mercadería pendientes",
   pagos_flete: "Fletes pendientes de pago",
+  ventas_externas_pago_confirmar: "Ventas Externas — comprobante de pago por confirmar",
   horas_extra_aprobacion: "Horas extra por aprobar",
   comisiones_bonos_aprobacion: "Comisiones y bonos por aprobar",
   anticipos_aprobacion: "Anticipos por aprobar",
@@ -1975,6 +1976,31 @@ async function getPersonalPurchasePaymentWatchItem(href: string): Promise<Pendin
   };
 }
 
+// Confirmado 2026-08-31: pedido explícito del usuario — mismo patrón que
+// getAdminPaymentsPendingItem, pero para "Ventas Externas": el asesor (hoy
+// Heidy, Jariel, Yair o Marcos) sube el comprobante y el admin confirma con
+// doble check que llegó el dinero (canConfirmExternalSalePayment en
+// guards.ts, exclusivo de admin). Ya existía el push puntual
+// (notifyAdminPaymentProofUploaded en externalSales.ts); esto agrega
+// visibilidad persistente en Inicio hasta que se confirme, en vez de
+// depender solo de la notificación del momento en que se subió.
+async function getExternalSalePaymentConfirmPendingItem(href: string): Promise<PendingItem | null> {
+  const pending = await prisma.externalSale.findMany({
+    where: { reviewStatus: "APPROVED", paymentProofUrl: { not: null }, paymentConfirmedAt: null },
+    select: { totalAmount: true },
+  });
+  if (pending.length === 0) return null;
+  const total = pending.reduce((s, r) => s + r.totalAmount, 0);
+  return {
+    type: "ventas_externas_pago_confirmar",
+    icon: "💵",
+    label: "Ventas Externas — comprobante de pago por confirmar",
+    meta: `${pending.length} venta${pending.length === 1 ? "" : "s"} · $${total.toFixed(2)}`,
+    overdue: false,
+    href,
+  };
+}
+
 // Confirmado 2026-08-06: aviso 1 día antes de la fecha en que se va a
 // felicitar (que puede ser el cumpleaños real o el último día laborable
 // antes, si cae sábado/domingo/feriado — ver celebrationDateFor en
@@ -2027,7 +2053,12 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     // departamento INV (ver canViewMerchandiseOutflow en admin/dept/[id]/page.tsx).
     const invDept = await prisma.department.findUnique({ where: { code: "INV" }, select: { id: true } });
     const invEgresosHref = invDept ? `/admin/dept/${invDept.id}?tab=egresos&otab=proveedor` : "/admin";
-    const [feedbackItems, recognitionItem, weeklyCheckinStalledItems, pettyCashLow, pettyCashUnconfirmed, adminPaymentsItem, purchaseMerchandiseItem, purchaseShippingItem, purchaseCreditsItem, supplierExchangeRejectedItem, overtimeApprovalItem, commissionBonusApprovalItem, salaryAdvanceItem, managementDeductionItem, personalPurchaseFinanceItem, personalPurchaseTransferConfirmItem, personalPurchaseTransferCloseItem, personalPurchasePaymentWatchItem, payrollTransferItem, payrollIessTransferItem, birthdayItems] = await Promise.all([
+    // Confirmado 2026-08-31: "Ventas Externas" vive en la página del
+    // departamento MKT (ver canViewExternalSales en admin/dept/[id]/page.tsx),
+    // pestaña interna "Pagos" (?etab=pagos, leída por ExternalSalesPanel).
+    const mktDept = await prisma.department.findUnique({ where: { code: "MKT" }, select: { id: true } });
+    const mktVentasPagosHref = mktDept ? `/admin/dept/${mktDept.id}?tab=ventas-externas&etab=pagos` : "/admin";
+    const [feedbackItems, recognitionItem, weeklyCheckinStalledItems, pettyCashLow, pettyCashUnconfirmed, adminPaymentsItem, purchaseMerchandiseItem, purchaseShippingItem, purchaseCreditsItem, supplierExchangeRejectedItem, overtimeApprovalItem, commissionBonusApprovalItem, salaryAdvanceItem, managementDeductionItem, personalPurchaseFinanceItem, personalPurchaseTransferConfirmItem, personalPurchaseTransferCloseItem, personalPurchasePaymentWatchItem, payrollTransferItem, payrollIessTransferItem, externalSalePaymentConfirmItem, birthdayItems] = await Promise.all([
       getFeedbackPendingItems(),
       getRecognitionAdminPendingItem("/admin/colaborador-destacado"),
       getWeeklyCheckinStalledPendingItems(),
@@ -2048,6 +2079,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       getPersonalPurchasePaymentWatchItem("/admin/nomina?tab=pagos&ptab=comprasfinanzas"),
       getPayrollTransferPendingItem(true, "/admin/nomina?tab=pagos&ptab=roles"),
       getPayrollIessTransferPendingItem(true, "/admin/nomina?tab=pagos&ptab=roles"),
+      getExternalSalePaymentConfirmPendingItem(mktVentasPagosHref),
       getUpcomingBirthdayPendingItems("/admin/nomina"),
     ]);
     const items = [
@@ -2071,6 +2103,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       ...(personalPurchasePaymentWatchItem ? [personalPurchasePaymentWatchItem] : []),
       ...(payrollTransferItem ? [payrollTransferItem] : []),
       ...(payrollIessTransferItem ? [payrollIessTransferItem] : []),
+      ...(externalSalePaymentConfirmItem ? [externalSalePaymentConfirmItem] : []),
       ...birthdayItems,
     ];
     if (items.length === 0) return null;
