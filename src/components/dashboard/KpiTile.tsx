@@ -312,6 +312,11 @@ export function ReturnRateTile({ trend }: { trend: NonNullable<WeeklyTrend> }) {
       value={`${Math.round(latest.value)}%`}
       period={`${formatMonthShort(latest.week)} · último mes`}
       pill={returnRateStatus(latest.value)}
+      legend={[
+        { color: "#22C55E", label: "<20% Excelente" },
+        { color: "#D9A441", label: "21–27% Muy bueno" },
+        { color: "#E0574A", label: "≥28% Alerta" },
+      ]}
     >
       <MiniSparkline
         points={trend.points}
