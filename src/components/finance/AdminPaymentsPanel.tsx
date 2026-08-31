@@ -2,7 +2,7 @@
 
 import { Fragment, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Upload, CheckCircle2, Lock, Bell, Trash2, Landmark, Send, ChevronDown, ChevronUp } from "lucide-react";
+import { Upload, CheckCircle2, Lock, Bell, Trash2, Landmark, Send, ChevronDown, ChevronUp, Pencil } from "lucide-react";
 import { Combobox } from "@/components/ui/Combobox";
 import { uploadFile } from "@/lib/uploadFile";
 import { compressImage } from "@/lib/compressImage";
@@ -133,6 +133,14 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+
+  // Confirmado 2026-08-31: pedido explícito del usuario — corregir el título
+  // (motivo) de una solicitud (ej. un error de tipeo) es exclusivo del admin,
+  // ni siquiera Nairoby (a diferencia de casi todo lo demás de este panel,
+  // que ambos comparten vía canManageAdminPayments/isAdmin más abajo).
+  const [editingMotivoId, setEditingMotivoId] = useState<string | null>(null);
+  const [motivoDraft, setMotivoDraft] = useState("");
+  const [savingMotivoId, setSavingMotivoId] = useState<string | null>(null);
 
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
@@ -394,6 +402,34 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
       setErr(data?.error ?? "No se pudo borrar.");
       return;
     }
+    load();
+  }
+
+  function startEditMotivo(r: RequestDTO) {
+    setEditingMotivoId(r.id);
+    setMotivoDraft(r.motivo);
+    setErr("");
+  }
+
+  async function saveMotivo(id: string) {
+    if (!motivoDraft.trim()) {
+      setErr("El título no puede quedar vacío.");
+      return;
+    }
+    setErr("");
+    setSavingMotivoId(id);
+    const res = await fetch(`/api/admin-payments/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ motivo: motivoDraft.trim() }),
+    });
+    setSavingMotivoId(null);
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      setErr(data?.error ?? "No se pudo guardar el título.");
+      return;
+    }
+    setEditingMotivoId(null);
     load();
   }
 
@@ -685,17 +721,52 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
             <div className="bg-surface border border-rule rounded-md p-4">
               <div className="flex items-start justify-between gap-3 flex-wrap mb-1">
                 <div>
-                  <div className="flex items-center gap-1.5 mb-0.5">
-                    <div className="text-[13.5px] font-bold">{r.motivo}</div>
-                    <span className="text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded bg-cloud text-steel shrink-0">
-                      {r.type === "RECURRING" ? "Recurrente" : "Variable"}
-                    </span>
-                    {r.linkedGroupId && (
-                      <span className="text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded bg-blue/15 text-blue shrink-0">
-                        🚚 Flete
+                  {editingMotivoId === r.id ? (
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <input
+                        type="text"
+                        autoFocus
+                        className="rounded border border-teal px-2 py-1 text-[12.5px] font-bold min-w-[220px]"
+                        value={motivoDraft}
+                        onChange={(e) => setMotivoDraft(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") saveMotivo(r.id);
+                          if (e.key === "Escape") setEditingMotivoId(null);
+                        }}
+                      />
+                      <button
+                        type="button"
+                        disabled={savingMotivoId === r.id}
+                        className="rounded border border-teal bg-teal px-2 py-1 text-[11px] font-semibold text-white cursor-pointer disabled:opacity-60"
+                        onClick={() => saveMotivo(r.id)}
+                      >
+                        {savingMotivoId === r.id ? "Guardando…" : "Guardar"}
+                      </button>
+                      <button type="button" className="text-steel text-[11px] cursor-pointer" onClick={() => setEditingMotivoId(null)}>Cancelar</button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1.5 mb-0.5">
+                      <div className="text-[13.5px] font-bold">{r.motivo}</div>
+                      {isAdmin && (
+                        <button
+                          type="button"
+                          title="Corregir el título (solo admin)"
+                          className="text-steel-dim hover:text-teal cursor-pointer shrink-0"
+                          onClick={() => startEditMotivo(r)}
+                        >
+                          <Pencil size={12} />
+                        </button>
+                      )}
+                      <span className="text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded bg-cloud text-steel shrink-0">
+                        {r.type === "RECURRING" ? "Recurrente" : "Variable"}
                       </span>
-                    )}
-                  </div>
+                      {r.linkedGroupId && (
+                        <span className="text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded bg-blue/15 text-blue shrink-0">
+                          🚚 Flete
+                        </span>
+                      )}
+                    </div>
+                  )}
                   {r.linkedGroupLabel && <div className="text-[11px] text-steel">{r.linkedGroupLabel}</div>}
                   {r.period && <div className="text-[11.5px] text-steel">período {r.period}</div>}
                   <div className="text-[10px] text-steel-dim mt-0.5">Solicitada por {actorName(r.createdBy?.name)} · {formatDateTime(r.createdAt)}</div>
