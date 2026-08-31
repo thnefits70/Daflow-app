@@ -35,6 +35,7 @@ type RequestDTO = {
   paymentAiMatch: boolean | null;
   paymentAiNote: string | null;
   paymentAiReadAmount: number | null;
+  proofs: { id: string; fileUrl: string; fileName: string | null; readAmount: number | null; receiptNumber: string | null; createdAt: string }[];
   paymentOverrideNote: string | null;
   paymentExtraFileUrl: string | null;
   paymentExtraFileName: string | null;
@@ -663,6 +664,13 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
         {visibleList.map((r, idx) => {
           const canDelete = !r.declarationFileUrl && !r.paymentProofUrl;
           const overdue = r.status === "PENDING_PAYMENT" && Date.now() - new Date(r.createdAt).getTime() > 24 * 60 * 60 * 1000;
+          // Confirmado 2026-08-31: cuando la suma de comprobantes todavía no
+          // llega al monto pedido (pero al menos uno se pudo leer), no es un
+          // error — solo falta subir otro. Se distingue de un mismatch real
+          // (0 leído) solo para no pintar de rojo/bloqueado algo que es
+          // simplemente "en progreso".
+          const proofSum = r.proofs.reduce((acc, p) => acc + (p.readAmount ?? 0), 0);
+          const proofInProgress = r.paymentAiMatch === false && !r.paymentOverrideNote && proofSum > 0;
           return (
             <Fragment key={r.id}>
               {showPaid && settled.length > 0 && idx === pending.length && (
@@ -751,14 +759,38 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
                 </span>
               </div>
 
-              {r.paymentProofUrl && (
-                <div className={`border rounded-md p-2.5 mb-2.5 ${r.paymentAiMatch ? "bg-green/10 border-green/30" : r.paymentOverrideNote ? "bg-gold/10 border-gold/35" : "bg-red/10 border-red/30"}`}>
-                  <div className="flex items-center gap-2.5 mb-1">
-                    {r.paymentAiMatch ? <CheckCircle2 size={13} className="text-green shrink-0" /> : r.paymentOverrideNote ? <CheckCircle2 size={13} className="shrink-0" style={{ color: "#D9A441" }} /> : <Lock size={13} className="text-red shrink-0" />}
-                    <ProofPreview url={r.paymentProofUrl} size={44} filename="comprobante-de-pago" />
+              {r.proofs.length > 0 && (
+                <div
+                  className={`border rounded-md p-2.5 mb-2.5 ${
+                    r.paymentAiMatch ? "bg-green/10 border-green/30" : r.paymentOverrideNote || proofInProgress ? "bg-gold/10 border-gold/35" : "bg-red/10 border-red/30"
+                  }`}
+                >
+                  <div className="flex flex-col gap-2 mb-1.5">
+                    {r.proofs.map((p) => (
+                      <div key={p.id} className="flex items-center gap-2.5">
+                        <ProofPreview url={p.fileUrl} size={40} filename="comprobante-de-pago" />
+                        <div className="text-[11px] text-steel">
+                          {p.readAmount !== null ? <span className="font-semibold">{money(p.readAmount)}</span> : <span className="text-red">no se pudo leer el monto</span>}
+                          {p.receiptNumber && <span className="text-steel-dim"> · N° {p.receiptNumber}</span>}
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                  <div className={`text-[11px] ${r.paymentAiMatch ? "text-green" : r.paymentOverrideNote ? "" : "text-red"}`} style={r.paymentOverrideNote && !r.paymentAiMatch ? { color: "#D9A441" } : undefined}>
-                    {r.paymentAiMatch ? "✅ Todo en orden — el comprobante coincide con el monto pagado. " : ""}{r.paymentAiNote}
+                  <div className="flex items-center gap-1.5">
+                    {r.paymentAiMatch ? (
+                      <CheckCircle2 size={13} className="text-green shrink-0" />
+                    ) : r.paymentOverrideNote || proofInProgress ? (
+                      <CheckCircle2 size={13} className="shrink-0" style={{ color: "#D9A441" }} />
+                    ) : (
+                      <Lock size={13} className="text-red shrink-0" />
+                    )}
+                    <div
+                      className={`text-[11px] ${r.paymentAiMatch ? "text-green" : r.paymentOverrideNote || proofInProgress ? "" : "text-red"}`}
+                      style={r.paymentOverrideNote || proofInProgress ? { color: "#D9A441" } : undefined}
+                    >
+                      {r.paymentAiMatch ? "✅ Todo en orden — la suma coincide o supera el monto pedido. " : ""}
+                      {r.paymentAiNote}
+                    </div>
                   </div>
                   {r.paymentOverrideNote && (
                     <div className="text-[11px] mt-1" style={{ color: "#D9A441" }}>
@@ -769,7 +801,7 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
                 </div>
               )}
 
-              {isAdmin && r.status === "PENDING_PAYMENT" && r.paymentProofUrl && r.paymentAiMatch === false && (
+              {isAdmin && r.status === "PENDING_PAYMENT" && r.proofs.length > 0 && r.paymentAiMatch === false && (
                 <div className="mb-2.5">
                   {overrideOpenId === r.id ? (
                     <div className="bg-cloud border border-rule rounded-md p-2.5">
@@ -925,7 +957,7 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
                         onMouseLeave={() => { proofRowIdRef.current = null; disarmProofPaste(); }}
                         className="flex items-center gap-1.5 border-[1.5px] border-dashed border-rule rounded px-3 py-2 text-[12px] text-steel cursor-pointer hover:border-teal focus:border-teal focus:outline-none w-fit"
                       >
-                        <Upload size={13} /> Subir o pegar comprobante de pago
+                        <Upload size={13} /> {r.proofs.length > 0 ? "Subir o pegar otro comprobante" : "Subir o pegar comprobante de pago"}
                         {/* Confirmado 2026-08-06: accept="image/*,application/pdf" hacía que el
                             celular mostrara el selector genérico de "Cámara y archivos" en vez
                             del acceso directo a la última foto — se separa el PDF como opción

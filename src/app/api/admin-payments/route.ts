@@ -23,6 +23,7 @@ export async function GET() {
         createdBy: { select: { name: true } },
         paidBy: { select: { name: true } },
         confirmedBy: { select: { name: true } },
+        proofs: { orderBy: { createdAt: "asc" } },
       },
     }),
     getAdminPaymentTemplates(),

@@ -2756,16 +2756,21 @@ model AdminPaymentRequest {
   declarationAiMatch  Boolean?
   declarationAiNote   String?
 
-  // Comprobante de pago del admin — obligatorio para pasar a PAID, bloqueante
+  // Comprobante de pago del admin — obligatorio para pasar a PAID, bloqueante.
+  // Confirmado 2026-08-31: pedido explícito del usuario — una solicitud
+  // puede pagarse con varios comprobantes (ej. $5 a un número + $4 a una
+  // cuenta), así que ahora también existe `proofs` (uno-a-varios, ver abajo)
+  // con la lista completa. Estos campos scalares se siguen llenando con el
+  // ÚLTIMO comprobante subido (compat con solicitudes viejas y con la UI que
+  // ya los usaba como señal de "ya hay comprobante"); paymentAiReadAmount
+  // pasa a ser la SUMA de todos los comprobantes de `proofs`, no solo el
+  // último, y paymentAiMatch/paymentAiNote reflejan esa suma.
   paymentProofUrl     String?
   paymentProofName    String?
   paymentAiMatch      Boolean?
   paymentAiNote       String?
-  // Confirmado 2026-08-12: pedido explícito del usuario — el monto real que
-  // la IA leyó del comprobante (coincida o no con `monto`), para mostrarlo
-  // al lado de "Total a pagar" — antes solo vivía como texto dentro de
-  // paymentAiNote, sin un número aparte que la UI pudiera mostrar directo.
   paymentAiReadAmount Float?
+  proofs              AdminPaymentProof[]
   // Confirmado 2026-08-12: pedido explícito del usuario — solo el admin (el
   // único que hace estos pagos) puede, con un clic + una breve nota, dar por
   // buena una transacción cuando el comprobante no coincide con lo
@@ -2804,6 +2809,27 @@ model AdminPaymentRequest {
   @@index([status])
   @@index([type])
   @@index([linkedGroupId])
+}
+
+// Confirmado 2026-08-31: pedido explícito del usuario — una solicitud de
+// pago puede cubrirse con más de un comprobante (ej. $5 a un número + $4 a
+// una cuenta para completar $9). Cada comprobante se lee con IA por
+// separado (monto + número de comprobante/transacción del banco, solo de
+// referencia) y se guarda aparte; el request se marca PAID solo cuando la
+// SUMA de readAmount de todos sus proofs llega o supera `monto`.
+model AdminPaymentProof {
+  id        String              @id @default(cuid())
+  requestId String
+  request   AdminPaymentRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  fileUrl       String
+  fileName      String?
+  readAmount    Float?
+  receiptNumber String?
+
+  createdAt DateTime @default(now())
+
+  @@index([requestId])
 }
 
 /**

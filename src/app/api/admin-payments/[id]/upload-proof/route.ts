@@ -22,22 +22,40 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const parsed = schema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: "Datos inválidos." }, { status: 400 });
 
-  const request = await prisma.adminPaymentRequest.findUnique({ where: { id } });
+  const request = await prisma.adminPaymentRequest.findUnique({ where: { id }, include: { proofs: true } });
   if (!request) return NextResponse.json({ error: "No encontrada." }, { status: 404 });
   if (request.status !== "PENDING_PAYMENT") return NextResponse.json({ error: "Ya fue pagada." }, { status: 409 });
 
   let readAmount: number | null = null;
+  let receiptNumber: string | null = null;
   try {
     const read = await readPaymentProof({ proofImageUrl: parsed.data.proofUrl, actorId: pushOwnerId(session) });
     readAmount = read.readAmount;
+    receiptNumber = read.receiptNumber;
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : "No se pudo leer el comprobante." }, { status: 500 });
   }
 
-  const matches = readAmount !== null && Math.abs(readAmount - request.monto) < 0.01;
+  await prisma.adminPaymentProof.create({
+    data: {
+      requestId: id,
+      fileUrl: parsed.data.proofUrl,
+      fileName: parsed.data.proofName ?? null,
+      readAmount,
+      receiptNumber,
+    },
+  });
+
+  // Confirmado 2026-08-31: pedido explícito del usuario — una solicitud puede
+  // pagarse con varios comprobantes (ej. $5 a un número + $4 a una cuenta), así
+  // que se cierra sola cuando la SUMA de todos los comprobantes leídos llega o
+  // supera `monto` (nunca si suma de menos: ahí sigue pendiente).
+  const sum = [...request.proofs, { readAmount }].reduce((acc, p) => acc + (p.readAmount ?? 0), 0);
+  const matches = sum >= request.monto - 0.01;
+  const count = request.proofs.length + 1;
   const note = matches
-    ? `Coincide — $${readAmount?.toFixed(2)}`
-    : `No coincide — el comprobante dice $${readAmount?.toFixed(2) ?? "?"}, debía ser $${request.monto.toFixed(2)}`;
+    ? `Suma de ${count} comprobante${count === 1 ? "" : "s"}: $${sum.toFixed(2)}`
+    : `Llevas $${sum.toFixed(2)} de $${request.monto.toFixed(2)} — falta $${(request.monto - sum).toFixed(2)}`;
 
   const updated = await prisma.adminPaymentRequest.update({
     where: { id },
@@ -46,9 +64,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       paymentProofName: parsed.data.proofName ?? null,
       paymentAiMatch: matches,
       paymentAiNote: note,
-      paymentAiReadAmount: readAmount,
+      paymentAiReadAmount: sum,
       ...(matches ? { status: "PAID", paidAt: new Date(), paidById: null } : {}),
     },
+    include: { proofs: { orderBy: { createdAt: "asc" } } },
   });
 
   if (matches && request.linkedGroupId) {
