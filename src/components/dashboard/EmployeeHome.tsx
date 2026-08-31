@@ -127,7 +127,7 @@ export function EmployeeHome({
             <ClipboardList size={17} />
           </span>
           <div className="flex-1 min-w-0">
-            <div className="text-[13px] font-semibold">Check-in semanal con Mary</div>
+            <div className="text-[13px] font-semibold">Feedback con Mary</div>
             <div className="text-[11px] text-steel">Cuéntale qué pasó en tu área esta semana</div>
           </div>
           <span className="text-[11px] font-bold text-blue shrink-0">Ir →</span>
