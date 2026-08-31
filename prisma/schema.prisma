@@ -1937,22 +1937,22 @@ model PurchaseUrgentResolution {
   // (fecha límite, fotos, IA, aprobación de Daniel) — este flag solo cambia
   // cómo se rotula en pantalla.
   replacementIsMissingDelivery Boolean   @default(false)
-  replacementDueDate       DateTime?
-  replacementSubmittedById String?
-  replacementSubmittedBy   User?     @relation("UrgentResolutionReplacementSubmittedBy", fields: [replacementSubmittedById], references: [id], onDelete: SetNull)
-  replacementSubmittedAt   DateTime?
-  replacementArrivedAt     DateTime?
-  replacementPhotoUrls     String[]
-  replacementAiMatch       Boolean?
-  replacementAiNote        String?
-  replacementVerifiedById  String?
-  replacementVerifiedBy    User?     @relation("UrgentResolutionReplacementVerifiedBy", fields: [replacementVerifiedById], references: [id], onDelete: SetNull)
+  replacementDueDate           DateTime?
+  replacementSubmittedById     String?
+  replacementSubmittedBy       User?     @relation("UrgentResolutionReplacementSubmittedBy", fields: [replacementSubmittedById], references: [id], onDelete: SetNull)
+  replacementSubmittedAt       DateTime?
+  replacementArrivedAt         DateTime?
+  replacementPhotoUrls         String[]
+  replacementAiMatch           Boolean?
+  replacementAiNote            String?
+  replacementVerifiedById      String?
+  replacementVerifiedBy        User?     @relation("UrgentResolutionReplacementVerifiedBy", fields: [replacementVerifiedById], references: [id], onDelete: SetNull)
   // Confirmado 2026-08-18: mismo checklist de Justa que
   // PurchaseRequestReceipt.justaUploadedAt — un reemplazo aprobado también
   // es mercadería física nueva que hay que cargar en Justa.
-  justaUploadedById        String?
-  justaUploadedBy          User?     @relation("UrgentResolutionJustaUploadedBy", fields: [justaUploadedById], references: [id], onDelete: SetNull)
-  justaUploadedAt          DateTime?
+  justaUploadedById            String?
+  justaUploadedBy              User?     @relation("UrgentResolutionJustaUploadedBy", fields: [justaUploadedById], references: [id], onDelete: SetNull)
+  justaUploadedAt              DateTime?
 
   // REFUND — precio fijo (el mismo de la cotización), solo la cantidad se
   // ingresa; la IA cruza cantidad×precio contra el comprobante que suba el
@@ -3941,6 +3941,12 @@ model ExternalSale {
   quantity            Int
   unitPrice           Float
   totalAmount         Float // quantity * unitPrice, calculado al declarar
+
+  // Datos del cliente final que compra — para que quien confirma el pago
+  // pueda cruzarlos contra el nombre/número que aparece en el banco.
+  // Nullable porque ventas declaradas antes de este campo no lo tienen.
+  clientName  String?
+  clientPhone String?
 
   // Congelado desde User.externalSaleContraEntrega al declarar (hoy true
   // solo para Marcos). Define el orden del flujo: contra entrega despacha

@@ -12,6 +12,8 @@ const schema = z.object({
   unitPrice: z.number().positive(),
   pickupPersonName: z.string().trim().min(1, "Falta a quién debe entregársela bodega."),
   courierNote: z.string().trim().optional(),
+  clientName: z.string().trim().min(1, "Falta el nombre del cliente."),
+  clientPhone: z.string().trim().min(1, "Falta el número de celular del cliente."),
 });
 
 // Confirmado 2026-08-29, pedido explícito del usuario: si Bryan rechaza,
@@ -49,6 +51,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       totalAmount: parsed.data.quantity * parsed.data.unitPrice,
       pickupPersonName: parsed.data.pickupPersonName,
       courierNote: parsed.data.courierNote?.trim() || null,
+      clientName: parsed.data.clientName,
+      clientPhone: parsed.data.clientPhone,
       reviewStatus: "PENDING",
       rejectionReason: null,
       reviewedAt: null,

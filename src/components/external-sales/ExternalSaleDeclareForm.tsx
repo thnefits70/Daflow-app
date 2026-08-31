@@ -19,6 +19,8 @@ type SaleDTO = {
   totalAmount: number;
   pickupPersonName: string;
   courierNote: string | null;
+  clientName: string | null;
+  clientPhone: string | null;
   reviewStatus: "PENDING" | "APPROVED" | "REJECTED";
   rejectionReason: string | null;
   paymentProofUrl: string | null;
@@ -52,6 +54,8 @@ export function ExternalSaleDeclareForm() {
   const [unitPrice, setUnitPrice] = useState("");
   const [pickupPersonName, setPickupPersonName] = useState("");
   const [courierNote, setCourierNote] = useState("");
+  const [clientName, setClientName] = useState("");
+  const [clientPhone, setClientPhone] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [uploadingFor, setUploadingFor] = useState<string | null>(null);
@@ -67,6 +71,8 @@ export function ExternalSaleDeclareForm() {
   const [editUnitPrice, setEditUnitPrice] = useState("");
   const [editPickupPersonName, setEditPickupPersonName] = useState("");
   const [editCourierNote, setEditCourierNote] = useState("");
+  const [editClientName, setEditClientName] = useState("");
+  const [editClientPhone, setEditClientPhone] = useState("");
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState("");
 
@@ -77,7 +83,7 @@ export function ExternalSaleDeclareForm() {
 
   const qty = Number(quantity) || 0;
   const price = Number(unitPrice) || 0;
-  const canSave = !!selected && qty > 0 && price > 0 && pickupPersonName.trim().length > 0 && !saving;
+  const canSave = !!selected && qty > 0 && price > 0 && pickupPersonName.trim().length > 0 && clientName.trim().length > 0 && clientPhone.trim().length > 0 && !saving;
 
   async function save() {
     if (!selected) return;
@@ -90,12 +96,16 @@ export function ExternalSaleDeclareForm() {
         unitPrice: price,
         pickupPersonName: pickupPersonName.trim(),
         courierNote: courierNote.trim() || undefined,
+        clientName: clientName.trim(),
+        clientPhone: clientPhone.trim(),
       });
       setSelected(null);
       setQuantity("");
       setUnitPrice("");
       setPickupPersonName("");
       setCourierNote("");
+      setClientName("");
+      setClientPhone("");
       load();
     } catch (e) {
       setError(e instanceof Error ? e.message : "No se pudo declarar la venta.");
@@ -115,12 +125,14 @@ export function ExternalSaleDeclareForm() {
     setEditUnitPrice(String(s.unitPrice));
     setEditPickupPersonName(s.pickupPersonName);
     setEditCourierNote(s.courierNote ?? "");
+    setEditClientName(s.clientName ?? "");
+    setEditClientPhone(s.clientPhone ?? "");
     setEditError("");
   }
 
   const editQty = Number(editQuantity) || 0;
   const editPrice = Number(editUnitPrice) || 0;
-  const canSaveEdit = !!editSelected && editQty > 0 && editPrice > 0 && editPickupPersonName.trim().length > 0 && !editSaving;
+  const canSaveEdit = !!editSelected && editQty > 0 && editPrice > 0 && editPickupPersonName.trim().length > 0 && editClientName.trim().length > 0 && editClientPhone.trim().length > 0 && !editSaving;
 
   async function saveEdit(saleId: string) {
     if (!editSelected) return;
@@ -136,6 +148,8 @@ export function ExternalSaleDeclareForm() {
           unitPrice: editPrice,
           pickupPersonName: editPickupPersonName.trim(),
           courierNote: editCourierNote.trim() || undefined,
+          clientName: editClientName.trim(),
+          clientPhone: editClientPhone.trim(),
         }),
       }).then(async (res) => {
         const data = await res.json().catch(() => null);
@@ -202,6 +216,16 @@ export function ExternalSaleDeclareForm() {
           </div>
         </div>
         {qty > 0 && price > 0 && <div className="text-[12px] text-steel">Total: <span className="font-bold text-ink">${(qty * price).toFixed(2)}</span></div>}
+        <div className="flex gap-2.5">
+          <div className="flex-1">
+            <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Nombre del cliente</label>
+            <input type="text" className="w-full rounded border border-rule bg-cloud px-2.5 py-1.5 text-[12.5px]" value={clientName} onChange={(e) => setClientName(e.target.value)} />
+          </div>
+          <div className="flex-1">
+            <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Celular del cliente</label>
+            <input type="tel" className="w-full rounded border border-rule bg-cloud px-2.5 py-1.5 text-[12.5px]" value={clientPhone} onChange={(e) => setClientPhone(e.target.value)} />
+          </div>
+        </div>
         <div>
           <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">A quién debe entregarle bodega (motorizado o cliente)</label>
           <input type="text" className="w-full rounded border border-rule bg-cloud px-2.5 py-1.5 text-[12.5px]" value={pickupPersonName} onChange={(e) => setPickupPersonName(e.target.value)} />
@@ -237,6 +261,9 @@ export function ExternalSaleDeclareForm() {
                     <span>{s.catalogItem?.name ?? s.declaredProductName} — {s.quantity} un. · ${s.totalAmount.toFixed(2)}</span>
                   </div>
                   <div className="text-[10.5px] text-steel mt-0.5">Entrega a: {s.pickupPersonName}{s.courierNote ? ` · Transportadora: ${s.courierNote}` : ""}</div>
+                  {(s.clientName || s.clientPhone) && (
+                    <div className="text-[10.5px] text-steel mt-0.5">Cliente: {s.clientName ?? "—"}{s.clientPhone ? ` · ${s.clientPhone}` : ""}</div>
+                  )}
                   {s.reviewStatus === "REJECTED" && s.rejectionReason && <div className="text-[11.5px] text-red mt-1">{s.rejectionReason}</div>}
                   {s.reviewStatus === "REJECTED" && editingId !== s.id && (
                     <button type="button" className="mt-2 text-[11.5px] font-bold border border-teal text-teal rounded px-2.5 py-1.5 cursor-pointer" onClick={() => startEdit(s)}>
@@ -271,6 +298,16 @@ export function ExternalSaleDeclareForm() {
                         <div className="flex-1">
                           <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Precio unitario</label>
                           <input type="number" min={0} step="0.01" className="w-full rounded border border-rule bg-surface px-2.5 py-1.5 text-[12.5px] font-bold" value={editUnitPrice} onChange={(e) => setEditUnitPrice(e.target.value)} />
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <div className="flex-1">
+                          <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Nombre del cliente</label>
+                          <input type="text" className="w-full rounded border border-rule bg-surface px-2.5 py-1.5 text-[12px]" value={editClientName} onChange={(e) => setEditClientName(e.target.value)} />
+                        </div>
+                        <div className="flex-1">
+                          <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Celular del cliente</label>
+                          <input type="tel" className="w-full rounded border border-rule bg-surface px-2.5 py-1.5 text-[12px]" value={editClientPhone} onChange={(e) => setEditClientPhone(e.target.value)} />
                         </div>
                       </div>
                       <div>
