@@ -276,7 +276,7 @@ export function RecognitionPanel({
             value={selectedMonth}
             onChange={(e) => setSelectedMonth(e.target.value)}
           />
-          {!isCurrentMonth && (
+          {!isCurrentMonth && pendingCount > 0 && (
             <span className="text-[11px] font-semibold" style={{ color: "#D9A441" }}>
               Cargando para un mes distinto al actual — úsalo solo para ponerte al día.
             </span>
