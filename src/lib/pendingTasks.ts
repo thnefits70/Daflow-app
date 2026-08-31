@@ -388,6 +388,7 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   ruptura_stock: "Ruptura de Stock",
   caja_chica_saldo: "Caja Chica — saldo bajo",
   caja_chica_confirmacion: "Caja Chica — falta que confirmen una recarga",
+  caja_chica_recarga_pendiente: "Caja Chica — te fondearon, falta que confirmes",
   pagos_administrativos: "Pagos administrativos pendientes de pago",
   pagos_mercaderia: "Pagos de mercadería pendientes",
   pagos_flete: "Fletes pendientes de pago",
@@ -950,6 +951,40 @@ async function getPettyCashUnconfirmedFunderItems(funderId: string | null, hrefB
     });
   }
   return items;
+}
+
+// Confirmado 2026-08-31: pedido explícito del usuario — a quien le TOCA
+// confirmar una recarga (no a quien la fondeó) antes solo le llegaba una
+// notificación push única en el momento del fondeo; si se le pasaba, no
+// tenía ningún aviso en Inicio que lo llevara de vuelta a confirmar. Mismo
+// criterio de "quién es el destinatario" que ya usa /api/petty-cash/recharge
+// al mandar ese push — aplica a cualquier colaborador, sea líder o no (ej.
+// Bryan en Secundaria no lidera ningún departamento). A diferencia de
+// getPettyCashUnconfirmedFunderItems, este aparece de inmediato (no espera
+// 8h) porque es el aviso principal, no un recordatorio de atraso.
+async function getMyPettyCashConfirmationPendingItems(userId: string, hrefBase: string): Promise<PendingItem[]> {
+  const me = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { isLeader: true, leadsDept: { select: { code: true } }, canManagePettyCashSecundaria: true },
+  });
+  if (!me) return [];
+  const boxTypes: PettyCashBoxTypeStr[] = [];
+  if (me.isLeader && me.leadsDept?.code === "FIN") boxTypes.push("PRINCIPAL");
+  if (me.canManagePettyCashSecundaria) boxTypes.push("SECUNDARIA");
+  if (boxTypes.length === 0) return [];
+
+  const rows = await prisma.pettyCashEntry.findMany({
+    where: { kind: "RECARGA", confirmedAt: null, archived: false, box: { type: { in: boxTypes } } },
+    include: { box: true },
+  });
+  return rows.map((r) => ({
+    type: "caja_chica_recarga_pendiente",
+    icon: "💰",
+    label: `Confirma que recibiste $${r.amount.toFixed(2)} en Caja Chica ${r.box.type === "PRINCIPAL" ? "Principal" : "Secundaria"}`,
+    meta: "Te fondearon la caja — falta que confirmes que la recibiste.",
+    overdue: false,
+    href: `${hrefBase}?tab=cajachica&box=${r.box.type.toLowerCase()}`,
+  }));
 }
 
 // Confirmado 2026-08-12: pedido explícito del usuario — un enlace de un
@@ -2060,6 +2095,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
   const myBankAccountItem = await getMyBankAccountPendingItem(actor.userId, "/area/roles-de-pago");
   const myPersonalPurchasePaymentItem = await getMyPersonalPurchasePaymentPendingItem(actor.userId, "/area/compras-personales");
   const myPersonalPurchaseStatusItem = await getMyPersonalPurchaseStatusPendingItem(actor.userId, "/area/compras-personales");
+  const myPettyCashConfirmationItems = await getMyPettyCashConfirmationPendingItems(actor.userId, "/area/workspace");
 
   // Confirmado 2026-08-18: pedido explícito del usuario — acceso directo en
   // Inicio para CUALQUIER colaborador de Inventario (no solo Daniel, su
@@ -2074,6 +2110,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     if (myBankAccountItem) teamItems.push(myBankAccountItem);
     if (myPersonalPurchasePaymentItem) teamItems.push(myPersonalPurchasePaymentItem);
     if (myPersonalPurchaseStatusItem) teamItems.push(myPersonalPurchaseStatusItem);
+    teamItems.push(...myPettyCashConfirmationItems);
     if (me.department?.code === "INV") {
       const [receivingItem, replacementItem] = await Promise.all([
         getPurchaseReceivingPendingItem("/area/workspace?tab=compras&ptab=inventario"),
@@ -2091,6 +2128,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
   if (myBankAccountItem) items.push(myBankAccountItem);
   if (myPersonalPurchasePaymentItem) items.push(myPersonalPurchasePaymentItem);
   if (myPersonalPurchaseStatusItem) items.push(myPersonalPurchaseStatusItem);
+  items.push(...myPettyCashConfirmationItems);
   let monthly = false;
 
   if (me.leadsDept.code === "FIN") {
