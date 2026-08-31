@@ -124,11 +124,11 @@ export async function getEarliestIncompleteMonthBefore(
   evaluatorIsAdmin: boolean,
   leaderDeptId: string | null,
   targetMonth: string
-): Promise<string | null> {
+): Promise<{ month: string; missingNames: string[] } | null> {
   const where = evaluatorIsAdmin
     ? { isLeader: true as const, isActive: true, excludeFromRecognition: false }
     : { deptId: leaderDeptId!, isLeader: false as const, isActive: true, excludeFromRecognition: false };
-  const cohort = await prisma.user.findMany({ where, select: { id: true, startDate: true } });
+  const cohort = await prisma.user.findMany({ where, select: { id: true, name: true, startDate: true } });
   if (cohort.length === 0) return null;
   const cohortIds = cohort.map((u) => u.id);
 
@@ -141,10 +141,23 @@ export async function getEarliestIncompleteMonthBefore(
 
   let month = prevMonthStr(targetMonth);
   while (month >= genesis.month) {
-    const eligibleIds = eligibleForMonth(cohort, month).map((u) => u.id);
-    if (eligibleIds.length > 0) {
-      const done = await prisma.monthlyEvaluationSummary.count({ where: { month, evaluateeId: { in: eligibleIds } } });
-      if (done < eligibleIds.length) return month;
+    const eligible = eligibleForMonth(cohort, month);
+    if (eligible.length > 0) {
+      const doneIds = new Set(
+        (
+          await prisma.monthlyEvaluationSummary.findMany({
+            where: { month, evaluateeId: { in: eligible.map((u) => u.id) } },
+            select: { evaluateeId: true },
+          })
+        ).map((s) => s.evaluateeId)
+      );
+      const missing = eligible.filter((u) => !doneIds.has(u.id));
+      // Nota: `eligible` se calcula con la plantilla ACTUAL del equipo filtrada
+      // solo por startDate (ver eligibleForMonth) — no sabe si esa persona ya
+      // era líder/miembro del área en `month`. Un ascenso o cambio de área
+      // reciente puede aparecer aquí como "faltante" de un mes en el que esa
+      // persona en realidad no formaba parte de este grupo todavía.
+      if (missing.length > 0) return { month, missingNames: missing.map((u) => u.name) };
     }
     month = prevMonthStr(month);
   }
@@ -1039,7 +1052,7 @@ async function getPurchaseRequesterPendingItems(userId: string, href: string): P
 // Extraído a función propia (confirmado 2026-08-27) — además de alimentar la
 // tarjeta de Inicio (solo líderes, ver getPendingTasksForActor), la pestaña
 // "Registro de Egresos" de "Mi área de trabajo" (DeptWorkspaceTabs /
-// MerchandiseOutflowPanel) necesita el mismo conteo para CUALQUIER empleado,
+// MerchandiseOutflowPanel) necesita el mismo conteo para CUALQUIER colaborador,
 // no solo líderes, porque /api/merchandise-outflow/supplier-exchange/mine
 // (el dueño real de este flujo) tampoco exige liderazgo — así se ve la
 // sección "Mis solicitudes de gestión pendiente" ahí aunque no tenga ningún

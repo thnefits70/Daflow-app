@@ -35,10 +35,13 @@ export async function GET(req: NextRequest) {
   // recién se entere al guardar.
   const isAdmin = session.user.role === "admin";
   const evaluateeDept = isAdmin ? null : await prisma.user.findUnique({ where: { id: evaluateeId }, select: { deptId: true } });
-  const blockedMonth = await getEarliestIncompleteMonthBefore(isAdmin, evaluateeDept?.deptId ?? null, month);
-  if (blockedMonth) {
+  const blocked = await getEarliestIncompleteMonthBefore(isAdmin, evaluateeDept?.deptId ?? null, month);
+  if (blocked) {
     return NextResponse.json(
-      { error: `Antes de calificar ${formatMonthLabel(month)}, completa primero ${formatMonthLabel(blockedMonth)} — todavía te falta gente por calificar ese mes.`, blockedMonth },
+      {
+        error: `Antes de calificar ${formatMonthLabel(month)}, completa primero ${formatMonthLabel(blocked.month)} — todavía falta calificar a ${blocked.missingNames.join(", ")}.`,
+        blockedMonth: blocked.month,
+      },
       { status: 409 }
     );
   }
@@ -111,10 +114,13 @@ export async function POST(req: NextRequest) {
   // otro mes anterior quedó pendiente, o llama a la API directo.
   const isAdmin = session.user.role === "admin";
   const evaluateeDept = isAdmin ? null : await prisma.user.findUnique({ where: { id: evaluateeId }, select: { deptId: true } });
-  const blockedMonth = await getEarliestIncompleteMonthBefore(isAdmin, evaluateeDept?.deptId ?? null, month);
-  if (blockedMonth) {
+  const blocked = await getEarliestIncompleteMonthBefore(isAdmin, evaluateeDept?.deptId ?? null, month);
+  if (blocked) {
     return NextResponse.json(
-      { error: `Antes de calificar ${formatMonthLabel(month)}, completa primero ${formatMonthLabel(blockedMonth)} — todavía te falta gente por calificar ese mes.`, blockedMonth },
+      {
+        error: `Antes de calificar ${formatMonthLabel(month)}, completa primero ${formatMonthLabel(blocked.month)} — todavía falta calificar a ${blocked.missingNames.join(", ")}.`,
+        blockedMonth: blocked.month,
+      },
       { status: 409 }
     );
   }
