@@ -48,15 +48,14 @@ export function goalStatus(pct: number) {
   return { label: "No eficiente", color: "#C4453A" };
 }
 
-// Fill Rate reads on a much tighter band than a units goal like Pedidos
-// despachados — only above 99% counts as efficient.
-// Confirmado 2026-07-28: bandas del Fill Rate mejorado (4 indicadores) —
-// mismos cortes aplicados aquí para que la tarjetita chiquita de tendencia
-// y la tarjeta nueva de desglose (getLatestFillRateBreakdown) siempre
+// Confirmado 2026-08-31: bandas reemplazan las anteriores (98/95) — ≥96%
+// excelente, 90-95% muy bueno, <90% alerta/ineficiente. Mismos cortes que
+// dashboard.ts y FillRateBreakdownCard/WeeklyMetricPanel, para que la
+// tarjetita chiquita de tendencia y la tarjeta de desglose siempre
 // coincidan en la misma semana.
 export function fillRateStatus(pct: number) {
-  if (pct >= 98) return { label: "Eficiente", color: "#22C55E" };
-  if (pct >= 95) return { label: "Regular", color: "#D9A441" };
+  if (pct >= 96) return { label: "Excelente", color: "#22C55E" };
+  if (pct >= 90) return { label: "Muy bueno", color: "#D9A441" };
   return { label: "Alerta", color: "#E0574A" };
 }
 
