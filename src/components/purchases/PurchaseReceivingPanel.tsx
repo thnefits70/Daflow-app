@@ -80,6 +80,7 @@ type PendingReplacement = {
   id: string;
   quantity: number;
   replacementDueDate: string | null;
+  replacementIsMissingDelivery: boolean;
   // Confirmado 2026-08-18: pedido explícito del usuario — mismo patrón de
   // equipo/Daniel que la recepción normal. Mientras replacementSubmittedAt
   // sea null, falta que el equipo suba fotos; con valor, falta que Daniel
@@ -904,7 +905,7 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
       {pendingReplacements.length > 0 && (
         <div className="bg-surface border border-gold/40 rounded-md p-4 mb-1">
           <div className="flex items-center gap-1.5 text-[12px] font-bold mb-2" style={{ color: "#D9A441" }}>
-            <Truck size={14} /> Cambios de mercadería pendientes de verificar
+            <Truck size={14} /> Mercadería del proveedor pendiente de verificar
           </div>
           <div className="flex flex-col gap-2.5">
             {pendingReplacements.map((pr) => (
@@ -978,7 +979,7 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                       className="rounded border border-teal bg-teal px-3.5 py-1.5 text-[12px] font-bold text-navy cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                       onClick={() => approveReplacement(pr.id)}
                     >
-                      ✓ Aprobar cambio recibido
+                      ✓ Aprobar {pr.replacementIsMissingDelivery ? "entrega recibida" : "cambio recibido"}
                     </button>
                   </div>
                 ) : (
@@ -989,7 +990,7 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                     className="rounded border border-teal bg-teal px-3.5 py-1.5 text-[12px] font-bold text-navy cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                     onClick={() => { setOpenReplacementId(pr.id); setReplacementPhotoUrls([]); setErr(""); }}
                   >
-                    Verificar cambio recibido
+                    Verificar {pr.replacementIsMissingDelivery ? "entrega recibida" : "cambio recibido"}
                   </button>
                 )}
               </div>

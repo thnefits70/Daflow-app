@@ -1309,8 +1309,8 @@ async function getPurchaseReplacementVerificationPendingItem(href: string): Prom
   return {
     type: "compras_cambios_verificar",
     icon: "🔄",
-    label: "Verificar cambios de mercadería",
-    meta: `${rows.length} cambio${rows.length === 1 ? "" : "s"} pendiente${rows.length === 1 ? "" : "s"}${overdue ? " · atrasado" : ""}`,
+    label: "Verificar mercadería del proveedor pendiente",
+    meta: `${rows.length} pendiente${rows.length === 1 ? "" : "s"}${overdue ? " · atrasado" : ""}`,
     overdue,
     href,
   };

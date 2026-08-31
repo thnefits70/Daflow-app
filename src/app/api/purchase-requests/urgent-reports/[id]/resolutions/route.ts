@@ -13,7 +13,7 @@ const schema = z.discriminatedUnion("type", [
   // mismo campo (SupplierCredit.proofUrl/proofName) que ya usan los créditos
   // manuales, ahora también en los automáticos que salen de un reporte.
   z.object({ type: z.literal("CREDIT"), quantity: z.number().int().positive(), proofUrl: z.string().url("Sube el comprobante del proveedor."), proofName: z.string().trim().optional() }),
-  z.object({ type: z.literal("REPLACEMENT"), quantity: z.number().int().positive(), dueDate: z.string() }),
+  z.object({ type: z.literal("REPLACEMENT"), quantity: z.number().int().positive(), dueDate: z.string(), missingDelivery: z.boolean().optional() }),
   z.object({ type: z.literal("REFUND"), quantity: z.number().int().positive() }),
   z.object({ type: z.literal("WRITE_OFF"), quantity: z.number().int().positive(), note: z.string().trim().min(1, "Explica por qué no se recupera.") }),
 ]);
@@ -86,7 +86,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     }
     if (parsed.data.type === "REPLACEMENT") {
       return tx.purchaseUrgentResolution.create({
-        data: { reportId: id, type: "REPLACEMENT", quantity: parsed.data.quantity, amount, status: "PENDING", replacementDueDate: new Date(parsed.data.dueDate), createdById },
+        data: { reportId: id, type: "REPLACEMENT", quantity: parsed.data.quantity, amount, status: "PENDING", replacementDueDate: new Date(parsed.data.dueDate), replacementIsMissingDelivery: parsed.data.missingDelivery ?? false, createdById },
       });
     }
     if (parsed.data.type === "REFUND") {
@@ -102,8 +102,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (parsed.data.type === "REPLACEMENT") {
     const invLeader = await prisma.user.findFirst({ where: { isLeader: true, leadsDept: { code: "INV" } }, select: { id: true } });
     if (invLeader) {
+      const isMissingDelivery = parsed.data.missingDelivery ?? false;
       await sendPushToOwner(invLeader.id, {
-        title: "📦 Cambio de mercadería pendiente de verificar",
+        title: isMissingDelivery ? "📦 Entrega de mercadería faltante pendiente de verificar" : "📦 Cambio de mercadería pendiente de verificar",
         body: `${report.request.catalogItem.name} — ${parsed.data.quantity} un. · llega hasta ${new Date(parsed.data.dueDate).toLocaleDateString("es-MX")}`,
         url: "/area/workspace",
       }).catch(() => null);

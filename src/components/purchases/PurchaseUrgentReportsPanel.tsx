@@ -12,6 +12,11 @@ import { CatalogCode } from "@/components/shared/CatalogCode";
 
 type ResolutionType = "CREDIT" | "REPLACEMENT" | "REFUND" | "WRITE_OFF";
 type ResolutionStatus = "PENDING" | "COMPLETED" | "CANCELLED";
+// UI-only: "MISSING_DELIVERY" no es un tipo aparte en la base — es
+// REPLACEMENT con replacementIsMissingDelivery=true. Mismo mecanismo de
+// verificación de punta a punta, solo cambia el rótulo (ver
+// resolutionLabel más abajo).
+type UiResolutionType = ResolutionType | "MISSING_DELIVERY";
 
 type Resolution = {
   id: string;
@@ -21,6 +26,7 @@ type Resolution = {
   note: string | null;
   status: ResolutionStatus;
   replacementDueDate: string | null;
+  replacementIsMissingDelivery: boolean;
   replacementArrivedAt: string | null;
   replacementPhotoUrls: string[];
   replacementAiMatch: boolean | null;
@@ -75,12 +81,21 @@ function totalReported(r: Report) {
   return r.damagedQty + r.missingQty + r.incompleteQty + r.differentQty;
 }
 
-const RESOLUTION_LABEL: Record<ResolutionType, string> = {
+const RESOLUTION_LABEL: Record<UiResolutionType, string> = {
   CREDIT: "Crédito futuro",
   REPLACEMENT: "Cambio de mercadería",
+  MISSING_DELIVERY: "Entrega de mercadería faltante",
   REFUND: "Reembolso",
   WRITE_OFF: "Pérdida (sin acción)",
 };
+
+// El proveedor manda lo que faltó del pedido en vez de dar crédito/reembolso
+// — no es un cambio de producto dañado/distinto, así que se rotula distinto
+// aunque use el mismo mecanismo de verificación que "Cambio de mercadería".
+function resolutionLabel(res: Resolution): string {
+  if (res.type === "REPLACEMENT" && res.replacementIsMissingDelivery) return RESOLUTION_LABEL.MISSING_DELIVERY;
+  return RESOLUTION_LABEL[res.type];
+}
 
 // Confirmado 2026-08-06: bandeja donde Bryan (o admin) coordina con el
 // proveedor cada "Informar urgente" que sube Daniel — reparte la cantidad
@@ -92,7 +107,7 @@ export function PurchaseUrgentReportsPanel({ isAdmin }: { isAdmin: boolean }) {
   const router = useRouter();
   const [reports, setReports] = useState<Report[] | null>(null);
   const [openReportId, setOpenReportId] = useState<string | null>(null);
-  const [resType, setResType] = useState<ResolutionType>("CREDIT");
+  const [resType, setResType] = useState<UiResolutionType>("CREDIT");
   const [resQty, setResQty] = useState("");
   const [resDueDate, setResDueDate] = useState("");
   const [resNote, setResNote] = useState("");
@@ -139,13 +154,13 @@ export function PurchaseUrgentReportsPanel({ isAdmin }: { isAdmin: boolean }) {
   async function submitResolution(reportId: string) {
     const qty = Number(resQty);
     if (!qty || qty <= 0) { setErr("Ingresa una cantidad válida."); return; }
-    if (resType === "REPLACEMENT" && !resDueDate) { setErr("Elige la fecha máxima del cambio."); return; }
+    if ((resType === "REPLACEMENT" || resType === "MISSING_DELIVERY") && !resDueDate) { setErr("Elige la fecha máxima de entrega."); return; }
     if (resType === "WRITE_OFF" && !resNote.trim()) { setErr("Explica por qué no se recupera."); return; }
     if (resType === "CREDIT" && !resProofUrl) { setErr("Sube el comprobante del proveedor."); return; }
     setBusy(true);
     setErr("");
-    const body: Record<string, unknown> = { type: resType, quantity: qty };
-    if (resType === "REPLACEMENT") body.dueDate = resDueDate;
+    const body: Record<string, unknown> = { type: resType === "MISSING_DELIVERY" ? "REPLACEMENT" : resType, quantity: qty };
+    if (resType === "REPLACEMENT" || resType === "MISSING_DELIVERY") { body.dueDate = resDueDate; body.missingDelivery = resType === "MISSING_DELIVERY"; }
     if (resType === "WRITE_OFF") body.note = resNote.trim();
     if (resType === "CREDIT") { body.proofUrl = resProofUrl; body.proofName = resProofName; }
     const res = await fetch(`/api/purchase-requests/urgent-reports/${reportId}/resolutions`, {
@@ -301,7 +316,7 @@ export function PurchaseUrgentReportsPanel({ isAdmin }: { isAdmin: boolean }) {
                   {openReportId === r.id ? (
                     <div className="bg-cloud rounded-md p-3">
                       <div className="flex gap-1.5 mb-2.5 flex-wrap">
-                        {(["CREDIT", "REPLACEMENT", "REFUND", "WRITE_OFF"] as const).map((t) => (
+                        {(["CREDIT", "REPLACEMENT", "MISSING_DELIVERY", "REFUND", "WRITE_OFF"] as const).map((t) => (
                           <button key={t} type="button" className={`rounded border px-2.5 py-1.5 text-[11px] font-semibold cursor-pointer ${resType === t ? "border-teal text-teal bg-teal/10" : "border-rule text-steel"}`} onClick={() => setResType(t)}>
                             {RESOLUTION_LABEL[t]}
                           </button>
@@ -312,9 +327,9 @@ export function PurchaseUrgentReportsPanel({ isAdmin }: { isAdmin: boolean }) {
                           <label className="block mb-1 text-[10px] text-steel">Cantidad (máx. {remaining})</label>
                           <input type="number" min={1} max={remaining} className="w-full rounded border border-rule px-2.5 py-2 text-[13px]" value={resQty} onChange={(e) => setResQty(e.target.value)} />
                         </div>
-                        {resType === "REPLACEMENT" && (
+                        {(resType === "REPLACEMENT" || resType === "MISSING_DELIVERY") && (
                           <div>
-                            <label className="block mb-1 text-[10px] text-steel">Fecha máxima del cambio</label>
+                            <label className="block mb-1 text-[10px] text-steel">Fecha máxima de {resType === "MISSING_DELIVERY" ? "entrega" : "cambio"}</label>
                             <input type="date" className="w-full rounded border border-rule px-2.5 py-2 text-[13px]" value={resDueDate} onChange={(e) => setResDueDate(e.target.value)} />
                           </div>
                         )}
@@ -380,7 +395,7 @@ export function PurchaseUrgentReportsPanel({ isAdmin }: { isAdmin: boolean }) {
                 </div>
                 <div className="flex flex-col gap-1 mt-1.5">
                   {r.resolutions.map((res) => (
-                    <div key={res.id} className="text-steel">{RESOLUTION_LABEL[res.type]} — {res.quantity} un. · {money(res.amount)}</div>
+                    <div key={res.id} className="text-steel">{resolutionLabel(res)} — {res.quantity} un. · {money(res.amount)}</div>
                   ))}
                 </div>
               </div>
@@ -407,7 +422,7 @@ function ResolutionRow({
   return (
     <div className="bg-cloud rounded px-3 py-2 text-[11.5px]">
       <div className="flex items-center justify-between gap-2">
-        <span className="font-semibold">{RESOLUTION_LABEL[res.type]} — {res.quantity} un. · {money(res.amount)}</span>
+        <span className="font-semibold">{resolutionLabel(res)} — {res.quantity} un. · {money(res.amount)}</span>
         <span className={`text-[10px] font-bold uppercase ${res.status === "COMPLETED" ? "text-green" : "text-steel"}`}>{res.status === "COMPLETED" ? "Listo" : "En curso"}</span>
       </div>
 
@@ -427,7 +442,7 @@ function ResolutionRow({
           {res.status === "COMPLETED" ? (
             <>Verificado por {actorName(res.replacementVerifiedBy?.name)}{res.replacementArrivedAt ? ` · ${formatDateTime(res.replacementArrivedAt)}` : ""}{res.replacementAiNote ? ` — 🤖 ${res.replacementAiNote}` : ""}</>
           ) : (
-            <>Esperando el cambio — vence {res.replacementDueDate ? new Date(res.replacementDueDate).toLocaleDateString("es-MX") : "—"}</>
+            <>Esperando {res.replacementIsMissingDelivery ? "la entrega" : "el cambio"} — vence {res.replacementDueDate ? new Date(res.replacementDueDate).toLocaleDateString("es-MX") : "—"}</>
           )}
         </div>
       )}

@@ -1930,6 +1930,13 @@ model PurchaseUrgentResolution {
   // replacementSubmittedAt/By es el sello del equipo (status se queda
   // PENDING) y replacementVerifiedAt/By es la aprobación final de Daniel
   // (recién ahí status pasa a COMPLETED).
+  // Confirmado 2026-08-31: pedido explícito de Bryan — a veces el proveedor,
+  // para no dar crédito ni reembolso, prefiere directamente entregar la
+  // cantidad que faltó del pedido original (no es un cambio de producto
+  // dañado/distinto). Mismo mecanismo de REPLACEMENT de punta a punta
+  // (fecha límite, fotos, IA, aprobación de Daniel) — este flag solo cambia
+  // cómo se rotula en pantalla.
+  replacementIsMissingDelivery Boolean   @default(false)
   replacementDueDate       DateTime?
   replacementSubmittedById String?
   replacementSubmittedBy   User?     @relation("UrgentResolutionReplacementSubmittedBy", fields: [replacementSubmittedById], references: [id], onDelete: SetNull)
