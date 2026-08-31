@@ -833,21 +833,29 @@ async function getRecognitionAdminPendingItem(href: string): Promise<PendingItem
 // getRecognitionAdminPendingItem arriba (nunca se llama desde la rama de
 // líderes de getPendingTasksForActor).
 //
-// Fix confirmado 2026-08-31 (reportado por el usuario, doble bug real):
+// Fix confirmado 2026-08-31 (reportado por el usuario, dos rondas del
+// mismo bug real):
 // 1) El item agregaba a TODOS los líderes desde el día 1 de la función,
 //    porque "sin actividad en las últimas 2 semanas" también era cierto
 //    para cualquiera que simplemente nunca hubiera usado a Mary todavía
-//    (el feature es nuevo — nadie tiene historial). Ahora el caso (b) exige
-//    `everReported > 0`: solo cuenta como "se quedó en silencio" alguien
-//    que YA le había reportado algo antes y dejó de hacerlo, nunca alguien
-//    que sencillamente no ha estrenado el asistente.
+//    (el feature es nuevo — nadie tiene historial).
 // 2) Un solo item agregado con un href fijo ("/admin") apuntaba a la MISMA
 //    página del Inicio donde ya vive esta tarjeta — el clic "Ir →" no hacía
 //    nada porque ya estaba ahí. Ahora es un item POR LÍDER/ÁREA (mismo
 //    patrón que getFeedbackPendingItems arriba), cada uno con el href real
 //    de la bitácora de esa área (/admin/dept/[id]).
+// Primer intento del fix (1) exigía `everReported > 0` para contar como
+// "se quedó en silencio" — pero eso abría un hueco permanente: un líder
+// que NUNCA le escribe a Mary jamás cumple esa condición, así que nunca
+// se le marcaría, sin importar cuántas semanas pasen. La base correcta no
+// es el historial de cada quien, sino la fecha en que Mary existe.
+const MARY_LAUNCH_WEEK = "2026-W35"; // semana en que se lanzó el check-in semanal (2026-08-26/27)
+
 async function getWeeklyCheckinStalledPendingItems(): Promise<PendingItem[]> {
   const twoWeeksAgo = prevIsoWeek(prevIsoWeek(isoWeekOf(nowInEcuador())));
+  // Todavía no han pasado 2 semanas completas desde que Mary existe — nadie
+  // puede considerarse "en silencio" antes de eso, sin importar su historial.
+  if (twoWeeksAgo < MARY_LAUNCH_WEEK) return [];
 
   const leaders = await prisma.user.findMany({
     where: { isActive: true, isLeader: true, leadsDept: { trackWeeklyReview: true } },
@@ -857,17 +865,15 @@ async function getWeeklyCheckinStalledPendingItems(): Promise<PendingItem[]> {
 
   const items: PendingItem[] = [];
   for (const leader of leaders) {
-    const [stalePending, recentActivity, everReported] = await Promise.all([
+    const [stalePending, recentActivity] = await Promise.all([
       prisma.weeklyReviewRecord.findFirst({
         where: { reportedById: leader.id, status: "PENDING", week: { lte: twoWeeksAgo } },
       }),
       prisma.weeklyReviewRecord.count({
         where: { reportedById: leader.id, week: { gte: twoWeeksAgo } },
       }),
-      prisma.weeklyReviewRecord.count({ where: { reportedById: leader.id } }),
     ]);
-    const wentSilentAfterUsingIt = everReported > 0 && recentActivity === 0;
-    if (!stalePending && !wentSilentAfterUsingIt) continue;
+    if (!stalePending && recentActivity > 0) continue;
 
     items.push({
       type: "check_in_semanal_estancado",
