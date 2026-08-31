@@ -16,7 +16,7 @@ import { PieChart } from "./PieChart";
 import { OrgChart } from "./OrgChart";
 import { InventoryKpisHomeCard } from "./InventoryKpisHomeCard";
 import type { DashboardRow, WeeklyTrend, StockoutWeekPoint, WarrantyMonthlyChart, PieSlice, FillRateBreakdown, CommissionProgress } from "@/lib/dashboard";
-import type { StoreFeedbackAggregate, StoreFeedbackTrendPoint } from "@/lib/storeFeedback";
+import type { StoreFeedbackAggregate, StoreFeedbackStoreDetail, StoreFeedbackTrendPoint } from "@/lib/storeFeedback";
 import type { DuePeriodicReminderDTO } from "@/lib/periodicReminders";
 import { formatDateTime } from "@/lib/formatDateTime";
 import type { MyLearningPathSummaryDTO } from "@/lib/learningPaths";
@@ -62,6 +62,7 @@ export function EmployeeHome({
   warrantyReasonChart,
   storeFeedback,
   storeFeedbackTrend = [],
+  storeFeedbackDetails,
   rowsSorted,
   duePeriodicReminders = [],
   learningPathSummary,
@@ -87,6 +88,7 @@ export function EmployeeHome({
   warrantyReasonChart?: PieSlice[];
   storeFeedback?: StoreFeedbackAggregate | null;
   storeFeedbackTrend?: StoreFeedbackTrendPoint[];
+  storeFeedbackDetails?: StoreFeedbackStoreDetail[];
   rowsSorted: DashboardRow[];
   duePeriodicReminders?: DuePeriodicReminderDTO[];
   learningPathSummary?: MyLearningPathSummaryDTO;
@@ -141,7 +143,7 @@ export function EmployeeHome({
         inventoryKpis?.hasData ||
         (stockoutWeeks && stockoutWeeks.length > 0)) && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-7">
-          {storeFeedback && <StoreFeedbackTile data={storeFeedback} trend={storeFeedbackTrend} />}
+          {storeFeedback && <StoreFeedbackTile data={storeFeedback} trend={storeFeedbackTrend} storeDetails={storeFeedbackDetails} />}
 
           {warrantyMonthlyChart && (
             <WarrantyMonthTile chart={warrantyMonthlyChart} emptyMessage="Aún no hay categorías cargadas este mes." />

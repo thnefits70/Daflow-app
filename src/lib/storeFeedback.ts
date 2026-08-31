@@ -145,6 +145,20 @@ export async function getStoreFeedbackMonthlyAggregates(): Promise<StoreFeedback
   return aggregates.filter((a): a is StoreFeedbackAggregate => a !== null);
 }
 
+export type StoreFeedbackStoreDetail = { name: string; contactName: string | null };
+
+// Confirmado 2026-08-31: nombre de tienda + dueño/administrador SOLO para
+// quien ya ve el detalle completo (Nairoby vía canManageStoreFeedback, y
+// admin) — nunca en la tarjeta pública de Inicio que ve todo el mundo, ni
+// para Bryan (que solo ve el agregado, ver getStoreFeedbackMonthlyAggregates).
+export async function getStoreFeedbackStoreDetails(period: string): Promise<StoreFeedbackStoreDetail[]> {
+  const rows = await prisma.storeFeedbackEvaluation.findMany({
+    where: { period },
+    include: { store: { select: { name: true, contactName: true } } },
+  });
+  return rows.map((r) => ({ name: r.store.name, contactName: r.store.contactName }));
+}
+
 export type StoreFeedbackTrendPoint = { period: string; avgLoyaltyScore: number };
 
 // Public — last N periods that actually have data (not calendar months, to

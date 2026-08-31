@@ -9,7 +9,7 @@ import {
   getWarrantyReasonChart,
   getCommissionProgress,
 } from "@/lib/dashboard";
-import { getStoreFeedbackAggregate, getStoreFeedbackTrend } from "@/lib/storeFeedback";
+import { getStoreFeedbackAggregate, getStoreFeedbackTrend, getStoreFeedbackStoreDetails } from "@/lib/storeFeedback";
 import { getTeamLearningPathResults } from "@/lib/learningPaths";
 import { getAiSpendOverview } from "@/lib/aiUsage";
 import { getPurchaseMerchandisePaymentsShortcut } from "@/lib/pendingTasks";
@@ -39,6 +39,7 @@ export default async function AdminHomePage() {
       getCommissionProgress(),
       getPurchaseMerchandisePaymentsShortcut(),
     ]);
+  const storeFeedbackDetails = storeFeedback ? await getStoreFeedbackStoreDetails(storeFeedback.period) : [];
   return (
     <Dashboard
       data={data}
@@ -52,6 +53,7 @@ export default async function AdminHomePage() {
       warrantyReasonChart={warrantyReasonChart}
       storeFeedback={storeFeedback}
       storeFeedbackTrend={storeFeedbackTrend}
+      storeFeedbackDetails={storeFeedbackDetails}
       learningPathResults={learningPathResults}
       aiSpendToday={aiSpend.today}
       aiSpendMonth={aiSpend.month}

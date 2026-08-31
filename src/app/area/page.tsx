@@ -12,11 +12,11 @@ import {
   getWarrantyReasonChart,
   getCommissionProgress,
 } from "@/lib/dashboard";
-import { getStoreFeedbackAggregate, getStoreFeedbackTrend } from "@/lib/storeFeedback";
+import { getStoreFeedbackAggregate, getStoreFeedbackTrend, getStoreFeedbackStoreDetails } from "@/lib/storeFeedback";
 import { getDuePeriodicReminders } from "@/lib/periodicReminders";
 import { getMyLearningPaths, summarizeMyLearningPaths } from "@/lib/learningPaths";
 import { EmployeeHome } from "@/components/dashboard/EmployeeHome";
-import { canViewInventoryKpisHome, canJustifyFillRate } from "@/lib/guards";
+import { canViewInventoryKpisHome, canJustifyFillRate, canManageStoreFeedback } from "@/lib/guards";
 import { getInventoryKpisData } from "@/lib/inventoryKpis";
 
 export default async function AreaHomePage() {
@@ -74,6 +74,12 @@ export default async function AreaHomePage() {
 
   const canJustifyFillRateFlag = fillRateBreakdown ? await canJustifyFillRate() : false;
 
+  // Confirmado 2026-08-31: nombre de tienda + dueño/administrador solo para
+  // Nairoby (canManageStoreFeedback) — el resto de la empresa, incluido
+  // Bryan, sigue viendo únicamente el agregado en esta misma tarjeta.
+  const storeFeedbackDetails =
+    storeFeedback && (await canManageStoreFeedback()) ? await getStoreFeedbackStoreDetails(storeFeedback.period) : undefined;
+
   return (
     <EmployeeHome
       userName={session.user.name ?? ""}
@@ -93,6 +99,7 @@ export default async function AreaHomePage() {
       warrantyReasonChart={warrantyReasonChart}
       storeFeedback={storeFeedback}
       storeFeedbackTrend={storeFeedbackTrend}
+      storeFeedbackDetails={storeFeedbackDetails}
       duePeriodicReminders={duePeriodicReminders}
       inventoryKpis={inventoryKpis}
       rowsSorted={dashboardData.rowsSorted}

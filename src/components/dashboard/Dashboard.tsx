@@ -16,7 +16,7 @@ import { StockoutBarChart } from "./StockoutBarChart";
 import { PieChart } from "./PieChart";
 import { OrgChart } from "./OrgChart";
 import type { DashboardData, WeeklyTrend, StockoutWeekPoint, WarrantyMonthlyChart, PieSlice, FillRateBreakdown, CommissionProgress } from "@/lib/dashboard";
-import type { StoreFeedbackAggregate, StoreFeedbackTrendPoint } from "@/lib/storeFeedback";
+import type { StoreFeedbackAggregate, StoreFeedbackStoreDetail, StoreFeedbackTrendPoint } from "@/lib/storeFeedback";
 import type { DuePeriodicReminderDTO } from "@/lib/periodicReminders";
 import type { TeamLearningPathResultDTO } from "@/lib/learningPaths";
 import { GraduationCap } from "lucide-react";
@@ -44,6 +44,7 @@ export function Dashboard({
   warrantyReasonChart,
   storeFeedback,
   storeFeedbackTrend = [],
+  storeFeedbackDetails,
   duePeriodicReminders = [],
   learningPathResults = [],
   aiSpendToday,
@@ -62,6 +63,7 @@ export function Dashboard({
   warrantyReasonChart?: PieSlice[];
   storeFeedback?: StoreFeedbackAggregate | null;
   storeFeedbackTrend?: StoreFeedbackTrendPoint[];
+  storeFeedbackDetails?: StoreFeedbackStoreDetail[];
   duePeriodicReminders?: DuePeriodicReminderDTO[];
   learningPathResults?: TeamLearningPathResultDTO[];
   aiSpendToday?: number;
@@ -136,7 +138,7 @@ export function Dashboard({
         storeFeedback ||
         (stockoutWeeks && stockoutWeeks.length > 0)) && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-7">
-          {storeFeedback && <StoreFeedbackTile data={storeFeedback} trend={storeFeedbackTrend} />}
+          {storeFeedback && <StoreFeedbackTile data={storeFeedback} trend={storeFeedbackTrend} storeDetails={storeFeedbackDetails} />}
 
           {warrantyMonthlyChart && (
             <WarrantyMonthTile chart={warrantyMonthlyChart} emptyMessage="Aún no hay categorías cargadas este mes." />

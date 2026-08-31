@@ -4,18 +4,24 @@ import { useEffect, useState } from "react";
 import { TrendingUp, TrendingDown } from "lucide-react";
 import { KpiTile } from "./KpiTile";
 import { formatMonthShort, smoothPath } from "./WeeklyTrendChart";
-import type { StoreFeedbackAggregate, StoreFeedbackTrendPoint } from "@/lib/storeFeedback";
+import type { StoreFeedbackAggregate, StoreFeedbackStoreDetail, StoreFeedbackTrendPoint } from "@/lib/storeFeedback";
 import { trendStateFor } from "@/lib/storeFeedbackCalc";
 
 // Public to everyone — confirmed 2026-07-22: the company-wide average is
 // what's shown, never individual store detail (that stays admin/Análisis de
 // Mercado-only inside la pestaña "Servicio Postventa").
+// Excepción confirmada 2026-08-31: si el caller pasa `storeDetails`, se
+// listan tienda + dueño/administrador debajo del gráfico — el caller es
+// responsable de solo pasar ese prop para admin/Nairoby (nunca para el
+// resto de la empresa, ni para Bryan). Ver getStoreFeedbackStoreDetails.
 export function StoreFeedbackTile({
   data,
   trend,
+  storeDetails,
 }: {
   data: StoreFeedbackAggregate;
   trend: StoreFeedbackTrendPoint[];
+  storeDetails?: StoreFeedbackStoreDetail[];
 }) {
   const [reducedMotion, setReducedMotion] = useState(false);
   useEffect(() => {
@@ -88,6 +94,16 @@ export function StoreFeedbackTile({
               <span key={p.period}>{formatMonthShort(p.period).slice(0, 3)}</span>
             ))}
           </div>
+        </div>
+      )}
+      {storeDetails && storeDetails.length > 0 && (
+        <div className="mt-2.5 pt-2.5 border-t border-rule/60 space-y-1">
+          {storeDetails.map((s, i) => (
+            <div key={`${s.name}-${i}`} className="text-[11px] text-steel truncate">
+              <span className="text-ink font-medium">{s.name}</span>
+              {s.contactName && <> · {s.contactName}</>}
+            </div>
+          ))}
         </div>
       )}
     </KpiTile>
