@@ -832,12 +832,17 @@ export async function getLeadIdOfUsersDept(userId: string): Promise<string | nul
   return getDeptLeadId(user.deptId);
 }
 
-// Check-in semanal — cualquier colaborador activo con departamento puede
-// reportarle al asistente (admin no reporta, no tiene departamento real).
+// Check-in semanal — confirmado 2026-08-26: SOLO el líder de un área le
+// reporta al asistente, no el resto del equipo (reemplaza la reunión 1:1
+// que el admin tenía con cada líder, no una reunión con cada colaborador).
 export async function canUseWeeklyCheckin() {
   const session = await auth();
   if (!session || session.user.role !== "employee") return false;
-  return !!session.user.deptId;
+  const user = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { isLeader: true, leadsDeptId: true },
+  });
+  return !!user?.isLeader && !!user.leadsDeptId;
 }
 
 // Id de Nairoby (líder de Finanzas) para avisarle cuando Daniel aprueba un

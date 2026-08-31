@@ -27,7 +27,7 @@ const submitReportSchema = z.object({
   involvedPersonName: z.string().trim().optional(),
 });
 
-// Devuelve la conversación de ESTA semana (una por colaborador por semana, ver
+// Devuelve la conversación de ESTA semana (una por líder por semana, ver
 // weeklyCheckin.ts) para que el widget cargue el historial al abrir — no
 // existe un "listado de conversaciones" como en Nancy, porque solo hay una
 // activa a la vez.
@@ -54,9 +54,11 @@ export async function POST(req: NextRequest) {
     return new Response("No autorizado.", { status: 403 });
   }
   // deptId nunca viene del cliente — a diferencia de Nancy, acá decide a qué
-  // bitácora cae el registro y a quién se notifica, así que solo puede ser
-  // el del propio colaborador en sesión.
-  const deptId = session.user.deptId!;
+  // bitácora cae el registro y a quién se notifica. Se resuelve por
+  // leadsDeptId (el área que esta persona LIDERA), no por session.user.deptId
+  // — canUseWeeklyCheckin() ya garantiza que sea un líder con área asignada.
+  const leaderUser = await prisma.user.findUnique({ where: { id: session.user.id }, select: { leadsDeptId: true } });
+  const deptId = leaderUser!.leadsDeptId!;
   const ownerId = session.user.id;
 
   const body = await req.json().catch(() => null);

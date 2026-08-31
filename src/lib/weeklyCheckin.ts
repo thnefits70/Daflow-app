@@ -3,12 +3,13 @@ import { notifyOwner } from "@/lib/notifications";
 import { getDeptLeadId, getLeadIdOfUsersDept } from "@/lib/guards";
 
 // Asistente de check-in semanal — reemplaza la reunión 1:1 admin-líder: le
-// pregunta a cada colaborador qué problemas tuvo esta semana y arma el registro
-// en WeeklyReviewRecord solo. Separado de Nancy/FERNICK (ver esos archivos);
-// modelo más liviano porque esto es captura de datos, no análisis financiero.
+// pregunta al LÍDER de cada área (nunca al resto del equipo) qué problemas
+// tuvo esta semana y arma el registro en WeeklyReviewRecord solo. Separado
+// de Nancy/FERNICK (ver esos archivos); modelo más liviano porque esto es
+// captura de datos, no análisis financiero.
 export const WEEKLY_CHECKIN_MODEL = "claude-sonnet-5";
 
-export const WEEKLY_CHECKIN_SYSTEM_PROMPT = `Eres el asistente de check-in semanal de DAFLOW para Provedix (Guayaquil, Ecuador). Tu único trabajo es conversar con un colaborador para levantar su reporte semanal — reemplazas la reunión de 1:1 que antes se hacía en persona.
+export const WEEKLY_CHECKIN_SYSTEM_PROMPT = `Eres el asistente de check-in semanal de DAFLOW para Provedix (Guayaquil, Ecuador). Tu único trabajo es conversar con el líder de un área para levantar su reporte semanal — reemplazas la reunión de 1:1 que antes se hacía en persona.
 
 Cómo conducir la conversación:
 - Saluda brevemente y pregunta qué problemas o dificultades tuvo esta semana.
@@ -19,12 +20,12 @@ Cómo conducir la conversación:
 
 Cuándo registrar:
 - Llama a la herramienta submit_weekly_report SOLO cuando ya tengas claro el problema (o la ausencia de problemas) y el plan de acción — nunca antes, y nunca más de una vez por conversación.
-- No inventes nombres de áreas o personas que el colaborador no mencionó — si no dijo que involucra a alguien más, involvesOtherDept es false.`;
+- No inventes nombres de áreas o personas que el líder no mencionó — si no dijo que involucra a alguien más, involvesOtherDept es false.`;
 
 export const SUBMIT_WEEKLY_REPORT_TOOL = {
   name: "submit_weekly_report",
   description:
-    "Registra el reporte semanal del colaborador. Llamar solo una vez que el problema (o la ausencia de problemas) y el plan de acción están claros.",
+    "Registra el reporte semanal del líder del área. Llamar solo una vez que el problema (o la ausencia de problemas) y el plan de acción están claros.",
   input_schema: {
     type: "object" as const,
     properties: {
@@ -169,31 +170,32 @@ export type WeeklyCheckinPush = { ownerId: string; title: string; body: string; 
 // Recordatorio de los viernes — reutiliza el único cron diario existente
 // (ver /api/cron/push-pendientes), filtrando por día de la semana en vez de
 // crear un cron nuevo (Vercel Hobby no permite crons más frecuentes que uno
-// al día). Alcance: colaboradores activos de departamentos con
-// trackWeeklyReview=true (el mismo conjunto que ya tenía la reunión 1:1),
-// confirmado con el usuario — no se expande a toda la empresa por ahora.
+// al día). Alcance: solo LÍDERES activos de departamentos con
+// trackWeeklyReview=true (el mismo conjunto que ya tenía la reunión 1:1) —
+// confirmado con el usuario 2026-08-26: el asistente reemplaza la reunión
+// con el líder, no le pregunta al resto del equipo.
 export async function getWeeklyCheckinPushes(): Promise<WeeklyCheckinPush[]> {
   if (isoWeekdayOf(nowInEcuador()) !== 5) return [];
 
   const week = currentIsoWeek();
-  const employees = await prisma.user.findMany({
-    where: { isActive: true, deptId: { not: null }, department: { trackWeeklyReview: true } },
+  const leaders = await prisma.user.findMany({
+    where: { isActive: true, isLeader: true, leadsDept: { trackWeeklyReview: true } },
     select: { id: true },
   });
-  if (employees.length === 0) return [];
+  if (leaders.length === 0) return [];
 
   const reported = await prisma.weeklyReviewRecord.findMany({
-    where: { week, reportedById: { in: employees.map((e) => e.id) } },
+    where: { week, reportedById: { in: leaders.map((l) => l.id) } },
     select: { reportedById: true },
   });
   const done = new Set(reported.map((r) => r.reportedById));
 
-  return employees
-    .filter((e) => !done.has(e.id))
-    .map((e) => ({
-      ownerId: e.id,
+  return leaders
+    .filter((l) => !done.has(l.id))
+    .map((l) => ({
+      ownerId: l.id,
       title: "DAFLOW · Reporte semanal",
-      body: "¿Qué problemas tuviste esta semana? Cuéntaselo al asistente y arma tu plan de acción.",
+      body: "¿Qué problemas tuvo tu área esta semana? Cuéntaselo al asistente y arma el plan de acción.",
       url: "/area",
     }));
 }

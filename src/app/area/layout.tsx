@@ -185,7 +185,7 @@ export default async function AreaLayout({ children }: { children: React.ReactNo
       {(currentUser.canConfirmMarketingDesign || currentUser.canConfirmMarketingAdvisor) && (
         <MarketingArrivalAlert canConfirmDesign={currentUser.canConfirmMarketingDesign} canConfirmAdvisor={currentUser.canConfirmMarketingAdvisor} />
       )}
-      {dept.trackWeeklyReview && <WeeklyCheckinPanel />}
+      {currentUser.isLeader && dept.trackWeeklyReview && <WeeklyCheckinPanel />}
     </AreaGateShell>
   );
 }

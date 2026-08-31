@@ -9,10 +9,10 @@ type ChatMessage = { role: "user" | "assistant"; content: string };
 // Widget flotante del asistente de check-in semanal — reemplaza la reunión
 // 1:1 admin-líder (ver src/lib/weeklyCheckin.ts). A diferencia de Nancy (que
 // vive solo en la pantalla de KPIs financieros y maneja muchas
-// conversaciones guardadas), este widget es global para cualquier colaborador
-// activo de un área con bitácora semanal (montado sin condición en
-// area/layout.tsx) y solo tiene UNA conversación activa a la vez — la de la
-// semana en curso — así que no necesita props ni una vista de "lista".
+// conversaciones guardadas), este widget se monta para el LÍDER de un área
+// con bitácora semanal (nunca para el resto del equipo, ver area/layout.tsx)
+// y solo tiene UNA conversación activa a la vez — la de la semana en curso —
+// así que no necesita props ni una vista de "lista".
 // Posición bottom-left (Nancy usa bottom-right) para no chocar si alguien
 // llega a ver ambos widgets en la misma sesión.
 export function WeeklyCheckinPanel() {
