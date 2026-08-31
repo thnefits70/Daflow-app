@@ -10,6 +10,7 @@ import { CommissionTiersPanel } from "./CommissionTiersPanel";
 import { CeoBonusesPanel } from "./CeoBonusesPanel";
 import { PersonalPurchasesFinancePanel } from "@/components/personal-purchases/PersonalPurchasesFinancePanel";
 import { PersonalPurchasesTransferPanel } from "@/components/personal-purchases/PersonalPurchasesTransferPanel";
+import { PersonalPurchasesPaymentWatchPanel } from "@/components/personal-purchases/PersonalPurchasesPaymentWatchPanel";
 import { PersonalPurchasesHistoryPanel } from "@/components/personal-purchases/PersonalPurchasesHistoryPanel";
 import { SalaryAdvanceApprovalPanel } from "@/components/salary-advances/SalaryAdvanceApprovalPanel";
 import { ManagementDeductionsPanel } from "./ManagementDeductionsPanel";
@@ -161,6 +162,7 @@ export function PayrollWorkspace({
               <>Pon el precio en dólares de cada compra personal que Daniel ya confirmó (costo y Dropi según corresponda, en las cuotas que decidas). Una vez que el admin confirme que llegó el pago, cierra la operación desde acá para habilitar el retiro.</>
             )}
           </TabGuide>
+          <PersonalPurchasesPaymentWatchPanel />
           <PersonalPurchasesFinancePanel isAdmin={isAdmin} />
           <PersonalPurchasesTransferPanel isAdmin={isAdmin} />
           <PersonalPurchasesHistoryPanel />
