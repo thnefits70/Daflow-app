@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { CheckCircle2 } from "lucide-react";
 import { ProofPreview } from "@/components/shared/ProofPreview";
 import { CatalogCode } from "@/components/shared/CatalogCode";
+import { formatDateTime } from "@/lib/formatDateTime";
 
 type SaleDTO = {
   id: string;
@@ -13,6 +14,7 @@ type SaleDTO = {
   totalAmount: number;
   paymentProofUrl: string;
   paymentProofName: string | null;
+  paymentProofUploadedAt: string | null;
   advisor: { name: string } | null;
 };
 
@@ -57,11 +59,14 @@ export function ExternalSalePaymentConfirmInbox() {
         <div key={s.id} className="bg-surface border border-rule rounded-md p-3.5">
           <div className="flex items-center gap-2 mb-1.5">
             <span className="font-mono text-[11px] font-bold text-teal">{s.code}</span>
-            <span className="text-[11px] text-steel">{s.advisor?.name ?? "—"}</span>
+            <span className="text-[11px] text-steel">Registrado por {s.advisor?.name ?? "—"}</span>
           </div>
           <div className="text-[13px] font-semibold mb-1 flex items-center gap-1.5 flex-wrap">
             {s.catalogItem && <CatalogCode code={s.catalogItem.justCode} />}
             <span>{s.catalogItem?.name ?? s.declaredProductName} — ${s.totalAmount.toFixed(2)}</span>
+          </div>
+          <div className="text-[11px] text-steel mb-1.5">
+            Comprobante subido: {s.paymentProofUploadedAt ? formatDateTime(s.paymentProofUploadedAt) : "—"}
           </div>
           <ProofPreview url={s.paymentProofUrl} filename={s.paymentProofName ?? undefined} size={56} />
 
