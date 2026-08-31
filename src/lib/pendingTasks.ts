@@ -827,42 +827,58 @@ async function getRecognitionAdminPendingItem(href: string): Promise<PendingItem
 // (Mary) reemplaza la reunión 1:1, pero si un líder la ignora, alguien tiene
 // que enterarse. Cubre dos casos: (a) reportó algo pero quedó Pendiente 2+
 // semanas sin que Mary lo cerrara (nunca dio una explicación real de qué
-// hizo), o (b) no le ha dicho nada a Mary en las últimas 2 semanas — ni
-// siquiera "sin novedades". Exclusivo de admin — un líder nunca ve esto
-// sobre sí mismo, mismo criterio que getRecognitionAdminPendingItem arriba
-// (nunca se llama desde la rama de líderes de getPendingTasksForActor).
-async function getWeeklyCheckinStalledPendingItem(href: string): Promise<PendingItem | null> {
+// hizo), o (b) YA le había reportado algo antes, pero lleva las últimas 2
+// semanas sin decirle nada — ni siquiera "sin novedades". Exclusivo de
+// admin — un líder nunca ve esto sobre sí mismo, mismo criterio que
+// getRecognitionAdminPendingItem arriba (nunca se llama desde la rama de
+// líderes de getPendingTasksForActor).
+//
+// Fix confirmado 2026-08-31 (reportado por el usuario, doble bug real):
+// 1) El item agregaba a TODOS los líderes desde el día 1 de la función,
+//    porque "sin actividad en las últimas 2 semanas" también era cierto
+//    para cualquiera que simplemente nunca hubiera usado a Mary todavía
+//    (el feature es nuevo — nadie tiene historial). Ahora el caso (b) exige
+//    `everReported > 0`: solo cuenta como "se quedó en silencio" alguien
+//    que YA le había reportado algo antes y dejó de hacerlo, nunca alguien
+//    que sencillamente no ha estrenado el asistente.
+// 2) Un solo item agregado con un href fijo ("/admin") apuntaba a la MISMA
+//    página del Inicio donde ya vive esta tarjeta — el clic "Ir →" no hacía
+//    nada porque ya estaba ahí. Ahora es un item POR LÍDER/ÁREA (mismo
+//    patrón que getFeedbackPendingItems arriba), cada uno con el href real
+//    de la bitácora de esa área (/admin/dept/[id]).
+async function getWeeklyCheckinStalledPendingItems(): Promise<PendingItem[]> {
   const twoWeeksAgo = prevIsoWeek(prevIsoWeek(isoWeekOf(nowInEcuador())));
 
   const leaders = await prisma.user.findMany({
     where: { isActive: true, isLeader: true, leadsDept: { trackWeeklyReview: true } },
-    select: { id: true, name: true },
+    select: { id: true, name: true, leadsDeptId: true, leadsDept: { select: { name: true } } },
   });
-  if (leaders.length === 0) return null;
+  if (leaders.length === 0) return [];
 
-  const stalled: string[] = [];
+  const items: PendingItem[] = [];
   for (const leader of leaders) {
-    const [stalePending, recentActivity] = await Promise.all([
+    const [stalePending, recentActivity, everReported] = await Promise.all([
       prisma.weeklyReviewRecord.findFirst({
         where: { reportedById: leader.id, status: "PENDING", week: { lte: twoWeeksAgo } },
       }),
       prisma.weeklyReviewRecord.count({
         where: { reportedById: leader.id, week: { gte: twoWeeksAgo } },
       }),
+      prisma.weeklyReviewRecord.count({ where: { reportedById: leader.id } }),
     ]);
-    if (stalePending || recentActivity === 0) stalled.push(leader.name);
-  }
-  if (stalled.length === 0) return null;
+    const wentSilentAfterUsingIt = everReported > 0 && recentActivity === 0;
+    if (!stalePending && !wentSilentAfterUsingIt) continue;
 
-  const names = stalled.slice(0, 3).join(", ") + (stalled.length > 3 ? ` y ${stalled.length - 3} más` : "");
-  return {
-    type: "check_in_semanal_estancado",
-    icon: "🕑",
-    label: "Check-in semanal sin gestión hace 2+ semanas",
-    meta: names,
-    overdue: true,
-    href,
-  };
+    items.push({
+      type: "check_in_semanal_estancado",
+      icon: "🕑",
+      label: `Check-in semanal — ${leader.leadsDept!.name}`,
+      meta: `${leader.name} · sin gestión hace 2+ semanas`,
+      overdue: true,
+      href: `/admin/dept/${leader.leadsDeptId}`,
+    });
+  }
+  return items;
 }
 
 // Confirmado 2026-08-05: el aviso de saldo bajo le llega tanto a admin como
@@ -1959,10 +1975,10 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     // departamento INV (ver canViewMerchandiseOutflow en admin/dept/[id]/page.tsx).
     const invDept = await prisma.department.findUnique({ where: { code: "INV" }, select: { id: true } });
     const invEgresosHref = invDept ? `/admin/dept/${invDept.id}?tab=egresos&otab=proveedor` : "/admin";
-    const [feedbackItems, recognitionItem, weeklyCheckinStalledItem, pettyCashLow, pettyCashUnconfirmed, adminPaymentsItem, purchaseMerchandiseItem, purchaseShippingItem, purchaseCreditsItem, supplierExchangeRejectedItem, overtimeApprovalItem, commissionBonusApprovalItem, salaryAdvanceItem, managementDeductionItem, personalPurchaseFinanceItem, personalPurchaseTransferConfirmItem, personalPurchaseTransferCloseItem, personalPurchasePaymentWatchItem, payrollTransferItem, payrollIessTransferItem, birthdayItems] = await Promise.all([
+    const [feedbackItems, recognitionItem, weeklyCheckinStalledItems, pettyCashLow, pettyCashUnconfirmed, adminPaymentsItem, purchaseMerchandiseItem, purchaseShippingItem, purchaseCreditsItem, supplierExchangeRejectedItem, overtimeApprovalItem, commissionBonusApprovalItem, salaryAdvanceItem, managementDeductionItem, personalPurchaseFinanceItem, personalPurchaseTransferConfirmItem, personalPurchaseTransferCloseItem, personalPurchasePaymentWatchItem, payrollTransferItem, payrollIessTransferItem, birthdayItems] = await Promise.all([
       getFeedbackPendingItems(),
       getRecognitionAdminPendingItem("/admin/colaborador-destacado"),
-      getWeeklyCheckinStalledPendingItem("/admin"),
+      getWeeklyCheckinStalledPendingItems(),
       getPettyCashLowBalanceItems(financeHref),
       getPettyCashUnconfirmedFunderItems(null, financeHref),
       getAdminPaymentsPendingItem(`${financeHref}?tab=pagosadmin`),
@@ -1985,7 +2001,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     const items = [
       ...feedbackItems,
       ...(recognitionItem ? [recognitionItem] : []),
-      ...(weeklyCheckinStalledItem ? [weeklyCheckinStalledItem] : []),
+      ...weeklyCheckinStalledItems,
       ...pettyCashLow,
       ...pettyCashUnconfirmed,
       ...(adminPaymentsItem ? [adminPaymentsItem] : []),
