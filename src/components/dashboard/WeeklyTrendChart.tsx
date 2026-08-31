@@ -59,14 +59,13 @@ export function fillRateStatus(pct: number) {
   return { label: "Alerta", color: "#E0574A" };
 }
 
-// Inverse of the other two metrics — lower is better. Confirmed 2026-07-22:
-// under 20% is genuinely healthy; 20-30% is already an alert (not a mild
-// "regular" middle ground); 30%+ is an extremely high rate — both alert
-// tiers are red, just a deeper shade for the more severe one.
+// Inverse of the other two metrics — lower is better. Confirmado
+// 2026-08-31: bandas actualizadas — menos de 20% excelente, 21-27% muy
+// bueno, 28% en adelante alerta.
 export function returnRateStatus(pct: number) {
-  if (pct < 20) return { label: "Saludable", color: "#14C7C7" };
-  if (pct < 30) return { label: "Alerta", color: "#C4453A" };
-  return { label: "Extremadamente alta", color: "#8B2A2A" };
+  if (pct < 20) return { label: "Excelente", color: "#22C55E" };
+  if (pct <= 27) return { label: "Muy bueno", color: "#D9A441" };
+  return { label: "Alerta", color: "#E0574A" };
 }
 
 function niceMax(value: number) {
