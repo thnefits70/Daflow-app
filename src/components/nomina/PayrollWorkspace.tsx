@@ -11,6 +11,7 @@ import { CeoBonusesPanel } from "./CeoBonusesPanel";
 import { PersonalPurchasesFinancePanel } from "@/components/personal-purchases/PersonalPurchasesFinancePanel";
 import { PersonalPurchasesTransferPanel } from "@/components/personal-purchases/PersonalPurchasesTransferPanel";
 import { PersonalPurchasesPaymentWatchPanel } from "@/components/personal-purchases/PersonalPurchasesPaymentWatchPanel";
+import { PersonalPurchasesPaymentLedgerPanel } from "@/components/personal-purchases/PersonalPurchasesPaymentLedgerPanel";
 import { PersonalPurchasesHistoryPanel } from "@/components/personal-purchases/PersonalPurchasesHistoryPanel";
 import { SalaryAdvanceApprovalPanel } from "@/components/salary-advances/SalaryAdvanceApprovalPanel";
 import { ManagementDeductionsPanel } from "./ManagementDeductionsPanel";
@@ -163,6 +164,7 @@ export function PayrollWorkspace({
             )}
           </TabGuide>
           <PersonalPurchasesPaymentWatchPanel />
+          <PersonalPurchasesPaymentLedgerPanel />
           <PersonalPurchasesFinancePanel isAdmin={isAdmin} />
           <PersonalPurchasesTransferPanel isAdmin={isAdmin} />
           <PersonalPurchasesHistoryPanel />
