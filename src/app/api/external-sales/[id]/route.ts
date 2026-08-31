@@ -12,8 +12,7 @@ const schema = z.object({
   unitPrice: z.number().positive(),
   pickupPersonName: z.string().trim().min(1, "Falta a quién debe entregársela bodega."),
   courierNote: z.string().trim().optional(),
-  clientName: z.string().trim().min(1, "Falta el nombre del cliente."),
-  clientPhone: z.string().trim().min(1, "Falta el número de celular del cliente."),
+  clientId: z.string().min(1, "Falta matricular o seleccionar al cliente."),
 });
 
 // Confirmado 2026-08-29, pedido explícito del usuario: si Bryan rechaza,
@@ -34,6 +33,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (sale.advisorId !== session.user.id && session.user.role !== "admin") return NextResponse.json({ error: "No autorizado." }, { status: 403 });
   if (sale.reviewStatus !== "REJECTED") return NextResponse.json({ error: "Solo se puede corregir una venta rechazada." }, { status: 409 });
 
+  const client = await prisma.client.findUnique({ where: { id: parsed.data.clientId }, select: { id: true } });
+  if (!client) return NextResponse.json({ error: "Cliente no encontrado." }, { status: 404 });
+
   let declaredProductName = parsed.data.declaredProductName ?? "";
   if (parsed.data.catalogItemId) {
     const catalogItem = await prisma.purchaseCatalogItem.findUnique({ where: { id: parsed.data.catalogItemId }, select: { name: true } });
@@ -51,8 +53,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       totalAmount: parsed.data.quantity * parsed.data.unitPrice,
       pickupPersonName: parsed.data.pickupPersonName,
       courierNote: parsed.data.courierNote?.trim() || null,
-      clientName: parsed.data.clientName,
-      clientPhone: parsed.data.clientPhone,
+      clientId: parsed.data.clientId,
       reviewStatus: "PENDING",
       rejectionReason: null,
       reviewedAt: null,

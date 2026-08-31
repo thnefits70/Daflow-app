@@ -390,6 +390,8 @@ model User {
   externalSalesInvoiceUploadedBy  ExternalSale[] @relation("ExternalSaleInvoiceUploadedBy")
   externalSalesClosed             ExternalSale[] @relation("ExternalSaleNairobyClosedBy")
 
+  clientsRegistered Client[]
+
   cancelledGuidesSubmitted            CancelledGuideReport[] @relation("CancelledGuideSubmittedBy")
   cancelledGuidesFulfillmentConfirmed CancelledGuideReport[] @relation("CancelledGuideFulfillmentConfirmedBy")
   cancelledGuidesInventoryConfirmed   CancelledGuideReport[] @relation("CancelledGuideInventoryConfirmedBy")
@@ -3927,6 +3929,27 @@ enum ExternalSaleReviewStatus {
  * queda en modo lectura vía canViewExternalSales. El cierre de Nairoby sigue
  * siendo un clic manual suyo (no automático), confirmado explícitamente.
  */
+
+// Cliente final de una venta externa — matriculado UNA vez (nombre, RUC o
+// cédula, celular, dirección referencial) y reutilizado en ventas futuras
+// por idNumber (único), en vez de texto libre repetido cada vez. Los datos
+// legales existen para que, si el cliente pide factura, Nairoby ya los
+// tenga a mano sin perseguirlos después.
+model Client {
+  id       String       @id @default(cuid())
+  name     String
+  idType   HolderIdType
+  idNumber String       @unique
+  phone    String
+  address  String // dirección referencial
+
+  createdAt   DateTime @default(now())
+  createdById String?
+  createdBy   User?    @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
+  sales ExternalSale[]
+}
+
 model ExternalSale {
   id         String @id @default(cuid())
   code       String @unique // "VE-0001"
@@ -3942,9 +3965,13 @@ model ExternalSale {
   unitPrice           Float
   totalAmount         Float // quantity * unitPrice, calculado al declarar
 
-  // Datos del cliente final que compra — para que quien confirma el pago
-  // pueda cruzarlos contra el nombre/número que aparece en el banco.
-  // Nullable porque ventas declaradas antes de este campo no lo tienen.
+  // Cliente final que compra — matriculado antes de declarar la venta (ver
+  // model Client). Nullable porque ventas declaradas antes de este campo
+  // no lo tienen. clientName/clientPhone quedan huérfanos abajo, sin uso
+  // nuevo, solo por compatibilidad con la única venta que los tuvo.
+  clientId String?
+  client   Client? @relation(fields: [clientId], references: [id], onDelete: SetNull)
+
   clientName  String?
   clientPhone String?
 

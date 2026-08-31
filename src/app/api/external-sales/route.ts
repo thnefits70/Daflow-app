@@ -11,6 +11,7 @@ const SALE_INCLUDE = {
   advisor: { select: { name: true } },
   reviewedBy: { select: { name: true } },
   dispatchAssignedTo: { select: { name: true } },
+  client: true,
 } as const;
 
 const schema = z.object({
@@ -20,8 +21,7 @@ const schema = z.object({
   unitPrice: z.number().positive(),
   pickupPersonName: z.string().trim().min(1, "Falta a quién debe entregársela bodega."),
   courierNote: z.string().trim().optional(),
-  clientName: z.string().trim().min(1, "Falta el nombre del cliente."),
-  clientPhone: z.string().trim().min(1, "Falta el número de celular del cliente."),
+  clientId: z.string().min(1, "Falta matricular o seleccionar al cliente."),
 });
 
 // Las propias declaraciones del asesor — para seguir su estado y subir el
@@ -47,6 +47,9 @@ export async function POST(req: NextRequest) {
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Datos inválidos." }, { status: 400 });
   if (!parsed.data.catalogItemId && !parsed.data.declaredProductName) return NextResponse.json({ error: "Falta el producto." }, { status: 400 });
 
+  const client = await prisma.client.findUnique({ where: { id: parsed.data.clientId }, select: { id: true } });
+  if (!client) return NextResponse.json({ error: "Cliente no encontrado." }, { status: 404 });
+
   let declaredProductName = parsed.data.declaredProductName ?? "";
   if (parsed.data.catalogItemId) {
     const catalogItem = await prisma.purchaseCatalogItem.findUnique({ where: { id: parsed.data.catalogItemId }, select: { name: true } });
@@ -69,8 +72,7 @@ export async function POST(req: NextRequest) {
       totalAmount: parsed.data.quantity * parsed.data.unitPrice,
       pickupPersonName: parsed.data.pickupPersonName,
       courierNote: parsed.data.courierNote?.trim() || null,
-      clientName: parsed.data.clientName,
-      clientPhone: parsed.data.clientPhone,
+      clientId: parsed.data.clientId,
       isContraEntrega: !!advisor?.externalSaleContraEntrega,
     },
     include: SALE_INCLUDE,

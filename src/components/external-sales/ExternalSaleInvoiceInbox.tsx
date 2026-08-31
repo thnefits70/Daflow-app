@@ -17,6 +17,7 @@ type SaleDTO = {
   paymentProofUrl: string;
   paymentProofName: string | null;
   advisor: { name: string } | null;
+  client: { name: string; idType: "RUC" | "CEDULA"; idNumber: string; phone: string; address: string } | null;
 };
 
 async function postJson(url: string, body?: unknown) {
@@ -73,6 +74,14 @@ export function ExternalSaleInvoiceInbox() {
             <span>{s.catalogItem?.name ?? s.declaredProductName} — {s.quantity} un. · ${s.totalAmount.toFixed(2)}</span>
           </div>
           <ProofPreview url={s.paymentProofUrl} filename={s.paymentProofName ?? undefined} size={56} />
+
+          {s.client && (
+            <div className="bg-cloud rounded-md p-2.5 mt-2.5 text-[11.5px] flex flex-col gap-0.5">
+              <div className="font-semibold">{s.client.name}</div>
+              <div className="text-steel">{s.client.idType === "RUC" ? "RUC" : "Cédula"}: {s.client.idNumber} · {s.client.phone}</div>
+              <div className="text-steel">{s.client.address}</div>
+            </div>
+          )}
 
           <label className="mt-2.5 inline-flex items-center gap-1.5 text-[11.5px] font-bold border border-teal text-teal rounded px-2.5 py-1.5 cursor-pointer">
             <Upload size={13} /> {uploadingFor === s.id ? "Subiendo…" : "Subir factura"}

@@ -15,8 +15,7 @@ type SaleDTO = {
   paymentProofUrl: string;
   paymentProofName: string | null;
   paymentProofUploadedAt: string | null;
-  clientName: string | null;
-  clientPhone: string | null;
+  client: { name: string; phone: string } | null;
   advisor: { name: string } | null;
 };
 
@@ -71,7 +70,7 @@ export function ExternalSalePaymentConfirmInbox() {
             Comprobante subido: {s.paymentProofUploadedAt ? formatDateTime(s.paymentProofUploadedAt) : "—"}
           </div>
           <div className="text-[11px] text-steel mb-1.5">
-            Cliente: {s.clientName ?? "—"}{s.clientPhone ? ` · ${s.clientPhone}` : ""}
+            Cliente: {s.client ? `${s.client.name} · ${s.client.phone}` : "—"}
           </div>
           <ProofPreview url={s.paymentProofUrl} filename={s.paymentProofName ?? undefined} size={56} />
 

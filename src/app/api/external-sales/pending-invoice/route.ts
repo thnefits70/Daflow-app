@@ -9,7 +9,7 @@ export async function GET() {
   if (!(await canInvoiceExternalSale())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
   const sales = await prisma.externalSale.findMany({
     where: { paymentConfirmedAt: { not: null }, invoiceUploadedAt: null },
-    include: { catalogItem: { select: { name: true, justCode: true } }, advisor: { select: { name: true } } },
+    include: { catalogItem: { select: { name: true, justCode: true } }, advisor: { select: { name: true } }, client: true },
     orderBy: { paymentConfirmedAt: "asc" },
   });
   return NextResponse.json(sales);

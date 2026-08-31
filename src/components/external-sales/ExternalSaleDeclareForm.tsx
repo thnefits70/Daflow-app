@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Check, Upload } from "lucide-react";
 import { ProductMatchPicker, type MatchCatalogItem, type ProductMatchResult } from "@/components/merchandise-reentry/ProductMatchPicker";
+import { ClientMatchPicker, type ClientDTO } from "@/components/external-sales/ClientMatchPicker";
 import { uploadFile } from "@/lib/uploadFile";
 import { usePasteFile } from "@/lib/usePasteFile";
 import { formatDateTime } from "@/lib/formatDateTime";
@@ -19,8 +20,7 @@ type SaleDTO = {
   totalAmount: number;
   pickupPersonName: string;
   courierNote: string | null;
-  clientName: string | null;
-  clientPhone: string | null;
+  client: ClientDTO | null;
   reviewStatus: "PENDING" | "APPROVED" | "REJECTED";
   rejectionReason: string | null;
   paymentProofUrl: string | null;
@@ -49,13 +49,12 @@ function statusLabel(s: SaleDTO): { text: string; color: string } {
 
 export function ExternalSaleDeclareForm() {
   const [sales, setSales] = useState<SaleDTO[] | null>(null);
+  const [client, setClient] = useState<ClientDTO | null>(null);
   const [selected, setSelected] = useState<MatchCatalogItem | null>(null);
   const [quantity, setQuantity] = useState("");
   const [unitPrice, setUnitPrice] = useState("");
   const [pickupPersonName, setPickupPersonName] = useState("");
   const [courierNote, setCourierNote] = useState("");
-  const [clientName, setClientName] = useState("");
-  const [clientPhone, setClientPhone] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [uploadingFor, setUploadingFor] = useState<string | null>(null);
@@ -66,13 +65,12 @@ export function ExternalSaleDeclareForm() {
   });
 
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [editClient, setEditClient] = useState<ClientDTO | null>(null);
   const [editSelected, setEditSelected] = useState<MatchCatalogItem | null>(null);
   const [editQuantity, setEditQuantity] = useState("");
   const [editUnitPrice, setEditUnitPrice] = useState("");
   const [editPickupPersonName, setEditPickupPersonName] = useState("");
   const [editCourierNote, setEditCourierNote] = useState("");
-  const [editClientName, setEditClientName] = useState("");
-  const [editClientPhone, setEditClientPhone] = useState("");
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState("");
 
@@ -83,29 +81,27 @@ export function ExternalSaleDeclareForm() {
 
   const qty = Number(quantity) || 0;
   const price = Number(unitPrice) || 0;
-  const canSave = !!selected && qty > 0 && price > 0 && pickupPersonName.trim().length > 0 && clientName.trim().length > 0 && clientPhone.trim().length > 0 && !saving;
+  const canSave = !!client && !!selected && qty > 0 && price > 0 && pickupPersonName.trim().length > 0 && !saving;
 
   async function save() {
-    if (!selected) return;
+    if (!client || !selected) return;
     setSaving(true);
     setError("");
     try {
       await postJson("/api/external-sales", {
+        clientId: client.id,
         catalogItemId: selected.id,
         quantity: qty,
         unitPrice: price,
         pickupPersonName: pickupPersonName.trim(),
         courierNote: courierNote.trim() || undefined,
-        clientName: clientName.trim(),
-        clientPhone: clientPhone.trim(),
       });
+      setClient(null);
       setSelected(null);
       setQuantity("");
       setUnitPrice("");
       setPickupPersonName("");
       setCourierNote("");
-      setClientName("");
-      setClientPhone("");
       load();
     } catch (e) {
       setError(e instanceof Error ? e.message : "No se pudo declarar la venta.");
@@ -116,6 +112,7 @@ export function ExternalSaleDeclareForm() {
 
   function startEdit(s: SaleDTO) {
     setEditingId(s.id);
+    setEditClient(s.client);
     setEditSelected(
       s.catalogItemId
         ? { id: s.catalogItemId, name: s.catalogItem?.name ?? s.declaredProductName, justCode: s.catalogItem?.justCode ?? null, photos: [], pendingRegistration: false }
@@ -125,17 +122,15 @@ export function ExternalSaleDeclareForm() {
     setEditUnitPrice(String(s.unitPrice));
     setEditPickupPersonName(s.pickupPersonName);
     setEditCourierNote(s.courierNote ?? "");
-    setEditClientName(s.clientName ?? "");
-    setEditClientPhone(s.clientPhone ?? "");
     setEditError("");
   }
 
   const editQty = Number(editQuantity) || 0;
   const editPrice = Number(editUnitPrice) || 0;
-  const canSaveEdit = !!editSelected && editQty > 0 && editPrice > 0 && editPickupPersonName.trim().length > 0 && editClientName.trim().length > 0 && editClientPhone.trim().length > 0 && !editSaving;
+  const canSaveEdit = !!editClient && !!editSelected && editQty > 0 && editPrice > 0 && editPickupPersonName.trim().length > 0 && !editSaving;
 
   async function saveEdit(saleId: string) {
-    if (!editSelected) return;
+    if (!editClient || !editSelected) return;
     setEditSaving(true);
     setEditError("");
     try {
@@ -143,13 +138,12 @@ export function ExternalSaleDeclareForm() {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          clientId: editClient.id,
           catalogItemId: editSelected.id,
           quantity: editQty,
           unitPrice: editPrice,
           pickupPersonName: editPickupPersonName.trim(),
           courierNote: editCourierNote.trim() || undefined,
-          clientName: editClientName.trim(),
-          clientPhone: editClientPhone.trim(),
         }),
       }).then(async (res) => {
         const data = await res.json().catch(() => null);
@@ -188,56 +182,56 @@ export function ExternalSaleDeclareForm() {
       <div className="bg-surface border border-rule rounded-md p-3.5 flex flex-col gap-3">
         <div className="font-display font-bold text-[14px]">Declarar venta</div>
         <div>
-          <label className="block mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-steel">Producto</label>
-          {selected ? (
-            <div className="flex items-center gap-2.5 bg-green/10 border border-green/35 rounded-md p-2.5">
-              <div className="flex-1 min-w-0 text-[12.5px] font-semibold flex items-center gap-1.5">
-                <CatalogCode code={selected.justCode} />
-                <span className="truncate">{selected.name}</span>
-              </div>
-              <button type="button" className="shrink-0 text-[11px] font-semibold text-blue cursor-pointer" onClick={() => setSelected(null)}>Cambiar</button>
+          <label className="block mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-steel">Cliente</label>
+          <ClientMatchPicker value={client} onChange={setClient} />
+        </div>
+        {!client ? (
+          <div className="text-[11.5px] text-steel">Primero matricula o selecciona al cliente para poder declarar la venta.</div>
+        ) : (
+          <>
+            <div>
+              <label className="block mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-steel">Producto</label>
+              {selected ? (
+                <div className="flex items-center gap-2.5 bg-green/10 border border-green/35 rounded-md p-2.5">
+                  <div className="flex-1 min-w-0 text-[12.5px] font-semibold flex items-center gap-1.5">
+                    <CatalogCode code={selected.justCode} />
+                    <span className="truncate">{selected.name}</span>
+                  </div>
+                  <button type="button" className="shrink-0 text-[11px] font-semibold text-blue cursor-pointer" onClick={() => setSelected(null)}>Cambiar</button>
+                </div>
+              ) : (
+                <ProductMatchPicker
+                  referencePhotoUrl={null}
+                  searchUrl="/api/external-sales/catalog-search"
+                  onConfirm={(r: ProductMatchResult) => setSelected(r)}
+                />
+              )}
             </div>
-          ) : (
-            <ProductMatchPicker
-              referencePhotoUrl={null}
-              searchUrl="/api/external-sales/catalog-search"
-              onConfirm={(r: ProductMatchResult) => setSelected(r)}
-            />
-          )}
-        </div>
-        <div className="flex gap-2.5">
-          <div className="flex-1">
-            <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Cantidad</label>
-            <input type="number" min={1} className="w-full rounded border border-rule bg-cloud px-2.5 py-1.5 text-[13px] font-bold" value={quantity} onChange={(e) => setQuantity(e.target.value)} />
-          </div>
-          <div className="flex-1">
-            <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Precio unitario</label>
-            <input type="number" min={0} step="0.01" className="w-full rounded border border-rule bg-cloud px-2.5 py-1.5 text-[13px] font-bold" value={unitPrice} onChange={(e) => setUnitPrice(e.target.value)} />
-          </div>
-        </div>
-        {qty > 0 && price > 0 && <div className="text-[12px] text-steel">Total: <span className="font-bold text-ink">${(qty * price).toFixed(2)}</span></div>}
-        <div className="flex gap-2.5">
-          <div className="flex-1">
-            <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Nombre del cliente</label>
-            <input type="text" className="w-full rounded border border-rule bg-cloud px-2.5 py-1.5 text-[12.5px]" value={clientName} onChange={(e) => setClientName(e.target.value)} />
-          </div>
-          <div className="flex-1">
-            <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Celular del cliente</label>
-            <input type="tel" className="w-full rounded border border-rule bg-cloud px-2.5 py-1.5 text-[12.5px]" value={clientPhone} onChange={(e) => setClientPhone(e.target.value)} />
-          </div>
-        </div>
-        <div>
-          <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">A quién debe entregarle bodega (motorizado o cliente)</label>
-          <input type="text" className="w-full rounded border border-rule bg-cloud px-2.5 py-1.5 text-[12.5px]" value={pickupPersonName} onChange={(e) => setPickupPersonName(e.target.value)} />
-        </div>
-        <div>
-          <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Transportadora, si no es la habitual (opcional)</label>
-          <input type="text" className="w-full rounded border border-rule bg-cloud px-2.5 py-1.5 text-[12.5px]" value={courierNote} onChange={(e) => setCourierNote(e.target.value)} />
-        </div>
-        {error && <div className="text-red text-[11.5px]">{error}</div>}
-        <button type="button" disabled={!canSave} className="rounded border border-teal bg-teal px-3 py-2 text-[12.5px] font-bold text-navy cursor-pointer disabled:opacity-40" onClick={save}>
-          {saving ? "Enviando…" : "Declarar venta"}
-        </button>
+            <div className="flex gap-2.5">
+              <div className="flex-1">
+                <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Cantidad</label>
+                <input type="number" min={1} className="w-full rounded border border-rule bg-cloud px-2.5 py-1.5 text-[13px] font-bold" value={quantity} onChange={(e) => setQuantity(e.target.value)} />
+              </div>
+              <div className="flex-1">
+                <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Precio unitario</label>
+                <input type="number" min={0} step="0.01" className="w-full rounded border border-rule bg-cloud px-2.5 py-1.5 text-[13px] font-bold" value={unitPrice} onChange={(e) => setUnitPrice(e.target.value)} />
+              </div>
+            </div>
+            {qty > 0 && price > 0 && <div className="text-[12px] text-steel">Total: <span className="font-bold text-ink">${(qty * price).toFixed(2)}</span></div>}
+            <div>
+              <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">A quién debe entregarle bodega (motorizado o cliente)</label>
+              <input type="text" className="w-full rounded border border-rule bg-cloud px-2.5 py-1.5 text-[12.5px]" value={pickupPersonName} onChange={(e) => setPickupPersonName(e.target.value)} />
+            </div>
+            <div>
+              <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Transportadora, si no es la habitual (opcional)</label>
+              <input type="text" className="w-full rounded border border-rule bg-cloud px-2.5 py-1.5 text-[12.5px]" value={courierNote} onChange={(e) => setCourierNote(e.target.value)} />
+            </div>
+            {error && <div className="text-red text-[11.5px]">{error}</div>}
+            <button type="button" disabled={!canSave} className="rounded border border-teal bg-teal px-3 py-2 text-[12.5px] font-bold text-navy cursor-pointer disabled:opacity-40" onClick={save}>
+              {saving ? "Enviando…" : "Declarar venta"}
+            </button>
+          </>
+        )}
       </div>
 
       <div>
@@ -261,8 +255,8 @@ export function ExternalSaleDeclareForm() {
                     <span>{s.catalogItem?.name ?? s.declaredProductName} — {s.quantity} un. · ${s.totalAmount.toFixed(2)}</span>
                   </div>
                   <div className="text-[10.5px] text-steel mt-0.5">Entrega a: {s.pickupPersonName}{s.courierNote ? ` · Transportadora: ${s.courierNote}` : ""}</div>
-                  {(s.clientName || s.clientPhone) && (
-                    <div className="text-[10.5px] text-steel mt-0.5">Cliente: {s.clientName ?? "—"}{s.clientPhone ? ` · ${s.clientPhone}` : ""}</div>
+                  {s.client && (
+                    <div className="text-[10.5px] text-steel mt-0.5">Cliente: {s.client.name} · {s.client.phone}</div>
                   )}
                   {s.reviewStatus === "REJECTED" && s.rejectionReason && <div className="text-[11.5px] text-red mt-1">{s.rejectionReason}</div>}
                   {s.reviewStatus === "REJECTED" && editingId !== s.id && (
@@ -272,6 +266,10 @@ export function ExternalSaleDeclareForm() {
                   )}
                   {s.reviewStatus === "REJECTED" && editingId === s.id && (
                     <div className="bg-cloud rounded-md p-2.5 mt-2 flex flex-col gap-2.5">
+                      <div>
+                        <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Cliente</label>
+                        <ClientMatchPicker value={editClient} onChange={setEditClient} />
+                      </div>
                       <div>
                         <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Producto</label>
                         {editSelected ? (
@@ -298,16 +296,6 @@ export function ExternalSaleDeclareForm() {
                         <div className="flex-1">
                           <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Precio unitario</label>
                           <input type="number" min={0} step="0.01" className="w-full rounded border border-rule bg-surface px-2.5 py-1.5 text-[12.5px] font-bold" value={editUnitPrice} onChange={(e) => setEditUnitPrice(e.target.value)} />
-                        </div>
-                      </div>
-                      <div className="flex gap-2">
-                        <div className="flex-1">
-                          <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Nombre del cliente</label>
-                          <input type="text" className="w-full rounded border border-rule bg-surface px-2.5 py-1.5 text-[12px]" value={editClientName} onChange={(e) => setEditClientName(e.target.value)} />
-                        </div>
-                        <div className="flex-1">
-                          <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Celular del cliente</label>
-                          <input type="tel" className="w-full rounded border border-rule bg-surface px-2.5 py-1.5 text-[12px]" value={editClientPhone} onChange={(e) => setEditClientPhone(e.target.value)} />
                         </div>
                       </div>
                       <div>

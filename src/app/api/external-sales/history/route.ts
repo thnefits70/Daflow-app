@@ -8,6 +8,7 @@ export async function GET() {
     include: {
       catalogItem: { select: { name: true, photos: true, justCode: true } },
       advisor: { select: { name: true } },
+      client: true,
       reviewedBy: { select: { name: true } },
       paymentConfirmedBy: { select: { name: true } },
       invoiceUploadedBy: { select: { name: true } },
