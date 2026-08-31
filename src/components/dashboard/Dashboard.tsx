@@ -157,7 +157,7 @@ export function Dashboard({
 
           {fillRateBreakdown && (
             <div className="sm:col-span-2">
-              <FillRateBreakdownCard data={fillRateBreakdown} />
+              <FillRateBreakdownCard data={fillRateBreakdown} canJustify />
             </div>
           )}
 

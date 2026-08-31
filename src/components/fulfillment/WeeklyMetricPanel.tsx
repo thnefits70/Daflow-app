@@ -27,11 +27,12 @@ function fillRate(value: number, notDispatched: number | null) {
   return Math.round((value / total) * 100);
 }
 
-// Confirmado 2026-07-28: bandas del boceto aprobado — ≥98% eficiente,
-// 95-97% regular, <95% alerta.
+// Confirmado 2026-08-31: bandas reemplazan las anteriores (98/95) — ≥96%
+// excelente, 90-95% muy bueno, <90% alerta/ineficiente. Debe quedar igual
+// que fillRateColor/status en dashboard.ts y FillRateBreakdownCard.
 function fillRateColor(pct: number) {
-  if (pct >= 98) return "#22C55E";
-  if (pct >= 95) return "#D9A441";
+  if (pct >= 96) return "#22C55E";
+  if (pct >= 90) return "#D9A441";
   return "#E0574A";
 }
 

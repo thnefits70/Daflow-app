@@ -5,12 +5,18 @@
 // servidor tumba la página entera con "Attempted to call X() from the
 // server but X is on the client". Este archivo tiene que ser client
 // component para poder usarlo, aunque no tenga estado propio.
+import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { formatWeekShort } from "./WeeklyTrendChart";
+import { formatDateTime } from "@/lib/formatDateTime";
 import type { FillRateBreakdown } from "@/lib/dashboard";
 
+// Confirmado 2026-08-31: reemplaza las bandas anteriores (≥98/95-97/<95) —
+// ≥96% excelente, 90-95% muy bueno, <90% alerta/ineficiente. Debe quedar
+// igual que el status/color de dashboard.ts y WeeklyMetricPanel.tsx.
 const STATUS_META: Record<NonNullable<FillRateBreakdown>["status"], { label: string; color: string }> = {
-  good: { label: "Eficiente", color: "#22C55E" },
-  regular: { label: "Regular", color: "#D9A441" },
+  good: { label: "Excelente", color: "#22C55E" },
+  regular: { label: "Muy bueno", color: "#D9A441" },
   crit: { label: "Alerta", color: "#E0574A" },
 };
 
@@ -18,11 +24,106 @@ function pct(n: number, total: number) {
   return total === 0 ? 0 : Math.round((n / total) * 1000) / 10;
 }
 
+// Confirmado 2026-08-31: por debajo de 95% el líder de Fulfillment le debe
+// una explicación al equipo — se guarda en el mismo registro semanal y se
+// muestra aquí, visible para todos (no un mensaje privado al admin). El
+// textarea lo redacta dirigiéndose al equipo a propósito: el compromiso es
+// con ellos, no con el admin.
+function JustificationSection({
+  status,
+  data,
+  canJustify,
+}: {
+  status: { label: string; color: string };
+  data: NonNullable<FillRateBreakdown>;
+  canJustify: boolean;
+}) {
+  const router = useRouter();
+  const [text, setText] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+
+  if (data.justification) {
+    return (
+      <div className="rounded-md border border-rule bg-cloud px-3.5 py-3 mt-1">
+        <div className="text-[11px] font-semibold text-steel mb-1">
+          {data.justificationBy ?? "Líder de Fulfillment"} le explica al equipo:
+        </div>
+        <div className="text-[13px] leading-snug whitespace-pre-wrap">{data.justification}</div>
+        {data.justificationAt && (
+          <div className="text-[10.5px] text-steel mt-1.5">{formatDateTime(data.justificationAt)}</div>
+        )}
+      </div>
+    );
+  }
+
+  if (!canJustify) {
+    return (
+      <div className="rounded-md border border-dashed border-rule px-3.5 py-3 mt-1 text-[12.5px] text-steel">
+        El Fill Rate quedó por debajo de lo normal esta semana — el líder de Fulfillment todavía le debe una
+        explicación al equipo. Va a aparecer aquí en cuanto la escriba.
+      </div>
+    );
+  }
+
+  const submit = async () => {
+    if (text.trim().length < 10) {
+      setErr("Escribe una explicación un poco más completa.");
+      return;
+    }
+    setErr("");
+    setBusy(true);
+    const res = await fetch(`/api/weekly-metrics/${data.id}/justification`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ justification: text.trim() }),
+    });
+    setBusy(false);
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      setErr(body?.error ?? "No se pudo guardar.");
+      return;
+    }
+    router.refresh();
+  };
+
+  return (
+    <div className="rounded-md border px-3.5 py-3 mt-1" style={{ borderColor: status.color, background: `${status.color}14` }}>
+      <div className="text-[12.5px] font-semibold mb-1.5">
+        El Fill Rate quedó en {status.label.toLowerCase()} esta semana — explícale al equipo qué pasó y qué van a
+        hacer para mejorarlo. Todos van a leer esto, así que dirígete a ellos, no al admin.
+      </div>
+      <textarea
+        className="w-full rounded border border-rule px-2.5 py-2 text-[13px] min-h-[80px]"
+        placeholder="Ej. Esta semana nos faltó stock en varios SKUs de alta rotación, ya lo estamos coordinando con Compras…"
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        disabled={busy}
+      />
+      {err && <div className="text-red text-[12px] mt-1.5">{err}</div>}
+      <button
+        type="button"
+        disabled={busy}
+        className="mt-2 rounded border border-blue bg-blue px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer disabled:opacity-60"
+        onClick={submit}
+      >
+        Publicar para el equipo
+      </button>
+    </div>
+  );
+}
+
 // Confirmado 2026-07-28 (boceto aprobado): desglose de la ÚLTIMA semana con
 // datos, en 4 etapas — complementa, no reemplaza, la tarjetita chiquita de
 // tendencia que ya existe arriba. Va posicionada arriba de Ruptura de Stock
 // tanto en Dashboard (admin) como en EmployeeHome (líder de Fulfillment).
-export function FillRateBreakdownCard({ data }: { data: NonNullable<FillRateBreakdown> }) {
+export function FillRateBreakdownCard({
+  data,
+  canJustify = false,
+}: {
+  data: NonNullable<FillRateBreakdown>;
+  canJustify?: boolean;
+}) {
   const status = STATUS_META[data.status];
   const segs = [
     {
@@ -99,11 +200,13 @@ export function FillRateBreakdownCard({ data }: { data: NonNullable<FillRateBrea
         ))}
       </div>
 
-      <div className="flex flex-wrap gap-2 text-[11px] text-steel">
-        <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full" style={{ background: "#22C55E" }} />≥98% Eficiente</span>
-        <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full" style={{ background: "#D9A441" }} />95–97% Regular</span>
-        <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full" style={{ background: "#E0574A" }} />&lt;95% Alerta</span>
+      <div className="flex flex-wrap gap-2 text-[11px] text-steel mb-4">
+        <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full" style={{ background: "#22C55E" }} />≥96% Excelente</span>
+        <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full" style={{ background: "#D9A441" }} />90–95% Muy bueno</span>
+        <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full" style={{ background: "#E0574A" }} />&lt;90% Alerta / ineficiente</span>
       </div>
+
+      {data.needsJustification && <JustificationSection status={status} data={data} canJustify={canJustify} />}
     </div>
   );
 }

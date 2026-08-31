@@ -1134,6 +1134,16 @@ model WeeklyMetricRecord {
   generated  Int?
   outOfStock Int?
 
+  // Confirmado 2026-08-31: si el Fill Rate de la semana queda por debajo de
+  // 95%, el líder de Fulfillment (hoy Yair) explica al equipo qué pasó —
+  // visible para todos en Inicio, no solo un mensaje privado al admin.
+  // fillRateJustificationBy guarda el nombre de quien la escribió al
+  // momento de guardar (no una referencia a User) para no depender de que
+  // esa persona siga activa/con ese rol más adelante.
+  fillRateJustification   String?
+  fillRateJustificationBy String?
+  fillRateJustificationAt DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

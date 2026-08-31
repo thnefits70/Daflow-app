@@ -189,6 +189,8 @@ export async function getFillRateTrend(): Promise<WeeklyTrend> {
 }
 
 export type FillRateBreakdown = {
+  id: string;
+  deptId: string;
   deptName: string;
   week: string;
   fillRatePct: number;
@@ -198,6 +200,14 @@ export type FillRateBreakdown = {
   prepared: number;
   generated: number;
   outOfStock: number;
+  // Confirmado 2026-08-31: si fillRatePct < 95, el líder de Fulfillment le
+  // debe una explicación al equipo (visible para todos, no un mensaje
+  // privado). needsJustification es ese umbral — es independiente de las
+  // bandas de color (que van 90/96), por eso se calcula aparte.
+  needsJustification: boolean;
+  justification: string | null;
+  justificationBy: string | null;
+  justificationAt: string | null;
 } | null;
 
 // Confirmado 2026-07-28: solo la semana MÁS RECIENTE que ya tenga el
@@ -227,9 +237,27 @@ export async function getLatestFillRateBreakdown(): Promise<FillRateBreakdown> {
   if (total === 0) return null;
 
   const fillRatePct = Math.round((record.value / total) * 100);
-  const status = fillRatePct >= 98 ? "good" : fillRatePct >= 95 ? "regular" : "crit";
+  // Confirmado 2026-08-31: bandas reemplazan las anteriores (98/95) — ≥96%
+  // excelente, 90-95% muy bueno, <90% alerta/ineficiente.
+  const status = fillRatePct >= 96 ? "good" : fillRatePct >= 90 ? "regular" : "crit";
 
-  return { deptName: dept.name, week: record.week, fillRatePct, status, total, dispatched: record.value, prepared, generated, outOfStock };
+  return {
+    id: record.id,
+    deptId: dept.id,
+    deptName: dept.name,
+    week: record.week,
+    fillRatePct,
+    status,
+    total,
+    dispatched: record.value,
+    prepared,
+    generated,
+    outOfStock,
+    needsJustification: fillRatePct < 95,
+    justification: record.fillRateJustification,
+    justificationBy: record.fillRateJustificationBy,
+    justificationAt: record.fillRateJustificationAt?.toISOString() ?? null,
+  };
 }
 
 // Tasa de devolución general — un valor mensual (no semanal) que Nairoby o el

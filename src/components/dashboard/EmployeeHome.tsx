@@ -67,6 +67,7 @@ export function EmployeeHome({
   learningPathSummary,
   inventoryKpis = null,
   commissionProgress,
+  canJustifyFillRate = false,
 }: {
   userName: string;
   deptName: string;
@@ -79,6 +80,7 @@ export function EmployeeHome({
   commissionProgress?: CommissionProgress;
   fillRateTrend?: WeeklyTrend;
   fillRateBreakdown?: FillRateBreakdown;
+  canJustifyFillRate?: boolean;
   returnRateTrend?: WeeklyTrend;
   stockoutWeeks?: StockoutWeekPoint[];
   warrantyMonthlyChart?: WarrantyMonthlyChart | null;
@@ -160,7 +162,7 @@ export function EmployeeHome({
 
           {fillRateBreakdown && (
             <div className="sm:col-span-2">
-              <FillRateBreakdownCard data={fillRateBreakdown} />
+              <FillRateBreakdownCard data={fillRateBreakdown} canJustify={canJustifyFillRate} />
             </div>
           )}
 

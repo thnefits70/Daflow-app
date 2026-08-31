@@ -16,7 +16,7 @@ import { getStoreFeedbackAggregate, getStoreFeedbackTrend } from "@/lib/storeFee
 import { getDuePeriodicReminders } from "@/lib/periodicReminders";
 import { getMyLearningPaths, summarizeMyLearningPaths } from "@/lib/learningPaths";
 import { EmployeeHome } from "@/components/dashboard/EmployeeHome";
-import { canViewInventoryKpisHome } from "@/lib/guards";
+import { canViewInventoryKpisHome, canEditDeptKpis } from "@/lib/guards";
 import { getInventoryKpisData } from "@/lib/inventoryKpis";
 
 export default async function AreaHomePage() {
@@ -72,6 +72,8 @@ export default async function AreaHomePage() {
   ]);
   if (!dept) redirect("/api/auth/force-logout");
 
+  const canJustifyFillRate = fillRateBreakdown ? await canEditDeptKpis(fillRateBreakdown.deptId) : false;
+
   return (
     <EmployeeHome
       userName={session.user.name ?? ""}
@@ -84,6 +86,7 @@ export default async function AreaHomePage() {
       commissionProgress={commissionProgress}
       fillRateTrend={fillRateTrend}
       fillRateBreakdown={fillRateBreakdown}
+      canJustifyFillRate={canJustifyFillRate}
       returnRateTrend={returnRateTrend}
       stockoutWeeks={stockoutWeeks}
       warrantyMonthlyChart={warrantyMonthlyChart}
