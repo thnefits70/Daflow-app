@@ -747,8 +747,11 @@ export function SuppliersPanel({
                   </span>
                 ))}
               </div>
-              {s.status === "REJECTED" && s.rejectReason && (
-                <div className="text-[12px] text-red mb-2">Motivo del rechazo: {s.rejectReason}</div>
+              {s.status === "REJECTED" && (
+                <div className="text-[12px] text-red mb-2">
+                  Rechazado por {s.approvedByName ?? "—"}
+                  {s.rejectReason && <>. Motivo: {s.rejectReason}</>}
+                </div>
               )}
               {s.status === "PENDING" && (
                 <div>

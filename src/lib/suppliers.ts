@@ -64,7 +64,7 @@ export function toSupplierDTO(s: SupplierRow, includeBankAccounts = false, inclu
     status: s.status,
     rejectReason: s.rejectReason,
     createdByName: s.createdBy?.name ?? (s.createdById === null ? "Administrador" : null),
-    approvedByName: s.approvedBy?.name ?? (s.status === "APPROVED" && s.approvedById === null ? "Administrador" : null),
+    approvedByName: s.approvedBy?.name ?? (s.status !== "PENDING" && s.approvedById === null ? "Administrador" : null),
     createdAt: s.createdAt.toISOString(),
     contacts: s.contacts.map((c) => ({ id: c.id, label: c.label, whatsapp: c.whatsapp })),
     channels: s.channels.map((c) => ({ id: c.id, platform: c.platform as ChannelPlatform, url: c.url })),
