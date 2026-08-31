@@ -16,7 +16,7 @@ import { getStoreFeedbackAggregate, getStoreFeedbackTrend, getStoreFeedbackStore
 import { getDuePeriodicReminders } from "@/lib/periodicReminders";
 import { getMyLearningPaths, summarizeMyLearningPaths } from "@/lib/learningPaths";
 import { EmployeeHome } from "@/components/dashboard/EmployeeHome";
-import { canViewInventoryKpisHome, canJustifyFillRate, canManageStoreFeedback } from "@/lib/guards";
+import { canViewInventoryKpisHome, canJustifyFillRate, canManageStoreFeedback, canUseWeeklyCheckin } from "@/lib/guards";
 import { getInventoryKpisData } from "@/lib/inventoryKpis";
 
 export default async function AreaHomePage() {
@@ -73,6 +73,12 @@ export default async function AreaHomePage() {
   if (!dept) redirect("/api/auth/force-logout");
 
   const canJustifyFillRateFlag = fillRateBreakdown ? await canJustifyFillRate() : false;
+  // Confirmado 2026-08-31: pedido explícito del usuario — acceso directo
+  // en Inicio, un clic, al chat con Mary (ver WeeklyCheckinPanel, montada
+  // globalmente en area/layout.tsx solo para líderes de un área con
+  // trackWeeklyReview). canUseWeeklyCheckin ya resuelve "es líder con área
+  // asignada"; falta solo confirmar que ESA área tiene la bitácora activa.
+  const showMaryShortcut = dept.trackWeeklyReview && (await canUseWeeklyCheckin());
 
   // Confirmado 2026-08-31: nombre de tienda + dueño/administrador solo para
   // Nairoby (canManageStoreFeedback) — el resto de la empresa, incluido
@@ -84,6 +90,7 @@ export default async function AreaHomePage() {
     <EmployeeHome
       userName={session.user.name ?? ""}
       deptName={dept.name}
+      showMaryShortcut={showMaryShortcut}
       procs={procs}
       docs={docs}
       examCount={examCount}

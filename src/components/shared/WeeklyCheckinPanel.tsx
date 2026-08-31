@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ClipboardList, Send, X } from "lucide-react";
 
 type ChatMessage = { role: "user" | "assistant"; content: string };
@@ -17,6 +17,7 @@ type ChatMessage = { role: "user" | "assistant"; content: string };
 // llega a ver ambos widgets en la misma sesión.
 export function WeeklyCheckinPanel() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loadedOnce, setLoadedOnce] = useState(false);
@@ -24,6 +25,17 @@ export function WeeklyCheckinPanel() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+
+  // Accesos directos (ej. la tarjeta de Inicio, "?openMary=1") deben abrir
+  // el chat en un solo clic, sin que la persona tenga que buscar el botón
+  // flotante — confirmado 2026-08-31, pedido explícito del usuario.
+  // Depende de `searchParams` (no un efecto de una sola vez): este widget
+  // vive en el layout y NO se remonta al navegar de /area a /area de
+  // nuevo con otra query — sin esta dependencia, un segundo clic en el
+  // mismo accesos directo no vuelve a abrir el chat.
+  useEffect(() => {
+    if (searchParams.get("openMary") === "1") setOpen(true);
+  }, [searchParams]);
 
   useEffect(() => {
     if (!open || loadedOnce) return;

@@ -69,6 +69,7 @@ export function EmployeeHome({
   inventoryKpis = null,
   commissionProgress,
   canJustifyFillRate = false,
+  showMaryShortcut = false,
 }: {
   userName: string;
   deptName: string;
@@ -93,6 +94,7 @@ export function EmployeeHome({
   duePeriodicReminders?: DuePeriodicReminderDTO[];
   learningPathSummary?: MyLearningPathSummaryDTO;
   inventoryKpis?: InventoryKpisDataDTO | null;
+  showMaryShortcut?: boolean;
 }) {
   const avg = scores.length
     ? Math.round(scores.reduce((a, s) => a + pct(s.score, s.total), 0) / scores.length)
@@ -116,6 +118,21 @@ export function EmployeeHome({
       </div>
 
       <PushOptIn />
+      {showMaryShortcut && (
+        <Link
+          href="/area?openMary=1"
+          className="flex items-center gap-3 rounded-lg border border-rule bg-surface hover:border-teal px-4 py-3 mb-6"
+        >
+          <span className="w-9 h-9 rounded-full bg-teal/15 text-teal flex items-center justify-center shrink-0">
+            <ClipboardList size={17} />
+          </span>
+          <div className="flex-1 min-w-0">
+            <div className="text-[13px] font-semibold">Check-in semanal con Mary</div>
+            <div className="text-[11px] text-steel">Cuéntale qué pasó en tu área esta semana</div>
+          </div>
+          <span className="text-[11px] font-bold text-blue shrink-0">Ir →</span>
+        </Link>
+      )}
       <PendingTasksCard />
       <PeriodicRemindersCard items={duePeriodicReminders} />
 
