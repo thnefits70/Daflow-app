@@ -294,6 +294,10 @@ export function DeptWorkspaceTabs({
   preferredTab?: string | null;
 }) {
   const router = useRouter();
+  // supplierPending incluye rechazadas (para que la pestaña muestre su
+  // historial), pero el badge solo debe contar lo que de verdad falta
+  // revisar.
+  const supplierPendingCount = supplierPending.filter((s) => s.status === "PENDING").length;
   const tabs = ALL_TABS.filter((t) => {
     if (t.key === "kpis") return trackKpis;
     if (t.key === "pagos") return trackPaymentReminders;
@@ -388,9 +392,9 @@ export function DeptWorkspaceTabs({
                 {supplierExchangeMineCount + financeWriteOffPendingCount}
               </span>
             )}
-            {t.key === "proveedores" && canReviewSuppliers && supplierPending.length > 0 && (
+            {t.key === "proveedores" && canReviewSuppliers && supplierPendingCount > 0 && (
               <span className="font-mono text-[10px] font-semibold bg-red/20 text-red rounded-full px-1.5 py-0.5">
-                {supplierPending.length}
+                {supplierPendingCount}
               </span>
             )}
           </button>
