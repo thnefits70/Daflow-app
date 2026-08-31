@@ -864,23 +864,22 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
                 onChange={(e) => setManualCreditReason(e.target.value)}
               />
               {!manualCreditProofUrl ? (
-                <label
+                <div
                   tabIndex={0}
                   onPaste={onPasteManualCredit}
                   onMouseEnter={onManualCreditHoverIn}
                   onMouseLeave={onManualCreditHoverOut}
-                  onClick={(e) => e.preventDefault()}
                   className="flex flex-col items-center justify-center gap-1 border-[1.5px] border-dashed border-rule rounded-md py-3 cursor-pointer hover:border-teal focus:border-teal focus:outline-none text-steel text-[12px]"
                 >
                   <span className="flex items-center gap-2">
                     {uploadingManualCreditProof ? <span className="w-4 h-4 rounded-full border-2 border-rule border-t-teal animate-spin" /> : <Upload size={14} />}
                     Pega el comprobante aquí (Ctrl+V) — captura del chat o documento donde el proveedor acepta el crédito
                   </span>
-                  <button type="button" className="text-[10.5px] underline decoration-dotted opacity-80 hover:opacity-100 cursor-pointer" onClick={(e) => { e.stopPropagation(); manualCreditFileInputRef.current?.click(); }}>
+                  <button type="button" className="text-[10.5px] underline decoration-dotted opacity-80 hover:opacity-100 cursor-pointer" onClick={() => manualCreditFileInputRef.current?.click()}>
                     o selecciona un archivo
                   </button>
                   <input ref={manualCreditFileInputRef} type="file" accept="image/*,.pdf" className="hidden" onChange={(e) => e.target.files?.[0] && uploadManualCreditProof(e.target.files[0])} />
-                </label>
+                </div>
               ) : (
                 <div className="flex items-center gap-1.5 text-[12px] text-teal">
                   <FileText size={13} /> {manualCreditProofName || "Comprobante adjunto"}
@@ -916,23 +915,22 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
           Cotización <span className="text-steel-dim normal-case font-normal">— total de todos los productos: ${total.toFixed(2)}</span>
         </label>
         {!quoteImageUrl ? (
-          <label
+          <div
             tabIndex={0}
             onPaste={onPasteQuote}
             onMouseEnter={onPasteQuoteHoverIn}
             onMouseLeave={onPasteQuoteHoverOut}
-            onClick={(e) => e.preventDefault()}
             className="flex flex-col items-center justify-center gap-1 border-[1.5px] border-dashed border-rule rounded-md py-4 cursor-pointer hover:border-teal focus:border-teal focus:outline-none text-steel text-[12.5px]"
           >
             <span className="flex items-center gap-2">
               {uploadingQuote ? <span className="w-4 h-4 rounded-full border-2 border-rule border-t-teal animate-spin" /> : <Upload size={16} />}
               Pega la cotización aquí (Ctrl+V)
             </span>
-            <button type="button" className="text-[10.5px] underline decoration-dotted opacity-80 hover:opacity-100 cursor-pointer" onClick={(e) => { e.stopPropagation(); quoteFileInputRef.current?.click(); }}>
+            <button type="button" className="text-[10.5px] underline decoration-dotted opacity-80 hover:opacity-100 cursor-pointer" onClick={() => quoteFileInputRef.current?.click()}>
               o selecciona un archivo
             </button>
             <input ref={quoteFileInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && handleQuoteFile(e.target.files[0])} />
-          </label>
+          </div>
         ) : (
           <div className="bg-cloud border border-rule rounded-md p-3">
             <div className="flex items-center gap-3 mb-2.5">
@@ -1045,12 +1043,11 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
         )}
         {!purchaseOrderUrl ? (
           <div>
-            <label
+            <div
               tabIndex={0}
               onPaste={onPastePurchaseOrder}
               onMouseEnter={onPastePOHoverIn}
               onMouseLeave={onPastePOHoverOut}
-              onClick={(e) => e.preventDefault()}
               className={`flex flex-col items-center justify-center gap-1 border-[1.5px] border-dashed rounded-md py-3.5 cursor-pointer text-[12.5px] focus:outline-none ${
                 needsPurchaseOrder ? "border-red/45 text-red hover:border-red" : "border-rule text-steel hover:border-teal focus:border-teal"
               }`}
@@ -1059,7 +1056,7 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
                 {uploadingPurchaseOrder ? <span className="w-4 h-4 rounded-full border-2 border-rule border-t-teal animate-spin" /> : <Upload size={15} />}
                 Pega la orden de compra aquí (Ctrl+V)
               </span>
-              <button type="button" className="text-[10.5px] underline decoration-dotted opacity-80 hover:opacity-100 cursor-pointer" onClick={(e) => { e.stopPropagation(); purchaseOrderFileInputRef.current?.click(); }}>
+              <button type="button" className="text-[10.5px] underline decoration-dotted opacity-80 hover:opacity-100 cursor-pointer" onClick={() => purchaseOrderFileInputRef.current?.click()}>
                 o selecciona una imagen
               </button>
               {/* Confirmado 2026-08-03: accept="image/*,application/pdf" hacía que el
@@ -1067,7 +1064,7 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
                   del acceso directo a la última foto — se separa el PDF como opción
                   aparte para que la foto (el caso más común) siga siendo un solo toque. */}
               <input ref={purchaseOrderFileInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && handlePurchaseOrderFile(e.target.files[0])} />
-            </label>
+            </div>
             <label className="flex items-center justify-center gap-1.5 mt-1.5 text-[11px] text-steel cursor-pointer hover:text-teal">
               <FileText size={11} /> ¿Es un PDF? Subir documento
               <input type="file" accept="application/pdf" className="hidden" onChange={(e) => e.target.files?.[0] && handlePurchaseOrderFile(e.target.files[0])} />

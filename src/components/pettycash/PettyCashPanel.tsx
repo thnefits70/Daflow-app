@@ -52,27 +52,26 @@ function UploadBox({ label, folder, onFile, onCaptured }: { label: string; folde
   }
 
   return (
-    <label
+    <div
       tabIndex={0}
       onPaste={onPaste}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
-      onClick={(e) => e.preventDefault()}
       className="flex flex-col items-center justify-center gap-1 border-[1.5px] border-dashed border-rule rounded-md py-4 cursor-pointer hover:border-teal transition-colors text-center"
     >
       <Upload size={16} className="text-steel" />
       <div className="text-[11.5px] font-semibold">{label}</div>
       <div className="text-[10px] text-steel">Pega la imagen aquí (Ctrl+V)</div>
       <div className="flex items-center gap-2.5">
-        <button type="button" className="flex items-center gap-1 text-[10px] font-semibold text-blue cursor-pointer" onClick={(e) => { e.stopPropagation(); setTakingPhoto(true); }}>
+        <button type="button" className="flex items-center gap-1 text-[10px] font-semibold text-blue cursor-pointer" onClick={() => setTakingPhoto(true)}>
           <Camera size={11} /> Tomar foto
         </button>
-        <button type="button" className="text-[10px] underline decoration-dotted text-steel opacity-80 hover:opacity-100 cursor-pointer" onClick={(e) => { e.stopPropagation(); inputRef.current?.click(); }}>
+        <button type="button" className="text-[10px] underline decoration-dotted text-steel opacity-80 hover:opacity-100 cursor-pointer" onClick={() => inputRef.current?.click()}>
           o selecciona un archivo
         </button>
       </div>
       <input ref={inputRef} type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])} />
-    </label>
+    </div>
   );
 }
 

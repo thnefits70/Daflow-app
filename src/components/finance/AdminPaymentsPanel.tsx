@@ -574,16 +574,15 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
                 </div>
               ) : (
                 <div className="mb-2.5">
-                  <label
+                  <div
                     tabIndex={0}
                     onPaste={onPasteDeclaration}
                     onMouseEnter={onDeclarationHoverIn}
                     onMouseLeave={onDeclarationHoverOut}
-                    onClick={(e) => e.preventDefault()}
                     className="flex items-center gap-1.5 border-[1.5px] border-dashed border-rule rounded px-3 py-2 text-[12px] text-steel cursor-pointer hover:border-teal focus:border-teal focus:outline-none w-fit"
                   >
                     {uploadingDeclaration ? <span className="w-3.5 h-3.5 rounded-full border-2 border-rule border-t-teal animate-spin" /> : <Upload size={13} />} Pega el documento de soporte aquí (opcional, Ctrl+V)
-                    <button type="button" className="text-[10.5px] underline decoration-dotted opacity-80 hover:opacity-100 cursor-pointer" onClick={(e) => { e.stopPropagation(); declarationFileInputRef.current?.click(); }}>
+                    <button type="button" className="text-[10.5px] underline decoration-dotted opacity-80 hover:opacity-100 cursor-pointer" onClick={() => declarationFileInputRef.current?.click()}>
                       o selecciona un archivo
                     </button>
                     {/* Confirmado 2026-08-06: accept="image/*,application/pdf" hacía que el
@@ -591,7 +590,7 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
                         del acceso directo a la última foto — se separa el PDF como opción
                         aparte, mismo fix ya aplicado en PurchaseRequestForm.tsx. */}
                     <input ref={declarationFileInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && uploadDeclaration(e.target.files[0])} />
-                  </label>
+                  </div>
                   <label className="flex items-center gap-1 mt-1 text-[10.5px] text-steel cursor-pointer hover:text-teal w-fit">
                     ¿Es un PDF? Subir documento
                     <input type="file" accept="application/pdf" className="hidden" onChange={(e) => e.target.files?.[0] && uploadDeclaration(e.target.files[0])} />

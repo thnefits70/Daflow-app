@@ -629,22 +629,21 @@ function GroupCard({
 
       {needsPurchaseOrder && (
         <div className="mt-3 pt-3 border-t border-rule">
-          <label
+          <div
             tabIndex={0}
             onPaste={onPaste}
             onMouseEnter={onPasteHoverIn}
             onMouseLeave={onPasteHoverOut}
-            onClick={(e) => e.preventDefault()}
             className="flex items-center justify-center gap-2 border-[1.5px] border-dashed border-gold/50 rounded-md py-2.5 cursor-pointer text-[12px] focus:outline-none focus:border-gold"
             style={{ color: "#D9A441" }}
           >
             {uploading ? <span className="w-3.5 h-3.5 rounded-full border-2 border-rule border-t-teal animate-spin" /> : <Upload size={14} />}
             Falta subir la orden de compra — pega la imagen aquí (Ctrl+V)
-            <button type="button" className="text-[10.5px] underline decoration-dotted opacity-80 hover:opacity-100 cursor-pointer" onClick={(e) => { e.stopPropagation(); poFileInputRef.current?.click(); }}>
+            <button type="button" className="text-[10.5px] underline decoration-dotted opacity-80 hover:opacity-100 cursor-pointer" onClick={() => poFileInputRef.current?.click()}>
               o selecciona un archivo
             </button>
             <input ref={poFileInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])} />
-          </label>
+          </div>
           <label className="flex items-center justify-center gap-1.5 mt-1.5 text-[10.5px] text-steel cursor-pointer hover:text-teal">
             <FileText size={10.5} /> ¿Es un PDF? Subir documento
             <input type="file" accept="application/pdf" className="hidden" onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])} />

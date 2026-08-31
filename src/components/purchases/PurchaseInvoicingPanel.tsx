@@ -700,20 +700,19 @@ export function PurchaseInvoicingPanel({ isAdmin = false, canPayMerchandise }: {
                         </div>
                       ) : (
                         <div className="mb-2">
-                          <label
+                          <div
                             tabIndex={0}
                             onPaste={onPasteProof}
                             onMouseEnter={onPasteProofHoverIn}
                             onMouseLeave={onPasteProofHoverOut}
-                            onClick={(e) => e.preventDefault()}
                             className="flex items-center gap-1.5 border-[1.5px] border-dashed border-rule rounded px-3 py-2 text-[12px] text-steel cursor-pointer hover:border-teal focus:border-teal focus:outline-none w-fit"
                           >
                             {uploadingProof ? <span className="w-3.5 h-3.5 rounded-full border-2 border-rule border-t-teal animate-spin" /> : <Upload size={13} />} Pega la foto aquí (Ctrl+V)
-                            <button type="button" className="text-[10.5px] underline decoration-dotted opacity-80 hover:opacity-100 cursor-pointer" onClick={(e) => { e.stopPropagation(); proofFileInputRef.current?.click(); }}>
+                            <button type="button" className="text-[10.5px] underline decoration-dotted opacity-80 hover:opacity-100 cursor-pointer" onClick={() => proofFileInputRef.current?.click()}>
                               o selecciona un archivo
                             </button>
                             <input ref={proofFileInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && uploadProof(e.target.files[0])} />
-                          </label>
+                          </div>
                           <label className="flex items-center gap-1.5 mt-1 text-[10.5px] text-steel cursor-pointer hover:text-teal w-fit">
                             ¿Es un PDF? Subir documento
                             <input type="file" accept="application/pdf" className="hidden" onChange={(e) => e.target.files?.[0] && uploadProof(e.target.files[0])} />
@@ -818,20 +817,19 @@ export function PurchaseInvoicingPanel({ isAdmin = false, canPayMerchandise }: {
                         </div>
                       ) : (
                         <div className="mb-2">
-                          <label
+                          <div
                             tabIndex={0}
                             onPaste={onPasteShippingProof}
                             onMouseEnter={onPasteShippingProofHoverIn}
                             onMouseLeave={onPasteShippingProofHoverOut}
-                            onClick={(e) => e.preventDefault()}
                             className="flex items-center gap-1.5 border-[1.5px] border-dashed border-rule rounded px-3 py-2 text-[12px] text-steel cursor-pointer hover:border-teal focus:border-teal focus:outline-none w-fit"
                           >
                             {uploadingShippingProof ? <span className="w-3.5 h-3.5 rounded-full border-2 border-rule border-t-teal animate-spin" /> : <Upload size={13} />} Pega la foto aquí (opcional, Ctrl+V)
-                            <button type="button" className="text-[10.5px] underline decoration-dotted opacity-80 hover:opacity-100 cursor-pointer" onClick={(e) => { e.stopPropagation(); shippingProofFileInputRef.current?.click(); }}>
+                            <button type="button" className="text-[10.5px] underline decoration-dotted opacity-80 hover:opacity-100 cursor-pointer" onClick={() => shippingProofFileInputRef.current?.click()}>
                               o selecciona un archivo
                             </button>
                             <input ref={shippingProofFileInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && uploadShippingProof(e.target.files[0])} />
-                          </label>
+                          </div>
                           <label className="flex items-center gap-1.5 mt-1 text-[10.5px] text-steel cursor-pointer hover:text-teal w-fit">
                             ¿Es un PDF? Subir documento
                             <input type="file" accept="application/pdf" className="hidden" onChange={(e) => e.target.files?.[0] && uploadShippingProof(e.target.files[0])} />
