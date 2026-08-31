@@ -87,7 +87,7 @@ export async function GET(req: NextRequest) {
   }
 
   // Check-in semanal — reemplaza la reunión 1:1: solo se activa los
-  // viernes (ver getWeeklyCheckinPushes), a todo empleado activo de un
+  // viernes (ver getWeeklyCheckinPushes), a todo colaborador activo de un
   // área con trackWeeklyReview que todavía no reportó esta semana.
   const weeklyCheckinPushes = await getWeeklyCheckinPushes();
   for (const r of weeklyCheckinPushes) {

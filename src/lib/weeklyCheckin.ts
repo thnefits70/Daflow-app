@@ -3,12 +3,12 @@ import { notifyOwner } from "@/lib/notifications";
 import { getDeptLeadId, getLeadIdOfUsersDept } from "@/lib/guards";
 
 // Asistente de check-in semanal — reemplaza la reunión 1:1 admin-líder: le
-// pregunta a cada empleado qué problemas tuvo esta semana y arma el registro
+// pregunta a cada colaborador qué problemas tuvo esta semana y arma el registro
 // en WeeklyReviewRecord solo. Separado de Nancy/FERNICK (ver esos archivos);
 // modelo más liviano porque esto es captura de datos, no análisis financiero.
 export const WEEKLY_CHECKIN_MODEL = "claude-sonnet-5";
 
-export const WEEKLY_CHECKIN_SYSTEM_PROMPT = `Eres el asistente de check-in semanal de DAFLOW para Provedix (Guayaquil, Ecuador). Tu único trabajo es conversar con un empleado para levantar su reporte semanal — reemplazas la reunión de 1:1 que antes se hacía en persona.
+export const WEEKLY_CHECKIN_SYSTEM_PROMPT = `Eres el asistente de check-in semanal de DAFLOW para Provedix (Guayaquil, Ecuador). Tu único trabajo es conversar con un colaborador para levantar su reporte semanal — reemplazas la reunión de 1:1 que antes se hacía en persona.
 
 Cómo conducir la conversación:
 - Saluda brevemente y pregunta qué problemas o dificultades tuvo esta semana.
@@ -19,12 +19,12 @@ Cómo conducir la conversación:
 
 Cuándo registrar:
 - Llama a la herramienta submit_weekly_report SOLO cuando ya tengas claro el problema (o la ausencia de problemas) y el plan de acción — nunca antes, y nunca más de una vez por conversación.
-- No inventes nombres de áreas o personas que el empleado no mencionó — si no dijo que involucra a alguien más, involvesOtherDept es false.`;
+- No inventes nombres de áreas o personas que el colaborador no mencionó — si no dijo que involucra a alguien más, involvesOtherDept es false.`;
 
 export const SUBMIT_WEEKLY_REPORT_TOOL = {
   name: "submit_weekly_report",
   description:
-    "Registra el reporte semanal del empleado. Llamar solo una vez que el problema (o la ausencia de problemas) y el plan de acción están claros.",
+    "Registra el reporte semanal del colaborador. Llamar solo una vez que el problema (o la ausencia de problemas) y el plan de acción están claros.",
   input_schema: {
     type: "object" as const,
     properties: {
@@ -114,7 +114,7 @@ export async function resolveInvolvement(input: {
 // Avisa a quien corresponda cuando un reporte involucra a otra área o a un
 // colaborador específico: si nombraron a un COLABORADOR, se avisa a SU
 // líder (nunca al colaborador directo — regla explícita del usuario: nadie
-// recibe una tarea sin que su jefe lo sepa). Si nombraron un ÁREA completa,
+// recibe una tarea sin que su líder lo sepa). Si nombraron un ÁREA completa,
 // se avisa al líder de esa área. Mismo patrón que merchandiseReentry.ts al
 // avisar entre INV/FIN (resolver el id del líder, luego notifyOwner).
 export async function notifyInvolvedParties(record: {
@@ -169,7 +169,7 @@ export type WeeklyCheckinPush = { ownerId: string; title: string; body: string; 
 // Recordatorio de los viernes — reutiliza el único cron diario existente
 // (ver /api/cron/push-pendientes), filtrando por día de la semana en vez de
 // crear un cron nuevo (Vercel Hobby no permite crons más frecuentes que uno
-// al día). Alcance: empleados activos de departamentos con
+// al día). Alcance: colaboradores activos de departamentos con
 // trackWeeklyReview=true (el mismo conjunto que ya tenía la reunión 1:1),
 // confirmado con el usuario — no se expande a toda la empresa por ahora.
 export async function getWeeklyCheckinPushes(): Promise<WeeklyCheckinPush[]> {

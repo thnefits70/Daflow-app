@@ -65,7 +65,7 @@ export async function POST(req: NextRequest) {
     where: { id: userId },
     select: { deptId: true, name: true, email: true },
   });
-  if (!targetUser) return NextResponse.json({ error: "Empleado no encontrado." }, { status: 404 });
+  if (!targetUser) return NextResponse.json({ error: "Colaborador no encontrado." }, { status: 404 });
 
   const isAdmin = session.user.role === "admin";
   const stub = await prisma.payStub.upsert({

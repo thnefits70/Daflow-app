@@ -417,7 +417,7 @@ function SendTotalPrompt({
 // transferencia que se hizo a sí mismo es fricción sin sentido. Esta es la
 // alternativa al ProofUploader — doble clic (revela un paso de confirmación
 // antes de ejecutar, igual que los toggles de permisos en la ficha de
-// empleado) más un comentario opcional, para no perder del todo el rastro
+// colaborador) más un comentario opcional, para no perder del todo el rastro
 // de auditoría que sí da el comprobante.
 function ConfirmWithoutProofButton({ apiBase, onSent }: { apiBase: string; onSent: () => void }) {
   const [confirming, setConfirming] = useState(false);

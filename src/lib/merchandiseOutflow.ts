@@ -114,7 +114,7 @@ export async function resolveOutflowItemGestorId(item: { linkedPurchaseRequest: 
 // tiene que negociar con el proveedor. Apunta a una página propia dentro de
 // /area (no una pestaña de Registro de Egresos) porque el gestor puede no
 // tener ningún otro acceso a ese módulo — mismo criterio que
-// /area/compras-personales (solo requiere ser empleado activo, sin permiso
+// /area/compras-personales (solo requiere ser colaborador activo, sin permiso
 // de departamento).
 export async function notifySupplierExchangeGestors(batch: {
   code: string;

@@ -192,7 +192,7 @@ export async function POST(req: NextRequest) {
   // Confirmado 2026-07-31: el bug real era este — el admin nunca tiene
   // session.user.deptId (su login no pertenece a un departamento), así que
   // antes esto rechazaba SIEMPRE con "No autorizado" aunque canSubmitPurchaseRequests()
-  // ya hubiera dado luz verde. Para empleados se sigue usando su propio
+  // ya hubiera dado luz verde. Para colaboradores se sigue usando su propio
   // departamento (nunca el que mande el cliente); solo el admin puede usar
   // el deptId explícito que manda el formulario.
   const isAdmin = session.user.role === "admin";

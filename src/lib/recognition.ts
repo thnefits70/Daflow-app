@@ -81,7 +81,7 @@ export const PILLARS: Pillar[] = [
     label: "Liderazgo",
     tagline: "Influye positivamente con su ejemplo.",
     description:
-      "No se refiere a tener un cargo de jefe, sino a inspirar confianza, asumir responsabilidades, resolver problemas y ser un referente para sus compañeros.",
+      "No se refiere a tener un cargo de líder, sino a inspirar confianza, asumir responsabilidades, resolver problemas y ser un referente para sus compañeros.",
     why: "Los mejores colaboradores suelen convertirse en los futuros líderes de la organización.",
   },
 ];

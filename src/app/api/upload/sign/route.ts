@@ -25,7 +25,7 @@ import {
 
 // Confirmado 2026-08-03: bug real — ninguna de estas carpetas de Control de
 // Compras (cotización, orden de compra, fotos de catálogo, comprobante de
-// pago, factura, foto de recepción) tenía autorización para empleados, así
+// pago, factura, foto de recepción) tenía autorización para colaboradores, así
 // que CUALQUIERA que no fuera admin recibía "No autorizado" al subir algo
 // ahí, sin importar sus permisos de Control de Compras. Cualquiera de las
 // tres capacidades del módulo autoriza las seis carpetas — la carpeta en sí

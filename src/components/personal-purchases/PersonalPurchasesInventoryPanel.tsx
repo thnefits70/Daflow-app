@@ -34,7 +34,7 @@ function formatGapMinutes(diffMin: number) {
   return `${Math.round(diffH / 24)} d`;
 }
 
-// Detecta posibles duplicados: mismo empleado + mismo texto de producto en
+// Detecta posibles duplicados: mismo colaborador + mismo texto de producto en
 // otra orden pendiente. No bloquea nada, solo avisa — Daniel decide si es
 // error humano (clon) o dos compras reales según qué tan cerca estén los
 // horarios.
