@@ -866,8 +866,16 @@ async function getWeeklyCheckinStalledPendingItems(): Promise<PendingItem[]> {
   const items: PendingItem[] = [];
   for (const leader of leaders) {
     const [stalePending, recentActivity] = await Promise.all([
+      // Confirmado 2026-08-31: pedido explícito del usuario — si el
+      // pendiente depende de otra área (involvesDept, ver
+      // notifyInvolvedParties en weeklyCheckin.ts), el atraso puede no ser
+      // culpa de este líder. Se trae el nombre del área involucrada (la
+      // más vieja primero) para decirlo directo en la misma alerta, en vez
+      // de armar un segundo aviso o adivinar a quién perseguir.
       prisma.weeklyReviewRecord.findFirst({
         where: { reportedById: leader.id, status: "PENDING", week: { lte: twoWeeksAgo } },
+        include: { involvesDept: { select: { name: true } } },
+        orderBy: { week: "asc" },
       }),
       prisma.weeklyReviewRecord.count({
         where: { reportedById: leader.id, week: { gte: twoWeeksAgo } },
@@ -875,11 +883,14 @@ async function getWeeklyCheckinStalledPendingItems(): Promise<PendingItem[]> {
     ]);
     if (!stalePending && recentActivity > 0) continue;
 
+    const blockedByDept = stalePending?.involvesDept?.name;
     items.push({
       type: "check_in_semanal_estancado",
       icon: "🕑",
       label: `Check-in semanal — ${leader.leadsDept!.name}`,
-      meta: `${leader.name} · sin gestión hace 2+ semanas`,
+      meta: blockedByDept
+        ? `${leader.name} · depende de ${blockedByDept} · sin gestión hace 2+ semanas`
+        : `${leader.name} · sin gestión hace 2+ semanas`,
       overdue: true,
       href: `/admin/dept/${leader.leadsDeptId}`,
     });
