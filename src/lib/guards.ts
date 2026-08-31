@@ -644,6 +644,22 @@ export async function getFulfilmentLeadId(): Promise<string | null> {
   return lead?.id ?? null;
 }
 
+// Confirmado 2026-08-31: pedido explícito del usuario — la justificación
+// del Fill Rate bajo es EXCLUSIVA del líder de Fulfillment (hoy Yair), a
+// diferencia del resto de KPIs departamentales (canEditDeptKpis, que
+// también deja pasar a admin). El admin la ve igual que el resto del
+// equipo: solo lectura, sin el botón de publicar — él la lee, no la
+// escribe, porque el compromiso es del líder con su equipo.
+export async function canJustifyFillRate() {
+  const session = await auth();
+  if (!session || session.user.role !== "employee") return false;
+  const user = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { isLeader: true, leadsDept: { select: { code: true } } },
+  });
+  return !!user?.isLeader && user.leadsDept?.code === "FUL";
+}
+
 // Fix confirmado 2026-08-11: excepción explícita al patrón "admin siempre
 // puede" — el usuario pidió específicamente que confirmar que llegó,
 // informar urgente, y verificar cambios recibidos sean EXCLUSIVOS del líder
