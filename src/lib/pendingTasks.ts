@@ -1,6 +1,6 @@
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { isFixedHoliday, evaluationDeadline, adminConfirmDeadline } from "@/lib/recognition";
+import { isFixedHoliday, evaluationDeadline, adminConfirmDeadline, summaryFieldsFromScores } from "@/lib/recognition";
 import { addBusinessHours } from "@/lib/businessHours";
 import { getPettyCashBoxData, type PettyCashBoxTypeStr } from "@/lib/pettyCash";
 import { getUpcomingBirthdays } from "@/lib/birthdays";
@@ -151,7 +151,30 @@ export async function getEarliestIncompleteMonthBefore(
           })
         ).map((s) => s.evaluateeId)
       );
-      const missing = eligible.filter((u) => !doneIds.has(u.id));
+      let missing = eligible.filter((u) => !doneIds.has(u.id));
+      // Red de seguridad (bug real encontrado 2026-08-31): antes del
+      // 2026-07-17 la evaluación detallada (MonthlyEvaluation) se podía
+      // guardar sin su MonthlyEvaluationSummary — el resumen recién empezó a
+      // escribirse junto con el detalle desde esa fecha. Eso dejó evaluaciones
+      // ya hechas (el detalle existe, con sus scores) sin resumen, y el
+      // bloqueo las contaba como "sin calificar" aunque la persona sí
+      // aparecía como evaluada en la pantalla. Antes de reportar a alguien
+      // como faltante, se repara el resumen a partir del detalle si existe.
+      if (missing.length > 0) {
+        const detailRecords = await prisma.monthlyEvaluation.findMany({
+          where: { month, evaluateeId: { in: missing.map((u) => u.id) } },
+          include: { scores: { select: { pillar: true, score: true } } },
+        });
+        for (const rec of detailRecords) {
+          await prisma.monthlyEvaluationSummary.upsert({
+            where: { month_evaluateeId: { month, evaluateeId: rec.evaluateeId } },
+            create: { month, evaluateeId: rec.evaluateeId, ...summaryFieldsFromScores(rec.scores) },
+            update: summaryFieldsFromScores(rec.scores),
+          });
+        }
+        const healedIds = new Set(detailRecords.map((r) => r.evaluateeId));
+        missing = missing.filter((u) => !healedIds.has(u.id));
+      }
       // Nota: `eligible` se calcula con la plantilla ACTUAL del equipo filtrada
       // solo por startDate (ver eligibleForMonth) — no sabe si esa persona ya
       // era líder/miembro del área en `month`. Un ascenso o cambio de área
