@@ -13,10 +13,12 @@ function parseReason(value: string | null): Reason | null {
 }
 
 // CAMBIO_PROVEEDOR queda exclusivo de Daniel (canActOnMerchandiseOutflow) —
-// mismo criterio que el flujo anterior de un solo producto. Despacho y
-// garantía siguen abiertos a cualquiera del equipo de Inventario.
+// mismo criterio que el flujo anterior de un solo producto. Confirmado
+// 2026-08-31, pedido explícito del usuario: DESPACHO pasa a ser exclusivo de
+// Daniel también — el resto del equipo de Inventario ya no ve ni gestiona la
+// hoja de despacho diaria. Garantía sigue abierta a cualquiera del equipo.
 async function canUseDraftReason(reason: Reason): Promise<boolean> {
-  if (reason === "CAMBIO_PROVEEDOR") return canActOnMerchandiseOutflow();
+  if (reason === "CAMBIO_PROVEEDOR" || reason === "DESPACHO") return canActOnMerchandiseOutflow();
   return canCaptureMerchandiseOutflow();
 }
 

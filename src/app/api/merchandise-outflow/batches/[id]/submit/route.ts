@@ -9,7 +9,8 @@ const MIN_DOCUMENT_PHOTOS_BY_REASON: Partial<Record<string, number>> = { CAMBIO_
 // Congela el lote — a partir de acá ya no se puede editar, y queda listo en
 // la cola de "dar de baja en Just". CAMBIO_PROVEEDOR además exige al menos
 // una foto de la lista física declarada (documentPhotoUrls) como evidencia
-// de lo que se metió al paquete.
+// de lo que se metió al paquete. CAMBIO_PROVEEDOR y DESPACHO (confirmado
+// 2026-08-31) exclusivos de Daniel.
 export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
@@ -17,7 +18,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   const { id } = await params;
   const batch = await prisma.merchandiseOutflowBatch.findUnique({ where: { id }, include: { items: { select: { id: true } } } });
   if (!batch) return NextResponse.json({ error: "No encontrado." }, { status: 404 });
-  const authorized = batch.reason === "CAMBIO_PROVEEDOR" ? await canActOnMerchandiseOutflow() : await canCaptureMerchandiseOutflow();
+  const authorized = batch.reason === "CAMBIO_PROVEEDOR" || batch.reason === "DESPACHO" ? await canActOnMerchandiseOutflow() : await canCaptureMerchandiseOutflow();
   if (!authorized) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
   if (batch.createdById !== session.user.id) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
   if (batch.submittedAt) return NextResponse.json({ error: "Este lote ya fue enviado." }, { status: 409 });

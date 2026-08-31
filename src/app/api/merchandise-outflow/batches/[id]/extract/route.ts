@@ -2,20 +2,22 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { canCaptureMerchandiseOutflow } from "@/lib/guards";
+import { canCaptureMerchandiseOutflow, canActOnMerchandiseOutflow } from "@/lib/guards";
 import { readOutflowManifest, matchOutflowNamesToCatalog } from "@/lib/merchandiseOutflowAi";
 import { groupOutflowRows } from "@/lib/merchandiseOutflowGrouping";
 
 const MAX_PHOTOS = 40;
 const schema = z.object({ photoUrls: z.array(z.string().min(1)).min(1).max(MAX_PHOTOS) });
 
-// Daniel sube las fotos de la hoja/manifiesto — la IA arma un consolidado
-// SUGERIDO (nunca persistido acá) para que revise fila por fila antes de
-// agregarlo de verdad al lote (ver batches/[id]/items). Solo guarda las
-// fotos del documento en el lote, como evidencia.
+// Daniel (o cualquiera del equipo de Inventario para garantía) sube las
+// fotos de la hoja/manifiesto — la IA arma un consolidado SUGERIDO (nunca
+// persistido acá) para que revise fila por fila antes de agregarlo de
+// verdad al lote (ver batches/[id]/items). Solo guarda las fotos del
+// documento en el lote, como evidencia. DESPACHO exclusivo de Daniel
+// (confirmado 2026-08-31); garantía sigue abierta a todo el equipo.
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
-  if (!(await canCaptureMerchandiseOutflow()) || !session) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+  if (!session) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
   const { id } = await params;
   const body = await req.json().catch(() => null);
@@ -27,6 +29,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const batch = await prisma.merchandiseOutflowBatch.findUnique({ where: { id } });
   if (!batch) return NextResponse.json({ error: "No encontrado." }, { status: 404 });
+  const authorized = batch.reason === "DESPACHO" ? await canActOnMerchandiseOutflow() : await canCaptureMerchandiseOutflow();
+  if (!authorized) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
   if (batch.createdById !== session.user.id) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
   if (batch.submittedAt) return NextResponse.json({ error: "Este lote ya fue enviado." }, { status: 409 });
   if (batch.reason !== "DESPACHO" && batch.reason !== "GARANTIA") return NextResponse.json({ error: "Este motivo no usa lectura de documento." }, { status: 400 });

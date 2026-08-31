@@ -87,15 +87,20 @@ export function MerchandiseOutflowPanel({
   // cuanto alguien (ej. Bryan) tiene algo propio pendiente de gestionar ahí
   // — antes "guias" siempre ganaba primero para cualquiera de MKT/FUL, así
   // que un pendiente urgente de proveedor quedaba escondido detrás.
-  const defaultTab: Tab = canCapture
+  // Confirmado 2026-08-31: "despacho" solo puede ganar si además de capturar
+  // el usuario puede actuar (Daniel) — el resto del equipo de Inventario ya
+  // no tiene esa pestaña, así que su default cae en "garantia".
+  const defaultTab: Tab = canCapture && canAct
     ? "despacho"
-    : canAct
-      ? "baja"
-      : supplierExchangeMineCount > 0 || financeWriteOffPendingCount > 0
-        ? "proveedor"
-        : canSubmitCancelledGuide || canConfirmCancelledGuide || canCutoffCancelledGuide
-          ? "guias"
-          : "historial";
+    : canCapture
+      ? "garantia"
+      : canAct
+        ? "baja"
+        : supplierExchangeMineCount > 0 || financeWriteOffPendingCount > 0
+          ? "proveedor"
+          : canSubmitCancelledGuide || canConfirmCancelledGuide || canCutoffCancelledGuide
+            ? "guias"
+            : "historial";
   // Confirmado 2026-08-25: pedido explícito del usuario — todos los
   // motivos de egreso viven en una sola sesión para que Daniel no salte
   // entre módulos. Los atajos de Inicio/notificaciones llegan con
@@ -119,7 +124,10 @@ export function MerchandiseOutflowPanel({
   const canSeeProveedorTab = canAct || canViewSupplierExchangeResolution || supplierExchangeMineCount > 0 || financeWriteOffPendingCount > 0;
 
   const tabs: { id: Tab; label: string }[] = [
-    ...(canCapture ? [{ id: "despacho" as const, label: "Despacho" }] : []),
+    // Confirmado 2026-08-31, pedido explícito del usuario: "Despacho" pasa a
+    // ser exclusivo de Daniel (canAct) — el resto del equipo de Inventario ya
+    // no ve ni gestiona la hoja de despacho diaria, solo garantía/deterioro.
+    ...(canCapture && canAct ? [{ id: "despacho" as const, label: "Despacho" }] : []),
     ...(canCapture ? [{ id: "garantia" as const, label: "Garantía" }] : []),
     ...(canCapture ? [{ id: "deterioro" as const, label: "Deterioro" }] : []),
     ...(canSeeProveedorTab ? [{ id: "proveedor" as const, label: "Cambio con proveedor" }] : []),
@@ -150,7 +158,7 @@ export function MerchandiseOutflowPanel({
         ))}
       </div>
 
-      {tab === "despacho" && canCapture && (
+      {tab === "despacho" && canCapture && canAct && (
         <>
           <TabGuide storageKey="merchoutflow-despacho">
             Fotografía la hoja física de despacho — la IA lee cada renglón (producto + cantidad) y arma un consolidado editable. Confirma cada fila contra el catálogo antes de enviar el lote.

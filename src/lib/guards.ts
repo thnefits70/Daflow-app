@@ -853,11 +853,17 @@ export async function getFinanceLeadId(): Promise<string | null> {
 /**
  * ---------------- Registro de Egresos ----------------
  * Confirmado 2026-08-25, mismo espíritu que Reingreso de Mercadería: cualquier
- * miembro del equipo de Inventario captura (despacho/garantía/deterioro),
- * solo Daniel (líder de Inventario) resuelve deterioro y confirma la baja en
- * Just — ni siquiera admin, mismo criterio que canActOnMerchandiseReentry.
- * Admin puede VER el módulo (supervisión) igual que en el resto de flujos de
- * Inventario.
+ * miembro del equipo de Inventario captura (garantía/deterioro), solo Daniel
+ * (líder de Inventario) resuelve deterioro y confirma la baja en Just — ni
+ * siquiera admin, mismo criterio que canActOnMerchandiseReentry. Admin puede
+ * VER el módulo (supervisión) igual que en el resto de flujos de Inventario.
+ *
+ * Confirmado 2026-08-31, pedido explícito del usuario: DESPACHO (la hoja de
+ * despacho diaria) pasa a ser exclusivo de Daniel también — se gatea con
+ * canActOnMerchandiseOutflow() en vez de canCaptureMerchandiseOutflow() en
+ * cada endpoint/UI de esa razón, mismo patrón ya usado para CAMBIO_PROVEEDOR.
+ * canCaptureMerchandiseOutflow() en sí no cambió (sigue siendo "todo el
+ * equipo de Inventario") porque garantía/deterioro todavía la usan tal cual.
  */
 export async function canCaptureMerchandiseOutflow() {
   const session = await auth();

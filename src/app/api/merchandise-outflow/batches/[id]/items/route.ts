@@ -13,9 +13,9 @@ const schema = z.object({
 
 // Agrega un renglón ya confirmado (contra el catálogo, vía ProductMatchPicker
 // del lado del cliente, o nombre libre) al lote — mismo patrón que Reingreso,
-// cada fila se confirma antes de quedar guardada. CAMBIO_PROVEEDOR queda
-// exclusivo de Daniel (canActOnMerchandiseOutflow); despacho/garantía siguen
-// abiertos a todo el equipo de Inventario.
+// cada fila se confirma antes de quedar guardada. CAMBIO_PROVEEDOR y DESPACHO
+// quedan exclusivos de Daniel (canActOnMerchandiseOutflow, este último
+// confirmado 2026-08-31); garantía sigue abierta a todo el equipo de Inventario.
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
@@ -28,7 +28,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const batch = await prisma.merchandiseOutflowBatch.findUnique({ where: { id } });
   if (!batch) return NextResponse.json({ error: "No encontrado." }, { status: 404 });
-  const authorized = batch.reason === "CAMBIO_PROVEEDOR" ? await canActOnMerchandiseOutflow() : await canCaptureMerchandiseOutflow();
+  const authorized = batch.reason === "CAMBIO_PROVEEDOR" || batch.reason === "DESPACHO" ? await canActOnMerchandiseOutflow() : await canCaptureMerchandiseOutflow();
   if (!authorized) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
   if (batch.createdById !== session.user.id) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
   if (batch.submittedAt) return NextResponse.json({ error: "Este lote ya fue enviado." }, { status: 409 });

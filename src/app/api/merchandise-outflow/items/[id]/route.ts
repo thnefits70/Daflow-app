@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { canCaptureMerchandiseOutflow, canActOnMerchandiseOutflow } from "@/lib/guards";
 
 // Quitar un renglón del lote mientras sigue en borrador — solo quien lo creó.
+// CAMBIO_PROVEEDOR y DESPACHO (confirmado 2026-08-31) exclusivos de Daniel.
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
@@ -11,7 +12,7 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   const { id } = await params;
   const item = await prisma.merchandiseOutflowItem.findUnique({ where: { id }, include: { batch: { select: { createdById: true, submittedAt: true, reason: true } } } });
   if (!item) return NextResponse.json({ error: "No encontrado." }, { status: 404 });
-  const authorized = item.batch.reason === "CAMBIO_PROVEEDOR" ? await canActOnMerchandiseOutflow() : await canCaptureMerchandiseOutflow();
+  const authorized = item.batch.reason === "CAMBIO_PROVEEDOR" || item.batch.reason === "DESPACHO" ? await canActOnMerchandiseOutflow() : await canCaptureMerchandiseOutflow();
   if (!authorized) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
   if (item.batch.createdById !== session.user.id) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
   if (item.batch.submittedAt) return NextResponse.json({ error: "Este lote ya fue enviado." }, { status: 409 });
