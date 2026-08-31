@@ -142,6 +142,16 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
   const [motivoDraft, setMotivoDraft] = useState("");
   const [savingMotivoId, setSavingMotivoId] = useState<string | null>(null);
 
+  // Corregir el beneficiario/cuenta bancaria de una solicitud ya enviada
+  // (ej. se envió sin elegir cuenta) — mismo patrón que editingMotivoId,
+  // también exclusivo del admin porque los datos bancarios lo son en toda
+  // la app (ver AdminPayeePicker/Proveedores).
+  const [editingPayeeId, setEditingPayeeId] = useState<string | null>(null);
+  const [payeeDraft, setPayeeDraft] = useState<AdminPaymentPayeeDTO | null>(null);
+  const [bankAccountDraft, setBankAccountDraft] = useState<string | null>(null);
+  const [savingPayeeId, setSavingPayeeId] = useState<string | null>(null);
+  const [payeeErr, setPayeeErr] = useState("");
+
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [monthFilter, setMonthFilter] = useState("");
@@ -430,6 +440,39 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
       return;
     }
     setEditingMotivoId(null);
+    load();
+  }
+
+  function startEditPayee(r: RequestDTO) {
+    setEditingPayeeId(r.id);
+    const fullPayee = r.payee
+      ? payees.find((p) => p.id === r.payee!.id) ?? { id: r.payee.id, name: r.payee.name, bankAccounts: r.bankAccount ? [r.bankAccount] : [] }
+      : null;
+    setPayeeDraft(fullPayee);
+    setBankAccountDraft(r.bankAccount?.id ?? null);
+    setPayeeErr("");
+  }
+
+  function cancelEditPayee() {
+    setEditingPayeeId(null);
+    setPayeeErr("");
+  }
+
+  async function savePayee(id: string) {
+    setPayeeErr("");
+    setSavingPayeeId(id);
+    const res = await fetch(`/api/admin-payments/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ payeeId: payeeDraft?.id ?? null, bankAccountId: bankAccountDraft ?? null }),
+    });
+    setSavingPayeeId(null);
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      setPayeeErr(data?.error ?? "No se pudo guardar.");
+      return;
+    }
+    setEditingPayeeId(null);
     load();
   }
 
@@ -792,10 +835,49 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
                 </div>
               </div>
 
-              {r.payee && (
+              {editingPayeeId === r.id ? (
                 <div className="bg-cloud border border-rule rounded-md px-3 py-2.5 mb-2.5">
                   <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-steel mb-1.5">
-                    <Landmark size={12} /> A pagar a {r.payee.name}
+                    <Landmark size={12} /> Editar beneficiario y cuenta bancaria
+                  </div>
+                  <AdminPayeePicker
+                    payees={payees}
+                    value={payeeDraft}
+                    onChange={setPayeeDraft}
+                    isAdmin={isAdmin}
+                    selectedBankAccountId={bankAccountDraft}
+                    onSelectBankAccount={setBankAccountDraft}
+                    onPayeeUpdated={upsertPayeeInList}
+                  />
+                  {payeeErr && <div className="text-red text-[11.5px] mt-1.5">{payeeErr}</div>}
+                  <div className="flex items-center gap-2 mt-2">
+                    <button
+                      type="button"
+                      disabled={savingPayeeId === r.id}
+                      className="rounded border border-teal bg-teal px-3 py-1.5 text-[11.5px] font-bold text-navy cursor-pointer disabled:opacity-60"
+                      onClick={() => savePayee(r.id)}
+                    >
+                      {savingPayeeId === r.id ? "Guardando…" : "Guardar"}
+                    </button>
+                    <button type="button" className="text-steel text-[11.5px] cursor-pointer" onClick={cancelEditPayee}>Cancelar</button>
+                  </div>
+                </div>
+              ) : r.payee ? (
+                <div className="bg-cloud border border-rule rounded-md px-3 py-2.5 mb-2.5">
+                  <div className="flex items-center justify-between gap-2 mb-1.5">
+                    <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-steel">
+                      <Landmark size={12} /> A pagar a {r.payee.name}
+                    </div>
+                    {isAdmin && (
+                      <button
+                        type="button"
+                        title="Editar beneficiario/cuenta (solo admin)"
+                        className="text-steel-dim hover:text-teal cursor-pointer shrink-0"
+                        onClick={() => startEditPayee(r)}
+                      >
+                        <Pencil size={12} />
+                      </button>
+                    )}
                   </div>
                   {r.bankAccount ? (
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-2.5 gap-y-0.5 text-[11.5px]">
@@ -811,7 +893,15 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
                     <div className="text-[11.5px] text-steel">Sin cuenta bancaria elegida.</div>
                   )}
                 </div>
-              )}
+              ) : isAdmin ? (
+                <button
+                  type="button"
+                  className="flex items-center gap-1.5 text-[11.5px] text-blue font-semibold cursor-pointer mb-2.5"
+                  onClick={() => startEditPayee(r)}
+                >
+                  <Landmark size={12} /> Agregar beneficiario y cuenta bancaria
+                </button>
+              ) : null}
 
               {r.declarationFileUrl && (
                 <div className="bg-green/10 border border-green/30 rounded-md p-2.5 mb-2.5">
