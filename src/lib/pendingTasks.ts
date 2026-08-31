@@ -539,12 +539,19 @@ async function getStockoutPendingItem(href: string): Promise<PendingItem | null>
 }
 
 async function countMissingPayStubs(month: number, year: number): Promise<number> {
+  const monthStr = `${year}-${pad2(month)}`;
   const [activeUsers, stubs] = await Promise.all([
-    prisma.user.findMany({ where: { isActive: true }, select: { id: true } }),
+    prisma.user.findMany({ where: { isActive: true }, select: { id: true, startDate: true } }),
     prisma.payStub.findMany({ where: { month, year }, select: { userId: true } }),
   ]);
+  // Fix confirmado 2026-08-31 (caso real: Elsa Yambay, ingresó 2026-08-14)
+  // — mismo bug que eligibleForMonth ya resuelve para Colaborador del mes:
+  // sin filtrar por startDate, alguien contratado en agosto aparecía como
+  // "faltante" del rol de pago de julio, un mes en el que ni siquiera
+  // trabajaba acá.
+  const eligible = eligibleForMonth(activeUsers, monthStr);
   const stubUserIds = new Set(stubs.map((s) => s.userId));
-  return activeUsers.filter((u) => !stubUserIds.has(u.id)).length;
+  return eligible.filter((u) => !stubUserIds.has(u.id)).length;
 }
 
 // Only surfaces once the fixed check-in day for the current month has
