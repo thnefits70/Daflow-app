@@ -259,6 +259,23 @@ export async function notifyInvolvedParties(record: {
 
 export type WeeklyCheckinPush = { ownerId: string; title: string; body: string; url: string };
 
+// Saludo con el que Mary "abre" la conversación ella sola los viernes —
+// confirmado 2026-08-31, pedido explícito del usuario: el check-in no debe
+// depender de que el líder sepa qué escribir primero. Es una plantilla
+// simple armada en el servidor, sin llamar al modelo (sin costo de IA
+// nuevo) — retoma el pendiente más viejo si hay alguno, igual que Mary lo
+// haría en vivo (ver MARY_SYSTEM_PROMPT), y la conversación real con el
+// modelo arranca recién cuando el líder responde.
+function buildOpeningMessage(leaderName: string, openPrevious: OpenPreviousReport[]): string {
+  const greeting = `¡Hola, ${leaderName}! 😊`;
+  if (openPrevious.length > 0) {
+    const first = openPrevious[0];
+    const weeksLabel = `${first.weeksStale} semana${first.weeksStale === 1 ? "" : "s"}`;
+    return `${greeting} Antes de ver cómo va esta semana, quiero retomar un pendiente de hace ${weeksLabel}:\n\n"${first.problem}" — el plan era: "${first.actionPlan}".\n\n¿Cómo quedó eso, ya lo resolviste?`;
+  }
+  return `${greeting} ¿Qué problemas tuvo tu área esta semana?`;
+}
+
 // Recordatorio de los viernes — reutiliza el único cron diario existente
 // (ver /api/cron/push-pendientes), filtrando por día de la semana en vez de
 // crear un cron nuevo (Vercel Hobby no permite crons más frecuentes que uno
@@ -272,7 +289,7 @@ export async function getWeeklyCheckinPushes(): Promise<WeeklyCheckinPush[]> {
   const week = currentIsoWeek();
   const leaders = await prisma.user.findMany({
     where: { isActive: true, isLeader: true, leadsDept: { trackWeeklyReview: true } },
-    select: { id: true },
+    select: { id: true, name: true, leadsDeptId: true },
   });
   if (leaders.length === 0) return [];
 
@@ -281,15 +298,31 @@ export async function getWeeklyCheckinPushes(): Promise<WeeklyCheckinPush[]> {
     select: { reportedById: true },
   });
   const done = new Set(reported.map((r) => r.reportedById));
+  const pending = leaders.filter((l) => !done.has(l.id));
 
-  return leaders
-    .filter((l) => !done.has(l.id))
-    .map((l) => ({
-      ownerId: l.id,
+  const pushes: WeeklyCheckinPush[] = [];
+  for (const leader of pending) {
+    // Solo se deja la pregunta escrita si esta persona no tiene ya una
+    // conversación abierta esta semana — si ya empezó a chatear por su
+    // cuenta (ej. reportó antes del viernes), no se le pisa nada.
+    const existing = await prisma.checkinConversation.findFirst({ where: { ownerId: leader.id, weekOf: week } });
+    if (!existing) {
+      const openPrevious = await getOpenPreviousReports(leader.id, week);
+      const opening = buildOpeningMessage(leader.name, openPrevious);
+      const conversation = await prisma.checkinConversation.create({
+        data: { ownerId: leader.id, deptId: leader.leadsDeptId!, weekOf: week, title: opening.slice(0, 60) },
+      });
+      await prisma.checkinMessage.create({ data: { conversationId: conversation.id, role: "assistant", content: opening } });
+    }
+
+    pushes.push({
+      ownerId: leader.id,
       title: "DAFLOW · Reporte semanal",
-      body: "¿Qué problemas tuvo tu área esta semana? Cuéntaselo al asistente y arma el plan de acción.",
+      body: "Mary te dejó una pregunta sobre esta semana — entra a contestarle.",
       url: "/area",
-    }));
+    });
+  }
+  return pushes;
 }
 
 export type InvolvingMeReviewDTO = {
