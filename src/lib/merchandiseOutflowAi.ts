@@ -34,6 +34,11 @@ const SUBMIT_OUTFLOW_ROWS_TOOL = {
               description:
                 "'alta' si la letra/número es clara y no da lugar a dudas, 'media' si hay algo que dificulta la lectura pero igual hiciste una lectura razonable, 'baja' si tuviste que inferir bastante.",
             },
+            outOfStock: {
+              type: "boolean",
+              description:
+                "true SOLO si junto a este renglón hay una anotación a mano que dice \"NO HAY\" (o algo equivalente que indique claramente que no hay existencias de ese producto). En ese caso igual registra el renglón con su nombre — el valor de \"quantity\" no importa, no se va a usar. Omite este campo (o pon false) en cualquier otro caso.",
+            },
           },
           required: ["name", "quantity", "confidence"],
         },
@@ -43,7 +48,7 @@ const SUBMIT_OUTFLOW_ROWS_TOOL = {
   },
 };
 
-export type OutflowManifestRow = { name: string; quantity: number; confidence: "alta" | "media" | "baja"; code: string | null; catalogMatch: string | null };
+export type OutflowManifestRow = { name: string; quantity: number; confidence: "alta" | "media" | "baja"; code: string | null; catalogMatch: string | null; outOfStock: boolean };
 export type OutflowManifestReadResult = { rows: Omit<OutflowManifestRow, "catalogMatch">[] };
 
 // Confirmado 2026-08-25: Daniel fotografía la hoja física de despacho (o el
@@ -87,7 +92,14 @@ export async function readOutflowManifest(params: { photoUrls: string[]; documen
       "número es la referencia principal para identificar el producto exacto. Si en vez de un número ves un " +
       "código de letras (ej. \"CCM\"), transcríbelo tal cual está escrito. Nunca mezcles el código de un renglón " +
       "con el nombre o el código de otro renglón. Si no se distingue con claridad algún renglón, omítelo de la " +
-      "lista en vez de adivinar. Llama a submit_outflow_rows con el resultado — es la única forma de responder.",
+      "lista en vez de adivinar. " +
+      "Confirmado 2026-08-31, pedido explícito del usuario: a veces alguien escribe a mano \"NO HAY\" junto a un " +
+      "renglón — significa que Daniel confirmó que no hay existencias de ese producto. Cuando veas esa anotación, " +
+      "igual incluye el renglón (con su nombre) pero marca \"outOfStock\" en true; la cantidad en ese caso no " +
+      "importa. Además, el renglón con ID 50269 (\"ENVIO PRIORITARIO + PRODUCTO APARTADO\" o similar) NUNCA es un " +
+      "producto real — es un cargo de envío, ignóralo por completo, nunca lo incluyas en la lista aunque aparezca " +
+      "impreso en el documento. " +
+      "Llama a submit_outflow_rows con el resultado — es la única forma de responder.",
     tools: [SUBMIT_OUTFLOW_ROWS_TOOL],
     tool_choice: { type: "tool" as const, name: "submit_outflow_rows" },
     messages: [{ role: "user" as const, content: [...fileBlocks, { type: "text" as const, text: "Lee este documento y llama a submit_outflow_rows con el resultado." }] }],
@@ -117,11 +129,16 @@ export async function readOutflowManifest(params: { photoUrls: string[]; documen
   return {
     rows: Array.isArray(result.rows)
       ? result.rows
-          .filter((r) => r.name && r.quantity > 0)
+          // Confirmado 2026-08-31, pedido explícito del usuario: el ID 50269
+          // ("ENVIO PRIORITARIO + PRODUCTO APARTADO") nunca es un producto
+          // real — se filtra acá en código, no solo pedido en el prompt, para
+          // que quede bloqueado siempre aunque la IA lo pase por alto.
+          .filter((r) => r.name && r.code?.trim() !== "50269" && (r.quantity > 0 || r.outOfStock === true))
           .map((r) => ({
             ...r,
             confidence: r.confidence === "alta" || r.confidence === "media" || r.confidence === "baja" ? r.confidence : "media",
             code: typeof r.code === "string" && r.code.trim() ? r.code.trim() : null,
+            outOfStock: r.outOfStock === true,
           }))
       : [],
   };

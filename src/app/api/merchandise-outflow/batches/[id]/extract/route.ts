@@ -68,15 +68,23 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       actorId: session.user.id,
     });
 
+    // Confirmado 2026-08-31, pedido explícito del usuario: un renglón que la
+    // IA marcó "outOfStock" (Daniel escribió "NO HAY" al lado) nunca se
+    // agrega al lote — se separa ANTES de emparejar/agrupar y se devuelve
+    // aparte, solo informativo, para que quien captura vea que quedó
+    // excluido a propósito y no piense que se perdió por error.
+    const noStockRows = result.rows.filter((r) => r.outOfStock);
+    const readableRows = result.rows.filter((r) => !r.outOfStock);
+
     // Confirmado 2026-08-26: emparejamiento por nombre en una llamada
     // SEPARADA (solo texto, sin fotos) — ver merchandiseOutflowAi.ts para
     // por qué se sacó de la llamada que lee las fotos.
     const catalogMatches = await matchOutflowNamesToCatalog({
-      names: result.rows.map((r) => r.name),
+      names: readableRows.map((r) => r.name),
       catalogNames: catalog.map((c) => c.name),
       actorId: session.user.id,
     });
-    const rowsWithMatch = result.rows.map((r, i) => ({ ...r, catalogMatch: catalogMatches[i] ?? null }));
+    const rowsWithMatch = readableRows.map((r, i) => ({ ...r, catalogMatch: catalogMatches[i] ?? null }));
 
     // Agrupa por el producto de catálogo ya resuelto (o por el nombre crudo
     // si no hubo match) — así dos renglones escritos distinto en el papel
@@ -84,7 +92,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     // la cantidad sumada, que es justo el resumen que Daniel necesita ver
     // antes de mandarlo a dar de baja en Just. Ver merchandiseOutflowGrouping.ts.
     const rows = groupOutflowRows(rowsWithMatch, { catalogByJustCode, catalogByName, combosByCode });
-    return NextResponse.json({ rows });
+    const excludedNoStock = noStockRows.map((r) => ({ name: r.name, code: r.code }));
+    return NextResponse.json({ rows, excludedNoStock });
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : "No se pudo leer el documento.", rows: [] }, { status: 200 });
   }

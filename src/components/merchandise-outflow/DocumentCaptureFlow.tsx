@@ -61,6 +61,7 @@ export function DocumentCaptureFlow({ reason, canManageJustCatalog = false }: { 
   const [taking, setTaking] = useState(false);
   const [extracting, setExtracting] = useState(false);
   const [rows, setRows] = useState<SuggestedRow[]>([]);
+  const [noStockItems, setNoStockItems] = useState<{ name: string; code: string | null }[]>([]);
   const [manualMode, setManualMode] = useState(false);
   const [manualQty, setManualQty] = useState("");
   const [manualSelected, setManualSelected] = useState<MatchCatalogItem | null>(null);
@@ -100,6 +101,7 @@ export function DocumentCaptureFlow({ reason, canManageJustCatalog = false }: { 
     try {
       const result = await postJson(`/api/merchandise-outflow/batches/${batch.id}/extract`, { photoUrls: photos.map((p) => p.url) });
       if (result.error) setError(result.error);
+      setNoStockItems(Array.isArray(result.excludedNoStock) ? result.excludedNoStock : []);
       setRows(
         (result.rows ?? []).map(
           (r: {
@@ -272,6 +274,7 @@ export function DocumentCaptureFlow({ reason, canManageJustCatalog = false }: { 
     setConfirmDeleteBatch(false);
     setPhotos([]);
     setRows([]);
+    setNoStockItems([]);
   }
 
   async function submitBatch() {
@@ -285,6 +288,7 @@ export function DocumentCaptureFlow({ reason, canManageJustCatalog = false }: { 
       setConfirmingSubmit(false);
       setPhotos([]);
       setRows([]);
+      setNoStockItems([]);
     } catch (e) {
       setError(e instanceof Error ? e.message : "No se pudo enviar el lote.");
     } finally {
@@ -461,6 +465,20 @@ export function DocumentCaptureFlow({ reason, canManageJustCatalog = false }: { 
           </button>
         )}
       </div>
+
+      {noStockItems.length > 0 && (
+        <div className="bg-red/10 border border-red/40 rounded-md p-3 mb-3">
+          <div className="text-[12px] font-bold text-red mb-1.5">{noStockItems.length} producto(s) marcado(s) como &quot;NO HAY&quot; — no se incluyen en este lote</div>
+          <div className="flex flex-col gap-1">
+            {noStockItems.map((it, i) => (
+              <div key={i} className="text-[12px] text-steel">
+                {it.code && <span className="font-mono text-[10.5px] mr-1.5">#{it.code}</span>}
+                {it.name}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {rows.length > 0 && (
         <div className="flex flex-col gap-2 mb-3">
