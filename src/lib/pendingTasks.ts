@@ -538,11 +538,33 @@ async function getStockoutPendingItem(href: string): Promise<PendingItem | null>
   };
 }
 
+// Reescrito 2026-08-31 — hasta el 2026-08-24 esto contaba comprobantes
+// (PayStub) subidos a mano por Nairoby; ese flujo se retiró (commit
+// 47f7b44, "Auto-generate the Rol del mes... retire manual comprobante
+// uploads") a favor del Rol del mes automático (MonthlyLegalRole), que se
+// genera solo al publicar la quincena de fin de mes — ver publish/route.ts.
+// Mirar solo PayStub habría hecho que este aviso marcara a TODO el equipo
+// como "faltante" cada mes desde agosto en adelante, porque ya nadie sube
+// un PayStub nuevo. Pero mirar solo MonthlyLegalRole tampoco alcanza: julio
+// 2026 se cerró 100% con el sistema viejo (comprobante a mano) ANTES de que
+// existiera el Rol del mes automático (shippeado 2026-08-13), así que no
+// tiene ni un solo MonthlyLegalRole — un swap directo habría disparado una
+// alarma falsa mucho peor (todo el equipo "faltante" de julio) el mismo día
+// de este fix. Por eso cuenta a alguien como cubierto si tiene CUALQUIERA
+// de los dos para ese mes — cubre correctamente el mes de transición (vía
+// PayStub) sin fecha de corte fija, y de ahí en adelante el OR se reduce
+// solo a MonthlyLegalRole porque PayStub ya no recibe filas nuevas. Con el
+// sistema nuevo, "falta" significa: la quincena de fin de mes de esa
+// persona todavía no se publicó, o su sueldo declarado en IESS no está
+// configurado (publish/route.ts la salta en silencio si
+// PayrollProfile.iessDeclaredSalary es null) — ambos resolubles por
+// Nairoby desde Roles de pago.
 async function countMissingPayStubs(month: number, year: number): Promise<number> {
   const monthStr = `${year}-${pad2(month)}`;
-  const [activeUsers, stubs] = await Promise.all([
+  const [activeUsers, stubs, roles] = await Promise.all([
     prisma.user.findMany({ where: { isActive: true }, select: { id: true, startDate: true } }),
     prisma.payStub.findMany({ where: { month, year }, select: { userId: true } }),
+    prisma.monthlyLegalRole.findMany({ where: { month: monthStr, isCurrent: true }, select: { employeeId: true } }),
   ]);
   // Fix confirmado 2026-08-31 (caso real: Elsa Yambay, ingresó 2026-08-14)
   // — mismo bug que eligibleForMonth ya resuelve para Colaborador del mes:
@@ -550,8 +572,8 @@ async function countMissingPayStubs(month: number, year: number): Promise<number
   // "faltante" del rol de pago de julio, un mes en el que ni siquiera
   // trabajaba acá.
   const eligible = eligibleForMonth(activeUsers, monthStr);
-  const stubUserIds = new Set(stubs.map((s) => s.userId));
-  return eligible.filter((u) => !stubUserIds.has(u.id)).length;
+  const coveredIds = new Set([...stubs.map((s) => s.userId), ...roles.map((r) => r.employeeId)]);
+  return eligible.filter((u) => !coveredIds.has(u.id)).length;
 }
 
 // Only surfaces once the fixed check-in day for the current month has
