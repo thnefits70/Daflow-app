@@ -12,11 +12,31 @@ import {
 import { PieChart } from "./PieChart";
 import type { WeeklyTrend, WarrantyMonthlyChart } from "@/lib/dashboard";
 
+// Confirmado 2026-08-31: pedido explícito del usuario — quien vea la
+// tarjetita chiquita (no solo la tarjeta grande de desglose) debe poder
+// ver a qué rango corresponde cada color, no solo el nombre de la banda
+// actual ("Muy bueno") sin contexto de dónde empieza y termina.
+export type KpiRangeLegendItem = { color: string; label: string };
+
+export function KpiRangeLegend({ items }: { items: KpiRangeLegendItem[] }) {
+  return (
+    <div className="flex flex-wrap gap-x-2.5 gap-y-1 text-[9.5px] text-steel mt-2 pt-2 border-t border-dashed border-rule">
+      {items.map((item) => (
+        <span key={item.label} className="flex items-center gap-1">
+          <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: item.color }} />
+          {item.label}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 export function KpiTile({
   kicker,
   value,
   period,
   pill,
+  legend,
   className,
   children,
 }: {
@@ -24,6 +44,7 @@ export function KpiTile({
   value: string;
   period: string;
   pill?: { label: string; color: string };
+  legend?: KpiRangeLegendItem[];
   className?: string;
   children: React.ReactNode;
 }) {
@@ -43,6 +64,7 @@ export function KpiTile({
       </div>
       <div className="text-[10.5px] text-steel mb-2.5">{period}</div>
       {children}
+      {legend && <KpiRangeLegend items={legend} />}
     </div>
   );
 }
@@ -265,11 +287,16 @@ export function FillRateTile({ trend }: { trend: NonNullable<WeeklyTrend> }) {
       value={`${Math.round(latest.value)}%`}
       period={`${formatWeekShort(latest.week)} · última semana`}
       pill={fillRateStatus(latest.value)}
+      legend={[
+        { color: "#22C55E", label: "≥96% Excelente" },
+        { color: "#D9A441", label: "90–95% Muy bueno" },
+        { color: "#E0574A", label: "<90% Alerta" },
+      ]}
     >
       <MiniSparkline
         points={trend.points}
         color="#14C7C7"
-        dangerBelow={95}
+        dangerBelow={90}
         formatPeriod={formatWeekShort}
         formatValue={(v) => `${Math.round(v)}%`}
       />
