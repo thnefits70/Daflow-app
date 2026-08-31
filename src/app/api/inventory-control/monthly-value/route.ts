@@ -1,15 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { auth } from "@/auth";
 import { canManageInventoryControl } from "@/lib/guards";
 import { getFinanzasDeptId, recentInventoryPeriods } from "@/lib/inventoryKpis";
+import { readInventoryValueProof } from "@/lib/inventoryAi";
 import { prisma } from "@/lib/prisma";
 
 const schema = z.object({
   period: z.string().regex(/^\d{4}-\d{2}$/),
   value: z.number().nonnegative(),
   proofUrl: z.string().url().nullable().optional(),
-  aiReadAmount: z.number().nullable().optional(),
-  aiMatches: z.boolean().nullable().optional(),
 });
 
 // Daniel (líder de Inventario) carga el único dato mensual que le
@@ -17,11 +17,16 @@ const schema = z.object({
 // FinanceSharedMonthlyBalance.inventarioFinal que ya usa "Cargar plantilla",
 // solo que desde su propia pantalla ("Control de Inventario" en Mi área de
 // trabajo) en vez de la de Finanzas. Confirmado 2026-08-05: puede elegir
-// CUALQUIER mes reciente (no solo el actual, ej. cargar julio atrasado), y
-// si adjuntó una captura, ya se verificó UNA vez en /verify-value-proof —
-// este endpoint solo guarda, no vuelve a llamar a la IA.
+// CUALQUIER mes reciente (no solo el actual, ej. cargar julio atrasado).
+// Corregido 2026-08-31: este endpoint YA NO confía en el aiReadAmount/
+// aiMatches que mandaba el cliente (el chequeo de /verify-value-proof era
+// solo de la pantalla — nada impedía llamar a este endpoint directo, sin
+// pasar por ahí, y guardar cualquier monto con "coincide" a la fuerza). Ahora
+// vuelve a leer la captura con IA aquí mismo y decide el match él solo,
+// mismo patrón que /api/petty-cash/entries.
 export async function POST(req: NextRequest) {
-  if (!(await canManageInventoryControl())) {
+  const session = await auth();
+  if (!(await canManageInventoryControl()) || !session) {
     return NextResponse.json({ error: "No autorizado." }, { status: 403 });
   }
 
@@ -36,12 +41,36 @@ export async function POST(req: NextRequest) {
   const deptId = await getFinanzasDeptId();
   if (!deptId) return NextResponse.json({ error: "No se encontró el departamento de Finanzas." }, { status: 500 });
 
-  const { period } = parsed.data;
+  const { period, value, proofUrl } = parsed.data;
+
+  let aiReadAmount: number | null = null;
+  let aiMatches: boolean | null = null;
+  if (proofUrl) {
+    try {
+      const read = await readInventoryValueProof({ proofUrl, actorId: session.user.id, deptId: session.user.deptId ?? undefined });
+      aiReadAmount = read.readAmount;
+      aiMatches = read.readAmount !== null && Math.abs(read.readAmount - value) < 0.01;
+    } catch {
+      // La IA no pudo leer el comprobante — se guarda igual, solo sin verificación.
+    }
+  }
+
+  // Mismo freno que en petty-cash/entries: un mismatch CONFIRMADO (o una
+  // captura que la IA sí procesó pero no pudo leer con claridad) bloquea el
+  // guardado — solo una falla real de la IA (excepción/red) deja pasar sin
+  // verificar.
+  if (aiMatches === false) {
+    return NextResponse.json(
+      { error: `Rechazado — la captura muestra ${aiReadAmount !== null ? `$${aiReadAmount.toFixed(2)}` : "un monto que no se pudo leer con claridad"}, pero ingresaste $${value.toFixed(2)}.` },
+      { status: 409 }
+    );
+  }
+
   const data = {
-    inventarioFinal: parsed.data.value,
-    inventarioProofUrl: parsed.data.proofUrl || null,
-    inventarioAiReadAmount: parsed.data.aiReadAmount ?? null,
-    inventarioAiMatches: parsed.data.aiMatches ?? null,
+    inventarioFinal: value,
+    inventarioProofUrl: proofUrl || null,
+    inventarioAiReadAmount: aiReadAmount,
+    inventarioAiMatches: aiMatches,
   };
   await prisma.financeSharedMonthlyBalance.upsert({
     where: { deptId_period: { deptId, period } },

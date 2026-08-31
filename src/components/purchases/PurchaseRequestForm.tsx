@@ -424,6 +424,23 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
   const totalQty = lines.reduce((s, l) => s + (Number(l.quantity) || 0), 0);
   const total = lineTotals.reduce((s, t) => s + t, 0);
 
+  // Confirmado 2026-08-31: si el total cambia (cantidad, costo, IVA, o
+  // agregar/quitar un producto) DESPUÉS de que la cotización u orden de
+  // compra ya se verificó contra el total anterior, ese "coincide" queda
+  // obsoleto — invalida ambas verificaciones para forzar un chequeo nuevo
+  // contra el total real antes de poder enviar (submit() ya exige
+  // quoteVerified/poVerifyResult.matches, así que ponerlos en null vuelve a
+  // bloquear el envío hasta reverificar).
+  const lastVerifiedTotalRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!hydrated) return;
+    if (lastVerifiedTotalRef.current !== null && lastVerifiedTotalRef.current !== total) {
+      setVerifyResult(null);
+      setPoVerifyResult(null);
+    }
+    lastVerifiedTotalRef.current = total;
+  }, [hydrated, total]);
+
   // Confirmado 2026-08-17: pedido explícito del usuario — cuando la
   // cotización solo trae código (sin nombre de producto), antes el total que
   // leía la IA (readTotal) se descartaba en silencio: solo se comparaba la

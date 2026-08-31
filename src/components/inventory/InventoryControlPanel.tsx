@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, Upload, AlertTriangle, TrendingDown, Minus } from "lucide-react";
 import type { InventoryControlPeriodDTO, InventorySnapshotPeriodDTO } from "@/lib/inventoryKpis";
@@ -87,12 +87,9 @@ export function InventoryControlPanel({
     if (!res.ok) { setErr(res.error); return; }
     setProofUrl(res.url);
     setVerifyResult(null);
-    await verifyProof(res.url);
   }
 
-  async function verifyProof(url: string) {
-    const n = Number(value);
-    if (Number.isNaN(n) || n < 0) return;
+  async function verifyProof(url: string, n: number) {
     setVerifying(true);
     const res = await fetch("/api/inventory-control/verify-value-proof", {
       method: "POST",
@@ -104,6 +101,20 @@ export function InventoryControlPanel({
     if (!res.ok) { setErr(json?.error ?? "No se pudo leer la captura."); return; }
     setVerifyResult({ readAmount: json.readAmount, matches: json.matches });
   }
+
+  // Confirmado 2026-08-31: la verificación con IA debe dispararse sin
+  // importar el orden en que se llenen el valor y la captura — antes solo se
+  // disparaba en el instante de subir la foto (y encima "" se leía como 0,
+  // así que un campo vacío mandaba a verificar contra $0 en vez de no
+  // verificar nada). Ahora reacciona a ambos campos, con debounce al tipear.
+  useEffect(() => {
+    if (!proofUrl) return;
+    if (value.trim() === "") return;
+    const n = Number(value);
+    if (Number.isNaN(n) || n < 0) return;
+    const t = setTimeout(() => verifyProof(proofUrl, n), 600);
+    return () => clearTimeout(t);
+  }, [value, proofUrl]);
 
   function openConfirm() {
     const n = Number(value);
@@ -119,14 +130,14 @@ export function InventoryControlPanel({
     const res = await fetch("/api/inventory-control/monthly-value", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        period, value: n, proofUrl,
-        aiReadAmount: verifyResult?.readAmount ?? null,
-        aiMatches: proofUrl ? (verifyResult?.matches ?? null) : null,
-      }),
+      body: JSON.stringify({ period, value: n, proofUrl }),
     });
     setSavingValue(false);
-    if (!res.ok) { setErr("No se pudo guardar."); return; }
+    if (!res.ok) {
+      const json = await res.json().catch(() => null);
+      setErr(json?.error ?? "No se pudo guardar.");
+      return;
+    }
     setConfirming(false);
     setToast(`✅ Inventario de ${monthLabel(period)} guardado.`);
     router.refresh();
@@ -299,7 +310,12 @@ export function InventoryControlPanel({
               )
             )}
             <div className="flex items-center gap-2">
-              <button type="button" disabled={savingValue} className="rounded bg-blue text-white px-3.5 py-2 text-[12.5px] font-semibold cursor-pointer disabled:opacity-60" onClick={confirmSave}>
+              <button
+                type="button"
+                disabled={savingValue || verifying || (!!proofUrl && verifyResult?.matches === false)}
+                className="rounded bg-blue text-white px-3.5 py-2 text-[12.5px] font-semibold cursor-pointer disabled:opacity-60"
+                onClick={confirmSave}
+              >
                 Sí, guardar
               </button>
               <button type="button" className="text-steel text-[12.5px] cursor-pointer" onClick={() => setConfirming(false)}>

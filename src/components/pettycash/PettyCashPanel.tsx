@@ -241,6 +241,28 @@ function BoxCard({
   const [fundVerifying, setFundVerifying] = useState(false);
   const [fundVerifyResult, setFundVerifyResult] = useState<{ matches: boolean; readAmount: number | null; note: string } | null>(null);
 
+  // Confirmado 2026-08-31: dispara la verificación con IA sin importar el
+  // orden en que se llenen el monto y el comprobante — reacciona tanto a
+  // subir/cambiar la foto como a escribir/corregir el monto (con un pequeño
+  // debounce para no llamar a la IA en cada tecla).
+  useEffect(() => {
+    if (!proofUrl) return;
+    const n = Number(amount);
+    if (Number.isNaN(n) || n <= 0) return;
+    const t = setTimeout(() => verifyProof("desembolso", proofUrl, n), 600);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [amount, proofUrl]);
+
+  useEffect(() => {
+    if (!fundProofUrl) return;
+    const n = Number(fundAmount);
+    if (Number.isNaN(n) || n <= 0) return;
+    const t = setTimeout(() => verifyProof("recarga", fundProofUrl, n), 600);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fundAmount, fundProofUrl]);
+
   const [excReason, setExcReason] = useState("");
   const [zoomedUrl, setZoomedUrl] = useState<string | null>(null);
 
@@ -342,17 +364,18 @@ function BoxCard({
     if (target === "desembolso") setProofVerifyResult(data); else setFundVerifyResult(data);
   }
 
+  // Confirmado 2026-08-31: applyProof YA NO dispara verifyProof directo —
+  // ese trabajo lo hacen los useEffect de abajo, que reaccionan tanto a subir
+  // la foto como a escribir/corregir el monto, sin importar el orden. Antes
+  // solo se verificaba en el instante de la subida, así que si el monto se
+  // escribía DESPUÉS de la foto, la IA nunca llegaba a comparar nada.
   function applyProof(target: "desembolso" | "recarga", url: string) {
     if (target === "desembolso") {
       setProofUrl(url);
       setProofVerifyResult(null);
-      const n = Number(amount);
-      if (!Number.isNaN(n) && n > 0) verifyProof("desembolso", url, n);
     } else {
       setFundProofUrl(url);
       setFundVerifyResult(null);
-      const n = Number(fundAmount);
-      if (!Number.isNaN(n) && n > 0) verifyProof("recarga", url, n);
     }
   }
 
@@ -522,7 +545,7 @@ function BoxCard({
               )}
               {!box.blocked && (
                 <>
-                  <input type="number" step="any" placeholder="Monto que entregas" className="w-full rounded border border-rule bg-cloud px-2.5 py-2 text-[12px] font-mono mb-2" value={fundAmount} onChange={(e) => setFundAmount(e.target.value)} />
+                  <input type="number" step="any" placeholder="Monto que entregas" className="w-full rounded border border-rule bg-cloud px-2.5 py-2 text-[12px] font-mono mb-2" value={fundAmount} onChange={(e) => { setFundAmount(e.target.value); setFundVerifyResult(null); }} />
                   <input type="text" placeholder="Descripción (opcional)" className="w-full rounded border border-rule bg-cloud px-2.5 py-2 text-[12px] mb-2" value={fundDesc} onChange={(e) => setFundDesc(e.target.value)} />
                   {fundProofUrl ? (
                     <div className="flex items-start gap-2.5 mb-2">
@@ -750,7 +773,7 @@ function BoxCard({
             <input type="text" placeholder="Motivo del pago" className="w-full rounded border border-rule bg-cloud px-2.5 py-2 text-[12px] mb-2.5" value={reason} onChange={(e) => setReason(e.target.value)} />
           )}
           <input type="text" placeholder="Descripción" className="w-full rounded border border-rule bg-cloud px-2.5 py-2 text-[12px] mb-2.5" value={description} onChange={(e) => setDescription(e.target.value)} />
-          <input type="number" step="any" placeholder="$0.00" className="w-full rounded border border-rule bg-cloud px-2.5 py-2 text-[12px] font-mono mb-2.5" value={amount} onChange={(e) => setAmount(e.target.value)} />
+          <input type="number" step="any" placeholder="$0.00" className="w-full rounded border border-rule bg-cloud px-2.5 py-2 text-[12px] font-mono mb-2.5" value={amount} onChange={(e) => { setAmount(e.target.value); setProofVerifyResult(null); }} />
           {proofUrl ? (
             <div className="flex items-start gap-2.5 mb-2.5">
               <ProofThumb url={proofUrl} onZoom={() => setZoomedUrl(proofUrl)} />
