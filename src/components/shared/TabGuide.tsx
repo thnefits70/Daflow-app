@@ -14,13 +14,13 @@ export function TabGuide({ storageKey, children }: { storageKey: string; childre
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
-    if (localStorage.getItem(`tabguide:${storageKey}`) === "open") setOpen(true);
+    if (localStorage.getItem(`tabguide:v2:${storageKey}`) === "open") setOpen(true);
   }, [storageKey]);
 
   function toggle() {
     const next = !open;
     setOpen(next);
-    localStorage.setItem(`tabguide:${storageKey}`, next ? "open" : "closed");
+    localStorage.setItem(`tabguide:v2:${storageKey}`, next ? "open" : "closed");
   }
 
   return (
