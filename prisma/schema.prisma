@@ -4067,14 +4067,27 @@ model ExternalSale {
   outflowBatchId String?                  @unique
   outflowBatch   MerchandiseOutflowBatch? @relation(fields: [outflowBatchId], references: [id], onDelete: SetNull)
 
+  // Alertas de tiempo (Fase 3, Parte 3) — confirmado 2026-09-01, revisadas
+  // una vez al día por el cron de push-pendientes. Cada una se manda UNA
+  // sola vez (no se repite a diario como el resto de pendientes) porque acá
+  // no hay una acción en el sistema que la "resuelva" — es un aviso para
+  // que el equipo verifique algo por fuera de Daflow.
+  //
+  // 1) 3 días hábiles desde que el equipo de Yair entregó al motorizado sin
+  //    ninguna otra señal en el sistema de que en verdad llegó al cliente.
+  deliveryOverdueAlertSentAt DateTime?
+  // 2) Solo contra entrega (Marcos): 48 horas desde la entrega sin subir el
+  //    comprobante de pago — para no dejar mercadería entregada sin cobrar.
+  contraEntregaPaymentAlertSentAt DateTime?
+
   // Confirmado 2026-09-01: admin puede borrar una venta entera para volver a
   // declararla desde cero (ej. datos equivocados) — pero como baja lógica,
   // no un delete real, para que el código (VE-000X) deje rastro de qué pasó
   // en vez de desaparecer sin explicación. deletedById sin FK (sentinel
   // "admin", mismo patrón que otros actorId de admin en el schema) porque
   // solo admin puede borrar.
-  deletedAt    DateTime?
-  deletedById  String?
+  deletedAt   DateTime?
+  deletedById String?
 
   @@index([reviewStatus])
   @@index([dispatchAssignedToId])

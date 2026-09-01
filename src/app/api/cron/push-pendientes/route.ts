@@ -7,6 +7,7 @@ import { getStaleSupplierCreditPushes } from "@/lib/supplierCredits";
 import { getStaleAdminPaymentPushes } from "@/lib/adminPayments";
 import { getStalePersonalPurchaseTransferPushes } from "@/lib/personalPurchases";
 import { getWeeklyCheckinPushes } from "@/lib/weeklyCheckin";
+import { getDeliveryOverduePushes, getContraEntregaPaymentOverduePushes } from "@/lib/externalSales";
 import { sendPushToOwner } from "@/lib/webPush";
 
 // Disparado por Vercel Cron (ver vercel.json) una vez al día. Protegido por
@@ -91,6 +92,14 @@ export async function GET(req: NextRequest) {
   // área con trackWeeklyReview que todavía no reportó esta semana.
   const weeklyCheckinPushes = await getWeeklyCheckinPushes();
   for (const r of weeklyCheckinPushes) {
+    await sendPushToOwner(r.ownerId, { title: r.title, body: r.body, url: r.url });
+    notified++;
+  }
+
+  // Ventas Externas — alertas de tiempo (Parte 3): 3 días hábiles sin
+  // cerrar desde la entrega, y 48 horas sin comprobante en contra entrega.
+  const externalSaleTimingPushes = [...(await getDeliveryOverduePushes()), ...(await getContraEntregaPaymentOverduePushes())];
+  for (const r of externalSaleTimingPushes) {
     await sendPushToOwner(r.ownerId, { title: r.title, body: r.body, url: r.url });
     notified++;
   }

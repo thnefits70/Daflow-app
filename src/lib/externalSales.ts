@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { notifyOwner } from "@/lib/notifications";
 import { getInventoryLeadId, getMarketingLeadId, getFinanceLeadId, getFulfilmentLeadId } from "@/lib/guards";
 import { nextMerchandiseOutflowNumber, formatMerchandiseOutflowCode } from "@/lib/merchandiseOutflow";
+import { addBusinessDays } from "@/lib/businessHours";
 
 const URL_BASE = "/area/workspace?tab=ventas-externas";
 
@@ -65,28 +66,121 @@ export async function notifyFinanceLeadExternalSaleReadyToClose(code: string): P
   await notifyOwner(leadId, { title: "Venta externa lista para cerrar", body: `${code} — pago confirmado y mercadería entregada.`, url: `${URL_BASE}&etab=cierre` }).catch(() => null);
 }
 
-// Confirmado 2026-08-25: pedido explícito del usuario — al cerrar, TODOS los
-// involucrados reciben aviso (el link los lleva a la pantalla con las fotos
-// de producto/entrega, el push en sí es solo texto).
-export async function notifyEveryoneExternalSaleClosed(sale: {
-  code: string;
+type InvolvedSale = {
   advisorId: string;
   reviewedById: string | null;
   invoiceUploadedById: string | null;
   dispatchAssignedToId: string | null;
   packAssignedToId: string | null;
   deliveredById: string | null;
-}): Promise<void> {
-  const recipients = new Set(
-    [sale.advisorId, sale.reviewedById, sale.invoiceUploadedById, sale.dispatchAssignedToId, sale.packAssignedToId, sale.deliveredById].filter(
-      (id): id is string => !!id
-    )
-  );
+};
+
+function involvedRecipientIds(sale: InvolvedSale): string[] {
+  return [...new Set([sale.advisorId, sale.reviewedById, sale.invoiceUploadedById, sale.dispatchAssignedToId, sale.packAssignedToId, sale.deliveredById].filter((id): id is string => !!id))];
+}
+
+// Confirmado 2026-08-25: pedido explícito del usuario — al cerrar, TODOS los
+// involucrados reciben aviso (el link los lleva a la pantalla con las fotos
+// de producto/entrega, el push en sí es solo texto).
+export async function notifyEveryoneExternalSaleClosed(sale: { code: string } & InvolvedSale): Promise<void> {
   await Promise.all(
-    [...recipients].map((id) =>
+    involvedRecipientIds(sale).map((id) =>
       notifyOwner(id, { title: "✅ Venta externa cerrada", body: `${sale.code} — Nairoby ya registró el pago completo.`, url: `${URL_BASE}&etab=historial` }).catch(() => null)
     )
   );
+}
+
+export type ExternalSaleTimingPush = { ownerId: string; title: string; body: string; url: string };
+
+// Alertas de tiempo (Parte 3) — confirmado 2026-09-01. A diferencia del
+// resto de "stale pushes" de este cron, cada una se manda UNA sola vez
+// (marca *AlertSentAt) porque no hay ninguna acción dentro de Daflow que
+// las "resuelva" — son un aviso para verificar algo por fuera del sistema.
+//
+// 1) 3 días hábiles desde que el equipo de Yair entregó al motorizado, sin
+//    haberse cerrado la venta todavía.
+export async function getDeliveryOverduePushes(): Promise<ExternalSaleTimingPush[]> {
+  const candidates = await prisma.externalSale.findMany({
+    where: { deliveredAt: { not: null }, nairobyClosedAt: null, deletedAt: null, deliveryOverdueAlertSentAt: null },
+    select: {
+      id: true,
+      code: true,
+      deliveredAt: true,
+      declaredProductName: true,
+      catalogItem: { select: { name: true } },
+      advisorId: true,
+      reviewedById: true,
+      invoiceUploadedById: true,
+      dispatchAssignedToId: true,
+      packAssignedToId: true,
+      deliveredById: true,
+    },
+  });
+
+  const now = new Date();
+  const due = candidates.filter((s) => addBusinessDays(s.deliveredAt!, 3) <= now);
+  if (due.length === 0) return [];
+
+  await prisma.externalSale.updateMany({ where: { id: { in: due.map((s) => s.id) } }, data: { deliveryOverdueAlertSentAt: now } });
+
+  const pushes: ExternalSaleTimingPush[] = [];
+  for (const s of due) {
+    const name = s.catalogItem?.name ?? s.declaredProductName;
+    for (const ownerId of involvedRecipientIds(s)) {
+      pushes.push({
+        ownerId,
+        title: "⏰ Venta externa — verificar entrega",
+        body: `${s.code} — ${name}. Ya pasaron 3 días hábiles desde que se entregó al motorizado, confirma que de verdad llegó al cliente.`,
+        url: `${URL_BASE}&etab=historial`,
+      });
+    }
+  }
+  return pushes;
+}
+
+// 2) Solo contra entrega (Marcos): 48 horas desde la entrega sin subir el
+//    comprobante de pago — mercadería entregada que corre riesgo de
+//    quedarse sin cobrar.
+export async function getContraEntregaPaymentOverduePushes(): Promise<ExternalSaleTimingPush[]> {
+  const cutoff = new Date(Date.now() - 48 * 60 * 60 * 1000);
+  const due = await prisma.externalSale.findMany({
+    where: {
+      isContraEntrega: true,
+      deliveredAt: { not: null, lte: cutoff },
+      paymentProofUrl: null,
+      deletedAt: null,
+      contraEntregaPaymentAlertSentAt: null,
+    },
+    select: {
+      id: true,
+      code: true,
+      declaredProductName: true,
+      catalogItem: { select: { name: true } },
+      advisorId: true,
+      reviewedById: true,
+      invoiceUploadedById: true,
+      dispatchAssignedToId: true,
+      packAssignedToId: true,
+      deliveredById: true,
+    },
+  });
+  if (due.length === 0) return [];
+
+  await prisma.externalSale.updateMany({ where: { id: { in: due.map((s) => s.id) } }, data: { contraEntregaPaymentAlertSentAt: new Date() } });
+
+  const pushes: ExternalSaleTimingPush[] = [];
+  for (const s of due) {
+    const name = s.catalogItem?.name ?? s.declaredProductName;
+    for (const ownerId of involvedRecipientIds(s)) {
+      pushes.push({
+        ownerId,
+        title: "⏰ Venta contra entrega — falta el comprobante",
+        body: `${s.code} — ${name}. Ya pasaron 48 horas desde la entrega y todavía no se sube el comprobante de pago.`,
+        url: `${URL_BASE}&etab=declarar`,
+      });
+    }
+  }
+  return pushes;
 }
 
 // Se crea apenas el colaborador confirma la entrega física — recién ahí el
