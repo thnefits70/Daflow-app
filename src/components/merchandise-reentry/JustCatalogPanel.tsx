@@ -43,6 +43,66 @@ function fmt(iso: string) {
 
 type MissingReportDTO = { id: string; query: string; note: string | null; reportedAt: string; reportedBy: { name: string } };
 
+// Confirmado 2026-09-01: pedido explícito del usuario — sugerencia de nicho
+// automática al crear un producto (ver purchase-catalog/route.ts,
+// just-catalog/apply/route.ts), pero el catálogo que ya existía antes de eso
+// se quedó sin nicho. Este botón corre esa sugerencia UNA vez sobre lo que
+// falta — gasta dinero real, así que muestra el costo estimado y pide
+// confirmar antes de disparar.
+function NichoBackfillButton() {
+  const [info, setInfo] = useState<{ missingCount: number; estimatedCostUsd: number } | null>(null);
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState<number | null>(null);
+
+  useEffect(() => {
+    fetch("/api/purchase-catalog/backfill-nicho")
+      .then((r) => (r.ok ? r.json() : null))
+      .then(setInfo)
+      .catch(() => null);
+  }, []);
+
+  async function run() {
+    setBusy(true);
+    const res = await fetch("/api/purchase-catalog/backfill-nicho", { method: "POST" });
+    const data = await res.json().catch(() => null);
+    setBusy(false);
+    setConfirming(false);
+    if (res.ok) setDone(data?.queuedCount ?? 0);
+  }
+
+  if (done !== null) {
+    return (
+      <div className="flex items-center gap-2 text-teal text-[12.5px] bg-teal/10 border border-teal/30 rounded-md px-3 py-2 mb-4">
+        <CheckCircle2 size={14} /> {done} producto{done === 1 ? "" : "s"} en cola — el nicho se irá completando solo en los próximos minutos.
+      </div>
+    );
+  }
+
+  if (!info || info.missingCount === 0) return null;
+
+  return (
+    <div className="bg-gold/10 border border-gold/35 rounded-md p-3.5 mb-5 text-[12.5px]" style={{ color: "#D9A441" }}>
+      <div className="font-bold mb-1">{info.missingCount} productos del catálogo todavía no tienen nicho asignado</div>
+      <div className="mb-2.5">Sugerirlos con IA costaría aproximadamente ${info.estimatedCostUsd.toFixed(2)} en total (una sola vez).</div>
+      {confirming ? (
+        <div className="flex items-center gap-2">
+          <button type="button" disabled={busy} className="rounded border border-teal bg-teal px-3 py-1.5 text-[12px] font-bold text-navy cursor-pointer disabled:opacity-60" onClick={run}>
+            {busy ? "Enviando…" : "Sí, sugerir todos"}
+          </button>
+          <button type="button" className="text-[11px] text-steel cursor-pointer" onClick={() => setConfirming(false)}>
+            Cancelar
+          </button>
+        </div>
+      ) : (
+        <button type="button" className="rounded border border-rule px-3 py-1.5 text-[12px] font-semibold cursor-pointer" onClick={() => setConfirming(true)}>
+          Sugerir nichos faltantes
+        </button>
+      )}
+    </div>
+  );
+}
+
 // Confirmado 2026-08-29: cola de "avisos de producto faltante" que dispara
 // ProductMatchPicker cuando alguien no encuentra un producto (reemplaza
 // "escribir el nombre a mano"). Solo la ve quien administra el catálogo.
@@ -291,6 +351,7 @@ export function JustCatalogPanel({ canManage }: { canManage: boolean }) {
       {toast && <div className="flex items-center gap-2 text-teal text-[12.5px] bg-teal/10 border border-teal/30 rounded-md px-3 py-2 mb-4"><CheckCircle2 size={14} /> {toast}</div>}
       {err && <div className="text-red text-[12.5px] mb-3">{err}</div>}
 
+      {canManage && <NichoBackfillButton />}
       {canManage && <MissingReportsQueue />}
 
       {canManage && phase === "idle" && (
