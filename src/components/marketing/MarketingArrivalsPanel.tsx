@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Camera, ClipboardCheck, CheckCircle2 } from "lucide-react";
+import { Camera, ClipboardCheck, CheckCircle2, Search } from "lucide-react";
 import { actorName } from "@/lib/actorName";
 import { TabGuide } from "@/components/shared/TabGuide";
 import { formatDateTime } from "@/lib/formatDateTime";
@@ -74,6 +74,7 @@ export function MarketingArrivalsPanel({ canConfirmDesign, canConfirmAdvisor }: 
   const [confirmers, setConfirmers] = useState<Confirmer[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [filter, setFilter] = useState<string>("all");
+  const [search, setSearch] = useState("");
 
   function load() {
     fetch("/api/marketing-arrivals")
@@ -115,6 +116,13 @@ export function MarketingArrivalsPanel({ canConfirmDesign, canConfirmAdvisor }: 
         })
     : rows; // orden por defecto de la API: más reciente primero
 
+  const query = search.trim().toLowerCase();
+  const searchedRows = query
+    ? visibleRows.filter(
+        (r) => r.catalogItem.name.toLowerCase().includes(query) || r.catalogItem.justCode?.toLowerCase().includes(query)
+      )
+    : visibleRows;
+
   return (
     <div className="flex flex-col gap-3">
       <TabGuide storageKey="mercaderia-recibida">
@@ -124,6 +132,16 @@ export function MarketingArrivalsPanel({ canConfirmDesign, canConfirmAdvisor }: 
           <>Vista de solo lectura de la mercadería nueva que va llegando y en qué paso va: confirmación de diseño y confirmación de asesor.</>
         )}
       </TabGuide>
+      <div className="relative" style={{ maxWidth: 320 }}>
+        <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-steel" />
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Buscar por nombre o ID..."
+          className="w-full rounded border border-rule bg-surface pl-8 pr-2.5 py-1.5 text-[12.5px]"
+        />
+      </div>
       {confirmers.length > 0 && (
         <div className="flex flex-wrap items-center gap-1.5">
           <button
@@ -163,7 +181,13 @@ export function MarketingArrivalsPanel({ canConfirmDesign, canConfirmAdvisor }: 
         </div>
       )}
 
-      {visibleRows.map((r) => {
+      {visibleRows.length > 0 && searchedRows.length === 0 && (
+        <div className="border-[1.5px] border-dashed border-rule rounded-md p-8 text-center text-steel text-[13.5px]">
+          No se encontró ningún producto con &quot;{search.trim()}&quot;.
+        </div>
+      )}
+
+      {searchedRows.map((r) => {
         const fu = r.marketingFollowUp;
         return (
           <div key={r.id} className="bg-surface border border-rule rounded-md p-4">
