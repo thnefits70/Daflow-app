@@ -569,7 +569,6 @@ export function DeptWorkspaceTabs({
         <WeeklyReviewPanel
           deptId={deptId}
           records={weeklyReviewRecords}
-          editable={editable}
           involvingMe={weeklyReviewInvolvingMe}
         />
       )}

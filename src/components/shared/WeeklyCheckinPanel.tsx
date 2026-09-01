@@ -104,12 +104,12 @@ export function WeeklyCheckinPanel() {
         <div
           className="fixed bottom-24 left-5 z-[150] w-[min(380px,92vw)] max-h-[70vh] flex flex-col bg-surface border border-rule rounded-md shadow-2xl"
           role="dialog"
-          aria-label="Check-in semanal"
+          aria-label="Feedback semanal"
         >
           <div className="flex items-center justify-between gap-2 px-4 py-3 border-b border-rule shrink-0">
             <div className="flex items-center gap-2 min-w-0">
               <ClipboardList size={15} className="text-teal shrink-0" />
-              <div className="font-mono text-[10px] uppercase tracking-wide text-steel font-bold truncate">Check-in semanal</div>
+              <div className="font-mono text-[10px] uppercase tracking-wide text-steel font-bold truncate">Feedback semanal</div>
             </div>
             <button type="button" title="Cerrar" className="p-1.5 rounded text-steel hover:text-ink cursor-pointer" onClick={() => setOpen(false)}>
               <X size={15} />
@@ -173,7 +173,7 @@ export function WeeklyCheckinPanel() {
         type="button"
         className="fixed bottom-5 left-5 z-[150] w-13 h-13 rounded-full bg-teal text-navy shadow-2xl cursor-pointer flex items-center justify-center hover:brightness-110"
         style={{ width: 52, height: 52 }}
-        title="Check-in semanal"
+        title="Feedback semanal"
         onClick={() => setOpen((v) => !v)}
       >
         {open ? <X size={22} /> : <ClipboardList size={22} />}

@@ -376,7 +376,7 @@ export type PendingTasks = { title: string; sub: string; items: PendingItem[] };
 // usado por /api/push/preferences para armar la lista de interruptores.
 export const PENDING_TYPE_CATALOG: Record<string, string> = {
   feedback: "Feedback semanal/mensual de departamentos",
-  check_in_semanal_estancado: "Check-in semanal — líder sin gestión hace 2+ semanas",
+  check_in_semanal_estancado: "Feedback semanal — líder sin gestión hace 2+ semanas",
   roles_de_pago: "Roles de pago",
   nomina_transferencia: "Transferencia de nómina",
   iess_transferencia: "Transferencia de IESS",
@@ -889,7 +889,7 @@ async function getWeeklyCheckinStalledPendingItems(): Promise<PendingItem[]> {
     items.push({
       type: "check_in_semanal_estancado",
       icon: "🕑",
-      label: `Check-in semanal — ${leader.leadsDept!.name}`,
+      label: `Feedback semanal — ${leader.leadsDept!.name}`,
       meta: blockedByDept
         ? `${leader.name} · depende de ${blockedByDept} · sin gestión hace 2+ semanas`
         : `${leader.name} · sin gestión hace 2+ semanas`,

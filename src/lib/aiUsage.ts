@@ -6,7 +6,7 @@ export type AiUsageFeature = "nancy" | "fernick" | "weekly_checkin" | "rutas_con
 const FEATURE_LABELS: Record<AiUsageFeature, string> = {
   nancy: "Nancy · chat financiero",
   fernick: "FERNICK · asistente empresarial",
-  weekly_checkin: "Check-in semanal · asistente de reporte",
+  weekly_checkin: "Feedback semanal · asistente de reporte",
   rutas_conocimiento: "Rutas de conocimiento · generar preguntas",
   control_compras_cotizacion: "Control de Compras · verificar cotización",
   control_compras_catalogo: "Control de Compras · chequeo de catálogo",

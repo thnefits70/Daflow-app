@@ -45,24 +45,6 @@ export async function canManagePeriodicReminder(reminder: { deptId: string; crea
   return canEditDeptKpis(reminder.deptId);
 }
 
-// The weekly review log (admin-leader meeting notes) can be viewed by admin
-// or only the employee who leads that specific department — not the rest of
-// the team. Only admin can write to it — checked separately at the route
-// level with requireAdminSession().
-export async function canViewDeptReview(deptId: string) {
-  const session = await auth();
-  if (!session) return false;
-  if (session.user.role === "admin") return true;
-  if (session.user.role === "employee" && session.user.deptId === deptId) {
-    const user = await prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: { isLeader: true, leadsDeptId: true },
-    });
-    return !!user?.isLeader && user.leadsDeptId === deptId;
-  }
-  return false;
-}
-
 // Admin can always write to "Leyes y Reglamentos" (company-wide); an employee
 // only if explicitly granted via User.canManageLaws. Neither can delete —
 // that stays admin-only, checked separately.
