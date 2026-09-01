@@ -10,7 +10,29 @@ export type ClientDTO = {
   idNumber: string;
   phone: string;
   address: string;
+  country: string | null;
+  city: string | null;
 };
+
+// Lista simple para el buscador de país — sin API externa. Ecuador primero
+// porque es donde vive la mayoría de los clientes; el resto es texto libre
+// si no aparece en la lista.
+const COUNTRIES = [
+  "Ecuador",
+  "Colombia",
+  "Perú",
+  "México",
+  "Chile",
+  "Argentina",
+  "Estados Unidos",
+  "España",
+  "Panamá",
+  "Venezuela",
+  "Bolivia",
+  "Costa Rica",
+  "Guatemala",
+  "República Dominicana",
+];
 
 // Mismo patrón que PurchaseCatalogPicker (buscar existente o matricular uno
 // nuevo), simplificado: sin fotos ni chequeo por IA — un RUC/cédula es un
@@ -26,6 +48,8 @@ export function ClientMatchPicker({ value, onChange }: { value: ClientDTO | null
   const [newIdNumber, setNewIdNumber] = useState("");
   const [newPhone, setNewPhone] = useState("");
   const [newAddress, setNewAddress] = useState("");
+  const [newCountry, setNewCountry] = useState("");
+  const [newCity, setNewCity] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
 
@@ -57,6 +81,8 @@ export function ClientMatchPicker({ value, onChange }: { value: ClientDTO | null
     setNewIdNumber("");
     setNewPhone("");
     setNewAddress("");
+    setNewCountry("");
+    setNewCity("");
     setErr("");
   }
 
@@ -77,7 +103,15 @@ export function ClientMatchPicker({ value, onChange }: { value: ClientDTO | null
       res = await fetch("/api/clients", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: newName.trim(), idType: newIdType, idNumber: newIdNumber.trim(), phone: newPhone.trim(), address: newAddress.trim() }),
+        body: JSON.stringify({
+          name: newName.trim(),
+          idType: newIdType,
+          idNumber: newIdNumber.trim(),
+          phone: newPhone.trim(),
+          address: newAddress.trim(),
+          country: newCountry.trim() || undefined,
+          city: newCity.trim() || undefined,
+        }),
       });
     } catch {
       setBusy(false);
@@ -109,6 +143,9 @@ export function ClientMatchPicker({ value, onChange }: { value: ClientDTO | null
         <div className="flex-1 min-w-0">
           <div className="text-[13.5px] font-semibold truncate">{value.name}</div>
           <div className="text-[11px] text-steel">{value.idType === "RUC" ? "RUC" : "Cédula"} {value.idNumber} · {value.phone}</div>
+          {(value.city || value.country) && (
+            <div className="text-[11px] text-steel">{[value.city, value.country].filter(Boolean).join(", ")}</div>
+          )}
         </div>
         <button type="button" className="text-[11.5px] text-blue font-semibold cursor-pointer shrink-0" onClick={() => onChange(null)}>
           Cambiar
@@ -149,6 +186,29 @@ export function ClientMatchPicker({ value, onChange }: { value: ClientDTO | null
 
         <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Dirección referencial</label>
         <input className="w-full rounded border border-rule px-2.5 py-2 text-[13.5px] mb-3" value={newAddress} onChange={(e) => setNewAddress(e.target.value)} placeholder="Ej. Sector, calle, punto de referencia" />
+
+        <div className="flex gap-2.5 mb-3">
+          <div className="flex-1">
+            <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">País (opcional)</label>
+            <input
+              className="w-full rounded border border-rule px-2.5 py-2 text-[13.5px]"
+              list="client-country-options"
+              value={newCountry}
+              onChange={(e) => setNewCountry(e.target.value)}
+              placeholder="Empieza a escribir…"
+            />
+            <datalist id="client-country-options">
+              {COUNTRIES.map((c) => (
+                <option key={c} value={c} />
+              ))}
+            </datalist>
+          </div>
+          <div className="flex-1">
+            <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Ciudad (opcional)</label>
+            <input className="w-full rounded border border-rule px-2.5 py-2 text-[13.5px]" value={newCity} onChange={(e) => setNewCity(e.target.value)} />
+          </div>
+        </div>
+        <div className="text-[11px] text-steel mb-3">Solo para saber dónde vive el cliente — no cambia a dónde se despacha el pedido.</div>
 
         {err && <div className="text-red text-[12px] mb-2.5">{err}</div>}
         <div className="flex items-center gap-2.5">

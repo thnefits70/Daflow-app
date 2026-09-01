@@ -18,6 +18,8 @@ const createSchema = z.object({
   idNumber: z.string().trim().min(1, "Falta el RUC o cédula del cliente."),
   phone: z.string().trim().min(1, "Falta el celular del cliente."),
   address: z.string().trim().min(1, "Falta la dirección referencial del cliente."),
+  country: z.string().trim().optional(),
+  city: z.string().trim().optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -46,6 +48,8 @@ export async function POST(req: NextRequest) {
       idNumber: parsed.data.idNumber,
       phone: parsed.data.phone,
       address: parsed.data.address,
+      country: parsed.data.country || null,
+      city: parsed.data.city || null,
       createdById: isAdmin ? null : session.user.id,
     },
   });

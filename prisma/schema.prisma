@@ -3943,6 +3943,13 @@ model Client {
   phone    String
   address  String // dirección referencial
 
+  // Confirmado 2026-09-01, pedido explícito del usuario: solo para saber de
+  // dónde es el cliente (puede pedir que le despachen a otra bodega) — no
+  // determina el despacho real. A propósito simple: texto libre con
+  // sugerencias nativas del navegador, sin API externa de geografía.
+  country String?
+  city    String?
+
   createdAt   DateTime @default(now())
   createdById String?
   createdBy   User?    @relation(fields: [createdById], references: [id], onDelete: SetNull)

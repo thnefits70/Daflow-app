@@ -14,7 +14,7 @@ type SaleDTO = {
   totalAmount: number;
   pickupPersonName: string;
   courierNote: string | null;
-  client: { name: string; phone: string } | null;
+  client: { name: string; phone: string; city: string | null; country: string | null } | null;
   isContraEntrega: boolean;
   reviewStatus: "PENDING" | "APPROVED" | "REJECTED";
   rejectionReason: string | null;
@@ -122,7 +122,12 @@ export function ExternalSaleHistoryList() {
                   ))}
                 </div>
                 <div className="text-[10.5px] text-steel">Entrega a: {s.pickupPersonName}{s.courierNote ? ` · Transportadora: ${s.courierNote}` : ""}</div>
-                {s.client && <div className="text-[10.5px] text-steel">Cliente: {s.client.name} · {s.client.phone}</div>}
+                {s.client && (
+                  <div className="text-[10.5px] text-steel">
+                    Cliente: {s.client.name} · {s.client.phone}
+                    {(s.client.city || s.client.country) ? ` · ${[s.client.city, s.client.country].filter(Boolean).join(", ")}` : ""}
+                  </div>
+                )}
                 {s.paymentProofUrl && (
                   <a href={s.paymentProofUrl} target="_blank" rel="noreferrer" className="text-[10.5px] font-semibold text-blue underline">
                     Ver comprobante de pago{s.paymentProofName ? ` (${s.paymentProofName})` : ""}
