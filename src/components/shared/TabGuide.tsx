@@ -11,10 +11,10 @@ import { Info, ChevronDown, ChevronUp } from "lucide-react";
 // el server para esto). Pensado para reusarse en otros módulos si el
 // piloto funciona.
 export function TabGuide({ storageKey, children }: { storageKey: string; children: React.ReactNode }) {
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
 
   useEffect(() => {
-    if (localStorage.getItem(`tabguide:${storageKey}`) === "closed") setOpen(false);
+    if (localStorage.getItem(`tabguide:${storageKey}`) === "open") setOpen(true);
   }, [storageKey]);
 
   function toggle() {
