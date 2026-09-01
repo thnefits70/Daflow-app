@@ -15,11 +15,12 @@ export async function GET() {
     select: {
       id: true,
       code: true,
-      declaredProductName: true,
-      quantity: true,
       pickupPersonName: true,
       courierNote: true,
-      catalogItem: { select: { name: true, photos: true, justCode: true } },
+      items: {
+        select: { id: true, declaredProductName: true, quantity: true, catalogItem: { select: { name: true, photos: true, justCode: true } } },
+        orderBy: { createdAt: "asc" },
+      },
     },
     orderBy: { dispatchAssignedAt: "asc" },
   });

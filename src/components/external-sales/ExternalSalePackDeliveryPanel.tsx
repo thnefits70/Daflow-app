@@ -5,12 +5,16 @@ import { Camera, Check } from "lucide-react";
 import { LiveCameraCapture } from "@/components/shared/LiveCameraCapture";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 
-type SaleDTO = {
+type SaleItemDTO = {
   id: string;
-  code: string;
   declaredProductName: string;
   catalogItem: { name: string; photos: string[]; justCode: string | null } | null;
   quantity: number;
+};
+type SaleDTO = {
+  id: string;
+  code: string;
+  items: SaleItemDTO[];
   pickupPersonName: string;
   courierNote: string | null;
 };
@@ -61,23 +65,29 @@ export function ExternalSalePackDeliveryPanel() {
   return (
     <div className="flex flex-col gap-2.5 max-w-lg">
       {sales.map((s) => {
-        const photo = s.catalogItem?.photos[0] ?? null;
         return (
           <div key={s.id} className="bg-surface border border-rule rounded-md p-3.5">
-            <div className="flex items-center gap-3 mb-2.5">
-              {photo && (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={photo} alt={s.catalogItem?.name ?? s.declaredProductName} className="w-14 h-14 object-cover rounded border border-rule shrink-0" />
-              )}
-              <div className="flex-1 min-w-0">
-                <div className="text-[13px] font-semibold flex items-center gap-1.5 min-w-0">
-                  {s.catalogItem && <CatalogCode code={s.catalogItem.justCode} />}
-                  <span className="truncate">{s.catalogItem?.name ?? s.declaredProductName}</span>
-                </div>
-                <div className="text-[11.5px] text-steel">{s.quantity} un.</div>
-                <div className="text-[11.5px] font-semibold">Entregar a: {s.pickupPersonName}</div>
-                {s.courierNote && <div className="text-[10.5px] text-steel">Transportadora: {s.courierNote}</div>}
-              </div>
+            <div className="flex flex-col gap-2 mb-2.5">
+              {s.items.map((it) => {
+                const photo = it.catalogItem?.photos[0] ?? null;
+                return (
+                  <div key={it.id} className="flex items-center gap-3">
+                    {photo && (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={photo} alt={it.catalogItem?.name ?? it.declaredProductName} className="w-14 h-14 object-cover rounded border border-rule shrink-0" />
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[13px] font-semibold flex items-center gap-1.5 min-w-0">
+                        {it.catalogItem && <CatalogCode code={it.catalogItem.justCode} />}
+                        <span className="truncate">{it.catalogItem?.name ?? it.declaredProductName}</span>
+                      </div>
+                      <div className="text-[11.5px] text-steel">{it.quantity} un.</div>
+                    </div>
+                  </div>
+                );
+              })}
+              <div className="text-[11.5px] font-semibold">Entregar a: {s.pickupPersonName}</div>
+              {s.courierNote && <div className="text-[10.5px] text-steel">Transportadora: {s.courierNote}</div>}
             </div>
 
             {delivering === s.id ? (

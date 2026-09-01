@@ -7,22 +7,45 @@ import { nextExternalSaleNumber, formatExternalSaleCode } from "@/lib/merchandis
 import { notifyMarketingLeadNewExternalSale } from "@/lib/externalSales";
 
 const SALE_INCLUDE = {
-  catalogItem: { select: { name: true, photos: true, justCode: true } },
+  items: { include: { catalogItem: { select: { name: true, photos: true, justCode: true } } }, orderBy: { createdAt: "asc" } },
   advisor: { select: { name: true } },
   reviewedBy: { select: { name: true } },
   dispatchAssignedTo: { select: { name: true } },
   client: true,
 } as const;
 
-const schema = z.object({
-  catalogItemId: z.string().min(1).optional(),
-  declaredProductName: z.string().trim().min(1).optional(),
+const itemSchema = z.object({
+  catalogItemId: z.string().min(1, "Falta el producto."),
   quantity: z.number().int().positive(),
   unitPrice: z.number().positive(),
+});
+
+const schema = z.object({
+  items: z.array(itemSchema).min(1, "Agrega al menos un producto."),
   pickupPersonName: z.string().trim().min(1, "Falta a quién debe entregársela bodega."),
   courierNote: z.string().trim().optional(),
   clientId: z.string().min(1, "Falta matricular o seleccionar al cliente."),
 });
+
+// Resuelve cada renglón contra el catálogo real y arma los datos listos
+// para prisma.externalSaleItem.create (nombre congelado + total calculado).
+async function resolveItems(items: z.infer<typeof itemSchema>[]) {
+  const catalogItems = await prisma.purchaseCatalogItem.findMany({
+    where: { id: { in: items.map((it) => it.catalogItemId) } },
+    select: { id: true, name: true },
+  });
+  const byId = new Map(catalogItems.map((c) => [c.id, c.name]));
+  for (const it of items) {
+    if (!byId.has(it.catalogItemId)) throw new Error("Uno de los productos no se encontró en el catálogo.");
+  }
+  return items.map((it) => ({
+    catalogItemId: it.catalogItemId,
+    declaredProductName: byId.get(it.catalogItemId)!,
+    quantity: it.quantity,
+    unitPrice: it.unitPrice,
+    totalAmount: it.quantity * it.unitPrice,
+  }));
+}
 
 // Las propias declaraciones del asesor — para seguir su estado y subir el
 // comprobante de pago una vez aprobadas.
@@ -45,16 +68,15 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
   const parsed = schema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Datos inválidos." }, { status: 400 });
-  if (!parsed.data.catalogItemId && !parsed.data.declaredProductName) return NextResponse.json({ error: "Falta el producto." }, { status: 400 });
 
   const client = await prisma.client.findUnique({ where: { id: parsed.data.clientId }, select: { id: true } });
   if (!client) return NextResponse.json({ error: "Cliente no encontrado." }, { status: 404 });
 
-  let declaredProductName = parsed.data.declaredProductName ?? "";
-  if (parsed.data.catalogItemId) {
-    const catalogItem = await prisma.purchaseCatalogItem.findUnique({ where: { id: parsed.data.catalogItemId }, select: { name: true } });
-    if (!catalogItem) return NextResponse.json({ error: "Producto no encontrado en el catálogo." }, { status: 404 });
-    declaredProductName = catalogItem.name;
+  let resolvedItems;
+  try {
+    resolvedItems = await resolveItems(parsed.data.items);
+  } catch (e) {
+    return NextResponse.json({ error: e instanceof Error ? e.message : "Producto no encontrado en el catálogo." }, { status: 404 });
   }
 
   const advisor = await prisma.user.findUnique({ where: { id: session.user.id }, select: { externalSaleContraEntrega: true } });
@@ -65,11 +87,8 @@ export async function POST(req: NextRequest) {
       code: formatExternalSaleCode(saleNumber),
       saleNumber,
       advisorId: session.user.id,
-      catalogItemId: parsed.data.catalogItemId ?? null,
-      declaredProductName,
-      quantity: parsed.data.quantity,
-      unitPrice: parsed.data.unitPrice,
-      totalAmount: parsed.data.quantity * parsed.data.unitPrice,
+      totalAmount: resolvedItems.reduce((sum, it) => sum + it.totalAmount, 0),
+      items: { create: resolvedItems },
       pickupPersonName: parsed.data.pickupPersonName,
       courierNote: parsed.data.courierNote?.trim() || null,
       clientId: parsed.data.clientId,

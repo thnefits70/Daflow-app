@@ -6,7 +6,10 @@ export async function GET() {
   if (!(await canReviewExternalSales())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
   const sales = await prisma.externalSale.findMany({
     where: { reviewStatus: "PENDING", deletedAt: null },
-    include: { catalogItem: { select: { name: true, photos: true, justCode: true } }, advisor: { select: { name: true } } },
+    include: {
+      items: { include: { catalogItem: { select: { name: true, photos: true, justCode: true } } }, orderBy: { createdAt: "asc" } },
+      advisor: { select: { name: true } },
+    },
     orderBy: { createdAt: "asc" },
   });
   return NextResponse.json(sales);

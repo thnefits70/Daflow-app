@@ -6,12 +6,17 @@ import { ProofPreview } from "@/components/shared/ProofPreview";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 import { uploadFile } from "@/lib/uploadFile";
 
-type SaleDTO = {
+type SaleItemDTO = {
   id: string;
-  code: string;
   declaredProductName: string;
   catalogItem: { name: string; justCode: string | null } | null;
   quantity: number;
+};
+
+type SaleDTO = {
+  id: string;
+  code: string;
+  items: SaleItemDTO[];
   totalAmount: number;
   isContraEntrega: boolean;
   paymentProofUrl: string;
@@ -69,10 +74,15 @@ export function ExternalSaleInvoiceInbox() {
             <span className="text-[11px] text-steel">{s.advisor?.name ?? "—"}</span>
             {s.isContraEntrega && <span className="font-mono text-[9.5px] font-bold uppercase text-blue">Opcional — contra entrega</span>}
           </div>
-          <div className="text-[13px] font-semibold mb-1 flex items-center gap-1.5 flex-wrap">
-            {s.catalogItem && <CatalogCode code={s.catalogItem.justCode} />}
-            <span>{s.catalogItem?.name ?? s.declaredProductName} — {s.quantity} un. · ${s.totalAmount.toFixed(2)}</span>
+          <div className="flex flex-col gap-0.5 mb-1">
+            {s.items.map((it) => (
+              <div key={it.id} className="text-[13px] font-semibold flex items-center gap-1.5 flex-wrap">
+                {it.catalogItem && <CatalogCode code={it.catalogItem.justCode} />}
+                <span>{it.catalogItem?.name ?? it.declaredProductName} — {it.quantity} un.</span>
+              </div>
+            ))}
           </div>
+          <div className="text-[12px] font-bold mb-1">Total: ${s.totalAmount.toFixed(2)}</div>
           <ProofPreview url={s.paymentProofUrl} filename={s.paymentProofName ?? undefined} size={56} />
 
           {s.client && (

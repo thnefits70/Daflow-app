@@ -22,7 +22,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const sale = await prisma.externalSale.findUnique({
     where: { id },
-    select: { packAssignedToId: true, deliveredAt: true, paymentConfirmedAt: true, code: true, catalogItemId: true, declaredProductName: true, quantity: true },
+    select: {
+      packAssignedToId: true,
+      deliveredAt: true,
+      paymentConfirmedAt: true,
+      code: true,
+      items: { select: { catalogItemId: true, declaredProductName: true, quantity: true } },
+    },
   });
   if (!sale) return NextResponse.json({ error: "No encontrado." }, { status: 404 });
   const isAssignee = sale.packAssignedToId === session.user.id;
@@ -35,7 +41,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     data: { deliveryPhotoUrl: parsed.data.photoUrl, deliveredAt: new Date(), deliveredById: session.user.id },
   });
 
-  await createOutflowForExternalSale({ id, catalogItemId: sale.catalogItemId, declaredProductName: sale.declaredProductName, quantity: sale.quantity });
+  await createOutflowForExternalSale({ id, items: sale.items });
   if (sale.paymentConfirmedAt) await notifyFinanceLeadExternalSaleReadyToClose(sale.code);
 
   return NextResponse.json(updated);

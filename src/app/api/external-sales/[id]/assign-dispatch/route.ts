@@ -3,8 +3,7 @@ import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { canActOnMerchandiseOutflow } from "@/lib/guards";
-import { outflowItemDisplayName } from "@/lib/merchandiseOutflow";
-import { notifyColaboradorDispatchAssigned } from "@/lib/externalSales";
+import { notifyColaboradorDispatchAssigned, saleItemsSummary } from "@/lib/externalSales";
 
 const schema = z.object({ colaboradorId: z.string().min(1) });
 
@@ -25,8 +24,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       isContraEntrega: true,
       invoiceUploadedAt: true,
       code: true,
-      declaredProductName: true,
-      catalogItem: { select: { name: true } },
+      items: { select: { declaredProductName: true, catalogItem: { select: { name: true } } } },
     },
   });
   if (!sale) return NextResponse.json({ error: "No encontrado." }, { status: 404 });
@@ -42,6 +40,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     data: { dispatchAssignedToId: colaborador.id, dispatchAssignedAt: new Date(), dispatchAssignedById: session.user.id },
   });
 
-  await notifyColaboradorDispatchAssigned(colaborador.id, sale.code, outflowItemDisplayName({ declaredName: sale.declaredProductName, catalogItem: sale.catalogItem }));
+  await notifyColaboradorDispatchAssigned(colaborador.id, sale.code, saleItemsSummary(sale.items));
   return NextResponse.json(updated);
 }

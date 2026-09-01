@@ -15,7 +15,10 @@ export async function GET() {
         deletedAt: null,
         OR: [{ isContraEntrega: true }, { invoiceUploadedAt: { not: null } }],
       },
-      include: { catalogItem: { select: { name: true, photos: true, justCode: true } }, advisor: { select: { name: true } } },
+      include: {
+        items: { include: { catalogItem: { select: { name: true, photos: true, justCode: true } } }, orderBy: { createdAt: "asc" } },
+        advisor: { select: { name: true } },
+      },
       orderBy: { reviewedAt: "asc" },
     }),
     prisma.user.findMany({ where: { department: { code: "INV" } }, select: { id: true, name: true }, orderBy: { name: "asc" } }),

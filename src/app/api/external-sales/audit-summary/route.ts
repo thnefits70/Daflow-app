@@ -13,14 +13,12 @@ export async function GET() {
     select: {
       id: true,
       code: true,
-      declaredProductName: true,
-      catalogItem: { select: { name: true } },
-      quantity: true,
       totalAmount: true,
       isContraEntrega: true,
       createdAt: true,
       nairobyClosedAt: true,
       advisor: { select: { name: true } },
+      items: { select: { declaredProductName: true, quantity: true, catalogItem: { select: { name: true } } }, orderBy: { createdAt: "asc" } },
     },
     orderBy: { nairobyClosedAt: "desc" },
   });

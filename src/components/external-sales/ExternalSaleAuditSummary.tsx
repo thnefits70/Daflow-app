@@ -3,12 +3,11 @@
 import { useEffect, useState } from "react";
 import { formatDateTime } from "@/lib/formatDateTime";
 
+type AuditSaleItemDTO = { declaredProductName: string; catalogItem: { name: string } | null; quantity: number };
 type AuditSaleDTO = {
   id: string;
   code: string;
-  declaredProductName: string;
-  catalogItem: { name: string } | null;
-  quantity: number;
+  items: AuditSaleItemDTO[];
   totalAmount: number;
   isContraEntrega: boolean;
   createdAt: string;
@@ -90,7 +89,7 @@ export function ExternalSaleAuditSummary() {
                 </span>
               </div>
               <div className="font-semibold mt-0.5">
-                {s.catalogItem?.name ?? s.declaredProductName} — {s.quantity} un. · <span className="font-mono tabular-nums">{money(s.totalAmount)}</span>
+                {s.items.map((it) => it.catalogItem?.name ?? it.declaredProductName).join(", ")} — {s.items.reduce((sum, it) => sum + it.quantity, 0)} un. · <span className="font-mono tabular-nums">{money(s.totalAmount)}</span>
               </div>
               <div className="text-steel mt-0.5">Cerrada el {formatDateTime(s.nairobyClosedAt)}</div>
             </div>

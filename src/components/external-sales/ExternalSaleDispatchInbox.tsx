@@ -5,12 +5,16 @@ import { Truck } from "lucide-react";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 
 type TeamMember = { id: string; name: string };
-type SaleDTO = {
+type SaleItemDTO = {
   id: string;
-  code: string;
   declaredProductName: string;
   catalogItem: { name: string; photos: string[]; justCode: string | null } | null;
   quantity: number;
+};
+type SaleDTO = {
+  id: string;
+  code: string;
+  items: SaleItemDTO[];
   pickupPersonName: string;
   advisor: { name: string } | null;
 };
@@ -65,9 +69,13 @@ export function ExternalSaleDispatchInbox() {
             <span className="font-mono text-[11px] font-bold text-teal">{s.code}</span>
             <span className="text-[11px] text-steel">{s.advisor?.name ?? "—"}</span>
           </div>
-          <div className="text-[13px] font-semibold flex items-center gap-1.5 flex-wrap">
-            {s.catalogItem && <CatalogCode code={s.catalogItem.justCode} />}
-            <span>{s.catalogItem?.name ?? s.declaredProductName} — {s.quantity} un.</span>
+          <div className="flex flex-col gap-0.5">
+            {s.items.map((it) => (
+              <div key={it.id} className="text-[13px] font-semibold flex items-center gap-1.5 flex-wrap">
+                {it.catalogItem && <CatalogCode code={it.catalogItem.justCode} />}
+                <span>{it.catalogItem?.name ?? it.declaredProductName} — {it.quantity} un.</span>
+              </div>
+            ))}
           </div>
           <div className="text-[11.5px] text-steel mb-2.5">Entrega a: {s.pickupPersonName}</div>
 

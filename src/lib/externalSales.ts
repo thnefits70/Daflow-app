@@ -6,6 +6,14 @@ import { addBusinessDays } from "@/lib/businessHours";
 
 const URL_BASE = "/area/workspace?tab=ventas-externas";
 
+// Nombre corto para notificaciones/tarjetas que solo tienen espacio para una
+// línea — el primer producto, +"N más" si hay varios (ver ExternalSaleItem).
+export function saleItemsSummary(items: { declaredProductName: string; catalogItem: { name: string } | null }[]): string {
+  if (items.length === 0) return "—";
+  const first = items[0].catalogItem?.name ?? items[0].declaredProductName;
+  return items.length === 1 ? first : `${first} +${items.length - 1} más`;
+}
+
 export async function notifyMarketingLeadNewExternalSale(code: string): Promise<void> {
   const leadId = await getMarketingLeadId();
   if (!leadId) return;
@@ -16,6 +24,17 @@ export async function notifyAdvisorReviewResult(advisorId: string, code: string,
   await notifyOwner(advisorId, {
     title: approved ? "✅ Venta externa aprobada" : "❌ Venta externa rechazada",
     body: approved ? `${code} — ya puedes subir el comprobante de pago.` : `${code} — ${reason ?? "sin motivo detallado"}`,
+    url: `${URL_BASE}&etab=declarar`,
+  }).catch(() => null);
+}
+
+// Confirmado 2026-09-01, pedido explícito del usuario: Bryan puede rechazar
+// un producto puntual (ej. precio mal) sin tumbar toda la venta — solo le
+// llega el aviso al asesor dueño de la venta, sobre ese producto específico.
+export async function notifyAdvisorItemRejected(advisorId: string, code: string, productName: string, reason: string): Promise<void> {
+  await notifyOwner(advisorId, {
+    title: "❌ Producto rechazado en venta externa",
+    body: `${code} — ${productName}: ${reason}. Corrígelo o elimínalo y reenvíalo.`,
     url: `${URL_BASE}&etab=declarar`,
   }).catch(() => null);
 }
@@ -106,8 +125,7 @@ export async function getDeliveryOverduePushes(): Promise<ExternalSaleTimingPush
       id: true,
       code: true,
       deliveredAt: true,
-      declaredProductName: true,
-      catalogItem: { select: { name: true } },
+      items: { select: { declaredProductName: true, catalogItem: { select: { name: true } } } },
       advisorId: true,
       reviewedById: true,
       invoiceUploadedById: true,
@@ -125,7 +143,7 @@ export async function getDeliveryOverduePushes(): Promise<ExternalSaleTimingPush
 
   const pushes: ExternalSaleTimingPush[] = [];
   for (const s of due) {
-    const name = s.catalogItem?.name ?? s.declaredProductName;
+    const name = saleItemsSummary(s.items);
     for (const ownerId of involvedRecipientIds(s)) {
       pushes.push({
         ownerId,
@@ -154,8 +172,7 @@ export async function getContraEntregaPaymentOverduePushes(): Promise<ExternalSa
     select: {
       id: true,
       code: true,
-      declaredProductName: true,
-      catalogItem: { select: { name: true } },
+      items: { select: { declaredProductName: true, catalogItem: { select: { name: true } } } },
       advisorId: true,
       reviewedById: true,
       invoiceUploadedById: true,
@@ -170,7 +187,7 @@ export async function getContraEntregaPaymentOverduePushes(): Promise<ExternalSa
 
   const pushes: ExternalSaleTimingPush[] = [];
   for (const s of due) {
-    const name = s.catalogItem?.name ?? s.declaredProductName;
+    const name = saleItemsSummary(s.items);
     for (const ownerId of involvedRecipientIds(s)) {
       pushes.push({
         ownerId,
@@ -184,8 +201,9 @@ export async function getContraEntregaPaymentOverduePushes(): Promise<ExternalSa
 }
 
 // Se crea apenas el colaborador confirma la entrega física — recién ahí el
-// stock sale de verdad, sin importar si el pago ya se confirmó o no.
-export async function createOutflowForExternalSale(sale: { id: string; catalogItemId: string | null; declaredProductName: string; quantity: number }): Promise<string> {
+// stock sale de verdad, sin importar si el pago ya se confirmó o no. Un
+// renglón de egreso por cada producto de la venta (ver ExternalSaleItem).
+export async function createOutflowForExternalSale(sale: { id: string; items: { catalogItemId: string | null; declaredProductName: string; quantity: number }[] }): Promise<string> {
   const batchNumber = await nextMerchandiseOutflowNumber();
   const batch = await prisma.merchandiseOutflowBatch.create({
     data: {
@@ -193,7 +211,7 @@ export async function createOutflowForExternalSale(sale: { id: string; catalogIt
       batchNumber,
       reason: "VENTA_EXTERNA",
       submittedAt: new Date(),
-      items: { create: [{ catalogItemId: sale.catalogItemId, declaredName: sale.declaredProductName, quantity: sale.quantity }] },
+      items: { create: sale.items.map((it) => ({ catalogItemId: it.catalogItemId, declaredName: it.declaredProductName, quantity: it.quantity })) },
     },
   });
   await prisma.externalSale.update({ where: { id: sale.id }, data: { outflowBatchId: batch.id } });

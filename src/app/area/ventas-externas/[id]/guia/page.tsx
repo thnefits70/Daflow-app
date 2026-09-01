@@ -16,15 +16,13 @@ export default async function ExternalSaleGuidePage({ params }: { params: Promis
     where: { id },
     select: {
       code: true,
-      declaredProductName: true,
-      catalogItem: { select: { name: true, justCode: true } },
-      quantity: true,
       pickupPersonName: true,
       courierNote: true,
       createdAt: true,
       reviewedAt: true,
       prepReadyAt: true,
       packAssignedAt: true,
+      items: { select: { declaredProductName: true, quantity: true, catalogItem: { select: { name: true, justCode: true } } }, orderBy: { createdAt: "asc" } },
     },
   });
   if (!sale) notFound();
@@ -46,17 +44,15 @@ export default async function ExternalSaleGuidePage({ params }: { params: Promis
         </div>
 
         <div className="border-t border-b border-gray-300 py-4 mb-6">
-          <div className="flex justify-between text-[13px]">
-            <span className="text-gray-500">Producto</span>
-            <span className="font-semibold">
-              {sale.catalogItem?.justCode ? `${sale.catalogItem.justCode} — ` : ""}
-              {sale.catalogItem?.name ?? sale.declaredProductName}
-            </span>
-          </div>
-          <div className="flex justify-between text-[13px] mt-1">
-            <span className="text-gray-500">Cantidad</span>
-            <span className="font-semibold">{sale.quantity} un.</span>
-          </div>
+          {sale.items.map((it, i) => (
+            <div key={i} className="flex justify-between text-[13px] mt-1 first:mt-0">
+              <span className="text-gray-500">
+                {it.catalogItem?.justCode ? `${it.catalogItem.justCode} — ` : ""}
+                {it.catalogItem?.name ?? it.declaredProductName}
+              </span>
+              <span className="font-semibold">{it.quantity} un.</span>
+            </div>
+          ))}
           <div className="flex justify-between text-[13px] mt-1">
             <span className="text-gray-500">Entregar a</span>
             <span className="font-semibold">{sale.pickupPersonName}</span>

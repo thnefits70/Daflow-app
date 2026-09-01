@@ -3,8 +3,7 @@ import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { canAssignExternalSalePack } from "@/lib/guards";
-import { outflowItemDisplayName } from "@/lib/merchandiseOutflow";
-import { notifyColaboradorPackAssigned } from "@/lib/externalSales";
+import { notifyColaboradorPackAssigned, saleItemsSummary } from "@/lib/externalSales";
 
 const schema = z.object({ colaboradorId: z.string().min(1) });
 
@@ -19,7 +18,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const sale = await prisma.externalSale.findUnique({
     where: { id },
-    select: { prepReadyAt: true, packAssignedToId: true, code: true, declaredProductName: true, catalogItem: { select: { name: true } } },
+    select: { prepReadyAt: true, packAssignedToId: true, code: true, items: { select: { declaredProductName: true, catalogItem: { select: { name: true } } } } },
   });
   if (!sale) return NextResponse.json({ error: "No encontrado." }, { status: 404 });
   if (!sale.prepReadyAt) return NextResponse.json({ error: "Inventario todavía no la deja lista." }, { status: 409 });
@@ -33,6 +32,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     data: { packAssignedToId: colaborador.id, packAssignedAt: new Date(), packAssignedById: session.user.id },
   });
 
-  await notifyColaboradorPackAssigned(colaborador.id, sale.code, outflowItemDisplayName({ declaredName: sale.declaredProductName, catalogItem: sale.catalogItem }));
+  await notifyColaboradorPackAssigned(colaborador.id, sale.code, saleItemsSummary(sale.items));
   return NextResponse.json(updated);
 }

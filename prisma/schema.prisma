@@ -331,6 +331,8 @@ model User {
   monthlyEvaluationsReceived                   MonthlyEvaluation[]
   monthlyRecognitionResults                    MonthlyRecognitionResult[]
   monthlyEvaluationSummaries                   MonthlyEvaluationSummary[]
+  leaderTeamFeedbackReceived                   LeaderTeamFeedback[]               @relation("LeaderTeamFeedbackLeader")
+  leaderExternalObservationsReceived           LeaderExternalObservation[]        @relation("LeaderExternalObsLeader")
   learningPathsAssigned                        LearningPathAssignment[]           @relation("LearningPathAssignedTo")
   learningPathStepProgress                     LearningPathStepProgress[]         @relation("LearningPathStepProgressBy")
   payrollMessagesReceived                      PayrollMessage[]                   @relation("PayrollMessageEmployee")
@@ -1406,8 +1408,9 @@ model PurchaseCatalogItem {
   // reusa este mismo catálogo compartido.
   merchandiseOutflowItems        MerchandiseOutflowItem[]
   // Confirmado 2026-08-25: Ventas Externas (Fase 3) también reusa este
-  // catálogo compartido.
-  externalSales                  ExternalSale[]
+  // catálogo compartido — confirmado 2026-09-01: ahora por renglón de
+  // producto (ver ExternalSaleItem), una venta puede tener varios.
+  externalSaleItems              ExternalSaleItem[]
   // Confirmado 2026-08-25: Guías Canceladas (Fase 4) también reusa este
   // catálogo compartido.
   cancelledGuideItems            CancelledGuideItem[]
@@ -2427,6 +2430,109 @@ model MonthlyEvaluationSummary {
 
   @@unique([month, evaluateeId])
   @@index([month])
+}
+
+/**
+ * ---------------- Feedback de Liderazgo 360° ----------------
+ * Confirmado 2026-09-01: el pilar "Liderazgo" de un líder con equipo propio
+ * ya no lo califica el admin, lo califica su propio equipo (para premiar
+ * líderes que inspiran, no jefes que solo mandan). Además, cualquiera de
+ * otra área puede dejarle una observación libre (no afecta puntaje), y el
+ * admin recibe su propio feedback privado de los 5 líderes + el resto de la
+ * empresa — nunca entra al ranking de Colaborador del Mes porque el admin no
+ * participa. En los tres casos: anónimo para quien lo recibe, siempre visible
+ * para el admin, y todo se revela junto (no en tiempo real) recién cuando se
+ * confirma el podio del mes (ver isMonthConfirmed() en recognitionAdmin.ts).
+ */
+
+// Una fila por cada miembro del equipo que calificó a su líder ese mes — se
+// promedia pregunta por pregunta entre todos los que enviaron (ver
+// averageQuestionScores() en recognition.ts) para dar el 0-20 comparable al
+// resto de pilares. positiveComment siempre requerido; improvementComment es
+// la parte opcional, nunca al revés, para que nunca se sienta como un ataque.
+model LeaderTeamFeedback {
+  id                 String   @id @default(cuid())
+  month              String // "YYYY-MM"
+  leaderId           String
+  leader             User     @relation("LeaderTeamFeedbackLeader", fields: [leaderId], references: [id], onDelete: Cascade)
+  evaluatorId        String // colaborador del equipo que calificó
+  positiveComment    String
+  improvementComment String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  scores LeaderTeamFeedbackScore[]
+
+  @@unique([month, leaderId, evaluatorId])
+  @@index([month, leaderId])
+}
+
+model LeaderTeamFeedbackScore {
+  id         String             @id @default(cuid())
+  feedbackId String
+  feedback   LeaderTeamFeedback @relation(fields: [feedbackId], references: [id], onDelete: Cascade)
+  questionId String
+  score      Int // 1-5
+
+  @@unique([feedbackId, questionId])
+}
+
+// Observación de alguien de OTRA área (no del equipo del líder) — nunca
+// afecta puntaje ni ranking, es solo informativa para el líder (y auditable
+// por el admin).
+model LeaderExternalObservation {
+  id                 String   @id @default(cuid())
+  month              String
+  leaderId           String
+  leader             User     @relation("LeaderExternalObsLeader", fields: [leaderId], references: [id], onDelete: Cascade)
+  observerId         String
+  positiveComment    String
+  improvementComment String?
+  createdAt          DateTime @default(now())
+
+  @@unique([month, leaderId, observerId])
+  @@index([month, leaderId])
+}
+
+// Feedback privado del admin — sin relación hacia ningún User como
+// "receptor" (no apunta a nadie, existe solo "para el admin", mismo patrón
+// que Notification.ownerId con el sentinel "admin") para que sea
+// estructuralmente imposible que se cuele en el ranking de nadie.
+model AdminLeadershipFeedback {
+  id                 String   @id @default(cuid())
+  month              String
+  evaluatorId        String // uno de los líderes
+  positiveComment    String
+  improvementComment String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  scores AdminLeadershipFeedbackScore[]
+
+  @@unique([month, evaluatorId])
+}
+
+model AdminLeadershipFeedbackScore {
+  id         String                  @id @default(cuid())
+  feedbackId String
+  feedback   AdminLeadershipFeedback @relation(fields: [feedbackId], references: [id], onDelete: Cascade)
+  questionId String
+  score      Int
+
+  @@unique([feedbackId, questionId])
+}
+
+// Observación de cualquier colaborador no-líder (cualquier área) para el
+// admin — comment-only, mismo patrón que LeaderExternalObservation.
+model AdminLeadershipObservation {
+  id                 String   @id @default(cuid())
+  month              String
+  observerId         String
+  positiveComment    String
+  improvementComment String?
+  createdAt          DateTime @default(now())
+
+  @@unique([month, observerId])
 }
 
 // El podio (1°-3°) de un mes, confirmado por el admin con un clic. Queda
@@ -4093,12 +4199,11 @@ model ExternalSale {
   advisorId String
   advisor   User   @relation("ExternalSaleAdvisor", fields: [advisorId], references: [id], onDelete: Restrict)
 
-  catalogItemId       String?
-  catalogItem         PurchaseCatalogItem? @relation(fields: [catalogItemId], references: [id], onDelete: SetNull)
-  declaredProductName String
-  quantity            Int
-  unitPrice           Float
-  totalAmount         Float // quantity * unitPrice, calculado al declarar
+  // Confirmado 2026-09-01, pedido explícito del usuario: una venta puede
+  // incluir varios productos bajo la misma modalidad (mismo cliente, mismo
+  // pago, misma entrega) — ver ExternalSaleItem.
+  items       ExternalSaleItem[]
+  totalAmount Float // suma de items.totalAmount, recalculado cada vez que cambian los renglones
 
   // Cliente final que compra — matriculado antes de declarar la venta (ver
   // model Client). Nullable porque ventas declaradas antes de este campo
@@ -4221,6 +4326,33 @@ model ExternalSale {
   @@index([dispatchAssignedToId])
   @@index([packAssignedToId])
   @@index([advisorId])
+}
+
+// Un renglón de producto dentro de una venta externa (ver ExternalSale.items)
+// — confirmado 2026-09-01, pedido explícito del usuario: una venta puede
+// declarar varios productos bajo la misma modalidad. Bryan puede rechazar
+// un renglón puntual (ej. precio mal) sin tumbar toda la venta; el asesor
+// dueño de la venta corrige o elimina solo ese renglón y lo reenvía. Recién
+// cuando ningún renglón queda rechazado, Bryan puede aprobar/rechazar la
+// venta completa (ver ExternalSale.reviewStatus, endpoint /review).
+model ExternalSaleItem {
+  id     String       @id @default(cuid())
+  saleId String
+  sale   ExternalSale @relation(fields: [saleId], references: [id], onDelete: Cascade)
+
+  catalogItemId       String?
+  catalogItem         PurchaseCatalogItem? @relation(fields: [catalogItemId], references: [id], onDelete: SetNull)
+  declaredProductName String
+  quantity            Int
+  unitPrice           Float
+  totalAmount         Float // quantity * unitPrice
+
+  rejectedAt      DateTime?
+  rejectionReason String?
+
+  createdAt DateTime @default(now())
+
+  @@index([saleId])
 }
 
 // Acumulado semanal (lunes-sábado) de unidades dañadas "no solucionadas"

@@ -5,12 +5,20 @@ import { ChevronDown, ChevronUp } from "lucide-react";
 import { formatDateTime } from "@/lib/formatDateTime";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 
-type SaleDTO = {
+type SaleItemDTO = {
   id: string;
-  code: string;
   declaredProductName: string;
   catalogItem: { name: string; justCode: string | null } | null;
   quantity: number;
+  unitPrice: number;
+  totalAmount: number;
+  rejectedAt: string | null;
+  rejectionReason: string | null;
+};
+type SaleDTO = {
+  id: string;
+  code: string;
+  items: SaleItemDTO[];
   totalAmount: number;
   pickupPersonName: string;
   courierNote: string | null;
@@ -94,10 +102,16 @@ export function ExternalSaleHistoryList() {
               {!s.deletedAt && s.reviewStatus === "APPROVED" && (s.nairobyClosedAt ? <span className="font-mono text-[9.5px] font-bold uppercase text-green">Cerrada</span> : <span className="font-mono text-[9.5px] font-bold uppercase text-blue">En proceso</span>)}
             </div>
             {s.deletedAt && <div className="text-[11px] text-red mb-0.5">Eliminada por admin · {formatDateTime(s.deletedAt)}</div>}
-            <div className="text-[12.5px] font-semibold flex items-center gap-1.5 flex-wrap">
-              {s.catalogItem && <CatalogCode code={s.catalogItem.justCode} />}
-              <span>{s.catalogItem?.name ?? s.declaredProductName} — {s.quantity} un. · ${s.totalAmount.toFixed(2)}</span>
+            <div className="flex flex-col gap-0.5">
+              {s.items.map((it) => (
+                <div key={it.id} className="text-[12.5px] font-semibold flex items-center gap-1.5 flex-wrap">
+                  {it.catalogItem && <CatalogCode code={it.catalogItem.justCode} />}
+                  <span>{it.catalogItem?.name ?? it.declaredProductName} — {it.quantity} un. · ${it.totalAmount.toFixed(2)}</span>
+                  {it.rejectedAt && <span className="font-mono text-[9px] font-bold uppercase text-red">Rechazado</span>}
+                </div>
+              ))}
             </div>
+            <div className="text-[11px] font-bold">Total: ${s.totalAmount.toFixed(2)}</div>
             <div className="text-[10.5px] text-steel">{formatDateTime(s.createdAt)}</div>
 
             {s.reviewStatus !== "REJECTED" && (

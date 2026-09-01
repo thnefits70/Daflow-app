@@ -9,7 +9,10 @@ export async function GET() {
   const [sales, team] = await Promise.all([
     prisma.externalSale.findMany({
       where: { prepReadyAt: { not: null }, packAssignedToId: null, deletedAt: null },
-      include: { catalogItem: { select: { name: true, photos: true, justCode: true } }, advisor: { select: { name: true } } },
+      include: {
+        items: { include: { catalogItem: { select: { name: true, photos: true, justCode: true } } }, orderBy: { createdAt: "asc" } },
+        advisor: { select: { name: true } },
+      },
       orderBy: { prepReadyAt: "asc" },
     }),
     prisma.user.findMany({ where: { department: { code: "FUL" } }, select: { id: true, name: true }, orderBy: { name: "asc" } }),

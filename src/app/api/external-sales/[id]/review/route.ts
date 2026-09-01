@@ -21,9 +21,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const parsed = schema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Datos inválidos." }, { status: 400 });
 
-  const sale = await prisma.externalSale.findUnique({ where: { id }, select: { reviewStatus: true, advisorId: true, code: true, isContraEntrega: true } });
+  const sale = await prisma.externalSale.findUnique({
+    where: { id },
+    select: { reviewStatus: true, advisorId: true, code: true, isContraEntrega: true, items: { select: { rejectedAt: true } } },
+  });
   if (!sale) return NextResponse.json({ error: "No encontrado." }, { status: 404 });
   if (sale.reviewStatus !== "PENDING") return NextResponse.json({ error: "Ya fue revisada." }, { status: 409 });
+  if (parsed.data.approved && sale.items.some((it) => it.rejectedAt)) {
+    return NextResponse.json({ error: "Todavía hay productos rechazados pendientes de corrección." }, { status: 409 });
+  }
 
   const updated = await prisma.externalSale.update({
     where: { id },
