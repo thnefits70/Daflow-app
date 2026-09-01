@@ -10,10 +10,11 @@ import { ExternalSalePrepPanel } from "./ExternalSalePrepPanel";
 import { ExternalSalePackAssignInbox } from "./ExternalSalePackAssignInbox";
 import { ExternalSalePackDeliveryPanel } from "./ExternalSalePackDeliveryPanel";
 import { ExternalSaleClosingInbox } from "./ExternalSaleClosingInbox";
+import { ExternalSaleAuditSummary } from "./ExternalSaleAuditSummary";
 import { ExternalSaleHistoryList } from "./ExternalSaleHistoryList";
 import { TabGuide } from "@/components/shared/TabGuide";
 
-type Tab = "declarar" | "revision" | "pagos" | "facturacion" | "agrupar" | "preparar" | "embalaje" | "entregas" | "cierre" | "historial";
+type Tab = "declarar" | "revision" | "pagos" | "facturacion" | "agrupar" | "preparar" | "embalaje" | "entregas" | "cierre" | "auditoria" | "historial";
 
 export function ExternalSalesPanel({
   canDeclare,
@@ -40,7 +41,7 @@ export function ExternalSalesPanel({
   const [tab, setTab] = useState<Tab>(() => {
     if (typeof window === "undefined") return defaultTab;
     const t = new URLSearchParams(window.location.search).get("etab");
-    const valid: Tab[] = ["declarar", "revision", "pagos", "facturacion", "agrupar", "preparar", "embalaje", "entregas", "cierre", "historial"];
+    const valid: Tab[] = ["declarar", "revision", "pagos", "facturacion", "agrupar", "preparar", "embalaje", "entregas", "cierre", "auditoria", "historial"];
     return (valid as string[]).includes(t ?? "") ? (t as Tab) : defaultTab;
   });
 
@@ -54,6 +55,7 @@ export function ExternalSalesPanel({
     ...(canAssignPack ? [{ id: "embalaje" as const, label: "Embalaje" }] : []),
     ...(canPack ? [{ id: "entregas" as const, label: "Mis entregas" }] : []),
     ...(canClose ? [{ id: "cierre" as const, label: "Cierre" }] : []),
+    ...(canClose ? [{ id: "auditoria" as const, label: "Auditoría" }] : []),
     { id: "historial" as const, label: "Historial" },
   ];
 
@@ -127,6 +129,12 @@ export function ExternalSalesPanel({
         <>
           <TabGuide storageKey="externalsales-cierre">Ventas con pago confirmado y ya entregadas — cierra cada una para dejar el registro completo.</TabGuide>
           <ExternalSaleClosingInbox />
+        </>
+      )}
+      {tab === "auditoria" && canClose && (
+        <>
+          <TabGuide storageKey="externalsales-auditoria">Ventas ya cerradas, acumuladas para revisar el proceso completo más adelante — B2B y B2C juntas, solo lectura.</TabGuide>
+          <ExternalSaleAuditSummary />
         </>
       )}
       {tab === "historial" && (
