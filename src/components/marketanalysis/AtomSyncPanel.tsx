@@ -2,8 +2,17 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle2 } from "lucide-react";
+import { CheckCircle2, PackageSearch } from "lucide-react";
 import { ProductMatchPicker, type ProductMatchResult } from "@/components/merchandise-reentry/ProductMatchPicker";
+
+type DropiComboMatch = {
+  id: string;
+  code: string;
+  label: string | null;
+  matchType: "exact" | "similar";
+  components: { catalogItemId: string; name: string; quantity: number }[];
+};
+type ComboLookupState = { status: "checking" | "found" | "not_found"; match?: DropiComboMatch };
 
 type PreviewRow = {
   productName: string;
@@ -31,6 +40,7 @@ export function AtomSyncPanel() {
   const [err, setErr] = useState("");
   const [linkingIndex, setLinkingIndex] = useState<number | null>(null);
   const [savedAt, setSavedAt] = useState<string | null>(null);
+  const [comboLookup, setComboLookup] = useState<Record<number, ComboLookupState>>({});
 
   async function handlePreview() {
     if (!rawText.trim()) {
@@ -60,9 +70,28 @@ export function AtomSyncPanel() {
     );
   }
 
-  function markCombo(index: number) {
+  // Confirmado 2026-09-01 (pedido explícito del usuario, Opción B): antes de
+  // marcar algo como combo, busca si ese combo ya está registrado en Base de
+  // datos de productos (con sus componentes reales, los que Daniel ya
+  // anotó) — nunca se inventa la lista de productos aquí mismo.
+  async function checkCombo(index: number, productName: string) {
+    setComboLookup((prev) => ({ ...prev, [index]: { status: "checking" } }));
+    const res = await fetch(`/api/combo-suggestions/dropi-combo-match?name=${encodeURIComponent(productName)}`);
+    const data = await res.json().catch(() => null);
+    setComboLookup((prev) => ({ ...prev, [index]: data?.match ? { status: "found", match: data.match } : { status: "not_found" } }));
+  }
+
+  function confirmCombo(index: number) {
     setRows((prev) => prev!.map((r, i) => (i === index ? { ...r, resolution: "combo", linkedItemId: null } : r)));
     setLinkingIndex(null);
+  }
+
+  function cancelComboLookup(index: number) {
+    setComboLookup((prev) => {
+      const next = { ...prev };
+      delete next[index];
+      return next;
+    });
   }
 
   function setLink(index: number, result: ProductMatchResult) {
@@ -156,8 +185,8 @@ export function AtomSyncPanel() {
                 </div>
                 {r.resolution !== "linked" || r.matchType === "none" ? (
                   <div className="flex gap-2 mt-1.5">
-                    {r.resolution !== "combo" && (
-                      <button type="button" className="text-[11px] text-blue font-semibold cursor-pointer" onClick={() => markCombo(i)}>
+                    {r.resolution !== "combo" && !comboLookup[i] && (
+                      <button type="button" className="text-[11px] text-blue font-semibold cursor-pointer" onClick={() => checkCombo(i, r.productName)}>
                         Es un combo
                       </button>
                     )}
@@ -170,6 +199,46 @@ export function AtomSyncPanel() {
                     </button>
                   </div>
                 ) : null}
+                {comboLookup[i]?.status === "checking" && (
+                  <div className="text-[11.5px] text-steel mt-2">Buscando en Base de datos de productos…</div>
+                )}
+                {comboLookup[i]?.status === "found" && (
+                  <div className="bg-cloud rounded-md p-2.5 mt-2 text-[12px]">
+                    <div className="flex items-center gap-1.5 font-semibold mb-1.5">
+                      <PackageSearch size={13} className="text-teal shrink-0" />
+                      Encontrado en Base de datos de productos: "{comboLookup[i]!.match!.label}" ({comboLookup[i]!.match!.code})
+                    </div>
+                    <div className="text-steel mb-2">Trae adentro:</div>
+                    <ul className="list-disc list-inside text-steel mb-2">
+                      {comboLookup[i]!.match!.components.map((c) => (
+                        <li key={c.catalogItemId}>
+                          {c.quantity}× {c.name}
+                        </li>
+                      ))}
+                    </ul>
+                    <div className="flex gap-2">
+                      <button type="button" className="rounded border border-teal bg-teal px-2.5 py-1 text-[11px] font-bold text-navy cursor-pointer" onClick={() => confirmCombo(i)}>
+                        Sí, es este
+                      </button>
+                      <button type="button" className="text-[11px] text-steel cursor-pointer" onClick={() => cancelComboLookup(i)}>
+                        No es este
+                      </button>
+                    </div>
+                  </div>
+                )}
+                {comboLookup[i]?.status === "not_found" && (
+                  <div className="bg-gold/10 border border-gold/35 rounded-md p-2.5 mt-2 text-[12px]" style={{ color: "#D9A441" }}>
+                    <div className="mb-2">Este combo todavía no está registrado en Base de datos de productos — pídele a Daniel que lo registre ahí primero.</div>
+                    <div className="flex gap-2">
+                      <button type="button" className="rounded border border-rule px-2.5 py-1 text-[11px] font-semibold cursor-pointer" onClick={() => confirmCombo(i)}>
+                        Marcar como combo de todas formas
+                      </button>
+                      <button type="button" className="text-[11px] text-steel cursor-pointer" onClick={() => cancelComboLookup(i)}>
+                        Cancelar
+                      </button>
+                    </div>
+                  </div>
+                )}
                 {linkingIndex === i && (
                   <div className="mt-2">
                     <ProductMatchPicker
