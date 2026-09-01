@@ -197,6 +197,12 @@ export default async function DeptWorkspacePage({ params }: { params: Promise<{ 
         // Confirmado 2026-08-08: admin ve pero nunca confirma — exclusivo de quien tiene el flag.
         canConfirmMarketingDesign={false}
         canConfirmMarketingAdvisor={false}
+        // Sugerencias de Combos (ATOM + baja rotación) — confirmado
+        // 2026-08-31, mismo criterio "solo cuando admin navega ese
+        // departamento" que canViewMarketingArrivals/canManageJustCatalog.
+        canSyncAtomData={dept.code === "MKT"}
+        canUploadLowRotationList={dept.code === "INV"}
+        canApproveComboSuggestions={dept.code === "MKT"}
         isAdmin
         editable
       />

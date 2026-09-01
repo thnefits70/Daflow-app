@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { GitBranch, FileText, GraduationCap, LineChart, TrendingUp, MessageSquare, CalendarClock, BellRing, Heart, ShoppingCart, Package, Pin, Wallet, BarChart3, Landmark, PackageCheck, PackageOpen, PackageMinus, Truck, HandCoins } from "lucide-react";
+import { GitBranch, FileText, GraduationCap, LineChart, TrendingUp, MessageSquare, CalendarClock, BellRing, Heart, ShoppingCart, Package, Pin, Wallet, BarChart3, Landmark, PackageCheck, PackageOpen, PackageMinus, Truck, HandCoins, Combine } from "lucide-react";
 import { ProcessEmbeddedPanel } from "@/components/process/ProcessEmbeddedPanel";
 import type { ProcessDTO } from "@/components/process/ProcessEditor";
 import type { ProcessUpdateDTO } from "@/components/process/ProcessHistoryPanel";
@@ -32,6 +32,7 @@ import { MerchandiseReentryPanel } from "@/components/merchandise-reentry/Mercha
 import { MerchandiseOutflowPanel } from "@/components/merchandise-outflow/MerchandiseOutflowPanel";
 import { ExternalSalesPanel } from "@/components/external-sales/ExternalSalesPanel";
 import { SuppliersPanel, type SupplierDTO } from "@/components/suppliers/SuppliersPanel";
+import { ComboSuggestionsPanel } from "@/components/marketanalysis/ComboSuggestionsPanel";
 
 type DocumentDTO = { id: string; title: string; content: string; link: string; fileUrl: string | null; fileName: string | null };
 type ExamSummary = { id: string; title: string; questionCount: number };
@@ -55,6 +56,7 @@ const ALL_TABS = [
   { key: "cajachica", label: "Caja Chica", icon: Wallet },
   { key: "pagosadmin", label: "Pagos administrativos", icon: Landmark },
   { key: "postventa", label: "Servicio Postventa", icon: Heart },
+  { key: "combos", label: "Sugerencias de Combos", icon: Combine },
   { key: "documentos", label: "Documentos", icon: FileText },
   { key: "examenes", label: "Exámenes", icon: GraduationCap },
   { key: "recordatorios", label: "Recordatorios", icon: BellRing },
@@ -129,6 +131,9 @@ export function DeptWorkspaceTabs({
   canViewMarketingArrivals = false,
   canConfirmMarketingDesign = false,
   canConfirmMarketingAdvisor = false,
+  canSyncAtomData = false,
+  canUploadLowRotationList = false,
+  canApproveComboSuggestions = false,
   preferredTab = null,
   isAdmin = false,
   editable,
@@ -280,6 +285,13 @@ export function DeptWorkspaceTabs({
   canViewMarketingArrivals?: boolean;
   canConfirmMarketingDesign?: boolean;
   canConfirmMarketingAdvisor?: boolean;
+  // Sugerencias de Combos (ATOM + baja rotación) — confirmado 2026-08-31.
+  // canSyncAtomData/canApproveComboSuggestions = equipo/líder de Análisis de
+  // Mercado (dept.code "MKT"); canUploadLowRotationList = líder de
+  // Inventario (hoy Daniel). Ver ComboSuggestionsPanel.
+  canSyncAtomData?: boolean;
+  canUploadLowRotationList?: boolean;
+  canApproveComboSuggestions?: boolean;
   isAdmin?: boolean;
   editable: boolean;
   kpisEditable?: boolean;
@@ -313,6 +325,7 @@ export function DeptWorkspaceTabs({
     if (t.key === "inventoriokpis") return canViewInventoryKpisPanel;
     if (t.key === "cajachica") return !!(pettyCashData?.principal || pettyCashData?.secundaria);
     if (t.key === "postventa") return canManageStoreFeedback || canViewStoreFeedback;
+    if (t.key === "combos") return canSyncAtomData || canUploadLowRotationList || canApproveComboSuggestions;
     if (t.key === "pagosadmin") return canManageAdminPayments;
     return true;
   });
@@ -528,6 +541,13 @@ export function DeptWorkspaceTabs({
       )}
       {tab === "postventa" && !canManageStoreFeedback && canViewStoreFeedback && !isAdmin && (
         <StoreFeedbackKpiPanel aggregates={storeFeedbackAggregates} />
+      )}
+      {tab === "combos" && (canSyncAtomData || canUploadLowRotationList || canApproveComboSuggestions) && (
+        <ComboSuggestionsPanel
+          canSyncAtom={canSyncAtomData}
+          canUploadLowRotation={canUploadLowRotationList}
+          canApprove={canApproveComboSuggestions}
+        />
       )}
       {tab === "documentos" && <DocumentsPanel deptId={deptId} documents={documents} editable={editable} />}
       {tab === "examenes" && <ExamsPanel deptId={deptId} exams={exams} editable={editable} />}

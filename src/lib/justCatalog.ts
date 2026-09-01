@@ -2,7 +2,10 @@ import { prisma } from "@/lib/prisma";
 
 export type JustCatalogParsedRow = { code: string; name: string };
 
-function normalize(s: string): string {
+// Exportadas (2026-08-31) para que Sugerencias de Combos ATOM+baja rotación
+// (src/lib/atomSync.ts) reutilice el mismo criterio de coincidencia sin IA,
+// en vez de reimplementarlo — ver justificación de costo más abajo.
+export function normalize(s: string): string {
   return s.trim().replace(/\s+/g, " ").toUpperCase();
 }
 
@@ -10,7 +13,7 @@ function normalize(s: string): string {
 // comparar nombres por palabras en común (ver findSimilarUnlinkedItem).
 const STOPWORDS = new Set(["DE", "DEL", "LA", "EL", "LOS", "LAS", "UN", "UNA", "UNOS", "UNAS", "Y", "O", "CON", "PARA", "POR", "EN", "A", "AL", "TIPO"]);
 
-function significantWords(name: string): Set<string> {
+export function significantWords(name: string): Set<string> {
   return new Set(normalize(name).split(/\s+/).filter((w) => w.length >= 2 && !STOPWORDS.has(w)));
 }
 
@@ -23,7 +26,7 @@ function significantWords(name: string): Set<string> {
 // palabras del nombre más corto (mínimo 2 coincidencias) están en el otro
 // nombre, se sugiere como posible vínculo — nunca se auto-vincula, Daniel
 // siempre confirma o rechaza fila por fila en la vista previa.
-function findSimilarUnlinkedItem(
+export function findSimilarUnlinkedItem(
   rowWords: Set<string>,
   candidates: { id: string; name: string; words: Set<string> }[]
 ): { id: string; name: string } | null {

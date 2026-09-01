@@ -398,6 +398,12 @@ model User {
   cancelledGuidesCutoffDecided        CancelledGuideReport[] @relation("CancelledGuideCutoffDecidedBy")
   cancelledGuidesReingresado          CancelledGuideReport[] @relation("CancelledGuideReingresadoBy")
 
+  atomProductStatusesCreated       AtomProductStatus[]      @relation("AtomProductStatusCreatedBy")
+  lowRotationWeeklyEntriesCreated  LowRotationWeeklyEntry[] @relation("LowRotationWeeklyEntryCreatedBy")
+  comboSuggestionsSelected         ComboSuggestion[]        @relation("ComboSuggestionSelectedBy")
+  comboSuggestionsReviewed         ComboSuggestion[]        @relation("ComboSuggestionReviewedBy")
+  comboSuggestionsCreatedInDropiBy ComboSuggestion[]        @relation("ComboSuggestionCreatedInDropiBy")
+
   @@index([deptId])
   @@index([leadsDeptId])
 }
@@ -1378,6 +1384,12 @@ model PurchaseCatalogItem {
   // de esta regla, aunque tengan menos de 3 fotos.
   pendingRegistration Boolean @default(false)
 
+  // Confirmado 2026-08-31: nicho sugerido por IA una sola vez (Sugerencias de
+  // Combos ATOM+baja rotación) para poder cruzar productos ganadores con
+  // productos de baja rotación del mismo nicho. Editable a mano después —
+  // nunca se vuelve a llamar a la IA una vez asignado, ver src/lib/nichoAi.ts.
+  nicho String?
+
   createdById String?
   createdBy   User?    @relation("PurchaseCatalogItemCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   createdAt   DateTime @default(now())
@@ -1411,6 +1423,122 @@ model PurchaseCatalogItem {
   // Confirmado 2026-08-29: Ruptura de Stock (KPIs Generales) también reusa
   // este catálogo compartido.
   stockoutProduct                StockoutProduct?
+  // Confirmado 2026-08-31: Sugerencias de Combos (ATOM + baja rotación)
+  // también reusa este catálogo compartido — ver AtomProductStatus,
+  // LowRotationWeeklyEntry, ComboSuggestion.
+  atomProductStatuses            AtomProductStatus[]
+  lowRotationWeeklyEntries       LowRotationWeeklyEntry[]
+  comboSuggestionsAsWinner       ComboSuggestion[]        @relation("ComboSuggestionWinner")
+  comboSuggestionsAsLowRotation  ComboSuggestion[]        @relation("ComboSuggestionLowRotation")
+}
+
+enum AtomRentabilityStatus {
+  RENTABLE
+  SEGUIMIENTO
+}
+
+// Confirmado 2026-08-31 (idea diseñada en conversación larga, ver memoria
+// project_atom_combo_suggestions_idea): una lectura de la tabla de
+// atomapp.com.co/productos, registrada a mano lunes/miércoles/viernes por
+// alguien de Análisis de Mercado (nunca por script automático — no hay
+// clave de ATOM guardada en ningún lado). Nunca se sobrescribe: cada
+// lectura crea filas nuevas con su propio capturedAt, para acumular
+// historial real y no solo el último estado.
+model AtomProductStatus {
+  id String @id @default(cuid())
+
+  // Nombre tal cual aparece en ATOM — puede ser un producto individual o un
+  // combo de Dropi (isCombo lo distingue). No siempre enlaza con el catálogo
+  // (un combo de Dropi no existe como PurchaseCatalogItem propio).
+  productName String
+  status      AtomRentabilityStatus
+  isCombo     Boolean               @default(false)
+
+  matchedCatalogItemId String?
+  matchedCatalogItem   PurchaseCatalogItem? @relation(fields: [matchedCatalogItemId], references: [id], onDelete: SetNull)
+
+  capturedAt DateTime
+
+  createdById String?
+  createdBy   User?    @relation("AtomProductStatusCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+
+  @@index([capturedAt])
+  @@index([matchedCatalogItemId])
+}
+
+// Confirmado 2026-08-31: la lista semanal de Daniel (líder de Inventario) de
+// productos que despacharon menos de 8 unidades esa semana — el umbral real
+// de "todavía no funciona" que definió el usuario. weekOf es el sábado de
+// esa semana (día en que Daniel sube/actualiza la lista).
+model LowRotationWeeklyEntry {
+  id String @id @default(cuid())
+
+  weekOf DateTime
+
+  catalogItemId String
+  catalogItem   PurchaseCatalogItem @relation(fields: [catalogItemId], references: [id], onDelete: Cascade)
+
+  unitsDispatched Int
+
+  createdById String?
+  createdBy   User?    @relation("LowRotationWeeklyEntryCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+
+  @@unique([weekOf, catalogItemId])
+  @@index([weekOf])
+}
+
+enum ComboSuggestionStatus {
+  SUGERIDO
+  SELECCIONADO
+  PENDIENTE_APROBACION
+  APROBADO
+  RECHAZADO
+  CREADO_EN_DROPI
+}
+
+// Confirmado 2026-08-31: pareja sugerida (producto Rentable de ATOM + producto
+// de baja rotación de Daniel, mismo nicho) que recorre todo su ciclo de vida
+// acá — generada sola por cruce de datos (sin IA), seleccionada por el equipo
+// de Análisis de Mercado, aprobada por su líder (hoy Bryan Ríos, mismo criterio
+// que canApproveComboSuggestions — no depende de su nombre), y cerrada a mano
+// cuando el equipo la crea de verdad en Dropi (fuera de DAFLOW, sin precio).
+model ComboSuggestion {
+  id String @id @default(cuid())
+
+  nicho String
+
+  winnerCatalogItemId String
+  winnerCatalogItem   PurchaseCatalogItem @relation("ComboSuggestionWinner", fields: [winnerCatalogItemId], references: [id], onDelete: Cascade)
+
+  lowRotationCatalogItemId String
+  lowRotationCatalogItem   PurchaseCatalogItem @relation("ComboSuggestionLowRotation", fields: [lowRotationCatalogItemId], references: [id], onDelete: Cascade)
+
+  generatedAt DateTime @default(now())
+
+  // Se llena al enviar a aprobación — mismo rol que PurchaseRequest.groupId,
+  // todo el lote se aprueba/rechaza junto.
+  batchId String?
+
+  status ComboSuggestionStatus @default(SUGERIDO)
+
+  selectedById      String?
+  selectedBy        User?     @relation("ComboSuggestionSelectedBy", fields: [selectedById], references: [id], onDelete: SetNull)
+  sentForApprovalAt DateTime?
+
+  reviewedById String?
+  reviewedBy   User?     @relation("ComboSuggestionReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewedAt   DateTime?
+  rejectReason String?
+
+  createdInDropiAt   DateTime?
+  createdInDropiById String?
+  createdInDropiBy   User?     @relation("ComboSuggestionCreatedInDropiBy", fields: [createdInDropiById], references: [id], onDelete: SetNull)
+
+  @@unique([winnerCatalogItemId, lowRotationCatalogItemId])
+  @@index([status])
+  @@index([batchId])
 }
 
 // Confirmado 2026-08-26 (pedido explícito del usuario): un ID de combo de

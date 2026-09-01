@@ -3,7 +3,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { TopLine } from "@/components/ui/TopLine";
 import { DeptWorkspaceTabs } from "@/components/dept/DeptWorkspaceTabs";
-import { getUnseenFeedbackCount, canManageStoreFeedback as checkCanManageStoreFeedback, canViewStoreFeedback as checkCanViewStoreFeedback, canSubmitPurchaseRequests, canConfirmPurchaseReceiving, canReceivePurchasesTeam, canActOnPurchaseReceiving, canRegisterPurchaseInvoices, canPayMerchandisePurchases, canManageInventoryControl as checkCanManageInventoryControl, canViewInventoryKpisPanel as checkCanViewInventoryKpisPanel, canManageAdminPayments as checkCanManageAdminPayments, canViewMarketingArrivals as checkCanViewMarketingArrivals, canConfirmMarketingDesign as checkCanConfirmMarketingDesign, canConfirmMarketingAdvisor as checkCanConfirmMarketingAdvisor, canCaptureMerchandiseReentry, canApproveMerchandiseReentry, canActOnMerchandiseReentry, canCloseMerchandiseReentry, canVerifyDamageDisposal, canManageJustUpload, canManageJustCatalog, canCaptureMerchandiseOutflow, canActOnMerchandiseOutflow, canViewMerchandiseOutflow, canConfirmSupplierExchangeFinanceWriteOff, canSubmitCancelledGuide, canConfirmCancelledGuideFulfillment, canManageCancelledGuideCutoff, canDeclareExternalSales, canReviewExternalSales, canConfirmExternalSalePayment, canInvoiceExternalSale, canAssignExternalSalePack, canPackExternalSale, canCloseExternalSale, canViewExternalSales, getSupplierAccess, canAddSupplierBankAccounts } from "@/lib/guards";
+import { getUnseenFeedbackCount, canManageStoreFeedback as checkCanManageStoreFeedback, canViewStoreFeedback as checkCanViewStoreFeedback, canSubmitPurchaseRequests, canConfirmPurchaseReceiving, canReceivePurchasesTeam, canActOnPurchaseReceiving, canRegisterPurchaseInvoices, canPayMerchandisePurchases, canManageInventoryControl as checkCanManageInventoryControl, canViewInventoryKpisPanel as checkCanViewInventoryKpisPanel, canManageAdminPayments as checkCanManageAdminPayments, canViewMarketingArrivals as checkCanViewMarketingArrivals, canConfirmMarketingDesign as checkCanConfirmMarketingDesign, canConfirmMarketingAdvisor as checkCanConfirmMarketingAdvisor, canSyncAtomData as checkCanSyncAtomData, canUploadLowRotationList as checkCanUploadLowRotationList, canApproveComboSuggestions as checkCanApproveComboSuggestions, canCaptureMerchandiseReentry, canApproveMerchandiseReentry, canActOnMerchandiseReentry, canCloseMerchandiseReentry, canVerifyDamageDisposal, canManageJustUpload, canManageJustCatalog, canCaptureMerchandiseOutflow, canActOnMerchandiseOutflow, canViewMerchandiseOutflow, canConfirmSupplierExchangeFinanceWriteOff, canSubmitCancelledGuide, canConfirmCancelledGuideFulfillment, canManageCancelledGuideCutoff, canDeclareExternalSales, canReviewExternalSales, canConfirmExternalSalePayment, canInvoiceExternalSale, canAssignExternalSalePack, canPackExternalSale, canCloseExternalSale, canViewExternalSales, getSupplierAccess, canAddSupplierBankAccounts } from "@/lib/guards";
 import { getFinanceKpiData } from "@/lib/financeKpis";
 import { getDeptProcessDetail } from "@/lib/processDetail";
 import { getPaymentRemindersData } from "@/lib/paymentReminders";
@@ -37,6 +37,15 @@ export default async function WorkspacePage() {
   const [canManageStoreFeedback, canViewStoreFeedback] = await Promise.all([
     checkCanManageStoreFeedback(),
     checkCanViewStoreFeedback(),
+  ]);
+
+  // Sugerencias de Combos (ATOM + baja rotación) — confirmado 2026-08-31,
+  // mismo patrón sin dept.code que Servicio Postventa/Control de Compras:
+  // se ve en la propia "Mi área de trabajo" de quien tenga cada rol.
+  const [canSyncAtomData, canUploadLowRotationList, canApproveComboSuggestions] = await Promise.all([
+    checkCanSyncAtomData(),
+    checkCanUploadLowRotationList(),
+    checkCanApproveComboSuggestions(),
   ]);
 
   // Mismo patrón sin dept.code — Control de Compras (confirmado 2026-07-30:
@@ -311,6 +320,9 @@ export default async function WorkspacePage() {
         canViewMarketingArrivals={canViewMarketingArrivals}
         canConfirmMarketingDesign={canConfirmMarketingDesign}
         canConfirmMarketingAdvisor={canConfirmMarketingAdvisor}
+        canSyncAtomData={canSyncAtomData}
+        canUploadLowRotationList={canUploadLowRotationList}
+        canApproveComboSuggestions={canApproveComboSuggestions}
         preferredTab={currentUser?.defaultWorkspaceTab ?? null}
         isAdmin={false}
         editable={false}

@@ -1140,6 +1140,52 @@ export async function canConfirmMarketingAdvisor() {
   return !!user?.canConfirmMarketingAdvisor;
 }
 
+// Sugerencias de Combos (ATOM + baja rotación) — confirmado 2026-08-31, idea
+// diseñada en conversación larga (ver memoria
+// project_atom_combo_suggestions_idea). Ver/seleccionar sugerencias es todo
+// el equipo de Análisis de Mercado (hoy incluye a Jariel y Heidy, mismo
+// dept.code === "MKT" que canViewMarketingArrivals arriba); aprobar el lote
+// es exclusivo de quien lidera MKT (hoy Bryan Ríos) — el guard nunca depende
+// del nombre, solo de dept.code/leadsDept.code, para que siga funcionando si
+// cambia el roster.
+export async function canViewComboSuggestions() {
+  const session = await auth();
+  if (!session) return false;
+  if (session.user.role === "admin") return true;
+  const user = await prisma.user.findUnique({ where: { id: session.user.id }, select: { department: { select: { code: true } } } });
+  return user?.department?.code === "MKT";
+}
+
+export async function canApproveComboSuggestions() {
+  const session = await auth();
+  if (!session) return false;
+  if (session.user.role === "admin") return true;
+  const user = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { isLeader: true, leadsDept: { select: { code: true } } },
+  });
+  return !!user?.isLeader && user.leadsDept?.code === "MKT";
+}
+
+// Sube/actualiza la lista semanal de productos con menos de 8 despachos —
+// mismo criterio que canManageJustCatalog (líder de Inventario, hoy Daniel).
+export async function canUploadLowRotationList() {
+  const session = await auth();
+  if (!session) return false;
+  if (session.user.role === "admin") return true;
+  const user = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { isLeader: true, leadsDept: { select: { code: true } } },
+  });
+  return !!user?.isLeader && user.leadsDept?.code === "INV";
+}
+
+// Registra lo extraído de ATOM (lectura manual en vivo, lunes/miércoles/
+// viernes) — mismo grupo que ve las sugerencias.
+export async function canSyncAtomData() {
+  return canViewComboSuggestions();
+}
+
 // How many of the current user's own pay stubs were uploaded/updated since
 // they last opened "Roles de pago" — drives the sidebar badge.
 export async function getUnseenPayStubCount() {

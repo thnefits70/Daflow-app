@@ -6,6 +6,7 @@ import { getStalePurchaseRequestPushes } from "@/lib/purchases";
 import { getStaleSupplierCreditPushes } from "@/lib/supplierCredits";
 import { getStaleAdminPaymentPushes } from "@/lib/adminPayments";
 import { getStalePersonalPurchaseTransferPushes } from "@/lib/personalPurchases";
+import { getAtomSyncReminderPushes } from "@/lib/atomReminder";
 import { getWeeklyCheckinPushes } from "@/lib/weeklyCheckin";
 import { getDeliveryOverduePushes, getContraEntregaPaymentOverduePushes } from "@/lib/externalSales";
 import { sendPushToOwner } from "@/lib/webPush";
@@ -83,6 +84,16 @@ export async function GET(req: NextRequest) {
 
   const stalePersonalPurchaseTransfers = await getStalePersonalPurchaseTransferPushes();
   for (const r of stalePersonalPurchaseTransfers) {
+    await sendPushToOwner(r.ownerId, { title: r.title, body: r.body, url: r.url });
+    notified++;
+  }
+
+  // Sugerencias de Combos (ATOM + baja rotación) — confirmado 2026-08-31:
+  // recordatorio a todo el equipo de Análisis de Mercado los días que toca
+  // leer ATOM (lunes/miércoles/viernes, corrido por feriado) si nadie lo ha
+  // hecho todavía hoy. Nunca entra solo a ATOM — esto es SOLO el aviso.
+  const atomSyncReminders = await getAtomSyncReminderPushes();
+  for (const r of atomSyncReminders) {
     await sendPushToOwner(r.ownerId, { title: r.title, body: r.body, url: r.url });
     notified++;
   }
