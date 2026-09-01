@@ -195,6 +195,10 @@ export function ExternalSaleDeclareForm() {
               <label className="block mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-steel">Producto</label>
               {selected ? (
                 <div className="flex items-center gap-2.5 bg-green/10 border border-green/35 rounded-md p-2.5">
+                  {selected.photos[0] && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={selected.photos[0]} alt={selected.name} className="w-11 h-11 object-cover rounded border border-green/40 shrink-0" />
+                  )}
                   <div className="flex-1 min-w-0 text-[12.5px] font-semibold flex items-center gap-1.5">
                     <CatalogCode code={selected.justCode} />
                     <span className="truncate">{selected.name}</span>
@@ -276,6 +280,10 @@ export function ExternalSaleDeclareForm() {
                         <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Producto</label>
                         {editSelected ? (
                           <div className="flex items-center gap-2.5 bg-green/10 border border-green/35 rounded-md p-2">
+                            {editSelected.photos[0] && (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img src={editSelected.photos[0]} alt={editSelected.name} className="w-10 h-10 object-cover rounded border border-green/40 shrink-0" />
+                            )}
                             <div className="flex-1 min-w-0 text-[12px] font-semibold flex items-center gap-1.5">
                               <CatalogCode code={editSelected.justCode} />
                               <span className="truncate">{editSelected.name}</span>
