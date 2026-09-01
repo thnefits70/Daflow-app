@@ -548,6 +548,7 @@ export function PurchaseInvoicingPanel({ isAdmin = false, canPayMerchandise }: {
         if (!q) return true;
         return (
           g.some((r) => r.catalogItem.name.toLowerCase().includes(q)) ||
+          g.some((r) => r.catalogItem.justCode?.toLowerCase().includes(q)) ||
           g[0].supplier.name.toLowerCase().includes(q) ||
           formatPurchaseRequestCode(g[0].requestNumber).toLowerCase().includes(q)
         );
