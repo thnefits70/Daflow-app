@@ -11,6 +11,8 @@ type SaleDTO = {
   code: string;
   declaredProductName: string;
   catalogItem: { name: string; justCode: string | null } | null;
+  quantity: number;
+  unitPrice: number;
   totalAmount: number;
   paymentProofUrl: string;
   paymentProofName: string | null;
@@ -82,6 +84,9 @@ export function ExternalSalePaymentConfirmInbox() {
           <div className="text-[13px] font-semibold mb-1 flex items-center gap-1.5 flex-wrap">
             {s.catalogItem && <CatalogCode code={s.catalogItem.justCode} />}
             <span>{s.catalogItem?.name ?? s.declaredProductName} — ${s.totalAmount.toFixed(2)}</span>
+          </div>
+          <div className="text-[11px] text-steel mb-1.5">
+            {s.quantity} und. × ${s.unitPrice.toFixed(2)} c/u
           </div>
           <div className="text-[11px] text-steel mb-1.5">
             Comprobante subido: {s.paymentProofUploadedAt ? formatDateTime(s.paymentProofUploadedAt) : "—"}
