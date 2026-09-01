@@ -1369,6 +1369,51 @@ async function getPurchaseReplacementVerificationPendingItem(href: string): Prom
   };
 }
 
+// Confirmado 2026-09-01: pedido explícito del usuario — Daniel (y su equipo)
+// ahora ven en solo lectura la pestaña "Reportes urgentes" (antes exclusiva
+// de quien coordina con el proveedor), pero no tenían ningún aviso de que un
+// reclamo de su propio equipo sigue sin que Compras coordine nada. Mismo
+// criterio de "visible en esa pestaña" que usa api/purchase-requests/
+// urgent-reports/route.ts (ya revisado por Daniel, o ya dado de baja en Just
+// si es reclamo posterior; nunca rechazado), y misma cuenta de "lo faltante"
+// que openReports en PurchaseUrgentReportsPanel.tsx (lo reclamado en
+// resoluciones no CANCELLED todavía no cubre lo reportado).
+async function getPurchaseUrgentReportsUnresolvedPendingItem(href: string): Promise<PendingItem | null> {
+  const rows = await prisma.purchaseRequestUrgentReport.findMany({
+    where: {
+      rejectedAt: null,
+      OR: [
+        { isLateClaim: false, reviewedByLeadAt: { not: null } },
+        { isLateClaim: true, justConfirmedAt: { not: null } },
+      ],
+    },
+    select: {
+      damagedQty: true,
+      missingQty: true,
+      incompleteQty: true,
+      differentQty: true,
+      reportedAt: true,
+      resolutions: { select: { quantity: true, status: true } },
+    },
+  });
+  const open = rows.filter((r) => {
+    const total = r.damagedQty + r.missingQty + r.incompleteQty + r.differentQty;
+    const claimed = r.resolutions.filter((res) => res.status !== "CANCELLED").reduce((s, res) => s + res.quantity, 0);
+    return claimed < total;
+  });
+  if (open.length === 0) return null;
+  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const overdue = open.some((r) => r.reportedAt < cutoff);
+  return {
+    type: "compras_urgentes_sin_resolver",
+    icon: "📦",
+    label: "Reclamos de tu equipo sin resolver con el proveedor",
+    meta: `${open.length} reclamo${open.length === 1 ? "" : "s"}${overdue ? " · atrasado" : ""}`,
+    overdue,
+    href,
+  };
+}
+
 // Confirmado 2026-08-25: "Reclamo posterior al cierre" — daño descubierto
 // DÍAS después de confirmar recibido. Dos colas propias de Daniel, mismo
 // patrón que getPurchaseReceivingPendingItem: reclamos que su equipo subió
@@ -2145,12 +2190,14 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     if (myPersonalPurchaseStatusItem) teamItems.push(myPersonalPurchaseStatusItem);
     teamItems.push(...myPettyCashConfirmationItems);
     if (me.department?.code === "INV") {
-      const [receivingItem, replacementItem] = await Promise.all([
+      const [receivingItem, replacementItem, urgentUnresolvedItem] = await Promise.all([
         getPurchaseReceivingPendingItem("/area/workspace?tab=compras&ptab=inventario"),
         getPurchaseReplacementVerificationPendingItem("/area/workspace?tab=compras&ptab=inventario"),
+        getPurchaseUrgentReportsUnresolvedPendingItem("/area/workspace?tab=compras&ptab=urgentes"),
       ]);
       if (receivingItem) teamItems.push(receivingItem);
       if (replacementItem) teamItems.push(replacementItem);
+      if (urgentUnresolvedItem) teamItems.push(urgentUnresolvedItem);
     }
     if (teamItems.length === 0) return null;
     return { title: "Pendientes de esta semana", sub: me.department?.code === "INV" ? "En Inventario" : "Para ti", items: teamItems };
@@ -2208,7 +2255,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
   }
 
   if (me.leadsDept.code === "INV") {
-    const [stockoutItem, receivingItem, replacementItem, inventoryControlItem, inventoryWeeklySnapshotItem, merchandiseReentryItem, merchandiseWeeklyJustItem, personalPurchaseInventoryItem, lateClaimReviewItem, lateClaimJustItem] = await Promise.all([
+    const [stockoutItem, receivingItem, replacementItem, inventoryControlItem, inventoryWeeklySnapshotItem, merchandiseReentryItem, merchandiseWeeklyJustItem, personalPurchaseInventoryItem, lateClaimReviewItem, lateClaimJustItem, urgentUnresolvedItem] = await Promise.all([
       getStockoutPendingItem("/area/kpis-generales"),
       getPurchaseReceivingPendingItem("/area/workspace?tab=compras&ptab=inventario"),
       getPurchaseReplacementVerificationPendingItem("/area/workspace?tab=compras&ptab=inventario"),
@@ -2219,6 +2266,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       getPersonalPurchasePendingInventoryItem("/area/compras-personales-inventario"),
       getLateClaimReviewPendingItem("/area/workspace?tab=compras&ptab=inventario"),
       getLateClaimJustPendingItem("/area/workspace?tab=compras&ptab=inventario"),
+      getPurchaseUrgentReportsUnresolvedPendingItem("/area/workspace?tab=compras&ptab=urgentes"),
     ]);
     if (stockoutItem) items.push(stockoutItem);
     if (receivingItem) items.push(receivingItem);
@@ -2230,6 +2278,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     if (personalPurchaseInventoryItem) items.push(personalPurchaseInventoryItem);
     if (lateClaimReviewItem) items.push(lateClaimReviewItem);
     if (lateClaimJustItem) items.push(lateClaimJustItem);
+    if (urgentUnresolvedItem) items.push(urgentUnresolvedItem);
 
     const justWriteOffItem = await getSupplierExchangeJustWriteOffPendingItem("/area/workspace?tab=egresos&otab=proveedor");
     if (justWriteOffItem) items.push(justWriteOffItem);

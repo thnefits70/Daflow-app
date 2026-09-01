@@ -1,15 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { canSubmitPurchaseRequests } from "@/lib/guards";
+import { canSubmitPurchaseRequests, canConfirmPurchaseReceiving } from "@/lib/guards";
 import { isWithinCreditClaimWindow, creditClaimDeadline } from "@/lib/purchaseUrgent";
 
-// Admin, o quien tenga delegación de Compras (hoy Bryan) — es quien coordina
-// con el proveedor y elige cómo se resuelve cada reporte de Daniel.
+// Admin, o quien tenga delegación de Compras (hoy Bryan), coordina con el
+// proveedor y elige cómo se resuelve cada reporte de Daniel — acciones
+// propias, gateadas aparte en cada endpoint (resolutions/refund-proof/
+// confirm-bank). Confirmado 2026-09-01: pedido explícito del usuario —
+// Daniel y su equipo de Inventario (canConfirmPurchaseReceiving) ahora
+// también pueden VER esta bandeja en solo lectura desde su pestaña "Reportes
+// urgentes" (antes no existía para ellos), para no perder de vista lo que
+// falta por llegarles aunque no puedan coordinar nada ellos mismos.
 export async function GET(_req: NextRequest) {
   const session = await auth();
   const isAdmin = session?.user.role === "admin";
-  if (!session || (!isAdmin && !(await canSubmitPurchaseRequests()))) {
+  if (!session || (!isAdmin && !(await canSubmitPurchaseRequests()) && !(await canConfirmPurchaseReceiving()))) {
     return NextResponse.json({ error: "No autorizado." }, { status: 403 });
   }
 

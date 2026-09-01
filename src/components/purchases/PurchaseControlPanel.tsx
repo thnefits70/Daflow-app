@@ -47,7 +47,13 @@ export function PurchaseControlPanel({
     ...(canSubmit || canReview ? [{ key: "comparar" as Tab, label: "Comparar precios" }] : []),
     ...(canSubmit ? [{ key: "solicitar" as Tab, label: "Solicitar" }, { key: "mias" as Tab, label: "Mis solicitudes" }] : []),
     ...(canReview ? [{ key: "aprobacion" as Tab, label: "Bandeja de aprobación" }] : []),
-    ...(canSubmit || canReview ? [{ key: "urgentes" as Tab, label: "Reportes urgentes" }] : []),
+    // Confirmado 2026-09-01: pedido explícito del usuario — Daniel y su
+    // equipo de Inventario (canReceive) ahora también ven esta pestaña, pero
+    // en solo lectura (ver canAct más abajo): antes se enteraban de un
+    // reclamo suyo recién cuando algo físico les tocaba verificar; ahora ven
+    // el estado completo, incluyendo créditos/reembolsos/pérdidas que nunca
+    // generan mercadería que ellos reciban.
+    ...(canSubmit || canReview || canReceive ? [{ key: "urgentes" as Tab, label: "Reportes urgentes" }] : []),
     ...(canSubmit || canReview ? [{ key: "creditos" as Tab, label: "Créditos pendientes" }] : []),
     ...(canReceive ? [{ key: "inventario" as Tab, label: "Inventario" }] : []),
     // Confirmado 2026-08-18: pedido explícito del usuario — pestaña propia,
@@ -140,9 +146,11 @@ export function PurchaseControlPanel({
       {tab === "urgentes" && (
         <>
           <TabGuide storageKey="compras-urgentes">
-            Acá resuelves los &quot;informar urgente&quot; que sube Daniel cuando algo llega mal: reparte la cantidad afectada entre crédito, cambio, reembolso o pérdida — nunca a mano, siempre según el costo real de la cotización. El reembolso lo confirma el admin en su banco.
+            {canSubmit || canReview
+              ? <>Acá resuelves los &quot;informar urgente&quot; que sube Daniel cuando algo llega mal: reparte la cantidad afectada entre crédito, cambio, reembolso o pérdida — nunca a mano, siempre según el costo real de la cotización. El reembolso lo confirma el admin en su banco.</>
+              : <>Acá ves en solo lectura el estado de los reclamos de tu equipo con el proveedor: qué sigue sin resolver y cómo se resolvió cada uno (crédito, cambio de mercadería, reembolso o pérdida). Coordinar la solución con el proveedor lo hace Compras, no tú.</>}
           </TabGuide>
-          <PurchaseUrgentReportsPanel isAdmin={isAdmin} />
+          <PurchaseUrgentReportsPanel isAdmin={isAdmin} canAct={canSubmit || canReview} />
         </>
       )}
       {tab === "creditos" && (

@@ -103,7 +103,13 @@ function resolutionLabel(res: Resolution): string {
 // nunca escribe un monto a mano (siempre cantidad × costo real de la
 // cotización). El reembolso lo confirma admin en su banco; el resto de
 // pasos son de Bryan.
-export function PurchaseUrgentReportsPanel({ isAdmin }: { isAdmin: boolean }) {
+// Confirmado 2026-09-01: pedido explícito del usuario — Daniel y su equipo
+// de Inventario ahora ven esta misma bandeja pero en solo lectura (canAct
+// false): sin el botón "Coordinar resolución", sin subir comprobante de
+// reembolso ni confirmar banco. Así tienen a la vista qué sigue sin resolver
+// y cómo se resolvió cada reclamo de su equipo, sin poder negociar nada
+// ellos mismos — eso se queda exclusivo de quien coordina con el proveedor.
+export function PurchaseUrgentReportsPanel({ isAdmin, canAct }: { isAdmin: boolean; canAct: boolean }) {
   const router = useRouter();
   const [reports, setReports] = useState<Report[] | null>(null);
   const [openReportId, setOpenReportId] = useState<string | null>(null);
@@ -308,12 +314,14 @@ export function PurchaseUrgentReportsPanel({ isAdmin }: { isAdmin: boolean }) {
                   {r.resolutions.length > 0 && (
                     <div className="flex flex-col gap-1.5 mb-2.5">
                       {r.resolutions.map((res) => (
-                        <ResolutionRow key={res.id} res={res} isAdmin={isAdmin} refundUploadingFor={refundUploadingFor} confirmBankId={confirmBankId} setConfirmBankId={setConfirmBankId} onFileRefund={(f) => uploadRefundProof(res.id, f)} onConfirmBank={() => confirmBank(res.id)} busy={busy} />
+                        <ResolutionRow key={res.id} res={res} isAdmin={isAdmin} canAct={canAct} refundUploadingFor={refundUploadingFor} confirmBankId={confirmBankId} setConfirmBankId={setConfirmBankId} onFileRefund={(f) => uploadRefundProof(res.id, f)} onConfirmBank={() => confirmBank(res.id)} busy={busy} />
                       ))}
                     </div>
                   )}
 
-                  {openReportId === r.id ? (
+                  {!canAct ? (
+                    <div className="text-[11.5px] text-steel-dim italic">Esperando que Compras coordine con el proveedor.</div>
+                  ) : openReportId === r.id ? (
                     <div className="bg-cloud rounded-md p-3">
                       <div className="flex gap-1.5 mb-2.5 flex-wrap">
                         {(["CREDIT", "REPLACEMENT", "MISSING_DELIVERY", "REFUND", "WRITE_OFF"] as const).map((t) => (
@@ -408,10 +416,11 @@ export function PurchaseUrgentReportsPanel({ isAdmin }: { isAdmin: boolean }) {
 }
 
 function ResolutionRow({
-  res, isAdmin, refundUploadingFor, confirmBankId, setConfirmBankId, onFileRefund, onConfirmBank, busy,
+  res, isAdmin, canAct, refundUploadingFor, confirmBankId, setConfirmBankId, onFileRefund, onConfirmBank, busy,
 }: {
   res: Resolution;
   isAdmin: boolean;
+  canAct: boolean;
   refundUploadingFor: string | null;
   confirmBankId: string | null;
   setConfirmBankId: (id: string | null) => void;
@@ -450,17 +459,21 @@ function ResolutionRow({
       {res.type === "REFUND" && (
         <div className="mt-1.5">
           {!res.refundProofUrl ? (
-            <label className="flex items-center gap-1.5 border-[1.5px] border-dashed border-rule rounded px-2.5 py-1.5 text-[11px] text-steel cursor-pointer hover:border-teal w-fit">
-              {refundUploadingFor === res.id ? <span className="w-3.5 h-3.5 rounded-full border-2 border-rule border-t-teal animate-spin" /> : <Upload size={12} />}
-              Subir comprobante del proveedor
-              <input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && onFileRefund(e.target.files[0])} />
-            </label>
+            canAct ? (
+              <label className="flex items-center gap-1.5 border-[1.5px] border-dashed border-rule rounded px-2.5 py-1.5 text-[11px] text-steel cursor-pointer hover:border-teal w-fit">
+                {refundUploadingFor === res.id ? <span className="w-3.5 h-3.5 rounded-full border-2 border-rule border-t-teal animate-spin" /> : <Upload size={12} />}
+                Subir comprobante del proveedor
+                <input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && onFileRefund(e.target.files[0])} />
+              </label>
+            ) : (
+              <div className="text-steel italic">Esperando el comprobante del proveedor.</div>
+            )
           ) : (
             <div>
               <div className="mb-1"><ProofPreview url={res.refundProofUrl} size={40} filename="comprobante-reembolso" /></div>
               <div className={`flex items-center gap-1.5 ${res.refundAiMatch ? "text-teal" : "text-red"}`}>
                 {res.refundAiMatch ? <CheckCircle2 size={12} /> : <AlertTriangle size={12} />} 🤖 {res.refundAiNote}
-                {!res.refundAiMatch && (
+                {!res.refundAiMatch && canAct && (
                   <label className="text-steel underline cursor-pointer ml-1">
                     cambiar
                     <input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && onFileRefund(e.target.files[0])} />
