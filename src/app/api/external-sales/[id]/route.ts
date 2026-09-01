@@ -64,3 +64,20 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   await notifyMarketingLeadNewExternalSale(sale.code);
   return NextResponse.json(updated);
 }
+
+// Admin puede borrar una venta entera para volver a declararla desde cero
+// (ej. se equivocaron de producto/monto) — solo mientras el stock no haya
+// salido de bodega todavía (sin outflowBatchId), para no dejar un egreso de
+// inventario huérfano apuntando a una venta que ya no existe.
+export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const session = await auth();
+  if (!session || session.user.role !== "admin") return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+
+  const { id } = await params;
+  const sale = await prisma.externalSale.findUnique({ where: { id }, select: { outflowBatchId: true } });
+  if (!sale) return NextResponse.json({ error: "No encontrado." }, { status: 404 });
+  if (sale.outflowBatchId) return NextResponse.json({ error: "No se puede eliminar: el stock ya salió de bodega para esta venta." }, { status: 409 });
+
+  await prisma.externalSale.delete({ where: { id } });
+  return NextResponse.json({ ok: true });
+}

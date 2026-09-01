@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CheckCircle2 } from "lucide-react";
+import { CheckCircle2, Trash2 } from "lucide-react";
 import { ProofPreview } from "@/components/shared/ProofPreview";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 import { formatDateTime } from "@/lib/formatDateTime";
@@ -29,6 +29,7 @@ async function postJson(url: string) {
 export function ExternalSalePaymentConfirmInbox() {
   const [sales, setSales] = useState<SaleDTO[] | null>(null);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -46,6 +47,22 @@ export function ExternalSalePaymentConfirmInbox() {
       load();
     } catch (e) {
       setError(e instanceof Error ? e.message : "No se pudo confirmar.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function remove(id: string) {
+    setSaving(true);
+    setError("");
+    try {
+      const res = await fetch(`/api/external-sales/${id}`, { method: "DELETE" });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error ?? "No se pudo eliminar.");
+      setDeletingId(null);
+      load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "No se pudo eliminar.");
     } finally {
       setSaving(false);
     }
@@ -85,10 +102,26 @@ export function ExternalSalePaymentConfirmInbox() {
                 </button>
               </div>
             </div>
+          ) : deletingId === s.id ? (
+            <div className="bg-cloud rounded-md p-2.5 mt-2.5">
+              <div className="text-[12px] font-semibold mb-2">¿Eliminar esta solicitud por completo? No se puede deshacer — para volver a declararla, hay que hacerlo de cero.</div>
+              {error && <div className="text-red text-[11px] mb-1.5">{error}</div>}
+              <div className="flex gap-2">
+                <button type="button" className="flex-1 rounded border border-rule px-2.5 py-1.5 text-[11.5px] font-semibold cursor-pointer" onClick={() => setDeletingId(null)}>Cancelar</button>
+                <button type="button" disabled={saving} className="flex-1 rounded border border-red bg-red px-2.5 py-1.5 text-[11.5px] font-bold text-white cursor-pointer disabled:opacity-60" onClick={() => remove(s.id)}>
+                  {saving ? "Eliminando…" : "Sí, eliminar"}
+                </button>
+              </div>
+            </div>
           ) : (
-            <button type="button" className="flex items-center gap-1.5 text-[11.5px] font-bold border border-teal text-teal rounded px-2.5 py-1.5 cursor-pointer mt-2.5" onClick={() => setConfirmingId(s.id)}>
-              <CheckCircle2 size={13} /> Confirmar recibido
-            </button>
+            <div className="flex items-center gap-2 mt-2.5">
+              <button type="button" className="flex items-center gap-1.5 text-[11.5px] font-bold border border-teal text-teal rounded px-2.5 py-1.5 cursor-pointer" onClick={() => setConfirmingId(s.id)}>
+                <CheckCircle2 size={13} /> Confirmar recibido
+              </button>
+              <button type="button" className="flex items-center gap-1.5 text-[11.5px] font-bold border border-rule text-steel rounded px-2.5 py-1.5 cursor-pointer" onClick={() => setDeletingId(s.id)}>
+                <Trash2 size={13} /> Eliminar
+              </button>
+            </div>
           )}
         </div>
       ))}
