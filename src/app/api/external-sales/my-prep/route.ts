@@ -11,7 +11,7 @@ export async function GET() {
   if (!(await canCaptureMerchandiseOutflow()) || !session) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
   const sales = await prisma.externalSale.findMany({
-    where: { dispatchAssignedToId: session.user.id, prepReadyAt: null },
+    where: { dispatchAssignedToId: session.user.id, prepReadyAt: null, deletedAt: null },
     select: {
       id: true,
       code: true,

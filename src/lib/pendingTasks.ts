@@ -1986,7 +1986,7 @@ async function getPersonalPurchasePaymentWatchItem(href: string): Promise<Pendin
 // depender solo de la notificación del momento en que se subió.
 async function getExternalSalePaymentConfirmPendingItem(href: string): Promise<PendingItem | null> {
   const pending = await prisma.externalSale.findMany({
-    where: { reviewStatus: "APPROVED", paymentProofUrl: { not: null }, paymentConfirmedAt: null },
+    where: { reviewStatus: "APPROVED", paymentProofUrl: { not: null }, paymentConfirmedAt: null, deletedAt: null },
     select: { totalAmount: true },
   });
   if (pending.length === 0) return null;

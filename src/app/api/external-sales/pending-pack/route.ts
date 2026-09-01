@@ -8,7 +8,7 @@ export async function GET() {
   if (!(await canAssignExternalSalePack())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
   const [sales, team] = await Promise.all([
     prisma.externalSale.findMany({
-      where: { prepReadyAt: { not: null }, packAssignedToId: null },
+      where: { prepReadyAt: { not: null }, packAssignedToId: null, deletedAt: null },
       include: { catalogItem: { select: { name: true, photos: true, justCode: true } }, advisor: { select: { name: true } } },
       orderBy: { prepReadyAt: "asc" },
     }),

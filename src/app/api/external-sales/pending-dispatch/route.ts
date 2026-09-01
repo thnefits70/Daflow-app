@@ -12,6 +12,7 @@ export async function GET() {
       where: {
         reviewStatus: "APPROVED",
         dispatchAssignedToId: null,
+        deletedAt: null,
         OR: [{ isContraEntrega: true }, { invoiceUploadedAt: { not: null } }],
       },
       include: { catalogItem: { select: { name: true, photos: true, justCode: true } }, advisor: { select: { name: true } } },

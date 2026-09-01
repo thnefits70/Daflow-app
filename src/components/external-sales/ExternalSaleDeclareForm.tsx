@@ -28,6 +28,7 @@ type SaleDTO = {
   paymentConfirmedAt: string | null;
   deliveredAt: string | null;
   nairobyClosedAt: string | null;
+  deletedAt: string | null;
 };
 
 async function postJson(url: string, body?: unknown) {
@@ -38,6 +39,7 @@ async function postJson(url: string, body?: unknown) {
 }
 
 function statusLabel(s: SaleDTO): { text: string; color: string } {
+  if (s.deletedAt) return { text: `Eliminada por admin · ${formatDateTime(s.deletedAt)}`, color: "text-red" };
   if (s.reviewStatus === "REJECTED") return { text: "Rechazada", color: "text-red" };
   if (s.reviewStatus === "PENDING") return { text: "Esperando aprobación de Bryan", color: "text-gold" };
   if (s.nairobyClosedAt) return { text: `Cerrada · ${formatDateTime(s.nairobyClosedAt)}`, color: "text-green" };
@@ -258,13 +260,13 @@ export function ExternalSaleDeclareForm() {
                   {s.client && (
                     <div className="text-[10.5px] text-steel mt-0.5">Cliente: {s.client.name} · {s.client.phone}</div>
                   )}
-                  {s.reviewStatus === "REJECTED" && s.rejectionReason && <div className="text-[11.5px] text-red mt-1">{s.rejectionReason}</div>}
-                  {s.reviewStatus === "REJECTED" && editingId !== s.id && (
+                  {!s.deletedAt && s.reviewStatus === "REJECTED" && s.rejectionReason && <div className="text-[11.5px] text-red mt-1">{s.rejectionReason}</div>}
+                  {!s.deletedAt && s.reviewStatus === "REJECTED" && editingId !== s.id && (
                     <button type="button" className="mt-2 text-[11.5px] font-bold border border-teal text-teal rounded px-2.5 py-1.5 cursor-pointer" onClick={() => startEdit(s)}>
                       Corregir y reenviar
                     </button>
                   )}
-                  {s.reviewStatus === "REJECTED" && editingId === s.id && (
+                  {!s.deletedAt && s.reviewStatus === "REJECTED" && editingId === s.id && (
                     <div className="bg-cloud rounded-md p-2.5 mt-2 flex flex-col gap-2.5">
                       <div>
                         <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Cliente</label>
@@ -315,7 +317,7 @@ export function ExternalSaleDeclareForm() {
                       </div>
                     </div>
                   )}
-                  {s.reviewStatus === "APPROVED" && !s.paymentProofUrl && (
+                  {!s.deletedAt && s.reviewStatus === "APPROVED" && !s.paymentProofUrl && (
                     <div className="mt-2 max-w-xs">
                       <div
                         role="button"

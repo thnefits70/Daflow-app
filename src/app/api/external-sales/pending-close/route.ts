@@ -5,7 +5,7 @@ import { canCloseExternalSale } from "@/lib/guards";
 export async function GET() {
   if (!(await canCloseExternalSale())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
   const sales = await prisma.externalSale.findMany({
-    where: { paymentConfirmedAt: { not: null }, deliveredAt: { not: null }, nairobyClosedAt: null },
+    where: { paymentConfirmedAt: { not: null }, deliveredAt: { not: null }, nairobyClosedAt: null, deletedAt: null },
     include: {
       catalogItem: { select: { name: true, photos: true, justCode: true } },
       advisor: { select: { name: true } },

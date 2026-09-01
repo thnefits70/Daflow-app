@@ -4067,6 +4067,15 @@ model ExternalSale {
   outflowBatchId String?                  @unique
   outflowBatch   MerchandiseOutflowBatch? @relation(fields: [outflowBatchId], references: [id], onDelete: SetNull)
 
+  // Confirmado 2026-09-01: admin puede borrar una venta entera para volver a
+  // declararla desde cero (ej. datos equivocados) — pero como baja lógica,
+  // no un delete real, para que el código (VE-000X) deje rastro de qué pasó
+  // en vez de desaparecer sin explicación. deletedById sin FK (sentinel
+  // "admin", mismo patrón que otros actorId de admin en el schema) porque
+  // solo admin puede borrar.
+  deletedAt    DateTime?
+  deletedById  String?
+
   @@index([reviewStatus])
   @@index([dispatchAssignedToId])
   @@index([packAssignedToId])

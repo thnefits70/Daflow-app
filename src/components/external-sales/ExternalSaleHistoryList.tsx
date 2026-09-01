@@ -37,6 +37,7 @@ type SaleDTO = {
   packAssignedTo: { name: string } | null;
   deliveredAt: string | null;
   deliveredBy: { name: string } | null;
+  deletedAt: string | null;
 };
 
 function Pill({ label, done }: { label: string; done: boolean }) {
@@ -87,10 +88,12 @@ export function ExternalSaleHistoryList() {
               <span className="font-mono text-[11px] font-bold text-teal">{s.code}</span>
               <span className="text-[11px] text-steel">{s.advisor?.name ?? "—"}</span>
               {s.isContraEntrega && <span className="font-mono text-[9px] font-bold uppercase text-blue">Contra entrega</span>}
-              {s.reviewStatus === "REJECTED" && <span className="font-mono text-[9.5px] font-bold uppercase text-red">Rechazada</span>}
-              {s.reviewStatus === "PENDING" && <span className="font-mono text-[9.5px] font-bold uppercase text-gold">Pendiente</span>}
-              {s.reviewStatus === "APPROVED" && (s.nairobyClosedAt ? <span className="font-mono text-[9.5px] font-bold uppercase text-green">Cerrada</span> : <span className="font-mono text-[9.5px] font-bold uppercase text-blue">En proceso</span>)}
+              {s.deletedAt && <span className="font-mono text-[9.5px] font-bold uppercase text-red">Eliminada</span>}
+              {!s.deletedAt && s.reviewStatus === "REJECTED" && <span className="font-mono text-[9.5px] font-bold uppercase text-red">Rechazada</span>}
+              {!s.deletedAt && s.reviewStatus === "PENDING" && <span className="font-mono text-[9.5px] font-bold uppercase text-gold">Pendiente</span>}
+              {!s.deletedAt && s.reviewStatus === "APPROVED" && (s.nairobyClosedAt ? <span className="font-mono text-[9.5px] font-bold uppercase text-green">Cerrada</span> : <span className="font-mono text-[9.5px] font-bold uppercase text-blue">En proceso</span>)}
             </div>
+            {s.deletedAt && <div className="text-[11px] text-red mb-0.5">Eliminada por admin · {formatDateTime(s.deletedAt)}</div>}
             <div className="text-[12.5px] font-semibold flex items-center gap-1.5 flex-wrap">
               {s.catalogItem && <CatalogCode code={s.catalogItem.justCode} />}
               <span>{s.catalogItem?.name ?? s.declaredProductName} — {s.quantity} un. · ${s.totalAmount.toFixed(2)}</span>
