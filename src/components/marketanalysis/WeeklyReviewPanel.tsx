@@ -109,7 +109,7 @@ export function WeeklyReviewPanel({
                     {r.status === "PENDING" && !!r.weeksStale && r.weeksStale >= 2 && (
                       <div
                         className="mt-1 inline-flex items-center gap-1 font-mono text-[9.5px] font-semibold normal-case px-1.5 py-0.5 rounded-full"
-                        style={{ color: "#C4453A", border: "1px solid #C4453A", background: "#C4453A1a" }}
+                        style={{ color: "#92A3C0", border: "1px solid #92A3C0", background: "#92A3C01a" }}
                         title="Sigue Pendiente sin que Mary lo haya podido cerrar"
                       >
                         🕑 {r.weeksStale} semanas
