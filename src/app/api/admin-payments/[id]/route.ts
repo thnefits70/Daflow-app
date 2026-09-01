@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { canManageAdminPayments, requireAdminSession } from "@/lib/guards";
+import { verifyPassword } from "@/lib/password";
 
 // Confirmado 2026-08-06: si la solicitud ya tiene CUALQUIER archivo cargado
 // (doc. de soporte o comprobante de pago), nunca se puede borrar — protege
@@ -25,6 +26,7 @@ const patchSchema = z
     motivo: z.string().trim().min(1).optional(),
     payeeId: z.string().nullable().optional(),
     bankAccountId: z.string().nullable().optional(),
+    adminPassword: z.string().optional(),
   })
   .refine((d) => d.motivo !== undefined || d.payeeId !== undefined || d.bankAccountId !== undefined, {
     message: "Nada para actualizar.",
@@ -38,8 +40,11 @@ const patchSchema = z
 //
 // payeeId/bankAccountId (agregado el mismo día): corrige el beneficiario y/o
 // cuenta bancaria de una solicitud ya enviada — ej. se envió sin elegir
-// cuenta. También exclusivo del admin porque los datos bancarios lo son en
-// toda la app.
+// cuenta. Pedido explícito del usuario el mismo día: como la contraseña de
+// admin es una sola compartida, esto por sí solo no basta para dejarlo
+// "solo para mí en caso de emergencia" — exige volver a escribir esa
+// contraseña justo al guardar este cambio puntual (adminPassword), como
+// fricción deliberada además del requireAdminSession() normal.
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   if (!(await requireAdminSession())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
@@ -55,6 +60,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (parsed.data.motivo !== undefined) data.motivo = parsed.data.motivo;
 
   if (parsed.data.payeeId !== undefined || parsed.data.bankAccountId !== undefined) {
+    const settings = await prisma.platformSettings.findUnique({ where: { id: "singleton" } });
+    const ok = settings && parsed.data.adminPassword ? await verifyPassword(parsed.data.adminPassword, settings.adminPasswordHash) : false;
+    if (!ok) return NextResponse.json({ error: "Contraseña de administrador incorrecta." }, { status: 403 });
+
     const nextPayeeId = parsed.data.payeeId !== undefined ? parsed.data.payeeId : request.payeeId;
     const nextBankAccountId = parsed.data.bankAccountId !== undefined ? parsed.data.bankAccountId : request.bankAccountId;
     if (nextBankAccountId) {

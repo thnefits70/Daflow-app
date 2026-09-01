@@ -145,10 +145,15 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
   // Corregir el beneficiario/cuenta bancaria de una solicitud ya enviada
   // (ej. se envió sin elegir cuenta) — mismo patrón que editingMotivoId,
   // también exclusivo del admin porque los datos bancarios lo son en toda
-  // la app (ver AdminPayeePicker/Proveedores).
+  // la app (ver AdminPayeePicker/Proveedores). Pedido explícito del usuario
+  // el mismo día: como la contraseña de admin es una sola compartida, pide
+  // volver a escribirla justo al guardar — para que quede como acción de
+  // emergencia deliberada, no un click casual dentro de una sesión admin ya
+  // abierta por otra persona.
   const [editingPayeeId, setEditingPayeeId] = useState<string | null>(null);
   const [payeeDraft, setPayeeDraft] = useState<AdminPaymentPayeeDTO | null>(null);
   const [bankAccountDraft, setBankAccountDraft] = useState<string | null>(null);
+  const [payeePasswordConfirm, setPayeePasswordConfirm] = useState("");
   const [savingPayeeId, setSavingPayeeId] = useState<string | null>(null);
   const [payeeErr, setPayeeErr] = useState("");
 
@@ -450,21 +455,27 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
       : null;
     setPayeeDraft(fullPayee);
     setBankAccountDraft(r.bankAccount?.id ?? null);
+    setPayeePasswordConfirm("");
     setPayeeErr("");
   }
 
   function cancelEditPayee() {
     setEditingPayeeId(null);
+    setPayeePasswordConfirm("");
     setPayeeErr("");
   }
 
   async function savePayee(id: string) {
+    if (!payeePasswordConfirm) {
+      setPayeeErr("Escribe la contraseña de administrador para confirmar.");
+      return;
+    }
     setPayeeErr("");
     setSavingPayeeId(id);
     const res = await fetch(`/api/admin-payments/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ payeeId: payeeDraft?.id ?? null, bankAccountId: bankAccountDraft ?? null }),
+      body: JSON.stringify({ payeeId: payeeDraft?.id ?? null, bankAccountId: bankAccountDraft ?? null, adminPassword: payeePasswordConfirm }),
     });
     setSavingPayeeId(null);
     const data = await res.json().catch(() => null);
@@ -473,6 +484,7 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
       return;
     }
     setEditingPayeeId(null);
+    setPayeePasswordConfirm("");
     load();
   }
 
@@ -849,6 +861,20 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
                     onSelectBankAccount={setBankAccountDraft}
                     onPayeeUpdated={upsertPayeeInList}
                   />
+                  <div className="mt-2">
+                    <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">
+                      Confirma con la contraseña de administrador
+                    </label>
+                    <input
+                      type="password"
+                      autoComplete="off"
+                      value={payeePasswordConfirm}
+                      onChange={(e) => setPayeePasswordConfirm(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter") savePayee(r.id); }}
+                      placeholder="Contraseña de administrador"
+                      className="w-full rounded border border-rule px-2.5 py-1.5 text-[12.5px]"
+                    />
+                  </div>
                   {payeeErr && <div className="text-red text-[11.5px] mt-1.5">{payeeErr}</div>}
                   <div className="flex items-center gap-2 mt-2">
                     <button
