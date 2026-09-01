@@ -190,7 +190,13 @@ export default async function DeptWorkspacePage({ params }: { params: Promise<{ 
         canAssignExternalSalePack={dept.code === "FUL"}
         canPackExternalSale={false}
         canCloseExternalSale={dept.code === "FIN"}
-        canViewExternalSales={true}
+        // Corrección 2026-09-01: esto había quedado en `true` fijo por
+        // error, así que la pestaña salía en TODOS los departamentos (ej.
+        // Control de Compras), donde nadie tiene ningún rol en este flujo.
+        // Los únicos departamentos con un rol real son MKT (Bryan revisa,
+        // Heidy/Jariel declaran), FIN (Nairoby), INV (Daniel/equipo) y FUL
+        // (Yair/equipo).
+        canViewExternalSales={["MKT", "FIN", "INV", "FUL"].includes(dept.code)}
         pettyCashData={pettyCashData}
         canManageAdminPayments={dept.code === "FIN"}
         canViewMarketingArrivals={dept.code === "MKT"}
