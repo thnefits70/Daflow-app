@@ -18,7 +18,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
 
   const updated = await prisma.externalSale.update({
     where: { id },
-    data: { paymentConfirmedAt: new Date(), paymentConfirmedById: session.user.id },
+    data: { paymentConfirmedAt: new Date(), paymentConfirmedById: session.user.role === "admin" ? null : session.user.id },
   });
 
   await notifyFinanceLeadExternalSalePendingInvoice(sale.code);
