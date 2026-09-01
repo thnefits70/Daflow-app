@@ -282,7 +282,7 @@ export function PurchaseAuditPanel() {
               </div>
               <div className="text-[11.5px] text-steel">{r0.supplier.name} — {money(total)}</div>
               <div className="text-[10px] text-steel-dim mb-1">
-                Solicitada por {actorName(r0.requestedBy?.name)} · Pagada por {actorName(r0.paidBy?.name)} · Recibida por {actorName(r0.receipt?.confirmedBy?.name)}
+                Solicitada por {actorName(r0.requestedBy?.name)}{r0.requestedAt ? ` · ${formatDateTime(r0.requestedAt)}` : ""} · Pagada por {actorName(r0.paidBy?.name)} · Recibida por {actorName(r0.receipt?.confirmedBy?.name)}
                 {r0.receipt?.confirmedAt ? ` · ${formatDateTime(r0.receipt.confirmedAt)}` : ""}
                 {/* Confirmado 2026-08-18: pedido explícito del usuario — Auditoría
                     es "el área ya completada" para el checklist de Just de Daniel. */}
