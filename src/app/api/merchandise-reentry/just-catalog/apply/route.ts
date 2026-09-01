@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
+import { after } from "next/server";
 import { z } from "zod";
 import { auth } from "@/auth";
 import { canManageJustCatalog } from "@/lib/guards";
 import { applyJustCatalogImport } from "@/lib/justCatalog";
+import { suggestNichoIfMissing } from "@/lib/nichoAi";
 
 const schema = z.object({
   totalRows: z.number().int().nonnegative(),
@@ -26,5 +28,15 @@ export async function POST(req: NextRequest) {
   if (!parsed.success) return NextResponse.json({ error: "Datos inválidos." }, { status: 400 });
 
   const result = await applyJustCatalogImport(parsed.data, parsed.data.totalRows, session.user.id);
+
+  // Confirmado 2026-09-01: pedido explícito del usuario — sugerencia de
+  // nicho automática, sin depender de ningún clic. Corre después de
+  // responder (no retrasa la subida) y en paralelo, best-effort.
+  if (result.newlyCreatedIds.length > 0) {
+    after(async () => {
+      await Promise.allSettled(result.newlyCreatedIds.map((id) => suggestNichoIfMissing(id)));
+    });
+  }
+
   return NextResponse.json({ ok: true, ...result });
 }

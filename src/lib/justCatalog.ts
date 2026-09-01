@@ -185,6 +185,11 @@ export async function applyJustCatalogImport(decisions: JustCatalogApplyDecision
   let createdCount = 0;
   let linkedCount = 0;
   let renamedCount = 0;
+  // Confirmado 2026-09-01: justCode de cada producto creado en esta subida —
+  // sirve para, después de la transacción, ubicar sus IDs reales y disparar
+  // la sugerencia automática de nicho (ver suggestNichoIfMissing) sin tener
+  // que volver a la creación fila por fila dentro de la transacción.
+  const createdJustCodes: string[] = [];
 
   // `PurchaseCatalogItem.name` es @unique — el export real de Just trae
   // algunos nombres repetidos con código distinto (mismo nombre, dos SKU
@@ -225,6 +230,7 @@ export async function applyJustCatalogImport(decisions: JustCatalogApplyDecision
     photos: [] as string[],
     pendingRegistration: true,
   }));
+  createdJustCodes.push(...newItemsData.map((d) => d.justCode), ...duplicateItemsData.map((d) => d.justCode));
 
   await prisma.$transaction(
     async (tx) => {
@@ -239,6 +245,7 @@ export async function applyJustCatalogImport(decisions: JustCatalogApplyDecision
           const name = resolveUniqueName(d.name, d.code);
           await tx.purchaseCatalogItem.create({ data: { name, justCode: d.code, photos: [], pendingRegistration: true } });
           createdCount++;
+          createdJustCodes.push(d.code);
         }
       }
 
@@ -269,5 +276,14 @@ export async function applyJustCatalogImport(decisions: JustCatalogApplyDecision
     },
   });
 
-  return { createdCount, linkedCount, renamedCount };
+  // Confirmado 2026-09-01: IDs de todo lo creado en esta subida, para que la
+  // ruta que llama a esto dispare la sugerencia automática de nicho (fuera
+  // de esta transacción, vía after() — nunca bloquea ni forma parte del
+  // guardado real).
+  const newlyCreatedIds =
+    createdJustCodes.length > 0
+      ? (await prisma.purchaseCatalogItem.findMany({ where: { justCode: { in: createdJustCodes } }, select: { id: true } })).map((i) => i.id)
+      : [];
+
+  return { createdCount, linkedCount, renamedCount, newlyCreatedIds };
 }

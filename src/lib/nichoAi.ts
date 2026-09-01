@@ -1,5 +1,6 @@
 import { getAnthropicClient } from "@/lib/nancy";
 import { logAiUsage } from "@/lib/aiUsage";
+import { prisma } from "@/lib/prisma";
 
 // Confirmado 2026-08-31: la IA sugiere un nicho UNA sola vez por producto
 // (nunca se recalcula por vista) — mismo patrón que generateQuestionsForContent
@@ -61,4 +62,23 @@ export async function suggestNicho(product: { name: string; description?: string
   const textBlock = response.content.find((b) => b.type === "text");
   if (!textBlock || textBlock.type !== "text") throw new Error("La IA no devolvió contenido de texto.");
   return parseNichoResponse(textBlock.text);
+}
+
+// Confirmado 2026-09-01: pedido explícito del usuario — automático, sin
+// depender de que nadie haga clic. Se llama vía after() (next/server) justo
+// después de crear un producto nuevo, para no bloquear la respuesta de la
+// acción que lo creó. Best-effort: si falla, no revienta nada — el producto
+// simplemente se queda sin nicho hasta que alguien lo asigne a mano.
+export async function suggestNichoIfMissing(catalogItemId: string, actorId = "system"): Promise<void> {
+  try {
+    const item = await prisma.purchaseCatalogItem.findUnique({
+      where: { id: catalogItemId },
+      select: { name: true, description: true, nicho: true },
+    });
+    if (!item || item.nicho) return;
+    const nicho = await suggestNicho(item, actorId);
+    await prisma.purchaseCatalogItem.update({ where: { id: catalogItemId }, data: { nicho } });
+  } catch (err) {
+    console.error(`No se pudo sugerir nicho automático para ${catalogItemId}:`, err);
+  }
 }

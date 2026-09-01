@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
+import { after } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { canSubmitPurchaseRequests } from "@/lib/guards";
 import { getCatalogItemPriceStats } from "@/lib/purchases";
 import { actorName } from "@/lib/actorName";
+import { suggestNichoIfMissing } from "@/lib/nichoAi";
 
 // Confirmado 2026-08-06: quien creó un producto puede eliminarlo él mismo
 // dentro de las primeras 2 horas desde que lo creó (ver DELETE en
@@ -115,5 +117,11 @@ export async function POST(req: NextRequest) {
       createdById: isAdmin ? null : session.user.id,
     },
   });
+
+  // Confirmado 2026-09-01: pedido explícito del usuario — sugerencia de
+  // nicho automática al crear cualquier producto nuevo, sin depender de
+  // ningún clic. Corre después de responder, no retrasa la creación.
+  after(() => suggestNichoIfMissing(item.id));
+
   return NextResponse.json(item, { status: 201 });
 }
