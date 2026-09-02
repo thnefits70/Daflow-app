@@ -322,8 +322,8 @@ function ReadyItemRow({
         <div className="flex-1 text-[12px] flex items-center gap-1.5 min-w-0">
           {item.catalogItem && <CatalogCode code={item.catalogItem.justCode} />}
           <span className="truncate">{itemName(item)}</span>
-          {legacyId && canAct && !editingProduct && (
-            <button type="button" title="Corregir producto registrado por Inventario" className="shrink-0 text-steel hover:text-teal cursor-pointer" onClick={() => setEditingProduct(true)}>
+          {!item.approvedAt && canAct && !editingProduct && (
+            <button type="button" title="Vincular con el producto correcto del catálogo" className="shrink-0 text-steel hover:text-teal cursor-pointer" onClick={() => setEditingProduct(true)}>
               <Pencil size={11} />
             </button>
           )}
