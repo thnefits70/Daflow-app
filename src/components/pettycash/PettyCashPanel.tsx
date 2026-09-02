@@ -867,7 +867,7 @@ export function PettyCashPanel({
     <div>
       <TabGuide storageKey="cajachica">
         {isAdmin ? (
-          <>Ves ambas cajas. Fondéalas cuando alguien te pida transferir, y puedes editar o archivar movimientos del historial si hace falta corregir algo — pero registrar un desembolso o confirmar que llegó el fondeo es exclusivo de quien administra cada caja el día a día (Nairoby en Principal, Bryan en Secundaria).</>
+          <>Ves ambas cajas. Fondéalas cuando alguien te pida transferir, y puedes editar o archivar movimientos del historial si hace falta corregir algo — pero registrar un desembolso o confirmar que llegó el fondeo es exclusivo de quien administra cada caja el día a día (Nairoby en Principal, Jariel en Secundaria).</>
         ) : operates && canManageSecundaria ? (
           <>Esta es tu caja del día a día. Confirma cuando te fondeen, y registra cada desembolso con su comprobante — la IA verifica que el monto coincida. Puedes vincular el pago a una orden con flete pendiente o escribir el motivo a mano; si una orden ya tiene el flete pagado y necesitas un segundo pago, pide la excepción al dueño.</>
         ) : operates ? (

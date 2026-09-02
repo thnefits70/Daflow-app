@@ -338,7 +338,7 @@ function ShippingPaymentSection({ g, onUpdate }: { g: Row[]; onUpdate: (patch: P
       {err && !addingAccount && <div className="text-red text-[11.5px] mb-2">{err}</div>}
 
       {r0.shippingPaymentMethod === "PETTY_CASH" ? (
-        <div className="text-[11.5px] text-steel">Se paga con caja chica — Bryan Ríos lo registra desde su Caja Chica cuando llegue la mercadería.</div>
+        <div className="text-[11.5px] text-steel">Se paga con caja chica — Jariel Murillo lo registra desde su Caja Chica cuando llegue la mercadería.</div>
       ) : requested ? (
         <div className="text-[11.5px] text-steel">✓ Ya se le pidió al administrador que pague el flete{r0.shippingPaymentRequestedAt ? ` · ${formatDateTime(r0.shippingPaymentRequestedAt)}` : ""} — esperando confirmación.</div>
       ) : !hasAccount ? (
