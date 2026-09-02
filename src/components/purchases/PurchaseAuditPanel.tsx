@@ -179,6 +179,7 @@ export function PurchaseAuditPanel() {
       if (!q) return true;
       return (
         r.catalogItem.name.toLowerCase().includes(q) ||
+        (r.catalogItem.justCode?.toLowerCase().includes(q) ?? false) ||
         r.supplier.name.toLowerCase().includes(q) ||
         formatPurchaseRequestCode(r.requestNumber).toLowerCase().includes(q)
       );
