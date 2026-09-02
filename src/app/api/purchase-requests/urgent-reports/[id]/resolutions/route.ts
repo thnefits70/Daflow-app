@@ -65,39 +65,46 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const amount = parsed.data.quantity * effectiveUnitCost;
   const createdById = isAdmin ? null : session.user.id;
 
-  const resolution = await prisma.$transaction(async (tx) => {
-    if (parsed.data.type === "CREDIT") {
-      const res = await tx.purchaseUrgentResolution.create({
-        data: { reportId: id, type: "CREDIT", quantity: parsed.data.quantity, amount, status: "COMPLETED", createdById },
-      });
-      await tx.supplierCredit.create({
-        data: {
-          supplierId: report.request.supplierId,
-          amount,
-          reason: `Reporte urgente — ${report.request.catalogItem.name} (${parsed.data.quantity} un.)`,
-          urgentResolutionId: res.id,
-          status: "AVAILABLE",
-          createdById,
-          proofUrl: parsed.data.proofUrl,
-          proofName: parsed.data.proofName || null,
-        },
-      });
-      return res;
-    }
-    if (parsed.data.type === "REPLACEMENT") {
+  let resolution;
+  try {
+    resolution = await prisma.$transaction(async (tx) => {
+      if (parsed.data.type === "CREDIT") {
+        const res = await tx.purchaseUrgentResolution.create({
+          data: { reportId: id, type: "CREDIT", quantity: parsed.data.quantity, amount, status: "COMPLETED", createdById },
+        });
+        await tx.supplierCredit.create({
+          data: {
+            supplierId: report.request.supplierId,
+            amount,
+            reason: `Reporte urgente — ${report.request.catalogItem.name} (${parsed.data.quantity} un.)`,
+            urgentResolutionId: res.id,
+            status: "AVAILABLE",
+            createdById,
+            proofUrl: parsed.data.proofUrl,
+            proofName: parsed.data.proofName || null,
+          },
+        });
+        return res;
+      }
+      if (parsed.data.type === "REPLACEMENT") {
+        return tx.purchaseUrgentResolution.create({
+          data: { reportId: id, type: "REPLACEMENT", quantity: parsed.data.quantity, amount, status: "PENDING", replacementDueDate: new Date(parsed.data.dueDate), replacementIsMissingDelivery: parsed.data.missingDelivery ?? false, createdById },
+        });
+      }
+      if (parsed.data.type === "REFUND") {
+        return tx.purchaseUrgentResolution.create({
+          data: { reportId: id, type: "REFUND", quantity: parsed.data.quantity, amount, status: "PENDING", createdById },
+        });
+      }
       return tx.purchaseUrgentResolution.create({
-        data: { reportId: id, type: "REPLACEMENT", quantity: parsed.data.quantity, amount, status: "PENDING", replacementDueDate: new Date(parsed.data.dueDate), replacementIsMissingDelivery: parsed.data.missingDelivery ?? false, createdById },
+        data: { reportId: id, type: "WRITE_OFF", quantity: parsed.data.quantity, amount, status: "COMPLETED", note: parsed.data.note, createdById },
       });
-    }
-    if (parsed.data.type === "REFUND") {
-      return tx.purchaseUrgentResolution.create({
-        data: { reportId: id, type: "REFUND", quantity: parsed.data.quantity, amount, status: "PENDING", createdById },
-      });
-    }
-    return tx.purchaseUrgentResolution.create({
-      data: { reportId: id, type: "WRITE_OFF", quantity: parsed.data.quantity, amount, status: "COMPLETED", note: parsed.data.note, createdById },
     });
-  });
+  } catch (err) {
+    console.error("[urgent-reports resolutions] falló al crear la resolución", err);
+    const message = err instanceof Error ? err.message : String(err);
+    return NextResponse.json({ error: `No se pudo registrar: ${message}` }, { status: 500 });
+  }
 
   if (parsed.data.type === "REPLACEMENT") {
     const invLeader = await prisma.user.findFirst({ where: { isLeader: true, leadsDept: { code: "INV" } }, select: { id: true } });
