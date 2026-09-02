@@ -10,6 +10,7 @@ import { getAtomSyncReminderPushes } from "@/lib/atomReminder";
 import { getWeeklyCheckinPushes } from "@/lib/weeklyCheckin";
 import { getDeliveryOverduePushes, getContraEntregaPaymentOverduePushes } from "@/lib/externalSales";
 import { sendPushToOwner } from "@/lib/webPush";
+import { runNichoAutoBackfill } from "@/lib/nichoAi";
 
 // Disparado por Vercel Cron (ver vercel.json) una vez al día. Protegido por
 // CRON_SECRET para que nadie más pueda llamarlo desde afuera y disparar
@@ -115,5 +116,11 @@ export async function GET(req: NextRequest) {
     notified++;
   }
 
-  return NextResponse.json({ ok: true, checked: actors.length, notified });
+  // Backfill automático de nichos faltantes (confirmado 2026-09-02) — corre
+  // solo mientras el gasto del mes para esta feature no llegue al techo; si
+  // ya lo alcanzó, se detiene y se queda esperando confirmación manual desde
+  // el botón "Sugerir nichos faltantes" en Base de datos de productos.
+  const nichoBackfill = await runNichoAutoBackfill();
+
+  return NextResponse.json({ ok: true, checked: actors.length, notified, nichoBackfill });
 }

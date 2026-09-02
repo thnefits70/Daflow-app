@@ -89,7 +89,13 @@ export async function getAiSpendOverview(): Promise<AiSpendOverview> {
   const deptNameById = new Map(deptRows.map((d) => [d.id, d.name]));
   const userNameById = new Map(userRows.map((u) => [u.id, u.name]));
   const actorName = (actorId: string) =>
-    actorId === "admin" ? "Andrés (admin)" : actorId === "system" ? "Automático (nicho al crear producto)" : userNameById.get(actorId) ?? "Usuario eliminado";
+    actorId === "admin"
+      ? "Andrés (admin)"
+      : actorId === "system"
+        ? "Automático (nicho al crear producto)"
+        : actorId === "cron"
+          ? "Automático (revisión diaria de nicho)"
+          : (userNameById.get(actorId) ?? "Usuario eliminado");
 
   let today = 0;
   let week = 0;

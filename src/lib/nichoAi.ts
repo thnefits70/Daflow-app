@@ -82,3 +82,31 @@ export async function suggestNichoIfMissing(catalogItemId: string, actorId = "sy
     console.error(`No se pudo sugerir nicho automático para ${catalogItemId}:`, err);
   }
 }
+
+// Confirmado 2026-09-02 (pedido explícito del usuario): el backfill de
+// nichos atrasados (antes solo manual vía el botón "Sugerir nichos
+// faltantes") ahora corre solo, una vez al día desde el cron existente —
+// pero con un techo de gasto mensual. Si lo ya gastado este mes en esta
+// feature llega a NICHO_AUTO_MONTHLY_BUDGET_USD, se detiene sin gastar más
+// y se queda esperando a que alguien confirme a mano con ese mismo botón
+// (que sigue funcionando igual, sin techo, para cuando el usuario decida
+// pasar el límite a propósito). No manda ninguna alerta al llegar al techo
+// — el botón ya se muestra solo en "Base de datos de productos" en cuanto
+// falta 1 producto por asignar, así que no hace falta duplicar el aviso.
+export const NICHO_AUTO_MONTHLY_BUDGET_USD = 10;
+
+export async function runNichoAutoBackfill(): Promise<{ processed: number; skippedOverBudget: boolean }> {
+  const now = new Date();
+  const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  const spent = await prisma.aiUsageLog.aggregate({
+    where: { feature: "combo_sugerencias_nicho", createdAt: { gte: monthStart } },
+    _sum: { costUsd: true },
+  });
+  if ((spent._sum.costUsd ?? 0) >= NICHO_AUTO_MONTHLY_BUDGET_USD) {
+    return { processed: 0, skippedOverBudget: true };
+  }
+
+  const missing = await prisma.purchaseCatalogItem.findMany({ where: { nicho: null }, select: { id: true } });
+  await Promise.allSettled(missing.map((i) => suggestNichoIfMissing(i.id, "cron")));
+  return { processed: missing.length, skippedOverBudget: false };
+}
