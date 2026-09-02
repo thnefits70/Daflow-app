@@ -48,20 +48,107 @@ type SaleDTO = {
   deletedAt: string | null;
 };
 
-function Pill({ label, done }: { label: string; done: boolean }) {
+function step(label: string, at: string | null, by: { name: string } | null) {
+  return { label, at, by };
+}
+
+function saleSteps(s: SaleDTO) {
+  return [
+    step("Declarada", s.createdAt, s.advisor),
+    step("Aprobada", s.reviewedAt, s.reviewedBy),
+    step("Pago confirmado", s.paymentConfirmedAt, s.paymentConfirmedBy),
+    step("Facturada", s.invoiceUploadedAt, s.invoiceUploadedBy),
+    step("Agrupada", s.prepReadyAt, s.prepReadyBy),
+    step("Embalaje asignado", s.packAssignedAt, s.packAssignedTo),
+    step("Entregada", s.deliveredAt, s.deliveredBy),
+    step("Cerrada", s.nairobyClosedAt, null),
+  ];
+}
+
+// La columna de una venta es el paso más avanzado que ya se cumplió —
+// caminando desde "Cerrada" hacia atrás hasta "Declarada". Funciona igual de
+// bien en pago anticipado que en contra entrega (donde facturación y pago
+// pueden pasar DESPUÉS de la entrega), porque no asume un orden fijo.
+function saleColumn(s: SaleDTO): string {
+  const steps = saleSteps(s);
+  for (let i = steps.length - 1; i >= 0; i--) {
+    if (steps[i].at) return steps[i].label;
+  }
+  return "Declarada";
+}
+
+function itemsSummary(s: SaleDTO): string {
+  if (s.items.length === 0) return "—";
+  const first = s.items[0].catalogItem?.name ?? s.items[0].declaredProductName;
+  return s.items.length === 1 ? first : `${first} +${s.items.length - 1} más`;
+}
+
+const FLOW_COLUMNS = ["Declarada", "Aprobada", "Pago confirmado", "Facturada", "Agrupada", "Embalaje asignado", "Entregada", "Cerrada"];
+
+function SaleDetail({ s }: { s: SaleDTO }) {
+  const steps = saleSteps(s);
   return (
-    <span
-      className={`text-[10.5px] font-bold uppercase tracking-wide rounded px-2 py-1 border ${
-        done ? "bg-green/10 border-green/40 text-green" : "bg-cloud border-rule text-steel"
-      }`}
-    >
-      {label}
-    </span>
+    <div className="mt-2.5 border-t border-rule pt-2.5 flex flex-col gap-2">
+      <div className="text-[10.5px] text-steel flex flex-col gap-0.5">
+        {steps.filter((st) => st.at).map((st) => (
+          <div key={st.label}>
+            {st.label}{st.by ? ` por ${st.by.name}` : ""} · {formatDateTime(st.at!)}
+          </div>
+        ))}
+      </div>
+      <div className="text-[10.5px] text-steel">Entrega a: {s.pickupPersonName}{s.courierNote ? ` · Transportadora: ${s.courierNote}` : ""}</div>
+      {s.client && (
+        <div className="text-[10.5px] text-steel">
+          Cliente: {s.client.name} · {s.client.idType === "RUC" ? "RUC" : "Cédula"}: {s.client.idNumber} · Cel: {s.client.phone}
+          {s.client.email ? ` · Correo: ${s.client.email}` : ""}
+          {(s.client.city || s.client.country) ? ` · ${[s.client.city, s.client.country].filter(Boolean).join(", ")}` : ""}
+        </div>
+      )}
+      {s.paymentProofUrl && (
+        <a href={s.paymentProofUrl} target="_blank" rel="noreferrer" className="text-[10.5px] font-semibold text-blue underline">
+          Ver comprobante de pago{s.paymentProofName ? ` (${s.paymentProofName})` : ""}
+        </a>
+      )}
+      {s.invoiceUrl && (
+        <a href={s.invoiceUrl} target="_blank" rel="noreferrer" className="text-[10.5px] font-semibold text-blue underline">
+          Ver factura
+        </a>
+      )}
+    </div>
   );
 }
 
-function step(label: string, at: string | null, by: { name: string } | null) {
-  return { label, at, by };
+function SaleCard({ s, isOpen, onToggle }: { s: SaleDTO; isOpen: boolean; onToggle: () => void }) {
+  return (
+    <div className="bg-surface border border-rule rounded-md p-2.5">
+      <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+        <span className="font-mono text-[10.5px] font-bold text-teal">{s.code}</span>
+        <span className="text-[10.5px] text-steel">{s.advisor?.name ?? "—"}</span>
+        {s.isContraEntrega && <span className="font-mono text-[8.5px] font-bold uppercase text-blue">Contra entrega</span>}
+        {s.deletedAt && <span className="font-mono text-[8.5px] font-bold uppercase text-red">Eliminada</span>}
+      </div>
+      <div className="text-[12px] font-semibold flex items-center gap-1.5 flex-wrap">
+        {s.items.length === 1 && s.items[0].catalogItem && <CatalogCode code={s.items[0].catalogItem.justCode} />}
+        <span>{itemsSummary(s)}</span>
+      </div>
+      <div className="text-[10.5px] text-steel">${s.totalAmount.toFixed(2)} · {formatDateTime(s.createdAt)}</div>
+      {s.deletedAt && <div className="text-[10.5px] text-red mt-0.5">Eliminada por admin · {formatDateTime(s.deletedAt)}</div>}
+      {s.reviewStatus === "REJECTED" && s.rejectionReason && <div className="text-[10.5px] text-red mt-0.5">{s.rejectionReason}</div>}
+
+      {!s.deletedAt && s.reviewStatus !== "REJECTED" && (
+        <>
+          <button
+            type="button"
+            className="mt-1.5 flex items-center gap-1 text-[10.5px] font-semibold text-blue cursor-pointer"
+            onClick={onToggle}
+          >
+            {isOpen ? <ChevronUp size={12} /> : <ChevronDown size={12} />} {isOpen ? "Ocultar" : "Ver detalle"}
+          </button>
+          {isOpen && <SaleDetail s={s} />}
+        </>
+      )}
+    </div>
+  );
 }
 
 export function ExternalSaleHistoryList() {
@@ -75,94 +162,40 @@ export function ExternalSaleHistoryList() {
   if (sales === null) return <div className="text-[13px] text-steel">Cargando…</div>;
   if (sales.length === 0) return <div className="text-[13px] text-steel">Todavía no hay ventas externas registradas.</div>;
 
+  const active = sales.filter((s) => !s.deletedAt && s.reviewStatus !== "REJECTED");
+  const rejected = sales.filter((s) => !s.deletedAt && s.reviewStatus === "REJECTED");
+  const deleted = sales.filter((s) => s.deletedAt);
+
+  const columns = [
+    ...FLOW_COLUMNS.map((label) => ({ label, sales: active.filter((s) => saleColumn(s) === label) })),
+    ...(rejected.length > 0 ? [{ label: "Rechazada", sales: rejected }] : []),
+    ...(deleted.length > 0 ? [{ label: "Eliminada", sales: deleted }] : []),
+  ];
+
   return (
-    <div className="flex flex-col gap-2 max-w-lg">
-      {sales.map((s) => {
-        const isOpen = expanded === s.id;
-        const steps = [
-          step("Declarada", s.createdAt, s.advisor),
-          step("Aprobada", s.reviewedAt, s.reviewedBy),
-          step("Pago confirmado", s.paymentConfirmedAt, s.paymentConfirmedBy),
-          step("Facturada", s.invoiceUploadedAt, s.invoiceUploadedBy),
-          step("Agrupada", s.prepReadyAt, s.prepReadyBy),
-          step("Embalaje asignado", s.packAssignedAt, s.packAssignedTo),
-          step("Entregada", s.deliveredAt, s.deliveredBy),
-          step("Cerrada", s.nairobyClosedAt, null),
-        ];
-
-        return (
-          <div key={s.id} className="bg-surface border border-rule rounded-md p-3">
-            <div className="flex items-center gap-2 mb-1">
-              <span className="font-mono text-[11px] font-bold text-teal">{s.code}</span>
-              <span className="text-[11px] text-steel">{s.advisor?.name ?? "—"}</span>
-              {s.isContraEntrega && <span className="font-mono text-[9px] font-bold uppercase text-blue">Contra entrega</span>}
-              {s.deletedAt && <span className="font-mono text-[9.5px] font-bold uppercase text-red">Eliminada</span>}
-              {!s.deletedAt && s.reviewStatus === "REJECTED" && <span className="font-mono text-[9.5px] font-bold uppercase text-red">Rechazada</span>}
-              {!s.deletedAt && s.reviewStatus === "PENDING" && <span className="font-mono text-[9.5px] font-bold uppercase text-gold">Pendiente</span>}
-              {!s.deletedAt && s.reviewStatus === "APPROVED" && (s.nairobyClosedAt ? <span className="font-mono text-[9.5px] font-bold uppercase text-green">Cerrada</span> : <span className="font-mono text-[9.5px] font-bold uppercase text-blue">En proceso</span>)}
+    <div>
+      <div className="text-[12px] text-steel mb-3">
+        Cada columna es un paso del proceso — así se ve de un vistazo cuántas ventas hay en cada uno y cuáles están atrasadas.
+      </div>
+      <div className="flex gap-3 overflow-x-auto pb-2">
+        {columns.map((col) => (
+          <div key={col.label} className="shrink-0 w-[260px] flex flex-col gap-2">
+            <div className="flex items-center justify-between px-1">
+              <span className="font-display font-bold text-[12.5px]">{col.label}</span>
+              <span className="font-mono text-[11px] tabular-nums text-steel bg-cloud border border-rule rounded-full px-2 py-0.5">{col.sales.length}</span>
             </div>
-            {s.deletedAt && <div className="text-[11px] text-red mb-0.5">Eliminada por admin · {formatDateTime(s.deletedAt)}</div>}
-            <div className="flex flex-col gap-0.5">
-              {s.items.map((it) => (
-                <div key={it.id} className="text-[12.5px] font-semibold flex items-center gap-1.5 flex-wrap">
-                  {it.catalogItem && <CatalogCode code={it.catalogItem.justCode} />}
-                  <span>{it.catalogItem?.name ?? it.declaredProductName} — {it.quantity} un. · ${it.totalAmount.toFixed(2)}</span>
-                  {it.rejectedAt && <span className="font-mono text-[9px] font-bold uppercase text-red">Rechazado</span>}
-                </div>
-              ))}
+            <div className="flex flex-col gap-2 min-h-[40px]">
+              {col.sales.length === 0 ? (
+                <div className="text-[11px] text-steel px-1">—</div>
+              ) : (
+                col.sales.map((s) => (
+                  <SaleCard key={s.id} s={s} isOpen={expanded === s.id} onToggle={() => setExpanded(expanded === s.id ? null : s.id)} />
+                ))
+              )}
             </div>
-            <div className="text-[11px] font-bold">Total: ${s.totalAmount.toFixed(2)}</div>
-            <div className="text-[10.5px] text-steel">{formatDateTime(s.createdAt)}</div>
-
-            {s.reviewStatus !== "REJECTED" && (
-              <button
-                type="button"
-                className="mt-2 flex items-center gap-1 text-[11px] font-semibold text-blue cursor-pointer"
-                onClick={() => setExpanded(isOpen ? null : s.id)}
-              >
-                {isOpen ? <ChevronUp size={13} /> : <ChevronDown size={13} />} {isOpen ? "Ocultar trazabilidad" : "Ver trazabilidad completa"}
-              </button>
-            )}
-
-            {isOpen && (
-              <div className="mt-2.5 border-t border-rule pt-2.5 flex flex-col gap-2">
-                <div className="flex flex-wrap gap-1.5">
-                  {steps.map((st) => (
-                    <Pill key={st.label} label={st.label} done={!!st.at} />
-                  ))}
-                </div>
-                <div className="text-[10.5px] text-steel flex flex-col gap-0.5">
-                  {steps.filter((st) => st.at).map((st) => (
-                    <div key={st.label}>
-                      {st.label}{st.by ? ` por ${st.by.name}` : ""} · {formatDateTime(st.at!)}
-                    </div>
-                  ))}
-                </div>
-                <div className="text-[10.5px] text-steel">Entrega a: {s.pickupPersonName}{s.courierNote ? ` · Transportadora: ${s.courierNote}` : ""}</div>
-                {s.client && (
-                  <div className="text-[10.5px] text-steel">
-                    Cliente: {s.client.name} · {s.client.idType === "RUC" ? "RUC" : "Cédula"}: {s.client.idNumber} · Cel: {s.client.phone}
-                    {s.client.email ? ` · Correo: ${s.client.email}` : ""}
-                    {(s.client.city || s.client.country) ? ` · ${[s.client.city, s.client.country].filter(Boolean).join(", ")}` : ""}
-                  </div>
-                )}
-                {s.paymentProofUrl && (
-                  <a href={s.paymentProofUrl} target="_blank" rel="noreferrer" className="text-[10.5px] font-semibold text-blue underline">
-                    Ver comprobante de pago{s.paymentProofName ? ` (${s.paymentProofName})` : ""}
-                  </a>
-                )}
-                {s.invoiceUrl && (
-                  <a href={s.invoiceUrl} target="_blank" rel="noreferrer" className="text-[10.5px] font-semibold text-blue underline">
-                    Ver factura
-                  </a>
-                )}
-              </div>
-            )}
-
-            {s.reviewStatus === "REJECTED" && s.rejectionReason && <div className="text-[11.5px] text-red mt-1">{s.rejectionReason}</div>}
           </div>
-        );
-      })}
+        ))}
+      </div>
     </div>
   );
 }
