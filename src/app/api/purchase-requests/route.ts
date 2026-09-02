@@ -3,7 +3,7 @@ import { randomUUID } from "crypto";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
-import { canSubmitPurchaseRequests, canConfirmPurchaseReceiving, canRegisterPurchaseInvoices } from "@/lib/guards";
+import { canSubmitPurchaseRequests, canCreateNewPurchaseRequests, canApprovePurchaseRequests, canConfirmPurchaseReceiving, canRegisterPurchaseInvoices, getPurchaseApproverIds } from "@/lib/guards";
 import { checkPurchaseSubmission, purchaseSubmissionSchema, nextPurchaseRequestNumber, purchaseRequestInclude } from "@/lib/purchases";
 import { sendPushToOwner } from "@/lib/webPush";
 import { reserveCreditsForGroup } from "@/lib/supplierCredits";
@@ -18,7 +18,12 @@ export async function GET(req: NextRequest) {
   const view = req.nextUrl.searchParams.get("view") ?? "mine";
 
   if (view === "approval") {
-    if (session.user.role !== "admin") return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+    // Confirmado 2026-09-02: pedido explícito del usuario — además de admin,
+    // quien tenga el nuevo permiso de aprobación con un clic (hoy Bryan) ve
+    // esta misma bandeja (ver canApprovePurchaseRequests en guards.ts).
+    if (session.user.role !== "admin" && !(await canApprovePurchaseRequests())) {
+      return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+    }
     const rows = await prisma.purchaseRequest.findMany({
       where: { status: "PENDING_APPROVAL" },
       orderBy: { requestedAt: "asc" },
@@ -178,7 +183,11 @@ const createSchema = purchaseSubmissionSchema.extend({
 
 export async function POST(req: NextRequest) {
   const session = await auth();
-  if (!(await canSubmitPurchaseRequests()) || !session) {
+  // Confirmado 2026-09-02: crear una solicitud NUEVA desde cero usa
+  // canCreateNewPurchaseRequests (más estricto que canSubmitPurchaseRequests
+  // — ver guards.ts) para poder bloquear puntualmente a alguien en
+  // transición (hoy Bryan) sin tocarle el resto de "Mis solicitudes".
+  if (!(await canCreateNewPurchaseRequests()) || !session) {
     return NextResponse.json({ error: "No autorizado." }, { status: 403 });
   }
 
@@ -262,6 +271,20 @@ export async function POST(req: NextRequest) {
     body: `${summary} · $${check.groupTotal.toFixed(2)}`,
     url: "/admin",
   }).catch(() => null);
+
+  // Confirmado 2026-09-02: pedido explícito del usuario — además del admin,
+  // se avisa a quien tenga el nuevo permiso de aprobación con un clic (hoy
+  // Bryan), para que sepa que hay algo suyo por aprobar.
+  const approverIds = await getPurchaseApproverIds();
+  await Promise.all(
+    approverIds.map((id) =>
+      sendPushToOwner(id, {
+        title: check.anyOverThreshold ? "🔴 Nueva solicitud — precio por encima del historial" : "Nueva solicitud de compra",
+        body: `${summary} · $${check.groupTotal.toFixed(2)}`,
+        url: "/area/workspace",
+      }).catch(() => null)
+    )
+  );
 
   const full = await prisma.purchaseRequest.findMany({ where: { groupId }, include: purchaseRequestInclude });
   return NextResponse.json(full, { status: 201 });

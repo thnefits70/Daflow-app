@@ -22,6 +22,7 @@ type Tab = "solicitar" | "mias" | "comparar" | "aprobacion" | "inventario" | "ju
 export function PurchaseControlPanel({
   deptId,
   canSubmit,
+  canCreateNew,
   canReview,
   canReceive,
   canReceiveTeam,
@@ -32,6 +33,13 @@ export function PurchaseControlPanel({
 }: {
   deptId: string;
   canSubmit: boolean;
+  // Confirmado 2026-09-02: pedido explícito del usuario — transición Bryan →
+  // Jariel. canSubmit sigue gateando "Mis solicitudes" (y todo lo demás del
+  // módulo, sin cambios); canCreateNew gatea SOLO la pestaña "Solicitar"
+  // (armar una compra nueva desde cero) — se pueden separar cuando alguien
+  // (hoy Bryan) debe poder seguir viendo/resolviendo lo que ya tiene, pero
+  // ya no puede iniciar una solicitud nueva.
+  canCreateNew: boolean;
   canReview: boolean;
   canReceive: boolean;
   canReceiveTeam: boolean;
@@ -45,7 +53,8 @@ export function PurchaseControlPanel({
   // de qué pestaña abre por defecto (eso lo decide preferredDefault abajo).
   const tabs: { key: Tab; label: string }[] = [
     ...(canSubmit || canReview ? [{ key: "comparar" as Tab, label: "Comparar precios" }] : []),
-    ...(canSubmit ? [{ key: "solicitar" as Tab, label: "Solicitar" }, { key: "mias" as Tab, label: "Mis solicitudes" }] : []),
+    ...(canCreateNew ? [{ key: "solicitar" as Tab, label: "Solicitar" }] : []),
+    ...(canSubmit ? [{ key: "mias" as Tab, label: "Mis solicitudes" }] : []),
     ...(canReview ? [{ key: "aprobacion" as Tab, label: "Bandeja de aprobación" }] : []),
     // Confirmado 2026-09-01: pedido explícito del usuario — Daniel y su
     // equipo de Inventario (canReceive) ahora también ven esta pestaña, pero

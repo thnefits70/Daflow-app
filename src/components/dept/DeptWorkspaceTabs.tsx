@@ -85,6 +85,8 @@ export function DeptWorkspaceTabs({
   storeFeedbackStores = [],
   storeFeedbackAggregates = [],
   canSubmitPurchases = false,
+  canCreatePurchases = false,
+  canApprovePurchases = false,
   canReceivePurchases = false,
   canReceivePurchasesTeam = false,
   canApprovePurchaseReceiving = false,
@@ -174,6 +176,13 @@ export function DeptWorkspaceTabs({
   // así que se ve en la propia "Mi área de trabajo" de cada quien sin
   // importar a qué departamento pertenezcan de verdad.
   canSubmitPurchases?: boolean;
+  // Confirmado 2026-09-02: pedido explícito del usuario — transición Bryan →
+  // Jariel. canSubmitPurchases sigue gateando "Mis solicitudes" (sin
+  // cambios); canCreatePurchases gatea SOLO "Solicitar" (armar una compra
+  // nueva); canApprovePurchases es el nuevo paso de aprobación con un clic
+  // (hoy Bryan), que se SUMA a isAdmin en vez de reemplazarlo.
+  canCreatePurchases?: boolean;
+  canApprovePurchases?: boolean;
   canReceivePurchases?: boolean;
   // Confirmado 2026-08-18: canReceivePurchases sigue siendo el gate de la
   // pestaña "Inventario" (ahora todo el equipo de INV, no solo Daniel);
@@ -439,7 +448,8 @@ export function DeptWorkspaceTabs({
         <PurchaseControlPanel
           deptId={deptId}
           canSubmit={canSubmitPurchases}
-          canReview={isAdmin}
+          canCreateNew={canCreatePurchases}
+          canReview={isAdmin || canApprovePurchases}
           canReceive={canReceivePurchases}
           canReceiveTeam={canReceivePurchasesTeam}
           canApproveReceiving={canApprovePurchaseReceiving}

@@ -169,6 +169,25 @@ model User {
   // isLeader+leadsDeptId==COM. Admin siempre puede, sin necesitar el flag.
   canManagePurchases Boolean @default(false)
 
+  // Confirmado 2026-09-02: pedido explícito del usuario — transición Bryan →
+  // Jariel en Control de Compras. Bloquea puntualmente a alguien que YA tiene
+  // canManagePurchases (hoy Bryan) para que no arme una solicitud de compra
+  // NUEVA desde cero, SIN tocarle el resto de "Mis solicitudes" (subir orden
+  // de compra, pedir cambio de cuenta bancaria, pedir pago de flete, corregir
+  // y reenviar una rechazada) — eso sigue andando porque son otras rutas,
+  // todas gateadas por canSubmitPurchaseRequests() sin cambios. Así Bryan
+  // puede terminar de resolver lo que ya tiene pendiente. Ver
+  // canCreateNewPurchaseRequests() en guards.ts.
+  purchasingNewRequestsBlocked Boolean @default(false)
+
+  // Confirmado 2026-09-02: pedido explícito del usuario — paso nuevo de
+  // aprobación con un clic para alguien que no es admin (hoy Bryan, que deja
+  // de solicitar y pasa a aprobar lo que solicite Jariel). Mismo patrón que
+  // canManagePurchases: escape hatch por flag; admin sigue pudiendo aprobar
+  // también, como respaldo (no lo reemplaza). Ver
+  // canApprovePurchaseRequests() en guards.ts.
+  canApprovePurchaseRequests Boolean @default(false)
+
   // Escape hatch para Pagos administrativos (Finanzas) — confirmado
   // 2026-08-06: por defecto solo el líder de Finanzas (y admin) gestiona
   // esto; a diferencia de canManagePurchases, no incluye a Compras.

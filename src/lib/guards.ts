@@ -544,8 +544,18 @@ async function purchasesUserContext(userId: string) {
     where: { id: userId },
     // department (a diferencia de leadsDept, que es lo que la persona
     // LIDERA) se agregó 2026-08-18 para reconocer al resto del equipo de
-    // Inventario, no solo a Daniel (su líder).
-    select: { canManagePurchases: true, isLeader: true, leadsDept: { select: { code: true } }, department: { select: { code: true } } },
+    // Inventario, no solo a Daniel (su líder). purchasingNewRequestsBlocked
+    // y canApprovePurchaseRequests se agregaron 2026-09-02 para la
+    // transición Bryan → Jariel (ver canCreateNewPurchaseRequests y
+    // canApprovePurchaseRequests más abajo).
+    select: {
+      canManagePurchases: true,
+      isLeader: true,
+      leadsDept: { select: { code: true } },
+      department: { select: { code: true } },
+      purchasingNewRequestsBlocked: true,
+      canApprovePurchaseRequests: true,
+    },
   });
 }
 
@@ -565,6 +575,48 @@ export async function canSubmitPurchaseRequests() {
   if (!user) return false;
   if (user.canManagePurchases) return true;
   return !!user.isLeader && !!user.leadsDept && ["COM", "FIN"].includes(user.leadsDept.code);
+}
+
+// Confirmado 2026-09-02: pedido explícito del usuario — transición Bryan →
+// Jariel en Control de Compras. Mismo criterio que canSubmitPurchaseRequests
+// de arriba, pero además bloquea a quien tenga purchasingNewRequestsBlocked
+// (hoy Bryan) — sigue viendo y resolviendo todo lo que ya tiene en "Mis
+// solicitudes" (esas rutas siguen usando canSubmitPurchaseRequests() sin
+// cambios), pero ya no puede armar una solicitud nueva desde cero. Se usa
+// SOLO en la pestaña "Solicitar" y en el POST que crea una solicitud.
+export async function canCreateNewPurchaseRequests() {
+  const session = await auth();
+  if (!session) return false;
+  if (session.user.role === "admin") return true;
+  const user = await purchasesUserContext(session.user.id);
+  if (!user) return false;
+  if (user.purchasingNewRequestsBlocked) return false;
+  if (user.canManagePurchases) return true;
+  return !!user.isLeader && !!user.leadsDept && ["COM", "FIN"].includes(user.leadsDept.code);
+}
+
+// Confirmado 2026-09-02: pedido explícito del usuario — paso nuevo de
+// aprobación con un clic delegado a alguien que no es admin (hoy Bryan, que
+// deja de solicitar y pasa a aprobar lo que solicite Jariel). Admin sigue
+// pudiendo aprobar también — este flag se SUMA, no lo reemplaza, para que
+// quede un respaldo si Bryan no está disponible.
+export async function canApprovePurchaseRequests() {
+  const session = await auth();
+  if (!session) return false;
+  if (session.user.role === "admin") return true;
+  const user = await purchasesUserContext(session.user.id);
+  return !!user?.canApprovePurchaseRequests;
+}
+
+// Confirmado 2026-09-02: usado para avisarle por push a quien tenga el
+// nuevo flag de aprobación (hoy Bryan) apenas entra una solicitud nueva —
+// mismo estilo que getInventoryLeadId/getFulfilmentLeadId.
+export async function getPurchaseApproverIds(): Promise<string[]> {
+  const users = await prisma.user.findMany({
+    where: { canApprovePurchaseRequests: true, isActive: true },
+    select: { id: true },
+  });
+  return users.map((u) => u.id);
 }
 
 // Confirmado 2026-08-06: bug real — canManagePurchases es un escape hatch
