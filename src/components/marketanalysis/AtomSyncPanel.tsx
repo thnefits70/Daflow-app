@@ -41,6 +41,15 @@ export function AtomSyncPanel() {
   const [linkingIndex, setLinkingIndex] = useState<number | null>(null);
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [comboLookup, setComboLookup] = useState<Record<number, ComboLookupState>>({});
+  // Lote de combos: pedido explícito del usuario (2026-09-02) para no tener
+  // que revisar cada combo uno por uno cuando llegan varios juntos en la
+  // tabla de ATOM. Se seleccionan filas "Sin resolver", se buscan todas en
+  // Base de datos de productos (mismo lookup que ya hacía "Es un combo" por
+  // fila, nunca se saltea esa verificación), y solo después de revisarlas se
+  // puede confirmar el lote completo de un click — el botón de confirmar
+  // recién aparece cuando todas ya se buscaron, para que no sea un click a
+  // ciegas.
+  const [batchSelected, setBatchSelected] = useState<Set<number>>(new Set());
 
   async function handlePreview() {
     if (!rawText.trim()) {
@@ -84,6 +93,7 @@ export function AtomSyncPanel() {
   function confirmCombo(index: number) {
     setRows((prev) => prev!.map((r, i) => (i === index ? { ...r, resolution: "combo", linkedItemId: null } : r)));
     setLinkingIndex(null);
+    dropFromBatch(index);
   }
 
   function cancelComboLookup(index: number) {
@@ -92,11 +102,53 @@ export function AtomSyncPanel() {
       delete next[index];
       return next;
     });
+    dropFromBatch(index);
   }
 
   function setLink(index: number, result: ProductMatchResult) {
     setRows((prev) => prev!.map((r, i) => (i === index ? { ...r, resolution: "linked", linkedItemId: result.id, matchedItemName: result.name } : r)));
     setLinkingIndex(null);
+    dropFromBatch(index);
+  }
+
+  function dropFromBatch(index: number) {
+    setBatchSelected((prev) => {
+      if (!prev.has(index)) return prev;
+      const next = new Set(prev);
+      next.delete(index);
+      return next;
+    });
+  }
+
+  function toggleBatchSelect(index: number) {
+    setBatchSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(index)) next.delete(index);
+      else next.add(index);
+      return next;
+    });
+  }
+
+  // Dispara la misma búsqueda en Base de datos de productos que ya hacía el
+  // botón individual, para cada seleccionado que todavía no se buscó.
+  function reviewBatch() {
+    for (const i of batchSelected) {
+      if (!comboLookup[i]) checkCombo(i, rows![i].productName);
+    }
+  }
+
+  function cancelBatch() {
+    setComboLookup((prev) => {
+      const next = { ...prev };
+      for (const i of batchSelected) delete next[i];
+      return next;
+    });
+    setBatchSelected(new Set());
+  }
+
+  function confirmBatch() {
+    setRows((prev) => prev!.map((r, i) => (batchSelected.has(i) ? { ...r, resolution: "combo", linkedItemId: null } : r)));
+    setBatchSelected(new Set());
   }
 
   async function handleConfirm() {
@@ -184,7 +236,13 @@ export function AtomSyncPanel() {
                   {r.resolution === "pending" && <span className="text-[11px] text-red font-semibold">Sin resolver</span>}
                 </div>
                 {r.resolution !== "linked" || r.matchType === "none" ? (
-                  <div className="flex gap-2 mt-1.5">
+                  <div className="flex gap-2 mt-1.5 items-center">
+                    {r.resolution === "pending" && (
+                      <label className="flex items-center gap-1 text-[11px] text-steel cursor-pointer">
+                        <input type="checkbox" checked={batchSelected.has(i)} onChange={() => toggleBatchSelect(i)} />
+                        Incluir en lote
+                      </label>
+                    )}
                     {r.resolution !== "combo" && !comboLookup[i] && (
                       <button type="button" className="text-[11px] text-blue font-semibold cursor-pointer" onClick={() => checkCombo(i, r.productName)}>
                         Es un combo
@@ -253,6 +311,39 @@ export function AtomSyncPanel() {
               </div>
             ))}
           </div>
+
+          {batchSelected.size > 0 && (
+            <div className="bg-cloud rounded-md p-3 mt-3 text-[12.5px]">
+              <div className="font-semibold mb-2">
+                {batchSelected.size} producto{batchSelected.size === 1 ? "" : "s"} seleccionado{batchSelected.size === 1 ? "" : "s"} para el lote de combos
+              </div>
+              {(() => {
+                const indices = [...batchSelected];
+                const anyChecked = indices.some((i) => comboLookup[i]);
+                const allReviewed = indices.every((i) => comboLookup[i]?.status === "found" || comboLookup[i]?.status === "not_found");
+                if (allReviewed) {
+                  return (
+                    <div className="flex gap-2">
+                      <button type="button" className="rounded border border-teal bg-teal px-2.5 py-1 text-[11px] font-bold text-navy cursor-pointer" onClick={confirmBatch}>
+                        Sí, confirmo que son combos
+                      </button>
+                      <button type="button" className="text-[11px] text-steel cursor-pointer" onClick={cancelBatch}>
+                        Cancelar lote
+                      </button>
+                    </div>
+                  );
+                }
+                if (anyChecked) {
+                  return <div className="text-steel">Buscando cada uno en Base de datos de productos (revisa arriba en la lista)…</div>;
+                }
+                return (
+                  <button type="button" className="rounded border border-blue px-2.5 py-1 text-[11px] font-semibold text-blue cursor-pointer" onClick={reviewBatch}>
+                    Revisar en Base de datos de productos
+                  </button>
+                );
+              })()}
+            </div>
+          )}
 
           {err && <div className="text-red text-[12.5px] mt-3">{err}</div>}
           <div className="flex gap-2 mt-3.5">
