@@ -1,14 +1,19 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AlertTriangle, ChevronDown, ChevronUp, Pencil, Trash2, Wrench } from "lucide-react";
+import { AlertTriangle, Ban, ChevronDown, ChevronUp, Pencil, Trash2, Wrench } from "lucide-react";
 import { ProductMatchPicker, type ProductMatchResult } from "./ProductMatchPicker";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 
 type ItemDTO = {
   id: string;
   photoUrls: string[];
-  catalogItem: { name: string; photos: string[]; justCode: string | null } | null;
+  // legacyInventoryName: true SOLO en productos del catálogo que un chico de
+  // Inventario registró a mano antes del cierre del 24 de agosto (ver
+  // commit beb776f) — son los únicos que Daniel puede corregir/eliminar
+  // directo desde acá (ver ReadyItemRow/ReviewItemRow), nunca un producto
+  // matriculado de verdad por Compras.
+  catalogItem: { id: string; name: string; photos: string[]; justCode: string | null; legacyInventoryName: boolean } | null;
   aiRecognized: boolean;
   declaredName: string | null;
   correctedName: string | null;
@@ -193,32 +198,14 @@ export function ReviewInbox({ canAct }: { canAct: boolean }) {
                         </button>
                       </div>
                     ) : (
-                      <div key={it.id} className="flex items-center gap-2.5">
-                        {it.photoUrls[0] && (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            src={it.photoUrls[0]}
-                            alt={itemName(it)}
-                            className="w-9 h-9 object-cover rounded border border-rule cursor-zoom-in"
-                            onClick={() => setLightboxUrl(it.photoUrls[0])}
-                          />
-                        )}
-                        <div className="flex-1 text-[12px] flex items-center gap-1.5 min-w-0">
-                          {it.catalogItem && <CatalogCode code={it.catalogItem.justCode} />}
-                          <span className="truncate">{itemName(it)}</span>
-                        </div>
-                        <span className="text-[11.5px] text-green font-semibold">{it.goodQty} buenas</span>
-                        {canAct && (
-                          <button
-                            type="button"
-                            title="Quitar producto duplicado de este lote"
-                            className="text-steel hover:text-red cursor-pointer shrink-0"
-                            onClick={() => { setConfirmDeleteId(it.id); setDeleteError(""); }}
-                          >
-                            <Trash2 size={13} />
-                          </button>
-                        )}
-                      </div>
+                      <ReadyItemRow
+                        key={it.id}
+                        item={it}
+                        canAct={canAct}
+                        onRequestRemove={() => { setConfirmDeleteId(it.id); setDeleteError(""); }}
+                        onChanged={load}
+                        onExpandPhoto={setLightboxUrl}
+                      />
                     )
                   )}
                 </div>
@@ -261,6 +248,130 @@ export function ReviewInbox({ canAct }: { canAct: boolean }) {
   );
 }
 
+// Compartido entre ReadyItemRow y ReviewItemRow: borrar de verdad un
+// producto del catálogo mal registrado por Inventario (ver
+// legacyInventoryName arriba). El servidor vuelve a revisar el origen y si
+// todavía está en uso en cualquier parte del sistema, así que esto solo
+// funciona después de que ya nada apunte a ese producto — normalmente
+// después de que Daniel ya corrigió el vínculo con "Corregir".
+function useDeleteLegacyCatalogItem(catalogItemId: string, onDeleted: () => void) {
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function doDelete() {
+    setBusy(true);
+    setError("");
+    try {
+      const res = await fetch(`/api/merchandise-reentry/catalog-items/${catalogItemId}`, { method: "DELETE" });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error ?? "No se pudo eliminar.");
+      setConfirming(false);
+      onDeleted();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "No se pudo eliminar.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return { confirming, setConfirming, busy, error, doDelete };
+}
+
+function ReadyItemRow({
+  item,
+  canAct,
+  onRequestRemove,
+  onChanged,
+  onExpandPhoto,
+}: {
+  item: ItemDTO;
+  canAct: boolean;
+  onRequestRemove: () => void;
+  onChanged: () => void;
+  onExpandPhoto: (url: string) => void;
+}) {
+  const [editingProduct, setEditingProduct] = useState(false);
+  const [relinkError, setRelinkError] = useState("");
+  const legacyId = item.catalogItem?.legacyInventoryName ? item.catalogItem.id : null;
+  const del = useDeleteLegacyCatalogItem(legacyId ?? "", onChanged);
+
+  async function relink(result: ProductMatchResult) {
+    setRelinkError("");
+    try {
+      await postJson(`/api/merchandise-reentry/items/${item.id}/relink`, { catalogItemId: result.id });
+      setEditingProduct(false);
+      onChanged();
+    } catch (e) {
+      setRelinkError(e instanceof Error ? e.message : "No se pudo guardar.");
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="flex items-center gap-2.5">
+        {item.photoUrls[0] && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={item.photoUrls[0]}
+            alt={itemName(item)}
+            className="w-9 h-9 object-cover rounded border border-rule cursor-zoom-in"
+            onClick={() => onExpandPhoto(item.photoUrls[0])}
+          />
+        )}
+        <div className="flex-1 text-[12px] flex items-center gap-1.5 min-w-0">
+          {item.catalogItem && <CatalogCode code={item.catalogItem.justCode} />}
+          <span className="truncate">{itemName(item)}</span>
+          {legacyId && canAct && !editingProduct && (
+            <button type="button" title="Corregir producto registrado por Inventario" className="shrink-0 text-steel hover:text-teal cursor-pointer" onClick={() => setEditingProduct(true)}>
+              <Pencil size={11} />
+            </button>
+          )}
+          {legacyId && canAct && !editingProduct && !del.confirming && (
+            <button
+              type="button"
+              title="Eliminar producto mal registrado del catálogo"
+              className="shrink-0 text-steel hover:text-red cursor-pointer"
+              onClick={() => del.setConfirming(true)}
+            >
+              <Ban size={11} />
+            </button>
+          )}
+        </div>
+        <span className="text-[11.5px] text-green font-semibold">{item.goodQty} buenas</span>
+        {canAct && (
+          <button type="button" title="Quitar producto duplicado de este lote" className="text-steel hover:text-red cursor-pointer shrink-0" onClick={onRequestRemove}>
+            <Trash2 size={13} />
+          </button>
+        )}
+      </div>
+      {editingProduct && (
+        <div className="pl-[44px]">
+          <ProductMatchPicker referencePhotoUrl={item.photoUrls[0] ?? null} initialQuery="" onConfirm={relink} onCancel={() => setEditingProduct(false)} />
+          {relinkError && <div className="text-red text-[11px] mt-1">{relinkError}</div>}
+        </div>
+      )}
+      {del.confirming && (
+        <div className="ml-[44px] flex items-center gap-2 bg-red/10 border border-red/40 rounded-md p-2">
+          <span className="flex-1 text-[11px]">Esto borra &quot;{item.catalogItem?.name}&quot; del catálogo para siempre — solo funciona si ya nada más lo está usando.</span>
+          <button type="button" className="text-[11px] font-semibold text-steel cursor-pointer" onClick={() => del.setConfirming(false)}>
+            Cancelar
+          </button>
+          <button
+            type="button"
+            disabled={del.busy}
+            className="rounded border border-red bg-red px-2.5 py-1 text-[11px] font-bold text-white cursor-pointer disabled:opacity-60 whitespace-nowrap"
+            onClick={del.doDelete}
+          >
+            {del.busy ? "Eliminando…" : "Sí, eliminar"}
+          </button>
+        </div>
+      )}
+      {del.error && <div className="ml-[44px] text-red text-[11px]">{del.error}</div>}
+    </div>
+  );
+}
+
 function ReviewItemRow({ item, canAct, onChanged, onExpandPhoto }: { item: ItemDTO; canAct: boolean; onChanged: () => void; onExpandPhoto: (url: string) => void }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -272,6 +383,8 @@ function ReviewItemRow({ item, canAct, onChanged, onExpandPhoto }: { item: ItemD
   // que ya no "necesita revisión" a simple vista. Una vez aprobado
   // (item.approvedAt) ya no se puede abrir — el vínculo queda fijo.
   const [editingProduct, setEditingProduct] = useState(false);
+  const legacyId = item.catalogItem?.legacyInventoryName ? item.catalogItem.id : null;
+  const del = useDeleteLegacyCatalogItem(legacyId ?? "", onChanged);
 
   const nameNeedsReview = !item.aiRecognized && !item.correctedName;
   const damageNeedsReview = item.damagedQty > 0 && item.damageConfirmed === null;
@@ -327,6 +440,16 @@ function ReviewItemRow({ item, canAct, onChanged, onExpandPhoto }: { item: ItemD
               {!item.approvedAt && canAct && !editingProduct && (
                 <button type="button" title="Corregir el producto vinculado" className="shrink-0 text-steel hover:text-teal cursor-pointer" onClick={() => setEditingProduct(true)}>
                   <Pencil size={11} />
+                </button>
+              )}
+              {legacyId && canAct && !editingProduct && !del.confirming && (
+                <button
+                  type="button"
+                  title="Eliminar producto mal registrado del catálogo"
+                  className="shrink-0 text-steel hover:text-red cursor-pointer"
+                  onClick={() => del.setConfirming(true)}
+                >
+                  <Ban size={11} />
                 </button>
               )}
             </div>
@@ -423,6 +546,23 @@ function ReviewItemRow({ item, canAct, onChanged, onExpandPhoto }: { item: ItemD
           {nameNeedsReview && damageNeedsReview && <div className="text-[10.5px] text-steel mt-1.5">Resuelve también el daño para poder aprobar este producto.</div>}
         </div>
       )}
+      {del.confirming && (
+        <div className="mt-2 pl-[52px] flex items-center gap-2 bg-red/10 border border-red/40 rounded-md p-2">
+          <span className="flex-1 text-[11px]">Esto borra &quot;{item.catalogItem?.name}&quot; del catálogo para siempre — solo funciona si ya nada más lo está usando.</span>
+          <button type="button" className="text-[11px] font-semibold text-steel cursor-pointer" onClick={() => del.setConfirming(false)}>
+            Cancelar
+          </button>
+          <button
+            type="button"
+            disabled={del.busy}
+            className="rounded border border-red bg-red px-2.5 py-1 text-[11px] font-bold text-white cursor-pointer disabled:opacity-60 whitespace-nowrap"
+            onClick={del.doDelete}
+          >
+            {del.busy ? "Eliminando…" : "Sí, eliminar"}
+          </button>
+        </div>
+      )}
+      {del.error && <div className="text-red text-[11px] mt-1.5 pl-[52px]">{del.error}</div>}
       {error && <div className="text-red text-[11px] mt-1.5">{error}</div>}
     </div>
   );
