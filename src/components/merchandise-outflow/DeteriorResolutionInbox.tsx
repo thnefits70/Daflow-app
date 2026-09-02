@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { CheckCircle2, PackageMinus, TrendingUp } from "lucide-react";
 import { CatalogCode } from "@/components/shared/CatalogCode";
+import { formatDateTime } from "@/lib/formatDateTime";
 
 type ItemDTO = {
   id: string;
@@ -77,7 +78,7 @@ export function DeteriorResolutionInbox({ canAct }: { canAct: boolean }) {
                 <span className="truncate">{itemName(item)}</span>
               </div>
               <div className="text-[11px] text-steel">{item.quantity} un. · {item.damageReason?.name ?? item.damageReasonOther ?? "Sin motivo"}</div>
-              <div className="text-[10.5px] text-steel">{item.batch.code} · {item.batch.createdBy?.name ?? "—"}</div>
+              <div className="text-[10.5px] text-steel">{item.batch.code} · {item.batch.createdBy?.name ?? "—"} · {formatDateTime(item.batch.createdAt)}</div>
             </div>
           </div>
 
