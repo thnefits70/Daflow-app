@@ -182,7 +182,7 @@ export function MerchandiseOutflowPanel({
               : "Reporta acá un producto encontrado dañado en bodega (no una devolución). Daniel decide qué hacer con cada reporte."}
           </TabGuide>
           <div className="flex flex-col gap-6">
-            <DeteriorCapture />
+            <DeteriorCapture allowUpload={canAct} />
             <div>
               <div className="font-display font-bold text-[14px] mb-2.5">Pendientes de resolución</div>
               <DeteriorResolutionInbox canAct={canAct} />

@@ -18,7 +18,12 @@ async function postJson(url: string, body?: unknown) {
 // Reporte de un producto encontrado dañado en bodega — NO una devolución
 // (eso vive en Reingreso). Un solo paso, sin borrador: foto + producto +
 // cantidad + motivo, y queda directo en la cola de Daniel.
-export function DeteriorCapture({ onReported }: { onReported?: () => void }) {
+// Confirmado 2026-09-02: por ahora solo Daniel reporta acá (su equipo
+// todavía no usa esta pestaña) y lo hace desde la computadora, sin cámara
+// — allowUpload queda atado a canAct (exclusivo de Daniel) para que cuando
+// el equipo empiece a reportar desde el celular en bodega, ellos sigan
+// restringidos a cámara en vivo por defecto.
+export function DeteriorCapture({ onReported, allowUpload = false }: { onReported?: () => void; allowUpload?: boolean }) {
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [taking, setTaking] = useState(false);
   const [selected, setSelected] = useState<MatchCatalogItem | null>(null);
@@ -116,10 +121,10 @@ export function DeteriorCapture({ onReported }: { onReported?: () => void }) {
             <button type="button" className="text-[11.5px] text-blue font-semibold cursor-pointer" onClick={() => { setPhotoUrl(null); setTaking(true); }}>Volver a tomar</button>
           </div>
         ) : taking ? (
-          <LiveCameraCapture folder="merchandise-outflow-photos" onCaptured={(url) => { setPhotoUrl(url); setTaking(false); }} onCancel={() => setTaking(false)} />
+          <LiveCameraCapture allowUpload={allowUpload} folder="merchandise-outflow-photos" onCaptured={(url) => { setPhotoUrl(url); setTaking(false); }} onCancel={() => setTaking(false)} />
         ) : (
           <button type="button" className="flex items-center gap-1.5 text-[12.5px] font-bold border-[1.5px] border-rule rounded-md px-3.5 py-2 cursor-pointer" onClick={() => setTaking(true)}>
-            <Camera size={14} /> Tomar foto en vivo
+            <Camera size={14} /> {allowUpload ? "Tomar o subir foto" : "Tomar foto en vivo"}
           </button>
         )}
       </div>
