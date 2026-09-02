@@ -77,6 +77,16 @@ function isVideoUrl(url: string) {
 function claimedQty(resolutions: Resolution[]) {
   return resolutions.filter((r) => r.status !== "CANCELLED").reduce((s, r) => s + r.quantity, 0);
 }
+// Solo lo COMPLETED cuenta para dar el reporte por cerrado — un reembolso o
+// cambio de mercadería en curso (PENDING) ya reclamó la cantidad (no se
+// puede volver a repartir esa unidad) pero todavía necesita su propio
+// seguimiento (subir comprobante, confirmar banco, verificar el cambio), así
+// que el reporte se tiene que quedar en la sección abierta/interactiva hasta
+// que eso también se complete — mismo criterio que ya usa isReportOpen() en
+// src/lib/purchaseUrgent.ts, que esta pantalla no estaba aplicando.
+function resolvedQty(resolutions: Resolution[]) {
+  return resolutions.filter((r) => r.status === "COMPLETED").reduce((s, r) => s + r.quantity, 0);
+}
 function totalReported(r: Report) {
   return r.damagedQty + r.missingQty + r.incompleteQty + r.differentQty;
 }
@@ -217,8 +227,8 @@ export function PurchaseUrgentReportsPanel({ isAdmin, canAct }: { isAdmin: boole
 
   if (!reports) return <div className="text-steel text-[13px]">Cargando…</div>;
 
-  const openReports = reports.filter((r) => claimedQty(r.resolutions) < totalReported(r));
-  const closedReports = reports.filter((r) => claimedQty(r.resolutions) >= totalReported(r));
+  const openReports = reports.filter((r) => resolvedQty(r.resolutions) < totalReported(r));
+  const closedReports = reports.filter((r) => resolvedQty(r.resolutions) >= totalReported(r));
   const pendingCredits = reports.flatMap((r) => r.resolutions.filter((res) => res.credit?.status === "AVAILABLE").map((res) => ({ report: r, res })));
 
   return (

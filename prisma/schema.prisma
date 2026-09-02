@@ -2116,7 +2116,12 @@ model PurchaseUrgentResolution {
   replacementSubmittedBy       User?     @relation("UrgentResolutionReplacementSubmittedBy", fields: [replacementSubmittedById], references: [id], onDelete: SetNull)
   replacementSubmittedAt       DateTime?
   replacementArrivedAt         DateTime?
-  replacementPhotoUrls         String[]
+  // Confirmado 2026-09-02: bug real — la migración del 2026-08-18 le quitó
+  // el DEFAULT a nivel de base de datos a esta columna pero se quedó NOT
+  // NULL, y como acá nunca se manda un valor explícito, cualquier resolución
+  // nueva (crédito, cambio, reembolso o pérdida) fallaba con un "Null
+  // constraint violation" en cuanto se creaba — no era solo Reembolso.
+  replacementPhotoUrls         String[]  @default([])
   replacementAiMatch           Boolean?
   replacementAiNote            String?
   replacementVerifiedById      String?
