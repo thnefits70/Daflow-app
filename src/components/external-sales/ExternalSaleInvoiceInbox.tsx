@@ -11,6 +11,8 @@ type SaleItemDTO = {
   declaredProductName: string;
   catalogItem: { name: string; justCode: string | null } | null;
   quantity: number;
+  unitPrice: number;
+  totalAmount: number;
 };
 
 type SaleDTO = {
@@ -78,7 +80,7 @@ export function ExternalSaleInvoiceInbox() {
             {s.items.map((it) => (
               <div key={it.id} className="text-[13px] font-semibold flex items-center gap-1.5 flex-wrap">
                 {it.catalogItem && <CatalogCode code={it.catalogItem.justCode} />}
-                <span>{it.catalogItem?.name ?? it.declaredProductName} — {it.quantity} un.</span>
+                <span>{it.catalogItem?.name ?? it.declaredProductName} — {it.quantity} un. × ${it.unitPrice.toFixed(2)} = ${it.totalAmount.toFixed(2)}</span>
               </div>
             ))}
           </div>
