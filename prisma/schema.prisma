@@ -4197,6 +4197,7 @@ model Client {
   idType   HolderIdType
   idNumber String       @unique
   phone    String
+  email    String? // opcional — para tener el correo del cliente registrado, no todos lo dan
   address  String // dirección referencial
 
   // Confirmado 2026-09-01, pedido explícito del usuario: solo para saber de

@@ -22,7 +22,7 @@ type SaleDTO = {
   paymentProofUrl: string;
   paymentProofName: string | null;
   advisor: { name: string } | null;
-  client: { name: string; idType: "RUC" | "CEDULA"; idNumber: string; phone: string; address: string; country: string | null; city: string | null } | null;
+  client: { name: string; idType: "RUC" | "CEDULA"; idNumber: string; phone: string; email: string | null; address: string; country: string | null; city: string | null } | null;
 };
 
 async function postJson(url: string, body?: unknown) {
@@ -88,7 +88,8 @@ export function ExternalSaleInvoiceInbox() {
           {s.client && (
             <div className="bg-cloud rounded-md p-2.5 mt-2.5 text-[11.5px] flex flex-col gap-0.5">
               <div className="font-semibold">{s.client.name}</div>
-              <div className="text-steel">{s.client.idType === "RUC" ? "RUC" : "Cédula"}: {s.client.idNumber} · {s.client.phone}</div>
+              <div className="text-steel">{s.client.idType === "RUC" ? "RUC" : "Cédula"}: {s.client.idNumber} · Cel: {s.client.phone}</div>
+              {s.client.email && <div className="text-steel">Correo: {s.client.email}</div>}
               <div className="text-steel">{s.client.address}</div>
               {(s.client.city || s.client.country) && (
                 <div className="text-steel">{[s.client.city, s.client.country].filter(Boolean).join(", ")}</div>

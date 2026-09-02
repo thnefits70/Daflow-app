@@ -9,6 +9,7 @@ export type ClientDTO = {
   idType: "RUC" | "CEDULA";
   idNumber: string;
   phone: string;
+  email: string | null;
   address: string;
   country: string | null;
   city: string | null;
@@ -47,6 +48,7 @@ export function ClientMatchPicker({ value, onChange }: { value: ClientDTO | null
   const [newIdType, setNewIdType] = useState<"RUC" | "CEDULA">("CEDULA");
   const [newIdNumber, setNewIdNumber] = useState("");
   const [newPhone, setNewPhone] = useState("");
+  const [newEmail, setNewEmail] = useState("");
   const [newAddress, setNewAddress] = useState("");
   const [newCountry, setNewCountry] = useState("");
   const [newCity, setNewCity] = useState("");
@@ -80,6 +82,7 @@ export function ClientMatchPicker({ value, onChange }: { value: ClientDTO | null
     setNewIdType("CEDULA");
     setNewIdNumber("");
     setNewPhone("");
+    setNewEmail("");
     setNewAddress("");
     setNewCountry("");
     setNewCity("");
@@ -96,6 +99,10 @@ export function ClientMatchPicker({ value, onChange }: { value: ClientDTO | null
       setErr("Completa nombre, RUC o cédula, celular y dirección referencial.");
       return;
     }
+    if (newEmail.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail.trim())) {
+      setErr("El correo no tiene un formato válido.");
+      return;
+    }
     setBusy(true);
     setErr("");
     let res: Response;
@@ -108,6 +115,7 @@ export function ClientMatchPicker({ value, onChange }: { value: ClientDTO | null
           idType: newIdType,
           idNumber: newIdNumber.trim(),
           phone: newPhone.trim(),
+          email: newEmail.trim() || undefined,
           address: newAddress.trim(),
           country: newCountry.trim() || undefined,
           city: newCity.trim() || undefined,
@@ -142,7 +150,8 @@ export function ClientMatchPicker({ value, onChange }: { value: ClientDTO | null
         <CheckCircle2 size={15} className="text-teal shrink-0" />
         <div className="flex-1 min-w-0">
           <div className="text-[13.5px] font-semibold truncate">{value.name}</div>
-          <div className="text-[11px] text-steel">{value.idType === "RUC" ? "RUC" : "Cédula"} {value.idNumber} · {value.phone}</div>
+          <div className="text-[11px] text-steel">{value.idType === "RUC" ? "RUC" : "Cédula"}: {value.idNumber} · Cel: {value.phone}</div>
+          {value.email && <div className="text-[11px] text-steel">Correo: {value.email}</div>}
           {(value.city || value.country) && (
             <div className="text-[11px] text-steel">{[value.city, value.country].filter(Boolean).join(", ")}</div>
           )}
@@ -183,6 +192,9 @@ export function ClientMatchPicker({ value, onChange }: { value: ClientDTO | null
 
         <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Celular</label>
         <input type="tel" className="w-full rounded border border-rule px-2.5 py-2 text-[13.5px] mb-3" value={newPhone} onChange={(e) => setNewPhone(e.target.value)} />
+
+        <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Correo (opcional)</label>
+        <input type="email" className="w-full rounded border border-rule px-2.5 py-2 text-[13.5px] mb-3" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} placeholder="cliente@correo.com" />
 
         <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Dirección referencial</label>
         <input className="w-full rounded border border-rule px-2.5 py-2 text-[13.5px] mb-3" value={newAddress} onChange={(e) => setNewAddress(e.target.value)} placeholder="Ej. Sector, calle, punto de referencia" />

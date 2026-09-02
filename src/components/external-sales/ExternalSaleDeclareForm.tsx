@@ -441,7 +441,10 @@ export function ExternalSaleDeclareForm() {
                   <div className="text-[11px] font-bold mt-0.5">Total: ${s.totalAmount.toFixed(2)}</div>
                   <div className="text-[10.5px] text-steel mt-0.5">Entrega a: {s.pickupPersonName}{s.courierNote ? ` · Transportadora: ${s.courierNote}` : ""}</div>
                   {s.client && (
-                    <div className="text-[10.5px] text-steel mt-0.5">Cliente: {s.client.name} · {s.client.phone}</div>
+                    <div className="text-[10.5px] text-steel mt-0.5">
+                      Cliente: {s.client.name} · {s.client.idType === "RUC" ? "RUC" : "Cédula"}: {s.client.idNumber} · Cel: {s.client.phone}
+                      {s.client.email ? ` · Correo: ${s.client.email}` : ""}
+                    </div>
                   )}
                   {!s.deletedAt && s.reviewStatus === "REJECTED" && s.rejectionReason && <div className="text-[11.5px] text-red mt-1">{s.rejectionReason}</div>}
                   {!s.deletedAt && s.reviewStatus === "REJECTED" && editingId !== s.id && (

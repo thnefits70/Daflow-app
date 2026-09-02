@@ -22,7 +22,7 @@ type SaleDTO = {
   totalAmount: number;
   pickupPersonName: string;
   courierNote: string | null;
-  client: { name: string; phone: string; city: string | null; country: string | null } | null;
+  client: { name: string; idType: "RUC" | "CEDULA"; idNumber: string; phone: string; email: string | null; city: string | null; country: string | null } | null;
   isContraEntrega: boolean;
   reviewStatus: "PENDING" | "APPROVED" | "REJECTED";
   rejectionReason: string | null;
@@ -141,7 +141,8 @@ export function ExternalSaleHistoryList() {
                 <div className="text-[10.5px] text-steel">Entrega a: {s.pickupPersonName}{s.courierNote ? ` · Transportadora: ${s.courierNote}` : ""}</div>
                 {s.client && (
                   <div className="text-[10.5px] text-steel">
-                    Cliente: {s.client.name} · {s.client.phone}
+                    Cliente: {s.client.name} · {s.client.idType === "RUC" ? "RUC" : "Cédula"}: {s.client.idNumber} · Cel: {s.client.phone}
+                    {s.client.email ? ` · Correo: ${s.client.email}` : ""}
                     {(s.client.city || s.client.country) ? ` · ${[s.client.city, s.client.country].filter(Boolean).join(", ")}` : ""}
                   </div>
                 )}
