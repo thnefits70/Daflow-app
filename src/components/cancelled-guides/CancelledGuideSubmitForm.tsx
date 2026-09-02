@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Check, X } from "lucide-react";
 import { CARRIER_LABELS, SOURCE_AREA_LABELS, MKT_CANCEL_REASONS, FULFILLMENT_CANCEL_REASONS, splitGuideBuffer, isPossibleGuidePrefix } from "@/lib/cancelledGuidesLabels";
 
+type SourceArea = "MKT_DAMIAN" | "MKT_PROVEDIX" | "MKT_SHANGHAI" | "FULFILLMENT";
 type DetectedGuide = { id: string; carrier: keyof typeof CARRIER_LABELS; guideNumber: string };
 
 async function postJson(url: string, body?: unknown) {
@@ -14,7 +15,7 @@ async function postJson(url: string, body?: unknown) {
 }
 
 export function CancelledGuideSubmitForm({ onSubmitted }: { onSubmitted?: () => void }) {
-  const [sourceArea, setSourceArea] = useState<"MKT_DAMIAN" | "MKT_PROVEDIX" | "FULFILLMENT" | "">("");
+  const [sourceArea, setSourceArea] = useState<SourceArea | "">("");
   const [guideBuffer, setGuideBuffer] = useState("");
   const [guides, setGuides] = useState<DetectedGuide[]>([]);
   const [reason, setReason] = useState("");
@@ -53,23 +54,24 @@ export function CancelledGuideSubmitForm({ onSubmitted }: { onSubmitted?: () => 
   async function save() {
     setSaving(true);
     setError("");
-    let done = 0;
+    const carriersInOrder = Array.from(new Set(guides.map((g) => g.carrier)));
+    let doneGuides = 0;
     try {
-      for (const g of guides) {
-        await postJson("/api/cancelled-guides", {
+      for (const carrier of carriersInOrder) {
+        const guideNumbers = guides.filter((g) => g.carrier === carrier).map((g) => g.guideNumber);
+        await postJson("/api/cancelled-guides/batches", {
           sourceArea,
-          guideNumber: g.guideNumber,
-          carrier: g.carrier,
+          carrier,
           reason: finalReason,
-          items: [],
+          guideNumbers,
         });
-        done += 1;
+        doneGuides += guideNumbers.length;
       }
-      setSentCount(done);
+      setSentCount(doneGuides);
       onSubmitted?.();
     } catch (e) {
-      setError(`${e instanceof Error ? e.message : "No se pudo enviar."} (se reportaron ${done} de ${guides.length} guías antes de la falla)`);
-      setGuides((gs) => gs.slice(done));
+      setError(`${e instanceof Error ? e.message : "No se pudo enviar."} (se enviaron ${doneGuides} de ${guides.length} guías antes de la falla)`);
+      setGuides((gs) => gs.slice(doneGuides));
     } finally {
       setSaving(false);
     }
@@ -82,7 +84,7 @@ export function CancelledGuideSubmitForm({ onSubmitted }: { onSubmitted?: () => 
           <Check size={20} className="text-green" />
         </div>
         <div className="font-display font-bold text-[15px] mb-1.5">{sentCount === 1 ? "Reportada" : `${sentCount} guías reportadas`}</div>
-        <p className="text-[12.5px] text-steel mb-4">Fulfillment e Inventario ya fueron avisados para que no las despachen.</p>
+        <p className="text-[12.5px] text-steel mb-4">Fulfillment e Inventario ya fueron avisados para que no las despachen, y Análisis de Mercado ya recibió el lote para gestionarlo.</p>
         <button type="button" className="text-[12.5px] font-bold text-teal cursor-pointer" onClick={reset}>Reportar otra</button>
       </div>
     );
@@ -95,7 +97,7 @@ export function CancelledGuideSubmitForm({ onSubmitted }: { onSubmitted?: () => 
       <div>
         <label className="block mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-steel">Área / bodega</label>
         <div className="flex flex-col gap-1.5">
-          {(["MKT_DAMIAN", "MKT_PROVEDIX", "FULFILLMENT"] as const).map((a) => (
+          {(["MKT_DAMIAN", "MKT_PROVEDIX", "MKT_SHANGHAI", "FULFILLMENT"] as const).map((a) => (
             <button key={a} type="button" onClick={() => { setSourceArea(a); setReason(""); }} className={`text-left text-[12.5px] font-semibold rounded-md px-2.5 py-1.5 border cursor-pointer ${sourceArea === a ? "border-teal text-teal bg-teal/10" : "border-rule text-steel"}`}>
               {SOURCE_AREA_LABELS[a]}
             </button>

@@ -44,6 +44,7 @@ type UserProfile = {
   externalSaleContraEntrega: boolean;
   canConfirmMarketingDesign: boolean;
   canConfirmMarketingAdvisor: boolean;
+  canAssignCancelledGuideItems: boolean;
   canViewMarketingArrivalsForDispatch: boolean;
   marketingAdvisorBrand: string | null;
   canManageStoreFeedback: boolean;
@@ -809,6 +810,16 @@ export function ProfileDetail({
                 />
               </div>
             )}
+          </div>
+
+          <div className="bg-cloud border border-rule rounded p-3.5 mt-3.5">
+            <label className="flex items-center gap-1 mb-2 text-[10.5px] font-semibold uppercase tracking-wide text-steel">
+              <Truck size={11} /> ¿Carga productos de Guías Canceladas?
+            </label>
+            <div className="text-[11px] text-steel mb-2">
+              Una vez que Bryan gestiona un lote de guías canceladas con la transportadora/Dropi, esta persona (hoy Heidy) ve esas guías y carga qué productos y cantidades venían en cada una, antes de que Daniel las reingrese a Just.
+            </div>
+            <PermToggle value={p.canAssignCancelledGuideItems} busy={busy} onChange={(v) => save({ canAssignCancelledGuideItems: v })} />
           </div>
 
           <div className="bg-cloud border border-rule rounded p-3.5 mt-3.5">

@@ -11,10 +11,13 @@ export const CARRIER_LABELS: Record<string, string> = {
 export const SOURCE_AREA_LABELS: Record<string, string> = {
   MKT_DAMIAN: "Análisis de Mercado — Bodega Importadora Damián",
   MKT_PROVEDIX: "Análisis de Mercado — Bodega Provedix",
+  MKT_SHANGHAI: "Análisis de Mercado — Bodega Importadora Shanghai",
   FULFILLMENT: "Fulfillment",
 };
 
-export const MKT_CANCEL_REASONS = ["Solicitud del dropshipper", "Falta de stock"];
+// Reemplazados 2026-09-02, pedido explícito del usuario (antes "Solicitud
+// del dropshipper" / "Falta de stock").
+export const MKT_CANCEL_REASONS = ["Rechazado por transportadora", "Cancelación por ruptura de stock"];
 export const FULFILLMENT_CANCEL_REASONS = ["No cumple medidas o peso"];
 
 // Prefijo y largo total (en caracteres) del número de guía de cada

@@ -8,11 +8,14 @@ import { CatalogCode } from "@/components/shared/CatalogCode";
 type ReportDTO = {
   id: string;
   code: string;
+  batchCode: string | null;
   guideNumber: string;
   carrier: keyof typeof CARRIER_LABELS;
   sourceArea: keyof typeof SOURCE_AREA_LABELS;
   reason: string;
   reallyCancelled: boolean | null;
+  batchManagedAt: string | null;
+  itemsAssignedAt: string | null;
   reingresadoAt: string | null;
   createdAt: string;
   submittedBy: { name: string } | null;
@@ -20,10 +23,15 @@ type ReportDTO = {
 };
 
 function statusChip(r: ReportDTO): { text: string; color: string } {
-  if (r.reallyCancelled === null) return { text: "Pendiente de corte", color: "text-gold" };
-  if (r.reallyCancelled === false) return { text: "Se despachó igual", color: "text-steel" };
   if (r.reingresadoAt) return { text: `Reingresada a Just · ${formatDateTime(r.reingresadoAt)}`, color: "text-green" };
-  return { text: "Confirmada — falta reingresar", color: "text-blue" };
+  if (r.itemsAssignedAt) return { text: "Con productos — falta reingresar", color: "text-blue" };
+  if (r.batchManagedAt) return { text: "Gestionada con la transportadora — falta cargar productos", color: "text-gold" };
+  // Reportes de antes del rediseño 2026-09-02 nunca tuvieron lote.
+  if (!r.batchCode) {
+    if (r.reallyCancelled === false) return { text: "Se despachó igual", color: "text-steel" };
+    if (r.reallyCancelled === null) return { text: "Pendiente de corte (reporte antiguo)", color: "text-steel" };
+  }
+  return { text: "Pendiente de gestionar con la transportadora", color: "text-gold" };
 }
 
 export function CancelledGuideHistoryList() {
@@ -44,6 +52,7 @@ export function CancelledGuideHistoryList() {
           <div key={r.id} className="bg-surface border border-rule rounded-md p-3">
             <div className="flex items-center gap-2 mb-1 flex-wrap">
               <span className="font-mono text-[11px] font-bold text-teal">{r.code}</span>
+              {r.batchCode && <span className="font-mono text-[10px] text-steel">{r.batchCode}</span>}
               <span className="text-[11px] text-steel">Guía {r.guideNumber} · {CARRIER_LABELS[r.carrier]}</span>
               <span className={`font-mono text-[9.5px] font-bold uppercase ${status.color}`}>{status.text}</span>
             </div>

@@ -2,32 +2,32 @@
 
 import { useState } from "react";
 import { CancelledGuideSubmitForm } from "./CancelledGuideSubmitForm";
-import { CancelledGuideConfirmationsInbox } from "./CancelledGuideConfirmationsInbox";
-import { CancelledGuideCutoffInbox } from "./CancelledGuideCutoffInbox";
+import { CancelledGuideBatchInbox } from "./CancelledGuideBatchInbox";
+import { CancelledGuideItemAssignmentPanel } from "./CancelledGuideItemAssignmentPanel";
 import { CancelledGuideReingresoQueue } from "./CancelledGuideReingresoQueue";
 import { CancelledGuideHistoryList } from "./CancelledGuideHistoryList";
 import { TabGuide } from "@/components/shared/TabGuide";
 
-type Tab = "reportar" | "confirmaciones" | "corte" | "reingreso" | "historial";
+type Tab = "reportar" | "lotes" | "productos" | "reingreso" | "historial";
 
 export function CancelledGuidesPanel({
   canSubmit,
-  canConfirm,
-  canCutoff,
+  canManageBatches,
+  canAssignItems,
   canReingreso,
 }: {
   canSubmit: boolean;
-  canConfirm: boolean;
-  canCutoff: boolean;
+  canManageBatches: boolean;
+  canAssignItems: boolean;
   canReingreso: boolean;
 }) {
-  const defaultTab: Tab = canSubmit ? "reportar" : canConfirm ? "confirmaciones" : canCutoff ? "corte" : canReingreso ? "reingreso" : "historial";
+  const defaultTab: Tab = canSubmit ? "reportar" : canManageBatches ? "lotes" : canAssignItems ? "productos" : canReingreso ? "reingreso" : "historial";
   const [tab, setTab] = useState<Tab>(defaultTab);
 
   const tabs: { id: Tab; label: string }[] = [
     ...(canSubmit ? [{ id: "reportar" as const, label: "Reportar" }] : []),
-    ...(canConfirm ? [{ id: "confirmaciones" as const, label: "Confirmaciones" }] : []),
-    ...(canCutoff ? [{ id: "corte" as const, label: "Corte semanal" }] : []),
+    ...(canManageBatches ? [{ id: "lotes" as const, label: "Gestionar lotes" }] : []),
+    ...(canAssignItems ? [{ id: "productos" as const, label: "Cargar productos" }] : []),
     ...(canReingreso ? [{ id: "reingreso" as const, label: "Reingresar a Just" }] : []),
     { id: "historial" as const, label: "Historial" },
   ];
@@ -49,25 +49,25 @@ export function CancelledGuidesPanel({
 
       {tab === "reportar" && canSubmit && (
         <>
-          <TabGuide storageKey="cancelledguides-reportar">Reporta acá una guía que hay que cancelar — Fulfillment e Inventario se enteran al toque para no despacharla.</TabGuide>
+          <TabGuide storageKey="cancelledguides-reportar">Reporta acá las guías que hay que cancelar — Fulfillment e Inventario se enteran al toque para no despacharlas, y Análisis de Mercado recibe el lote para gestionarlo con la transportadora.</TabGuide>
           <CancelledGuideSubmitForm />
         </>
       )}
-      {tab === "confirmaciones" && canConfirm && (
+      {tab === "lotes" && canManageBatches && (
         <>
-          <TabGuide storageKey="cancelledguides-confirmaciones">Confirma acá que hiciste tu gestión (no despachar) para cada guía reportada — sin importar quién la haya subido.</TabGuide>
-          <CancelledGuideConfirmationsInbox />
+          <TabGuide storageKey="cancelledguides-lotes">Copiá las guías de cada lote y gestioná la cancelación con la transportadora/Dropi. Cuando ya lo hiciste, confirmá el lote completo.</TabGuide>
+          <CancelledGuideBatchInbox />
         </>
       )}
-      {tab === "corte" && canCutoff && (
+      {tab === "productos" && canAssignItems && (
         <>
-          <TabGuide storageKey="cancelledguides-corte">Decide, guía por guía, si realmente no se despachó (pasa a la cola de Daniel para reingresar a Just) o si se despachó igual por otro motivo.</TabGuide>
-          <CancelledGuideCutoffInbox />
+          <TabGuide storageKey="cancelledguides-productos">Guías ya gestionadas con la transportadora — cargá qué productos y cantidades venían en cada una.</TabGuide>
+          <CancelledGuideItemAssignmentPanel />
         </>
       )}
       {tab === "reingreso" && canReingreso && (
         <>
-          <TabGuide storageKey="cancelledguides-reingreso">Guías confirmadas como realmente canceladas — reingresa esa mercadería en Just.</TabGuide>
+          <TabGuide storageKey="cancelledguides-reingreso">Guías con productos ya cargados — reingresa esa mercadería en Just.</TabGuide>
           <CancelledGuideReingresoQueue />
         </>
       )}

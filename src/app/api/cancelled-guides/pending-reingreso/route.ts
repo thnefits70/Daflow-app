@@ -5,9 +5,9 @@ import { canActOnMerchandiseOutflow } from "@/lib/guards";
 export async function GET() {
   if (!(await canActOnMerchandiseOutflow())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
   const reports = await prisma.cancelledGuideReport.findMany({
-    where: { reallyCancelled: true, reingresadoAt: null },
+    where: { itemsAssignedAt: { not: null }, reingresadoAt: null },
     include: { items: { include: { catalogItem: { select: { name: true, justCode: true } } } } },
-    orderBy: { cutoffDecidedAt: "asc" },
+    orderBy: { itemsAssignedAt: "asc" },
   });
   return NextResponse.json(reports);
 }

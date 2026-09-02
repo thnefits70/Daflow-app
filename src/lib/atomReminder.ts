@@ -57,7 +57,7 @@ const URL_BASE = "/area/workspace?tab=analisis-mercado&otab=combos";
 
 // Confirmado 2026-08-31: avisa a TODO el equipo de Análisis de Mercado (no a
 // una sola persona) — repartido, mismo patrón que
-// notifyCancelledGuideSubmitted en cancelledGuides.ts.
+// notifyCancelledGuideBatchSubmitted en cancelledGuides.ts.
 export async function getAtomSyncReminderPushes(): Promise<AtomSyncReminderPush[]> {
   if (!(await isAtomSyncDueToday())) return [];
 

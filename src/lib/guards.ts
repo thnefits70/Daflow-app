@@ -1100,10 +1100,16 @@ export async function canCloseExternalSale() {
  * ---------------- Guías Canceladas (Fase 4 de Registro de Egresos) ----------------
  * Confirmado 2026-08-25: lo sube cualquiera de Análisis de Mercado (MKT) o
  * Fulfillment (FUL) — sin exigir liderazgo, mismo criterio de membresía de
- * equipo que Reingreso/Egresos. Fulfillment e Inventario confirman por
- * separado (cualquier miembro de su equipo, no solo el líder). El corte
- * semanal es de Bryan (líder de MKT); reingresar a Just es de Daniel
- * (reusa canActOnMerchandiseOutflow, mismo Daniel exclusivo).
+ * equipo que Reingreso/Egresos.
+ *
+ * Rediseñado 2026-09-02 (ver docblock de CancelledGuideReport en el
+ * schema): las confirmaciones separadas de Fulfillment/Inventario y el
+ * corte semanal de Bryan quedaron reemplazadas por
+ * canManageCancelledGuideBatches (Bryan gestiona el lote completo con la
+ * transportadora/Dropi) + canAssignCancelledGuideItems (delegado puntual,
+ * hoy Heidy, carga los productos de cada guía). Reingresar a Just sigue
+ * siendo de Daniel (reusa canActOnMerchandiseOutflow, mismo Daniel
+ * exclusivo).
  */
 async function cancelledGuideUserContext(userId: string) {
   return prisma.user.findUnique({
@@ -1120,19 +1126,24 @@ export async function canSubmitCancelledGuide() {
   return user.department?.code === "MKT" || user.department?.code === "FUL";
 }
 
-export async function canConfirmCancelledGuideFulfillment() {
-  const session = await auth();
-  if (!session) return false;
-  const user = await cancelledGuideUserContext(session.user.id);
-  return user?.department?.code === "FUL";
-}
-
-export async function canManageCancelledGuideCutoff() {
+// Bryan (líder MKT) confirma que gestionó un lote completo con la
+// transportadora/Dropi — mismo criterio que el corte semanal que reemplaza.
+export async function canManageCancelledGuideBatches() {
   const session = await auth();
   if (!session) return false;
   if (session.user.role === "admin") return true;
   const user = await cancelledGuideUserContext(session.user.id);
   return !!user?.isLeader && user.leadsDept?.code === "MKT";
+}
+
+// Delegado puntual (hoy Heidy) que carga productos/cantidades guía por
+// guía una vez que Bryan confirmó el lote — mismo patrón EXCLUSIVO de
+// canConfirmMarketingDesign/Advisor, ni siquiera admin actúa acá.
+export async function canAssignCancelledGuideItems() {
+  const session = await auth();
+  if (!session || session.user.role === "admin") return false;
+  const user = await prisma.user.findUnique({ where: { id: session.user.id }, select: { canAssignCancelledGuideItems: true } });
+  return !!user?.canAssignCancelledGuideItems;
 }
 
 // Ve TODAS las solicitudes (no solo las propias) — líderes de MKT/FUL/INV y
@@ -1149,7 +1160,13 @@ export async function canViewCancelledGuides() {
   const session = await auth();
   if (!session) return false;
   if (session.user.role === "admin") return true;
-  return (await canSubmitCancelledGuide()) || (await canViewAllCancelledGuides()) || (await canCaptureMerchandiseOutflow());
+  return (
+    (await canSubmitCancelledGuide()) ||
+    (await canViewAllCancelledGuides()) ||
+    (await canManageCancelledGuideBatches()) ||
+    (await canAssignCancelledGuideItems()) ||
+    (await canCaptureMerchandiseOutflow())
+  );
 }
 
 // Visibilidad general de la pestaña — cualquiera de los roles del flujo.
@@ -1329,4 +1346,30 @@ export async function canEvaluateUser(evaluateeId: string) {
     select: { isLeader: true, leadsDeptId: true },
   });
   return !!me?.isLeader && me.leadsDeptId === evaluatee.deptId;
+}
+
+// Feedback de Liderazgo 360° (confirmado 2026-09-01) — quién puede calificar
+// el Liderazgo de un líder (su propio equipo) vs. quién solo puede dejarle
+// una observación libre (cualquiera de otra área). Nunca el admin ni el
+// propio líder.
+export async function canRateLeaderLeadership(leaderId: string) {
+  const session = await auth();
+  if (!session || session.user.role !== "employee") return false;
+
+  const leader = await prisma.user.findUnique({ where: { id: leaderId }, select: { isLeader: true, leadsDeptId: true } });
+  if (!leader?.isLeader) return false;
+
+  const me = await prisma.user.findUnique({ where: { id: session.user.id }, select: { isLeader: true, deptId: true } });
+  return !!me && !me.isLeader && me.deptId === leader.leadsDeptId;
+}
+
+export async function canObserveLeader(leaderId: string) {
+  const session = await auth();
+  if (!session || session.user.role !== "employee") return false;
+
+  const leader = await prisma.user.findUnique({ where: { id: leaderId }, select: { isLeader: true, leadsDeptId: true } });
+  if (!leader?.isLeader) return false;
+
+  const me = await prisma.user.findUnique({ where: { id: session.user.id }, select: { isLeader: true, deptId: true } });
+  return !!me && !me.isLeader && me.deptId !== leader.leadsDeptId;
 }

@@ -170,12 +170,15 @@ export default async function DeptWorkspacePage({ params }: { params: Promise<{ 
         canCaptureMerchandiseOutflow={false}
         canActOnMerchandiseOutflow={false}
         canViewMerchandiseOutflow={dept.code === "INV"}
-        // Guías Canceladas (Fase 4) — admin nunca reporta ni confirma (no
-        // tiene departamento real); el corte semanal SÍ es de admin además
-        // de Bryan (mismo bypass ya presente en canManageCancelledGuideCutoff).
+        // Guías Canceladas (Fase 4), rediseñado 2026-09-02 — admin nunca
+        // reporta ni carga productos (canAssignCancelledGuideItems es
+        // EXCLUSIVO de quien tiene el flag, ni siquiera admin, mismo
+        // patrón que canConfirmMarketingDesign de abajo); gestionar lotes
+        // SÍ es de admin además de Bryan (mismo bypass ya presente en el
+        // guard), se muestra al navegar el departamento de MKT.
         canSubmitCancelledGuide={false}
-        canConfirmCancelledGuide={false}
-        canCutoffCancelledGuide={dept.code === "MKT"}
+        canManageCancelledGuideBatches={dept.code === "MKT"}
+        canAssignCancelledGuideItems={false}
         // Ventas Externas (Fase 3) — Nairoby factura y cierra (FIN), admin
         // confirma pago SIEMPRE (no es de ningún departamento en
         // particular, así que no se apaga al navegar otras áreas).

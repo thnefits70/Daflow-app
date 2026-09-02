@@ -50,6 +50,10 @@ model PlatformSettings {
   // Confirmado 2026-08-25: correlativo propio de Guías Canceladas (GC-0001,
   // GC-0002...) — mismo patrón atómico que los anteriores.
   lastCancelledGuideNumber     Int       @default(0)
+  // Confirmado 2026-09-02: correlativo de LOTES de guías canceladas
+  // (LOTE-0001...) — un lote agrupa las guías de una misma transportadora
+  // que Yair confirma juntas, para que Bryan las copie/gestione de una.
+  lastCancelledGuideBatchNumber Int      @default(0)
   updatedAt                    DateTime  @updatedAt
 }
 
@@ -257,6 +261,14 @@ model User {
   // puede ambas cosas, sin necesitar el flag.
   canConfirmMarketingDesign  Boolean @default(false)
   canConfirmMarketingAdvisor Boolean @default(false)
+
+  // Confirmado 2026-09-02: rediseño del flujo de Guías Canceladas — Bryan
+  // gestiona la cancelación con la transportadora/Dropi y, una vez hecho,
+  // alguien de Análisis de Mercado (hoy Heidy) debe cargar qué productos y
+  // cantidades venían en cada guía antes de que Daniel la gestione en Just.
+  // Mismo patrón que canConfirmMarketingDesign/Advisor: delegado puntual,
+  // EXCLUSIVO de quien tiene el flag — ni siquiera admin actúa, solo ve.
+  canAssignCancelledGuideItems Boolean @default(false)
   // Solo informativo (mismo espíritu que Store.brand) — qué marca asesora
   // esta persona, para mostrarla junto a su nombre cuando confirma. Nunca se
   // usa para filtrar ni bloquear quién ve o puede confirmar qué llegada.
@@ -419,6 +431,8 @@ model User {
   cancelledGuidesInventoryConfirmed   CancelledGuideReport[] @relation("CancelledGuideInventoryConfirmedBy")
   cancelledGuidesCutoffDecided        CancelledGuideReport[] @relation("CancelledGuideCutoffDecidedBy")
   cancelledGuidesReingresado          CancelledGuideReport[] @relation("CancelledGuideReingresadoBy")
+  cancelledGuidesBatchManaged         CancelledGuideReport[] @relation("CancelledGuideBatchManagedBy")
+  cancelledGuidesItemsAssigned        CancelledGuideReport[] @relation("CancelledGuideItemsAssignedBy")
 
   atomProductStatusesCreated       AtomProductStatus[]      @relation("AtomProductStatusCreatedBy")
   lowRotationWeeklyEntriesCreated  LowRotationWeeklyEntry[] @relation("LowRotationWeeklyEntryCreatedBy")
@@ -4437,6 +4451,8 @@ enum CancelledGuideSourceArea {
   // código a que "Heidy siempre es Damián" si eso cambia algún día).
   MKT_DAMIAN
   MKT_PROVEDIX
+  // Agregada 2026-09-02, pedido explícito del usuario.
+  MKT_SHANGHAI
   FULFILLMENT
 }
 
@@ -4454,14 +4470,24 @@ enum CancelledGuideCarrier {
  * mercadería nunca salió, hay que reingresarla a Just), el usuario pidió
  * explícitamente que viva dentro de Registro de Egresos, junto a los demás
  * motivos, para no tener a Daniel saltando entre módulos.
- * Lo sube cualquiera de Análisis de Mercado (Heidy/Jariel, bodega
- * Damián/Provedix) o de Fulfillment (Yair) — motivos distintos según el
- * área. Fulfillment e Inventario confirman por separado que hicieron su
- * gestión (no despachar); Bryan hace el corte semanal decidiendo, guía por
- * guía, si realmente se canceló o si se despachó igual por otro motivo —
- * eso no lo puede saber el sistema solo, es juicio humano contra lo que
- * pasó de verdad en Dropi/Rocket. Solo lo realmente cancelado entra a la
- * cola de Daniel para reingresar a Just.
+ *
+ * Rediseñado 2026-09-02, pedido explícito del usuario — reemplaza el flujo
+ * viejo (confirmaciones separadas de Fulfillment/Inventario + corte semanal
+ * de Bryan decidiendo si "realmente" se canceló):
+ *   1. Yair sube números de guía seguidos (se detectan solos por prefijo) y
+ *      al confirmar arma un LOTE por transportadora (batchCode) — sin
+ *      productos todavía, eso viene después.
+ *   2. Bryan (líder MKT) ve los lotes, copia las guías con un clic y las
+ *      gestiona afuera con la transportadora/Dropi; cuando confirma acá
+ *      (batchManagedAt), se marca TODO el lote de una.
+ *   3. Al confirmarse el lote, alguien con canAssignCancelledGuideItems (hoy
+ *      Heidy) ve esas guías y carga, guía por guía, qué productos y
+ *      cantidades venían (itemsAssignedAt).
+ *   4. Daniel reingresa a Just — igual que antes, ahora gatillado por
+ *      itemsAssignedAt en vez de reallyCancelled.
+ * Los campos viejos (fulfillmentConfirmedAt/inventoryConfirmedAt/
+ * reallyCancelled/cutoffDecidedAt) se conservan sin usar, solo para no
+ * perder el historial de guías reportadas antes del rediseño.
  */
 model CancelledGuideReport {
   id           String @id @default(cuid())
@@ -4474,16 +4500,19 @@ model CancelledGuideReport {
 
   guideNumber String
   carrier     CancelledGuideCarrier
-  // "Solicitud del dropshipper" / "Falta de stock" (MKT) o "No cumple
-  // medidas o peso" (Fulfillment) / texto libre si elige "Otro".
+  // "Rechazado por transportadora" / "Cancelación por ruptura de stock"
+  // (MKT) o "No cumple medidas o peso" (Fulfillment) / texto libre si
+  // elige "Otro".
   reason      String
 
   createdAt DateTime @default(now())
 
   items CancelledGuideItem[]
 
-  // Cada área responsable confirma POR SEPARADO que hizo su parte (no
-  // despachar) — un botón, sin más detalle que pedir.
+  // Lote por transportadora armado al confirmar (ver docblock arriba).
+  // "LOTE-0001" — nullable solo por reportes de antes del rediseño.
+  batchCode String?
+
   fulfillmentConfirmedAt   DateTime?
   fulfillmentConfirmedById String?
   fulfillmentConfirmedBy   User?     @relation("CancelledGuideFulfillmentConfirmedBy", fields: [fulfillmentConfirmedById], references: [id], onDelete: SetNull)
@@ -4492,19 +4521,30 @@ model CancelledGuideReport {
   inventoryConfirmedById String?
   inventoryConfirmedBy   User?     @relation("CancelledGuideInventoryConfirmedBy", fields: [inventoryConfirmedById], references: [id], onDelete: SetNull)
 
-  // Corte semanal de Bryan — null mientras está pendiente de decidir.
   reallyCancelled   Boolean?
   cutoffDecidedAt   DateTime?
   cutoffDecidedById String?
   cutoffDecidedBy   User?     @relation("CancelledGuideCutoffDecidedBy", fields: [cutoffDecidedById], references: [id], onDelete: SetNull)
 
-  // Daniel reingresa a Just — solo aplica cuando reallyCancelled = true.
+  // Bryan confirma que gestionó el lote completo con la transportadora/Dropi.
+  batchManagedAt   DateTime?
+  batchManagedById String?
+  batchManagedBy   User?     @relation("CancelledGuideBatchManagedBy", fields: [batchManagedById], references: [id], onDelete: SetNull)
+
+  // Heidy (o quien tenga el flag) cargó los productos/cantidades de esta guía.
+  itemsAssignedAt   DateTime?
+  itemsAssignedById String?
+  itemsAssignedBy   User?     @relation("CancelledGuideItemsAssignedBy", fields: [itemsAssignedById], references: [id], onDelete: SetNull)
+
+  // Daniel reingresa a Just — habilitado por itemsAssignedAt.
   reingresadoAt   DateTime?
   reingresadoById String?
   reingresadoBy   User?     @relation("CancelledGuideReingresadoBy", fields: [reingresadoById], references: [id], onDelete: SetNull)
 
   @@index([createdAt])
-  @@index([reallyCancelled])
+  @@index([batchCode])
+  @@index([batchManagedAt])
+  @@index([itemsAssignedAt])
   @@index([submittedById])
 }
 

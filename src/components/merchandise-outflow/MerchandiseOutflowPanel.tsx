@@ -24,8 +24,8 @@ export function MerchandiseOutflowPanel({
   canConfirmFinanceWriteOff = false,
   financeWriteOffPendingCount = 0,
   canSubmitCancelledGuide = false,
-  canConfirmCancelledGuide = false,
-  canCutoffCancelledGuide = false,
+  canManageCancelledGuideBatches = false,
+  canAssignCancelledGuideItems = false,
   isAdmin = false,
 }: {
   canCapture: boolean;
@@ -73,9 +73,13 @@ export function MerchandiseOutflowPanel({
   // Guías Canceladas (Fase 4) — vive como pestaña acá adentro (pedido
   // explícito del usuario), aunque su resultado final sea una entrada, no
   // una salida. Reingresar reusa `canAct` (Daniel exclusivo, ya pasado).
+  // Rediseñado 2026-09-02: canConfirmCancelledGuide/canCutoffCancelledGuide
+  // quedaron reemplazados por canManageCancelledGuideBatches (Bryan
+  // gestiona el lote con la transportadora/Dropi) y
+  // canAssignCancelledGuideItems (Heidy carga productos por guía).
   canSubmitCancelledGuide?: boolean;
-  canConfirmCancelledGuide?: boolean;
-  canCutoffCancelledGuide?: boolean;
+  canManageCancelledGuideBatches?: boolean;
+  canAssignCancelledGuideItems?: boolean;
   // Confirmado 2026-08-28, pedido explícito del usuario: el admin puede
   // revisar/comentar (opcional) un rechazo total del proveedor — puro
   // historial, no gatea a Nairoby ni a Daniel. Ver canReviewAsAdmin en
@@ -98,7 +102,7 @@ export function MerchandiseOutflowPanel({
         ? "baja"
         : supplierExchangeMineCount > 0 || financeWriteOffPendingCount > 0
           ? "proveedor"
-          : canSubmitCancelledGuide || canConfirmCancelledGuide || canCutoffCancelledGuide
+          : canSubmitCancelledGuide || canManageCancelledGuideBatches || canAssignCancelledGuideItems
             ? "guias"
             : "historial";
   // Confirmado 2026-08-25: pedido explícito del usuario — todos los
@@ -131,7 +135,7 @@ export function MerchandiseOutflowPanel({
     ...(canCapture ? [{ id: "garantia" as const, label: "Garantía" }] : []),
     ...(canCapture ? [{ id: "deterioro" as const, label: "Deterioro" }] : []),
     ...(canSeeProveedorTab ? [{ id: "proveedor" as const, label: "Cambio con proveedor" }] : []),
-    ...(canSubmitCancelledGuide || canConfirmCancelledGuide || canCutoffCancelledGuide || canAct ? [{ id: "guias" as const, label: "Guías canceladas" }] : []),
+    ...(canSubmitCancelledGuide || canManageCancelledGuideBatches || canAssignCancelledGuideItems || canAct ? [{ id: "guias" as const, label: "Guías canceladas" }] : []),
     ...(canView ? [{ id: "baja" as const, label: "Dar de baja en Just" }, { id: "historial" as const, label: "Historial" }] : []),
   ];
 
@@ -218,12 +222,12 @@ export function MerchandiseOutflowPanel({
           </div>
         </>
       )}
-      {tab === "guias" && (canSubmitCancelledGuide || canConfirmCancelledGuide || canCutoffCancelledGuide || canAct) && (
+      {tab === "guias" && (canSubmitCancelledGuide || canManageCancelledGuideBatches || canAssignCancelledGuideItems || canAct) && (
         <>
           <TabGuide storageKey="merchoutflow-guias">
             Aunque el resultado final sea reingresar mercadería a Just (no darla de baja), las guías canceladas viven acá junto a los demás motivos para no saltar entre módulos.
           </TabGuide>
-          <CancelledGuidesPanel canSubmit={canSubmitCancelledGuide} canConfirm={canConfirmCancelledGuide} canCutoff={canCutoffCancelledGuide} canReingreso={canAct} />
+          <CancelledGuidesPanel canSubmit={canSubmitCancelledGuide} canManageBatches={canManageCancelledGuideBatches} canAssignItems={canAssignCancelledGuideItems} canReingreso={canAct} />
         </>
       )}
       {tab === "baja" && canView && (

@@ -119,8 +119,8 @@ export function DeptWorkspaceTabs({
   canConfirmFinanceWriteOff = false,
   financeWriteOffPendingCount = 0,
   canSubmitCancelledGuide = false,
-  canConfirmCancelledGuide = false,
-  canCutoffCancelledGuide = false,
+  canManageCancelledGuideBatches = false,
+  canAssignCancelledGuideItems = false,
   canDeclareExternalSales = false,
   canReviewExternalSales = false,
   canConfirmExternalSalePayment = false,
@@ -275,8 +275,8 @@ export function DeptWorkspaceTabs({
   // amplía la visibilidad de esa pestaña sin tocar canViewMerchandiseOutflow
   // (que sigue gateando las rutas propias de Egresos).
   canSubmitCancelledGuide?: boolean;
-  canConfirmCancelledGuide?: boolean;
-  canCutoffCancelledGuide?: boolean;
+  canManageCancelledGuideBatches?: boolean;
+  canAssignCancelledGuideItems?: boolean;
   // Ventas Externas (Fase 3) — declarar/revisión/pagos/cierre viven en la
   // misma pestaña sin dept.code (Bryan revisa, admin confirma pago, Nairoby
   // cierra); despacho/entregas reusan las guards de Registro de Egresos.
@@ -336,7 +336,7 @@ export function DeptWorkspaceTabs({
     if (t.key === "llegadas") return canViewMarketingArrivals;
     if (t.key === "inventario") return canManageInventoryControl;
     if (t.key === "reingreso") return canCaptureMerchandiseReentry || canApproveMerchandiseReentry || canCloseMerchandiseReentry;
-    if (t.key === "egresos") return canViewMerchandiseOutflow || canSubmitCancelledGuide || canConfirmCancelledGuide || canCutoffCancelledGuide || supplierExchangeMineCount > 0 || financeWriteOffPendingCount > 0;
+    if (t.key === "egresos") return canViewMerchandiseOutflow || canSubmitCancelledGuide || canManageCancelledGuideBatches || canAssignCancelledGuideItems || supplierExchangeMineCount > 0 || financeWriteOffPendingCount > 0;
     if (t.key === "ventas-externas") return canViewExternalSales;
     if (t.key === "inventoriokpis") return canViewInventoryKpisPanel;
     if (t.key === "cajachica") return !!(pettyCashData?.principal || pettyCashData?.secundaria);
@@ -499,7 +499,7 @@ export function DeptWorkspaceTabs({
           canManageJustCatalog={canManageJustCatalog}
         />
       )}
-      {tab === "egresos" && (canViewMerchandiseOutflow || canSubmitCancelledGuide || canConfirmCancelledGuide || canCutoffCancelledGuide || supplierExchangeMineCount > 0 || financeWriteOffPendingCount > 0) && (
+      {tab === "egresos" && (canViewMerchandiseOutflow || canSubmitCancelledGuide || canManageCancelledGuideBatches || canAssignCancelledGuideItems || supplierExchangeMineCount > 0 || financeWriteOffPendingCount > 0) && (
         <MerchandiseOutflowPanel
           canCapture={canCaptureMerchandiseOutflow}
           canAct={canActOnMerchandiseOutflow}
@@ -510,8 +510,8 @@ export function DeptWorkspaceTabs({
           canConfirmFinanceWriteOff={canConfirmFinanceWriteOff}
           financeWriteOffPendingCount={financeWriteOffPendingCount}
           canSubmitCancelledGuide={canSubmitCancelledGuide}
-          canConfirmCancelledGuide={canConfirmCancelledGuide}
-          canCutoffCancelledGuide={canCutoffCancelledGuide}
+          canManageCancelledGuideBatches={canManageCancelledGuideBatches}
+          canAssignCancelledGuideItems={canAssignCancelledGuideItems}
           isAdmin={isAdmin}
         />
       )}
