@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Upload, CheckCircle2, AlertTriangle, Clock, Search, ChevronDown, ChevronUp } from "lucide-react";
+import { Upload, CheckCircle2, AlertTriangle, Clock, Search, ChevronDown, ChevronUp, Pencil, Check, X } from "lucide-react";
 import { uploadFile } from "@/lib/uploadFile";
 import { CatalogCode, CopyCodeButton } from "@/components/shared/CatalogCode";
 
@@ -153,6 +153,90 @@ function MissingReportsQueue() {
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+// Corregir a mano el nombre de un producto ya existente en el catálogo —
+// pedido explícito del usuario 2026-09-02: no había forma de arreglar un
+// nombre mal escrito salvo re-subiendo el Excel completo de Just. Exclusivo
+// de quien administra el catálogo (canManage = Daniel/admin).
+function RenameCatalogItem({ item, onRenamed }: { item: CatalogItemDTO; onRenamed: (name: string) => void }) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(item.name);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function save() {
+    const trimmed = value.trim();
+    if (!trimmed || trimmed === item.name) {
+      setEditing(false);
+      setValue(item.name);
+      return;
+    }
+    setBusy(true);
+    setError("");
+    try {
+      const res = await fetch(`/api/merchandise-reentry/catalog-items/${item.id}/rename`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: trimmed }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error ?? "No se pudo guardar.");
+      onRenamed(trimmed);
+      setEditing(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "No se pudo guardar.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!editing) {
+    return (
+      <>
+        <span className="text-[12.5px] flex-1 min-w-0 truncate">{item.name}</span>
+        <button type="button" title="Corregir nombre" className="shrink-0 text-steel hover:text-teal cursor-pointer" onClick={() => setEditing(true)}>
+          <Pencil size={12} />
+        </button>
+      </>
+    );
+  }
+
+  return (
+    <div className="flex-1 min-w-0 flex items-center gap-1.5">
+      <input
+        autoFocus
+        disabled={busy}
+        className="flex-1 min-w-0 rounded border border-teal bg-cloud px-2 py-1 text-[12.5px] disabled:opacity-60"
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") save();
+          if (e.key === "Escape") {
+            setEditing(false);
+            setValue(item.name);
+          }
+        }}
+      />
+      <button type="button" disabled={busy} title="Guardar" className="shrink-0 text-teal cursor-pointer disabled:opacity-50" onClick={save}>
+        <Check size={14} />
+      </button>
+      <button
+        type="button"
+        disabled={busy}
+        title="Cancelar"
+        className="shrink-0 text-steel hover:text-red cursor-pointer disabled:opacity-50"
+        onClick={() => {
+          setEditing(false);
+          setValue(item.name);
+          setError("");
+        }}
+      >
+        <X size={14} />
+      </button>
+      {error && <span className="text-red text-[11px] shrink-0">{error}</span>}
     </div>
   );
 }
@@ -618,7 +702,14 @@ export function JustCatalogPanel({ canManage }: { canManage: boolean }) {
               </div>
             )}
             <CatalogCode code={item.justCode} />
-            <span className="text-[12.5px] flex-1 min-w-0 truncate">{item.name}</span>
+            {canManage ? (
+              <RenameCatalogItem
+                item={item}
+                onRenamed={(name) => setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, name } : i)))}
+              />
+            ) : (
+              <span className="text-[12.5px] flex-1 min-w-0 truncate">{item.name}</span>
+            )}
             {item.pendingRegistration && (
               <span className="shrink-0 font-mono text-[9px] font-bold uppercase rounded-full px-1.5 py-0.5 bg-gold/15 border border-gold/40" style={{ color: "#D9A441" }}>
                 Pendiente de matricular
