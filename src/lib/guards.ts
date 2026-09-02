@@ -1,6 +1,19 @@
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 
+// El login de admin (auth.ts, mode: "admin") no está atado a ninguna fila
+// real de User — devuelve el id literal "admin", que nunca existe en la
+// tabla User. Cualquier createdById/reportedById/etc. que guarde
+// session.user.id tal cual revienta con "foreign key constraint violated" en
+// cuanto lo usa admin (confirmado 2026-09-02, causa real de "no se pudo
+// guardar" en ATOM y en "avisar producto faltante" — ver memoria). Usar esto
+// en vez de session.user.id crudo en cualquier campo que sea una relación
+// real a User; el campo debe aceptar null (si no, no se puede grabar quién
+// hizo la acción cuando la hace admin, sin migrar el schema).
+export function dbUserId(id: string): string | null {
+  return id === "admin" ? null : id;
+}
+
 export async function requireAdminSession() {
   const session = await auth();
   if (!session || session.user.role !== "admin") return null;
