@@ -4,20 +4,20 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { sendPushToOwner } from "@/lib/webPush";
 import { releaseCreditsForGroup } from "@/lib/supplierCredits";
-import { canApprovePurchaseRequests } from "@/lib/guards";
+import { canActOnPurchaseApproval } from "@/lib/guards";
 
 const schema = z.object({ action: z.enum(["approve", "reject"]), rejectReason: z.string().trim().optional() });
 
 // Confirmado 2026-07-31: una cotización con varios productos se aprueba o
 // rechaza COMO UNA SOLA compra — aplica a todas las filas del groupId a la
 // vez, no producto por producto.
-// Confirmado 2026-09-02: pedido explícito del usuario — además de admin,
-// quien tenga el nuevo permiso de aprobación con un clic (hoy Bryan) puede
-// aprobar/rechazar (ver canApprovePurchaseRequests en guards.ts). Admin
-// sigue pudiendo también, como respaldo.
+// Confirmado 2026-09-02: pedido explícito del usuario — corrección al
+// diseño anterior. Aprobar/rechazar es EXCLUSIVO de quien tenga el permiso
+// (hoy Bryan), ni siquiera admin — su parte activa pasó a ser pagar, no
+// aprobar (ver canActOnPurchaseApproval en guards.ts).
 export async function POST(req: NextRequest, { params }: { params: Promise<{ groupId: string }> }) {
   const session = await auth();
-  if (!session || !(await canApprovePurchaseRequests())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+  if (!session || !(await canActOnPurchaseApproval())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
   const { groupId } = await params;
   const body = await req.json().catch(() => null);

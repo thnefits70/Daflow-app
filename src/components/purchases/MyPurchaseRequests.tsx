@@ -50,7 +50,9 @@ type Row = {
   shippingPaidAt: string | null;
   requestedBy: { name: string } | null;
   reviewedBy: { name: string } | null;
+  reviewedAt: string | null;
   paidBy: { name: string } | null;
+  paidAt: string | null;
   invoicedBy: { name: string } | null;
   receipt: {
     photoUrls: string[];
@@ -58,6 +60,7 @@ type Row = {
     aiPhotoMatch: boolean | null;
     aiPhotoNote: string | null;
     confirmedBy: { name: string } | null;
+    confirmedAt: string | null;
   } | null;
   supplier: { id: string; name: string; bankAccounts: BankAccountDTO[] };
   bankAccountId: string | null;
@@ -611,9 +614,9 @@ function GroupCard({
             </div>
           )}
           <div className="text-[10px] text-steel-dim mt-1.5">
-            {groupIdx >= 1 && <>Aprobada por {actorName(g[0].reviewedBy?.name)} · </>}
-            {groupIdx >= 2 && <>Pagada por {actorName(g[0].paidBy?.name)} · </>}
-            {groupIdx >= 4 && <>Recibida por {[...new Set(g.map((r) => actorName(r.receipt?.confirmedBy?.name)))].join(", ")}</>}
+            {groupIdx >= 1 && <>Aprobada por {actorName(g[0].reviewedBy?.name)}{g[0].reviewedAt ? ` · ${formatDateTime(g[0].reviewedAt)}` : ""} · </>}
+            {groupIdx >= 2 && <>Pagada por {actorName(g[0].paidBy?.name)}{g[0].paidAt ? ` · ${formatDateTime(g[0].paidAt)}` : ""} · </>}
+            {groupIdx >= 4 && <>Recibida por {[...new Set(g.map((r) => actorName(r.receipt?.confirmedBy?.name)))].join(", ")}{g[0].receipt?.confirmedAt ? ` · ${formatDateTime(g[0].receipt.confirmedAt)}` : ""}</>}
           </div>
           {groupIdx === 1 && (
             <button

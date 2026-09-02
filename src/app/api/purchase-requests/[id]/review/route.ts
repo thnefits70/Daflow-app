@@ -3,17 +3,17 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { sendPushToOwner } from "@/lib/webPush";
-import { canApprovePurchaseRequests } from "@/lib/guards";
+import { canActOnPurchaseApproval } from "@/lib/guards";
 
 const schema = z.object({ action: z.enum(["approve", "reject"]), rejectReason: z.string().trim().optional() });
 
-// Confirmado 2026-09-02: además de admin, quien tenga el nuevo permiso de
-// aprobación con un clic (hoy Bryan) puede aprobar/rechazar — mismo cambio
-// que en group/[groupId]/review/route.ts (que es la que de verdad usa la
-// UI hoy; esta ruta de una sola fila se mantiene igual por consistencia).
+// Confirmado 2026-09-02: aprobar/rechazar es EXCLUSIVO de quien tenga el
+// permiso (hoy Bryan), ni siquiera admin — mismo cambio que en
+// group/[groupId]/review/route.ts (que es la que de verdad usa la UI hoy;
+// esta ruta de una sola fila se mantiene igual por consistencia).
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
-  if (!session || !(await canApprovePurchaseRequests())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+  if (!session || !(await canActOnPurchaseApproval())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
   const { id } = await params;
   const body = await req.json().catch(() => null);

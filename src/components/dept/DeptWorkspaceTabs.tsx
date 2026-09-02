@@ -87,6 +87,7 @@ export function DeptWorkspaceTabs({
   canSubmitPurchases = false,
   canCreatePurchases = false,
   canApprovePurchases = false,
+  canActOnPurchaseApproval = false,
   canReceivePurchases = false,
   canReceivePurchasesTeam = false,
   canApprovePurchaseReceiving = false,
@@ -183,6 +184,12 @@ export function DeptWorkspaceTabs({
   // (hoy Bryan), que se SUMA a isAdmin en vez de reemplazarlo.
   canCreatePurchases?: boolean;
   canApprovePurchases?: boolean;
+  // Confirmado 2026-09-02: corrección al diseño anterior — canApprovePurchases
+  // (arriba) sigue dando VISIBILIDAD de la pestaña "Bandeja de aprobación"
+  // (admin siempre la ve, en modo solo lectura); canActOnPurchaseApproval es
+  // el permiso de aprobar/rechazar de VERDAD, exclusivo de quien lo tenga
+  // asignado (hoy Bryan) — NUNCA admin, cuya parte activa pasó a ser pagar.
+  canActOnPurchaseApproval?: boolean;
   canReceivePurchases?: boolean;
   // Confirmado 2026-08-18: canReceivePurchases sigue siendo el gate de la
   // pestaña "Inventario" (ahora todo el equipo de INV, no solo Daniel);
@@ -450,6 +457,7 @@ export function DeptWorkspaceTabs({
           canSubmit={canSubmitPurchases}
           canCreateNew={canCreatePurchases}
           canReview={isAdmin || canApprovePurchases}
+          canActOnApproval={canActOnPurchaseApproval}
           canReceive={canReceivePurchases}
           canReceiveTeam={canReceivePurchasesTeam}
           canApproveReceiving={canApprovePurchaseReceiving}

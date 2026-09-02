@@ -124,7 +124,19 @@ function buildValidationSummary(g: Row[]) {
   return { text: parts.join(" "), hasIssue };
 }
 
-export function PurchaseApprovalInbox() {
+// Confirmado 2026-09-02: pedido explícito del usuario — corrección al
+// diseño anterior. canAct es EXCLUSIVO de quien tenga el permiso de
+// aprobación real (hoy Bryan) — el admin ve esta misma bandeja
+// (canReview en PurchaseControlPanel sigue dándole acceso a la pestaña)
+// pero en modo SOLO LECTURA, sin botones de aprobar/rechazar: su parte
+// activa es pagar, no aprobar. canPayHere decide si "Aprobar" abre el
+// combo de subir comprobante y pagar de una vez (pensado para cuando
+// aprobar y pagar los hace la misma persona) o si aprueba directo sin
+// pedir comprobante (el caso real de Bryan, que nunca paga — el pago
+// queda para después, en Finanzas). isAdmin sigue gatiando "pedir cambio
+// de cuenta bancaria", que es una acción de pago, no de aprobación, y
+// sigue siendo exclusiva de admin en el servidor.
+export function PurchaseApprovalInbox({ canAct = true, canPayHere = true, isAdmin = true }: { canAct?: boolean; canPayHere?: boolean; isAdmin?: boolean }) {
   const router = useRouter();
   const [rows, setRows] = useState<Row[] | null>(null);
   const [busyGroup, setBusyGroup] = useState<string | null>(null);
@@ -364,10 +376,40 @@ export function PurchaseApprovalInbox() {
     router.refresh();
   }
 
+  // Confirmado 2026-09-02: pedido explícito del usuario — aprobar solo,
+  // sin comprobante ni pago (el caso real de Bryan: él aprueba, el pago
+  // queda para después en Finanzas, que hace otra persona).
+  async function justApprove(groupId: string) {
+    setBusyGroup(groupId);
+    await fetch(`/api/purchase-requests/group/${groupId}/review`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "approve" }),
+    });
+    setBusyGroup(null);
+    load();
+    router.refresh();
+  }
+
+  function startApprove(groupId: string) {
+    if (canPayHere) {
+      setApprovingGroup(groupId);
+      setProofUrl(null);
+      setProofVerifyResult(null);
+      setShippingProofUrl(null);
+      setShippingProofVerifyResult(null);
+      setErr("");
+    } else {
+      justApprove(groupId);
+    }
+  }
+
   // Confirmado 2026-08-03: aprobar y pagar quedan en un solo paso — se
   // aprueba, y con el comprobante ya subido se registra el pago de una vez
   // (el del flete es opcional), en vez de tener que volver más tarde a
-  // Finanzas para la mitad que faltaba.
+  // Finanzas para la mitad que faltaba. Solo aplica cuando quien aprueba
+  // TAMBIÉN puede pagar (canPayHere) — ver justApprove/startApprove arriba
+  // para el caso normal de hoy (Bryan aprueba, nunca paga).
   async function approveAndPay(groupId: string, payShipping: boolean) {
     const netAmount = netAmountFor(groupId);
     if (netAmount > 0) {
@@ -686,26 +728,28 @@ export function PurchaseApprovalInbox() {
                     <div className="font-display text-[16px] font-bold text-teal leading-tight break-all">{g[0].bankAccount.bankAccountNumber}</div>
                   </div>
                 </div>
-                {requestingAccountChangeFor === groupId ? (
-                  <div>
-                    <textarea
-                      className="w-full rounded border border-rule px-2.5 py-1.5 text-[11.5px] mb-1.5"
-                      rows={2}
-                      placeholder="¿Por qué hace falta cambiarla? (opcional, ej. el banco no permite la transferencia)"
-                      value={accountChangeNote}
-                      onChange={(e) => setAccountChangeNote(e.target.value)}
-                    />
-                    <div className="flex items-center gap-2">
-                      <button type="button" disabled={busyAccountGroup === groupId} className="rounded border border-gold/50 px-2.5 py-1 text-[11px] font-semibold cursor-pointer disabled:opacity-60" style={{ color: "#D9A441" }} onClick={() => requestAccountChange(groupId)}>
-                        Confirmar aviso
-                      </button>
-                      <button type="button" className="text-steel text-[11px] cursor-pointer" onClick={() => { setRequestingAccountChangeFor(null); setAccountChangeNote(""); }}>Cancelar</button>
+                {isAdmin && (
+                  requestingAccountChangeFor === groupId ? (
+                    <div>
+                      <textarea
+                        className="w-full rounded border border-rule px-2.5 py-1.5 text-[11.5px] mb-1.5"
+                        rows={2}
+                        placeholder="¿Por qué hace falta cambiarla? (opcional, ej. el banco no permite la transferencia)"
+                        value={accountChangeNote}
+                        onChange={(e) => setAccountChangeNote(e.target.value)}
+                      />
+                      <div className="flex items-center gap-2">
+                        <button type="button" disabled={busyAccountGroup === groupId} className="rounded border border-gold/50 px-2.5 py-1 text-[11px] font-semibold cursor-pointer disabled:opacity-60" style={{ color: "#D9A441" }} onClick={() => requestAccountChange(groupId)}>
+                          Confirmar aviso
+                        </button>
+                        <button type="button" className="text-steel text-[11px] cursor-pointer" onClick={() => { setRequestingAccountChangeFor(null); setAccountChangeNote(""); }}>Cancelar</button>
+                      </div>
                     </div>
-                  </div>
-                ) : (
-                  <button type="button" className="text-[11px] text-steel underline cursor-pointer" onClick={() => setRequestingAccountChangeFor(groupId)}>
-                    Esta cuenta no sirvió — pedir que la cambien
-                  </button>
+                  ) : (
+                    <button type="button" className="text-[11px] text-steel underline cursor-pointer" onClick={() => setRequestingAccountChangeFor(groupId)}>
+                      Esta cuenta no sirvió — pedir que la cambien
+                    </button>
+                  )
                 )}
               </div>
             ) : (
@@ -714,7 +758,8 @@ export function PurchaseApprovalInbox() {
 
             {justification && <div className="text-[12px] text-steel mb-2.5">Justificación: &quot;{justification}&quot;</div>}
 
-            {rejectingGroup === groupId ? (
+            {canAct ? (
+            rejectingGroup === groupId ? (
               <div>
                 <textarea className="w-full rounded border border-rule px-2.5 py-2 text-[12.5px] mb-2" rows={2} placeholder="Motivo del rechazo (opcional)" value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} />
                 <div className="flex items-center gap-2">
@@ -868,13 +913,16 @@ export function PurchaseApprovalInbox() {
               </div>
             ) : (
               <div className="flex items-center gap-2">
-                <button type="button" disabled={busyGroup === groupId} className="rounded border border-green bg-green px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer disabled:opacity-60" onClick={() => { setApprovingGroup(groupId); setProofUrl(null); setProofVerifyResult(null); setShippingProofUrl(null); setShippingProofVerifyResult(null); setErr(""); }}>
+                <button type="button" disabled={busyGroup === groupId} className="rounded border border-green bg-green px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer disabled:opacity-60" onClick={() => startApprove(groupId)}>
                   Aprobar
                 </button>
                 <button type="button" disabled={busyGroup === groupId} className="rounded border border-rule px-3.5 py-1.5 text-[12.5px] font-semibold text-steel cursor-pointer" onClick={() => setRejectingGroup(groupId)}>
                   Rechazar
                 </button>
               </div>
+            )
+            ) : (
+              <div className="text-[11.5px] text-steel-dim italic">Solo lectura — la aprobación de esta compra la gestiona el equipo de Compras.</div>
             )}
           </div>
         );

@@ -24,6 +24,7 @@ export function PurchaseControlPanel({
   canSubmit,
   canCreateNew,
   canReview,
+  canActOnApproval,
   canReceive,
   canReceiveTeam,
   canApproveReceiving,
@@ -41,6 +42,12 @@ export function PurchaseControlPanel({
   // ya no puede iniciar una solicitud nueva.
   canCreateNew: boolean;
   canReview: boolean;
+  // Confirmado 2026-09-02: pedido explícito del usuario — corrección al
+  // diseño anterior. canReview sigue gateando si se VE la pestaña "Bandeja
+  // de aprobación" (admin la ve siempre, en modo solo lectura); aprobar o
+  // rechazar de VERDAD es EXCLUSIVO de quien tenga canActOnApproval (hoy
+  // Bryan) — el admin ya no aprueba, su parte activa es pagar.
+  canActOnApproval: boolean;
   canReceive: boolean;
   canReceiveTeam: boolean;
   canApproveReceiving: boolean;
@@ -147,9 +154,11 @@ export function PurchaseControlPanel({
       {tab === "aprobacion" && (
         <>
           <TabGuide storageKey="compras-aprobacion">
-            Apruebas o rechazas las solicitudes de compra. El sistema lee la cotización subida con IA y te avisa si el total no coincide con lo declarado — revísalo antes de aprobar.
+            {canActOnApproval
+              ? <>Apruebas o rechazas las solicitudes de compra. El sistema lee la cotización subida con IA y te avisa si el total no coincide con lo declarado — revísalo antes de aprobar.</>
+              : <>Vista de solo lectura de las solicitudes pendientes de aprobación y cómo se van resolviendo. Aprobar o rechazar es de quien tiene ese permiso asignado — tu parte activa en la compra es pagarla, en la pestaña Finanzas, una vez aprobada.</>}
           </TabGuide>
-          <PurchaseApprovalInbox />
+          <PurchaseApprovalInbox canAct={canActOnApproval} canPayHere={canActOnApproval && canPayMerchandise} isAdmin={isAdmin} />
         </>
       )}
       {tab === "urgentes" && (

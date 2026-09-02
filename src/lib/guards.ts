@@ -567,13 +567,30 @@ function isFulfilmentTeamMember(user: { isLeader: boolean; leadsDept: { code: st
   return (user.isLeader && user.leadsDept?.code === "FUL") || user.department?.code === "FUL";
 }
 
+// Confirmado 2026-09-02: pedido explícito del usuario — alguien en
+// transición (purchasingNewRequestsBlocked, hoy Bryan) no debe conservar
+// "Mis solicitudes" para siempre. Una vez que ya no le queda ninguna
+// solicitud propia sin cerrar (todo llegó a RECIBIDO), pierde el acceso
+// automáticamente — nadie tiene que acordarse de apagarle nada a mano. Un
+// REJECTED sin reenviar cuenta como "todavía sin cerrar" a propósito:
+// mientras esa fila exista, sigue siendo algo suyo por resolver.
+async function hasOpenOwnPurchaseRequests(userId: string): Promise<boolean> {
+  const count = await prisma.purchaseRequest.count({
+    where: { requestedById: userId, status: { not: "RECEIVED" } },
+  });
+  return count > 0;
+}
+
 export async function canSubmitPurchaseRequests() {
   const session = await auth();
   if (!session) return false;
   if (session.user.role === "admin") return true;
   const user = await purchasesUserContext(session.user.id);
   if (!user) return false;
-  if (user.canManagePurchases) return true;
+  if (user.canManagePurchases) {
+    if (user.purchasingNewRequestsBlocked) return hasOpenOwnPurchaseRequests(session.user.id);
+    return true;
+  }
   return !!user.isLeader && !!user.leadsDept && ["COM", "FIN"].includes(user.leadsDept.code);
 }
 
@@ -604,6 +621,21 @@ export async function canApprovePurchaseRequests() {
   const session = await auth();
   if (!session) return false;
   if (session.user.role === "admin") return true;
+  const user = await purchasesUserContext(session.user.id);
+  return !!user?.canApprovePurchaseRequests;
+}
+
+// Confirmado 2026-09-02: pedido explícito del usuario — corrección al
+// diseño anterior ("admin también puede aprobar, como respaldo"). Aprobar o
+// rechazar de VERDAD (el clic que mueve el estado) pasa a ser EXCLUSIVO de
+// quien tenga el flag (hoy Bryan), ni siquiera admin — mismo patrón que
+// canActOnPurchaseInvoices/canActOnPurchaseReceiving. Admin sigue viendo la
+// Bandeja de aprobación (canApprovePurchaseRequests arriba sigue dando esa
+// visibilidad) pero en modo SOLO LECTURA: su parte activa en la compra es
+// pagar (Finanzas), no aprobar.
+export async function canActOnPurchaseApproval() {
+  const session = await auth();
+  if (!session) return false;
   const user = await purchasesUserContext(session.user.id);
   return !!user?.canApprovePurchaseRequests;
 }
