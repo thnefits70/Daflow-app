@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/auth";
-import { canSyncAtomData } from "@/lib/guards";
+import { canSyncAtomData, dbUserId } from "@/lib/guards";
 import { applyAtomSync } from "@/lib/atomSync";
 
 const schema = z.object({
@@ -24,6 +24,6 @@ export async function POST(req: NextRequest) {
   if (parsed.data.rows.length === 0) return NextResponse.json({ error: "No hay filas para registrar." }, { status: 400 });
 
   const capturedAt = new Date();
-  const result = await applyAtomSync(parsed.data.rows, capturedAt, session.user.id);
+  const result = await applyAtomSync(parsed.data.rows, capturedAt, dbUserId(session.user.id));
   return NextResponse.json({ ok: true, ...result, capturedAt });
 }
