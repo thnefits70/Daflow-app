@@ -169,21 +169,36 @@ export async function POST(req: NextRequest) {
             ? await resolveInvolvement({ involvedDeptName: report.involvedDeptName, involvedPersonName: report.involvedPersonName })
             : { involvesDeptId: null, involvesUserId: null, involvesRaw: null };
 
-          const record = await prisma.weeklyReviewRecord.create({
-            data: {
-              deptId,
-              week,
-              problem: report.hasIssues ? report.problem : "Sin novedades esta semana.",
-              actionPlan: report.actionPlan,
-              status: "PENDING",
-              source: "ASSISTANT",
-              reportedById: ownerId,
-              involvesDeptId,
-              involvesUserId,
-              involvesRaw,
-            },
+          // Ya existe un registro de Mary para esta semana (ej. el líder
+          // manda un mensaje de más después del cierre y el modelo vuelve a
+          // llamar la herramienta, pese a que el prompt le dice que no lo
+          // haga) — actualiza ESE registro en vez de crear uno duplicado.
+          // Confirmado 2026-09-02: reportado por Daniel Morán (INV), dos
+          // filas casi idénticas en la bitácora de Inventario tras
+          // responder algo fuera de tema justo después de "quedó registrado".
+          const existing = await prisma.weeklyReviewRecord.findFirst({
+            where: { reportedById: ownerId, week, source: "ASSISTANT" },
           });
-          await notifyInvolvedParties(record).catch((err) => console.error("notifyInvolvedParties falló:", err));
+          const reportData = {
+            deptId,
+            week,
+            problem: report.hasIssues ? report.problem : "Sin novedades esta semana.",
+            actionPlan: report.actionPlan,
+            status: "PENDING" as const,
+            source: "ASSISTANT" as const,
+            reportedById: ownerId,
+            involvesDeptId,
+            involvesUserId,
+            involvesRaw,
+          };
+          const record = existing
+            ? await prisma.weeklyReviewRecord.update({ where: { id: existing.id }, data: reportData })
+            : await prisma.weeklyReviewRecord.create({ data: reportData });
+          // No re-avisar a la misma persona cada vez que el modelo reintenta
+          // registrar la misma semana — solo si todavía no se había avisado.
+          if (!existing?.involvedNotifiedAt) {
+            await notifyInvolvedParties(record).catch((err) => console.error("notifyInvolvedParties falló:", err));
+          }
           anyToolSucceeded = true;
         } else if (block.name === "close_previous_report") {
           const closeParsed = closeReportSchema.safeParse(block.input);

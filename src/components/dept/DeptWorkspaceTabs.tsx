@@ -570,6 +570,7 @@ export function DeptWorkspaceTabs({
           deptId={deptId}
           records={weeklyReviewRecords}
           involvingMe={weeklyReviewInvolvingMe}
+          canDelete={isAdmin}
         />
       )}
     </div>

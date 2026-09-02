@@ -1,5 +1,8 @@
 "use client";
 
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { Trash2 } from "lucide-react";
 import { PushTypeToggle } from "@/components/shared/PushTypeToggle";
 
 export type WeeklyReviewDTO = {
@@ -44,25 +47,40 @@ function formatWeek(week: string) {
   return `Semana ${Number(w)} · ${year}`;
 }
 
-// Bitácora de feedback semanal: 100% lectura, para todo el mundo (admin
-// incluido). El único que escribe registros nuevos es Mary, conversando
-// con el líder de cada área (ver WeeklyCheckinPanel) — ya no existe una
-// forma manual de crear, editar o cerrar un registro a mano; esto es
-// deliberado, para que "Solucionado" siempre venga con una explicación
-// real que Mary recogió, nunca de un botón. Esta vista es puramente para
-// que el admin pueda leer semana a semana lo que cada área reportó y
-// decidir si necesita darle seguimiento él mismo.
+// Bitácora de feedback semanal: solo lectura de contenido — nadie escribe
+// un problema/plan a mano, ni cambia el estado a mano. El único que
+// escribe registros nuevos es Mary, conversando con el líder de cada área
+// (ver WeeklyCheckinPanel); esto es deliberado, para que "Solucionado"
+// siempre venga con una explicación real que Mary recogió, nunca de un
+// botón. La única acción que le queda al admin es "canDelete": eliminar un
+// registro roto o duplicado (ej. si el modelo de Mary vuelve a llamar la
+// herramienta de registro por error — confirmado 2026-09-02, ver
+// api/weekly-checkin/route.ts) — es limpieza de datos, no una forma de
+// fabricar feedback.
 export function WeeklyReviewPanel({
   records,
   involvingMe = [],
+  canDelete = false,
 }: {
   deptId: string;
   records: WeeklyReviewDTO[];
   // Registros de OTRAS áreas que nombraron a este departamento o a uno de
   // sus colaboradores — solo lectura.
   involvingMe?: InvolvingMeReviewDTO[];
+  canDelete?: boolean;
 }) {
+  const router = useRouter();
   const sorted = [...records].sort((a, b) => (a.week < b.week ? 1 : -1));
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
+
+  const remove = async (id: string) => {
+    setBusyId(id);
+    await fetch(`/api/weekly-reviews/${id}`, { method: "DELETE" });
+    setBusyId(null);
+    setConfirmingDeleteId(null);
+    router.refresh();
+  };
 
   return (
     <div>
@@ -96,6 +114,7 @@ export function WeeklyReviewPanel({
                 <th className="py-2 pr-3 text-[10.5px] font-semibold uppercase tracking-wide text-steel whitespace-nowrap">
                   Estado
                 </th>
+                {canDelete && <th className="py-2 text-[10.5px] font-semibold uppercase tracking-wide text-steel" />}
               </tr>
             </thead>
             <tbody>
@@ -150,6 +169,38 @@ export function WeeklyReviewPanel({
                       </div>
                     )}
                   </td>
+                  {canDelete && (
+                    <td className="py-3 whitespace-nowrap">
+                      {confirmingDeleteId === r.id ? (
+                        <span className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            className="text-red text-[11.5px] font-semibold cursor-pointer"
+                            disabled={busyId === r.id}
+                            onClick={() => remove(r.id)}
+                          >
+                            Eliminar
+                          </button>
+                          <button
+                            type="button"
+                            className="text-steel text-[11.5px] cursor-pointer"
+                            onClick={() => setConfirmingDeleteId(null)}
+                          >
+                            Cancelar
+                          </button>
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          title="Eliminar este registro (ej. duplicado)"
+                          className="text-steel hover:text-red cursor-pointer"
+                          onClick={() => setConfirmingDeleteId(r.id)}
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      )}
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
