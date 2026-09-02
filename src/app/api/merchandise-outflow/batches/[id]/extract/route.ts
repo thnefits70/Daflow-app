@@ -9,14 +9,6 @@ import { groupOutflowRows } from "@/lib/merchandiseOutflowGrouping";
 const MAX_PHOTOS = 40;
 const schema = z.object({ photoUrls: z.array(z.string().min(1)).min(1).max(MAX_PHOTOS) });
 
-// Sin esto, Vercel corta la función con su límite por defecto (unos pocos
-// segundos) antes de que la IA termine de leer lotes grandes de fotos (ej.
-// 14 fotos), y Daniel se queda viendo "Leyendo..." para siempre sin ningún
-// error — el fetch nunca recibe respuesta. Con lotes de hasta 40 fotos y
-// hasta 2 llamadas a la IA en cascada (lectura + reintento + emparejamiento
-// de catálogo), se necesita un techo alto.
-export const maxDuration = 300;
-
 // Daniel (o cualquiera del equipo de Inventario para garantía) sube las
 // fotos de la hoja/manifiesto — la IA arma un consolidado SUGERIDO (nunca
 // persistido acá) para que revise fila por fila antes de agregarlo de

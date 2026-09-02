@@ -187,17 +187,6 @@ export function PurchaseUrgentReportsPanel({ isAdmin, canAct }: { isAdmin: boole
     setBusy(false);
     const data = await res.json().catch(() => null);
     if (!res.ok) { setErr(data?.error ?? "No se pudo registrar."); return; }
-    // Si Bryan ya subió el comprobante al momento de registrar el Reembolso
-    // (nuevo, pedido por Bryan), se adjunta de una vez usando el mismo
-    // endpoint que ya verifica el monto con IA — sin esto, tocaría subirlo
-    // de nuevo después como paso aparte.
-    if (resType === "REFUND" && resProofUrl && data?.id) {
-      await fetch(`/api/purchase-requests/urgent-resolutions/${data.id}/refund-proof`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ proofUrl: resProofUrl }),
-      }).catch(() => null);
-    }
     setOpenReportId(null);
     load();
     router.refresh();
@@ -378,26 +367,6 @@ export function PurchaseUrgentReportsPanel({ isAdmin, canAct }: { isAdmin: boole
                           ) : (
                             <div className="flex items-center gap-2">
                               <ProofPreview url={resProofUrl} size={36} filename={resProofName || "comprobante-credito"} />
-                              <label className="text-steel underline cursor-pointer text-[11px]">
-                                cambiar
-                                <input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && uploadCreditProof(e.target.files[0])} />
-                              </label>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                      {resType === "REFUND" && (
-                        <div className="mb-2.5">
-                          <label className="block mb-1 text-[10px] text-steel">Comprobante del proveedor (opcional, se puede subir después)</label>
-                          {!resProofUrl ? (
-                            <label className="flex items-center gap-1.5 border-[1.5px] border-dashed border-rule rounded px-2.5 py-1.5 text-[11px] text-steel cursor-pointer hover:border-teal w-fit">
-                              {resProofUploading ? <span className="w-3.5 h-3.5 rounded-full border-2 border-rule border-t-teal animate-spin" /> : <Upload size={12} />}
-                              Subir comprobante
-                              <input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && uploadCreditProof(e.target.files[0])} />
-                            </label>
-                          ) : (
-                            <div className="flex items-center gap-2">
-                              <ProofPreview url={resProofUrl} size={36} filename={resProofName || "comprobante-reembolso"} />
                               <label className="text-steel underline cursor-pointer text-[11px]">
                                 cambiar
                                 <input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && uploadCreditProof(e.target.files[0])} />
