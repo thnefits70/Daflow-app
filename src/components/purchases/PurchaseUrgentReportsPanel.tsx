@@ -37,6 +37,7 @@ type Resolution = {
   refundAiNote: string | null;
   bankConfirmedAt: string | null;
   credit: { id: string; amount: number; status: "AVAILABLE" | "APPLIED" | "REFUNDED"; proofUrl: string | null; proofName: string | null } | null;
+  createdBy: { name: string } | null;
   createdAt: string;
 };
 
@@ -145,10 +146,18 @@ export function PurchaseUrgentReportsPanel({ isAdmin, canAct }: { isAdmin: boole
   }
   useEffect(load, []);
 
-  function openResolutionForm(reportId: string) {
+  // Confirmado 2026-09-02 (pedido explícito del usuario): la mayoría de las
+  // veces el reclamo entero va por un solo camino (crédito, reembolso,
+  // etc.) — dividirlo entre varios es la excepción. Antes Bryan tenía que
+  // escribir a mano la cantidad aunque el sistema ya sabía cuánto quedaba
+  // pendiente, lo que era un paso de más y una forma fácil de equivocarse
+  // (ej. escribir 8 en vez de 80). Ahora viene puesta con el total
+  // pendiente por defecto — Bryan solo la cambia si de verdad va a dividir
+  // el reclamo entre varios caminos.
+  function openResolutionForm(reportId: string, remaining: number) {
     setOpenReportId(reportId);
     setResType("CREDIT");
-    setResQty("");
+    setResQty(String(remaining));
     setResDueDate("");
     setResNote("");
     setResProofUrl("");
@@ -387,7 +396,7 @@ export function PurchaseUrgentReportsPanel({ isAdmin, canAct }: { isAdmin: boole
                       </div>
                     </div>
                   ) : (
-                    <button type="button" className="rounded border border-blue bg-blue px-3.5 py-1.5 text-[12px] font-semibold text-white cursor-pointer" onClick={() => openResolutionForm(r.id)}>
+                    <button type="button" className="rounded border border-blue bg-blue px-3.5 py-1.5 text-[12px] font-semibold text-white cursor-pointer" onClick={() => openResolutionForm(r.id, remaining)}>
                       Coordinar resolución con el proveedor
                     </button>
                   )}
@@ -444,6 +453,7 @@ function ResolutionRow({
         <span className="font-semibold">{resolutionLabel(res)} — {res.quantity} un. · {money(res.amount)}</span>
         <span className={`text-[10px] font-bold uppercase ${res.status === "COMPLETED" ? "text-green" : "text-steel"}`}>{res.status === "COMPLETED" ? "Listo" : "En curso"}</span>
       </div>
+      <div className="text-steel-dim text-[10px] mt-0.5">Registrado por {actorName(res.createdBy?.name)} · {formatDateTime(res.createdAt)}</div>
 
       {res.type === "CREDIT" && res.credit && (
         <div className="mt-0.5">

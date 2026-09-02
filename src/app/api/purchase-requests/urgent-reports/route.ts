@@ -43,6 +43,7 @@ export async function GET(_req: NextRequest) {
           credit: true,
           replacementVerifiedBy: { select: { name: true } },
           bankConfirmedBy: { select: { name: true } },
+          createdBy: { select: { name: true } },
         },
       },
       request: {
