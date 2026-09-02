@@ -53,8 +53,18 @@ export async function POST(req: NextRequest) {
   if (rawRows.length === 0) return NextResponse.json({ error: "El archivo no tiene filas de datos." }, { status: 400 });
 
   const columnKeys = Object.keys(rawRows[0]);
-  const codeKey = findColumn(columnKeys, ["codigo", "codig"]);
-  const nameKey = findColumn(columnKeys, ["descripcion", "nombre"]);
+  let codeKey = findColumn(columnKeys, ["codigo", "codig", "sku"]);
+  let nameKey = findColumn(columnKeys, ["descripcion", "nombre", "producto", "articulo", "detalle"]);
+
+  // El export real de Just no tiene una plantilla fija de encabezados (ej.
+  // "productos" en vez de "nombre"/"descripción" — reportado por Daniel
+  // 2026-09-02). Si el archivo trae exactamente 2 columnas y una ya se
+  // identificó por su encabezado, la otra es la que falta, sea cual sea su
+  // nombre — no hace falta que coincida con ninguna lista de palabras.
+  if (columnKeys.length === 2) {
+    if (codeKey && !nameKey) nameKey = columnKeys.find((k) => k !== codeKey);
+    else if (nameKey && !codeKey) codeKey = columnKeys.find((k) => k !== nameKey);
+  }
 
   if (!codeKey || !nameKey) {
     const missing = [!codeKey && "código del producto", !nameKey && "nombre/descripción del producto"].filter(Boolean);
