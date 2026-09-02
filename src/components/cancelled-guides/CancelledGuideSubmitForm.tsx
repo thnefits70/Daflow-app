@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Check, Plus, X } from "lucide-react";
 import { ProductMatchPicker, type MatchCatalogItem, type ProductMatchResult } from "@/components/merchandise-reentry/ProductMatchPicker";
-import { CARRIER_LABELS, SOURCE_AREA_LABELS, MKT_CANCEL_REASONS, FULFILLMENT_CANCEL_REASONS } from "@/lib/cancelledGuidesLabels";
+import { CARRIER_LABELS, SOURCE_AREA_LABELS, MKT_CANCEL_REASONS, FULFILLMENT_CANCEL_REASONS, detectCarrierFromGuideNumber } from "@/lib/cancelledGuidesLabels";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 
 type Row = { selected: MatchCatalogItem | null; quantity: string };
@@ -19,6 +19,7 @@ export function CancelledGuideSubmitForm({ onSubmitted }: { onSubmitted?: () => 
   const [sourceArea, setSourceArea] = useState<"MKT_DAMIAN" | "MKT_PROVEDIX" | "FULFILLMENT" | "">("");
   const [guideNumber, setGuideNumber] = useState("");
   const [carrier, setCarrier] = useState("");
+  const [carrierIsAuto, setCarrierIsAuto] = useState(false);
   const [reason, setReason] = useState("");
   const [reasonOther, setReasonOther] = useState("");
   const [rows, setRows] = useState<Row[]>([{ selected: null, quantity: "" }]);
@@ -36,10 +37,31 @@ export function CancelledGuideSubmitForm({ onSubmitted }: { onSubmitted?: () => 
     setSourceArea("");
     setGuideNumber("");
     setCarrier("");
+    setCarrierIsAuto(false);
     setReason("");
     setReasonOther("");
     setRows([{ selected: null, quantity: "" }]);
     setSent(false);
+  }
+
+  function handleGuideNumberChange(value: string) {
+    setGuideNumber(value);
+    // Solo autocompletamos mientras la transportadora no haya sido elegida
+    // a mano — si el usuario ya la corrigió manualmente, no se la pisamos.
+    if (carrier && !carrierIsAuto) return;
+    const detected = detectCarrierFromGuideNumber(value);
+    if (detected) {
+      setCarrier(detected);
+      setCarrierIsAuto(true);
+    } else if (carrierIsAuto) {
+      setCarrier("");
+      setCarrierIsAuto(false);
+    }
+  }
+
+  function handleCarrierClick(key: string) {
+    setCarrier(key);
+    setCarrierIsAuto(false);
   }
 
   async function save() {
@@ -90,14 +112,17 @@ export function CancelledGuideSubmitForm({ onSubmitted }: { onSubmitted?: () => 
 
       <div>
         <label className="block mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-steel">Número de guía</label>
-        <input type="text" className="w-full rounded border border-rule bg-cloud px-2.5 py-1.5 text-[12.5px]" value={guideNumber} onChange={(e) => setGuideNumber(e.target.value)} />
+        <input type="text" className="w-full rounded border border-rule bg-cloud px-2.5 py-1.5 text-[12.5px]" value={guideNumber} onChange={(e) => handleGuideNumberChange(e.target.value)} />
       </div>
 
       <div>
-        <label className="block mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-steel">Transportadora</label>
+        <div className="flex items-center justify-between mb-1.5">
+          <label className="text-[10px] font-semibold uppercase tracking-wide text-steel">Transportadora</label>
+          {carrierIsAuto && carrier && <span className="text-[10px] font-semibold text-teal">Detectada automáticamente</span>}
+        </div>
         <div className="flex gap-1.5 flex-wrap">
           {Object.entries(CARRIER_LABELS).map(([key, label]) => (
-            <button key={key} type="button" onClick={() => setCarrier(key)} className={`text-[11.5px] font-semibold rounded-full px-2.5 py-1 border cursor-pointer ${carrier === key ? "border-teal text-teal bg-teal/15" : "border-rule text-steel"}`}>
+            <button key={key} type="button" onClick={() => handleCarrierClick(key)} className={`text-[11.5px] font-semibold rounded-full px-2.5 py-1 border cursor-pointer ${carrier === key ? "border-teal text-teal bg-teal/15" : "border-rule text-steel"}`}>
               {label}
             </button>
           ))}
