@@ -1,13 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Plus, X } from "lucide-react";
-import { ProductMatchPicker, type MatchCatalogItem, type ProductMatchResult } from "@/components/merchandise-reentry/ProductMatchPicker";
+import { Check, X } from "lucide-react";
 import { CARRIER_LABELS, SOURCE_AREA_LABELS, MKT_CANCEL_REASONS, FULFILLMENT_CANCEL_REASONS, splitGuideBuffer, isPossibleGuidePrefix } from "@/lib/cancelledGuidesLabels";
-import { CatalogCode } from "@/components/shared/CatalogCode";
 
-type ProductRow = { selected: MatchCatalogItem | null; quantity: string };
-type DetectedGuide = { id: string; carrier: keyof typeof CARRIER_LABELS; guideNumber: string; rows: ProductRow[] };
+type DetectedGuide = { id: string; carrier: keyof typeof CARRIER_LABELS; guideNumber: string };
 
 async function postJson(url: string, body?: unknown) {
   const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
@@ -30,8 +27,7 @@ export function CancelledGuideSubmitForm({ onSubmitted }: { onSubmitted?: () => 
   const finalReason = reason === "Otro" ? reasonOther.trim() : reason;
   const bufferInvalid = guideBuffer.length > 0 && !isPossibleGuidePrefix(guideBuffer);
 
-  const guidesReady = guides.length > 0 && guides.every((g) => g.rows.some((r) => r.selected && Number(r.quantity) > 0));
-  const canSave = !!sourceArea && guidesReady && !!finalReason && guideBuffer.trim().length === 0 && !saving;
+  const canSave = !!sourceArea && guides.length > 0 && !!finalReason && guideBuffer.trim().length === 0 && !saving;
 
   function reset() {
     setSourceArea("");
@@ -45,7 +41,7 @@ export function CancelledGuideSubmitForm({ onSubmitted }: { onSubmitted?: () => 
   function handleBufferChange(value: string) {
     const { extracted, remainder } = splitGuideBuffer(value);
     if (extracted.length > 0) {
-      setGuides((gs) => [...gs, ...extracted.map((e) => ({ id: crypto.randomUUID(), carrier: e.carrier, guideNumber: e.guideNumber, rows: [{ selected: null, quantity: "" }] }))]);
+      setGuides((gs) => [...gs, ...extracted.map((e) => ({ id: crypto.randomUUID(), carrier: e.carrier, guideNumber: e.guideNumber }))]);
     }
     setGuideBuffer(remainder);
   }
@@ -54,23 +50,18 @@ export function CancelledGuideSubmitForm({ onSubmitted }: { onSubmitted?: () => 
     setGuides((gs) => gs.filter((g) => g.id !== id));
   }
 
-  function updateGuideRows(id: string, updater: (rows: ProductRow[]) => ProductRow[]) {
-    setGuides((gs) => gs.map((g) => (g.id === id ? { ...g, rows: updater(g.rows) } : g)));
-  }
-
   async function save() {
     setSaving(true);
     setError("");
     let done = 0;
     try {
       for (const g of guides) {
-        const validRows = g.rows.filter((r) => r.selected && Number(r.quantity) > 0);
         await postJson("/api/cancelled-guides", {
           sourceArea,
           guideNumber: g.guideNumber,
           carrier: g.carrier,
           reason: finalReason,
-          items: validRows.map((r) => ({ catalogItemId: r.selected!.id, quantity: Number(r.quantity) })),
+          items: [],
         });
         done += 1;
       }
@@ -131,49 +122,12 @@ export function CancelledGuideSubmitForm({ onSubmitted }: { onSubmitted?: () => 
           {carriersInOrder.map((carrierKey) => (
             <div key={carrierKey}>
               <div className="text-[10px] font-semibold uppercase tracking-wide text-teal mb-1.5">{CARRIER_LABELS[carrierKey]}</div>
-              <div className="flex flex-col gap-2">
+              <div className="flex flex-col gap-1">
                 {guides.filter((g) => g.carrier === carrierKey).map((g) => (
-                  <div key={g.id} className="bg-cloud rounded-md p-2.5">
-                    <div className="flex items-center justify-between mb-1.5">
-                      <span className="text-[12px] font-bold">{g.guideNumber}</span>
-                      <button type="button" className="text-steel hover:text-red cursor-pointer" onClick={() => removeGuide(g.id)}>
-                        <X size={13} />
-                      </button>
-                    </div>
-                    <div className="flex flex-col gap-1.5">
-                      {g.rows.map((row, i) => (
-                        <div key={i} className="bg-surface rounded-md p-2">
-                          <div className="flex items-center justify-between mb-1.5">
-                            <span className="text-[10.5px] font-semibold text-steel">Producto {i + 1}</span>
-                            {g.rows.length > 1 && (
-                              <button type="button" className="text-steel hover:text-red cursor-pointer" onClick={() => updateGuideRows(g.id, (rows) => rows.filter((_, j) => j !== i))}>
-                                <X size={12} />
-                              </button>
-                            )}
-                          </div>
-                          {row.selected ? (
-                            <div className="flex items-center gap-2.5 bg-green/10 border border-green/35 rounded-md p-2 mb-2">
-                              <div className="flex-1 min-w-0 text-[12px] font-semibold flex items-center gap-1.5">
-                                <CatalogCode code={row.selected.justCode} />
-                                <span className="truncate">{row.selected.name}</span>
-                              </div>
-                              <button type="button" className="text-[11px] font-semibold text-blue cursor-pointer" onClick={() => updateGuideRows(g.id, (rows) => rows.map((r, j) => (j === i ? { ...r, selected: null } : r)))}>Cambiar</button>
-                            </div>
-                          ) : (
-                            <ProductMatchPicker
-                              referencePhotoUrl={null}
-                              onConfirm={(r: ProductMatchResult) => updateGuideRows(g.id, (rows) => rows.map((row2, j) => (j === i ? { ...row2, selected: r } : row2)))}
-                            />
-                          )}
-                          <div className="flex items-center gap-2">
-                            <span className="text-[11px] text-steel">Cantidad</span>
-                            <input type="number" min={1} className="w-20 rounded border border-rule bg-cloud px-2 py-1 text-[12px] font-bold" value={row.quantity} onChange={(e) => updateGuideRows(g.id, (rows) => rows.map((r, j) => (j === i ? { ...r, quantity: e.target.value } : r)))} />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                    <button type="button" className="flex items-center gap-1.5 text-[11px] font-semibold text-blue cursor-pointer mt-1.5" onClick={() => updateGuideRows(g.id, (rows) => [...rows, { selected: null, quantity: "" }])}>
-                      <Plus size={12} /> Agregar otro producto
+                  <div key={g.id} className="flex items-center justify-between bg-cloud rounded-md px-2.5 py-1.5">
+                    <span className="text-[12px] font-bold">{g.guideNumber}</span>
+                    <button type="button" className="text-steel hover:text-red cursor-pointer" onClick={() => removeGuide(g.id)}>
+                      <X size={13} />
                     </button>
                   </div>
                 ))}

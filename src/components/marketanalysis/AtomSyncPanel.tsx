@@ -173,10 +173,17 @@ export function AtomSyncPanel() {
     setBatchSelected(new Set());
   }
 
+  // Pedido del usuario (2026-09-02): ya no bloquea guardar por tener
+  // pendientes — un combo sin registrar en Base de datos de productos puede
+  // tardar en resolverse (hay que pedirle a Daniel que lo anote), y obligar
+  // a resolver TODO antes de guardar cualquier cosa dejaba perdido lo que sí
+  // ya estaba confirmado. Ahora guarda solo lo resuelto y deja los "Sin
+  // resolver" en pantalla para seguir después (en vez de descartarlos).
   async function handleConfirm() {
     if (!rows) return;
-    if (rows.some((r) => r.resolution === "pending")) {
-      setErr("Todavía hay productos sin resolver — marca cada uno como combo o búscalo en el catálogo.");
+    const resolved = rows.filter((r) => r.resolution !== "pending");
+    if (resolved.length === 0) {
+      setErr("Todavía no hay ningún producto resuelto para guardar.");
       return;
     }
     setErr("");
@@ -185,7 +192,7 @@ export function AtomSyncPanel() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        rows: rows.map((r) => ({
+        rows: resolved.map((r) => ({
           productName: r.productName,
           confirmedMatchedItemId: r.resolution === "linked" ? r.linkedItemId : null,
           isCombo: r.resolution === "combo",
@@ -199,8 +206,16 @@ export function AtomSyncPanel() {
       return;
     }
     setSavedAt(data.capturedAt);
-    setRows(null);
-    setRawText("");
+    const stillPending = rows.filter((r) => r.resolution === "pending");
+    if (stillPending.length === 0) {
+      setRows(null);
+      setRawText("");
+    } else {
+      setRows(stillPending);
+      setComboLookup({});
+      setBatchSelected(new Set());
+      setLinkingIndex(null);
+    }
     router.refresh();
   }
 
@@ -389,11 +404,23 @@ export function AtomSyncPanel() {
             ))}
           </div>
 
+          {(() => {
+            const pendingCount = rows.filter((r) => r.resolution === "pending").length;
+            if (pendingCount === 0) return null;
+            const resolvedCount = rows.length - pendingCount;
+            return (
+              <div className="text-[11.5px] text-steel mt-3">
+                {resolvedCount > 0
+                  ? `Se van a guardar ${resolvedCount} ya resueltos. Los ${pendingCount} "Sin resolver" se quedan en la lista para después.`
+                  : `Todavía no hay ninguno resuelto — marca o busca al menos uno antes de guardar.`}
+              </div>
+            );
+          })()}
           {err && <div className="text-red text-[12.5px] mt-3">{err}</div>}
           <div className="flex gap-2 mt-3.5">
             <button
               type="button"
-              disabled={busy}
+              disabled={busy || rows.every((r) => r.resolution === "pending")}
               className="rounded border border-teal bg-teal px-3.5 py-2 text-[12.5px] font-bold text-navy cursor-pointer disabled:opacity-60"
               onClick={handleConfirm}
             >

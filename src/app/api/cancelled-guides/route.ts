@@ -22,7 +22,7 @@ const schema = z.object({
   reason: z.string().trim().min(1, "Falta el motivo."),
   items: z
     .array(z.object({ catalogItemId: z.string().min(1).optional(), declaredName: z.string().trim().min(1).optional(), quantity: z.number().int().positive() }))
-    .min(1, "Agrega al menos un producto."),
+    .default([]),
 });
 
 // Confirmado 2026-08-25: lista propia (asesores de MKT/FUL) o completa
