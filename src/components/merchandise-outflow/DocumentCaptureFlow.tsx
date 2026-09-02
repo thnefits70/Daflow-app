@@ -167,17 +167,27 @@ export function DocumentCaptureFlow({ reason, canManageJustCatalog = false }: { 
     if (!row.sourceCode || !row.comboDraft || row.comboDraft.length === 0) return;
     setRows((rs) => rs.map((r, i) => (i === index ? { ...r, savingCombo: true } : r)));
     try {
+      // Confirmado con el usuario (reportado por Daniel, combo 142907): acá
+      // Daniel escribe el TOTAL de cada producto que ve para esta entrega
+      // (ej. llegaron 6 cajas del combo y escribe "6" de cada producto), no
+      // la cantidad por UNA sola caja. La receta que se guarda en
+      // DropiComboComponent sí es "por 1 caja" (ver schema.prisma), así que
+      // se divide entre la cantidad de cajas de esta entrega antes de
+      // guardar. Para esta entrega en particular se usa el número que
+      // Daniel escribió tal cual (sin volver a multiplicar), para que no se
+      // duplique.
+      const units = row.quantity || 1;
       const combo = await postJson("/api/dropi-combos", {
         code: row.sourceCode,
-        components: row.comboDraft.map((c) => ({ catalogItemId: c.catalogItem.id, quantity: c.quantity })),
+        components: row.comboDraft.map((c) => ({ catalogItemId: c.catalogItem.id, quantity: Math.max(1, Math.round(c.quantity / units)) })),
       });
-      const expanded: SuggestedRow[] = combo.components.map((comp: { quantity: number; catalogItem: MatchCatalogItem }) => ({
-        name: comp.catalogItem.name,
-        quantity: comp.quantity * row.quantity,
+      const expanded: SuggestedRow[] = row.comboDraft.map((c) => ({
+        name: c.catalogItem.name,
+        quantity: c.quantity,
         confidence: row.confidence,
-        selected: comp.catalogItem,
+        selected: c.catalogItem,
         fromCombo: combo.code,
-        comboUnits: row.quantity,
+        comboUnits: units,
       }));
       setRows((rs) => [...rs.slice(0, index), ...expanded, ...rs.slice(index + 1)]);
     } catch (e) {
@@ -198,7 +208,12 @@ export function DocumentCaptureFlow({ reason, canManageJustCatalog = false }: { 
       const combos = await fetch("/api/dropi-combos").then((r) => (r.ok ? r.json() : []));
       const combo = (combos as { code: string; components: { quantity: number; catalogItem: MatchCatalogItem }[] }[]).find((c) => c.code === row.fromCombo);
       if (combo) {
-        const draft: ComboDraftComponent[] = combo.components.map((c) => ({ catalogItem: c.catalogItem, quantity: c.quantity }));
+        // La receta guardada es "por 1 caja" — se precarga multiplicada por
+        // las cajas de ESTA entrega (row.comboUnits) para que el número que
+        // ve Daniel al abrir "Corregir" ya sea el total de esta entrega,
+        // consistente con lo que se le pide escribir (ver comboBuilderOpen).
+        const units = row.comboUnits ?? 1;
+        const draft: ComboDraftComponent[] = combo.components.map((c) => ({ catalogItem: c.catalogItem, quantity: c.quantity * units }));
         setRows((rs) => rs.map((r, i) => (i === index ? { ...r, comboDraft: draft } : r)));
       }
     } catch {
@@ -218,15 +233,22 @@ export function DocumentCaptureFlow({ reason, canManageJustCatalog = false }: { 
     const units = row.comboUnits ?? 1;
     setRows((rs) => rs.map((r, i) => (i === index ? { ...r, savingCombo: true } : r)));
     try {
-      const combo = await postJson("/api/dropi-combos", {
+      // Mismo criterio que saveComboAndExpand (reportado por Daniel, combo
+      // 142907): lo que Daniel escribe acá es el TOTAL para esta entrega
+      // (ej. 6 unidades de cada producto porque llegaron 6 cajas), no la
+      // cantidad por 1 caja. Se guarda la receta "por 1 caja" dividiendo
+      // entre `units`, pero esta fila se recalcula usando lo que Daniel
+      // escribió tal cual — antes esto multiplicaba `comp.quantity * units`
+      // otra vez, duplicando el número (6 × 6 = 36 en vez de 6).
+      await postJson("/api/dropi-combos", {
         code,
-        components: row.comboDraft.map((c) => ({ catalogItemId: c.catalogItem.id, quantity: c.quantity })),
+        components: row.comboDraft.map((c) => ({ catalogItemId: c.catalogItem.id, quantity: Math.max(1, Math.round(c.quantity / units)) })),
       });
-      const expanded: SuggestedRow[] = combo.components.map((comp: { quantity: number; catalogItem: MatchCatalogItem }) => ({
-        name: comp.catalogItem.name,
-        quantity: comp.quantity * units,
+      const expanded: SuggestedRow[] = row.comboDraft.map((c) => ({
+        name: c.catalogItem.name,
+        quantity: c.quantity,
         confidence: row.confidence,
-        selected: comp.catalogItem,
+        selected: c.catalogItem,
         fromCombo: code,
         comboUnits: units,
       }));
@@ -613,7 +635,11 @@ export function DocumentCaptureFlow({ reason, canManageJustCatalog = false }: { 
                 )}
                 {row.comboBuilderOpen && (
                   <div className="bg-yellow/10 border border-yellow/35 rounded-md p-2.5 mb-2">
-                    <div className="text-[11px] font-semibold text-steel mb-1">¿Qué productos reales trae este combo, y en qué cantidad cada uno?</div>
+                    <div className="text-[11px] font-semibold text-steel mb-1">¿Qué productos reales trae este combo?</div>
+                    {/* Confirmado con el usuario (reportado por Daniel, combo 142907): aclarar que la cantidad es el TOTAL de esta entrega, no por 1 caja — el sistema calcula solo cuánto trae 1 caja dividiendo entre las cajas que llegaron. */}
+                    <div className="text-[11px] text-steel mb-1.5">
+                      Llegaron {row.fromCombo ? row.comboUnits ?? 1 : row.quantity} caja(s) de este combo. Escribe cuántas unidades de cada producto real ves EN TOTAL para esta entrega (no por caja) — el sistema calcula solo.
+                    </div>
                     <ComboComponentBuilder components={row.comboDraft ?? []} onChange={(next) => setRows((rs) => rs.map((r, j) => (j === i ? { ...r, comboDraft: next } : r)))} />
                     <div className="flex gap-2 mt-2">
                       <button
