@@ -19,6 +19,7 @@ type PreviewRow = {
   matchedItemId: string | null;
   matchedItemName: string | null;
   matchType: "exact" | "similar" | "none";
+  matchedCombo: DropiComboMatch | null;
 };
 
 // Cada fila termina en uno de estos tres estados antes de poder confirmar:
@@ -70,13 +71,23 @@ export function AtomSyncPanel() {
       setErr(data?.error ?? "No se pudo leer el texto pegado.");
       return;
     }
+    const preview = data.preview as PreviewRow[];
     setRows(
-      (data.preview as PreviewRow[]).map((r) => ({
+      preview.map((r) => ({
         ...r,
         resolution: r.matchType === "none" ? "pending" : "linked",
         linkedItemId: r.matchedItemId,
       }))
     );
+    // Combos que Daniel ya registró en Base de datos de productos se
+    // reconocen solos acá — se precarga el panel de "encontrado" como si ya
+    // se hubiera apretado "Es un combo", así solo falta el clic de confirmar
+    // en vez de buscarlo a mano (confirmado 2026-09-02).
+    const preloaded: Record<number, ComboLookupState> = {};
+    preview.forEach((r, i) => {
+      if (r.matchedCombo) preloaded[i] = { status: "found", match: r.matchedCombo };
+    });
+    setComboLookup(preloaded);
   }
 
   // Confirmado 2026-09-01 (pedido explícito del usuario, Opción B): antes de
@@ -223,7 +234,14 @@ export function AtomSyncPanel() {
             {rows.length} producto{rows.length === 1 ? "" : "s"} marcados "Rentable" en el texto pegado
           </div>
           <div className="flex flex-col gap-2">
-            {rows.map((r, i) => (
+            {rows
+              .map((r, i) => ({ r, i }))
+              // Pedido del usuario (2026-09-02): los "Sin resolver" arriba de
+              // todo para no tener que scrollear buscándolos entre los ya
+              // resueltos — sort estable, así entre los pendientes (y entre
+              // los ya resueltos) se respeta el orden en que llegaron.
+              .sort((a, b) => (a.r.resolution === "pending" ? 0 : 1) - (b.r.resolution === "pending" ? 0 : 1))
+              .map(({ r, i }) => (
               <div key={`${r.productName}-${i}`} className="border border-rule rounded p-2.5">
                 <div className="flex items-center justify-between gap-2 flex-wrap">
                   <span className="text-[12.5px] font-medium">{r.productName}</span>
