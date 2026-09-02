@@ -3,7 +3,7 @@ import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { canSubmitCancelledGuide, canManageCancelledGuideBatches } from "@/lib/guards";
-import { nextCancelledGuideNumber, formatCancelledGuideCode, nextCancelledGuideBatchNumber, formatCancelledGuideBatchCode, notifyCancelledGuideBatchSubmitted, notifyMarketingLeadBatchReceived } from "@/lib/cancelledGuides";
+import { nextCancelledGuideNumber, formatCancelledGuideCode, nextCancelledGuideBatchNumber, formatCancelledGuideBatchCode, notifyCancelledGuideBatchSubmitted, notifyMarketingLeadBatchReceived, notifyItemAssigneesNewBatch } from "@/lib/cancelledGuides";
 import { MKT_CANCEL_REASONS, FULFILLMENT_CANCEL_REASONS } from "@/lib/cancelledGuidesLabels";
 
 // Bryan (líder MKT) ve los lotes todavía sin gestionar, agrupados por
@@ -66,9 +66,13 @@ export async function POST(req: NextRequest) {
 
   await prisma.cancelledGuideReport.createMany({ data: rows });
 
+  // Bryan y Heidy (o quien tenga canAssignCancelledGuideItems) se enteran
+  // al mismo tiempo — los dos pasos corren en paralelo, ninguno espera al
+  // otro (pedido explícito del usuario 2026-09-02).
   await Promise.all([
     notifyCancelledGuideBatchSubmitted(batchCode, rows.length),
     notifyMarketingLeadBatchReceived(batchCode, rows.length),
+    notifyItemAssigneesNewBatch(batchCode, rows.length),
   ]);
 
   return NextResponse.json({ batchCode, count: rows.length });

@@ -61,13 +61,13 @@ export function CancelledGuidesPanel({
       )}
       {tab === "productos" && canAssignItems && (
         <>
-          <TabGuide storageKey="cancelledguides-productos">Guías ya gestionadas con la transportadora — cargá qué productos y cantidades venían en cada una.</TabGuide>
+          <TabGuide storageKey="cancelledguides-productos">Cargá qué productos y cantidades venían en cada guía — no hace falta esperar a que Bryan termine de gestionarla con la transportadora, va en paralelo.</TabGuide>
           <CancelledGuideItemAssignmentPanel />
         </>
       )}
       {tab === "reingreso" && canReingreso && (
         <>
-          <TabGuide storageKey="cancelledguides-reingreso">Guías con productos ya cargados — reingresa esa mercadería en Just.</TabGuide>
+          <TabGuide storageKey="cancelledguides-reingreso">Guías ya gestionadas con la transportadora Y con productos cargados — reingresa esa mercadería en Just.</TabGuide>
           <CancelledGuideReingresoQueue />
         </>
       )}

@@ -14,6 +14,7 @@ type ReportDTO = {
   carrier: keyof typeof CARRIER_LABELS;
   reason: string;
   guideNumber: string;
+  batchManagedAt: string | null;
 };
 
 type Row = { selected: MatchCatalogItem | null; quantity: string };
@@ -53,6 +54,11 @@ function GuideCard({ report, onSaved }: { report: ReportDTO; onSaved: () => void
       <div className="flex items-center gap-2 mb-1 flex-wrap">
         <span className="font-mono text-[11px] font-bold text-teal">{report.code}</span>
         <span className="text-[11px] text-steel">Guía {report.guideNumber} · {CARRIER_LABELS[report.carrier]}</span>
+        {report.batchManagedAt ? (
+          <span className="text-[9.5px] font-bold uppercase text-green">Ya gestionada con la transportadora</span>
+        ) : (
+          <span className="text-[9.5px] font-bold uppercase text-gold">Bryan todavía gestionando</span>
+        )}
       </div>
       <div className="text-[11px] text-steel mb-2">{SOURCE_AREA_LABELS[report.sourceArea]} · {report.reason}</div>
 

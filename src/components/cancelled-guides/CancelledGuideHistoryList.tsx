@@ -22,16 +22,20 @@ type ReportDTO = {
   items: { id: string; declaredName: string; quantity: number; catalogItem: { name: string; justCode: string | null } | null }[];
 };
 
+// Bryan (batchManagedAt) y Heidy (itemsAssignedAt) trabajan en paralelo,
+// cualquiera de los dos puede terminar primero — solo cuando los DOS están
+// listos entra a la cola de Daniel.
 function statusChip(r: ReportDTO): { text: string; color: string } {
   if (r.reingresadoAt) return { text: `Reingresada a Just · ${formatDateTime(r.reingresadoAt)}`, color: "text-green" };
-  if (r.itemsAssignedAt) return { text: "Con productos — falta reingresar", color: "text-blue" };
+  if (r.itemsAssignedAt && r.batchManagedAt) return { text: "Lista — falta reingresar", color: "text-blue" };
+  if (r.itemsAssignedAt) return { text: "Con productos — falta que Bryan gestione con la transportadora", color: "text-gold" };
   if (r.batchManagedAt) return { text: "Gestionada con la transportadora — falta cargar productos", color: "text-gold" };
   // Reportes de antes del rediseño 2026-09-02 nunca tuvieron lote.
   if (!r.batchCode) {
     if (r.reallyCancelled === false) return { text: "Se despachó igual", color: "text-steel" };
     if (r.reallyCancelled === null) return { text: "Pendiente de corte (reporte antiguo)", color: "text-steel" };
   }
-  return { text: "Pendiente de gestionar con la transportadora", color: "text-gold" };
+  return { text: "Pendiente de gestionar y cargar productos", color: "text-gold" };
 }
 
 export function CancelledGuideHistoryList() {

@@ -57,21 +57,28 @@ export async function notifyMarketingLeadBatchReceived(batchCode: string, guideC
   await notifyOwner(leadId, { title: "Lote de guías canceladas para gestionar", body, url: `${URL_BASE}&sub=lotes` }).catch(() => null);
 }
 
-// Bryan confirmó que gestionó el lote con la transportadora/Dropi — les
-// llega a quienes tienen canAssignCancelledGuideItems (hoy Heidy) para que
-// carguen los productos de cada guía.
-export async function notifyItemAssigneesBatchManaged(batchCode: string, guideCount: number): Promise<void> {
+// Yair confirmó un lote nuevo — les llega DE UNA a quienes tienen
+// canAssignCancelledGuideItems (hoy Heidy), en paralelo con el aviso a
+// Bryan. Pedido explícito del usuario 2026-09-02: cargar productos no
+// tiene que esperar a que Bryan termine de gestionar con Dropi, los dos
+// pasos corren a la par.
+export async function notifyItemAssigneesNewBatch(batchCode: string, guideCount: number): Promise<void> {
   const assignees = await prisma.user.findMany({ where: { canAssignCancelledGuideItems: true, isActive: true }, select: { id: true } });
-  const body = guideCount === 1 ? `${batchCode} — 1 guía pendiente de cancelación, cargá qué venía.` : `${batchCode} — ${guideCount} guías pendientes de cancelación, cargá qué venía en cada una.`;
+  const body = guideCount === 1 ? `${batchCode} — 1 guía nueva, cargá qué venía.` : `${batchCode} — ${guideCount} guías nuevas, cargá qué venía en cada una.`;
   await Promise.all(
     assignees.map((u) =>
-      notifyOwner(u.id, { title: "Guías pendientes de cancelación", body, url: `${URL_BASE}&sub=productos` }).catch(() => null)
+      notifyOwner(u.id, { title: "Guías canceladas para cargar productos", body, url: `${URL_BASE}&sub=productos` }).catch(() => null)
     )
   );
 }
 
-export async function notifyInventoryLeadCancelledGuideConfirmed(code: string): Promise<void> {
+// Una guía queda lista para Daniel recién cuando AMBOS pasos (Bryan
+// gestionó + productos cargados) están hechos, sin importar cuál terminó
+// primero — se llama desde los dos lugares donde eso puede completarse.
+export async function notifyInventoryLeadCancelledGuidesReady(codes: string[]): Promise<void> {
+  if (codes.length === 0) return;
   const leadId = await getInventoryLeadId();
   if (!leadId) return;
-  await notifyOwner(leadId, { title: "Guía cancelada lista — reingresar a Just", body: `${code} — ya tiene los productos cargados.`, url: `${URL_BASE}&sub=reingreso` }).catch(() => null);
+  const body = codes.length === 1 ? `${codes[0]} — ya tiene los productos cargados.` : `${codes.length} guías listas — ${codes.join(", ")}.`;
+  await notifyOwner(leadId, { title: "Guía cancelada lista — reingresar a Just", body, url: `${URL_BASE}&sub=reingreso` }).catch(() => null);
 }

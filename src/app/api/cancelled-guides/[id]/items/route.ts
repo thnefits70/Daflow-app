@@ -3,7 +3,7 @@ import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { canAssignCancelledGuideItems } from "@/lib/guards";
-import { notifyInventoryLeadCancelledGuideConfirmed } from "@/lib/cancelledGuides";
+import { notifyInventoryLeadCancelledGuidesReady } from "@/lib/cancelledGuides";
 
 const schema = z.object({
   items: z
@@ -12,7 +12,11 @@ const schema = z.object({
 });
 
 // Heidy (o quien tenga el flag) carga qué productos y cantidades venían en
-// esta guía — habilita la cola de reingreso de Daniel.
+// esta guía. Corre EN PARALELO con la gestión de Bryan (pedido explícito
+// del usuario, 2026-09-02) — no espera batchManagedAt. La cola de Daniel
+// solo se habilita cuando AMBOS pasos están listos (ver pending-reingreso),
+// así que acá solo avisamos a Daniel si Bryan ya gestionó este lote;
+// si no, el aviso sale después, desde /batches/[batchCode]/manage.
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!(await canAssignCancelledGuideItems()) || !session) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
@@ -24,7 +28,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   const report = await prisma.cancelledGuideReport.findUnique({ where: { id }, select: { code: true, batchManagedAt: true, itemsAssignedAt: true } });
   if (!report) return NextResponse.json({ error: "No encontrado." }, { status: 404 });
-  if (!report.batchManagedAt) return NextResponse.json({ error: "Este lote todavía no fue gestionado." }, { status: 409 });
   if (report.itemsAssignedAt) return NextResponse.json({ error: "Esta guía ya tiene productos cargados." }, { status: 409 });
 
   const catalogIds = parsed.data.items.map((i) => i.catalogItemId).filter((cid): cid is string => !!cid);
@@ -47,6 +50,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     include: { items: { include: { catalogItem: { select: { name: true, justCode: true } } } } },
   });
 
-  await notifyInventoryLeadCancelledGuideConfirmed(report.code);
+  if (report.batchManagedAt) await notifyInventoryLeadCancelledGuidesReady([report.code]);
   return NextResponse.json(updated);
 }
