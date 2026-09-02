@@ -140,11 +140,22 @@ export function AtomSyncPanel() {
     });
   }
 
+  // Pedido del usuario (2026-09-02, tabla real de 189 productos): marcar cada
+  // "Sin resolver" a mano con la casilla es demasiado cuando son decenas —
+  // este botón las selecciona todas de un click, pero sigue sin confirmar
+  // nada por sí solo (eso sigue pasando por reviewBatch + confirmBatch).
+  function selectAllPending() {
+    if (!rows) return;
+    setBatchSelected(new Set(rows.map((r, i) => (r.resolution === "pending" ? i : -1)).filter((i) => i >= 0)));
+  }
+
   // Dispara la misma búsqueda en Base de datos de productos que ya hacía el
-  // botón individual, para cada seleccionado que todavía no se buscó.
-  function reviewBatch() {
+  // botón individual, para cada seleccionado que todavía no se buscó — una
+  // por una (no en paralelo) para no saturar la base de datos cuando el lote
+  // tiene decenas de productos.
+  async function reviewBatch() {
     for (const i of batchSelected) {
-      if (!comboLookup[i]) checkCombo(i, rows![i].productName);
+      if (!comboLookup[i]) await checkCombo(i, rows![i].productName);
     }
   }
 
@@ -233,6 +244,54 @@ export function AtomSyncPanel() {
           <div className="text-[12.5px] font-semibold mb-3">
             {rows.length} producto{rows.length === 1 ? "" : "s"} marcados "Rentable" en el texto pegado
           </div>
+
+          {(() => {
+            const pendingCount = rows.filter((r) => r.resolution === "pending").length;
+            if (pendingCount === 0 && batchSelected.size === 0) return null;
+            const indices = [...batchSelected];
+            const reviewedCount = indices.filter((i) => comboLookup[i]?.status === "found" || comboLookup[i]?.status === "not_found").length;
+            const anyChecked = indices.some((i) => comboLookup[i]);
+            const allReviewed = batchSelected.size > 0 && reviewedCount === indices.length;
+            return (
+              <div className="bg-cloud rounded-md p-3 mb-3 text-[12.5px]">
+                {batchSelected.size === 0 ? (
+                  pendingCount > 0 && (
+                    <button type="button" className="rounded border border-blue px-2.5 py-1 text-[11px] font-semibold text-blue cursor-pointer" onClick={selectAllPending}>
+                      Seleccionar todos los sin resolver ({pendingCount})
+                    </button>
+                  )
+                ) : (
+                  <>
+                    <div className="font-semibold mb-2">
+                      {batchSelected.size} producto{batchSelected.size === 1 ? "" : "s"} seleccionado{batchSelected.size === 1 ? "" : "s"} para el lote de combos
+                    </div>
+                    {allReviewed ? (
+                      <div className="flex gap-2">
+                        <button type="button" className="rounded border border-teal bg-teal px-2.5 py-1 text-[11px] font-bold text-navy cursor-pointer" onClick={confirmBatch}>
+                          Sí, confirmo que son combos
+                        </button>
+                        <button type="button" className="text-[11px] text-steel cursor-pointer" onClick={cancelBatch}>
+                          Cancelar lote
+                        </button>
+                      </div>
+                    ) : anyChecked ? (
+                      <div className="text-steel">Revisando en Base de datos de productos… {reviewedCount}/{indices.length}</div>
+                    ) : (
+                      <div className="flex gap-2">
+                        <button type="button" className="rounded border border-blue px-2.5 py-1 text-[11px] font-semibold text-blue cursor-pointer" onClick={reviewBatch}>
+                          Revisar en Base de datos de productos
+                        </button>
+                        <button type="button" className="text-[11px] text-steel cursor-pointer" onClick={cancelBatch}>
+                          Cancelar selección
+                        </button>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            );
+          })()}
+
           <div className="flex flex-col gap-2">
             {rows
               .map((r, i) => ({ r, i }))
@@ -329,39 +388,6 @@ export function AtomSyncPanel() {
               </div>
             ))}
           </div>
-
-          {batchSelected.size > 0 && (
-            <div className="bg-cloud rounded-md p-3 mt-3 text-[12.5px]">
-              <div className="font-semibold mb-2">
-                {batchSelected.size} producto{batchSelected.size === 1 ? "" : "s"} seleccionado{batchSelected.size === 1 ? "" : "s"} para el lote de combos
-              </div>
-              {(() => {
-                const indices = [...batchSelected];
-                const anyChecked = indices.some((i) => comboLookup[i]);
-                const allReviewed = indices.every((i) => comboLookup[i]?.status === "found" || comboLookup[i]?.status === "not_found");
-                if (allReviewed) {
-                  return (
-                    <div className="flex gap-2">
-                      <button type="button" className="rounded border border-teal bg-teal px-2.5 py-1 text-[11px] font-bold text-navy cursor-pointer" onClick={confirmBatch}>
-                        Sí, confirmo que son combos
-                      </button>
-                      <button type="button" className="text-[11px] text-steel cursor-pointer" onClick={cancelBatch}>
-                        Cancelar lote
-                      </button>
-                    </div>
-                  );
-                }
-                if (anyChecked) {
-                  return <div className="text-steel">Buscando cada uno en Base de datos de productos (revisa arriba en la lista)…</div>;
-                }
-                return (
-                  <button type="button" className="rounded border border-blue px-2.5 py-1 text-[11px] font-semibold text-blue cursor-pointer" onClick={reviewBatch}>
-                    Revisar en Base de datos de productos
-                  </button>
-                );
-              })()}
-            </div>
-          )}
 
           {err && <div className="text-red text-[12.5px] mt-3">{err}</div>}
           <div className="flex gap-2 mt-3.5">
