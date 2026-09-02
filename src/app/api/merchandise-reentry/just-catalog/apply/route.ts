@@ -12,6 +12,7 @@ const schema = z.object({
   nameChangedDecisions: z.array(z.object({ itemId: z.string(), code: z.string().min(1), justName: z.string().min(1), useJustName: z.boolean() })),
   suggestedLinkDecisions: z.array(z.object({ itemId: z.string(), code: z.string().min(1), name: z.string().min(1), link: z.boolean() })),
   duplicateGroupDecisions: z.array(z.object({ code: z.string().min(1), name: z.string().min(1) })),
+  duplicateGroupResolutions: z.array(z.object({ groupName: z.string().min(1), codes: z.array(z.string().min(1)), decision: z.string().min(1) })),
   duplicateGroupsTotal: z.number().int().nonnegative(),
   duplicateGroupsResolved: z.number().int().nonnegative(),
   missingCount: z.number().int().nonnegative(),

@@ -33,8 +33,11 @@ type Preview = {
   suggestedLinkRows: SuggestedLinkRow[];
   duplicateGroups: DuplicateGroup[];
   missingItems: MissingItem[];
+  autoResolvedDuplicateGroups: number;
 };
 
+// Debe coincidir con DUPLICATE_DISTINCT en src/lib/justCatalog.ts — no se
+// importa directo porque ese archivo trae `prisma` (solo servidor).
 const DISTINCT = "__distinct__";
 
 function fmt(iso: string) {
@@ -252,11 +255,13 @@ export function JustCatalogPanel({ canManage }: { canManage: boolean }) {
     setPhase("applying");
     setErr("");
     const duplicateGroupDecisions: { code: string; name: string }[] = [];
+    const duplicateGroupResolutions: { groupName: string; codes: string[]; decision: string }[] = [];
     let duplicateGroupsResolved = 0;
     preview.duplicateGroups.forEach((g, gi) => {
       const decision = duplicateDecisions[gi];
       if (!decision) return;
       duplicateGroupsResolved++;
+      duplicateGroupResolutions.push({ groupName: g.groupName, codes: g.rows.map((r) => r.code), decision });
       if (decision === DISTINCT) {
         g.rows.forEach((r) => {
           if (!r.alreadyLinked) duplicateGroupDecisions.push({ code: r.code, name: r.name });
@@ -275,6 +280,7 @@ export function JustCatalogPanel({ canManage }: { canManage: boolean }) {
         nameChangedDecisions: preview.nameChangedRows.map((r) => ({ itemId: r.itemId, code: r.code, justName: r.justName, useJustName: !!nameDecisions[r.itemId] })),
         suggestedLinkDecisions: preview.suggestedLinkRows.map((r) => ({ itemId: r.itemId, code: r.code, name: r.name, link: !!linkDecisions[r.itemId] })),
         duplicateGroupDecisions,
+        duplicateGroupResolutions,
         duplicateGroupsTotal: preview.duplicateGroups.length,
         duplicateGroupsResolved,
         missingCount: preview.missingItems.length,
@@ -392,6 +398,11 @@ export function JustCatalogPanel({ canManage }: { canManage: boolean }) {
             {(preview.nameChangedRows.length > 0 || preview.suggestedLinkRows.length > 0 || preview.duplicateGroups.length > 0) && (
               <span className="font-mono text-[10.5px] bg-gold/15 border border-gold/40 rounded-full px-2.5 py-1" style={{ color: "#D9A441" }}>
                 {preview.nameChangedRows.length + preview.suggestedLinkRows.length + preview.duplicateGroups.length} necesitan tu decisión
+              </span>
+            )}
+            {preview.autoResolvedDuplicateGroups > 0 && (
+              <span className="font-mono text-[10.5px] bg-teal/15 border border-teal/40 text-teal rounded-full px-2.5 py-1">
+                {preview.autoResolvedDuplicateGroups} nombre(s) repetido(s) resuelto(s) solo — ya los habías decidido antes
               </span>
             )}
           </div>

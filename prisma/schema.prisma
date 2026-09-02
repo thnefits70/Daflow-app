@@ -292,6 +292,7 @@ model User {
   catalogMissingReportsReported                CatalogMissingReport[]             @relation("CatalogMissingReportReportedBy")
   catalogMissingReportsResolved                CatalogMissingReport[]             @relation("CatalogMissingReportResolvedBy")
   justCatalogImports                           JustCatalogImport[]                @relation("JustCatalogImportImportedBy")
+  justCatalogDuplicateResolutions              JustCatalogDuplicateResolution[]   @relation("JustCatalogDuplicateResolutionDecidedBy")
   dropiCombosCreated                           DropiCombo[]                       @relation("DropiComboCreatedBy")
   supplierCreditsCreated                       SupplierCredit[]                   @relation("SupplierCreditCreatedBy")
   urgentResolutionsCreated                     PurchaseUrgentResolution[]         @relation("UrgentResolutionCreatedBy")
@@ -1618,6 +1619,27 @@ model JustCatalogImport {
   missingCount Int @default(0)
 
   @@index([importedAt])
+}
+
+// Confirmado 2026-09-01: pedido explícito de Daniel — que su decisión sobre
+// un nombre repetido en Just (cuál código mantener, o si son productos
+// distintos) quede guardada, para que no le vuelva a preguntar lo mismo en
+// cada subida mientras Just siga trayendo el mismo duplicado sin corregir.
+// La clave (groupKey) combina el nombre normalizado + el conjunto exacto de
+// códigos vistos al decidir — si en una subida futura aparece un código
+// nuevo bajo el mismo nombre, es un caso distinto y sí se vuelve a
+// preguntar (ver classifyJustCatalogRows).
+model JustCatalogDuplicateResolution {
+  id          String   @id @default(cuid())
+  groupKey    String   @unique
+  groupName   String
+  codes       String[]
+  // Código elegido para mantener, o "__distinct__" si son productos
+  // distintos (ver DISTINCT en justCatalog.ts).
+  decision    String
+  decidedById String?
+  decidedBy   User?    @relation("JustCatalogDuplicateResolutionDecidedBy", fields: [decidedById], references: [id], onDelete: SetNull)
+  decidedAt   DateTime @default(now())
 }
 
 // La sola existencia de esta fila ES el estado "pendiente de eliminar" —
@@ -4308,7 +4330,7 @@ model ExternalSale {
   //
   // 1) 3 días hábiles desde que el equipo de Yair entregó al motorizado sin
   //    ninguna otra señal en el sistema de que en verdad llegó al cliente.
-  deliveryOverdueAlertSentAt DateTime?
+  deliveryOverdueAlertSentAt      DateTime?
   // 2) Solo contra entrega (Marcos): 48 horas desde la entrega sin subir el
   //    comprobante de pago — para no dejar mercadería entregada sin cobrar.
   contraEntregaPaymentAlertSentAt DateTime?

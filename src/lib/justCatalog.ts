@@ -2,6 +2,11 @@ import { prisma } from "@/lib/prisma";
 
 export type JustCatalogParsedRow = { code: string; name: string };
 
+// Marca de "son productos distintos" para un grupo duplicado — compartida
+// entre la clasificación, el guardado de la decisión y el frontend
+// (JustCatalogPanel) para que las tres partes usen el mismo valor.
+export const DUPLICATE_DISTINCT = "__distinct__";
+
 // Exportadas (2026-08-31) para que Sugerencias de Combos ATOM+baja rotación
 // (src/lib/atomSync.ts) reutilice el mismo criterio de coincidencia sin IA,
 // en vez de reimplementarlo — ver justificación de costo más abajo.
@@ -58,7 +63,19 @@ export type JustCatalogPreview = {
   suggestedLinkRows: SuggestedLinkPreviewRow[];
   duplicateGroups: DuplicateGroupPreviewRow[];
   missingItems: MissingItemRow[];
+  // Confirmado 2026-09-01: grupos duplicados que NO se muestran para
+  // decisión porque Daniel ya resolvió exactamente este mismo grupo (mismo
+  // nombre + mismos códigos) en una subida anterior — ver
+  // JustCatalogDuplicateResolution. Solo informativo en la vista previa.
+  autoResolvedDuplicateGroups: number;
 };
+
+// Clave estable para recordar la decisión de un grupo duplicado: nombre
+// normalizado + códigos ordenados. Si aparece un código nuevo bajo el mismo
+// nombre en una subida futura, la clave cambia y sí se vuelve a preguntar.
+function duplicateGroupKey(groupName: string, codes: string[]): string {
+  return `${normalize(groupName)}::${[...codes].sort().join(",")}`;
+}
 
 // Clasifica cada fila del export de Just contra el catálogo ya existente —
 // confirmado 2026-08-21 (varias rondas de preguntas antes de tocar código):
@@ -117,14 +134,50 @@ export async function classifyJustCatalogRows(rows: JustCatalogParsedRow[]): Pro
     nameGroups.set(key, [...(nameGroups.get(key) ?? []), row]);
   }
   const duplicateGroupEntries = [...nameGroups.values()].filter((groupRows) => groupRows.length > 1);
-  const dupedCodes = new Set(duplicateGroupEntries.flatMap((groupRows) => groupRows.map((r) => r.code)));
-  const duplicateGroups: DuplicateGroupPreviewRow[] = duplicateGroupEntries.map((groupRows) => ({
-    groupName: groupRows[0].name,
-    rows: groupRows.map((r) => {
-      const linked = byJustCode.get(r.code);
-      return { code: r.code, name: r.name, alreadyLinked: !!linked, existingName: linked?.name ?? null };
-    }),
-  }));
+
+  // Confirmado 2026-09-01: antes de pedirle a Daniel que decida un grupo
+  // duplicado, se revisa si ya decidió exactamente este mismo grupo (mismo
+  // nombre + mismos códigos) en una subida anterior — si sí, se aplica esa
+  // decisión sola, sin volver a preguntar.
+  const candidateKeys = duplicateGroupEntries.map((groupRows) => duplicateGroupKey(groupRows[0].name, groupRows.map((r) => r.code)));
+  const savedResolutions =
+    candidateKeys.length > 0
+      ? await prisma.justCatalogDuplicateResolution.findMany({ where: { groupKey: { in: candidateKeys } } })
+      : [];
+  const resolutionByKey = new Map(savedResolutions.map((r) => [r.groupKey, r]));
+
+  // Códigos que Daniel ya decidió NO crear nunca (el resto de un grupo
+  // donde eligió "mantener" un código distinto) — se descartan por completo,
+  // no pasan por ninguna clasificación.
+  const permanentlySkippedCodes = new Set<string>();
+  let autoResolvedDuplicateGroups = 0;
+  const dupedCodes = new Set<string>();
+  const duplicateGroups: DuplicateGroupPreviewRow[] = [];
+
+  duplicateGroupEntries.forEach((groupRows, gi) => {
+    const key = candidateKeys[gi];
+    const resolution = resolutionByKey.get(key);
+    if (!resolution) {
+      groupRows.forEach((r) => dupedCodes.add(r.code));
+      duplicateGroups.push({
+        groupName: groupRows[0].name,
+        rows: groupRows.map((r) => {
+          const linked = byJustCode.get(r.code);
+          return { code: r.code, name: r.name, alreadyLinked: !!linked, existingName: linked?.name ?? null };
+        }),
+      });
+      return;
+    }
+    autoResolvedDuplicateGroups++;
+    if (resolution.decision !== DUPLICATE_DISTINCT) {
+      const keptCode = resolution.decision;
+      groupRows.forEach((r) => {
+        if (r.code !== keptCode) permanentlySkippedCodes.add(r.code);
+      });
+    }
+    // Si la decisión guardada fue "son productos distintos", no se hace
+    // nada más — cada código sigue su clasificación normal más abajo.
+  });
 
   const newRows: JustCatalogParsedRow[] = [];
   const nameChangedRows: NameChangedPreviewRow[] = [];
@@ -132,7 +185,7 @@ export async function classifyJustCatalogRows(rows: JustCatalogParsedRow[]): Pro
   let unchangedCount = 0;
 
   for (const row of rows) {
-    if (dupedCodes.has(row.code)) continue;
+    if (dupedCodes.has(row.code) || permanentlySkippedCodes.has(row.code)) continue;
     const linked = byJustCode.get(row.code);
     if (linked) {
       if (normalize(linked.name) === normalize(row.name)) {
@@ -165,7 +218,16 @@ export async function classifyJustCatalogRows(rows: JustCatalogParsedRow[]): Pro
     .filter((i) => i.justCode && !uploadedCodes.has(i.justCode))
     .map((i) => ({ id: i.id, name: i.name, justCode: i.justCode as string, hasPhotos: i.photos.length > 0 }));
 
-  return { totalRows: rows.length, unchangedCount, newRows, nameChangedRows, suggestedLinkRows, duplicateGroups, missingItems };
+  return {
+    totalRows: rows.length,
+    unchangedCount,
+    newRows,
+    nameChangedRows,
+    suggestedLinkRows,
+    duplicateGroups,
+    missingItems,
+    autoResolvedDuplicateGroups,
+  };
 }
 
 export type JustCatalogApplyDecisions = {
@@ -176,6 +238,11 @@ export type JustCatalogApplyDecisions = {
   // (uno solo si eligió "mantener este código", todos los no vinculados
   // si confirmó "son productos distintos") — ver classifyJustCatalogRows.
   duplicateGroupDecisions: { code: string; name: string }[];
+  // Confirmado 2026-09-01: una entrada por cada grupo duplicado que Daniel
+  // resolvió activamente en esta subida (no los que ya venían auto-resueltos
+  // de una decisión previa) — se guardan para que la próxima subida no
+  // vuelva a preguntar el mismo grupo (ver classifyJustCatalogRows).
+  duplicateGroupResolutions: { groupName: string; codes: string[]; decision: string }[];
   duplicateGroupsTotal: number;
   duplicateGroupsResolved: number;
   missingCount: number;
@@ -262,6 +329,19 @@ export async function applyJustCatalogImport(decisions: JustCatalogApplyDecision
     },
     { timeout: 30000 }
   );
+
+  if (decisions.duplicateGroupResolutions.length > 0) {
+    await Promise.all(
+      decisions.duplicateGroupResolutions.map((r) => {
+        const groupKey = duplicateGroupKey(r.groupName, r.codes);
+        return prisma.justCatalogDuplicateResolution.upsert({
+          where: { groupKey },
+          create: { groupKey, groupName: r.groupName, codes: r.codes, decision: r.decision, decidedById: importedById },
+          update: { decision: r.decision, decidedById: importedById, decidedAt: new Date() },
+        });
+      })
+    );
+  }
 
   await prisma.justCatalogImport.create({
     data: {
