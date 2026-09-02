@@ -7,6 +7,7 @@ import { getUpcomingBirthdays } from "@/lib/birthdays";
 import { getFinanzasDeptId, recentInventorySnapshotPeriods, isSnapshotPeriodOverdue, snapshotPeriodLabel } from "@/lib/inventoryKpis";
 import { isEndOfMonthQuincena, monthOfPeriod } from "@/lib/payrollCalc";
 import { getMarketingLeadId } from "@/lib/guards";
+import { NICHO_AUTO_MONTHLY_BUDGET_USD } from "@/lib/nichoAi";
 
 // ---------------- Date helpers ----------------
 // Deadline rule confirmed by the user 2026-07-20: work week is Mon-Sat, and
@@ -421,6 +422,7 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   compras_creditos_pendientes: "Créditos pendientes de recuperar",
   control_inventario: "Control de Inventario — captura mensual",
   control_inventario_semanal: "Control de Inventario — Excel semanal de stock por SKU",
+  combo_sugerencias_nicho_backfill: "Sugerencias de Combos — nichos por asignar (tope de gasto alcanzado)",
 };
 
 // "colaborador_del_mes" es obligatorio — confirmado 2026-08-05: a diferencia
@@ -1811,6 +1813,37 @@ async function getMerchandiseWeeklyWriteOffJustPendingItem(href: string): Promis
   };
 }
 
+// Confirmado 2026-09-02: pedido explícito del usuario — el backfill
+// automático de nichos (runNichoAutoBackfill en nichoAi.ts) corre solo todos
+// los días mientras el gasto del mes no llegue al techo; en cuanto lo
+// alcanza se detiene y se queda esperando que alguien confirme a mano con el
+// botón "Sugerir nichos faltantes". Sin este pendiente, admin/Daniel solo se
+// enterarían si entran a esa pestaña por su cuenta — por eso avisa en Inicio,
+// para quien pueda gestionar Base de datos de productos (mismo criterio que
+// canManageJustCatalog).
+async function getNichoBackfillPendingItem(href: string): Promise<PendingItem | null> {
+  const missingCount = await prisma.purchaseCatalogItem.count({ where: { nicho: null } });
+  if (missingCount === 0) return null;
+
+  const monthStart = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1));
+  const spent = await prisma.aiUsageLog.aggregate({
+    where: { feature: "combo_sugerencias_nicho", createdAt: { gte: monthStart } },
+    _sum: { costUsd: true },
+  });
+  // Todavía hay margen este mes — el cron diario lo va a resolver solo, no
+  // hace falta molestar a nadie.
+  if ((spent._sum.costUsd ?? 0) < NICHO_AUTO_MONTHLY_BUDGET_USD) return null;
+
+  return {
+    type: "combo_sugerencias_nicho_backfill",
+    icon: "🏷️",
+    label: "Nichos de productos por asignar",
+    meta: `${missingCount} producto${missingCount === 1 ? "" : "s"} · se llegó al tope de gasto mensual, confirma a mano en Base de datos de productos`,
+    overdue: true,
+    href,
+  };
+}
+
 // Confirmado 2026-08-21: pedido explícito del usuario — acceso directo con
 // un solo clic para Nairoby cuando Daniel ya dio de baja en Just un lote
 // semanal y le falta a ella la verificación física + doble confirmación.
@@ -2098,12 +2131,13 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     // departamento INV (ver canViewMerchandiseOutflow en admin/dept/[id]/page.tsx).
     const invDept = await prisma.department.findUnique({ where: { code: "INV" }, select: { id: true } });
     const invEgresosHref = invDept ? `/admin/dept/${invDept.id}?tab=egresos&otab=proveedor` : "/admin";
+    const nichoBackfillHref = "/admin/reingreso-mercaderia?tab=productos";
     // Confirmado 2026-08-31: "Ventas Externas" vive en la página del
     // departamento MKT (ver canViewExternalSales en admin/dept/[id]/page.tsx),
     // pestaña interna "Pagos" (?etab=pagos, leída por ExternalSalesPanel).
     const mktDept = await prisma.department.findUnique({ where: { code: "MKT" }, select: { id: true } });
     const mktVentasPagosHref = mktDept ? `/admin/dept/${mktDept.id}?tab=ventas-externas&etab=pagos` : "/admin";
-    const [feedbackItems, recognitionItem, weeklyCheckinStalledItems, pettyCashLow, pettyCashUnconfirmed, adminPaymentsItem, purchaseMerchandiseItem, purchaseShippingItem, purchaseCreditsItem, supplierExchangeRejectedItem, overtimeApprovalItem, commissionBonusApprovalItem, salaryAdvanceItem, managementDeductionItem, personalPurchaseFinanceItem, personalPurchaseTransferConfirmItem, personalPurchaseTransferCloseItem, personalPurchasePaymentWatchItem, payrollTransferItem, payrollIessTransferItem, externalSalePaymentConfirmItem, birthdayItems] = await Promise.all([
+    const [feedbackItems, recognitionItem, weeklyCheckinStalledItems, pettyCashLow, pettyCashUnconfirmed, adminPaymentsItem, purchaseMerchandiseItem, purchaseShippingItem, purchaseCreditsItem, supplierExchangeRejectedItem, overtimeApprovalItem, commissionBonusApprovalItem, salaryAdvanceItem, managementDeductionItem, personalPurchaseFinanceItem, personalPurchaseTransferConfirmItem, personalPurchaseTransferCloseItem, personalPurchasePaymentWatchItem, payrollTransferItem, payrollIessTransferItem, externalSalePaymentConfirmItem, birthdayItems, nichoBackfillItem] = await Promise.all([
       getFeedbackPendingItems(),
       getRecognitionAdminPendingItem("/admin/colaborador-destacado"),
       getWeeklyCheckinStalledPendingItems(),
@@ -2126,6 +2160,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       getPayrollIessTransferPendingItem(true, "/admin/nomina?tab=pagos&ptab=roles"),
       getExternalSalePaymentConfirmPendingItem(mktVentasPagosHref),
       getUpcomingBirthdayPendingItems("/admin/nomina"),
+      getNichoBackfillPendingItem(nichoBackfillHref),
     ]);
     const items = [
       ...feedbackItems,
@@ -2150,6 +2185,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       ...(payrollIessTransferItem ? [payrollIessTransferItem] : []),
       ...(externalSalePaymentConfirmItem ? [externalSalePaymentConfirmItem] : []),
       ...birthdayItems,
+      ...(nichoBackfillItem ? [nichoBackfillItem] : []),
     ];
     if (items.length === 0) return null;
     return { title: "Pendientes de esta semana", sub: "Como administrador", items };
@@ -2255,7 +2291,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
   }
 
   if (me.leadsDept.code === "INV") {
-    const [stockoutItem, receivingItem, replacementItem, inventoryControlItem, inventoryWeeklySnapshotItem, merchandiseReentryItem, merchandiseWeeklyJustItem, personalPurchaseInventoryItem, lateClaimReviewItem, lateClaimJustItem, urgentUnresolvedItem] = await Promise.all([
+    const [stockoutItem, receivingItem, replacementItem, inventoryControlItem, inventoryWeeklySnapshotItem, merchandiseReentryItem, merchandiseWeeklyJustItem, personalPurchaseInventoryItem, lateClaimReviewItem, lateClaimJustItem, urgentUnresolvedItem, nichoBackfillItem] = await Promise.all([
       getStockoutPendingItem("/area/kpis-generales"),
       getPurchaseReceivingPendingItem("/area/workspace?tab=compras&ptab=inventario"),
       getPurchaseReplacementVerificationPendingItem("/area/workspace?tab=compras&ptab=inventario"),
@@ -2267,6 +2303,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       getLateClaimReviewPendingItem("/area/workspace?tab=compras&ptab=inventario"),
       getLateClaimJustPendingItem("/area/workspace?tab=compras&ptab=inventario"),
       getPurchaseUrgentReportsUnresolvedPendingItem("/area/workspace?tab=compras&ptab=urgentes"),
+      getNichoBackfillPendingItem("/area/reingreso-mercaderia?tab=productos"),
     ]);
     if (stockoutItem) items.push(stockoutItem);
     if (receivingItem) items.push(receivingItem);
@@ -2279,6 +2316,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     if (lateClaimReviewItem) items.push(lateClaimReviewItem);
     if (lateClaimJustItem) items.push(lateClaimJustItem);
     if (urgentUnresolvedItem) items.push(urgentUnresolvedItem);
+    if (nichoBackfillItem) items.push(nichoBackfillItem);
 
     const justWriteOffItem = await getSupplierExchangeJustWriteOffPendingItem("/area/workspace?tab=egresos&otab=proveedor");
     if (justWriteOffItem) items.push(justWriteOffItem);
@@ -2338,7 +2376,7 @@ export async function getPossiblePendingTypesForActor(
   const types: string[] = [];
 
   if (actor.isAdmin) {
-    types.push("feedback", "caja_chica_saldo", "caja_chica_confirmacion", "cumpleanos", "compras_creditos_pendientes", "anticipos_aprobacion", "descuentos_sin_aceptar", "compras_personales_precio", "compras_personales_transferencia", "compras_personales_cierre", "nomina_transferencia", "iess_transferencia");
+    types.push("feedback", "caja_chica_saldo", "caja_chica_confirmacion", "cumpleanos", "compras_creditos_pendientes", "anticipos_aprobacion", "descuentos_sin_aceptar", "compras_personales_precio", "compras_personales_transferencia", "compras_personales_cierre", "nomina_transferencia", "iess_transferencia", "combo_sugerencias_nicho_backfill");
   } else {
     const me = await prisma.user.findUnique({
       where: { id: actor.userId },
@@ -2352,7 +2390,7 @@ export async function getPossiblePendingTypesForActor(
     }
     if (me.leadsDept.trackWeeklyMetric) types.push("pedidos_despachados");
     if (me.leadsDept.code === "INV") {
-      types.push("ruptura_stock", "compras_recepcion", "compras_cambios_verificar", "control_inventario", "control_inventario_semanal", "reingreso_mercaderia_revision", "reingreso_mercaderia_baja_just", "compras_personales_confirmar", "compras_reclamo_posterior_revision", "compras_reclamo_posterior_just");
+      types.push("ruptura_stock", "compras_recepcion", "compras_cambios_verificar", "control_inventario", "control_inventario_semanal", "reingreso_mercaderia_revision", "reingreso_mercaderia_baja_just", "compras_personales_confirmar", "compras_reclamo_posterior_revision", "compras_reclamo_posterior_just", "combo_sugerencias_nicho_backfill");
     }
     // Mismo criterio de elegibilidad que canSubmitPurchaseRequests
     // (guards.ts) — delegado vía canManagePurchases, o líder de COM/FIN —
