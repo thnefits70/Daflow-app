@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { CheckCircle2, ExternalLink } from "lucide-react";
+import { CheckCircle2, ExternalLink, TrendingUp, TrendingDown } from "lucide-react";
 
 type CatalogRef = { id: string; name: string; photos: string[]; nicho: string | null };
 type Suggestion = {
@@ -17,15 +17,24 @@ type Suggestion = {
   createdInDropiBy: { name: string } | null;
 };
 
+// Confirmado 2026-09-03: pedido explícito del usuario — antes solo el color
+// distinguía cuál de los dos productos es el que ya vende bien (ganador) y
+// cuál es el que casi no se vende (baja rotación, el que el combo busca
+// mover) — poco claro sin saber de memoria la convención. Ahora cada uno
+// lleva un ícono + palabra fija, además del color.
 function Pair({ s }: { s: Suggestion }) {
   return (
-    <div className="text-[12.5px]">
-      <span className="font-semibold text-teal">{s.winnerCatalogItem.name}</span>
-      <span className="text-steel"> + </span>
-      <span className="font-semibold text-gold" style={{ color: "#D9A441" }}>
-        {s.lowRotationCatalogItem.name}
+    <div className="text-[12.5px] flex flex-wrap items-center gap-1.5">
+      <span className="inline-flex items-center gap-1 font-semibold text-teal">
+        <TrendingUp size={12} /> {s.winnerCatalogItem.name}
+        <span className="text-[10px] font-normal text-steel">(vende bien)</span>
       </span>
-      <span className="text-steel"> · {s.nicho}</span>
+      <span className="text-steel">+</span>
+      <span className="inline-flex items-center gap-1 font-semibold" style={{ color: "#D9A441" }}>
+        <TrendingDown size={12} /> {s.lowRotationCatalogItem.name}
+        <span className="text-[10px] font-normal text-steel">(casi no se vende)</span>
+      </span>
+      <span className="text-steel">· {s.nicho}</span>
     </div>
   );
 }
