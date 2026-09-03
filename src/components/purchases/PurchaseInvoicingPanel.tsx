@@ -634,15 +634,25 @@ export function PurchaseInvoicingPanel({ isAdmin = false, canPayMerchandise }: {
                       <Landmark size={12} /> Transferir a {g[0].supplier.name}
                     </div>
                     {g[0].bankAccount ? (
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-2.5 gap-y-0.5 text-[11.5px]">
-                        <div><span className="text-steel">Banco: </span><span className="font-semibold">{g[0].bankAccount.bankName}</span></div>
-                        <div><span className="text-steel">Tipo: </span><span className="font-semibold">{g[0].bankAccount.bankAccountType}</span></div>
-                        {g[0].bankAccount.holderIdType && (
-                          <div><span className="text-steel">{g[0].bankAccount.holderIdType === "RUC" ? "RUC" : "CI"}: </span><span className="font-semibold break-all">{g[0].bankAccount.holderIdNumber}</span></div>
-                        )}
-                        <div><span className="text-steel">Titular: </span><span className="font-bold text-teal">{g[0].bankAccount.bankAccountHolder}</span></div>
-                        <div><span className="text-steel">N°: </span><span className="font-bold text-teal break-all">{g[0].bankAccount.bankAccountNumber}</span></div>
-                      </div>
+                      <>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-2.5 gap-y-0.5 text-[11.5px] mb-2">
+                          <div><span className="text-steel">Banco: </span><span className="font-semibold">{g[0].bankAccount.bankName}</span></div>
+                          <div><span className="text-steel">Tipo: </span><span className="font-semibold">{g[0].bankAccount.bankAccountType}</span></div>
+                          {g[0].bankAccount.holderIdType && (
+                            <div><span className="text-steel">{g[0].bankAccount.holderIdType === "RUC" ? "RUC" : "CI"}: </span><span className="font-semibold break-all">{g[0].bankAccount.holderIdNumber}</span></div>
+                          )}
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          <div className="bg-teal/10 border border-teal/30 rounded-md px-2.5 py-1.5">
+                            <div className="text-[9px] font-semibold uppercase tracking-wide text-teal/80">Titular</div>
+                            <div className="font-display text-[16px] font-bold text-teal leading-tight break-words">{g[0].bankAccount.bankAccountHolder}</div>
+                          </div>
+                          <div className="bg-teal/10 border border-teal/30 rounded-md px-2.5 py-1.5">
+                            <div className="text-[9px] font-semibold uppercase tracking-wide text-teal/80">N° de cuenta</div>
+                            <div className="font-display text-[16px] font-bold text-teal leading-tight break-all">{g[0].bankAccount.bankAccountNumber}</div>
+                          </div>
+                        </div>
+                      </>
                     ) : (
                       <div className="text-[11.5px] text-red">Falta registrar la cuenta bancaria del proveedor.</div>
                     )}
@@ -778,15 +788,25 @@ export function PurchaseInvoicingPanel({ isAdmin = false, canPayMerchandise }: {
                       <Landmark size={12} /> Transferir a {r0.carrier?.name ?? "transportista"}
                     </div>
                     {r0.carrierBankAccount ? (
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-2.5 gap-y-0.5 text-[11.5px]">
-                        <div><span className="text-steel">Banco: </span><span className="font-semibold">{r0.carrierBankAccount.bankName}</span></div>
-                        <div><span className="text-steel">Tipo: </span><span className="font-semibold">{r0.carrierBankAccount.bankAccountType}</span></div>
-                        {r0.carrierBankAccount.holderIdType && (
-                          <div><span className="text-steel">{r0.carrierBankAccount.holderIdType === "RUC" ? "RUC" : "CI"}: </span><span className="font-semibold break-all">{r0.carrierBankAccount.holderIdNumber}</span></div>
-                        )}
-                        <div><span className="text-steel">Titular: </span><span className="font-bold text-teal">{r0.carrierBankAccount.bankAccountHolder}</span></div>
-                        <div><span className="text-steel">N°: </span><span className="font-bold text-teal break-all">{r0.carrierBankAccount.bankAccountNumber}</span></div>
-                      </div>
+                      <>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-2.5 gap-y-0.5 text-[11.5px] mb-2">
+                          <div><span className="text-steel">Banco: </span><span className="font-semibold">{r0.carrierBankAccount.bankName}</span></div>
+                          <div><span className="text-steel">Tipo: </span><span className="font-semibold">{r0.carrierBankAccount.bankAccountType}</span></div>
+                          {r0.carrierBankAccount.holderIdType && (
+                            <div><span className="text-steel">{r0.carrierBankAccount.holderIdType === "RUC" ? "RUC" : "CI"}: </span><span className="font-semibold break-all">{r0.carrierBankAccount.holderIdNumber}</span></div>
+                          )}
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          <div className="bg-teal/10 border border-teal/30 rounded-md px-2.5 py-1.5">
+                            <div className="text-[9px] font-semibold uppercase tracking-wide text-teal/80">Titular</div>
+                            <div className="font-display text-[16px] font-bold text-teal leading-tight break-words">{r0.carrierBankAccount.bankAccountHolder}</div>
+                          </div>
+                          <div className="bg-teal/10 border border-teal/30 rounded-md px-2.5 py-1.5">
+                            <div className="text-[9px] font-semibold uppercase tracking-wide text-teal/80">N° de cuenta</div>
+                            <div className="font-display text-[16px] font-bold text-teal leading-tight break-all">{r0.carrierBankAccount.bankAccountNumber}</div>
+                          </div>
+                        </div>
+                      </>
                     ) : (
                       <div className="text-[11.5px] text-red">Falta registrar la cuenta bancaria del transportista.</div>
                     )}
