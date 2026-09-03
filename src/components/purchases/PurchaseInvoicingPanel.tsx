@@ -662,6 +662,8 @@ export function PurchaseInvoicingPanel({ isAdmin = false, canPayMerchandise }: {
             {approvedGroups.map((g) => {
               const groupId = g[0].groupId;
               const total = g.reduce((s, r) => s + r.totalCost, 0);
+              const linkedCredit = groupCredits[groupId]?.linked ?? 0;
+              const netToPay = Math.max(0, total - linkedCredit);
               return (
                 <div key={groupId} className="bg-surface border border-rule rounded-md p-4">
                   <div className="flex items-start justify-between gap-2">
@@ -674,14 +676,17 @@ export function PurchaseInvoicingPanel({ isAdmin = false, canPayMerchandise }: {
                       ))}
                     </div>
                     <div className="flex flex-col items-end shrink-0 gap-0.5">
-                      <span className="font-display text-[16px] font-bold text-teal leading-tight">{money(total)}</span>
+                      <span className="font-display text-[16px] font-bold text-teal leading-tight">{money(netToPay)}</span>
+                      {linkedCredit > 0 && (
+                        <span className="text-[9.5px] text-steel-dim text-right leading-tight line-through">{money(total)}</span>
+                      )}
                       <span className="font-mono text-[10.5px] text-steel">{formatPurchaseRequestCode(g[0].requestNumber)}</span>
                       {groupCredits[groupId] && (() => {
                         const { available, linked } = groupCredits[groupId];
                         if (linked > 0) {
                           return (
                             <span className="text-[9.5px] font-semibold text-teal text-right leading-tight">
-                              Crédito ya vinculado: {money(linked)}
+                              Ya se restó crédito de {money(linked)}
                             </span>
                           );
                         }
