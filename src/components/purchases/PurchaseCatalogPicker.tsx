@@ -77,7 +77,8 @@ export function PurchaseCatalogPicker({
   const [newCode, setNewCode] = useState(defaultCreateDraft?.newCode ?? "");
   const [photos, setPhotos] = useState<string[]>(defaultCreateDraft?.photos ?? []);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
-  const { onPaste: onPastePhoto, onMouseEnter: onPasteHoverIn, onMouseLeave: onPasteHoverOut } = usePasteFile((file) => addPhoto(file));
+  const [dragOver, setDragOver] = useState(false);
+  const { onPaste: onPastePhoto, onMouseEnter: onPasteHoverIn, onMouseLeave: onPasteHoverOut } = usePasteFile((file) => addPhotos([file]));
   const [similarity, setSimilarity] = useState<{ suspected: boolean; matchedName: string | null; message: string | null } | null>(null);
   const [checkingSimilarity, setCheckingSimilarity] = useState(false);
   const [confirmStep, setConfirmStep] = useState(false);
@@ -135,18 +136,25 @@ export function PurchaseCatalogPicker({
     setErr("");
   }
 
-  async function addPhoto(file: File) {
-    if (photos.length >= 3) return;
+  // Confirmado 2026-09-03: Jariel pidió poder arrastrar/seleccionar varias
+  // fotos de una vez en vez de repetir el flujo de a una — sube en orden y
+  // se detiene sola al llegar a 3 (o al primer error, para no tapar cuál
+  // falló con más subidas encima).
+  async function addPhotos(files: File[]) {
+    const toAdd = files.filter((f) => f.type.startsWith("image/")).slice(0, Math.max(0, 3 - photos.length));
+    if (toAdd.length === 0) return;
     setUploadingPhoto(true);
     setErr("");
-    const compressed = await compressImage(file);
-    const uploaded = await uploadFile(compressed, "purchase-catalog");
-    setUploadingPhoto(false);
-    if (!uploaded.ok) {
-      setErr(uploaded.error);
-      return;
+    for (const file of toAdd) {
+      const compressed = await compressImage(file);
+      const uploaded = await uploadFile(compressed, "purchase-catalog");
+      if (!uploaded.ok) {
+        setErr(uploaded.error);
+        break;
+      }
+      setPhotos((p) => [...p, uploaded.url]);
     }
-    setPhotos((p) => [...p, uploaded.url]);
+    setUploadingPhoto(false);
   }
 
   async function goToConfirm() {
@@ -343,20 +351,36 @@ export function PurchaseCatalogPicker({
                   onPaste={onPastePhoto}
                   onMouseEnter={onPasteHoverIn}
                   onMouseLeave={onPasteHoverOut}
-                  title="Pasa el mouse y Ctrl+V para pegar una foto copiada"
-                  className="w-16 h-16 rounded border-[1.5px] border-dashed border-rule flex items-center justify-center cursor-pointer text-steel hover:border-teal focus:border-teal focus:outline-none"
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    setDragOver(true);
+                  }}
+                  onDragLeave={() => setDragOver(false)}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    setDragOver(false);
+                    addPhotos(Array.from(e.dataTransfer.files));
+                  }}
+                  title="Pasa el mouse y Ctrl+V para pegar, o arrastra varias fotos aquí"
+                  className={`w-16 h-16 rounded border-[1.5px] border-dashed flex items-center justify-center cursor-pointer text-steel hover:border-teal focus:border-teal focus:outline-none ${dragOver ? "border-teal bg-teal/10" : "border-rule"}`}
                 >
                   {uploadingPhoto ? (
                     <span className="w-4 h-4 rounded-full border-2 border-rule border-t-teal animate-spin" />
                   ) : (
                     <Camera size={18} />
                   )}
-                  <input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && addPhoto(e.target.files[0])} />
+                  <input
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    className="hidden"
+                    onChange={(e) => e.target.files && addPhotos(Array.from(e.target.files))}
+                  />
                 </label>
               )}
             </div>
             <div className="text-[11px] text-steel mb-3">
-              Real si lo tienes físicamente; referencial del proveedor (misma foto de la cotización) si no — que se vea el producto exacto.
+              Real si lo tienes físicamente; referencial del proveedor (misma foto de la cotización) si no — que se vea el producto exacto. Puedes arrastrar o seleccionar varias fotos a la vez.
             </div>
             <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">
               Descripción <span className="text-steel-dim normal-case font-normal">(opcional)</span>
