@@ -799,10 +799,10 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
                 <div className="rounded border border-rule px-2.5 py-2 text-[13px] font-bold bg-cloud">${lineTotals[idx].toFixed(2)}</div>
               </div>
             </div>
-            <label className="flex items-center gap-2 text-[11.5px] text-steel cursor-pointer">
-              <input type="checkbox" className="w-auto" checked={line.ivaIncluded} onChange={(e) => updateLine(idx, { ivaIncluded: e.target.checked })} />
-              El proveedor cobra 15% de IVA aparte de este costo <span className="text-steel-dim">— súmalo para que cuadre con la cotización</span>
-            </label>
+            <div className="flex items-center gap-2 text-[11.5px] text-steel">
+              <input type="checkbox" className="w-auto cursor-pointer" checked={line.ivaIncluded} onChange={(e) => updateLine(idx, { ivaIncluded: e.target.checked })} />
+              <span>El proveedor cobra 15% de IVA aparte de este costo <span className="text-steel-dim">— súmalo para que cuadre con la cotización</span></span>
+            </div>
           </div>
         ))}
       </div>
