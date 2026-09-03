@@ -26,30 +26,6 @@ export function formatCancelledGuideBatchCode(batchNumber: number): string {
   return `LOTE-${String(batchNumber).padStart(4, "0")}`;
 }
 
-const ECUADOR_UTC_OFFSET_HOURS = 5;
-
-function startOfEcuadorDayUtc(now: Date): Date {
-  const ecuadorNow = new Date(now.getTime() - ECUADOR_UTC_OFFSET_HOURS * 3600 * 1000);
-  return new Date(Date.UTC(ecuadorNow.getUTCFullYear(), ecuadorNow.getUTCMonth(), ecuadorNow.getUTCDate()) + ECUADOR_UTC_OFFSET_HOURS * 3600 * 1000);
-}
-
-// Pedido explícito de Yair 2026-09-03: si ya subió guías de esta misma
-// transportadora hoy y todavía no las gestionó Bryan (batchManagedAt
-// null), las guías nuevas se suman a ESE mismo lote en vez de abrir uno
-// nuevo — un solo lote por transportadora por día mientras siga abierto.
-export async function findOrCreateCancelledGuideBatchCode(carrier: "SERVIENTREGA" | "URBANO" | "GINTRANCOM" | "LAARCOURIER" | "VELOCES"): Promise<string> {
-  const todayStart = startOfEcuadorDayUtc(new Date());
-  const openToday = await prisma.cancelledGuideReport.findFirst({
-    where: { carrier, batchManagedAt: null, batchCode: { not: null }, createdAt: { gte: todayStart } },
-    select: { batchCode: true },
-    orderBy: { createdAt: "desc" },
-  });
-  if (openToday?.batchCode) return openToday.batchCode;
-
-  const batchNumber = await nextCancelledGuideBatchNumber();
-  return formatCancelledGuideBatchCode(batchNumber);
-}
-
 const URL_BASE = "/area/workspace?tab=egresos&otab=guias";
 
 // Confirmado 2026-08-25: apenas se sube una guía a cancelar, Fulfillment

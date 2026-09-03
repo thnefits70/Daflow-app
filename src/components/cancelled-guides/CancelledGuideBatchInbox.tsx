@@ -16,38 +16,41 @@ type ReportDTO = {
   submittedBy: { name: string } | null;
 };
 
+type CarrierGroup = { carrier: keyof typeof CARRIER_LABELS; guideNumbers: string[] };
 type Batch = {
   batchCode: string;
   sourceArea: keyof typeof SOURCE_AREA_LABELS;
-  carrier: keyof typeof CARRIER_LABELS;
   reason: string;
-  guideNumbers: string[];
   submittedByName: string;
+  guideCount: number;
+  carrierGroups: CarrierGroup[];
 };
 
+// Un lote es TODA la tanda que alguien confirmó junta — puede traer varias
+// transportadoras adentro (pedido explícito de Yair 2026-09-03), agrupadas
+// acá solo para que copiar/pegar en Dropi sea por transportadora.
 function groupIntoBatches(reports: ReportDTO[]): Batch[] {
   const map = new Map<string, Batch>();
   for (const r of reports) {
-    const existing = map.get(r.batchCode);
-    if (existing) {
-      existing.guideNumbers.push(r.guideNumber);
-    } else {
-      map.set(r.batchCode, {
-        batchCode: r.batchCode,
-        sourceArea: r.sourceArea,
-        carrier: r.carrier,
-        reason: r.reason,
-        guideNumbers: [r.guideNumber],
-        submittedByName: r.submittedBy?.name ?? "—",
-      });
+    let batch = map.get(r.batchCode);
+    if (!batch) {
+      batch = { batchCode: r.batchCode, sourceArea: r.sourceArea, reason: r.reason, submittedByName: r.submittedBy?.name ?? "—", guideCount: 0, carrierGroups: [] };
+      map.set(r.batchCode, batch);
     }
+    batch.guideCount += 1;
+    let group = batch.carrierGroups.find((g) => g.carrier === r.carrier);
+    if (!group) {
+      group = { carrier: r.carrier, guideNumbers: [] };
+      batch.carrierGroups.push(group);
+    }
+    group.guideNumbers.push(r.guideNumber);
   }
   return [...map.values()];
 }
 
 export function CancelledGuideBatchInbox() {
   const [reports, setReports] = useState<ReportDTO[] | null>(null);
-  const [copiedCode, setCopiedCode] = useState<string | null>(null);
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [managingCode, setManagingCode] = useState<string | null>(null);
   const [savingCode, setSavingCode] = useState<string | null>(null);
   const [error, setError] = useState("");
@@ -57,11 +60,11 @@ export function CancelledGuideBatchInbox() {
   }
   useEffect(load, []);
 
-  async function copy(batch: Batch) {
+  async function copy(key: string, guideNumbers: string[]) {
     try {
-      await navigator.clipboard.writeText(batch.guideNumbers.join("\n"));
-      setCopiedCode(batch.batchCode);
-      setTimeout(() => setCopiedCode((c) => (c === batch.batchCode ? null : c)), 2000);
+      await navigator.clipboard.writeText(guideNumbers.join("\n"));
+      setCopiedKey(key);
+      setTimeout(() => setCopiedKey((c) => (c === key ? null : c)), 2000);
     } catch {
       setError("No se pudo copiar — copiá manualmente.");
     }
@@ -94,31 +97,40 @@ export function CancelledGuideBatchInbox() {
         <div key={b.batchCode} className="bg-surface border border-rule rounded-md p-3.5">
           <div className="flex items-center gap-2 mb-1 flex-wrap">
             <span className="font-mono text-[11px] font-bold text-teal">{b.batchCode}</span>
-            <span className="text-[11px] font-semibold">{CARRIER_LABELS[b.carrier]}</span>
-            <span className="text-[10.5px] text-steel">{b.guideNumbers.length} guía{b.guideNumbers.length === 1 ? "" : "s"}</span>
+            <span className="text-[10.5px] text-steel">{b.guideCount} guía{b.guideCount === 1 ? "" : "s"}</span>
           </div>
-          <div className="text-[11px] text-steel mb-2">{SOURCE_AREA_LABELS[b.sourceArea]} · {b.reason} · subido por {b.submittedByName}</div>
+          <div className="text-[11px] text-steel mb-2.5">{SOURCE_AREA_LABELS[b.sourceArea]} · {b.reason} · subido por {b.submittedByName}</div>
 
-          <div className="bg-cloud rounded-md p-2 mb-2.5 max-h-32 overflow-y-auto">
-            {b.guideNumbers.map((g) => (
-              <div key={g} className="font-mono text-[11.5px]">{g}</div>
-            ))}
+          <div className="flex flex-col gap-2 mb-2.5">
+            {b.carrierGroups.map((g) => {
+              const copyKey = `${b.batchCode}:${g.carrier}`;
+              return (
+                <div key={g.carrier} className="bg-cloud rounded-md p-2.5">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-[11.5px] font-semibold">{CARRIER_LABELS[g.carrier]}</span>
+                    <button type="button" className="flex items-center gap-1 text-[10.5px] font-semibold text-blue cursor-pointer" onClick={() => copy(copyKey, g.guideNumbers)}>
+                      {copiedKey === copyKey ? <><Check size={12} className="text-green" /> Copiado</> : <><Copy size={12} /> Copiar</>}
+                    </button>
+                  </div>
+                  <div className="max-h-28 overflow-y-auto">
+                    {g.guideNumbers.map((num) => (
+                      <div key={num} className="font-mono text-[11.5px]">{num}</div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
           </div>
 
-          <div className="flex gap-2">
-            <button type="button" className="flex-1 flex items-center justify-center gap-1.5 rounded border border-rule px-2.5 py-1.5 text-[11.5px] font-semibold cursor-pointer" onClick={() => copy(b)}>
-              {copiedCode === b.batchCode ? <><Check size={13} className="text-green" /> Copiado</> : <><Copy size={13} /> Copiar guías</>}
+          {managingCode === b.batchCode ? (
+            <button type="button" disabled={savingCode === b.batchCode} className="w-full rounded border border-teal bg-teal px-2.5 py-1.5 text-[11.5px] font-bold text-navy cursor-pointer disabled:opacity-60" onClick={() => manage(b.batchCode)}>
+              {savingCode === b.batchCode ? "Confirmando…" : "Sí, ya gestioné todo este lote con Dropi"}
             </button>
-            {managingCode === b.batchCode ? (
-              <button type="button" disabled={savingCode === b.batchCode} className="flex-1 rounded border border-teal bg-teal px-2.5 py-1.5 text-[11.5px] font-bold text-navy cursor-pointer disabled:opacity-60" onClick={() => manage(b.batchCode)}>
-                {savingCode === b.batchCode ? "Confirmando…" : "Sí, ya gestioné con Dropi"}
-              </button>
-            ) : (
-              <button type="button" className="flex-1 rounded border border-teal text-teal px-2.5 py-1.5 text-[11.5px] font-bold cursor-pointer" onClick={() => setManagingCode(b.batchCode)}>
-                Confirmar gestión
-              </button>
-            )}
-          </div>
+          ) : (
+            <button type="button" className="w-full rounded border border-teal text-teal px-2.5 py-1.5 text-[11.5px] font-bold cursor-pointer" onClick={() => setManagingCode(b.batchCode)}>
+              Confirmar gestión del lote completo
+            </button>
+          )}
         </div>
       ))}
     </div>

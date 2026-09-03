@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Check, X } from "lucide-react";
-import { CARRIER_LABELS, SOURCE_AREA_LABELS, MKT_CANCEL_REASONS, FULFILLMENT_CANCEL_REASONS, splitGuideBuffer, isPossibleGuidePrefix } from "@/lib/cancelledGuidesLabels";
+import { CARRIER_LABELS, SOURCE_AREA_LABELS, MKT_CANCEL_REASONS, FULFILLMENT_CANCEL_REASONS, allowedSourceAreasFor, splitGuideBuffer, isPossibleGuidePrefix } from "@/lib/cancelledGuidesLabels";
 
 type SourceArea = "MKT_DAMIAN" | "MKT_PROVEDIX" | "MKT_SHANGHAI" | "FULFILLMENT";
 type DetectedGuide = { id: string; carrier: keyof typeof CARRIER_LABELS; guideNumber: string };
@@ -14,7 +14,8 @@ async function postJson(url: string, body?: unknown) {
   return data;
 }
 
-export function CancelledGuideSubmitForm({ onSubmitted }: { onSubmitted?: () => void }) {
+export function CancelledGuideSubmitForm({ onSubmitted, viewerDeptCode }: { onSubmitted?: () => void; viewerDeptCode?: string | null }) {
+  const areaOptions = allowedSourceAreasFor(viewerDeptCode) as SourceArea[];
   const [sourceArea, setSourceArea] = useState<SourceArea | "">("");
   const [guideBuffer, setGuideBuffer] = useState("");
   const [guides, setGuides] = useState<DetectedGuide[]>([]);
@@ -70,24 +71,16 @@ export function CancelledGuideSubmitForm({ onSubmitted }: { onSubmitted?: () => 
   async function save() {
     setSaving(true);
     setError("");
-    const carriersInOrder = Array.from(new Set(guides.map((g) => g.carrier)));
-    let doneGuides = 0;
     try {
-      for (const carrier of carriersInOrder) {
-        const guideNumbers = guides.filter((g) => g.carrier === carrier).map((g) => g.guideNumber);
-        await postJson("/api/cancelled-guides/batches", {
-          sourceArea,
-          carrier,
-          reason: finalReason,
-          guideNumbers,
-        });
-        doneGuides += guideNumbers.length;
-      }
-      setSentCount(doneGuides);
+      await postJson("/api/cancelled-guides/batches", {
+        sourceArea,
+        reason: finalReason,
+        guides: guides.map((g) => ({ carrier: g.carrier, guideNumber: g.guideNumber })),
+      });
+      setSentCount(guides.length);
       onSubmitted?.();
     } catch (e) {
-      setError(`${e instanceof Error ? e.message : "No se pudo enviar."} (se enviaron ${doneGuides} de ${guides.length} guías antes de la falla)`);
-      setGuides((gs) => gs.slice(doneGuides));
+      setError(e instanceof Error ? e.message : "No se pudo enviar.");
     } finally {
       setSaving(false);
     }
@@ -113,7 +106,7 @@ export function CancelledGuideSubmitForm({ onSubmitted }: { onSubmitted?: () => 
       <div>
         <label className="block mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-steel">Área / bodega</label>
         <div className="flex flex-col gap-1.5">
-          {(["MKT_DAMIAN", "MKT_PROVEDIX", "MKT_SHANGHAI", "FULFILLMENT"] as const).map((a) => (
+          {areaOptions.map((a) => (
             <button key={a} type="button" onClick={() => { setSourceArea(a); setReason(""); }} className={`text-left text-[12.5px] font-semibold rounded-md px-2.5 py-1.5 border cursor-pointer ${sourceArea === a ? "border-teal text-teal bg-teal/10" : "border-rule text-steel"}`}>
               {SOURCE_AREA_LABELS[a]}
             </button>
