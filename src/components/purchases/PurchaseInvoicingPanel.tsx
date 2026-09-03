@@ -627,7 +627,7 @@ export function PurchaseInvoicingPanel({ isAdmin = false, canPayMerchandise }: {
                     </div>
                     <span className="font-mono text-[10.5px] text-steel shrink-0">{formatPurchaseRequestCode(g[0].requestNumber)}</span>
                   </div>
-                  <div className="text-[11.5px] text-steel">{g[0].supplier.name} — {money(total)}</div>
+                  <div className="text-[11.5px] text-steel">{g[0].supplier.name} — <span className="font-bold text-teal">{money(total)}</span></div>
                   <div className="text-[10px] text-steel-dim mb-2.5">Solicitada por {actorName(g[0].requestedBy?.name)}</div>
                   <div className="bg-cloud border border-rule rounded-md px-3 py-2.5 mb-2.5">
                     <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-steel mb-1.5">
@@ -640,8 +640,8 @@ export function PurchaseInvoicingPanel({ isAdmin = false, canPayMerchandise }: {
                         {g[0].bankAccount.holderIdType && (
                           <div><span className="text-steel">{g[0].bankAccount.holderIdType === "RUC" ? "RUC" : "CI"}: </span><span className="font-semibold break-all">{g[0].bankAccount.holderIdNumber}</span></div>
                         )}
-                        <div><span className="text-steel">Titular: </span><span className="font-semibold">{g[0].bankAccount.bankAccountHolder}</span></div>
-                        <div><span className="text-steel">N°: </span><span className="font-semibold break-all">{g[0].bankAccount.bankAccountNumber}</span></div>
+                        <div><span className="text-steel">Titular: </span><span className="font-bold text-teal">{g[0].bankAccount.bankAccountHolder}</span></div>
+                        <div><span className="text-steel">N°: </span><span className="font-bold text-teal break-all">{g[0].bankAccount.bankAccountNumber}</span></div>
                       </div>
                     ) : (
                       <div className="text-[11.5px] text-red">Falta registrar la cuenta bancaria del proveedor.</div>
@@ -738,7 +738,7 @@ export function PurchaseInvoicingPanel({ isAdmin = false, canPayMerchandise }: {
                     <>
                       <div className="text-[11px] text-steel mb-1.5">Paso 1 de 2: transfiere el monto a la cuenta de arriba (o usa el crédito, si aplica). Después haz clic aquí para subir el comprobante y cerrar la solicitud.</div>
                       <button type="button" disabled={payLocked} title={payLocked ? ADMIN_LOCK_TITLE : undefined} className="rounded border border-blue bg-blue px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed" onClick={() => openPay(groupId, g[0].supplier.id)}>
-                        💳 Ya transferí, cerrar solicitud
+                        💳 Ya transferí, subir comprobante
                       </button>
                     </>
                   )}
@@ -771,7 +771,7 @@ export function PurchaseInvoicingPanel({ isAdmin = false, canPayMerchandise }: {
                     </div>
                     <span className="font-mono text-[10.5px] text-steel shrink-0">{formatPurchaseRequestCode(r0.requestNumber)}</span>
                   </div>
-                  <div className="text-[11.5px] text-steel">{r0.carrier?.name ?? "Transportista"} — {money(r0.shippingCostTotal ?? 0)}</div>
+                  <div className="text-[11.5px] text-steel">{r0.carrier?.name ?? "Transportista"} — <span className="font-bold text-teal">{money(r0.shippingCostTotal ?? 0)}</span></div>
                   <div className="text-[10px] text-steel-dim mb-2.5">Pedido por {actorName(r0.shippingPaymentRequestedBy?.name)}{r0.shippingPaymentRequestedAt ? ` · ${formatDateTime(r0.shippingPaymentRequestedAt)}` : ""}</div>
                   <div className="bg-cloud border border-rule rounded-md px-3 py-2.5 mb-2.5">
                     <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-steel mb-1.5">
@@ -784,8 +784,8 @@ export function PurchaseInvoicingPanel({ isAdmin = false, canPayMerchandise }: {
                         {r0.carrierBankAccount.holderIdType && (
                           <div><span className="text-steel">{r0.carrierBankAccount.holderIdType === "RUC" ? "RUC" : "CI"}: </span><span className="font-semibold break-all">{r0.carrierBankAccount.holderIdNumber}</span></div>
                         )}
-                        <div><span className="text-steel">Titular: </span><span className="font-semibold">{r0.carrierBankAccount.bankAccountHolder}</span></div>
-                        <div><span className="text-steel">N°: </span><span className="font-semibold break-all">{r0.carrierBankAccount.bankAccountNumber}</span></div>
+                        <div><span className="text-steel">Titular: </span><span className="font-bold text-teal">{r0.carrierBankAccount.bankAccountHolder}</span></div>
+                        <div><span className="text-steel">N°: </span><span className="font-bold text-teal break-all">{r0.carrierBankAccount.bankAccountNumber}</span></div>
                       </div>
                     ) : (
                       <div className="text-[11.5px] text-red">Falta registrar la cuenta bancaria del transportista.</div>
@@ -853,9 +853,9 @@ export function PurchaseInvoicingPanel({ isAdmin = false, canPayMerchandise }: {
                     </div>
                   ) : (
                     <>
-                      <div className="text-[11px] text-steel mb-1.5">Paso 1 de 2: transfiere el monto a la cuenta de arriba. Después haz clic aquí para cerrar la solicitud.</div>
+                      <div className="text-[11px] text-steel mb-1.5">Paso 1 de 2: transfiere el monto a la cuenta de arriba. Después haz clic aquí para subir el comprobante (opcional) y cerrar la solicitud.</div>
                       <button type="button" disabled={isAdmin} title={isAdmin ? ADMIN_LOCK_TITLE : undefined} className="rounded border border-blue bg-blue px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed" onClick={() => { setPayingShippingGroup(groupId); setShippingProofUrl(null); setShippingProofVerifyResult(null); setErr(""); }}>
-                        💳 Ya transferí, cerrar solicitud
+                        💳 Ya transferí, subir comprobante
                       </button>
                     </>
                   )}
