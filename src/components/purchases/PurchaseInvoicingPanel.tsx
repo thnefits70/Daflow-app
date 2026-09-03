@@ -738,7 +738,7 @@ export function PurchaseInvoicingPanel({ isAdmin = false, canPayMerchandise }: {
                     <>
                       <div className="text-[11px] text-steel mb-1.5">Paso 1 de 2: transfiere el monto a la cuenta de arriba (o usa el crédito, si aplica). Después haz clic aquí para subir el comprobante y cerrar la solicitud.</div>
                       <button type="button" disabled={payLocked} title={payLocked ? ADMIN_LOCK_TITLE : undefined} className="rounded border border-blue bg-blue px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed" onClick={() => openPay(groupId, g[0].supplier.id)}>
-                        💳 Ya transferí, subir comprobante
+                        💳 Subir comprobante
                       </button>
                     </>
                   )}
@@ -855,7 +855,7 @@ export function PurchaseInvoicingPanel({ isAdmin = false, canPayMerchandise }: {
                     <>
                       <div className="text-[11px] text-steel mb-1.5">Paso 1 de 2: transfiere el monto a la cuenta de arriba. Después haz clic aquí para subir el comprobante (opcional) y cerrar la solicitud.</div>
                       <button type="button" disabled={isAdmin} title={isAdmin ? ADMIN_LOCK_TITLE : undefined} className="rounded border border-blue bg-blue px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed" onClick={() => { setPayingShippingGroup(groupId); setShippingProofUrl(null); setShippingProofVerifyResult(null); setErr(""); }}>
-                        💳 Ya transferí, subir comprobante
+                        💳 Subir comprobante
                       </button>
                     </>
                   )}
