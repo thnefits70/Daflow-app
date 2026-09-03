@@ -41,6 +41,8 @@ export function ComboSuggestionsBoard({ canApprove }: { canApprove: boolean }) {
   const [err, setErr] = useState("");
   const [rejectingBatch, setRejectingBatch] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState("");
+  const [recalculating, setRecalculating] = useState(false);
+  const [recalcMsg, setRecalcMsg] = useState("");
 
   const load = useCallback(async () => {
     const res = await fetch("/api/combo-suggestions");
@@ -107,6 +109,26 @@ export function ComboSuggestionsBoard({ canApprove }: { canApprove: boolean }) {
     }
     setRejectingBatch(null);
     setRejectReason("");
+    load();
+  }
+
+  // Confirmado 2026-09-03: el cruce automático contra el Excel semanal de
+  // stock (ver comboSuggestions.ts) puede tener datos nuevos con qué cruzar
+  // sin que nadie guarde una lectura de ATOM ni baja rotación manual — este
+  // botón recalcula en el momento en vez de esperar a que pase alguna de
+  // esas dos acciones.
+  async function recalculate() {
+    setRecalculating(true);
+    setRecalcMsg("");
+    setErr("");
+    const res = await fetch("/api/combo-suggestions/recalculate", { method: "POST" });
+    const data = await res.json().catch(() => null);
+    setRecalculating(false);
+    if (!res.ok) {
+      setErr(data?.error ?? "No se pudo recalcular.");
+      return;
+    }
+    setRecalcMsg(data.created > 0 ? `${data.created} sugerencia${data.created === 1 ? "" : "s"} nueva${data.created === 1 ? "" : "s"}.` : "Sin novedades por ahora.");
     load();
   }
 
@@ -189,7 +211,15 @@ export function ComboSuggestionsBoard({ canApprove }: { canApprove: boolean }) {
       )}
 
       <div>
-        <div className="text-[11px] font-semibold uppercase tracking-wide text-steel mb-2">Sugerencias nuevas</div>
+        <div className="flex items-center justify-between gap-2 mb-2">
+          <div className="text-[11px] font-semibold uppercase tracking-wide text-steel">Sugerencias nuevas</div>
+          <div className="flex items-center gap-2">
+            {recalcMsg && <span className="text-[11px] text-steel">{recalcMsg}</span>}
+            <button type="button" disabled={recalculating} className="rounded border border-rule px-2.5 py-1 text-[11px] font-semibold cursor-pointer disabled:opacity-60" onClick={recalculate}>
+              {recalculating ? "Recalculando…" : "Recalcular sugerencias"}
+            </button>
+          </div>
+        </div>
         {suggested.length === 0 ? (
           <div className="border-[1.5px] border-dashed border-rule rounded-md p-6 text-center text-steel text-[12.5px]">
             No hay sugerencias nuevas todavía.
