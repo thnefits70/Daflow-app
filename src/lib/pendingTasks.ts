@@ -469,6 +469,17 @@ const FEEDBACK_MONTHLY_REVIEW: Record<string, { weekday: number; occurrence: num
   FIN: { weekday: 4, occurrence: 4 },
 };
 
+// Pedido puntual del usuario 2026-09-03: apagar la alerta de Fulfillment en
+// Inicio hasta el 6 de septiembre — ya hay una revisión programada para el
+// 5 de septiembre (tarea "check-fulfillment-feedback") y no quiere ver el
+// rojo mientras tanto. Esto NO significa que el pendiente esté resuelto,
+// solo deja de mostrarse acá durante esa ventana; pasada la fecha vuelve a
+// evaluarse con la lógica normal de weeklyPendingStatus. Quitar esta
+// entrada (o todo el bloque de abajo que la usa) una vez que ya no aplique.
+const FEEDBACK_SNOOZED_UNTIL: Record<string, string> = {
+  FUL: "2026-09-06",
+};
+
 // ---------------- Per-source checks ----------------
 async function getFeedbackPendingItems(): Promise<PendingItem[]> {
   // A department with no active leader has nobody to have the admin-leader
@@ -483,6 +494,13 @@ async function getFeedbackPendingItems(): Promise<PendingItem[]> {
 
   const items: PendingItem[] = [];
   for (const d of depts) {
+    const snoozedUntil = FEEDBACK_SNOOZED_UNTIL[d.code];
+    if (snoozedUntil) {
+      const d0 = nowInEcuador();
+      const todayStr = `${d0.getUTCFullYear()}-${pad2(d0.getUTCMonth() + 1)}-${pad2(d0.getUTCDate())}`;
+      if (todayStr < snoozedUntil) continue;
+    }
+
     const monthlyCfg = FEEDBACK_MONTHLY_REVIEW[d.code];
     const existsFn = async (week: string) => {
       const count = await prisma.weeklyReviewRecord.count({ where: { deptId: d.id, week } });
