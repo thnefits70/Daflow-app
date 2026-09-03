@@ -56,6 +56,18 @@ type Row = {
   emergencyReason: string | null;
 };
 
+// Confirmado 2026-09-03: pedido explícito del usuario — Bryan notó que al
+// aprobar una solicitud, esta desaparece de la bandeja sin dejar rastro
+// visible ahí mismo (tiene que ir a Auditoría, que es otra pestaña). Este
+// tipo agrega solo los campos que ya trae GET ?view=approval-history
+// (reviewedBy/reviewedAt/status/rejectReason) sobre el mismo Row de arriba.
+type HistoryRow = Row & {
+  status: "APPROVED" | "REJECTED" | "PAID" | "RECEIVED_PENDING_REVIEW" | "RECEIVED";
+  reviewedBy: { name: string } | null;
+  reviewedAt: string | null;
+  rejectReason: string | null;
+};
+
 function attemptLabel(n: number) {
   if (n === 2) return "2do intento";
   if (n === 3) return "3er intento";
@@ -92,8 +104,8 @@ function isPdf(url: string) {
   return /\.pdf($|\?)/i.test(url);
 }
 
-function groupRows(rows: Row[]) {
-  const map = new Map<string, Row[]>();
+function groupRows<T extends Row>(rows: T[]) {
+  const map = new Map<string, T[]>();
   for (const r of rows) {
     if (!map.has(r.groupId)) map.set(r.groupId, []);
     map.get(r.groupId)!.push(r);
@@ -165,6 +177,25 @@ export function PurchaseApprovalInbox({ canAct = true, canPayHere = true, canPay
   const [accountChangeNote, setAccountChangeNote] = useState("");
   const [busyAccountGroup, setBusyAccountGroup] = useState<string | null>(null);
   const [zoomedPhoto, setZoomedPhoto] = useState<string | null>(null);
+
+  // Confirmado 2026-09-03: pedido explícito del usuario — pestaña interna
+  // "Historial" de solo lectura, en el mismo panel donde se aprueba, para lo
+  // ya aprobado/rechazado (antes desaparecía sin dejar rastro acá mismo).
+  // Se carga solo la primera vez que se abre, no en cada render.
+  const [subTab, setSubTab] = useState<"pending" | "history">("pending");
+  const [historyRows, setHistoryRows] = useState<HistoryRow[] | null>(null);
+
+  function loadHistory() {
+    fetch("/api/purchase-requests?view=approval-history")
+      .then((r) => (r.ok ? r.json() : []))
+      .then((data: HistoryRow[]) => setHistoryRows(data))
+      .catch(() => setHistoryRows([]));
+  }
+
+  function openSubTab(next: "pending" | "history") {
+    setSubTab(next);
+    if (next === "history" && historyRows === null) loadHistory();
+  }
 
   // Confirmado 2026-08-13: fix — esta pantalla no tenía en cuenta el
   // crédito que ya quedó reservado para esta solicitud desde que se pidió
@@ -397,6 +428,7 @@ export function PurchaseApprovalInbox({ canAct = true, canPayHere = true, canPay
     setBusyGroup(null);
     setRejectingGroup(null);
     setRejectReason("");
+    setHistoryRows(null);
     load();
     router.refresh();
   }
@@ -412,6 +444,7 @@ export function PurchaseApprovalInbox({ canAct = true, canPayHere = true, canPay
       body: JSON.stringify({ action: "approve" }),
     });
     setBusyGroup(null);
+    setHistoryRows(null);
     load();
     router.refresh();
   }
@@ -489,17 +522,98 @@ export function PurchaseApprovalInbox({ canAct = true, canPayHere = true, canPay
     setProofVerifyResult(null);
     setShippingProofUrl(null);
     setShippingProofVerifyResult(null);
+    setHistoryRows(null);
     load();
     router.refresh();
   }
 
   if (!rows) return <div className="text-steel text-[13px]">Cargando…</div>;
-  if (rows.length === 0) return <div className="border-[1.5px] border-dashed border-rule rounded-md p-8 text-center text-steel text-[13.5px]">No hay solicitudes pendientes de aprobar.</div>;
 
   const groups = groupRows(rows);
 
+  const subTabs = (
+    <div className="flex gap-4 border-b border-rule mb-3.5">
+      <button
+        type="button"
+        className={`pb-2 text-[12.5px] font-semibold border-b-2 cursor-pointer ${subTab === "pending" ? "text-ink border-teal" : "text-steel border-transparent hover:text-ink"}`}
+        onClick={() => openSubTab("pending")}
+      >
+        Pendientes {rows.length > 0 && `(${groups.length})`}
+      </button>
+      <button
+        type="button"
+        className={`pb-2 text-[12.5px] font-semibold border-b-2 cursor-pointer ${subTab === "history" ? "text-ink border-teal" : "text-steel border-transparent hover:text-ink"}`}
+        onClick={() => openSubTab("history")}
+      >
+        Historial
+      </button>
+    </div>
+  );
+
+  if (subTab === "history") {
+    const historyGroups = historyRows ? groupRows(historyRows) : null;
+    return (
+      <div>
+        {subTabs}
+        {!historyGroups ? (
+          <div className="text-steel text-[13px]">Cargando…</div>
+        ) : historyGroups.length === 0 ? (
+          <div className="border-[1.5px] border-dashed border-rule rounded-md p-8 text-center text-steel text-[13.5px]">Todavía no aprobaste ni rechazaste ninguna solicitud.</div>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {historyGroups.map((g) => {
+              const groupId = g[0].groupId;
+              const total = g.reduce((s, r) => s + r.totalCost, 0);
+              const isRejected = g[0].status === "REJECTED";
+              const when = g[0].reviewedAt ? pendingInfo(g[0].reviewedAt).dateStr : null;
+              return (
+                <div key={groupId} className="bg-surface border border-rule rounded-md p-3.5">
+                  <div className="flex items-start justify-between gap-3 flex-wrap">
+                    <div>
+                      {g.map((r) => (
+                        <div key={r.id} className="text-[13px] font-bold">
+                          {r.catalogItem.name} · {r.quantity} un. — ${r.unitCost.toFixed(2)}/un.
+                        </div>
+                      ))}
+                      <div className="text-[11.5px] text-steel mt-0.5">{g[0].supplier.name}</div>
+                      <div className="text-[10px] text-steel-dim mt-0.5">
+                        Solicitada por {actorName(g[0].requestedBy?.name)}
+                        {g[0].attemptNumber > 1 && <span className="text-gold"> — {attemptLabel(g[0].attemptNumber)}</span>}
+                      </div>
+                      {when && (
+                        <div className="text-[10px] text-steel-dim mt-0.5">
+                          {isRejected ? "Rechazada" : "Aprobada"} por {actorName(g[0].reviewedBy?.name ?? "Admin")} · {when}
+                        </div>
+                      )}
+                      {isRejected && g[0].rejectReason && <div className="text-[11px] text-steel mt-1">Motivo: &quot;{g[0].rejectReason}&quot;</div>}
+                    </div>
+                    <div className="flex flex-col items-end gap-1.5">
+                      <span className={`flex items-center gap-1 text-[9.5px] font-bold uppercase tracking-wide rounded-full px-2.5 py-1 border ${isRejected ? "bg-red/15 text-red border-red/40" : "bg-teal/15 text-teal border-teal/40"}`}>
+                        {isRejected ? <AlertTriangle size={11} /> : <CheckCircle2 size={11} />}
+                        {isRejected ? "Rechazada" : "Aprobada"}
+                      </span>
+                      <div className="text-right">
+                        <div className="text-[9px] font-semibold uppercase tracking-wide text-steel">Total</div>
+                        <div className="font-display text-[18px] font-bold text-teal leading-tight">${total.toFixed(2)}</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
-    <div className="flex flex-col gap-2.5">
+    <div>
+      {subTabs}
+      {groups.length === 0 ? (
+        <div className="border-[1.5px] border-dashed border-rule rounded-md p-8 text-center text-steel text-[13.5px]">No hay solicitudes pendientes de aprobar.</div>
+      ) : (
+      <div className="flex flex-col gap-2.5">
       {groups.map((g) => {
         const groupId = g[0].groupId;
         const total = g.reduce((s, r) => s + r.totalCost, 0);
@@ -957,6 +1071,8 @@ export function PurchaseApprovalInbox({ canAct = true, canPayHere = true, canPay
           </div>
         );
       })}
+      </div>
+      )}
 
       {zoomedPhoto && (
         <div

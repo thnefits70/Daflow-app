@@ -38,6 +38,25 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(rows);
   }
 
+  // Confirmado 2026-09-03: pedido explícito del usuario — Bryan notó que
+  // apenas aprueba una solicitud, esta desaparece de la bandeja sin dejar
+  // rastro visible ahí mismo. Mismo criterio de acceso que "approval"
+  // (admin o canApprovePurchaseRequests); acá se ve TODO lo ya resuelto
+  // (aprobado o rechazado), de solo lectura, más reciente primero — nunca
+  // se puede volver a actuar sobre estas filas.
+  if (view === "approval-history") {
+    if (session.user.role !== "admin" && !(await canApprovePurchaseRequests())) {
+      return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+    }
+    const rows = await prisma.purchaseRequest.findMany({
+      where: { status: { in: ["APPROVED", "REJECTED", "PAID", "RECEIVED_PENDING_REVIEW", "RECEIVED"] } },
+      orderBy: { reviewedAt: "desc" },
+      take: 100,
+      include: purchaseRequestInclude,
+    });
+    return NextResponse.json(rows);
+  }
+
   if (view === "receiving") {
     if (!(await canConfirmPurchaseReceiving())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
     // Confirmado 2026-08-18: pedido explícito del usuario — ahora incluye
