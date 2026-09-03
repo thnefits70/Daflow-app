@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Upload, CheckCircle2, Truck, Lock, Wallet, Search, AlertTriangle, Landmark } from "lucide-react";
+import { Upload, CheckCircle2, Truck, Lock, Wallet, Search, AlertTriangle, Landmark, LineChart } from "lucide-react";
 import { uploadFile } from "@/lib/uploadFile";
 import { compressImage } from "@/lib/compressImage";
 import { usePasteFile } from "@/lib/usePasteFile";
@@ -10,6 +10,8 @@ import { actorName } from "@/lib/actorName";
 import { formatDateTime } from "@/lib/formatDateTime";
 import { PurchaseOperationDocuments, type OperationDocRow } from "./PurchaseOperationDocuments";
 import { CatalogCode } from "@/components/shared/CatalogCode";
+import { PriceTrendChart } from "./PriceTrendChart";
+import type { SupplierPriceHistory, SupplierPricePoint } from "@/lib/purchases";
 
 type InvoiceStatus = "PENDING" | "COMPLETE" | "PARTIAL" | "NON_FISCAL" | "NONE";
 
@@ -19,7 +21,9 @@ type Row = {
   requestNumber: number | null;
   status: "APPROVED" | "PAID" | "RECEIVED_PENDING_REVIEW" | "RECEIVED";
   quantity: number;
+  unitCost: number;
   totalCost: number;
+  catalogItemId: string;
   invoiceStatus: InvoiceStatus;
   invoiceAmount: number | null;
   invoiceDocUrl: string | null;
@@ -263,6 +267,30 @@ export function PurchaseInvoicingPanel({ isAdmin = false, canPayMerchandise }: {
   // reserveCreditsForGroup) — si linked es 0 y available es mayor a 0,
   // significa que a quien pidió se le pasó vincularlo.
   const [groupCredits, setGroupCredits] = useState<Record<string, { available: number; linked: number }>>({});
+
+  // Vista de solo lectura para admin — pedido explícito del usuario: quiere
+  // ver qué productos, cantidades y precio unitario trae cada solicitud
+  // aprobada, con la misma gráfica de tendencia de precio (solo precio
+  // unitario, todos los proveedores) ya usada en la bandeja de aprobación,
+  // para poder detectar sobreprecio antes de que Bryan la deje pasar.
+  const [priceHistoryFor, setPriceHistoryFor] = useState<{ catalogItemId: string; name: string } | null>(null);
+  const [priceHistoryPoints, setPriceHistoryPoints] = useState<Record<string, SupplierPricePoint[] | null>>({});
+
+  function openPriceHistory(catalogItemId: string, name: string) {
+    setPriceHistoryFor({ catalogItemId, name });
+    if (priceHistoryPoints[catalogItemId] !== undefined) return;
+    setPriceHistoryPoints((m) => ({ ...m, [catalogItemId]: null }));
+    fetch(`/api/purchase-catalog/${catalogItemId}/supplier-comparison`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((data: SupplierPriceHistory[]) => {
+        const merged = data
+          .flatMap((s) => s.history)
+          .sort((a, b) => new Date(a.paidAt ?? a.date).getTime() - new Date(b.paidAt ?? b.date).getTime())
+          .slice(-12);
+        setPriceHistoryPoints((m) => ({ ...m, [catalogItemId]: merged }));
+      })
+      .catch(() => setPriceHistoryPoints((m) => ({ ...m, [catalogItemId]: [] })));
+  }
 
   function load() {
     fetch("/api/purchase-requests?view=invoicing").then((r) => (r.ok ? r.json() : [])).then(setRows).catch(() => setRows([]));
@@ -671,7 +699,16 @@ export function PurchaseInvoicingPanel({ isAdmin = false, canPayMerchandise }: {
                       {g.map((r) => (
                         <div key={r.id} className="text-[13.5px] font-bold flex items-center gap-1.5 flex-wrap">
                           <CatalogCode code={r.catalogItem.justCode} />
-                          <span>{r.catalogItem.name} · {r.quantity} un.</span>
+                          <span>{r.catalogItem.name} · {r.quantity} un. — ${r.unitCost.toFixed(2)}/un.</span>
+                          <button
+                            type="button"
+                            title="Doble clic para ver el historial de precio"
+                            onDoubleClick={() => openPriceHistory(r.catalogItemId, r.catalogItem.name)}
+                            className="flex items-center gap-0.5 text-[9px] font-semibold normal-case tracking-normal text-teal/80 bg-teal/10 border border-teal/25 rounded-full px-1.5 py-0.5 hover:text-teal hover:bg-teal/20 cursor-pointer select-none shrink-0"
+                          >
+                            <LineChart size={9} />
+                            Historial de precio
+                          </button>
                         </div>
                       ))}
                     </div>
@@ -1311,6 +1348,34 @@ export function PurchaseInvoicingPanel({ isAdmin = false, canPayMerchandise }: {
           );
         })}
       </div>
+
+      {priceHistoryFor && (
+        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-6" onClick={() => setPriceHistoryFor(null)}>
+          <div className="bg-surface border border-rule rounded-md p-4 max-w-[620px] w-full" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between gap-3 mb-2">
+              <div className="flex items-center gap-1.5 text-[13px] font-bold">
+                <LineChart size={14} className="text-teal shrink-0" />
+                Historial de precio — {priceHistoryFor.name}
+              </div>
+              <button type="button" className="text-steel text-[12px] cursor-pointer shrink-0" onClick={() => setPriceHistoryFor(null)}>
+                Cerrar
+              </button>
+            </div>
+            {priceHistoryPoints[priceHistoryFor.catalogItemId] === undefined || priceHistoryPoints[priceHistoryFor.catalogItemId] === null ? (
+              <div className="text-steel text-[12px] py-8 text-center">Cargando historial…</div>
+            ) : priceHistoryPoints[priceHistoryFor.catalogItemId]!.length === 0 ? (
+              <div className="text-steel text-[12px] py-8 text-center">Todavía no hay compras registradas de este insumo.</div>
+            ) : (
+              <>
+                <PriceTrendChart points={priceHistoryPoints[priceHistoryFor.catalogItemId]!} />
+                <div className="text-[10px] text-steel-dim text-center mt-1">
+                  Últimas {priceHistoryPoints[priceHistoryFor.catalogItemId]!.length} compras · todos los proveedores · precio unitario
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
