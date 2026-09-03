@@ -852,10 +852,10 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                           Confirma cuántas unidades diste de baja en Just
                         </label>
                         <input type="number" className="w-full rounded border border-rule px-2.5 py-2 text-[13.5px] mb-2.5" style={{ maxWidth: 160 }} value={justQtyInput} onChange={(e) => setJustQtyInput(e.target.value)} />
-                        <label className="flex items-start gap-2 text-[12px] text-steel mb-2.5 cursor-pointer">
-                          <input type="checkbox" className="mt-0.5" checked={justAffirmed} onChange={(e) => setJustAffirmed(e.target.checked)} />
+                        <div className="flex items-start gap-2 text-[12px] text-steel mb-2.5">
+                          <input type="checkbox" className="mt-0.5 cursor-pointer" checked={justAffirmed} onChange={(e) => setJustAffirmed(e.target.checked)} />
                           Confirmo que entré a Just y descarté físicamente estas unidades del inventario disponible
-                        </label>
+                        </div>
                         {justQtyInput !== "" && Number(justQtyInput) !== c.justWriteOffQty && (
                           <div className="flex items-center gap-1.5 text-[11px] text-red mb-2.5">
                             <AlertTriangle size={12} /> Debe ser {c.justWriteOffQty} un. — la cantidad aprobada en el reclamo.

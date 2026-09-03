@@ -330,10 +330,10 @@ export function AtomSyncPanel() {
                 {r.resolution !== "linked" || r.matchType === "none" ? (
                   <div className="flex gap-2 mt-1.5 items-center">
                     {r.resolution === "pending" && (
-                      <label className="flex items-center gap-1 text-[11px] text-steel cursor-pointer">
-                        <input type="checkbox" checked={batchSelected.has(i)} onChange={() => toggleBatchSelect(i)} />
+                      <div className="flex items-center gap-1 text-[11px] text-steel">
+                        <input type="checkbox" className="cursor-pointer" checked={batchSelected.has(i)} onChange={() => toggleBatchSelect(i)} />
                         Incluir en lote
-                      </label>
+                      </div>
                     )}
                     {r.resolution !== "combo" && !comboLookup[i] && (
                       <button type="button" className="text-[11px] text-blue font-semibold cursor-pointer" onClick={() => checkCombo(i, r.productName)}>

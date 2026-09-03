@@ -297,15 +297,16 @@ export function PeriodicRemindersPanel({
                 />
               </div>
             )}
-            <label className="flex items-center gap-2 text-[12.5px] sm:col-span-2 cursor-pointer">
+            <div className="flex items-center gap-2 text-[12.5px] sm:col-span-2">
               <input
                 type="checkbox"
+                className="cursor-pointer"
                 checked={form.notifyPush}
                 onChange={(e) => setForm((f) => ({ ...f, notifyPush: e.target.checked }))}
               />
               <Bell size={13} className="text-teal" />
               Avisarme por notificación push cuando esté vencido
-            </label>
+            </div>
           </div>
           <div className="flex items-center gap-2.5">
             <button

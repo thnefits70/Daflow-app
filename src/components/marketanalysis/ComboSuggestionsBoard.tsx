@@ -198,10 +198,10 @@ export function ComboSuggestionsBoard({ canApprove }: { canApprove: boolean }) {
           <>
             <div className="flex flex-col gap-1.5 mb-2.5">
               {suggested.map((s) => (
-                <label key={s.id} className="flex items-center gap-2.5 border border-rule rounded p-2.5 cursor-pointer">
-                  <input type="checkbox" checked={checked.has(s.id)} onChange={() => toggle(s.id)} />
+                <div key={s.id} className="flex items-center gap-2.5 border border-rule rounded p-2.5">
+                  <input type="checkbox" className="cursor-pointer" checked={checked.has(s.id)} onChange={() => toggle(s.id)} />
                   <Pair s={s} />
-                </label>
+                </div>
               ))}
             </div>
             <button

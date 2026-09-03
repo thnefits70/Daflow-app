@@ -277,15 +277,16 @@ export function ConfidentialDocsPanel({
                 <div className="text-[12px] text-steel p-2.5">Sin resultados.</div>
               )}
               {filteredUsers.map((u) => (
-                <label key={u.id} className="flex items-center gap-2 px-2.5 py-1.5 text-[12.5px] hover:bg-cloud cursor-pointer border-b border-rule last:border-b-0">
+                <div key={u.id} className="flex items-center gap-2 px-2.5 py-1.5 text-[12.5px] hover:bg-cloud border-b border-rule last:border-b-0">
                   <input
                     type="checkbox"
+                    className="cursor-pointer"
                     checked={form.grantedUserIds.includes(u.id)}
                     onChange={() => toggleUser(u.id)}
                   />
                   <span>{u.name}</span>
                   {u.deptName && <span className="text-steel ml-auto">{u.deptName}</span>}
-                </label>
+                </div>
               ))}
             </div>
           </div>

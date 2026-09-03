@@ -839,11 +839,11 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
           {availableCredits.length > 0 ? (
             <div className="flex flex-col gap-1.5 mb-1">
               {availableCredits.map((c) => (
-                <label key={c.id} className="flex items-center gap-2 text-[12px] text-ink cursor-pointer">
-                  <input type="checkbox" className="w-auto" checked={selectedCreditIds.includes(c.id)} onChange={() => toggleCredit(c.id)} />
+                <div key={c.id} className="flex items-center gap-2 text-[12px] text-ink">
+                  <input type="checkbox" className="w-auto cursor-pointer" checked={selectedCreditIds.includes(c.id)} onChange={() => toggleCredit(c.id)} />
                   <span className="font-semibold">${c.amount.toFixed(2)}</span>
                   <span className="text-steel">— {c.reason}</span>
-                </label>
+                </div>
               ))}
             </div>
           ) : (
@@ -1160,24 +1160,24 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
         )}
       </div>
 
-      <label className="flex items-center gap-2 mb-3.5 text-[12.5px] text-steel cursor-pointer">
-        <input type="checkbox" checked={shippingIncluded} onChange={(e) => setShippingIncluded(e.target.checked)} className="w-auto" />
+      <div className="flex items-center gap-2 mb-3.5 text-[12.5px] text-steel">
+        <input type="checkbox" checked={shippingIncluded} onChange={(e) => setShippingIncluded(e.target.checked)} className="w-auto cursor-pointer" />
         El costo del producto SÍ incluye el envío <span className="text-steel-dim">— márcalo solo si confirmas que el proveedor NO cobra el flete por separado</span>
-      </label>
+      </div>
 
       {!shippingIncluded && (
         <div className="bg-surface2 border border-rule rounded-md p-3.5 mb-3.5">
           <label className="block mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-steel">Transportista</label>
 
-          <label className="flex items-center gap-2 mb-3 text-[12px] text-steel cursor-pointer">
+          <div className="flex items-center gap-2 mb-3 text-[12px] text-steel">
             <input
               type="checkbox"
               checked={shippingCarrierPending}
               onChange={(e) => { setShippingCarrierPending(e.target.checked); if (e.target.checked) { setCarrier(null); setCarrierBankAccountId(null); setShippingCostTotal(""); } }}
-              className="w-auto"
+              className="w-auto cursor-pointer"
             />
             Todavía no sé el transportista ni el costo del flete — lo completo después
-          </label>
+          </div>
 
           {shippingCarrierPending ? (
             <div className="text-[11.5px] text-steel bg-cloud border border-dashed border-rule rounded-md p-3">

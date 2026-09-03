@@ -666,10 +666,10 @@ export function PurchaseInvoicingPanel({ isAdmin = false, canPayMerchandise }: {
                           <div className="flex items-center gap-1.5 text-[12px] font-semibold mb-1.5"><Wallet size={13} /> Crédito adicional disponible con {g[0].supplier.name}</div>
                           <div className="flex flex-col gap-1 mb-1.5">
                             {availableCredits.map((c) => (
-                              <label key={c.id} className="flex items-center gap-2 text-[12px] text-ink cursor-pointer">
-                                <input type="checkbox" checked={selectedCreditIds.includes(c.id)} onChange={() => toggleCredit(c.id)} />
+                              <div key={c.id} className="flex items-center gap-2 text-[12px] text-ink">
+                                <input type="checkbox" className="cursor-pointer" checked={selectedCreditIds.includes(c.id)} onChange={() => toggleCredit(c.id)} />
                                 {money(c.amount)} — {c.reason}
-                              </label>
+                              </div>
                             ))}
                           </div>
                           <div className="text-[12px] font-semibold text-ink">Neto a transferir: {money(netAmountFor(groupId))}</div>
