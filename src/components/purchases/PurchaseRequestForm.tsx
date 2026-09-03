@@ -155,6 +155,15 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
   const [uploadingPurchaseOrder, setUploadingPurchaseOrder] = useState(false);
   const [poVerifying, setPoVerifying] = useState(false);
   const [poVerifyResult, setPoVerifyResult] = useState<{ readTotal: number | null; matches: boolean } | null>(null);
+  // Confirmado 2026-09-03: la lectura automática al subir el archivo solo se
+  // intentaba una vez — si fallaba por algo pasajero (conexión, timeout de la
+  // IA), se quedaba trabada para siempre sin ningún aviso claro ni forma de
+  // reintentar. Este contador deja que el useEffect de más abajo reintente
+  // solo, con espera creciente, hasta 3 veces antes de pedirle a la persona
+  // que suba una foto más clara — así no se reintenta sin límite un caso
+  // donde la foto de verdad no se puede leer (cada lectura le cuesta a la
+  // empresa).
+  const [poVerifyAttempts, setPoVerifyAttempts] = useState(0);
   const [confirmUnlockPO, setConfirmUnlockPO] = useState(false);
   const { onPaste: onPastePurchaseOrder, onMouseEnter: onPastePOHoverIn, onMouseLeave: onPastePOHoverOut, onDragOver: onDragOverPO, onDragLeave: onDragLeavePO, onDrop: onDropPO, isDragOver: isDragOverPO } = usePasteFile((file) => handlePurchaseOrderFile(file));
   const purchaseOrderFileInputRef = useRef<HTMLInputElement>(null);
@@ -543,6 +552,7 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
   async function handlePurchaseOrderFile(file: File) {
     setPurchaseOrderFile(file);
     setPoVerifyResult(null);
+    setPoVerifyAttempts(0);
     setUploadingPurchaseOrder(true);
     setErr("");
     const compressed = await compressImage(file);
@@ -553,28 +563,27 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
       return;
     }
     setPurchaseOrderUrl(uploaded.url);
-    // Confirmado 2026-08-06: cuando es obligatoria (cotización solo con
-    // código), el monto de la orden de compra se cruza contra lo mismo que
-    // ya se comparó contra la cotización — cotización, lo tipeado a mano, y
-    // la orden de compra deben coincidir entre los tres, no solo dos.
-    if (needsPurchaseOrder && total > 0) verifyPurchaseOrder(uploaded.url);
+    // La verificación en sí la dispara el useEffect de más abajo (mira
+    // needsPurchaseOrder/purchaseOrderUrl/poVerifyResult) — así también
+    // reintenta solo si el intento automático falla, en vez de depender de
+    // que este momento exacto tenga todo lo necesario listo.
   }
 
   async function verifyPurchaseOrder(url: string) {
     setPoVerifying(true);
-    setPoVerifyResult(null);
     const res = await fetch("/api/purchase-requests/verify-purchase-order", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ purchaseOrderUrl: url, expectedTotal: total }),
-    });
+    }).catch(() => null);
     setPoVerifying(false);
-    const data = await res.json().catch(() => null);
-    if (!res.ok) {
-      setErr(data?.error ?? "No se pudo verificar la orden de compra.");
+    const data = res ? await res.json().catch(() => null) : null;
+    if (!res || !res.ok) {
+      setPoVerifyAttempts((n) => n + 1);
       return;
     }
     setPoVerifyResult(data);
+    setPoVerifyAttempts(0);
   }
 
   async function verifyQuote() {
@@ -601,6 +610,24 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
   // es el único respaldo real de qué se está comprando y solicitando pagar.
   const needsPurchaseOrder = !!verifyResult?.referenceCodeFound && !verifyResult?.productNameFound;
   const poAnchored = !!poVerifyResult?.matches;
+
+  // Confirmado 2026-09-03: reintenta sola la lectura de la orden de compra
+  // cuando falta (recién subida, o el borrador guardado se quedó sin
+  // verificar de una sesión anterior) y también cuando el intento previo
+  // falló — con espera creciente (0s, 3s, 8s) para no golpear la IA de
+  // inmediato tres veces seguidas. Se detiene a los 3 intentos fallidos: si
+  // la foto de verdad no se puede leer, seguir reintentando para siempre
+  // solo generaría gasto sin resolver nada — ahí se le pide a la persona que
+  // suba una foto más clara.
+  useEffect(() => {
+    if (!needsPurchaseOrder || !purchaseOrderUrl || total <= 0) return;
+    if (poVerifyResult || poVerifying) return;
+    if (poVerifyAttempts >= 3) return;
+    const delay = poVerifyAttempts === 0 ? 0 : poVerifyAttempts === 1 ? 3000 : 8000;
+    const t = setTimeout(() => verifyPurchaseOrder(purchaseOrderUrl), delay);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [needsPurchaseOrder, purchaseOrderUrl, poVerifyResult, poVerifying, total, poVerifyAttempts]);
   const validLines = lines.filter((l) => l.catalogItem && Number(l.quantity) > 0 && Number(l.unitCost) > 0);
 
   async function submit() {
@@ -1148,7 +1175,7 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
                 <CheckCircle2 size={13} /> Orden de compra subida
               </div>
               {!poAnchored ? (
-                <button type="button" className="text-[11px] text-steel cursor-pointer" onClick={() => { setPurchaseOrderFile(null); setPurchaseOrderUrl(null); setPoVerifyResult(null); }}>
+                <button type="button" className="text-[11px] text-steel cursor-pointer" onClick={() => { setPurchaseOrderFile(null); setPurchaseOrderUrl(null); setPoVerifyResult(null); setPoVerifyAttempts(0); }}>
                   Cambiar
                 </button>
               ) : !confirmUnlockPO ? (
@@ -1189,6 +1216,14 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
                 ) : poVerifyResult ? (
                   <div className="flex items-center gap-2 text-[12px] text-red">
                     <Lock size={14} /> No coincide — la orden de compra dice ${poVerifyResult.readTotal?.toFixed(2) ?? "?"}, pero se escribió ${total.toFixed(2)}. Corrige el número o sube la orden de compra correcta.
+                  </div>
+                ) : poVerifyAttempts >= 3 ? (
+                  <div className="flex items-center gap-2 text-[12px] text-red">
+                    <AlertTriangle size={14} /> No se pudo leer el monto de la orden de compra después de varios intentos. Sube una foto más clara.
+                  </div>
+                ) : poVerifyAttempts > 0 ? (
+                  <div className="flex items-center gap-2 text-[12px] text-steel">
+                    <span className="w-3.5 h-3.5 rounded-full border-2 border-rule border-t-teal animate-spin" /> No se pudo leer a la primera — reintentando…
                   </div>
                 ) : null}
               </div>
