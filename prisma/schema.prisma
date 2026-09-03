@@ -1500,6 +1500,14 @@ model AtomProductStatus {
   createdBy   User?    @relation("AtomProductStatusCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   createdAt   DateTime @default(now())
 
+  // Confirmado 2026-09-03: pedido explícito del usuario — "firma" (fecha,
+  // hora, quién) de cada lectura guardada, visible en el panel. createdById
+  // solo no alcanza porque cuando lo guarda admin queda null (ver
+  // guards.dbUserId — admin no es una fila real de User), y ahí se perdía el
+  // nombre. Se guarda el nombre tal cual salía en la sesión al momento de
+  // guardar (ej. "Administrador"), aparte de la relación real a User.
+  createdByName String?
+
   @@index([capturedAt])
   @@index([matchedCatalogItemId])
 }
