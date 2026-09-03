@@ -702,8 +702,8 @@ export function PurchaseInvoicingPanel({ isAdmin = false, canPayMerchandise }: {
                           <span>{r.catalogItem.name} · {r.quantity} un. — ${r.unitCost.toFixed(2)}/un.</span>
                           <button
                             type="button"
-                            title="Doble clic para ver el historial de precio"
-                            onDoubleClick={() => openPriceHistory(r.catalogItemId, r.catalogItem.name)}
+                            title="Ver historial de precio"
+                            onClick={() => openPriceHistory(r.catalogItemId, r.catalogItem.name)}
                             className="flex items-center gap-0.5 text-[9px] font-semibold normal-case tracking-normal text-teal/80 bg-teal/10 border border-teal/25 rounded-full px-1.5 py-0.5 hover:text-teal hover:bg-teal/20 cursor-pointer select-none shrink-0"
                           >
                             <LineChart size={9} />
