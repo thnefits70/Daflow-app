@@ -23,6 +23,7 @@ export function CancelledGuideSubmitForm({ onSubmitted }: { onSubmitted?: () => 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [sentCount, setSentCount] = useState(0);
+  const [duplicateWarning, setDuplicateWarning] = useState("");
 
   const reasonOptions = sourceArea === "FULFILLMENT" ? FULFILLMENT_CANCEL_REASONS : sourceArea ? MKT_CANCEL_REASONS : [];
   const finalReason = reason === "Otro" ? reasonOther.trim() : reason;
@@ -37,12 +38,27 @@ export function CancelledGuideSubmitForm({ onSubmitted }: { onSubmitted?: () => 
     setReason("");
     setReasonOther("");
     setSentCount(0);
+    setDuplicateWarning("");
   }
 
   function handleBufferChange(value: string) {
     const { extracted, remainder } = splitGuideBuffer(value);
     if (extracted.length > 0) {
-      setGuides((gs) => [...gs, ...extracted.map((e) => ({ id: crypto.randomUUID(), carrier: e.carrier, guideNumber: e.guideNumber }))]);
+      setGuides((gs) => {
+        const seen = new Set(gs.map((g) => g.guideNumber));
+        const repeated: string[] = [];
+        const toAdd: DetectedGuide[] = [];
+        for (const e of extracted) {
+          if (seen.has(e.guideNumber)) {
+            repeated.push(e.guideNumber);
+            continue;
+          }
+          seen.add(e.guideNumber);
+          toAdd.push({ id: crypto.randomUUID(), carrier: e.carrier, guideNumber: e.guideNumber });
+        }
+        setDuplicateWarning(repeated.length > 0 ? `Ya está en la lista, no la agrego de nuevo: ${repeated.join(", ")}` : "");
+        return toAdd.length > 0 ? [...gs, ...toAdd] : gs;
+      });
     }
     setGuideBuffer(remainder);
   }
@@ -116,6 +132,7 @@ export function CancelledGuideSubmitForm({ onSubmitted }: { onSubmitted?: () => 
           onChange={(e) => handleBufferChange(e.target.value)}
         />
         {bufferInvalid && <p className="text-red text-[11px] mt-1">No reconozco esta transportadora — revisá el número.</p>}
+        {!bufferInvalid && duplicateWarning && <p className="text-red text-[11px] mt-1">{duplicateWarning}</p>}
         <p className="text-[11px] text-steel mt-1">La transportadora se detecta sola por el número — no hace falta elegirla. Podés seguir escaneando o tipeando la próxima guía apenas se cierra la anterior.</p>
       </div>
 

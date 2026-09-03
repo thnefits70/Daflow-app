@@ -44,6 +44,21 @@ export async function POST(req: NextRequest) {
   const isKnownReason = allowedReasons.some((r) => parsed.data.reason === r) || parsed.data.reason.length > 0;
   if (!isKnownReason) return NextResponse.json({ error: "Motivo inválido." }, { status: 400 });
 
+  // Una guía repetida duplicaría todo el flujo de acá para adelante (Bryan
+  // la gestiona dos veces, Heidy carga productos dos veces, Daniel reingresa
+  // mercadería dos veces) — se rechaza si esa guía ya fue reportada antes,
+  // sin importar cuándo ni en qué lote (pedido explícito de Yair 2026-09-03).
+  const guideNumbersInPayload = parsed.data.guideNumbers;
+  const dupesInPayload = guideNumbersInPayload.filter((g, i) => guideNumbersInPayload.indexOf(g) !== i);
+  const existing = await prisma.cancelledGuideReport.findMany({
+    where: { carrier: parsed.data.carrier, guideNumber: { in: guideNumbersInPayload } },
+    select: { guideNumber: true },
+  });
+  const dupeSet = new Set([...dupesInPayload, ...existing.map((e) => e.guideNumber)]);
+  if (dupeSet.size > 0) {
+    return NextResponse.json({ error: `Ya reportada antes, no se puede repetir: ${[...dupeSet].join(", ")}` }, { status: 400 });
+  }
+
   const batchNumber = await nextCancelledGuideBatchNumber();
   const batchCode = formatCancelledGuideBatchCode(batchNumber);
 
