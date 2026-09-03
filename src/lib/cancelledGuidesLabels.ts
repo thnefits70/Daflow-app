@@ -15,6 +15,19 @@ export const SOURCE_AREA_LABELS: Record<string, string> = {
   FULFILLMENT: "Fulfillment",
 };
 
+// Confirmado 2026-09-03, pedido explícito del usuario: a quien reporta
+// desde Fulfillment (hoy Yair) este formulario solo le sirve para avisar
+// guías de Análisis de Mercado rechazadas por transportadora o canceladas
+// por ruptura de stock — nada de Shanghai ni del motivo propio de
+// Fulfillment ("no cumple medidas o peso", nunca usado en la práctica).
+// MKT sigue viendo las 4 opciones de siempre.
+export const SOURCE_AREAS_FOR_FULFILLMENT_SUBMITTER = ["MKT_DAMIAN", "MKT_PROVEDIX"] as const;
+export const ALL_SOURCE_AREAS = ["MKT_DAMIAN", "MKT_PROVEDIX", "MKT_SHANGHAI", "FULFILLMENT"] as const;
+
+export function allowedSourceAreasFor(deptCode: string | null | undefined): readonly string[] {
+  return deptCode === "FUL" ? SOURCE_AREAS_FOR_FULFILLMENT_SUBMITTER : ALL_SOURCE_AREAS;
+}
+
 // Reemplazados 2026-09-02, pedido explícito del usuario (antes "Solicitud
 // del dropshipper" / "Falta de stock").
 export const MKT_CANCEL_REASONS = ["Rechazado por transportadora", "Cancelación por ruptura de stock"];

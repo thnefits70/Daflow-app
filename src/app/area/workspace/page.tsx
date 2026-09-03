@@ -228,6 +228,7 @@ export default async function WorkspacePage() {
       <TopLine eyebrow={`Área · ${dept.code}`} title={dept.name} />
       <DeptWorkspaceTabs
         deptId={dept.id}
+        viewerDeptCode={dept.code}
         activeProcess={processDetail?.process ?? null}
         processUpdates={processDetail?.updates ?? []}
         periodicReminders={periodicReminders}

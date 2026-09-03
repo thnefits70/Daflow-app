@@ -27,6 +27,7 @@ export function MerchandiseOutflowPanel({
   canManageCancelledGuideBatches = false,
   canAssignCancelledGuideItems = false,
   isAdmin = false,
+  viewerDeptCode = null,
 }: {
   canCapture: boolean;
   canAct?: boolean;
@@ -85,6 +86,10 @@ export function MerchandiseOutflowPanel({
   // historial, no gatea a Nairoby ni a Daniel. Ver canReviewAsAdmin en
   // SupplierExchangeResolutionInbox.
   isAdmin?: boolean;
+  // Confirmado 2026-09-03, pedido explícito del usuario: quien reporta desde
+  // Fulfillment (hoy Yair) solo necesita ver Provedix/Damián en "Reportar" —
+  // ver allowedSourceAreasFor en cancelledGuidesLabels.ts.
+  viewerDeptCode?: string | null;
 }) {
   // Confirmado 2026-08-27, pedido explícito del usuario: "Cambio con
   // proveedor" gana sobre "Guías canceladas" como pestaña por defecto en
@@ -227,7 +232,7 @@ export function MerchandiseOutflowPanel({
           <TabGuide storageKey="merchoutflow-guias">
             Aunque el resultado final sea reingresar mercadería a Just (no darla de baja), las guías canceladas viven acá junto a los demás motivos para no saltar entre módulos.
           </TabGuide>
-          <CancelledGuidesPanel canSubmit={canSubmitCancelledGuide} canManageBatches={canManageCancelledGuideBatches} canAssignItems={canAssignCancelledGuideItems} canReingreso={canAct} />
+          <CancelledGuidesPanel canSubmit={canSubmitCancelledGuide} canManageBatches={canManageCancelledGuideBatches} canAssignItems={canAssignCancelledGuideItems} canReingreso={canAct} viewerDeptCode={viewerDeptCode} />
         </>
       )}
       {tab === "baja" && canView && (

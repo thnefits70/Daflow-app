@@ -66,6 +66,7 @@ type TabKey = (typeof ALL_TABS)[number]["key"];
 
 export function DeptWorkspaceTabs({
   deptId,
+  viewerDeptCode = null,
   activeProcess,
   processUpdates = [],
   periodicReminders = [],
@@ -146,6 +147,10 @@ export function DeptWorkspaceTabs({
   currentUserId = null,
 }: {
   deptId: string;
+  // Confirmado 2026-09-03: departamento del usuario que está viendo esta
+  // pantalla — hoy solo usado para acotar el formulario de "Guías
+  // canceladas → Reportar" cuando es de Fulfillment (ver MerchandiseOutflowPanel).
+  viewerDeptCode?: string | null;
   activeProcess: ProcessDTO | null;
   processUpdates?: ProcessUpdateDTO[];
   periodicReminders?: PeriodicReminderDTO[];
@@ -521,6 +526,7 @@ export function DeptWorkspaceTabs({
           canManageCancelledGuideBatches={canManageCancelledGuideBatches}
           canAssignCancelledGuideItems={canAssignCancelledGuideItems}
           isAdmin={isAdmin}
+          viewerDeptCode={viewerDeptCode}
         />
       )}
       {tab === "ventas-externas" && canViewExternalSales && (

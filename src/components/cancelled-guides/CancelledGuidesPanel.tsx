@@ -15,11 +15,13 @@ export function CancelledGuidesPanel({
   canManageBatches,
   canAssignItems,
   canReingreso,
+  viewerDeptCode,
 }: {
   canSubmit: boolean;
   canManageBatches: boolean;
   canAssignItems: boolean;
   canReingreso: boolean;
+  viewerDeptCode?: string | null;
 }) {
   const defaultTab: Tab = canSubmit ? "reportar" : canManageBatches ? "lotes" : canAssignItems ? "productos" : canReingreso ? "reingreso" : "historial";
   const [tab, setTab] = useState<Tab>(defaultTab);
@@ -50,7 +52,7 @@ export function CancelledGuidesPanel({
       {tab === "reportar" && canSubmit && (
         <>
           <TabGuide storageKey="cancelledguides-reportar">Reporta acá las guías que hay que cancelar — Fulfillment e Inventario se enteran al toque para no despacharlas, y Análisis de Mercado recibe el lote para gestionarlo con la transportadora.</TabGuide>
-          <CancelledGuideSubmitForm />
+          <CancelledGuideSubmitForm viewerDeptCode={viewerDeptCode} />
         </>
       )}
       {tab === "lotes" && canManageBatches && (
