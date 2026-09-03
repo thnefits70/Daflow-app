@@ -181,7 +181,6 @@ export function PurchaseApprovalInbox({ canAct = true, canPayHere = true, canPay
   // Confirmado 2026-09-03: pedido explícito del usuario — pestaña interna
   // "Historial" de solo lectura, en el mismo panel donde se aprueba, para lo
   // ya aprobado/rechazado (antes desaparecía sin dejar rastro acá mismo).
-  // Se carga solo la primera vez que se abre, no en cada render.
   const [subTab, setSubTab] = useState<"pending" | "history">("pending");
   const [historyRows, setHistoryRows] = useState<HistoryRow[] | null>(null);
 
@@ -189,12 +188,20 @@ export function PurchaseApprovalInbox({ canAct = true, canPayHere = true, canPay
     fetch("/api/purchase-requests?view=approval-history")
       .then((r) => (r.ok ? r.json() : []))
       .then((data: HistoryRow[]) => setHistoryRows(data))
-      .catch(() => setHistoryRows([]));
+      .catch(() => setHistoryRows((cur) => cur ?? []));
   }
 
+  // Corregido 2026-09-03: Bryan reportó que lo que acababa de aprobar/
+  // rechazar no le aparecía en "Historial" — se cargaba solo la primera vez
+  // que se abría la pestaña (ver comentario anterior), así que si aprobaba
+  // desde otra pestaña del navegador o dispositivo, esta quedaba con el
+  // resultado viejo cacheado para siempre en esa sesión. Ahora se recarga
+  // cada vez que se abre, sin borrar lo que ya había en pantalla mientras
+  // llega lo nuevo (evita el parpadeo de "Cargando…" en el caso común de
+  // que no haya cambiado nada).
   function openSubTab(next: "pending" | "history") {
     setSubTab(next);
-    if (next === "history" && historyRows === null) loadHistory();
+    if (next === "history") loadHistory();
   }
 
   // Confirmado 2026-08-13: fix — esta pantalla no tenía en cuenta el
