@@ -59,12 +59,24 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ gro
     await releaseCreditsForGroup(groupId);
   }
 
+  const names = rows.map((r) => r.catalogItem.name).join(", ");
+
   const requestedById = rows[0].requestedById;
   if (requestedById) {
-    const names = rows.map((r) => r.catalogItem.name).join(", ");
     await sendPushToOwner(requestedById, {
       title: parsed.data.action === "approve" ? "Solicitud aprobada" : "Solicitud rechazada",
       body: `${names} — ${parsed.data.action === "approve" ? "sigue con el pago" : parsed.data.rejectReason || "sin motivo especificado"}`,
+      url: "/area/workspace",
+    }).catch(() => null);
+  }
+
+  // Confirmado 2026-09-03: pedido explícito del usuario — avisar al admin
+  // al instante cuando se aprueba (antes solo se enteraba por la tarjeta de
+  // Inicio o, si nadie pagaba, por el aviso tardío de 24h en el cron).
+  if (parsed.data.action === "approve" && !isAdmin) {
+    await sendPushToOwner("admin", {
+      title: "Solicitud de compra aprobada",
+      body: `${names} — lista para pagar`,
       url: "/area/workspace",
     }).catch(() => null);
   }
