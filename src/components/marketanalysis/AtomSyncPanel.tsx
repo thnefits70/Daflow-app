@@ -1,9 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, PackageSearch } from "lucide-react";
 import { ProductMatchPicker, type ProductMatchResult } from "@/components/merchandise-reentry/ProductMatchPicker";
+import { formatDateTime } from "@/lib/formatDateTime";
+
+type LastSync = { lastSyncAt: string | null; lastSyncCount: number | null; lastSyncByName: string | null };
 
 type DropiComboMatch = {
   id: string;
@@ -51,6 +54,21 @@ export function AtomSyncPanel() {
   // recién aparece cuando todas ya se buscaron, para que no sea un click a
   // ciegas.
   const [batchSelected, setBatchSelected] = useState<Set<number>>(new Set());
+
+  // Pedido del usuario (2026-09-03): la caja de texto queda vacía en cada
+  // visita a esta pestaña (siempre lista para pegar una lectura nueva), así
+  // que después de guardar parecía que la información se había perdido —
+  // esto muestra fecha/hora/quién de la última lectura guardada, para que
+  // quede claro que sigue ahí aunque la pantalla se vea "vacía".
+  const [lastSync, setLastSync] = useState<LastSync | null>(null);
+
+  function loadLastSync() {
+    fetch("/api/atom-sync/status")
+      .then((r) => (r.ok ? r.json() : null))
+      .then(setLastSync)
+      .catch(() => null);
+  }
+  useEffect(loadLastSync, []);
 
   async function handlePreview() {
     if (!rawText.trim()) {
@@ -206,6 +224,7 @@ export function AtomSyncPanel() {
       return;
     }
     setSavedAt(data.capturedAt);
+    loadLastSync();
     const stillPending = rows.filter((r) => r.resolution === "pending");
     if (stillPending.length === 0) {
       setRows(null);
@@ -227,6 +246,11 @@ export function AtomSyncPanel() {
         </label>
         <div className="text-[11.5px] text-steel mb-2.5">
           En atomapp.com.co/productos, selecciona toda la tabla (Ctrl+A) y cópiala — puedes incluir todas las páginas. Pégala tal cual acá abajo. Solo se guardan los productos y combos marcados "Rentable" ese día.
+        </div>
+        <div className="text-[11px] text-steel mb-2.5">
+          {lastSync?.lastSyncAt
+            ? `Última actualización: ${formatDateTime(lastSync.lastSyncAt)} — ${lastSync.lastSyncCount ?? 0} producto${lastSync.lastSyncCount === 1 ? "" : "s"}${lastSync.lastSyncByName ? ` — ${lastSync.lastSyncByName}` : ""}`
+            : "Todavía no se ha guardado ninguna lectura."}
         </div>
         <textarea
           className="w-full rounded border border-rule bg-surface px-3 py-2.5 text-[12.5px] font-mono resize-y"

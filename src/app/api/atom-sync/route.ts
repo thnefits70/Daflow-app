@@ -24,6 +24,6 @@ export async function POST(req: NextRequest) {
   if (parsed.data.rows.length === 0) return NextResponse.json({ error: "No hay filas para registrar." }, { status: 400 });
 
   const capturedAt = new Date();
-  const result = await applyAtomSync(parsed.data.rows, capturedAt, dbUserId(session.user.id));
+  const result = await applyAtomSync(parsed.data.rows, capturedAt, dbUserId(session.user.id), session.user.name ?? null);
   return NextResponse.json({ ok: true, ...result, capturedAt });
 }

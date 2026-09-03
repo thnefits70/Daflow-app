@@ -12,7 +12,14 @@ export async function GET() {
 
   const [dueToday, latest] = await Promise.all([
     isAtomSyncDueToday(),
-    prisma.atomProductStatus.findFirst({ orderBy: { capturedAt: "desc" }, select: { capturedAt: true } }),
+    prisma.atomProductStatus.findFirst({ orderBy: { capturedAt: "desc" }, select: { capturedAt: true, createdByName: true } }),
   ]);
-  return NextResponse.json({ dueToday, lastSyncAt: latest?.capturedAt ?? null });
+  // Confirmado 2026-09-03: pedido explícito del usuario — la pantalla de
+  // "Actualizar ATOM" no dejaba rastro visible de una lectura ya guardada
+  // (la caja de texto vuelve a estar vacía en cada visita), así que después
+  // de guardar parecía que nada había quedado. lastSyncCount cuenta cuántos
+  // productos comparten el capturedAt más reciente (una lectura = un
+  // capturedAt fijo, ver applyAtomSync en atomSync.ts).
+  const lastSyncCount = latest ? await prisma.atomProductStatus.count({ where: { capturedAt: latest.capturedAt } }) : null;
+  return NextResponse.json({ dueToday, lastSyncAt: latest?.capturedAt ?? null, lastSyncCount, lastSyncByName: latest?.createdByName ?? null });
 }
