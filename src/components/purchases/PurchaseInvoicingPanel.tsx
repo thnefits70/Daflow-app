@@ -625,9 +625,12 @@ export function PurchaseInvoicingPanel({ isAdmin = false, canPayMerchandise }: {
                         </div>
                       ))}
                     </div>
-                    <span className="font-mono text-[10.5px] text-steel shrink-0">{formatPurchaseRequestCode(g[0].requestNumber)}</span>
+                    <div className="flex flex-col items-end shrink-0 gap-0.5">
+                      <span className="font-display text-[16px] font-bold text-teal leading-tight">{money(total)}</span>
+                      <span className="font-mono text-[10.5px] text-steel">{formatPurchaseRequestCode(g[0].requestNumber)}</span>
+                    </div>
                   </div>
-                  <div className="text-[11.5px] text-steel">{g[0].supplier.name} — <span className="font-bold text-teal">{money(total)}</span></div>
+                  <div className="text-[11.5px] text-steel">{g[0].supplier.name}</div>
                   <div className="text-[10px] text-steel-dim mb-2.5">Solicitada por {actorName(g[0].requestedBy?.name)}</div>
                   <div className="bg-cloud border border-rule rounded-md px-3 py-2.5 mb-2.5">
                     <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-steel mb-1.5">
@@ -779,9 +782,12 @@ export function PurchaseInvoicingPanel({ isAdmin = false, canPayMerchandise }: {
                         </span>
                       ))}
                     </div>
-                    <span className="font-mono text-[10.5px] text-steel shrink-0">{formatPurchaseRequestCode(r0.requestNumber)}</span>
+                    <div className="flex flex-col items-end shrink-0 gap-0.5">
+                      <span className="font-display text-[16px] font-bold text-teal leading-tight">{money(r0.shippingCostTotal ?? 0)}</span>
+                      <span className="font-mono text-[10.5px] text-steel">{formatPurchaseRequestCode(r0.requestNumber)}</span>
+                    </div>
                   </div>
-                  <div className="text-[11.5px] text-steel">{r0.carrier?.name ?? "Transportista"} — <span className="font-bold text-teal">{money(r0.shippingCostTotal ?? 0)}</span></div>
+                  <div className="text-[11.5px] text-steel">{r0.carrier?.name ?? "Transportista"}</div>
                   <div className="text-[10px] text-steel-dim mb-2.5">Pedido por {actorName(r0.shippingPaymentRequestedBy?.name)}{r0.shippingPaymentRequestedAt ? ` · ${formatDateTime(r0.shippingPaymentRequestedAt)}` : ""}</div>
                   <div className="bg-cloud border border-rule rounded-md px-3 py-2.5 mb-2.5">
                     <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-steel mb-1.5">
