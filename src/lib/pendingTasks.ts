@@ -2235,6 +2235,18 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       if (replacementItem) teamItems.push(replacementItem);
       if (urgentUnresolvedItem) teamItems.push(urgentUnresolvedItem);
     }
+    // Confirmado 2026-09-03: Jariel (transición Bryan→Jariel en Compras) es
+    // delegado vía canManagePurchases pero no lidera ningún departamento —
+    // mismo criterio de elegibilidad que canSubmitPurchaseRequests
+    // (guards.ts) y que el bloque de líder más abajo, para que sus propias
+    // solicitudes de compra pendientes y los créditos con proveedores le
+    // aparezcan en Inicio igual que a un líder de COM/FIN.
+    if (me.canManagePurchases) {
+      const purchaseRequesterItems = await getPurchaseRequesterPendingItems(actor.userId, "/area/workspace?tab=compras&ptab=mias");
+      teamItems.push(...purchaseRequesterItems);
+      const purchaseCreditsItem = await getPurchaseCreditsPendingItem("/area/workspace?tab=compras&ptab=urgentes");
+      if (purchaseCreditsItem) teamItems.push(purchaseCreditsItem);
+    }
     if (teamItems.length === 0) return null;
     return { title: "Pendientes de esta semana", sub: me.department?.code === "INV" ? "En Inventario" : "Para ti", items: teamItems };
   }
@@ -2382,7 +2394,17 @@ export async function getPossiblePendingTypesForActor(
       where: { id: actor.userId },
       select: { isLeader: true, leadsDeptId: true, canManagePurchases: true, leadsDept: { select: { code: true, trackWeeklyMetric: true } } },
     });
-    if (!me?.isLeader || !me.leadsDeptId || !me.leadsDept) return [];
+    if (!me) return [];
+    if (!me.isLeader || !me.leadsDeptId || !me.leadsDept) {
+      // Delegado sin liderar ningún departamento (p.ej. Jariel vía
+      // canManagePurchases) — mismo criterio que el bloque de compras más
+      // abajo, pero sin nada del resto (KPIs, roles de pago, etc.) que sigue
+      // siendo exclusivo de líderes.
+      if (me.canManagePurchases) {
+        types.push("compras_rechazadas", "compras_orden_compra", "compras_transportista", "compras_cuenta_bancaria", "compras_creditos_pendientes");
+      }
+      return types.map((type) => ({ type, label: PENDING_TYPE_CATALOG[type] }));
+    }
 
     types.push("cumpleanos");
     if (me.leadsDept.code === "FIN") {
@@ -2412,8 +2434,18 @@ export async function getAllPendingTasksActors(): Promise<{ ownerId: string; act
     where: { isLeader: true, isActive: true, leadsDeptId: { not: null } },
     select: { id: true },
   });
+  // Confirmado 2026-09-03: además de los líderes, cualquier delegado de
+  // Compras sin liderar departamento (p.ej. Jariel vía canManagePurchases)
+  // también puede tener pendientes propios (ver bloque no-líder de
+  // getPendingTasksForActor) — si no se incluye acá, el cron nunca lo
+  // evalúa y nunca le llega el push aunque tenga algo pendiente.
+  const purchaseDelegates = await prisma.user.findMany({
+    where: { isActive: true, canManagePurchases: true, OR: [{ isLeader: false }, { leadsDeptId: null }] },
+    select: { id: true },
+  });
   return [
     { ownerId: "admin", actor: { isAdmin: true } as const },
     ...leaders.map((l) => ({ ownerId: l.id, actor: { isAdmin: false as const, userId: l.id } })),
+    ...purchaseDelegates.map((l) => ({ ownerId: l.id, actor: { isAdmin: false as const, userId: l.id } })),
   ];
 }
