@@ -43,6 +43,8 @@ export function ComboSuggestionsBoard({ canApprove }: { canApprove: boolean }) {
   const [rejectReason, setRejectReason] = useState("");
   const [recalculating, setRecalculating] = useState(false);
   const [recalcMsg, setRecalcMsg] = useState("");
+  const [confirmingDiscard, setConfirmingDiscard] = useState(false);
+  const [discarding, setDiscarding] = useState(false);
 
   const load = useCallback(async () => {
     const res = await fetch("/api/combo-suggestions");
@@ -132,6 +134,25 @@ export function ComboSuggestionsBoard({ canApprove }: { canApprove: boolean }) {
     load();
   }
 
+  // Confirmado 2026-09-03: para limpiar las sugerencias creadas ANTES del
+  // filtro de IA (puro cruce por nicho, sin revisar sentido real) — no se
+  // vuelven a evaluar solas porque el cruce nunca re-procesa una pareja que
+  // ya existe como ComboSuggestion.
+  async function discardUnreviewed() {
+    setDiscarding(true);
+    setErr("");
+    const res = await fetch("/api/combo-suggestions/discard-unreviewed", { method: "POST" });
+    const data = await res.json().catch(() => null);
+    setDiscarding(false);
+    setConfirmingDiscard(false);
+    if (!res.ok) {
+      setErr(data?.error ?? "No se pudo descartar.");
+      return;
+    }
+    setRecalcMsg(`${data.deleted} descartada${data.deleted === 1 ? "" : "s"}.`);
+    load();
+  }
+
   async function markCreated(id: string) {
     setBusy(true);
     setErr("");
@@ -215,6 +236,23 @@ export function ComboSuggestionsBoard({ canApprove }: { canApprove: boolean }) {
           <div className="text-[11px] font-semibold uppercase tracking-wide text-steel">Sugerencias nuevas</div>
           <div className="flex items-center gap-2">
             {recalcMsg && <span className="text-[11px] text-steel">{recalcMsg}</span>}
+            {canApprove && suggested.length > 0 && (
+              confirmingDiscard ? (
+                <span className="flex items-center gap-1.5 text-[11px]">
+                  ¿Descartar las {suggested.length} sin revisar?
+                  <button type="button" disabled={discarding} className="font-bold text-red cursor-pointer disabled:opacity-60" onClick={discardUnreviewed}>
+                    {discarding ? "Descartando…" : "Sí"}
+                  </button>
+                  <button type="button" className="text-steel cursor-pointer" onClick={() => setConfirmingDiscard(false)}>
+                    No
+                  </button>
+                </span>
+              ) : (
+                <button type="button" className="rounded border border-rule px-2.5 py-1 text-[11px] font-semibold cursor-pointer" onClick={() => setConfirmingDiscard(true)}>
+                  Descartar sin revisar
+                </button>
+              )
+            )}
             <button type="button" disabled={recalculating} className="rounded border border-rule px-2.5 py-1 text-[11px] font-semibold cursor-pointer disabled:opacity-60" onClick={recalculate}>
               {recalculating ? "Recalculando…" : "Recalcular sugerencias"}
             </button>
