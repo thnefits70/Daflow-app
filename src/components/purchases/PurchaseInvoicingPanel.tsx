@@ -257,8 +257,12 @@ export function PurchaseInvoicingPanel({ isAdmin = false, canPayMerchandise }: {
   const [uploadingDoc, setUploadingDoc] = useState<string | null>(null);
   // Confirmado 2026-09-03: pedido explícito del usuario — saldo de crédito
   // por proveedor, mostrado de una vez en la tarjeta de "falta pagar" (sin
-  // tener que abrir "Subir comprobante" para enterarse).
-  const [supplierCredits, setSupplierCredits] = useState<Record<string, number>>({});
+  // tener que abrir "Subir comprobante" para enterarse). available = crédito
+  // suelto con ese proveedor (nadie lo vinculó a nada todavía); linked =
+  // crédito que quien pidió esta solicitud SÍ vinculó a ella (ver
+  // reserveCreditsForGroup) — si linked es 0 y available es mayor a 0,
+  // significa que a quien pidió se le pasó vincularlo.
+  const [groupCredits, setGroupCredits] = useState<Record<string, { available: number; linked: number }>>({});
 
   function load() {
     fetch("/api/purchase-requests?view=invoicing").then((r) => (r.ok ? r.json() : [])).then(setRows).catch(() => setRows([]));
@@ -269,16 +273,24 @@ export function PurchaseInvoicingPanel({ isAdmin = false, canPayMerchandise }: {
 
   useEffect(() => {
     if (!rows) return;
-    const supplierIds = [...new Set(rows.filter((r) => r.status === "APPROVED").map((r) => r.supplier.id))];
-    if (supplierIds.length === 0) return;
+    const approvedGroupPairs = [
+      ...new Map(rows.filter((r) => r.status === "APPROVED").map((r) => [r.groupId, r.supplier.id])).entries(),
+    ];
+    if (approvedGroupPairs.length === 0) return;
     Promise.all(
-      supplierIds.map((id) =>
-        fetch(`/api/purchase-suppliers/${id}/credit-balance`)
+      approvedGroupPairs.map(([groupId, supplierId]) =>
+        fetch(`/api/purchase-suppliers/${supplierId}/credit-balance?groupId=${groupId}`)
           .then((r) => (r.ok ? r.json() : null))
-          .then((data) => [id, data?.balance ?? 0] as const)
-          .catch(() => [id, 0] as const)
+          .then((data) => [
+            groupId,
+            {
+              available: data?.balance ?? 0,
+              linked: (data?.reserved ?? []).reduce((s: number, c: { amount: number }) => s + c.amount, 0),
+            },
+          ] as const)
+          .catch(() => [groupId, { available: 0, linked: 0 }] as const)
       )
-    ).then((entries) => setSupplierCredits(Object.fromEntries(entries)));
+    ).then((entries) => setGroupCredits(Object.fromEntries(entries)));
   }, [rows]);
 
   // Confirmado 2026-08-06: mientras la suma de resoluciones COMPLETED no
@@ -664,13 +676,24 @@ export function PurchaseInvoicingPanel({ isAdmin = false, canPayMerchandise }: {
                     <div className="flex flex-col items-end shrink-0 gap-0.5">
                       <span className="font-display text-[16px] font-bold text-teal leading-tight">{money(total)}</span>
                       <span className="font-mono text-[10.5px] text-steel">{formatPurchaseRequestCode(g[0].requestNumber)}</span>
-                      {supplierCredits[g[0].supplier.id] !== undefined && (
-                        <span className={`text-[9.5px] font-semibold text-right leading-tight ${supplierCredits[g[0].supplier.id] > 0 ? "text-red" : "text-teal"}`}>
-                          {supplierCredits[g[0].supplier.id] > 0
-                            ? `Crédito con ${g[0].supplier.name}: ${money(supplierCredits[g[0].supplier.id])}`
-                            : "Sin créditos pendientes"}
-                        </span>
-                      )}
+                      {groupCredits[groupId] && (() => {
+                        const { available, linked } = groupCredits[groupId];
+                        if (linked > 0) {
+                          return (
+                            <span className="text-[9.5px] font-semibold text-teal text-right leading-tight">
+                              Crédito ya vinculado: {money(linked)}
+                            </span>
+                          );
+                        }
+                        if (available > 0) {
+                          return (
+                            <span className="text-[9.5px] font-semibold text-red text-right leading-tight max-w-[190px]">
+                              ⚠️ Verificar con {actorName(g[0].requestedBy?.name)} — no vinculó crédito a esta solicitud, hay {money(available)} disponible con {g[0].supplier.name}
+                            </span>
+                          );
+                        }
+                        return <span className="text-[9.5px] font-semibold text-teal text-right leading-tight">Sin créditos pendientes</span>;
+                      })()}
                     </div>
                   </div>
                   <div className="text-[11.5px] text-steel">{g[0].supplier.name}</div>
