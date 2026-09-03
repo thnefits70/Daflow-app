@@ -331,6 +331,7 @@ model User {
   urgentResolutionsReplacementVerified         PurchaseUrgentResolution[]         @relation("UrgentResolutionReplacementVerifiedBy")
   urgentResolutionsJustaUploaded               PurchaseUrgentResolution[]         @relation("UrgentResolutionJustaUploadedBy")
   urgentResolutionsBankConfirmed               PurchaseUrgentResolution[]         @relation("UrgentResolutionBankConfirmedBy")
+  urgentResolutionsCancelled                   PurchaseUrgentResolution[]         @relation("UrgentResolutionCancelledBy")
   purchaseRequestsFinanceFlagged               PurchaseRequest[]                  @relation("PurchaseRequestFinanceFlaggedBy")
   adminPaymentTemplatesCreated                 AdminPaymentTemplate[]             @relation("AdminPaymentTemplateCreatedBy")
   adminPaymentRequestsCreated                  AdminPaymentRequest[]              @relation("AdminPaymentRequestCreatedBy")
@@ -2204,12 +2205,27 @@ model PurchaseUrgentResolution {
   createdBy   User?    @relation("UrgentResolutionCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   createdAt   DateTime @default(now())
 
+  // Confirmado 2026-09-03: pedido explícito del usuario — admin puede
+  // cancelar una resolución registrada por error, pero solo mientras no haya
+  // tenido consecuencias reales todavía (ver la validación por tipo en
+  // urgent-resolutions/[id]/cancel/route.ts). Nunca se elimina la fila, solo
+  // pasa a status CANCELLED — misma lógica de auditoría que SupplierCredit.
+  cancelledAt   DateTime?
+  cancelledById String?
+  cancelledBy   User?     @relation("UrgentResolutionCancelledBy", fields: [cancelledById], references: [id], onDelete: SetNull)
+  cancelReason  String?
+
   @@index([reportId])
   @@index([status])
 }
 
 enum SupplierCreditStatus {
   AVAILABLE
+  // Confirmado 2026-09-03: pedido explícito del usuario — admin cancela la
+  // resolución que originó este crédito (por error, o para cambiarla por
+  // otra vía) mientras siga AVAILABLE (sin usar todavía). Nunca se elimina
+  // la fila, queda como respaldo de auditoría igual que el resto.
+  CANCELLED
   // Confirmado 2026-08-12: pedido explícito del usuario — apenas se marca un
   // crédito al solicitar una compra, queda "anclado" a esa solicitud
   // (reservedForGroupId) para que nadie más lo pueda usar mientras tanto.

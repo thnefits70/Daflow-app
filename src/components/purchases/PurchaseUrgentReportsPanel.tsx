@@ -27,6 +27,7 @@ type Resolution = {
   status: ResolutionStatus;
   replacementDueDate: string | null;
   replacementIsMissingDelivery: boolean;
+  replacementSubmittedAt: string | null;
   replacementArrivedAt: string | null;
   replacementPhotoUrls: string[];
   replacementAiMatch: boolean | null;
@@ -36,10 +37,25 @@ type Resolution = {
   refundAiMatch: boolean | null;
   refundAiNote: string | null;
   bankConfirmedAt: string | null;
-  credit: { id: string; amount: number; status: "AVAILABLE" | "APPLIED" | "REFUNDED"; proofUrl: string | null; proofName: string | null } | null;
+  credit: { id: string; amount: number; status: "AVAILABLE" | "APPLIED" | "REFUNDED" | "CANCELLED"; proofUrl: string | null; proofName: string | null } | null;
   createdBy: { name: string } | null;
   createdAt: string;
+  cancelledAt: string | null;
+  cancelReason: string | null;
+  cancelledBy: { name: string } | null;
 };
+
+// Espeja la validación real de urgent-resolutions/[id]/cancel/route.ts, para
+// no mostrar el botón "Cancelar" cuando el servidor lo va a rechazar de
+// todos modos (ya tuvo consecuencias reales: crédito usado, banco
+// confirmado, cambio ya verificado o con fotos subidas).
+function canCancelResolution(res: Resolution): boolean {
+  if (res.status === "CANCELLED") return false;
+  if (res.type === "CREDIT") return res.credit?.status === "AVAILABLE";
+  if (res.type === "REPLACEMENT") return res.status === "PENDING" && !res.replacementSubmittedAt;
+  if (res.type === "REFUND") return res.status === "PENDING";
+  return true; // WRITE_OFF: nada externo que deshacer.
+}
 
 type Report = {
   id: string;
@@ -140,6 +156,8 @@ export function PurchaseUrgentReportsPanel({ isAdmin, canAct }: { isAdmin: boole
 
   const [refundUploadingFor, setRefundUploadingFor] = useState<string | null>(null);
   const [confirmBankId, setConfirmBankId] = useState<string | null>(null);
+  const [cancelId, setCancelId] = useState<string | null>(null);
+  const [cancelReason, setCancelReason] = useState("");
 
   function load() {
     fetch("/api/purchase-requests/urgent-reports").then((r) => (r.ok ? r.json() : [])).then(setReports).catch(() => setReports([]));
@@ -230,6 +248,24 @@ export function PurchaseUrgentReportsPanel({ isAdmin, canAct }: { isAdmin: boole
     const data = await res.json().catch(() => null);
     if (!res.ok) { setErr(data?.error ?? "No se pudo confirmar."); return; }
     setConfirmBankId(null);
+    load();
+    router.refresh();
+  }
+
+  async function cancelResolution(resolutionId: string) {
+    if (!cancelReason.trim()) { setErr("Explica por qué se cancela."); return; }
+    setBusy(true);
+    setErr("");
+    const res = await fetch(`/api/purchase-requests/urgent-resolutions/${resolutionId}/cancel`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reason: cancelReason.trim() }),
+    });
+    setBusy(false);
+    const data = await res.json().catch(() => null);
+    if (!res.ok) { setErr(data?.error ?? "No se pudo cancelar."); return; }
+    setCancelId(null);
+    setCancelReason("");
     load();
     router.refresh();
   }
@@ -333,7 +369,23 @@ export function PurchaseUrgentReportsPanel({ isAdmin, canAct }: { isAdmin: boole
                   {r.resolutions.length > 0 && (
                     <div className="flex flex-col gap-1.5 mb-2.5">
                       {r.resolutions.map((res) => (
-                        <ResolutionRow key={res.id} res={res} isAdmin={isAdmin} canAct={canAct} refundUploadingFor={refundUploadingFor} confirmBankId={confirmBankId} setConfirmBankId={setConfirmBankId} onFileRefund={(f) => uploadRefundProof(res.id, f)} onConfirmBank={() => confirmBank(res.id)} busy={busy} />
+                        <ResolutionRow
+                          key={res.id}
+                          res={res}
+                          isAdmin={isAdmin}
+                          canAct={canAct}
+                          refundUploadingFor={refundUploadingFor}
+                          confirmBankId={confirmBankId}
+                          setConfirmBankId={setConfirmBankId}
+                          onFileRefund={(f) => uploadRefundProof(res.id, f)}
+                          onConfirmBank={() => confirmBank(res.id)}
+                          busy={busy}
+                          cancelId={cancelId}
+                          setCancelId={(id) => { setCancelId(id); setCancelReason(""); setErr(""); }}
+                          cancelReason={cancelReason}
+                          setCancelReason={setCancelReason}
+                          onCancel={() => cancelResolution(res.id)}
+                        />
                       ))}
                     </div>
                   )}
@@ -422,7 +474,7 @@ export function PurchaseUrgentReportsPanel({ isAdmin, canAct }: { isAdmin: boole
                 </div>
                 <div className="flex flex-col gap-1 mt-1.5">
                   {r.resolutions.map((res) => (
-                    <div key={res.id} className="text-steel">{resolutionLabel(res)} — {res.quantity} un. · {money(res.amount)}</div>
+                    <div key={res.id} className={res.status === "CANCELLED" ? "text-red line-through" : "text-steel"}>{resolutionLabel(res)} — {res.quantity} un. · {money(res.amount)}{res.status === "CANCELLED" ? " (anulado)" : ""}</div>
                   ))}
                 </div>
               </div>
@@ -436,6 +488,7 @@ export function PurchaseUrgentReportsPanel({ isAdmin, canAct }: { isAdmin: boole
 
 function ResolutionRow({
   res, isAdmin, canAct, refundUploadingFor, confirmBankId, setConfirmBankId, onFileRefund, onConfirmBank, busy,
+  cancelId, setCancelId, cancelReason, setCancelReason, onCancel,
 }: {
   res: Resolution;
   isAdmin: boolean;
@@ -446,18 +499,29 @@ function ResolutionRow({
   onFileRefund: (file: File) => void;
   onConfirmBank: () => void;
   busy: boolean;
+  cancelId: string | null;
+  setCancelId: (id: string | null) => void;
+  cancelReason: string;
+  setCancelReason: (v: string) => void;
+  onCancel: () => void;
 }) {
+  const statusLabel = res.status === "COMPLETED" ? "Listo" : res.status === "CANCELLED" ? "Anulado" : "En curso";
+  const statusColor = res.status === "COMPLETED" ? "text-green" : res.status === "CANCELLED" ? "text-red" : "text-steel";
   return (
     <div className="bg-cloud rounded px-3 py-2 text-[11.5px]">
       <div className="flex items-center justify-between gap-2">
-        <span className="font-semibold">{resolutionLabel(res)} — {res.quantity} un. · {money(res.amount)}</span>
-        <span className={`text-[10px] font-bold uppercase ${res.status === "COMPLETED" ? "text-green" : "text-steel"}`}>{res.status === "COMPLETED" ? "Listo" : "En curso"}</span>
+        <span className={`font-semibold ${res.status === "CANCELLED" ? "line-through text-steel" : ""}`}>{resolutionLabel(res)} — {res.quantity} un. · {money(res.amount)}</span>
+        <span className={`text-[10px] font-bold uppercase ${statusColor}`}>{statusLabel}</span>
       </div>
       <div className="text-steel-dim text-[10px] mt-0.5">Registrado por {actorName(res.createdBy?.name)} · {formatDateTime(res.createdAt)}</div>
 
+      {res.status === "CANCELLED" && (
+        <div className="text-red mt-0.5">Anulado por {actorName(res.cancelledBy?.name)}{res.cancelledAt ? ` · ${formatDateTime(res.cancelledAt)}` : ""}{res.cancelReason ? ` — ${res.cancelReason}` : ""}</div>
+      )}
+
       {res.type === "CREDIT" && res.credit && (
         <div className="mt-0.5">
-          <div className="text-steel">{res.credit.status === "AVAILABLE" ? "Disponible para la próxima compra a este proveedor" : res.credit.status === "APPLIED" ? "Ya aplicado a una compra" : "Reembolsado"}</div>
+          <div className="text-steel">{res.credit.status === "AVAILABLE" ? "Disponible para la próxima compra a este proveedor" : res.credit.status === "APPLIED" ? "Ya aplicado a una compra" : res.credit.status === "CANCELLED" ? "Crédito anulado" : "Reembolsado"}</div>
           {res.credit.proofUrl && (
             <div className="mt-1.5"><ProofPreview url={res.credit.proofUrl} size={36} filename={res.credit.proofName ?? "comprobante-credito"} /></div>
           )}
@@ -520,6 +584,30 @@ function ResolutionRow({
           )}
           {res.status === "COMPLETED" && <div className="text-green mt-1 flex items-center gap-1"><CheckCircle2 size={12} /> Confirmado el {res.bankConfirmedAt ? formatDateTime(res.bankConfirmedAt) : ""}</div>}
         </div>
+      )}
+
+      {isAdmin && canCancelResolution(res) && (
+        cancelId === res.id ? (
+          <div className="bg-surface border border-red/40 rounded-md p-2.5 mt-2">
+            <div className="text-[11.5px] font-semibold text-red mb-1.5">¿Anular esta resolución?</div>
+            <div className="text-[11px] text-steel mb-2">Las {res.quantity} un. vuelven a quedar sin resolver en el reporte.</div>
+            <input
+              type="text"
+              value={cancelReason}
+              onChange={(e) => setCancelReason(e.target.value)}
+              placeholder="Motivo de la anulación"
+              className="w-full border border-rule rounded px-2 py-1.5 text-[11.5px] mb-2"
+            />
+            <div className="flex items-center gap-2">
+              <button type="button" disabled={busy} className="rounded border border-red bg-red px-3 py-1.5 text-[11.5px] font-semibold text-white cursor-pointer disabled:opacity-60" onClick={onCancel}>Sí, anular</button>
+              <button type="button" className="text-steel text-[11.5px] cursor-pointer" onClick={() => setCancelId(null)}>Cerrar</button>
+            </div>
+          </div>
+        ) : (
+          <button type="button" className="text-red text-[11px] font-semibold mt-1.5 cursor-pointer underline" onClick={() => setCancelId(res.id)}>
+            Anular esta resolución
+          </button>
+        )
       )}
     </div>
   );

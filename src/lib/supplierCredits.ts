@@ -4,7 +4,7 @@ export type SupplierCreditDTO = {
   id: string;
   amount: number;
   reason: string;
-  status: "AVAILABLE" | "RESERVED" | "APPLIED" | "REFUNDED";
+  status: "AVAILABLE" | "RESERVED" | "APPLIED" | "REFUNDED" | "CANCELLED";
   createdAt: string;
 };
 

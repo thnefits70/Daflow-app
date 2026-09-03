@@ -44,6 +44,7 @@ export async function GET(_req: NextRequest) {
           replacementVerifiedBy: { select: { name: true } },
           bankConfirmedBy: { select: { name: true } },
           createdBy: { select: { name: true } },
+          cancelledBy: { select: { name: true } },
         },
       },
       request: {
