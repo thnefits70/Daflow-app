@@ -665,7 +665,7 @@ export function PurchaseInvoicingPanel({ isAdmin = false, canPayMerchandise }: {
                       <span className="font-display text-[16px] font-bold text-teal leading-tight">{money(total)}</span>
                       <span className="font-mono text-[10.5px] text-steel">{formatPurchaseRequestCode(g[0].requestNumber)}</span>
                       {supplierCredits[g[0].supplier.id] !== undefined && (
-                        <span className="text-[9.5px] font-semibold text-red text-right leading-tight">
+                        <span className={`text-[9.5px] font-semibold text-right leading-tight ${supplierCredits[g[0].supplier.id] > 0 ? "text-red" : "text-teal"}`}>
                           {supplierCredits[g[0].supplier.id] > 0
                             ? `Crédito con ${g[0].supplier.name}: ${money(supplierCredits[g[0].supplier.id])}`
                             : "Sin créditos pendientes"}
