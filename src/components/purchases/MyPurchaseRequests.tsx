@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { FileText, Upload, Truck, CheckCircle2, Plus, Bell } from "lucide-react";
+import { FileText, Upload, Truck, CheckCircle2, Plus, Bell, AlertTriangle } from "lucide-react";
 import { uploadFile } from "@/lib/uploadFile";
 import { compressImage } from "@/lib/compressImage";
 import { usePasteFile } from "@/lib/usePasteFile";
@@ -66,6 +66,8 @@ type Row = {
   bankAccountId: string | null;
   bankAccountChangeRequestedAt: string | null;
   bankAccountChangeNote: string | null;
+  isEmergency: boolean;
+  emergencyReason: string | null;
 };
 
 const STEPS: { key: Row["status"]; label: string; description: string }[] = [
@@ -560,6 +562,11 @@ function GroupCard({
             <div className="font-mono text-[10.5px] text-teal mb-0.5 flex items-center gap-1.5">
               {formatPurchaseRequestCode(g[0].requestNumber)}
               {g[0].attemptNumber > 1 && <span className="text-steel-dim font-sans">— {attemptLabel(g[0].attemptNumber)}</span>}
+            </div>
+          )}
+          {g[0].isEmergency && (
+            <div className="flex items-center gap-1 text-[10px] font-bold text-red mb-0.5">
+              <AlertTriangle size={11} /> Emergencia — {g[0].emergencyReason} · la aprueba y paga el admin directamente
             </div>
           )}
           <div className="text-[11px] text-steel mb-0.5">Proveedor: <span className="font-semibold text-ink">{g[0].supplier.name}</span></div>

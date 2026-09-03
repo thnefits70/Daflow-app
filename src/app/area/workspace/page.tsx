@@ -3,7 +3,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { TopLine } from "@/components/ui/TopLine";
 import { DeptWorkspaceTabs } from "@/components/dept/DeptWorkspaceTabs";
-import { getUnseenFeedbackCount, canManageStoreFeedback as checkCanManageStoreFeedback, canViewStoreFeedback as checkCanViewStoreFeedback, canSubmitPurchaseRequests, canCreateNewPurchaseRequests, canApprovePurchaseRequests as checkCanApprovePurchaseRequests, canActOnPurchaseApproval as checkCanActOnPurchaseApproval, canConfirmPurchaseReceiving, canReceivePurchasesTeam, canActOnPurchaseReceiving, canRegisterPurchaseInvoices, canPayMerchandisePurchases, canManageInventoryControl as checkCanManageInventoryControl, canViewInventoryKpisPanel as checkCanViewInventoryKpisPanel, canManageAdminPayments as checkCanManageAdminPayments, canViewMarketingArrivals as checkCanViewMarketingArrivals, canConfirmMarketingDesign as checkCanConfirmMarketingDesign, canConfirmMarketingAdvisor as checkCanConfirmMarketingAdvisor, canSyncAtomData as checkCanSyncAtomData, canUploadLowRotationList as checkCanUploadLowRotationList, canApproveComboSuggestions as checkCanApproveComboSuggestions, canCaptureMerchandiseReentry, canApproveMerchandiseReentry, canActOnMerchandiseReentry, canCloseMerchandiseReentry, canVerifyDamageDisposal, canManageJustUpload, canManageJustCatalog, canCaptureMerchandiseOutflow, canActOnMerchandiseOutflow, canViewMerchandiseOutflow, canConfirmSupplierExchangeFinanceWriteOff, canSubmitCancelledGuide, canManageCancelledGuideBatches, canAssignCancelledGuideItems, canDeclareExternalSales, canReviewExternalSales, canConfirmExternalSalePayment, canInvoiceExternalSale, canAssignExternalSalePack, canPackExternalSale, canCloseExternalSale, canViewExternalSales, getSupplierAccess, canAddSupplierBankAccounts } from "@/lib/guards";
+import { getUnseenFeedbackCount, canManageStoreFeedback as checkCanManageStoreFeedback, canViewStoreFeedback as checkCanViewStoreFeedback, canSubmitPurchaseRequests, canCreateNewPurchaseRequests, canSubmitEmergencyPurchaseRequest, canApprovePurchaseRequests as checkCanApprovePurchaseRequests, canActOnPurchaseApproval as checkCanActOnPurchaseApproval, canConfirmPurchaseReceiving, canReceivePurchasesTeam, canActOnPurchaseReceiving, canRegisterPurchaseInvoices, canPayMerchandisePurchases, canManageInventoryControl as checkCanManageInventoryControl, canViewInventoryKpisPanel as checkCanViewInventoryKpisPanel, canManageAdminPayments as checkCanManageAdminPayments, canViewMarketingArrivals as checkCanViewMarketingArrivals, canConfirmMarketingDesign as checkCanConfirmMarketingDesign, canConfirmMarketingAdvisor as checkCanConfirmMarketingAdvisor, canSyncAtomData as checkCanSyncAtomData, canUploadLowRotationList as checkCanUploadLowRotationList, canApproveComboSuggestions as checkCanApproveComboSuggestions, canCaptureMerchandiseReentry, canApproveMerchandiseReentry, canActOnMerchandiseReentry, canCloseMerchandiseReentry, canVerifyDamageDisposal, canManageJustUpload, canManageJustCatalog, canCaptureMerchandiseOutflow, canActOnMerchandiseOutflow, canViewMerchandiseOutflow, canConfirmSupplierExchangeFinanceWriteOff, canSubmitCancelledGuide, canManageCancelledGuideBatches, canAssignCancelledGuideItems, canDeclareExternalSales, canReviewExternalSales, canConfirmExternalSalePayment, canInvoiceExternalSale, canAssignExternalSalePack, canPackExternalSale, canCloseExternalSale, canViewExternalSales, getSupplierAccess, canAddSupplierBankAccounts } from "@/lib/guards";
 import { getFinanceKpiData } from "@/lib/financeKpis";
 import { getDeptProcessDetail } from "@/lib/processDetail";
 import { getPaymentRemindersData } from "@/lib/paymentReminders";
@@ -52,9 +52,10 @@ export default async function WorkspacePage() {
   // Bryan y Nairoby están asignados a esto sin ser líderes formales del
   // departamento "Control de Compras", así que se ve en su propia "Mi área
   // de trabajo" sin importar a cuál pertenecen de verdad).
-  const [canSubmitPurchases, canCreatePurchases, canApprovePurchasesFlag, canActOnPurchaseApprovalFlag, canReceivePurchases, canReceivePurchasesTeamFlag, canApprovePurchaseReceivingFlag, canInvoicePurchases, canPayMerchandisePurchasesFlag] = await Promise.all([
+  const [canSubmitPurchases, canCreatePurchases, canSubmitEmergencyPurchases, canApprovePurchasesFlag, canActOnPurchaseApprovalFlag, canReceivePurchases, canReceivePurchasesTeamFlag, canApprovePurchaseReceivingFlag, canInvoicePurchases, canPayMerchandisePurchasesFlag] = await Promise.all([
     canSubmitPurchaseRequests(),
     canCreateNewPurchaseRequests(),
+    canSubmitEmergencyPurchaseRequest(),
     checkCanApprovePurchaseRequests(),
     checkCanActOnPurchaseApproval(),
     canConfirmPurchaseReceiving(),
@@ -279,6 +280,7 @@ export default async function WorkspacePage() {
         storeFeedbackAggregates={storeFeedbackAggregates}
         canSubmitPurchases={canSubmitPurchases}
         canCreatePurchases={canCreatePurchases}
+        canSubmitEmergencyPurchases={canSubmitEmergencyPurchases}
         canApprovePurchases={canApprovePurchasesFlag}
         canActOnPurchaseApproval={canActOnPurchaseApprovalFlag}
         canReceivePurchases={canReceivePurchases}

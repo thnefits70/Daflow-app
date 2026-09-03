@@ -52,6 +52,8 @@ type Row = {
   requestedBy: { name: string } | null;
   attemptNumber: number;
   requestedAt: string;
+  isEmergency: boolean;
+  emergencyReason: string | null;
 };
 
 function attemptLabel(n: number) {
@@ -136,7 +138,14 @@ function buildValidationSummary(g: Row[]) {
 // queda para después, en Finanzas). isAdmin sigue gatiando "pedir cambio
 // de cuenta bancaria", que es una acción de pago, no de aprobación, y
 // sigue siendo exclusiva de admin en el servidor.
-export function PurchaseApprovalInbox({ canAct = true, canPayHere = true, isAdmin = true }: { canAct?: boolean; canPayHere?: boolean; isAdmin?: boolean }) {
+// Confirmado 2026-09-03: pedido explícito del usuario — un grupo isEmergency
+// (vía de respaldo cuando Jariel/Nairoby no están disponibles) invierte
+// canAct/canPayHere: SOLO el admin puede actuar sobre él (nunca quien tenga
+// el permiso normal, hoy Bryan, que podría ser quien la subió) — ver
+// groupIsEmergency/effectiveCanAct/effectiveCanPayHere abajo. canPayMerchandise
+// se pasa aparte (sin combinar) para poder recalcular el combo "aprobar y
+// pagar" caso por caso.
+export function PurchaseApprovalInbox({ canAct = true, canPayHere = true, canPayMerchandise = false, isAdmin = true }: { canAct?: boolean; canPayHere?: boolean; canPayMerchandise?: boolean; isAdmin?: boolean }) {
   const router = useRouter();
   const [rows, setRows] = useState<Row[] | null>(null);
   const [busyGroup, setBusyGroup] = useState<string | null>(null);
@@ -268,6 +277,22 @@ export function PurchaseApprovalInbox({ canAct = true, canPayHere = true, isAdmi
     return (rows ?? []).filter((r) => r.groupId === groupId);
   }
 
+  function groupIsEmergency(groupId: string) {
+    return currentGroupRows(groupId).some((r) => r.isEmergency);
+  }
+
+  // Confirmado 2026-09-03: para un grupo de emergencia, actuar (aprobar/
+  // rechazar) es EXCLUSIVO del admin, nunca de quien solo tenga el permiso
+  // normal (hoy Bryan) — ver guards.ts (canSubmitEmergencyPurchaseRequest) y
+  // review/route.ts, que hace cumplir esto mismo en el servidor.
+  function effectiveCanAct(groupId: string) {
+    return groupIsEmergency(groupId) ? isAdmin : canAct;
+  }
+
+  function effectiveCanPayHere(groupId: string) {
+    return groupIsEmergency(groupId) ? isAdmin && canPayMerchandise : canPayHere;
+  }
+
   function reservedTotalFor(groupId: string) {
     return (reservedCreditsByGroup[groupId] ?? []).reduce((s, c) => s + c.amount, 0);
   }
@@ -392,7 +417,7 @@ export function PurchaseApprovalInbox({ canAct = true, canPayHere = true, isAdmi
   }
 
   function startApprove(groupId: string) {
-    if (canPayHere) {
+    if (effectiveCanPayHere(groupId)) {
       setApprovingGroup(groupId);
       setProofUrl(null);
       setProofVerifyResult(null);
@@ -513,6 +538,11 @@ export function PurchaseApprovalInbox({ canAct = true, canPayHere = true, isAdmi
                   Solicitada por {actorName(g[0].requestedBy?.name)}
                   {g[0].attemptNumber > 1 && <span className="text-gold"> — {attemptLabel(g[0].attemptNumber)}</span>}
                 </div>
+                {g[0].isEmergency && (
+                  <div className="flex items-center gap-1 text-[10px] font-bold text-red mt-1">
+                    <AlertTriangle size={11} /> Emergencia — {g[0].emergencyReason}
+                  </div>
+                )}
                 {(() => {
                   const p = pendingInfo(g[0].requestedAt);
                   return (
@@ -758,7 +788,7 @@ export function PurchaseApprovalInbox({ canAct = true, canPayHere = true, isAdmi
 
             {justification && <div className="text-[12px] text-steel mb-2.5">Justificación: &quot;{justification}&quot;</div>}
 
-            {canAct ? (
+            {effectiveCanAct(groupId) ? (
             rejectingGroup === groupId ? (
               <div>
                 <textarea className="w-full rounded border border-rule px-2.5 py-2 text-[12.5px] mb-2" rows={2} placeholder="Motivo del rechazo (opcional)" value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} />

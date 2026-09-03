@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ShieldCheck, Search, CheckCircle2 } from "lucide-react";
+import { ShieldCheck, Search, CheckCircle2, AlertTriangle } from "lucide-react";
 import { actorName } from "@/lib/actorName";
 import { formatDateTime } from "@/lib/formatDateTime";
 import { PurchaseOperationDocuments, type OperationDocRow } from "./PurchaseOperationDocuments";
@@ -23,6 +23,8 @@ type Row = Omit<OperationDocRow, "receipt"> & {
   // (Auditoría), nunca en Solicitar/Bandeja de aprobación/Finanzas.
   paymentProofReceiptNumber: string | null;
   shippingPaymentProofReceiptNumber: string | null;
+  isEmergency: boolean;
+  emergencyReason: string | null;
   receipt: {
     photoUrls: string[];
     receivedQuantity: number;
@@ -283,6 +285,11 @@ export function PurchaseAuditPanel() {
                 </div>
               </div>
               <div className="text-[11.5px] text-steel">{r0.supplier.name} — {money(total)}</div>
+              {r0.isEmergency && (
+                <div className="flex items-center gap-1 text-[10px] font-bold text-red mb-0.5">
+                  <AlertTriangle size={11} /> Solicitud de emergencia — {r0.emergencyReason}
+                </div>
+              )}
               <div className="text-[10px] text-steel-dim mb-1">
                 Solicitada por {actorName(r0.requestedBy?.name)}{r0.requestedAt ? ` · ${formatDateTime(r0.requestedAt)}` : ""}
                 {" · "}Aprobada por {actorName(r0.reviewedBy?.name)}{r0.reviewedAt ? ` · ${formatDateTime(r0.reviewedAt)}` : ""}

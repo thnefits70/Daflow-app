@@ -3,7 +3,7 @@ import { randomUUID } from "crypto";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
-import { canSubmitPurchaseRequests, canCreateNewPurchaseRequests, canApprovePurchaseRequests, canConfirmPurchaseReceiving, canRegisterPurchaseInvoices, getPurchaseApproverIds } from "@/lib/guards";
+import { canSubmitPurchaseRequests, canCreateNewPurchaseRequests, canSubmitEmergencyPurchaseRequest, canApprovePurchaseRequests, canConfirmPurchaseReceiving, canRegisterPurchaseInvoices, getPurchaseApproverIds } from "@/lib/guards";
 import { checkPurchaseSubmission, purchaseSubmissionSchema, nextPurchaseRequestNumber, purchaseRequestInclude } from "@/lib/purchases";
 import { sendPushToOwner } from "@/lib/webPush";
 import { reserveCreditsForGroup } from "@/lib/supplierCredits";
@@ -24,8 +24,14 @@ export async function GET(req: NextRequest) {
     if (session.user.role !== "admin" && !(await canApprovePurchaseRequests())) {
       return NextResponse.json({ error: "No autorizado." }, { status: 403 });
     }
+    // Confirmado 2026-09-03: pedido explícito del usuario — una solicitud de
+    // emergencia (isEmergency) nunca aparece en la bandeja de quien tenga
+    // solo el permiso normal de aprobación (hoy Bryan, que además puede ser
+    // quien la subió) — SOLO el admin la ve/gestiona acá, para que no exista
+    // forma de que la misma persona se apruebe a sí misma.
+    const isAdmin = session.user.role === "admin";
     const rows = await prisma.purchaseRequest.findMany({
-      where: { status: "PENDING_APPROVAL" },
+      where: { status: "PENDING_APPROVAL", ...(isAdmin ? {} : { isEmergency: false }) },
       orderBy: { requestedAt: "asc" },
       include: purchaseRequestInclude,
     });
@@ -183,12 +189,26 @@ const createSchema = purchaseSubmissionSchema.extend({
 
 export async function POST(req: NextRequest) {
   const session = await auth();
+  if (!session) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+
   // Confirmado 2026-09-02: crear una solicitud NUEVA desde cero usa
   // canCreateNewPurchaseRequests (más estricto que canSubmitPurchaseRequests
   // — ver guards.ts) para poder bloquear puntualmente a alguien en
   // transición (hoy Bryan) sin tocarle el resto de "Mis solicitudes".
-  if (!(await canCreateNewPurchaseRequests()) || !session) {
-    return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+  // Confirmado 2026-09-03: pedido explícito del usuario — quien esté
+  // bloqueado (hoy Bryan) puede igual crear una solicitud por la vía de
+  // emergencia (canSubmitEmergencyPurchaseRequest), solo cuando Jariel y
+  // Nairoby no están disponibles. isEmergency SIEMPRE lo decide el servidor
+  // según qué permiso aplicó — nunca se confía en lo que mande el cliente,
+  // para que nadie con acceso normal pueda marcarse a sí mismo como
+  // "emergencia" y saltarse la bandeja de aprobación normal.
+  const canNormal = await canCreateNewPurchaseRequests();
+  let isEmergencySubmission = false;
+  if (!canNormal) {
+    if (!(await canSubmitEmergencyPurchaseRequest())) {
+      return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+    }
+    isEmergencySubmission = true;
   }
 
   const body = await req.json().catch(() => null);
@@ -197,6 +217,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Datos inválidos." }, { status: 400 });
   }
   const d = parsed.data;
+
+  if (isEmergencySubmission && !d.emergencyReason?.trim()) {
+    return NextResponse.json({ error: "Escribe el motivo de la solicitud de emergencia (ej. \"Jariel no disponible\")." }, { status: 400 });
+  }
 
   // Confirmado 2026-07-31: el bug real era este — el admin nunca tiene
   // session.user.deptId (su login no pertenece a un departamento), así que
@@ -258,14 +282,33 @@ export async function POST(req: NextRequest) {
           status: "PENDING_APPROVAL",
           requestedById: isAdmin ? null : session.user.id,
           requestedByDeptId: effectiveDeptId,
+          isEmergency: isEmergencySubmission,
+          emergencyReason: isEmergencySubmission ? d.emergencyReason!.trim() : null,
         },
       })
     )
   );
 
+  const summary = d.items.length === 1 ? check.nameById.get(d.items[0].catalogItemId) : `${d.items.length} productos`;
+
+  // Confirmado 2026-09-03: pedido explícito del usuario — cuando se usa la
+  // vía de emergencia, el aviso al admin debe dejar claro que se usó esa
+  // opción y por qué, y NADIE más se notifica (ni los aprobadores normales,
+  // hoy Bryan, que sería la misma persona que la subió) — solo el admin
+  // puede actuar sobre esto, ver GET view=approval y review/route.ts.
+  if (isEmergencySubmission) {
+    await sendPushToOwner("admin", {
+      title: "🚨 Solicitud de emergencia de compra",
+      body: `${summary} · $${check.groupTotal.toFixed(2)} — motivo: ${d.emergencyReason!.trim()}`,
+      url: "/admin",
+    }).catch(() => null);
+
+    const full = await prisma.purchaseRequest.findMany({ where: { groupId }, include: purchaseRequestInclude });
+    return NextResponse.json(full, { status: 201 });
+  }
+
   // Confirmado 2026-07-30: push en tiempo real al admin, aparte de la
   // notificación diaria de Pendientes — apenas se envía la solicitud.
-  const summary = d.items.length === 1 ? check.nameById.get(d.items[0].catalogItemId) : `${d.items.length} productos`;
   await sendPushToOwner("admin", {
     title: check.anyOverThreshold ? "🔴 Nueva solicitud — precio por encima del historial" : "Nueva solicitud de compra",
     body: `${summary} · $${check.groupTotal.toFixed(2)}`,

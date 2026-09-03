@@ -86,6 +86,7 @@ export function DeptWorkspaceTabs({
   storeFeedbackAggregates = [],
   canSubmitPurchases = false,
   canCreatePurchases = false,
+  canSubmitEmergencyPurchases = false,
   canApprovePurchases = false,
   canActOnPurchaseApproval = false,
   canReceivePurchases = false,
@@ -183,6 +184,12 @@ export function DeptWorkspaceTabs({
   // nueva); canApprovePurchases es el nuevo paso de aprobación con un clic
   // (hoy Bryan), que se SUMA a isAdmin en vez de reemplazarlo.
   canCreatePurchases?: boolean;
+  // Confirmado 2026-09-03: pedido explícito del usuario — vía de respaldo
+  // para cuando Jariel/Nairoby no están disponibles (ver
+  // canSubmitEmergencyPurchaseRequest en guards.ts). Independiente de
+  // canCreatePurchases: alguien puede tener esto en true precisamente porque
+  // canCreatePurchases está en false (bloqueado en transición).
+  canSubmitEmergencyPurchases?: boolean;
   canApprovePurchases?: boolean;
   // Confirmado 2026-09-02: corrección al diseño anterior — canApprovePurchases
   // (arriba) sigue dando VISIBILIDAD de la pestaña "Bandeja de aprobación"
@@ -331,7 +338,7 @@ export function DeptWorkspaceTabs({
     if (t.key === "pagos") return trackPaymentReminders;
     if (t.key === "semanal") return trackWeeklyMetric;
     if (t.key === "feedback") return trackWeeklyReview;
-    if (t.key === "compras") return canSubmitPurchases || canReceivePurchases || canInvoicePurchases;
+    if (t.key === "compras") return canSubmitPurchases || canSubmitEmergencyPurchases || canReceivePurchases || canInvoicePurchases;
     if (t.key === "proveedores") return canAccessSuppliers;
     if (t.key === "llegadas") return canViewMarketingArrivals;
     if (t.key === "inventario") return canManageInventoryControl;
@@ -451,11 +458,12 @@ export function DeptWorkspaceTabs({
           currentUserId={currentUserId}
         />
       )}
-      {tab === "compras" && (canSubmitPurchases || canReceivePurchases || canInvoicePurchases) && (
+      {tab === "compras" && (canSubmitPurchases || canSubmitEmergencyPurchases || canReceivePurchases || canInvoicePurchases) && (
         <PurchaseControlPanel
           deptId={deptId}
           canSubmit={canSubmitPurchases}
           canCreateNew={canCreatePurchases}
+          canSubmitEmergency={canSubmitEmergencyPurchases}
           canReview={isAdmin || canApprovePurchases}
           canActOnApproval={canActOnPurchaseApproval}
           canReceive={canReceivePurchases}

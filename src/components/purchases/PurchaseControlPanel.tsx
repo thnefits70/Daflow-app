@@ -23,6 +23,7 @@ export function PurchaseControlPanel({
   deptId,
   canSubmit,
   canCreateNew,
+  canSubmitEmergency,
   canReview,
   canActOnApproval,
   canReceive,
@@ -41,6 +42,13 @@ export function PurchaseControlPanel({
   // (hoy Bryan) debe poder seguir viendo/resolviendo lo que ya tiene, pero
   // ya no puede iniciar una solicitud nueva.
   canCreateNew: boolean;
+  // Confirmado 2026-09-03: pedido explícito del usuario — vía de respaldo
+  // para cuando Jariel/Nairoby no están disponibles (ver
+  // canSubmitEmergencyPurchaseRequest en guards.ts). Independiente de
+  // canCreateNew: quien tiene esto en true normalmente tiene canCreateNew en
+  // false (bloqueado en transición) — solo entonces se le muestra la
+  // pestaña, pero marcada como "emergencia".
+  canSubmitEmergency: boolean;
   canReview: boolean;
   // Confirmado 2026-09-02: pedido explícito del usuario — corrección al
   // diseño anterior. canReview sigue gateando si se VE la pestaña "Bandeja
@@ -60,7 +68,7 @@ export function PurchaseControlPanel({
   // de qué pestaña abre por defecto (eso lo decide preferredDefault abajo).
   const tabs: { key: Tab; label: string }[] = [
     ...(canSubmit || canReview ? [{ key: "comparar" as Tab, label: "Comparar precios" }] : []),
-    ...(canCreateNew ? [{ key: "solicitar" as Tab, label: "Solicitar" }] : []),
+    ...(canCreateNew ? [{ key: "solicitar" as Tab, label: "Solicitar" }] : canSubmitEmergency ? [{ key: "solicitar" as Tab, label: "🚨 Emergencia" }] : []),
     ...(canSubmit ? [{ key: "mias" as Tab, label: "Mis solicitudes" }] : []),
     ...(canReview ? [{ key: "aprobacion" as Tab, label: "Bandeja de aprobación" }] : []),
     // Confirmado 2026-09-01: pedido explícito del usuario — Daniel y su
@@ -129,10 +137,17 @@ export function PurchaseControlPanel({
 
       {tab === "solicitar" && (
         <>
-          <TabGuide storageKey="compras-solicitar">
-            Arma acá una nueva solicitud de compra: producto, cantidad, costo, proveedor y la cotización. Se envía a aprobación del admin.
+          <TabGuide storageKey={canCreateNew ? "compras-solicitar" : "compras-solicitar-emergencia"}>
+            {canCreateNew ? (
+              <>Arma acá una nueva solicitud de compra: producto, cantidad, costo, proveedor y la cotización. Se envía a aprobación de Bryan.</>
+            ) : (
+              <>
+                Usa esto SOLO cuando Jariel y Nairoby no están disponibles ese día para solicitar. Vas a tener que escribir el motivo, y esta
+                solicitud no cae en la bandeja normal — la aprueba y paga directamente el admin, nunca tú mismo.
+              </>
+            )}
           </TabGuide>
-          <PurchaseRequestForm deptId={deptId} isAdmin={isAdmin} />
+          <PurchaseRequestForm deptId={deptId} isAdmin={isAdmin} emergencyOnly={!canCreateNew && canSubmitEmergency} />
         </>
       )}
       {tab === "mias" && (
@@ -158,7 +173,7 @@ export function PurchaseControlPanel({
               ? <>Apruebas o rechazas las solicitudes de compra. El sistema lee la cotización subida con IA y te avisa si el total no coincide con lo declarado — revísalo antes de aprobar.</>
               : <>Vista de solo lectura de las solicitudes pendientes de aprobación y cómo se van resolviendo. Aprobar o rechazar es de quien tiene ese permiso asignado — tu parte activa en la compra es pagarla, en la pestaña Finanzas, una vez aprobada.</>}
           </TabGuide>
-          <PurchaseApprovalInbox canAct={canActOnApproval} canPayHere={canActOnApproval && canPayMerchandise} isAdmin={isAdmin} />
+          <PurchaseApprovalInbox canAct={canActOnApproval} canPayHere={canActOnApproval && canPayMerchandise} canPayMerchandise={canPayMerchandise} isAdmin={isAdmin} />
         </>
       )}
       {tab === "urgentes" && (

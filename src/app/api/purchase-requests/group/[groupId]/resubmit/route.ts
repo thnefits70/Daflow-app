@@ -88,6 +88,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ gro
           requestedByDeptId: r0.requestedByDeptId,
           attemptNumber,
           rejectReason: null,
+          // Confirmado 2026-09-03: una solicitud de emergencia rechazada
+          // sigue siendo de emergencia al corregirla y reenviarla — nunca se
+          // le quita esa marca ni cae en la bandeja normal (donde quien la
+          // subió podría verse a sí mismo y aprobarse).
+          isEmergency: r0.isEmergency,
+          emergencyReason: r0.emergencyReason,
         },
       })
     ),
@@ -95,8 +101,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ gro
 
   const summary = d.items.length === 1 ? check.nameById.get(d.items[0].catalogItemId) : `${d.items.length} productos`;
   await sendPushToOwner("admin", {
-    title: check.anyOverThreshold ? "🔴 Solicitud corregida — precio por encima del historial" : "Solicitud de compra corregida y reenviada",
-    body: `${summary} · $${check.groupTotal.toFixed(2)} · intento ${attemptNumber}`,
+    title: r0.isEmergency
+      ? "🚨 Solicitud de emergencia corregida y reenviada"
+      : check.anyOverThreshold ? "🔴 Solicitud corregida — precio por encima del historial" : "Solicitud de compra corregida y reenviada",
+    body: r0.isEmergency
+      ? `${summary} · $${check.groupTotal.toFixed(2)} · intento ${attemptNumber} — motivo: ${r0.emergencyReason ?? ""}`
+      : `${summary} · $${check.groupTotal.toFixed(2)} · intento ${attemptNumber}`,
     url: "/admin",
   }).catch(() => null);
 

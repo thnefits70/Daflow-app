@@ -101,9 +101,16 @@ function draftHasContent(d: Pick<Draft, "lines" | "supplier" | "quoteImageUrl" |
 // costo, comparada contra SU propio historial), pero comparten un solo
 // proveedor, una sola cotización, y un solo envío/justificación, porque es
 // una sola compra.
-export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdmin: boolean }) {
+// Confirmado 2026-09-03: emergencyOnly (pedido explícito del usuario) — solo
+// true cuando quien entra está bloqueado de solicitar normalmente (hoy
+// Bryan) pero tiene la vía de respaldo para cuando Jariel/Nairoby no están
+// disponibles. Exige motivo obligatorio y lo manda como isEmergency +
+// emergencyReason — el servidor es quien de verdad decide si se respeta
+// (ver POST /api/purchase-requests), esto es solo la UI/UX de esa vía.
+export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: { deptId: string; isAdmin: boolean; emergencyOnly?: boolean }) {
   const router = useRouter();
   const [lines, setLines] = useState<Line[]>([emptyLine()]);
+  const [emergencyReason, setEmergencyReason] = useState("");
   const [supplier, setSupplier] = useState<PurchaseSupplierDTO | null>(null);
   const [bankAccountId, setBankAccountId] = useState<string | null>(null);
 
@@ -601,6 +608,10 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
       setErr("Completa producto, mercadería o insumo, cantidad y costo de cada línea, el proveedor, y la cotización.");
       return;
     }
+    if (emergencyOnly && !editingGroupId && !emergencyReason.trim()) {
+      setErr("Escribe el motivo de la solicitud de emergencia (ej. \"Jariel no disponible\").");
+      return;
+    }
     if (!quoteVerified) {
       setErr("Verifica la cotización antes de enviar.");
       return;
@@ -655,6 +666,8 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
       carrierBankAccountId: shippingIncluded ? null : carrierBankAccountId,
       justification: needsJustification ? justification.trim() : null,
       appliedCreditIds: selectedCreditIds,
+      isEmergency: emergencyOnly,
+      emergencyReason: emergencyOnly ? emergencyReason.trim() : null,
     };
     // Confirmado 2026-08-08: cambio de política — corregir una solicitud
     // rechazada YA NO crea una nueva (eso hacía crecer la lista con
@@ -686,6 +699,30 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
 
   return (
     <div className="bg-surface border border-rule rounded-md p-4.5">
+      {emergencyOnly && (
+        <div className="bg-red/10 border border-red/40 rounded-md px-3.5 py-2.5 mb-4">
+          <div className="flex items-center gap-1.5 text-[12.5px] font-bold text-red mb-1.5">
+            <AlertTriangle size={14} /> Solicitud de emergencia
+          </div>
+          <div className="text-[12px] text-steel mb-2.5">
+            Usa esto SOLO si hoy Jariel y Nairoby no están disponibles para solicitar. Esta solicitud no cae en tu propia bandeja — la aprueba y paga directamente el admin.
+          </div>
+          {editingGroupId ? (
+            <div className="text-[11.5px] text-steel-dim italic">Se corrige y reenvía con el mismo motivo de emergencia original.</div>
+          ) : (
+            <>
+              <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Motivo (obligatorio)</label>
+              <textarea
+                className="w-full rounded border border-red/40 px-2.5 py-2 text-[12.5px]"
+                rows={2}
+                placeholder='Ej. "Jariel no disponible hoy y es urgente"'
+                value={emergencyReason}
+                onChange={(e) => setEmergencyReason(e.target.value)}
+              />
+            </>
+          )}
+        </div>
+      )}
       {editingGroupId && (
         <div className="bg-gold/10 border border-gold/35 rounded-md px-3.5 py-2.5 mb-4 text-[12.5px]" style={{ color: "#D9A441" }}>
           <AlertTriangle size={14} className="inline mr-1.5 -mt-0.5" />

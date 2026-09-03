@@ -625,6 +625,23 @@ export async function canCreateNewPurchaseRequests() {
   return !!user.isLeader && !!user.leadsDept && ["COM", "FIN"].includes(user.leadsDept.code);
 }
 
+// Confirmado 2026-09-03: pedido explícito del usuario — respaldo para
+// cuando Jariel (y Nairoby) no están disponibles para solicitar ese día.
+// Exclusiva de quien esté en la misma transición que Bryan
+// (purchasingNewRequestsBlocked) — siempre visible, no depende de que el
+// admin la habilite a mano. La solicitud que se crea por esta vía queda
+// marcada isEmergency y solo el admin puede aprobarla/pagarla (nunca la
+// misma persona que la subió) — ver review/route.ts y la vista "approval"
+// en GET /api/purchase-requests.
+export async function canSubmitEmergencyPurchaseRequest() {
+  const session = await auth();
+  if (!session) return false;
+  if (session.user.role === "admin") return false;
+  const user = await purchasesUserContext(session.user.id);
+  if (!user) return false;
+  return !!user.canManagePurchases && !!user.purchasingNewRequestsBlocked;
+}
+
 // Confirmado 2026-09-02: pedido explícito del usuario — paso nuevo de
 // aprobación con un clic delegado a alguien que no es admin (hoy Bryan, que
 // deja de solicitar y pasa a aprobar lo que solicite Jariel). Admin sigue

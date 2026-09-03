@@ -1837,6 +1837,18 @@ model PurchaseRequest {
   // últimas 3 compras de este insumo — impuesta en la ruta, no aquí.
   justification String?
 
+  // Confirmado 2026-09-03: pedido explícito del usuario — vía de respaldo
+  // para cuando Jariel (y Nairoby) no están disponibles para solicitar. Solo
+  // quien tenga purchasingNewRequestsBlocked (hoy Bryan) puede usarla (ver
+  // canSubmitEmergencyPurchaseRequest en guards.ts), con motivo obligatorio.
+  // Una solicitud marcada así nunca aparece en la bandeja de aprobación de
+  // quien la subió ni de otros aprobadores con el flag normal — SOLO el
+  // admin puede aprobarla y pagarla, justamente para que no exista forma de
+  // que la misma persona se apruebe a sí misma (ver canActOnPurchaseApproval
+  // y la ruta group/[groupId]/review).
+  isEmergency     Boolean @default(false)
+  emergencyReason String?
+
   status       PurchaseRequestStatus @default(PENDING_APPROVAL)
   rejectReason String?
 

@@ -15,9 +15,14 @@ const schema = z.object({ action: z.enum(["approve", "reject"]), rejectReason: z
 // diseño anterior. Aprobar/rechazar es EXCLUSIVO de quien tenga el permiso
 // (hoy Bryan), ni siquiera admin — su parte activa pasó a ser pagar, no
 // aprobar (ver canActOnPurchaseApproval en guards.ts).
+// Confirmado 2026-09-03: EXCEPCIÓN a lo anterior — un grupo isEmergency
+// (vía de respaldo cuando Jariel/Nairoby no están disponibles, ver
+// canSubmitEmergencyPurchaseRequest) solo lo puede aprobar/rechazar el
+// admin, nunca quien tenga el flag normal (hoy Bryan) — justamente porque
+// Bryan podría ser quien la subió, y no debe poder aprobarse a sí mismo.
 export async function POST(req: NextRequest, { params }: { params: Promise<{ groupId: string }> }) {
   const session = await auth();
-  if (!session || !(await canActOnPurchaseApproval())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+  if (!session) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
   const { groupId } = await params;
   const body = await req.json().catch(() => null);
@@ -27,6 +32,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ gro
   const rows = await prisma.purchaseRequest.findMany({ where: { groupId }, include: { catalogItem: { select: { name: true } } } });
   if (rows.length === 0) return NextResponse.json({ error: "No encontrada." }, { status: 404 });
   if (rows.some((r) => r.status !== "PENDING_APPROVAL")) return NextResponse.json({ error: "Ya fue revisada." }, { status: 409 });
+
+  const isEmergencyGroup = rows.some((r) => r.isEmergency);
+  const authorized = isEmergencyGroup ? session.user.role === "admin" : await canActOnPurchaseApproval();
+  if (!authorized) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
   // Confirmado 2026-09-02: pedido explícito del usuario — antes reviewedById
   // se dejaba siempre en null; ahora sí registra a quien aprobó de verdad

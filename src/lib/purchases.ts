@@ -288,6 +288,12 @@ export const purchaseSubmissionSchema = z.object({
   // reserveCreditsForGroup en supplierCredits.ts), nunca pueden superar el
   // total de la solicitud.
   appliedCreditIds: z.array(z.string()).optional(),
+  // Confirmado 2026-09-03: solo se respeta cuando quien envía tiene el
+  // permiso de emergencia (ver canSubmitEmergencyPurchaseRequest en
+  // guards.ts) — la ruta ignora este campo para cualquier otra persona, así
+  // que no sirve para saltarse la aprobación normal.
+  isEmergency: z.boolean().optional(),
+  emergencyReason: z.string().trim().nullable().optional(),
 });
 
 export type PurchaseSubmissionData = z.infer<typeof purchaseSubmissionSchema>;
