@@ -93,7 +93,7 @@ export type AtomSyncConfirmedRow = { productName: string; confirmedMatchedItemId
 // Guarda la lectura confirmada (una fila nueva por producto, nunca se
 // sobrescribe lo anterior — así se acumula el historial real) y dispara la
 // generación de sugerencias con los datos frescos.
-export async function applyAtomSync(rows: AtomSyncConfirmedRow[], capturedAt: Date, createdById: string | null): Promise<{ savedCount: number; suggestionsCreated: number }> {
+export async function applyAtomSync(rows: AtomSyncConfirmedRow[], capturedAt: Date, createdById: string | null, createdByName: string | null): Promise<{ savedCount: number; suggestionsCreated: number }> {
   await prisma.atomProductStatus.createMany({
     data: rows.map((r) => ({
       productName: r.productName,
@@ -102,6 +102,7 @@ export async function applyAtomSync(rows: AtomSyncConfirmedRow[], capturedAt: Da
       matchedCatalogItemId: r.isCombo ? null : r.confirmedMatchedItemId,
       capturedAt,
       createdById,
+      createdByName,
     })),
   });
   const { created } = await generateComboSuggestions();
