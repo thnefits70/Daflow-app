@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { auth } from "@/auth";
 import { canViewComboSuggestions } from "@/lib/guards";
 import { generateComboSuggestions } from "@/lib/comboSuggestions";
 
@@ -9,7 +10,8 @@ import { generateComboSuggestions } from "@/lib/comboSuggestions";
 // nadie haga ninguna de esas dos acciones — este botón deja recalcular en el
 // momento sin esperar a la próxima.
 export async function POST() {
-  if (!(await canViewComboSuggestions())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
-  const result = await generateComboSuggestions();
+  const session = await auth();
+  if (!session || !(await canViewComboSuggestions())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+  const result = await generateComboSuggestions(session.user.id);
   return NextResponse.json(result);
 }

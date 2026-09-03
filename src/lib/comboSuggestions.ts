@@ -1,4 +1,87 @@
 import { prisma } from "@/lib/prisma";
+import { getAnthropicClient } from "@/lib/nancy";
+import { logAiUsage } from "@/lib/aiUsage";
+
+const COMBO_MATCH_AI_MODEL = "claude-sonnet-5";
+
+const COMBO_MATCH_SYSTEM_PROMPT = `Eres un experto en armar combos de productos para una tienda de dropshipping en Ecuador (Provedix/DAFLOW).
+
+Te doy dos listas de productos de la MISMA categoría amplia: "ganadores" (se están vendiendo bien ahora mismo) y "de baja rotación" (casi no se vendieron esta semana). Compartir categoría NO basta — tu trabajo es elegir SOLO las parejas (un ganador + uno de baja rotación) que de verdad tendrían sentido como combo real para vender juntos, porque se complementan en uso (ej. funda de celular + protector de pantalla, cepillo de dientes eléctrico + repuestos de cabezal) o porque uno resuelve una necesidad relacionada al otro.
+
+Sé exigente: dos productos de electrónica que no tienen relación de uso entre sí (ej. una antena de TV y unos audífonos) NO son un combo lógico solo por compartir categoría. Es mejor devolver pocas parejas muy lógicas, o ninguna, que muchas dudosas.
+
+Responde ÚNICAMENTE con un objeto JSON (sin texto adicional, sin markdown) con esta forma exacta:
+{ "pairs": [{ "winnerIndex": 0, "lowRotationIndex": 2 }] }
+Los índices son la posición (empezando en 0) de cada producto dentro de la lista que te di. Si ninguna pareja tiene sentido real, responde { "pairs": [] }.`;
+
+function parseComboMatchResponse(raw: string): { winnerIndex: number; lowRotationIndex: number }[] {
+  let text = raw.trim();
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fenced) text = fenced[1].trim();
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return [];
+  }
+  const pairs = (parsed as { pairs?: unknown })?.pairs;
+  if (!Array.isArray(pairs)) return [];
+  return pairs.filter(
+    (p): p is { winnerIndex: number; lowRotationIndex: number } =>
+      typeof p === "object" && p !== null && typeof (p as { winnerIndex?: unknown }).winnerIndex === "number" && typeof (p as { lowRotationIndex?: unknown }).lowRotationIndex === "number"
+  );
+}
+
+// Confirmado 2026-09-03 (pedido explícito del usuario): el cruce por nicho
+// solo (sin este filtro) junta CUALQUIER ganador con CUALQUIER producto de
+// baja rotación que comparta la misma categoría amplia — con un nicho
+// grande ("Electrónica y gadgets") eso arma cientos de parejas sin sentido
+// real (ej. "Antena HD TV + Gafas Bluetooth"). Una sola llamada de IA por
+// nicho (no una por pareja, para no disparar el costo) revisa las parejas
+// candidatas de ESE nicho y deja pasar solo las que tienen lógica real de
+// combo. Nunca se re-evalúa una pareja que ya se decidió antes (ver
+// filtrado por `existingKeys` en generateComboSuggestions) — el costo real
+// es solo sobre parejas nuevas.
+async function filterPlausibleComboPairs(
+  nicho: string,
+  winnerNames: string[],
+  lowRotationNames: string[],
+  actorId: string
+): Promise<Set<string>> {
+  try {
+    const client = getAnthropicClient();
+    const promptText = `Categoría: "${nicho}"\n\nGanadores:\n${winnerNames.map((n, i) => `${i}. ${n}`).join("\n")}\n\nDe baja rotación:\n${lowRotationNames.map((n, i) => `${i}. ${n}`).join("\n")}`;
+
+    const response = await client.messages.create({
+      model: COMBO_MATCH_AI_MODEL,
+      max_tokens: 1024,
+      system: COMBO_MATCH_SYSTEM_PROMPT,
+      messages: [{ role: "user", content: promptText }],
+    });
+
+    await logAiUsage({
+      feature: "combo_sugerencias_match",
+      model: COMBO_MATCH_AI_MODEL,
+      actorId,
+      inputTokens: response.usage.input_tokens,
+      outputTokens: response.usage.output_tokens,
+    });
+
+    const textBlock = response.content.find((b) => b.type === "text");
+    if (!textBlock || textBlock.type !== "text") return new Set();
+    const pairs = parseComboMatchResponse(textBlock.text);
+    return new Set(
+      pairs
+        .filter((p) => p.winnerIndex >= 0 && p.winnerIndex < winnerNames.length && p.lowRotationIndex >= 0 && p.lowRotationIndex < lowRotationNames.length)
+        .map((p) => `${p.winnerIndex}::${p.lowRotationIndex}`)
+    );
+  } catch (err) {
+    // Best-effort: si la IA falla por lo que sea, ese nicho simplemente no
+    // suma sugerencias esta corrida en vez de tumbar todo el cruce.
+    console.error(`No se pudo filtrar combos para el nicho "${nicho}":`, err);
+    return new Set();
+  }
+}
 
 // Confirmado 2026-08-31: umbral real que definió el usuario — 8 o más
 // despachos en la semana = "funcionó". Debajo de eso, "todavía no funciona"
@@ -63,12 +146,18 @@ async function getAutoLowRotationFromStockSnapshots(): Promise<{ catalogItemId: 
 // Cruza los productos ganadores más recientes de ATOM (status RENTABLE) con
 // los productos de baja rotación más recientes — de la lista manual de
 // Daniel (unitsDispatched < 8) Y del cruce automático contra el Excel
-// semanal de stock (ver arriba) — agrupados por PurchaseCatalogItem.nicho, y
-// crea una ComboSuggestion (SUGERIDO) por cada pareja nueva. Sin IA — puro
-// cruce de datos ya guardados. Nunca duplica: @@unique([winnerCatalogItemId,
-// lowRotationCatalogItemId]) en el modelo evita crear la misma pareja dos
-// veces aunque el cruce corra varias veces con datos frescos.
-export async function generateComboSuggestions(): Promise<{ created: number }> {
+// semanal de stock (ver arriba) — agrupados por PurchaseCatalogItem.nicho.
+// Confirmado 2026-09-03: el cruce por nicho solo no bastaba (armaba parejas
+// sin sentido real dentro de categorías amplias), así que ahora un filtro de
+// IA (ver filterPlausibleComboPairs) decide, por categoría, cuáles parejas
+// tienen lógica real de combo antes de crear la ComboSuggestion (SUGERIDO).
+// Nunca duplica: @@unique([winnerCatalogItemId, lowRotationCatalogItemId])
+// en el modelo evita crear la misma pareja dos veces aunque el cruce corra
+// varias veces con datos frescos — y una pareja ya evaluada (aprobada o no)
+// nunca se le vuelve a preguntar a la IA en corridas futuras.
+// actorId: quién disparó esta corrida (para el registro de gasto de IA) —
+// "system" cuando corre desde el cron u otro flujo sin usuario real.
+export async function generateComboSuggestions(actorId = "system"): Promise<{ created: number }> {
   const [atomStatuses, lowRotationEntries, catalogItems, autoLowRotation] = await Promise.all([
     prisma.atomProductStatus.findMany({
       where: { status: "RENTABLE", isCombo: false, matchedCatalogItemId: { not: null } },
@@ -149,8 +238,37 @@ export async function generateComboSuggestions(): Promise<{ created: number }> {
   const newPairs = pairs.filter((p) => !existingKeys.has(`${p.winnerCatalogItemId}::${p.lowRotationCatalogItemId}`));
   if (newPairs.length === 0) return { created: 0 };
 
+  // Filtro de IA: por nicho (una sola llamada por categoría, no una por
+  // pareja), y solo sobre parejas NUEVAS — una pareja ya evaluada antes
+  // (aprobada o no) no se vuelve a mandar a la IA en corridas futuras.
+  const newPairsByNicho = new Map<string, typeof newPairs>();
+  for (const p of newPairs) newPairsByNicho.set(p.nicho, [...(newPairsByNicho.get(p.nicho) ?? []), p]);
+
+  const nameById = new Map(
+    (await prisma.purchaseCatalogItem.findMany({ where: { id: { in: [...new Set(newPairs.flatMap((p) => [p.winnerCatalogItemId, p.lowRotationCatalogItemId]))] } }, select: { id: true, name: true } })).map((i) => [i.id, i.name])
+  );
+
+  const approvedPairs = (
+    await Promise.all(
+      [...newPairsByNicho.entries()].map(async ([nicho, nichoPairs]) => {
+        const winnerIds = [...new Set(nichoPairs.map((p) => p.winnerCatalogItemId))];
+        const lowIds = [...new Set(nichoPairs.map((p) => p.lowRotationCatalogItemId))];
+        const winnerIndexById = new Map(winnerIds.map((id, i) => [id, i]));
+        const lowIndexById = new Map(lowIds.map((id, i) => [id, i]));
+        const approvedKeys = await filterPlausibleComboPairs(
+          nicho,
+          winnerIds.map((id) => nameById.get(id) ?? id),
+          lowIds.map((id) => nameById.get(id) ?? id),
+          actorId
+        );
+        return nichoPairs.filter((p) => approvedKeys.has(`${winnerIndexById.get(p.winnerCatalogItemId)}::${lowIndexById.get(p.lowRotationCatalogItemId)}`));
+      })
+    )
+  ).flat();
+  if (approvedPairs.length === 0) return { created: 0 };
+
   const result = await prisma.comboSuggestion.createMany({
-    data: newPairs.map((p) => ({ winnerCatalogItemId: p.winnerCatalogItemId, lowRotationCatalogItemId: p.lowRotationCatalogItemId, nicho: p.nicho })),
+    data: approvedPairs.map((p) => ({ winnerCatalogItemId: p.winnerCatalogItemId, lowRotationCatalogItemId: p.lowRotationCatalogItemId, nicho: p.nicho })),
     skipDuplicates: true,
   });
   return { created: result.count };

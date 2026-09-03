@@ -45,6 +45,6 @@ export async function POST(req: NextRequest) {
     )
   );
 
-  const { created } = await generateComboSuggestions();
+  const { created } = await generateComboSuggestions(session.user.id);
   return NextResponse.json({ ok: true, savedCount: parsed.data.entries.length, suggestionsCreated: created });
 }
