@@ -46,6 +46,7 @@ export function usePasteFile(onFile: (file: File) => void) {
   const armed = useRef(false);
   const [tapHint, setTapHint] = useState<string | null>(null);
   const hintTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [isDragOver, setIsDragOver] = useState(false);
 
   useEffect(() => {
     function handleGlobalPaste(e: ClipboardEvent) {
@@ -110,5 +111,28 @@ export function usePasteFile(onFile: (file: File) => void) {
     [onFile, showHint]
   );
 
-  return { onPaste, onMouseEnter, onMouseLeave, onTapPaste, tapHint };
+  // Jariel (Compras) pidió arrastrar y soltar 2026-09-03 para no depender
+  // solo de Ctrl+V — toma el primer archivo soltado, sin filtrar por tipo,
+  // porque estas mismas cajas ya aceptan imagen o PDF según el caso y el
+  // handler de destino (handleQuoteFile/handlePurchaseOrderFile) valida el
+  // contenido.
+  const onDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(true);
+  }, []);
+  const onDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+  }, []);
+  const onDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      setIsDragOver(false);
+      const file = e.dataTransfer?.files?.[0];
+      if (file) onFile(file);
+    },
+    [onFile]
+  );
+
+  return { onPaste, onMouseEnter, onMouseLeave, onTapPaste, tapHint, onDragOver, onDragLeave, onDrop, isDragOver };
 }

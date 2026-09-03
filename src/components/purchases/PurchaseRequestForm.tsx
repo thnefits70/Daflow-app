@@ -140,7 +140,7 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
   // completo — obliga a subir y verificar de nuevo, nunca a reutilizar el
   // resultado viejo con un archivo distinto.
   const [confirmUnlockQuote, setConfirmUnlockQuote] = useState(false);
-  const { onPaste: onPasteQuote, onMouseEnter: onPasteQuoteHoverIn, onMouseLeave: onPasteQuoteHoverOut } = usePasteFile((file) => handleQuoteFile(file));
+  const { onPaste: onPasteQuote, onMouseEnter: onPasteQuoteHoverIn, onMouseLeave: onPasteQuoteHoverOut, onDragOver: onDragOverQuote, onDragLeave: onDragLeaveQuote, onDrop: onDropQuote, isDragOver: isDragOverQuote } = usePasteFile((file) => handleQuoteFile(file));
   const quoteFileInputRef = useRef<HTMLInputElement>(null);
 
   const [purchaseOrderFile, setPurchaseOrderFile] = useState<File | null>(null);
@@ -149,7 +149,7 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
   const [poVerifying, setPoVerifying] = useState(false);
   const [poVerifyResult, setPoVerifyResult] = useState<{ readTotal: number | null; matches: boolean } | null>(null);
   const [confirmUnlockPO, setConfirmUnlockPO] = useState(false);
-  const { onPaste: onPastePurchaseOrder, onMouseEnter: onPastePOHoverIn, onMouseLeave: onPastePOHoverOut } = usePasteFile((file) => handlePurchaseOrderFile(file));
+  const { onPaste: onPastePurchaseOrder, onMouseEnter: onPastePOHoverIn, onMouseLeave: onPastePOHoverOut, onDragOver: onDragOverPO, onDragLeave: onDragLeavePO, onDrop: onDropPO, isDragOver: isDragOverPO } = usePasteFile((file) => handlePurchaseOrderFile(file));
   const purchaseOrderFileInputRef = useRef<HTMLInputElement>(null);
 
   // Confirmado 2026-08-07: antes venía marcado por default (asumía "envío
@@ -937,11 +937,16 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
             onPaste={onPasteQuote}
             onMouseEnter={onPasteQuoteHoverIn}
             onMouseLeave={onPasteQuoteHoverOut}
-            className="flex flex-col items-center justify-center gap-1 border-[1.5px] border-dashed border-rule rounded-md py-4 cursor-pointer hover:border-teal focus:border-teal focus:outline-none text-steel text-[12.5px]"
+            onDragOver={onDragOverQuote}
+            onDragLeave={onDragLeaveQuote}
+            onDrop={onDropQuote}
+            className={`flex flex-col items-center justify-center gap-1 border-[1.5px] border-dashed rounded-md py-4 cursor-pointer focus:outline-none text-steel text-[12.5px] ${
+              isDragOverQuote ? "border-teal bg-teal/5" : "border-rule hover:border-teal focus:border-teal"
+            }`}
           >
             <span className="flex items-center gap-2">
               {uploadingQuote ? <span className="w-4 h-4 rounded-full border-2 border-rule border-t-teal animate-spin" /> : <Upload size={16} />}
-              Pega la cotización aquí (Ctrl+V)
+              Pega o arrastra la cotización aquí (Ctrl+V)
             </span>
             <button type="button" className="text-[10.5px] underline decoration-dotted opacity-80 hover:opacity-100 cursor-pointer" onClick={() => quoteFileInputRef.current?.click()}>
               o selecciona un archivo
@@ -1065,13 +1070,20 @@ export function PurchaseRequestForm({ deptId, isAdmin }: { deptId: string; isAdm
               onPaste={onPastePurchaseOrder}
               onMouseEnter={onPastePOHoverIn}
               onMouseLeave={onPastePOHoverOut}
+              onDragOver={onDragOverPO}
+              onDragLeave={onDragLeavePO}
+              onDrop={onDropPO}
               className={`flex flex-col items-center justify-center gap-1 border-[1.5px] border-dashed rounded-md py-3.5 cursor-pointer text-[12.5px] focus:outline-none ${
-                needsPurchaseOrder ? "border-red/45 text-red hover:border-red" : "border-rule text-steel hover:border-teal focus:border-teal"
+                isDragOverPO
+                  ? "border-teal bg-teal/5 text-steel"
+                  : needsPurchaseOrder
+                  ? "border-red/45 text-red hover:border-red"
+                  : "border-rule text-steel hover:border-teal focus:border-teal"
               }`}
             >
               <span className="flex items-center gap-2">
                 {uploadingPurchaseOrder ? <span className="w-4 h-4 rounded-full border-2 border-rule border-t-teal animate-spin" /> : <Upload size={15} />}
-                Pega la orden de compra aquí (Ctrl+V)
+                Pega o arrastra la orden de compra aquí (Ctrl+V)
               </span>
               <button type="button" className="text-[10.5px] underline decoration-dotted opacity-80 hover:opacity-100 cursor-pointer" onClick={() => purchaseOrderFileInputRef.current?.click()}>
                 o selecciona una imagen
