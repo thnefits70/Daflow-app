@@ -24,6 +24,8 @@ type Row = {
   invoiceAmount: number | null;
   invoiceDocUrl: string | null;
   invoicedBy: { name: string } | null;
+  invoicedAt: string | null;
+  reviewedAt: string | null;
   paidAt: string | null;
   paidBy: { name: string } | null;
   requestedBy: { name: string } | null;
@@ -105,6 +107,22 @@ const INVOICE_LABELS: Record<InvoiceStatus, string> = {
 
 function money(n: number) {
   return `$${n.toLocaleString("es-MX", { minimumFractionDigits: 2 })}`;
+}
+
+// Confirmado 2026-09-03: pedido explícito del usuario — visibilidad de
+// cuánto tiempo lleva algo sin gestionarse, para que cada quien vea de un
+// vistazo qué tan atrasado está lo que le corresponde.
+function elapsedHours(iso: string): number {
+  return (Date.now() - new Date(iso).getTime()) / 3_600_000;
+}
+function elapsedLabel(iso: string): string {
+  const totalMinutes = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 60_000));
+  const days = Math.floor(totalMinutes / 1440);
+  const hours = Math.floor((totalMinutes % 1440) / 60);
+  const minutes = totalMinutes % 60;
+  if (days > 0) return `${days}d ${hours}h`;
+  if (hours > 0) return `${hours}h ${minutes}min`;
+  return `${minutes}min`;
 }
 
 // Confirmado 2026-08-11: mismo código único (SC-XXX) ya visible en Mis
@@ -237,6 +255,10 @@ export function PurchaseInvoicingPanel({ isAdmin = false, canPayMerchandise }: {
   const [invoiceType, setInvoiceType] = useState<Record<string, "COMPLETE" | "PARTIAL">>({});
   const [invoiceDocUrl, setInvoiceDocUrl] = useState<Record<string, string>>({});
   const [uploadingDoc, setUploadingDoc] = useState<string | null>(null);
+  // Confirmado 2026-09-03: pedido explícito del usuario — saldo de crédito
+  // por proveedor, mostrado de una vez en la tarjeta de "falta pagar" (sin
+  // tener que abrir "Subir comprobante" para enterarse).
+  const [supplierCredits, setSupplierCredits] = useState<Record<string, number>>({});
 
   function load() {
     fetch("/api/purchase-requests?view=invoicing").then((r) => (r.ok ? r.json() : [])).then(setRows).catch(() => setRows([]));
@@ -244,6 +266,20 @@ export function PurchaseInvoicingPanel({ isAdmin = false, canPayMerchandise }: {
     fetch("/api/purchase-requests/urgent-reports").then((r) => (r.ok ? r.json() : [])).then(setUrgentReports).catch(() => setUrgentReports([]));
   }
   useEffect(load, []);
+
+  useEffect(() => {
+    if (!rows) return;
+    const supplierIds = [...new Set(rows.filter((r) => r.status === "APPROVED").map((r) => r.supplier.id))];
+    if (supplierIds.length === 0) return;
+    Promise.all(
+      supplierIds.map((id) =>
+        fetch(`/api/purchase-suppliers/${id}/credit-balance`)
+          .then((r) => (r.ok ? r.json() : null))
+          .then((data) => [id, data?.balance ?? 0] as const)
+          .catch(() => [id, 0] as const)
+      )
+    ).then((entries) => setSupplierCredits(Object.fromEntries(entries)));
+  }, [rows]);
 
   // Confirmado 2026-08-06: mientras la suma de resoluciones COMPLETED no
   // cubra el total reportado, la operación sigue "con algo pendiente con el
@@ -628,10 +664,27 @@ export function PurchaseInvoicingPanel({ isAdmin = false, canPayMerchandise }: {
                     <div className="flex flex-col items-end shrink-0 gap-0.5">
                       <span className="font-display text-[16px] font-bold text-teal leading-tight">{money(total)}</span>
                       <span className="font-mono text-[10.5px] text-steel">{formatPurchaseRequestCode(g[0].requestNumber)}</span>
+                      {supplierCredits[g[0].supplier.id] !== undefined && (
+                        <span className="text-[9.5px] font-semibold text-red text-right leading-tight">
+                          {supplierCredits[g[0].supplier.id] > 0
+                            ? `Crédito con ${g[0].supplier.name}: ${money(supplierCredits[g[0].supplier.id])}`
+                            : "Sin créditos pendientes"}
+                        </span>
+                      )}
                     </div>
                   </div>
                   <div className="text-[11.5px] text-steel">{g[0].supplier.name}</div>
-                  <div className="text-[10px] text-steel-dim mb-2.5">Solicitada por {actorName(g[0].requestedBy?.name)}</div>
+                  <div className="text-[10px] text-steel-dim mb-2.5">
+                    Solicitada por {actorName(g[0].requestedBy?.name)}
+                    {g[0].reviewedAt && (
+                      <>
+                        {" "}· Aprobada {formatDateTime(g[0].reviewedAt)} ·{" "}
+                        <span className={elapsedHours(g[0].reviewedAt) >= 24 ? "font-semibold text-red" : ""}>
+                          lleva {elapsedLabel(g[0].reviewedAt)} sin gestionar
+                        </span>
+                      </>
+                    )}
+                  </div>
                   <div className="bg-cloud border border-rule rounded-md px-3 py-2.5 mb-2.5">
                     <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-steel mb-1.5">
                       <Landmark size={12} /> Transferir a {g[0].supplier.name}
@@ -788,7 +841,17 @@ export function PurchaseInvoicingPanel({ isAdmin = false, canPayMerchandise }: {
                     </div>
                   </div>
                   <div className="text-[11.5px] text-steel">{r0.carrier?.name ?? "Transportista"}</div>
-                  <div className="text-[10px] text-steel-dim mb-2.5">Pedido por {actorName(r0.shippingPaymentRequestedBy?.name)}{r0.shippingPaymentRequestedAt ? ` · ${formatDateTime(r0.shippingPaymentRequestedAt)}` : ""}</div>
+                  <div className="text-[10px] text-steel-dim mb-2.5">
+                    Pedido por {actorName(r0.shippingPaymentRequestedBy?.name)}
+                    {r0.shippingPaymentRequestedAt && (
+                      <>
+                        {" "}· {formatDateTime(r0.shippingPaymentRequestedAt)} ·{" "}
+                        <span className={elapsedHours(r0.shippingPaymentRequestedAt) >= 24 ? "font-semibold text-red" : ""}>
+                          lleva {elapsedLabel(r0.shippingPaymentRequestedAt)} sin gestionar
+                        </span>
+                      </>
+                    )}
+                  </div>
                   <div className="bg-cloud border border-rule rounded-md px-3 py-2.5 mb-2.5">
                     <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-steel mb-1.5">
                       <Landmark size={12} /> Transferir a {r0.carrier?.name ?? "transportista"}
@@ -956,6 +1019,14 @@ export function PurchaseInvoicingPanel({ isAdmin = false, canPayMerchandise }: {
                 <div className="text-[11.5px] text-steel">{r0.supplier.name} — Pagado {money(total)} {r0.paidAt ? `· ${formatDateTime(r0.paidAt)}` : ""}</div>
                 <div className="text-[10px] text-steel-dim">
                   Solicitada por {actorName(r0.requestedBy?.name)} · Pagada por {actorName(r0.paidBy?.name)}
+                  {r0.invoiceStatus === "PENDING" && r0.paidAt && (
+                    <>
+                      {" "}·{" "}
+                      <span className={elapsedHours(r0.paidAt) >= 24 ? "font-semibold text-red" : ""}>
+                        lleva {elapsedLabel(r0.paidAt)} sin factura registrada
+                      </span>
+                    </>
+                  )}
                 </div>
               </div>
 
@@ -1119,7 +1190,7 @@ export function PurchaseInvoicingPanel({ isAdmin = false, canPayMerchandise }: {
                       <a href={r0.invoiceDocUrl} target="_blank" rel="noopener noreferrer" className="text-[11.5px] text-blue font-semibold whitespace-nowrap">Ver documento</a>
                     )}
                   </div>
-                  <div className="text-[10px] text-steel-dim mt-0.5">Registrada por {actorName(r0.invoicedBy?.name)}</div>
+                  <div className="text-[10px] text-steel-dim mt-0.5">Registrada por {actorName(r0.invoicedBy?.name)}{r0.invoicedAt ? ` · ${formatDateTime(r0.invoicedAt)}` : ""}</div>
                   {!g.every((r) => r.status === "RECEIVED") && (
                     <div className="flex items-center gap-1.5 text-[11px] mt-1.5 pt-1.5 border-t border-rule" style={{ color: "#D9A441" }}>
                       <AlertTriangle size={12} className="shrink-0" /> Sigue aquí hasta que Inventario confirme que llegó todo — recién ahí pasa a Auditoría.
