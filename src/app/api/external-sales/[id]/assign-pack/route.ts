@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { canAssignExternalSalePack } from "@/lib/guards";
+import { canAssignExternalSalePack, dbUserId } from "@/lib/guards";
 import { notifyColaboradorPackAssigned, saleItemsSummary } from "@/lib/externalSales";
 
 const schema = z.object({ colaboradorId: z.string().min(1) });
@@ -29,7 +29,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const updated = await prisma.externalSale.update({
     where: { id },
-    data: { packAssignedToId: colaborador.id, packAssignedAt: new Date(), packAssignedById: session.user.id },
+    data: { packAssignedToId: colaborador.id, packAssignedAt: new Date(), packAssignedById: dbUserId(session.user.id) },
   });
 
   await notifyColaboradorPackAssigned(colaborador.id, sale.code, saleItemsSummary(sale.items));

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { canInvoiceExternalSale } from "@/lib/guards";
+import { canInvoiceExternalSale, dbUserId } from "@/lib/guards";
 import { notifyInventoryLeadExternalSaleInvoiced } from "@/lib/externalSales";
 
 const schema = z.object({ invoiceUrl: z.string().url(), invoiceName: z.string().trim().optional() });
@@ -34,7 +34,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       invoiceUrl: parsed.data.invoiceUrl,
       invoiceName: parsed.data.invoiceName || null,
       invoiceUploadedAt: new Date(),
-      invoiceUploadedById: session.user.id,
+      invoiceUploadedById: dbUserId(session.user.id),
     },
   });
 

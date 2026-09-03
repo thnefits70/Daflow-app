@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { canDeclareExternalSales } from "@/lib/guards";
+import { canDeclareExternalSales, dbUserId } from "@/lib/guards";
 import { notifyMarketingLeadNewExternalSale } from "@/lib/externalSales";
 
 const itemSchema = z.object({
@@ -104,6 +104,6 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   if (sale.deletedAt) return NextResponse.json({ error: "Ya fue eliminada." }, { status: 409 });
   if (sale.outflowBatchId) return NextResponse.json({ error: "No se puede eliminar: el stock ya salió de bodega para esta venta." }, { status: 409 });
 
-  await prisma.externalSale.update({ where: { id }, data: { deletedAt: new Date(), deletedById: session.user.id } });
+  await prisma.externalSale.update({ where: { id }, data: { deletedAt: new Date(), deletedById: dbUserId(session.user.id) } });
   return NextResponse.json({ ok: true });
 }

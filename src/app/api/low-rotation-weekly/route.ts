@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { canUploadLowRotationList, canViewComboSuggestions } from "@/lib/guards";
+import { canUploadLowRotationList, canViewComboSuggestions, dbUserId } from "@/lib/guards";
 import { generateComboSuggestions } from "@/lib/comboSuggestions";
 
 // Confirmado 2026-08-31: sábado = Daniel sube/actualiza la lista de
@@ -39,8 +39,8 @@ export async function POST(req: NextRequest) {
     parsed.data.entries.map((e) =>
       prisma.lowRotationWeeklyEntry.upsert({
         where: { weekOf_catalogItemId: { weekOf, catalogItemId: e.catalogItemId } },
-        update: { unitsDispatched: e.unitsDispatched, createdById: session.user.id },
-        create: { weekOf, catalogItemId: e.catalogItemId, unitsDispatched: e.unitsDispatched, createdById: session.user.id },
+        update: { unitsDispatched: e.unitsDispatched, createdById: dbUserId(session.user.id) },
+        create: { weekOf, catalogItemId: e.catalogItemId, unitsDispatched: e.unitsDispatched, createdById: dbUserId(session.user.id) },
       })
     )
   );

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { dbUserId } from "@/lib/guards";
 import { sendPushToOwner } from "@/lib/webPush";
 
 // Solo admin — es quien de verdad revisa su cuenta bancaria. El doble
@@ -22,7 +23,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
 
   const updated = await prisma.purchaseUrgentResolution.update({
     where: { id },
-    data: { status: "COMPLETED", bankConfirmedAt: new Date(), bankConfirmedById: session.user.id },
+    data: { status: "COMPLETED", bankConfirmedAt: new Date(), bankConfirmedById: dbUserId(session.user.id) },
   });
 
   // Confirmado 2026-09-02: pedido explícito de Bryan — quien coordinó el

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { canCloseExternalSale } from "@/lib/guards";
+import { canCloseExternalSale, dbUserId } from "@/lib/guards";
 import { notifyEveryoneExternalSaleClosed } from "@/lib/externalSales";
 
 // Nairoby cierra con el valor completo y toda la trazabilidad — solo
@@ -32,7 +32,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
 
   const updated = await prisma.externalSale.update({
     where: { id },
-    data: { nairobyClosedAt: new Date(), nairobyClosedById: session.user.id },
+    data: { nairobyClosedAt: new Date(), nairobyClosedById: dbUserId(session.user.id) },
   });
 
   await notifyEveryoneExternalSaleClosed(sale);

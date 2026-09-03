@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { canManageJustCatalog } from "@/lib/guards";
+import { canManageJustCatalog, dbUserId } from "@/lib/guards";
 
 const CATALOG_ITEM_SELECT = { id: true, name: true, photos: true, justCode: true } as const;
 
@@ -68,7 +68,7 @@ export async function POST(req: NextRequest) {
         data: {
           code: parsed.data.code,
           label: parsed.data.label || null,
-          createdById: session.user.id,
+          createdById: dbUserId(session.user.id),
           components: { create: parsed.data.components.map((c) => ({ catalogItemId: c.catalogItemId, quantity: c.quantity })) },
         },
         include: { components: { include: { catalogItem: { select: CATALOG_ITEM_SELECT } } } },

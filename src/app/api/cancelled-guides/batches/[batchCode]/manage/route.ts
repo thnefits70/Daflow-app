@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { canManageCancelledGuideBatches } from "@/lib/guards";
+import { canManageCancelledGuideBatches, dbUserId } from "@/lib/guards";
 import { notifyInventoryLeadCancelledGuidesReady } from "@/lib/cancelledGuides";
 
 // Bryan confirma que ya gestionó el lote completo con la
@@ -19,7 +19,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ batchC
 
   await prisma.cancelledGuideReport.updateMany({
     where: { id: { in: pending.map((r) => r.id) } },
-    data: { batchManagedAt: new Date(), batchManagedById: session.user.id },
+    data: { batchManagedAt: new Date(), batchManagedById: dbUserId(session.user.id) },
   });
 
   const readyCodes = pending.filter((r) => r.itemsAssignedAt).map((r) => r.code);
