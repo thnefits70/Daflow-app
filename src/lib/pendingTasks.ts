@@ -314,6 +314,16 @@ function nthDayOfMonthClamped(month: string, day: number): Date {
 // that weekday arrives, stays silent even if the previous week is empty.
 // Defaults to Monday, which is the original, still-correct rule for every
 // weekly item that isn't tied to a specific meeting day.
+//
+// Confirmed 2026-09-03: if the CURRENT week already has something recorded,
+// that counts as caught up and the check stops there — it does not also
+// require the previous week to be filled. Without this, a multi-week gap
+// from before someone got back on track (e.g. 3 skipped weeks) would keep
+// surfacing "atrasado" for the oldest unfilled week forever, even after the
+// person resumed reporting normally, because nothing ever retroactively
+// fills old empty weeks. Old gaps are left alone (no backfill, no separate
+// alert per skipped week) — the reminder only ever looks at "did you do
+// this week's, or failing that, last week's", never further back.
 async function weeklyPendingStatus(
   exists: (week: string) => Promise<boolean>,
   reviewWeekday: number = 1
@@ -321,6 +331,7 @@ async function weeklyPendingStatus(
   const now = nowInEcuador();
   if (isoWeekdayOf(now) < reviewWeekday) return null;
   const today = isoWeekOf(now);
+  if (await exists(today)) return null;
   const prev = prevIsoWeek(today);
   if (!(await exists(prev))) return { week: prev, overdue: true };
   return null;
