@@ -426,6 +426,7 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   compras_orden_compra: "Tus solicitudes de compra — falta subir orden de compra",
   compras_transportista: "Tus solicitudes de compra — falta transportista",
   compras_cuenta_bancaria: "Tus solicitudes de compra — cambiar cuenta bancaria",
+  compras_pago_seguimiento: "Tus solicitudes de compra — seguimiento después del pago (mientras Inventario confirma la recepción)",
   compras_recepcion: "Control de Compras — confirmar mercadería recibida",
   compras_cambios_verificar: "Control de Compras — verificar cambios de mercadería",
   compras_reclamo_posterior_revision: "Reclamos posteriores al cierre por revisar",
@@ -1231,6 +1232,30 @@ async function getPurchaseRequesterPendingItems(userId: string, href: string): P
       label: "Cambia la cuenta bancaria del proveedor — la anterior no sirvió",
       meta: `${bankChange.length} solicitud${bankChange.length === 1 ? "" : "es"} · atrasado`,
       overdue: true,
+      href,
+    });
+  }
+
+  // Confirmado 2026-09-03: pedido de Jariel vía Andrés — ya recibía la
+  // notificación puntual de "Tu solicitud ya fue pagada", pero una vez
+  // pagada la solicitud desaparecía por completo de su Inicio (el siguiente
+  // paso, confirmar la recepción física, es exclusivo de Daniel/Inventario —
+  // ver getPurchaseReceivingPendingItem). Esto es puramente informativo
+  // (nunca "atrasado", mismo criterio que getMyPersonalPurchaseStatusPendingItem
+  // para compras personales) — solo mantiene visible "ya se pagó, sigue en
+  // curso" hasta que Inventario la reciba (status pasa a RECEIVED y deja de
+  // matchear el filtro).
+  const paidTracking = groups.filter((g) => g.status === "PAID" || g.status === "RECEIVED_PENDING_REVIEW");
+  if (paidTracking.length > 0) {
+    const statusLabel = (s: string) =>
+      s === "PAID" ? "Pagada — esperando que Inventario confirme la recepción" : "Inventario ya recibió — falta la aprobación final de Daniel";
+    const meta = paidTracking.length === 1 ? statusLabel(paidTracking[0].status) : `${paidTracking.length} solicitudes en curso`;
+    items.push({
+      type: "compras_pago_seguimiento",
+      icon: "📦",
+      label: "Tu solicitud de compra — seguimiento",
+      meta,
+      overdue: false,
       href,
     });
   }
