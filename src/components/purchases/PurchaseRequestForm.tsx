@@ -122,6 +122,12 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
   const [availableCredits, setAvailableCredits] = useState<SupplierCreditDTO[]>([]);
   const [selectedCreditIds, setSelectedCreditIds] = useState<string[]>([]);
   const [creditExceedsMsg, setCreditExceedsMsg] = useState("");
+  // Confirmado 2026-09-03: pedido explícito del usuario — si hay crédito
+  // disponible con el proveedor y no se marca nada, hace falta explicar por
+  // qué antes de poder enviar (impuesto también en el servidor, ver
+  // checkPurchaseSubmission) — así Finanzas siempre tiene un respaldo de que
+  // el crédito sí se revisó, en vez de enterarse recién al pagar.
+  const [creditSkipJustification, setCreditSkipJustification] = useState("");
   const [manualCreditOpen, setManualCreditOpen] = useState(false);
   const [manualCreditAmount, setManualCreditAmount] = useState("");
   const [manualCreditReason, setManualCreditReason] = useState("");
@@ -238,6 +244,7 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
   useEffect(() => {
     setSelectedCreditIds([]);
     setCreditExceedsMsg("");
+    setCreditSkipJustification("");
     if (!supplier?.id) {
       setAvailableCredits([]);
       return;
@@ -504,6 +511,13 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
   const supplierNotCheapest = supplierNotCheapestLines.length > 0;
   const needsJustification = overThreshold || supplierNotCheapest;
 
+  // Confirmado 2026-09-03: pedido explícito del usuario — si hay crédito
+  // disponible con el proveedor que no se marcó (todo o en parte), hace
+  // falta justificar por qué antes de poder enviar, mismo espíritu que
+  // needsJustification arriba.
+  const skippedCredits = availableCredits.filter((c) => !selectedCreditIds.includes(c.id));
+  const needsCreditJustification = skippedCredits.length > 0;
+
   // Confirmado 2026-08-06: bug real encontrado — si alguien escribía una
   // justificación (porque el precio superaba el historial) y LUEGO quitaba o
   // cambiaba ese producto (catalogItem vuelve a null), la justificación se
@@ -674,6 +688,11 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
       );
       return;
     }
+    if (needsCreditJustification && !creditSkipJustification.trim()) {
+      const skippedTotal = skippedCredits.reduce((s, c) => s + c.amount, 0);
+      setErr(`Hay $${skippedTotal.toFixed(2)} de crédito disponible con este proveedor y no lo estás aplicando — márcalo arriba o explica por qué no.`);
+      return;
+    }
     setBusy(true);
     setErr("");
     const body = {
@@ -693,6 +712,7 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
       carrierBankAccountId: shippingIncluded ? null : carrierBankAccountId,
       justification: needsJustification ? justification.trim() : null,
       appliedCreditIds: selectedCreditIds,
+      creditSkipJustification: needsCreditJustification ? creditSkipJustification.trim() : null,
       isEmergency: emergencyOnly,
       emergencyReason: emergencyOnly ? emergencyReason.trim() : null,
     };
@@ -1339,6 +1359,23 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
             placeholder="Ej. El proveedor más barato ya no tiene stock esta semana…"
             value={justification}
             onChange={(e) => setJustification(e.target.value)}
+          />
+        </div>
+      )}
+
+      {needsCreditJustification && (
+        <div className="bg-red/10 border-[1.5px] border-red/45 rounded-md p-3.5 mb-3.5">
+          <div className="flex items-center gap-1.5 text-[13px] font-bold text-red mb-1">
+            <AlertTriangle size={14} /> No estás aplicando el crédito disponible
+          </div>
+          <div className="text-[12px] text-steel mb-2.5">
+            Hay ${skippedCredits.reduce((s, c) => s + c.amount, 0).toFixed(2)} de crédito disponible con {supplier?.name} y no lo marcaste arriba. No se puede enviar sin explicar por qué (o márcalo en la sección de arriba).
+          </div>
+          <textarea
+            className="w-full rounded border border-red/40 bg-surface2 px-2.5 py-2 text-[12.5px] resize-vertical min-h-[60px]"
+            placeholder="Ej. Ese crédito se está reservando para otra compra pendiente…"
+            value={creditSkipJustification}
+            onChange={(e) => setCreditSkipJustification(e.target.value)}
           />
         </div>
       )}

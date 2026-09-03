@@ -1845,6 +1845,13 @@ model PurchaseRequest {
   // últimas 3 compras de este insumo — impuesta en la ruta, no aquí.
   justification String?
 
+  // Confirmado 2026-09-03: pedido explícito del usuario — cuando el
+  // proveedor elegido tiene crédito disponible y quien pide NO lo aplica a
+  // esta solicitud, tiene que explicar por qué (impuesto en checkPurchaseSubmission,
+  // no aquí). Así Finanzas (quien paga) siempre tiene un respaldo de que el
+  // crédito sí se revisó, en vez de solo un aviso de "se le pudo pasar".
+  creditSkipJustification String?
+
   // Confirmado 2026-09-03: pedido explícito del usuario — vía de respaldo
   // para cuando Jariel (y Nairoby) no están disponibles para solicitar. Solo
   // quien tenga purchasingNewRequestsBlocked (hoy Bryan) puede usarla (ver

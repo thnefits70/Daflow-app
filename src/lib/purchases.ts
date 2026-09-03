@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import type { PurchaseRequestStatus } from "@/generated/prisma/client";
+import { getAvailableCreditsForSupplier } from "@/lib/supplierCredits";
 
 // Estados que cuentan como "compra real" para el historial de precio — no
 // las que todavía están pendientes de aprobar (no son un precio confirmado
@@ -288,6 +289,10 @@ export const purchaseSubmissionSchema = z.object({
   // reserveCreditsForGroup en supplierCredits.ts), nunca pueden superar el
   // total de la solicitud.
   appliedCreditIds: z.array(z.string()).optional(),
+  // Confirmado 2026-09-03: pedido explícito del usuario — obligatoria solo
+  // cuando el proveedor tiene crédito disponible y no se aplicó nada de eso
+  // en appliedCreditIds — impuesta en checkPurchaseSubmission, no aquí.
+  creditSkipJustification: z.string().trim().nullable().optional(),
   // Confirmado 2026-09-03: solo se respeta cuando quien envía tiene el
   // permiso de emergencia (ver canSubmitEmergencyPurchaseRequest en
   // guards.ts) — la ruta ignora este campo para cualquier otra persona, así
@@ -304,6 +309,7 @@ export type PurchaseSubmissionCheck =
       resolvedBankAccountId: string;
       anyOverThreshold: boolean;
       anySupplierNotCheapest: boolean;
+      creditSkipJustification: string | null;
       nameById: Map<string, string>;
       groupTotal: number;
       // Indexado por posición en d.items, NUNCA por catalogItemId — el mismo
@@ -397,6 +403,28 @@ export async function checkPurchaseSubmission(d: PurchaseSubmissionData): Promis
     return { ok: false, status: 400, error: `${parts.join(" · ")} — agrega una justificación.` };
   }
 
+  // Confirmado 2026-09-03: pedido explícito del usuario — si el proveedor
+  // tiene crédito disponible y no se aplicó (todo o en parte) a esta
+  // solicitud, hace falta una breve justificación, mismo patrón que el
+  // umbral de precio arriba. Así Finanzas (quien paga) siempre tiene un
+  // respaldo de que el crédito sí se revisó al pedir, en vez de solo
+  // enterarse después de que ya se le pasó a quien pidió.
+  const availableCredits = await getAvailableCreditsForSupplier(d.supplierId);
+  const appliedIds = new Set(d.appliedCreditIds ?? []);
+  const skippedCredits = availableCredits.filter((c) => !appliedIds.has(c.id));
+  let creditSkipJustification: string | null = null;
+  if (skippedCredits.length > 0) {
+    if (!d.creditSkipJustification?.trim()) {
+      const skippedTotal = skippedCredits.reduce((s, c) => s + c.amount, 0);
+      return {
+        ok: false,
+        status: 400,
+        error: `Hay $${skippedTotal.toFixed(2)} de crédito disponible con este proveedor y no lo estás aplicando — agrega una breve justificación o marca el crédito arriba.`,
+      };
+    }
+    creditSkipJustification = d.creditSkipJustification.trim();
+  }
+
   const catalogItems = await prisma.purchaseCatalogItem.findMany({
     where: { id: { in: d.items.map((it) => it.catalogItemId) } },
     select: { id: true, name: true },
@@ -406,7 +434,7 @@ export async function checkPurchaseSubmission(d: PurchaseSubmissionData): Promis
   }
   const nameById = new Map(catalogItems.map((c) => [c.id, c.name]));
 
-  return { ok: true, resolvedBankAccountId, anyOverThreshold, anySupplierNotCheapest, nameById, groupTotal, lineShippingByIndex };
+  return { ok: true, resolvedBankAccountId, anyOverThreshold, anySupplierNotCheapest, creditSkipJustification, nameById, groupTotal, lineShippingByIndex };
 }
 
 const bankAccountSelect = { id: true, bankName: true, bankAccountType: true, bankAccountNumber: true, bankAccountHolder: true, holderIdType: true, holderIdNumber: true };

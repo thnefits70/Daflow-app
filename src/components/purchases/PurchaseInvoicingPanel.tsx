@@ -33,6 +33,7 @@ type Row = {
   paidAt: string | null;
   paidBy: { name: string } | null;
   requestedBy: { name: string } | null;
+  creditSkipJustification: string | null;
   catalogItem: { name: string; photos: string[]; justCode: string | null };
   supplier: { id: string; name: string };
   bankAccount: {
@@ -724,6 +725,13 @@ export function PurchaseInvoicingPanel({ isAdmin = false, canPayMerchandise }: {
                           return (
                             <span className="text-[9.5px] font-semibold text-teal text-right leading-tight">
                               Ya se restó crédito de {money(linked)}
+                            </span>
+                          );
+                        }
+                        if (available > 0 && g[0].creditSkipJustification) {
+                          return (
+                            <span className="text-[9.5px] font-semibold text-gold text-right leading-tight max-w-[190px]">
+                              💬 {actorName(g[0].requestedBy?.name)} no aplicó {money(available)} de crédito — "{g[0].creditSkipJustification}"
                             </span>
                           );
                         }
