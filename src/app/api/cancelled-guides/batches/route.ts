@@ -3,7 +3,7 @@ import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { canSubmitCancelledGuide, canManageCancelledGuideBatches } from "@/lib/guards";
-import { nextCancelledGuideNumber, formatCancelledGuideCode, nextCancelledGuideBatchNumber, formatCancelledGuideBatchCode, notifyCancelledGuideBatchSubmitted, notifyMarketingLeadBatchReceived, notifyItemAssigneesNewBatch } from "@/lib/cancelledGuides";
+import { nextCancelledGuideNumber, formatCancelledGuideCode, findOrCreateCancelledGuideBatchCode, notifyCancelledGuideBatchSubmitted, notifyMarketingLeadBatchReceived, notifyItemAssigneesNewBatch } from "@/lib/cancelledGuides";
 import { MKT_CANCEL_REASONS, FULFILLMENT_CANCEL_REASONS } from "@/lib/cancelledGuidesLabels";
 
 // Bryan (líder MKT) ve los lotes todavía sin gestionar, agrupados por
@@ -59,8 +59,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: `Ya reportada antes, no se puede repetir: ${[...dupeSet].join(", ")}` }, { status: 400 });
   }
 
-  const batchNumber = await nextCancelledGuideBatchNumber();
-  const batchCode = formatCancelledGuideBatchCode(batchNumber);
+  // Si ya hay un lote abierto (sin gestionar) de esta transportadora hoy,
+  // las guías se suman ahí en vez de abrir uno nuevo (pedido explícito de
+  // Yair 2026-09-03).
+  const batchCode = await findOrCreateCancelledGuideBatchCode(parsed.data.carrier);
 
   // Numeramos cada guía primero (correlativo atómico, uno por uno) para
   // poder crearlas todas juntas con code/reportNumber ya definidos.
