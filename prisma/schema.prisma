@@ -1703,8 +1703,13 @@ model CatalogMissingReport {
   query String
   note  String?
 
-  reportedById String
-  reportedBy   User     @relation("CatalogMissingReportReportedBy", fields: [reportedById], references: [id], onDelete: Cascade)
+  // Confirmado 2026-09-02: se aflojó a opcional — el login de admin (mode:
+  // "admin" en auth.ts) no tiene una fila real en User, así que guardar acá
+  // literalmente "admin" siempre reventaba con foreign key constraint
+  // violation (ver guards.dbUserId). Queda null cuando lo reporta admin,
+  // igual que el resto de campos "quién hizo esto" en el resto del schema.
+  reportedById String?
+  reportedBy   User?    @relation("CatalogMissingReportReportedBy", fields: [reportedById], references: [id], onDelete: SetNull)
   reportedAt   DateTime @default(now())
 
   resolvedAt   DateTime?

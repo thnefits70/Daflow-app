@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
-import { canManageJustCatalog } from "@/lib/guards";
+import { canManageJustCatalog, dbUserId } from "@/lib/guards";
 import { notifyOwner } from "@/lib/notifications";
 import { actorName } from "@/lib/actorName";
 
@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Datos inválidos." }, { status: 400 });
 
   const report = await prisma.catalogMissingReport.create({
-    data: { query: parsed.data.query, note: parsed.data.note || null, reportedById: session.user.id },
+    data: { query: parsed.data.query, note: parsed.data.note || null, reportedById: dbUserId(session.user.id) },
   });
 
   const invLeader = await prisma.user.findFirst({ where: { isLeader: true, leadsDept: { code: "INV" } }, select: { id: true } });
