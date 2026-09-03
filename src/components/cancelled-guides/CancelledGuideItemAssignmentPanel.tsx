@@ -84,6 +84,7 @@ function GuideCard({ report, onSaved }: { report: ReportDTO; onSaved: () => void
             ) : (
               <ProductMatchPicker
                 referencePhotoUrl={null}
+                searchUrl="/api/cancelled-guides/catalog-search"
                 onConfirm={(r: ProductMatchResult) => setRows((rs) => rs.map((row2, j) => (j === i ? { ...row2, selected: r } : row2)))}
               />
             )}
