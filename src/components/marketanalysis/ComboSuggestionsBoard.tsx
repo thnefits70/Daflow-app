@@ -7,6 +7,7 @@ type CatalogRef = { id: string; name: string; photos: string[]; nicho: string | 
 type Suggestion = {
   id: string;
   nicho: string;
+  matchScore: number | null;
   status: "SUGERIDO" | "SELECCIONADO" | "PENDIENTE_APROBACION" | "APROBADO" | "RECHAZADO" | "CREADO_EN_DROPI";
   batchId: string | null;
   rejectReason: string | null;
@@ -16,6 +17,18 @@ type Suggestion = {
   reviewedBy: { name: string } | null;
   createdInDropiBy: { name: string } | null;
 };
+
+// Confirmado 2026-09-03: pedido explícito del usuario — qué tan probable es,
+// según la IA, que esta combinación específica funcione bien como combo.
+function MatchScoreBadge({ score }: { score: number | null }) {
+  if (score === null) return null;
+  const color = score >= 80 ? "#3FB98C" : score >= 60 ? "#D9A441" : "#C4665A";
+  return (
+    <span className="text-[10px] font-bold rounded-full px-1.5 py-0.5" style={{ color, border: `1px solid ${color}` }}>
+      {score}% probable
+    </span>
+  );
+}
 
 // Confirmado 2026-09-03: pedido explícito del usuario — antes solo el color
 // distinguía cuál de los dos productos es el que ya vende bien (ganador) y
@@ -35,6 +48,7 @@ function Pair({ s }: { s: Suggestion }) {
         <span className="text-[10px] font-normal text-steel">(casi no se vende)</span>
       </span>
       <span className="text-steel">· {s.nicho}</span>
+      <MatchScoreBadge score={s.matchScore} />
     </div>
   );
 }
@@ -65,7 +79,9 @@ export function ComboSuggestionsBoard({ canApprove }: { canApprove: boolean }) {
     load();
   }, [load]);
 
-  const suggested = (suggestions ?? []).filter((s) => s.status === "SUGERIDO" || s.status === "SELECCIONADO");
+  const suggested = (suggestions ?? [])
+    .filter((s) => s.status === "SUGERIDO" || s.status === "SELECCIONADO")
+    .sort((a, b) => (b.matchScore ?? 0) - (a.matchScore ?? 0));
   const pendingApproval = (suggestions ?? []).filter((s) => s.status === "PENDIENTE_APROBACION");
   const approved = (suggestions ?? []).filter((s) => s.status === "APROBADO");
   const created = (suggestions ?? []).filter((s) => s.status === "CREADO_EN_DROPI");

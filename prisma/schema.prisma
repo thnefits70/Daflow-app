@@ -1560,6 +1560,12 @@ model ComboSuggestion {
   lowRotationCatalogItemId String
   lowRotationCatalogItem   PurchaseCatalogItem @relation("ComboSuggestionLowRotation", fields: [lowRotationCatalogItemId], references: [id], onDelete: Cascade)
 
+  // Confirmado 2026-09-03: pedido explícito del usuario — qué tan segura
+  // está la IA (0-100) de que esta pareja específica funcionaría bien como
+  // combo real, además del sí/no de si pasó el filtro. Null en sugerencias
+  // creadas antes de este campo.
+  matchScore Int?
+
   generatedAt DateTime @default(now())
 
   // Se llena al enviar a aprobación — mismo rol que PurchaseRequest.groupId,
