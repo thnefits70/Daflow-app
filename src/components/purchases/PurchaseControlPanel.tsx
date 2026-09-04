@@ -89,7 +89,7 @@ export function PurchaseControlPanel({
     // de todo lo confirmado recibido, para auditar sin poder editar nada —
     // ya no exclusivo del admin, cualquiera con acceso a este módulo
     // (Bryan/Daniel/Nairoby) también la ve, siempre en modo solo lectura.
-    ...(isAdmin || canSubmit || canReceive || canInvoice ? [{ key: "auditoria" as Tab, label: "Auditoría" }] : []),
+    ...(isAdmin || canSubmit || canReview || canReceive || canInvoice ? [{ key: "auditoria" as Tab, label: "Auditoría" }] : []),
   ];
   const preferredDefault: Tab[] = ["solicitar", "aprobacion", "inventario", "finanzas", "mias", "comparar", "urgentes", "auditoria"];
   const [tab, setTab] = useState<Tab>(preferredDefault.find((k) => tabs.some((t) => t.key === k)) ?? tabs[0]?.key ?? "solicitar");
