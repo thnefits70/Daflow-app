@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { dbUserId } from "@/lib/guards";
 
 const schema = z.object({ reason: z.string().trim().min(1, "Explica por qué se cancela.") });
 
@@ -52,7 +53,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     }
     return tx.purchaseUrgentResolution.update({
       where: { id },
-      data: { status: "CANCELLED", cancelledAt: new Date(), cancelledById: session.user.id, cancelReason: parsed.data.reason.trim() },
+      data: { status: "CANCELLED", cancelledAt: new Date(), cancelledById: dbUserId(session.user.id), cancelReason: parsed.data.reason.trim() },
     });
   });
 

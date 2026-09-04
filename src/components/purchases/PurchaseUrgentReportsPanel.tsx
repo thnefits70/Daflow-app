@@ -385,6 +385,7 @@ export function PurchaseUrgentReportsPanel({ isAdmin, canAct }: { isAdmin: boole
                           cancelReason={cancelReason}
                           setCancelReason={setCancelReason}
                           onCancel={() => cancelResolution(res.id)}
+                          cancelErr={cancelId === res.id ? err : ""}
                         />
                       ))}
                     </div>
@@ -488,7 +489,7 @@ export function PurchaseUrgentReportsPanel({ isAdmin, canAct }: { isAdmin: boole
 
 function ResolutionRow({
   res, isAdmin, canAct, refundUploadingFor, confirmBankId, setConfirmBankId, onFileRefund, onConfirmBank, busy,
-  cancelId, setCancelId, cancelReason, setCancelReason, onCancel,
+  cancelId, setCancelId, cancelReason, setCancelReason, onCancel, cancelErr,
 }: {
   res: Resolution;
   isAdmin: boolean;
@@ -504,6 +505,7 @@ function ResolutionRow({
   cancelReason: string;
   setCancelReason: (v: string) => void;
   onCancel: () => void;
+  cancelErr: string;
 }) {
   const statusLabel = res.status === "COMPLETED" ? "Listo" : res.status === "CANCELLED" ? "Anulado" : "En curso";
   const statusColor = res.status === "COMPLETED" ? "text-green" : res.status === "CANCELLED" ? "text-red" : "text-steel";
@@ -598,6 +600,7 @@ function ResolutionRow({
               placeholder="Motivo de la anulación"
               className="w-full border border-rule rounded px-2 py-1.5 text-[11.5px] mb-2"
             />
+            {cancelErr && <div className="text-red text-[11px] mb-2">{cancelErr}</div>}
             <div className="flex items-center gap-2">
               <button type="button" disabled={busy} className="rounded border border-red bg-red px-3 py-1.5 text-[11.5px] font-semibold text-white cursor-pointer disabled:opacity-60" onClick={onCancel}>Sí, anular</button>
               <button type="button" className="text-steel text-[11.5px] cursor-pointer" onClick={() => setCancelId(null)}>Cerrar</button>
