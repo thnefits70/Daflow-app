@@ -639,9 +639,18 @@ export function PurchaseInvoicingPanel({ isAdmin = false, canPayMerchandise }: {
   // operación mientras la mercadería todavía no llegó de verdad y se pueda
   // perder ese dinero. Mientras falte cualquiera de las dos, sigue aquí;
   // una vez cierran ambas, solo queda visible en Auditoría.
-  const restGroupsAll = groupRows(rows.filter((r) => r.status !== "APPROVED")).filter(
-    (g) => !(g[0].invoiceStatus !== "PENDING" && g.every((r) => r.status === "RECEIVED"))
-  );
+  // Corregido 2026-09-04: pedido explícito del usuario — el servidor ordena
+  // estas filas por status (alfabético) antes que por fecha, así que una
+  // operación recién pagada podía quedar enterrada al fondo de la lista si
+  // su status ("RECEIVED_PENDING_REVIEW") ordena alfabéticamente después de
+  // "RECEIVED" (ya cerradas), aunque en la práctica sea la más reciente y
+  // activa de todas — el admin reportó no encontrarla siendo la operación
+  // #32 de 32. Se reordena acá por paidAt descendente (lo más reciente
+  // primero), que es la misma fecha que ya se imprime en cada tarjeta y la
+  // que ya usa el filtro de fechas de abajo.
+  const restGroupsAll = groupRows(rows.filter((r) => r.status !== "APPROVED"))
+    .filter((g) => !(g[0].invoiceStatus !== "PENDING" && g.every((r) => r.status === "RECEIVED")))
+    .sort((a, b) => new Date(b[0].paidAt ?? 0).getTime() - new Date(a[0].paidAt ?? 0).getTime());
   // Confirmado 2026-08-06: por fecha de pago (paidAt) — es lo que ya se ve
   // impreso en cada tarjeta ("Pagado ... · fecha"), así el filtro coincide
   // con lo que la persona está mirando.
