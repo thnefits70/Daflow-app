@@ -92,6 +92,20 @@ export function ComboSuggestionsBoard({ canApprove }: { canApprove: boolean }) {
     pendingByBatch.set(key, [...(pendingByBatch.get(key) ?? []), s]);
   }
 
+  // Pedido del usuario (2026-09-04): marcar de un click todas las de un
+  // mismo color de probabilidad (verde ≥80%, naranja 60-79%), en vez de
+  // clickear casilla por casilla cuando hay decenas de sugerencias.
+  function selectByTier(min: number, max: number) {
+    setChecked((prev) => {
+      const next = new Set(prev);
+      for (const s of suggested) {
+        const score = s.matchScore ?? 0;
+        if (score >= min && score <= max) next.add(s.id);
+      }
+      return next;
+    });
+  }
+
   function toggle(id: string) {
     setChecked((prev) => {
       const next = new Set(prev);
@@ -290,6 +304,30 @@ export function ComboSuggestionsBoard({ canApprove }: { canApprove: boolean }) {
           </div>
         ) : (
           <>
+            <div className="flex items-center gap-2 mb-2 text-[11px]">
+              <span className="text-steel">Marcar de una:</span>
+              <button
+                type="button"
+                className="rounded-full px-2 py-0.5 font-semibold cursor-pointer"
+                style={{ color: "#3FB98C", border: "1px solid #3FB98C" }}
+                onClick={() => selectByTier(80, 100)}
+              >
+                Verdes (≥80%)
+              </button>
+              <button
+                type="button"
+                className="rounded-full px-2 py-0.5 font-semibold cursor-pointer"
+                style={{ color: "#D9A441", border: "1px solid #D9A441" }}
+                onClick={() => selectByTier(60, 79)}
+              >
+                Naranjas (60-79%)
+              </button>
+              {checked.size > 0 && (
+                <button type="button" className="text-steel underline cursor-pointer" onClick={() => setChecked(new Set())}>
+                  Limpiar selección
+                </button>
+              )}
+            </div>
             <div className="flex flex-col gap-1.5 mb-2.5">
               {suggested.map((s) => (
                 <div key={s.id} className="flex items-center gap-2.5 border border-rule rounded p-2.5">
