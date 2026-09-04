@@ -532,8 +532,14 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
   // un criterio aparte). Lo pagado/confirmado queda oculto por defecto y
   // se despliega con un clic.
   const byOldestFirst = (a: RequestDTO, b: RequestDTO) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+  // Confirmado 2026-09-04: pedido explícito del usuario — a diferencia de
+  // lo pendiente (donde lo atrasado debe quedar arriba), el historial de
+  // pagados/confirmados debe mostrar primero lo más reciente, si no los
+  // últimos pagos quedan enterrados al fondo de la lista.
+  const byMostRecentPaidFirst = (a: RequestDTO, b: RequestDTO) =>
+    new Date(b.paidAt ?? b.createdAt).getTime() - new Date(a.paidAt ?? a.createdAt).getTime();
   const pending = filtered.filter((r) => r.status === "PENDING_PAYMENT").sort(byOldestFirst);
-  const settled = filtered.filter((r) => r.status !== "PENDING_PAYMENT").sort(byOldestFirst);
+  const settled = filtered.filter((r) => r.status !== "PENDING_PAYMENT").sort(byMostRecentPaidFirst);
   const visibleList = showPaid ? [...pending, ...settled] : pending;
 
   return (
