@@ -144,10 +144,21 @@ export default async function AreaLayout({ children }: { children: React.ReactNo
   const unseenConfidentialCount = await prisma.confidentialDocumentAccess.count({
     where: { userId: session.user.id, seenAt: null },
   });
-  // Always true now — confirmed 2026-07-22: Servicio Postventa's company-wide
-  // average is public to every employee, even those with no other KPI edit
-  // rights. The page itself still gates each individual section's edit UI.
-  const showKpis = true;
+  // Confirmado 2026-07-22: Servicio Postventa's company-wide average is
+  // public to every employee, even those with no other KPI edit rights (the
+  // page itself still gates each individual section's edit UI) — EXCEPT
+  // confirmado 2026-09-04: pedido explícito del usuario, estas personas no
+  // deben ver el botón "KPIs Generales" en absoluto.
+  const KPIS_HIDDEN_USERNAMES = new Set([
+    "jarielmurillo2026", // Jariel Murillo
+    "robert2026", // Robert Salinas
+    "heidy2026", // Heidy Morales
+    "joelguale2026", // Joel Guale
+    "scott2026", // Bryan Franco (usuario "scott2026")
+    "luis2026", // Luis Castillo
+    "allan2026", // Allan Anastacio
+  ]);
+  const showKpis = !KPIS_HIDDEN_USERNAMES.has(currentUser.username);
   // Confirmado 2026-08-13: pedido explícito del usuario — el líder de un
   // área habilitada para horas extra (hoy Inventario y Fulfillment)
   // necesita entrar acá para registrar, aunque no gestione Nómina en
