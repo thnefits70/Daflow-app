@@ -5,6 +5,7 @@ import { AlertTriangle } from "lucide-react";
 import { AtomSyncPanel } from "@/components/marketanalysis/AtomSyncPanel";
 import { LowRotationWeeklyPanel } from "@/components/marketanalysis/LowRotationWeeklyPanel";
 import { ComboSuggestionsBoard } from "@/components/marketanalysis/ComboSuggestionsBoard";
+import { TabGuide } from "@/components/shared/TabGuide";
 
 function todayIsoDate() {
   const d = new Date();
@@ -65,9 +66,34 @@ export function ComboSuggestionsPanel({
         </div>
       )}
 
-      {sub === "atom" && canSyncAtom && <AtomSyncPanel />}
-      {sub === "rotacion" && canUploadLowRotation && <LowRotationWeeklyPanel defaultWeekOf={todayIsoDate()} />}
-      {sub === "sugerencias" && (canSyncAtom || canApprove) && <ComboSuggestionsBoard canApprove={canApprove} />}
+      {sub === "atom" && canSyncAtom && (
+        <>
+          <TabGuide storageKey="combos-atom">
+            Pega acá la tabla completa que copiaste de atomapp.com.co/productos (Ctrl+A). El sistema separa los productos marcados &quot;Rentable&quot; y los compara contra el catálogo — confirma o corrige cada uno y guarda. Esto alimenta las sugerencias de combos: entre más seguido lo actualices (lunes/miércoles/viernes), mejores sugerencias salen.
+          </TabGuide>
+          <AtomSyncPanel />
+        </>
+      )}
+      {sub === "rotacion" && canUploadLowRotation && (
+        <>
+          <TabGuide storageKey="combos-rotacion">
+            Cada semana, anota acá los productos que despacharon menos de 8 unidades — eso es lo que el sistema junta con los productos que sí se venden bien (de ATOM) para sugerir combos. El Excel de &quot;Productos sin movimiento&quot; que ya subes en KPIs de Inventario también suma solo, automáticamente — esto es para lo que quieras anotar a mano además de eso.
+          </TabGuide>
+          <LowRotationWeeklyPanel defaultWeekOf={todayIsoDate()} />
+        </>
+      )}
+      {sub === "sugerencias" && (canSyncAtom || canApprove) && (
+        <>
+          <TabGuide storageKey="combos-sugerencias">
+            {canApprove ? (
+              <>Acá salen las combinaciones que la IA arma sola, cruzando productos que venden bien con productos de baja rotación — cada una trae un % de qué tan segura es. Marca las que quieras armar, mándalas a aprobación, y cuando las apruebes quedan listas para que alguien del equipo las cree en Dropi y marque &quot;Creado en Dropi&quot;. &quot;Descartar sin revisar&quot; borra las sugerencias viejas sin decisión tomada, y &quot;Recalcular sugerencias&quot; vuelve a correr el cruce con los datos más frescos (puede tardar hasta 1 minuto).</>
+            ) : (
+              <>Acá ves las combinaciones que la IA sugiere, cruzando productos que venden bien con productos de baja rotación — cada una trae un % de qué tan segura es. Seleccionar y mandar a aprobación es de cualquiera del equipo de Análisis de Mercado; aprobar o rechazar el lote es exclusivo del líder.</>
+            )}
+          </TabGuide>
+          <ComboSuggestionsBoard canApprove={canApprove} />
+        </>
+      )}
     </div>
   );
 }
