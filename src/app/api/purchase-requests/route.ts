@@ -284,7 +284,7 @@ export async function POST(req: NextRequest) {
           bankAccountId: check.resolvedBankAccountId,
           quantity: it.quantity,
           unitCost: it.unitCost,
-          totalCost: it.quantity * it.unitCost,
+          totalCost: Math.round(it.quantity * it.unitCost * 100) / 100,
           quoteImageUrl: d.quoteImageUrl,
           quoteReadTotal: d.quoteReadTotal,
           quoteReferenceCode: d.quoteReferenceCode || null,

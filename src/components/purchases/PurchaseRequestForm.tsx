@@ -29,9 +29,17 @@ const emptyLine = (): Line => ({ catalogItem: null, productQuery: "", createDraf
 // el que de verdad se paga, así que es ese el que se guarda y compara contra
 // el historial de precios — nunca el "antes de IVA".
 const IVA_RATE = 0.15;
+// Confirmado 2026-09-04: no redondear a centavos aquí — este valor se
+// multiplica por la cantidad (a veces miles de unidades) para armar el
+// subtotal y el totalCost que se guarda. Redondear el costo unitario ANTES
+// de multiplicar amplifica el error x cantidad (ej. 0.09*1.15=0.1035 → sin
+// redondear, 5000 unidades dan $517.50; redondeado a $0.10 antes de
+// multiplicar daban $500.00, $17.50 de menos). El redondeo a centavos debe
+// pasar solo donde se muestra o guarda el monto final (.toFixed(2), o el
+// total ya sumado), nunca en el costo por unidad intermedio.
 function effectiveLineUnitCost(l: { unitCost: string; ivaIncluded: boolean }) {
   const raw = Number(l.unitCost) || 0;
-  return l.ivaIncluded ? Math.round(raw * (1 + IVA_RATE) * 100) / 100 : raw;
+  return l.ivaIncluded ? raw * (1 + IVA_RATE) : raw;
 }
 
 type Draft = {
