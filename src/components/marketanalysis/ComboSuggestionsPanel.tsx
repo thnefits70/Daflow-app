@@ -24,10 +24,13 @@ export function ComboSuggestionsPanel({
   canUploadLowRotation: boolean;
   canApprove: boolean;
 }) {
+  // Pedido del usuario (2026-09-04): "Sugerencias" primero — es la pantalla
+  // que se usa primero al entrar (revisar/enviar combos), no la de subir
+  // datos — así también queda como pestaña por defecto.
   const subTabs = [
+    ...(canSyncAtom || canApprove ? [{ key: "sugerencias" as const, label: "Sugerencias" }] : []),
     ...(canSyncAtom ? [{ key: "atom" as const, label: "Actualizar ATOM" }] : []),
     ...(canUploadLowRotation ? [{ key: "rotacion" as const, label: "Baja rotación semanal" }] : []),
-    ...(canSyncAtom || canApprove ? [{ key: "sugerencias" as const, label: "Sugerencias" }] : []),
   ];
   const [sub, setSub] = useState(subTabs[0]?.key ?? "sugerencias");
   const [stale, setStale] = useState<{ dueToday: boolean; lastSyncAt: string | null } | null>(null);
