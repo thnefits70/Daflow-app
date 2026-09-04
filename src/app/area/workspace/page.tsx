@@ -3,7 +3,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { TopLine } from "@/components/ui/TopLine";
 import { DeptWorkspaceTabs } from "@/components/dept/DeptWorkspaceTabs";
-import { getUnseenFeedbackCount, canManageStoreFeedback as checkCanManageStoreFeedback, canViewStoreFeedback as checkCanViewStoreFeedback, canSubmitPurchaseRequests, canCreateNewPurchaseRequests, canSubmitEmergencyPurchaseRequest, canApprovePurchaseRequests as checkCanApprovePurchaseRequests, canActOnPurchaseApproval as checkCanActOnPurchaseApproval, canConfirmPurchaseReceiving, canReceivePurchasesTeam, canActOnPurchaseReceiving, canRegisterPurchaseInvoices, canPayMerchandisePurchases, canManageInventoryControl as checkCanManageInventoryControl, canViewInventoryKpisPanel as checkCanViewInventoryKpisPanel, canManageAdminPayments as checkCanManageAdminPayments, canViewMarketingArrivals as checkCanViewMarketingArrivals, canConfirmMarketingDesign as checkCanConfirmMarketingDesign, canConfirmMarketingAdvisor as checkCanConfirmMarketingAdvisor, canSyncAtomData as checkCanSyncAtomData, canUploadLowRotationList as checkCanUploadLowRotationList, canApproveComboSuggestions as checkCanApproveComboSuggestions, canCaptureMerchandiseReentry, canApproveMerchandiseReentry, canActOnMerchandiseReentry, canCloseMerchandiseReentry, canVerifyDamageDisposal, canManageJustUpload, canManageJustCatalog, canCaptureMerchandiseOutflow, canActOnMerchandiseOutflow, canViewMerchandiseOutflow, canConfirmSupplierExchangeFinanceWriteOff, canSubmitCancelledGuide, canManageCancelledGuideBatches, canConfirmCancelledGuideFulfillmentRemoval, canAssignCancelledGuideItems, canDeclareExternalSales, canReviewExternalSales, canConfirmExternalSalePayment, canInvoiceExternalSale, canAssignExternalSalePack, canPackExternalSale, canCloseExternalSale, canViewExternalSales, getSupplierAccess, canAddSupplierBankAccounts } from "@/lib/guards";
+import { getUnseenFeedbackCount, canManageStoreFeedback as checkCanManageStoreFeedback, canViewStoreFeedback as checkCanViewStoreFeedback, canSubmitPurchaseRequests, canCreateNewPurchaseRequests, canSubmitEmergencyPurchaseRequest, canApprovePurchaseRequests as checkCanApprovePurchaseRequests, canActOnPurchaseApproval as checkCanActOnPurchaseApproval, canConfirmPurchaseReceiving, canReceivePurchasesTeam, canActOnPurchaseReceiving, canRegisterPurchaseInvoices, canPayMerchandisePurchases, canManageInventoryControl as checkCanManageInventoryControl, canViewInventoryKpisPanel as checkCanViewInventoryKpisPanel, canManageAdminPayments as checkCanManageAdminPayments, canViewMarketingArrivals as checkCanViewMarketingArrivals, canConfirmMarketingDesign as checkCanConfirmMarketingDesign, canConfirmMarketingAdvisor as checkCanConfirmMarketingAdvisor, canSyncAtomData as checkCanSyncAtomData, canUploadLowRotationList as checkCanUploadLowRotationList, canApproveComboSuggestions as checkCanApproveComboSuggestions, canActOnComboSuggestions as checkCanActOnComboSuggestions, canCaptureMerchandiseReentry, canApproveMerchandiseReentry, canActOnMerchandiseReentry, canCloseMerchandiseReentry, canVerifyDamageDisposal, canManageJustUpload, canManageJustCatalog, canCaptureMerchandiseOutflow, canActOnMerchandiseOutflow, canViewMerchandiseOutflow, canConfirmSupplierExchangeFinanceWriteOff, canSubmitCancelledGuide, canManageCancelledGuideBatches, canConfirmCancelledGuideFulfillmentRemoval, canAssignCancelledGuideItems, canDeclareExternalSales, canReviewExternalSales, canConfirmExternalSalePayment, canInvoiceExternalSale, canAssignExternalSalePack, canPackExternalSale, canCloseExternalSale, canViewExternalSales, getSupplierAccess, canAddSupplierBankAccounts } from "@/lib/guards";
 import { getFinanceKpiData } from "@/lib/financeKpis";
 import { getDeptProcessDetail } from "@/lib/processDetail";
 import { getPaymentRemindersData } from "@/lib/paymentReminders";
@@ -42,10 +42,11 @@ export default async function WorkspacePage() {
   // Sugerencias de Combos (ATOM + baja rotación) — confirmado 2026-08-31,
   // mismo patrón sin dept.code que Servicio Postventa/Control de Compras:
   // se ve en la propia "Mi área de trabajo" de quien tenga cada rol.
-  const [canSyncAtomData, canUploadLowRotationList, canApproveComboSuggestions] = await Promise.all([
+  const [canSyncAtomData, canUploadLowRotationList, canApproveComboSuggestions, canActOnComboSuggestions] = await Promise.all([
     checkCanSyncAtomData(),
     checkCanUploadLowRotationList(),
     checkCanApproveComboSuggestions(),
+    checkCanActOnComboSuggestions(),
   ]);
 
   // Mismo patrón sin dept.code — Control de Compras (confirmado 2026-07-30:
@@ -335,6 +336,7 @@ export default async function WorkspacePage() {
         canSyncAtomData={canSyncAtomData}
         canUploadLowRotationList={canUploadLowRotationList}
         canApproveComboSuggestions={canApproveComboSuggestions}
+        canActOnComboSuggestions={canActOnComboSuggestions}
         preferredTab={currentUser?.defaultWorkspaceTab ?? null}
         isAdmin={false}
         editable={false}

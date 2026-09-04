@@ -140,6 +140,7 @@ export function DeptWorkspaceTabs({
   canSyncAtomData = false,
   canUploadLowRotationList = false,
   canApproveComboSuggestions = false,
+  canActOnComboSuggestions = false,
   preferredTab = null,
   isAdmin = false,
   editable,
@@ -322,6 +323,7 @@ export function DeptWorkspaceTabs({
   canSyncAtomData?: boolean;
   canUploadLowRotationList?: boolean;
   canApproveComboSuggestions?: boolean;
+  canActOnComboSuggestions?: boolean;
   isAdmin?: boolean;
   editable: boolean;
   kpisEditable?: boolean;
@@ -582,6 +584,7 @@ export function DeptWorkspaceTabs({
           canSyncAtom={canSyncAtomData}
           canUploadLowRotation={canUploadLowRotationList}
           canApprove={canApproveComboSuggestions}
+          canAct={canActOnComboSuggestions}
         />
       )}
       {tab === "documentos" && <DocumentsPanel deptId={deptId} documents={documents} editable={editable} />}

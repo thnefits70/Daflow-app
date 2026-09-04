@@ -1298,6 +1298,21 @@ export async function canApproveComboSuggestions() {
   return !!user?.isLeader && user.leadsDept?.code === "MKT";
 }
 
+// Confirmado 2026-09-04: pedido explícito del usuario (Andrés, admin) —
+// aprobar/rechazar un lote de combos queda EXCLUSIVO de Bryan (líder de
+// Análisis de Mercado), ni siquiera admin. canApproveComboSuggestions sigue
+// siendo el gate de "ver la cola de aprobación" (admin la sigue viendo, en
+// modo lectura); este guard nuevo es el único que autoriza la acción real.
+export async function canActOnComboSuggestions() {
+  const session = await auth();
+  if (!session) return false;
+  const user = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { isLeader: true, leadsDept: { select: { code: true } } },
+  });
+  return !!user?.isLeader && user.leadsDept?.code === "MKT";
+}
+
 // Sube/actualiza la lista semanal de productos con menos de 8 despachos —
 // mismo criterio que canManageJustCatalog (líder de Inventario, hoy Daniel).
 export async function canUploadLowRotationList() {

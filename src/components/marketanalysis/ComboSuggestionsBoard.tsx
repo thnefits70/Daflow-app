@@ -57,7 +57,7 @@ function Pair({ s }: { s: Suggestion }) {
 // por lote; el líder de MKT (hoy Bryan) aprueba/rechaza TODO el lote junto;
 // una vez aprobado, cualquiera del equipo marca "creado en Dropi" cuando ya
 // lo armó allá manualmente (sin precio, eso queda fuera de esto).
-export function ComboSuggestionsBoard({ canApprove }: { canApprove: boolean }) {
+export function ComboSuggestionsBoard({ canApprove, canAct }: { canApprove: boolean; canAct: boolean }) {
   const [suggestions, setSuggestions] = useState<Suggestion[] | null>(null);
   const [checked, setChecked] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
@@ -213,7 +213,9 @@ export function ComboSuggestionsBoard({ canApprove }: { canApprove: boolean }) {
 
       {canApprove && pendingByBatch.size > 0 && (
         <div>
-          <div className="text-[11px] font-semibold uppercase tracking-wide text-steel mb-2">Pendientes de tu aprobación</div>
+          <div className="text-[11px] font-semibold uppercase tracking-wide text-steel mb-2">
+            {canAct ? "Pendientes de tu aprobación" : "Pendientes de aprobación"}
+          </div>
           <div className="flex flex-col gap-2.5">
             {[...pendingByBatch.entries()].map(([batchId, rows]) => (
               <div key={batchId} className="bg-surface border border-gold/40 rounded-md p-3.5">
@@ -222,7 +224,9 @@ export function ComboSuggestionsBoard({ canApprove }: { canApprove: boolean }) {
                     <Pair key={s.id} s={s} />
                   ))}
                 </div>
-                {rejectingBatch === batchId ? (
+                {!canAct ? (
+                  <div className="text-[11.5px] text-steel">Solo el líder de Análisis de Mercado puede aprobar o rechazar este lote.</div>
+                ) : rejectingBatch === batchId ? (
                   <div className="flex items-center gap-2 flex-wrap">
                     <input
                       type="text"
