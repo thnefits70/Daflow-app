@@ -195,6 +195,7 @@ export function PurchaseInvoicingPanel({ isAdmin = false, canPayMerchandise }: {
   const payLocked = !canPay;
   const router = useRouter();
   const [rows, setRows] = useState<Row[] | null>(null);
+  const [zoomedPhoto, setZoomedPhoto] = useState<string | null>(null);
   const [pettyCash, setPettyCash] = useState<{ count: number; total: number } | null>(null);
   const [payingGroup, setPayingGroup] = useState<string | null>(null);
   const [proofUrl, setProofUrl] = useState<string | null>(null);
@@ -699,6 +700,15 @@ export function PurchaseInvoicingPanel({ isAdmin = false, canPayMerchandise }: {
                     <div>
                       {g.map((r) => (
                         <div key={r.id} className="text-[13.5px] font-bold flex items-center gap-1.5 flex-wrap">
+                          {r.catalogItem.photos[0] && (
+                            <img
+                              src={r.catalogItem.photos[0]}
+                              alt=""
+                              title="Doble clic para ampliar"
+                              onDoubleClick={() => setZoomedPhoto(r.catalogItem.photos[0])}
+                              className="w-6 h-6 rounded object-cover border border-rule cursor-zoom-in shrink-0"
+                            />
+                          )}
                           <CatalogCode code={r.catalogItem.justCode} />
                           <span>{r.catalogItem.name} · {r.quantity} un. — ${r.unitCost.toFixed(2)}/un.</span>
                           <button
@@ -903,6 +913,15 @@ export function PurchaseInvoicingPanel({ isAdmin = false, canPayMerchandise }: {
                       {g.map((r, i) => (
                         <span key={r.id} className="flex items-center gap-1.5">
                           {i > 0 && <span className="text-steel font-normal">,</span>}
+                          {r.catalogItem.photos[0] && (
+                            <img
+                              src={r.catalogItem.photos[0]}
+                              alt=""
+                              title="Doble clic para ampliar"
+                              onDoubleClick={() => setZoomedPhoto(r.catalogItem.photos[0])}
+                              className="w-6 h-6 rounded object-cover border border-rule cursor-zoom-in shrink-0"
+                            />
+                          )}
                           <CatalogCode code={r.catalogItem.justCode} />
                           <span>{r.catalogItem.name}</span>
                         </span>
@@ -1082,6 +1101,15 @@ export function PurchaseInvoicingPanel({ isAdmin = false, canPayMerchandise }: {
                   <div>
                     {g.map((r) => (
                       <div key={r.id} className="text-[13.5px] font-bold flex items-center gap-1.5 flex-wrap">
+                        {r.catalogItem.photos[0] && (
+                          <img
+                            src={r.catalogItem.photos[0]}
+                            alt=""
+                            title="Doble clic para ampliar"
+                            onDoubleClick={() => setZoomedPhoto(r.catalogItem.photos[0])}
+                            className="w-6 h-6 rounded object-cover border border-rule cursor-zoom-in shrink-0"
+                          />
+                        )}
                         <CatalogCode code={r.catalogItem.justCode} />
                         <span>{r.catalogItem.name} · {r.quantity} un.</span>
                       </div>
@@ -1356,6 +1384,15 @@ export function PurchaseInvoicingPanel({ isAdmin = false, canPayMerchandise }: {
           );
         })}
       </div>
+
+      {zoomedPhoto && (
+        <div
+          className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-6 cursor-zoom-out"
+          onClick={() => setZoomedPhoto(null)}
+        >
+          <img src={zoomedPhoto} alt="" className="max-w-full max-h-full rounded-md object-contain" />
+        </div>
+      )}
 
       {priceHistoryFor && (
         <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-6" onClick={() => setPriceHistoryFor(null)}>
