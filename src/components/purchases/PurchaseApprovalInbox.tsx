@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { FileText, Upload, CheckCircle2, AlertTriangle, Lock, Landmark, LineChart, ChevronDown, Award } from "lucide-react";
+import { FileText, Upload, CheckCircle2, AlertTriangle, Lock, Landmark, LineChart, ChevronDown, Award, CreditCard, PackageSearch, PackageCheck } from "lucide-react";
 import { actorName } from "@/lib/actorName";
 import { uploadFile } from "@/lib/uploadFile";
 import { compressImage } from "@/lib/compressImage";
@@ -66,7 +66,43 @@ type HistoryRow = Row & {
   reviewedBy: { name: string } | null;
   reviewedAt: string | null;
   rejectReason: string | null;
+  paidBy: { name: string } | null;
+  paidAt: string | null;
+  receipt: {
+    confirmedBy: { name: string } | null;
+    confirmedAt: string | null;
+    approvedBy: { name: string } | null;
+    approvedAt: string | null;
+  } | null;
 };
+
+// Confirmado 2026-09-04: pedido explícito del usuario (Bryan) — "Historial"
+// solo mostraba su propia acción (Aprobada/Rechazada) y no lo que pasó
+// después con la compra. Los mismos datos (paidAt/paidBy, receipt.*) ya
+// venían del servidor vía purchaseRequestInclude — esto solo arma la línea
+// de tiempo completa a partir de lo que ya está en la fila.
+const STATUS_META: Record<HistoryRow["status"], { text: string; cls: string; style?: React.CSSProperties; Icon: typeof CheckCircle2 }> = {
+  REJECTED: { text: "Rechazada", cls: "bg-red/15 text-red border-red/40", Icon: AlertTriangle },
+  APPROVED: { text: "Aprobada", cls: "bg-teal/15 text-teal border-teal/40", Icon: CheckCircle2 },
+  PAID: { text: "Pagada", cls: "bg-blue/15 text-blue border-blue/40", Icon: CreditCard },
+  RECEIVED_PENDING_REVIEW: { text: "Recibida — pendiente revisión", cls: "bg-gold/15 border-gold/40", style: { color: "#D9A441" }, Icon: PackageSearch },
+  RECEIVED: { text: "Recibida y cerrada", cls: "bg-green/15 text-green border-green/40", Icon: PackageCheck },
+};
+
+function buildTimeline(g0: HistoryRow) {
+  const steps: { label: string; who: string; when: string }[] = [
+    { label: "Solicitada", who: actorName(g0.requestedBy?.name), when: g0.requestedAt },
+  ];
+  if (g0.status === "REJECTED") {
+    if (g0.reviewedAt) steps.push({ label: "Rechazada", who: actorName(g0.reviewedBy?.name ?? "Admin"), when: g0.reviewedAt });
+    return steps;
+  }
+  if (g0.reviewedAt) steps.push({ label: "Aprobada", who: actorName(g0.reviewedBy?.name ?? "Admin"), when: g0.reviewedAt });
+  if (g0.paidAt) steps.push({ label: "Pagada", who: actorName(g0.paidBy?.name), when: g0.paidAt });
+  if (g0.receipt?.confirmedAt) steps.push({ label: "Recibida", who: actorName(g0.receipt.confirmedBy?.name), when: g0.receipt.confirmedAt });
+  if (g0.receipt?.approvedAt) steps.push({ label: "Revisión final OK", who: actorName(g0.receipt.approvedBy?.name), when: g0.receipt.approvedAt });
+  return steps;
+}
 
 function attemptLabel(n: number) {
   if (n === 2) return "2do intento";
@@ -572,7 +608,8 @@ export function PurchaseApprovalInbox({ canAct = true, canPayHere = true, canPay
               const groupId = g[0].groupId;
               const total = g.reduce((s, r) => s + r.totalCost, 0);
               const isRejected = g[0].status === "REJECTED";
-              const when = g[0].reviewedAt ? pendingInfo(g[0].reviewedAt).dateStr : null;
+              const meta = STATUS_META[g[0].status];
+              const timeline = buildTimeline(g[0]);
               return (
                 <div key={groupId} className="bg-surface border border-rule rounded-md p-3.5">
                   <div className="flex items-start justify-between gap-3 flex-wrap">
@@ -583,21 +620,20 @@ export function PurchaseApprovalInbox({ canAct = true, canPayHere = true, canPay
                         </div>
                       ))}
                       <div className="text-[11.5px] text-steel mt-0.5">{g[0].supplier.name}</div>
-                      <div className="text-[10px] text-steel-dim mt-0.5">
-                        Solicitada por {actorName(g[0].requestedBy?.name)}
-                        {g[0].attemptNumber > 1 && <span className="text-gold"> — {attemptLabel(g[0].attemptNumber)}</span>}
+                      {g[0].attemptNumber > 1 && <div className="text-[10px] text-gold mt-0.5">{attemptLabel(g[0].attemptNumber)}</div>}
+                      <div className="flex flex-col gap-0.5 mt-1.5">
+                        {timeline.map((step, i) => (
+                          <div key={i} className="text-[10px] text-steel-dim">
+                            <span className="font-semibold text-steel">{step.label}</span> por {step.who} · {pendingInfo(step.when).dateStr}
+                          </div>
+                        ))}
                       </div>
-                      {when && (
-                        <div className="text-[10px] text-steel-dim mt-0.5">
-                          {isRejected ? "Rechazada" : "Aprobada"} por {actorName(g[0].reviewedBy?.name ?? "Admin")} · {when}
-                        </div>
-                      )}
                       {isRejected && g[0].rejectReason && <div className="text-[11px] text-steel mt-1">Motivo: &quot;{g[0].rejectReason}&quot;</div>}
                     </div>
                     <div className="flex flex-col items-end gap-1.5">
-                      <span className={`flex items-center gap-1 text-[9.5px] font-bold uppercase tracking-wide rounded-full px-2.5 py-1 border ${isRejected ? "bg-red/15 text-red border-red/40" : "bg-teal/15 text-teal border-teal/40"}`}>
-                        {isRejected ? <AlertTriangle size={11} /> : <CheckCircle2 size={11} />}
-                        {isRejected ? "Rechazada" : "Aprobada"}
+                      <span className={`flex items-center gap-1 text-[9.5px] font-bold uppercase tracking-wide rounded-full px-2.5 py-1 border ${meta.cls}`} style={meta.style}>
+                        <meta.Icon size={11} />
+                        {meta.text}
                       </span>
                       <div className="text-right">
                         <div className="text-[9px] font-semibold uppercase tracking-wide text-steel">Total</div>
