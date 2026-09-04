@@ -1150,7 +1150,7 @@ export function PurchaseInvoicingPanel({ isAdmin = false, canPayMerchandise }: {
                   </div>
                   <span className="font-mono text-[10.5px] text-steel shrink-0">{formatPurchaseRequestCode(r0.requestNumber)}</span>
                 </div>
-                <div className="text-[11.5px] text-steel">{r0.supplier.name} — Pagado {money(total)} {r0.paidAt ? `· ${formatDateTime(r0.paidAt)}` : ""}</div>
+                <div className="text-[11.5px] text-steel">{r0.supplier.name} — <span className="text-green font-semibold">Pagado {money(total)}</span> {r0.paidAt ? `· ${formatDateTime(r0.paidAt)}` : ""}</div>
                 <div className="text-[10px] text-steel-dim">
                   Solicitada por {actorName(r0.requestedBy?.name)} · Pagada por {actorName(r0.paidBy?.name)}
                   {r0.invoiceStatus === "PENDING" && r0.paidAt && (
