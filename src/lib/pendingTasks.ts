@@ -422,6 +422,7 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   reingreso_mercaderia_baja_just: "Reingreso de mercadería — semana de dañados por dar de baja en Just",
   reingreso_mercaderia_verificacion_semanal: "Reingreso de mercadería — lote semanal de dañados por verificar",
   cumpleanos: "Cumpleaños de tu equipo (aviso 1 día antes)",
+  compras_pendientes_aprobacion: "Solicitudes de compra por aprobar",
   compras_rechazadas: "Tus solicitudes de compra rechazadas — corregir y reenviar",
   compras_orden_compra: "Tus solicitudes de compra — falta subir orden de compra",
   compras_transportista: "Tus solicitudes de compra — falta transportista",
@@ -1047,16 +1048,14 @@ async function getAdminPaymentsPendingItem(href: string): Promise<PendingItem | 
   };
 }
 
-// Cálculo compartido. Confirmado 2026-08-17 (corregido tras feedback del
-// usuario): para quien paga, una solicitud esperando en Bandeja de
-// aprobación YA es "un pago de mercadería pendiente" — aprobar y pagar casi
-// siempre quedan en el mismo paso (ver PurchaseApprovalInbox.tsx), así que
-// mostrar solo lo APPROVED-sin-pagar se quedaba corto y decía "no hay" con
-// solicitudes reales esperando. Suma ambos estados: PENDING_APPROVAL (sin
-// revisar todavía) y APPROVED (revisado, falta subir comprobante). El link
-// va a Bandeja de aprobación si algo sigue sin revisar (ahí se decide y,
-// casi siempre, se paga); si ya no queda nada por revisar y solo falta
-// comprobante de algo ya aprobado, va directo a Finanzas.
+// Cálculo compartido. Confirmado 2026-08-17: originalmente sumaba también
+// PENDING_APPROVAL porque quien pagaba (admin) también aprobaba, así que
+// aprobar y pagar quedaban en el mismo paso. Corregido 2026-09-04 tras
+// feedback del usuario: desde la transición Bryan→Jariel, aprobar (Bryan) y
+// pagar (admin) son pasos de personas distintas — admin veía "pendiente de
+// pagar" mercadería que Bryan todavía ni había revisado. Ahora solo cuenta
+// APPROVED (lo que de verdad ya se puede pagar); lo PENDING_APPROVAL le
+// aparece a quien aprueba, ver getPurchaseApprovalPendingItem más abajo.
 async function getPurchaseMerchandisePaymentsSummary(comDeptId: string | null): Promise<{
   count: number;
   total: number;
@@ -1076,26 +1075,50 @@ async function getPurchaseMerchandisePaymentsSummary(comDeptId: string | null): 
     return [...byGroup.values()];
   };
 
-  const [pendingApprovalRows, approvedRows] = await Promise.all([
-    prisma.purchaseRequest.findMany({
-      where: { status: "PENDING_APPROVAL" },
-      select: { groupId: true, totalCost: true, requestedAt: true },
-    }),
-    prisma.purchaseRequest.findMany({
-      where: { status: "APPROVED" },
-      select: { groupId: true, totalCost: true, reviewedAt: true },
-    }),
-  ]);
+  const approvedRows = await prisma.purchaseRequest.findMany({
+    where: { status: "APPROVED" },
+    select: { groupId: true, totalCost: true, reviewedAt: true },
+  });
 
-  const pendingGroups = groupRows(pendingApprovalRows.map((r) => ({ groupId: r.groupId, totalCost: r.totalCost, at: r.requestedAt })));
   const approvedGroups = groupRows(approvedRows.map((r) => ({ groupId: r.groupId, totalCost: r.totalCost, at: r.reviewedAt })));
-  const allGroups = [...pendingGroups, ...approvedGroups];
 
-  const overdue = allGroups.some((g) => g.at && g.at < cutoff);
-  const total = allGroups.reduce((s, g) => s + g.total, 0);
-  const ptab = pendingGroups.length > 0 ? "aprobacion" : "finanzas";
+  const overdue = approvedGroups.some((g) => g.at && g.at < cutoff);
+  const total = approvedGroups.reduce((s, g) => s + g.total, 0);
 
-  return { count: allGroups.length, total, overdue, href: `${base}?tab=compras&ptab=${ptab}` };
+  return { count: approvedGroups.length, total, overdue, href: `${base}?tab=compras&ptab=finanzas` };
+}
+
+// Confirmado 2026-09-04: pedido explícito del usuario — contraparte de
+// getPurchaseMerchandisePaymentsSummary, para quien APRUEBA (hoy Bryan, ver
+// canApprovePurchaseRequests en guards.ts) en vez de quien paga. Cuenta
+// PENDING_APPROVAL, company-wide igual que getPurchaseCreditsPendingItem
+// (no hay un "approverId" — cualquiera con el flag ve la misma bandeja).
+async function getPurchaseApprovalPendingItem(href: string): Promise<PendingItem | null> {
+  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const rows = await prisma.purchaseRequest.findMany({
+    where: { status: "PENDING_APPROVAL" },
+    select: { groupId: true, totalCost: true, requestedAt: true },
+  });
+  if (rows.length === 0) return null;
+
+  const byGroup = new Map<string, { total: number; at: Date }>();
+  for (const r of rows) {
+    const cur = byGroup.get(r.groupId) ?? { total: 0, at: r.requestedAt };
+    cur.total += r.totalCost;
+    byGroup.set(r.groupId, cur);
+  }
+  const groups = [...byGroup.values()];
+  const overdue = groups.some((g) => g.at < cutoff);
+  const total = groups.reduce((s, g) => s + g.total, 0);
+
+  return {
+    type: "compras_pendientes_aprobacion",
+    icon: "✅",
+    label: "Solicitudes de compra por aprobar",
+    meta: `${groups.length} solicitud${groups.length === 1 ? "" : "es"} · $${total.toFixed(2)}${overdue ? " · atrasado" : ""}`,
+    overdue,
+    href,
+  };
 }
 
 // Confirmado 2026-08-13: pedido explícito del usuario — un solo enlace en
@@ -2251,6 +2274,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       isLeader: true,
       leadsDeptId: true,
       canManagePurchases: true,
+      canApprovePurchaseRequests: true,
       leadsDept: { select: { code: true, name: true, trackWeeklyMetric: true } },
       department: { select: { code: true } },
     },
@@ -2300,6 +2324,13 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       teamItems.push(...purchaseRequesterItems);
       const purchaseCreditsItem = await getPurchaseCreditsPendingItem("/area/workspace?tab=compras&ptab=urgentes");
       if (purchaseCreditsItem) teamItems.push(purchaseCreditsItem);
+    }
+    // Confirmado 2026-09-04: quien aprueba compras (hoy Bryan) puede no
+    // liderar ningún departamento — mismo patrón que canManagePurchases
+    // arriba, para que le aparezca igual sin depender de ser líder.
+    if (me.canApprovePurchaseRequests) {
+      const purchaseApprovalItem = await getPurchaseApprovalPendingItem("/area/workspace?tab=compras&ptab=aprobacion");
+      if (purchaseApprovalItem) teamItems.push(purchaseApprovalItem);
     }
     if (teamItems.length === 0) return null;
     return { title: "Pendientes de esta semana", sub: me.department?.code === "INV" ? "En Inventario" : "Para ti", items: teamItems };
@@ -2416,6 +2447,16 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     if (purchaseCreditsItem) items.push(purchaseCreditsItem);
   }
 
+  // Confirmado 2026-09-04: pedido explícito del usuario — quien aprueba
+  // compras (hoy Bryan) debe ver en su propio Inicio lo que tiene pendiente
+  // de aprobar, separado de lo que el admin ve como "pendiente de pagar"
+  // (ver getPurchaseMerchandisePaymentsSummary, que ahora solo cuenta
+  // APPROVED).
+  if (me.canApprovePurchaseRequests) {
+    const purchaseApprovalItem = await getPurchaseApprovalPendingItem("/area/workspace?tab=compras&ptab=aprobacion");
+    if (purchaseApprovalItem) items.push(purchaseApprovalItem);
+  }
+
   if (items.length === 0) return null;
   return {
     title: monthly ? "Pendientes de este mes" : "Pendientes de esta semana",
@@ -2446,7 +2487,13 @@ export async function getPossiblePendingTypesForActor(
   } else {
     const me = await prisma.user.findUnique({
       where: { id: actor.userId },
-      select: { isLeader: true, leadsDeptId: true, canManagePurchases: true, leadsDept: { select: { code: true, trackWeeklyMetric: true } } },
+      select: {
+        isLeader: true,
+        leadsDeptId: true,
+        canManagePurchases: true,
+        canApprovePurchaseRequests: true,
+        leadsDept: { select: { code: true, trackWeeklyMetric: true } },
+      },
     });
     if (!me) return [];
     if (!me.isLeader || !me.leadsDeptId || !me.leadsDept) {
@@ -2457,6 +2504,7 @@ export async function getPossiblePendingTypesForActor(
       if (me.canManagePurchases) {
         types.push("compras_rechazadas", "compras_orden_compra", "compras_transportista", "compras_cuenta_bancaria", "compras_creditos_pendientes");
       }
+      if (me.canApprovePurchaseRequests) types.push("compras_pendientes_aprobacion");
       return types.map((type) => ({ type, label: PENDING_TYPE_CATALOG[type] }));
     }
 
@@ -2475,6 +2523,7 @@ export async function getPossiblePendingTypesForActor(
     if (me.canManagePurchases || ["COM", "FIN"].includes(me.leadsDept.code)) {
       types.push("compras_rechazadas", "compras_orden_compra", "compras_transportista", "compras_cuenta_bancaria", "compras_creditos_pendientes");
     }
+    if (me.canApprovePurchaseRequests) types.push("compras_pendientes_aprobacion");
   }
 
   return types.map((type) => ({ type, label: PENDING_TYPE_CATALOG[type] }));
