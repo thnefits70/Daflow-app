@@ -135,7 +135,7 @@ export async function GET(req: NextRequest) {
     // que marcaban como problema un crédito aplicado en 0 aunque nunca hubo
     // ninguno que aplicar (reportado por el usuario). Cualquier resumen
     // generado antes de este momento se vuelve a calcular una vez más.
-    const AI_REVIEW_FIX_CUTOFF = new Date("2026-09-04T19:30:00Z");
+    const AI_REVIEW_FIX_CUTOFF = new Date("2026-09-04T20:20:00Z");
     const pendingReviewGroupIds = [
       ...new Set(
         rows
