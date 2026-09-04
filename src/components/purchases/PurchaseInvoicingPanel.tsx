@@ -30,6 +30,7 @@ type Row = {
   invoicedBy: { name: string } | null;
   invoicedAt: string | null;
   reviewedAt: string | null;
+  reviewedBy: { name: string } | null;
   paidAt: string | null;
   paidBy: { name: string } | null;
   requestedBy: { name: string } | null;
@@ -800,7 +801,7 @@ export function PurchaseInvoicingPanel({ isAdmin = false, canPayMerchandise }: {
                     Solicitada por {actorName(g[0].requestedBy?.name)}
                     {g[0].reviewedAt && (
                       <>
-                        {" "}· Aprobada {formatDateTime(g[0].reviewedAt)} ·{" "}
+                        {" "}· Aprobada por {actorName(g[0].reviewedBy?.name)} {formatDateTime(g[0].reviewedAt)} ·{" "}
                         <span className={elapsedHours(g[0].reviewedAt) >= 24 ? "font-semibold text-red" : ""}>
                           lleva {elapsedLabel(g[0].reviewedAt)} sin gestionar
                         </span>
