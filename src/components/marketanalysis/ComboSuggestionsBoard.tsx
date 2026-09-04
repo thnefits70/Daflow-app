@@ -322,6 +322,14 @@ export function ComboSuggestionsBoard({ canApprove }: { canApprove: boolean }) {
               >
                 Naranjas (60-79%)
               </button>
+              <button
+                type="button"
+                className="rounded-full px-2 py-0.5 font-semibold cursor-pointer"
+                style={{ color: "#C4665A", border: "1px solid #C4665A" }}
+                onClick={() => selectByTier(0, 59)}
+              >
+                Rojas (&lt;60%)
+              </button>
               {checked.size > 0 && (
                 <button type="button" className="text-steel underline cursor-pointer" onClick={() => setChecked(new Set())}>
                   Limpiar selección
