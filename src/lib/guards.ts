@@ -1127,6 +1127,11 @@ export async function canCloseExternalSale() {
  * hoy Heidy, carga los productos de cada guía). Reingresar a Just sigue
  * siendo de Daniel (reusa canActOnMerchandiseOutflow, mismo Daniel
  * exclusivo).
+ *
+ * Agregado 2026-09-03, pedido explícito del usuario: entre Bryan y Daniel
+ * se sumó canConfirmCancelledGuideFulfillmentRemoval (Yair, líder FUL,
+ * confirma que sacó las guías gestionadas del área de Fulfillment antes de
+ * que se despachen) — mismo criterio de liderazgo que Bryan/Daniel.
  */
 async function cancelledGuideUserContext(userId: string) {
   return prisma.user.findUnique({
@@ -1151,6 +1156,18 @@ export async function canManageCancelledGuideBatches() {
   if (session.user.role === "admin") return true;
   const user = await cancelledGuideUserContext(session.user.id);
   return !!user?.isLeader && user.leadsDept?.code === "MKT";
+}
+
+// Agregado 2026-09-03, pedido explícito del usuario: Yair (líder FUL)
+// confirma, después de que Bryan gestionó el lote, que ya sacó esas guías
+// del área de Fulfillment para que no se despachen. Mismo criterio que
+// canManageCancelledGuideBatches (admin también puede).
+export async function canConfirmCancelledGuideFulfillmentRemoval() {
+  const session = await auth();
+  if (!session) return false;
+  if (session.user.role === "admin") return true;
+  const user = await cancelledGuideUserContext(session.user.id);
+  return !!user?.isLeader && user.leadsDept?.code === "FUL";
 }
 
 // Delegado puntual (hoy Heidy) que carga productos/cantidades guía por
@@ -1181,6 +1198,7 @@ export async function canViewCancelledGuides() {
     (await canSubmitCancelledGuide()) ||
     (await canViewAllCancelledGuides()) ||
     (await canManageCancelledGuideBatches()) ||
+    (await canConfirmCancelledGuideFulfillmentRemoval()) ||
     (await canAssignCancelledGuideItems()) ||
     (await canCaptureMerchandiseOutflow())
   );

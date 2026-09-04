@@ -7,6 +7,7 @@ const REPORT_INCLUDE = {
   submittedBy: { select: { name: true } },
   items: { include: { catalogItem: { select: { name: true, photos: true, justCode: true } } } },
   batchManagedBy: { select: { name: true } },
+  fulfillmentRemovedBy: { select: { name: true } },
   itemsAssignedBy: { select: { name: true } },
   reingresadoBy: { select: { name: true } },
 } as const;

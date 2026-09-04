@@ -3,8 +3,18 @@
 import { useEffect, useState } from "react";
 import { PackagePlus } from "lucide-react";
 import { CatalogCode } from "@/components/shared/CatalogCode";
+import { formatDateTime } from "@/lib/formatDateTime";
 
-type ReportDTO = { id: string; code: string; guideNumber: string; items: { id: string; declaredName: string; quantity: number; catalogItem: { name: string; justCode: string | null } | null }[] };
+type ReportDTO = {
+  id: string;
+  code: string;
+  guideNumber: string;
+  batchManagedAt: string;
+  batchManagedBy: { name: string } | null;
+  fulfillmentRemovedAt: string;
+  fulfillmentRemovedBy: { name: string } | null;
+  items: { id: string; declaredName: string; quantity: number; catalogItem: { name: string; justCode: string | null } | null }[];
+};
 
 async function postJson(url: string) {
   const res = await fetch(url, { method: "POST" });
@@ -49,6 +59,9 @@ export function CancelledGuideReingresoQueue() {
             <span className="font-mono text-[11px] font-bold text-teal">{r.code}</span>
             <span className="text-[11px] text-steel">Guía {r.guideNumber}</span>
           </div>
+          <div className="text-[10.5px] text-steel mb-1">Aprobó {r.batchManagedBy?.name ?? "—"} · {formatDateTime(r.batchManagedAt)}</div>
+          <div className="text-[10.5px] text-steel mb-2">Sacó de Fulfillment {r.fulfillmentRemovedBy?.name ?? "—"} · {formatDateTime(r.fulfillmentRemovedAt)}</div>
+          <div className="text-[10.5px] font-semibold text-ink mb-1">No despachar:</div>
           <div className="flex flex-col gap-0.5 mb-2.5">
             {r.items.map((it) => (
               <div key={it.id} className="text-[12px] flex items-center gap-1.5">

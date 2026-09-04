@@ -15,6 +15,9 @@ type ReportDTO = {
   reason: string;
   reallyCancelled: boolean | null;
   batchManagedAt: string | null;
+  batchManagedBy: { name: string } | null;
+  fulfillmentRemovedAt: string | null;
+  fulfillmentRemovedBy: { name: string } | null;
   itemsAssignedAt: string | null;
   reingresadoAt: string | null;
   createdAt: string;
@@ -22,14 +25,19 @@ type ReportDTO = {
   items: { id: string; declaredName: string; quantity: number; catalogItem: { name: string; justCode: string | null } | null }[];
 };
 
-// Bryan (batchManagedAt) y Heidy (itemsAssignedAt) trabajan en paralelo,
-// cualquiera de los dos puede terminar primero — solo cuando los DOS están
-// listos entra a la cola de Daniel.
+// Bryan (batchManagedAt), Yair (fulfillmentRemovedAt, solo después de
+// Bryan) y Heidy (itemsAssignedAt) — los últimos dos corren en paralelo —
+// solo cuando los TRES están listos entra a la cola de Daniel.
 function statusChip(r: ReportDTO): { text: string; color: string } {
   if (r.reingresadoAt) return { text: `Reingresada a Just · ${formatDateTime(r.reingresadoAt)}`, color: "text-green" };
-  if (r.itemsAssignedAt && r.batchManagedAt) return { text: "Lista — falta reingresar", color: "text-blue" };
-  if (r.itemsAssignedAt) return { text: "Con productos — falta que Bryan gestione con la transportadora", color: "text-gold" };
-  if (r.batchManagedAt) return { text: "Gestionada con la transportadora — falta cargar productos", color: "text-gold" };
+  if (r.itemsAssignedAt && r.batchManagedAt && r.fulfillmentRemovedAt) return { text: "Lista — falta reingresar", color: "text-blue" };
+  const missing: string[] = [];
+  if (!r.batchManagedAt) missing.push("que Bryan gestione con la transportadora");
+  if (!r.fulfillmentRemovedAt) missing.push("que Yair confirme la salida de Fulfillment");
+  if (!r.itemsAssignedAt) missing.push("cargar productos");
+  if (missing.length > 0 && (r.batchManagedAt || r.fulfillmentRemovedAt || r.itemsAssignedAt)) {
+    return { text: `Falta ${missing.join(" y ")}`, color: "text-gold" };
+  }
   // Reportes de antes del rediseño 2026-09-02 nunca tuvieron lote.
   if (!r.batchCode) {
     if (r.reallyCancelled === false) return { text: "Se despachó igual", color: "text-steel" };
@@ -103,6 +111,12 @@ export function CancelledGuideHistoryList() {
                       <span className={`font-mono text-[9.5px] font-bold uppercase ${status.color}`}>{status.text}</span>
                     </div>
                     <div className="text-[11px] text-steel mb-1">{SOURCE_AREA_LABELS[r.sourceArea]} · {r.reason}</div>
+                    {(r.batchManagedAt || r.fulfillmentRemovedAt) && (
+                      <div className="text-[10px] text-steel mb-1">
+                        {r.batchManagedAt && <div>Aprobó {r.batchManagedBy?.name ?? "—"} · {formatDateTime(r.batchManagedAt)}</div>}
+                        {r.fulfillmentRemovedAt && <div>Sacó de Fulfillment {r.fulfillmentRemovedBy?.name ?? "—"} · {formatDateTime(r.fulfillmentRemovedAt)}</div>}
+                      </div>
+                    )}
                     <div className="flex flex-col gap-0.5">
                       {r.items.map((it) => (
                         <div key={it.id} className="text-[12px] flex items-center gap-1.5">

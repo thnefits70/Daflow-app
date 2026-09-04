@@ -12,11 +12,12 @@ const schema = z.object({
 });
 
 // Heidy (o quien tenga el flag) carga qué productos y cantidades venían en
-// esta guía. Corre EN PARALELO con la gestión de Bryan (pedido explícito
-// del usuario, 2026-09-02) — no espera batchManagedAt. La cola de Daniel
-// solo se habilita cuando AMBOS pasos están listos (ver pending-reingreso),
-// así que acá solo avisamos a Daniel si Bryan ya gestionó este lote;
-// si no, el aviso sale después, desde /batches/[batchCode]/manage.
+// esta guía. Corre EN PARALELO con la gestión de Bryan y la confirmación de
+// Yair (pedido explícito del usuario, 2026-09-02/03) — no espera ninguna de
+// las dos. La cola de Daniel solo se habilita cuando los TRES pasos están
+// listos (ver pending-reingreso), así que acá solo avisamos a Daniel si
+// Bryan ya gestionó Y Yair ya confirmó la salida de Fulfillment de este
+// lote; si no, el aviso sale después, desde /confirm-removal.
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!(await canAssignCancelledGuideItems()) || !session) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
@@ -26,7 +27,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const parsed = schema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Datos inválidos." }, { status: 400 });
 
-  const report = await prisma.cancelledGuideReport.findUnique({ where: { id }, select: { code: true, batchManagedAt: true, itemsAssignedAt: true } });
+  const report = await prisma.cancelledGuideReport.findUnique({ where: { id }, select: { code: true, batchManagedAt: true, itemsAssignedAt: true, fulfillmentRemovedAt: true } });
   if (!report) return NextResponse.json({ error: "No encontrado." }, { status: 404 });
   if (report.itemsAssignedAt) return NextResponse.json({ error: "Esta guía ya tiene productos cargados." }, { status: 409 });
 
@@ -50,6 +51,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     include: { items: { include: { catalogItem: { select: { name: true, justCode: true } } } } },
   });
 
-  if (report.batchManagedAt) await notifyInventoryLeadCancelledGuidesReady([report.code]);
+  if (report.batchManagedAt && report.fulfillmentRemovedAt) await notifyInventoryLeadCancelledGuidesReady([report.code]);
   return NextResponse.json(updated);
 }

@@ -14,47 +14,47 @@ datasource db {
  * ---------------- Configuración global de la plataforma ----------------
  */
 model PlatformSettings {
-  id                           String    @id @default("singleton")
-  adminPasswordHash            String
-  adminEmail                   String?
-  logoUrl                      String?
+  id                            String    @id @default("singleton")
+  adminPasswordHash             String
+  adminEmail                    String?
+  logoUrl                       String?
   // Marca de agua opcional (logo + wordmark) mostrada discretamente en la tarjeta de Inicio.
-  bannerUrl                    String?
+  bannerUrl                     String?
   // Ícono de la pestaña del navegador — si no se sube uno, se usa el /icon.svg genérico por defecto.
-  faviconUrl                   String?
+  faviconUrl                    String?
   // Cumpleaños del admin — el único perfil sin un User real detrás, así que
   // vive aquí en vez de en la tabla User.
-  adminBirthDate               DateTime?
+  adminBirthDate                DateTime?
   // Confirmado 2026-08-05: contador único para el código correlativo de
   // Control de Compras (SC-001, SC-002...) — una sola secuencia para todo el
   // módulo, sin importar quién solicite. Incrementado dentro de una
   // transacción al crear el primer PurchaseRequest de un grupo nuevo, y
   // copiado a todas las filas de ese mismo grupo.
-  lastPurchaseRequestNumber    Int       @default(0)
+  lastPurchaseRequestNumber     Int       @default(0)
   // Confirmado 2026-08-19: correlativo propio de Reingreso de Mercadería
   // (RM-0001, RM-0002...) — mismo patrón atómico que lastPurchaseRequestNumber,
   // una sola numeración para todo el módulo sin importar quién capture el lote.
-  lastMerchandiseReentryNumber Int       @default(0)
+  lastMerchandiseReentryNumber  Int       @default(0)
   // Confirmado 2026-08-25: correlativo propio de "Reclamo posterior al
   // cierre" (RPC-0001, RPC-0002...) — mismo patrón atómico que los dos de
   // arriba, distinto de lastPurchaseRequestNumber porque el reclamo puede no
   // tener un origen exacto (mercadería mezclada).
-  lastLateClaimNumber          Int       @default(0)
+  lastLateClaimNumber           Int       @default(0)
   // Confirmado 2026-08-25: correlativo propio de Registro de Egresos
   // (EG-0001, EG-0002...) — mismo patrón atómico que los anteriores, una
   // sola numeración para todo el módulo sin importar el motivo.
-  lastMerchandiseOutflowNumber Int       @default(0)
+  lastMerchandiseOutflowNumber  Int       @default(0)
   // Confirmado 2026-08-25: correlativo propio de Ventas Externas (VE-0001,
   // VE-0002...) — mismo patrón atómico que los anteriores.
-  lastExternalSaleNumber       Int       @default(0)
+  lastExternalSaleNumber        Int       @default(0)
   // Confirmado 2026-08-25: correlativo propio de Guías Canceladas (GC-0001,
   // GC-0002...) — mismo patrón atómico que los anteriores.
-  lastCancelledGuideNumber     Int       @default(0)
+  lastCancelledGuideNumber      Int       @default(0)
   // Confirmado 2026-09-02: correlativo de LOTES de guías canceladas
   // (LOTE-0001...) — un lote agrupa las guías de una misma transportadora
   // que Yair confirma juntas, para que Bryan las copie/gestione de una.
-  lastCancelledGuideBatchNumber Int      @default(0)
-  updatedAt                    DateTime  @updatedAt
+  lastCancelledGuideBatchNumber Int       @default(0)
+  updatedAt                     DateTime  @updatedAt
 }
 
 // Token temporal para el flujo de "olvidé mi contraseña" del administrador
@@ -272,7 +272,7 @@ model User {
   // Solo informativo (mismo espíritu que Store.brand) — qué marca asesora
   // esta persona, para mostrarla junto a su nombre cuando confirma. Nunca se
   // usa para filtrar ni bloquear quién ve o puede confirmar qué llegada.
-  marketingAdvisorBrand      String?
+  marketingAdvisorBrand        String?
 
   // Confirmado 2026-08-05: excluye a esta persona de "Colaborador del mes"
   // por completo — su líder ya no la ve en su lista para calificar, y nunca
@@ -434,6 +434,7 @@ model User {
   cancelledGuidesReingresado          CancelledGuideReport[] @relation("CancelledGuideReingresadoBy")
   cancelledGuidesBatchManaged         CancelledGuideReport[] @relation("CancelledGuideBatchManagedBy")
   cancelledGuidesItemsAssigned        CancelledGuideReport[] @relation("CancelledGuideItemsAssignedBy")
+  cancelledGuidesFulfillmentRemoved   CancelledGuideReport[] @relation("CancelledGuideFulfillmentRemovedBy")
 
   atomProductStatusesCreated       AtomProductStatus[]      @relation("AtomProductStatusCreatedBy")
   lowRotationWeeklyEntriesCreated  LowRotationWeeklyEntry[] @relation("LowRotationWeeklyEntryCreatedBy")
@@ -4524,21 +4525,28 @@ enum CancelledGuideCarrier {
  * mercadería nunca salió, hay que reingresarla a Just), el usuario pidió
  * explícitamente que viva dentro de Registro de Egresos, junto a los demás
  * motivos, para no tener a Daniel saltando entre módulos.
- *
  * Rediseñado 2026-09-02, pedido explícito del usuario — reemplaza el flujo
  * viejo (confirmaciones separadas de Fulfillment/Inventario + corte semanal
  * de Bryan decidiendo si "realmente" se canceló):
- *   1. Yair sube números de guía seguidos (se detectan solos por prefijo) y
- *      al confirmar arma un LOTE por transportadora (batchCode) — sin
- *      productos todavía, eso viene después.
- *   2. Bryan (líder MKT) ve los lotes, copia las guías con un clic y las
- *      gestiona afuera con la transportadora/Dropi; cuando confirma acá
- *      (batchManagedAt), se marca TODO el lote de una.
- *   3. Al confirmarse el lote, alguien con canAssignCancelledGuideItems (hoy
- *      Heidy) ve esas guías y carga, guía por guía, qué productos y
- *      cantidades venían (itemsAssignedAt).
- *   4. Daniel reingresa a Just — igual que antes, ahora gatillado por
- *      itemsAssignedAt en vez de reallyCancelled.
+ * 1. Cualquiera de MKT o FUL (hoy en la práctica Heidy desde MKT, Yair
+ * desde FUL, cada uno por su propio motivo) sube números de guía
+ * seguidos (se detectan solos por prefijo) y al confirmar arma un LOTE
+ * por tanda (batchCode) — sin productos todavía, eso viene después.
+ * 2. Bryan (líder MKT) ve los lotes, copia las guías con un clic y las
+ * gestiona afuera con la transportadora/Dropi; cuando confirma acá
+ * (batchManagedAt), se marca TODO el lote de una.
+ * 3. Agregado 2026-09-03, pedido explícito del usuario: una vez que Bryan
+ * gestionó el lote, Yair (líder FUL) confirma que sacó físicamente
+ * esas guías del área de Fulfillment para que no se despachen
+ * (fulfillmentRemovedAt) — aplica a TODO el lote de una, sin importar
+ * quién reportó cada guía (inclusive las que reportó el propio Yair,
+ * pedido explícito: la doble confirmación es igual en ambos casos).
+ * 4. En paralelo con los pasos 2-3, alguien con canAssignCancelledGuideItems
+ * (hoy Heidy) ve esas guías y carga, guía por guía, qué productos y
+ * cantidades venían (itemsAssignedAt).
+ * 5. Daniel reingresa a Just — solo cuando batchManagedAt,
+ * fulfillmentRemovedAt E itemsAssignedAt están los tres listos, con
+ * quién aprobó/confirmó cada paso y cuándo a la vista.
  * Los campos viejos (fulfillmentConfirmedAt/inventoryConfirmedAt/
  * reallyCancelled/cutoffDecidedAt) se conservan sin usar, solo para no
  * perder el historial de guías reportadas antes del rediseño.
@@ -4590,7 +4598,14 @@ model CancelledGuideReport {
   itemsAssignedById String?
   itemsAssignedBy   User?     @relation("CancelledGuideItemsAssignedBy", fields: [itemsAssignedById], references: [id], onDelete: SetNull)
 
-  // Daniel reingresa a Just — habilitado por itemsAssignedAt.
+  // Yair (líder FUL) confirma que sacó estas guías del área de Fulfillment
+  // para que no se despachen — ver punto 3 del docblock arriba. Solo se
+  // puede confirmar después de batchManagedAt.
+  fulfillmentRemovedAt   DateTime?
+  fulfillmentRemovedById String?
+  fulfillmentRemovedBy   User?     @relation("CancelledGuideFulfillmentRemovedBy", fields: [fulfillmentRemovedById], references: [id], onDelete: SetNull)
+
+  // Daniel reingresa a Just — habilitado por itemsAssignedAt + fulfillmentRemovedAt.
   reingresadoAt   DateTime?
   reingresadoById String?
   reingresadoBy   User?     @relation("CancelledGuideReingresadoBy", fields: [reingresadoById], references: [id], onDelete: SetNull)
@@ -4599,6 +4614,7 @@ model CancelledGuideReport {
   @@index([batchCode])
   @@index([batchManagedAt])
   @@index([itemsAssignedAt])
+  @@index([fulfillmentRemovedAt])
   @@index([submittedById])
 }
 

@@ -3,7 +3,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { TopLine } from "@/components/ui/TopLine";
 import { DeptWorkspaceTabs } from "@/components/dept/DeptWorkspaceTabs";
-import { getUnseenFeedbackCount, canManageStoreFeedback as checkCanManageStoreFeedback, canViewStoreFeedback as checkCanViewStoreFeedback, canSubmitPurchaseRequests, canCreateNewPurchaseRequests, canSubmitEmergencyPurchaseRequest, canApprovePurchaseRequests as checkCanApprovePurchaseRequests, canActOnPurchaseApproval as checkCanActOnPurchaseApproval, canConfirmPurchaseReceiving, canReceivePurchasesTeam, canActOnPurchaseReceiving, canRegisterPurchaseInvoices, canPayMerchandisePurchases, canManageInventoryControl as checkCanManageInventoryControl, canViewInventoryKpisPanel as checkCanViewInventoryKpisPanel, canManageAdminPayments as checkCanManageAdminPayments, canViewMarketingArrivals as checkCanViewMarketingArrivals, canConfirmMarketingDesign as checkCanConfirmMarketingDesign, canConfirmMarketingAdvisor as checkCanConfirmMarketingAdvisor, canSyncAtomData as checkCanSyncAtomData, canUploadLowRotationList as checkCanUploadLowRotationList, canApproveComboSuggestions as checkCanApproveComboSuggestions, canCaptureMerchandiseReentry, canApproveMerchandiseReentry, canActOnMerchandiseReentry, canCloseMerchandiseReentry, canVerifyDamageDisposal, canManageJustUpload, canManageJustCatalog, canCaptureMerchandiseOutflow, canActOnMerchandiseOutflow, canViewMerchandiseOutflow, canConfirmSupplierExchangeFinanceWriteOff, canSubmitCancelledGuide, canManageCancelledGuideBatches, canAssignCancelledGuideItems, canDeclareExternalSales, canReviewExternalSales, canConfirmExternalSalePayment, canInvoiceExternalSale, canAssignExternalSalePack, canPackExternalSale, canCloseExternalSale, canViewExternalSales, getSupplierAccess, canAddSupplierBankAccounts } from "@/lib/guards";
+import { getUnseenFeedbackCount, canManageStoreFeedback as checkCanManageStoreFeedback, canViewStoreFeedback as checkCanViewStoreFeedback, canSubmitPurchaseRequests, canCreateNewPurchaseRequests, canSubmitEmergencyPurchaseRequest, canApprovePurchaseRequests as checkCanApprovePurchaseRequests, canActOnPurchaseApproval as checkCanActOnPurchaseApproval, canConfirmPurchaseReceiving, canReceivePurchasesTeam, canActOnPurchaseReceiving, canRegisterPurchaseInvoices, canPayMerchandisePurchases, canManageInventoryControl as checkCanManageInventoryControl, canViewInventoryKpisPanel as checkCanViewInventoryKpisPanel, canManageAdminPayments as checkCanManageAdminPayments, canViewMarketingArrivals as checkCanViewMarketingArrivals, canConfirmMarketingDesign as checkCanConfirmMarketingDesign, canConfirmMarketingAdvisor as checkCanConfirmMarketingAdvisor, canSyncAtomData as checkCanSyncAtomData, canUploadLowRotationList as checkCanUploadLowRotationList, canApproveComboSuggestions as checkCanApproveComboSuggestions, canCaptureMerchandiseReentry, canApproveMerchandiseReentry, canActOnMerchandiseReentry, canCloseMerchandiseReentry, canVerifyDamageDisposal, canManageJustUpload, canManageJustCatalog, canCaptureMerchandiseOutflow, canActOnMerchandiseOutflow, canViewMerchandiseOutflow, canConfirmSupplierExchangeFinanceWriteOff, canSubmitCancelledGuide, canManageCancelledGuideBatches, canConfirmCancelledGuideFulfillmentRemoval, canAssignCancelledGuideItems, canDeclareExternalSales, canReviewExternalSales, canConfirmExternalSalePayment, canInvoiceExternalSale, canAssignExternalSalePack, canPackExternalSale, canCloseExternalSale, canViewExternalSales, getSupplierAccess, canAddSupplierBankAccounts } from "@/lib/guards";
 import { getFinanceKpiData } from "@/lib/financeKpis";
 import { getDeptProcessDetail } from "@/lib/processDetail";
 import { getPaymentRemindersData } from "@/lib/paymentReminders";
@@ -142,9 +142,10 @@ export default async function WorkspacePage() {
   // lote con la transportadora/Dropi (canManageCancelledGuideBatches);
   // Heidy (delegado puntual) carga productos por guía
   // (canAssignCancelledGuideItems).
-  const [canSubmitGuide, canManageGuideBatches, canAssignGuideItems] = await Promise.all([
+  const [canSubmitGuide, canManageGuideBatches, canConfirmGuideFulfillmentRemoval, canAssignGuideItems] = await Promise.all([
     canSubmitCancelledGuide(),
     canManageCancelledGuideBatches(),
+    canConfirmCancelledGuideFulfillmentRemoval(),
     canAssignCancelledGuideItems(),
   ]);
   // Ventas Externas (Fase 3) — mismo patrón sin dept.code que lo anterior.
@@ -316,6 +317,7 @@ export default async function WorkspacePage() {
         financeWriteOffPendingCount={financeWriteOffPendingCount}
         canSubmitCancelledGuide={canSubmitGuide}
         canManageCancelledGuideBatches={canManageGuideBatches}
+        canConfirmCancelledGuideFulfillmentRemoval={canConfirmGuideFulfillmentRemoval}
         canAssignCancelledGuideItems={canAssignGuideItems}
         canDeclareExternalSales={canDeclareSales}
         canReviewExternalSales={canReviewSales}

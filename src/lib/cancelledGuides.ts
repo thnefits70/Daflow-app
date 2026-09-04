@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { notifyOwner } from "@/lib/notifications";
-import { getMarketingLeadId, getInventoryLeadId } from "@/lib/guards";
+import { getMarketingLeadId, getInventoryLeadId, getFulfilmentLeadId } from "@/lib/guards";
 
 export async function nextCancelledGuideNumber(): Promise<number> {
   const updated = await prisma.platformSettings.update({
@@ -72,9 +72,21 @@ export async function notifyItemAssigneesNewBatch(batchCode: string, guideCount:
   );
 }
 
-// Una guía queda lista para Daniel recién cuando AMBOS pasos (Bryan
-// gestionó + productos cargados) están hechos, sin importar cuál terminó
-// primero — se llama desde los dos lugares donde eso puede completarse.
+// Agregado 2026-09-03, pedido explícito del usuario: apenas Bryan gestiona
+// un lote, le llega a Yair (líder FUL) para que confirme que ya sacó esas
+// guías del área de Fulfillment (fulfillmentRemovedAt) — paso nuevo, antes
+// de que el lote pueda llegar a Daniel.
+export async function notifyFulfillmentLeadBatchManaged(batchCode: string, guideCount: number): Promise<void> {
+  const leadId = await getFulfilmentLeadId();
+  if (!leadId) return;
+  const body = guideCount === 1 ? `${batchCode} — 1 guía gestionada, confirmá que la sacaste de Fulfillment.` : `${batchCode} — ${guideCount} guías gestionadas, confirmá que las sacaste de Fulfillment.`;
+  await notifyOwner(leadId, { title: "Lote gestionado — sacalo de Fulfillment", body, url: `${URL_BASE}&sub=salida-fulfillment` }).catch(() => null);
+}
+
+// Una guía queda lista para Daniel recién cuando los TRES pasos (Bryan
+// gestionó + Yair confirmó que sacó el lote de Fulfillment + productos
+// cargados) están hechos, sin importar cuál terminó primero — se llama
+// desde los lugares donde eso puede completarse.
 export async function notifyInventoryLeadCancelledGuidesReady(codes: string[]): Promise<void> {
   if (codes.length === 0) return;
   const leadId = await getInventoryLeadId();

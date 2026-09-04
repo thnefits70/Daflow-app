@@ -175,9 +175,12 @@ export default async function DeptWorkspacePage({ params }: { params: Promise<{ 
         // EXCLUSIVO de quien tiene el flag, ni siquiera admin, mismo
         // patrón que canConfirmMarketingDesign de abajo); gestionar lotes
         // SÍ es de admin además de Bryan (mismo bypass ya presente en el
-        // guard), se muestra al navegar el departamento de MKT.
+        // guard), se muestra al navegar el departamento de MKT. Agregado
+        // 2026-09-03: confirmar salida de Fulfillment (Yair) sigue el
+        // mismo bypass de admin, se muestra al navegar el departamento FUL.
         canSubmitCancelledGuide={false}
         canManageCancelledGuideBatches={dept.code === "MKT"}
+        canConfirmCancelledGuideFulfillmentRemoval={dept.code === "FUL"}
         canAssignCancelledGuideItems={false}
         // Ventas Externas (Fase 3) — Nairoby factura y cierra (FIN), admin
         // confirma pago SIEMPRE (no es de ningún departamento en

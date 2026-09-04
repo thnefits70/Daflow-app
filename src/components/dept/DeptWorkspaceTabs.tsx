@@ -122,6 +122,7 @@ export function DeptWorkspaceTabs({
   financeWriteOffPendingCount = 0,
   canSubmitCancelledGuide = false,
   canManageCancelledGuideBatches = false,
+  canConfirmCancelledGuideFulfillmentRemoval = false,
   canAssignCancelledGuideItems = false,
   canDeclareExternalSales = false,
   canReviewExternalSales = false,
@@ -288,6 +289,7 @@ export function DeptWorkspaceTabs({
   // (que sigue gateando las rutas propias de Egresos).
   canSubmitCancelledGuide?: boolean;
   canManageCancelledGuideBatches?: boolean;
+  canConfirmCancelledGuideFulfillmentRemoval?: boolean;
   canAssignCancelledGuideItems?: boolean;
   // Ventas Externas (Fase 3) — declarar/revisión/pagos/cierre viven en la
   // misma pestaña sin dept.code (Bryan revisa, admin confirma pago, Nairoby
@@ -348,7 +350,7 @@ export function DeptWorkspaceTabs({
     if (t.key === "llegadas") return canViewMarketingArrivals;
     if (t.key === "inventario") return canManageInventoryControl;
     if (t.key === "reingreso") return canCaptureMerchandiseReentry || canApproveMerchandiseReentry || canCloseMerchandiseReentry;
-    if (t.key === "egresos") return canViewMerchandiseOutflow || canSubmitCancelledGuide || canManageCancelledGuideBatches || canAssignCancelledGuideItems || supplierExchangeMineCount > 0 || financeWriteOffPendingCount > 0;
+    if (t.key === "egresos") return canViewMerchandiseOutflow || canSubmitCancelledGuide || canManageCancelledGuideBatches || canConfirmCancelledGuideFulfillmentRemoval || canAssignCancelledGuideItems || supplierExchangeMineCount > 0 || financeWriteOffPendingCount > 0;
     if (t.key === "ventas-externas") return canViewExternalSales;
     if (t.key === "inventoriokpis") return canViewInventoryKpisPanel;
     if (t.key === "cajachica") return !!(pettyCashData?.principal || pettyCashData?.secundaria);
@@ -512,7 +514,7 @@ export function DeptWorkspaceTabs({
           canManageJustCatalog={canManageJustCatalog}
         />
       )}
-      {tab === "egresos" && (canViewMerchandiseOutflow || canSubmitCancelledGuide || canManageCancelledGuideBatches || canAssignCancelledGuideItems || supplierExchangeMineCount > 0 || financeWriteOffPendingCount > 0) && (
+      {tab === "egresos" && (canViewMerchandiseOutflow || canSubmitCancelledGuide || canManageCancelledGuideBatches || canConfirmCancelledGuideFulfillmentRemoval || canAssignCancelledGuideItems || supplierExchangeMineCount > 0 || financeWriteOffPendingCount > 0) && (
         <MerchandiseOutflowPanel
           canCapture={canCaptureMerchandiseOutflow}
           canAct={canActOnMerchandiseOutflow}
@@ -524,6 +526,7 @@ export function DeptWorkspaceTabs({
           financeWriteOffPendingCount={financeWriteOffPendingCount}
           canSubmitCancelledGuide={canSubmitCancelledGuide}
           canManageCancelledGuideBatches={canManageCancelledGuideBatches}
+          canConfirmCancelledGuideFulfillmentRemoval={canConfirmCancelledGuideFulfillmentRemoval}
           canAssignCancelledGuideItems={canAssignCancelledGuideItems}
           isAdmin={isAdmin}
           viewerDeptCode={viewerDeptCode}
