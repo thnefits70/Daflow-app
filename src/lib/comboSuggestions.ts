@@ -175,10 +175,12 @@ async function getAutoLowRotationFromStockSnapshots(): Promise<{ catalogItemId: 
   return out;
 }
 
-// Cruza los productos ganadores más recientes de ATOM (status RENTABLE) con
-// los productos de baja rotación más recientes — de la lista manual de
-// Daniel (unitsDispatched < 8) Y del cruce automático contra el Excel
-// semanal de stock (ver arriba). Confirmado 2026-09-03: ya no se agrupa por
+// Cruza los productos ganadores más recientes — de ATOM (status RENTABLE) Y
+// del reporte mensual de Daniel de 200+ movimientos (MonthlyTopMoverEntry,
+// solo el mes más reciente cargado) — con los productos de baja rotación más
+// recientes — de la lista manual de Daniel (unitsDispatched < 8) Y del cruce
+// automático contra el Excel semanal de stock (ver arriba). Confirmado
+// 2026-09-03: ya no se agrupa por
 // nicho exacto (ver comentario en filterPlausibleComboPairs) — se manda todo
 // el catálogo de cada lado a la IA en una sola llamada y ella decide, con un
 // puntaje de confianza, qué combinaciones tienen lógica real. Nunca duplica:
@@ -189,7 +191,7 @@ async function getAutoLowRotationFromStockSnapshots(): Promise<{ catalogItemId: 
 // actorId: quién disparó esta corrida (para el registro de gasto de IA) —
 // "system" cuando corre desde un flujo sin usuario real.
 export async function generateComboSuggestions(actorId = "system"): Promise<{ created: number }> {
-  const [atomStatuses, lowRotationEntries, catalogItems, autoLowRotation] = await Promise.all([
+  const [atomStatuses, lowRotationEntries, catalogItems, autoLowRotation, latestTopMoverMonth] = await Promise.all([
     prisma.atomProductStatus.findMany({
       where: { status: "RENTABLE", isCombo: false, matchedCatalogItemId: { not: null } },
       orderBy: { capturedAt: "desc" },
@@ -201,7 +203,18 @@ export async function generateComboSuggestions(actorId = "system"): Promise<{ cr
     }),
     prisma.purchaseCatalogItem.findMany({ select: { id: true, name: true, nicho: true } }),
     getAutoLowRotationFromStockSnapshots(),
+    prisma.monthlyTopMoverEntry.findFirst({ orderBy: { month: "desc" }, select: { month: true } }),
   ]);
+
+  // Confirmado 2026-09-04: pedido explícito de Daniel — sus "productos
+  // ganadores del mes" (200+ movimientos) SUMAN como otra fuente de
+  // ganadores, junto a los diarios de ATOM — mismo patrón "suma, no
+  // reemplaza" que ya usa el cruce automático de baja rotación. Solo se usa
+  // el mes más reciente cargado (un producto ganador de hace 3 meses ya no
+  // cuenta como ganador hoy).
+  const monthlyTopMovers = latestTopMoverMonth
+    ? await prisma.monthlyTopMoverEntry.findMany({ where: { month: latestTopMoverMonth.month }, select: { catalogItemId: true } })
+    : [];
 
   // Solo la lectura más reciente de ATOM por producto decide si hoy es
   // ganador — un RENTABLE viejo no cuenta si luego bajó a SEGUIMIENTO.
@@ -210,6 +223,8 @@ export async function generateComboSuggestions(actorId = "system"): Promise<{ cr
     const id = s.matchedCatalogItemId as string;
     if (!latestAtomByItem.has(id)) latestAtomByItem.set(id, s.capturedAt);
   }
+  const winnerIds = new Set(latestAtomByItem.keys());
+  for (const m of monthlyTopMovers) winnerIds.add(m.catalogItemId);
 
   // Solo la semana más reciente de Daniel por producto decide si sigue de
   // baja rotación — si ya no aparece bajo el umbral la última vez, se saca
@@ -233,7 +248,7 @@ export async function generateComboSuggestions(actorId = "system"): Promise<{ cr
 
   const catalogById = new Map(catalogItems.map((i) => [i.id, i]));
 
-  const winners: ComboCandidate[] = [...latestAtomByItem.keys()]
+  const winners: ComboCandidate[] = [...winnerIds]
     .map((id) => catalogById.get(id))
     .filter((i): i is (typeof catalogItems)[number] => !!i)
     .map((i) => ({ id: i.id, name: i.name, nicho: i.nicho }));

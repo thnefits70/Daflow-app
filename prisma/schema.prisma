@@ -441,6 +441,7 @@ model User {
   comboSuggestionsSelected         ComboSuggestion[]        @relation("ComboSuggestionSelectedBy")
   comboSuggestionsReviewed         ComboSuggestion[]        @relation("ComboSuggestionReviewedBy")
   comboSuggestionsCreatedInDropiBy ComboSuggestion[]        @relation("ComboSuggestionCreatedInDropiBy")
+  monthlyTopMoverEntriesCreated    MonthlyTopMoverEntry[]   @relation("MonthlyTopMoverEntryCreatedBy")
 
   @@index([deptId])
   @@index([leadsDeptId])
@@ -1469,6 +1470,7 @@ model PurchaseCatalogItem {
   lowRotationWeeklyEntries       LowRotationWeeklyEntry[]
   comboSuggestionsAsWinner       ComboSuggestion[]        @relation("ComboSuggestionWinner")
   comboSuggestionsAsLowRotation  ComboSuggestion[]        @relation("ComboSuggestionLowRotation")
+  monthlyTopMoverEntries         MonthlyTopMoverEntry[]
 }
 
 enum AtomRentabilityStatus {
@@ -1534,6 +1536,32 @@ model LowRotationWeeklyEntry {
 
   @@unique([weekOf, catalogItemId])
   @@index([weekOf])
+}
+
+// Confirmado 2026-09-04: pedido explícito de Daniel — lista mensual de
+// productos "ganadores" (más de 200 movimientos en el mes), aparte de los
+// ganadores diarios de ATOM. Se sube una vez al mes (ideal: primeros 3 días,
+// con aviso si se sube después, nunca bloqueado) y SUMA como otra fuente de
+// ganadores para el cruce de Sugerencias de Combos — igual que el Excel de
+// stock semanal suma candidatos de baja rotación sin reemplazar la lista
+// manual de Daniel.
+model MonthlyTopMoverEntry {
+  id String @id @default(cuid())
+
+  month String // "YYYY-MM"
+
+  catalogItemId String
+  catalogItem   PurchaseCatalogItem @relation(fields: [catalogItemId], references: [id], onDelete: Cascade)
+
+  unitsMoved Int
+
+  createdById   String?
+  createdBy     User?    @relation("MonthlyTopMoverEntryCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdByName String?
+  createdAt     DateTime @default(now())
+
+  @@unique([month, catalogItemId])
+  @@index([month])
 }
 
 enum ComboSuggestionStatus {

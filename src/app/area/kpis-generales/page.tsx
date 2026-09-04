@@ -6,17 +6,19 @@ import { PushTypeToggle } from "@/components/shared/PushTypeToggle";
 import { ReturnRatePanel } from "@/components/finance/ReturnRatePanel";
 import { StockoutPanel } from "@/components/finance/StockoutPanel";
 import { WarrantyPanel } from "@/components/finance/WarrantyPanel";
+import { MonthlyTopMoversPanel } from "@/components/finance/MonthlyTopMoversPanel";
 import { TabGuide } from "@/components/shared/TabGuide";
-import { canManageReturnRate, canManageStockouts, canManageWarranties } from "@/lib/guards";
+import { canManageReturnRate, canManageStockouts, canManageWarranties, canManageInventoryControl } from "@/lib/guards";
 
 export default async function AreaKpisGeneralesPage() {
   const session = await auth();
   if (!session) redirect("/login");
 
-  const [canReturnRate, canStockouts, canWarranties] = await Promise.all([
+  const [canReturnRate, canStockouts, canWarranties, canTopMovers] = await Promise.all([
     canManageReturnRate(),
     canManageStockouts(),
     canManageWarranties(),
+    canManageInventoryControl(),
   ]);
 
   const [returnRateRecords, stockoutWeekRows, stockoutConfirmations, warrantyCategories, warrantyMonthTotals, warrantyCounts] =
@@ -69,6 +71,18 @@ export default async function AreaKpisGeneralesPage() {
             weekRows={stockoutWeekRows}
             confirmedWeeks={stockoutConfirmations.map((c) => c.week)}
           />
+        </>
+      )}
+
+      {canTopMovers && (
+        <>
+          <div className={`flex items-center justify-between gap-2 mb-3 ${canReturnRate || canStockouts ? "mt-7" : ""}`}>
+            <h3 className="text-[14px] font-semibold">Productos ganadores del mes</h3>
+          </div>
+          <TabGuide storageKey="kpis-generales-topmovers">
+            Una vez al mes (ideal: los primeros 3 días), sube el reporte de productos con 200+ movimientos ese mes. Estos ganadores se suman a los de ATOM para armar Sugerencias de Combos — mientras más productos ganadores tenga el sistema, más opciones de combos puede sugerir.
+          </TabGuide>
+          <MonthlyTopMoversPanel />
         </>
       )}
 

@@ -3,6 +3,7 @@ import { TopLine } from "@/components/ui/TopLine";
 import { ReturnRatePanel } from "@/components/finance/ReturnRatePanel";
 import { StockoutPanel } from "@/components/finance/StockoutPanel";
 import { WarrantyPanel } from "@/components/finance/WarrantyPanel";
+import { MonthlyTopMoversPanel } from "@/components/finance/MonthlyTopMoversPanel";
 import { TabGuide } from "@/components/shared/TabGuide";
 
 export default async function AdminKpisGeneralesPage() {
@@ -40,6 +41,12 @@ export default async function AdminKpisGeneralesPage() {
         weekRows={stockoutWeekRows}
         confirmedWeeks={stockoutConfirmations.map((c) => c.week)}
       />
+
+      <h3 className="text-[14px] font-semibold mt-7 mb-3">Productos ganadores del mes</h3>
+      <TabGuide storageKey="kpis-generales-topmovers">
+        Una vez al mes (ideal: los primeros 3 días), sube el reporte de productos con 200+ movimientos ese mes. Estos ganadores se suman a los de ATOM para armar Sugerencias de Combos — mientras más productos ganadores tenga el sistema, más opciones de combos puede sugerir.
+      </TabGuide>
+      <MonthlyTopMoversPanel />
 
       <h3 className="text-[14px] font-semibold mt-7 mb-3">KPI de Garantías</h3>
       <TabGuide storageKey="kpis-generales-garantias">
