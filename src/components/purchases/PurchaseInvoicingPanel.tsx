@@ -1047,6 +1047,13 @@ export function PurchaseInvoicingPanel({ isAdmin = false, canPayMerchandise }: {
         </div>
       )}
 
+      {/* Confirmado 2026-09-04: pedido explícito del usuario — "Registrar
+          factura" es exclusivo de Nairoby (ver ADMIN_LOCK_TITLE arriba); para
+          admin, que solo paga mercadería, verlo en modo solo-lectura
+          confundía con su propia parte (pagar y subir comprobante). Se oculta
+          del todo para admin en vez de mostrarlo bloqueado. */}
+      {!isAdmin && (
+      <>
       <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
         <div className="text-[11px] font-semibold uppercase tracking-wide text-steel">Registrar factura</div>
         <span className="font-mono text-[10px] text-steel">{restGroups.length} de {restGroupsAll.length}</span>
@@ -1384,6 +1391,8 @@ export function PurchaseInvoicingPanel({ isAdmin = false, canPayMerchandise }: {
           );
         })}
       </div>
+      </>
+      )}
 
       {zoomedPhoto && (
         <div
