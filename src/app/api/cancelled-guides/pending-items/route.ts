@@ -13,7 +13,21 @@ export async function GET() {
 
   const reports = await prisma.cancelledGuideReport.findMany({
     where: { itemsAssignedAt: null, batchCode: { not: null } },
-    select: { id: true, code: true, batchCode: true, sourceArea: true, carrier: true, reason: true, guideNumber: true, batchManagedAt: true, createdAt: true },
+    select: {
+      id: true,
+      code: true,
+      batchCode: true,
+      sourceArea: true,
+      carrier: true,
+      reason: true,
+      guideNumber: true,
+      createdAt: true,
+      submittedBy: { select: { name: true } },
+      batchManagedAt: true,
+      batchManagedBy: { select: { name: true } },
+      fulfillmentRemovedAt: true,
+      fulfillmentRemovedBy: { select: { name: true } },
+    },
     orderBy: { createdAt: "asc" },
   });
   return NextResponse.json(reports);

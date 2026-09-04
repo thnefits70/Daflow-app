@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { ProductMatchPicker, type MatchCatalogItem, type ProductMatchResult } from "@/components/merchandise-reentry/ProductMatchPicker";
 import { CARRIER_LABELS, SOURCE_AREA_LABELS } from "@/lib/cancelledGuidesLabels";
+import { formatDateTime } from "@/lib/formatDateTime";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 
 type ReportDTO = {
@@ -14,7 +15,12 @@ type ReportDTO = {
   carrier: keyof typeof CARRIER_LABELS;
   reason: string;
   guideNumber: string;
+  createdAt: string;
+  submittedBy: { name: string } | null;
   batchManagedAt: string | null;
+  batchManagedBy: { name: string } | null;
+  fulfillmentRemovedAt: string | null;
+  fulfillmentRemovedBy: { name: string } | null;
 };
 
 type Row = { selected: MatchCatalogItem | null; quantity: string };
@@ -60,7 +66,12 @@ function GuideCard({ report, onSaved }: { report: ReportDTO; onSaved: () => void
           <span className="text-[9.5px] font-bold uppercase text-gold">Bryan todavía gestionando</span>
         )}
       </div>
-      <div className="text-[11px] text-steel mb-2">{SOURCE_AREA_LABELS[report.sourceArea]} · {report.reason}</div>
+      <div className="text-[11px] text-steel mb-1">{SOURCE_AREA_LABELS[report.sourceArea]} · {report.reason}</div>
+      <div className="text-[10px] text-steel mb-2">
+        <div>Reportó {report.submittedBy?.name ?? "—"} · {formatDateTime(report.createdAt)}</div>
+        {report.batchManagedAt && <div>Aprobó {report.batchManagedBy?.name ?? "—"} · {formatDateTime(report.batchManagedAt)}</div>}
+        {report.fulfillmentRemovedAt && <div>Sacó de Fulfillment {report.fulfillmentRemovedBy?.name ?? "—"} · {formatDateTime(report.fulfillmentRemovedAt)}</div>}
+      </div>
 
       <div className="flex flex-col gap-1.5 mb-2">
         {rows.map((row, i) => (
