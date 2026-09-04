@@ -17,7 +17,7 @@ type Row = Omit<OperationDocRow, "receipt"> & {
   reviewedAt: string | null;
   paidAt: string | null;
   invoicedAt: string | null;
-  supplier: { name: string };
+  supplier: { id: string; name: string };
   urgentReports: { id: string }[];
   // Confirmado 2026-08-11: pedido explícito del usuario — solo visible acá
   // (Auditoría), nunca en Solicitar/Bandeja de aprobación/Finanzas.
@@ -146,9 +146,29 @@ export function PurchaseAuditPanel() {
   const [dateTo, setDateTo] = useState("");
   const [monthFilter, setMonthFilter] = useState("");
   const [query, setQuery] = useState("");
+  // Confirmado 2026-09-04: pedido explícito del usuario (Bryan) — el crédito
+  // con el proveedor se descuenta recién al pagar (ver pay/route.ts), así que
+  // el total de la cotización que se ve acá no era lo que de verdad se
+  // transfirió cuando parte se cubrió con crédito.
+  const [appliedCreditsByGroup, setAppliedCreditsByGroup] = useState<Record<string, { id: string; amount: number }[]>>({});
 
   useEffect(() => {
-    fetch("/api/purchase-requests?view=audit").then((r) => (r.ok ? r.json() : [])).then(setRows).catch(() => setRows([]));
+    fetch("/api/purchase-requests?view=audit")
+      .then((r) => (r.ok ? r.json() : []))
+      .then(async (data: Row[]) => {
+        setRows(data);
+        const groups = groupRows(data);
+        const entries = await Promise.all(
+          groups.map(async (g) => {
+            const groupId = g[0].groupId;
+            const res = await fetch(`/api/purchase-suppliers/${g[0].supplier.id}/credit-balance?groupId=${groupId}`);
+            const d = await res.json().catch(() => null);
+            return [groupId, res.ok ? d.applied ?? [] : []] as const;
+          })
+        );
+        setAppliedCreditsByGroup(Object.fromEntries(entries));
+      })
+      .catch(() => setRows([]));
   }, []);
 
   function applyMonthFilter(month: string) {
@@ -249,6 +269,7 @@ export function PurchaseAuditPanel() {
           const r0 = g[0];
           const urgentCount = g.reduce((s, r) => s + r.urgentReports.length, 0);
           const timing = computeStageTimes(r0);
+          const appliedCreditTotal = (appliedCreditsByGroup[groupId] ?? []).reduce((s, c) => s + c.amount, 0);
           return (
             <div key={groupId} className="bg-surface border border-rule rounded-md p-4">
               <div className="flex items-start justify-between gap-2 mb-1">
@@ -284,7 +305,18 @@ export function PurchaseAuditPanel() {
                   )}
                 </div>
               </div>
-              <div className="text-[11.5px] text-steel">{r0.supplier.name} — {money(total)}</div>
+              <div className="text-[11.5px] text-steel">
+                {r0.supplier.name} —{" "}
+                {appliedCreditTotal > 0 ? (
+                  <>
+                    <span className="line-through text-steel-dim">{money(total)}</span>{" "}
+                    <span className="font-semibold text-teal">{money(Math.max(0, total - appliedCreditTotal))} pagado</span>{" "}
+                    <span className="text-steel-dim">(crédito de {money(appliedCreditTotal)} aplicado)</span>
+                  </>
+                ) : (
+                  money(total)
+                )}
+              </div>
               {r0.isEmergency && (
                 <div className="flex items-center gap-1 text-[10px] font-bold text-red mb-0.5">
                   <AlertTriangle size={11} /> Solicitud de emergencia — {r0.emergencyReason}

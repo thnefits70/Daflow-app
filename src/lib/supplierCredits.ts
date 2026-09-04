@@ -77,6 +77,20 @@ export async function getReservedCreditsForGroup(groupId: string): Promise<Suppl
   return credits.map((c) => ({ id: c.id, amount: c.amount, reason: c.reason, status: c.status, createdAt: c.createdAt.toISOString() }));
 }
 
+// Confirmado 2026-09-04: pedido explícito del usuario (Bryan) — una vez
+// pagada la solicitud, el crédito que se usó pasa de RESERVED a APPLIED (ver
+// pay/route.ts) y deja de aparecer en getReservedCreditsForGroup. Sin esto,
+// las pantallas de solo lectura (Historial de aprobación, Auditoría) siguen
+// mostrando el total crudo de la cotización sin restar el crédito ya usado,
+// aunque de verdad se haya transferido menos.
+export async function getAppliedCreditsForGroup(groupId: string): Promise<SupplierCreditDTO[]> {
+  const credits = await prisma.supplierCredit.findMany({
+    where: { appliedToGroupId: groupId, status: "APPLIED" },
+    orderBy: { createdAt: "asc" },
+  });
+  return credits.map((c) => ({ id: c.id, amount: c.amount, reason: c.reason, status: c.status, createdAt: c.createdAt.toISOString() }));
+}
+
 // Confirmado 2026-08-12: si la solicitud se rechaza por completo, cualquier
 // crédito que se le hubiera reservado vuelve a quedar libre de inmediato.
 export async function releaseCreditsForGroup(groupId: string): Promise<void> {

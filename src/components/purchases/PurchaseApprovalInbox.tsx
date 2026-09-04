@@ -220,10 +220,30 @@ export function PurchaseApprovalInbox({ canAct = true, canPayHere = true, canPay
   const [subTab, setSubTab] = useState<"pending" | "history">("pending");
   const [historyRows, setHistoryRows] = useState<HistoryRow[] | null>(null);
 
+  // Confirmado 2026-09-04: pedido explícito del usuario (Bryan) — el crédito
+  // con el proveedor se aplica recién al pagar (pay/route.ts pasa el
+  // SupplierCredit de RESERVED a APPLIED), así que el total que se ve acá no
+  // reflejaba lo que de verdad se transfirió cuando parte se cubrió con
+  // crédito. Solo se busca para grupos que ya pasaron por pago (PAID en
+  // adelante) — uno que sigue en APPROVED todavía no tiene nada "aplicado".
+  const [appliedCreditsByGroup, setAppliedCreditsByGroup] = useState<Record<string, { id: string; amount: number; reason: string }[]>>({});
+
   function loadHistory() {
     fetch("/api/purchase-requests?view=approval-history")
       .then((r) => (r.ok ? r.json() : []))
-      .then((data: HistoryRow[]) => setHistoryRows(data))
+      .then(async (data: HistoryRow[]) => {
+        setHistoryRows(data);
+        const paidGroups = groupRows(data).filter((g) => g[0].status !== "APPROVED" && g[0].status !== "REJECTED");
+        const entries = await Promise.all(
+          paidGroups.map(async (g) => {
+            const groupId = g[0].groupId;
+            const res = await fetch(`/api/purchase-suppliers/${g[0].supplier.id}/credit-balance?groupId=${groupId}`);
+            const d = await res.json().catch(() => null);
+            return [groupId, res.ok ? d.applied ?? [] : []] as const;
+          })
+        );
+        setAppliedCreditsByGroup(Object.fromEntries(entries));
+      })
       .catch(() => setHistoryRows((cur) => cur ?? []));
   }
 
@@ -610,6 +630,7 @@ export function PurchaseApprovalInbox({ canAct = true, canPayHere = true, canPay
               const isRejected = g[0].status === "REJECTED";
               const meta = STATUS_META[g[0].status];
               const timeline = buildTimeline(g[0]);
+              const appliedCreditTotal = (appliedCreditsByGroup[groupId] ?? []).reduce((s, c) => s + c.amount, 0);
               return (
                 <div key={groupId} className="bg-surface border border-rule rounded-md p-3.5">
                   <div className="flex items-start justify-between gap-3 flex-wrap">
@@ -636,8 +657,18 @@ export function PurchaseApprovalInbox({ canAct = true, canPayHere = true, canPay
                         {meta.text}
                       </span>
                       <div className="text-right">
-                        <div className="text-[9px] font-semibold uppercase tracking-wide text-steel">Total</div>
-                        <div className="font-display text-[18px] font-bold text-teal leading-tight">${total.toFixed(2)}</div>
+                        {appliedCreditTotal > 0 ? (
+                          <>
+                            <div className="text-[9px] font-semibold uppercase tracking-wide text-steel-dim">Total ${total.toFixed(2)} − crédito aplicado ${appliedCreditTotal.toFixed(2)}</div>
+                            <div className="text-[9px] font-semibold uppercase tracking-wide text-steel">Pagado</div>
+                            <div className="font-display text-[18px] font-bold text-teal leading-tight">${Math.max(0, total - appliedCreditTotal).toFixed(2)}</div>
+                          </>
+                        ) : (
+                          <>
+                            <div className="text-[9px] font-semibold uppercase tracking-wide text-steel">Total</div>
+                            <div className="font-display text-[18px] font-bold text-teal leading-tight">${total.toFixed(2)}</div>
+                          </>
+                        )}
                       </div>
                     </div>
                   </div>
