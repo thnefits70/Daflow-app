@@ -289,6 +289,94 @@ export async function compareReceiptPhotos(params: {
   return { ...result, minorDifferenceOnly: result.likelyMatch === false && !!result.minorDifferenceOnly };
 }
 
+export type PurchaseGroupReviewResult = {
+  ok: boolean;
+  summary: string;
+};
+
+// Confirmado 2026-09-04: pedido explícito del usuario (admin/Andrés) — hasta
+// ahora cada dato de una solicitud se validaba por separado (cotización al
+// solicitar, justificación de precio, crédito, etc.), pero admin igual tenía
+// que entrar a revisar cada solicitud aprobada a mano antes de pagar. Esta
+// función corre UNA vez, en cuanto Bryan aprueba, y arma una revisión
+// consolidada en español simple con TODO lo ya cargado — no vuelve a leer
+// imágenes (esas ya se leyeron y validaron en su paso correspondiente), solo
+// cruza los datos ya confirmados para que admin confíe en el resultado sin
+// tener que revisar cada campo uno por uno.
+export async function reviewApprovedPurchaseGroup(params: {
+  actorId: string | null;
+  deptId?: string;
+  supplierName: string;
+  requestNumber: number | null;
+  lines: { name: string; justCode: string | null; quantity: number; unitCost: number; totalCost: number; justification: string | null }[];
+  totalCost: number;
+  quoteReadTotal: number | null;
+  quoteReferenceCode: string | null;
+  hasPurchaseOrder: boolean;
+  bankAccount: { bankName: string; bankAccountType: string; bankAccountNumber: string; bankAccountHolder: string } | null;
+  reservedCreditTotal: number;
+  creditSkipJustification: string | null;
+}): Promise<PurchaseGroupReviewResult> {
+  const client = getAnthropicClient();
+
+  const facts = {
+    proveedor: params.supplierName,
+    codigo_solicitud: params.requestNumber ? `SC-${String(params.requestNumber).padStart(3, "0")}` : null,
+    productos: params.lines.map((l) => ({
+      nombre: l.name,
+      codigo_catalogo: l.justCode,
+      cantidad: l.quantity,
+      precio_unitario: l.unitCost,
+      subtotal: l.totalCost,
+      justificacion_precio_sobre_historial: l.justification,
+    })),
+    total_a_pagar_por_las_lineas: params.totalCost,
+    total_leido_por_ia_en_la_cotizacion_al_solicitar: params.quoteReadTotal,
+    cotizacion_solo_traia_codigo_sin_nombre: !!params.quoteReferenceCode,
+    tiene_orden_de_compra_de_respaldo: params.hasPurchaseOrder,
+    cuenta_bancaria_para_transferir: params.bankAccount,
+    credito_con_proveedor_ya_aplicado: params.reservedCreditTotal,
+    justificacion_de_no_aplicar_credito_disponible: params.creditSkipJustification,
+  };
+
+  const response = await client.messages.create({
+    model: PURCHASE_AI_MODEL,
+    max_tokens: 500,
+    system:
+      "Eres el último control antes de pagar en Control de Compras de Provedix (Guayaquil, Ecuador). Cada dato que " +
+      "te doy YA fue validado en su propio paso (cotización leída por IA al solicitar, precio justificado si superó " +
+      "el historial, crédito con el proveedor ya reservado, etc.) — tu trabajo es cruzarlos TODOS juntos una vez " +
+      "más y darle a Andrés (quien va a pagar) la confianza de que no hay que revisar nada a mano. " +
+      "Verifica específicamente: (1) que total_a_pagar_por_las_lineas coincida con total_leido_por_ia_en_la_cotizacion_al_solicitar " +
+      "(si este último es null, no lo marques como problema — pasa cuando la cotización solo traía código); " +
+      "(2) que CUALQUIER producto con justificacion_precio_sobre_historial en null tenga sentido como precio normal " +
+      "(no puedes saber el historial exacto, así que no inventes un problema aquí — solo repórtalo si el patrón se ve " +
+      "claramente anómalo, ej. precio 0 o negativo); (3) que si cotizacion_solo_traia_codigo_sin_nombre es true, " +
+      "tiene_orden_de_compra_de_respaldo también sea true; (4) que cuenta_bancaria_para_transferir no sea null; " +
+      "(5) que si hay credito_con_proveedor_ya_aplicado en 0 pero no hay justificacion_de_no_aplicar_credito_disponible, " +
+      "lo señales (podría haber crédito sin usar). " +
+      'Responde ÚNICAMENTE un JSON: {"ok": boolean, "summary": string}. ' +
+      "Si TODO está en orden, ok=true y summary es UNA frase breve y clara en español simple confirmándolo (ej. " +
+      "\"Todo cuadra: el total, el precio y la cuenta bancaria coinciden con lo revisado — puedes pagar con confianza.\"). " +
+      "Si algo no cuadra o falta, ok=false y summary dice EXACTAMENTE qué revisar, en español simple, sin tecnicismos. " +
+      "Nunca inventes datos que no te di.",
+    messages: [{ role: "user", content: `Datos ya confirmados de esta operación aprobada:\n${JSON.stringify(facts, null, 2)}\n\nDevuelve el JSON pedido.` }],
+  });
+
+  await logAiUsage({
+    feature: "control_compras_revision_pago",
+    model: PURCHASE_AI_MODEL,
+    actorId: params.actorId ?? "admin",
+    deptId: params.deptId,
+    inputTokens: response.usage.input_tokens,
+    outputTokens: response.usage.output_tokens,
+  });
+
+  const textBlock = response.content.find((b) => b.type === "text");
+  if (!textBlock || textBlock.type !== "text") throw new Error("La IA no devolvió contenido de texto.");
+  return extractJson<PurchaseGroupReviewResult>(textBlock.text);
+}
+
 export type CatalogDuplicateCheck = {
   suspected: boolean;
   matchedName: string | null;

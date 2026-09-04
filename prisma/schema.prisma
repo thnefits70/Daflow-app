@@ -1950,6 +1950,16 @@ model PurchaseRequest {
   financeFlaggedById String?
   financeFlaggedBy   User?     @relation("PurchaseRequestFinanceFlaggedBy", fields: [financeFlaggedById], references: [id], onDelete: SetNull)
 
+  // Confirmado 2026-09-04: pedido explícito del usuario (admin/Andrés) — en
+  // cuanto Bryan aprueba, la IA revisa de una sola vez todo lo ya cargado de
+  // la operación (precios vs. historial, crédito aplicado, documentos,
+  // cuenta bancaria) y deja este resumen listo, para que admin no tenga que
+  // entrar a revisar cada solicitud a mano antes de pagar. Ver
+  // reviewApprovedPurchaseGroup en purchaseAi.ts.
+  aiReviewSummary String?   @db.Text
+  aiReviewOk      Boolean?
+  aiReviewAt      DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

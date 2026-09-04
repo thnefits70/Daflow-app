@@ -6,7 +6,8 @@ import { auth } from "@/auth";
 import { canSubmitPurchaseRequests, canCreateNewPurchaseRequests, canSubmitEmergencyPurchaseRequest, canApprovePurchaseRequests, canConfirmPurchaseReceiving, canRegisterPurchaseInvoices, getPurchaseApproverIds } from "@/lib/guards";
 import { checkPurchaseSubmission, purchaseSubmissionSchema, nextPurchaseRequestNumber, purchaseRequestInclude } from "@/lib/purchases";
 import { sendPushToOwner } from "@/lib/webPush";
-import { reserveCreditsForGroup } from "@/lib/supplierCredits";
+import { reserveCreditsForGroup, getReservedCreditsForGroup } from "@/lib/supplierCredits";
+import { reviewApprovedPurchaseGroup } from "@/lib/purchaseAi";
 
 // status: "approval" (bandeja admin), "receiving" (Inventario), "invoicing"
 // (Finanzas), "audit" (admin, historial de solo lectura), "mine" (lo que yo
@@ -123,6 +124,59 @@ export async function GET(req: NextRequest) {
       orderBy: [{ status: "asc" }, { requestedAt: "desc" }],
       include: purchaseRequestInclude,
     });
+
+    // Confirmado 2026-09-04: pedido explícito del usuario (admin/Andrés) —
+    // respaldo para operaciones que ya estaban APPROVED antes de que este
+    // resumen existiera (o si la llamada al aprobar falló). Se rellena una
+    // sola vez, de paso, para que "todo lo que ya me llega" venga con el
+    // análisis sin depender de que alguien vuelva a aprobar.
+    const pendingReviewGroupIds = [
+      ...new Set(rows.filter((r) => r.status === "APPROVED" && r.aiReviewSummary === null).map((r) => r.groupId)),
+    ];
+    if (pendingReviewGroupIds.length > 0) {
+      await Promise.all(
+        pendingReviewGroupIds.map(async (groupId) => {
+          try {
+            const groupRows = rows.filter((r) => r.groupId === groupId);
+            const r0 = groupRows[0];
+            const reservedCredits = await getReservedCreditsForGroup(groupId);
+            const review = await reviewApprovedPurchaseGroup({
+              actorId: r0.reviewedById,
+              deptId: r0.deptId,
+              supplierName: r0.supplier.name,
+              requestNumber: r0.requestNumber,
+              lines: groupRows.map((r) => ({
+                name: r.catalogItem.name,
+                justCode: r.catalogItem.justCode,
+                quantity: r.quantity,
+                unitCost: r.unitCost,
+                totalCost: r.totalCost,
+                justification: r.justification,
+              })),
+              totalCost: groupRows.reduce((s, r) => s + r.totalCost, 0),
+              quoteReadTotal: r0.quoteReadTotal,
+              quoteReferenceCode: r0.quoteReferenceCode,
+              hasPurchaseOrder: !!r0.purchaseOrderUrl,
+              bankAccount: r0.bankAccount,
+              reservedCreditTotal: reservedCredits.reduce((s, c) => s + c.amount, 0),
+              creditSkipJustification: r0.creditSkipJustification,
+            });
+            await prisma.purchaseRequest.updateMany({
+              where: { groupId },
+              data: { aiReviewSummary: review.summary, aiReviewOk: review.ok, aiReviewAt: new Date() },
+            });
+            for (const r of groupRows) {
+              r.aiReviewSummary = review.summary;
+              r.aiReviewOk = review.ok;
+              r.aiReviewAt = new Date();
+            }
+          } catch {
+            // Sin bloquear la carga de la pantalla — se reintenta en la próxima visita.
+          }
+        })
+      );
+    }
+
     return NextResponse.json(rows);
   }
 

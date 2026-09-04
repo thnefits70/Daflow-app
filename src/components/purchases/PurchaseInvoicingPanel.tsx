@@ -34,6 +34,8 @@ type Row = {
   paidBy: { name: string } | null;
   requestedBy: { name: string } | null;
   creditSkipJustification: string | null;
+  aiReviewSummary: string | null;
+  aiReviewOk: boolean | null;
   catalogItem: { name: string; photos: string[]; justCode: string | null };
   supplier: { id: string; name: string };
   bankAccount: {
@@ -774,6 +776,20 @@ export function PurchaseInvoicingPanel({ isAdmin = false, canPayMerchandise }: {
                       </>
                     )}
                   </div>
+                  {g[0].aiReviewSummary ? (
+                    <div
+                      className={`flex items-start gap-1.5 rounded-md px-3 py-2 mb-2.5 text-[11.5px] border ${
+                        g[0].aiReviewOk ? "bg-teal/10 border-teal/30 text-teal" : "bg-gold/10 border-gold/30 text-gold"
+                      }`}
+                    >
+                      <span className="shrink-0">{g[0].aiReviewOk ? "✅" : "⚠️"}</span>
+                      <span>{g[0].aiReviewSummary}</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1.5 rounded-md px-3 py-2 mb-2.5 text-[11.5px] border border-rule text-steel-dim">
+                      Revisión de IA en proceso — recarga en unos segundos.
+                    </div>
+                  )}
                   <div className="bg-cloud border border-rule rounded-md px-3 py-2.5 mb-2.5">
                     <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-steel mb-1.5">
                       <Landmark size={12} /> Transferir a {g[0].supplier.name}
