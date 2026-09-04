@@ -304,7 +304,7 @@ export function ComboSuggestionsBoard({ canApprove }: { canApprove: boolean }) {
           </div>
         ) : (
           <>
-            <div className="flex items-center gap-2 mb-2 text-[11px]">
+            <div className="flex items-center gap-2 mb-2 text-[11px] flex-wrap">
               <span className="text-steel">Marcar de una:</span>
               <button
                 type="button"
@@ -335,6 +335,17 @@ export function ComboSuggestionsBoard({ canApprove }: { canApprove: boolean }) {
                   Limpiar selección
                 </button>
               )}
+              {/* Pedido del usuario (2026-09-04): mismo botón de arriba y de
+                  abajo — con muchas sugerencias, bajar hasta el final solo
+                  para enviar era molesto. */}
+              <button
+                type="button"
+                disabled={busy || checked.size === 0}
+                className="ml-auto rounded border border-teal bg-teal px-3 py-1 text-[11px] font-bold text-navy cursor-pointer disabled:opacity-60"
+                onClick={submitBatch}
+              >
+                Enviar {checked.size > 0 ? `(${checked.size}) ` : ""}a aprobación
+              </button>
             </div>
             <div className="flex flex-col gap-1.5 mb-2.5">
               {suggested.map((s) => (
