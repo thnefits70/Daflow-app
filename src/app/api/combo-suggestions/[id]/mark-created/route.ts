@@ -1,14 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { canViewComboSuggestions } from "@/lib/guards";
+import { canMarkComboCreatedInDropi } from "@/lib/guards";
 
 // Confirmado 2026-08-31: sin integración con Dropi — el equipo de Análisis
 // de Mercado crea el combo manualmente allá (sin precio todavía, eso es
 // aparte) y solo marca acá que ya quedó hecho.
+// Confirmado 2026-09-04: aunque todo el equipo VE la cola de aprobados,
+// marcar "creado en Dropi" es exclusivo de quien tenga el flag (hoy Heidy).
 export async function POST(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
-  if (!session || !(await canViewComboSuggestions())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+  if (!session || !(await canMarkComboCreatedInDropi())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
   const { id } = await params;
   const existing = await prisma.comboSuggestion.findUnique({ where: { id } });

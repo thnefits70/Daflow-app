@@ -45,6 +45,7 @@ type UserProfile = {
   canConfirmMarketingDesign: boolean;
   canConfirmMarketingAdvisor: boolean;
   canAssignCancelledGuideItems: boolean;
+  canMarkComboCreatedInDropi: boolean;
   canViewMarketingArrivalsForDispatch: boolean;
   marketingAdvisorBrand: string | null;
   canManageStoreFeedback: boolean;
@@ -820,6 +821,16 @@ export function ProfileDetail({
               Una vez que Bryan gestiona un lote de guías canceladas con la transportadora/Dropi, esta persona (hoy Heidy) ve esas guías y carga qué productos y cantidades venían en cada una, antes de que Daniel las reingrese a Just.
             </div>
             <PermToggle value={p.canAssignCancelledGuideItems} busy={busy} onChange={(v) => save({ canAssignCancelledGuideItems: v })} />
+          </div>
+
+          <div className="bg-cloud border border-rule rounded p-3.5 mt-3.5">
+            <label className="flex items-center gap-1 mb-2 text-[10.5px] font-semibold uppercase tracking-wide text-steel">
+              <Truck size={11} /> ¿Crea en Dropi los combos aprobados?
+            </label>
+            <div className="text-[11px] text-steel mb-2">
+              Una vez que Bryan aprueba un lote de Sugerencias de Combos, esta persona (hoy Heidy) es quien arma el combo en Dropi de verdad y lo marca &quot;Creado en Dropi&quot;. El resto del equipo de Análisis de Mercado sigue viendo la cola de aprobados, solo que sin este botón.
+            </div>
+            <PermToggle value={p.canMarkComboCreatedInDropi} busy={busy} onChange={(v) => save({ canMarkComboCreatedInDropi: v })} />
           </div>
 
           <div className="bg-cloud border border-rule rounded p-3.5 mt-3.5">

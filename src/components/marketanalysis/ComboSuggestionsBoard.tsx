@@ -54,10 +54,12 @@ function Pair({ s }: { s: Suggestion }) {
 }
 
 // Confirmado 2026-08-31: el equipo de Análisis de Mercado selecciona y manda
-// por lote; el líder de MKT (hoy Bryan) aprueba/rechaza TODO el lote junto;
-// una vez aprobado, cualquiera del equipo marca "creado en Dropi" cuando ya
-// lo armó allá manualmente (sin precio, eso queda fuera de esto).
-export function ComboSuggestionsBoard({ canApprove, canAct }: { canApprove: boolean; canAct: boolean }) {
+// por lote; el líder de MKT (hoy Bryan) aprueba/rechaza TODO el lote junto.
+// Confirmado 2026-09-04: una vez aprobado, todo el equipo VE la cola de
+// aprobados, pero solo quien tiene canMarkComboCreatedInDropi (hoy Heidy)
+// puede marcar "creado en Dropi" cuando ya lo armó allá manualmente (sin
+// precio, eso queda fuera de esto).
+export function ComboSuggestionsBoard({ canApprove, canAct, canMarkCreated }: { canApprove: boolean; canAct: boolean; canMarkCreated: boolean }) {
   const [suggestions, setSuggestions] = useState<Suggestion[] | null>(null);
   const [checked, setChecked] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
@@ -265,9 +267,13 @@ export function ComboSuggestionsBoard({ canApprove, canAct }: { canApprove: bool
             {approved.map((s) => (
               <div key={s.id} className="flex items-center justify-between gap-2 border border-rule rounded p-2.5 flex-wrap">
                 <Pair s={s} />
-                <button type="button" disabled={busy} className="rounded border border-teal bg-teal px-3 py-1.5 text-[12px] font-bold text-navy cursor-pointer disabled:opacity-60" onClick={() => markCreated(s.id)}>
-                  <ExternalLink size={12} className="inline mr-1" /> Ya lo creé en Dropi
-                </button>
+                {canMarkCreated ? (
+                  <button type="button" disabled={busy} className="rounded border border-teal bg-teal px-3 py-1.5 text-[12px] font-bold text-navy cursor-pointer disabled:opacity-60" onClick={() => markCreated(s.id)}>
+                    <ExternalLink size={12} className="inline mr-1" /> Ya lo creé en Dropi
+                  </button>
+                ) : (
+                  <span className="text-[11.5px] text-steel">Esperando a que Heidy lo cree en Dropi.</span>
+                )}
               </div>
             ))}
           </div>

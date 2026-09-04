@@ -274,6 +274,14 @@ model User {
   // usa para filtrar ni bloquear quién ve o puede confirmar qué llegada.
   marketingAdvisorBrand        String?
 
+  // Confirmado 2026-09-04: pedido explícito del usuario — todo el equipo de
+  // Análisis de Mercado ve la cola "Aprobados — listos para crear en Dropi"
+  // de Sugerencias de Combos, pero en la práctica solo Heidy los crea de
+  // verdad en Dropi (Jariel/Robert no hacen esa parte). Mismo patrón que
+  // canConfirmMarketingDesign/canAssignCancelledGuideItems: delegado
+  // puntual, EXCLUSIVO de quien tiene el flag — ni siquiera admin actúa.
+  canMarkComboCreatedInDropi Boolean @default(false)
+
   // Confirmado 2026-08-05: excluye a esta persona de "Colaborador del mes"
   // por completo — su líder ya no la ve en su lista para calificar, y nunca
   // se generan evaluaciones nuevas para ella. No borra evaluaciones pasadas.

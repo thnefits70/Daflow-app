@@ -1337,6 +1337,18 @@ export async function canSyncAtomData() {
   return canViewComboSuggestions();
 }
 
+// Confirmado 2026-09-04: marcar "Ya lo creé en Dropi" en un combo aprobado
+// es EXCLUSIVO de quien tiene este flag (hoy Heidy) — el resto del equipo de
+// Análisis de Mercado sigue viendo la cola de aprobados (canViewComboSuggestions),
+// solo que sin el botón. Ni admin lo hace, mismo patrón que
+// canConfirmMarketingDesign/canAssignCancelledGuideItems.
+export async function canMarkComboCreatedInDropi() {
+  const session = await auth();
+  if (!session || session.user.role === "admin") return false;
+  const user = await prisma.user.findUnique({ where: { id: session.user.id }, select: { canMarkComboCreatedInDropi: true } });
+  return !!user?.canMarkComboCreatedInDropi;
+}
+
 // How many of the current user's own pay stubs were uploaded/updated since
 // they last opened "Roles de pago" — drives the sidebar badge.
 export async function getUnseenPayStubCount() {

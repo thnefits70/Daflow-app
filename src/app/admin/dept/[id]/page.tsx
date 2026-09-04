@@ -217,6 +217,7 @@ export default async function DeptWorkspacePage({ params }: { params: Promise<{ 
         canUploadLowRotationList={dept.code === "INV"}
         canApproveComboSuggestions={dept.code === "MKT"}
         canActOnComboSuggestions={false}
+        canMarkComboCreatedInDropi={false}
         isAdmin
         editable
       />

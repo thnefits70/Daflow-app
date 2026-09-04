@@ -20,11 +20,13 @@ export function ComboSuggestionsPanel({
   canUploadLowRotation,
   canApprove,
   canAct,
+  canMarkCreated,
 }: {
   canSyncAtom: boolean;
   canUploadLowRotation: boolean;
   canApprove: boolean;
   canAct: boolean;
+  canMarkCreated: boolean;
 }) {
   // Pedido del usuario (2026-09-04): "Sugerencias" primero — es la pantalla
   // que se usa primero al entrar (revisar/enviar combos), no la de subir
@@ -91,14 +93,14 @@ export function ComboSuggestionsPanel({
         <>
           <TabGuide storageKey="combos-sugerencias">
             {canAct ? (
-              <>Acá salen las combinaciones que la IA arma sola, cruzando productos que venden bien con productos de baja rotación — cada una trae un % de qué tan segura es. Marca las que quieras armar, mándalas a aprobación, y cuando las apruebes quedan listas para que alguien del equipo las cree en Dropi y marque &quot;Creado en Dropi&quot;. &quot;Descartar sin revisar&quot; borra las sugerencias viejas sin decisión tomada, y &quot;Recalcular sugerencias&quot; vuelve a correr el cruce con los datos más frescos (puede tardar hasta 1 minuto).</>
+              <>Acá salen las combinaciones que la IA arma sola, cruzando productos que venden bien con productos de baja rotación — cada una trae un % de qué tan segura es. Marca las que quieras armar, mándalas a aprobación, y cuando las apruebes quedan listas para que quien tenga el rol de crearlas en Dropi (hoy Heidy) las arme allá y marque &quot;Creado en Dropi&quot;. &quot;Descartar sin revisar&quot; borra las sugerencias viejas sin decisión tomada, y &quot;Recalcular sugerencias&quot; vuelve a correr el cruce con los datos más frescos (puede tardar hasta 1 minuto).</>
             ) : canApprove ? (
               <>Ves todo en modo lectura, incluyendo los lotes esperando aprobación — aprobar o rechazar es exclusivo del líder de Análisis de Mercado, ni admin lo hace. Sí puedes seleccionar sugerencias y mandarlas a aprobación, igual que el resto del equipo.</>
             ) : (
               <>Acá ves las combinaciones que la IA sugiere, cruzando productos que venden bien con productos de baja rotación — cada una trae un % de qué tan segura es. Seleccionar y mandar a aprobación es de cualquiera del equipo de Análisis de Mercado; aprobar o rechazar el lote es exclusivo del líder.</>
             )}
           </TabGuide>
-          <ComboSuggestionsBoard canApprove={canApprove} canAct={canAct} />
+          <ComboSuggestionsBoard canApprove={canApprove} canAct={canAct} canMarkCreated={canMarkCreated} />
         </>
       )}
     </div>

@@ -141,6 +141,7 @@ export function DeptWorkspaceTabs({
   canUploadLowRotationList = false,
   canApproveComboSuggestions = false,
   canActOnComboSuggestions = false,
+  canMarkComboCreatedInDropi = false,
   preferredTab = null,
   isAdmin = false,
   editable,
@@ -324,6 +325,9 @@ export function DeptWorkspaceTabs({
   canUploadLowRotationList?: boolean;
   canApproveComboSuggestions?: boolean;
   canActOnComboSuggestions?: boolean;
+  // Confirmado 2026-09-04: exclusivo de quien crea los combos aprobados en
+  // Dropi de verdad (hoy Heidy) — el resto del equipo solo VE la cola.
+  canMarkComboCreatedInDropi?: boolean;
   isAdmin?: boolean;
   editable: boolean;
   kpisEditable?: boolean;
@@ -585,6 +589,7 @@ export function DeptWorkspaceTabs({
           canUploadLowRotation={canUploadLowRotationList}
           canApprove={canApproveComboSuggestions}
           canAct={canActOnComboSuggestions}
+          canMarkCreated={canMarkComboCreatedInDropi}
         />
       )}
       {tab === "documentos" && <DocumentsPanel deptId={deptId} documents={documents} editable={editable} />}
