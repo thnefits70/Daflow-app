@@ -3,7 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { sendPushToOwner } from "@/lib/webPush";
-import { releaseCreditsForGroup, getReservedCreditsForGroup } from "@/lib/supplierCredits";
+import { releaseCreditsForGroup, getReservedCreditsForGroup, getAvailableCreditsForSupplier } from "@/lib/supplierCredits";
 import { canActOnPurchaseApproval } from "@/lib/guards";
 import { reviewApprovedPurchaseGroup } from "@/lib/purchaseAi";
 
@@ -97,8 +97,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ gro
   // simplemente sin resumen (se reintenta solo/a mano más adelante).
   if (parsed.data.action === "approve") {
     try {
-      const reservedCredits = await getReservedCreditsForGroup(groupId);
       const r0 = rows[0];
+      const [reservedCredits, availableCredits] = await Promise.all([
+        getReservedCreditsForGroup(groupId),
+        getAvailableCreditsForSupplier(r0.supplierId),
+      ]);
       const review = await reviewApprovedPurchaseGroup({
         actorId,
         deptId: r0.deptId,
@@ -118,6 +121,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ gro
         hasPurchaseOrder: !!r0.purchaseOrderUrl,
         bankAccount: r0.bankAccount,
         reservedCreditTotal: reservedCredits.reduce((s, c) => s + c.amount, 0),
+        availableCreditTotal: availableCredits.reduce((s, c) => s + c.amount, 0),
         creditSkipJustification: r0.creditSkipJustification,
       });
       await prisma.purchaseRequest.updateMany({

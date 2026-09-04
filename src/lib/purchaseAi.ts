@@ -315,6 +315,13 @@ export async function reviewApprovedPurchaseGroup(params: {
   hasPurchaseOrder: boolean;
   bankAccount: { bankName: string; bankAccountType: string; bankAccountNumber: string; bankAccountHolder: string } | null;
   reservedCreditTotal: number;
+  // Confirmado 2026-09-04 (fix reportado por el usuario): crédito AVAILABLE
+  // que de verdad existe con este proveedor ahora mismo (sin contar el ya
+  // reservado a esta misma solicitud) — sin este dato la IA no puede
+  // distinguir "no había nada que aplicar" de "había crédito y se saltó sin
+  // explicar", y marcaba como problema un crédito aplicado en 0 aunque
+  // nunca hubo ninguno disponible.
+  availableCreditTotal: number;
   creditSkipJustification: string | null;
 }): Promise<PurchaseGroupReviewResult> {
   const client = getAnthropicClient();
@@ -336,6 +343,7 @@ export async function reviewApprovedPurchaseGroup(params: {
     tiene_orden_de_compra_de_respaldo: params.hasPurchaseOrder,
     cuenta_bancaria_para_transferir: params.bankAccount,
     credito_con_proveedor_ya_aplicado: params.reservedCreditTotal,
+    credito_disponible_con_el_proveedor_sin_aplicar: params.availableCreditTotal,
     justificacion_de_no_aplicar_credito_disponible: params.creditSkipJustification,
   };
 
@@ -353,8 +361,10 @@ export async function reviewApprovedPurchaseGroup(params: {
       "(no puedes saber el historial exacto, así que no inventes un problema aquí — solo repórtalo si el patrón se ve " +
       "claramente anómalo, ej. precio 0 o negativo); (3) que si cotizacion_solo_traia_codigo_sin_nombre es true, " +
       "tiene_orden_de_compra_de_respaldo también sea true; (4) que cuenta_bancaria_para_transferir no sea null; " +
-      "(5) que si hay credito_con_proveedor_ya_aplicado en 0 pero no hay justificacion_de_no_aplicar_credito_disponible, " +
-      "lo señales (podría haber crédito sin usar). " +
+      "(5) que si credito_disponible_con_el_proveedor_sin_aplicar es MAYOR A 0 y credito_con_proveedor_ya_aplicado " +
+      "es 0 y no hay justificacion_de_no_aplicar_credito_disponible, lo señales (hay crédito real sin usar). " +
+      "Si credito_disponible_con_el_proveedor_sin_aplicar es 0, NUNCA marques esto como problema — no había nada " +
+      "que aplicar, así que credito_con_proveedor_ya_aplicado en 0 es exactamente lo esperado. " +
       'Responde ÚNICAMENTE un JSON: {"ok": boolean, "summary": string}. ' +
       "Si TODO está en orden, ok=true y summary es UNA frase breve y clara en español simple confirmándolo (ej. " +
       "\"Todo cuadra: el total, el precio y la cuenta bancaria coinciden con lo revisado — puedes pagar con confianza.\"). " +

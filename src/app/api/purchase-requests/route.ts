@@ -6,7 +6,7 @@ import { auth } from "@/auth";
 import { canSubmitPurchaseRequests, canCreateNewPurchaseRequests, canSubmitEmergencyPurchaseRequest, canApprovePurchaseRequests, canConfirmPurchaseReceiving, canRegisterPurchaseInvoices, getPurchaseApproverIds } from "@/lib/guards";
 import { checkPurchaseSubmission, purchaseSubmissionSchema, nextPurchaseRequestNumber, purchaseRequestInclude } from "@/lib/purchases";
 import { sendPushToOwner } from "@/lib/webPush";
-import { reserveCreditsForGroup, getReservedCreditsForGroup } from "@/lib/supplierCredits";
+import { reserveCreditsForGroup, getReservedCreditsForGroup, getAvailableCreditsForSupplier } from "@/lib/supplierCredits";
 import { reviewApprovedPurchaseGroup } from "@/lib/purchaseAi";
 
 // status: "approval" (bandeja admin), "receiving" (Inventario), "invoicing"
@@ -130,8 +130,18 @@ export async function GET(req: NextRequest) {
     // resumen existiera (o si la llamada al aprobar falló). Se rellena una
     // sola vez, de paso, para que "todo lo que ya me llega" venga con el
     // análisis sin depender de que alguien vuelva a aprobar.
+    // AI_REVIEW_FIX_CUTOFF: corrección del mismo día — las primeras corridas
+    // no le pasaban a la IA cuánto crédito había REALMENTE disponible, así
+    // que marcaban como problema un crédito aplicado en 0 aunque nunca hubo
+    // ninguno que aplicar (reportado por el usuario). Cualquier resumen
+    // generado antes de este momento se vuelve a calcular una vez más.
+    const AI_REVIEW_FIX_CUTOFF = new Date("2026-09-04T19:30:00Z");
     const pendingReviewGroupIds = [
-      ...new Set(rows.filter((r) => r.status === "APPROVED" && r.aiReviewSummary === null).map((r) => r.groupId)),
+      ...new Set(
+        rows
+          .filter((r) => r.status === "APPROVED" && (r.aiReviewSummary === null || (r.aiReviewAt && r.aiReviewAt < AI_REVIEW_FIX_CUTOFF)))
+          .map((r) => r.groupId)
+      ),
     ];
     if (pendingReviewGroupIds.length > 0) {
       await Promise.all(
@@ -139,7 +149,10 @@ export async function GET(req: NextRequest) {
           try {
             const groupRows = rows.filter((r) => r.groupId === groupId);
             const r0 = groupRows[0];
-            const reservedCredits = await getReservedCreditsForGroup(groupId);
+            const [reservedCredits, availableCredits] = await Promise.all([
+              getReservedCreditsForGroup(groupId),
+              getAvailableCreditsForSupplier(r0.supplierId),
+            ]);
             const review = await reviewApprovedPurchaseGroup({
               actorId: r0.reviewedById,
               deptId: r0.deptId,
@@ -159,6 +172,7 @@ export async function GET(req: NextRequest) {
               hasPurchaseOrder: !!r0.purchaseOrderUrl,
               bankAccount: r0.bankAccount,
               reservedCreditTotal: reservedCredits.reduce((s, c) => s + c.amount, 0),
+              availableCreditTotal: availableCredits.reduce((s, c) => s + c.amount, 0),
               creditSkipJustification: r0.creditSkipJustification,
             });
             await prisma.purchaseRequest.updateMany({
