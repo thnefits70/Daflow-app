@@ -225,16 +225,30 @@ function BankAccountChangeSection({ g, onUpdate }: { g: Row[]; onUpdate: (patch:
 // de pedir con un clic que se pague — y si el transportista todavía no dio
 // su cuenta bancaria (algunos solo la dan al entregar), se puede agregar
 // justo en este momento.
-function ShippingPaymentSection({ g, onUpdate }: { g: Row[]; onUpdate: (patch: Partial<Row>) => void }) {
+function ShippingPaymentSection({ g, onUpdate, canPettyCashSecundaria }: { g: Row[]; onUpdate: (patch: Partial<Row>) => void; canPettyCashSecundaria: boolean }) {
   const r0 = g[0];
   const [addingAccount, setAddingAccount] = useState(false);
   const [accountForm, setAccountForm] = useState(emptyAccountForm);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  const [reverting, setReverting] = useState(false);
 
   const carrier = r0.carrier;
   const hasAccount = !!r0.carrierBankAccountId;
   const requested = !!r0.shippingPaymentRequestedAt;
+
+  async function revertToPettyCash() {
+    setReverting(true);
+    setErr("");
+    const res = await fetch(`/api/purchase-requests/group/${r0.groupId}/revert-shipping-to-petty-cash`, { method: "POST" });
+    setReverting(false);
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      setErr(data?.error ?? "No se pudo deshacer la solicitud.");
+      return;
+    }
+    onUpdate({ shippingPaymentMethod: "PETTY_CASH", shippingPaymentRequestedAt: null });
+  }
 
   async function addAccount() {
     if (!carrier) return;
@@ -342,7 +356,17 @@ function ShippingPaymentSection({ g, onUpdate }: { g: Row[]; onUpdate: (patch: P
       {r0.shippingPaymentMethod === "PETTY_CASH" ? (
         <div className="text-[11.5px] text-steel">Se paga con caja chica — Jariel Murillo lo registra desde su Caja Chica cuando llegue la mercadería.</div>
       ) : requested ? (
-        <div className="text-[11.5px] text-steel">✓ Ya se le pidió al administrador que pague el flete{r0.shippingPaymentRequestedAt ? ` · ${formatDateTime(r0.shippingPaymentRequestedAt)}` : ""} — esperando confirmación.</div>
+        <div className="text-[11.5px] text-steel">
+          ✓ Ya se le pidió al administrador que pague el flete{r0.shippingPaymentRequestedAt ? ` · ${formatDateTime(r0.shippingPaymentRequestedAt)}` : ""} — esperando confirmación.
+          {canPettyCashSecundaria && (
+            <>
+              {" "}
+              <button type="button" disabled={reverting} className="text-blue font-semibold underline decoration-dotted cursor-pointer disabled:opacity-60" onClick={revertToPettyCash}>
+                ¿Fue un error? Pagar yo con mi caja chica
+              </button>
+            </>
+          )}
+        </div>
       ) : !hasAccount ? (
         <div className="text-[11.5px] text-steel">Agrega la cuenta bancaria del transportista (arriba) antes de poder pedir el pago.</div>
       ) : (
@@ -358,12 +382,25 @@ function ShippingPaymentSection({ g, onUpdate }: { g: Row[]; onUpdate: (patch: P
 // marcando "todavía no sé el transportista ni el costo del flete", esto
 // aparece hasta que se complete con los datos reales (mismo patrón que la
 // orden de compra pendiente, arriba).
-function ShippingCarrierPendingSection({ g, onUpdate, isAdmin }: { g: Row[]; onUpdate: (patch: Partial<Row>) => void; isAdmin: boolean }) {
+function ShippingCarrierPendingSection({ g, onUpdate, isAdmin, canPettyCashSecundaria }: { g: Row[]; onUpdate: (patch: Partial<Row>) => void; isAdmin: boolean; canPettyCashSecundaria: boolean }) {
   const r0 = g[0];
   const [carrier, setCarrier] = useState<PurchaseSupplierDTO | null>(null);
   const [carrierBankAccountId, setCarrierBankAccountId] = useState<string | null>(null);
   const [cost, setCost] = useState("");
+  // Confirmado 2026-09-04: pedido explícito del usuario — este menú vuelve a
+  // aparecer acá (segunda vez, separado del formulario original) para
+  // completar transportista/costo reales; sin esto, quien administra caja
+  // chica secundaria tenía que acordarse de volver a marcarla, y si se le
+  // pasaba quedaba en TRANSFER por defecto (así se envió por error un flete
+  // de Jariel a la bandeja de Finanzas en vez de a su caja chica). El check
+  // de permiso llega por fetch aparte y puede tardar más que este montaje,
+  // por eso se corrige con efecto (no solo el valor inicial del useState) —
+  // pero solo mientras la persona no haya tocado el menú a mano.
   const [method, setMethod] = useState<"TRANSFER" | "PETTY_CASH">("TRANSFER");
+  const methodTouched = useRef(false);
+  useEffect(() => {
+    if (!methodTouched.current && canPettyCashSecundaria) setMethod("PETTY_CASH");
+  }, [canPettyCashSecundaria]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
 
@@ -411,7 +448,7 @@ function ShippingCarrierPendingSection({ g, onUpdate, isAdmin }: { g: Row[]; onU
         </div>
         <div>
           <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">¿Cómo se paga?</label>
-          <select className="w-full rounded border border-rule bg-surface px-2.5 py-2 text-[13px]" value={method} onChange={(e) => setMethod(e.target.value as "TRANSFER" | "PETTY_CASH")}>
+          <select className="w-full rounded border border-rule bg-surface px-2.5 py-2 text-[13px]" value={method} onChange={(e) => { methodTouched.current = true; setMethod(e.target.value as "TRANSFER" | "PETTY_CASH"); }}>
             <option value="TRANSFER">Transferencia bancaria</option>
             <option value="PETTY_CASH">Efectivo — caja chica</option>
           </select>
@@ -476,12 +513,14 @@ function GroupCard({
   onGroupUpdate,
   onResubmit,
   isAdmin,
+  canPettyCashSecundaria,
 }: {
   g: Row[];
   onPurchaseOrderUploaded: (groupId: string, url: string) => void;
   onGroupUpdate: (groupId: string, patch: Partial<Row>) => void;
   onResubmit: (draft: ReturnType<typeof buildResubmitDraft>) => void;
   isAdmin: boolean;
+  canPettyCashSecundaria: boolean;
 }) {
   const groupId = g[0].groupId;
   const total = g.reduce((s, r) => s + r.totalCost, 0);
@@ -663,14 +702,14 @@ function GroupCard({
       )}
 
       {!rejected && g[0].shippingCarrierPending && (
-        <ShippingCarrierPendingSection g={g} onUpdate={(patch) => onGroupUpdate(groupId, patch)} isAdmin={isAdmin} />
+        <ShippingCarrierPendingSection g={g} onUpdate={(patch) => onGroupUpdate(groupId, patch)} isAdmin={isAdmin} canPettyCashSecundaria={canPettyCashSecundaria} />
       )}
 
       {!rejected && g[0].bankAccountChangeRequestedAt && (
         <BankAccountChangeSection g={g} onUpdate={(patch) => onGroupUpdate(groupId, patch)} />
       )}
 
-      {showShippingSection && <ShippingPaymentSection g={g} onUpdate={(patch) => onGroupUpdate(groupId, patch)} />}
+      {showShippingSection && <ShippingPaymentSection g={g} onUpdate={(patch) => onGroupUpdate(groupId, patch)} canPettyCashSecundaria={canPettyCashSecundaria} />}
 
       {/* Confirmado 2026-08-13: pedido explícito del usuario — apenas queda
           Pagada, quien la pidió (hoy Bryan, a cargo provisional de Compras)
@@ -683,9 +722,11 @@ function GroupCard({
 
 export function MyPurchaseRequests({ onResubmit, isAdmin = false }: { onResubmit: (draft: ReturnType<typeof buildResubmitDraft>) => void; isAdmin?: boolean }) {
   const [rows, setRows] = useState<Row[] | null>(null);
+  const [canPettyCashSecundaria, setCanPettyCashSecundaria] = useState(false);
 
   useEffect(() => {
     fetch("/api/purchase-requests?view=mine").then((r) => (r.ok ? r.json() : [])).then(setRows).catch(() => setRows([]));
+    fetch("/api/petty-cash/permissions").then((r) => (r.ok ? r.json() : null)).then((d) => setCanPettyCashSecundaria(!!d?.canSecundaria)).catch(() => {});
   }, []);
 
   if (!rows) return <div className="text-steel text-[13px]">Cargando…</div>;
@@ -711,7 +752,7 @@ export function MyPurchaseRequests({ onResubmit, isAdmin = false }: { onResubmit
       )}
       <div className="flex flex-col gap-2.5">
         {groups.map((g) => (
-          <GroupCard key={g[0].groupId} g={g} onPurchaseOrderUploaded={markUploaded} onGroupUpdate={updateGroup} onResubmit={onResubmit} isAdmin={isAdmin} />
+          <GroupCard key={g[0].groupId} g={g} onPurchaseOrderUploaded={markUploaded} onGroupUpdate={updateGroup} onResubmit={onResubmit} isAdmin={isAdmin} canPettyCashSecundaria={canPettyCashSecundaria} />
         ))}
       </div>
     </div>

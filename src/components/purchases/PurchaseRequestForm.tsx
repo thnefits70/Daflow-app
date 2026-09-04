@@ -198,6 +198,23 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
   const [carrierBankAccountId, setCarrierBankAccountId] = useState<string | null>(null);
   const [shippingCostTotal, setShippingCostTotal] = useState("");
   const [shippingPaymentMethod, setShippingPaymentMethod] = useState<"TRANSFER" | "PETTY_CASH">("TRANSFER");
+  // Confirmado 2026-09-04: pedido explícito del usuario — a Jariel se le
+  // envió por error un flete a la bandeja de pago de Finanzas en vez de a su
+  // propia caja chica secundaria porque este menú siempre arrancaba en
+  // "Transferencia bancaria" y él no se acordó de cambiarlo. Quien administra
+  // la caja chica secundaria ahora lo ve arrancar en "Efectivo — caja chica"
+  // — solo mientras no lo haya tocado a mano en esta sesión.
+  const [canPettyCashSecundaria, setCanPettyCashSecundaria] = useState(false);
+  const shippingMethodTouchedRef = useRef(false);
+  useEffect(() => {
+    fetch("/api/petty-cash/permissions").then((r) => (r.ok ? r.json() : null)).then((d) => setCanPettyCashSecundaria(!!d?.canSecundaria)).catch(() => {});
+  }, []);
+  useEffect(() => {
+    if (canPettyCashSecundaria && !shippingMethodTouchedRef.current && shippingPaymentMethod === "TRANSFER") {
+      setShippingPaymentMethod("PETTY_CASH");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canPettyCashSecundaria]);
   // Confirmado 2026-08-03: si el flete se cobra aparte, se elige si se paga
   // junto con la compra (como antes) o si queda pendiente hasta que llegue
   // la mercadería — algunos transportistas solo dan su cuenta al entregar.
@@ -371,6 +388,9 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
         setCarrierBankAccountId(d.carrierBankAccountId ?? null);
         setShippingCostTotal(d.shippingCostTotal ?? "");
         setShippingPaymentMethod(d.shippingPaymentMethod ?? "TRANSFER");
+        // Ya había un borrador guardado (nuevo o de una compra en edición) —
+        // no pisar lo que sea que tenga ahí con el valor por defecto.
+        shippingMethodTouchedRef.current = true;
         setShippingPaymentTiming(d.shippingPaymentTiming ?? "WITH_PURCHASE");
         setJustification(d.justification ?? "");
         setEditingGroupId(d.editingGroupId ?? null);
@@ -429,7 +449,8 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
     setShippingCostTotal("");
     setShippingIncluded(false);
     setShippingCarrierPending(false);
-    setShippingPaymentMethod("TRANSFER");
+    shippingMethodTouchedRef.current = false;
+    setShippingPaymentMethod(canPettyCashSecundaria ? "PETTY_CASH" : "TRANSFER");
     setShippingPaymentTiming("WITH_PURCHASE");
     setJustification("");
     setDraftRestored(false);
@@ -1306,7 +1327,7 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
                 </div>
                 <div>
                   <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">¿Cómo se paga?</label>
-                  <select className="w-full rounded border border-rule bg-surface px-2.5 py-2 text-[13.5px]" value={shippingPaymentMethod} onChange={(e) => setShippingPaymentMethod(e.target.value as "TRANSFER" | "PETTY_CASH")}>
+                  <select className="w-full rounded border border-rule bg-surface px-2.5 py-2 text-[13.5px]" value={shippingPaymentMethod} onChange={(e) => { shippingMethodTouchedRef.current = true; setShippingPaymentMethod(e.target.value as "TRANSFER" | "PETTY_CASH"); }}>
                     <option value="TRANSFER">Transferencia bancaria</option>
                     <option value="PETTY_CASH">Efectivo — caja chica</option>
                   </select>
