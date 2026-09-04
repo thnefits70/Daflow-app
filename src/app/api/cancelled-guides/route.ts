@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { canSubmitCancelledGuide, canViewAllCancelledGuides } from "@/lib/guards";
+import { canSubmitCancelledGuide, canViewAllCancelledGuides, canAssignCancelledGuideItems } from "@/lib/guards";
 
 const REPORT_INCLUDE = {
   submittedBy: { select: { name: true } },
@@ -20,7 +20,11 @@ export async function GET() {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
-  const seeAll = await canViewAllCancelledGuides();
+  // Heidy (canAssignCancelledGuideItems) ya ve TODAS las guías pendientes de
+  // cargar productos, cruzando departamentos (/api/cancelled-guides/pending-items)
+  // — el historial debe reflejar esa misma cobertura, no solo lo que ella
+  // reportó, para que pueda seguir el estado de las guías que gestiona.
+  const seeAll = (await canViewAllCancelledGuides()) || (await canAssignCancelledGuideItems());
   if (!seeAll && !(await canSubmitCancelledGuide())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
   const reports = await prisma.cancelledGuideReport.findMany({
