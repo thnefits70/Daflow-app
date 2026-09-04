@@ -633,13 +633,18 @@ export async function canCreateNewPurchaseRequests() {
 // marcada isEmergency y solo el admin puede aprobarla/pagarla (nunca la
 // misma persona que la subió) — ver review/route.ts y la vista "approval"
 // en GET /api/purchase-requests.
+// Confirmado 2026-09-04: pedido explícito del usuario — se quita el
+// requisito adicional de canManagePurchases. Ese flag ahora solo debe
+// significar "gestiona créditos con proveedores" (hoy Jariel, ya no
+// Bryan), y estaba acoplado sin necesidad al respaldo de emergencia.
+// purchasingNewRequestsBlocked por sí solo ya identifica a Bryan.
 export async function canSubmitEmergencyPurchaseRequest() {
   const session = await auth();
   if (!session) return false;
   if (session.user.role === "admin") return false;
   const user = await purchasesUserContext(session.user.id);
   if (!user) return false;
-  return !!user.canManagePurchases && !!user.purchasingNewRequestsBlocked;
+  return !!user.purchasingNewRequestsBlocked;
 }
 
 // Confirmado 2026-09-02: pedido explícito del usuario — paso nuevo de
