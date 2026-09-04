@@ -46,6 +46,7 @@ function UploadBox({ label, folder, onFile, onCaptured }: { label: string; folde
   const { onPaste, onMouseEnter, onMouseLeave } = usePasteFile(onFile);
   const inputRef = useRef<HTMLInputElement>(null);
   const [takingPhoto, setTakingPhoto] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
 
   if (takingPhoto) {
     return <LiveCameraCapture folder={folder} onCaptured={(url) => { setTakingPhoto(false); onCaptured(url); }} onCancel={() => setTakingPhoto(false)} />;
@@ -57,11 +58,19 @@ function UploadBox({ label, folder, onFile, onCaptured }: { label: string; folde
       onPaste={onPaste}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
-      className="flex flex-col items-center justify-center gap-1 border-[1.5px] border-dashed border-rule rounded-md py-4 cursor-pointer hover:border-teal transition-colors text-center"
+      onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+      onDragLeave={() => setDragOver(false)}
+      onDrop={(e) => {
+        e.preventDefault();
+        setDragOver(false);
+        const file = e.dataTransfer.files?.[0];
+        if (file) onFile(file);
+      }}
+      className={`flex flex-col items-center justify-center gap-1 border-[1.5px] border-dashed rounded-md py-4 cursor-pointer transition-colors text-center ${dragOver ? "border-teal bg-teal/5" : "border-rule hover:border-teal"}`}
     >
       <Upload size={16} className="text-steel" />
       <div className="text-[11.5px] font-semibold">{label}</div>
-      <div className="text-[10px] text-steel">Pega la imagen aquí (Ctrl+V)</div>
+      <div className="text-[10px] text-steel">Arrastra o pega la imagen aquí (Ctrl+V)</div>
       <div className="flex items-center gap-2.5">
         <button type="button" className="flex items-center gap-1 text-[10px] font-semibold text-blue cursor-pointer" onClick={() => setTakingPhoto(true)}>
           <Camera size={11} /> Tomar foto
@@ -608,6 +617,92 @@ function BoxCard({
         </div>
       )}
 
+      {canOperate && !blocked && (
+        <div className="mt-4 pt-3.5 border-t border-dashed border-rule">
+          <div className="text-[12px] font-semibold mb-2">Registrar solicitud de pago</div>
+          {showOrderLink && (
+            <div className="flex gap-1.5 mb-2.5">
+              <button type="button" className={`flex-1 rounded px-2 py-1.5 text-[11px] font-semibold cursor-pointer ${linkMode === "orden" ? "bg-blue text-white" : "bg-cloud text-steel"}`} onClick={() => selectLinkMode("orden")}>🚚 Flete</button>
+              <button type="button" className={`flex-1 rounded px-2 py-1.5 text-[11px] font-semibold cursor-pointer ${linkMode === "motivo" ? "bg-blue text-white" : "bg-cloud text-steel"}`} onClick={() => selectLinkMode("motivo")}>✏️ Otro gasto</button>
+            </div>
+          )}
+          {showOrderLink && linkMode === "orden" && (
+            <select className="w-full rounded border border-rule bg-cloud px-2.5 py-2 text-[12px] mb-2.5" value={groupId} onChange={(e) => selectGroup(e.target.value)}>
+              {eligibleOrders.length === 0 && <option value="">No hay órdenes con flete pendiente</option>}
+              {eligibleOrders.map((o) => <option key={o.groupId} value={o.groupId}>{o.label}</option>)}
+            </select>
+          )}
+          {showOrderLink && linkMode === "motivo" && (
+            <input type="text" placeholder="Motivo del pago" className="w-full rounded border border-rule bg-cloud px-2.5 py-2 text-[12px] mb-2.5" value={reason} onChange={(e) => setReason(e.target.value)} />
+          )}
+          <input type="text" placeholder="Descripción" className="w-full rounded border border-rule bg-cloud px-2.5 py-2 text-[12px] mb-2.5" value={description} onChange={(e) => setDescription(e.target.value)} />
+          <input type="number" step="any" placeholder="$0.00" className="w-full rounded border border-rule bg-cloud px-2.5 py-2 text-[12px] font-mono mb-2.5" value={amount} onChange={(e) => { setAmount(e.target.value); setProofVerifyResult(null); }} />
+          {proofUrl ? (
+            <div className="flex items-start gap-2.5 mb-2.5">
+              <ProofThumb url={proofUrl} onZoom={() => setZoomedUrl(proofUrl)} />
+              <div className="flex-1 min-w-0 text-[11.5px]">
+                {proofVerifying ? (
+                  <span className="text-steel flex items-center gap-1.5"><span className="w-3 h-3 rounded-full border-2 border-rule border-t-teal animate-spin shrink-0" /> Verificando con IA…</span>
+                ) : proofVerifyResult?.matches ? (
+                  <span className="text-teal flex items-center gap-1"><CheckCircle2 size={13} /> {proofVerifyResult.note}</span>
+                ) : proofVerifyResult ? (
+                  <span className="text-red">{proofVerifyResult.note}</span>
+                ) : (
+                  <span className="text-teal flex items-center gap-1"><CheckCircle2 size={13} /> Comprobante listo — doble clic para ampliar</span>
+                )}
+                <div className="flex items-center gap-2.5 mt-1">
+                  <button type="button" className="text-steel underline cursor-pointer" onClick={() => { setProofUrl(null); setProofVerifyResult(null); }}>Cambiar foto</button>
+                  {!proofVerifying && (
+                    <button
+                      type="button"
+                      className="text-steel underline cursor-pointer"
+                      onClick={() => { const n = Number(amount); if (!Number.isNaN(n) && n > 0) verifyProof("desembolso", proofUrl, n); else setErr("Ingresa el monto antes de verificar."); }}
+                    >
+                      Verificar de nuevo
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="mb-2.5">{uploading ? <div className="text-[11.5px] text-steel">Subiendo…</div> : <UploadBox label="📷 Subir comprobante" folder="petty-cash" onFile={(f) => doUpload(f, "desembolso")} onCaptured={(url) => applyProof("desembolso", url)} />}</div>
+          )}
+          <div className="flex items-center gap-2.5">
+            <button
+              type="button"
+              disabled={busy || proofVerifying || (!!proofUrl && proofVerifyResult?.matches === false)}
+              className="rounded bg-blue text-white px-3.5 py-2 text-[12.5px] font-semibold cursor-pointer disabled:opacity-60"
+              onClick={submitDesembolso}
+            >
+              Guardar desembolso
+            </button>
+            {(description || amount || proofUrl) && (
+              <button
+                type="button"
+                disabled={busy}
+                className="text-steel text-[11.5px] cursor-pointer disabled:opacity-60"
+                onClick={clearDesembolso}
+              >
+                Cancelar / borrar
+              </button>
+            )}
+          </div>
+
+          {showOrderLink && (
+            <div className="mt-4 pt-3 border-t border-dashed border-rule">
+              <div className="text-[11px] font-semibold mb-1.5">¿Una orden ya tiene el flete pagado y necesitas un 2do pago real?</div>
+              <select className="w-full rounded border border-rule bg-cloud px-2.5 py-2 text-[11.5px] mb-2" value={groupId} onChange={(e) => setGroupId(e.target.value)}>
+                {eligibleOrders.map((o) => <option key={o.groupId} value={o.groupId}>{o.label}</option>)}
+              </select>
+              <textarea rows={2} placeholder="Explica por qué hace falta un segundo pago…" className="w-full rounded border border-rule bg-cloud px-2.5 py-2 text-[11.5px] mb-2 resize-none" value={excReason} onChange={(e) => setExcReason(e.target.value)} />
+              <button type="button" disabled={busy} className="rounded border border-rule text-steel px-3 py-1.5 text-[11.5px] cursor-pointer disabled:opacity-60" onClick={submitException}>
+                Enviar excepción al dueño
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="mt-3.5">
         {box.entries.length > 0 && (
           <div className="flex items-center gap-1.5 mb-2.5 flex-wrap text-[11px]">
@@ -750,92 +845,6 @@ function BoxCard({
             </div>
           ) : (
             <div className="text-[12px] text-steel italic">Sin cuenta configurada</div>
-          )}
-        </div>
-      )}
-
-      {canOperate && !blocked && (
-        <div className="mt-4 pt-3.5 border-t border-dashed border-rule">
-          <div className="text-[12px] font-semibold mb-2">Registrar solicitud de pago</div>
-          {showOrderLink && (
-            <div className="flex gap-1.5 mb-2.5">
-              <button type="button" className={`flex-1 rounded px-2 py-1.5 text-[11px] font-semibold cursor-pointer ${linkMode === "orden" ? "bg-blue text-white" : "bg-cloud text-steel"}`} onClick={() => selectLinkMode("orden")}>🚚 Flete</button>
-              <button type="button" className={`flex-1 rounded px-2 py-1.5 text-[11px] font-semibold cursor-pointer ${linkMode === "motivo" ? "bg-blue text-white" : "bg-cloud text-steel"}`} onClick={() => selectLinkMode("motivo")}>✏️ Otro gasto</button>
-            </div>
-          )}
-          {showOrderLink && linkMode === "orden" && (
-            <select className="w-full rounded border border-rule bg-cloud px-2.5 py-2 text-[12px] mb-2.5" value={groupId} onChange={(e) => selectGroup(e.target.value)}>
-              {eligibleOrders.length === 0 && <option value="">No hay órdenes con flete pendiente</option>}
-              {eligibleOrders.map((o) => <option key={o.groupId} value={o.groupId}>{o.label}</option>)}
-            </select>
-          )}
-          {showOrderLink && linkMode === "motivo" && (
-            <input type="text" placeholder="Motivo del pago" className="w-full rounded border border-rule bg-cloud px-2.5 py-2 text-[12px] mb-2.5" value={reason} onChange={(e) => setReason(e.target.value)} />
-          )}
-          <input type="text" placeholder="Descripción" className="w-full rounded border border-rule bg-cloud px-2.5 py-2 text-[12px] mb-2.5" value={description} onChange={(e) => setDescription(e.target.value)} />
-          <input type="number" step="any" placeholder="$0.00" className="w-full rounded border border-rule bg-cloud px-2.5 py-2 text-[12px] font-mono mb-2.5" value={amount} onChange={(e) => { setAmount(e.target.value); setProofVerifyResult(null); }} />
-          {proofUrl ? (
-            <div className="flex items-start gap-2.5 mb-2.5">
-              <ProofThumb url={proofUrl} onZoom={() => setZoomedUrl(proofUrl)} />
-              <div className="flex-1 min-w-0 text-[11.5px]">
-                {proofVerifying ? (
-                  <span className="text-steel flex items-center gap-1.5"><span className="w-3 h-3 rounded-full border-2 border-rule border-t-teal animate-spin shrink-0" /> Verificando con IA…</span>
-                ) : proofVerifyResult?.matches ? (
-                  <span className="text-teal flex items-center gap-1"><CheckCircle2 size={13} /> {proofVerifyResult.note}</span>
-                ) : proofVerifyResult ? (
-                  <span className="text-red">{proofVerifyResult.note}</span>
-                ) : (
-                  <span className="text-teal flex items-center gap-1"><CheckCircle2 size={13} /> Comprobante listo — doble clic para ampliar</span>
-                )}
-                <div className="flex items-center gap-2.5 mt-1">
-                  <button type="button" className="text-steel underline cursor-pointer" onClick={() => { setProofUrl(null); setProofVerifyResult(null); }}>Cambiar foto</button>
-                  {!proofVerifying && (
-                    <button
-                      type="button"
-                      className="text-steel underline cursor-pointer"
-                      onClick={() => { const n = Number(amount); if (!Number.isNaN(n) && n > 0) verifyProof("desembolso", proofUrl, n); else setErr("Ingresa el monto antes de verificar."); }}
-                    >
-                      Verificar de nuevo
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div className="mb-2.5">{uploading ? <div className="text-[11.5px] text-steel">Subiendo…</div> : <UploadBox label="📷 Subir comprobante" folder="petty-cash" onFile={(f) => doUpload(f, "desembolso")} onCaptured={(url) => applyProof("desembolso", url)} />}</div>
-          )}
-          <div className="flex items-center gap-2.5">
-            <button
-              type="button"
-              disabled={busy || proofVerifying || (!!proofUrl && proofVerifyResult?.matches === false)}
-              className="rounded bg-blue text-white px-3.5 py-2 text-[12.5px] font-semibold cursor-pointer disabled:opacity-60"
-              onClick={submitDesembolso}
-            >
-              Guardar desembolso
-            </button>
-            {(description || amount || proofUrl) && (
-              <button
-                type="button"
-                disabled={busy}
-                className="text-steel text-[11.5px] cursor-pointer disabled:opacity-60"
-                onClick={clearDesembolso}
-              >
-                Cancelar / borrar
-              </button>
-            )}
-          </div>
-
-          {showOrderLink && (
-            <div className="mt-4 pt-3 border-t border-dashed border-rule">
-              <div className="text-[11px] font-semibold mb-1.5">¿Una orden ya tiene el flete pagado y necesitas un 2do pago real?</div>
-              <select className="w-full rounded border border-rule bg-cloud px-2.5 py-2 text-[11.5px] mb-2" value={groupId} onChange={(e) => setGroupId(e.target.value)}>
-                {eligibleOrders.map((o) => <option key={o.groupId} value={o.groupId}>{o.label}</option>)}
-              </select>
-              <textarea rows={2} placeholder="Explica por qué hace falta un segundo pago…" className="w-full rounded border border-rule bg-cloud px-2.5 py-2 text-[11.5px] mb-2 resize-none" value={excReason} onChange={(e) => setExcReason(e.target.value)} />
-              <button type="button" disabled={busy} className="rounded border border-rule text-steel px-3 py-1.5 text-[11.5px] cursor-pointer disabled:opacity-60" onClick={submitException}>
-                Enviar excepción al dueño
-              </button>
-            </div>
           )}
         </div>
       )}
