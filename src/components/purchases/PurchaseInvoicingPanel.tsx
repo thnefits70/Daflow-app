@@ -196,6 +196,12 @@ export function PurchaseInvoicingPanel({ isAdmin = false, canPayMerchandise }: {
   const router = useRouter();
   const [rows, setRows] = useState<Row[] | null>(null);
   const [zoomedPhoto, setZoomedPhoto] = useState<string | null>(null);
+  // Confirmado 2026-09-04: pedido explícito del usuario — "Registrar factura"
+  // (exclusivo de Nairoby) no debe desaparecer del todo para admin, solo
+  // quedar colapsado por defecto para no confundir con su propia parte
+  // (pagar mercadería); un botón lo despliega cuando de verdad hace falta
+  // verlo. Nairoby lo sigue viendo siempre desplegado, como antes.
+  const [showInvoicing, setShowInvoicing] = useState(!isAdmin);
   const [pettyCash, setPettyCash] = useState<{ count: number; total: number } | null>(null);
   const [payingGroup, setPayingGroup] = useState<string | null>(null);
   const [proofUrl, setProofUrl] = useState<string | null>(null);
@@ -1047,12 +1053,16 @@ export function PurchaseInvoicingPanel({ isAdmin = false, canPayMerchandise }: {
         </div>
       )}
 
-      {/* Confirmado 2026-09-04: pedido explícito del usuario — "Registrar
-          factura" es exclusivo de Nairoby (ver ADMIN_LOCK_TITLE arriba); para
-          admin, que solo paga mercadería, verlo en modo solo-lectura
-          confundía con su propia parte (pagar y subir comprobante). Se oculta
-          del todo para admin en vez de mostrarlo bloqueado. */}
-      {!isAdmin && (
+      {isAdmin && (
+        <button
+          type="button"
+          className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-steel cursor-pointer hover:text-teal mb-2"
+          onClick={() => setShowInvoicing((v) => !v)}
+        >
+          {showInvoicing ? "▾" : "▸"} Registrar factura (exclusivo de Nairoby) — {restGroupsAll.length} operaci{restGroupsAll.length === 1 ? "ón" : "ones"}
+        </button>
+      )}
+      {(!isAdmin || showInvoicing) && (
       <>
       <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
         <div className="text-[11px] font-semibold uppercase tracking-wide text-steel">Registrar factura</div>
