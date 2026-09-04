@@ -277,6 +277,12 @@ export function PurchaseInvoicingPanel({ isAdmin = false, canPayMerchandise }: {
   // reserveCreditsForGroup) — si linked es 0 y available es mayor a 0,
   // significa que a quien pidió se le pasó vincularlo.
   const [groupCredits, setGroupCredits] = useState<Record<string, { available: number; linked: number }>>({});
+  // Confirmado 2026-09-04: pedido explícito del usuario — el crédito con el
+  // proveedor se descuenta recién al pagar (ver group/[groupId]/pay/route.ts),
+  // así que el total de la solicitud que se ve acá no es necesariamente lo
+  // que de verdad se transfirió cuando parte se cubrió con crédito. Mismo
+  // fix ya aplicado en PurchaseAuditPanel.
+  const [appliedCreditsByGroup, setAppliedCreditsByGroup] = useState<Record<string, { id: string; amount: number }[]>>({});
 
   // Vista de solo lectura para admin — pedido explícito del usuario: quiere
   // ver qué productos, cantidades y precio unitario trae cada solicitud
@@ -329,6 +335,22 @@ export function PurchaseInvoicingPanel({ isAdmin = false, canPayMerchandise }: {
           .catch(() => [groupId, { available: 0, linked: 0 }] as const)
       )
     ).then((entries) => setGroupCredits(Object.fromEntries(entries)));
+  }, [rows]);
+
+  useEffect(() => {
+    if (!rows) return;
+    const paidGroupPairs = [
+      ...new Map(rows.filter((r) => r.status !== "APPROVED").map((r) => [r.groupId, r.supplier.id])).entries(),
+    ];
+    if (paidGroupPairs.length === 0) return;
+    Promise.all(
+      paidGroupPairs.map(([groupId, supplierId]) =>
+        fetch(`/api/purchase-suppliers/${supplierId}/credit-balance?groupId=${groupId}`)
+          .then((r) => (r.ok ? r.json() : null))
+          .then((data) => [groupId, data?.applied ?? []] as const)
+          .catch(() => [groupId, []] as const)
+      )
+    ).then((entries) => setAppliedCreditsByGroup(Object.fromEntries(entries)));
   }, [rows]);
 
   // Confirmado 2026-08-06: mientras la suma de resoluciones COMPLETED no
@@ -1150,7 +1172,22 @@ export function PurchaseInvoicingPanel({ isAdmin = false, canPayMerchandise }: {
                   </div>
                   <span className="font-mono text-[10.5px] text-steel shrink-0">{formatPurchaseRequestCode(r0.requestNumber)}</span>
                 </div>
-                <div className="text-[11.5px] text-steel">{r0.supplier.name} — <span className="text-green font-semibold">Pagado {money(total)}</span> {r0.paidAt ? `· ${formatDateTime(r0.paidAt)}` : ""}</div>
+                <div className="text-[11.5px] text-steel">
+                  {r0.supplier.name} —{" "}
+                  {(() => {
+                    const appliedCreditTotal = (appliedCreditsByGroup[groupId] ?? []).reduce((s, c) => s + c.amount, 0);
+                    return appliedCreditTotal > 0 ? (
+                      <>
+                        <span className="line-through text-steel-dim">{money(total)}</span>{" "}
+                        <span className="text-green font-semibold">Pagado {money(Math.max(0, total - appliedCreditTotal))}</span>{" "}
+                        <span className="text-steel-dim">(crédito de {money(appliedCreditTotal)} aplicado)</span>
+                      </>
+                    ) : (
+                      <span className="text-green font-semibold">Pagado {money(total)}</span>
+                    );
+                  })()}{" "}
+                  {r0.paidAt ? `· ${formatDateTime(r0.paidAt)}` : ""}
+                </div>
                 <div className="text-[10px] text-steel-dim">
                   Solicitada por {actorName(r0.requestedBy?.name)} · Pagada por {actorName(r0.paidBy?.name)}
                   {r0.invoiceStatus === "PENDING" && r0.paidAt && (
