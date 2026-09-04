@@ -347,7 +347,7 @@ export function DeptWorkspaceTabs({
     if (t.key === "pagos") return trackPaymentReminders;
     if (t.key === "semanal") return trackWeeklyMetric;
     if (t.key === "feedback") return trackWeeklyReview;
-    if (t.key === "compras") return canSubmitPurchases || canSubmitEmergencyPurchases || canReceivePurchases || canInvoicePurchases;
+    if (t.key === "compras") return canSubmitPurchases || canSubmitEmergencyPurchases || canApprovePurchases || canReceivePurchases || canInvoicePurchases;
     if (t.key === "proveedores") return canAccessSuppliers;
     if (t.key === "llegadas") return canViewMarketingArrivals;
     if (t.key === "inventario") return canManageInventoryControl;
@@ -467,7 +467,7 @@ export function DeptWorkspaceTabs({
           currentUserId={currentUserId}
         />
       )}
-      {tab === "compras" && (canSubmitPurchases || canSubmitEmergencyPurchases || canReceivePurchases || canInvoicePurchases) && (
+      {tab === "compras" && (canSubmitPurchases || canSubmitEmergencyPurchases || canApprovePurchases || canReceivePurchases || canInvoicePurchases) && (
         <PurchaseControlPanel
           deptId={deptId}
           canSubmit={canSubmitPurchases}
