@@ -278,6 +278,7 @@ export function ComboSuggestionsBoard({ canApprove }: { canApprove: boolean }) {
                 </button>
               )
             )}
+            {recalculating && <span className="text-[11px] text-steel">Puede tardar hasta 1 minuto…</span>}
             <button type="button" disabled={recalculating} className="rounded border border-rule px-2.5 py-1 text-[11px] font-semibold cursor-pointer disabled:opacity-60" onClick={recalculate}>
               {recalculating ? "Recalculando…" : "Recalcular sugerencias"}
             </button>

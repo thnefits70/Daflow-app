@@ -4,6 +4,11 @@ import { auth } from "@/auth";
 import { canSyncAtomData, dbUserId } from "@/lib/guards";
 import { applyAtomSync } from "@/lib/atomSync";
 
+// Confirmado 2026-09-03: guardar dispara generateComboSuggestions, que corre
+// varias llamadas de IA en paralelo y puede tardar más que el límite por
+// defecto de una función serverless.
+export const maxDuration = 60;
+
 const schema = z.object({
   rows: z.array(
     z.object({

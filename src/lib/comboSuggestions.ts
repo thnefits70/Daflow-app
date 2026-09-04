@@ -56,10 +56,18 @@ function parseComboMatchResponse(raw: string): ComboMatchPair[] {
 
 export type ComboCandidate = { id: string; name: string; nicho: string | null };
 
-// Una sola llamada de IA revisa TODO el catálogo de ganadores contra TODO el
-// de baja rotación a la vez (no una por pareja, para no disparar el costo) y
-// devuelve solo las combinaciones con lógica real de combo + su puntaje.
-async function filterPlausibleComboPairs(winners: ComboCandidate[], lowRotation: ComboCandidate[], actorId: string): Promise<Map<string, number>> {
+// Confirmado 2026-09-03 (mismo día, corrección): mandar TODO el catálogo de
+// ganadores (150+) en una sola llamada hacía que la IA intentara razonar
+// cientos de combinaciones a la vez — la respuesta se cortaba al llegar al
+// límite de tokens (JSON incompleto, se descartaba todo) y la llamada
+// tardaba tanto que la función serverless se quedaba colgada sin terminar
+// nunca ("se queda recalculando"). Se reparte a los ganadores en grupos
+// chicos, cada grupo contra TODA la lista de baja rotación, corriendo todos
+// los grupos EN PARALELO — cada llamada individual es rápida y con
+// respuesta corta, y el tiempo total es el de la más lenta, no la suma.
+const WINNER_CHUNK_SIZE = 20;
+
+async function callComboMatchAi(winners: ComboCandidate[], lowRotation: ComboCandidate[], actorId: string): Promise<Map<string, number>> {
   try {
     const client = getAnthropicClient();
     const fmt = (items: ComboCandidate[]) => items.map((it, i) => `${i}. ${it.name} (${it.nicho ?? "sin categoría"})`).join("\n");
@@ -90,11 +98,21 @@ async function filterPlausibleComboPairs(winners: ComboCandidate[], lowRotation:
     }
     return out;
   } catch (err) {
-    // Best-effort: si la IA falla por lo que sea, esta corrida simplemente no
-    // suma sugerencias nuevas en vez de tumbar todo el cruce.
-    console.error("No se pudo filtrar combos con IA:", err);
+    // Best-effort: si un grupo falla por lo que sea, ese grupo simplemente no
+    // suma sugerencias esta corrida en vez de tumbar todo el cruce.
+    console.error("No se pudo filtrar un grupo de combos con IA:", err);
     return new Map();
   }
+}
+
+async function filterPlausibleComboPairs(winners: ComboCandidate[], lowRotation: ComboCandidate[], actorId: string): Promise<Map<string, number>> {
+  const chunks: ComboCandidate[][] = [];
+  for (let i = 0; i < winners.length; i += WINNER_CHUNK_SIZE) chunks.push(winners.slice(i, i + WINNER_CHUNK_SIZE));
+
+  const results = await Promise.all(chunks.map((chunk) => callComboMatchAi(chunk, lowRotation, actorId)));
+  const merged = new Map<string, number>();
+  for (const r of results) for (const [key, score] of r) merged.set(key, score);
+  return merged;
 }
 
 // Confirmado 2026-08-31: umbral real que definió el usuario — 8 o más

@@ -5,6 +5,11 @@ import { prisma } from "@/lib/prisma";
 import { canUploadLowRotationList, canViewComboSuggestions, dbUserId } from "@/lib/guards";
 import { generateComboSuggestions } from "@/lib/comboSuggestions";
 
+// Confirmado 2026-09-03: guardar dispara generateComboSuggestions, que corre
+// varias llamadas de IA en paralelo y puede tardar más que el límite por
+// defecto de una función serverless.
+export const maxDuration = 60;
+
 // Confirmado 2026-08-31: sábado = Daniel sube/actualiza la lista de
 // productos que despacharon menos de 8 unidades esa semana.
 export async function GET(req: NextRequest) {
