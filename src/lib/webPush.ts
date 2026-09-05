@@ -65,6 +65,20 @@ export async function sendPushToOwner(ownerId: string, payload: PushPayload) {
           // enteraba nunca. Ahora queda en los logs de Vercel para poder
           // diagnosticar sin adivinar.
           console.error(`sendPushToOwner falló (ownerId=${ownerId}, statusCode=${statusCode}):`, err);
+
+          // Confirmado 2026-09-05: los logs de Vercel no los revisa nadie en
+          // el día a día, así que además queda un aviso en la campanita del
+          // admin — inserción directa (no notifyOwner) para no reintentar el
+          // push que ya sabemos que falló.
+          const message = err instanceof Error ? err.message : String(err);
+          await prisma.notification.create({
+            data: {
+              ownerId: "admin",
+              title: "⚠️ Un push no se pudo enviar",
+              body: `Destinatario: ${ownerId}${statusCode ? ` · código ${statusCode}` : ""} · ${message}`,
+              url: null,
+            },
+          }).catch(() => null);
         }
       }
     })
