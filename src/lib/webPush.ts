@@ -71,11 +71,15 @@ export async function sendPushToOwner(ownerId: string, payload: PushPayload) {
           // admin — inserción directa (no notifyOwner) para no reintentar el
           // push que ya sabemos que falló.
           const message = err instanceof Error ? err.message : String(err);
+          const destinatario =
+            ownerId === "admin"
+              ? "Administrador"
+              : (await prisma.user.findUnique({ where: { id: ownerId }, select: { name: true } }).catch(() => null))?.name ?? ownerId;
           await prisma.notification.create({
             data: {
               ownerId: "admin",
               title: "⚠️ Un push no se pudo enviar",
-              body: `Destinatario: ${ownerId}${statusCode ? ` · código ${statusCode}` : ""} · ${message}`,
+              body: `Destinatario: ${destinatario}${statusCode ? ` · código ${statusCode}` : ""} · ${message}`,
               url: null,
             },
           }).catch(() => null);
