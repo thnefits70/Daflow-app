@@ -2,9 +2,28 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ClipboardList, Send, X } from "lucide-react";
+import { ClipboardList, Send, X, Mic, MicOff } from "lucide-react";
 
 type ChatMessage = { role: "user" | "assistant"; content: string };
+
+// Minimal local typing for the (non-standard, not in lib.dom.d.ts everywhere)
+// Web Speech API — same pattern as NancyPanel.tsx. Chrome/Edge support this
+// well; Safari/Firefox support is partial, so the mic button just hides when
+// unsupported instead of erroring.
+type SpeechRecognitionLike = {
+  lang: string;
+  continuous: boolean;
+  interimResults: boolean;
+  onresult: ((event: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null;
+  onend: (() => void) | null;
+  onerror: (() => void) | null;
+  start: () => void;
+  stop: () => void;
+};
+type SpeechWindow = Window & {
+  SpeechRecognition?: new () => SpeechRecognitionLike;
+  webkitSpeechRecognition?: new () => SpeechRecognitionLike;
+};
 
 // Widget flotante del asistente de check-in semanal — reemplaza la reunión
 // 1:1 admin-líder (ver src/lib/weeklyCheckin.ts). A diferencia de Nancy (que
@@ -24,7 +43,11 @@ export function WeeklyCheckinPanel() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [listening, setListening] = useState(false);
+  const [micSupported, setMicSupported] = useState(false);
+  const [reducedMotion, setReducedMotion] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
 
   // Accesos directos (ej. la tarjeta de Inicio, "?openMary=1") deben abrir
   // el chat en un solo clic, sin que la persona tenga que buscar el botón
@@ -36,6 +59,41 @@ export function WeeklyCheckinPanel() {
   useEffect(() => {
     if (searchParams.get("openMary") === "1") setOpen(true);
   }, [searchParams]);
+
+  // "Assume default, flip after mount" — same pattern used in NancyPanel and
+  // WeeklyTrendChart — keeps the server-rendered markup identical to the
+  // first client render (matchMedia/SpeechRecognition don't exist on server).
+  useEffect(() => {
+    setReducedMotion(window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+    const sw = window as SpeechWindow;
+    setMicSupported(!!(sw.SpeechRecognition || sw.webkitSpeechRecognition));
+  }, []);
+
+  function toggleListening() {
+    const sw = window as SpeechWindow;
+    const Ctor = sw.SpeechRecognition || sw.webkitSpeechRecognition;
+    if (!Ctor) return;
+
+    if (listening) {
+      recognitionRef.current?.stop();
+      return;
+    }
+
+    const recognition = new Ctor();
+    recognition.lang = "es-EC";
+    recognition.continuous = false;
+    recognition.interimResults = true;
+    recognition.onresult = (event) => {
+      let transcript = "";
+      for (let i = 0; i < event.results.length; i++) transcript += event.results[i][0].transcript;
+      setInput(transcript);
+    };
+    recognition.onend = () => setListening(false);
+    recognition.onerror = () => setListening(false);
+    recognitionRef.current = recognition;
+    setListening(true);
+    recognition.start();
+  }
 
   useEffect(() => {
     if (!open || loadedOnce) return;
@@ -145,7 +203,7 @@ export function WeeklyCheckinPanel() {
               <input
                 type="text"
                 className="flex-1 rounded border border-rule bg-cloud px-3 py-2 text-[12.5px] min-w-0"
-                placeholder="Escribe tu respuesta..."
+                placeholder={listening ? "Escuchando..." : "Escribe o dicta tu respuesta..."}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => {
@@ -156,6 +214,19 @@ export function WeeklyCheckinPanel() {
                 }}
                 disabled={loading}
               />
+              {micSupported && (
+                <button
+                  type="button"
+                  title={listening ? "Detener dictado" : "Dictar por voz"}
+                  className={`px-2.5 py-2 rounded-md border shrink-0 cursor-pointer ${
+                    listening ? "bg-red/20 border-red text-red" : "border-rule text-steel hover:text-ink"
+                  } ${listening && !reducedMotion ? "animate-pulse" : ""}`}
+                  onClick={toggleListening}
+                  disabled={loading}
+                >
+                  {listening ? <MicOff size={15} /> : <Mic size={15} />}
+                </button>
+              )}
               <button
                 type="button"
                 className="px-3.5 py-2 rounded-md bg-teal text-navy font-semibold text-[12.5px] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 shrink-0"
