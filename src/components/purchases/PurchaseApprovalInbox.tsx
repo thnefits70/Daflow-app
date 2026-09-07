@@ -767,9 +767,9 @@ export function PurchaseApprovalInbox({ canAct = true, canPayHere = true, canPay
               </div>
             </div>
 
-            <div className={`rounded-md px-3 py-2 mb-2.5 text-[11.5px] ${summary.hasIssue ? "bg-red/10 text-red border border-red/30" : "bg-teal/10 text-teal border border-teal/30"}`}>
+            <div className={`rounded-md px-3 py-2 mb-2.5 text-[11.5px] ${summary.hasIssue ? "bg-red/25 text-red border-2 border-red font-semibold" : "bg-teal/10 text-teal border border-teal/30"}`}>
               <div className="flex items-start gap-1.5">
-                {summary.hasIssue ? <AlertTriangle size={13} className="mt-0.5 shrink-0" /> : <CheckCircle2 size={13} className="mt-0.5 shrink-0" />}
+                {summary.hasIssue ? <AlertTriangle size={15} className="mt-0.5 shrink-0" /> : <CheckCircle2 size={13} className="mt-0.5 shrink-0" />}
                 <span>{summary.text}</span>
               </div>
               {summary.hasIssue && g.some((r) => r.justification) && (
