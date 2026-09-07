@@ -83,8 +83,9 @@ export function PriceTrendChart({ points }: { points: SupplierPricePoint[] }) {
         (() => {
           const c = coords[hover];
           const p = points[hover];
-          const boxW = 118;
-          const boxH = 46;
+          const hasBreakdown = p.shippingPerUnit > 0;
+          const boxW = 132;
+          const boxH = hasBreakdown ? 70 : 58;
           const boxX = Math.max(padL, Math.min(c.x - boxW / 2, width - padR - boxW));
           const boxY = Math.max(2, c.y - boxH - 10);
           return (
@@ -93,15 +94,61 @@ export function PriceTrendChart({ points }: { points: SupplierPricePoint[] }) {
               <text x={boxX + boxW / 2} y={boxY + 16} textAnchor="middle" fontSize="12" fontWeight="700" fill="#f1f5fb">
                 ${p.unitCost.toFixed(2)}
               </text>
-              <text x={boxX + boxW / 2} y={boxY + 30} textAnchor="middle" fontSize="9.5" fill="#92a3c0">
+              {hasBreakdown && (
+                <text x={boxX + boxW / 2} y={boxY + 29} textAnchor="middle" fontSize="8.5" fill="#92a3c0">
+                  ${p.baseUnitCost.toFixed(2)} + ${p.shippingPerUnit.toFixed(2)} flete
+                </text>
+              )}
+              <text x={boxX + boxW / 2} y={boxY + (hasBreakdown ? 42 : 30)} textAnchor="middle" fontSize="10" fontWeight="600" fill="#f1f5fb">
+                {p.supplierName}
+              </text>
+              <text x={boxX + boxW / 2} y={boxY + (hasBreakdown ? 55 : 43)} textAnchor="middle" fontSize="9.5" fill="#92a3c0">
                 {fmtDate(effDate(p))} · {p.quantity} un.
               </text>
-              <text x={boxX + boxW / 2} y={boxY + 42} textAnchor="middle" fontSize="9.5" fill="#92a3c0">
+              <text x={boxX + boxW / 2} y={boxY + (hasBreakdown ? 67 : 55)} textAnchor="middle" fontSize="9.5" fill="#92a3c0">
                 {p.paidAt ? "Pagado" : `${STATUS_LABEL[p.status] ?? p.status} · pago pendiente`}
               </text>
             </g>
           );
         })()}
     </svg>
+  );
+}
+
+// Confirmado 2026-09-07, pedido explícito del usuario — el gráfico solo
+// muestra el precio al pasar el mouse; esta lista deja el desglose de cada
+// compra siempre visible debajo (fecha, proveedor, cantidad, costo base +
+// flete si aplica), para no depender de hacer hover para entender por qué la
+// línea se ve como se ve (ej. una línea plana porque las últimas compras
+// tuvieron el mismo costo).
+export function PriceHistoryBreakdownList({ points }: { points: SupplierPricePoint[] }) {
+  if (points.length === 0) return null;
+  const fmtDate = (iso: string) => {
+    const d = new Date(iso);
+    return `${d.getDate()}/${d.getMonth() + 1}/${String(d.getFullYear()).slice(2)}`;
+  };
+  const effDate = (p: SupplierPricePoint) => p.paidAt ?? p.date;
+
+  return (
+    <div className="flex flex-col gap-1.5 mt-2.5">
+      {[...points].reverse().map((p, i) => (
+        <div key={i} className="flex items-center justify-between gap-3 text-[11px] bg-cloud rounded-md px-2.5 py-1.5">
+          <div className="min-w-0">
+            <div className="font-semibold truncate">{p.supplierName}</div>
+            <div className="text-steel">
+              {fmtDate(effDate(p))} · {p.quantity} un. · {p.paidAt ? "pagado" : `${STATUS_LABEL[p.status] ?? p.status} · pago pendiente`}
+            </div>
+          </div>
+          <div className="text-right shrink-0">
+            <div className="font-bold">${p.unitCost.toFixed(2)}</div>
+            {p.shippingPerUnit > 0 && (
+              <div className="text-steel-dim text-[9.5px]">
+                ${p.baseUnitCost.toFixed(2)} + ${p.shippingPerUnit.toFixed(2)} flete
+              </div>
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
   );
 }

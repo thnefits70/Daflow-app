@@ -7,7 +7,7 @@ import { actorName } from "@/lib/actorName";
 import { uploadFile } from "@/lib/uploadFile";
 import { compressImage } from "@/lib/compressImage";
 import { usePasteFile } from "@/lib/usePasteFile";
-import { PriceTrendChart } from "./PriceTrendChart";
+import { PriceTrendChart, PriceHistoryBreakdownList } from "./PriceTrendChart";
 import type { SupplierPriceHistory, PriceHistoryStats, SupplierPricePoint } from "@/lib/purchases";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 
@@ -1179,6 +1179,7 @@ export function PurchaseApprovalInbox({ canAct = true, canPayHere = true, canPay
                 <div className="text-[10px] text-steel-dim text-center mt-1">
                   Últimas {priceHistoryPoints[priceHistoryFor.catalogItemId]!.length} compras · todos los proveedores
                 </div>
+                <PriceHistoryBreakdownList points={priceHistoryPoints[priceHistoryFor.catalogItemId]!} />
               </>
             )}
           </div>

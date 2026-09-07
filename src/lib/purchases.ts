@@ -88,7 +88,24 @@ export async function getCatalogItemPriceStats(catalogItemId: string): Promise<P
 // de tendencia la usa para el eje cuando está disponible, porque eso es lo
 // que de verdad le importa a quien aprueba (cuándo se pagó ese precio), no
 // cuándo se pidió.
-export type SupplierPricePoint = { date: string; paidAt: string | null; unitCost: number; quantity: number; status: PurchaseRequestStatus };
+// supplierName/baseUnitCost/shippingPerUnit (confirmado 2026-09-07, pedido
+// explícito del usuario) sostienen el desglose de precio en la vista
+// combinada "todos los proveedores" (PurchaseInvoicingPanel/PurchaseApprovalInbox)
+// — ahí los puntos de distintos proveedores se mezclan en una sola lista y se
+// pierde de vista de quién es cada uno si no viaja en el propio punto.
+// baseUnitCost es el costo unitario tal cual se negoció (antes de flete);
+// shippingPerUnit es 0 cuando el flete ya viene incluido en unitCost o no
+// aplica — unitCost sigue siendo el costo efectivo ya usado por el gráfico.
+export type SupplierPricePoint = {
+  date: string;
+  paidAt: string | null;
+  unitCost: number;
+  quantity: number;
+  status: PurchaseRequestStatus;
+  supplierName: string;
+  baseUnitCost: number;
+  shippingPerUnit: number;
+};
 export type SupplierPriceHistory = {
   supplierId: string;
   supplierName: string;
@@ -134,6 +151,9 @@ export async function getCatalogItemSupplierComparison(catalogItemId: string): P
       unitCost: effectiveUnitCost({ unitCost: r.unitCost, quantity: r.quantity, shippingIncluded: r.shippingIncluded, shippingCostTotal: r.shippingCostTotal }),
       quantity: r.quantity,
       status: r.status,
+      supplierName: r.supplier.name,
+      baseUnitCost: r.unitCost,
+      shippingPerUnit: r.shippingIncluded || !r.shippingCostTotal || r.quantity === 0 ? 0 : r.shippingCostTotal / r.quantity,
     });
   }
   // Reordenar por fecha efectiva (pago si ya existe, si no la solicitud) —

@@ -10,7 +10,7 @@ import { actorName } from "@/lib/actorName";
 import { formatDateTime } from "@/lib/formatDateTime";
 import { PurchaseOperationDocuments, type OperationDocRow } from "./PurchaseOperationDocuments";
 import { CatalogCode } from "@/components/shared/CatalogCode";
-import { PriceTrendChart } from "./PriceTrendChart";
+import { PriceTrendChart, PriceHistoryBreakdownList } from "./PriceTrendChart";
 import type { SupplierPriceHistory, SupplierPricePoint } from "@/lib/purchases";
 
 type InvoiceStatus = "PENDING" | "COMPLETE" | "PARTIAL" | "NON_FISCAL" | "NONE";
@@ -1498,6 +1498,7 @@ export function PurchaseInvoicingPanel({ isAdmin = false, canPayMerchandise }: {
                 <div className="text-[10px] text-steel-dim text-center mt-1">
                   Últimas {priceHistoryPoints[priceHistoryFor.catalogItemId]!.length} compras · todos los proveedores · precio unitario
                 </div>
+                <PriceHistoryBreakdownList points={priceHistoryPoints[priceHistoryFor.catalogItemId]!} />
               </>
             )}
           </div>
