@@ -35,11 +35,12 @@ export function PriceTrendChart({ points }: { points: SupplierPricePoint[] }) {
   }));
 
   // Confirmado 2026-09-07, pedido explícito del usuario — cada tramo se
-  // colorea según si el precio subió o bajó contra el punto anterior, mismo
-  // criterio y mismos colores que WeeklyTrendChart con invertDirection (más
-  // barato es "bueno"): sube el costo → rojo, baja o se mantiene → teal.
+  // colorea según si el precio subió o bajó contra el punto anterior. Corrección
+  // del mismo día: igual (sin cambio) NO cuenta como "subida" — solo un
+  // aumento real (>, no >=) se pinta de rojo; se mantiene o baja usa el color
+  // normal (teal).
   const segments = coords.slice(1).map((c, i) => {
-    const rose = points[i + 1].unitCost >= points[i].unitCost;
+    const rose = points[i + 1].unitCost > points[i].unitCost;
     return { d: `M${coords[i].x.toFixed(1)},${coords[i].y.toFixed(1)} L${c.x.toFixed(1)},${c.y.toFixed(1)}`, color: rose ? "#FF9B90" : "#14C7C7" };
   });
   const fmtDate = (iso: string) => {
