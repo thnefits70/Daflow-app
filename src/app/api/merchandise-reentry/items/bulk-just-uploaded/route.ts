@@ -32,8 +32,13 @@ export async function POST(req: Request) {
   // Confirmado 2026-08-23: los grupos de JUST_UPLOAD_MIN_QTY unidades o
   // menos solo se pueden subir el último día laboral de la semana — se
   // valida acá también, no solo ocultando el botón en el cliente.
+  // Corregido 2026-09-07: igual que en batches/close/route.ts, una vez que
+  // el ítem se habilitó (justEligibleOpenedAt) se queda habilitado aunque
+  // ya no sea el último día laboral — si no, esta ruta rechazaba subidas
+  // que el listado (GET) ya mostraba como permitidas.
   const totalGoodQty = items.reduce((s, i) => s + i.goodQty, 0);
-  if (totalGoodQty <= JUST_UPLOAD_MIN_QTY && !isTodayLastBusinessDayOfWeek()) {
+  const alreadyOpened = items.some((i) => i.justEligibleOpenedAt);
+  if (totalGoodQty <= JUST_UPLOAD_MIN_QTY && !isTodayLastBusinessDayOfWeek() && !alreadyOpened) {
     return NextResponse.json({ error: `Este producto tiene ${JUST_UPLOAD_MIN_QTY} unidades o menos — solo se puede subir a Just el último día laboral de la semana.` }, { status: 409 });
   }
 
