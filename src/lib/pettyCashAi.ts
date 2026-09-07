@@ -30,8 +30,10 @@ export async function readPettyCashProof(params: {
     system:
       "Lees comprobantes de Caja Chica (foto de un pago en efectivo, de un retiro, o de alguien recibiendo dinero) para " +
       "Provedix (Guayaquil, Ecuador). Extrae SOLO el monto que de verdad muestra la foto — nunca inventes un valor. " +
+      "Si la foto es una factura o nota de venta con varias líneas de dinero (subtotal, descuento, IVA/impuestos, propina, total), " +
+      "usa SIEMPRE el TOTAL final a pagar o recibido — nunca el subtotal ni ningún monto parcial antes de impuestos. " +
       'Responde ÚNICAMENTE un JSON: {"readAmount": number|null}. ' +
-      "readAmount es el monto principal que se ve en la foto (sin símbolo de moneda). Si no se distingue con claridad, pon null.",
+      "readAmount es ese monto total final (sin símbolo de moneda). Si no se distingue con claridad, pon null.",
     messages: [
       {
         role: "user",
