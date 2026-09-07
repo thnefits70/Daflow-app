@@ -111,7 +111,13 @@ export function SalaryAdvanceApprovalPanel() {
     }
   }
 
-  const { onPaste: onPasteProof, onMouseEnter: armProofPaste, onMouseLeave: disarmProofPaste } = usePasteFile((file) => {
+  const {
+    onPaste: onPasteProof,
+    onMouseEnter: armProofPaste,
+    onMouseLeave: disarmProofPaste,
+    onTapPaste: onTapPasteProof,
+    tapHint: tapHintProof,
+  } = usePasteFile((file) => {
     const id = proofRowIdRef.current;
     const item = items?.find((a) => a.id === id);
     if (id && item) handleProofFile(id, file, item.amount);
@@ -206,28 +212,32 @@ export function SalaryAdvanceApprovalPanel() {
                       <button type="button" className="text-[11px] underline decoration-dotted text-steel opacity-80 hover:opacity-100 cursor-pointer" onClick={() => clearProof(a.id)}>Cambiar</button>
                     </>
                   ) : (
-                    <div
-                      tabIndex={0}
-                      onPaste={onPasteProof}
-                      onMouseEnter={() => { proofRowIdRef.current = a.id; armProofPaste(); }}
-                      onMouseLeave={disarmProofPaste}
-                      className="flex items-center gap-1.5 border-[1.5px] border-dashed border-rule rounded px-2.5 py-1.5 text-[11.5px] text-steel cursor-pointer hover:border-teal focus:border-teal focus:outline-none"
-                    >
-                      {uploadingId === a.id ? "Subiendo…" : "Pega el comprobante aquí (Ctrl+V)"}
-                      <button
-                        type="button"
-                        className="text-[11px] font-semibold text-blue underline decoration-dotted cursor-pointer"
-                        onClick={() => proofInputRefs.current[a.id]?.click()}
+                    <div>
+                      <div
+                        tabIndex={0}
+                        onPaste={onPasteProof}
+                        onMouseEnter={() => { proofRowIdRef.current = a.id; armProofPaste(); }}
+                        onMouseLeave={disarmProofPaste}
+                        onClick={(e) => { proofRowIdRef.current = a.id; onTapPasteProof(e); }}
+                        className="flex items-center gap-1.5 border-[1.5px] border-dashed border-rule rounded px-2.5 py-1.5 text-[11.5px] text-steel cursor-pointer hover:border-teal focus:border-teal focus:outline-none"
                       >
-                        o selecciona un archivo
-                      </button>
-                      <input
-                        ref={(el) => { proofInputRefs.current[a.id] = el; }}
-                        type="file"
-                        accept="image/*,application/pdf"
-                        className="hidden"
-                        onChange={(e) => e.target.files?.[0] && handleProofFile(a.id, e.target.files[0], a.amount)}
-                      />
+                        {uploadingId === a.id ? "Subiendo…" : "Pega el comprobante aquí (Ctrl+V, o toca en celular)"}
+                        <button
+                          type="button"
+                          className="text-[11px] font-semibold text-blue underline decoration-dotted cursor-pointer"
+                          onClick={(e) => { e.stopPropagation(); proofInputRefs.current[a.id]?.click(); }}
+                        >
+                          o selecciona un archivo
+                        </button>
+                        <input
+                          ref={(el) => { proofInputRefs.current[a.id] = el; }}
+                          type="file"
+                          accept="image/*,application/pdf"
+                          className="hidden"
+                          onChange={(e) => e.target.files?.[0] && handleProofFile(a.id, e.target.files[0], a.amount)}
+                        />
+                      </div>
+                      {tapHintProof && <p className="mt-1 text-[10.5px] text-red">{tapHintProof}</p>}
                     </div>
                   )}
                   <button type="button" disabled={busy || !proofUrls[a.id] || verifyResults[a.id]?.matches === false || verifyingId === a.id} className="text-[12px] font-bold bg-green text-white rounded-md px-3.5 py-1.5 cursor-pointer disabled:opacity-40" onClick={() => approve(a.id)}>Aprobar y transferir</button>
