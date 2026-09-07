@@ -4099,6 +4099,14 @@ model MerchandiseReentryItem {
   justUploadedById String?
   justUploadedBy   User?     @relation("MerchandiseReentryItemJustUploadedBy", fields: [justUploadedById], references: [id], onDelete: SetNull)
 
+  // Confirmado 2026-09-07: la ventana semanal para subir "lo chico" a Just
+  // (ver JUST_UPLOAD_MIN_QTY) solo tenía que abrirse el último día laboral
+  // de la semana. Nairoby reportó que si no alcanzaba a subirlo ese mismo
+  // día, se volvía a cerrar y esperaba hasta el viernes siguiente. Ahora se
+  // marca la primera vez que el ítem queda habilitado y esa marca ya no se
+  // borra: una vez abierto, se queda abierto hasta que se suba.
+  justEligibleOpenedAt DateTime?
+
   // Cierre completo de la parte dañada. Las unidades solucionadas nunca
   // pasan por acá (van por goodQty/justUploadedAt); las no solucionadas lo
   // marcan cuando Nairoby termina su decisión de disposición tras el ciclo

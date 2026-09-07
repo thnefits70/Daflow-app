@@ -35,9 +35,20 @@ export async function GET() {
   // sensible a feriados) para subirse junto con el resto de lo chico.
   const todayQualifies = isTodayLastBusinessDayOfWeek();
   const nextEligibleDay = todayQualifies ? null : lastBusinessDayOfWeek(new Date());
+
+  // Corregido 2026-09-07: la ventana ya no se vuelve a cerrar si no se
+  // aprovechó el mismo día — una vez habilitado un ítem (justEligibleOpenedAt),
+  // se queda habilitado hasta que se suba, aunque pasen los días.
+  if (todayQualifies) {
+    const toOpen = forJustItems.filter((i) => !i.justEligibleOpenedAt).map((i) => i.id);
+    if (toOpen.length > 0) {
+      await prisma.merchandiseReentryItem.updateMany({ where: { id: { in: toOpen } }, data: { justEligibleOpenedAt: new Date() } });
+    }
+  }
+  const openedIds = new Set(forJustItems.filter((i) => i.justEligibleOpenedAt || todayQualifies).map((i) => i.id));
   const forJust = groupItemsForJustUpload(forJustItems).map((g) => ({
     ...g,
-    canUploadNow: g.totalGoodQty > JUST_UPLOAD_MIN_QTY || todayQualifies,
+    canUploadNow: g.totalGoodQty > JUST_UPLOAD_MIN_QTY || g.itemIds.some((id) => openedIds.has(id)),
   }));
 
   return NextResponse.json({ forJust, justUploadMinQty: JUST_UPLOAD_MIN_QTY, nextEligibleDay });
