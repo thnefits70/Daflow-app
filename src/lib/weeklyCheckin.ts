@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { notifyOwner } from "@/lib/notifications";
 import { getDeptLeadId, getLeadIdOfUsersDept } from "@/lib/guards";
-import { getWeeklyTrend, getFillRateTrend, getLatestFillRateBreakdown } from "@/lib/dashboard";
+import { getWeeklyTrend, getFillRateTrend, getLatestFillRateBreakdown, getWarrantyMonthlyChart } from "@/lib/dashboard";
 
 // Mary, la asistente de check-in semanal — reemplaza la reunión 1:1
 // admin-líder: le pregunta al LÍDER de cada área (nunca al resto del
@@ -33,9 +33,14 @@ Después de eso (o directo, si no había pendientes), pregunta qué problemas o 
 
 El check-in es sobre el trabajo del área — problemas operativos, capacidad, personal, tiempos de despacho — nunca sobre temas personales o de bienestar individual del líder (salud, comida, vida personal). Si el líder menciona algo así de pasada, respóndele con una sola frase breve y cálida — sin indagar, sin preguntarle si lo va a manejar él o si hay que avisar a alguien — y vuelve enseguida a la pregunta del check-in que estabas haciendo. Nunca abras una segunda vuelta de preguntas sobre un tema así; tu trabajo es mantener la conversación enfocada en el área y en la meta, no seguirle la corriente a lo que no tiene que ver con eso.
 
-Tienes una meta de fondo que compartes con todo el equipo: llegar a los 1000 pedidos diarios. No es una orden que bajas al líder desde arriba — es tu meta también, así que háblala en primera persona del plural ("nosotros", "entre todos", "la meta que tenemos"), nunca como "ustedes deben llegar a...". Sácala a relucir de forma sutil, solo cuando el problema o el plan que te está contando realmente se conecta con volumen, capacidad, personal o tiempos de despacho — no la menciones en temas que no tienen nada que ver. Cuando sí aplique, no te quedes en anotar el plan tal cual te lo dan: ayuda al líder a pensar un paso más allá, hacia esa meta — por ejemplo, preguntando si el plan también aguanta si el volumen sigue subiendo, o si hay algo más que valdría la pena hacer pensando en llegar a los 1000. La idea es que el líder sienta que esa meta es del equipo completo, tú incluida, no una tarea más que le toca cumplir a él solo.
+Tienes una meta de fondo que compartes con todo el equipo: llegar a los 1000 pedidos diarios. No es una orden que bajas al líder desde arriba — es tu meta también, así que háblala en primera persona del plural ("nosotros", "entre todos", "la meta que tenemos"), nunca como "ustedes deben llegar a...". Sácala a relucir de forma sutil, solo cuando el problema o el plan que te está contando realmente se conecta con esa meta — no la menciones en temas que no tienen nada que ver. Cómo se conecta depende del área que lideras:
+- Fulfillment: capacidad, personal, tiempos de despacho — la ejecución operativa día a día de esos pedidos.
+- Análisis de Mercado: NO le pidas resolver capacidad operativa, eso es de Fulfillment. Acá la meta se conecta a qué proyecto o iniciativa está impulsando para hacer crecer el volumen (nuevos productos, combos, proveedores, lo que sea que él te cuente) — pregúntale por el proyecto concreto, no por una tarea operativa.
+- Finanzas: la meta se conecta a la calidad de la operación reflejada en garantías — menos garantías y motivos que dejan de repetirse significa más capacidad y confianza para sostener ese volumen. Nunca hables de dinero acá, ni aunque el líder lo mencione — redirige a cantidad/motivos.
 
-Si el contexto trae "DATOS REALES DE ESTA SEMANA", son los números YA calculados de Inicio (pedidos despachados, fill rate, etc.) — úsalos tal cual, nunca los inventes ni los redondees distinto. Cuando la conversación toque volumen o capacidad, habla en números concretos ("vamos en X al día, nos faltan Y para la meta") en vez de mencionar la meta en abstracto, y exige que el plan de acción sea igual de concreto — no "vamos a mejorar", sino qué se va a hacer distinto esta semana para cerrar esa brecha puntual.
+Cuando sí aplique, no te quedes en anotar el plan tal cual te lo dan: ayuda al líder a pensar un paso más allá, hacia esa meta, según el ángulo de su área (arriba). La idea es que el líder sienta que esa meta es del equipo completo, tú incluida, no una tarea más que le toca cumplir a él solo.
+
+Si el contexto trae "DATOS REALES DE ESTA SEMANA" (pedidos despachados, fill rate) o "DATOS REALES (garantías)" (cantidad y motivos, del mes más reciente cargado — no semanal), son números YA calculados — úsalos tal cual, nunca los inventes ni los redondees distinto. Cuando la conversación toque la meta, habla en números concretos ("vamos en X al día, nos faltan Y para la meta", o "este mes van N garantías, el motivo que más se repite es Z") en vez de mencionar la meta en abstracto, y exige que el plan de acción sea igual de concreto — no "vamos a mejorar", sino qué se va a hacer distinto esta semana para acercarnos.
 
 Sé breve y directa, en español. No es una entrevista larga — en pocos intercambios ya deberías tener lo necesario.
 
@@ -168,8 +173,12 @@ const FULFILLMENT_WORKDAYS_PER_WEEK = 6; // lunes a sábado, igual que la tarjet
 // dashboard.ts) — reinyectados en el contexto de Mary para que hable con
 // números reales de la semana en vez de solo mencionar la meta de 1000
 // pedidos/día como una idea abstracta. Confirmado 2026-09-07: nunca datos
-// financieros acá, solo operativos (pedidos, fill rate, motivos).
-async function buildFulfillmentMetricsBlock(): Promise<string | null> {
+// financieros acá, solo operativos (pedidos, fill rate, motivos). Se
+// reutiliza tal cual para el líder de Análisis de Mercado (MKT, hoy Bryan):
+// mismo volumen total de pedidos, pero su ángulo en el prompt es proponer
+// proyectos para crecer ese número, no resolver capacidad operativa (ver
+// MARY_SYSTEM_PROMPT).
+async function buildDispatchVolumeMetricsBlock(): Promise<string | null> {
   const [trend, fillRate, breakdown] = await Promise.all([getWeeklyTrend(), getFillRateTrend(), getLatestFillRateBreakdown()]);
   if (!trend || trend.points.length === 0) return null;
 
@@ -197,12 +206,35 @@ async function buildFulfillmentMetricsBlock(): Promise<string | null> {
   return lines.join("\n");
 }
 
+// Garantías para el líder de Finanzas (Nairoby) — SOLO cantidad, volumen y
+// motivos, nunca dinero (confirmado 2026-09-07: aunque ella es la única
+// líder que sí ve cifras financieras en otras partes de la app, acá se le
+// da el mismo trato operativo que a cualquier otro líder). El dato se sube
+// MES A MES (WarrantyMonthTotal/getWarrantyMonthlyChart), no semana a
+// semana — el rótulo lo deja explícito para que Mary nunca diga "esta
+// semana" sobre un número que en realidad es del mes más reciente cargado.
+async function buildWarrantyMetricsBlock(): Promise<string | null> {
+  const chart = await getWarrantyMonthlyChart();
+  if (!chart || chart.slices.length === 0) return null;
+
+  const topReasons = [...chart.slices]
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 3)
+    .map((s) => `${s.label} (${s.value})`)
+    .join(", ");
+
+  return [
+    `- Garantías del mes ${chart.month} (dato más reciente cargado, no es semanal): ${chart.total.toLocaleString("es-EC")} en total.`,
+    `- Motivos más frecuentes: ${topReasons}.`,
+  ].join("\n");
+}
+
 // Contexto inyectado en cada mensaje enviado al modelo — mismo patrón que
 // buildNancyContext en nancy.ts (nunca confiar en que el cliente mande el
 // nombre/área; siempre resuelto server-side). Antepuesto al contenido del
 // último mensaje del usuario en la ruta. deptCode decide qué bloque de datos
-// reales se agrega (hoy solo "FUL" tiene uno armado, ver
-// buildFulfillmentMetricsBlock).
+// reales se agrega: FUL y MKT ven el volumen de pedidos
+// (buildDispatchVolumeMetricsBlock), FIN ve garantías (buildWarrantyMetricsBlock).
 export async function buildWeeklyCheckinContext(params: {
   leaderName: string;
   deptName: string;
@@ -220,10 +252,15 @@ export async function buildWeeklyCheckinContext(params: {
     ctx += `\n\nPENDIENTES DE SEMANAS ANTERIORES (pregunta por cada uno antes de seguir con problemas nuevos):\n${lines}`;
   }
 
-  if (params.deptCode === "FUL") {
-    const metrics = await buildFulfillmentMetricsBlock();
+  if (params.deptCode === "FUL" || params.deptCode === "MKT") {
+    const metrics = await buildDispatchVolumeMetricsBlock();
     if (metrics) {
       ctx += `\n\nDATOS REALES DE ESTA SEMANA:\n${metrics}`;
+    }
+  } else if (params.deptCode === "FIN") {
+    const metrics = await buildWarrantyMetricsBlock();
+    if (metrics) {
+      ctx += `\n\nDATOS REALES (garantías):\n${metrics}`;
     }
   }
 
