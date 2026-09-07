@@ -82,7 +82,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ gro
           shippingPaymentMethod: d.shippingIncluded ? null : d.shippingPaymentMethod,
           shippingPaymentTiming: d.shippingIncluded ? null : (d.shippingCarrierPending ? "ON_DELIVERY" : (d.shippingPaymentTiming ?? "WITH_PURCHASE")),
           carrierBankAccountId: d.shippingIncluded || d.shippingCarrierPending ? null : d.carrierBankAccountId || null,
-          justification: (check.anyOverThreshold || check.anySupplierNotCheapest) ? d.justification!.trim() : null,
+          justification: check.justificationByIndex[idx],
           creditSkipJustification: check.creditSkipJustification,
           status: "PENDING_APPROVAL",
           requestedById: r0.requestedById,

@@ -158,7 +158,11 @@ function groupRows<T extends Row>(rows: T[]) {
 function buildValidationSummary(g: Row[]) {
   const r0 = g[0];
   const total = g.reduce((s, r) => s + r.totalCost, 0);
-  const justification = g.find((r) => r.justification)?.justification ?? null;
+  // Confirmado 2026-09-07 — ya no se cita UNA justificación como si
+  // representara a todo el grupo (ese era justo el origen del bug reportado:
+  // mostrar la nota de un producto pegada sobre otro). El texto de cada
+  // producto se muestra por separado más abajo, esto solo dice cuántos.
+  const justifiedCount = g.filter((r) => r.justification).length;
   const codeOnly = !!r0.quoteReferenceCode;
   const parts: string[] = [];
   if (codeOnly) {
@@ -166,10 +170,10 @@ function buildValidationSummary(g: Row[]) {
   } else {
     parts.push(`Cotización verificada por IA — el total leído coincide con los $${total.toFixed(2)} escritos.`);
   }
-  if (justification) {
-    parts.push(`Uno o más productos superan el historial de precio — justificación: "${justification}"`);
+  if (justifiedCount > 0) {
+    parts.push(`${justifiedCount} producto${justifiedCount === 1 ? "" : "s"} superó el historial de precio o cambió de proveedor — justificación abajo.`);
   }
-  const hasIssue = !!justification;
+  const hasIssue = justifiedCount > 0;
   if (!hasIssue) parts.push("Sin novedades — todo cuadra correctamente.");
   return { text: parts.join(" "), hasIssue };
 }
@@ -974,7 +978,17 @@ export function PurchaseApprovalInbox({ canAct = true, canPayHere = true, canPay
               <div className="text-[11px] text-steel mb-2.5">Sin cuenta bancaria elegida (el proveedor solo tenía una en ese momento).</div>
             )}
 
-            {justification && <div className="text-[12px] text-steel mb-2.5">Justificación: &quot;{justification}&quot;</div>}
+            {g.some((r) => r.justification) && (
+              <div className="text-[12px] text-steel mb-2.5 flex flex-col gap-0.5">
+                {g
+                  .filter((r) => r.justification)
+                  .map((r) => (
+                    <div key={r.id}>
+                      <b className="text-ink">{r.catalogItem.name}</b>: &quot;{r.justification}&quot;
+                    </div>
+                  ))}
+              </div>
+            )}
 
             {effectiveCanAct(groupId) ? (
             rejectingGroup === groupId ? (

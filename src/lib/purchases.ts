@@ -277,6 +277,16 @@ export const purchaseLineSchema = z.object({
   catalogItemId: z.string().min(1),
   quantity: z.number().int().positive(),
   unitCost: z.number().positive(),
+  // Confirmado 2026-09-07 (bug real reportado por el usuario) — antes había
+  // una sola justificación por SOLICITUD completa, y esa misma frase se
+  // guardaba en todos los productos del grupo aunque solo uno hubiera
+  // superado el historial. Un revisor de otro producto en la misma cotización
+  // terminaba con una nota que no le correspondía (ej. "precio normal $2.25 a
+  // $2.75" pegada en un producto que cuesta $11.50). Ahora cada línea trae su
+  // propia justificación — impuesta en checkPurchaseSubmission solo para las
+  // líneas que de verdad la necesitan (superó el historial o el proveedor
+  // elegido no es el más barato para ESE producto).
+  justification: z.string().trim().nullable().optional(),
 });
 
 // Confirmado 2026-08-08: compartido entre crear una solicitud nueva
@@ -303,7 +313,6 @@ export const purchaseSubmissionSchema = z.object({
   shippingPaymentMethod: z.enum(["TRANSFER", "PETTY_CASH"]).nullable().optional(),
   shippingPaymentTiming: z.enum(["WITH_PURCHASE", "ON_DELIVERY"]).nullable().optional(),
   carrierBankAccountId: z.string().min(1).nullable().optional(),
-  justification: z.string().trim().nullable().optional(),
   // Confirmado 2026-08-12: créditos con el proveedor elegido, marcados para
   // usarse en esta misma solicitud — se reservan al enviar (ver
   // reserveCreditsForGroup en supplierCredits.ts), nunca pueden superar el
@@ -337,6 +346,12 @@ export type PurchaseSubmissionCheck =
       // solicitud (ej. dos cotizaciones de precio diferente), y un Map por
       // id perdería el flete de una de las dos.
       lineShippingByIndex: (number | null)[];
+      // Confirmado 2026-09-07 (fix del bug de justificación copiada entre
+      // productos) — la justificación final por línea, ya resuelta: el texto
+      // que esa línea escribió si de verdad lo necesitaba, o null si no le
+      // aplicaba. La ruta usa esto directo al crear cada fila, en vez de
+      // reusar un solo texto compartido para todo el grupo.
+      justificationByIndex: (string | null)[];
     }
   | { ok: false; error: string; status: number };
 
@@ -381,47 +396,65 @@ export async function checkPurchaseSubmission(d: PurchaseSubmissionData): Promis
 
   const totalQty = d.items.reduce((s, it) => s + it.quantity, 0);
   const lineShippingByIndex: (number | null)[] = [];
+  // Confirmado 2026-09-07 (fix del bug de justificación copiada entre
+  // productos) — antes solo se guardaba UN booleano global (anyOverThreshold)
+  // y un solo texto de justificación para todo el grupo, así que un producto
+  // que ni siquiera superó su historial terminaba con la explicación de OTRO
+  // producto pegada encima. Ahora needsJustificationByIndex marca, línea por
+  // línea, cuál de verdad necesita su propia explicación.
+  const needsJustificationByIndex: boolean[] = d.items.map(() => false);
   let anyOverThreshold = false;
-  const lineChecks: { catalogItemName: string; effCost: number; last3Avg: number }[] = [];
-  for (const it of d.items) {
+  const lineChecks: { idx: number; catalogItemName: string; effCost: number; last3Avg: number }[] = [];
+  for (let i = 0; i < d.items.length; i++) {
+    const it = d.items[i];
     const stats = await getCatalogItemPriceStats(it.catalogItemId);
     const lineShipping = d.shippingIncluded || !d.shippingCostTotal ? null : (d.shippingCostTotal * it.quantity) / totalQty;
     lineShippingByIndex.push(lineShipping);
     const effCost = effectiveUnitCost({ unitCost: it.unitCost, quantity: it.quantity, shippingIncluded: d.shippingIncluded, shippingCostTotal: lineShipping });
     if (stats.last3Avg !== null && effCost > stats.last3Avg) {
       anyOverThreshold = true;
+      needsJustificationByIndex[i] = true;
       const item = await prisma.purchaseCatalogItem.findUnique({ where: { id: it.catalogItemId }, select: { name: true } });
-      lineChecks.push({ catalogItemName: item?.name ?? "?", effCost, last3Avg: stats.last3Avg });
+      lineChecks.push({ idx: i, catalogItemName: item?.name ?? "?", effCost, last3Avg: stats.last3Avg });
     }
   }
   // Confirmado 2026-08-06: además de superar el historial de precio, si el
   // proveedor elegido no es el más barato conocido, también hace falta
-  // justificar — mismo campo `justification`, ambos motivos se combinan.
+  // justificar — mismo campo `justification` de esa línea, ambos motivos se
+  // combinan si aplican al mismo producto.
   let anySupplierNotCheapest = false;
-  const supplierChecks: { catalogItemName: string; cheapestSupplierName: string; cheapestPrice: number }[] = [];
-  for (const it of d.items) {
+  const supplierChecks: { idx: number; catalogItemName: string; cheapestSupplierName: string; cheapestPrice: number }[] = [];
+  for (let i = 0; i < d.items.length; i++) {
+    const it = d.items[i];
     const comparison = await getCatalogItemSupplierComparison(it.catalogItemId);
     if (comparison.length === 0) continue;
     const cheapest = comparison[0];
     if (cheapest.supplierId !== d.supplierId) {
       anySupplierNotCheapest = true;
+      needsJustificationByIndex[i] = true;
       const item = await prisma.purchaseCatalogItem.findUnique({ where: { id: it.catalogItemId }, select: { name: true } });
-      supplierChecks.push({ catalogItemName: item?.name ?? "?", cheapestSupplierName: cheapest.supplierName, cheapestPrice: cheapest.latest });
+      supplierChecks.push({ idx: i, catalogItemName: item?.name ?? "?", cheapestSupplierName: cheapest.supplierName, cheapestPrice: cheapest.latest });
     }
   }
 
-  if ((anyOverThreshold || anySupplierNotCheapest) && !d.justification?.trim()) {
+  const missingJustificationIdx = needsJustificationByIndex
+    .map((needs, i) => (needs && !d.items[i].justification?.trim() ? i : null))
+    .filter((i): i is number => i !== null);
+  if (missingJustificationIdx.length > 0) {
     const parts: string[] = [];
-    if (lineChecks.length > 0) {
-      const detail = lineChecks.map((l) => `${l.catalogItemName} ($${l.effCost.toFixed(2)} vs. $${l.last3Avg.toFixed(2)})`).join(", ");
-      parts.push(`Uno o más productos superan el promedio de las últimas compras (${detail})`);
+    const overForMissing = lineChecks.filter((l) => missingJustificationIdx.includes(l.idx));
+    const supplierForMissing = supplierChecks.filter((s) => missingJustificationIdx.includes(s.idx));
+    if (overForMissing.length > 0) {
+      const detail = overForMissing.map((l) => `${l.catalogItemName} ($${l.effCost.toFixed(2)} vs. $${l.last3Avg.toFixed(2)})`).join(", ");
+      parts.push(`Falta justificar el precio de: ${detail}`);
     }
-    if (supplierChecks.length > 0) {
-      const detail = supplierChecks.map((s) => `${s.catalogItemName} — ${s.cheapestSupplierName} lo vendió más barato ($${s.cheapestPrice.toFixed(2)})`).join(", ");
-      parts.push(`Hay un proveedor más barato para uno o más productos (${detail})`);
+    if (supplierForMissing.length > 0) {
+      const detail = supplierForMissing.map((s) => `${s.catalogItemName} — ${s.cheapestSupplierName} lo vendió más barato ($${s.cheapestPrice.toFixed(2)})`).join(", ");
+      parts.push(`Falta justificar el proveedor elegido para: ${detail}`);
     }
-    return { ok: false, status: 400, error: `${parts.join(" · ")} — agrega una justificación.` };
+    return { ok: false, status: 400, error: `${parts.join(" · ")} — cada producto necesita su propia justificación.` };
   }
+  const justificationByIndex = needsJustificationByIndex.map((needs, i) => (needs ? d.items[i].justification!.trim() : null));
 
   // Confirmado 2026-09-03: pedido explícito del usuario — si el proveedor
   // tiene crédito disponible y no se aplicó (todo o en parte) a esta
@@ -454,7 +487,7 @@ export async function checkPurchaseSubmission(d: PurchaseSubmissionData): Promis
   }
   const nameById = new Map(catalogItems.map((c) => [c.id, c.name]));
 
-  return { ok: true, resolvedBankAccountId, anyOverThreshold, anySupplierNotCheapest, creditSkipJustification, nameById, groupTotal, lineShippingByIndex };
+  return { ok: true, resolvedBankAccountId, anyOverThreshold, anySupplierNotCheapest, creditSkipJustification, nameById, groupTotal, lineShippingByIndex, justificationByIndex };
 }
 
 const bankAccountSelect = { id: true, bankName: true, bankAccountType: true, bankAccountNumber: true, bankAccountHolder: true, holderIdType: true, holderIdNumber: true };

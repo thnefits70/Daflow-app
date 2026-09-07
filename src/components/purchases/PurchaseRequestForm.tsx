@@ -20,8 +20,14 @@ type QuoteReadResult = {
   suggestedCatalogItem: { id: string; name: string } | null;
 };
 
-type Line = { catalogItem: CatalogItemDTO | null; productQuery: string; createDraft: CatalogCreateDraft | null; quantity: string; unitCost: string; ivaIncluded: boolean; stats: PriceStats | null };
-const emptyLine = (): Line => ({ catalogItem: null, productQuery: "", createDraft: null, quantity: "", unitCost: "", ivaIncluded: false, stats: null });
+// Confirmado 2026-09-07 (bug real reportado por el usuario) — justification
+// vive POR LÍNEA, no compartida entre todos los productos de la solicitud:
+// antes había una sola caja de texto para todo el envío, y esa misma frase
+// se guardaba en cada producto aunque solo uno hubiera superado su propio
+// historial de precio — un producto sin nada raro terminaba con la
+// explicación de OTRO pegada encima.
+type Line = { catalogItem: CatalogItemDTO | null; productQuery: string; createDraft: CatalogCreateDraft | null; quantity: string; unitCost: string; ivaIncluded: boolean; justification: string; stats: PriceStats | null };
+const emptyLine = (): Line => ({ catalogItem: null, productQuery: "", createDraft: null, quantity: "", unitCost: "", ivaIncluded: false, justification: "", stats: null });
 
 // Confirmado 2026-08-03: algunos proveedores cobran el 15% de IVA aparte del
 // costo por unidad que se escribe en el formulario — sin esto, el total no
@@ -43,7 +49,7 @@ function effectiveLineUnitCost(l: { unitCost: string; ivaIncluded: boolean }) {
 }
 
 type Draft = {
-  lines: { catalogItem: CatalogItemDTO | null; productQuery: string; createDraft: CatalogCreateDraft | null; quantity: string; unitCost: string; ivaIncluded: boolean }[];
+  lines: { catalogItem: CatalogItemDTO | null; productQuery: string; createDraft: CatalogCreateDraft | null; quantity: string; unitCost: string; ivaIncluded: boolean; justification?: string }[];
   supplier: PurchaseSupplierDTO | null;
   bankAccountId: string | null;
   quoteImageUrl: string | null;
@@ -58,7 +64,6 @@ type Draft = {
   shippingCostTotal: string;
   shippingPaymentMethod: "TRANSFER" | "PETTY_CASH";
   shippingPaymentTiming: "WITH_PURCHASE" | "ON_DELIVERY";
-  justification: string;
   // Confirmado 2026-08-08: cambio de política — "Corregir y reenviar" ya NO
   // crea una solicitud nueva; corrige la MISMA (mismo groupId/código SC-XXX)
   // en su lugar. editingGroupId presente = el envío va a
@@ -94,13 +99,26 @@ function normalizeSupplier(s: PurchaseSupplierDTO | null | undefined): PurchaseS
   };
 }
 
-function draftHasContent(d: Pick<Draft, "lines" | "supplier" | "quoteImageUrl" | "purchaseOrderUrl" | "justification">) {
+function draftHasContent(d: Pick<Draft, "lines" | "supplier" | "quoteImageUrl" | "purchaseOrderUrl">) {
   return (
-    d.lines.some((l) => l.catalogItem || l.productQuery || l.quantity || l.unitCost || (l.createDraft?.creating && (l.createDraft.newName.trim() || l.createDraft.photos.length > 0))) ||
+    d.lines.some(
+      (l) =>
+        l.catalogItem ||
+        l.productQuery ||
+        l.quantity ||
+        l.unitCost ||
+        // Confirmado 2026-08-06 (bug real, ahora por línea) — una
+        // justificación solo cuenta como "contenido real" si su línea
+        // todavía tiene un producto elegido. Si el producto se quitó, el
+        // texto queda huérfano e invisible (esa línea ya no muestra su caja
+        // de justificación) — contarlo igual mostraría el aviso de
+        // "retomando" con todo lo visible vacío.
+        (l.catalogItem && l.justification?.trim()) ||
+        (l.createDraft?.creating && (l.createDraft.newName.trim() || l.createDraft.photos.length > 0))
+    ) ||
     !!d.supplier ||
     !!d.quoteImageUrl ||
-    !!d.purchaseOrderUrl ||
-    !!d.justification.trim()
+    !!d.purchaseOrderUrl
   );
 }
 
@@ -219,8 +237,6 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
   // junto con la compra (como antes) o si queda pendiente hasta que llegue
   // la mercadería — algunos transportistas solo dan su cuenta al entregar.
   const [shippingPaymentTiming, setShippingPaymentTiming] = useState<"WITH_PURCHASE" | "ON_DELIVERY">("WITH_PURCHASE");
-
-  const [justification, setJustification] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [toast, setToast] = useState("");
@@ -373,7 +389,7 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
       const raw = localStorage.getItem(DRAFT_KEY);
       if (raw) {
         const d: Draft = JSON.parse(raw);
-        const restoredLines: Line[] = (d.lines?.length ? d.lines : [emptyLine()]).map((l) => ({ ...l, productQuery: l.productQuery ?? "", createDraft: l.createDraft ?? null, ivaIncluded: l.ivaIncluded ?? false, stats: null }));
+        const restoredLines: Line[] = (d.lines?.length ? d.lines : [emptyLine()]).map((l) => ({ ...l, productQuery: l.productQuery ?? "", createDraft: l.createDraft ?? null, ivaIncluded: l.ivaIncluded ?? false, justification: l.justification ?? "", stats: null }));
         setLines(restoredLines);
         setSupplier(normalizeSupplier(d.supplier));
         setBankAccountId(d.bankAccountId ?? null);
@@ -392,7 +408,6 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
         // no pisar lo que sea que tenga ahí con el valor por defecto.
         shippingMethodTouchedRef.current = true;
         setShippingPaymentTiming(d.shippingPaymentTiming ?? "WITH_PURCHASE");
-        setJustification(d.justification ?? "");
         setEditingGroupId(d.editingGroupId ?? null);
         setResubmitAttemptHint(d.nextAttemptNumber ?? null);
         restoredLines.forEach((l, i) => { if (l.catalogItem) { fetchLineStats(i, l.catalogItem.id); fetchSupplierComparison(i, l.catalogItem.id); } });
@@ -407,7 +422,7 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
   useEffect(() => {
     if (!hydrated) return;
     const draft: Draft = {
-      lines: lines.map(({ catalogItem, productQuery, createDraft, quantity, unitCost, ivaIncluded }) => ({ catalogItem, productQuery, createDraft, quantity, unitCost, ivaIncluded })),
+      lines: lines.map(({ catalogItem, productQuery, createDraft, quantity, unitCost, ivaIncluded, justification }) => ({ catalogItem, productQuery, createDraft, quantity, unitCost, ivaIncluded, justification })),
       supplier,
       bankAccountId,
       quoteImageUrl,
@@ -422,7 +437,6 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
       shippingCostTotal,
       shippingPaymentMethod,
       shippingPaymentTiming,
-      justification,
       editingGroupId: editingGroupId ?? undefined,
       nextAttemptNumber: resubmitAttemptHint ?? undefined,
     };
@@ -431,7 +445,7 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
     } else {
       localStorage.removeItem(DRAFT_KEY);
     }
-  }, [hydrated, lines, supplier, bankAccountId, quoteImageUrl, verifyResult, manualCodeConfirm, purchaseOrderUrl, poVerifyResult, shippingIncluded, shippingCarrierPending, carrier, carrierBankAccountId, shippingCostTotal, shippingPaymentMethod, shippingPaymentTiming, justification, editingGroupId, resubmitAttemptHint]);
+  }, [hydrated, lines, supplier, bankAccountId, quoteImageUrl, verifyResult, manualCodeConfirm, purchaseOrderUrl, poVerifyResult, shippingIncluded, shippingCarrierPending, carrier, carrierBankAccountId, shippingCostTotal, shippingPaymentMethod, shippingPaymentTiming, editingGroupId, resubmitAttemptHint]);
 
   function resetForm() {
     setLines([emptyLine()]);
@@ -452,7 +466,6 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
     shippingMethodTouchedRef.current = false;
     setShippingPaymentMethod(canPettyCashSecundaria ? "PETTY_CASH" : "TRANSFER");
     setShippingPaymentTiming("WITH_PURCHASE");
-    setJustification("");
     setDraftRestored(false);
     setEditingGroupId(null);
     setResubmitAttemptHint(null);
@@ -538,7 +551,11 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
     })
     .filter((x): x is { idx: number; name: string; cheapestSupplierName: string; cheapestPrice: number } => x !== null);
   const supplierNotCheapest = supplierNotCheapestLines.length > 0;
-  const needsJustification = overThreshold || supplierNotCheapest;
+  // Confirmado 2026-09-07 — qué líneas concretas necesitan SU PROPIA
+  // justificación (una u otra razón, o ambas), en vez de un solo booleano
+  // global para toda la solicitud. Ver purchaseLineSchema en lib/purchases.ts.
+  const justificationNeededIdx = new Set<number>([...overThresholdLines.map((l) => l.idx), ...supplierNotCheapestLines.map((l) => l.idx)]);
+  const needsJustification = justificationNeededIdx.size > 0;
 
   // Confirmado 2026-09-03: pedido explícito del usuario — si hay crédito
   // disponible con el proveedor que no se marcó (todo o en parte), hace
@@ -546,22 +563,6 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
   // needsJustification arriba.
   const skippedCredits = availableCredits.filter((c) => !selectedCreditIds.includes(c.id));
   const needsCreditJustification = skippedCredits.length > 0;
-
-  // Confirmado 2026-08-06: bug real encontrado — si alguien escribía una
-  // justificación (porque el precio superaba el historial) y LUEGO quitaba o
-  // cambiaba ese producto (catalogItem vuelve a null), la justificación se
-  // quedaba huérfana en el borrador guardado. overThreshold pasa a false (no
-  // hay catalogItem con qué compararlo), así que nada se ve en pantalla, pero
-  // `justification` seguía siendo texto no vacío — suficiente para que
-  // draftHasContent() marcara el borrador como "con contenido" y mostrara el
-  // aviso de "retomando", aunque todos los campos visibles estuvieran vacíos.
-  // Se limpia sola en cuanto ya no queda ningún producto elegido en ninguna
-  // línea (nunca durante la carga async de stats de un producto que sí sigue
-  // elegido, para no borrar una justificación válida a medio cargar).
-  const hasAnyCatalogItem = lines.some((l) => l.catalogItem);
-  useEffect(() => {
-    if (hydrated && !hasAnyCatalogItem && justification) setJustification("");
-  }, [hydrated, hasAnyCatalogItem, justification]);
 
   // Lo que de verdad hay guardado en el borrador, para mostrarlo en el aviso
   // de "retomando" — así se ve a qué se refiere en vez de solo un mensaje
@@ -707,14 +708,10 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
       setErr("Elige la cuenta bancaria del proveedor a la que se le paga.");
       return;
     }
-    if (needsJustification && !justification.trim()) {
-      setErr(
-        overThreshold && supplierNotCheapest
-          ? "Uno o más productos están por encima del historial, y hay un proveedor más barato para alguno — agrega una justificación."
-          : overThreshold
-          ? "Uno o más productos están por encima del historial — agrega una justificación."
-          : "Hay un proveedor más barato para uno o más productos — agrega una justificación."
-      );
+    const missingJustificationIdx = [...justificationNeededIdx].filter((idx) => !lines[idx].justification.trim());
+    if (missingJustificationIdx.length > 0) {
+      const names = missingJustificationIdx.map((idx) => lines[idx].catalogItem?.name ?? `producto ${idx + 1}`).join(", ");
+      setErr(`Falta la justificación de: ${names}.`);
       return;
     }
     if (needsCreditJustification && !creditSkipJustification.trim()) {
@@ -725,7 +722,12 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
     setBusy(true);
     setErr("");
     const body = {
-      items: lines.map((l) => ({ catalogItemId: l.catalogItem!.id, quantity: Number(l.quantity), unitCost: effectiveLineUnitCost(l) })),
+      items: lines.map((l, i) => ({
+        catalogItemId: l.catalogItem!.id,
+        quantity: Number(l.quantity),
+        unitCost: effectiveLineUnitCost(l),
+        justification: justificationNeededIdx.has(i) ? l.justification.trim() : null,
+      })),
       supplierId: supplier.id,
       bankAccountId,
       quoteImageUrl,
@@ -739,7 +741,6 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
       shippingPaymentMethod: shippingIncluded ? null : shippingPaymentMethod,
       shippingPaymentTiming: shippingIncluded ? null : shippingPaymentTiming,
       carrierBankAccountId: shippingIncluded ? null : carrierBankAccountId,
-      justification: needsJustification ? justification.trim() : null,
       appliedCreditIds: selectedCreditIds,
       creditSkipJustification: needsCreditJustification ? creditSkipJustification.trim() : null,
       isEmergency: emergencyOnly,
@@ -1371,24 +1372,37 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
             <AlertTriangle size={14} /> {overThreshold && supplierNotCheapest ? "Precio sobre el historial y hay un proveedor más barato" : overThreshold ? "Precio por encima del historial" : "Hay un proveedor más barato"}
           </div>
           <div className="text-[12px] text-steel mb-2.5">
-            {overThresholdLines.map((l) => (
-              <div key={`over-${l.idx}`}>
-                <b className="text-ink">{l.name}</b>: ${l.effCost.toFixed(2)} por unidad, supera el promedio de ${l.last3Avg.toFixed(2)}.
-              </div>
-            ))}
-            {supplierNotCheapestLines.map((l) => (
-              <div key={`supplier-${l.idx}`}>
-                <b className="text-ink">{l.name}</b>: {l.cheapestSupplierName} lo vendió más barato (${l.cheapestPrice.toFixed(2)}/un.) que el proveedor elegido.
-              </div>
-            ))}
-            No se puede enviar sin explicar por qué.
+            No se puede enviar sin explicar por qué — cada producto tiene su propia justificación, para no confundir la explicación de uno con la de otro.
           </div>
-          <textarea
-            className="w-full rounded border border-red/40 bg-surface2 px-2.5 py-2 text-[12.5px] resize-vertical min-h-[60px]"
-            placeholder="Ej. El proveedor más barato ya no tiene stock esta semana…"
-            value={justification}
-            onChange={(e) => setJustification(e.target.value)}
-          />
+          <div className="flex flex-col gap-3">
+            {[...justificationNeededIdx]
+              .sort((a, b) => a - b)
+              .map((idx) => {
+                const overLine = overThresholdLines.find((l) => l.idx === idx);
+                const supplierLine = supplierNotCheapestLines.find((l) => l.idx === idx);
+                return (
+                  <div key={idx}>
+                    <div className="text-[12px] text-steel mb-1">
+                      <b className="text-ink">{lines[idx].catalogItem?.name ?? `Producto ${idx + 1}`}</b>
+                      {overLine && (
+                        <>
+                          : ${overLine.effCost.toFixed(2)} por unidad, supera el promedio de ${overLine.last3Avg.toFixed(2)}.
+                        </>
+                      )}
+                      {supplierLine && (
+                        <> {overLine ? "Además, " : ": "}{supplierLine.cheapestSupplierName} lo vendió más barato (${supplierLine.cheapestPrice.toFixed(2)}/un.) que el proveedor elegido.</>
+                      )}
+                    </div>
+                    <textarea
+                      className="w-full rounded border border-red/40 bg-surface2 px-2.5 py-2 text-[12.5px] resize-vertical min-h-[50px]"
+                      placeholder="Ej. El proveedor más barato ya no tiene stock esta semana…"
+                      value={lines[idx].justification}
+                      onChange={(e) => updateLine(idx, { justification: e.target.value })}
+                    />
+                  </div>
+                );
+              })}
+          </div>
         </div>
       )}
 

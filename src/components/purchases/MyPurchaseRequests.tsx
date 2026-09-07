@@ -476,6 +476,10 @@ function buildResubmitDraft(g: Row[]) {
       quantity: String(r.quantity),
       unitCost: String(r.unitCost),
       ivaIncluded: false,
+      // Confirmado 2026-09-07 — cada producto trae SU PROPIA justificación
+      // (antes se reusaba r0.justification, la del primer producto del
+      // grupo, para todos — el mismo bug de justificación copiada).
+      justification: r.justification ?? "",
     })),
     supplier: { id: r0.supplier.id, name: r0.supplier.name, location: null, email: null, bankAccounts: r0.supplier.bankAccounts, contacts: [] },
     bankAccountId: r0.bankAccountId,
@@ -501,7 +505,6 @@ function buildResubmitDraft(g: Row[]) {
     shippingCostTotal: r0.shippingCostTotal != null ? String(r0.shippingCostTotal) : "",
     shippingPaymentMethod: "TRANSFER",
     shippingPaymentTiming: r0.shippingPaymentTiming ?? "WITH_PURCHASE",
-    justification: r0.justification ?? "",
     editingGroupId: r0.groupId,
     nextAttemptNumber: r0.attemptNumber + 1,
   };
