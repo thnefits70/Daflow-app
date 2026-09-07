@@ -1,7 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import { notifyOwner } from "@/lib/notifications";
 import { getDeptLeadId, getLeadIdOfUsersDept } from "@/lib/guards";
-import { getWeeklyTrend, getFillRateTrend, getLatestFillRateBreakdown, getWarrantyMonthlyChart } from "@/lib/dashboard";
+import { getWeeklyTrend, getFillRateTrend, getLatestFillRateBreakdown, getWarrantyMonthlyChart, getStockoutWeeks } from "@/lib/dashboard";
+import { getInventoryKpisData } from "@/lib/inventoryKpis";
 
 // Mary, la asistente de check-in semanal — reemplaza la reunión 1:1
 // admin-líder: le pregunta al LÍDER de cada área (nunca al resto del
@@ -37,10 +38,11 @@ Tienes una meta de fondo que compartes con todo el equipo: llegar a los 1000 ped
 - Fulfillment: capacidad, personal, tiempos de despacho — la ejecución operativa día a día de esos pedidos.
 - Análisis de Mercado: NO le pidas resolver capacidad operativa, eso es de Fulfillment. Acá la meta se conecta a qué proyecto o iniciativa está impulsando para hacer crecer el volumen (nuevos productos, combos, proveedores, lo que sea que él te cuente) — pregúntale por el proyecto concreto, no por una tarea operativa.
 - Finanzas: la meta se conecta a la calidad de la operación reflejada en garantías — menos garantías y motivos que dejan de repetirse significa más capacidad y confianza para sostener ese volumen. Nunca hables de dinero acá, ni aunque el líder lo mencione — redirige a cantidad/motivos.
+- Inventario: la meta se conecta a qué tan bien está organizado el inventario para sostener ese volumen — DIO, GMROI, sobrestock, productos sin movimiento, y ruptura de stock (que conecta directo con lo que Fulfillment no logra despachar por falta de stock). Ayúdalo a organizarse con eso: qué va a priorizar esta semana para que el inventario deje de ser un freno para llegar a los 1000.
 
 Cuando sí aplique, no te quedes en anotar el plan tal cual te lo dan: ayuda al líder a pensar un paso más allá, hacia esa meta, según el ángulo de su área (arriba). La idea es que el líder sienta que esa meta es del equipo completo, tú incluida, no una tarea más que le toca cumplir a él solo.
 
-Si el contexto trae "DATOS REALES DE ESTA SEMANA" (pedidos despachados, fill rate) o "DATOS REALES (garantías)" (cantidad y motivos, del mes más reciente cargado — no semanal), son números YA calculados — úsalos tal cual, nunca los inventes ni los redondees distinto. Cuando la conversación toque la meta, habla en números concretos ("vamos en X al día, nos faltan Y para la meta", o "este mes van N garantías, el motivo que más se repite es Z") en vez de mencionar la meta en abstracto, y exige que el plan de acción sea igual de concreto — no "vamos a mejorar", sino qué se va a hacer distinto esta semana para acercarnos.
+Si el contexto trae "DATOS REALES DE ESTA SEMANA" (pedidos despachados, fill rate), "DATOS REALES (garantías)" (cantidad y motivos, del mes más reciente cargado — no semanal) o "DATOS REALES (inventario)" (DIO/GMROI mensuales, sobrestock, sin movimiento, ruptura de stock semanal — cadencias mezcladas, respeta la que cada línea indica), son números YA calculados — úsalos tal cual, nunca los inventes ni los redondees distinto. Cuando la conversación toque la meta, habla en números concretos ("vamos en X al día, nos faltan Y para la meta", "este mes van N garantías, el motivo que más se repite es Z", o "el DIO subió a N días y hay M productos sin movimiento") en vez de mencionar la meta en abstracto, y exige que el plan de acción sea igual de concreto — no "vamos a mejorar", sino qué se va a hacer distinto esta semana para acercarnos.
 
 Sé breve y directa, en español. No es una entrevista larga — en pocos intercambios ya deberías tener lo necesario.
 
@@ -229,6 +231,48 @@ async function buildWarrantyMetricsBlock(): Promise<string | null> {
   ].join("\n");
 }
 
+// Todo lo que Daniel (líder de Inventario) ya ve en su propio panel de KPIs
+// (canViewInventoryKpisPanel en guards.ts, mismos 4 KPIs) más Ruptura de
+// Stock — confirmado 2026-09-07: el usuario pidió explícitamente que Mary
+// vea TODO esto para ayudarlo a organizarse hacia la meta de 1000
+// pedidos/día. No es información nueva para él (ya la ve en su propia
+// pestaña), solo se reinyecta acá. Cadencias mixtas — DIO/GMROI son
+// mensuales, sin-movimiento es de la última captura (semanal desde
+// 2026-08-25), ruptura de stock es semanal — cada línea deja claro de qué
+// período es para que Mary nunca la presente como si fuera todo "de esta
+// semana".
+async function buildInventoryMetricsBlock(): Promise<string | null> {
+  const [kpis, stockoutWeeks] = await Promise.all([getInventoryKpisData(), getStockoutWeeks()]);
+  const lines: string[] = [];
+
+  if (kpis.hasData) {
+    if (kpis.dio.current !== null) {
+      const trend = kpis.dio.good === null ? "" : kpis.dio.good ? " (mejorando)" : " (empeorando)";
+      lines.push(`- DIO / días de inventario (dato mensual): ${kpis.dio.current.toFixed(1)} días${trend}.`);
+    }
+    if (kpis.gmroiSeries.current !== null) {
+      const trend = kpis.gmroiSeries.good === null ? "" : kpis.gmroiSeries.good ? " (mejorando)" : " (empeorando)";
+      lines.push(`- GMROI (dato mensual): ${kpis.gmroiSeries.current.toFixed(2)}x${trend}.`);
+    }
+    if (kpis.overstockAlert.alert) {
+      lines.push(`- Alerta de sobrestock activa: ${kpis.overstockAlert.message}`);
+    }
+    const staleCount = kpis.staleSummary.bucket1.length + kpis.staleSummary.bucket23.length + kpis.staleSummary.bucket4plus.length;
+    if (staleCount > 0) {
+      lines.push(
+        `- Productos sin movimiento (última captura, ${kpis.staleSnapshotPeriod ?? "sin fecha"}): ${staleCount} en total, de los cuales ${kpis.staleSummary.bucket4plus.length} llevan 13+ semanas sin moverse.`
+      );
+    }
+  }
+
+  const latestStockout = stockoutWeeks[stockoutWeeks.length - 1];
+  if (latestStockout) {
+    lines.push(`- Ruptura de stock semana ${latestStockout.week}: ${latestStockout.value} productos distintos se quedaron sin stock.`);
+  }
+
+  return lines.length > 0 ? lines.join("\n") : null;
+}
+
 // Contexto inyectado en cada mensaje enviado al modelo — mismo patrón que
 // buildNancyContext en nancy.ts (nunca confiar en que el cliente mande el
 // nombre/área; siempre resuelto server-side). Antepuesto al contenido del
@@ -261,6 +305,11 @@ export async function buildWeeklyCheckinContext(params: {
     const metrics = await buildWarrantyMetricsBlock();
     if (metrics) {
       ctx += `\n\nDATOS REALES (garantías):\n${metrics}`;
+    }
+  } else if (params.deptCode === "INV") {
+    const metrics = await buildInventoryMetricsBlock();
+    if (metrics) {
+      ctx += `\n\nDATOS REALES (inventario):\n${metrics}`;
     }
   }
 
