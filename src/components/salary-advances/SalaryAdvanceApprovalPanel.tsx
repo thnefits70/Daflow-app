@@ -80,7 +80,6 @@ export function SalaryAdvanceApprovalPanel() {
   const [rejectReason, setRejectReason] = useState("");
   const [busy, setBusy] = useState(false);
   const proofRowIdRef = useRef<string | null>(null);
-  const proofInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
   function load() {
     fetch("/api/salary-advances/pending").then((r) => (r.ok ? r.json() : [])).then(setItems);
@@ -122,19 +121,6 @@ export function SalaryAdvanceApprovalPanel() {
     const item = items?.find((a) => a.id === id);
     if (id && item) handleProofFile(id, file, item.amount);
   });
-
-  // En celular el toque intenta leer el portapapeles primero (usePasteFile),
-  // pero eso falla seguido (permiso denegado, navegador sin soporte, o el
-  // screenshot nunca se copió al portapapeles — en Android una captura no se
-  // copia sola). Cuando falla, abrimos el selector de archivos automático
-  // como respaldo para que el toque siempre termine en algo que funciona.
-  const tapHintHandledRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (!tapHintProof || tapHintProof === tapHintHandledRef.current) return;
-    tapHintHandledRef.current = tapHintProof;
-    const id = proofRowIdRef.current;
-    if (id) proofInputRefs.current[id]?.click();
-  }, [tapHintProof]);
 
   function clearProof(id: string) {
     setProofUrls((p) => { const rest = { ...p }; delete rest[id]; return rest; });
@@ -242,7 +228,7 @@ export function SalaryAdvanceApprovalPanel() {
                       <button type="button" className="text-[11px] underline decoration-dotted text-steel opacity-80 hover:opacity-100 cursor-pointer" onClick={() => clearProof(a.id)}>Cambiar</button>
                     </>
                   ) : (
-                    <div>
+                    <div className="w-full">
                       <div
                         tabIndex={0}
                         onPaste={onPasteProof}
@@ -252,22 +238,26 @@ export function SalaryAdvanceApprovalPanel() {
                         className="flex items-center gap-1.5 border-[1.5px] border-dashed border-rule rounded px-2.5 py-1.5 text-[11.5px] text-steel cursor-pointer hover:border-teal focus:border-teal focus:outline-none"
                       >
                         {uploadingId === a.id ? "Subiendo…" : "Pega el comprobante aquí (Ctrl+V, o toca en celular)"}
-                        <button
-                          type="button"
-                          className="text-[11px] font-semibold text-blue underline decoration-dotted cursor-pointer"
-                          onClick={(e) => { e.stopPropagation(); proofInputRefs.current[a.id]?.click(); }}
-                        >
-                          o selecciona un archivo
-                        </button>
+                      </div>
+                      <label className="block w-full mt-1 py-1 text-center text-[11px] font-medium text-blue underline decoration-dotted cursor-pointer">
+                        o selecciona un archivo
                         <input
-                          ref={(el) => { proofInputRefs.current[a.id] = el; }}
                           type="file"
-                          accept="image/*,application/pdf"
+                          accept="image/*"
                           className="hidden"
                           onChange={(e) => e.target.files?.[0] && handleProofFile(a.id, e.target.files[0], a.amount)}
                         />
-                      </div>
+                      </label>
                       {tapHintProof && <p className="mt-1 text-[10.5px] text-red">{tapHintProof}</p>}
+                      <label className="flex items-center justify-center gap-1 mt-1 text-[10.5px] text-steel cursor-pointer hover:text-blue">
+                        ¿Es un PDF? Subir documento
+                        <input
+                          type="file"
+                          accept="application/pdf"
+                          className="hidden"
+                          onChange={(e) => e.target.files?.[0] && handleProofFile(a.id, e.target.files[0], a.amount)}
+                        />
+                      </label>
                     </div>
                   )}
                   <button type="button" disabled={busy || !proofUrls[a.id] || verifyResults[a.id]?.matches === false || verifyingId === a.id} className="text-[12px] font-bold bg-green text-white rounded-md px-3.5 py-1.5 cursor-pointer disabled:opacity-40" onClick={() => approve(a.id)}>Aprobar y transferir</button>
