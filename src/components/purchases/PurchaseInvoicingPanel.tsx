@@ -24,6 +24,7 @@ type Row = {
   unitCost: number;
   totalCost: number;
   catalogItemId: string;
+  justification: string | null;
   invoiceStatus: InvoiceStatus;
   invoiceAmount: number | null;
   invoiceDocUrl: string | null;
