@@ -70,7 +70,7 @@ export async function POST(req: NextRequest) {
   // cliente) para que Mary pueda saludar por nombre.
   const leaderUser = await prisma.user.findUnique({
     where: { id: session.user.id },
-    select: { name: true, leadsDeptId: true, leadsDept: { select: { name: true } } },
+    select: { name: true, leadsDeptId: true, leadsDept: { select: { name: true, code: true } } },
   });
   const deptId = leaderUser!.leadsDeptId!;
   const ownerId = session.user.id;
@@ -109,9 +109,10 @@ export async function POST(req: NextRequest) {
   // patrón que buildNancyContext en nancy.ts), así que si algo se cierra a
   // mitad de la conversación, el siguiente turno ya no lo repite.
   const openPrevious = await getOpenPreviousReports(ownerId, week);
-  const context = buildWeeklyCheckinContext({
+  const context = await buildWeeklyCheckinContext({
     leaderName: leaderUser!.name,
     deptName: leaderUser!.leadsDept!.name,
+    deptCode: leaderUser!.leadsDept!.code,
     openPrevious,
   });
 

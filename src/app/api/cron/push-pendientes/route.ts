@@ -7,7 +7,7 @@ import { getStaleSupplierCreditPushes } from "@/lib/supplierCredits";
 import { getStaleAdminPaymentPushes } from "@/lib/adminPayments";
 import { getStalePersonalPurchaseTransferPushes } from "@/lib/personalPurchases";
 import { getAtomSyncReminderPushes } from "@/lib/atomReminder";
-import { getWeeklyCheckinPushes } from "@/lib/weeklyCheckin";
+import { getWeeklyCheckinPushes, getMidweekFollowupPushes } from "@/lib/weeklyCheckin";
 import { getDeliveryOverduePushes, getContraEntregaPaymentOverduePushes } from "@/lib/externalSales";
 import { sendPushToOwner } from "@/lib/webPush";
 import { runNichoAutoBackfill } from "@/lib/nichoAi";
@@ -104,6 +104,15 @@ export async function GET(req: NextRequest) {
   // área con trackWeeklyReview que todavía no reportó esta semana.
   const weeklyCheckinPushes = await getWeeklyCheckinPushes();
   for (const r of weeklyCheckinPushes) {
+    await sendPushToOwner(r.ownerId, { title: r.title, body: r.body, url: r.url });
+    notified++;
+  }
+
+  // Seguimiento de mitad de semana (miércoles) — no espera al viernes para
+  // recordarle a cada líder el plan que dejó pendiente (ver
+  // getMidweekFollowupPushes).
+  const midweekFollowupPushes = await getMidweekFollowupPushes();
+  for (const r of midweekFollowupPushes) {
     await sendPushToOwner(r.ownerId, { title: r.title, body: r.body, url: r.url });
     notified++;
   }

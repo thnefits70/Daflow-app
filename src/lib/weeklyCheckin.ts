@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { notifyOwner } from "@/lib/notifications";
 import { getDeptLeadId, getLeadIdOfUsersDept } from "@/lib/guards";
+import { getWeeklyTrend, getFillRateTrend, getLatestFillRateBreakdown } from "@/lib/dashboard";
 
 // Mary, la asistente de check-in semanal — reemplaza la reunión 1:1
 // admin-líder: le pregunta al LÍDER de cada área (nunca al resto del
@@ -33,6 +34,8 @@ Después de eso (o directo, si no había pendientes), pregunta qué problemas o 
 El check-in es sobre el trabajo del área — problemas operativos, capacidad, personal, tiempos de despacho — nunca sobre temas personales o de bienestar individual del líder (salud, comida, vida personal). Si el líder menciona algo así de pasada, respóndele con una sola frase breve y cálida — sin indagar, sin preguntarle si lo va a manejar él o si hay que avisar a alguien — y vuelve enseguida a la pregunta del check-in que estabas haciendo. Nunca abras una segunda vuelta de preguntas sobre un tema así; tu trabajo es mantener la conversación enfocada en el área y en la meta, no seguirle la corriente a lo que no tiene que ver con eso.
 
 Tienes una meta de fondo que compartes con todo el equipo: llegar a los 1000 pedidos diarios. No es una orden que bajas al líder desde arriba — es tu meta también, así que háblala en primera persona del plural ("nosotros", "entre todos", "la meta que tenemos"), nunca como "ustedes deben llegar a...". Sácala a relucir de forma sutil, solo cuando el problema o el plan que te está contando realmente se conecta con volumen, capacidad, personal o tiempos de despacho — no la menciones en temas que no tienen nada que ver. Cuando sí aplique, no te quedes en anotar el plan tal cual te lo dan: ayuda al líder a pensar un paso más allá, hacia esa meta — por ejemplo, preguntando si el plan también aguanta si el volumen sigue subiendo, o si hay algo más que valdría la pena hacer pensando en llegar a los 1000. La idea es que el líder sienta que esa meta es del equipo completo, tú incluida, no una tarea más que le toca cumplir a él solo.
+
+Si el contexto trae "DATOS REALES DE ESTA SEMANA", son los números YA calculados de Inicio (pedidos despachados, fill rate, etc.) — úsalos tal cual, nunca los inventes ni los redondees distinto. Cuando la conversación toque volumen o capacidad, habla en números concretos ("vamos en X al día, nos faltan Y para la meta") en vez de mencionar la meta en abstracto, y exige que el plan de acción sea igual de concreto — no "vamos a mejorar", sino qué se va a hacer distinto esta semana para cerrar esa brecha puntual.
 
 Sé breve y directa, en español. No es una entrevista larga — en pocos intercambios ya deberías tener lo necesario.
 
@@ -153,11 +156,59 @@ export async function getOpenPreviousReports(leaderId: string, currentWeek: stri
   return rows.map((r) => ({ id: r.id, week: r.week, problem: r.problem, actionPlan: r.actionPlan, weeksStale: weeksStaleOf(r.week) }));
 }
 
+// Meta compartida de Fulfillment (ver MARY_SYSTEM_PROMPT) — no vive en la
+// base de datos porque hoy es la única área con una meta numérica de este
+// tipo conectada a un dato real; si se agrega otra área con meta propia,
+// esto se vuelve configurable en vez de un literal.
+const FULFILLMENT_DAILY_TARGET = 1000;
+const FULFILLMENT_WORKDAYS_PER_WEEK = 6; // lunes a sábado, igual que la tarjeta de Inicio
+
+// Mismos datos ya calculados que se ven en Inicio para Fulfillment
+// (getWeeklyTrend/getFillRateTrend/getLatestFillRateBreakdown de
+// dashboard.ts) — reinyectados en el contexto de Mary para que hable con
+// números reales de la semana en vez de solo mencionar la meta de 1000
+// pedidos/día como una idea abstracta. Confirmado 2026-09-07: nunca datos
+// financieros acá, solo operativos (pedidos, fill rate, motivos).
+async function buildFulfillmentMetricsBlock(): Promise<string | null> {
+  const [trend, fillRate, breakdown] = await Promise.all([getWeeklyTrend(), getFillRateTrend(), getLatestFillRateBreakdown()]);
+  if (!trend || trend.points.length === 0) return null;
+
+  const latest = trend.points[trend.points.length - 1];
+  const dailyAvg = Math.round(latest.value / FULFILLMENT_WORKDAYS_PER_WEEK);
+  const gap = Math.max(0, FULFILLMENT_DAILY_TARGET - dailyAvg);
+
+  const lines = [
+    `- Pedidos despachados semana ${latest.week}: ${latest.value.toLocaleString("es-EC")} (~${dailyAvg.toLocaleString("es-EC")}/día, meta ${FULFILLMENT_DAILY_TARGET.toLocaleString("es-EC")}/día — ${gap > 0 ? `faltan ${gap.toLocaleString("es-EC")}/día` : "meta alcanzada esta semana"})`,
+  ];
+
+  const latestFillRate = fillRate?.points[fillRate.points.length - 1];
+  if (latestFillRate) {
+    lines.push(`- Fill Rate: ${latestFillRate.value}%${latestFillRate.detail ? ` (${latestFillRate.detail})` : ""}`);
+  }
+  if (breakdown) {
+    lines.push(
+      `- De lo no despachado esa semana: ${breakdown.prepared} en preparación, ${breakdown.generated} generado sin despachar, ${breakdown.outOfStock} sin stock.`
+    );
+    if (breakdown.needsJustification) {
+      lines.push(`- Fill Rate por debajo del 95% — todavía necesita justificación del equipo.`);
+    }
+  }
+
+  return lines.join("\n");
+}
+
 // Contexto inyectado en cada mensaje enviado al modelo — mismo patrón que
 // buildNancyContext en nancy.ts (nunca confiar en que el cliente mande el
 // nombre/área; siempre resuelto server-side). Antepuesto al contenido del
-// último mensaje del usuario en la ruta.
-export function buildWeeklyCheckinContext(params: { leaderName: string; deptName: string; openPrevious: OpenPreviousReport[] }): string {
+// último mensaje del usuario en la ruta. deptCode decide qué bloque de datos
+// reales se agrega (hoy solo "FUL" tiene uno armado, ver
+// buildFulfillmentMetricsBlock).
+export async function buildWeeklyCheckinContext(params: {
+  leaderName: string;
+  deptName: string;
+  deptCode: string;
+  openPrevious: OpenPreviousReport[];
+}): Promise<string> {
   let ctx = `CONTEXTO\nEstás hablando con ${params.leaderName}, líder de ${params.deptName}.`;
   if (params.openPrevious.length > 0) {
     const lines = params.openPrevious
@@ -168,6 +219,14 @@ export function buildWeeklyCheckinContext(params: { leaderName: string; deptName
       .join("\n");
     ctx += `\n\nPENDIENTES DE SEMANAS ANTERIORES (pregunta por cada uno antes de seguir con problemas nuevos):\n${lines}`;
   }
+
+  if (params.deptCode === "FUL") {
+    const metrics = await buildFulfillmentMetricsBlock();
+    if (metrics) {
+      ctx += `\n\nDATOS REALES DE ESTA SEMANA:\n${metrics}`;
+    }
+  }
+
   return ctx;
 }
 
@@ -327,6 +386,46 @@ export async function getWeeklyCheckinPushes(): Promise<WeeklyCheckinPush[]> {
     });
   }
   return pushes;
+}
+
+// Seguimiento de mitad de semana — confirmado 2026-09-07: el líder no debe
+// esperar hasta el viernes para que le vuelvan a preguntar por su plan
+// pendiente; este recordatorio llega a mitad de semana (miércoles) para que
+// vaya actuando, no solo lo recuerde el día del corte. Es solo un empujón —
+// no abre una conversación nueva ni duplica el flujo de getWeeklyCheckinPushes,
+// solo apunta a /area donde puede seguir chateando con Mary sobre el mismo
+// pendiente. Reutiliza el único cron diario existente (ver comentario de
+// getWeeklyCheckinPushes) — Vercel Hobby no permite crons más frecuentes.
+export async function getMidweekFollowupPushes(): Promise<WeeklyCheckinPush[]> {
+  if (isoWeekdayOf(nowInEcuador()) !== 3) return [];
+
+  const leaders = await prisma.user.findMany({
+    where: { isActive: true, isLeader: true, leadsDept: { trackWeeklyReview: true } },
+    select: { id: true },
+  });
+  if (leaders.length === 0) return [];
+
+  const pending = await prisma.weeklyReviewRecord.findMany({
+    where: { reportedById: { in: leaders.map((l) => l.id) }, status: "PENDING" },
+    orderBy: { week: "desc" },
+  });
+  if (pending.length === 0) return [];
+
+  // Un solo aviso por líder — si tiene varios pendientes, usa el más
+  // reciente (el primero al ordenar por semana descendente).
+  const byLeader = new Map<string, (typeof pending)[number]>();
+  for (const record of pending) {
+    if (record.reportedById && !byLeader.has(record.reportedById)) {
+      byLeader.set(record.reportedById, record);
+    }
+  }
+
+  return [...byLeader.entries()].map(([ownerId, record]) => ({
+    ownerId,
+    title: "DAFLOW · ¿Cómo vas con tu plan?",
+    body: `Recuerda: "${record.actionPlan.slice(0, 120)}" — cuéntale a Mary cómo vas.`,
+    url: "/area",
+  }));
 }
 
 export type InvolvingMeReviewDTO = {
