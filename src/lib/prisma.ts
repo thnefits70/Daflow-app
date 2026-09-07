@@ -3,22 +3,29 @@ import { PrismaClient } from "@/generated/prisma/client";
 
 const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
 
-// Confirmado 2026-09-07 — causa real de una caída de producción: cada
-// instancia serverless de Vercel abre su propio pool hacia el pooler de
-// Supabase (puerto 6543, pgbouncer=true), y sin un `max` explícito, pg.Pool
-// usa 10 por default. Con suficiente tráfico concurrente, Vercel levanta
-// muchas instancias a la vez, cada una reteniendo hasta 10 conexiones
-// mientras sigue "tibia" (no se cierran solas entre invocaciones) — se llegó
-// al límite del pooler (200) y TODA la app empezó a fallar, no solo una
-// pantalla. `max: 3` deja mucho más margen: aunque haya decenas de
-// instancias vivas a la vez, la suma total se mantiene lejos del límite.
-// connectionTimeoutMillis además hace que, si alguna vez el pool sí se
-// agota, la request falle rápido con un error claro en vez de colgarse
-// esperando una conexión libre.
+// Confirmado 2026-09-07 — causa real de DOS caídas de producción seguidas
+// el mismo día. Cada instancia serverless de Vercel abre su propio pool
+// hacia Supavisor (el "portero" de conexiones de Supabase, puerto 6543).
+// El límite de 200 que se ve en el error NO es de la base de datos real
+// (medido directo con pg_stat_activity: apenas ~20 conexiones reales en el
+// peor momento) — es cuántas conexiones de CLIENTE (o sea, de Vercel)
+// Supavisor acepta a la vez. Bajo tráfico alto, Vercel levanta muchas
+// instancias en paralelo, y cada una retiene sus conexiones mientras sigue
+// "tibia" entre pedidos (no se cierran solas — una función serverless
+// "congelada" ni siquiera puede correr su propio temporizador de limpieza
+// mientras está pausada, así que idleTimeoutMillis no alcanza a actuar).
+// Un primer intento con `max: 3` no fue suficiente — con suficientes
+// instancias vivas a la vez, 3 cada una todavía sumaba más de 200. `max: 1`
+// es lo que Prisma recomienda para serverless + pooler de este tipo: cada
+// instancia solo necesita una conexión a la vez (una function no atiende
+// dos pedidos en simultáneo), así que aunque haya cien instancias vivas al
+// mismo tiempo, la suma se queda muy por debajo del límite.
+// connectionTimeoutMillis hace que, si el pool alguna vez sí se agota, la
+// request falle rápido con un error claro en vez de colgarse indefinidamente.
 function createPrismaClient() {
   const adapter = new PrismaPg({
     connectionString: process.env.DATABASE_URL,
-    max: 3,
+    max: 1,
     idleTimeoutMillis: 10_000,
     connectionTimeoutMillis: 10_000,
   });
