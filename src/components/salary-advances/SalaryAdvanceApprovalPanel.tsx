@@ -123,6 +123,19 @@ export function SalaryAdvanceApprovalPanel() {
     if (id && item) handleProofFile(id, file, item.amount);
   });
 
+  // En celular el toque intenta leer el portapapeles primero (usePasteFile),
+  // pero eso falla seguido (permiso denegado, navegador sin soporte, o el
+  // screenshot nunca se copió al portapapeles — en Android una captura no se
+  // copia sola). Cuando falla, abrimos el selector de archivos automático
+  // como respaldo para que el toque siempre termine en algo que funciona.
+  const tapHintHandledRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!tapHintProof || tapHintProof === tapHintHandledRef.current) return;
+    tapHintHandledRef.current = tapHintProof;
+    const id = proofRowIdRef.current;
+    if (id) proofInputRefs.current[id]?.click();
+  }, [tapHintProof]);
+
   function clearProof(id: string) {
     setProofUrls((p) => { const rest = { ...p }; delete rest[id]; return rest; });
     setVerifyResults((v) => ({ ...v, [id]: null }));
@@ -167,7 +180,9 @@ export function SalaryAdvanceApprovalPanel() {
           const isCalamidad = a.reason === "EMERGENCIA_FAMILIAR";
           return (
           <div key={a.id} className={`rounded-md p-3.5 ${isCalamidad ? "bg-[#D9A441]/10 border-2 border-[#D9A441]" : "bg-surface border border-rule"}`}>
-            <div className="font-bold text-[13px]">{a.employee.name} — {money(a.amount)}{a.installments > 1 ? ` (${a.installments} cuotas)` : ""}</div>
+            <div className="font-bold text-[13px]">
+              {a.employee.name} — <span className="text-[15px] text-green">{money(a.amount)}</span>{a.installments > 1 ? ` (${a.installments} cuotas)` : ""}
+            </div>
             {a.reason && (
               <div className={`text-[11.5px] mt-0.5 ${isCalamidad ? "text-[#D9A441] font-semibold" : "text-steel"}`}>
                 Motivo: {REASON_LABEL[a.reason] ?? a.reason}
@@ -180,8 +195,23 @@ export function SalaryAdvanceApprovalPanel() {
               </div>
             )}
             {a.bankAccount ? (
-              <div className="text-[11.5px] text-steel mt-1.5">
-                {a.bankAccount.bankName} · {a.bankAccount.bankAccountType} · {a.bankAccount.bankAccountNumber} · {a.bankAccount.bankAccountHolder}{a.bankAccount.holderIdNumber ? ` · CI ${a.bankAccount.holderIdNumber}` : ""}
+              <div className="mt-2 rounded border border-rule bg-cloud px-2.5 py-2 grid grid-cols-2 gap-x-3 gap-y-1.5 text-[12px]">
+                <div>
+                  <div className="text-[9.5px] uppercase tracking-wide text-steel-dim">Banco / tipo</div>
+                  <div className="font-semibold">{a.bankAccount.bankName} · {a.bankAccount.bankAccountType}</div>
+                </div>
+                <div>
+                  <div className="text-[9.5px] uppercase tracking-wide text-steel-dim">Número de cuenta</div>
+                  <div className="font-bold tabular-nums text-[13px]">{a.bankAccount.bankAccountNumber}</div>
+                </div>
+                <div>
+                  <div className="text-[9.5px] uppercase tracking-wide text-steel-dim">Titular</div>
+                  <div className="font-bold">{a.bankAccount.bankAccountHolder}</div>
+                </div>
+                <div>
+                  <div className="text-[9.5px] uppercase tracking-wide text-steel-dim">Cédula</div>
+                  <div className="font-bold tabular-nums text-[13px]">{a.bankAccount.holderIdNumber ?? "—"}</div>
+                </div>
               </div>
             ) : (
               <div className="text-[11.5px] text-red mt-1.5">No tiene cuenta bancaria registrada.</div>
