@@ -6,7 +6,7 @@ import { resolveFirstPayoutMonth } from "@/lib/payroll";
 import { addMonthsToMonthStr } from "@/lib/payrollCalc";
 import { sendPushToOwner } from "@/lib/webPush";
 
-const schema = z.object({ method: z.enum(["PAYROLL", "TRANSFER"]) });
+const schema = z.object({ method: z.enum(["PAYROLL", "TRANSFER", "CASH"]) });
 
 // Confirmado 2026-08-20: recién acá el colaborador elige cómo paga, una vez
 // que ya sabe el total. PAYROLL activa el descuento real (mismo cálculo que
@@ -15,6 +15,10 @@ const schema = z.object({ method: z.enum(["PAYROLL", "TRANSFER"]) });
 // en la rama PAYROLL — es la garantía de que a nadie que pague por
 // transferencia le sale además el descuento en rol (payroll.ts filtra por
 // firstPayoutMonth not null).
+// Confirmado 2026-09-07: CASH (efectivo entregado en mano a Nairoby) es un
+// tercer camino — no hay comprobante que subir, solo queda esperando a que
+// Nairoby confirme la recepción (ver confirm-cash), igual que TRANSFER
+// nunca toca firstPayoutMonth.
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session || session.user.role === "admin") return NextResponse.json({ error: "No autorizado." }, { status: 401 });
@@ -33,6 +37,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const updated = await prisma.personalPurchaseOrder.update({
       where: { id },
       data: { paymentMethod: "TRANSFER", status: "PENDING_TRANSFER_PROOF" },
+    });
+    return NextResponse.json(updated);
+  }
+
+  if (parsed.data.method === "CASH") {
+    const updated = await prisma.personalPurchaseOrder.update({
+      where: { id },
+      data: { paymentMethod: "CASH", status: "PENDING_CASH_CONFIRM" },
     });
     return NextResponse.json(updated);
   }

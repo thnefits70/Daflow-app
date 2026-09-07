@@ -21,6 +21,12 @@ type CloseOrder = {
   transferProofName: string | null;
   items: { confirmedProductName: string | null; employeeProductName: string; quantity: number; confirmedCatalogItem: { justCode: string | null } | null }[];
 };
+type CashOrder = {
+  id: string;
+  employee: { name: string };
+  totalAmount: number | null;
+  items: { confirmedProductName: string | null; employeeProductName: string; quantity: number; confirmedCatalogItem: { justCode: string | null } | null }[];
+};
 
 function money(n: number | null) {
   return n == null ? "—" : `$${n.toFixed(2)}`;
@@ -33,6 +39,7 @@ function money(n: number | null) {
 export function PersonalPurchasesTransferPanel({ isAdmin }: { isAdmin: boolean }) {
   const [confirmOrders, setConfirmOrders] = useState<ConfirmOrder[] | null>(null);
   const [closeOrders, setCloseOrders] = useState<CloseOrder[] | null>(null);
+  const [cashOrders, setCashOrders] = useState<CashOrder[] | null>(null);
   const [confirming, setConfirming] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -41,6 +48,7 @@ export function PersonalPurchasesTransferPanel({ isAdmin }: { isAdmin: boolean }
       fetch("/api/personal-purchases/pending-transfer-confirm").then((r) => (r.ok ? r.json() : [])).then(setConfirmOrders);
     }
     fetch("/api/personal-purchases/pending-transfer-close").then((r) => (r.ok ? r.json() : [])).then(setCloseOrders);
+    fetch("/api/personal-purchases/pending-cash-confirm").then((r) => (r.ok ? r.json() : [])).then(setCashOrders);
   }
   useEffect(load, [isAdmin]);
 
@@ -59,8 +67,19 @@ export function PersonalPurchasesTransferPanel({ isAdmin }: { isAdmin: boolean }
     load();
   }
 
-  if (confirmOrders === null && closeOrders === null) return null;
-  if ((confirmOrders?.length ?? 0) === 0 && (closeOrders?.length ?? 0) === 0) return null;
+  // Confirmado 2026-09-07: un solo clic — a diferencia de transferencia, acá
+  // no hay comprobante ni segundo paso: Nairoby ya tiene el efectivo en mano,
+  // así que este clic confirma la recepción Y sube el monto a Caja Chica
+  // Principal en el mismo movimiento (ver confirm-cash/route.ts).
+  async function confirmCash(id: string) {
+    setBusy(true);
+    await fetch(`/api/personal-purchases/${id}/confirm-cash`, { method: "POST" });
+    setBusy(false);
+    load();
+  }
+
+  if (confirmOrders === null && closeOrders === null && cashOrders === null) return null;
+  if ((confirmOrders?.length ?? 0) === 0 && (closeOrders?.length ?? 0) === 0 && (cashOrders?.length ?? 0) === 0) return null;
 
   return (
     <div className="flex flex-col gap-4">
@@ -142,6 +161,42 @@ export function PersonalPurchasesTransferPanel({ isAdmin }: { isAdmin: boolean }
                   ))}
                 </div>
                 {o.transferProofUrl && <ProofPreview url={o.transferProofUrl} filename={o.transferProofName ?? undefined} />}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {(cashOrders?.length ?? 0) > 0 && (
+        <div>
+          <div className="text-[11px] font-semibold uppercase tracking-wide text-steel mb-3">
+            Efectivo — falta confirmar recepción ({cashOrders!.length})
+          </div>
+          <div className="flex flex-col gap-3">
+            {cashOrders!.map((o) => (
+              <div key={o.id} className="bg-surface border border-rule rounded-md p-3.5">
+                <div className="flex items-center justify-between gap-3 mb-2.5">
+                  <div>
+                    <div className="font-bold text-[13px]">{o.employee.name}</div>
+                    <div className="text-[12px] text-steel-dim tabular-nums">{money(o.totalAmount)}</div>
+                  </div>
+                  {isAdmin ? (
+                    <span className="text-[11px] text-steel-dim italic">Esperando que Nairoby confirme</span>
+                  ) : (
+                    <button type="button" disabled={busy} className="text-[12px] font-bold bg-teal text-white rounded-md px-3.5 py-1.5 cursor-pointer disabled:opacity-40" onClick={() => confirmCash(o.id)}>
+                      💵 Confirmé que recibí — subir a caja chica
+                    </button>
+                  )}
+                </div>
+                <div className="text-[11.5px] text-steel-dim">
+                  {o.items.map((it, i) => (
+                    <span key={i} className="inline-flex items-center gap-1">
+                      <CatalogCode code={it.confirmedCatalogItem?.justCode} />
+                      {it.confirmedProductName ?? it.employeeProductName} × {it.quantity}
+                      {i < o.items.length - 1 ? " · " : ""}
+                    </span>
+                  ))}
+                </div>
               </div>
             ))}
           </div>

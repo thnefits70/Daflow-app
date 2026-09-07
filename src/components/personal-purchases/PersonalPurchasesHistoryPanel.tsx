@@ -21,7 +21,7 @@ type Order = {
   items: Item[];
   totalAmount: number | null;
   installments: number;
-  paymentMethod: "PAYROLL" | "TRANSFER" | null;
+  paymentMethod: "PAYROLL" | "TRANSFER" | "CASH" | null;
   rejectionReason: string | null;
   createdAt: string;
 };
@@ -35,6 +35,7 @@ const STATUS_LABEL: Record<string, string> = {
   PENDING_TRANSFER_PROOF: "Eligió transferencia — falta comprobante",
   PENDING_ADMIN_CONFIRM: "Comprobante subido — falta confirmar admin",
   PENDING_NAIROBY_CLOSE: "Transferencia confirmada — falta cerrar",
+  PENDING_CASH_CONFIRM: "Eligió efectivo — falta que Nairoby confirme",
   APPROVED: "Aprobado",
   REJECTED: "Rechazado",
 };
@@ -90,7 +91,9 @@ export function PersonalPurchasesHistoryPanel() {
                     {STATUS_LABEL[o.status] ?? o.status}
                   </span>
                   {o.paymentMethod && (
-                    <span className="text-[11px] text-steel-dim">{o.paymentMethod === "PAYROLL" ? "Descuento en rol" : "Transferencia"}</span>
+                    <span className="text-[11px] text-steel-dim">
+                      {o.paymentMethod === "PAYROLL" ? "Descuento en rol" : o.paymentMethod === "CASH" ? "Efectivo" : "Transferencia"}
+                    </span>
                   )}
                   {o.installments > 1 && <span className="text-[11px] text-steel-dim">{o.installments} cuotas</span>}
                 </div>

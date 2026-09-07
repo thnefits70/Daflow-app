@@ -19,6 +19,7 @@ const UNRESOLVED_LABEL: Record<string, string> = {
   PENDING_TRANSFER_PROOF: "Eligió transferencia — falta comprobante",
   PENDING_ADMIN_CONFIRM: "Comprobante subido — falta confirmar admin",
   PENDING_NAIROBY_CLOSE: "Transferencia confirmada — falta cerrar",
+  PENDING_CASH_CONFIRM: "Eligió efectivo — falta que Nairoby confirme",
 };
 
 function productLabel(items: { confirmedProductName: string | null; employeeProductName: string; quantity: number }[]) {
@@ -50,6 +51,7 @@ export async function GET() {
       paymentMethod: true,
       firstPayoutMonth: true,
       transferClosedAt: true,
+      cashConfirmedAt: true,
       employee: { select: { name: true } },
       items: { select: { confirmedProductName: true, employeeProductName: true, quantity: true } },
     },
@@ -100,6 +102,12 @@ export async function GET() {
     if (o.paymentMethod === "TRANSFER" && o.transferClosedAt) {
       const month = o.transferClosedAt.toISOString().slice(0, 7);
       push(month, { key: o.id, employee, product, amount: o.totalAmount ?? 0, detail: "Transferencia recibida", state: "cobrada" });
+      continue;
+    }
+
+    if (o.paymentMethod === "CASH" && o.cashConfirmedAt) {
+      const month = o.cashConfirmedAt.toISOString().slice(0, 7);
+      push(month, { key: o.id, employee, product, amount: o.totalAmount ?? 0, detail: "Efectivo recibido", state: "cobrada" });
       continue;
     }
 

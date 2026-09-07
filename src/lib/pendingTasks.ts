@@ -2063,6 +2063,29 @@ async function getPersonalPurchaseTransferClosePendingItem(href: string): Promis
   };
 }
 
+// Confirmado 2026-09-07: el colaborador eligió pagar en efectivo — falta
+// que Nairoby/FIN confirme con un clic que lo recibió en mano (ese clic
+// también sube el monto a Caja Chica Principal, ver confirm-cash/route.ts).
+// Sin campo de fecha propio para este estado (no hay "cashChosenAt"), así
+// que a diferencia del resto de items de esta cola no se marca "atrasado".
+async function getPersonalPurchaseCashConfirmPendingItem(href: string): Promise<PendingItem | null> {
+  const rows = await prisma.personalPurchaseOrder.findMany({
+    where: { status: "PENDING_CASH_CONFIRM" },
+    select: { employee: { select: { name: true } } },
+  });
+  if (rows.length === 0) return null;
+
+  const names = rows.map((r) => r.employee.name).join(", ");
+  return {
+    type: "compras_personales_efectivo",
+    icon: "💵",
+    label: "Compras personales — efectivo por confirmar",
+    meta: rows.length === 1 ? names : `${rows.length} pedidos`,
+    overdue: false,
+    href,
+  };
+}
+
 // Confirmado 2026-08-21: pedido explícito del usuario — una vez que Nairoby
 // cierra el precio, el colaborador tiene que elegir cómo paga
 // (PENDING_PAYMENT_METHOD) o, si eligió transferencia, subir el comprobante
@@ -2240,7 +2263,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     // pestaña interna "Pagos" (?etab=pagos, leída por ExternalSalesPanel).
     const mktDept = await prisma.department.findUnique({ where: { code: "MKT" }, select: { id: true } });
     const mktVentasPagosHref = mktDept ? `/admin/dept/${mktDept.id}?tab=ventas-externas&etab=pagos` : "/admin";
-    const [feedbackItems, recognitionItem, weeklyCheckinStalledItems, pettyCashLow, pettyCashUnconfirmed, adminPaymentsItem, purchaseMerchandiseItem, purchaseShippingItem, purchaseCreditsItem, supplierExchangeRejectedItem, overtimeApprovalItem, commissionBonusApprovalItem, salaryAdvanceItem, managementDeductionItem, personalPurchaseFinanceItem, personalPurchaseTransferConfirmItem, personalPurchaseTransferCloseItem, personalPurchasePaymentWatchItem, payrollTransferItem, payrollIessTransferItem, externalSalePaymentConfirmItem, birthdayItems, nichoBackfillItem, monthlyTopMoversItem] = await Promise.all([
+    const [feedbackItems, recognitionItem, weeklyCheckinStalledItems, pettyCashLow, pettyCashUnconfirmed, adminPaymentsItem, purchaseMerchandiseItem, purchaseShippingItem, purchaseCreditsItem, supplierExchangeRejectedItem, overtimeApprovalItem, commissionBonusApprovalItem, salaryAdvanceItem, managementDeductionItem, personalPurchaseFinanceItem, personalPurchaseTransferConfirmItem, personalPurchaseTransferCloseItem, personalPurchaseCashConfirmItem, personalPurchasePaymentWatchItem, payrollTransferItem, payrollIessTransferItem, externalSalePaymentConfirmItem, birthdayItems, nichoBackfillItem, monthlyTopMoversItem] = await Promise.all([
       getFeedbackPendingItems(),
       getRecognitionAdminPendingItem("/admin/colaborador-destacado"),
       getWeeklyCheckinStalledPendingItems(),
@@ -2258,6 +2281,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       getPersonalPurchasePendingFinanceItem("/admin/nomina?tab=pagos&ptab=comprasfinanzas"),
       getPersonalPurchaseTransferConfirmPendingItem("/admin/nomina?tab=pagos&ptab=comprasfinanzas"),
       getPersonalPurchaseTransferClosePendingItem("/admin/nomina?tab=pagos&ptab=comprasfinanzas"),
+      getPersonalPurchaseCashConfirmPendingItem("/admin/nomina?tab=pagos&ptab=comprasfinanzas"),
       getPersonalPurchasePaymentWatchItem("/admin/nomina?tab=pagos&ptab=comprasfinanzas"),
       getPayrollTransferPendingItem(true, "/admin/nomina?tab=pagos&ptab=roles"),
       getPayrollIessTransferPendingItem(true, "/admin/nomina?tab=pagos&ptab=roles"),
@@ -2284,6 +2308,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       ...(personalPurchaseFinanceItem ? [personalPurchaseFinanceItem] : []),
       ...(personalPurchaseTransferConfirmItem ? [personalPurchaseTransferConfirmItem] : []),
       ...(personalPurchaseTransferCloseItem ? [personalPurchaseTransferCloseItem] : []),
+      ...(personalPurchaseCashConfirmItem ? [personalPurchaseCashConfirmItem] : []),
       ...(personalPurchasePaymentWatchItem ? [personalPurchasePaymentWatchItem] : []),
       ...(payrollTransferItem ? [payrollTransferItem] : []),
       ...(payrollIessTransferItem ? [payrollIessTransferItem] : []),
@@ -2374,7 +2399,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
 
   if (me.leadsDept.code === "FIN") {
     monthly = true;
-    const [payStub, returnRate, warranty, paymentReminders, storeFeedback, pettyCashLow, pettyCashUnconfirmed, purchaseShippingItem, managementDeductionItem, personalPurchaseFinanceItem, personalPurchaseTransferCloseItem, personalPurchasePaymentWatchItem, merchandiseWeeklyVerificationItem, payrollTransferItem, payrollIessTransferItem] = await Promise.all([
+    const [payStub, returnRate, warranty, paymentReminders, storeFeedback, pettyCashLow, pettyCashUnconfirmed, purchaseShippingItem, managementDeductionItem, personalPurchaseFinanceItem, personalPurchaseTransferCloseItem, personalPurchaseCashConfirmItem, personalPurchasePaymentWatchItem, merchandiseWeeklyVerificationItem, payrollTransferItem, payrollIessTransferItem] = await Promise.all([
       getPayStubPendingItem("/area/roles-de-pago"),
       getReturnRatePendingItem("/area/kpis-generales"),
       getWarrantyPendingItem("/area/kpis-generales"),
@@ -2386,6 +2411,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       getManagementDeductionUnacceptedPendingItem("/area/nomina?tab=pagos&ptab=descuentos"),
       getPersonalPurchasePendingFinanceItem("/area/nomina?tab=pagos&ptab=comprasfinanzas"),
       getPersonalPurchaseTransferClosePendingItem("/area/nomina?tab=pagos&ptab=comprasfinanzas"),
+      getPersonalPurchaseCashConfirmPendingItem("/area/nomina?tab=pagos&ptab=comprasfinanzas"),
       getPersonalPurchasePaymentWatchItem("/area/nomina?tab=pagos&ptab=comprasfinanzas"),
       getMerchandiseWeeklyWriteOffVerificationPendingItem("/area/reingreso-mercaderia?tab=danos"),
       getPayrollTransferPendingItem(false, "/area/nomina?tab=pagos&ptab=roles"),
@@ -2402,6 +2428,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     if (managementDeductionItem) items.push(managementDeductionItem);
     if (personalPurchaseFinanceItem) items.push(personalPurchaseFinanceItem);
     if (personalPurchaseTransferCloseItem) items.push(personalPurchaseTransferCloseItem);
+    if (personalPurchaseCashConfirmItem) items.push(personalPurchaseCashConfirmItem);
     if (merchandiseWeeklyVerificationItem) items.push(merchandiseWeeklyVerificationItem);
     if (payrollTransferItem) items.push(payrollTransferItem);
     if (payrollIessTransferItem) items.push(payrollIessTransferItem);

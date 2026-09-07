@@ -3735,6 +3735,7 @@ enum PersonalPurchaseStatus {
   PENDING_TRANSFER_PROOF // eligió transferencia, falta que pegue el comprobante
   PENDING_ADMIN_CONFIRM // comprobante subido, falta que el admin confirme (revisando su banco real)
   PENDING_NAIROBY_CLOSE // admin confirmó, falta que Nairoby/FIN cierre la operación
+  PENDING_CASH_CONFIRM // eligió efectivo, falta que Nairoby/FIN confirme que lo recibió en mano
   APPROVED
   REJECTED
 }
@@ -3742,6 +3743,7 @@ enum PersonalPurchaseStatus {
 enum PersonalPurchasePaymentMethod {
   PAYROLL
   TRANSFER
+  CASH
 }
 
 // Para quién es cada unidad declarada (hasta 3 por producto, ver
@@ -3800,6 +3802,15 @@ model PersonalPurchaseOrder {
   transferAdminConfirmedById String?
   transferClosedAt           DateTime? // Nairoby/FIN cierra la operación
   transferClosedById         String?
+
+  // Confirmado 2026-09-07: tercera forma de pago — el colaborador entrega el
+  // efectivo en mano a Nairoby. A diferencia de transferencia, no hay
+  // comprobante ni doble confirmación admin→Nairoby: el clic de Nairoby en
+  // confirm-cash YA es la confirmación (ella es quien recibió la plata), y
+  // ese mismo clic acredita el monto a Caja Chica Principal.
+  cashConfirmedAt   DateTime?
+  cashConfirmedById String?
+  cashPettyCashEntryId String? // movimiento de Caja Chica que generó esta confirmación
 
   items     PersonalPurchaseItem[]
   createdAt DateTime               @default(now())

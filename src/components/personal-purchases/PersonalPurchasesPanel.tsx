@@ -30,7 +30,7 @@ type OrderHistory = {
   totalAmount: number | null;
   installments: number;
   createdAt: string;
-  paymentMethod: "PAYROLL" | "TRANSFER" | null;
+  paymentMethod: "PAYROLL" | "TRANSFER" | "CASH" | null;
   transferDeadlineAt: string | null;
   transferProofUrl: string | null;
   transferProofName: string | null;
@@ -63,6 +63,7 @@ const STATUS_LABEL: Record<string, { label: string; color: string }> = {
   PENDING_TRANSFER_PROOF: { label: "Falta que subas el comprobante", color: "#D9A441" },
   PENDING_ADMIN_CONFIRM: { label: "Comprobante en revisión", color: "#1E5EFF" },
   PENDING_NAIROBY_CLOSE: { label: "Transferencia confirmada — cerrando", color: "#1E5EFF" },
+  PENDING_CASH_CONFIRM: { label: "Esperando que Nairoby confirme el efectivo", color: "#1E5EFF" },
   APPROVED: { label: "Aprobada", color: "#22C55E" },
   REJECTED: { label: "Rechazada", color: "#C4453A" },
 };
@@ -172,7 +173,7 @@ export function PersonalPurchasesPanel() {
   const [err, setErr] = useState("");
   const [bankAccount, setBankAccount] = useState<CompanyBankAccount>(null);
   const [payBusy, setPayBusy] = useState<Record<string, boolean>>({});
-  const [armedMethod, setArmedMethod] = useState<Record<string, "PAYROLL" | "TRANSFER" | "CANCEL_TO_PAYROLL" | undefined>>({});
+  const [armedMethod, setArmedMethod] = useState<Record<string, "PAYROLL" | "TRANSFER" | "CASH" | "CANCEL_TO_PAYROLL" | undefined>>({});
   const armTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   function loadOrders() {
@@ -183,7 +184,7 @@ export function PersonalPurchasesPanel() {
     fetch("/api/company-bank-account").then((r) => (r.ok ? r.json() : null)).then(setBankAccount);
   }, []);
 
-  async function choosePaymentMethod(orderId: string, method: "PAYROLL" | "TRANSFER") {
+  async function choosePaymentMethod(orderId: string, method: "PAYROLL" | "TRANSFER" | "CASH") {
     setPayBusy((b) => ({ ...b, [orderId]: true }));
     await fetch(`/api/personal-purchases/${orderId}/choose-payment-method`, {
       method: "POST",
@@ -209,7 +210,7 @@ export function PersonalPurchasesPanel() {
   // o descuento del rol), así que un solo tap no alcanza — el primer tap arma
   // la opción ("¿Confirmar?") y solo el segundo tap sobre la misma la ejecuta.
   // Tocar la otra opción, o no confirmar en unos segundos, desarma sin efecto.
-  function handlePaymentMethodTap(orderId: string, method: "PAYROLL" | "TRANSFER") {
+  function handlePaymentMethodTap(orderId: string, method: "PAYROLL" | "TRANSFER" | "CASH") {
     if (armTimers.current[orderId]) {
       clearTimeout(armTimers.current[orderId]);
       delete armTimers.current[orderId];
@@ -480,7 +481,16 @@ export function PersonalPurchasesPanel() {
                       >
                         {armedMethod[o.id] === "PAYROLL" ? "Tocá de nuevo para confirmar" : "🧾 Descuento en rol"}
                       </button>
+                      <button
+                        type="button"
+                        disabled={isBusy}
+                        className={`text-[12px] font-bold border-[1.5px] rounded-md px-3.5 py-1.5 cursor-pointer disabled:opacity-40 ${armedMethod[o.id] === "CASH" ? "bg-green border-green text-white" : "border-green text-green"}`}
+                        onClick={() => handlePaymentMethodTap(o.id, "CASH")}
+                      >
+                        {armedMethod[o.id] === "CASH" ? "Tocá de nuevo para confirmar" : "💵 Efectivo"}
+                      </button>
                     </div>
+                    <div className="text-[10.5px] text-steel-dim mt-1.5">Si pagás en efectivo, entregáselo a Nairoby — ella lo confirma y te avisa.</div>
                     {armedMethod[o.id] && (
                       <div className="text-[10.5px] text-steel-dim mt-1.5">Volvé a tocar la misma opción para confirmar, o tocá la otra para cambiar.</div>
                     )}
