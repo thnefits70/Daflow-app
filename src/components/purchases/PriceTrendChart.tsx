@@ -34,7 +34,14 @@ export function PriceTrendChart({ points }: { points: SupplierPricePoint[] }) {
     y: padT + innerH - ((p.unitCost - yMin) / (yMax - yMin)) * innerH,
   }));
 
-  const linePath = coords.map((c, i) => `${i === 0 ? "M" : "L"}${c.x.toFixed(1)},${c.y.toFixed(1)}`).join(" ");
+  // Confirmado 2026-09-07, pedido explícito del usuario — cada tramo se
+  // colorea según si el precio subió o bajó contra el punto anterior, mismo
+  // criterio y mismos colores que WeeklyTrendChart con invertDirection (más
+  // barato es "bueno"): sube el costo → rojo, baja o se mantiene → teal.
+  const segments = coords.slice(1).map((c, i) => {
+    const rose = points[i + 1].unitCost >= points[i].unitCost;
+    return { d: `M${coords[i].x.toFixed(1)},${coords[i].y.toFixed(1)} L${c.x.toFixed(1)},${c.y.toFixed(1)}`, color: rose ? "#FF9B90" : "#14C7C7" };
+  });
   const fmtDate = (iso: string) => {
     const d = new Date(iso);
     return `${d.getDate()}/${d.getMonth() + 1}/${String(d.getFullYear()).slice(2)}`;
@@ -57,7 +64,9 @@ export function PriceTrendChart({ points }: { points: SupplierPricePoint[] }) {
         );
       })}
 
-      {coords.length > 1 && <path d={linePath} fill="none" stroke="#14C7C7" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />}
+      {segments.map((s, i) => (
+        <path key={i} d={s.d} fill="none" stroke={s.color} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+      ))}
 
       {coords.map((c, i) => (
         <text key={`d-${i}`} x={c.x} y={height - 8} textAnchor="middle" fontSize="9.5" fill="#92a3c0">
