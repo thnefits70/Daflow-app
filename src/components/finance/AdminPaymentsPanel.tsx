@@ -785,7 +785,8 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
                   <div className="flex items-center gap-1.5 text-[11.5px] text-teal mb-1.5">
                     <CheckCircle2 size={13} /> Documento de soporte subido
                   </div>
-                  <button type="button" className="text-steel text-[11px] underline cursor-pointer" onClick={() => { setFormDeclarationUrl(null); setFormDeclarationName(null); }}>
+                  <ProofPreview url={formDeclarationUrl} size={56} filename={formDeclarationName ?? "documento-de-soporte"} />
+                  <button type="button" className="text-steel text-[11px] underline cursor-pointer mt-1.5" onClick={() => { setFormDeclarationUrl(null); setFormDeclarationName(null); }}>
                     Quitar
                   </button>
                 </div>
