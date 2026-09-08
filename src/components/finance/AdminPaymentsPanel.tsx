@@ -36,7 +36,7 @@ type RequestDTO = {
   paymentAiMatch: boolean | null;
   paymentAiNote: string | null;
   paymentAiReadAmount: number | null;
-  proofs: { id: string; fileUrl: string; fileName: string | null; readAmount: number | null; receiptNumber: string | null; createdAt: string }[];
+  proofs: { id: string; fileUrl: string; fileName: string | null; readAmount: number | null; receiptNumber: string | null; contractAccountNumber: string | null; createdAt: string }[];
   paymentOverrideNote: string | null;
   paymentExtraFileUrl: string | null;
   paymentExtraFileName: string | null;
@@ -1339,8 +1339,15 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
                         <div className="text-[11px] text-steel">
                           {p.readAmount !== null ? <span className="font-semibold">{money(p.readAmount)}</span> : <span className="text-red">no se pudo leer el monto</span>}
                           {p.receiptNumber && <span className="text-steel-dim"> · N° {p.receiptNumber}</span>}
-                          {r.iessReceiptNumber && p.receiptNumber && (
-                            codesMatch(r.iessReceiptNumber, p.receiptNumber) ? (
+                          {p.contractAccountNumber && <span className="text-steel-dim"> · Cuenta contrato {p.contractAccountNumber}</span>}
+                          {r.iessReceiptNumber && (p.contractAccountNumber || p.receiptNumber) && (
+                            // Confirmado 2026-09-08: pedido explícito del usuario — el código del
+                            // IESS coincide con la "Cuenta contrato" del comprobante (cuenta
+                            // destino del pago), NO con el N° de comprobante/transacción del
+                            // banco (ese siempre es distinto). Se compara contra
+                            // contractAccountNumber primero; solo si el comprobante no trae ese
+                            // dato se compara contra receiptNumber como respaldo.
+                            codesMatch(r.iessReceiptNumber, p.contractAccountNumber ?? p.receiptNumber!) ? (
                               <span className="text-green font-semibold"> · ✅ coincide con el código del IESS</span>
                             ) : (
                               <span className="font-semibold" style={{ color: "#D9A441" }}> · ⚠️ no coincide con el código del IESS ({r.iessReceiptNumber})</span>

@@ -28,10 +28,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   let readAmount: number | null = null;
   let receiptNumber: string | null = null;
+  let contractAccountNumber: string | null = null;
   try {
     const read = await readPaymentProof({ proofImageUrl: parsed.data.proofUrl, actorId: pushOwnerId(session) });
     readAmount = read.readAmount;
     receiptNumber = read.receiptNumber;
+    contractAccountNumber = read.contractAccountNumber;
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : "No se pudo leer el comprobante." }, { status: 500 });
   }
@@ -43,6 +45,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       fileName: parsed.data.proofName ?? null,
       readAmount,
       receiptNumber,
+      contractAccountNumber,
     },
   });
 

@@ -97,6 +97,14 @@ export type PaymentProofReadResult = {
   // banco (o de caja chica) — se usa para detectar si el mismo comprobante
   // se reutiliza por error en otra solicitud. Null si no se distingue.
   receiptNumber: string | null;
+  // Confirmado 2026-09-08: pedido explícito del usuario — para pagos al
+  // IESS, el comprobante de Pichincha NO repite el código de pago del IESS
+  // como "N° de comprobante" (ese es un número de transacción del banco,
+  // siempre distinto); el código del IESS aparece como "Cuenta contrato"
+  // (cuenta destino del pago). Se lee siempre que aparezca en el
+  // comprobante, no solo para IESS, para no tener que distinguir el motivo
+  // acá — el llamador decide contra cuál campo comparar.
+  contractAccountNumber: string | null;
 };
 
 // Confirmado 2026-08-04: antes de aprobar/pagar, la IA lee el comprobante de
@@ -121,10 +129,17 @@ export async function readPaymentProof(params: {
       "Provedix (Guayaquil, Ecuador). Extrae SOLO el monto que de verdad muestra el comprobante como transferido o " +
       "pagado — nunca inventes un valor. También extrae el número de comprobante/transacción/referencia del banco " +
       "(puede aparecer como 'N° de comprobante', 'N° de transacción', 'Número de referencia', 'ID de transacción', " +
-      "'Nro. de operación', etc. — usa el que encuentres). " +
-      'Responde ÚNICAMENTE un JSON: {"readAmount": number|null, "receiptNumber": string|null}. ' +
+      "'Nro. de operación', etc. — usa el que encuentres) — este es SIEMPRE un número de la transacción en sí, " +
+      "distinto cada vez que se paga. Por separado, si el comprobante muestra a qué cuenta/contrato se pagó " +
+      "(puede aparecer como 'Cuenta contrato', 'Cuenta destino', 'N° de cuenta', etc. — el identificador de la " +
+      "cuenta del BENEFICIARIO del pago, no del banco emisor ni del pagador), extráelo también por separado: NUNCA " +
+      "confundas este campo con el número de comprobante/transacción de arriba, son cosas distintas aunque ambos " +
+      "sean numéricos. " +
+      'Responde ÚNICAMENTE un JSON: {"readAmount": number|null, "receiptNumber": string|null, "contractAccountNumber": string|null}. ' +
       "readAmount es el monto total transferido/pagado (sin símbolo de moneda). receiptNumber es el número de " +
-      "comprobante tal como aparece (letras y números tal cual). Si no se distingue con claridad, pon null en cualquiera de los dos.",
+      "comprobante/transacción tal como aparece (letras y números tal cual). contractAccountNumber es el número de " +
+      "cuenta/contrato del beneficiario tal como aparece, o null si el comprobante no muestra ese dato. Si algo no " +
+      "se distingue con claridad, pon null en ese campo.",
     messages: [
       {
         role: "user",

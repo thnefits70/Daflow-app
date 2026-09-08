@@ -3265,6 +3265,12 @@ model AdminPaymentProof {
   fileName      String?
   readAmount    Float?
   receiptNumber String?
+  // Confirmado 2026-09-08: "Cuenta contrato" del comprobante — para pagos al
+  // IESS es lo que de verdad coincide con el código que Nairoby escribió
+  // (iessReceiptNumber), a diferencia de receiptNumber (N° de comprobante),
+  // que en el recibo de Pichincha es un número de transacción distinto que
+  // nunca va a coincidir con el código del IESS.
+  contractAccountNumber String?
 
   createdAt DateTime @default(now())
 
