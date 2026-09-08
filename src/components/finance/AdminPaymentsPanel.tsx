@@ -1361,6 +1361,27 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
 
               {r.status === "PENDING_PAYMENT" && isAdmin && (
                 <div>
+                  {/* Confirmado 2026-09-08: pedido explícito del usuario — antes
+                      "Borrar" solo lo veía Nairoby (quien normalmente crea la
+                      solicitud); acá lo necesitaba el admin para limpiar una
+                      semana de almuerzos que se coló sin pasar por la
+                      verificación nueva. Mismo candado que ya existía
+                      (canDelete: sin factura ni comprobante todavía). */}
+                  {canDelete && (
+                    <div className="mb-2">
+                      {deleteConfirmId === r.id ? (
+                        <span className="flex items-center gap-1.5 text-[11.5px]">
+                          ¿Borrar esta solicitud?
+                          <button type="button" disabled={busyId === r.id} className="text-red font-semibold cursor-pointer" onClick={() => deleteRequest(r.id)}>Sí</button>
+                          <button type="button" className="text-steel cursor-pointer" onClick={() => setDeleteConfirmId(null)}>No</button>
+                        </span>
+                      ) : (
+                        <button type="button" className="text-steel text-[11.5px] cursor-pointer flex items-center gap-1" onClick={() => setDeleteConfirmId(r.id)}>
+                          <Trash2 size={12} /> Borrar
+                        </button>
+                      )}
+                    </div>
+                  )}
                   {uploadingProofFor === r.id ? (
                     <div className="flex items-center gap-2 text-[12px] text-steel mb-2">
                       <span className="w-3.5 h-3.5 rounded-full border-2 border-rule border-t-teal animate-spin" /> Verificando con IA…
