@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { GitBranch, FileText, GraduationCap, LineChart, TrendingUp, MessageSquare, CalendarClock, BellRing, Heart, ShoppingCart, Package, Pin, Wallet, BarChart3, Landmark, PackageCheck, PackageOpen, PackageMinus, Truck, HandCoins, Combine } from "lucide-react";
+import { GitBranch, FileText, GraduationCap, LineChart, TrendingUp, MessageSquare, CalendarClock, BellRing, Heart, ShoppingCart, Package, Pin, Wallet, BarChart3, Landmark, PackageCheck, PackageOpen, PackageMinus, Truck, HandCoins, Combine, UtensilsCrossed } from "lucide-react";
 import { ProcessEmbeddedPanel } from "@/components/process/ProcessEmbeddedPanel";
 import type { ProcessDTO } from "@/components/process/ProcessEditor";
 import type { ProcessUpdateDTO } from "@/components/process/ProcessHistoryPanel";
@@ -27,6 +27,7 @@ import { PettyCashPanel } from "@/components/pettycash/PettyCashPanel";
 import { PettyCashExceptionsPanel } from "@/components/pettycash/PettyCashExceptionsPanel";
 import type { PettyCashViewerData } from "@/lib/pettyCash";
 import { AdminPaymentsPanel } from "@/components/finance/AdminPaymentsPanel";
+import { LunchPaymentsPanel } from "@/components/finance/LunchPaymentsPanel";
 import { MarketingArrivalsPanel } from "@/components/marketing/MarketingArrivalsPanel";
 import { MerchandiseReentryPanel } from "@/components/merchandise-reentry/MerchandiseReentryPanel";
 import { MerchandiseOutflowPanel } from "@/components/merchandise-outflow/MerchandiseOutflowPanel";
@@ -55,6 +56,7 @@ const ALL_TABS = [
   { key: "inventoriokpis", label: "KPIs de Inventario", icon: BarChart3 },
   { key: "cajachica", label: "Caja Chica", icon: Wallet },
   { key: "pagosadmin", label: "Pagos administrativos", icon: Landmark },
+  { key: "almuerzos", label: "Almuerzos semanales", icon: UtensilsCrossed },
   { key: "postventa", label: "Servicio Postventa", icon: Heart },
   { key: "combos", label: "Sugerencias de Combos", icon: Combine },
   { key: "documentos", label: "Documentos", icon: FileText },
@@ -134,6 +136,7 @@ export function DeptWorkspaceTabs({
   canViewExternalSales = false,
   pettyCashData = null,
   canManageAdminPayments = false,
+  canRegisterLunchPayments = false,
   canViewMarketingArrivals = false,
   canConfirmMarketingDesign = false,
   canConfirmMarketingAdvisor = false,
@@ -310,6 +313,7 @@ export function DeptWorkspaceTabs({
   // Pagos administrativos — mismo patrón sin dept.code que Control de
   // Compras (confirmado 2026-08-06), exclusivo de Finanzas + admin.
   canManageAdminPayments?: boolean;
+  canRegisterLunchPayments?: boolean;
   // "Mercadería recibida" — confirmado 2026-08-08: visible para TODOS los
   // que pertenecen a Análisis de Mercado (informativo), pero solo confirman
   // quien tenga el flag puntual (canConfirmMarketingDesign/Advisor) — nunca
@@ -363,6 +367,7 @@ export function DeptWorkspaceTabs({
     if (t.key === "postventa") return canManageStoreFeedback || canViewStoreFeedback;
     if (t.key === "combos") return canSyncAtomData || canUploadLowRotationList || canApproveComboSuggestions;
     if (t.key === "pagosadmin") return canManageAdminPayments;
+    if (t.key === "almuerzos") return canRegisterLunchPayments;
     return true;
   });
   // Confirmado 2026-07-30: cada área debería abrir directo en su pestaña más
@@ -574,6 +579,7 @@ export function DeptWorkspaceTabs({
       )}
 
       {tab === "pagosadmin" && canManageAdminPayments && <AdminPaymentsPanel isAdmin={isAdmin} />}
+      {tab === "almuerzos" && canRegisterLunchPayments && <LunchPaymentsPanel />}
       {tab === "postventa" && canManageStoreFeedback && (
         <StoreFeedbackPanel stores={storeFeedbackStores} editable />
       )}

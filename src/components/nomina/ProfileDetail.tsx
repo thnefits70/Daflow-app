@@ -38,6 +38,7 @@ type UserProfile = {
   canAddSuppliers: boolean;
   canManagePurchases: boolean;
   canManageAdminPayments: boolean;
+  canRegisterLunchPayments: boolean;
   canAddSupplierBankAccounts: boolean;
   canManagePettyCashSecundaria: boolean;
   canDeclareExternalSales: boolean;
@@ -744,6 +745,16 @@ export function ProfileDetail({
               Solicitudes de pago administrativos (IESS, sueldos, alquiler, etc.) de Finanzas — sin necesitar ser líder formal de ese departamento.
             </div>
             <PermToggle value={p.canManageAdminPayments} busy={busy} onChange={(v) => save({ canManageAdminPayments: v })} />
+          </div>
+
+          <div className="bg-cloud border border-rule rounded p-3.5 mt-3.5">
+            <label className="flex items-center gap-1 mb-2 text-[10.5px] font-semibold uppercase tracking-wide text-steel">
+              <Receipt size={11} /> ¿Puede registrar Almuerzos semanales?
+            </label>
+            <div className="text-[11px] text-steel mb-2">
+              Registra, semana por semana, la cantidad de almuerzos pedidos (convenio con el restaurante) — el monto se calcula solo. No es acceso al resto de Pagos administrativos.
+            </div>
+            <PermToggle value={p.canRegisterLunchPayments} busy={busy} onChange={(v) => save({ canRegisterLunchPayments: v })} />
           </div>
 
           {canViewPayroll && <PayrollProfileFields userId={p.id} canEdit={canEditPayroll} />}

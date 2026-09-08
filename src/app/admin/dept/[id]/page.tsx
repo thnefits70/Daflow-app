@@ -206,6 +206,11 @@ export default async function DeptWorkspacePage({ params }: { params: Promise<{ 
         canViewExternalSales={["MKT", "FIN", "INV", "FUL"].includes(dept.code)}
         pettyCashData={pettyCashData}
         canManageAdminPayments={dept.code === "FIN"}
+        // Flag delegado a una persona puntual (hoy Daniel), no "el rol de
+        // Inventario" — mismo criterio que canDeclareExternalSales arriba:
+        // no se aproxima por departamento, se deja en false en esta vista
+        // genérica de admin navegando por departamento.
+        canRegisterLunchPayments={false}
         canViewMarketingArrivals={dept.code === "MKT"}
         // Confirmado 2026-08-08: admin ve pero nunca confirma — exclusivo de quien tiene el flag.
         canConfirmMarketingDesign={false}

@@ -161,6 +161,37 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
   const [dateTo, setDateTo] = useState("");
   const [monthFilter, setMonthFilter] = useState("");
   const [showPaid, setShowPaid] = useState(false);
+  const [showAllTemplates, setShowAllTemplates] = useState(false);
+  const [deactivatingTemplateId, setDeactivatingTemplateId] = useState<string | null>(null);
+
+  const [lunchPrice, setLunchPrice] = useState<number | null>(null);
+  const [editingLunchPrice, setEditingLunchPrice] = useState(false);
+  const [lunchPriceDraft, setLunchPriceDraft] = useState("");
+  const [savingLunchPrice, setSavingLunchPrice] = useState(false);
+
+  function loadLunchSettings() {
+    fetch("/api/lunch-payments/settings")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => data && setLunchPrice(data.pricePerLunch))
+      .catch(() => null);
+  }
+  useEffect(loadLunchSettings, []);
+
+  async function saveLunchPrice() {
+    const value = Number(lunchPriceDraft);
+    if (!value || value <= 0) return;
+    setSavingLunchPrice(true);
+    const res = await fetch("/api/lunch-payments/settings", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pricePerLunch: value }),
+    });
+    setSavingLunchPrice(false);
+    if (res.ok) {
+      setLunchPrice(value);
+      setEditingLunchPrice(false);
+    }
+  }
 
   function load() {
     fetch("/api/admin-payments")
@@ -221,6 +252,21 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
     setFormPayee(null);
     setFormBankAccountId(null);
     setErr("");
+  }
+
+  async function deactivateTemplate(t: TemplateDTO) {
+    if (!window.confirm(`¿"${t.motivo}" ya no vuelve a repetirse? Dejará de pedirse cada mes (el historial ya pagado no se toca).`)) return;
+    setDeactivatingTemplateId(t.id);
+    try {
+      const res = await fetch(`/api/admin-payments/templates/${t.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isActive: false }),
+      });
+      if (res.ok) load();
+    } finally {
+      setDeactivatingTemplateId(null);
+    }
   }
 
   async function uploadDeclaration(file: File) {
@@ -551,6 +597,42 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
           <>Registra acá los pagos administrativos recurrentes (luz, agua, etc.) y variables, con la declaración de lo que hay que pagar. Cuando el admin transfiera y suba el comprobante, confirma que está correcto para cerrar el ciclo.</>
         )}
       </TabGuide>
+
+      {lunchPrice !== null && (
+        <div className="flex items-center gap-2 mb-4 bg-cloud border border-rule rounded-md px-3 py-2.5 w-fit">
+          <span className="text-[12px] text-steel">Precio por almuerzo (Almuerzos semanales):</span>
+          {editingLunchPrice ? (
+            <>
+              <input
+                type="number"
+                step="0.01"
+                value={lunchPriceDraft}
+                onChange={(e) => setLunchPriceDraft(e.target.value)}
+                className="w-20 rounded border border-rule px-2 py-1 text-[12.5px]"
+                autoFocus
+              />
+              <button type="button" disabled={savingLunchPrice} className="text-teal text-[12px] font-semibold cursor-pointer disabled:opacity-50" onClick={saveLunchPrice}>
+                Guardar
+              </button>
+              <button type="button" className="text-steel text-[12px] cursor-pointer" onClick={() => setEditingLunchPrice(false)}>
+                Cancelar
+              </button>
+            </>
+          ) : (
+            <>
+              <span className="text-[12.5px] font-semibold">{money(lunchPrice)}</span>
+              <button
+                type="button"
+                className="text-teal text-[12px] font-semibold cursor-pointer"
+                onClick={() => { setLunchPriceDraft(String(lunchPrice)); setEditingLunchPrice(true); }}
+              >
+                Editar
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
       {!isAdmin && pendingThisMonth.length > 0 && (
         <div className="mb-4">
           <div className="text-[11px] font-semibold uppercase tracking-wide text-steel mb-2">Pendientes de registrar este mes</div>
@@ -558,14 +640,51 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
             {pendingThisMonth.map((t) => (
               <div key={t.id} className="flex items-center justify-between gap-2 bg-gold/10 border border-gold/35 rounded-md px-3 py-2.5">
                 <span className="text-[12.5px] font-semibold" style={{ color: "#D9A441" }}>{t.motivo} — todavía no se registró este mes</span>
-                {!isAdmin && (
-                  <button type="button" className="rounded border border-gold/50 px-2.5 py-1 text-[11.5px] font-semibold shrink-0 cursor-pointer" style={{ color: "#D9A441" }} onClick={() => openFormForTemplate(t)}>
-                    Registrar
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {!isAdmin && (
+                    <button type="button" className="rounded border border-gold/50 px-2.5 py-1 text-[11.5px] font-semibold cursor-pointer" style={{ color: "#D9A441" }} onClick={() => openFormForTemplate(t)}>
+                      Registrar
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    disabled={deactivatingTemplateId === t.id}
+                    className="rounded border border-rule px-2.5 py-1 text-[11.5px] font-semibold text-steel cursor-pointer disabled:opacity-50"
+                    onClick={() => deactivateTemplate(t)}
+                    title="Ya no se va a volver a pagar este motivo (ej. era de una sola vez)"
+                  >
+                    Ya no aplica
                   </button>
-                )}
+                </div>
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {templates.length > 0 && (
+        <div className="mb-4">
+          <button type="button" className="text-[11px] font-semibold uppercase tracking-wide text-steel cursor-pointer" onClick={() => setShowAllTemplates((v) => !v)}>
+            {showAllTemplates ? "Ocultar" : "Ver"} todos los motivos recurrentes activos ({templates.length})
+          </button>
+          {showAllTemplates && (
+            <div className="flex flex-col gap-2 mt-2">
+              {templates.map((t) => (
+                <div key={t.id} className="flex items-center justify-between gap-2 bg-cloud border border-rule rounded-md px-3 py-2.5">
+                  <span className="text-[12.5px]">{t.motivo}</span>
+                  <button
+                    type="button"
+                    disabled={deactivatingTemplateId === t.id}
+                    className="rounded border border-rule px-2.5 py-1 text-[11.5px] font-semibold text-steel cursor-pointer disabled:opacity-50 shrink-0"
+                    onClick={() => deactivateTemplate(t)}
+                    title="Ya no se va a volver a pagar este motivo (ej. era de una sola vez)"
+                  >
+                    Ya no aplica
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

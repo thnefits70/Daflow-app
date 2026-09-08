@@ -282,6 +282,15 @@ model User {
   // puntual, EXCLUSIVO de quien tiene el flag — ni siquiera admin actúa.
   canMarkComboCreatedInDropi Boolean @default(false)
 
+  // Confirmado 2026-09-08: pedido explícito del usuario — Daniel registra
+  // cada semana la cantidad de almuerzos pedidos (convenio con el
+  // restaurante a un precio fijo por almuerzo, IVA incluido); el monto se
+  // calcula solo (cantidad × LunchPaymentSettings.pricePerLunch) en vez de
+  // que alguien escriba el motivo/monto a mano cada vez. Mismo patrón que
+  // canManagePettyCashSecundaria: escape hatch por flag, no depende de
+  // liderar ningún departamento. Admin siempre puede, sin el flag.
+  canRegisterLunchPayments Boolean @default(false)
+
   // Confirmado 2026-08-05: excluye a esta persona de "Colaborador del mes"
   // por completo — su líder ya no la ve en su lista para calificar, y nunca
   // se generan evaluaciones nuevas para ella. No borra evaluaciones pasadas.
@@ -385,6 +394,7 @@ model User {
   overtimeEntriesApproved     OvertimeEntry[]       @relation("OvertimeEntryApprovedBy")
   overtimeEntriesRejected     OvertimeEntry[]       @relation("OvertimeEntryRejectedBy")
   payrollSettingsUpdated      PayrollSettings[]     @relation("PayrollSettingsUpdatedBy")
+  lunchPaymentSettingsUpdated LunchPaymentSettings[] @relation("LunchPaymentSettingsUpdatedBy")
   payrollPeriodsGenerated     PayrollPeriod[]       @relation("PayrollPeriodGeneratedBy")
   payrollPeriodsPublished     PayrollPeriod[]       @relation("PayrollPeriodPublishedBy")
   payrollQuincenaRolesOwn     PayrollQuincenaRole[] @relation("PayrollQuincenaRoleEmployee")
@@ -3133,6 +3143,20 @@ model AdminPaymentRequest {
   monto  Float
   status AdminPaymentStatus @default(PENDING_PAYMENT)
 
+  // Confirmado 2026-09-08: pedido explícito del usuario — Almuerzos
+  // semanales (convenio con el restaurante, precio fijo por almuerzo IVA
+  // incluido). Solo se llenan para ese tipo de solicitud (type=VARIABLE,
+  // creada desde /api/lunch-payments) — sirven para calcular monto solo
+  // (lunchCount × LunchPaymentSettings.pricePerLunch) y para sugerirle a
+  // quien registra cuál es la semana siguiente sin registrar, sin depender
+  // de parsear el texto del motivo ni del mecanismo de plantillas/período
+  // mensual (ese fue justamente el bug: una semana ya pagada no debe volver
+  // a pedirse cada mes, cosa que si pasaba al forzar esto por el sistema de
+  // AdminPaymentTemplate recurrente).
+  lunchWeekStart DateTime?
+  lunchWeekEnd   DateTime?
+  lunchCount     Int?
+
   // Confirmado 2026-08-06: a quién y a qué cuenta se le paga — opcional
   // porque solicitudes viejas (antes de este campo) no lo tienen.
   payeeId       String?
@@ -3319,6 +3343,19 @@ model PayrollSettings {
   updatedAt          DateTime @updatedAt
   updatedById        String?
   updatedBy          User?    @relation("PayrollSettingsUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+}
+
+// Fila única — precio fijo por almuerzo (IVA incluido) del convenio con el
+// restaurante, usado para calcular solo el monto de cada semana registrada
+// en LunchPaymentRequest. Confirmado 2026-09-08: editable en la app por
+// quien gestiona Pagos administrativos, para cuando el restaurante suba el
+// precio, sin tocar código. Mismo patrón que PayrollSettings.
+model LunchPaymentSettings {
+  id            String   @id @default(cuid())
+  pricePerLunch Float    @default(2.5)
+  updatedAt     DateTime @updatedAt
+  updatedById   String?
+  updatedBy     User?    @relation("LunchPaymentSettingsUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
 }
 
 // El líder de cada área (incluido él mismo) carga, día por día, cuánto se

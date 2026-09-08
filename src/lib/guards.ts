@@ -1240,6 +1240,18 @@ export async function canManageAdminPayments() {
   return !!user.isLeader && user.leadsDept?.code === "FIN";
 }
 
+// Almuerzos semanales — confirmado 2026-09-08: pedido explícito del usuario.
+// Escape hatch por flag exclusivo (hoy Daniel) — deliberadamente NO incluye
+// a quien lidera Finanzas (a diferencia de canManageAdminPayments), porque
+// quien cuenta los almuerzos es Inventario, no Finanzas. Admin siempre puede.
+export async function canRegisterLunchPayments() {
+  const session = await auth();
+  if (!session) return false;
+  if (session.user.role === "admin") return true;
+  const user = await prisma.user.findUnique({ where: { id: session.user.id }, select: { canRegisterLunchPayments: true } });
+  return !!user?.canRegisterLunchPayments;
+}
+
 // "Mercadería recibida" (Análisis de Mercado) — confirmado 2026-08-08.
 // Ver visible = pertenecer al departamento MKT + admin (Bryan y Andrés
 // incluidos, aunque ninguno de los dos confirma nada, solo supervisan).
