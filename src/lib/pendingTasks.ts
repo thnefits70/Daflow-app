@@ -397,6 +397,7 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   pagos_recordatorios: "Pagos recordatorios",
   servicio_postventa: "Servicio Postventa",
   pedidos_despachados: "Pedidos despachados / Fill Rate",
+  fillrate_justificacion_pendiente: "Fill Rate en alerta — falta tu explicación al equipo",
   ruptura_stock: "Ruptura de Stock",
   caja_chica_saldo: "Caja Chica — saldo bajo",
   caja_chica_confirmacion: "Caja Chica — falta que confirmen una recarga",
@@ -552,6 +553,36 @@ async function getWeeklyMetricPendingItem(deptId: string, href: string): Promise
     label: "Pedidos despachados / Fill Rate",
     meta: `${formatWeekLabel(status.week)} · atrasado`,
     overdue: status.overdue,
+    href,
+  };
+}
+
+// Confirmado 2026-09-08: pedido explícito del usuario — hasta ahora, una vez
+// que una semana quedaba en alerta (<95%, mismo umbral que needsJustification
+// en dashboard.ts), la explicación del líder de Fulfillment podía quedar
+// pendiente indefinidamente sin que nada se lo recordara (solo aparecía el
+// aviso pasivo en FillRateBreakdownCard). Mira la semana MÁS RECIENTE que ya
+// tenga el desglose completo (prepared/generated/outOfStock) — mismo criterio
+// que getLatestFillRateBreakdown — y solo avisa si esa semana quedó bajo 95%
+// y todavía no tiene justificación guardada.
+async function getFillRateJustificationPendingItem(deptId: string, href: string): Promise<PendingItem | null> {
+  const record = await prisma.weeklyMetricRecord.findFirst({
+    where: { deptId, prepared: { not: null }, generated: { not: null }, outOfStock: { not: null } },
+    orderBy: { week: "desc" },
+  });
+  if (!record || record.fillRateJustification) return null;
+
+  const total = record.value + (record.prepared ?? 0) + (record.generated ?? 0) + (record.outOfStock ?? 0);
+  if (total === 0) return null;
+  const fillRatePct = Math.round((record.value / total) * 100);
+  if (fillRatePct >= 95) return null;
+
+  return {
+    type: "fillrate_justificacion_pendiente",
+    icon: "📦",
+    label: "Fill Rate en alerta — falta tu explicación al equipo",
+    meta: `${formatWeekLabel(record.week)} · ${fillRatePct}% · atrasado`,
+    overdue: true,
     href,
   };
 }
@@ -2440,6 +2471,8 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
   if (me.leadsDept.trackWeeklyMetric) {
     const item = await getWeeklyMetricPendingItem(me.leadsDeptId, "/area/workspace");
     if (item) items.push(item);
+    const justificationItem = await getFillRateJustificationPendingItem(me.leadsDeptId, "/area/workspace");
+    if (justificationItem) items.push(justificationItem);
   }
 
   if (me.leadsDept.code === "INV") {
@@ -2569,7 +2602,7 @@ export async function getPossiblePendingTypesForActor(
     if (me.leadsDept.code === "FIN") {
       types.push("roles_de_pago", "tasa_devolucion", "kpi_garantias", "pagos_recordatorios", "servicio_postventa", "caja_chica_saldo", "caja_chica_confirmacion", "descuentos_sin_aceptar", "compras_personales_precio", "compras_personales_cierre", "reingreso_mercaderia_verificacion_semanal", "nomina_transferencia", "iess_transferencia");
     }
-    if (me.leadsDept.trackWeeklyMetric) types.push("pedidos_despachados");
+    if (me.leadsDept.trackWeeklyMetric) types.push("pedidos_despachados", "fillrate_justificacion_pendiente");
     if (me.leadsDept.code === "INV") {
       types.push("ruptura_stock", "compras_recepcion", "compras_cambios_verificar", "control_inventario", "control_inventario_semanal", "reingreso_mercaderia_revision", "reingreso_mercaderia_baja_just", "compras_personales_confirmar", "compras_reclamo_posterior_revision", "compras_reclamo_posterior_just", "combo_sugerencias_nicho_backfill", "monthly_top_movers");
     }

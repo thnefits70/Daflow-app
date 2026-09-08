@@ -13,6 +13,7 @@ export type WeeklyMetricDTO = {
   prepared: number | null;
   generated: number | null;
   outOfStock: number | null;
+  fillRateJustification: string | null;
 };
 
 function formatWeek(week: string) {
@@ -43,11 +44,13 @@ export function WeeklyMetricPanel({
   records,
   editable,
   label,
+  canJustify = false,
 }: {
   deptId: string;
   records: WeeklyMetricDTO[];
   editable: boolean;
   label: string;
+  canJustify?: boolean;
 }) {
   const router = useRouter();
   const sorted = [...records].sort((a, b) => (a.week < b.week ? 1 : -1));
@@ -59,9 +62,23 @@ export function WeeklyMetricPanel({
   const [prepared, setPrepared] = useState("");
   const [generated, setGenerated] = useState("");
   const [outOfStock, setOutOfStock] = useState("");
+  const [justification, setJustification] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [search, setSearch] = useState("");
+
+  // Confirmado 2026-09-08: pedido explícito del usuario — si lo que se está
+  // por guardar YA queda en alerta (<95%, mismo umbral que needsJustification
+  // en dashboard.ts), el líder de Fulfillment tiene que explicarle al equipo
+  // en el mismo registro, no después. Solo aplica a quien de verdad puede
+  // escribir esa explicación (canJustify) — si no, el registro se guarda
+  // igual y queda pendiente como antes.
+  const hasBreakdownDraft = prepared !== "" || generated !== "" || outOfStock !== "";
+  const draftTotal = hasBreakdownDraft
+    ? Number(value || 0) + Number(prepared || 0) + Number(generated || 0) + Number(outOfStock || 0)
+    : 0;
+  const draftPct = hasBreakdownDraft && draftTotal > 0 ? Math.round((Number(value || 0) / draftTotal) * 100) : null;
+  const needsJustificationDraft = canJustify && draftPct !== null && draftPct < 95;
 
   const query = search.trim().toLowerCase();
   const visible = query
@@ -76,6 +93,7 @@ export function WeeklyMetricPanel({
     setPrepared("");
     setGenerated("");
     setOutOfStock("");
+    setJustification("");
     setFormOpen(true);
     setErr("");
   };
@@ -87,6 +105,7 @@ export function WeeklyMetricPanel({
     setPrepared(r.prepared === null ? "" : String(r.prepared));
     setGenerated(r.generated === null ? "" : String(r.generated));
     setOutOfStock(r.outOfStock === null ? "" : String(r.outOfStock));
+    setJustification(r.fillRateJustification ?? "");
     setFormOpen(true);
     setErr("");
   };
@@ -96,6 +115,10 @@ export function WeeklyMetricPanel({
       setErr("Completa la semana y el valor.");
       return;
     }
+    if (needsJustificationDraft && justification.trim().length < 10) {
+      setErr(`Este Fill Rate va a quedar en ${draftPct}% (alerta) — escribe una explicación para el equipo antes de guardar.`);
+      return;
+    }
     setErr("");
     setBusy(true);
     const payload = {
@@ -103,6 +126,7 @@ export function WeeklyMetricPanel({
       prepared: prepared === "" ? null : Number(prepared),
       generated: generated === "" ? null : Number(generated),
       outOfStock: outOfStock === "" ? null : Number(outOfStock),
+      justification: justification.trim() === "" ? undefined : justification.trim(),
     };
     const res = editingId
       ? await fetch(`/api/weekly-metrics/${editingId}`, {
@@ -128,6 +152,7 @@ export function WeeklyMetricPanel({
     setPrepared("");
     setGenerated("");
     setOutOfStock("");
+    setJustification("");
     router.refresh();
   };
 
@@ -239,6 +264,20 @@ export function WeeklyMetricPanel({
           <div className="text-[11.5px] text-steel mb-3">
             Las 3 de la derecha son opcionales — con ellas calculamos el Fill Rate y el desglose que se ve en Inicio: despachadas ÷ (despachadas + preparadas + generadas + falta de stock).
           </div>
+          {needsJustificationDraft && (
+            <div className="rounded-md border border-red bg-red/10 px-3.5 py-3 mb-3">
+              <label className="block mb-1.5 text-[12.5px] font-semibold text-red">
+                Este Fill Rate va a quedar en {draftPct}% (alerta) — explícale al equipo qué pasó antes de poder guardar.
+              </label>
+              <textarea
+                className="w-full rounded border border-rule px-2.5 py-2 text-[13px] min-h-[70px]"
+                placeholder="Ej. Esta semana nos faltó stock en varios SKUs de alta rotación, ya lo estamos coordinando con Compras…"
+                value={justification}
+                onChange={(e) => setJustification(e.target.value)}
+                disabled={busy}
+              />
+            </div>
+          )}
           {err && <div className="text-red text-[12.5px] mb-2.5">{err}</div>}
           <div className="flex items-center gap-2.5">
             <button

@@ -95,7 +95,13 @@ export default async function DeptWorkspacePage({ params }: { params: Promise<{ 
           prepared: w.prepared,
           generated: w.generated,
           outOfStock: w.outOfStock,
+          fillRateJustification: w.fillRateJustification,
         }))}
+        // Confirmado 2026-09-08: admin nunca escribe la explicación del Fill
+        // Rate (ver canJustifyFillRate en guards.ts, exclusivo del líder de
+        // Fulfillment) — si admin registra una semana en alerta desde acá,
+        // se guarda igual y queda pendiente para que Yair la escriba después.
+        canJustifyFillRate={false}
         trackWeeklyReview={dept.trackWeeklyReview}
         weeklyReviewRecords={weeklyReviewRecords.map((w) => ({
           id: w.id,

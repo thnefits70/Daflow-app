@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
-import { canEditDeptKpis } from "@/lib/guards";
+import { canEditDeptKpis, canJustifyFillRate } from "@/lib/guards";
 
 export async function GET(req: NextRequest) {
   const session = await auth();
@@ -27,6 +27,7 @@ const createSchema = z.object({
   prepared: z.number().int().min(0).nullable().optional(),
   generated: z.number().int().min(0).nullable().optional(),
   outOfStock: z.number().int().min(0).nullable().optional(),
+  justification: z.string().trim().max(2000).optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -36,7 +37,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Datos inválidos." }, { status: 400 });
   }
 
-  const { deptId, week, value, prepared, generated, outOfStock } = parsed.data;
+  const { deptId, week, value, prepared, generated, outOfStock, justification } = parsed.data;
   if (!(await canEditDeptKpis(deptId))) {
     return NextResponse.json({ error: "No autorizado." }, { status: 403 });
   }
@@ -48,10 +49,36 @@ export async function POST(req: NextRequest) {
   const hasBreakdown = prepared != null || generated != null || outOfStock != null;
   const notDispatched = hasBreakdown ? (prepared ?? 0) + (generated ?? 0) + (outOfStock ?? 0) : null;
 
+  // Confirmado 2026-09-08: pedido explícito del usuario — si esta semana ya
+  // queda en alerta (<95%, mismo umbral que needsJustification en
+  // dashboard.ts) y quien registra es el líder de Fulfillment (el único que
+  // puede escribir la explicación, ver canJustifyFillRate), el sistema lo
+  // obliga a explicarle al equipo AHORA, en el mismo registro — ya no puede
+  // quedar pendiente para después. Si quien registra no puede justificar
+  // (ej. admin), no se bloquea: la semana se guarda igual y la explicación
+  // queda pendiente como antes, a la espera del líder.
+  const total = hasBreakdown ? value + notDispatched! : 0;
+  const fillRatePct = total > 0 ? Math.round((value / total) * 100) : null;
+  const needsJustification = fillRatePct !== null && fillRatePct < 95;
+  if (needsJustification && (await canJustifyFillRate())) {
+    if (!justification || justification.length < 10) {
+      return NextResponse.json(
+        { error: `Este Fill Rate quedó en ${fillRatePct}% (alerta) — agrega una explicación para el equipo antes de guardar.` },
+        { status: 400 }
+      );
+    }
+  }
+
+  const session = await auth();
+  const justificationData =
+    needsJustification && justification && justification.length >= 10
+      ? { fillRateJustification: justification, fillRateJustificationBy: session?.user.name ?? null, fillRateJustificationAt: new Date() }
+      : {};
+
   const record = await prisma.weeklyMetricRecord.upsert({
     where: { deptId_week: { deptId, week } },
-    update: { value, prepared, generated, outOfStock, notDispatched },
-    create: { deptId, week, value, prepared, generated, outOfStock, notDispatched },
+    update: { value, prepared, generated, outOfStock, notDispatched, ...justificationData },
+    create: { deptId, week, value, prepared, generated, outOfStock, notDispatched, ...justificationData },
   });
   return NextResponse.json(record, { status: 201 });
 }

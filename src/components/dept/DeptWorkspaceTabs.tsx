@@ -80,6 +80,7 @@ export function DeptWorkspaceTabs({
   paymentReminders = [],
   trackWeeklyMetric = false,
   weeklyMetricRecords = [],
+  canJustifyFillRate = false,
   trackWeeklyReview = false,
   weeklyReviewRecords = [],
   weeklyReviewInvolvingMe = [],
@@ -168,6 +169,7 @@ export function DeptWorkspaceTabs({
   paymentReminders?: PaymentReminderDTO[];
   trackWeeklyMetric?: boolean;
   weeklyMetricRecords?: WeeklyMetricDTO[];
+  canJustifyFillRate?: boolean;
   trackWeeklyReview?: boolean;
   weeklyReviewRecords?: WeeklyReviewDTO[];
   weeklyReviewInvolvingMe?: InvolvingMeReviewDTO[];
@@ -612,6 +614,7 @@ export function DeptWorkspaceTabs({
           records={weeklyMetricRecords}
           editable={kpisEditable ?? editable}
           label="Pedidos despachados"
+          canJustify={canJustifyFillRate}
         />
       )}
       {tab === "feedback" && trackWeeklyReview && (
