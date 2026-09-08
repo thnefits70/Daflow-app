@@ -111,7 +111,7 @@ function ProofThumb({ url, onZoom }: { url: string; onZoom: () => void }) {
 }
 
 function EntryRow({
-  entry, canManage, isAdmin, onEdit, onArchive, onRestore,
+  entry, canManage, isAdmin, onEdit, onArchive, onRestore, onAttachProof,
 }: {
   entry: PettyCashBoxDTO["entries"][number];
   canManage: boolean;
@@ -119,6 +119,7 @@ function EntryRow({
   onEdit: (id: string, amount: number, description: string) => void;
   onArchive: (id: string) => void;
   onRestore: (id: string) => void;
+  onAttachProof: (id: string, url: string) => Promise<string | null>;
 }) {
   // Confirmado 2026-08-06: solo admin edita el monto de un fondeo (RECARGA)
   // — quien recibe el fondeo no decide cuánto le tocó, eso lo define quien
@@ -128,6 +129,29 @@ function EntryRow({
   const [editing, setEditing] = useState(false);
   const [amt, setAmt] = useState(String(entry.amount));
   const [desc, setDesc] = useState(entry.description);
+
+  // Pedido 2026-09-08: el pago en efectivo de compras personales genera esta
+  // fila automáticamente sin recibo (confirmado en su momento — el clic de
+  // Nairoby YA es la confirmación). Ahora se puede adjuntar la foto del
+  // recibo después, si queda a mano, igual que en cualquier otro movimiento.
+  const [attaching, setAttaching] = useState(false);
+  const [attachUploading, setAttachUploading] = useState(false);
+  const [attachErr, setAttachErr] = useState("");
+
+  async function handleAttachUrl(url: string) {
+    setAttachUploading(true);
+    const err = await onAttachProof(entry.id, url);
+    setAttachUploading(false);
+    if (err) { setAttachErr(err); return; }
+    setAttaching(false);
+  }
+  async function doAttach(file: File) {
+    setAttachUploading(true);
+    setAttachErr("");
+    const res = await uploadFile(file, "petty-cash");
+    if (!res.ok) { setAttachUploading(false); setAttachErr(res.error); return; }
+    await handleAttachUrl(res.url);
+  }
 
   return (
     <div className={`flex items-center justify-between gap-2.5 rounded-md px-3 py-2.5 text-[12.5px] ${entry.archived ? "bg-cloud/50 opacity-60" : "bg-cloud"}`}>
@@ -161,6 +185,23 @@ function EntryRow({
           <div className="mt-1.5">
             <ProofPreview url={entry.proofUrl} size={40} />
           </div>
+        )}
+        {!editing && !entry.proofUrl && canManage && !entry.archived && (
+          attaching ? (
+            <div className="mt-2 max-w-[280px]">
+              {attachUploading ? (
+                <div className="text-[11px] text-steel">Subiendo…</div>
+              ) : (
+                <UploadBox label="Adjuntar recibo" folder="petty-cash" onFile={doAttach} onCaptured={handleAttachUrl} />
+              )}
+              {attachErr && <div className="text-red text-[10.5px] mt-1">{attachErr}</div>}
+              <button type="button" className="text-steel text-[10.5px] underline mt-1 cursor-pointer" onClick={() => { setAttaching(false); setAttachErr(""); }}>Cancelar</button>
+            </div>
+          ) : (
+            <button type="button" className="mt-1.5 flex items-center gap-1 text-[10.5px] font-semibold text-blue cursor-pointer" onClick={() => setAttaching(true)}>
+              <Upload size={11} /> Adjuntar recibo
+            </button>
+          )
         )}
       </div>
       <div className="flex items-center gap-2 shrink-0">
@@ -394,6 +435,13 @@ function BoxCard({
     if (target === "desembolso") setUploading(false); else setFundUploading(false);
     if (!res.ok) { setErr(res.error); return; }
     applyProof(target, res.url);
+  }
+
+  async function attachProof(id: string, url: string): Promise<string | null> {
+    const res = await fetch(`/api/petty-cash/entries/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "edit", proofUrl: url }) });
+    if (!res.ok) { const data = await res.json().catch(() => null); return data?.error ?? "No se pudo adjuntar el recibo."; }
+    router.refresh();
+    return null;
   }
 
   async function confirmReceived() {
@@ -776,6 +824,7 @@ function BoxCard({
                 await fetch(`/api/petty-cash/entries/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "restore" }) });
                 router.refresh();
               }}
+              onAttachProof={attachProof}
             />
           ))}
         </div>
@@ -796,6 +845,7 @@ function BoxCard({
                     await fetch(`/api/petty-cash/entries/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "restore" }) });
                     router.refresh();
                   }}
+                  onAttachProof={async () => null}
                 />
               ))}
             </div>

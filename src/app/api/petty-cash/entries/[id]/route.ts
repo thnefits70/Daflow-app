@@ -2,12 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/auth";
 import { canManagePettyCashPrincipal, canManagePettyCashSecundaria } from "@/lib/guards";
+import { hashFileFromUrl } from "@/lib/fileHash";
 import { prisma } from "@/lib/prisma";
 
 const schema = z.object({
   action: z.enum(["edit", "archive", "restore"]),
   amount: z.number().positive().optional(),
   description: z.string().trim().min(1).optional(),
+  proofUrl: z.string().url().optional(),
 });
 
 // Confirmado 2026-08-05: ningún movimiento se elimina — solo se edita
@@ -34,15 +36,26 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   // Confirmado 2026-08-06: solo admin edita cuánto se fondeó una caja — quien
   // recibe el fondeo (Nairoby/Bryan) no puede cambiar ese monto, ya que es el
   // admin quien de verdad recarga cada caja. Editar un DESEMBOLSO (su propio
-  // registro de pago) sigue permitido para el manager de la caja.
-  if (parsed.data.action === "edit" && entry.kind === "RECARGA" && !isAdmin) {
+  // registro de pago) sigue permitido para el manager de la caja. Adjuntar el
+  // recibo (proofUrl) no cambia el monto, así que no aplica esta restricción
+  // — quien confirmó la recarga (ej. Nairoby en un pago en efectivo) puede
+  // subir la foto aunque no sea admin.
+  if (parsed.data.action === "edit" && entry.kind === "RECARGA" && !isAdmin && parsed.data.amount !== undefined) {
     return NextResponse.json({ error: "Solo el admin puede editar el monto de un fondeo." }, { status: 403 });
   }
 
   if (parsed.data.action === "edit") {
-    const data: { amount?: number; description?: string; updatedById: string | null } = { updatedById: actorId };
+    const data: { amount?: number; description?: string; proofUrl?: string; proofHash?: string; updatedById: string | null } = { updatedById: actorId };
     if (parsed.data.amount !== undefined) data.amount = parsed.data.amount;
     if (parsed.data.description !== undefined) data.description = parsed.data.description;
+    if (parsed.data.proofUrl !== undefined) {
+      if (entry.proofUrl) return NextResponse.json({ error: "Este movimiento ya tiene un recibo adjunto." }, { status: 409 });
+      const proofHash = await hashFileFromUrl(parsed.data.proofUrl);
+      const duplicate = await prisma.pettyCashEntry.findFirst({ where: { proofHash } });
+      if (duplicate) return NextResponse.json({ error: "Este comprobante ya se usó antes en otro movimiento — sube una foto distinta." }, { status: 409 });
+      data.proofUrl = parsed.data.proofUrl;
+      data.proofHash = proofHash;
+    }
     const updated = await prisma.pettyCashEntry.update({ where: { id }, data });
     return NextResponse.json({ ok: true, entry: updated });
   }
