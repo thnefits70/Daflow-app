@@ -30,12 +30,13 @@ function monthsSince(date: Date, now: Date): number {
   return (now.getUTCFullYear() - date.getUTCFullYear()) * 12 + (now.getUTCMonth() - date.getUTCMonth());
 }
 
-async function costCooldownEligible(employeeId: string, confirmedProductName: string): Promise<boolean> {
+async function costCooldownEligible(employeeId: string, confirmedProductName: string, excludeItemId: string | null): Promise<boolean> {
   const lastCostItem = await prisma.personalPurchaseItem.findFirst({
     where: {
       confirmedProductName,
       order: { employeeId },
       unitPriceModes: { array_contains: "COST" },
+      ...(excludeItemId ? { id: { not: excludeItemId } } : {}),
     },
     orderBy: { createdAt: "desc" },
     select: { createdAt: true },
@@ -58,7 +59,8 @@ export async function computeUnitPriceModes(
   confirmedProductName: string,
   quantity: number,
   declarations: UnitDeclaration[],
-  confirmedJustCode: string | null
+  confirmedJustCode: string | null,
+  excludeItemId: string | null = null
 ): Promise<PriceMode[]> {
   if (await isComboJustCode(confirmedJustCode)) {
     return Array.from({ length: quantity }, () => "DROPI" as PriceMode);
@@ -82,7 +84,7 @@ export async function computeUnitPriceModes(
       modes.push("DROPI");
       continue;
     }
-    if (selfEligible === null) selfEligible = await costCooldownEligible(employeeId, confirmedProductName);
+    if (selfEligible === null) selfEligible = await costCooldownEligible(employeeId, confirmedProductName, excludeItemId);
     if (selfEligible) {
       modes.push("COST");
       selfCostUnitsGranted++;

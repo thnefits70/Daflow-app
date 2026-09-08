@@ -55,7 +55,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     if (!confirmedProductName) return NextResponse.json({ error: "Producto de catálogo no encontrado." }, { status: 400 });
     nameById.set(it.id, confirmedProductName);
     const declarations = (Array.isArray(it.unitDeclarations) ? it.unitDeclarations : []) as unknown as UnitDeclaration[];
-    const unitPriceModes = await computeUnitPriceModes(order.employeeId, confirmedProductName, it.quantity, declarations, catalogItem.justCode);
+    const unitPriceModes = await computeUnitPriceModes(order.employeeId, confirmedProductName, it.quantity, declarations, catalogItem.justCode, it.id);
     await prisma.personalPurchaseItem.update({
       where: { id: it.id },
       data: { confirmedProductName, confirmedCatalogItemId: catalogItemId, unitPriceModes },

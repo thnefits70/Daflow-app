@@ -31,7 +31,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   for (const it of order.items) {
     if (!it.confirmedProductName) continue;
     const declarations = (Array.isArray(it.unitDeclarations) ? it.unitDeclarations : []) as unknown as UnitDeclaration[];
-    const unitPriceModes = await computeUnitPriceModes(order.employeeId, it.confirmedProductName, it.quantity, declarations, it.confirmedCatalogItem?.justCode ?? null);
+    const unitPriceModes = await computeUnitPriceModes(order.employeeId, it.confirmedProductName, it.quantity, declarations, it.confirmedCatalogItem?.justCode ?? null, it.id);
     await prisma.personalPurchaseItem.update({ where: { id: it.id }, data: { unitPriceModes } });
   }
 
