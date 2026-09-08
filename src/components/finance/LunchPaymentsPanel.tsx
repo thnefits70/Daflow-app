@@ -34,36 +34,44 @@ function dateEs(iso: string) {
   return new Date(`${iso}T00:00:00`).toLocaleDateString("es-EC", { day: "numeric", month: "long", year: "numeric" });
 }
 
-// Convenio con el restaurante es de lunes a sábado (mismo patrón que
-// businessHours.ts) — cada semana registrada abarca esos 6 días.
-const WEEK_LENGTH_DAYS = 6;
-
+// Mismo picker nativo "Semana" que ya usa Marcar producto sin stock
+// (StockoutPanel) — un solo toque abre el calendario del navegador y elige
+// la semana, sin escribir fechas a mano. El convenio con el restaurante es
+// de lunes a sábado (mismo patrón que businessHours.ts), así que la semana
+// ISO elegida (que abarca lunes-domingo) se recorta a esos 6 días.
 function addDaysIso(iso: string, days: number): string {
   const d = new Date(`${iso}T00:00:00Z`);
   d.setUTCDate(d.getUTCDate() + days);
   return d.toISOString().slice(0, 10);
 }
 
-// Confirmado 2026-09-08: Daniel pidió elegir la semana de una lista en vez de
-// escribir "desde"/"hasta" a mano — acá se arman esas opciones en cadena, cada
-// una empezando el día siguiente a la anterior, para que nunca se solape ni
-// deje huecos con lo ya registrado.
-function buildWeekOptions(firstStart: string, count: number): { weekStart: string; weekEnd: string; label: string }[] {
-  const out: { weekStart: string; weekEnd: string; label: string }[] = [];
-  let start = firstStart;
-  for (let i = 0; i < count; i++) {
-    const end = addDaysIso(start, WEEK_LENGTH_DAYS - 1);
-    out.push({ weekStart: start, weekEnd: end, label: `${dateEs(start)} al ${dateEs(end)}` });
-    // El sábado (fin de semana) es seguido de domingo, no laborable — se
-    // salta directo al lunes siguiente en vez de sumar solo 1 día.
-    start = addDaysIso(end, 2);
-  }
-  return out;
+// Semana ISO-8601 ("YYYY-Www") -> lunes de esa semana, en "YYYY-MM-DD".
+function isoWeekMonday(week: string): string | null {
+  const match = /^(\d{4})-W(\d{1,2})$/.exec(week);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const weekNum = Number(match[2]);
+  const simple = new Date(Date.UTC(year, 0, 1 + (weekNum - 1) * 7));
+  const dayOfWeek = simple.getUTCDay() || 7;
+  simple.setUTCDate(simple.getUTCDate() + (dayOfWeek <= 4 ? 1 - dayOfWeek : 8 - dayOfWeek));
+  return simple.toISOString().slice(0, 10);
+}
+
+// Fecha -> semana ISO-8601 que la contiene (inverso de isoWeekMonday), para
+// sugerir de entrada la semana pendiente que sigue a la última registrada.
+function dateToIsoWeek(iso: string): string {
+  const d = new Date(`${iso}T00:00:00Z`);
+  const day = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - day); // jueves de esa semana
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  const weekNo = Math.ceil(((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
+  return `${d.getUTCFullYear()}-W${String(weekNo).padStart(2, "0")}`;
 }
 
 // El convenio corre lunes a sábado — si la fecha sugerida (día siguiente a la
-// última semana registrada) cae domingo, hay que saltar al lunes; si no, ya
-// arrancaría la cadena de semanas un día corrida para siempre.
+// última semana registrada) cae domingo, esa semana ISO ya es la misma que
+// se acaba de registrar. Hay que saltar al lunes siguiente para sugerir la
+// semana correcta.
 function nextMondayOnOrAfter(iso: string): string {
   const d = new Date(`${iso}T00:00:00Z`);
   const day = d.getUTCDay(); // 0=domingo … 6=sábado
@@ -88,9 +96,7 @@ export function LunchPaymentsPanel() {
   const [payees, setPayees] = useState<AdminPaymentPayeeDTO[]>([]);
   const [history, setHistory] = useState<HistoryRow[]>([]);
 
-  const [weekStart, setWeekStart] = useState("");
-  const [weekEnd, setWeekEnd] = useState("");
-  const [weekOptions, setWeekOptions] = useState<{ weekStart: string; weekEnd: string; label: string }[]>([]);
+  const [weekInput, setWeekInput] = useState(""); // "YYYY-Www", del picker nativo
   const [lunchCount, setLunchCount] = useState("");
   const [montoOverride, setMontoOverride] = useState<string | null>(null);
   const [payee, setPayee] = useState<AdminPaymentPayeeDTO | null>(null);
@@ -109,10 +115,7 @@ export function LunchPaymentsPanel() {
         setPayees(data.payees ?? []);
         setHistory(data.history ?? []);
         const rawStart = data.defaults.suggestedWeekStart ?? new Date().toISOString().slice(0, 10);
-        const options = buildWeekOptions(nextMondayOnOrAfter(rawStart), 5);
-        setWeekOptions(options);
-        setWeekStart(options[0].weekStart);
-        setWeekEnd(options[0].weekEnd);
+        setWeekInput(dateToIsoWeek(nextMondayOnOrAfter(rawStart)));
         if (data.defaults.payeeId) {
           const p = (data.payees ?? []).find((x: AdminPaymentPayeeDTO) => x.id === data.defaults.payeeId);
           if (p) setPayee(p);
@@ -124,13 +127,17 @@ export function LunchPaymentsPanel() {
   }
   useEffect(load, []);
 
+  const weekMonday = isoWeekMonday(weekInput);
+  const weekStart = weekMonday ?? "";
+  const weekEnd = weekMonday ? addDaysIso(weekMonday, 5) : "";
+
   const computedMonto = Number(lunchCount) > 0 ? (Number(lunchCount) * pricePerLunch).toFixed(2) : "";
   const monto = montoOverride ?? computedMonto;
 
   async function submit() {
     setErr("");
     if (!weekStart || !weekEnd) {
-      setErr("Elige la semana (fecha inicial y final).");
+      setErr("Elige la semana.");
       return;
     }
     const count = Number(lunchCount);
@@ -203,24 +210,13 @@ export function LunchPaymentsPanel() {
         <div className="text-[11px] text-steel mb-2.5">Precio actual: {money(pricePerLunch)} por almuerzo (IVA incluido)</div>
 
         <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Semana</label>
-        <select
-          value={weekStart}
-          onChange={(e) => {
-            const opt = weekOptions.find((o) => o.weekStart === e.target.value);
-            if (opt) {
-              setWeekStart(opt.weekStart);
-              setWeekEnd(opt.weekEnd);
-            }
-          }}
-          className="w-full rounded border border-rule px-2.5 py-2 text-[13px] mb-2.5"
-        >
-          {weekOptions.map((o, i) => (
-            <option key={o.weekStart} value={o.weekStart}>
-              {o.label}
-              {i === 0 ? " (siguiente)" : ""}
-            </option>
-          ))}
-        </select>
+        <input
+          type="week"
+          value={weekInput}
+          onChange={(e) => setWeekInput(e.target.value)}
+          className="rounded border border-rule px-2.5 py-2 text-[13px] bg-surface mb-1"
+        />
+        {weekStart && weekEnd && <div className="text-[11px] text-steel mb-2.5">{dateEs(weekStart)} al {dateEs(weekEnd)}</div>}
 
         <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Cantidad de almuerzos</label>
         <input
