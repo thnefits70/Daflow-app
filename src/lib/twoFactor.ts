@@ -12,7 +12,10 @@ import bcrypt from "bcryptjs";
 // Análisis de Mercado (MKT) vía el flag canManagePurchases, no por deptId.
 // Se agrega MKT completo para cubrirlo a él (y de paso a Bryan Ríos, Heidy y
 // Robert, que manejan proveedores/precios/Dropi de ese mismo equipo).
-export const TWO_FACTOR_REQUIRED_DEPT_CODES = ["INV", "COM", "FIN", "MKT"];
+// Ampliado de nuevo 2026-09-08: se suman DIS (Diseño - Marketing) y FUL
+// (Fulfillment) — pedido explícito del usuario, ya no queda ningún
+// departamento con cuentas reales fuera del alcance obligatorio.
+export const TWO_FACTOR_REQUIRED_DEPT_CODES = ["INV", "COM", "FIN", "MKT", "DIS", "FUL"];
 
 export function generateTwoFactorSecret() {
   return authenticator.generateSecret();

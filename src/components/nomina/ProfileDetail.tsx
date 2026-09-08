@@ -19,7 +19,7 @@ type Dept = { id: string; name: string; code: string };
 // — duplicado acá porque ese archivo importa librerías de servidor
 // (otplib/qrcode) que no deben entrar al bundle de este componente cliente.
 // Si esa lista cambia, hay que actualizar ambas.
-const TWO_FACTOR_DEPT_CODES = ["INV", "COM", "FIN", "MKT"];
+const TWO_FACTOR_DEPT_CODES = ["INV", "COM", "FIN", "MKT", "DIS", "FUL"];
 type Position = { id: string; deptId: string; name: string };
 type Milestone = { id: string; title: string; note: string | null; date: string };
 type ExamScore = { id: string; score: number; total: number; createdAt: string; exam: { title: string } };
