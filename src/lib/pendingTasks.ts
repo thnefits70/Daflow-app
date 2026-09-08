@@ -1629,31 +1629,47 @@ async function getInventoryControlPendingItem(href: string): Promise<PendingItem
 // pasó la fecha límite de una semana (ver snapshotPeriodDeadline en
 // inventoryKpis.ts: último día laborable del bloque, antes de las 12 si cae
 // sábado, antes de las 4pm cualquier otro día) y todavía no subió el Excel
-// de stock por SKU de esa semana. Igual espíritu que
-// getMerchandiseWeeklyWriteOffJustPendingItem: junta TODAS las semanas
-// atrasadas sin cargar (no solo la más reciente), no solo "ya te avisé una
-// vez, no insisto más".
+// de stock por SKU de esa semana.
+//
+// Corregido 2026-09-08: antes juntaba TODAS las semanas atrasadas sin cargar
+// desde que arrancó el proceso semanal, así que una semana vieja saltada
+// (ej. "Agosto (semana 4)") se quedaba marcada "atrasado" para siempre aunque
+// Daniel ya estuviera al día con las semanas recientes — mismo bug de fondo
+// que weeklyPendingStatus (ver feedback_reminder_no_stale_gaps), solo que
+// este aviso no reusaba esa función porque trabaja con "semanas" fijas de
+// mes (recentInventorySnapshotPeriods) en vez de semanas ISO. Ahora sigue el
+// mismo espíritu: si el bloque actual ya tiene Excel, no hay nada que avisar
+// (sin importar huecos viejos); si no, solo se marca atrasado el bloque más
+// reciente que ya venció y sigue vacío — nunca uno más atrás.
 async function getInventoryWeeklySnapshotPendingItem(href: string): Promise<PendingItem | null> {
   const deptId = await getFinanzasDeptId();
   if (!deptId) return null;
 
-  const overduePeriods = recentInventorySnapshotPeriods().filter((p) => isSnapshotPeriodOverdue(p));
-  if (overduePeriods.length === 0) return null;
+  const periods = recentInventorySnapshotPeriods(); // más antigua primero
+  const current = periods[periods.length - 1];
+  const prev = periods.length > 1 ? periods[periods.length - 2] : null;
 
+  const toCheck = prev ? [prev, current] : [current];
   const loaded = await prisma.inventoryProductSnapshot.findMany({
-    where: { deptId, period: { in: overduePeriods } },
+    where: { deptId, period: { in: toCheck } },
     select: { period: true },
     distinct: ["period"],
   });
   const loadedSet = new Set(loaded.map((r) => r.period));
-  const missing = overduePeriods.filter((p) => !loadedSet.has(p)).sort();
-  if (missing.length === 0) return null;
+  if (loadedSet.has(current)) return null;
+
+  const target = isSnapshotPeriodOverdue(current)
+    ? current
+    : prev && !loadedSet.has(prev) && isSnapshotPeriodOverdue(prev)
+      ? prev
+      : null;
+  if (!target) return null;
 
   return {
     type: "control_inventario_semanal",
     icon: "📊",
     label: "Control de Inventario — Excel semanal de stock por SKU",
-    meta: `${missing.length === 1 ? snapshotPeriodLabel(missing[0]) : `${missing.length} semanas`} · atrasado`,
+    meta: `${snapshotPeriodLabel(target)} · atrasado`,
     overdue: true,
     href,
   };
