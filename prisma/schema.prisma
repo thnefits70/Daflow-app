@@ -3148,6 +3148,17 @@ model AdminPaymentRequest {
   monto  Float
   status AdminPaymentStatus @default(PENDING_PAYMENT)
 
+  // Confirmado 2026-09-08: pedido explícito del usuario — el código de pago
+  // que genera el IESS cada mes (distinto cada vez) es el mismo que se usa
+  // para pagar en Pichincha (autocompleta el monto a pagar) y el que debería
+  // salir como referencia en el comprobante bancario después. Nairoby lo
+  // escribe al crear la solicitud (solo aparece el campo si el motivo
+  // menciona IESS); admin lo usa para pagar y la UI lo compara contra el
+  // receiptNumber que la IA YA lee de cada comprobante (sin llamada de IA
+  // nueva) para que se vea de un vistazo si coinciden — no bloquea el pago,
+  // es solo apoyo visual porque el formato en el comprobante puede variar.
+  iessReceiptNumber String?
+
   // Confirmado 2026-09-08: pedido explícito del usuario — Almuerzos
   // semanales (convenio con el restaurante, precio fijo por almuerzo IVA
   // incluido). Solo se llenan para ese tipo de solicitud (type=VARIABLE,

@@ -2,7 +2,7 @@
 
 import { Fragment, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Upload, CheckCircle2, Lock, Bell, Trash2, Landmark, Send, ChevronDown, ChevronUp, Pencil } from "lucide-react";
+import { Upload, CheckCircle2, Lock, Bell, Trash2, Landmark, Send, ChevronDown, ChevronUp, Pencil, Copy, ClipboardCheck } from "lucide-react";
 import { Combobox } from "@/components/ui/Combobox";
 import { uploadFile } from "@/lib/uploadFile";
 import { compressImage } from "@/lib/compressImage";
@@ -26,6 +26,7 @@ type RequestDTO = {
   motivo: string;
   monto: number;
   status: Status;
+  iessReceiptNumber: string | null;
   declarationFileUrl: string | null;
   declarationFileName: string | null;
   declarationAiMatch: boolean | null;
@@ -68,6 +69,22 @@ type LunchQueueDTO = {
 
 function money(n: number) {
   return `$${n.toLocaleString("es-MX", { minimumFractionDigits: 2 })}`;
+}
+function isIessMotivo(motivo: string) {
+  return motivo.toLowerCase().includes("iess");
+}
+// Confirmado 2026-09-08: compara el código que escribió Nairoby contra el
+// N° que la IA ya lee de cada comprobante bancario — normalizado (sin
+// espacios/guiones, mayúsculas) porque el banco a veces agrega un prefijo o
+// formatea distinto el mismo código.
+function normalizeCode(s: string) {
+  return s.toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+function codesMatch(a: string, b: string) {
+  const na = normalizeCode(a);
+  const nb = normalizeCode(b);
+  if (!na || !nb) return false;
+  return na === nb || na.includes(nb) || nb.includes(na);
 }
 function dateEs(iso: string) {
   return new Date(`${iso}T00:00:00`).toLocaleDateString("es-EC", { day: "numeric", month: "long", year: "numeric" });
@@ -116,6 +133,7 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
   const [formType, setFormType] = useState<PaymentType>("VARIABLE");
   const [formMotivo, setFormMotivo] = useState("");
   const [formMonto, setFormMonto] = useState("");
+  const [formIessReceiptNumber, setFormIessReceiptNumber] = useState("");
   const [formPayee, setFormPayee] = useState<AdminPaymentPayeeDTO | null>(null);
   const [formBankAccountId, setFormBankAccountId] = useState<string | null>(null);
   const [formDeclarationUrl, setFormDeclarationUrl] = useState<string | null>(null);
@@ -156,6 +174,14 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
   const [editingMotivoId, setEditingMotivoId] = useState<string | null>(null);
   const [motivoDraft, setMotivoDraft] = useState("");
   const [savingMotivoId, setSavingMotivoId] = useState<string | null>(null);
+
+  // Corregir el código de comprobante/planilla del IESS que Nairoby escribió
+  // al crear la solicitud (ej. un error de tipeo) — mismo patrón que
+  // editingMotivoId, también exclusivo del admin.
+  const [editingIessId, setEditingIessId] = useState<string | null>(null);
+  const [iessDraft, setIessDraft] = useState("");
+  const [savingIessId, setSavingIessId] = useState<string | null>(null);
+  const [copiedIessId, setCopiedIessId] = useState<string | null>(null);
 
   // Corregir el beneficiario/cuenta bancaria de una solicitud ya enviada
   // (ej. se envió sin elegir cuenta) — mismo patrón que editingMotivoId,
@@ -259,6 +285,7 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
     setFormType("VARIABLE");
     setFormMotivo("");
     setFormMonto("");
+    setFormIessReceiptNumber("");
     setFormDeclarationUrl(null);
     setFormDeclarationName(null);
     setFormPayee(null);
@@ -273,6 +300,7 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
     setFormType("RECURRING");
     setFormMotivo(t.motivo);
     setFormMonto("");
+    setFormIessReceiptNumber("");
     setFormDeclarationUrl(null);
     setFormDeclarationName(null);
     setFormPayee(null);
@@ -329,6 +357,7 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
       linkedGroupId: formLinkMode === "flete" ? formGroupId : undefined,
       declarationFileUrl: formDeclarationUrl ?? undefined,
       declarationFileName: formDeclarationName ?? undefined,
+      iessReceiptNumber: isIessMotivo(formMotivo) && formIessReceiptNumber.trim() ? formIessReceiptNumber.trim() : undefined,
     };
     if (formLinkMode !== "flete" && formType === "RECURRING") body.newTemplateMotivo = formMotivo.trim();
     const res = await fetch("/api/admin-payments", {
@@ -547,6 +576,40 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
     }
     setEditingMotivoId(null);
     load();
+  }
+
+  function startEditIess(r: RequestDTO) {
+    setEditingIessId(r.id);
+    setIessDraft(r.iessReceiptNumber ?? "");
+    setErr("");
+  }
+
+  async function saveIess(id: string) {
+    setErr("");
+    setSavingIessId(id);
+    const res = await fetch(`/api/admin-payments/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ iessReceiptNumber: iessDraft.trim() || null }),
+    });
+    setSavingIessId(null);
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      setErr(data?.error ?? "No se pudo guardar el código.");
+      return;
+    }
+    setEditingIessId(null);
+    load();
+  }
+
+  async function copyIessCode(id: string, code: string) {
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopiedIessId(id);
+      setTimeout(() => setCopiedIessId((cur) => (cur === id ? null : cur)), 2000);
+    } catch {
+      /* clipboard no disponible, no hacer nada */
+    }
   }
 
   function startEditPayee(r: RequestDTO) {
@@ -871,6 +934,23 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
                 className="w-full rounded border border-rule px-2.5 py-2 text-[13px] mb-2.5"
               />
 
+              {isIessMotivo(formMotivo) && (
+                <div className="mb-2.5">
+                  <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">
+                    Código de pago del IESS <span className="text-steel-dim">(el mismo que se usa en Pichincha)</span>
+                  </label>
+                  <input
+                    value={formIessReceiptNumber}
+                    onChange={(e) => setFormIessReceiptNumber(e.target.value)}
+                    placeholder="Ej. el código que generó el IESS este mes"
+                    className="w-full rounded border border-rule px-2.5 py-2 text-[13px] font-mono"
+                  />
+                  <div className="text-[10.5px] text-steel mt-1">
+                    Así, cuando se pague, se puede comparar contra el N° que se lee del comprobante del banco.
+                  </div>
+                </div>
+              )}
+
               <div className="mb-2.5">
                 <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">A quién pagar <span className="text-steel-dim">(opcional)</span></label>
                 <AdminPayeePicker
@@ -1077,6 +1157,76 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
                 </div>
               </div>
 
+              {editingIessId === r.id ? (
+                <div className="bg-cloud border border-rule rounded-md px-3 py-2.5 mb-2.5">
+                  <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-steel mb-1.5">
+                    Código de pago del IESS
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="text"
+                      autoFocus
+                      className="flex-1 rounded border border-teal px-2 py-1.5 text-[12.5px] font-mono"
+                      value={iessDraft}
+                      onChange={(e) => setIessDraft(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") saveIess(r.id);
+                        if (e.key === "Escape") setEditingIessId(null);
+                      }}
+                    />
+                    <button
+                      type="button"
+                      disabled={savingIessId === r.id}
+                      className="rounded border border-teal bg-teal px-2.5 py-1.5 text-[11px] font-semibold text-white cursor-pointer disabled:opacity-60"
+                      onClick={() => saveIess(r.id)}
+                    >
+                      {savingIessId === r.id ? "Guardando…" : "Guardar"}
+                    </button>
+                    <button type="button" className="text-steel text-[11px] cursor-pointer" onClick={() => setEditingIessId(null)}>Cancelar</button>
+                  </div>
+                </div>
+              ) : r.iessReceiptNumber ? (
+                <div className="bg-teal/10 border border-teal/30 rounded-md px-3 py-2.5 mb-2.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="text-[10px] font-semibold uppercase tracking-wide text-steel mb-0.5">
+                        Código de pago del IESS <span className="text-steel-dim normal-case">(úsalo en Pichincha para pagar)</span>
+                      </div>
+                      <div className="font-mono text-[13px] font-bold break-all">{r.iessReceiptNumber}</div>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button
+                        type="button"
+                        title="Copiar código"
+                        className="flex items-center gap-1 rounded border border-teal/40 px-2 py-1 text-[10.5px] font-semibold text-teal cursor-pointer hover:bg-teal/10"
+                        onClick={() => copyIessCode(r.id, r.iessReceiptNumber!)}
+                      >
+                        {copiedIessId === r.id ? <ClipboardCheck size={12} /> : <Copy size={12} />}
+                        {copiedIessId === r.id ? "Copiado" : "Copiar"}
+                      </button>
+                      {isAdmin && (
+                        <button
+                          type="button"
+                          title="Corregir el código (solo admin)"
+                          className="text-steel-dim hover:text-teal cursor-pointer shrink-0"
+                          onClick={() => startEditIess(r)}
+                        >
+                          <Pencil size={12} />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ) : isIessMotivo(r.motivo) && isAdmin ? (
+                <button
+                  type="button"
+                  className="flex items-center gap-1.5 text-[11.5px] text-blue font-semibold cursor-pointer mb-2.5"
+                  onClick={() => startEditIess(r)}
+                >
+                  <Pencil size={12} /> Agregar código de pago del IESS
+                </button>
+              ) : null}
+
               {editingPayeeId === r.id ? (
                 <div className="bg-cloud border border-rule rounded-md px-3 py-2.5 mb-2.5">
                   <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-steel mb-1.5">
@@ -1189,6 +1339,13 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
                         <div className="text-[11px] text-steel">
                           {p.readAmount !== null ? <span className="font-semibold">{money(p.readAmount)}</span> : <span className="text-red">no se pudo leer el monto</span>}
                           {p.receiptNumber && <span className="text-steel-dim"> · N° {p.receiptNumber}</span>}
+                          {r.iessReceiptNumber && p.receiptNumber && (
+                            codesMatch(r.iessReceiptNumber, p.receiptNumber) ? (
+                              <span className="text-green font-semibold"> · ✅ coincide con el código del IESS</span>
+                            ) : (
+                              <span className="font-semibold" style={{ color: "#D9A441" }}> · ⚠️ no coincide con el código del IESS ({r.iessReceiptNumber})</span>
+                            )
+                          )}
                         </div>
                       </div>
                     ))}

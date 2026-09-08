@@ -63,6 +63,7 @@ const schema = z.object({
   linkedGroupId: z.string().optional(),
   declarationFileUrl: z.string().url().optional(),
   declarationFileName: z.string().optional(),
+  iessReceiptNumber: z.string().trim().min(1).optional(),
 });
 
 // Confirmado 2026-08-06: el doc. de soporte es opcional, pero si viene, la
@@ -144,6 +145,7 @@ export async function POST(req: NextRequest) {
       declarationFileName: d.declarationFileName ?? null,
       declarationAiMatch,
       declarationAiNote,
+      iessReceiptNumber: d.iessReceiptNumber ?? null,
       createdById,
     },
   });

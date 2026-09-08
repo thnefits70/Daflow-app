@@ -24,13 +24,15 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
 const patchSchema = z
   .object({
     motivo: z.string().trim().min(1).optional(),
+    iessReceiptNumber: z.string().trim().min(1).nullable().optional(),
     payeeId: z.string().nullable().optional(),
     bankAccountId: z.string().nullable().optional(),
     adminPassword: z.string().optional(),
   })
-  .refine((d) => d.motivo !== undefined || d.payeeId !== undefined || d.bankAccountId !== undefined, {
-    message: "Nada para actualizar.",
-  });
+  .refine(
+    (d) => d.motivo !== undefined || d.iessReceiptNumber !== undefined || d.payeeId !== undefined || d.bankAccountId !== undefined,
+    { message: "Nada para actualizar." }
+  );
 
 // Confirmado 2026-08-31: pedido explícito del usuario — corregir el título
 // (motivo) de una solicitud, ej. un error de tipeo o un dato mal escrito, es
@@ -56,8 +58,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const request = await prisma.adminPaymentRequest.findUnique({ where: { id } });
   if (!request) return NextResponse.json({ error: "No encontrada." }, { status: 404 });
 
-  const data: { motivo?: string; payeeId?: string | null; bankAccountId?: string | null } = {};
+  const data: { motivo?: string; iessReceiptNumber?: string | null; payeeId?: string | null; bankAccountId?: string | null } = {};
   if (parsed.data.motivo !== undefined) data.motivo = parsed.data.motivo;
+  if (parsed.data.iessReceiptNumber !== undefined) data.iessReceiptNumber = parsed.data.iessReceiptNumber;
 
   if (parsed.data.payeeId !== undefined || parsed.data.bankAccountId !== undefined) {
     const settings = await prisma.platformSettings.findUnique({ where: { id: "singleton" } });
