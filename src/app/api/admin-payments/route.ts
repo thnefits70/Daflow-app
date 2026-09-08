@@ -13,7 +13,7 @@ export async function GET() {
   if (!(await canManageAdminPayments())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
   const bankAccountSelect = { id: true, bankName: true, bankAccountType: true, bankAccountNumber: true, bankAccountHolder: true, holderIdType: true, holderIdNumber: true };
-  const [rows, templates, pendingThisMonth, payees, eligibleOrders] = await Promise.all([
+  const [rows, templates, pendingThisMonth, payees, eligibleOrders, lunchVerificationQueue] = await Promise.all([
     prisma.adminPaymentRequest.findMany({
       orderBy: { createdAt: "desc" },
       include: {
@@ -30,13 +30,26 @@ export async function GET() {
     getAdminPaymentTemplatesPendingThisMonth(),
     getAdminPaymentPayees(),
     getEligiblePaymentOrdersForFreight(),
+    // Confirmado 2026-09-08: pedido explícito del usuario — semanas de
+    // almuerzos que Daniel ya envió pero Nairoby todavía no verifica. A
+    // propósito NO son AdminPaymentRequest todavía, así que no aparecen en
+    // `requests` — el admin nunca debe verlas hasta que Nairoby las apruebe.
+    prisma.lunchWeekSubmission.findMany({
+      where: { sentToVerificationAt: { not: null }, verifiedAt: null },
+      orderBy: { sentToVerificationAt: "asc" },
+      include: {
+        payee: { select: { id: true, name: true } },
+        bankAccount: { select: bankAccountSelect },
+        registeredBy: { select: { name: true } },
+      },
+    }),
   ]);
 
   const requests = await Promise.all(
     rows.map(async (r) => ({ ...r, linkedGroupLabel: r.linkedGroupId ? await orderLabel(r.linkedGroupId) : null }))
   );
 
-  return NextResponse.json({ requests, templates, pendingThisMonth, payees, eligibleOrders });
+  return NextResponse.json({ requests, templates, pendingThisMonth, payees, eligibleOrders, lunchVerificationQueue });
 }
 
 const schema = z.object({

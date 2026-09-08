@@ -22,7 +22,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const parsed = schema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: "Datos inválidos." }, { status: 400 });
 
-  const request = await prisma.adminPaymentRequest.findUnique({ where: { id }, include: { proofs: true } });
+  const request = await prisma.adminPaymentRequest.findUnique({ where: { id }, include: { proofs: true, lunchWeekSubmission: { select: { verifiedById: true } } } });
   if (!request) return NextResponse.json({ error: "No encontrada." }, { status: 404 });
   if (request.status !== "PENDING_PAYMENT") return NextResponse.json({ error: "Ya fue pagada." }, { status: 409 });
 
@@ -77,6 +77,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (matches && request.createdById) {
     await notifyOwner(request.createdById, {
       title: "✅ Ya se pagó tu solicitud",
+      body: `${request.motivo} — $${request.monto.toFixed(2)} · revisa el comprobante`,
+      url: "/area/workspace",
+    }).catch(() => null);
+  }
+
+  // Confirmado 2026-09-08: pedido explícito del usuario — Nairoby (quien
+  // verificó la semana de almuerzos) debe enterarse cuando ya se pagó, para
+  // su registro de auditorías futuras, aunque no sea ella quien la registró.
+  if (matches && request.lunchWeekSubmission?.verifiedById) {
+    await notifyOwner(request.lunchWeekSubmission.verifiedById, {
+      title: "✅ Ya se pagó — Almuerzos",
       body: `${request.motivo} — $${request.monto.toFixed(2)} · revisa el comprobante`,
       url: "/area/workspace",
     }).catch(() => null);

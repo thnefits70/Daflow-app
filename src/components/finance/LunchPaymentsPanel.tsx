@@ -1,26 +1,27 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { Upload, CheckCircle2 } from "lucide-react";
-import { uploadFile } from "@/lib/uploadFile";
-import { compressImage } from "@/lib/compressImage";
-import { usePasteFile } from "@/lib/usePasteFile";
+import { useEffect, useState } from "react";
+import { CheckCircle2 } from "lucide-react";
 import { TabGuide } from "@/components/shared/TabGuide";
 import { AdminPayeePicker, type AdminPaymentPayeeDTO } from "@/components/finance/AdminPayeePicker";
 import { formatDateTime } from "@/lib/formatDateTime";
 
+type PaymentStatus = "PENDING_PAYMENT" | "PAID" | "CONFIRMED";
+
 type HistoryRow = {
   id: string;
-  motivo: string;
+  weekStart: string;
+  weekEnd: string;
+  lunchCount: number;
   monto: number;
-  status: "PENDING_PAYMENT" | "PAID" | "CONFIRMED";
-  lunchWeekStart: string | null;
-  lunchWeekEnd: string | null;
-  lunchCount: number | null;
-  createdAt: string;
+  registeredAt: string;
+  invoiceConfirmedAt: string | null;
+  sentToVerificationAt: string | null;
+  verifiedAt: string | null;
+  adminPaymentRequest: { status: PaymentStatus } | null;
 };
 
-const STATUS_LABELS: Record<HistoryRow["status"], string> = {
+const STATUS_LABELS: Record<PaymentStatus, string> = {
   PENDING_PAYMENT: "Pendiente de pago",
   PAID: "Pagado — falta confirmar",
   CONFIRMED: "Confirmado",
@@ -31,6 +32,16 @@ function money(n: number) {
 }
 function dateEs(iso: string) {
   return new Date(`${iso}T00:00:00`).toLocaleDateString("es-EC", { day: "numeric", month: "long", year: "numeric" });
+}
+
+// Confirmado 2026-09-08: pedido explícito del usuario — el admin no debe ver
+// nada de esto hasta que Nairoby verifique, así que acá se muestra el paso en
+// el que está cada semana en vez de un único estado de pago.
+function stageLabel(h: HistoryRow): string {
+  if (h.adminPaymentRequest) return STATUS_LABELS[h.adminPaymentRequest.status];
+  if (h.sentToVerificationAt) return "Enviado a Nairoby — pendiente de verificar";
+  if (h.invoiceConfirmedAt) return "Factura confirmada — falta enviar a Nairoby";
+  return "Registrado — falta confirmar factura";
 }
 
 export function LunchPaymentsPanel() {
@@ -45,13 +56,9 @@ export function LunchPaymentsPanel() {
   const [montoOverride, setMontoOverride] = useState<string | null>(null);
   const [payee, setPayee] = useState<AdminPaymentPayeeDTO | null>(null);
   const [bankAccountId, setBankAccountId] = useState<string | null>(null);
-  const [declarationUrl, setDeclarationUrl] = useState<string | null>(null);
-  const [declarationName, setDeclarationName] = useState<string | null>(null);
-  const [uploading, setUploading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [actingOnId, setActingOnId] = useState<string | null>(null);
   const [err, setErr] = useState("");
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const { onPaste, onMouseEnter, onMouseLeave } = usePasteFile((file) => uploadDeclaration(file));
 
   function load() {
     fetch("/api/lunch-payments")
@@ -76,20 +83,6 @@ export function LunchPaymentsPanel() {
   const computedMonto = Number(lunchCount) > 0 ? (Number(lunchCount) * pricePerLunch).toFixed(2) : "";
   const monto = montoOverride ?? computedMonto;
 
-  async function uploadDeclaration(file: File) {
-    setErr("");
-    setUploading(true);
-    const compressed = await compressImage(file);
-    const uploaded = await uploadFile(compressed, "admin-payments");
-    setUploading(false);
-    if (!uploaded.ok) {
-      setErr(uploaded.error);
-      return;
-    }
-    setDeclarationUrl(uploaded.url);
-    setDeclarationName(uploaded.name);
-  }
-
   async function submit() {
     setErr("");
     if (!weekStart || !weekEnd) {
@@ -112,8 +105,6 @@ export function LunchPaymentsPanel() {
         monto: monto ? Number(monto) : undefined,
         payeeId: payee?.id ?? undefined,
         bankAccountId: bankAccountId ?? undefined,
-        declarationFileUrl: declarationUrl ?? undefined,
-        declarationFileName: declarationName ?? undefined,
       }),
     });
     setSubmitting(false);
@@ -122,12 +113,36 @@ export function LunchPaymentsPanel() {
       setErr(data?.error ?? "No se pudo registrar.");
       return;
     }
-    setWeekStart(data.lunchWeekEnd ? new Date(new Date(data.lunchWeekEnd).getTime() + 86400000).toISOString().slice(0, 10) : "");
+    setWeekStart(data.weekEnd ? new Date(new Date(data.weekEnd).getTime() + 86400000).toISOString().slice(0, 10) : "");
     setWeekEnd("");
     setLunchCount("");
     setMontoOverride(null);
-    setDeclarationUrl(null);
-    setDeclarationName(null);
+    load();
+  }
+
+  async function confirmInvoice(id: string) {
+    setErr("");
+    setActingOnId(id);
+    const res = await fetch(`/api/lunch-payments/${id}/confirm-invoice`, { method: "POST" });
+    setActingOnId(null);
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      setErr(data?.error ?? "No se pudo confirmar.");
+      return;
+    }
+    load();
+  }
+
+  async function sendToVerification(id: string) {
+    setErr("");
+    setActingOnId(id);
+    const res = await fetch(`/api/lunch-payments/${id}/send`, { method: "POST" });
+    setActingOnId(null);
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      setErr(data?.error ?? "No se pudo enviar.");
+      return;
+    }
     load();
   }
 
@@ -136,7 +151,9 @@ export function LunchPaymentsPanel() {
   return (
     <div>
       <TabGuide storageKey="almuerzos-semanales">
-        Registra acá, cada semana, cuántos almuerzos se pidieron (convenio con el restaurante) — el monto se calcula solo. Después el admin paga y sube el comprobante, igual que cualquier otro pago administrativo.
+        Registra acá, cada semana, cuántos almuerzos se pidieron (convenio con el restaurante) — el monto se calcula
+        solo. Después confirma que la proveedora te avisó que envió la factura y envíalo a Nairoby: ella lo revisa y
+        recién ahí llega al admin para que pague.
       </TabGuide>
 
       <div className="bg-surface border border-rule rounded-md p-4 mb-4">
@@ -188,38 +205,11 @@ export function LunchPaymentsPanel() {
           />
         </div>
 
-        {declarationUrl ? (
-          <div className="mb-2.5">
-            <div className="flex items-center gap-1.5 text-[11.5px] text-teal mb-1.5">
-              <CheckCircle2 size={13} /> Factura adjuntada
-            </div>
-            <button type="button" className="text-steel text-[11px] underline cursor-pointer" onClick={() => { setDeclarationUrl(null); setDeclarationName(null); }}>
-              Quitar
-            </button>
-          </div>
-        ) : (
-          <div className="mb-2.5">
-            <div
-              tabIndex={0}
-              onPaste={onPaste}
-              onMouseEnter={onMouseEnter}
-              onMouseLeave={onMouseLeave}
-              className="flex items-center gap-1.5 border-[1.5px] border-dashed border-rule rounded px-3 py-2 text-[12px] text-steel cursor-pointer hover:border-teal focus:border-teal focus:outline-none w-fit"
-            >
-              {uploading ? <span className="w-3.5 h-3.5 rounded-full border-2 border-rule border-t-teal animate-spin" /> : <Upload size={13} />} Foto de la factura (opcional, Ctrl+V)
-              <button type="button" className="text-[10.5px] underline decoration-dotted opacity-80 hover:opacity-100 cursor-pointer" onClick={() => fileInputRef.current?.click()}>
-                o selecciona un archivo
-              </button>
-              <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && uploadDeclaration(e.target.files[0])} />
-            </div>
-          </div>
-        )}
-
         {err && <div className="text-red text-[12px] mb-2.5">{err}</div>}
 
         <button
           type="button"
-          disabled={submitting || uploading}
+          disabled={submitting}
           className="rounded border border-blue bg-blue px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer disabled:opacity-60"
           onClick={submit}
         >
@@ -236,14 +226,41 @@ export function LunchPaymentsPanel() {
             <div key={h.id} className="bg-surface border border-rule rounded-md px-3 py-2.5">
               <div className="flex items-center justify-between gap-2">
                 <span className="text-[12.5px] font-semibold">
-                  {h.lunchWeekStart && h.lunchWeekEnd ? `${dateEs(h.lunchWeekStart.slice(0, 10))} al ${dateEs(h.lunchWeekEnd.slice(0, 10))}` : h.motivo}
+                  {dateEs(h.weekStart.slice(0, 10))} al {dateEs(h.weekEnd.slice(0, 10))}
                 </span>
                 <span className="text-[12.5px] font-semibold shrink-0">{money(h.monto)}</span>
               </div>
               <div className="flex items-center justify-between gap-2 mt-1">
-                <span className="text-[11px] text-steel">{h.lunchCount} almuerzos · registrado {formatDateTime(h.createdAt)}</span>
-                <span className="text-[11px] text-steel shrink-0">{STATUS_LABELS[h.status]}</span>
+                <span className="text-[11px] text-steel">{h.lunchCount} almuerzos · registrado {formatDateTime(h.registeredAt)}</span>
+                <span className="text-[11px] text-steel shrink-0">{stageLabel(h)}</span>
               </div>
+
+              {!h.invoiceConfirmedAt && (
+                <button
+                  type="button"
+                  disabled={actingOnId === h.id}
+                  className="mt-2 rounded border border-teal px-2.5 py-1 text-[11.5px] font-semibold text-teal cursor-pointer disabled:opacity-50"
+                  onClick={() => confirmInvoice(h.id)}
+                >
+                  Confirmar que la proveedora envió la factura
+                </button>
+              )}
+
+              {h.invoiceConfirmedAt && !h.sentToVerificationAt && (
+                <div className="mt-2 flex items-center gap-2">
+                  <div className="flex items-center gap-1.5 text-[11.5px] text-teal">
+                    <CheckCircle2 size={13} /> Factura confirmada
+                  </div>
+                  <button
+                    type="button"
+                    disabled={actingOnId === h.id}
+                    className="rounded border border-blue bg-blue px-2.5 py-1 text-[11.5px] font-semibold text-white cursor-pointer disabled:opacity-50"
+                    onClick={() => sendToVerification(h.id)}
+                  >
+                    Enviar a Nairoby
+                  </button>
+                </div>
+              )}
             </div>
           ))}
         </div>

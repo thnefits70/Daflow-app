@@ -389,18 +389,21 @@ model User {
   payrollMessagesSent                          PayrollMessage[]                   @relation("PayrollMessageSender")
 
   payrollProfile              PayrollProfile?
-  overtimeEntriesOwn          OvertimeEntry[]       @relation("OvertimeEntryEmployee")
-  overtimeEntriesEntered      OvertimeEntry[]       @relation("OvertimeEntryEnteredBy")
-  overtimeEntriesApproved     OvertimeEntry[]       @relation("OvertimeEntryApprovedBy")
-  overtimeEntriesRejected     OvertimeEntry[]       @relation("OvertimeEntryRejectedBy")
-  payrollSettingsUpdated      PayrollSettings[]     @relation("PayrollSettingsUpdatedBy")
+  overtimeEntriesOwn          OvertimeEntry[]        @relation("OvertimeEntryEmployee")
+  overtimeEntriesEntered      OvertimeEntry[]        @relation("OvertimeEntryEnteredBy")
+  overtimeEntriesApproved     OvertimeEntry[]        @relation("OvertimeEntryApprovedBy")
+  overtimeEntriesRejected     OvertimeEntry[]        @relation("OvertimeEntryRejectedBy")
+  payrollSettingsUpdated      PayrollSettings[]      @relation("PayrollSettingsUpdatedBy")
   lunchPaymentSettingsUpdated LunchPaymentSettings[] @relation("LunchPaymentSettingsUpdatedBy")
-  payrollPeriodsGenerated     PayrollPeriod[]       @relation("PayrollPeriodGeneratedBy")
-  payrollPeriodsPublished     PayrollPeriod[]       @relation("PayrollPeriodPublishedBy")
-  payrollQuincenaRolesOwn     PayrollQuincenaRole[] @relation("PayrollQuincenaRoleEmployee")
-  payrollQuincenaRolesCreated PayrollQuincenaRole[] @relation("PayrollQuincenaRoleCreatedBy")
-  monthlyLegalRolesOwn        MonthlyLegalRole[]    @relation("MonthlyLegalRoleEmployee")
-  monthlyLegalRolesPublished  MonthlyLegalRole[]    @relation("MonthlyLegalRolePublishedBy")
+  lunchWeeksRegistered        LunchWeekSubmission[]  @relation("LunchWeekRegisteredBy")
+  lunchWeeksInvoiceConfirmed  LunchWeekSubmission[]  @relation("LunchWeekInvoiceConfirmedBy")
+  lunchWeeksVerified          LunchWeekSubmission[]  @relation("LunchWeekVerifiedBy")
+  payrollPeriodsGenerated     PayrollPeriod[]        @relation("PayrollPeriodGeneratedBy")
+  payrollPeriodsPublished     PayrollPeriod[]        @relation("PayrollPeriodPublishedBy")
+  payrollQuincenaRolesOwn     PayrollQuincenaRole[]  @relation("PayrollQuincenaRoleEmployee")
+  payrollQuincenaRolesCreated PayrollQuincenaRole[]  @relation("PayrollQuincenaRoleCreatedBy")
+  monthlyLegalRolesOwn        MonthlyLegalRole[]     @relation("MonthlyLegalRoleEmployee")
+  monthlyLegalRolesPublished  MonthlyLegalRole[]     @relation("MonthlyLegalRolePublishedBy")
 
   commissionTierAmounts         CommissionTierAmount[] @relation("CommissionTierAmountUser")
   commissionTierAmountsProposed CommissionTierAmount[] @relation("CommissionTierAmountProposedBy")
@@ -3087,8 +3090,9 @@ model AdminPaymentPayee {
   createdBy   User?    @relation("AdminPaymentPayeeCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   createdAt   DateTime @default(now())
 
-  bankAccounts AdminPaymentPayeeBankAccount[]
-  requests     AdminPaymentRequest[]
+  bankAccounts         AdminPaymentPayeeBankAccount[]
+  requests             AdminPaymentRequest[]
+  lunchWeekSubmissions LunchWeekSubmission[]
 }
 
 model AdminPaymentPayeeBankAccount {
@@ -3107,7 +3111,8 @@ model AdminPaymentPayeeBankAccount {
   createdBy   User?    @relation("AdminPaymentPayeeBankAccountCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   createdAt   DateTime @default(now())
 
-  requests AdminPaymentRequest[]
+  requests             AdminPaymentRequest[]
+  lunchWeekSubmissions LunchWeekSubmission[]
 
   @@index([payeeId])
 }
@@ -3226,6 +3231,8 @@ model AdminPaymentRequest {
   createdBy   User?    @relation("AdminPaymentRequestCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   createdAt   DateTime @default(now())
 
+  lunchWeekSubmission LunchWeekSubmission?
+
   @@unique([templateId, period])
   @@index([status])
   @@index([type])
@@ -3251,6 +3258,61 @@ model AdminPaymentProof {
   createdAt DateTime @default(now())
 
   @@index([requestId])
+}
+
+// Confirmado 2026-09-08: pedido explícito del usuario — antes de que una
+// semana de almuerzos se convierta en un AdminPaymentRequest pagable (visible
+// al admin), pasa por dos chequeos aparte: (1) Daniel confirma con un clic
+// que la proveedora le avisó que sí envió la factura — no sube ningún
+// archivo, solo informa; (2) Nairoby, ya con eso confirmado, baja ella misma
+// la factura del SRI, la sube acá y la IA lee su monto total y lo cruza
+// contra lo calculado (lunchCount × precio). Recién cuando eso coincide se
+// crea el AdminPaymentRequest real. Modelo aparte (no un status más de
+// AdminPaymentStatus) para que ninguna semana sin verificar aparezca jamás en
+// la bandeja compartida de Pagos administrativos, que hoy no distingue
+// "recién registrada" de "ya lista para pagar" — así el admin nunca ve nada
+// de esto hasta que Nairoby ya la aprobó.
+model LunchWeekSubmission {
+  id String @id @default(cuid())
+
+  weekStart  DateTime
+  weekEnd    DateTime
+  lunchCount Int
+  monto      Float
+
+  payeeId       String?
+  payee         AdminPaymentPayee?            @relation(fields: [payeeId], references: [id], onDelete: SetNull)
+  bankAccountId String?
+  bankAccount   AdminPaymentPayeeBankAccount? @relation(fields: [bankAccountId], references: [id], onDelete: SetNull)
+
+  registeredById String?
+  registeredBy   User?    @relation("LunchWeekRegisteredBy", fields: [registeredById], references: [id], onDelete: SetNull)
+  registeredAt   DateTime @default(now())
+
+  // Clic de Daniel: la proveedora le confirmó (verbalmente) que sí mandó la
+  // factura. Nada de archivo acá.
+  invoiceConfirmedAt   DateTime?
+  invoiceConfirmedById String?
+  invoiceConfirmedBy   User?     @relation("LunchWeekInvoiceConfirmedBy", fields: [invoiceConfirmedById], references: [id], onDelete: SetNull)
+
+  // Clic de Daniel: solo disponible después de invoiceConfirmedAt — pasa la
+  // semana a la bandeja de Nairoby.
+  sentToVerificationAt DateTime?
+
+  // Nairoby: aprueba con un clic tras subir la factura (bajada del SRI) y que
+  // la IA confirme que el monto coincide — ese archivo y el resultado de la
+  // IA quedan en el AdminPaymentRequest creado acá abajo (mismos campos
+  // declarationFileUrl/declarationAiMatch/declarationAiNote que ya usa
+  // cualquier otro pago administrativo), no duplicados en este modelo.
+  verifiedAt   DateTime?
+  verifiedById String?
+  verifiedBy   User?     @relation("LunchWeekVerifiedBy", fields: [verifiedById], references: [id], onDelete: SetNull)
+
+  adminPaymentRequestId String?              @unique
+  adminPaymentRequest   AdminPaymentRequest? @relation(fields: [adminPaymentRequestId], references: [id], onDelete: SetNull)
+
+  @@unique([weekStart, weekEnd])
+  @@index([sentToVerificationAt])
 }
 
 /**
@@ -3856,8 +3918,8 @@ model PersonalPurchaseOrder {
   // comprobante ni doble confirmación admin→Nairoby: el clic de Nairoby en
   // confirm-cash YA es la confirmación (ella es quien recibió la plata), y
   // ese mismo clic acredita el monto a Caja Chica Principal.
-  cashConfirmedAt   DateTime?
-  cashConfirmedById String?
+  cashConfirmedAt      DateTime?
+  cashConfirmedById    String?
   cashPettyCashEntryId String? // movimiento de Caja Chica que generó esta confirmación
 
   items     PersonalPurchaseItem[]

@@ -54,8 +54,23 @@ type RequestDTO = {
   confirmedBy: { name: string } | null;
 };
 
+type LunchQueueDTO = {
+  id: string;
+  weekStart: string;
+  weekEnd: string;
+  lunchCount: number;
+  monto: number;
+  sentToVerificationAt: string;
+  payee: { id: string; name: string } | null;
+  bankAccount: PayeeBankAccountDTO | null;
+  registeredBy: { name: string } | null;
+};
+
 function money(n: number) {
   return `$${n.toLocaleString("es-MX", { minimumFractionDigits: 2 })}`;
+}
+function dateEs(iso: string) {
+  return new Date(`${iso}T00:00:00`).toLocaleDateString("es-EC", { day: "numeric", month: "long", year: "numeric" });
 }
 function pad2(n: number) {
   return String(n).padStart(2, "0");
@@ -169,6 +184,15 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
   const [lunchPriceDraft, setLunchPriceDraft] = useState("");
   const [savingLunchPrice, setSavingLunchPrice] = useState(false);
 
+  const [lunchVerificationQueue, setLunchVerificationQueue] = useState<LunchQueueDTO[]>([]);
+  const [verifyingLunchId, setVerifyingLunchId] = useState<string | null>(null);
+  const [lunchVerifyErr, setLunchVerifyErr] = useState<Record<string, string>>({});
+  const lunchVerifyRowIdRef = useRef<string | null>(null);
+  const { onPaste: onPasteLunchInvoice, onMouseEnter: armLunchInvoicePaste, onMouseLeave: disarmLunchInvoicePaste } = usePasteFile((file) => {
+    const id = lunchVerifyRowIdRef.current;
+    if (id) uploadAndVerifyLunch(id, file);
+  });
+
   function loadLunchSettings() {
     fetch("/api/lunch-payments/settings")
       .then((r) => (r.ok ? r.json() : null))
@@ -195,13 +219,14 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
 
   function load() {
     fetch("/api/admin-payments")
-      .then((r) => (r.ok ? r.json() : { requests: [], templates: [], pendingThisMonth: [], payees: [], eligibleOrders: [] }))
+      .then((r) => (r.ok ? r.json() : { requests: [], templates: [], pendingThisMonth: [], payees: [], eligibleOrders: [], lunchVerificationQueue: [] }))
       .then((data) => {
         setRequests(data.requests);
         setTemplates(data.templates);
         setPendingThisMonth(data.pendingThisMonth);
         setPayees(data.payees ?? []);
         setEligibleOrders(data.eligibleOrders ?? []);
+        setLunchVerificationQueue(data.lunchVerificationQueue ?? []);
       })
       .catch(() => {
         setRequests([]);
@@ -209,6 +234,7 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
         setPendingThisMonth([]);
         setPayees([]);
         setEligibleOrders([]);
+        setLunchVerificationQueue([]);
       });
   }
   useEffect(load, []);
@@ -340,6 +366,35 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
     const data = await res.json().catch(() => null);
     if (!res.ok) {
       setErr(data?.error ?? "No se pudo verificar el comprobante.");
+      return;
+    }
+    load();
+    router.refresh();
+  }
+
+  // Confirmado 2026-09-08: pedido explícito del usuario — Nairoby baja ella
+  // misma la factura del SRI y la sube acá; la IA la cruza contra lo
+  // calculado (cantidad × precio) y si no coincide, bloquea (no crea nada) y
+  // deja el error puesto para que reintente con otro archivo.
+  async function uploadAndVerifyLunch(id: string, file: File) {
+    setLunchVerifyErr((cur) => ({ ...cur, [id]: "" }));
+    setVerifyingLunchId(id);
+    const compressed = await compressImage(file);
+    const uploaded = await uploadFile(compressed, "admin-payments");
+    if (!uploaded.ok) {
+      setVerifyingLunchId(null);
+      setLunchVerifyErr((cur) => ({ ...cur, [id]: uploaded.error }));
+      return;
+    }
+    const res = await fetch(`/api/lunch-payments/${id}/verify`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ invoiceFileUrl: uploaded.url, invoiceFileName: uploaded.name }),
+    });
+    setVerifyingLunchId(null);
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      setLunchVerifyErr((cur) => ({ ...cur, [id]: data?.error ?? "No se pudo verificar la factura." }));
       return;
     }
     load();
@@ -630,6 +685,55 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
               </button>
             </>
           )}
+        </div>
+      )}
+
+      {/* Confirmado 2026-09-08: pedido explícito del usuario — solo Nairoby
+          (o admin) ve esto. El admin NUNCA debe ver una semana de almuerzos
+          hasta que se verifique acá y se convierta recién en una solicitud
+          de pago normal más abajo. */}
+      {!isAdmin && lunchVerificationQueue.length > 0 && (
+        <div className="mb-4">
+          <div className="text-[11px] font-semibold uppercase tracking-wide text-steel mb-2">🍽️ Almuerzos por verificar</div>
+          <div className="flex flex-col gap-2">
+            {lunchVerificationQueue.map((q) => (
+              <div key={q.id} className="bg-surface border border-rule rounded-md px-3 py-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[12.5px] font-semibold">{dateEs(q.weekStart.slice(0, 10))} al {dateEs(q.weekEnd.slice(0, 10))}</span>
+                  <span className="text-[12.5px] font-semibold shrink-0">{money(q.monto)}</span>
+                </div>
+                <div className="text-[11px] text-steel mt-1 mb-2">
+                  {q.lunchCount} almuerzos · registrado por {actorName(q.registeredBy?.name)} · enviado {formatDateTime(q.sentToVerificationAt)}
+                </div>
+                <div className="text-[11px] text-steel mb-2">Baja la factura del SRI y súbela acá — la IA la lee y cruza el monto contra lo calculado.</div>
+
+                {verifyingLunchId === q.id ? (
+                  <div className="flex items-center gap-2 text-[12px] text-steel mb-1">
+                    <span className="w-3.5 h-3.5 rounded-full border-2 border-rule border-t-teal animate-spin" /> Verificando con IA…
+                  </div>
+                ) : (
+                  <div>
+                    <label
+                      tabIndex={0}
+                      onPaste={onPasteLunchInvoice}
+                      onMouseEnter={() => { lunchVerifyRowIdRef.current = q.id; armLunchInvoicePaste(); }}
+                      onMouseLeave={() => { lunchVerifyRowIdRef.current = null; disarmLunchInvoicePaste(); }}
+                      className="flex items-center gap-1.5 border-[1.5px] border-dashed border-rule rounded px-3 py-2 text-[12px] text-steel cursor-pointer hover:border-teal focus:border-teal focus:outline-none w-fit"
+                    >
+                      <Upload size={13} /> Subir o pegar la factura (Ctrl+V)
+                      <input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && uploadAndVerifyLunch(q.id, e.target.files[0])} />
+                    </label>
+                    <label className="flex items-center gap-1 mt-1 text-[10.5px] text-steel cursor-pointer hover:text-teal w-fit">
+                      ¿Es un PDF? Subir documento
+                      <input type="file" accept="application/pdf" className="hidden" onChange={(e) => e.target.files?.[0] && uploadAndVerifyLunch(q.id, e.target.files[0])} />
+                    </label>
+                  </div>
+                )}
+
+                {lunchVerifyErr[q.id] && <div className="text-red text-[11.5px] mt-1.5">{lunchVerifyErr[q.id]}</div>}
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

@@ -27,17 +27,32 @@ export type LunchDefaultsDTO = {
 // Confirmado 2026-09-08: para no hacer que Daniel vuelva a elegir a quién
 // pagar cada semana (siempre es el mismo restaurante) ni calcule a mano cuál
 // semana sigue — se sugiere en base al último registro, pero queda editable.
+// Se lee de LunchWeekSubmission (la etapa de registro) y no de
+// AdminPaymentRequest, porque una semana recién registrada todavía no tiene
+// AdminPaymentRequest — recién se crea cuando Nairoby la verifica.
 export async function getLunchDefaults(): Promise<LunchDefaultsDTO> {
-  const last = await prisma.adminPaymentRequest.findFirst({
-    where: { lunchWeekEnd: { not: null } },
-    orderBy: { lunchWeekEnd: "desc" },
-    select: { payeeId: true, bankAccountId: true, lunchWeekEnd: true },
+  const last = await prisma.lunchWeekSubmission.findFirst({
+    orderBy: { weekEnd: "desc" },
+    select: { payeeId: true, bankAccountId: true, weekEnd: true },
   });
   let suggestedWeekStart: string | null = null;
-  if (last?.lunchWeekEnd) {
-    const next = new Date(last.lunchWeekEnd);
+  if (last?.weekEnd) {
+    const next = new Date(last.weekEnd);
     next.setUTCDate(next.getUTCDate() + 1);
     suggestedWeekStart = next.toISOString().slice(0, 10);
   }
   return { payeeId: last?.payeeId ?? null, bankAccountId: last?.bankAccountId ?? null, suggestedWeekStart };
+}
+
+const MONTH_NAMES_ES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
+function formatDateEs(iso: string): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  return `${d} de ${MONTH_NAMES_ES[m - 1]} del ${y}`;
+}
+
+// Compartido entre el registro (Daniel) y la verificación (Nairoby) — el
+// motivo que termina en el AdminPaymentRequest debe ser idéntico al que se
+// mostró cuando se registró la semana.
+export function formatLunchMotivo(weekStartIso: string, weekEndIso: string, lunchCount: number, pricePerLunch: number): string {
+  return `Almuerzos semana del ${formatDateEs(weekStartIso)} al ${formatDateEs(weekEndIso)} — ${lunchCount} almuerzos x $${pricePerLunch.toFixed(2)}`;
 }
