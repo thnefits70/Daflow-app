@@ -17,7 +17,7 @@ import { formatDateTime } from "@/lib/formatDateTime";
 type PaymentType = "RECURRING" | "VARIABLE";
 type Status = "PENDING_PAYMENT" | "PAID" | "CONFIRMED";
 
-type TemplateDTO = { id: string; motivo: string; isActive: boolean };
+type TemplateDTO = { id: string; motivo: string; isActive: boolean; numeroContrato: string | null };
 
 type RequestDTO = {
   id: string;
@@ -45,7 +45,7 @@ type RequestDTO = {
   paidAt: string | null;
   confirmedAt: string | null;
   createdAt: string;
-  template: { id: string; motivo: string } | null;
+  template: { id: string; motivo: string; numeroContrato: string | null } | null;
   payee: { id: string; name: string } | null;
   bankAccount: PayeeBankAccountDTO | null;
   linkedGroupId: string | null;
@@ -72,6 +72,12 @@ function money(n: number) {
 }
 function isIessMotivo(motivo: string) {
   return motivo.toLowerCase().includes("iess");
+}
+// Confirmado 2026-09-08: pedido explícito del usuario — recurrentes de luz
+// (ej. "Luz de la bodega") se identifican por el número de contrato del
+// medidor, que CNEL exige para cualquier pago.
+function isElectricityMotivo(motivo: string) {
+  return motivo.toLowerCase().includes("luz");
 }
 // Confirmado 2026-09-08: compara el código que escribió Nairoby contra el
 // N° que la IA ya lee de cada comprobante bancario — normalizado (sin
@@ -184,6 +190,13 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
   const [iessDraft, setIessDraft] = useState("");
   const [savingIessId, setSavingIessId] = useState<string | null>(null);
   const [copiedIessId, setCopiedIessId] = useState<string | null>(null);
+
+  // Agregar el número de contrato del medidor (recurrentes de luz) — vive en
+  // la plantilla (mismo valor toda la serie), y a diferencia del código del
+  // IESS, una vez guardado queda bloqueado: no se ofrece botón de editar.
+  const [editingContratoTemplateId, setEditingContratoTemplateId] = useState<string | null>(null);
+  const [contratoDraft, setContratoDraft] = useState("");
+  const [savingContratoTemplateId, setSavingContratoTemplateId] = useState<string | null>(null);
 
   // Corregir el beneficiario/cuenta bancaria de una solicitud ya enviada
   // (ej. se envió sin elegir cuenta) — mismo patrón que editingMotivoId,
@@ -601,6 +614,34 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
       return;
     }
     setEditingIessId(null);
+    load();
+  }
+
+  function startEditContrato(templateId: string) {
+    setEditingContratoTemplateId(templateId);
+    setContratoDraft("");
+    setErr("");
+  }
+
+  async function saveContrato(templateId: string) {
+    if (!contratoDraft.trim()) {
+      setErr("Escribe el número de contrato.");
+      return;
+    }
+    setErr("");
+    setSavingContratoTemplateId(templateId);
+    const res = await fetch(`/api/admin-payments/templates/${templateId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ numeroContrato: contratoDraft.trim() }),
+    });
+    setSavingContratoTemplateId(null);
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      setErr(data?.error ?? "No se pudo guardar el número de contrato.");
+      return;
+    }
+    setEditingContratoTemplateId(null);
     load();
   }
 
@@ -1225,6 +1266,53 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
                 >
                   <Pencil size={12} /> Agregar código de pago del IESS
                 </button>
+              ) : null}
+
+              {r.template && isElectricityMotivo(r.motivo) ? (
+                editingContratoTemplateId === r.template.id ? (
+                  <div className="bg-cloud border border-rule rounded-md px-3 py-2.5 mb-2.5">
+                    <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-steel mb-1.5">
+                      Número de contrato (medidor CNEL) <span className="text-steel-dim normal-case">— queda bloqueado tras guardarlo</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        type="text"
+                        autoFocus
+                        className="flex-1 rounded border border-teal px-2 py-1.5 text-[12.5px] font-mono"
+                        value={contratoDraft}
+                        onChange={(e) => setContratoDraft(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") saveContrato(r.template!.id);
+                          if (e.key === "Escape") setEditingContratoTemplateId(null);
+                        }}
+                      />
+                      <button
+                        type="button"
+                        disabled={savingContratoTemplateId === r.template.id}
+                        className="rounded border border-teal bg-teal px-2.5 py-1.5 text-[11px] font-semibold text-white cursor-pointer disabled:opacity-60"
+                        onClick={() => saveContrato(r.template!.id)}
+                      >
+                        {savingContratoTemplateId === r.template.id ? "Guardando…" : "Guardar"}
+                      </button>
+                      <button type="button" className="text-steel text-[11px] cursor-pointer" onClick={() => setEditingContratoTemplateId(null)}>Cancelar</button>
+                    </div>
+                  </div>
+                ) : r.template.numeroContrato ? (
+                  <div className="bg-teal/10 border border-teal/30 rounded-md px-3 py-2.5 mb-2.5">
+                    <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-steel mb-0.5">
+                      <Lock size={11} /> Número de contrato (medidor CNEL)
+                    </div>
+                    <div className="font-mono text-[13px] font-bold break-all">{r.template.numeroContrato}</div>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    className="flex items-center gap-1.5 text-[11.5px] text-blue font-semibold cursor-pointer mb-2.5"
+                    onClick={() => startEditContrato(r.template!.id)}
+                  >
+                    <Pencil size={12} /> Agregar número de contrato del medidor
+                  </button>
+                )
               ) : null}
 
               {editingPayeeId === r.id ? (

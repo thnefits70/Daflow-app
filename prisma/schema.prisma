@@ -3129,6 +3129,16 @@ model AdminPaymentTemplate {
   createdBy   User?    @relation("AdminPaymentTemplateCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   createdAt   DateTime @default(now())
 
+  // Confirmado 2026-09-08: pedido explícito del usuario — para recurrentes de
+  // luz (CNEL), el pago se identifica por el número de contrato del medidor,
+  // que no cambia mes a mes (a diferencia del código del IESS). Vive en la
+  // plantilla, no en cada AdminPaymentRequest, porque es el mismo para toda
+  // la serie. Nairoby lo escribe una sola vez; el backend (PATCH
+  // /api/admin-payments/templates/[id]) rechaza sobrescribirlo si ya tiene
+  // valor — solo se puede corregir borrándolo directo en la base, a
+  // propósito, para que no se edite por error el identificador del medidor.
+  numeroContrato String?
+
   requests AdminPaymentRequest[]
 }
 

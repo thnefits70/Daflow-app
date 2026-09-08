@@ -17,7 +17,7 @@ export async function GET() {
     prisma.adminPaymentRequest.findMany({
       orderBy: { createdAt: "desc" },
       include: {
-        template: { select: { id: true, motivo: true } },
+        template: { select: { id: true, motivo: true, numeroContrato: true } },
         payee: { select: { id: true, name: true } },
         bankAccount: { select: bankAccountSelect },
         createdBy: { select: { name: true } },

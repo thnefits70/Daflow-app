@@ -12,13 +12,14 @@ export type AdminPaymentTemplateDTO = {
   id: string;
   motivo: string;
   isActive: boolean;
+  numeroContrato: string | null;
 };
 
 export async function getAdminPaymentTemplates(): Promise<AdminPaymentTemplateDTO[]> {
   return prisma.adminPaymentTemplate.findMany({
     where: { isActive: true },
     orderBy: { motivo: "asc" },
-    select: { id: true, motivo: true, isActive: true },
+    select: { id: true, motivo: true, isActive: true, numeroContrato: true },
   });
 }
 
@@ -30,9 +31,11 @@ export async function getAdminPaymentTemplatesPendingThisMonth(): Promise<AdminP
   const period = currentPeriod();
   const templates = await prisma.adminPaymentTemplate.findMany({
     where: { isActive: true },
-    select: { id: true, motivo: true, isActive: true, requests: { where: { period }, select: { id: true } } },
+    select: { id: true, motivo: true, isActive: true, numeroContrato: true, requests: { where: { period }, select: { id: true } } },
   });
-  return templates.filter((t) => t.requests.length === 0).map((t) => ({ id: t.id, motivo: t.motivo, isActive: t.isActive }));
+  return templates
+    .filter((t) => t.requests.length === 0)
+    .map((t) => ({ id: t.id, motivo: t.motivo, isActive: t.isActive, numeroContrato: t.numeroContrato }));
 }
 
 export type AdminPaymentPayeeBankAccountDTO = {
