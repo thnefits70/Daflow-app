@@ -8,20 +8,23 @@ import { sendPushToOwner } from "@/lib/webPush";
 
 const schema = z.object({
   items: z.array(z.object({ itemId: z.string().min(1), costUnitPrice: z.number().nonnegative(), dropiUnitPrice: z.number().nonnegative() })).min(1),
-  installments: z.number().int().min(1),
 });
 
 // Confirmado 2026-08-18/20: Nairoby digita el precio en dólares acá —
 // sin ningún catálogo, sin ningún valor precargado. Ya se sabe (desde que
 // Daniel confirmó) cuántas unidades de cada producto van a costo y cuántas
-// a Dropi (unitPriceModes) — con eso se arma el total. Cuotas libres, sin
-// tope (se guardan ya, por si el colaborador termina eligiendo rol).
+// a Dropi (unitPriceModes) — con eso se arma el total.
 // Exclusivo de Nairoby/FIN — pedido explícito del usuario, el admin puede
 // ver la cola pero no poner precio. Esto YA NO activa el descuento
 // directo — deja la orden esperando que el colaborador elija cómo pagar
 // (choose-payment-method), con 3 días hábiles de plazo si elige
 // transferencia. Es la única vez que el colaborador se entera del monto
 // (por push).
+// Confirmado 2026-09-08 (pedido explícito del usuario): las cuotas ya NO
+// se deciden acá — Nairoby solo pone precio. El colaborador las elige
+// recién al escoger "Descuento en rol" (ver choose-payment-method), con
+// tope según el total (maxInstallmentsForAmount). installments queda en
+// su default (1) hasta entonces.
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   if (!(await canSetPersonalPurchasePrice())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
@@ -59,7 +62,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     data: {
       status: "PENDING_PAYMENT_METHOD",
       totalAmount,
-      installments: parsed.data.installments,
       transferDeadlineAt: addBusinessDays(new Date(), 3),
       financeConfirmedAt: new Date(),
       financeConfirmedById: session!.user.id,

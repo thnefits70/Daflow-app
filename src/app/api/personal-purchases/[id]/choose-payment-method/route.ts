@@ -5,8 +5,9 @@ import { auth } from "@/auth";
 import { resolveFirstPayoutMonth } from "@/lib/payroll";
 import { addMonthsToMonthStr } from "@/lib/payrollCalc";
 import { sendPushToOwner } from "@/lib/webPush";
+import { maxInstallmentsForAmount } from "@/lib/personalPurchases";
 
-const schema = z.object({ method: z.enum(["PAYROLL", "TRANSFER", "CASH"]) });
+const schema = z.object({ method: z.enum(["PAYROLL", "TRANSFER", "CASH"]), installments: z.number().int().min(1).max(3).optional() });
 
 // Confirmado 2026-08-20: recién acá el colaborador elige cómo paga, una vez
 // que ya sabe el total. PAYROLL activa el descuento real (mismo cálculo que
@@ -49,15 +50,26 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json(updated);
   }
 
+  // Confirmado 2026-09-08 (pedido explícito del usuario): recién acá el
+  // colaborador elige cuántas cuotas — antes las ponía Nairoby sin tope.
+  // Con total <= $10 no hay opción real, siempre 1. Con total > $10 puede
+  // pedir hasta maxInstallmentsForAmount (3), sin importar qué tan grande
+  // sea el total.
+  const maxInstallments = maxInstallmentsForAmount(order.totalAmount ?? 0);
+  const installments = maxInstallments > 1 ? (parsed.data.installments ?? 1) : 1;
+  if (installments < 1 || installments > maxInstallments) {
+    return NextResponse.json({ error: `Este total admite hasta ${maxInstallments} cuota(s).` }, { status: 400 });
+  }
+
   const naturalFirstMonth = addMonthsToMonthStr(order.eventMonth, 1);
   const firstPayoutMonth = await resolveFirstPayoutMonth(naturalFirstMonth);
 
   const updated = await prisma.personalPurchaseOrder.update({
     where: { id },
-    data: { paymentMethod: "PAYROLL", status: "APPROVED", firstPayoutMonth },
+    data: { paymentMethod: "PAYROLL", status: "APPROVED", firstPayoutMonth, installments },
   });
 
-  const cuotaText = order.installments > 1 ? ` en ${order.installments} cuotas` : "";
+  const cuotaText = installments > 1 ? ` en ${installments} cuotas` : "";
   await sendPushToOwner(session.user.id, {
     title: "✅ Tu compra personal quedó en rol",
     body: `Total $${order.totalAmount?.toFixed(2)}${cuotaText} — se va a descontar de tu rol a partir de ${firstPayoutMonth}.`,

@@ -28,13 +28,14 @@ function money(n: number) {
 // Confirmado 2026-08-18/20: Nairoby digita el precio en dólares acá — sin
 // ningún catálogo, sin nada precargado. Ya se sabe (unitPriceModes,
 // calculado al confirmar Daniel) cuántas unidades de cada producto van a
-// costo y cuántas a Dropi. Cuotas libres, sin tope, decide ella. Pedido
-// explícito del usuario: el admin ve esta misma cola pero sin poder tocar
-// nada — ni precio, ni rechazo, ni cuotas.
+// costo y cuántas a Dropi. Pedido explícito del usuario: el admin ve esta
+// misma cola pero sin poder tocar nada — ni precio, ni rechazo.
+// Confirmado 2026-09-08 (pedido explícito del usuario): las cuotas ya NO
+// se deciden acá — las elige el colaborador recién al escoger "Descuento
+// en rol" (con tope según el total). Nairoby solo pone precio.
 export function PersonalPurchasesFinancePanel({ isAdmin = false }: { isAdmin?: boolean }) {
   const [orders, setOrders] = useState<Order[] | null>(null);
   const [prices, setPrices] = useState<Record<string, { cost: string; dropi: string }>>({});
-  const [installments, setInstallments] = useState<Record<string, string>>({});
   const [rejecting, setRejecting] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState("");
   const [busy, setBusy] = useState(false);
@@ -71,13 +72,12 @@ export function PersonalPurchasesFinancePanel({ isAdmin = false }: { isAdmin?: b
       const p = priceFor(it.id);
       return { itemId: it.id, costUnitPrice: Number(p.cost || 0), dropiUnitPrice: Number(p.dropi || 0) };
     });
-    const installmentsN = Number(installments[order.id] || 1);
     setBusy(true);
     setErr((e) => ({ ...e, [order.id]: "" }));
     const res = await fetch(`/api/personal-purchases/${order.id}/confirm-finance`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ items, installments: installmentsN }),
+      body: JSON.stringify({ items }),
     });
     setBusy(false);
     const data = await res.json().catch(() => null);
@@ -197,9 +197,6 @@ export function PersonalPurchasesFinancePanel({ isAdmin = false }: { isAdmin?: b
                   </div>
                   <div className="flex items-center gap-2 mt-3 flex-wrap">
                     {orderTotal > 0 && <span className="text-[13px] font-bold">Total: {money(orderTotal)}</span>}
-                    <label className="text-[11px] text-steel ml-2">Cuotas</label>
-                    <input className="text-[12px] rounded border border-rule bg-cloud px-2 py-1 w-16" type="number" min={1}
-                      value={installments[o.id] ?? "1"} onChange={(e) => setInstallments((s) => ({ ...s, [o.id]: e.target.value }))} />
                   </div>
                   {err[o.id] && <div className="text-red text-[11.5px] mt-1.5">{err[o.id]}</div>}
 

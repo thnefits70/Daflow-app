@@ -26,6 +26,19 @@ export type BuyerRelation = "SELF" | "MINOR_CHILD" | "OTHER_FAMILY";
 export type UnitDeclaration = { relation: BuyerRelation; note?: string };
 export type PriceMode = "COST" | "DROPI";
 
+// Confirmado 2026-09-08 (pedido explícito del usuario): antes Nairoby
+// definía las cuotas al cerrar el precio, sin tope. Ahora las elige el
+// colaborador recién al escoger "Descuento en rol" — con un total de $10 o
+// menos no hay opción (1 sola cuota, no vale la pena partirlo), con más de
+// $10 puede elegir hasta MAX_INSTALLMENTS, sin importar qué tan grande sea
+// el total (una compra de $60 sigue topando en 3 cuotas).
+export const MAX_INSTALLMENTS = 3;
+const SMALL_PURCHASE_INSTALLMENT_THRESHOLD = 10;
+
+export function maxInstallmentsForAmount(totalAmount: number): number {
+  return totalAmount > SMALL_PURCHASE_INSTALLMENT_THRESHOLD ? MAX_INSTALLMENTS : 1;
+}
+
 function monthsSince(date: Date, now: Date): number {
   return (now.getUTCFullYear() - date.getUTCFullYear()) * 12 + (now.getUTCMonth() - date.getUTCMonth());
 }

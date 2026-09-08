@@ -3890,7 +3890,14 @@ model PersonalPurchaseOrder {
   pickedUpApprovedById String?
 
   eventMonth   String // "YYYY-MM" — mes en que se hizo la compra
-  installments Int    @default(1) // libre, sin tope — lo decide Nairoby
+  // Confirmado 2026-09-08 (pedido explícito del usuario): antes lo decidía
+  // Nairoby sin tope al cerrar el precio. Ahora lo decide el colaborador
+  // recién al elegir "Descuento en rol" (choose-payment-method) — con
+  // totalAmount<=$10 no hay opción, siempre 1 cuota; con totalAmount>$10
+  // puede elegir hasta MAX_INSTALLMENTS (3), sin importar qué tan grande
+  // sea el total. Ver personalPurchases.ts maxInstallmentsForAmount(). Para
+  // TRANSFER/CASH este campo queda en su default (1) y nunca se usa.
+  installments Int    @default(1)
   totalAmount  Float? // suma de todos los ítems, se llena al confirmar Nairoby
 
   // Confirmado 2026-08-20: segunda forma de pago (transferencia), además del

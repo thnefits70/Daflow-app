@@ -174,6 +174,7 @@ export function PersonalPurchasesPanel() {
   const [bankAccount, setBankAccount] = useState<CompanyBankAccount>(null);
   const [payBusy, setPayBusy] = useState<Record<string, boolean>>({});
   const [armedMethod, setArmedMethod] = useState<Record<string, "PAYROLL" | "TRANSFER" | "CASH" | "CANCEL_TO_PAYROLL" | undefined>>({});
+  const [installmentsChoice, setInstallmentsChoice] = useState<Record<string, number>>({});
   const armTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   function loadOrders() {
@@ -184,12 +185,16 @@ export function PersonalPurchasesPanel() {
     fetch("/api/company-bank-account").then((r) => (r.ok ? r.json() : null)).then(setBankAccount);
   }, []);
 
+  // Confirmado 2026-09-08 (pedido explícito del usuario): las cuotas ya no
+  // las pone Nairoby — las elige el colaborador acá, recién al mandar
+  // "Descuento en rol". Con $10 o menos no hay opción (1 sola cuota); con
+  // más de $10 puede pedir hasta 3, sin importar qué tan grande sea el total.
   async function choosePaymentMethod(orderId: string, method: "PAYROLL" | "TRANSFER" | "CASH") {
     setPayBusy((b) => ({ ...b, [orderId]: true }));
     await fetch(`/api/personal-purchases/${orderId}/choose-payment-method`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ method }),
+      body: JSON.stringify({ method, installments: installmentsChoice[orderId] ?? 1 }),
     });
     setPayBusy((b) => ({ ...b, [orderId]: false }));
     loadOrders();
@@ -201,7 +206,11 @@ export function PersonalPurchasesPanel() {
   // elegir el método por primera vez.
   async function cancelTransfer(orderId: string) {
     setPayBusy((b) => ({ ...b, [orderId]: true }));
-    await fetch(`/api/personal-purchases/${orderId}/cancel-transfer`, { method: "POST" });
+    await fetch(`/api/personal-purchases/${orderId}/cancel-transfer`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ installments: installmentsChoice[orderId] ?? 1 }),
+    });
     setPayBusy((b) => ({ ...b, [orderId]: false }));
     loadOrders();
   }
@@ -464,6 +473,24 @@ export function PersonalPurchasesPanel() {
                     {o.transferDeadlineAt && (
                       <div className="text-[10.5px] text-steel-dim mb-1.5">Si elegís transferencia, tenés hasta el {deadlineText(o.transferDeadlineAt)}.</div>
                     )}
+                    {o.totalAmount != null && o.totalAmount > 10 && (
+                      <div className="mb-2">
+                        <div className="text-[10.5px] text-steel-dim mb-1">¿En cuántas cuotas? (solo aplica si elegís descuento en rol)</div>
+                        <div className="flex gap-1.5">
+                          {[1, 2, 3].map((n) => (
+                            <button
+                              key={n}
+                              type="button"
+                              disabled={isBusy}
+                              className={`text-[11.5px] font-bold rounded-md px-2.5 py-1 border-[1.5px] cursor-pointer ${(installmentsChoice[o.id] ?? 1) === n ? "border-ink bg-ink text-bg" : "border-rule text-steel"}`}
+                              onClick={() => setInstallmentsChoice((s) => ({ ...s, [o.id]: n }))}
+                            >
+                              {n === 1 ? "1 cuota" : `${n} cuotas`}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                     <div className="flex gap-2">
                       <button
                         type="button"
@@ -521,6 +548,24 @@ export function PersonalPurchasesPanel() {
                     )}
                     <TransferProofUploader orderId={o.id} onSent={loadOrders} />
                     <div className="mt-2.5 pt-2.5 border-t border-rule">
+                      {o.totalAmount != null && o.totalAmount > 10 && (
+                        <div className="mb-2">
+                          <div className="text-[10.5px] text-steel-dim mb-1">¿En cuántas cuotas? (solo aplica si pasás a descuento en rol)</div>
+                          <div className="flex gap-1.5">
+                            {[1, 2, 3].map((n) => (
+                              <button
+                                key={n}
+                                type="button"
+                                disabled={isBusy}
+                                className={`text-[11.5px] font-bold rounded-md px-2.5 py-1 border-[1.5px] cursor-pointer ${(installmentsChoice[o.id] ?? 1) === n ? "border-ink bg-ink text-bg" : "border-rule text-steel"}`}
+                                onClick={() => setInstallmentsChoice((s) => ({ ...s, [o.id]: n }))}
+                              >
+                                {n === 1 ? "1 cuota" : `${n} cuotas`}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                       <button
                         type="button"
                         disabled={isBusy}
