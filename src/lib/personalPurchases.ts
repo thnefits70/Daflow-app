@@ -30,7 +30,14 @@ function monthsSince(date: Date, now: Date): number {
   return (now.getUTCFullYear() - date.getUTCFullYear()) * 12 + (now.getUTCMonth() - date.getUTCMonth());
 }
 
-async function costCooldownEligible(employeeId: string, confirmedProductName: string, excludeItemId: string | null): Promise<boolean> {
+export type CostCooldownStatus = { eligible: boolean; lastCostAt: Date | null; availableAgainAt: Date | null };
+
+// Confirmado 2026-09-08 (pedido explícito del usuario): Daniel/Nairoby no
+// tenían forma de saber POR QUÉ un producto le salía a Dropi a alguien que
+// esperaba costo — el cálculo era silencioso. Este status expone la fecha
+// de la última compra a costo y cuándo se vuelve a habilitar, para
+// mostrarlo como aviso en la pantalla de confirmación de bodega.
+export async function getCostCooldownStatus(employeeId: string, confirmedProductName: string, excludeItemId: string | null = null): Promise<CostCooldownStatus> {
   const lastCostItem = await prisma.personalPurchaseItem.findFirst({
     where: {
       confirmedProductName,
@@ -41,8 +48,15 @@ async function costCooldownEligible(employeeId: string, confirmedProductName: st
     orderBy: { createdAt: "desc" },
     select: { createdAt: true },
   });
-  if (!lastCostItem) return true;
-  return monthsSince(lastCostItem.createdAt, new Date()) >= COOLDOWN_MONTHS;
+  if (!lastCostItem) return { eligible: true, lastCostAt: null, availableAgainAt: null };
+  const eligible = monthsSince(lastCostItem.createdAt, new Date()) >= COOLDOWN_MONTHS;
+  const availableAgainAt = new Date(lastCostItem.createdAt);
+  availableAgainAt.setUTCMonth(availableAgainAt.getUTCMonth() + COOLDOWN_MONTHS);
+  return { eligible, lastCostAt: lastCostItem.createdAt, availableAgainAt };
+}
+
+async function costCooldownEligible(employeeId: string, confirmedProductName: string, excludeItemId: string | null): Promise<boolean> {
+  return (await getCostCooldownStatus(employeeId, confirmedProductName, excludeItemId)).eligible;
 }
 
 async function isComboJustCode(justCode: string | null): Promise<boolean> {

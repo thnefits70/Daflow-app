@@ -22,8 +22,14 @@ type Order = {
 
 const RELATION_LABEL: Record<string, string> = { SELF: "él/ella mismo/a", MINOR_CHILD: "hijo/a menor", OTHER_FAMILY: "otra persona" };
 
+type CooldownStatus = { eligible: boolean; lastCostAt: string | null; availableAgainAt: string | null };
+
 function formatDateTime(iso: string) {
   return new Date(iso).toLocaleString("es-EC", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+}
+
+function formatDateOnly(iso: string) {
+  return new Date(iso).toLocaleDateString("es-EC", { day: "2-digit", month: "short", year: "numeric" });
 }
 
 function formatGapMinutes(diffMin: number) {
@@ -62,6 +68,7 @@ function findDuplicateGap(order: Order, item: Item, orders: Order[]): string | n
 export function PersonalPurchasesInventoryPanel() {
   const [orders, setOrders] = useState<Order[] | null>(null);
   const [confirmed, setConfirmed] = useState<Record<string, MatchCatalogItem | null>>({});
+  const [cooldowns, setCooldowns] = useState<Record<string, CooldownStatus | null>>({});
   const [rejecting, setRejecting] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState("");
   const [busy, setBusy] = useState(false);
@@ -78,6 +85,28 @@ export function PersonalPurchasesInventoryPanel() {
     });
   }
   useEffect(load, []);
+
+  // Confirmado 2026-09-08 (pedido explícito del usuario): apenas se sabe el
+  // producto real (elegido por el colaborador o corregido por Daniel) y ese
+  // producto tiene al menos una unidad declarada "él/ella mismo/a", se
+  // consulta si ya está en enfriamiento (compra a costo en los últimos 6
+  // meses) — antes esto era invisible, Daniel se enteraba recién en la cola
+  // de Nairoby (o ni se enteraba).
+  useEffect(() => {
+    if (!orders) return;
+    for (const o of orders) {
+      for (const it of o.items) {
+        const match = confirmed[it.id];
+        const hasSelfUnit = it.unitDeclarations.some((d) => d.relation === "SELF");
+        if (!match || !hasSelfUnit || cooldowns[it.id] !== undefined) continue;
+        const url = `/api/personal-purchases/cooldown-status?employeeId=${encodeURIComponent(o.employee.id)}&productName=${encodeURIComponent(match.name)}`;
+        fetch(url)
+          .then((r) => (r.ok ? r.json() : null))
+          .then((data: CooldownStatus | null) => setCooldowns((c) => ({ ...c, [it.id]: data })));
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orders, confirmed]);
 
   async function confirm(order: Order) {
     setBusy(true);
@@ -151,7 +180,7 @@ export function PersonalPurchasesInventoryPanel() {
                             <CatalogCode code={confirmed[it.id]!.justCode} />
                             <span className="truncate">{confirmed[it.id]!.name}</span>
                           </div>
-                          <button type="button" className="shrink-0 text-[11px] font-semibold text-blue cursor-pointer" onClick={() => setConfirmed((n) => ({ ...n, [it.id]: null }))}>
+                          <button type="button" className="shrink-0 text-[11px] font-semibold text-blue cursor-pointer" onClick={() => { setConfirmed((n) => ({ ...n, [it.id]: null })); setCooldowns((c) => { const n = { ...c }; delete n[it.id]; return n; }); }}>
                             Cambiar
                           </button>
                         </div>
@@ -161,13 +190,18 @@ export function PersonalPurchasesInventoryPanel() {
                             referencePhotoUrl={it.livePhotoUrl}
                             initialQuery={it.employeeProductName}
                             searchUrl="/api/personal-purchases/catalog-search"
-                            onConfirm={(r: ProductMatchResult) => setConfirmed((n) => ({ ...n, [it.id]: r }))}
+                            onConfirm={(r: ProductMatchResult) => { setConfirmed((n) => ({ ...n, [it.id]: r })); setCooldowns((c) => { const n = { ...c }; delete n[it.id]; return n; }); }}
                           />
                         </div>
                       )}
                       <div className="text-[10.5px] text-steel-dim">
                         {it.unitDeclarations.map((d, i) => `Unidad ${i + 1}: ${RELATION_LABEL[d.relation]}${d.note ? ` (${d.note})` : ""}`).join(" · ")}
                       </div>
+                      {cooldowns[it.id] && !cooldowns[it.id]!.eligible && cooldowns[it.id]!.availableAgainAt && (
+                        <div className="text-[10.5px] font-semibold text-red mt-1">
+                          🥶 {o.employee.name} ya compró este producto a precio de costo el {formatDateOnly(cooldowns[it.id]!.lastCostAt!)} — recién puede volver a costo a partir del {formatDateOnly(cooldowns[it.id]!.availableAgainAt!)}. Por ahora, la unidad de él/ella mismo/a sale a precio Dropi.
+                        </div>
+                      )}
                     </div>
                   </div>
                   );
