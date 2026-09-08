@@ -358,7 +358,7 @@ export function PersonalPurchasesPanel() {
           </div>
 
           <div className="flex flex-col gap-2">
-            <label className="text-[10px] font-semibold uppercase tracking-wide text-steel">¿Para quién es cada unidad? (hasta 3 califican a precio al costo)</label>
+            <label className="text-[10px] font-semibold uppercase tracking-wide text-steel">¿Para quién es cada unidad? (vos mismo/a: 1 unidad a costo · hijo/a menor: hasta 3 · otra persona: siempre Dropi)</label>
             {draft.unitDeclarations.map((d, idx) => (
               <div key={idx} className="flex items-center gap-2 flex-wrap">
                 <span className="text-[11px] text-steel-dim w-14 shrink-0">Unidad {idx + 1}</span>

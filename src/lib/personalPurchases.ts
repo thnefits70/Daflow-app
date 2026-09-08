@@ -2,13 +2,25 @@ import { prisma } from "@/lib/prisma";
 
 // Confirmado 2026-08-18: rediseño completo — el precio al costo por unidad
 // se declara al momento de la compra (hasta 3 unidades por producto). Hijo
-// menor de 18: siempre precio al costo, nunca enfriamiento. Cualquier otra
-// persona (el mismo colaborador, esposa, otro familiar — sin distinción):
-// sujeta a un enfriamiento de 6 meses por (colaborador + producto), usando
-// el nombre ya CORREGIDO por Daniel (confirmedProductName) — recién ahí es
-// confiable para comparar contra compras anteriores.
+// menor de 18: siempre precio al costo, nunca enfriamiento.
+//
+// Confirmado 2026-09-08 (pedido explícito del usuario): se endureció la
+// regla para todos los demás casos.
+// - Producto combo (su justCode ya está registrado como código de combo en
+//   DropiCombo — ver ese modelo: esos IDs se registran a mano en DAFLOW,
+//   nunca vienen del archivo de Just): SIEMPRE precio Dropi, sin
+//   excepción, ni para hijo/a menor.
+// - "Otra persona" (fuera de uno mismo o hijo/a menor): SIEMPRE precio
+//   Dropi, ya no hay chance de costo.
+// - Uno mismo (SELF): precio al costo solo para 1 unidad — si pide más de
+//   una del mismo producto, la unidad extra ya se cobra a Dropi — y solo
+//   si no volvió a comprar ese mismo producto en los últimos 6 meses
+//   (enfriamiento por colaborador + producto, usando el nombre ya
+//   CORREGIDO por Daniel — confirmedProductName — recién ahí es confiable
+//   para comparar contra compras anteriores).
 const COOLDOWN_MONTHS = 6;
 export const MAX_COST_UNITS_PER_ITEM = 3;
+const MAX_SELF_COST_UNITS_PER_ITEM = 1;
 
 export type BuyerRelation = "SELF" | "MINOR_CHILD" | "OTHER_FAMILY";
 export type UnitDeclaration = { relation: BuyerRelation; note?: string };
@@ -32,6 +44,12 @@ async function costCooldownEligible(employeeId: string, confirmedProductName: st
   return monthsSince(lastCostItem.createdAt, new Date()) >= COOLDOWN_MONTHS;
 }
 
+async function isComboJustCode(justCode: string | null): Promise<boolean> {
+  if (!justCode) return false;
+  const combo = await prisma.dropiCombo.findUnique({ where: { code: justCode }, select: { id: true } });
+  return !!combo;
+}
+
 // Se calcula UNA SOLA VEZ, al momento en que Daniel confirma el pedido (ya
 // con el nombre normalizado) — el resultado queda guardado en
 // PersonalPurchaseItem.unitPriceModes, nunca se recalcula después.
@@ -39,17 +57,38 @@ export async function computeUnitPriceModes(
   employeeId: string,
   confirmedProductName: string,
   quantity: number,
-  declarations: UnitDeclaration[]
+  declarations: UnitDeclaration[],
+  confirmedJustCode: string | null
 ): Promise<PriceMode[]> {
+  if (await isComboJustCode(confirmedJustCode)) {
+    return Array.from({ length: quantity }, () => "DROPI" as PriceMode);
+  }
+
   const capped = declarations.slice(0, Math.min(MAX_COST_UNITS_PER_ITEM, quantity));
   const modes: PriceMode[] = [];
+  let selfCostUnitsGranted = 0;
+  let selfEligible: boolean | null = null;
   for (const d of capped) {
     if (d.relation === "MINOR_CHILD") {
       modes.push("COST");
       continue;
     }
-    const eligible = await costCooldownEligible(employeeId, confirmedProductName);
-    modes.push(eligible ? "COST" : "DROPI");
+    if (d.relation === "OTHER_FAMILY") {
+      modes.push("DROPI");
+      continue;
+    }
+    // SELF
+    if (selfCostUnitsGranted >= MAX_SELF_COST_UNITS_PER_ITEM) {
+      modes.push("DROPI");
+      continue;
+    }
+    if (selfEligible === null) selfEligible = await costCooldownEligible(employeeId, confirmedProductName);
+    if (selfEligible) {
+      modes.push("COST");
+      selfCostUnitsGranted++;
+    } else {
+      modes.push("DROPI");
+    }
   }
   while (modes.length < quantity) modes.push("DROPI");
   return modes;

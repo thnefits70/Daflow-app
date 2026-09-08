@@ -43,18 +43,19 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const catalogItems = await prisma.purchaseCatalogItem.findMany({
     where: { id: { in: [...new Set(parsed.data.items.map((i) => i.confirmedCatalogItemId))] } },
-    select: { id: true, name: true },
+    select: { id: true, name: true, justCode: true },
   });
-  const catalogNameById = new Map(catalogItems.map((c) => [c.id, c.name]));
+  const catalogById = new Map(catalogItems.map((c) => [c.id, c]));
 
   const nameById = new Map<string, string>();
   for (const it of order.items) {
     const catalogItemId = catalogItemIdById.get(it.id)!;
-    const confirmedProductName = catalogNameById.get(catalogItemId);
+    const catalogItem = catalogById.get(catalogItemId);
+    const confirmedProductName = catalogItem?.name;
     if (!confirmedProductName) return NextResponse.json({ error: "Producto de catálogo no encontrado." }, { status: 400 });
     nameById.set(it.id, confirmedProductName);
     const declarations = (Array.isArray(it.unitDeclarations) ? it.unitDeclarations : []) as unknown as UnitDeclaration[];
-    const unitPriceModes = await computeUnitPriceModes(order.employeeId, confirmedProductName, it.quantity, declarations);
+    const unitPriceModes = await computeUnitPriceModes(order.employeeId, confirmedProductName, it.quantity, declarations, catalogItem.justCode);
     await prisma.personalPurchaseItem.update({
       where: { id: it.id },
       data: { confirmedProductName, confirmedCatalogItemId: catalogItemId, unitPriceModes },
