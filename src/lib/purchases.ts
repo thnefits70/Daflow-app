@@ -515,6 +515,7 @@ export const purchaseRequestInclude = {
     include: {
       reportedBy: { select: { name: true } },
       reviewedByLead: { select: { name: true } },
+      resolvedInternallyBy: { select: { name: true } },
       // Confirmado 2026-08-12: pedido explícito del usuario — Auditoría
       // necesita saber si un reporte urgente ya quedó resuelto del todo
       // (suma de resoluciones COMPLETED cubre el total reportado) para

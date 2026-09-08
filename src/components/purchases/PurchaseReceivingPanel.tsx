@@ -52,6 +52,9 @@ type Row = {
     description: string;
     reportedAt: string;
     reportedBy: { name: string } | null;
+    resolvedInternallyAt: string | null;
+    resolvedInternallyNote: string | null;
+    resolvedInternallyBy: { name: string } | null;
   }[];
 };
 
@@ -234,6 +237,13 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
   // error); primero tiene que confirmar ese número específico en una segunda
   // pantalla, mismo patrón que "Dar de baja en Just" (justDoubleConfirm).
   const [confirmingMissingId, setConfirmingMissingId] = useState<string | null>(null);
+  // Confirmado 2026-09-08: pedido explícito de Daniel — camino alterno a
+  // "enviar a Compras": si él y su equipo resuelven lo faltante por su
+  // cuenta, cierra el reporte sin escalar ni notificar (ver
+  // urgent-reports/[id]/resolve-internal/route.ts). Nota obligatoria +
+  // mismo patrón de doble confirmación que el envío a Compras.
+  const [internalNoteEdits, setInternalNoteEdits] = useState<Record<string, string>>({});
+  const [confirmingInternalId, setConfirmingInternalId] = useState<string | null>(null);
 
   // Informar urgente — cantidad contada + desglose por tipo + evidencia.
   const [urgentCountedQty, setUrgentCountedQty] = useState("");
@@ -510,6 +520,36 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
     setConfirmingMissingId(null);
   }
 
+  async function resolveUrgentReportInternally(id: string, missingQty: number, note: string) {
+    setBusy(true);
+    setErr("");
+    const res = await fetch(`/api/purchase-requests/urgent-reports/${id}/resolve-internal`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ missingQty, note }),
+    });
+    setBusy(false);
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      setErr(data?.error ?? "No se pudo resolver.");
+      return;
+    }
+    setPendingUrgentReports((rs) => rs.filter((r) => r.id !== id));
+    setMissingQtyEdits((m) => {
+      const next = { ...m };
+      delete next[id];
+      return next;
+    });
+    setInternalNoteEdits((m) => {
+      const next = { ...m };
+      delete next[id];
+      return next;
+    });
+    setConfirmingInternalId(null);
+    load();
+    router.refresh();
+  }
+
   function openUrgent(id: string) {
     setUrgentId(id);
     // Confirmado 2026-08-27: si ya había contado antes de tocar "Informar
@@ -709,6 +749,24 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                       {total} un. afectadas · ${(total * pr.request.unitCost).toFixed(2)} en disputa
                     </div>
                   )}
+                  {/* Confirmado 2026-09-08: pedido explícito de Daniel — si lo faltante
+                      se resuelve hablando con su propio equipo (sin nada dañado/incompleto/
+                      diferente en el mismo reporte), puede cerrarlo sin mandarlo a Compras.
+                      Nota obligatoria para dejar rastro de qué pasó. */}
+                  {flaggedQty === 0 && confirmingMissingId !== pr.id && confirmingInternalId !== pr.id && (
+                    <div className="mb-2.5">
+                      <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">
+                        Nota (solo si lo resuelves internamente, sin enviar a Compras)
+                      </label>
+                      <textarea
+                        className="w-full rounded border border-rule px-2.5 py-2 text-[12.5px]"
+                        rows={2}
+                        placeholder="Ej. se encontró mal ubicado en bodega, fue un mal conteo..."
+                        value={internalNoteEdits[pr.id] ?? ""}
+                        onChange={(e) => setInternalNoteEdits((m) => ({ ...m, [pr.id]: e.target.value }))}
+                      />
+                    </div>
+                  )}
                   {err && <div className="text-red text-[12px] mb-2">{err}</div>}
                   {/* Confirmado 2026-08-27: pedido explícito del usuario — la cantidad
                       faltante se confirma en un segundo paso aparte, para que un clic de
@@ -733,16 +791,49 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                         </button>
                       </div>
                     </div>
+                  ) : confirmingInternalId === pr.id ? (
+                    <div className="bg-navy rounded-md p-3">
+                      <div className="text-[13px] font-bold mb-1.5">¿Seguro?</div>
+                      <div className="text-[12px] text-steel mb-3">
+                        Vas a cerrar este reporte con {missingNum} un. faltantes resueltas internamente — no se le va a avisar a Compras.
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          disabled={busy}
+                          className="rounded border border-teal bg-teal px-3.5 py-1.5 text-[12px] font-bold text-navy cursor-pointer disabled:opacity-60"
+                          onClick={() => resolveUrgentReportInternally(pr.id, missingNum, internalNoteEdits[pr.id] ?? "")}
+                        >
+                          Sí, resolver internamente
+                        </button>
+                        <button type="button" className="text-steel text-[12px] cursor-pointer" onClick={() => setConfirmingInternalId(null)}>
+                          Cancelar
+                        </button>
+                      </div>
+                    </div>
                   ) : (
-                    <button
-                      type="button"
-                      disabled={!canApprove || busy || overLimit}
-                      title={!canApprove ? "Exclusivo del líder de Inventario" : undefined}
-                      className="rounded border border-red bg-red px-3.5 py-1.5 text-[12px] font-semibold text-white cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-                      onClick={() => setConfirmingMissingId(pr.id)}
-                    >
-                      ✓ Revisar y enviar a Compras
-                    </button>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <button
+                        type="button"
+                        disabled={!canApprove || busy || overLimit}
+                        title={!canApprove ? "Exclusivo del líder de Inventario" : undefined}
+                        className="rounded border border-red bg-red px-3.5 py-1.5 text-[12px] font-semibold text-white cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                        onClick={() => setConfirmingMissingId(pr.id)}
+                      >
+                        ✓ Revisar y enviar a Compras
+                      </button>
+                      {flaggedQty === 0 && (
+                        <button
+                          type="button"
+                          disabled={!canApprove || busy || overLimit || !(internalNoteEdits[pr.id] ?? "").trim()}
+                          title={!canApprove ? "Exclusivo del líder de Inventario" : !(internalNoteEdits[pr.id] ?? "").trim() ? "Escribe la nota de arriba primero" : undefined}
+                          className="rounded border border-teal px-3.5 py-1.5 text-[12px] font-semibold text-teal cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                          onClick={() => setConfirmingInternalId(pr.id)}
+                        >
+                          Resolver internamente (no enviar a Compras)
+                        </button>
+                      )}
+                    </div>
                   )}
                 </div>
               );
@@ -1486,6 +1577,15 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                           {r.urgentReports.length > 0 && <span className="text-red"> (faltan {r.quantity - expectedReceivedQty} un.)</span>}
                         </div>
                       )}
+                      {(canApprove || isAdmin) &&
+                        r.urgentReports
+                          .filter((rep) => rep.resolvedInternallyAt)
+                          .map((rep) => (
+                            <div key={rep.id} className="flex items-center gap-1.5 text-[11px] text-teal mb-1.5">
+                              <CheckCircle2 size={12} className="shrink-0" />
+                              Resuelto internamente por {actorName(rep.resolvedInternallyBy?.name)} · {formatDateTime(rep.resolvedInternallyAt!)} — &quot;{rep.resolvedInternallyNote}&quot;
+                            </div>
+                          ))}
                       <div className="text-[11.5px] text-steel mb-2">
                         Recibido por {actorName(r.receipt.confirmedBy?.name)} · {formatDateTime(r.receipt.confirmedAt)}
                         {r.receipt.comment && ` — "${r.receipt.comment}"`}

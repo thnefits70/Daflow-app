@@ -409,6 +409,7 @@ model User {
   purchaseRequestUrgentReportsReviewed         PurchaseRequestUrgentReport[]      @relation("PurchaseRequestUrgentReportReviewedByLead")
   purchaseRequestUrgentReportsRejected         PurchaseRequestUrgentReport[]      @relation("PurchaseRequestUrgentReportRejectedBy")
   purchaseRequestUrgentReportsJustConfirmed    PurchaseRequestUrgentReport[]      @relation("PurchaseRequestUrgentReportJustConfirmedBy")
+  purchaseRequestUrgentReportsResolvedInternally PurchaseRequestUrgentReport[]    @relation("PurchaseRequestUrgentReportResolvedInternallyBy")
   storeFeedbackEvaluations                     StoreFeedbackEvaluation[]          @relation("StoreFeedbackEvaluatedBy")
   confidentialAccess                           ConfidentialDocumentAccess[]
   monthlyEvaluationsReceived                   MonthlyEvaluation[]
@@ -2197,6 +2198,20 @@ model PurchaseRequestUrgentReport {
   justConfirmedById String?
   justConfirmedBy   User?     @relation("PurchaseRequestUrgentReportJustConfirmedBy", fields: [justConfirmedById], references: [id], onDelete: SetNull)
   justConfirmedAt   DateTime?
+
+  // Confirmado 2026-09-08: pedido explícito de Daniel — cuando lo faltante
+  // se resuelve hablando con su propio equipo (ej. se encontró mal ubicado
+  // en bodega, o fue un mal conteo), no hace falta molestar a Compras con
+  // una notificación. reviewedByLeadAt igual se marca (para que salga de su
+  // cola de pendientes), pero resolvedInternallyAt es lo que además lo
+  // excluye de la bandeja de Compras (urgent-reports/route.ts) y de la
+  // notificación — deja rastro de que existió y por qué, nunca se borra.
+  // Solo aplica cuando el reporte es puramente cantidad faltante (sin
+  // dañada/incompleta/diferente) — eso siempre sigue el camino normal.
+  resolvedInternallyAt     DateTime?
+  resolvedInternallyById   String?
+  resolvedInternallyBy     User?     @relation("PurchaseRequestUrgentReportResolvedInternallyBy", fields: [resolvedInternallyById], references: [id], onDelete: SetNull)
+  resolvedInternallyNote   String?
 
   resolutions PurchaseUrgentResolution[]
 

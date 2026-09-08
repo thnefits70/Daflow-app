@@ -29,6 +29,11 @@ export async function GET(_req: NextRequest) {
     // late-claims/[id]/just-confirm). rejectedAt siempre lo excluye.
     where: {
       rejectedAt: null,
+      // Confirmado 2026-09-08: pedido explícito de Daniel — un reporte que
+      // él mismo resolvió internamente con su equipo (sin escalarlo) nunca
+      // debe aparecer en la bandeja de Compras, aunque reviewedByLeadAt ya
+      // esté marcado (ver urgent-reports/[id]/resolve-internal/route.ts).
+      resolvedInternallyAt: null,
       OR: [
         { isLateClaim: false, reviewedByLeadAt: { not: null } },
         { isLateClaim: true, justConfirmedAt: { not: null } },
