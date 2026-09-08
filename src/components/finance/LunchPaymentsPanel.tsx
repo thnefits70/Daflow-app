@@ -34,6 +34,44 @@ function dateEs(iso: string) {
   return new Date(`${iso}T00:00:00`).toLocaleDateString("es-EC", { day: "numeric", month: "long", year: "numeric" });
 }
 
+// Convenio con el restaurante es de lunes a sábado (mismo patrón que
+// businessHours.ts) — cada semana registrada abarca esos 6 días.
+const WEEK_LENGTH_DAYS = 6;
+
+function addDaysIso(iso: string, days: number): string {
+  const d = new Date(`${iso}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+// Confirmado 2026-09-08: Daniel pidió elegir la semana de una lista en vez de
+// escribir "desde"/"hasta" a mano — acá se arman esas opciones en cadena, cada
+// una empezando el día siguiente a la anterior, para que nunca se solape ni
+// deje huecos con lo ya registrado.
+function buildWeekOptions(firstStart: string, count: number): { weekStart: string; weekEnd: string; label: string }[] {
+  const out: { weekStart: string; weekEnd: string; label: string }[] = [];
+  let start = firstStart;
+  for (let i = 0; i < count; i++) {
+    const end = addDaysIso(start, WEEK_LENGTH_DAYS - 1);
+    out.push({ weekStart: start, weekEnd: end, label: `${dateEs(start)} al ${dateEs(end)}` });
+    // El sábado (fin de semana) es seguido de domingo, no laborable — se
+    // salta directo al lunes siguiente en vez de sumar solo 1 día.
+    start = addDaysIso(end, 2);
+  }
+  return out;
+}
+
+// El convenio corre lunes a sábado — si la fecha sugerida (día siguiente a la
+// última semana registrada) cae domingo, hay que saltar al lunes; si no, ya
+// arrancaría la cadena de semanas un día corrida para siempre.
+function nextMondayOnOrAfter(iso: string): string {
+  const d = new Date(`${iso}T00:00:00Z`);
+  const day = d.getUTCDay(); // 0=domingo … 6=sábado
+  const forward = (1 - day + 7) % 7;
+  d.setUTCDate(d.getUTCDate() + forward);
+  return d.toISOString().slice(0, 10);
+}
+
 // Confirmado 2026-09-08: pedido explícito del usuario — el admin no debe ver
 // nada de esto hasta que Nairoby verifique, así que acá se muestra el paso en
 // el que está cada semana en vez de un único estado de pago.
@@ -52,10 +90,12 @@ export function LunchPaymentsPanel() {
 
   const [weekStart, setWeekStart] = useState("");
   const [weekEnd, setWeekEnd] = useState("");
+  const [weekOptions, setWeekOptions] = useState<{ weekStart: string; weekEnd: string; label: string }[]>([]);
   const [lunchCount, setLunchCount] = useState("");
   const [montoOverride, setMontoOverride] = useState<string | null>(null);
   const [payee, setPayee] = useState<AdminPaymentPayeeDTO | null>(null);
   const [bankAccountId, setBankAccountId] = useState<string | null>(null);
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [actingOnId, setActingOnId] = useState<string | null>(null);
   const [err, setErr] = useState("");
@@ -68,7 +108,11 @@ export function LunchPaymentsPanel() {
         setPricePerLunch(data.settings.pricePerLunch);
         setPayees(data.payees ?? []);
         setHistory(data.history ?? []);
-        if (data.defaults.suggestedWeekStart) setWeekStart(data.defaults.suggestedWeekStart);
+        const rawStart = data.defaults.suggestedWeekStart ?? new Date().toISOString().slice(0, 10);
+        const options = buildWeekOptions(nextMondayOnOrAfter(rawStart), 5);
+        setWeekOptions(options);
+        setWeekStart(options[0].weekStart);
+        setWeekEnd(options[0].weekEnd);
         if (data.defaults.payeeId) {
           const p = (data.payees ?? []).find((x: AdminPaymentPayeeDTO) => x.id === data.defaults.payeeId);
           if (p) setPayee(p);
@@ -113,8 +157,6 @@ export function LunchPaymentsPanel() {
       setErr(data?.error ?? "No se pudo registrar.");
       return;
     }
-    setWeekStart(data.weekEnd ? new Date(new Date(data.weekEnd).getTime() + 86400000).toISOString().slice(0, 10) : "");
-    setWeekEnd("");
     setLunchCount("");
     setMontoOverride(null);
     load();
@@ -160,16 +202,25 @@ export function LunchPaymentsPanel() {
         <div className="text-[13px] font-bold mb-2.5">Registrar semana de almuerzos</div>
         <div className="text-[11px] text-steel mb-2.5">Precio actual: {money(pricePerLunch)} por almuerzo (IVA incluido)</div>
 
-        <div className="flex gap-2 mb-2.5">
-          <div className="flex-1">
-            <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Desde</label>
-            <input type="date" value={weekStart} onChange={(e) => setWeekStart(e.target.value)} className="w-full rounded border border-rule px-2.5 py-2 text-[13px]" />
-          </div>
-          <div className="flex-1">
-            <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Hasta</label>
-            <input type="date" value={weekEnd} onChange={(e) => setWeekEnd(e.target.value)} className="w-full rounded border border-rule px-2.5 py-2 text-[13px]" />
-          </div>
-        </div>
+        <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Semana</label>
+        <select
+          value={weekStart}
+          onChange={(e) => {
+            const opt = weekOptions.find((o) => o.weekStart === e.target.value);
+            if (opt) {
+              setWeekStart(opt.weekStart);
+              setWeekEnd(opt.weekEnd);
+            }
+          }}
+          className="w-full rounded border border-rule px-2.5 py-2 text-[13px] mb-2.5"
+        >
+          {weekOptions.map((o, i) => (
+            <option key={o.weekStart} value={o.weekStart}>
+              {o.label}
+              {i === 0 ? " (siguiente)" : ""}
+            </option>
+          ))}
+        </select>
 
         <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Cantidad de almuerzos</label>
         <input
@@ -181,29 +232,41 @@ export function LunchPaymentsPanel() {
           className="w-full rounded border border-rule px-2.5 py-2 text-[13px] mb-2.5"
         />
 
-        <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">
-          Monto a pagar <span className="text-steel-dim">(se calcula solo — ajusta si la factura real difiere por centavos)</span>
-        </label>
-        <input
-          type="number"
-          step="0.01"
-          value={monto}
-          onChange={(e) => setMontoOverride(e.target.value)}
-          className="w-full rounded border border-rule px-2.5 py-2 text-[13px] mb-2.5"
-        />
+        <button
+          type="button"
+          onClick={() => setShowAdvanced((v) => !v)}
+          className="text-[11px] text-teal cursor-pointer mb-2.5"
+        >
+          {showAdvanced ? "Ocultar" : "Ajustar monto o a quién pagar"}
+        </button>
 
-        <div className="mb-2.5">
-          <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">A quién pagar <span className="text-steel-dim">(opcional)</span></label>
-          <AdminPayeePicker
-            payees={payees}
-            value={payee}
-            onChange={setPayee}
-            isAdmin={false}
-            selectedBankAccountId={bankAccountId}
-            onSelectBankAccount={setBankAccountId}
-            onPayeeUpdated={(p) => setPayees((cur) => (cur.some((x) => x.id === p.id) ? cur.map((x) => (x.id === p.id ? p : x)) : [...cur, p].sort((a, b) => a.name.localeCompare(b.name))))}
-          />
-        </div>
+        {showAdvanced && (
+          <>
+            <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">
+              Monto a pagar <span className="text-steel-dim">(se calcula solo — ajusta si la factura real difiere por centavos)</span>
+            </label>
+            <input
+              type="number"
+              step="0.01"
+              value={monto}
+              onChange={(e) => setMontoOverride(e.target.value)}
+              className="w-full rounded border border-rule px-2.5 py-2 text-[13px] mb-2.5"
+            />
+
+            <div className="mb-2.5">
+              <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">A quién pagar <span className="text-steel-dim">(opcional)</span></label>
+              <AdminPayeePicker
+                payees={payees}
+                value={payee}
+                onChange={setPayee}
+                isAdmin={false}
+                selectedBankAccountId={bankAccountId}
+                onSelectBankAccount={setBankAccountId}
+                onPayeeUpdated={(p) => setPayees((cur) => (cur.some((x) => x.id === p.id) ? cur.map((x) => (x.id === p.id ? p : x)) : [...cur, p].sort((a, b) => a.name.localeCompare(b.name))))}
+              />
+            </div>
+          </>
+        )}
 
         {err && <div className="text-red text-[12px] mb-2.5">{err}</div>}
 
