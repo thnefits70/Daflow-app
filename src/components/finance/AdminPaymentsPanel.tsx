@@ -175,9 +175,11 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
   const [motivoDraft, setMotivoDraft] = useState("");
   const [savingMotivoId, setSavingMotivoId] = useState<string | null>(null);
 
-  // Corregir el código de comprobante/planilla del IESS que Nairoby escribió
-  // al crear la solicitud (ej. un error de tipeo) — mismo patrón que
-  // editingMotivoId, también exclusivo del admin.
+  // Agregar/corregir el código de comprobante/planilla del IESS — a
+  // diferencia de editingMotivoId, NO es exclusivo del admin: lo puede
+  // escribir Nairoby (quien lo conoce) tanto en solicitudes nuevas como en
+  // las que ya existían antes de este campo (backend gatea por
+  // canManageAdminPayments, no por sesión de admin).
   const [editingIessId, setEditingIessId] = useState<string | null>(null);
   const [iessDraft, setIessDraft] = useState("");
   const [savingIessId, setSavingIessId] = useState<string | null>(null);
@@ -1204,20 +1206,18 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
                         {copiedIessId === r.id ? <ClipboardCheck size={12} /> : <Copy size={12} />}
                         {copiedIessId === r.id ? "Copiado" : "Copiar"}
                       </button>
-                      {isAdmin && (
-                        <button
-                          type="button"
-                          title="Corregir el código (solo admin)"
-                          className="text-steel-dim hover:text-teal cursor-pointer shrink-0"
-                          onClick={() => startEditIess(r)}
-                        >
-                          <Pencil size={12} />
-                        </button>
-                      )}
+                      <button
+                        type="button"
+                        title="Corregir el código"
+                        className="text-steel-dim hover:text-teal cursor-pointer shrink-0"
+                        onClick={() => startEditIess(r)}
+                      >
+                        <Pencil size={12} />
+                      </button>
                     </div>
                   </div>
                 </div>
-              ) : isIessMotivo(r.motivo) && isAdmin ? (
+              ) : isIessMotivo(r.motivo) ? (
                 <button
                   type="button"
                   className="flex items-center gap-1.5 text-[11.5px] text-blue font-semibold cursor-pointer mb-2.5"

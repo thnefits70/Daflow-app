@@ -47,13 +47,20 @@ const patchSchema = z
 // "solo para mí en caso de emergencia" — exige volver a escribir esa
 // contraseña justo al guardar este cambio puntual (adminPassword), como
 // fricción deliberada además del requireAdminSession() normal.
+//
+// iessReceiptNumber (2026-09-08): a diferencia del motivo, este dato lo
+// conoce Nairoby (ella lo escribe/corrige al crear o después), no es
+// exclusivo del admin — así que si el body SOLO trae este campo, basta
+// canManageAdminPayments() en vez de requireAdminSession().
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  if (!(await requireAdminSession())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
-
   const { id } = await params;
   const body = await req.json().catch(() => null);
   const parsed = patchSchema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: "Datos inválidos." }, { status: 400 });
+
+  const onlyIessReceiptNumber = parsed.data.motivo === undefined && parsed.data.payeeId === undefined && parsed.data.bankAccountId === undefined;
+  const authorized = onlyIessReceiptNumber ? await canManageAdminPayments() : !!(await requireAdminSession());
+  if (!authorized) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
   const request = await prisma.adminPaymentRequest.findUnique({ where: { id } });
   if (!request) return NextResponse.json({ error: "No encontrada." }, { status: 404 });
