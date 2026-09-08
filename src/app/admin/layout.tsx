@@ -19,6 +19,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
   const [allDepartments, settings, pendingSuppliersCount, pendingRecognitionMonth] = await Promise.all([
     prisma.department.findMany({
+      where: { deletedAt: null },
       orderBy: { order: "asc" },
       select: { id: true, name: true, code: true, isSpecial: true },
     }),

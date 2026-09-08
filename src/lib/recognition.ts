@@ -249,6 +249,94 @@ export function pickQuestions(evaluatorId: string, evaluateeId: string, month: s
   return seededShuffle(bank, rand).slice(0, QUESTIONS_PER_PILLAR);
 }
 
+// Feedback de Liderazgo 360° (confirmado 2026-09-01, banco de 50 ampliado el
+// mismo día) — en primera persona, desde cómo se SIENTE el colaborador con
+// su líder (no un interrogatorio de "esto o lo otro"), para que calificar
+// bien se sienta como reconocer algo positivo y no como acusar a un
+// "capataz". El banco de `liderazgo` en QUESTION_BANK sigue intacto: es el
+// que un líder usa para calificar a su equipo normal.
+export const LEADERSHIP_360_QUESTION_BANK: BankQuestion[] = [
+  { id: "lead360_1", text: "Cuando hablo con mi líder, siento que realmente me escucha." },
+  { id: "lead360_2", text: "Siento que mi líder confía en mi capacidad para tomar decisiones." },
+  { id: "lead360_3", text: "Me siento cómodo compartiendo una idea distinta con mi líder, aunque no coincida con la suya." },
+  { id: "lead360_4", text: "Siento que mi líder reconoce mi esfuerzo, no solo cuando algo sale mal." },
+  { id: "lead360_5", text: "Cuando cometo un error, siento que mi líder me ayuda a aprender de él, no solo a sentirme mal." },
+  { id: "lead360_6", text: "Siento que mi líder cree en mi potencial, más allá de mi puesto actual." },
+  { id: "lead360_7", text: "Me siento motivado a mejorar cuando trabajo con mi líder." },
+  { id: "lead360_8", text: "Siento que mi líder es honesto conmigo, incluso cuando el mensaje es incómodo." },
+  { id: "lead360_9", text: "Siento que mi líder predica con el ejemplo, no solo con palabras." },
+  { id: "lead360_10", text: "Me siento tranquilo acercándome a mi líder cuando tengo un problema." },
+  { id: "lead360_11", text: "Siento que mi líder celebra los logros del equipo, no solo los suyos." },
+  { id: "lead360_12", text: "Siento que mi líder me da espacio para proponer soluciones antes de imponer una." },
+  { id: "lead360_13", text: "Siento que mi líder se hace responsable junto conmigo cuando algo sale mal, no busca a quién culpar." },
+  { id: "lead360_14", text: "Siento que mi líder respeta mi tiempo fuera del trabajo." },
+  { id: "lead360_15", text: "Me siento respetado por mi líder, incluso en momentos de tensión." },
+  { id: "lead360_16", text: "Siento que mi líder me explica el \"por qué\" detrás de una decisión, no solo el \"qué hacer\"." },
+  { id: "lead360_17", text: "Siento que puedo ser yo mismo con mi líder, sin miedo a ser juzgado." },
+  { id: "lead360_18", text: "Siento que mi líder invierte tiempo en mi crecimiento profesional." },
+  { id: "lead360_19", text: "Siento que mi líder me da la confianza para intentar algo nuevo, aunque pueda fallar." },
+  { id: "lead360_20", text: "Siento que mi líder mantiene la calma en momentos difíciles, y eso me da seguridad." },
+  { id: "lead360_21", text: "Siento que mi líder es justo al repartir el trabajo entre todos." },
+  { id: "lead360_22", text: "Siento que mi líder me toma en cuenta antes de decidir algo que me afecta directamente." },
+  { id: "lead360_23", text: "Siento que mi líder valora mis ideas, aunque sean diferentes a las suyas." },
+  { id: "lead360_24", text: "Siento que mi líder está genuinamente interesado en cómo estoy, no solo en lo que entrego." },
+  { id: "lead360_25", text: "Siento que mi líder me da la oportunidad de asumir más responsabilidad cuando estoy listo." },
+  { id: "lead360_26", text: "Siento que mi líder admite sus propios errores en vez de esconderlos." },
+  { id: "lead360_27", text: "Siento que trabajar con mi líder me está formando como futuro líder." },
+  { id: "lead360_28", text: "Siento que mi líder me defiende ante otros cuando es justo hacerlo." },
+  { id: "lead360_29", text: "Siento que mi líder cumple lo que promete." },
+  { id: "lead360_30", text: "Siento que mi líder se toma el tiempo de explicarme algo que no entiendo, sin hacerme sentir menos." },
+  { id: "lead360_31", text: "Siento que mi líder confía en mí incluso cuando no está supervisando de cerca." },
+  { id: "lead360_32", text: "Siento que puedo decirle a mi líder cuando algo no me parece correcto." },
+  { id: "lead360_33", text: "Siento que mi líder me ayuda a ver el lado positivo cuando las cosas se complican." },
+  { id: "lead360_34", text: "Siento que mi líder trata a todo el equipo por igual, sin favoritismos." },
+  { id: "lead360_35", text: "Siento que mi líder me acompaña en los momentos difíciles, no solo en los buenos." },
+  { id: "lead360_36", text: "Siento que mi líder me impulsa a dar lo mejor de mí, no por miedo, sino por ganas." },
+  { id: "lead360_37", text: "Siento que mi líder se preocupa por mi bienestar, no solo por mis resultados." },
+  { id: "lead360_38", text: "Siento que mi líder comparte información importante conmigo, no me la oculta." },
+  { id: "lead360_39", text: "Siento que mi líder me da retroalimentación útil, no solo críticas." },
+  { id: "lead360_40", text: "Siento que mi líder confía en el equipo para resolver problemas sin necesitar controlarlo todo." },
+  { id: "lead360_41", text: "Siento que mi líder me inspira a querer ser mejor profesional." },
+  { id: "lead360_42", text: "Siento que mi líder reconoce en público el buen trabajo del equipo." },
+  { id: "lead360_43", text: "Siento que mi líder tiene la humildad de pedir ayuda cuando la necesita." },
+  { id: "lead360_44", text: "Siento que mi líder me trata con paciencia cuando estoy aprendiendo algo nuevo." },
+  { id: "lead360_45", text: "Siento que mi líder toma decisiones pensando en el equipo, no solo en quedar bien con otros." },
+  { id: "lead360_46", text: "Siento que mi líder me anima a hablar cuando algo me incomoda, en vez de dejarlo pasar." },
+  { id: "lead360_47", text: "Siento que mi líder es alguien a quien admiro como profesional." },
+  { id: "lead360_48", text: "Siento que mi líder me da la confianza de decir \"no sé\" sin sentirme juzgado." },
+  { id: "lead360_49", text: "Siento que mi líder se mantiene firme en sus valores, incluso bajo presión." },
+  { id: "lead360_50", text: "En general, siento que mi líder aporta algo positivo a mi crecimiento, más allá del trabajo del día a día." },
+];
+
+// Determinística por (targetId, month) SOLAMENTE — a diferencia de
+// pickQuestions(), sin evaluatorId, porque acá TODOS los que califican al
+// mismo líder (o al admin) ese mes deben responder exactamente las mismas 4
+// preguntas para poder promediarlas pregunta por pregunta.
+export function pickLeadershipQuestions(targetId: string, month: string): BankQuestion[] {
+  const rand = seededRandom(`lead360:${targetId}:${month}`);
+  return seededShuffle(LEADERSHIP_360_QUESTION_BANK, rand).slice(0, QUESTIONS_PER_PILLAR);
+}
+
+export function findLeadershipQuestionText(questionId: string): string {
+  return LEADERSHIP_360_QUESTION_BANK.find((q) => q.id === questionId)?.text ?? questionId;
+}
+
+// Promedia cada pregunta entre todos los que calificaron ese mes y suma los
+// promedios → un 0-20 comparable al resto de pilares (4 preguntas × máx 5).
+export function averageQuestionScores(rows: { questionId: string; score: number }[]): number {
+  if (rows.length === 0) return 0;
+  const byQuestion = new Map<string, number[]>();
+  for (const r of rows) {
+    if (!byQuestion.has(r.questionId)) byQuestion.set(r.questionId, []);
+    byQuestion.get(r.questionId)!.push(r.score);
+  }
+  let total = 0;
+  for (const scores of byQuestion.values()) {
+    total += scores.reduce((a, b) => a + b, 0) / scores.length;
+  }
+  return Math.round(total);
+}
+
 export function findQuestionText(pillar: string, questionId: string): string {
   const bank = QUESTION_BANK[pillar as PillarKey];
   return bank?.find((q) => q.id === questionId)?.text ?? questionId;

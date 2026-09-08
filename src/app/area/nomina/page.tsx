@@ -66,7 +66,7 @@ export default async function AreaNominaPage() {
         isActive: true,
       },
     }),
-    prisma.department.findMany({ orderBy: { order: "asc" }, select: { id: true, name: true, code: true } }),
+    prisma.department.findMany({ where: { deletedAt: null }, orderBy: { order: "asc" }, select: { id: true, name: true, code: true } }),
   ]);
 
   return (

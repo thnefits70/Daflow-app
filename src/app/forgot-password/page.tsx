@@ -27,7 +27,7 @@ export default function ForgotPasswordPage() {
         {sent ? (
           <>
             <div className="text-[13.5px] leading-relaxed mb-5">
-              Si hay un correo de administrador configurado, te enviamos un enlace para restablecer la contraseña.
+              Si hay algún correo de administrador configurado, te enviamos un enlace para restablecer la contraseña.
               Revisa tu bandeja de entrada (y spam). El enlace expira en 30 minutos.
             </div>
             <Link href="/login" className="inline-flex items-center gap-1.5 text-[13px] text-steel hover:text-ink">
@@ -37,7 +37,8 @@ export default function ForgotPasswordPage() {
         ) : (
           <>
             <div className="text-[13.5px] text-steel leading-relaxed mb-5">
-              Te enviaremos un enlace de recuperación al correo de administrador configurado en Configuración.
+              Te enviaremos un enlace de recuperación al correo (o correos) de administrador configurados en
+              Configuración.
             </div>
             <button
               type="button"

@@ -4,7 +4,10 @@ import { prisma } from "@/lib/prisma";
 import { requireAdminSession } from "@/lib/guards";
 
 export async function GET() {
-  const departments = await prisma.department.findMany({ orderBy: { order: "asc" } });
+  const departments = await prisma.department.findMany({
+    where: { deletedAt: null },
+    orderBy: { order: "asc" },
+  });
   return NextResponse.json(departments);
 }
 

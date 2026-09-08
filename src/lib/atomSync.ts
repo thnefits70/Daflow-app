@@ -63,24 +63,67 @@ export function parseAtomPastedTable(raw: string): string[] {
   return [...new Set(rentableNames)];
 }
 
+export type AtomSyncMatchedCombo = {
+  id: string;
+  code: string;
+  label: string;
+  matchType: "exact" | "similar";
+  components: { catalogItemId: string; name: string; quantity: number }[];
+};
+
 export type AtomSyncPreviewRow = {
   productName: string;
   matchedItemId: string | null;
   matchedItemName: string | null;
   matchType: "exact" | "similar" | "none";
+  matchedCombo: AtomSyncMatchedCombo | null;
 };
 
+// Confirmado 2026-09-02 (pedido explícito del usuario): un combo de Dropi
+// nunca es un producto real de Just, así que nunca va a matchear contra el
+// catálogo — por eso solo se busca combo cuando NO hubo match de producto.
+// La búsqueda reusa el mismo criterio por nombre que ya usa
+// /api/combo-suggestions/dropi-combo-match (label del combo, nunca su código
+// real de Dropi — ese no aparece en el texto pegado de ATOM). Esto es lo que
+// hace que la vista previa "aprenda" con el tiempo: mientras más combos
+// registre Daniel en Base de datos de productos, menos filas quedan "Sin
+// resolver" en cada pegado nuevo — pero como el label es solo una referencia
+// de Daniel (no un identificador confiable), la persona que pega ATOM
+// siempre confirma "sí, es este" antes de guardarlo, nunca se auto-vincula.
 export async function previewAtomSync(productNames: string[]): Promise<AtomSyncPreviewRow[]> {
-  const catalogItems = await prisma.purchaseCatalogItem.findMany({ select: { id: true, name: true } });
+  const [catalogItems, dropiCombos] = await Promise.all([
+    prisma.purchaseCatalogItem.findMany({ select: { id: true, name: true } }),
+    prisma.dropiCombo.findMany({
+      where: { label: { not: null } },
+      include: { components: { include: { catalogItem: { select: { id: true, name: true } } } } },
+    }),
+  ]);
   const byNormalizedName = new Map(catalogItems.map((i) => [normalize(i.name), i]));
   const withWords = catalogItems.map((i) => ({ id: i.id, name: i.name, words: significantWords(i.name) }));
 
+  const labeledCombos = dropiCombos.filter((c): c is typeof c & { label: string } => c.label !== null);
+  const comboWords = labeledCombos.map((c) => ({ id: c.id, name: c.label, words: significantWords(c.label) }));
+
+  function findMatchedCombo(productName: string): AtomSyncMatchedCombo | null {
+    const exact = labeledCombos.find((c) => normalize(c.label) === normalize(productName));
+    const similarId = exact ? null : findSimilarUnlinkedItem(significantWords(productName), comboWords)?.id;
+    const found = exact ?? (similarId ? labeledCombos.find((c) => c.id === similarId) : undefined);
+    if (!found) return null;
+    return {
+      id: found.id,
+      code: found.code,
+      label: found.label,
+      matchType: exact ? "exact" : "similar",
+      components: found.components.map((c) => ({ catalogItemId: c.catalogItemId, name: c.catalogItem.name, quantity: c.quantity })),
+    };
+  }
+
   return productNames.map((productName) => {
     const exact = byNormalizedName.get(normalize(productName));
-    if (exact) return { productName, matchedItemId: exact.id, matchedItemName: exact.name, matchType: "exact" as const };
+    if (exact) return { productName, matchedItemId: exact.id, matchedItemName: exact.name, matchType: "exact" as const, matchedCombo: null };
     const similar = findSimilarUnlinkedItem(significantWords(productName), withWords);
-    if (similar) return { productName, matchedItemId: similar.id, matchedItemName: similar.name, matchType: "similar" as const };
-    return { productName, matchedItemId: null, matchedItemName: null, matchType: "none" as const };
+    if (similar) return { productName, matchedItemId: similar.id, matchedItemName: similar.name, matchType: "similar" as const, matchedCombo: null };
+    return { productName, matchedItemId: null, matchedItemName: null, matchType: "none" as const, matchedCombo: findMatchedCombo(productName) };
   });
 }
 

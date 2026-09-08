@@ -6,7 +6,7 @@ import Link from "next/link";
 import {
   ArrowLeft, Upload, X, Download, Plus, Trash2, KeyRound,
   User, Building2, Briefcase, Mail, Phone, Calendar, Award, FileText, Truck,
-  Copy, Check, RefreshCw, Cake, Power, Receipt, Heart, HandCoins,
+  Copy, Check, RefreshCw, Cake, Power, Receipt, Heart, HandCoins, ShieldCheck,
 } from "lucide-react";
 import { PositionPicker } from "@/components/users/PositionPicker";
 import { PayrollProfileFields } from "@/components/nomina/PayrollProfileFields";
@@ -14,6 +14,12 @@ import { uploadFile as uploadToStorage } from "@/lib/uploadFile";
 import { formatDateTime } from "@/lib/formatDateTime";
 
 type Dept = { id: string; name: string; code: string };
+
+// Mismos 3 departamentos que TWO_FACTOR_REQUIRED_DEPT_CODES en
+// lib/twoFactor.ts — duplicado acá porque ese archivo importa librerías de
+// servidor (otplib/qrcode) que no deben entrar al bundle de este componente
+// cliente. Si esa lista cambia, hay que actualizar ambas.
+const TWO_FACTOR_DEPT_CODES = ["INV", "COM", "FIN"];
 type Position = { id: string; deptId: string; name: string };
 type Milestone = { id: string; title: string; note: string | null; date: string };
 type ExamScore = { id: string; score: number; total: number; createdAt: string; exam: { title: string } };
@@ -53,6 +59,7 @@ type UserProfile = {
   canViewStoreFeedback: boolean;
   excludeFromRecognition: boolean;
   isActive: boolean;
+  twoFactorEnabled: boolean;
   milestones: Milestone[];
   examScores: ExamScore[];
 };
@@ -132,6 +139,7 @@ export function ProfileDetail({
   canDelete = true,
   canViewPayroll = false,
   canEditPayroll = false,
+  isAdmin = false,
 }: {
   profile: UserProfile;
   departments: Dept[];
@@ -140,6 +148,7 @@ export function ProfileDetail({
   canDelete?: boolean;
   canViewPayroll?: boolean;
   canEditPayroll?: boolean;
+  isAdmin?: boolean;
 }) {
   const router = useRouter();
   const [p, setP] = useState(profile);
@@ -162,6 +171,8 @@ export function ProfileDetail({
   const [confirmingDeactivate, setConfirmingDeactivate] = useState(false);
   const [leaderBusy, setLeaderBusy] = useState(false);
   const [leaderConflict, setLeaderConflict] = useState<{ deptId: string; deptName: string; existingLeaderName: string } | null>(null);
+  const [confirmingTwoFactorReset, setConfirmingTwoFactorReset] = useState(false);
+  const [twoFactorResetting, setTwoFactorResetting] = useState(false);
 
   const removePosition = async (id: string, name: string) => {
     if (!confirm(`¿Eliminar el puesto "${name}"?`)) return;
@@ -274,6 +285,19 @@ export function ProfileDetail({
     setResetting(false);
     setPasswordSaved(false);
     setNewPassword("");
+  };
+
+  const resetTwoFactor = async () => {
+    setTwoFactorResetting(true);
+    await fetch(`/api/users/${p.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ resetTwoFactor: true }),
+    });
+    setTwoFactorResetting(false);
+    setConfirmingTwoFactorReset(false);
+    setP({ ...p, twoFactorEnabled: false });
+    router.refresh();
   };
 
   const copyToClipboard = (text: string, field: "username" | "password") => {
@@ -629,6 +653,51 @@ export function ProfileDetail({
               )}
             </div>
           </div>
+
+          {isAdmin && TWO_FACTOR_DEPT_CODES.includes(departments.find((d) => d.id === p.deptId)?.code ?? "") && (
+            <div className="bg-cloud border border-rule rounded p-3.5 mt-3.5">
+              <label className="flex items-center gap-1 mb-2 text-[10.5px] font-semibold uppercase tracking-wide text-steel">
+                <ShieldCheck size={11} /> Autenticador 2FA
+              </label>
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <div className="flex items-center gap-2">
+                  <span className={`inline-flex items-center rounded px-2 py-0.5 text-[11px] font-semibold ${p.twoFactorEnabled ? "bg-green/10 text-green" : "bg-surface text-steel"}`}>
+                    {p.twoFactorEnabled ? "Activo" : "Sin configurar"}
+                  </span>
+                  <span className="text-[11.5px] text-steel">
+                    {p.twoFactorEnabled
+                      ? "Ya escaneó su código QR — se lo pide cada vez que inicia sesión."
+                      : "Se lo va a pedir la próxima vez que inicie sesión, aún no lo configura."}
+                  </span>
+                </div>
+                {p.twoFactorEnabled &&
+                  (confirmingTwoFactorReset ? (
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="text-[11.5px] text-steel">¿Restablecer? Su código actual dejará de servir de inmediato.</span>
+                      <button
+                        type="button"
+                        disabled={twoFactorResetting}
+                        className="rounded border border-red bg-red px-3 py-1.5 text-[12px] font-semibold text-white cursor-pointer disabled:opacity-60"
+                        onClick={resetTwoFactor}
+                      >
+                        Sí, restablecer
+                      </button>
+                      <button type="button" className="text-steel text-[12px] cursor-pointer" onClick={() => setConfirmingTwoFactorReset(false)}>
+                        Cancelar
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      className="text-[12.5px] text-steel hover:text-ink cursor-pointer underline underline-offset-2 shrink-0"
+                      onClick={() => setConfirmingTwoFactorReset(true)}
+                    >
+                      Restablecer 2FA
+                    </button>
+                  ))}
+              </div>
+            </div>
+          )}
 
           <div className="bg-cloud border border-rule rounded p-3.5 mt-3.5">
             <label className="flex items-center gap-1 mb-2 text-[10.5px] font-semibold uppercase tracking-wide text-steel">

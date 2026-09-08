@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { User, CheckCircle2, Circle, ArrowLeft, Clock } from "lucide-react";
-import { evaluationDeadline, formatDeadline, currentMonth, PILLAR_ACCENTS, type PillarKey } from "@/lib/recognition";
+import { evaluationDeadline, formatDeadline, currentMonth, PILLAR_ACCENTS, PILLARS, type PillarKey } from "@/lib/recognition";
 
 export type RecognitionPersonDTO = {
   id: string;
@@ -19,7 +19,9 @@ export type RecognitionPersonDTO = {
 
 type QuestionDTO = { id: string; text: string; score: number | null };
 type PillarDTO = { key: string; label: string; tagline: string; description: string; why: string; questions: QuestionDTO[] };
-type EvaluationData = { month: string; pillars: PillarDTO[]; comment: string; questionsPerPillar: number };
+type EvaluationData = { month: string; pillars: PillarDTO[]; comment: string; questionsPerPillar: number; liderazgoSource?: "team" | "admin" };
+
+const LIDERAZGO_PILLAR = PILLARS.find((p) => p.key === "liderazgo")!;
 
 function ScorePicker({ value, onChange }: { value: number | null; onChange: (v: number) => void }) {
   return (
@@ -219,6 +221,21 @@ export function RecognitionPanel({
                     </div>
                   );
                 })}
+
+                {data.liderazgoSource === "team" && (
+                  <div
+                    className="bg-surface border border-rule rounded-md p-4.5 mb-4"
+                    style={{ borderTopColor: PILLAR_ACCENTS.liderazgo, borderTopWidth: 3 }}
+                  >
+                    <div className="font-display text-[15px] font-bold" style={{ color: PILLAR_ACCENTS.liderazgo }}>
+                      {LIDERAZGO_PILLAR.label}
+                    </div>
+                    <div className="text-[12.5px] text-steel mt-1.5">
+                      Este pilar lo califica el propio equipo de {selectedPerson.name} — se revela junto con el resto cuando confirmes
+                      el podio del mes.
+                    </div>
+                  </div>
+                )}
 
                 <div className="bg-surface border border-rule rounded-md p-4.5 mb-5">
                   <label className="block mb-1.5 text-[10.5px] font-semibold uppercase tracking-wide text-steel">

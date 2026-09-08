@@ -5,6 +5,8 @@ import { WeeklyTrendChart, formatMonthShort } from "@/components/dashboard/Weekl
 import { PILLARS, generateAutoFeedback, type PillarKey } from "@/lib/recognition";
 import { RecognitionPillarsInfo } from "@/components/recognition/RecognitionPillarsInfo";
 
+type CommentGroup = { positiveComments: string[]; improvementComments: string[] };
+
 type HistoryEntry = {
   month: string;
   userId: string;
@@ -14,6 +16,8 @@ type HistoryEntry = {
   pillarScores: Record<string, number>;
   comment: string | null;
   hasDetail: boolean;
+  teamFeedback?: CommentGroup;
+  externalObservations?: CommentGroup;
 };
 
 const MAX_PER_PILLAR = 20;
@@ -121,6 +125,45 @@ export function RecognitionMyProgress() {
               {renderBold(generateAutoFeedback(h.userId, h.month, h.pillarScores as Record<PillarKey, number>))}
             </div>
           </div>
+
+          {h.teamFeedback && (
+            <div className="mt-2.5 bg-cloud rounded p-2.5">
+              <div className="text-[9.5px] font-semibold uppercase tracking-wide text-steel mb-1.5">
+                Feedback de tu equipo (Liderazgo) — anónimo
+              </div>
+              {h.teamFeedback.positiveComments.map((c, i) => (
+                <div key={`tp-${i}`} className="text-[12px] italic mb-1">
+                  &ldquo;{c}&rdquo;
+                </div>
+              ))}
+              {h.teamFeedback.improvementComments.map((c, i) => (
+                <div key={`ti-${i}`} className="text-[12px] italic mb-1" style={{ color: "#D9A441" }}>
+                  &ldquo;{c}&rdquo;
+                </div>
+              ))}
+              {h.teamFeedback.positiveComments.length === 0 && (
+                <div className="text-[11.5px] text-steel">Nadie de tu equipo dejó feedback ese mes.</div>
+              )}
+            </div>
+          )}
+
+          {h.externalObservations && h.externalObservations.positiveComments.length > 0 && (
+            <div className="mt-2 bg-cloud rounded p-2.5">
+              <div className="text-[9.5px] font-semibold uppercase tracking-wide text-steel mb-1.5">
+                Observaciones de otras áreas — anónimo
+              </div>
+              {h.externalObservations.positiveComments.map((c, i) => (
+                <div key={`op-${i}`} className="text-[12px] italic mb-1">
+                  &ldquo;{c}&rdquo;
+                </div>
+              ))}
+              {h.externalObservations.improvementComments.map((c, i) => (
+                <div key={`oi-${i}`} className="text-[12px] italic mb-1" style={{ color: "#D9A441" }}>
+                  &ldquo;{c}&rdquo;
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       ))}
     </div>

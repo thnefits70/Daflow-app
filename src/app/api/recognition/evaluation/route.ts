@@ -6,6 +6,14 @@ import { canEvaluateUser } from "@/lib/guards";
 import { PILLARS, pickQuestions, currentMonth, QUESTIONS_PER_PILLAR, summaryFieldsFromScores } from "@/lib/recognition";
 import { purgeOldEvaluationDetail } from "@/lib/recognitionPurge";
 import { getEarliestIncompleteMonthBefore, formatMonthLabel } from "@/lib/pendingTasks";
+import { leaderHasTeam, recomputeLeaderSummary } from "@/lib/recognitionAdmin";
+
+// Un líder cuyo equipo lo califica en Liderazgo 360° ya no responde ese pilar
+// acá — ver el bloque "Feedback de Liderazgo 360°" en recognitionAdmin.ts.
+async function liderazgoSourceFor(evaluateeId: string, evaluateeIsLeader: boolean): Promise<"team" | "admin"> {
+  if (!evaluateeIsLeader) return "admin";
+  return (await leaderHasTeam(evaluateeId)) ? "team" : "admin";
+}
 
 // Returns this month's randomized question set for (evaluator, evaluatee),
 // grouped by pillar, plus any scores/comment already saved (so reopening a
@@ -34,7 +42,9 @@ export async function GET(req: NextRequest) {
   // cargar las preguntas) en vez de dejar que llene todo el formulario y
   // recién se entere al guardar.
   const isAdmin = session.user.role === "admin";
-  const evaluateeDept = isAdmin ? null : await prisma.user.findUnique({ where: { id: evaluateeId }, select: { deptId: true } });
+  const evaluatee = await prisma.user.findUnique({ where: { id: evaluateeId }, select: { deptId: true, isLeader: true } });
+  if (!evaluatee) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+  const evaluateeDept = isAdmin ? null : evaluatee;
   const blocked = await getEarliestIncompleteMonthBefore(isAdmin, evaluateeDept?.deptId ?? null, month);
   if (blocked) {
     return NextResponse.json(
@@ -46,12 +56,14 @@ export async function GET(req: NextRequest) {
     );
   }
 
+  const liderazgoSource = await liderazgoSourceFor(evaluateeId, evaluatee.isLeader);
+
   const existing = await prisma.monthlyEvaluation.findUnique({
     where: { month_evaluateeId: { month, evaluateeId } },
     include: { scores: true },
   });
 
-  const pillars = PILLARS.map((p) => ({
+  const pillars = PILLARS.filter((p) => p.key !== "liderazgo" || liderazgoSource === "admin").map((p) => ({
     ...p,
     questions: pickQuestions(evaluatorId, evaluateeId, month, p.key).map((q) => ({
       ...q,
@@ -62,6 +74,7 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({
     month,
     pillars,
+    liderazgoSource,
     comment: existing?.comment ?? "",
     questionsPerPillar: QUESTIONS_PER_PILLAR,
   });
@@ -96,12 +109,22 @@ export async function POST(req: NextRequest) {
   const canEvaluate = await canEvaluateUser(evaluateeId);
   if (!canEvaluate) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
+  const evaluatee = await prisma.user.findUnique({ where: { id: evaluateeId }, select: { deptId: true, isLeader: true } });
+  if (!evaluatee) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+  const liderazgoSource = await liderazgoSourceFor(evaluateeId, evaluatee.isLeader);
+
   // Every question in every pillar must be answered — a partial evaluation
   // would give this person an unfair (lower max) total against everyone
-  // else, which breaks the ranking's fairness.
-  const expectedCount = PILLARS.length * QUESTIONS_PER_PILLAR;
+  // else, which breaks the ranking's fairness. Un líder cuyo Liderazgo lo
+  // califica su equipo no responde ese pilar acá (24 en vez de 28), y ningún
+  // score de "liderazgo" puede colarse en ese caso.
+  const expectedPillars = liderazgoSource === "team" ? PILLARS.length - 1 : PILLARS.length;
+  const expectedCount = expectedPillars * QUESTIONS_PER_PILLAR;
   if (scores.length !== expectedCount) {
     return NextResponse.json({ error: "Debes responder todas las preguntas antes de guardar." }, { status: 400 });
+  }
+  if (liderazgoSource === "team" && scores.some((s) => s.pillar === "liderazgo")) {
+    return NextResponse.json({ error: "Este pilar lo califica el equipo, no se puede enviar acá." }, { status: 400 });
   }
 
   // Same "past month only, never future" rule as GET — catching up a month
@@ -113,7 +136,7 @@ export async function POST(req: NextRequest) {
   // alguien deja el formulario abierto desde antes y guarda después de que
   // otro mes anterior quedó pendiente, o llama a la API directo.
   const isAdmin = session.user.role === "admin";
-  const evaluateeDept = isAdmin ? null : await prisma.user.findUnique({ where: { id: evaluateeId }, select: { deptId: true } });
+  const evaluateeDept = isAdmin ? null : evaluatee;
   const blocked = await getEarliestIncompleteMonthBefore(isAdmin, evaluateeDept?.deptId ?? null, month);
   if (blocked) {
     return NextResponse.json(
@@ -146,6 +169,13 @@ export async function POST(req: NextRequest) {
     });
     return ev;
   });
+
+  // El upsert de arriba dejó liderazgoScore en 0 (summaryFieldsFromScores no
+  // recibió ninguna pregunta de ese pilar) — se completa con lo que ya haya
+  // enviado el equipo.
+  if (liderazgoSource === "team") {
+    await recomputeLeaderSummary(evaluateeId, month);
+  }
 
   // No cron in this app — piggyback the retention cleanup on the natural
   // write cadence (a handful of evaluations per month) instead.

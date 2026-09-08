@@ -5,10 +5,16 @@ import { auth } from "@/auth";
 import { requireAdminSession, canManageNomina } from "@/lib/guards";
 import { hashPassword } from "@/lib/password";
 
-function omitPasswordHash<T extends { passwordHash: string }>(user: T): Omit<T, "passwordHash"> {
+function omitPasswordHash<T extends { passwordHash: string; twoFactorSecret?: string | null; twoFactorBackupCodes?: string[] }>(
+  user: T
+): Omit<T, "passwordHash" | "twoFactorSecret" | "twoFactorBackupCodes"> {
   const safe: Partial<T> = { ...user };
   delete safe.passwordHash;
-  return safe as Omit<T, "passwordHash">;
+  // Nunca deben salir de este endpoint — son lo único que hace falta para
+  // suplantar el 2FA de alguien.
+  delete safe.twoFactorSecret;
+  delete safe.twoFactorBackupCodes;
+  return safe as Omit<T, "passwordHash" | "twoFactorSecret" | "twoFactorBackupCodes">;
 }
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -63,6 +69,12 @@ const updateSchema = z.object({
   canViewStoreFeedback: z.boolean().optional(),
   excludeFromRecognition: z.boolean().optional(),
   isActive: z.boolean().optional(),
+  // Confirmado 2026-09-08: borra el secreto 2FA + códigos de respaldo de
+  // esta persona, invalidando de inmediato lo que tenga en su celular —
+  // exclusivo del admin (ver chequeo más abajo), ni siquiera Nairoby vía
+  // canManageNomina, para que el control quede visiblemente en una sola
+  // persona.
+  resetTwoFactor: z.boolean().optional(),
   // When assigning this user as leader of a department that already has a
   // different leader, the request is rejected with 409 unless this is set —
   // it confirms the admin wants to demote the existing leader.
@@ -138,6 +150,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (d.canViewStoreFeedback !== undefined) data.canViewStoreFeedback = d.canViewStoreFeedback;
   if (d.excludeFromRecognition !== undefined) data.excludeFromRecognition = d.excludeFromRecognition;
   if (d.isActive !== undefined) data.isActive = d.isActive;
+  if (d.resetTwoFactor) {
+    if (session.user.role !== "admin") return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+    data.twoFactorEnabled = false;
+    data.twoFactorSecret = null;
+    data.twoFactorBackupCodes = [];
+  }
 
   try {
     const user = await prisma.user.update({ where: { id }, data });

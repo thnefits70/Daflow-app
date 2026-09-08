@@ -3,7 +3,7 @@
 // imported by a "use client" component, and bundling prisma into it breaks
 // the Turbopack client build.
 import { prisma } from "@/lib/prisma";
-import { currentMonth, evaluationDeadline, rankEvaluations, rankSummaries } from "@/lib/recognition";
+import { averageQuestionScores, currentMonth, evaluationDeadline, pillarTotalsFromScores, rankEvaluations, rankSummaries } from "@/lib/recognition";
 
 // The most recent month whose evaluation window has closed, has at least
 // one evaluation, and hasn't been confirmed yet — this is what the admin's
@@ -66,4 +66,97 @@ export async function confirmMonthWinner(month: string) {
   ]);
 
   return podium;
+}
+
+/**
+ * ---------------- Feedback de Liderazgo 360° ----------------
+ * Ver el comentario en schema.prisma sobre LeaderTeamFeedback para el
+ * contexto completo. Este bloque vive acá (no en recognition.ts) por la
+ * misma razón que el resto del archivo: toca prisma directamente.
+ */
+
+// Mismo filtro de cohort que ya usan pendingTasks.ts y
+// area/colaborador-destacado/page.tsx — se calcula siempre dinámico, nunca
+// hardcodeado por área, porque hoy Marketing/Finanzas no tienen equipo y eso
+// puede cambiar.
+export async function leaderHasTeam(leaderId: string): Promise<boolean> {
+  const leader = await prisma.user.findUnique({ where: { id: leaderId }, select: { leadsDeptId: true } });
+  if (!leader?.leadsDeptId) return false;
+  const count = await prisma.user.count({
+    where: { deptId: leader.leadsDeptId, isLeader: false, isActive: true, excludeFromRecognition: false },
+  });
+  return count > 0;
+}
+
+export async function computeTeamLiderazgoScore(leaderId: string, month: string): Promise<number> {
+  const rows = await prisma.leaderTeamFeedbackScore.findMany({
+    where: { feedback: { leaderId, month } },
+    select: { questionId: true, score: true },
+  });
+  return averageQuestionScores(rows);
+}
+
+// Recalcula el resumen mensual de un líder mezclando los 6 pilares que sigue
+// calificando el admin (leídos del detalle si todavía existe, o del resumen
+// ya guardado si no) con el Liderazgo agregado del equipo. Se llama tanto
+// cuando el admin guarda su evaluación como cada vez que un miembro del
+// equipo envía/actualiza su calificación — así el ranking del admin siempre
+// está al día, aunque el líder evaluado no vea nada hasta que se confirme el
+// podio (ver isMonthConfirmed()).
+export async function recomputeLeaderSummary(leaderId: string, month: string): Promise<void> {
+  const detail = await prisma.monthlyEvaluation.findUnique({
+    where: { month_evaluateeId: { month, evaluateeId: leaderId } },
+    include: { scores: { select: { pillar: true, score: true } } },
+  });
+
+  let other6: Record<string, number>;
+  if (detail) {
+    const totals = pillarTotalsFromScores(detail.scores);
+    other6 = {
+      resultadosScore: totals.resultados,
+      excelenciaScore: totals.excelencia,
+      compromisoScore: totals.compromiso,
+      colaboracionScore: totals.colaboracion,
+      clienteScore: totals.orientacion_cliente,
+      innovacionScore: totals.innovacion,
+    };
+  } else {
+    const existing = await prisma.monthlyEvaluationSummary.findUnique({ where: { month_evaluateeId: { month, evaluateeId: leaderId } } });
+    other6 = {
+      resultadosScore: existing?.resultadosScore ?? 0,
+      excelenciaScore: existing?.excelenciaScore ?? 0,
+      compromisoScore: existing?.compromisoScore ?? 0,
+      colaboracionScore: existing?.colaboracionScore ?? 0,
+      clienteScore: existing?.clienteScore ?? 0,
+      innovacionScore: existing?.innovacionScore ?? 0,
+    };
+  }
+
+  const liderazgoScore = await computeTeamLiderazgoScore(leaderId, month);
+  const totalScore = Object.values(other6).reduce((a, b) => a + b, 0) + liderazgoScore;
+
+  const fields = {
+    resultadosScore: other6.resultadosScore,
+    excelenciaScore: other6.excelenciaScore,
+    compromisoScore: other6.compromisoScore,
+    colaboracionScore: other6.colaboracionScore,
+    clienteScore: other6.clienteScore,
+    innovacionScore: other6.innovacionScore,
+    liderazgoScore,
+    totalScore,
+  };
+  await prisma.monthlyEvaluationSummary.upsert({
+    where: { month_evaluateeId: { month, evaluateeId: leaderId } },
+    create: { month, evaluateeId: leaderId, ...fields },
+    update: fields,
+  });
+}
+
+// "Se cerró el mes" = ya se confirmó el podio de Colaborador Destacado para
+// ese mes (la misma acción deliberada de un clic que ya existe) — hasta
+// entonces, nada de feedback de equipo/observaciones/comentarios se le
+// muestra a quien lo recibe.
+export async function isMonthConfirmed(month: string): Promise<boolean> {
+  const row = await prisma.monthlyRecognitionResult.findFirst({ where: { month } });
+  return !!row;
 }

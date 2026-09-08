@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Upload, X, Mail, KeyRound, Cake, Landmark } from "lucide-react";
+import { Upload, X, Mail, KeyRound, Cake, Landmark, ShieldCheck, Copy, Check } from "lucide-react";
 import { BrandMark } from "@/components/brand/DaflowMark";
 import { uploadFile } from "@/lib/uploadFile";
 
@@ -22,24 +22,40 @@ export function SettingsPanel({
   bannerUrl,
   faviconUrl,
   adminEmail,
+  adminEmailBackup,
   adminBirthDate,
+  adminTwoFactorEnabled,
 }: {
   logoUrl: string | null;
   bannerUrl: string | null;
   faviconUrl: string | null;
   adminEmail: string | null;
+  adminEmailBackup: string | null;
   adminBirthDate: string | null;
+  adminTwoFactorEnabled: boolean;
 }) {
   const router = useRouter();
   const [logo, setLogo] = useState(logoUrl);
   const [banner, setBanner] = useState(bannerUrl);
   const [favicon, setFavicon] = useState(faviconUrl);
   const [email, setEmail] = useState(adminEmail ?? "");
+  const [emailBackup, setEmailBackup] = useState(adminEmailBackup ?? "");
   const [birthDate, setBirthDate] = useState(adminBirthDate ? adminBirthDate.slice(0, 10) : "");
   const [logoErr, setLogoErr] = useState("");
   const [bannerErr, setBannerErr] = useState("");
   const [faviconErr, setFaviconErr] = useState("");
   const [emailSaved, setEmailSaved] = useState(false);
+  const [emailBackupSaved, setEmailBackupSaved] = useState(false);
+
+  const [tfEnabled, setTfEnabled] = useState(adminTwoFactorEnabled);
+  const [tfStep, setTfStep] = useState<"idle" | "setup" | "backup-codes" | "confirm-disable">("idle");
+  const [tfSecret, setTfSecret] = useState("");
+  const [tfQrDataUrl, setTfQrDataUrl] = useState("");
+  const [tfCode, setTfCode] = useState("");
+  const [tfBackupCodes, setTfBackupCodes] = useState<string[]>([]);
+  const [tfErr, setTfErr] = useState("");
+  const [tfBusy, setTfBusy] = useState(false);
+  const [tfCopied, setTfCopied] = useState(false);
   const [birthDateSaved, setBirthDateSaved] = useState(false);
 
   const [newPassword, setNewPassword] = useState("");
@@ -266,6 +282,82 @@ export function SettingsPanel({
     setTimeout(() => setEmailSaved(false), 2500);
   };
 
+  const saveEmailBackup = async () => {
+    setBusy(true);
+    await fetch("/api/settings", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ adminEmailBackup: emailBackup.trim() }),
+    });
+    setBusy(false);
+    setEmailBackupSaved(true);
+    setTimeout(() => setEmailBackupSaved(false), 2500);
+  };
+
+  const startTwoFactorSetup = async () => {
+    setTfErr("");
+    setTfBusy(true);
+    const res = await fetch("/api/settings/2fa/setup", { method: "POST" });
+    const data = await res.json().catch(() => null);
+    setTfBusy(false);
+    if (!res.ok || !data?.secret) {
+      setTfErr("No se pudo generar el código QR. Intenta de nuevo.");
+      return;
+    }
+    setTfSecret(data.secret);
+    setTfQrDataUrl(data.qrDataUrl);
+    setTfCode("");
+    setTfStep("setup");
+  };
+
+  const confirmTwoFactorSetup = async () => {
+    setTfErr("");
+    setTfBusy(true);
+    const res = await fetch("/api/settings/2fa/confirm", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ secret: tfSecret, code: tfCode }),
+    });
+    const data = await res.json().catch(() => null);
+    setTfBusy(false);
+    if (!res.ok || !data?.ok) {
+      setTfErr(data?.error ?? "Código incorrecto.");
+      return;
+    }
+    setTfBackupCodes(data.backupCodes);
+    setTfEnabled(true);
+    setTfStep("backup-codes");
+  };
+
+  const disableTwoFactor = async () => {
+    setTfBusy(true);
+    await fetch("/api/settings/2fa/disable", { method: "POST" });
+    setTfBusy(false);
+    setTfEnabled(false);
+    setTfStep("idle");
+  };
+
+  const regenerateBackupCodes = async () => {
+    setTfErr("");
+    setTfBusy(true);
+    const res = await fetch("/api/settings/2fa/regenerate-codes", { method: "POST" });
+    const data = await res.json().catch(() => null);
+    setTfBusy(false);
+    if (!res.ok || !data?.ok) {
+      setTfErr("No se pudo regenerar los códigos.");
+      return;
+    }
+    setTfBackupCodes(data.backupCodes);
+    setTfStep("backup-codes");
+  };
+
+  const copyTwoFactorBackupCodes = () => {
+    navigator.clipboard.writeText(tfBackupCodes.join("\n")).then(() => {
+      setTfCopied(true);
+      setTimeout(() => setTfCopied(false), 1500);
+    });
+  };
+
   const saveBirthDate = async (value: string) => {
     setBirthDate(value);
     setBusy(true);
@@ -422,6 +514,170 @@ export function SettingsPanel({
           </button>
         </div>
         {emailSaved && <div className="text-green text-[12px] mt-2">Correo guardado.</div>}
+      </div>
+
+      <div className="bg-surface border border-rule rounded p-4.5">
+        <label className="flex items-center gap-1.5 mb-3 text-[11px] font-semibold tracking-wide uppercase text-steel">
+          <Mail size={12} /> Correo de respaldo (opcional)
+        </label>
+        <div className="text-[12px] text-steel mb-3">
+          Si algún día no puedes abrir el correo principal de arriba, el enlace de recuperación también llegará
+          aquí.
+        </div>
+        <div className="flex gap-2">
+          <input
+            className="flex-1 rounded border border-rule px-2.5 py-2 text-[13.5px]"
+            placeholder="correo-alterno@empresa.com"
+            value={emailBackup}
+            onChange={(e) => setEmailBackup(e.target.value)}
+          />
+          <button
+            type="button"
+            disabled={busy}
+            className="rounded border border-blue bg-blue px-4 py-2 text-[13px] font-semibold text-white cursor-pointer disabled:opacity-60"
+            onClick={saveEmailBackup}
+          >
+            Guardar
+          </button>
+        </div>
+        {emailBackupSaved && <div className="text-green text-[12px] mt-2">Correo guardado.</div>}
+      </div>
+
+      <div className="bg-surface border border-rule rounded p-4.5">
+        <label className="flex items-center gap-1.5 mb-3 text-[11px] font-semibold tracking-wide uppercase text-steel">
+          <ShieldCheck size={12} /> Verificación en dos pasos (2FA)
+        </label>
+
+        {tfStep === "idle" && (
+          <>
+            <div className="flex items-center gap-2.5 mb-3">
+              <span className={`inline-flex items-center rounded px-2 py-0.5 text-[11px] font-semibold ${tfEnabled ? "bg-green/10 text-green" : "bg-cloud text-steel"}`}>
+                {tfEnabled ? "Activo" : "Inactivo"}
+              </span>
+              <span className="text-[12px] text-steel">
+                {tfEnabled
+                  ? "Cada vez que inicies sesión te pedirá el código de tu app autenticadora."
+                  : "Pide un código de tu celular (Google Authenticator) además de la contraseña al iniciar sesión."}
+              </span>
+            </div>
+            <div className="flex items-center gap-2.5">
+              {!tfEnabled ? (
+                <button
+                  type="button"
+                  disabled={tfBusy}
+                  className="rounded border border-blue bg-blue px-3.5 py-2 text-[12.5px] font-semibold text-white cursor-pointer disabled:opacity-60"
+                  onClick={startTwoFactorSetup}
+                >
+                  Activar 2FA
+                </button>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    disabled={tfBusy}
+                    className="rounded border border-rule px-3.5 py-2 text-[12.5px] font-semibold cursor-pointer disabled:opacity-60"
+                    onClick={regenerateBackupCodes}
+                  >
+                    Regenerar códigos de respaldo
+                  </button>
+                  <button
+                    type="button"
+                    className="text-[12.5px] font-semibold text-red cursor-pointer"
+                    onClick={() => setTfStep("confirm-disable")}
+                  >
+                    Desactivar
+                  </button>
+                </>
+              )}
+            </div>
+          </>
+        )}
+
+        {tfStep === "confirm-disable" && (
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <span className="text-[12.5px] text-steel">
+              ¿Desactivar el autenticador? Ya no se pedirá código al iniciar sesión de administrador.
+            </span>
+            <button
+              type="button"
+              disabled={tfBusy}
+              className="rounded border border-red bg-red px-3 py-1.5 text-[12px] font-semibold text-white cursor-pointer disabled:opacity-60"
+              onClick={disableTwoFactor}
+            >
+              Sí, desactivar
+            </button>
+            <button type="button" className="text-steel text-[12px] cursor-pointer" onClick={() => setTfStep("idle")}>
+              Cancelar
+            </button>
+          </div>
+        )}
+
+        {tfStep === "setup" && (
+          <div>
+            <div className="text-[12px] text-steel mb-3">
+              Escanea este código QR con Google Authenticator (o cualquier app compatible) y escribe el código de 6
+              dígitos que te muestra.
+            </div>
+            {tfQrDataUrl && (
+              <div className="flex justify-center mb-3.5">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={tfQrDataUrl} alt="Código QR del autenticador" className="w-36 h-36 rounded border border-rule bg-white p-2" />
+              </div>
+            )}
+            <div className="flex gap-2">
+              <input
+                className="flex-1 rounded border border-rule px-2.5 py-2 text-[15px] tracking-widest text-center"
+                placeholder="000000"
+                value={tfCode}
+                onChange={(e) => setTfCode(e.target.value)}
+              />
+              <button
+                type="button"
+                disabled={tfBusy}
+                className="rounded border border-blue bg-blue px-4 py-2 text-[13px] font-semibold text-white cursor-pointer disabled:opacity-60"
+                onClick={confirmTwoFactorSetup}
+              >
+                Confirmar
+              </button>
+            </div>
+            {tfErr && <div className="text-red text-[12px] mt-2">{tfErr}</div>}
+            <button type="button" className="mt-2.5 text-[12px] text-steel cursor-pointer" onClick={() => setTfStep("idle")}>
+              Cancelar
+            </button>
+          </div>
+        )}
+
+        {tfStep === "backup-codes" && (
+          <div>
+            <div className="text-[12px] text-steel mb-3">
+              Guarda estos códigos de respaldo — cada uno sirve una sola vez si algún día pierdes el celular. No se
+              van a volver a mostrar.
+            </div>
+            <div className="rounded border border-rule bg-cloud p-3 mb-3">
+              <div className="grid grid-cols-2 gap-1.5 font-mono text-[13px]">
+                {tfBackupCodes.map((c) => (
+                  <div key={c}>{c}</div>
+                ))}
+              </div>
+            </div>
+            <div className="flex items-center gap-2.5">
+              <button
+                type="button"
+                className="inline-flex items-center gap-1.5 rounded border border-rule px-3.5 py-2 text-[12.5px] font-semibold cursor-pointer"
+                onClick={copyTwoFactorBackupCodes}
+              >
+                {tfCopied ? <Check size={14} className="text-green" /> : <Copy size={14} />} {tfCopied ? "Copiados" : "Copiar"}
+              </button>
+              <button
+                type="button"
+                className="rounded border border-blue bg-blue px-3.5 py-2 text-[12.5px] font-semibold text-white cursor-pointer"
+                onClick={() => setTfStep("idle")}
+              >
+                Listo
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="bg-surface border border-rule rounded p-4.5">

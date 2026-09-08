@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { rankEvaluations, rankSummaries, MAX_TOTAL_SCORE } from "@/lib/recognition";
+import { leaderHasTeam, isMonthConfirmed } from "@/lib/recognitionAdmin";
 
 // Every employee's own evaluation history, month by month — their total
 // score, the pillar breakdown, and where they ranked that month (computed
@@ -42,7 +43,35 @@ export async function GET() {
           );
 
     const mine = ranked.find((r) => r.userId === session.user.id);
-    if (mine) history.push({ month, ...mine, outOf: ranked.length });
+    if (!mine) continue;
+
+    // Feedback de Liderazgo 360° (equipo + observaciones externas): solo
+    // aplica a un líder cuyo equipo lo calificó, y ese mes entero se oculta
+    // hasta que se confirme el podio — "todo junto, no por partes".
+    if (mine.isLeader && (await leaderHasTeam(mine.userId))) {
+      if (!(await isMonthConfirmed(month))) continue;
+
+      const [teamFeedback, observations] = await Promise.all([
+        prisma.leaderTeamFeedback.findMany({ where: { leaderId: mine.userId, month }, select: { positiveComment: true, improvementComment: true } }),
+        prisma.leaderExternalObservation.findMany({ where: { leaderId: mine.userId, month }, select: { positiveComment: true, improvementComment: true } }),
+      ]);
+      history.push({
+        month,
+        ...mine,
+        outOf: ranked.length,
+        teamFeedback: {
+          positiveComments: teamFeedback.map((f) => f.positiveComment),
+          improvementComments: teamFeedback.map((f) => f.improvementComment).filter((c): c is string => !!c),
+        },
+        externalObservations: {
+          positiveComments: observations.map((o) => o.positiveComment),
+          improvementComments: observations.map((o) => o.improvementComment).filter((c): c is string => !!c),
+        },
+      });
+      continue;
+    }
+
+    history.push({ month, ...mine, outOf: ranked.length });
   }
 
   return NextResponse.json({ history, maxTotalScore: MAX_TOTAL_SCORE });

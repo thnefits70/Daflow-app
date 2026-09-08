@@ -3,6 +3,7 @@ import { TopLine } from "@/components/ui/TopLine";
 import { RecognitionPanel } from "@/components/recognition/RecognitionPanel";
 import { RecognitionRanking } from "@/components/recognition/RecognitionRanking";
 import { RecognitionTabs } from "@/components/recognition/RecognitionTabs";
+import { AdminLeadershipDashboard } from "@/components/recognition/AdminLeadershipDashboard";
 import { currentMonth, MAX_TOTAL_SCORE } from "@/lib/recognition";
 
 export default async function AdminRecognitionPage() {
@@ -62,6 +63,11 @@ export default async function AdminRecognitionPage() {
             key: "ranking",
             label: "Ranking general",
             content: <RecognitionRanking scope="admin" departments={departments} />,
+          },
+          {
+            key: "mi-liderazgo",
+            label: "Mi liderazgo",
+            content: <AdminLeadershipDashboard />,
           },
         ]}
       />

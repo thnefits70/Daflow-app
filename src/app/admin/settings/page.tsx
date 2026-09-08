@@ -13,7 +13,9 @@ export default async function SettingsPage() {
         bannerUrl={settings?.bannerUrl ?? null}
         faviconUrl={settings?.faviconUrl ?? null}
         adminEmail={settings?.adminEmail ?? null}
+        adminEmailBackup={settings?.adminEmailBackup ?? null}
         adminBirthDate={settings?.adminBirthDate ? settings.adminBirthDate.toISOString() : null}
+        adminTwoFactorEnabled={settings?.adminTwoFactorEnabled ?? false}
       />
     </div>
   );

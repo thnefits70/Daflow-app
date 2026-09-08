@@ -14,7 +14,7 @@ export default async function NominaProfilePage({ params }: { params: Promise<{ 
         examScores: { orderBy: { createdAt: "desc" }, include: { exam: { select: { title: true } } } },
       },
     }),
-    prisma.department.findMany({ orderBy: { order: "asc" }, select: { id: true, name: true, code: true } }),
+    prisma.department.findMany({ where: { deletedAt: null }, orderBy: { order: "asc" }, select: { id: true, name: true, code: true } }),
     prisma.position.findMany({ orderBy: { name: "asc" } }),
     canViewPayrollRoles(),
     canEditPayrollRoles(),
@@ -59,6 +59,7 @@ export default async function NominaProfilePage({ params }: { params: Promise<{ 
         canViewStoreFeedback: user.canViewStoreFeedback,
         excludeFromRecognition: user.excludeFromRecognition,
         isActive: user.isActive,
+        twoFactorEnabled: user.twoFactorEnabled,
         milestones: user.milestones.map((m) => ({
           id: m.id,
           title: m.title,
@@ -77,6 +78,7 @@ export default async function NominaProfilePage({ params }: { params: Promise<{ 
       positions={positions.map((p) => ({ id: p.id, deptId: p.deptId, name: p.name }))}
       canViewPayroll={canViewPayroll}
       canEditPayroll={canEditPayroll}
+      isAdmin
     />
   );
 }

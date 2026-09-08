@@ -17,6 +17,18 @@ model PlatformSettings {
   id                            String    @id @default("singleton")
   adminPasswordHash             String
   adminEmail                    String?
+  // Confirmado 2026-09-08: correo de respaldo para "¿Olvidaste tu
+  // contraseña?" — si el correo principal (adminEmail) queda inaccesible,
+  // el enlace de recuperación también llega aquí.
+  adminEmailBackup              String?
+  // Confirmado 2026-09-08: autenticador 2FA (TOTP, compatible con Google
+  // Authenticator) opcional para el login de administrador. Igual patrón
+  // que User.twoFactorSecret/twoFactorBackupCodes más abajo, duplicado acá
+  // porque el admin no tiene una fila real en User (ver dbUserId en
+  // guards.ts).
+  adminTwoFactorEnabled         Boolean   @default(false)
+  adminTwoFactorSecret          String?
+  adminTwoFactorBackupCodes     String[]  @default([])
   logoUrl                       String?
   // Marca de agua opcional (logo + wordmark) mostrada discretamente en la tarjeta de Inicio.
   bannerUrl                     String?
@@ -92,6 +104,13 @@ model Department {
   // variables) — confirmado 2026-07-22: solo Finanzas y Contabilidad, por ahora.
   trackPaymentReminders Boolean  @default(false)
   createdAt             DateTime @default(now())
+  // Borrado lógico (confirmado 2026-09-08): eliminar un área pide contraseña
+  // de admin + código del autenticador (o de respaldo) + escribir el nombre
+  // exacto, y aun así solo marca deletedAt en vez de borrar — así queda
+  // recuperable desde la papelera si fue un error. Se bloquea del todo si el
+  // área todavía tiene personas activas asignadas (ver DELETE en
+  // api/departments/[id]/route.ts).
+  deletedAt             DateTime?
 
   users                     User[]
   processes                 Process[]
@@ -145,6 +164,20 @@ model User {
   // Nómina profile, isLeader, historial — stays intact so reactivating them
   // restores exactly what they had before.
   isActive Boolean @default(true)
+
+  // Confirmado 2026-09-08: autenticador 2FA (TOTP, compatible con Google
+  // Authenticator), obligatorio al iniciar sesión para todo colaborador
+  // cuyo departamento esté en TWO_FACTOR_REQUIRED_DEPT_CODES (lib/twoFactor.ts
+  // — hoy Inventario/Control de Compras/Finanzas). twoFactorSecret queda null
+  // hasta que la persona escanea el QR y confirma un código por primera vez;
+  // hasta entonces el login la manda a ese paso de configuración en vez de
+  // dejarla entrar. El admin puede borrar los 3 campos en cualquier momento
+  // (botón "Restablecer 2FA" en su ficha de Nómina) para invalidar de
+  // inmediato el código que tenga esa persona en su celular — ej. si se va de
+  // la empresa — sin depender de que ella entregue el teléfono.
+  twoFactorEnabled     Boolean  @default(false)
+  twoFactorSecret      String?
+  twoFactorBackupCodes String[] @default([])
 
   photoUrl  String?
   position  String?

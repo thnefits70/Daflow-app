@@ -9,6 +9,7 @@ const schema = z.object({
   bannerUrl: z.string().nullable().optional(),
   faviconUrl: z.string().nullable().optional(),
   adminEmail: z.string().trim().nullable().optional(),
+  adminEmailBackup: z.string().trim().nullable().optional(),
   adminBirthDate: z.string().nullable().optional(),
   newPassword: z.string().min(6, "La contraseña debe tener al menos 6 caracteres.").optional(),
 });
@@ -29,6 +30,7 @@ export async function PATCH(req: NextRequest) {
   if (d.bannerUrl !== undefined) data.bannerUrl = d.bannerUrl;
   if (d.faviconUrl !== undefined) data.faviconUrl = d.faviconUrl;
   if (d.adminEmail !== undefined) data.adminEmail = d.adminEmail || null;
+  if (d.adminEmailBackup !== undefined) data.adminEmailBackup = d.adminEmailBackup || null;
   if (d.adminBirthDate !== undefined) data.adminBirthDate = d.adminBirthDate ? new Date(d.adminBirthDate) : null;
   if (d.newPassword) data.adminPasswordHash = await hashPassword(d.newPassword);
 
@@ -38,6 +40,7 @@ export async function PATCH(req: NextRequest) {
     bannerUrl: settings.bannerUrl,
     faviconUrl: settings.faviconUrl,
     adminEmail: settings.adminEmail,
+    adminEmailBackup: settings.adminEmailBackup,
     adminBirthDate: settings.adminBirthDate,
   });
 }

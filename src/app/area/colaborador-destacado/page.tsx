@@ -6,6 +6,8 @@ import { RecognitionPanel } from "@/components/recognition/RecognitionPanel";
 import { RecognitionRanking } from "@/components/recognition/RecognitionRanking";
 import { RecognitionMyProgress } from "@/components/recognition/RecognitionMyProgress";
 import { RecognitionTabs } from "@/components/recognition/RecognitionTabs";
+import { LeadershipQuestionsForm } from "@/components/recognition/LeadershipQuestionsForm";
+import { ObservationTargetPicker } from "@/components/recognition/ObservationTargetPicker";
 import { currentMonth, MAX_TOTAL_SCORE } from "@/lib/recognition";
 
 export default async function AreaRecognitionPage() {
@@ -14,19 +16,45 @@ export default async function AreaRecognitionPage() {
 
   const me = await prisma.user.findUnique({
     where: { id: session.user.id },
-    select: { isLeader: true, leadsDeptId: true, leadsDept: { select: { name: true } } },
+    select: { isLeader: true, deptId: true, leadsDeptId: true, leadsDept: { select: { name: true } } },
   });
 
   // A regular employee (not a leader) doesn't evaluate anyone — they only
-  // see their own progress, no tabs needed.
+  // see their own progress, plus (Liderazgo 360°) rate their own leader and
+  // optionally leave an observation for someone else.
   if (!me?.isLeader || !me.leadsDeptId) {
+    const myLeader = me?.deptId
+      ? await prisma.user.findFirst({ where: { isLeader: true, leadsDeptId: me.deptId, isActive: true }, select: { id: true, name: true } })
+      : null;
+
     return (
       <div>
         <TopLine eyebrow="Reconocimiento" title="Colaborador Destacado del Mes" />
         <div className="text-[13px] text-steel mb-5 max-w-2xl">
-          Aquí puedes ver tu propio progreso mes a mes, según la evaluación de tu líder.
+          Aquí puedes ver tu propio progreso mes a mes, según la evaluación de tu líder{myLeader ? `, calificar el Liderazgo de ${myLeader.name}` : ""} y dejar una observación a quien quieras.
         </div>
-        <RecognitionMyProgress />
+        <RecognitionTabs
+          tabs={[
+            { key: "progreso", label: "Mi progreso", content: <RecognitionMyProgress /> },
+            ...(myLeader
+              ? [
+                  {
+                    key: "calificar-lider",
+                    label: "Calificar a mi líder",
+                    content: (
+                      <LeadershipQuestionsForm
+                        fetchUrl={`/api/recognition/leader-feedback?leaderId=${myLeader.id}`}
+                        submitUrl="/api/recognition/leader-feedback"
+                        extraBody={{ leaderId: myLeader.id }}
+                        targetName={myLeader.name}
+                      />
+                    ),
+                  },
+                ]
+              : []),
+            { key: "observacion", label: "Dejar una observación", content: <ObservationTargetPicker /> },
+          ]}
+        />
       </div>
     );
   }
@@ -88,6 +116,18 @@ export default async function AreaRecognitionPage() {
             key: "progreso",
             label: "Mi progreso",
             content: <RecognitionMyProgress />,
+          },
+          {
+            key: "calificar-admin",
+            label: "Calificar al admin",
+            content: (
+              <LeadershipQuestionsForm
+                fetchUrl="/api/recognition/admin-feedback"
+                submitUrl="/api/recognition/admin-feedback"
+                targetName="Administrador"
+                anonymousNote="Tu nombre no se le muestra a quien recibe esta calificación."
+              />
+            ),
           },
         ]}
       />

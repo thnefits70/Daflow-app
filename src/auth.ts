@@ -2,6 +2,25 @@ import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { prisma } from "@/lib/prisma";
 import { verifyPassword } from "@/lib/password";
+import { verifyTwoFactorCode, consumeBackupCode, looksLikeTotpCode, TWO_FACTOR_REQUIRED_DEPT_CODES } from "@/lib/twoFactor";
+
+// Valida un código de 2FA contra un secreto + lista de códigos de respaldo
+// ya guardados. Si el match viene de un código de respaldo, avisa cuál
+// hash quedó consumido (el caller debe persistir la lista sin ese hash —
+// un código de respaldo sirve una sola vez).
+async function checkTwoFactorCode(
+  code: string | undefined,
+  secret: string | null,
+  backupHashes: string[]
+): Promise<{ ok: boolean; remainingBackupHashes?: string[] }> {
+  if (!code || !secret) return { ok: false };
+  if (looksLikeTotpCode(code)) {
+    return { ok: verifyTwoFactorCode(code, secret) };
+  }
+  const remaining = await consumeBackupCode(code, backupHashes);
+  if (remaining === null) return { ok: false };
+  return { ok: true, remainingBackupHashes: remaining };
+}
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   session: { strategy: "jwt" },
@@ -13,10 +32,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         mode: { label: "Modo", type: "text" },
         username: { label: "Usuario", type: "text" },
         password: { label: "Contraseña", type: "password" },
+        totp: { label: "Código", type: "text" },
       },
       authorize: async (raw) => {
         const mode = raw?.mode as string | undefined;
         const password = raw?.password as string | undefined;
+        const totp = raw?.totp as string | undefined;
         if (!password) return null;
 
         if (mode === "admin") {
@@ -24,6 +45,18 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           if (!settings) return null;
           const ok = await verifyPassword(password, settings.adminPasswordHash);
           if (!ok) return null;
+
+          if (settings.adminTwoFactorEnabled) {
+            const check = await checkTwoFactorCode(totp, settings.adminTwoFactorSecret, settings.adminTwoFactorBackupCodes);
+            if (!check.ok) return null;
+            if (check.remainingBackupHashes) {
+              await prisma.platformSettings.update({
+                where: { id: "singleton" },
+                data: { adminTwoFactorBackupCodes: check.remainingBackupHashes },
+              });
+            }
+          }
+
           return { id: "admin", name: "Administrador", role: "admin" };
         }
 
@@ -32,6 +65,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         const user = await prisma.user.findFirst({
           where: { username: { equals: username, mode: "insensitive" } },
+          include: { department: { select: { code: true } } },
         });
         if (!user) return null;
 
@@ -39,6 +73,22 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         if (!ok) return null;
         if (!user.deptId) return null;
         if (!user.isActive) return null;
+
+        const requiresTwoFactor = !!user.department && TWO_FACTOR_REQUIRED_DEPT_CODES.includes(user.department.code);
+        if (requiresTwoFactor) {
+          // Sin secreto guardado todavía: el frontend debe pasar primero por
+          // el enroll (2fa-enroll-confirm), que lo guarda antes de llegar
+          // acá — si por algún motivo llega sin eso, no se deja entrar.
+          if (!user.twoFactorEnabled || !user.twoFactorSecret) return null;
+          const check = await checkTwoFactorCode(totp, user.twoFactorSecret, user.twoFactorBackupCodes);
+          if (!check.ok) return null;
+          if (check.remainingBackupHashes) {
+            await prisma.user.update({
+              where: { id: user.id },
+              data: { twoFactorBackupCodes: check.remainingBackupHashes },
+            });
+          }
+        }
 
         return {
           id: user.id,
