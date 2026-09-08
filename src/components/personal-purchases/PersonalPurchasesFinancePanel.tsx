@@ -11,6 +11,8 @@ type Item = {
   unitPriceModes: string[] | null;
   livePhotoUrl: string;
   optionalPhotoUrl: string | null;
+  costUnitPrice: number | null;
+  dropiUnitPrice: number | null;
   confirmedCatalogItem: { justCode: string | null } | null;
 };
 type Order = {
@@ -40,7 +42,23 @@ export function PersonalPurchasesFinancePanel({ isAdmin = false }: { isAdmin?: b
   const [zoomedPhoto, setZoomedPhoto] = useState<string | null>(null);
 
   function load() {
-    fetch("/api/personal-purchases/pending-finance").then((r) => (r.ok ? r.json() : [])).then(setOrders);
+    fetch("/api/personal-purchases/pending-finance")
+      .then((r) => (r.ok ? r.json() : []))
+      .then((data: Order[]) => {
+        setOrders(data);
+        // Precarga lo que ya estaba puesto (ej. una orden reabierta para
+        // corregir el precio) sin pisar lo que el usuario ya esté tipeando.
+        setPrices((prev) => {
+          const next = { ...prev };
+          for (const o of data) {
+            for (const it of o.items) {
+              if (next[it.id] || (it.costUnitPrice == null && it.dropiUnitPrice == null)) continue;
+              next[it.id] = { cost: it.costUnitPrice != null ? String(it.costUnitPrice) : "", dropi: it.dropiUnitPrice != null ? String(it.dropiUnitPrice) : "" };
+            }
+          }
+          return next;
+        });
+      });
   }
   useEffect(load, []);
 

@@ -163,7 +163,7 @@ export function PayrollWorkspace({
               <>Pon el precio en dólares de cada compra personal que Daniel ya confirmó (costo y Dropi según corresponda, en las cuotas que decidas). Una vez que el admin confirme que llegó el pago, cierra la operación desde acá para habilitar el retiro.</>
             )}
           </TabGuide>
-          <PersonalPurchasesPaymentWatchPanel />
+          <PersonalPurchasesPaymentWatchPanel canReopenPrice={!isAdmin} />
           <PersonalPurchasesPaymentLedgerPanel />
           <PersonalPurchasesFinancePanel isAdmin={isAdmin} />
           <PersonalPurchasesTransferPanel isAdmin={isAdmin} />

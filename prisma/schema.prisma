@@ -3771,6 +3771,17 @@ model PersonalPurchaseOrder {
   rejectedById           String?
   rejectionReason        String?
 
+  // Confirmado 2026-09-08: pedido explícito del usuario — cuando Nairoby ya
+  // cerró el precio pero se equivocó (ej. digitó mal un valor), antes no
+  // había forma de corregirlo: reject() ya no aplica pasado PENDING_FINANCE.
+  // reopen-price regresa la orden a PENDING_FINANCE para que lo corrija y
+  // vuelva a confirmar (confirm-finance recalcula todo de nuevo, incluido el
+  // plazo de 3 días hábiles). Exclusivo de Nairoby (canSetPersonalPurchasePrice,
+  // sin bypass de admin) y solo si el colaborador todavía no pagó ni subió
+  // comprobante (PENDING_PAYMENT_METHOD o PENDING_TRANSFER_PROOF).
+  priceReopenedAt   DateTime?
+  priceReopenedById String?
+
   // El permiso real de retiro — antes era "solo trazabilidad" (Daniel lo
   // marcaba después, sin efecto). Ahora es el gate: Daniel lo setea cuando
   // observa y aprueba el producto que se está llevando, y recién ahí sale
