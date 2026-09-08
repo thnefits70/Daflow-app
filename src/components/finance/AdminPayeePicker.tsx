@@ -232,10 +232,16 @@ export function AdminPayeePicker({
               type="button"
               className="w-full flex items-center gap-2.5 px-3 py-2 text-left text-[13px] hover:bg-cloud cursor-pointer border-b border-rule last:border-none"
               onClick={() => {
+                // Confirmado 2026-09-08: pedido explícito del usuario — antes se
+                // auto-marcaba la primera cuenta del contacto al elegirlo, así
+                // que una solicitud podía terminar apuntando a una cuenta
+                // bancaria (ej. la de Bryan en "RECARGA TWENTY") sin que nadie
+                // la hubiera elegido a propósito. Ahora el contacto puede
+                // usarse solo como etiqueta informativa; la cuenta se adjunta
+                // únicamente si alguien la selecciona a mano.
                 onChange(p);
                 setOpen(false);
                 setQuery("");
-                if (p.bankAccounts[0]) onSelectBankAccount(p.bankAccounts[0].id);
               }}
             >
               <CheckCircle2 size={13} className="text-teal shrink-0" />
