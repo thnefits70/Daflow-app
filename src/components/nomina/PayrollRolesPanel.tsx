@@ -678,6 +678,8 @@ export function PayrollRolesPanel({ canEdit, canProposeFixedBonus, canApproveFix
 
       {err && <div className="text-red text-[12.5px] mb-3">{err}</div>}
 
+      <CeoBonusesForNairobyPanel />
+
       {(!detail || detail.status === "NOT_GENERATED") && canEdit && (
         <button type="button" disabled={busy} className="text-[12.5px] font-bold border border-rule rounded-md px-4 py-2 cursor-pointer disabled:opacity-60" onClick={generate}>
           {busy ? "Generando…" : "Generar roles de esta quincena"}
@@ -768,7 +770,6 @@ export function PayrollRolesPanel({ canEdit, canProposeFixedBonus, canApproveFix
           {showDetails && (
             <div className="mb-4">
               <PayrollEmployeeSalariesPanel canEdit={canEdit} canProposeBonus={canProposeFixedBonus} canApproveBonus={canApproveFixedBonus} />
-              <CeoBonusesForNairobyPanel />
 
               <div className="bg-surface border border-rule rounded-md p-4 mb-4">
                 <div className="text-[11px] font-semibold uppercase tracking-wide text-steel mb-2">Sueldo básico nacional</div>
