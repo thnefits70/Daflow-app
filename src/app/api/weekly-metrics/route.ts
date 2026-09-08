@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { canEditDeptKpis, canJustifyFillRate } from "@/lib/guards";
+import { getOldestUnjustifiedFillRateWeek } from "@/lib/dashboard";
 
 export async function GET(req: NextRequest) {
   const session = await auth();
@@ -48,6 +49,25 @@ export async function POST(req: NextRequest) {
   // (semanas ya cargadas antes de este cambio) siga funcionando igual.
   const hasBreakdown = prepared != null || generated != null || outOfStock != null;
   const notDispatched = hasBreakdown ? (prepared ?? 0) + (generated ?? 0) + (outOfStock ?? 0) : null;
+
+  // Confirmado 2026-09-08: pedido explícito del usuario — si el líder ya
+  // tiene una semana ANTERIOR en alerta sin explicar, no puede seguir
+  // registrando semanas nuevas hasta resolverla (ver
+  // getOldestUnjustifiedFillRateWeek) — evita que el backlog se acumule en
+  // silencio si un día se salta la explicación por cualquier motivo. No
+  // aplica a quien no puede justificar (ej. admin), igual que el resto de
+  // esta regla.
+  if (await canJustifyFillRate()) {
+    const backlog = await getOldestUnjustifiedFillRateWeek(deptId, week);
+    if (backlog) {
+      return NextResponse.json(
+        {
+          error: `Todavía tienes la semana ${backlog.week} sin explicar (quedó en ${backlog.fillRatePct}%, alerta) — escribe esa explicación antes de registrar una semana nueva.`,
+        },
+        { status: 400 }
+      );
+    }
+  }
 
   // Confirmado 2026-09-08: pedido explícito del usuario — si esta semana ya
   // queda en alerta (<95%, mismo umbral que needsJustification en

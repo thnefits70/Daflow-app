@@ -260,6 +260,39 @@ export async function getLatestFillRateBreakdown(): Promise<FillRateBreakdown> {
   };
 }
 
+export type UnjustifiedFillRateWeek = { week: string; fillRatePct: number } | null;
+
+// Confirmado 2026-09-08: pedido explícito del usuario — no basta con exigir
+// la explicación en el momento en que una semana cae en alerta; si el líder
+// de Fulfillment de todos modos se la salta (por ejemplo no entra ese día),
+// el hueco no debe poder acumularse en silencio. Mismo principio de bloqueo
+// en cascada que ya usa Colaborador del mes
+// (getEarliestIncompleteMonthBefore en pendingTasks.ts): no se puede
+// avanzar con un registro nuevo mientras quede una semana anterior sin
+// resolver. Se usa tanto al crear como al editar — `excludeWeek` deja
+// afuera la semana que se está guardando en ese mismo request, para no
+// bloquearse a sí misma.
+export async function getOldestUnjustifiedFillRateWeek(deptId: string, excludeWeek?: string): Promise<UnjustifiedFillRateWeek> {
+  const records = await prisma.weeklyMetricRecord.findMany({
+    where: {
+      deptId,
+      week: excludeWeek ? { not: excludeWeek } : undefined,
+      prepared: { not: null },
+      generated: { not: null },
+      outOfStock: { not: null },
+      fillRateJustification: null,
+    },
+    orderBy: { week: "asc" },
+  });
+  for (const r of records) {
+    const total = r.value + (r.prepared ?? 0) + (r.generated ?? 0) + (r.outOfStock ?? 0);
+    if (total === 0) continue;
+    const fillRatePct = Math.round((r.value / total) * 100);
+    if (fillRatePct < 95) return { week: r.week, fillRatePct };
+  }
+  return null;
+}
+
 // Tasa de devolución general — un valor mensual (no semanal) que Nairoby o el
 // admin cargan a mano. No está atada a un departamento, así que el "deptName"
 // del gráfico es solo un rótulo genérico, no un área real.

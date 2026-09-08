@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { canEditDeptKpis, canJustifyFillRate } from "@/lib/guards";
+import { getOldestUnjustifiedFillRateWeek } from "@/lib/dashboard";
 
 const updateSchema = z.object({
   value: z.number().int().min(0),
@@ -14,7 +15,7 @@ const updateSchema = z.object({
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const existing = await prisma.weeklyMetricRecord.findUnique({ where: { id }, select: { deptId: true } });
+  const existing = await prisma.weeklyMetricRecord.findUnique({ where: { id }, select: { deptId: true, week: true } });
   if (!existing) return NextResponse.json({ error: "No encontrado." }, { status: 404 });
   if (!(await canEditDeptKpis(existing.deptId))) {
     return NextResponse.json({ error: "No autorizado." }, { status: 403 });
@@ -29,6 +30,22 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const { value, prepared, generated, outOfStock, justification } = parsed.data;
   const hasBreakdown = prepared != null || generated != null || outOfStock != null;
   const notDispatched = hasBreakdown ? (prepared ?? 0) + (generated ?? 0) + (outOfStock ?? 0) : null;
+
+  // Mismo criterio que POST /api/weekly-metrics (confirmado 2026-09-08): si
+  // hay OTRA semana anterior en alerta sin explicar, no se puede seguir
+  // editando/registrando hasta resolverla — ver
+  // getOldestUnjustifiedFillRateWeek.
+  if (await canJustifyFillRate()) {
+    const backlog = await getOldestUnjustifiedFillRateWeek(existing.deptId, existing.week);
+    if (backlog) {
+      return NextResponse.json(
+        {
+          error: `Todavía tienes la semana ${backlog.week} sin explicar (quedó en ${backlog.fillRatePct}%, alerta) — escribe esa explicación antes de guardar otro registro.`,
+        },
+        { status: 400 }
+      );
+    }
+  }
 
   // Mismo criterio que POST /api/weekly-metrics (confirmado 2026-09-08): si
   // la edición deja esta semana en alerta (<95%) y quien edita es el líder

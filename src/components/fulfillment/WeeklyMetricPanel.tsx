@@ -80,6 +80,22 @@ export function WeeklyMetricPanel({
   const draftPct = hasBreakdownDraft && draftTotal > 0 ? Math.round((Number(value || 0) / draftTotal) * 100) : null;
   const needsJustificationDraft = canJustify && draftPct !== null && draftPct < 95;
 
+  // Confirmado 2026-09-08: pedido explícito del usuario — si el líder tiene
+  // una semana ANTERIOR en alerta sin explicar, no debe poder seguir
+  // registrando semanas nuevas hasta resolverla (backend ya lo bloquea, ver
+  // getOldestUnjustifiedFillRateWeek en dashboard.ts) — esto solo lo avisa
+  // de una vez, antes de que intente guardar y le rebote el error.
+  const oldestUnjustified = canJustify
+    ? sorted
+        .filter((r) => r.prepared !== null && r.generated !== null && r.outOfStock !== null && !r.fillRateJustification)
+        .map((r) => {
+          const t = r.value + (r.prepared ?? 0) + (r.generated ?? 0) + (r.outOfStock ?? 0);
+          return { week: r.week, pct: t > 0 ? Math.round((r.value / t) * 100) : null };
+        })
+        .filter((r): r is { week: string; pct: number } => r.pct !== null && r.pct < 95)
+        .sort((a, b) => (a.week < b.week ? -1 : 1))[0]
+    : undefined;
+
   const query = search.trim().toLowerCase();
   const visible = query
     ? sorted.filter((r) => formatWeek(r.week).toLowerCase().includes(query) || r.week.toLowerCase().includes(query))
@@ -174,7 +190,7 @@ export function WeeklyMetricPanel({
         {editable && (
           <button
             type="button"
-            disabled={busy}
+            disabled={busy || !!oldestUnjustified}
             className="inline-flex items-center gap-1.5 rounded border border-blue bg-blue px-3.5 py-2 text-[12.5px] font-semibold text-white cursor-pointer disabled:opacity-60 shrink-0"
             onClick={startNew}
           >
@@ -182,6 +198,14 @@ export function WeeklyMetricPanel({
           </button>
         )}
       </div>
+
+      {oldestUnjustified && (
+        <div className="rounded-md border border-red bg-red/10 px-3.5 py-3 mb-4 text-[12.5px]">
+          Tienes la semana <strong>{formatWeek(oldestUnjustified.week)}</strong> sin explicar (quedó en{" "}
+          {oldestUnjustified.pct}%, alerta) — no puedes registrar una semana nueva hasta que le expliques al equipo qué
+          pasó. Ábrela con el lápiz para escribirla.
+        </div>
+      )}
 
       {formOpen && (
         <div className="bg-surface border border-rule rounded-md p-4.5 mb-4">
