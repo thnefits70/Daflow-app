@@ -7,7 +7,12 @@ import bcrypt from "bcryptjs";
 // equipo (pedido explícito del usuario 2026-09-08): Inventario, Control de
 // Compras y Finanzas. Mismo patrón que SUPPLIER_VIEW_DEPT_CODES en guards.ts
 // — una lista de códigos en vez de una columna en Department.
-export const TWO_FACTOR_REQUIRED_DEPT_CODES = ["INV", "COM", "FIN"];
+// Ampliado el mismo día: "Control de Compras" (COM) no tiene gente asignada
+// de verdad — quien gestiona compras (Jariel) está organizativamente en
+// Análisis de Mercado (MKT) vía el flag canManagePurchases, no por deptId.
+// Se agrega MKT completo para cubrirlo a él (y de paso a Bryan Ríos, Heidy y
+// Robert, que manejan proveedores/precios/Dropi de ese mismo equipo).
+export const TWO_FACTOR_REQUIRED_DEPT_CODES = ["INV", "COM", "FIN", "MKT"];
 
 export function generateTwoFactorSecret() {
   return authenticator.generateSecret();

@@ -15,11 +15,11 @@ import { formatDateTime } from "@/lib/formatDateTime";
 
 type Dept = { id: string; name: string; code: string };
 
-// Mismos 3 departamentos que TWO_FACTOR_REQUIRED_DEPT_CODES en
-// lib/twoFactor.ts — duplicado acá porque ese archivo importa librerías de
-// servidor (otplib/qrcode) que no deben entrar al bundle de este componente
-// cliente. Si esa lista cambia, hay que actualizar ambas.
-const TWO_FACTOR_DEPT_CODES = ["INV", "COM", "FIN"];
+// Mismos departamentos que TWO_FACTOR_REQUIRED_DEPT_CODES en lib/twoFactor.ts
+// — duplicado acá porque ese archivo importa librerías de servidor
+// (otplib/qrcode) que no deben entrar al bundle de este componente cliente.
+// Si esa lista cambia, hay que actualizar ambas.
+const TWO_FACTOR_DEPT_CODES = ["INV", "COM", "FIN", "MKT"];
 type Position = { id: string; deptId: string; name: string };
 type Milestone = { id: string; title: string; note: string | null; date: string };
 type ExamScore = { id: string; score: number; total: number; createdAt: string; exam: { title: string } };
