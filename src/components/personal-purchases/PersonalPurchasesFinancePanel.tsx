@@ -85,6 +85,16 @@ export function PersonalPurchasesFinancePanel({ isAdmin = false }: { isAdmin?: b
     load();
   }
 
+  async function recalculate(id: string) {
+    setBusy(true);
+    setErr((e) => ({ ...e, [id]: "" }));
+    const res = await fetch(`/api/personal-purchases/${id}/recalculate-price-modes`, { method: "POST" });
+    setBusy(false);
+    const data = await res.json().catch(() => null);
+    if (!res.ok) { setErr((e) => ({ ...e, [id]: data?.error ?? "No se pudo recalcular." })); return; }
+    load();
+  }
+
   async function reject(id: string) {
     if (!rejectReason.trim()) return;
     setBusy(true);
@@ -180,6 +190,11 @@ export function PersonalPurchasesFinancePanel({ isAdmin = false }: { isAdmin?: b
                 <div className="text-[11.5px] text-steel-dim italic mt-2">Nairoby define el precio.</div>
               ) : (
                 <>
+                  <div className="mt-2">
+                    <button type="button" disabled={busy} className="text-[11px] font-semibold text-blue cursor-pointer" onClick={() => recalculate(o.id)}>
+                      Recalcular quién va a costo/Dropi (reglas actuales)
+                    </button>
+                  </div>
                   <div className="flex items-center gap-2 mt-3 flex-wrap">
                     {orderTotal > 0 && <span className="text-[13px] font-bold">Total: {money(orderTotal)}</span>}
                     <label className="text-[11px] text-steel ml-2">Cuotas</label>
