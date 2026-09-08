@@ -509,7 +509,7 @@ export const purchaseRequestInclude = {
   shippingPaymentRequestedBy: { select: { name: true } },
   shippingPaidBy: { select: { name: true } },
   financeFlaggedBy: { select: { name: true } },
-  receipt: { include: { confirmedBy: { select: { name: true } }, approvedBy: { select: { name: true } }, justaUploadedBy: { select: { name: true } } } },
+  receipt: { include: { confirmedBy: { select: { name: true } }, approvedBy: { select: { name: true } }, justaUploadedBy: { select: { name: true } }, quantityCorrectedBy: { select: { name: true } } } },
   urgentReports: {
     orderBy: { reportedAt: "desc" as const },
     include: {

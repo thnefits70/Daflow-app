@@ -403,6 +403,7 @@ model User {
   purchaseRequestReceiptsConfirmed             PurchaseRequestReceipt[]           @relation("PurchaseRequestReceiptConfirmedBy")
   purchaseRequestReceiptsApproved              PurchaseRequestReceipt[]           @relation("PurchaseRequestReceiptApprovedBy")
   purchaseRequestReceiptsJustaUploaded         PurchaseRequestReceipt[]           @relation("PurchaseRequestReceiptJustaUploadedBy")
+  purchaseRequestReceiptsQuantityCorrected     PurchaseRequestReceipt[]           @relation("PurchaseRequestReceiptQuantityCorrectedBy")
   marketingFollowUpsDesignConfirmed            PurchaseReceiptFollowUp[]          @relation("PurchaseReceiptFollowUpDesignConfirmedBy")
   marketingFollowUpsAdvisorConfirmed           PurchaseReceiptFollowUp[]          @relation("PurchaseReceiptFollowUpAdvisorConfirmedBy")
   purchaseRequestUrgentReports                 PurchaseRequestUrgentReport[]      @relation("PurchaseRequestUrgentReportedBy")
@@ -2089,6 +2090,19 @@ model PurchaseRequestReceipt {
   justaUploadedById String?
   justaUploadedBy   User?     @relation("PurchaseRequestReceiptJustaUploadedBy", fields: [justaUploadedById], references: [id], onDelete: SetNull)
   justaUploadedAt   DateTime?
+
+  // Confirmado 2026-09-08: pedido explícito de Daniel — corrige la cantidad
+  // declarada directo en la tarjeta de "Aprobar recepción" cuando no coincide
+  // con lo esperado (ej. resolvió un "Informar urgente" y el número
+  // declarado se quedó viejo). Solo mientras sigue en RECEIVED_PENDING_REVIEW
+  // (nunca después de aprobar). originalReceivedQuantity guarda lo que el
+  // equipo contó la primera vez — nunca se sobreescribe en correcciones
+  // posteriores, para no perder el dato de lo que de verdad se vio físicamente.
+  originalReceivedQuantity Int?
+  quantityCorrectedById    String?
+  quantityCorrectedBy      User?     @relation("PurchaseRequestReceiptQuantityCorrectedBy", fields: [quantityCorrectedById], references: [id], onDelete: SetNull)
+  quantityCorrectedAt      DateTime?
+  quantityCorrectionNote   String?
 }
 
 // Confirmado 2026-08-08: "Mercadería recibida" — pedido explícito del

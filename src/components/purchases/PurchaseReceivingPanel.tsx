@@ -38,6 +38,10 @@ type Row = {
     confirmedBy: { name: string } | null;
     confirmedAt: string;
     approvedBy: { name: string } | null;
+    originalReceivedQuantity: number | null;
+    quantityCorrectedAt: string | null;
+    quantityCorrectionNote: string | null;
+    quantityCorrectedBy: { name: string } | null;
   } | null;
   // Fix confirmado 2026-08-11: reportado por el usuario — sin esto, el
   // botón "Informar urgente" volvía a mostrar el formulario vacío como si
@@ -244,6 +248,15 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
   // mismo patrón de doble confirmación que el envío a Compras.
   const [internalNoteEdits, setInternalNoteEdits] = useState<Record<string, string>>({});
   const [confirmingInternalId, setConfirmingInternalId] = useState<string | null>(null);
+
+  // Confirmado 2026-09-08: pedido explícito de Daniel (caso real: resolvió
+  // un "Informar urgente" pero la cantidad declarada del recibo se quedó
+  // vieja y la alerta seguía roja) — corrige receivedQuantity directo desde
+  // la tarjeta de "Aprobar recepción", con nota obligatoria.
+  const [correctingQtyId, setCorrectingQtyId] = useState<string | null>(null);
+  const [correctQtyValue, setCorrectQtyValue] = useState("");
+  const [correctQtyNote, setCorrectQtyNote] = useState("");
+  const [confirmingCorrectQtyId, setConfirmingCorrectQtyId] = useState<string | null>(null);
 
   // Informar urgente — cantidad contada + desglose por tipo + evidencia.
   const [urgentCountedQty, setUrgentCountedQty] = useState("");
@@ -546,6 +559,28 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
       return next;
     });
     setConfirmingInternalId(null);
+    load();
+    router.refresh();
+  }
+
+  async function correctReceivedQuantity(id: string, receivedQuantity: number, note: string) {
+    setBusy(true);
+    setErr("");
+    const res = await fetch(`/api/purchase-requests/${id}/receipt/correct-quantity`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ receivedQuantity, note }),
+    });
+    setBusy(false);
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      setErr(data?.error ?? "No se pudo corregir.");
+      return;
+    }
+    setCorrectingQtyId(null);
+    setCorrectQtyValue("");
+    setCorrectQtyNote("");
+    setConfirmingCorrectQtyId(null);
     load();
     router.refresh();
   }
@@ -1586,6 +1621,81 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                               Resuelto internamente por {actorName(rep.resolvedInternallyBy?.name)} · {formatDateTime(rep.resolvedInternallyAt!)} — &quot;{rep.resolvedInternallyNote}&quot;
                             </div>
                           ))}
+                      {(canApprove || isAdmin) && r.receipt.quantityCorrectedAt && (
+                        <div className="flex items-center gap-1.5 text-[11px] text-steel mb-1.5">
+                          <CheckCircle2 size={12} className="shrink-0 text-teal" />
+                          Corregido por {actorName(r.receipt.quantityCorrectedBy?.name)} · {formatDateTime(r.receipt.quantityCorrectedAt)} — de {r.receipt.originalReceivedQuantity} a {r.receipt.receivedQuantity} un. — &quot;{r.receipt.quantityCorrectionNote}&quot;
+                        </div>
+                      )}
+                      {(canApprove || isAdmin) && !receivedQtyMatches && (
+                        correctingQtyId === r.id ? (
+                          confirmingCorrectQtyId === r.id ? (
+                            <div className="bg-navy rounded-md p-3 mb-2">
+                              <div className="text-[13px] font-bold mb-1.5">¿Seguro?</div>
+                              <div className="text-[12px] text-steel mb-3">
+                                Vas a corregir la cantidad declarada de {r.receipt.receivedQuantity} a {Number(correctQtyValue) || 0} un.
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  disabled={busy}
+                                  className="rounded border border-teal bg-teal px-3.5 py-1.5 text-[12px] font-bold text-navy cursor-pointer disabled:opacity-60"
+                                  onClick={() => correctReceivedQuantity(r.id, Number(correctQtyValue) || 0, correctQtyNote)}
+                                >
+                                  Sí, corregir
+                                </button>
+                                <button type="button" className="text-steel text-[12px] cursor-pointer" onClick={() => setConfirmingCorrectQtyId(null)}>
+                                  Cancelar
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="bg-cloud rounded-md p-3 mb-2">
+                              <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Cantidad declarada correcta</label>
+                              <input
+                                type="number"
+                                min={0}
+                                max={r.quantity}
+                                className="w-full rounded border border-rule px-2.5 py-2 text-[13px] font-bold mb-2"
+                                style={{ maxWidth: 160 }}
+                                value={correctQtyValue}
+                                onChange={(e) => setCorrectQtyValue(e.target.value)}
+                              />
+                              <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Nota (por qué se corrige)</label>
+                              <textarea
+                                className="w-full rounded border border-rule px-2.5 py-2 text-[12.5px] mb-2.5"
+                                rows={2}
+                                placeholder="Ej. se resolvió el faltante con Compras/internamente y este número se quedó viejo..."
+                                value={correctQtyNote}
+                                onChange={(e) => setCorrectQtyNote(e.target.value)}
+                              />
+                              <div className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  disabled={busy || !correctQtyValue || !correctQtyNote.trim()}
+                                  className="rounded border border-teal bg-teal px-3.5 py-1.5 text-[12px] font-bold text-navy cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                                  onClick={() => setConfirmingCorrectQtyId(r.id)}
+                                >
+                                  Guardar corrección
+                                </button>
+                                <button type="button" className="text-steel text-[12px] cursor-pointer" onClick={() => setCorrectingQtyId(null)}>
+                                  Cancelar
+                                </button>
+                              </div>
+                            </div>
+                          )
+                        ) : (
+                          <button
+                            type="button"
+                            disabled={!canApprove}
+                            title={!canApprove ? "Exclusivo del líder de Inventario" : undefined}
+                            className="text-[11.5px] font-semibold border border-teal/50 text-teal rounded px-3 py-1.5 cursor-pointer mb-2 disabled:opacity-40 disabled:cursor-not-allowed"
+                            onClick={() => { setCorrectingQtyId(r.id); setCorrectQtyValue(String(r.receipt!.receivedQuantity)); setCorrectQtyNote(""); setErr(""); }}
+                          >
+                            Corregir cantidad declarada
+                          </button>
+                        )
+                      )}
                       <div className="text-[11.5px] text-steel mb-2">
                         Recibido por {actorName(r.receipt.confirmedBy?.name)} · {formatDateTime(r.receipt.confirmedAt)}
                         {r.receipt.comment && ` — "${r.receipt.comment}"`}
