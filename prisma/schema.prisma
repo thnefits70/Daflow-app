@@ -2658,6 +2658,11 @@ model PurchaseUrgentResolution {
   replacementSubmittedBy       User?     @relation("UrgentResolutionReplacementSubmittedBy", fields: [replacementSubmittedById], references: [id], onDelete: SetNull)
   replacementSubmittedAt       DateTime?
   replacementArrivedAt         DateTime?
+  // Confirmado 2026-09-09: pedido explícito del usuario — antes el equipo
+  // solo subía fotos sin decir cuánto contó, así que no había forma de
+  // comparar contra `quantity` (lo que el sistema espera que llegue). Mismo
+  // criterio que receivedQuantity en la recepción normal.
+  replacementReceivedQty       Int?
   // Confirmado 2026-09-02: bug real — la migración del 2026-08-18 le quitó
   // el DEFAULT a nivel de base de datos a esta columna pero se quedó NOT
   // NULL, y como acá nunca se manda un valor explícito, cualquier resolución

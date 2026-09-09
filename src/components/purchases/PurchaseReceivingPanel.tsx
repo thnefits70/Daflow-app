@@ -94,6 +94,7 @@ type PendingReplacement = {
   // apruebe (ver approve-replacement/route.ts).
   replacementSubmittedAt: string | null;
   replacementSubmittedBy: { name: string } | null;
+  replacementReceivedQty: number | null;
   replacementPhotoUrls: string[];
   replacementAiMatch: boolean | null;
   replacementAiNote: string | null;
@@ -270,6 +271,7 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
 
   const [pendingReplacements, setPendingReplacements] = useState<PendingReplacement[]>([]);
   const [openReplacementId, setOpenReplacementId] = useState<string | null>(null);
+  const [replacementReceivedQty, setReplacementReceivedQty] = useState("");
   const [replacementPhotoUrls, setReplacementPhotoUrls] = useState<string[]>([]);
   const [takingReplacementPhoto, setTakingReplacementPhoto] = useState(false);
 
@@ -671,6 +673,10 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
   }
 
   async function confirmReplacement(resolutionId: string) {
+    if (!replacementReceivedQty) {
+      setErr("Falta la cantidad que contaste.");
+      return;
+    }
     if (replacementPhotoUrls.length < 2) {
       setErr("Sube al menos 2 fotos.");
       return;
@@ -680,7 +686,7 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
     const res = await fetch(`/api/purchase-requests/urgent-resolutions/${resolutionId}/replacement-arrived`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ photoUrls: replacementPhotoUrls }),
+      body: JSON.stringify({ receivedQty: Number(replacementReceivedQty), photoUrls: replacementPhotoUrls }),
     });
     setBusy(false);
     const data = await res.json().catch(() => null);
@@ -689,6 +695,7 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
       return;
     }
     setOpenReplacementId(null);
+    setReplacementReceivedQty("");
     setReplacementPhotoUrls([]);
     load();
     router.refresh();
@@ -1047,6 +1054,26 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                 </div>
                 {openReplacementId === pr.id ? (
                   <div>
+                    <div className="mb-2.5">
+                      <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">
+                        {canApprove || isAdmin ? `Cantidad contada — se esperaban ${pr.quantity} un.` : "Cantidad contada — cuenta las unidades que llegaron"}
+                      </label>
+                      <input
+                        type="number"
+                        className="w-full rounded border border-rule px-2.5 py-2 text-[13.5px]"
+                        style={{ maxWidth: 160 }}
+                        value={replacementReceivedQty}
+                        onChange={(e) => setReplacementReceivedQty(e.target.value)}
+                      />
+                      {replacementReceivedQty !== "" && Number(replacementReceivedQty) !== pr.quantity && (
+                        <div className="flex items-center gap-1.5 text-[11px] text-red mt-1.5">
+                          <AlertTriangle size={12} className="shrink-0" />
+                          {canApprove || isAdmin
+                            ? `No coincide con lo que el sistema espera (${pr.quantity} un.) — vuelve a contar antes de confirmar.`
+                            : "No coincide con lo registrado — vuelve a contar antes de confirmar."}
+                        </div>
+                      )}
+                    </div>
                     <div className="text-[11px] text-steel mb-1.5">Mínimo 2 fotos, igual que una recepción normal.</div>
                     {replacementPhotoUrls.length > 0 && (
                       <div className="grid grid-cols-3 gap-2 mb-2.5">
@@ -1074,10 +1101,10 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                     )}
                     {err && <div className="text-red text-[12px] mb-2">{err}</div>}
                     <div className="flex items-center gap-2">
-                      <button type="button" disabled={busy || replacementPhotoUrls.length < 2} className="rounded border border-green bg-green px-3.5 py-1.5 text-[12px] font-semibold text-white cursor-pointer disabled:opacity-60" onClick={() => confirmReplacement(pr.id)}>
+                      <button type="button" disabled={busy || !replacementReceivedQty || replacementPhotoUrls.length < 2} className="rounded border border-green bg-green px-3.5 py-1.5 text-[12px] font-semibold text-white cursor-pointer disabled:opacity-60" onClick={() => confirmReplacement(pr.id)}>
                         ✓ Confirmar que llegó bien
                       </button>
-                      <button type="button" className="text-steel text-[12px] cursor-pointer" onClick={() => { setOpenReplacementId(null); setReplacementPhotoUrls([]); }}>Cancelar</button>
+                      <button type="button" className="text-steel text-[12px] cursor-pointer" onClick={() => { setOpenReplacementId(null); setReplacementReceivedQty(""); setReplacementPhotoUrls([]); }}>Cancelar</button>
                     </div>
                   </div>
                 ) : pr.replacementSubmittedAt ? (
@@ -1087,6 +1114,12 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                     <div className="text-[11px] text-steel mb-1.5">
                       Subido por {actorName(pr.replacementSubmittedBy?.name)} · {formatDateTime(pr.replacementSubmittedAt)}
                     </div>
+                    {(canApprove || isAdmin) && pr.replacementReceivedQty != null && (
+                      <div className={`flex items-center gap-1.5 text-[11.5px] font-semibold mb-2 ${pr.replacementReceivedQty === pr.quantity ? "text-teal" : "text-red"}`}>
+                        {pr.replacementReceivedQty === pr.quantity ? <CheckCircle2 size={13} /> : <AlertTriangle size={13} />}
+                        Contó {pr.replacementReceivedQty} un. — se esperaban {pr.quantity} un.
+                      </div>
+                    )}
                     <div className="grid grid-cols-3 gap-2 mb-2.5">
                       {pr.replacementPhotoUrls.map((url, i) => (
                         <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="bg-navy rounded border border-rule flex items-center justify-center h-24">
@@ -1114,7 +1147,7 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                     disabled={!canReceiveTeam}
                     title={!canReceiveTeam ? "Exclusivo del equipo de Inventario" : undefined}
                     className="rounded border border-teal bg-teal px-3.5 py-1.5 text-[12px] font-bold text-navy cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-                    onClick={() => { setOpenReplacementId(pr.id); setReplacementPhotoUrls([]); setErr(""); }}
+                    onClick={() => { setOpenReplacementId(pr.id); setReplacementReceivedQty(""); setReplacementPhotoUrls([]); setErr(""); }}
                   >
                     Verificar {pr.replacementIsMissingDelivery ? "entrega recibida" : "cambio recibido"}
                   </button>

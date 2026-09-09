@@ -6,7 +6,10 @@ import { canReceivePurchasesTeam } from "@/lib/guards";
 import { compareReceiptPhotos } from "@/lib/purchaseAi";
 import { pushOwnerId } from "@/lib/pushOwner";
 
-const schema = z.object({ photoUrls: z.array(z.string().url()).min(2).max(3) });
+const schema = z.object({
+  receivedQty: z.number().int().min(0),
+  photoUrls: z.array(z.string().url()).min(2).max(3),
+});
 
 // Confirmado 2026-08-06 (ampliado 2026-08-18): cuando llega el cambio de
 // mercadería, cualquiera del equipo de Inventario lo sube con la MISMA
@@ -49,6 +52,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const updated = await prisma.purchaseUrgentResolution.update({
     where: { id },
     data: {
+      replacementReceivedQty: parsed.data.receivedQty,
       replacementPhotoUrls: parsed.data.photoUrls,
       replacementAiMatch: aiResult?.likelyMatch ?? null,
       replacementAiNote: aiResult?.note ?? null,
