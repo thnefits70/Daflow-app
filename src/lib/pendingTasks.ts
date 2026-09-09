@@ -423,6 +423,7 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   reingreso_mercaderia_revision: "Reingreso de mercadería por revisar",
   reingreso_mercaderia_baja_just: "Reingreso de mercadería — semana de dañados por dar de baja en Just",
   reingreso_mercaderia_verificacion_semanal: "Reingreso de mercadería — lote semanal de dañados por verificar",
+  guias_canceladas_reingreso: "Guías canceladas — reingresar mercadería a Just",
   cumpleanos: "Cumpleaños de tu equipo (aviso 1 día antes)",
   compras_pendientes_aprobacion: "Solicitudes de compra por aprobar",
   compras_rechazadas: "Tus solicitudes de compra rechazadas — corregir y reenviar",
@@ -1965,6 +1966,32 @@ async function getMerchandiseReentryPendingItem(href: string): Promise<PendingIt
   };
 }
 
+// Confirmado 2026-09-09: pedido explícito de Daniel — antes esto solo le
+// llegaba como una notificación puntual (ver notifyInventoryLeadCancelledGuidesReady
+// en cancelledGuides.ts), que se podía pasar por alto o perder si no la veía
+// justo en ese momento. Una guía está lista para él recién cuando los TRES
+// pasos previos (Bryan gestionó el lote, Yair la sacó de Fulfillment, y
+// Heidy cargó los productos) ya están hechos — ver docblock de
+// CancelledGuideReport en el schema.
+async function getCancelledGuidesReingresoPendingItem(href: string): Promise<PendingItem | null> {
+  const rows = await prisma.cancelledGuideReport.findMany({
+    where: { batchManagedAt: { not: null }, fulfillmentRemovedAt: { not: null }, itemsAssignedAt: { not: null }, reingresadoAt: null },
+    select: { code: true, itemsAssignedAt: true },
+  });
+  if (rows.length === 0) return null;
+
+  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const overdue = rows.some((r) => (r.itemsAssignedAt ?? new Date()) < cutoff);
+  return {
+    type: "guias_canceladas_reingreso",
+    icon: "🚚",
+    label: "Guías canceladas — reingresar a Just",
+    meta: `${rows.length === 1 ? rows[0].code : `${rows.length} guías`}${overdue ? " · atrasado" : ""}`,
+    overdue,
+    href,
+  };
+}
+
 // Confirmado 2026-08-21: pedido explícito del usuario — acceso directo para
 // Daniel cuando ya pasó el corte del sábado de una semana y todavía le
 // falta dar de baja en Just el acumulado de productos "no solucionados"
@@ -2541,7 +2568,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
   }
 
   if (me.leadsDept.code === "INV") {
-    const [stockoutItem, receivingItem, replacementItem, inventoryControlItem, inventoryWeeklySnapshotItem, merchandiseReentryItem, merchandiseWeeklyJustItem, personalPurchaseInventoryItem, lateClaimReviewItem, lateClaimJustItem, urgentUnresolvedItem, nichoBackfillItem, monthlyTopMoversItem] = await Promise.all([
+    const [stockoutItem, receivingItem, replacementItem, inventoryControlItem, inventoryWeeklySnapshotItem, merchandiseReentryItem, merchandiseWeeklyJustItem, personalPurchaseInventoryItem, lateClaimReviewItem, lateClaimJustItem, urgentUnresolvedItem, nichoBackfillItem, monthlyTopMoversItem, cancelledGuidesReingresoItem] = await Promise.all([
       getStockoutPendingItem("/area/kpis-generales"),
       getPurchaseReceivingPendingItem("/area/workspace?tab=compras&ptab=inventario"),
       getPurchaseReplacementVerificationPendingItem("/area/workspace?tab=compras&ptab=inventario"),
@@ -2555,6 +2582,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       getPurchaseUrgentReportsUnresolvedPendingItem("/area/workspace?tab=compras&ptab=urgentes"),
       getNichoBackfillPendingItem("/area/reingreso-mercaderia?tab=productos"),
       getMonthlyTopMoversPendingItem("/area/kpis-generales"),
+      getCancelledGuidesReingresoPendingItem("/area/workspace?tab=egresos&otab=guias"),
     ]);
     if (stockoutItem) items.push(stockoutItem);
     if (receivingItem) items.push(receivingItem);
@@ -2569,6 +2597,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     if (urgentUnresolvedItem) items.push(urgentUnresolvedItem);
     if (nichoBackfillItem) items.push(nichoBackfillItem);
     if (monthlyTopMoversItem) items.push(monthlyTopMoversItem);
+    if (cancelledGuidesReingresoItem) items.push(cancelledGuidesReingresoItem);
 
     const justWriteOffItem = await getSupplierExchangeJustWriteOffPendingItem("/area/workspace?tab=egresos&otab=proveedor");
     if (justWriteOffItem) items.push(justWriteOffItem);
@@ -2669,7 +2698,7 @@ export async function getPossiblePendingTypesForActor(
     }
     if (me.leadsDept.trackWeeklyMetric) types.push("pedidos_despachados", "fillrate_justificacion_pendiente");
     if (me.leadsDept.code === "INV") {
-      types.push("ruptura_stock", "compras_recepcion", "compras_cambios_verificar", "control_inventario", "control_inventario_semanal", "reingreso_mercaderia_revision", "reingreso_mercaderia_baja_just", "compras_personales_confirmar", "compras_reclamo_posterior_revision", "compras_reclamo_posterior_just", "combo_sugerencias_nicho_backfill", "monthly_top_movers");
+      types.push("ruptura_stock", "compras_recepcion", "compras_cambios_verificar", "control_inventario", "control_inventario_semanal", "reingreso_mercaderia_revision", "reingreso_mercaderia_baja_just", "compras_personales_confirmar", "compras_reclamo_posterior_revision", "compras_reclamo_posterior_just", "combo_sugerencias_nicho_backfill", "monthly_top_movers", "guias_canceladas_reingreso");
     }
     // Mismo criterio de elegibilidad que canSubmitPurchaseRequests
     // (guards.ts) — delegado vía canManagePurchases, o líder de COM/FIN —
