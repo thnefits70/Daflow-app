@@ -8,8 +8,24 @@ import { canViewPayrollRoles, canEditPayrollRoles } from "@/lib/guards";
 // (PayrollProfile.externalPaymentMode) para un mes dado, con su
 // ExternalPayment de ese mes si ya se registró. Mismo criterio de acceso
 // que Roles de pago — Nairoby edita, admin solo lee.
+// Ampliado 2026-09-09: pedido explícito del usuario — cada una de esas 8
+// personas (Robert, Allan, Bryan, Heidy, Mercedes, Elsa, Joel, Luis
+// Castillo) tampoco tenía forma de ver SU PROPIO comprobante de que sí se
+// le pagó (a diferencia de quien está en el Rol formal, que ve el suyo en
+// MonthlyLegalRolePanel). Quien no puede ver el roster completo (no es
+// Nairoby/admin) recibe en cambio su propio historial, sin necesidad de
+// mes — mismo patrón "modo propio" que /api/pay-stubs.
 export async function GET(req: NextRequest) {
-  if (!(await canViewPayrollRoles())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+  const canView = await canViewPayrollRoles();
+  if (!canView) {
+    const session = await auth();
+    if (!session) return NextResponse.json({ error: "No autorizado." }, { status: 401 });
+    const payments = await prisma.externalPayment.findMany({
+      where: { userId: session.user.id },
+      orderBy: { month: "desc" },
+    });
+    return NextResponse.json({ mode: "own", payments });
+  }
 
   const month = req.nextUrl.searchParams.get("month");
   if (!month || !/^\d{4}-\d{2}$/.test(month)) {
