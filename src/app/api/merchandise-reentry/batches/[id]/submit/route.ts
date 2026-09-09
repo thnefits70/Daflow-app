@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { canCaptureMerchandiseReentry, getInventoryLeadId } from "@/lib/guards";
-import { sendPushToOwner } from "@/lib/webPush";
+import { notifyOwner } from "@/lib/notifications";
 
 // La doble confirmación ("¿Estás seguro?" Sí/No) vive del lado del cliente
 // — esta ruta es el único Sí que de verdad congela el lote. A partir de acá
@@ -28,7 +28,10 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
 
   const leadId = await getInventoryLeadId();
   if (leadId) {
-    await sendPushToOwner(leadId, {
+    // Confirmado 2026-09-09: mismo fix que receipt/route.ts — antes era solo
+    // push (se pierde en silencio si el permiso está revocado o venció la
+    // suscripción), ahora también queda en la campanita.
+    await notifyOwner(leadId, {
       title: "Reingreso de mercadería pendiente de tu revisión",
       body: `${batch.code} — ${batch.items.length} producto(s) enviados por ${session.user.name ?? "un colaborador"}.`,
       url: "/area/reingreso-mercaderia?tab=revision",

@@ -3,7 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { canReceivePurchasesTeam, canActOnPurchaseReceiving, getInventoryLeadId } from "@/lib/guards";
-import { sendPushToOwner } from "@/lib/webPush";
+import { notifyOwner } from "@/lib/notifications";
 
 const schema = z.object({
   receivedQuantity: z.number().int().nonnegative(),
@@ -126,7 +126,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const leadId = await getInventoryLeadId();
   if (leadId) {
-    await sendPushToOwner(leadId, {
+    // Confirmado 2026-09-09: pedido explícito de Daniel — antes esto era solo
+    // sendPushToOwner (push al dispositivo), que se pierde en silencio si el
+    // permiso está revocado o la suscripción venció ("a veces sí llega, a
+    // veces no"). notifyOwner además deja constancia en la campanita, así
+    // que toda mercadería que llega físicamente a bodega queda visible ahí
+    // aunque el push falle.
+    await notifyOwner(leadId, {
       title: "Recepción pendiente de tu aprobación",
       body: `${existing.catalogItem.name} — ${parsed.data.receivedQuantity} un. recibidas por el equipo, esperando que apruebes.`,
       url: "/area/workspace?tab=compras&ptab=inventario",
