@@ -90,7 +90,7 @@ export function AdminSidebar({
 
   return (
     <>
-      <div className="md:hidden flex items-center justify-between gap-2 px-4 py-3 bg-navy text-white border-b border-white/10">
+      <div className="print:hidden md:hidden flex items-center justify-between gap-2 px-4 py-3 bg-navy text-white border-b border-white/10">
         <div className="flex items-center gap-2">
           <BrandMark logoUrl={logoUrl} size={22} light chip={!!logoUrl} />
           <span className="font-display font-bold text-[14px]">DAFLOW</span>
@@ -106,7 +106,7 @@ export function AdminSidebar({
         <button
           type="button"
           onClick={() => setDesktopCollapsed(false)}
-          className="hidden md:flex fixed top-4 left-4 z-50 items-center justify-center w-9 h-9 rounded-md bg-navy border border-white/15 text-white cursor-pointer hover:bg-white/10"
+          className="print:hidden hidden md:flex fixed top-4 left-4 z-50 items-center justify-center w-9 h-9 rounded-md bg-navy border border-white/15 text-white cursor-pointer hover:bg-white/10"
           aria-label="Mostrar menú"
           title="Mostrar menú"
         >
@@ -115,7 +115,7 @@ export function AdminSidebar({
       )}
 
       <div
-        className={`fixed md:static inset-y-0 left-0 z-40 shrink-0 overflow-hidden bg-navy transition-all duration-200 ${
+        className={`print:hidden fixed md:static inset-y-0 left-0 z-40 shrink-0 overflow-hidden bg-navy transition-all duration-200 ${
           open ? "translate-x-0" : "-translate-x-full"
         } md:translate-x-0 w-[230px] ${desktopCollapsed ? "md:w-0" : "md:w-[230px]"}`}
       >

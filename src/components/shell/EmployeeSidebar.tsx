@@ -47,7 +47,7 @@ export function EmployeeSidebar({
 
   return (
     <>
-      <div className="md:hidden flex items-center justify-between gap-2 px-4 py-3 bg-navy text-white border-b border-white/10">
+      <div className="print:hidden md:hidden flex items-center justify-between gap-2 px-4 py-3 bg-navy text-white border-b border-white/10">
         <div className="flex items-center gap-2">
           <BrandMark logoUrl={logoUrl} size={22} light chip={!!logoUrl} />
           <span className="font-display font-bold text-[14px]">DAFLOW</span>
@@ -60,7 +60,7 @@ export function EmployeeSidebar({
       {open && <div className="fixed inset-0 bg-black/50 z-30 md:hidden" onClick={() => setOpen(false)} />}
 
       <div
-        className={`fixed md:static inset-y-0 left-0 z-40 w-[230px] shrink-0 bg-navy text-[#EDEFE9] flex flex-col min-h-0 transform transition-transform duration-200 md:translate-x-0 ${
+        className={`print:hidden fixed md:static inset-y-0 left-0 z-40 w-[230px] shrink-0 bg-navy text-[#EDEFE9] flex flex-col min-h-0 transform transition-transform duration-200 md:translate-x-0 ${
           open ? "translate-x-0" : "-translate-x-full"
         }`}
       >

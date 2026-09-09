@@ -163,7 +163,7 @@ export function AreaGateShell({
   }
 
   return (
-    <div className="flex flex-col md:flex-row h-screen min-h-0">
+    <div className="flex flex-col md:flex-row h-screen min-h-0 print:block print:h-auto">
       <EmployeeSidebar
         deptName={deptName}
         userName={userName}
@@ -179,7 +179,11 @@ export function AreaGateShell({
         showMyLearningPath={showMyLearningPath}
         showPersonalPurchasesInventory={showPersonalPurchasesInventory}
       />
-      <main className="flex-1 overflow-y-auto bg-bg p-4 md:p-9">
+      {/* Confirmado 2026-09-09: sin esto, imprimir desde cualquier pantalla
+          (ej. Etiquetas de percha) recortaba el contenido al alto visible de
+          la pantalla — overflow-y-auto + h-screen solo dejaban ver/imprimir
+          lo que entraba en un viewport. */}
+      <main className="flex-1 overflow-y-auto bg-bg p-4 md:p-9 print:overflow-visible print:p-0">
         <TopBanner bannerUrl={bannerUrl} />
         {ledDeptName && <LeaderBanner deptName={ledDeptName} alerts={leaderAlerts} />}
         {children}
