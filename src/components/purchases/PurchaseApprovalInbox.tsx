@@ -2,14 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { FileText, Upload, CheckCircle2, AlertTriangle, Lock, Landmark, LineChart, ChevronDown, Award, CreditCard, PackageSearch, PackageCheck, Copy, Check } from "lucide-react";
+import { FileText, Upload, CheckCircle2, AlertTriangle, Lock, Landmark, LineChart, ChevronDown, Award, CreditCard, PackageSearch, PackageCheck } from "lucide-react";
 import { actorName } from "@/lib/actorName";
 import { uploadFile } from "@/lib/uploadFile";
 import { compressImage } from "@/lib/compressImage";
 import { usePasteFile } from "@/lib/usePasteFile";
 import { PriceTrendChart, PriceHistoryBreakdownList } from "./PriceTrendChart";
 import type { SupplierPriceHistory, PriceHistoryStats, SupplierPricePoint } from "@/lib/purchases";
-import { CatalogCode } from "@/components/shared/CatalogCode";
+import { CatalogCode, CopyValueButton } from "@/components/shared/CatalogCode";
 
 // Copiada de lib/purchases.ts (no se puede importar el original: arrastra
 // prisma/pg al bundle del cliente y rompe el build — ver commit que lo
@@ -197,37 +197,6 @@ function buildValidationSummary(g: Row[]) {
 // groupIsEmergency/effectiveCanAct/effectiveCanPayHere abajo. canPayMerchandise
 // se pasa aparte (sin combinar) para poder recalcular el combo "aprobar y
 // pagar" caso por caso.
-// Botón para copiar un valor (ej. número de cuenta) al portapapeles con un
-// solo clic, en celular o laptop — muestra un check por 1.5s de confirmación.
-function CopyValueButton({ value }: { value: string }) {
-  const [copied, setCopied] = useState(false);
-
-  async function copy(e: React.MouseEvent) {
-    e.stopPropagation();
-    try {
-      await navigator.clipboard.writeText(value);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    } catch {
-      /* clipboard no disponible, no hacer nada */
-    }
-  }
-
-  return (
-    <button
-      type="button"
-      title="Copiar"
-      className={`flex items-center gap-1 shrink-0 rounded-md px-2 py-1 text-[11px] font-semibold cursor-pointer border transition-colors ${
-        copied ? "bg-teal text-white border-teal" : "bg-white text-teal border-teal/50 hover:bg-teal/10"
-      }`}
-      onClick={copy}
-    >
-      {copied ? <Check size={13} /> : <Copy size={13} />}
-      {copied ? "Copiado" : "Copiar"}
-    </button>
-  );
-}
-
 export function PurchaseApprovalInbox({ canAct = true, canPayHere = true, canPayMerchandise = false, isAdmin = true }: { canAct?: boolean; canPayHere?: boolean; canPayMerchandise?: boolean; isAdmin?: boolean }) {
   const router = useRouter();
   const [rows, setRows] = useState<Row[] | null>(null);

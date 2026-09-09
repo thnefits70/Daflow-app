@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Upload, CheckCircle2, Truck, Lock, Wallet, Search, AlertTriangle, Landmark, LineChart } from "lucide-react";
+import { CopyValueButton } from "@/components/shared/CatalogCode";
 import { uploadFile } from "@/lib/uploadFile";
 import { compressImage } from "@/lib/compressImage";
 import { usePasteFile } from "@/lib/usePasteFile";
@@ -846,11 +847,17 @@ export function PurchaseInvoicingPanel({ isAdmin = false, canPayMerchandise }: {
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                           <div className="bg-teal/10 border border-teal/30 rounded-md px-2.5 py-1.5">
                             <div className="text-[9px] font-semibold uppercase tracking-wide text-teal/80">Titular</div>
-                            <div className="font-display text-[16px] font-bold text-teal leading-tight break-words">{g[0].bankAccount.bankAccountHolder}</div>
+                            <div className="flex items-center gap-1.5">
+                              <div className="font-display text-[16px] font-bold text-teal leading-tight break-words">{g[0].bankAccount.bankAccountHolder}</div>
+                              <CopyValueButton value={g[0].bankAccount.bankAccountHolder} />
+                            </div>
                           </div>
                           <div className="bg-teal/10 border border-teal/30 rounded-md px-2.5 py-1.5">
                             <div className="text-[9px] font-semibold uppercase tracking-wide text-teal/80">N° de cuenta</div>
-                            <div className="font-display text-[16px] font-bold text-teal leading-tight break-all">{g[0].bankAccount.bankAccountNumber}</div>
+                            <div className="flex items-center gap-1.5">
+                              <div className="font-display text-[16px] font-bold text-teal leading-tight break-all">{g[0].bankAccount.bankAccountNumber}</div>
+                              <CopyValueButton value={g[0].bankAccount.bankAccountNumber} />
+                            </div>
                           </div>
                         </div>
                       </>
@@ -1022,11 +1029,17 @@ export function PurchaseInvoicingPanel({ isAdmin = false, canPayMerchandise }: {
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                           <div className="bg-teal/10 border border-teal/30 rounded-md px-2.5 py-1.5">
                             <div className="text-[9px] font-semibold uppercase tracking-wide text-teal/80">Titular</div>
-                            <div className="font-display text-[16px] font-bold text-teal leading-tight break-words">{r0.carrierBankAccount.bankAccountHolder}</div>
+                            <div className="flex items-center gap-1.5">
+                              <div className="font-display text-[16px] font-bold text-teal leading-tight break-words">{r0.carrierBankAccount.bankAccountHolder}</div>
+                              <CopyValueButton value={r0.carrierBankAccount.bankAccountHolder} />
+                            </div>
                           </div>
                           <div className="bg-teal/10 border border-teal/30 rounded-md px-2.5 py-1.5">
                             <div className="text-[9px] font-semibold uppercase tracking-wide text-teal/80">N° de cuenta</div>
-                            <div className="font-display text-[16px] font-bold text-teal leading-tight break-all">{r0.carrierBankAccount.bankAccountNumber}</div>
+                            <div className="flex items-center gap-1.5">
+                              <div className="font-display text-[16px] font-bold text-teal leading-tight break-all">{r0.carrierBankAccount.bankAccountNumber}</div>
+                              <CopyValueButton value={r0.carrierBankAccount.bankAccountNumber} />
+                            </div>
                           </div>
                         </div>
                       </>
