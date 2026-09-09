@@ -23,9 +23,8 @@ const UNRESOLVED_LABEL: Record<string, string> = {
 };
 
 function productLabel(items: { confirmedProductName: string | null; employeeProductName: string; quantity: number }[]) {
-  if (items.length > 1) return `${items.length} productos`;
-  const it = items[0];
-  return it ? `${it.confirmedProductName ?? it.employeeProductName} × ${it.quantity}` : "producto";
+  if (items.length === 0) return "producto";
+  return items.map((it) => `${it.confirmedProductName ?? it.employeeProductName} × ${it.quantity}`).join(", ");
 }
 
 // Solo lectura: seguimiento mes a mes de qué se ha cobrado y qué falta de
