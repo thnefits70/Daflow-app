@@ -217,10 +217,13 @@ function CopyValueButton({ value }: { value: string }) {
     <button
       type="button"
       title="Copiar"
-      className="text-teal/70 hover:text-teal cursor-pointer shrink-0"
+      className={`flex items-center gap-1 shrink-0 rounded-md px-2 py-1 text-[11px] font-semibold cursor-pointer border transition-colors ${
+        copied ? "bg-teal text-white border-teal" : "bg-white text-teal border-teal/50 hover:bg-teal/10"
+      }`}
       onClick={copy}
     >
       {copied ? <Check size={13} /> : <Copy size={13} />}
+      {copied ? "Copiado" : "Copiar"}
     </button>
   );
 }
