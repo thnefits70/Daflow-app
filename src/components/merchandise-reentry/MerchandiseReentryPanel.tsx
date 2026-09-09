@@ -63,10 +63,10 @@ export function MerchandiseReentryPanel({
 
   return (
     <div>
-      <h1 className="font-display text-[22px] font-bold mb-1">Reingreso de Mercadería</h1>
-      <p className="text-[13px] text-steel mb-5">Devoluciones de pedidos no entregados que regresan a bodega.</p>
+      <h1 className="print:hidden font-display text-[22px] font-bold mb-1">Reingreso de Mercadería</h1>
+      <p className="print:hidden text-[13px] text-steel mb-5">Devoluciones de pedidos no entregados que regresan a bodega.</p>
 
-      <div className="flex gap-6 border-b border-rule mb-5">
+      <div className="print:hidden flex gap-6 border-b border-rule mb-5">
         {tabs.map((t) => (
           <button
             key={t.id}
@@ -132,15 +132,20 @@ export function MerchandiseReentryPanel({
       )}
       {tab === "productos" && (canApprove || canClose) && (
         <>
-          <TabGuide storageKey="merchreentry-productos">
-            {canManageJustCatalog ? (
-              <>Este es el catálogo maestro sincronizado con Just. Sube acá el archivo exportado de Just para comparar contra lo que ya existe — el sistema te muestra qué cambió antes de aplicar nada.</>
-            ) : (
-              <>Consulta acá el catálogo de productos sincronizado con Just, en modo lectura. Subir actualizaciones es exclusivo de Daniel o admin.</>
-            )}
-          </TabGuide>
-          <JustCatalogPanel canManage={canManageJustCatalog} />
-          {canManageJustCatalog && <DropiComboManager />}
+          {/* Confirmado 2026-09-09: solo la hoja de etiquetas debe imprimirse
+              — el catálogo y los combos son controles de pantalla, no parte
+              de lo que se pega en la percha. */}
+          <div className="print:hidden">
+            <TabGuide storageKey="merchreentry-productos">
+              {canManageJustCatalog ? (
+                <>Este es el catálogo maestro sincronizado con Just. Sube acá el archivo exportado de Just para comparar contra lo que ya existe — el sistema te muestra qué cambió antes de aplicar nada.</>
+              ) : (
+                <>Consulta acá el catálogo de productos sincronizado con Just, en modo lectura. Subir actualizaciones es exclusivo de Daniel o admin.</>
+              )}
+            </TabGuide>
+            <JustCatalogPanel canManage={canManageJustCatalog} />
+            {canManageJustCatalog && <DropiComboManager />}
+          </div>
           {canManageJustCatalog && <StockLabelsPanel />}
         </>
       )}

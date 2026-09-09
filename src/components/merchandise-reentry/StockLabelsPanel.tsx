@@ -53,8 +53,8 @@ export function StockLabelsPanel() {
 
   return (
     <div className="mt-6">
-      <h3 className="text-[13.5px] font-bold text-ink mb-2">Etiquetas de percha</h3>
-      <p className="text-[12px] text-steel mb-3">
+      <h3 className="print:hidden text-[13.5px] font-bold text-ink mb-2">Etiquetas de percha</h3>
+      <p className="print:hidden text-[12px] text-steel mb-3">
         Elige los productos y genera una hoja para imprimir — una etiqueta por producto, para pegar en la percha donde vive (no en cada unidad).
       </p>
 
