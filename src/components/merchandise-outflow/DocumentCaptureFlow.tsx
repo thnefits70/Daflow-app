@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Camera, Check, Pencil, Plus, Send, Sparkles, Trash2, X } from "lucide-react";
+import { Camera, Check, Pencil, Plus, ScanLine, Send, Sparkles, Trash2, X } from "lucide-react";
 import { LiveCameraCapture } from "@/components/shared/LiveCameraCapture";
+import { LiveBarcodeScanner } from "@/components/shared/LiveBarcodeScanner";
 import { ProductMatchPicker, type MatchCatalogItem, type ProductMatchResult } from "@/components/merchandise-reentry/ProductMatchPicker";
 import { ComboComponentBuilder, type ComboDraftComponent } from "@/components/merchandise-reentry/ComboComponentBuilder";
 import { CatalogCode } from "@/components/shared/CatalogCode";
@@ -65,6 +66,12 @@ export function DocumentCaptureFlow({ reason, canManageJustCatalog = false }: { 
   const [manualMode, setManualMode] = useState(false);
   const [manualQty, setManualQty] = useState("");
   const [manualSelected, setManualSelected] = useState<MatchCatalogItem | null>(null);
+  // Confirmado 2026-09-09 (Fase 3, INVESTOCK): "escanear en la percha" es el
+  // MISMO flujo manual de siempre (sin foto, sin IA) — lo único que cambia
+  // es que en vez de escribir el nombre, se escanea el código y eso se pasa
+  // como búsqueda inicial a ProductMatchPicker (que ya busca por justCode).
+  const [scanning, setScanning] = useState(false);
+  const [scannedQuery, setScannedQuery] = useState<string | null>(null);
 
   function startLongPress(url: string) {
     longPressTimer.current = setTimeout(() => setZoomedPhoto(url), 450);
@@ -274,9 +281,15 @@ export function DocumentCaptureFlow({ reason, canManageJustCatalog = false }: { 
         catalogItemId: manualSelected.id,
         quantity: qty,
       });
-      setManualMode(false);
+      const wasScan = scannedQuery !== null;
       setManualQty("");
       setManualSelected(null);
+      setScannedQuery(null);
+      // Confirmado 2026-09-09: si venía de escanear, se reabre la cámara
+      // directo para el siguiente producto — así el equipo puede ir
+      // escaneando varios seguidos sin volver a tocar nada entre uno y otro.
+      if (wasScan) setScanning(true);
+      else setManualMode(false);
       loadDraft();
     } catch (e) {
       setError(e instanceof Error ? e.message : "No se pudo agregar el producto.");
@@ -686,7 +699,9 @@ export function DocumentCaptureFlow({ reason, canManageJustCatalog = false }: { 
 
       {manualMode ? (
         <div className="bg-cloud rounded-md p-3 mb-3">
-          <div className="text-[10px] font-semibold uppercase tracking-wide text-steel mb-1.5">Agregar producto manual</div>
+          <div className="text-[10px] font-semibold uppercase tracking-wide text-steel mb-1.5">
+            {scannedQuery !== null ? "Escanear en la percha" : "Agregar producto manual"}
+          </div>
           {manualSelected ? (
             <div className="flex items-center gap-2.5 bg-green/10 border border-green/35 rounded-md p-2 mb-2">
               <div className="flex-1 min-w-0 text-[12px] font-semibold flex items-center gap-1.5">
@@ -695,22 +710,41 @@ export function DocumentCaptureFlow({ reason, canManageJustCatalog = false }: { 
               </div>
               <button type="button" className="text-[11px] font-semibold text-blue cursor-pointer" onClick={() => setManualSelected(null)}>Cambiar</button>
             </div>
+          ) : scanning ? (
+            <LiveBarcodeScanner
+              onScanned={(code) => { setScanning(false); setScannedQuery(code); }}
+              onCancel={() => { setScanning(false); setManualMode(false); }}
+            />
           ) : (
-            <ProductMatchPicker referencePhotoUrl={null} onConfirm={(r) => setManualSelected(r)} onCancel={() => setManualMode(false)} />
+            <ProductMatchPicker
+              referencePhotoUrl={null}
+              initialQuery={scannedQuery ?? undefined}
+              onConfirm={(r) => setManualSelected(r)}
+              onCancel={() => { setManualMode(false); setScannedQuery(null); }}
+            />
           )}
-          <div className="flex items-center gap-2 mt-2 mb-2">
-            <span className="text-[11px] text-steel">Cantidad</span>
-            <input type="number" min={1} className="w-20 rounded border border-rule bg-surface px-2 py-1 text-[12px] font-bold" value={manualQty} onChange={(e) => setManualQty(e.target.value)} />
-          </div>
-          <div className="flex gap-2">
-            <button type="button" className="flex-1 rounded border border-rule px-3 py-1.5 text-[12px] font-semibold cursor-pointer" onClick={() => setManualMode(false)}>Cancelar</button>
-            <button type="button" className="flex-1 rounded border border-teal bg-teal px-3 py-1.5 text-[12px] font-bold text-navy cursor-pointer" onClick={addManual}>Agregar</button>
-          </div>
+          {!scanning && (
+            <>
+              <div className="flex items-center gap-2 mt-2 mb-2">
+                <span className="text-[11px] text-steel">Cantidad</span>
+                <input type="number" min={1} className="w-20 rounded border border-rule bg-surface px-2 py-1 text-[12px] font-bold" value={manualQty} onChange={(e) => setManualQty(e.target.value)} />
+              </div>
+              <div className="flex gap-2">
+                <button type="button" className="flex-1 rounded border border-rule px-3 py-1.5 text-[12px] font-semibold cursor-pointer" onClick={() => { setManualMode(false); setScannedQuery(null); }}>Cancelar</button>
+                <button type="button" className="flex-1 rounded border border-teal bg-teal px-3 py-1.5 text-[12px] font-bold text-navy cursor-pointer" onClick={addManual}>Agregar</button>
+              </div>
+            </>
+          )}
         </div>
       ) : (
-        <button type="button" className="w-full flex items-center justify-center gap-1.5 rounded-md border-[1.5px] border-dashed border-rule px-3.5 py-2 text-[12px] font-semibold cursor-pointer hover:border-teal mb-3" onClick={() => setManualMode(true)}>
-          <Plus size={13} /> Agregar un producto sin usar la IA
-        </button>
+        <div className="flex gap-2 mb-3">
+          <button type="button" className="flex-1 flex items-center justify-center gap-1.5 rounded-md border-[1.5px] border-dashed border-teal text-teal px-3.5 py-2 text-[12px] font-semibold cursor-pointer" onClick={() => { setManualMode(true); setScanning(true); }}>
+            <ScanLine size={13} /> Escanear en la percha
+          </button>
+          <button type="button" className="flex-1 flex items-center justify-center gap-1.5 rounded-md border-[1.5px] border-dashed border-rule px-3.5 py-2 text-[12px] font-semibold cursor-pointer hover:border-teal" onClick={() => setManualMode(true)}>
+            <Plus size={13} /> Agregar sin usar la IA
+          </button>
+        </div>
       )}
 
       {error && <div className="text-red text-[12px] mb-2">{error}</div>}

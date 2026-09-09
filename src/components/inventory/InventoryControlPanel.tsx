@@ -153,6 +153,10 @@ export function InventoryControlPanel({
   const [snapBusy, setSnapBusy] = useState(false);
   const [snapToast, setSnapToast] = useState("");
   const [snapDragOver, setSnapDragOver] = useState(false);
+  // Fase 3 (INVESTOCK) — confirmado 2026-09-09: comparación calculada sola
+  // al guardar, contra el número propio de DAFLOW — ordenada por la
+  // diferencia más grande primero.
+  const [comparison, setComparison] = useState<{ catalogItemId: string; productName: string; productCode: string; justStock: number; investockStock: number; difference: number }[]>([]);
 
   function resetSnapUpload() {
     setSnapPhase("idle");
@@ -212,6 +216,7 @@ export function InventoryControlPanel({
     setSnapBusy(false);
     const json = await res.json().catch(() => null);
     if (!res.ok) { setSnapErr(json?.error ?? "No se pudo guardar."); return; }
+    setComparison(json.comparison ?? []);
     resetSnapUpload();
     setSnapToast(`✅ ${weekLabel(snapPreview.period)} guardado — ${json.count} productos. Los KPIs ya se actualizaron.`);
     router.refresh();
@@ -474,6 +479,38 @@ export function InventoryControlPanel({
         {snapToast && snapPhase === "idle" && (
           <div className="mt-3 flex items-center gap-2 text-teal text-[12.5px] bg-teal/10 border border-teal/30 rounded-md px-3 py-2">
             <CheckCircle2 size={14} /> {snapToast}
+          </div>
+        )}
+
+        {comparison.length > 0 && snapPhase === "idle" && (
+          <div className="mt-4">
+            <div className="text-[12px] font-semibold text-steel mb-2">
+              Comparación contra INVESTOCK — {comparison.filter((c) => c.difference !== 0).length} de {comparison.length} productos con diferencia
+            </div>
+            <div className="max-h-72 overflow-y-auto rounded-md border border-rule">
+              <table className="w-full text-[12px]">
+                <thead className="sticky top-0 bg-cloud">
+                  <tr>
+                    <th className="text-left px-2.5 py-1.5 font-semibold text-steel">Producto</th>
+                    <th className="text-right px-2.5 py-1.5 font-semibold text-steel">Just</th>
+                    <th className="text-right px-2.5 py-1.5 font-semibold text-steel">INVESTOCK</th>
+                    <th className="text-right px-2.5 py-1.5 font-semibold text-steel">Diferencia</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {comparison.map((c) => (
+                    <tr key={c.catalogItemId} className="border-t border-rule">
+                      <td className="px-2.5 py-1.5">{c.productName}</td>
+                      <td className="px-2.5 py-1.5 text-right tabular-nums">{c.justStock}</td>
+                      <td className="px-2.5 py-1.5 text-right tabular-nums">{c.investockStock}</td>
+                      <td className={`px-2.5 py-1.5 text-right tabular-nums font-semibold ${c.difference === 0 ? "text-steel" : "text-red"}`}>
+                        {c.difference > 0 ? "+" : ""}{c.difference}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </div>

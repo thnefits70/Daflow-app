@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { computeDerived, consolidateMonth, workingCapitalDays, type FinanceMonthRaw } from "@/lib/financeKpisCalc";
 import { lastOfficeDayAtOrBefore } from "@/lib/businessHours";
+import { getNegativeStockProducts } from "@/lib/stockKardex";
 import {
   gmroi,
   detectOverstockAlert,
@@ -234,6 +235,10 @@ export type InventoryKpisDataDTO = {
   dio: { current: number | null; previous: number | null; good: boolean | null };
   gmroiSeries: { current: number | null; previous: number | null; good: boolean | null };
   overstockAlert: { alert: boolean; message: string | null };
+  // Fase 3 (INVESTOCK) — confirmado 2026-09-09: productos con saldo
+  // negativo en el Kardex propio (error de conteo, o algo que salió sin
+  // que entrara registrado) — se calcula del Kardex, no del export de Just.
+  negativeStockProducts: { catalogItemId: string; name: string; balance: number }[];
   staleSummary: ReturnType<typeof summarizeStaleStreaks>;
   staleEntries: StaleStreakEntry[];
   staleSnapshotPeriod: string | null;
@@ -256,6 +261,7 @@ export async function getInventoryKpisData(): Promise<InventoryKpisDataDTO> {
     dio: { current: null, previous: null, good: null },
     gmroiSeries: { current: null, previous: null, good: null },
     overstockAlert: { alert: false, message: null },
+    negativeStockProducts: [],
     staleSummary: summarizeStaleStreaks([], null),
     staleEntries: [],
     staleSnapshotPeriod: null,
@@ -265,10 +271,11 @@ export async function getInventoryKpisData(): Promise<InventoryKpisDataDTO> {
   const deptId = await getFinanzasDeptId();
   if (!deptId) return empty;
 
-  const [records, balances, snapshots] = await Promise.all([
+  const [records, balances, snapshots, negativeStockProducts] = await Promise.all([
     prisma.financeKpiRecord.findMany({ where: { deptId }, orderBy: { period: "asc" } }),
     prisma.financeSharedMonthlyBalance.findMany({ where: { deptId }, orderBy: { period: "asc" } }),
     prisma.inventoryProductSnapshot.findMany({ where: { deptId }, orderBy: { period: "asc" } }),
+    getNegativeStockProducts(),
   ]);
 
   const staleEntries = computeStaleStreaks(snapshots);
@@ -283,7 +290,7 @@ export async function getInventoryKpisData(): Promise<InventoryKpisDataDTO> {
         .map((s) => ({ productCode: s.productCode, description: s.description, avgCost: s.avgCost, stock: s.stock, costTotal: s.costTotal }))
     : [];
 
-  if (records.length === 0) return { ...empty, staleEntries, staleSnapshotPeriod, staleSummary, latestSnapshotRows };
+  if (records.length === 0) return { ...empty, staleEntries, staleSnapshotPeriod, staleSummary, latestSnapshotRows, negativeStockProducts };
 
   const byPeriod = new Map<string, FinanceMonthRaw[]>();
   for (const r of records) {
@@ -336,6 +343,7 @@ export async function getInventoryKpisData(): Promise<InventoryKpisDataDTO> {
     dio: { current: dioCurrent, previous: dioPrevious, good: dioCurrent !== null ? trendIsGood(dioCurrent, dioPrevious, "down") : null },
     gmroiSeries: { current: gmroiCurrent, previous: gmroiPrevious, good: gmroiCurrent !== null ? trendIsGood(gmroiCurrent, gmroiPrevious, "up") : null },
     overstockAlert: detectOverstockAlert(overstockSeries),
+    negativeStockProducts,
     staleSummary,
     staleEntries,
     staleSnapshotPeriod,

@@ -3,6 +3,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { canCaptureMerchandiseOutflow, canActOnMerchandiseOutflow } from "@/lib/guards";
 import { notifyInventoryLeadOutflowPending, notifySupplierExchangeGestors } from "@/lib/merchandiseOutflow";
+import { recordKardexEntry } from "@/lib/stockKardex";
 
 const MIN_DOCUMENT_PHOTOS_BY_REASON: Partial<Record<string, number>> = { CAMBIO_PROVEEDOR: 1 };
 
@@ -16,7 +17,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   if (!session) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
   const { id } = await params;
-  const batch = await prisma.merchandiseOutflowBatch.findUnique({ where: { id }, include: { items: { select: { id: true } } } });
+  const batch = await prisma.merchandiseOutflowBatch.findUnique({ where: { id }, include: { items: { select: { id: true, catalogItemId: true, quantity: true } } } });
   if (!batch) return NextResponse.json({ error: "No encontrado." }, { status: 404 });
   const authorized = batch.reason === "CAMBIO_PROVEEDOR" || batch.reason === "DESPACHO" ? await canActOnMerchandiseOutflow() : await canCaptureMerchandiseOutflow();
   if (!authorized) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
@@ -29,6 +30,25 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   }
 
   const updated = await prisma.merchandiseOutflowBatch.update({ where: { id }, data: { submittedAt: new Date() } });
+
+  // Confirmado 2026-09-09 (Fase 3, INVESTOCK): al enviarse el lote — el
+  // mismo momento en que hoy queda congelado y en cola para dar de baja en
+  // Just — el Kardex propio resta cada ítem. Ítems sin catalogItemId
+  // (declarados solo por nombre) no tienen a qué producto restarle, se
+  // omiten. Secuencial, no en paralelo, porque cada línea depende del saldo
+  // que dejó la anterior del mismo producto.
+  for (const item of batch.items) {
+    if (!item.catalogItemId) continue;
+    await recordKardexEntry({
+      catalogItemId: item.catalogItemId,
+      type: "OUT",
+      quantity: item.quantity,
+      unitCost: null,
+      occurredAt: new Date(),
+      merchandiseOutflowItemId: item.id,
+    }).catch((err) => console.error("[merchandise-outflow submit] No se pudo registrar la salida de Kardex:", err));
+  }
+
   await notifyInventoryLeadOutflowPending(updated);
   if (updated.reason === "CAMBIO_PROVEEDOR") {
     const withDetails = await prisma.merchandiseOutflowBatch.findUnique({

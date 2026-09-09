@@ -112,6 +112,15 @@ export function InventoryKpisPanel({ data }: { data: InventoryKpisDataDTO }) {
     <TabGuide storageKey="inventoriokpis">
       Estos KPIs se calculan solos a partir de lo que Daniel carga en &quot;Control de Inventario&quot; (el valor total cada mes, el Excel de stock por SKU cada semana). Toca el ícono de información de cada tarjeta para ver cómo se calcula y qué significa el color.
     </TabGuide>
+    {data.negativeStockProducts.length > 0 && (
+      <div className="flex items-start gap-2 text-[12px] bg-red/10 border border-red/30 text-red rounded-md px-3 py-2.5">
+        <span className="w-1.5 h-1.5 rounded-full bg-red shrink-0 mt-1" />
+        <div>
+          <b>{data.negativeStockProducts.length} producto{data.negativeStockProducts.length === 1 ? "" : "s"} con saldo negativo</b> en INVESTOCK: {" "}
+          {data.negativeStockProducts.map((p) => `${p.name} (${p.balance})`).join(", ")}
+        </div>
+      </div>
+    )}
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
       {/* 1. Rotación / DIO */}
       <div className="bg-surface border border-rule rounded-md p-4.5" style={{ borderTop: "2px solid #14c7c7" }}>

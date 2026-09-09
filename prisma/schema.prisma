@@ -930,6 +930,70 @@ model InventoryProductSnapshot {
   @@index([productCode])
 }
 
+// ---------------- Fase 3: INVESTOCK ----------------
+// Confirmado 2026-09-09: el "número de stock propio" de DAFLOW, construido
+// como un Kardex real — cada movimiento (entrada o salida) queda como su
+// propia línea, con el saldo y el costo promedio ponderado justo después de
+// esa línea, para poder ver exactamente por qué el número es el que es. En
+// esta primera pasada solo se conecta a las dos fuentes de mayor volumen:
+// recepción de compras (IN, ver approve-receipt/route.ts) y Registro de
+// Egresos (OUT, ver batches/[id]/submit/route.ts) — Reingreso de Mercadería
+// y Guías Canceladas quedan para después, mismo patrón.
+enum StockMovementType {
+  IN
+  OUT
+}
+
+model StockKardexEntry {
+  id            String              @id @default(cuid())
+  catalogItemId String
+  catalogItem   PurchaseCatalogItem @relation(fields: [catalogItemId], references: [id], onDelete: Restrict)
+
+  type     StockMovementType
+  quantity Int
+  // IN: el costo de esa compra específica. OUT: el costo promedio vigente
+  // en ese momento (para poder valorizar la salida), nunca recalculado
+  // después aunque el costo promedio siga cambiando.
+  unitCost Float?
+
+  balanceAfter Int
+  avgCostAfter Float
+
+  // Origen — exactamente uno debe estar lleno, según el type.
+  purchaseRequestReceiptId String?                 @unique
+  purchaseRequestReceipt   PurchaseRequestReceipt? @relation(fields: [purchaseRequestReceiptId], references: [id], onDelete: SetNull)
+  merchandiseOutflowItemId String?                 @unique
+  merchandiseOutflowItem   MerchandiseOutflowItem? @relation(fields: [merchandiseOutflowItemId], references: [id], onDelete: SetNull)
+
+  occurredAt DateTime
+  createdAt  DateTime @default(now())
+
+  @@index([catalogItemId])
+  @@index([occurredAt])
+}
+
+// Confirmado 2026-09-09: comparación automática, calculada justo después de
+// que Daniel guarda el export semanal de Just (mismo punto donde ya se
+// guarda InventoryProductSnapshot) — una fila por producto reconocido en
+// ese archivo, para medir qué tan parecidos están los dos números antes de
+// apagar Just de verdad.
+model StockKardexJustComparison {
+  id     String @id @default(cuid())
+  period String
+
+  catalogItemId String
+  catalogItem   PurchaseCatalogItem @relation(fields: [catalogItemId], references: [id], onDelete: Cascade)
+
+  justStock      Float
+  investockStock Int
+  difference     Float // justStock - investockStock
+
+  createdAt DateTime @default(now())
+
+  @@unique([period, catalogItemId])
+  @@index([period])
+}
+
 enum PettyCashBoxType {
   PRINCIPAL
   SECUNDARIA
@@ -1559,8 +1623,8 @@ model PurchaseCatalogItem {
   // — el colaborador lo elige al declarar, Daniel lo reconfirma/relinkea al
   // aprobar bodega (dos relaciones separadas, mismo criterio que
   // employeeProductName/confirmedProductName).
-  personalPurchaseItemsPicked    PersonalPurchaseItem[]   @relation("PersonalPurchaseItemCatalogItem")
-  personalPurchaseItemsConfirmed PersonalPurchaseItem[]   @relation("PersonalPurchaseItemConfirmedCatalogItem")
+  personalPurchaseItemsPicked    PersonalPurchaseItem[]      @relation("PersonalPurchaseItemCatalogItem")
+  personalPurchaseItemsConfirmed PersonalPurchaseItem[]      @relation("PersonalPurchaseItemConfirmedCatalogItem")
   // Confirmado 2026-08-29: Ruptura de Stock (KPIs Generales) también reusa
   // este catálogo compartido.
   stockoutProduct                StockoutProduct?
@@ -1569,12 +1633,16 @@ model PurchaseCatalogItem {
   // LowRotationWeeklyEntry, ComboSuggestion.
   atomProductStatuses            AtomProductStatus[]
   lowRotationWeeklyEntries       LowRotationWeeklyEntry[]
-  comboSuggestionsAsWinner       ComboSuggestion[]        @relation("ComboSuggestionWinner")
-  comboSuggestionsAsLowRotation  ComboSuggestion[]        @relation("ComboSuggestionLowRotation")
+  comboSuggestionsAsWinner       ComboSuggestion[]           @relation("ComboSuggestionWinner")
+  comboSuggestionsAsLowRotation  ComboSuggestion[]           @relation("ComboSuggestionLowRotation")
   monthlyTopMoverEntries         MonthlyTopMoverEntry[]
   // Confirmado 2026-09-09: Análisis de Mercado (Fase 2) — se crea/liga solo
   // cuando Robert termina de brandear una propuesta, con sus 3 fotos reales.
   marketProductProposal          MarketProductProposal?
+  // Confirmado 2026-09-09: INVESTOCK (Fase 3) — historial completo de
+  // movimientos de este producto y su comparación semanal contra Just.
+  stockKardexEntries             StockKardexEntry[]
+  stockKardexJustComparisons     StockKardexJustComparison[]
 }
 
 enum AtomRentabilityStatus {
@@ -2329,6 +2397,10 @@ model PurchaseRequestReceipt {
   quantityCorrectedBy      User?     @relation("PurchaseRequestReceiptQuantityCorrectedBy", fields: [quantityCorrectedById], references: [id], onDelete: SetNull)
   quantityCorrectedAt      DateTime?
   quantityCorrectionNote   String?
+
+  // Confirmado 2026-09-09: INVESTOCK (Fase 3) — la entrada de Kardex que
+  // esta recepción generó al aprobarse (approve-receipt/route.ts).
+  stockKardexEntry StockKardexEntry?
 }
 
 // ---------------- Fase 1: proveedores con crédito (CHEN) ----------------
@@ -4861,6 +4933,11 @@ model MerchandiseOutflowItem {
   adminReviewNote   String?
 
   createdAt DateTime @default(now())
+
+  // Confirmado 2026-09-09: INVESTOCK (Fase 3) — la entrada de Kardex que
+  // este ítem generó al enviarse el lote (batches/[id]/submit/route.ts).
+  // Null si el ítem no tiene catalogItemId (declarado solo por nombre).
+  stockKardexEntry StockKardexEntry?
 
   @@index([batchId])
   @@index([resolution])

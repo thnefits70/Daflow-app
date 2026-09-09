@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import { canManageInventoryControl } from "@/lib/guards";
 import { getFinanzasDeptId, recentInventorySnapshotPeriods } from "@/lib/inventoryKpis";
 import { prisma } from "@/lib/prisma";
+import { computeAndSaveStockComparison } from "@/lib/stockKardexComparison";
 
 const rowSchema = z.object({
   productCode: z.string().trim().min(1),
@@ -53,5 +54,14 @@ export async function POST(req: NextRequest) {
     }),
   ]);
 
-  return NextResponse.json({ ok: true, period, count: rows.length });
+  // Confirmado 2026-09-09 (Fase 3, INVESTOCK): mismo momento donde ya se
+  // guarda el export de Just — de una vez se compara contra el número que
+  // INVESTOCK calculó por su cuenta, sin tocar nada del flujo que Daniel ya
+  // conoce.
+  const comparison = await computeAndSaveStockComparison(deptId, period).catch((err) => {
+    console.error("[stock-snapshot save] No se pudo calcular la comparación INVESTOCK:", err);
+    return [];
+  });
+
+  return NextResponse.json({ ok: true, period, count: rows.length, comparison });
 }

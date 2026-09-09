@@ -8,6 +8,7 @@ import { WeeklyDamageControl } from "./WeeklyDamageControl";
 import { HistoryList } from "./HistoryList";
 import { JustCatalogPanel } from "./JustCatalogPanel";
 import { DropiComboManager } from "./DropiComboManager";
+import { StockLabelsPanel } from "./StockLabelsPanel";
 import { TabGuide } from "@/components/shared/TabGuide";
 
 type Tab = "capturar" | "revision" | "cierre" | "danos" | "productos" | "historial";
@@ -140,6 +141,7 @@ export function MerchandiseReentryPanel({
           </TabGuide>
           <JustCatalogPanel canManage={canManageJustCatalog} />
           {canManageJustCatalog && <DropiComboManager />}
+          {canManageJustCatalog && <StockLabelsPanel />}
         </>
       )}
       {tab === "historial" && (

@@ -5,6 +5,7 @@ import { canActOnPurchaseReceiving } from "@/lib/guards";
 import { sendPushToOwner } from "@/lib/webPush";
 import { notifyOwner } from "@/lib/notifications";
 import { getMarketingArrivalActorIds, getMarketingArrivalDispatchViewerIds } from "@/lib/marketingArrivals";
+import { recordKardexEntry } from "@/lib/stockKardex";
 
 // Confirmado 2026-08-18: pedido explícito del usuario — la aprobación FINAL
 // de Daniel (líder de Inventario) sobre una recepción que ya hizo su equipo
@@ -39,6 +40,20 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     // la vea y la vaya confirmando cada quien su parte.
     prisma.purchaseReceiptFollowUp.create({ data: { requestId: id } }),
   ]);
+
+  // Confirmado 2026-09-09 (Fase 3, INVESTOCK): esta aprobación es el mismo
+  // candado real de siempre para Compras — acá es donde el Kardex propio
+  // suma la entrada. No forma parte de la transacción de arriba (es un
+  // read-then-write), pero el riesgo de choque es bajo (equipo chico, no
+  // dos aprobaciones simultáneas del mismo producto).
+  await recordKardexEntry({
+    catalogItemId: existing.catalogItemId,
+    type: "IN",
+    quantity: existing.receipt.receivedQuantity,
+    unitCost: existing.unitCost,
+    occurredAt: new Date(),
+    purchaseRequestReceiptId: existing.receipt.id,
+  }).catch((err) => console.error("[approve-receipt] No se pudo registrar la entrada de Kardex:", err));
 
   const differenceNote = existing.receipt.minorDifferenceConfirmed
     ? ` ⚠️ Llegó con una diferencia menor frente a la referencia (confirmado por Inventario)${existing.receipt.aiPhotoNote ? `: ${existing.receipt.aiPhotoNote}` : ""}.`
