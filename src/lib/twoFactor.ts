@@ -69,3 +69,36 @@ export async function consumeBackupCode(code: string, hashes: string[]): Promise
 export function looksLikeTotpCode(code: string) {
   return /^\d{6}$/.test(code.trim());
 }
+
+const ENROLL_TOKEN_TTL_MS = 5 * 60 * 1000;
+
+// Token firmado (no requiere guardar nada en la base de datos) que
+// reemplaza pedir un código TOTP nuevo en la pantalla de "guarda tus
+// códigos de respaldo". El código de 6 dígitos ya se verificó una vez en
+// /api/auth/2fa-enroll-confirm; reenviar ESE MISMO código para terminar de
+// entrar fallaba con "Código incorrecto" porque para cuando la persona
+// copiaba sus códigos de respaldo y presionaba "continuar" (30-90s+ después)
+// el código ya había vencido. Este token vale 5 minutos y queda atado a esa
+// cuenta específica, así que cubre ese tramo sin volver a pedirle nada.
+export function generateEnrollToken(mode: "admin" | "team", id: string) {
+  const expires = Date.now() + ENROLL_TOKEN_TTL_MS;
+  const payload = `${mode}:${id}:${expires}`;
+  const sig = crypto.createHmac("sha256", process.env.AUTH_SECRET ?? "").update(payload).digest("hex");
+  return Buffer.from(`${payload}:${sig}`).toString("base64url");
+}
+
+export function verifyEnrollToken(token: string, mode: "admin" | "team", id: string): boolean {
+  try {
+    const [tMode, tId, tExpires, tSig] = Buffer.from(token, "base64url").toString("utf8").split(":");
+    if (tMode !== mode || tId !== id || !tSig) return false;
+    const expires = Number(tExpires);
+    if (!Number.isFinite(expires) || Date.now() > expires) return false;
+    const payload = `${tMode}:${tId}:${tExpires}`;
+    const expectedSig = crypto.createHmac("sha256", process.env.AUTH_SECRET ?? "").update(payload).digest("hex");
+    const a = Buffer.from(tSig, "hex");
+    const b = Buffer.from(expectedSig, "hex");
+    return a.length === b.length && crypto.timingSafeEqual(a, b);
+  } catch {
+    return false;
+  }
+}

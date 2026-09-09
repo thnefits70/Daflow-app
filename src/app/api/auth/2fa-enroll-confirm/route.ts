@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { verifyPassword } from "@/lib/password";
-import { verifyTwoFactorCode, generateBackupCodes, TWO_FACTOR_REQUIRED_DEPT_CODES } from "@/lib/twoFactor";
+import { verifyTwoFactorCode, generateBackupCodes, generateEnrollToken, TWO_FACTOR_REQUIRED_DEPT_CODES } from "@/lib/twoFactor";
 
 const schema = z.object({
   mode: z.enum(["admin", "team"]),
@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
       where: { id: "singleton" },
       data: { adminTwoFactorEnabled: true, adminTwoFactorSecret: secret, adminTwoFactorBackupCodes: hashes },
     });
-    return NextResponse.json({ ok: true, backupCodes: codes });
+    return NextResponse.json({ ok: true, backupCodes: codes, enrollToken: generateEnrollToken("admin", "admin") });
   }
 
   const uname = (username ?? "").trim().toLowerCase();
@@ -57,5 +57,5 @@ export async function POST(req: NextRequest) {
     where: { id: user.id },
     data: { twoFactorEnabled: true, twoFactorSecret: secret, twoFactorBackupCodes: hashes },
   });
-  return NextResponse.json({ ok: true, backupCodes: codes });
+  return NextResponse.json({ ok: true, backupCodes: codes, enrollToken: generateEnrollToken("team", user.id) });
 }

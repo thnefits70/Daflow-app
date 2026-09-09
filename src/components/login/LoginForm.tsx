@@ -24,6 +24,7 @@ export function LoginForm({ logoUrl }: { logoUrl: string | null }) {
   const [enrollQrDataUrl, setEnrollQrDataUrl] = useState("");
   const [enrollCode, setEnrollCode] = useState("");
   const [backupCodes, setBackupCodes] = useState<string[]>([]);
+  const [enrollToken, setEnrollToken] = useState("");
   const [copied, setCopied] = useState(false);
 
   const resetTwoFactorState = () => {
@@ -33,10 +34,11 @@ export function LoginForm({ logoUrl }: { logoUrl: string | null }) {
     setEnrollQrDataUrl("");
     setEnrollCode("");
     setBackupCodes([]);
+    setEnrollToken("");
   };
 
-  const finishLogin = async (totp?: string) => {
-    const res = await signIn("credentials", { mode, username, password, totp, redirect: false });
+  const finishLogin = async (totp?: string, enrollTokenParam?: string) => {
+    const res = await signIn("credentials", { mode, username, password, totp, enrollToken: enrollTokenParam, redirect: false });
     if (!res || res.error) {
       setErr(mode === "admin" ? "Código incorrecto." : "Código incorrecto.");
       return false;
@@ -104,13 +106,14 @@ export function LoginForm({ logoUrl }: { logoUrl: string | null }) {
       return;
     }
     setBackupCodes(data.backupCodes);
+    setEnrollToken(data.enrollToken ?? "");
     setStep("backup-codes");
   };
 
   const finishEnrollment = async () => {
     setErr("");
     setLoading(true);
-    await finishLogin(enrollCode);
+    await finishLogin(undefined, enrollToken);
     setLoading(false);
   };
 
