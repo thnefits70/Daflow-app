@@ -634,10 +634,16 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
     if (!quoteImageUrl || total <= 0) return;
     setVerifying(true);
     setErr("");
+    // Confirmado 2026-09-09: se le pasan a la IA los nombres que ya están
+    // tipeados/elegidos en el formulario como pista para leer letra
+    // manuscrita en la cotización (ver readPurchaseQuote).
+    const expectedProductNames = Array.from(
+      new Set(lines.map((l) => l.catalogItem?.name ?? l.createDraft?.newName?.trim() ?? l.productQuery.trim()).filter(Boolean))
+    );
     const res = await fetch("/api/purchase-requests/verify-quote", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ quoteImageUrl, expectedTotal: total }),
+      body: JSON.stringify({ quoteImageUrl, expectedTotal: total, expectedProductNames }),
     });
     setVerifying(false);
     const data = await res.json().catch(() => null);

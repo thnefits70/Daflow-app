@@ -47,25 +47,50 @@ export type QuoteReadResult = {
 // único que trae (pasa seguido). El llamador decide qué hacer con esto
 // (comparar contra lo escrito, pedir confirmación manual, etc.) — esta
 // función solo extrae.
+// Confirmado 2026-09-09 (bug real reportado por el usuario): muchas
+// cotizaciones son notas de venta escritas A MANO, y la descripción del
+// producto suele venir junto al código en letra cursiva/apretada — la IA a
+// veces la pasaba por alto y devolvía solo el código, forzando a subir una
+// orden de compra de respaldo aunque el nombre sí estuviera escrito ahí.
+// expectedProductNames son los nombres que la persona YA tipeó/eligió en el
+// formulario antes de subir la foto — se los damos como pista de qué buscar
+// (ayuda a leer letra difícil), nunca como algo que inventar: si de verdad
+// no aparece nada parecido en la imagen, sigue debiendo devolver null.
 export async function readPurchaseQuote(params: {
   quoteImageUrl: string;
   actorId: string;
   deptId?: string;
+  expectedProductNames?: string[];
 }): Promise<QuoteReadResult> {
   const client = getAnthropicClient();
   const { data, mediaType } = await fetchImageBase64(params.quoteImageUrl);
+  const expectedNames = (params.expectedProductNames ?? []).map((n) => n.trim()).filter(Boolean);
 
   const response = await client.messages.create({
     model: PURCHASE_AI_MODEL,
     max_tokens: 1024,
     system:
       "Lees cotizaciones/facturas de proveedores para Control de Compras de Provedix (Guayaquil, Ecuador). " +
+      "Muchas son notas de venta escritas A MANO — lee con cuidado la letra manuscrita, incluso si es cursiva, " +
+      "está apretada, abreviada, o el nombre del producto sigue en la línea de abajo del código. No te quedes " +
+      "solo con el código si hay palabras describiendo el producto en algún lado cerca de él, aunque sea difícil " +
+      "de leer a primera vista — mira con atención antes de rendirte y poner null. " +
       "Extrae SOLO lo que de verdad está en la imagen — nunca inventes un valor. " +
       'Responde ÚNICAMENTE un JSON: {"readTotal": number|null, "productNameFound": string|null, "referenceCodeFound": string|null}. ' +
       "readTotal es el monto TOTAL a pagar que muestra el documento (sin símbolo de moneda). " +
-      "productNameFound es el nombre del producto si aparece descrito con palabras. " +
-      "referenceCodeFound es un código/SKU del proveedor si eso es lo único que identifica al producto (sin nombre descriptivo). " +
-      "Si no encuentras alguno de estos tres datos, pon null en ese campo — no adivines.",
+      "productNameFound es el nombre del producto tal como está escrito en la imagen, si aparece descrito con palabras " +
+      "(no hace falta que sea el nombre completo o perfectamente legible — con que haya una descripción real en palabras basta). " +
+      "referenceCodeFound es un código/SKU del proveedor si eso es lo único que identifica al producto (sin ninguna palabra descriptiva cerca). " +
+      "Si no encuentras alguno de estos tres datos, pon null en ese campo — no adivines." +
+      (expectedNames.length > 0
+        ? " La persona que sube esta cotización ya escribió estos nombres de producto en su formulario, en este " +
+          `orden: ${expectedNames.map((n) => `"${n}"`).join(", ")}. Úsalos SOLO como pista para leer mejor la letra ` +
+          "manuscrita de la imagen (si uno de estos nombres, o algo muy parecido, aparece escrito ahí aunque sea " +
+          "con letra difícil, es más probable que sea eso) — pero reporta productNameFound como el texto que DE " +
+          "VERDAD ves escrito en la imagen, nunca copies uno de estos nombres si no hay una descripción real " +
+          "correspondiente en la foto. Si la imagen de verdad solo trae el código sin ninguna palabra, sigue " +
+          "devolviendo productNameFound como null aunque tengas estos nombres esperados."
+        : ""),
     messages: [
       {
         role: "user",

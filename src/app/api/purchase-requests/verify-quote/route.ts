@@ -6,7 +6,14 @@ import { canSubmitPurchaseRequests } from "@/lib/guards";
 import { readPurchaseQuote } from "@/lib/purchaseAi";
 import { pushOwnerId } from "@/lib/pushOwner";
 
-const schema = z.object({ quoteImageUrl: z.string().url(), expectedTotal: z.number().positive() });
+const schema = z.object({
+  quoteImageUrl: z.string().url(),
+  expectedTotal: z.number().positive(),
+  // Confirmado 2026-09-09: nombres de producto que la persona ya
+  // tipeó/eligió en el formulario, para dárselos a la IA como pista al leer
+  // letra manuscrita (ver readPurchaseQuote en lib/purchaseAi.ts).
+  expectedProductNames: z.array(z.string()).optional(),
+});
 
 // Sin escritura en la base de datos — confirmado 2026-07-30: "una sola vez
 // por solicitud" se cumple aquí (la IA lee la imagen UNA vez); el POST que
@@ -27,6 +34,7 @@ export async function POST(req: NextRequest) {
       quoteImageUrl: parsed.data.quoteImageUrl,
       actorId: pushOwnerId(session),
       deptId: session.user.deptId ?? undefined,
+      expectedProductNames: parsed.data.expectedProductNames,
     });
     const matches = read.readTotal !== null && Math.abs(read.readTotal - parsed.data.expectedTotal) < 0.01;
 
