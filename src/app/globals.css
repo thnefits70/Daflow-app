@@ -59,3 +59,20 @@ body {
   0% { transform: translateX(-120%); }
   100% { transform: translateX(220%); }
 }
+
+/* Confirmado 2026-09-09 (Etiquetas de percha, INVESTOCK): cada etiqueta
+   impresa debe caer exacta en un sticker físico de 10x10cm, uno por hoja —
+   se usa una @page con nombre en vez de la @page global para no afectar
+   otras pantallas que también imprimen (ej. Rol del mes). */
+@media print {
+  .print-stock-label {
+    page: stock-label;
+  }
+  .print-stock-label:not(:last-child) {
+    break-after: page;
+  }
+  @page stock-label {
+    size: 10cm 10cm;
+    margin: 0;
+  }
+}

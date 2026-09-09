@@ -101,15 +101,20 @@ export function StockLabelsPanel() {
       </div>
 
       {selectedItems.length > 0 && (
-        <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-4 print:grid-cols-2">
+        <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-4 print:flex print:flex-wrap print:justify-center print:gap-6">
           {selectedItems.map((i) => {
             const code = stockCodeFor(i);
             const qr = qrByCode[code];
             return (
-              <div key={i.id} className="border border-rule rounded-md p-3 text-center print:break-inside-avoid">
-                <div className="text-[12px] font-semibold text-ink mb-2 line-clamp-2">{i.name}</div>
-                {qr && <img src={qr} alt={code} className="mx-auto w-28 h-28" />}
-                <div className="text-[11px] font-mono text-steel mt-1">{code}</div>
+              <div
+                key={i.id}
+                className="print-stock-label border border-rule rounded-md p-3 text-center print:break-inside-avoid print:w-[10cm] print:h-[10cm] print:rounded-none print:border-0 print:bg-white print:flex print:flex-col print:items-center print:justify-center print:p-[0.6cm]"
+              >
+                <div className="text-[12px] font-semibold text-ink mb-2 line-clamp-2 print:text-black print:text-[22px] print:font-bold print:line-clamp-none print:mb-[0.4cm]">
+                  {i.name}
+                </div>
+                {qr && <img src={qr} alt={code} className="mx-auto w-28 h-28 print:w-[6cm] print:h-[6cm]" />}
+                <div className="text-[11px] font-mono text-steel mt-1 print:text-black print:text-[20px] print:font-bold print:mt-[0.4cm]">{code}</div>
               </div>
             );
           })}
