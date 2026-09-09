@@ -191,6 +191,16 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
   const [savingIessId, setSavingIessId] = useState<string | null>(null);
   const [copiedIessId, setCopiedIessId] = useState<string | null>(null);
 
+  // Corregir a mano la "Cuenta contrato" de un comprobante puntual —
+  // confirmado 2026-09-09: comprobantes subidos antes del fix que le enseñó
+  // a la IA a leer este campo (09f2e22, 2026-09-08) quedaron con ese dato en
+  // null, y la comparación contra el código del IESS cae al N° de
+  // comprobante bancario (que nunca coincide) mostrando una alerta falsa.
+  // Igual que editingIessId: no es exclusivo del admin.
+  const [editingProofAccountId, setEditingProofAccountId] = useState<string | null>(null);
+  const [proofAccountDraft, setProofAccountDraft] = useState("");
+  const [savingProofAccountId, setSavingProofAccountId] = useState<string | null>(null);
+
   // Agregar el número de contrato del medidor (recurrentes de luz) — vive en
   // la plantilla (mismo valor toda la serie), y a diferencia del código del
   // IESS, una vez guardado queda bloqueado: no se ofrece botón de editar.
@@ -614,6 +624,30 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
       return;
     }
     setEditingIessId(null);
+    load();
+  }
+
+  function startEditProofAccount(p: { id: string; contractAccountNumber: string | null }) {
+    setEditingProofAccountId(p.id);
+    setProofAccountDraft(p.contractAccountNumber ?? "");
+    setErr("");
+  }
+
+  async function saveProofAccount(proofId: string) {
+    setErr("");
+    setSavingProofAccountId(proofId);
+    const res = await fetch(`/api/admin-payments/proofs/${proofId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ contractAccountNumber: proofAccountDraft.trim() || null }),
+    });
+    setSavingProofAccountId(null);
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      setErr(data?.error ?? "No se pudo guardar la cuenta contrato.");
+      return;
+    }
+    setEditingProofAccountId(null);
     load();
   }
 
@@ -1424,24 +1458,58 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
                     {r.proofs.map((p) => (
                       <div key={p.id} className="flex items-center gap-2.5">
                         <ProofPreview url={p.fileUrl} size={40} filename="comprobante-de-pago" />
-                        <div className="text-[11px] text-steel">
-                          {p.readAmount !== null ? <span className="font-semibold">{money(p.readAmount)}</span> : <span className="text-red">no se pudo leer el monto</span>}
-                          {p.receiptNumber && <span className="text-steel-dim"> · N° {p.receiptNumber}</span>}
-                          {p.contractAccountNumber && <span className="text-steel-dim"> · Cuenta contrato {p.contractAccountNumber}</span>}
-                          {r.iessReceiptNumber && (p.contractAccountNumber || p.receiptNumber) && (
-                            // Confirmado 2026-09-08: pedido explícito del usuario — el código del
-                            // IESS coincide con la "Cuenta contrato" del comprobante (cuenta
-                            // destino del pago), NO con el N° de comprobante/transacción del
-                            // banco (ese siempre es distinto). Se compara contra
-                            // contractAccountNumber primero; solo si el comprobante no trae ese
-                            // dato se compara contra receiptNumber como respaldo.
-                            codesMatch(r.iessReceiptNumber, p.contractAccountNumber ?? p.receiptNumber!) ? (
-                              <span className="text-green font-semibold"> · ✅ coincide con el código del IESS</span>
-                            ) : (
-                              <span className="font-semibold" style={{ color: "#D9A441" }}> · ⚠️ no coincide con el código del IESS ({r.iessReceiptNumber})</span>
-                            )
-                          )}
-                        </div>
+                        {editingProofAccountId === p.id ? (
+                          <div className="flex items-center gap-1.5 flex-1">
+                            <input
+                              type="text"
+                              autoFocus
+                              placeholder="Cuenta contrato tal como aparece en el comprobante"
+                              className="flex-1 rounded border border-teal px-2 py-1 text-[11.5px] font-mono min-w-[160px]"
+                              value={proofAccountDraft}
+                              onChange={(e) => setProofAccountDraft(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") saveProofAccount(p.id);
+                                if (e.key === "Escape") setEditingProofAccountId(null);
+                              }}
+                            />
+                            <button
+                              type="button"
+                              disabled={savingProofAccountId === p.id}
+                              className="rounded border border-teal bg-teal px-2 py-1 text-[10.5px] font-semibold text-white cursor-pointer disabled:opacity-60"
+                              onClick={() => saveProofAccount(p.id)}
+                            >
+                              {savingProofAccountId === p.id ? "Guardando…" : "Guardar"}
+                            </button>
+                            <button type="button" className="text-steel text-[10.5px] cursor-pointer" onClick={() => setEditingProofAccountId(null)}>Cancelar</button>
+                          </div>
+                        ) : (
+                          <div className="text-[11px] text-steel">
+                            {p.readAmount !== null ? <span className="font-semibold">{money(p.readAmount)}</span> : <span className="text-red">no se pudo leer el monto</span>}
+                            {p.receiptNumber && <span className="text-steel-dim"> · N° {p.receiptNumber}</span>}
+                            {p.contractAccountNumber && <span className="text-steel-dim"> · Cuenta contrato {p.contractAccountNumber}</span>}
+                            {r.iessReceiptNumber && (p.contractAccountNumber || p.receiptNumber) && (
+                              // Confirmado 2026-09-08: pedido explícito del usuario — el código del
+                              // IESS coincide con la "Cuenta contrato" del comprobante (cuenta
+                              // destino del pago), NO con el N° de comprobante/transacción del
+                              // banco (ese siempre es distinto). Se compara contra
+                              // contractAccountNumber primero; solo si el comprobante no trae ese
+                              // dato se compara contra receiptNumber como respaldo.
+                              codesMatch(r.iessReceiptNumber, p.contractAccountNumber ?? p.receiptNumber!) ? (
+                                <span className="text-green font-semibold"> · ✅ coincide con el código del IESS</span>
+                              ) : (
+                                <span className="font-semibold" style={{ color: "#D9A441" }}> · ⚠️ no coincide con el código del IESS ({r.iessReceiptNumber})</span>
+                              )
+                            )}
+                            <button
+                              type="button"
+                              title="Corregir la cuenta contrato de este comprobante"
+                              className="text-steel-dim hover:text-teal cursor-pointer ml-1 align-middle"
+                              onClick={() => startEditProofAccount(p)}
+                            >
+                              <Pencil size={11} className="inline" />
+                            </button>
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
