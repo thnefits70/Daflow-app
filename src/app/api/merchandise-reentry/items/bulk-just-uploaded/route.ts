@@ -3,6 +3,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { canManageJustUpload } from "@/lib/guards";
 import { maybeMarkBatchClosed, JUST_UPLOAD_MIN_QTY, isTodayLastBusinessDayOfWeek } from "@/lib/merchandiseReentry";
+import { recordKardexEntry } from "@/lib/stockKardex";
 
 // Confirma de un solo clic el consolidado de un producto: mismo efecto que
 // marcar "Subido a Just" item por item, pero para todas las unidades
@@ -46,6 +47,23 @@ export async function POST(req: Request) {
     where: { id: { in: itemIds } },
     data: { justUploadedAt: new Date(), justUploadedById: session.user.id },
   });
+
+  // Confirmado 2026-09-09 (Fase 3, INVESTOCK): este es el momento real en que
+  // la mercadería vuelve a stock (parte buena subida a Just) — mismo patrón
+  // que el resto de entradas/salidas del Kardex. Ítems sin catalogItemId
+  // (declarados solo por nombre) no tienen a qué producto sumarle, se omiten.
+  // Secuencial, no en paralelo, porque cada línea depende del saldo que dejó
+  // la anterior del mismo producto.
+  for (const item of items) {
+    if (!item.catalogItemId) continue;
+    await recordKardexEntry({
+      catalogItemId: item.catalogItemId,
+      type: "IN",
+      quantity: item.goodQty,
+      unitCost: null,
+      occurredAt: new Date(),
+    }).catch((err) => console.error("[merchandise-reentry bulk-just-uploaded] No se pudo registrar la entrada de Kardex:", err));
+  }
 
   const batchIds = [...new Set(items.map((i) => i.batchId))];
   for (const batchId of batchIds) await maybeMarkBatchClosed(batchId);
