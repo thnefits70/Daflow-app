@@ -43,12 +43,12 @@ export function CopyValueButton({ value }: { value: string }) {
     <button
       type="button"
       title="Copiar"
-      className={`flex items-center gap-1 shrink-0 rounded-md px-2 py-1 text-[11px] font-semibold cursor-pointer border transition-colors ${
-        copied ? "bg-teal text-white border-teal" : "bg-white text-teal border-teal/50 hover:bg-teal/10"
+      className={`flex items-center gap-1 shrink-0 text-[10.5px] cursor-pointer transition-colors ${
+        copied ? "text-teal" : "text-steel hover:text-teal"
       }`}
       onClick={copy}
     >
-      {copied ? <Check size={13} /> : <Copy size={13} />}
+      {copied ? <Check size={12} /> : <Copy size={12} />}
       {copied ? "Copiado" : "Copiar"}
     </button>
   );
