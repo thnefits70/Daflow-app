@@ -45,10 +45,22 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const existing = await prisma.purchaseRequest.findUnique({
     where: { id },
-    include: { catalogItem: { select: { name: true } }, urgentReports: true },
+    include: {
+      catalogItem: { select: { name: true } },
+      urgentReports: true,
+      supplier: { select: { paymentMode: true } },
+    },
   });
   if (!existing) return NextResponse.json({ error: "No encontrada." }, { status: 404 });
-  if (existing.status !== "PAID") return NextResponse.json({ error: "Todavía no está pagada." }, { status: 409 });
+  // Confirmado 2026-09-08 (Fase 1, proveedores con crédito): un proveedor de
+  // crédito (hoy solo CHEN) nunca pasa por "PAID" antes de recibir — se
+  // recibe primero, y el pago real ocurre después, agrupado en una tanda
+  // (ver SupplierDebtPayment). Para pago anticipado, el comportamiento no
+  // cambia: sigue exigiendo PAID.
+  const isCreditSupplier = existing.supplier.paymentMode === "CREDITO";
+  if (existing.status !== "PAID" && !(isCreditSupplier && existing.status === "APPROVED")) {
+    return NextResponse.json({ error: "Todavía no está pagada." }, { status: 409 });
+  }
   // Confirmado 2026-08-06: sin la orden de compra, Daniel no tiene el
   // respaldo completo de qué se pidió — no se puede cerrar el ciclo de
   // recepción hasta que quien solicitó la suba.

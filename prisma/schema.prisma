@@ -66,6 +66,10 @@ model PlatformSettings {
   // (LOTE-0001...) — un lote agrupa las guías de una misma transportadora
   // que Yair confirma juntas, para que Bryan las copie/gestione de una.
   lastCancelledGuideBatchNumber Int       @default(0)
+  // Confirmado 2026-09-08: correlativo propio de las tandas de pago a
+  // proveedores con crédito (TND-0001, TND-0002...) — mismo patrón atómico
+  // que los anteriores, ver SupplierDebtPayment.
+  lastSupplierDebtPaymentNumber Int       @default(0)
   updatedAt                     DateTime  @updatedAt
 }
 
@@ -82,28 +86,28 @@ model PasswordResetToken {
  * ---------------- Áreas del negocio ----------------
  */
 model Department {
-  id                    String   @id @default(cuid())
+  id                    String    @id @default(cuid())
   name                  String
-  code                  String   @unique
-  order                 Int      @default(0)
+  code                  String    @unique
+  order                 Int       @default(0)
   // Áreas especiales (ej. proyectos confidenciales) se anclan aparte en el menú,
   // no se mezclan con la lista arrastrable de áreas normales del negocio.
-  isSpecial             Boolean  @default(false)
+  isSpecial             Boolean   @default(false)
   // Habilita la pestaña de KPIs financieros (ROI, ventas y ganancia mensual) para esta área.
-  trackKpis             Boolean  @default(false)
+  trackKpis             Boolean   @default(false)
   // Habilita el registro semanal (ej. pedidos despachados) que se muestra en el Inicio para todos.
-  trackWeeklyMetric     Boolean  @default(false)
+  trackWeeklyMetric     Boolean   @default(false)
   // Habilita la bitácora de feedback semanal: problemas y plan de acción.
   // El admin puede escribir manualmente; el asistente de check-in semanal
   // también escribe (por su propio camino, ver CheckinConversation) cuando
   // el empleado reporta directo. El líder del área puede ver siempre, y
   // cambiar el estado (Pendiente/Solucionado/Rechazado) de sus propios
   // registros — ver canEditDeptKpis.
-  trackWeeklyReview     Boolean  @default(false)
+  trackWeeklyReview     Boolean   @default(false)
   // Habilita "Pagos recordatorios" (facturas/suscripciones mensuales que vencen en fechas
   // variables) — confirmado 2026-07-22: solo Finanzas y Contabilidad, por ahora.
-  trackPaymentReminders Boolean  @default(false)
-  createdAt             DateTime @default(now())
+  trackPaymentReminders Boolean   @default(false)
+  createdAt             DateTime  @default(now())
   // Borrado lógico (confirmado 2026-09-08): eliminar un área pide contraseña
   // de admin + código del autenticador (o de respaldo) + escribir el nombre
   // exacto, y aun así solo marca deletedAt en vez de borrar — así queda
@@ -348,80 +352,82 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  examScores                                   ExamScore[]
-  milestones                                   Milestone[]
-  ackUpdates                                   UserAckUpdate[]
-  suppliersCreated                             Supplier[]                         @relation("SupplierCreatedBy")
-  suppliersApproved                            Supplier[]                         @relation("SupplierApprovedBy")
-  supplierBankAccountsCreated                  SupplierBankAccount[]              @relation("SupplierBankAccountCreatedBy")
-  purchaseRequestsPaidBy                       PurchaseRequest[]                  @relation("PurchaseRequestPaidBy")
-  purchaseRequestsInvoicedBy                   PurchaseRequest[]                  @relation("PurchaseRequestInvoicedBy")
-  purchaseRequestsShippingPaymentRequestedBy   PurchaseRequest[]                  @relation("PurchaseRequestShippingPaymentRequestedBy")
-  purchaseRequestsBankAccountChangeRequestedBy PurchaseRequest[]                  @relation("PurchaseRequestBankAccountChangeRequestedBy")
-  purchaseRequestsShippingPaidBy               PurchaseRequest[]                  @relation("PurchaseRequestShippingPaidBy")
-  payStubs                                     PayStub[]                          @relation("PayStubOwner")
-  payStubsUploaded                             PayStub[]                          @relation("PayStubUploadedBy")
-  weeklyReviewsReported                        WeeklyReviewRecord[]               @relation("WeeklyReviewReportedBy")
-  weeklyReviewsInvolvingMe                     WeeklyReviewRecord[]               @relation("WeeklyReviewInvolvesUser")
-  financeKpiRecordsUploaded                    FinanceKpiRecord[]                 @relation("FinanceKpiRecordUploadedBy")
-  financeKpiUploadsBy                          FinanceKpiUpload[]                 @relation("FinanceKpiUploadUploadedBy")
-  paymentReminderRecordsCompleted              PaymentReminderRecord[]            @relation("PaymentReminderCompletedBy")
-  periodicReminderCompletions                  PeriodicReminderCompletion[]       @relation("PeriodicReminderCompletedBy")
-  periodicRemindersCreated                     PeriodicReminder[]                 @relation("PeriodicReminderCreatedBy")
-  purchaseCatalogItemsCreated                  PurchaseCatalogItem[]              @relation("PurchaseCatalogItemCreatedBy")
-  purchaseCatalogItemDeleteRequests            PurchaseCatalogItemDeleteRequest[] @relation("PurchaseCatalogItemDeleteRequestedBy")
-  catalogMissingReportsReported                CatalogMissingReport[]             @relation("CatalogMissingReportReportedBy")
-  catalogMissingReportsResolved                CatalogMissingReport[]             @relation("CatalogMissingReportResolvedBy")
-  justCatalogImports                           JustCatalogImport[]                @relation("JustCatalogImportImportedBy")
-  justCatalogDuplicateResolutions              JustCatalogDuplicateResolution[]   @relation("JustCatalogDuplicateResolutionDecidedBy")
-  dropiCombosCreated                           DropiCombo[]                       @relation("DropiComboCreatedBy")
-  supplierCreditsCreated                       SupplierCredit[]                   @relation("SupplierCreditCreatedBy")
-  urgentResolutionsCreated                     PurchaseUrgentResolution[]         @relation("UrgentResolutionCreatedBy")
-  urgentResolutionsReplacementSubmitted        PurchaseUrgentResolution[]         @relation("UrgentResolutionReplacementSubmittedBy")
-  urgentResolutionsReplacementVerified         PurchaseUrgentResolution[]         @relation("UrgentResolutionReplacementVerifiedBy")
-  urgentResolutionsJustaUploaded               PurchaseUrgentResolution[]         @relation("UrgentResolutionJustaUploadedBy")
-  urgentResolutionsBankConfirmed               PurchaseUrgentResolution[]         @relation("UrgentResolutionBankConfirmedBy")
-  urgentResolutionsCancelled                   PurchaseUrgentResolution[]         @relation("UrgentResolutionCancelledBy")
-  purchaseRequestsFinanceFlagged               PurchaseRequest[]                  @relation("PurchaseRequestFinanceFlaggedBy")
-  adminPaymentTemplatesCreated                 AdminPaymentTemplate[]             @relation("AdminPaymentTemplateCreatedBy")
-  adminPaymentRequestsCreated                  AdminPaymentRequest[]              @relation("AdminPaymentRequestCreatedBy")
-  adminPaymentsPaid                            AdminPaymentRequest[]              @relation("AdminPaymentPaidBy")
-  adminPaymentsConfirmed                       AdminPaymentRequest[]              @relation("AdminPaymentConfirmedBy")
-  adminPaymentPayeesCreated                    AdminPaymentPayee[]                @relation("AdminPaymentPayeeCreatedBy")
-  adminPaymentPayeeBankAccountsCreated         AdminPaymentPayeeBankAccount[]     @relation("AdminPaymentPayeeBankAccountCreatedBy")
-  inventoryProductSnapshotsCreated             InventoryProductSnapshot[]         @relation("InventoryProductSnapshotCreatedBy")
-  pettyCashEntriesCreated                      PettyCashEntry[]                   @relation("PettyCashEntryCreatedBy")
-  pettyCashEntriesUpdated                      PettyCashEntry[]                   @relation("PettyCashEntryUpdatedBy")
-  pettyCashEntriesArchived                     PettyCashEntry[]                   @relation("PettyCashEntryArchivedBy")
-  pettyCashEntriesRestored                     PettyCashEntry[]                   @relation("PettyCashEntryRestoredBy")
-  pettyCashEntriesConfirmed                    PettyCashEntry[]                   @relation("PettyCashEntryConfirmedBy")
-  pettyCashExceptionsRequested                 PettyCashFreightException[]        @relation("PettyCashExceptionRequestedBy")
-  pettyCashPayoutAccountsUpdated               PettyCashPayoutAccount[]
-  pettyCashExceptionsReviewed                  PettyCashFreightException[]        @relation("PettyCashExceptionReviewedBy")
-  purchaseRequestsMade                         PurchaseRequest[]                  @relation("PurchaseRequestRequestedBy")
-  purchaseRequestsReviewed                     PurchaseRequest[]                  @relation("PurchaseRequestReviewedBy")
-  purchaseRequestReceiptsConfirmed             PurchaseRequestReceipt[]           @relation("PurchaseRequestReceiptConfirmedBy")
-  purchaseRequestReceiptsApproved              PurchaseRequestReceipt[]           @relation("PurchaseRequestReceiptApprovedBy")
-  purchaseRequestReceiptsJustaUploaded         PurchaseRequestReceipt[]           @relation("PurchaseRequestReceiptJustaUploadedBy")
-  purchaseRequestReceiptsQuantityCorrected     PurchaseRequestReceipt[]           @relation("PurchaseRequestReceiptQuantityCorrectedBy")
-  marketingFollowUpsDesignConfirmed            PurchaseReceiptFollowUp[]          @relation("PurchaseReceiptFollowUpDesignConfirmedBy")
-  marketingFollowUpsAdvisorConfirmed           PurchaseReceiptFollowUp[]          @relation("PurchaseReceiptFollowUpAdvisorConfirmedBy")
-  purchaseRequestUrgentReports                 PurchaseRequestUrgentReport[]      @relation("PurchaseRequestUrgentReportedBy")
-  purchaseRequestUrgentReportsReviewed         PurchaseRequestUrgentReport[]      @relation("PurchaseRequestUrgentReportReviewedByLead")
-  purchaseRequestUrgentReportsRejected         PurchaseRequestUrgentReport[]      @relation("PurchaseRequestUrgentReportRejectedBy")
-  purchaseRequestUrgentReportsJustConfirmed    PurchaseRequestUrgentReport[]      @relation("PurchaseRequestUrgentReportJustConfirmedBy")
-  purchaseRequestUrgentReportsResolvedInternally PurchaseRequestUrgentReport[]    @relation("PurchaseRequestUrgentReportResolvedInternallyBy")
-  storeFeedbackEvaluations                     StoreFeedbackEvaluation[]          @relation("StoreFeedbackEvaluatedBy")
-  confidentialAccess                           ConfidentialDocumentAccess[]
-  monthlyEvaluationsReceived                   MonthlyEvaluation[]
-  monthlyRecognitionResults                    MonthlyRecognitionResult[]
-  monthlyEvaluationSummaries                   MonthlyEvaluationSummary[]
-  leaderTeamFeedbackReceived                   LeaderTeamFeedback[]               @relation("LeaderTeamFeedbackLeader")
-  leaderExternalObservationsReceived           LeaderExternalObservation[]        @relation("LeaderExternalObsLeader")
-  learningPathsAssigned                        LearningPathAssignment[]           @relation("LearningPathAssignedTo")
-  learningPathStepProgress                     LearningPathStepProgress[]         @relation("LearningPathStepProgressBy")
-  payrollMessagesReceived                      PayrollMessage[]                   @relation("PayrollMessageEmployee")
-  payrollMessagesSent                          PayrollMessage[]                   @relation("PayrollMessageSender")
+  examScores                                     ExamScore[]
+  milestones                                     Milestone[]
+  ackUpdates                                     UserAckUpdate[]
+  suppliersCreated                               Supplier[]                         @relation("SupplierCreatedBy")
+  suppliersApproved                              Supplier[]                         @relation("SupplierApprovedBy")
+  supplierBankAccountsCreated                    SupplierBankAccount[]              @relation("SupplierBankAccountCreatedBy")
+  supplierDebtPaymentsCreated                    SupplierDebtPayment[]              @relation("SupplierDebtPaymentCreatedBy")
+  supplierDebtTransfersCreated                   SupplierDebtTransfer[]             @relation("SupplierDebtTransferCreatedBy")
+  purchaseRequestsPaidBy                         PurchaseRequest[]                  @relation("PurchaseRequestPaidBy")
+  purchaseRequestsInvoicedBy                     PurchaseRequest[]                  @relation("PurchaseRequestInvoicedBy")
+  purchaseRequestsShippingPaymentRequestedBy     PurchaseRequest[]                  @relation("PurchaseRequestShippingPaymentRequestedBy")
+  purchaseRequestsBankAccountChangeRequestedBy   PurchaseRequest[]                  @relation("PurchaseRequestBankAccountChangeRequestedBy")
+  purchaseRequestsShippingPaidBy                 PurchaseRequest[]                  @relation("PurchaseRequestShippingPaidBy")
+  payStubs                                       PayStub[]                          @relation("PayStubOwner")
+  payStubsUploaded                               PayStub[]                          @relation("PayStubUploadedBy")
+  weeklyReviewsReported                          WeeklyReviewRecord[]               @relation("WeeklyReviewReportedBy")
+  weeklyReviewsInvolvingMe                       WeeklyReviewRecord[]               @relation("WeeklyReviewInvolvesUser")
+  financeKpiRecordsUploaded                      FinanceKpiRecord[]                 @relation("FinanceKpiRecordUploadedBy")
+  financeKpiUploadsBy                            FinanceKpiUpload[]                 @relation("FinanceKpiUploadUploadedBy")
+  paymentReminderRecordsCompleted                PaymentReminderRecord[]            @relation("PaymentReminderCompletedBy")
+  periodicReminderCompletions                    PeriodicReminderCompletion[]       @relation("PeriodicReminderCompletedBy")
+  periodicRemindersCreated                       PeriodicReminder[]                 @relation("PeriodicReminderCreatedBy")
+  purchaseCatalogItemsCreated                    PurchaseCatalogItem[]              @relation("PurchaseCatalogItemCreatedBy")
+  purchaseCatalogItemDeleteRequests              PurchaseCatalogItemDeleteRequest[] @relation("PurchaseCatalogItemDeleteRequestedBy")
+  catalogMissingReportsReported                  CatalogMissingReport[]             @relation("CatalogMissingReportReportedBy")
+  catalogMissingReportsResolved                  CatalogMissingReport[]             @relation("CatalogMissingReportResolvedBy")
+  justCatalogImports                             JustCatalogImport[]                @relation("JustCatalogImportImportedBy")
+  justCatalogDuplicateResolutions                JustCatalogDuplicateResolution[]   @relation("JustCatalogDuplicateResolutionDecidedBy")
+  dropiCombosCreated                             DropiCombo[]                       @relation("DropiComboCreatedBy")
+  supplierCreditsCreated                         SupplierCredit[]                   @relation("SupplierCreditCreatedBy")
+  urgentResolutionsCreated                       PurchaseUrgentResolution[]         @relation("UrgentResolutionCreatedBy")
+  urgentResolutionsReplacementSubmitted          PurchaseUrgentResolution[]         @relation("UrgentResolutionReplacementSubmittedBy")
+  urgentResolutionsReplacementVerified           PurchaseUrgentResolution[]         @relation("UrgentResolutionReplacementVerifiedBy")
+  urgentResolutionsJustaUploaded                 PurchaseUrgentResolution[]         @relation("UrgentResolutionJustaUploadedBy")
+  urgentResolutionsBankConfirmed                 PurchaseUrgentResolution[]         @relation("UrgentResolutionBankConfirmedBy")
+  urgentResolutionsCancelled                     PurchaseUrgentResolution[]         @relation("UrgentResolutionCancelledBy")
+  purchaseRequestsFinanceFlagged                 PurchaseRequest[]                  @relation("PurchaseRequestFinanceFlaggedBy")
+  adminPaymentTemplatesCreated                   AdminPaymentTemplate[]             @relation("AdminPaymentTemplateCreatedBy")
+  adminPaymentRequestsCreated                    AdminPaymentRequest[]              @relation("AdminPaymentRequestCreatedBy")
+  adminPaymentsPaid                              AdminPaymentRequest[]              @relation("AdminPaymentPaidBy")
+  adminPaymentsConfirmed                         AdminPaymentRequest[]              @relation("AdminPaymentConfirmedBy")
+  adminPaymentPayeesCreated                      AdminPaymentPayee[]                @relation("AdminPaymentPayeeCreatedBy")
+  adminPaymentPayeeBankAccountsCreated           AdminPaymentPayeeBankAccount[]     @relation("AdminPaymentPayeeBankAccountCreatedBy")
+  inventoryProductSnapshotsCreated               InventoryProductSnapshot[]         @relation("InventoryProductSnapshotCreatedBy")
+  pettyCashEntriesCreated                        PettyCashEntry[]                   @relation("PettyCashEntryCreatedBy")
+  pettyCashEntriesUpdated                        PettyCashEntry[]                   @relation("PettyCashEntryUpdatedBy")
+  pettyCashEntriesArchived                       PettyCashEntry[]                   @relation("PettyCashEntryArchivedBy")
+  pettyCashEntriesRestored                       PettyCashEntry[]                   @relation("PettyCashEntryRestoredBy")
+  pettyCashEntriesConfirmed                      PettyCashEntry[]                   @relation("PettyCashEntryConfirmedBy")
+  pettyCashExceptionsRequested                   PettyCashFreightException[]        @relation("PettyCashExceptionRequestedBy")
+  pettyCashPayoutAccountsUpdated                 PettyCashPayoutAccount[]
+  pettyCashExceptionsReviewed                    PettyCashFreightException[]        @relation("PettyCashExceptionReviewedBy")
+  purchaseRequestsMade                           PurchaseRequest[]                  @relation("PurchaseRequestRequestedBy")
+  purchaseRequestsReviewed                       PurchaseRequest[]                  @relation("PurchaseRequestReviewedBy")
+  purchaseRequestReceiptsConfirmed               PurchaseRequestReceipt[]           @relation("PurchaseRequestReceiptConfirmedBy")
+  purchaseRequestReceiptsApproved                PurchaseRequestReceipt[]           @relation("PurchaseRequestReceiptApprovedBy")
+  purchaseRequestReceiptsJustaUploaded           PurchaseRequestReceipt[]           @relation("PurchaseRequestReceiptJustaUploadedBy")
+  purchaseRequestReceiptsQuantityCorrected       PurchaseRequestReceipt[]           @relation("PurchaseRequestReceiptQuantityCorrectedBy")
+  marketingFollowUpsDesignConfirmed              PurchaseReceiptFollowUp[]          @relation("PurchaseReceiptFollowUpDesignConfirmedBy")
+  marketingFollowUpsAdvisorConfirmed             PurchaseReceiptFollowUp[]          @relation("PurchaseReceiptFollowUpAdvisorConfirmedBy")
+  purchaseRequestUrgentReports                   PurchaseRequestUrgentReport[]      @relation("PurchaseRequestUrgentReportedBy")
+  purchaseRequestUrgentReportsReviewed           PurchaseRequestUrgentReport[]      @relation("PurchaseRequestUrgentReportReviewedByLead")
+  purchaseRequestUrgentReportsRejected           PurchaseRequestUrgentReport[]      @relation("PurchaseRequestUrgentReportRejectedBy")
+  purchaseRequestUrgentReportsJustConfirmed      PurchaseRequestUrgentReport[]      @relation("PurchaseRequestUrgentReportJustConfirmedBy")
+  purchaseRequestUrgentReportsResolvedInternally PurchaseRequestUrgentReport[]      @relation("PurchaseRequestUrgentReportResolvedInternallyBy")
+  storeFeedbackEvaluations                       StoreFeedbackEvaluation[]          @relation("StoreFeedbackEvaluatedBy")
+  confidentialAccess                             ConfidentialDocumentAccess[]
+  monthlyEvaluationsReceived                     MonthlyEvaluation[]
+  monthlyRecognitionResults                      MonthlyRecognitionResult[]
+  monthlyEvaluationSummaries                     MonthlyEvaluationSummary[]
+  leaderTeamFeedbackReceived                     LeaderTeamFeedback[]               @relation("LeaderTeamFeedbackLeader")
+  leaderExternalObservationsReceived             LeaderExternalObservation[]        @relation("LeaderExternalObsLeader")
+  learningPathsAssigned                          LearningPathAssignment[]           @relation("LearningPathAssignedTo")
+  learningPathStepProgress                       LearningPathStepProgress[]         @relation("LearningPathStepProgressBy")
+  payrollMessagesReceived                        PayrollMessage[]                   @relation("PayrollMessageEmployee")
+  payrollMessagesSent                            PayrollMessage[]                   @relation("PayrollMessageSender")
 
   payrollProfile              PayrollProfile?
   overtimeEntriesOwn          OvertimeEntry[]        @relation("OvertimeEntryEmployee")
@@ -1336,22 +1342,39 @@ enum ShippingPaymentTiming {
   ON_DELIVERY
 }
 
+// Confirmado 2026-09-08 (Fase 1, proveedor CHEN): la mayoría de proveedores
+// cobran por adelantado (PREPAGO); un proveedor con crédito (hoy solo CHEN)
+// deja entrar mercadería sin cobrar de inmediato y el saldo se acumula hasta
+// que él mismo pide que se le pague. Campo general, no exclusivo de CHEN,
+// para que cualquier otro proveedor futuro con crédito use el mismo camino.
+enum SupplierPaymentMode {
+  PREPAGO
+  CREDITO
+}
+
 model Supplier {
-  id          String       @id @default(cuid())
+  id                         String              @id @default(cuid())
   // Confirmado 2026-07-30: los transportistas de Control de Compras viven en
   // esta MISMA tabla (type=CARRIER) en vez de un catálogo aparte, para que
   // "se sincroniza con Proveedores" sea automático (una sola fila, nunca dos
   // registros del mismo contacto) — se distinguen y filtran por type, y un
   // transportista simplemente no pide location (no tiene local fijo).
-  type        SupplierType @default(SUPPLIER)
-  name        String
-  location    String?
+  type                       SupplierType        @default(SUPPLIER)
+  name                       String
+  paymentMode                SupplierPaymentMode @default(PREPAGO)
+  // Confirmado 2026-09-08: enlace público de solo lectura para un proveedor
+  // con crédito (CHEN) — solo se guarda el hash (igual que
+  // PasswordResetToken), el token crudo nunca se persiste, solo se muestra
+  // una vez al generarlo. Null hasta que el admin lo genera.
+  publicLedgerTokenHash      String?             @unique
+  publicLedgerTokenCreatedAt DateTime?
+  location                   String?
   // Pin exacto marcado en el mapa (OpenStreetMap), opcional — más confiable que
   // una dirección escrita para que alguien nuevo pueda llegar.
-  locationLat Float?
-  locationLng Float?
-  category    String?
-  notes       String?
+  locationLat                Float?
+  locationLng                Float?
+  category                   String?
+  notes                      String?
 
   email String?
 
@@ -1379,6 +1402,7 @@ model Supplier {
   bankAccounts               SupplierBankAccount[]
   credits                    SupplierCredit[]
   merchandiseOutflowBatches  MerchandiseOutflowBatch[]
+  debtPayments               SupplierDebtPayment[]
 
   @@index([status])
   @@index([createdByDeptId])
@@ -1987,6 +2011,16 @@ model PurchaseRequest {
   // las pantallas normales de Compras/Finanzas, solo en Auditoría.
   paymentProofReceiptNumber String?
 
+  // Confirmado 2026-09-08 (Fase 1, proveedor CHEN): cuando el proveedor es
+  // de crédito (Supplier.paymentMode = CREDITO), esta solicitud nunca pasa
+  // por "PAID" individualmente — se recibe primero, y el pago real ocurre
+  // después, agrupado en una tanda (SupplierDebtPayment). Null = ya
+  // confirmada por el líder de Inventario pero todavía sin pagar (cuenta en
+  // el saldo actual que se le debe al proveedor); asignado = ya quedó
+  // dentro de una tanda cerrada y pagada.
+  debtPaymentId String?
+  debtPayment   SupplierDebtPayment? @relation(fields: [debtPaymentId], references: [id], onDelete: SetNull)
+
   invoiceStatus PurchaseInvoiceStatus @default(PENDING)
   invoiceAmount Float?
   invoiceDocUrl String?
@@ -2033,6 +2067,7 @@ model PurchaseRequest {
   @@index([resubmittedFromGroupId])
   @@index([paymentProofReceiptNumber])
   @@index([shippingPaymentProofReceiptNumber])
+  @@index([debtPaymentId])
 }
 
 // Inventario confirma que de verdad llegó — sin esto el ciclo no se cierra.
@@ -2103,6 +2138,75 @@ model PurchaseRequestReceipt {
   quantityCorrectedBy      User?     @relation("PurchaseRequestReceiptQuantityCorrectedBy", fields: [quantityCorrectedById], references: [id], onDelete: SetNull)
   quantityCorrectedAt      DateTime?
   quantityCorrectionNote   String?
+}
+
+// ---------------- Fase 1: proveedores con crédito (CHEN) ----------------
+// Confirmado 2026-09-08: una "tanda" — el conjunto de PurchaseRequest ya
+// RECEIVED (confirmadas por Daniel, completas y en buen estado) que el
+// admin decide pagar de una vez, cuando el proveedor de crédito (hoy solo
+// CHEN) avisa que quiere que se le pague. El pago NO es automático al pasar
+// un monto — siempre lo decide el admin. Puede pagarse en varias
+// transferencias (SupplierDebtTransfer). code = correlativo TND-0001...
+model SupplierDebtPayment {
+  id   String @id @default(cuid())
+  code String @unique
+
+  supplierId String
+  supplier   Supplier @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+
+  // Suma de PurchaseRequest.totalCost de todas las solicitudes incluidas —
+  // se guarda al cerrar la tanda, no se recalcula después (aunque el
+  // historial de precios cambie más adelante).
+  totalAmount Float
+
+  // Confirmado 2026-09-08: la misma revisión de IA que ya usa
+  // reviewApprovedPurchaseGroup en purchaseAi.ts, aplicada acá antes de
+  // cerrar la tanda (suma de solicitudes vs. suma de transferencias,
+  // comprobantes repetidos, cuenta destino real del proveedor). Nunca
+  // bloquea — el admin decide igual.
+  aiReviewSummary String?   @db.Text
+  aiReviewOk      Boolean?
+  aiReviewAt      DateTime?
+
+  closedAt    DateTime?
+  createdById String?
+  createdBy   User?     @relation("SupplierDebtPaymentCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime  @default(now())
+
+  requests  PurchaseRequest[]
+  transfers SupplierDebtTransfer[]
+
+  @@index([supplierId])
+  @@index([closedAt])
+}
+
+// Cada transferencia real dentro de una tanda — normalmente varias, entre
+// $2,000 y $4,999 cada una (costumbre operativa del dueño, no una regla que
+// el sistema bloquee), hasta cubrir el total de la tanda.
+model SupplierDebtTransfer {
+  id            String              @id @default(cuid())
+  debtPaymentId String
+  debtPayment   SupplierDebtPayment @relation(fields: [debtPaymentId], references: [id], onDelete: Cascade)
+
+  amount       Float
+  transferDate DateTime
+
+  bankNameDestino String
+  accountDestino  String
+  bankNameOrigen  String
+  accountOrigen   String
+
+  comprobanteNumber String
+  transactionCost   Float?
+  iva               Float?
+  proofUrl          String
+
+  createdById String?
+  createdBy   User?    @relation("SupplierDebtTransferCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+
+  @@index([debtPaymentId])
+  @@index([comprobanteNumber])
 }
 
 // Confirmado 2026-08-08: "Mercadería recibida" — pedido explícito del
@@ -2222,10 +2326,10 @@ model PurchaseRequestUrgentReport {
   // notificación — deja rastro de que existió y por qué, nunca se borra.
   // Solo aplica cuando el reporte es puramente cantidad faltante (sin
   // dañada/incompleta/diferente) — eso siempre sigue el camino normal.
-  resolvedInternallyAt     DateTime?
-  resolvedInternallyById   String?
-  resolvedInternallyBy     User?     @relation("PurchaseRequestUrgentReportResolvedInternallyBy", fields: [resolvedInternallyById], references: [id], onDelete: SetNull)
-  resolvedInternallyNote   String?
+  resolvedInternallyAt   DateTime?
+  resolvedInternallyById String?
+  resolvedInternallyBy   User?     @relation("PurchaseRequestUrgentReportResolvedInternallyBy", fields: [resolvedInternallyById], references: [id], onDelete: SetNull)
+  resolvedInternallyNote String?
 
   resolutions PurchaseUrgentResolution[]
 
@@ -3333,10 +3437,10 @@ model AdminPaymentProof {
   requestId String
   request   AdminPaymentRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
 
-  fileUrl       String
-  fileName      String?
-  readAmount    Float?
-  receiptNumber String?
+  fileUrl               String
+  fileName              String?
+  readAmount            Float?
+  receiptNumber         String?
   // Confirmado 2026-09-08: "Cuenta contrato" del comprobante — para pagos al
   // IESS es lo que de verdad coincide con el código que Nairoby escribió
   // (iessReceiptNumber), a diferencia de receiptNumber (N° de comprobante),

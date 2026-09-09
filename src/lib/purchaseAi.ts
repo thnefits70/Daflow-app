@@ -402,6 +402,87 @@ export async function reviewApprovedPurchaseGroup(params: {
   return extractJson<PurchaseGroupReviewResult>(textBlock.text);
 }
 
+export type SupplierDebtPaymentReviewResult = {
+  ok: boolean;
+  summary: string;
+};
+
+// Confirmado 2026-09-08 (Fase 1, proveedores con crédito — CHEN): el mismo
+// patrón que reviewApprovedPurchaseGroup, aplicado a una TANDA de pago a un
+// proveedor de crédito antes de que el admin la cierre. No vuelve a leer
+// imágenes — cruza datos ya confirmados. Pedido explícito del usuario:
+// "que la IA verifique que todos los pagos sean correctos y si ve algo
+// inusual me informe" — nunca bloquea, el admin decide igual.
+export async function reviewSupplierDebtPayment(params: {
+  actorId: string | null;
+  deptId?: string;
+  supplierName: string;
+  code: string;
+  lines: { name: string; quantity: number; unitCost: number; totalCost: number; requestedAt: string }[];
+  linesTotal: number;
+  transfers: { amount: number; comprobanteNumber: string; accountDestino: string; transferDate: string }[];
+  transfersTotal: number;
+  registeredBankAccounts: { bankName: string; bankAccountNumber: string; bankAccountHolder: string }[];
+  duplicateComprobantesElsewhere: string[];
+}): Promise<SupplierDebtPaymentReviewResult> {
+  const client = getAnthropicClient();
+
+  const facts = {
+    proveedor: params.supplierName,
+    tanda: params.code,
+    productos_incluidos: params.lines.map((l) => ({
+      nombre: l.name,
+      cantidad: l.quantity,
+      precio_unitario: l.unitCost,
+      subtotal: l.totalCost,
+      fecha_solicitud: l.requestedAt,
+    })),
+    total_de_los_productos_incluidos: params.linesTotal,
+    transferencias_registradas: params.transfers.map((t) => ({
+      monto: t.amount,
+      numero_de_comprobante: t.comprobanteNumber,
+      cuenta_destino: t.accountDestino,
+      fecha: t.transferDate,
+    })),
+    total_transferido: params.transfersTotal,
+    cuentas_bancarias_reales_registradas_del_proveedor: params.registeredBankAccounts,
+    numeros_de_comprobante_que_ya_se_usaron_en_otra_tanda_o_pago: params.duplicateComprobantesElsewhere,
+  };
+
+  const response = await client.messages.create({
+    model: PURCHASE_AI_MODEL,
+    max_tokens: 500,
+    system:
+      "Eres el último control antes de que el dueño del negocio (Provedix, Guayaquil, Ecuador) cierre una tanda de " +
+      "pago a un proveedor de crédito. Verifica específicamente: (1) que total_de_los_productos_incluidos coincida " +
+      "con la suma real de los subtotales en productos_incluidos; (2) que total_transferido coincida con " +
+      "total_de_los_productos_incluidos (si no coincide, señálalo, pero no es necesariamente un error — puede ser " +
+      "un pago parcial de la tanda, dilo así en el summary); (3) que cada cuenta_destino de las transferencias " +
+      "coincida con alguna de cuentas_bancarias_reales_registradas_del_proveedor — si ninguna coincide, es una señal " +
+      "seria de posible error o fraude; (4) que numeros_de_comprobante_que_ya_se_usaron_en_otra_tanda_o_pago esté " +
+      "vacío — si tiene algo, es un comprobante reutilizado, señal seria de posible error o fraude; (5) cualquier " +
+      "otro patrón claramente anómalo en los montos o fechas. " +
+      'Responde ÚNICAMENTE un JSON: {"ok": boolean, "summary": string}. ' +
+      "Si TODO está en orden, ok=true y summary es UNA frase breve y clara en español simple confirmándolo. " +
+      "Si algo no cuadra, ok=false y summary dice EXACTAMENTE qué revisar, en español simple, sin tecnicismos. " +
+      "Nunca inventes datos que no te di.",
+    messages: [{ role: "user", content: `Datos ya confirmados de esta tanda:\n${JSON.stringify(facts, null, 2)}\n\nDevuelve el JSON pedido.` }],
+  });
+
+  await logAiUsage({
+    feature: "proveedor_credito_pago",
+    model: PURCHASE_AI_MODEL,
+    actorId: params.actorId ?? "admin",
+    deptId: params.deptId,
+    inputTokens: response.usage.input_tokens,
+    outputTokens: response.usage.output_tokens,
+  });
+
+  const textBlock = response.content.find((b) => b.type === "text");
+  if (!textBlock || textBlock.type !== "text") throw new Error("La IA no devolvió contenido de texto.");
+  return extractJson<SupplierDebtPaymentReviewResult>(textBlock.text);
+}
+
 export type CatalogDuplicateCheck = {
   suspected: boolean;
   matchedName: string | null;

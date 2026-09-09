@@ -16,9 +16,20 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const parsed = schema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: "Datos inválidas." }, { status: 400 });
 
-  const existing = await prisma.purchaseRequest.findUnique({ where: { id }, include: { catalogItem: { select: { name: true } } } });
+  const existing = await prisma.purchaseRequest.findUnique({
+    where: { id },
+    include: { catalogItem: { select: { name: true } }, supplier: { select: { paymentMode: true } } },
+  });
   if (!existing) return NextResponse.json({ error: "No encontrada." }, { status: 404 });
   if (existing.status !== "APPROVED") return NextResponse.json({ error: "Solo se puede pagar una solicitud ya aprobada." }, { status: 409 });
+  // Confirmado 2026-09-08 (Fase 1, proveedores con crédito): ver la misma
+  // nota en group/[groupId]/pay/route.ts.
+  if (existing.supplier.paymentMode === "CREDITO") {
+    return NextResponse.json(
+      { error: "Este proveedor es de crédito — no se paga por solicitud individual, se paga por tanda en 'Proveedores con Crédito'." },
+      { status: 409 }
+    );
+  }
 
   const updated = await prisma.purchaseRequest.update({
     where: { id },

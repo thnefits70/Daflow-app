@@ -11,9 +11,10 @@ import { PurchaseUrgentReportsPanel } from "./PurchaseUrgentReportsPanel";
 import { PurchaseAuditPanel } from "./PurchaseAuditPanel";
 import { PurchaseCreditsPanel } from "./PurchaseCreditsPanel";
 import { PurchaseJustaPanel } from "./PurchaseJustaPanel";
+import { SupplierDebtPanel } from "./SupplierDebtPanel";
 import { TabGuide } from "@/components/shared/TabGuide";
 
-type Tab = "solicitar" | "mias" | "comparar" | "aprobacion" | "inventario" | "justa" | "finanzas" | "urgentes" | "creditos" | "auditoria";
+type Tab = "solicitar" | "mias" | "comparar" | "aprobacion" | "inventario" | "justa" | "finanzas" | "urgentes" | "creditos" | "proveedores-credito" | "auditoria";
 
 // Confirmado 2026-07-30: una sola pantalla para todo el módulo — las
 // pestañas que ve cada persona dependen de lo que puede hacer (admin ve
@@ -31,6 +32,7 @@ export function PurchaseControlPanel({
   canApproveReceiving,
   canInvoice,
   canPayMerchandise,
+  canManageSupplierDebt,
   isAdmin,
 }: {
   deptId: string;
@@ -61,6 +63,11 @@ export function PurchaseControlPanel({
   canApproveReceiving: boolean;
   canInvoice: boolean;
   canPayMerchandise: boolean;
+  // Confirmado 2026-09-08 (Fase 1, proveedores con crédito): exclusivo del
+  // admin — es él quien decide personalmente cuándo y cuánto pagarle a un
+  // proveedor de crédito (hoy solo CHEN), a diferencia del pago normal de
+  // mercadería (canPayMerchandise), que también puede hacer Finanzas.
+  canManageSupplierDebt: boolean;
   isAdmin: boolean;
 }) {
   // Confirmado 2026-08-08: "Comparar precios" va primera de izquierda a
@@ -79,6 +86,7 @@ export function PurchaseControlPanel({
     // generan mercadería que ellos reciban.
     ...(canSubmit || canReview || canReceive ? [{ key: "urgentes" as Tab, label: "Reportes urgentes" }] : []),
     ...(canSubmit || canReview ? [{ key: "creditos" as Tab, label: "Créditos pendientes" }] : []),
+    ...(canManageSupplierDebt ? [{ key: "proveedores-credito" as Tab, label: "Proveedores con Crédito" }] : []),
     ...(canReceive ? [{ key: "inventario" as Tab, label: "Inventario" }] : []),
     // Confirmado 2026-08-18: pedido explícito del usuario — pestaña propia,
     // separada de "Inventario", exclusiva de Daniel (canApproveReceiving) —
@@ -192,6 +200,14 @@ export function PurchaseControlPanel({
             Consulta acá todo el crédito vivo con proveedores, de cualquier operación. Desaparece de la lista en cuanto se aplica realmente a un pago.
           </TabGuide>
           <PurchaseCreditsPanel />
+        </>
+      )}
+      {tab === "proveedores-credito" && (
+        <>
+          <TabGuide storageKey="compras-proveedores-credito">
+            Acá ves el saldo que le debes a un proveedor de crédito (hoy solo CHEN) — solo cuenta lo que Daniel ya confirmó completo y en buen estado. Arma tandas de pago, registra las transferencias, y genera el enlace de solo lectura para que el proveedor vea su propio saldo.
+          </TabGuide>
+          <SupplierDebtPanel />
         </>
       )}
       {tab === "inventario" && (

@@ -98,6 +98,7 @@ export function DeptWorkspaceTabs({
   canApprovePurchaseReceiving = false,
   canInvoicePurchases = false,
   canPayMerchandisePurchases = false,
+  canManageSupplierDebtPayments = false,
   canAccessSuppliers = false,
   supplierList = [],
   supplierPending = [],
@@ -220,6 +221,9 @@ export function DeptWorkspaceTabs({
   canApprovePurchaseReceiving?: boolean;
   canInvoicePurchases?: boolean;
   canPayMerchandisePurchases?: boolean;
+  // Fase 1 (proveedores con crédito, CHEN) — confirmado 2026-09-08: exclusivo
+  // del admin, ver canManageSupplierDebtPayments en guards.ts.
+  canManageSupplierDebtPayments?: boolean;
   // Proveedores — movido de su propio ítem de sidebar a esta pestaña
   // (confirmado 2026-08-21), entre "Control de Compras" y "Documentos".
   // canAccessSuppliers gatea si la pestaña se ve (ver access.canView /
@@ -491,6 +495,7 @@ export function DeptWorkspaceTabs({
           canApproveReceiving={canApprovePurchaseReceiving}
           canInvoice={canInvoicePurchases}
           canPayMerchandise={canPayMerchandisePurchases}
+          canManageSupplierDebt={canManageSupplierDebtPayments}
           isAdmin={isAdmin}
         />
       )}

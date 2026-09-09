@@ -137,6 +137,9 @@ export default async function DeptWorkspacePage({ params }: { params: Promise<{ 
         // exclusivos de Nairoby (ver canPayMerchandisePurchases en
         // guards.ts).
         canPayMerchandisePurchases={dept.code === "COM"}
+        // Fase 1 (proveedores con crédito, CHEN) — confirmado 2026-09-08:
+        // exclusivo del admin, ver canManageSupplierDebtPayments en guards.ts.
+        canManageSupplierDebtPayments={dept.code === "COM"}
         canAccessSuppliers={canAccessSuppliers}
         supplierList={supplierList.map((s) => toSupplierDTO(s, true))}
         supplierPending={supplierPending.map((s) => toSupplierDTO(s, true))}

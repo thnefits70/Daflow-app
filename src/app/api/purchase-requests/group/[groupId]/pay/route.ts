@@ -28,10 +28,23 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ gro
   const parsed = schema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: "Datos inválidos." }, { status: 400 });
 
-  const rows = await prisma.purchaseRequest.findMany({ where: { groupId }, include: { catalogItem: { select: { name: true } } } });
+  const rows = await prisma.purchaseRequest.findMany({
+    where: { groupId },
+    include: { catalogItem: { select: { name: true } }, supplier: { select: { paymentMode: true } } },
+  });
   if (rows.length === 0) return NextResponse.json({ error: "No encontrada." }, { status: 404 });
   if (rows.some((r) => r.status !== "APPROVED")) {
     return NextResponse.json({ error: "Solo se puede pagar una solicitud ya aprobada." }, { status: 409 });
+  }
+  // Confirmado 2026-09-08 (Fase 1, proveedores con crédito): un proveedor de
+  // crédito (hoy solo CHEN) nunca se paga solicitud por solicitud — se
+  // recibe primero, y el pago real ocurre después, agrupado en una tanda
+  // (ver SupplierDebtPayment / pestaña "Proveedores con Crédito").
+  if (rows[0].supplier.paymentMode === "CREDITO") {
+    return NextResponse.json(
+      { error: "Este proveedor es de crédito — no se paga por solicitud individual, se paga por tanda en 'Proveedores con Crédito'." },
+      { status: 409 }
+    );
   }
 
   // Confirmado 2026-08-12: pedido explícito del usuario — los créditos ya

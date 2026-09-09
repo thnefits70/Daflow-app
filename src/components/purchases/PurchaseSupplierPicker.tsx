@@ -18,6 +18,10 @@ export type PurchaseSupplierDTO = {
   name: string;
   location: string | null;
   email: string | null;
+  // Fase 1 (proveedores con crédito, CHEN) — confirmado 2026-09-08. Puede
+  // faltar en resultados viejos de búsqueda que no lo seleccionan explícito,
+  // por eso opcional.
+  paymentMode?: "PREPAGO" | "CREDITO";
   bankAccounts: BankAccountDTO[];
   contacts: { label: string; whatsapp: string }[];
 };
@@ -206,6 +210,24 @@ export function PurchaseSupplierPicker({
     setEditingEmail(false);
   }
 
+  // Fase 1 (proveedores con crédito, CHEN) — confirmado 2026-09-08: cambiar
+  // el modo de pago es exclusivo del admin (ruta aparte de la general, ver
+  // canManageSupplierPaymentMode en guards.ts).
+  const [paymentModeBusy, setPaymentModeBusy] = useState(false);
+  async function togglePaymentMode() {
+    if (!value) return;
+    const next = value.paymentMode === "CREDITO" ? "PREPAGO" : "CREDITO";
+    setPaymentModeBusy(true);
+    const res = await fetch(`/api/purchase-suppliers/${value.id}/payment-mode`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ paymentMode: next }),
+    });
+    setPaymentModeBusy(false);
+    if (!res.ok) return;
+    onChange({ ...value, paymentMode: next });
+  }
+
   if (value) {
     return (
       <div className="bg-cloud border border-rule rounded-md p-3">
@@ -316,6 +338,22 @@ export function PurchaseSupplierPicker({
                   onClick={() => { setEmailDraft(value.email ?? ""); setEditingEmail(true); setEmailErr(""); }}
                 >
                   <Pencil size={11} /> {value.email ? "Editar" : "Agregar correo"}
+                </button>
+              </div>
+            )}
+            {isAdmin && (
+              <div className="flex items-center justify-between text-[11.5px] mt-2 pt-2 border-t border-rule">
+                <div className="text-steel">
+                  Modo de pago:{" "}
+                  <span className="font-semibold text-ink">{value.paymentMode === "CREDITO" ? "Crédito" : "Pago anticipado"}</span>
+                </div>
+                <button
+                  type="button"
+                  disabled={paymentModeBusy}
+                  className="flex items-center gap-1 text-blue font-semibold cursor-pointer disabled:opacity-60"
+                  onClick={togglePaymentMode}
+                >
+                  <Pencil size={11} /> {value.paymentMode === "CREDITO" ? "Marcar como pago anticipado" : "Marcar como proveedor con crédito"}
                 </button>
               </div>
             )}

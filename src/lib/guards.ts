@@ -114,6 +114,25 @@ export async function canViewSupplierBankAccounts() {
   return !!session && session.user.role === "admin";
 }
 
+// Fase 1 (proveedores con crédito, CHEN) — confirmado 2026-09-08: quién es
+// crédito vs. pago anticipado es un dato financiero sensible, mismo criterio
+// que las cuentas bancarias — exclusivo del admin, nadie más lo ve ni lo
+// cambia por ahora.
+export async function canManageSupplierPaymentMode() {
+  const session = await auth();
+  return !!session && session.user.role === "admin";
+}
+
+// Fase 1 — confirmado 2026-09-08 en la planificación con el usuario: solo el
+// admin ve y actúa sobre el saldo/tandas de pago de un proveedor con
+// crédito (a diferencia del pago normal de mercadería, que también puede
+// hacer el líder de Finanzas) — es él quien decide personalmente cuándo y
+// cuánto pagarle a CHEN.
+export async function canManageSupplierDebtPayments() {
+  const session = await auth();
+  return !!session && session.user.role === "admin";
+}
+
 // Confirmado 2026-08-18: pedido explícito del usuario — llegó el momento de
 // delegar (hoy Jariel y Bryan), pero solo para AGREGAR una cuenta bancaria
 // nueva, nunca para ver las ya registradas de otros proveedores (eso sigue
