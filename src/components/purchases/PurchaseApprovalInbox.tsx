@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { FileText, Upload, CheckCircle2, AlertTriangle, Lock, Landmark, LineChart, ChevronDown, Award, CreditCard, PackageSearch, PackageCheck } from "lucide-react";
+import { FileText, Upload, CheckCircle2, AlertTriangle, Lock, Landmark, LineChart, ChevronDown, Award, CreditCard, PackageSearch, PackageCheck, Copy, Check } from "lucide-react";
 import { actorName } from "@/lib/actorName";
 import { uploadFile } from "@/lib/uploadFile";
 import { compressImage } from "@/lib/compressImage";
@@ -197,6 +197,34 @@ function buildValidationSummary(g: Row[]) {
 // groupIsEmergency/effectiveCanAct/effectiveCanPayHere abajo. canPayMerchandise
 // se pasa aparte (sin combinar) para poder recalcular el combo "aprobar y
 // pagar" caso por caso.
+// Botón para copiar un valor (ej. número de cuenta) al portapapeles con un
+// solo clic, en celular o laptop — muestra un check por 1.5s de confirmación.
+function CopyValueButton({ value }: { value: string }) {
+  const [copied, setCopied] = useState(false);
+
+  async function copy(e: React.MouseEvent) {
+    e.stopPropagation();
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      /* clipboard no disponible, no hacer nada */
+    }
+  }
+
+  return (
+    <button
+      type="button"
+      title="Copiar"
+      className="text-teal/70 hover:text-teal cursor-pointer shrink-0"
+      onClick={copy}
+    >
+      {copied ? <Check size={13} /> : <Copy size={13} />}
+    </button>
+  );
+}
+
 export function PurchaseApprovalInbox({ canAct = true, canPayHere = true, canPayMerchandise = false, isAdmin = true }: { canAct?: boolean; canPayHere?: boolean; canPayMerchandise?: boolean; isAdmin?: boolean }) {
   const router = useRouter();
   const [rows, setRows] = useState<Row[] | null>(null);
@@ -950,11 +978,17 @@ export function PurchaseApprovalInbox({ canAct = true, canPayHere = true, canPay
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-2">
                   <div className="bg-teal/10 border border-teal/30 rounded-md px-2.5 py-1.5">
                     <div className="text-[9px] font-semibold uppercase tracking-wide text-teal/80">Titular</div>
-                    <div className="font-display text-[16px] font-bold text-teal leading-tight break-words">{g[0].bankAccount.bankAccountHolder}</div>
+                    <div className="flex items-center gap-1.5">
+                      <div className="font-display text-[16px] font-bold text-teal leading-tight break-words">{g[0].bankAccount.bankAccountHolder}</div>
+                      <CopyValueButton value={g[0].bankAccount.bankAccountHolder} />
+                    </div>
                   </div>
                   <div className="bg-teal/10 border border-teal/30 rounded-md px-2.5 py-1.5">
                     <div className="text-[9px] font-semibold uppercase tracking-wide text-teal/80">N° de cuenta</div>
-                    <div className="font-display text-[16px] font-bold text-teal leading-tight break-all">{g[0].bankAccount.bankAccountNumber}</div>
+                    <div className="flex items-center gap-1.5">
+                      <div className="font-display text-[16px] font-bold text-teal leading-tight break-all">{g[0].bankAccount.bankAccountNumber}</div>
+                      <CopyValueButton value={g[0].bankAccount.bankAccountNumber} />
+                    </div>
                   </div>
                 </div>
                 {isAdmin && (
