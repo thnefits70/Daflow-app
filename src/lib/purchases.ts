@@ -114,6 +114,9 @@ export type SupplierPricePoint = {
   requestNumber: number | null;
   quoteImageUrl: string;
   purchaseOrderUrl: string | null;
+  // Confirmado 2026-09-09 (pedido explícito del usuario, trazabilidad): quién
+  // gestionó esa compra — null si la cuenta que la creó ya fue eliminada.
+  requestedByName: string | null;
 };
 export type SupplierPriceHistory = {
   supplierId: string;
@@ -130,6 +133,7 @@ export type SupplierPriceHistory = {
   latestRequestNumber: number | null;
   latestQuoteImageUrl: string;
   latestPurchaseOrderUrl: string | null;
+  latestRequestedByName: string | null;
 };
 
 // Confirmado 2026-07-31: para un mismo insumo, cada proveedor tiene su propia
@@ -156,6 +160,7 @@ export async function getCatalogItemSupplierComparison(catalogItemId: string): P
       paidAt: true,
       status: true,
       supplier: { select: { id: true, name: true } },
+      requestedBy: { select: { name: true } },
     },
     orderBy: { requestedAt: "asc" },
   });
@@ -177,6 +182,7 @@ export async function getCatalogItemSupplierComparison(catalogItemId: string): P
       requestNumber: r.requestNumber,
       quoteImageUrl: r.quoteImageUrl,
       purchaseOrderUrl: r.purchaseOrderUrl,
+      requestedByName: r.requestedBy?.name ?? null,
     });
   }
   // Reordenar por fecha efectiva (pago si ya existe, si no la solicitud) —
@@ -199,6 +205,7 @@ export async function getCatalogItemSupplierComparison(catalogItemId: string): P
       latestRequestNumber: latestPoint.requestNumber,
       latestQuoteImageUrl: latestPoint.quoteImageUrl,
       latestPurchaseOrderUrl: latestPoint.purchaseOrderUrl,
+      latestRequestedByName: latestPoint.requestedByName,
     };
   });
   suppliers.sort((a, b) => a.latest - b.latest);

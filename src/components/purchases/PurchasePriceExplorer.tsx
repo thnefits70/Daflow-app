@@ -134,6 +134,7 @@ function ProductComparisonCard({ item, onRemove }: { item: CatalogItem; onRemove
                     <div className="mt-2.5 pt-2.5 border-t border-rule">
                       <div className="text-[10px] uppercase tracking-wide text-steel mb-1.5">
                         Respaldo de la última compra {s.latestRequestNumber ? <>· SC-{String(s.latestRequestNumber).padStart(3, "0")}</> : null}
+                        {s.latestRequestedByName ? <> · pedido por {s.latestRequestedByName}</> : null}
                       </div>
                       <div className="flex items-center gap-3 flex-wrap">
                         <a href={s.latestQuoteImageUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-[11.5px] text-blue font-semibold cursor-pointer">

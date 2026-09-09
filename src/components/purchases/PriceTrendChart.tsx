@@ -95,7 +95,7 @@ export function PriceTrendChart({ points }: { points: SupplierPricePoint[] }) {
           const p = points[hover];
           const hasBreakdown = p.shippingPerUnit > 0;
           const boxW = 132;
-          const boxH = hasBreakdown ? 70 : 58;
+          const boxH = (hasBreakdown ? 70 : 58) + 13;
           const boxX = Math.max(padL, Math.min(c.x - boxW / 2, width - padR - boxW));
           const boxY = Math.max(2, c.y - boxH - 10);
           return (
@@ -117,6 +117,9 @@ export function PriceTrendChart({ points }: { points: SupplierPricePoint[] }) {
               </text>
               <text x={boxX + boxW / 2} y={boxY + (hasBreakdown ? 67 : 55)} textAnchor="middle" fontSize="9.5" fill="#92a3c0">
                 {p.paidAt ? "Pagado" : `${STATUS_LABEL[p.status] ?? p.status} · pago pendiente`}
+              </text>
+              <text x={boxX + boxW / 2} y={boxY + (hasBreakdown ? 80 : 68)} textAnchor="middle" fontSize="9.5" fill="#92a3c0">
+                Pedido por: {p.requestedByName ?? "?"}
               </text>
             </g>
           );
@@ -148,6 +151,7 @@ export function PriceHistoryBreakdownList({ points }: { points: SupplierPricePoi
             <div className="text-steel">
               {fmtDate(effDate(p))} · {p.quantity} un. · {p.paidAt ? "pagado" : `${STATUS_LABEL[p.status] ?? p.status} · pago pendiente`}
             </div>
+            <div className="text-steel-dim">Pedido por: {p.requestedByName ?? "?"}</div>
           </div>
           <div className="text-right shrink-0">
             <div className="font-bold">${p.unitCost.toFixed(2)}</div>
