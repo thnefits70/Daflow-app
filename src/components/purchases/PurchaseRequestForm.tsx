@@ -943,7 +943,7 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
             <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-steel">
               <Wallet size={13} /> Créditos pendientes con {supplier.name}
             </div>
-            {!manualCreditOpen && (
+            {isAdmin && !manualCreditOpen && (
               <button type="button" className="text-[11.5px] text-blue font-semibold cursor-pointer" onClick={() => setManualCreditOpen(true)}>
                 + Agregar crédito manual
               </button>
@@ -1097,7 +1097,7 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
                         Ese código ya está guardado como <b className="text-ink">{verifyResult.suggestedCatalogItem.name}</b> en el catálogo.
                       </div>
                     )}
-                    {quoteCreditGap !== null && (
+                    {isAdmin && quoteCreditGap !== null && (
                       <div className="text-[11.5px] mb-2 rounded-md border p-2" style={{ borderColor: "#D9A441", color: "#D9A441", background: "rgba(217,164,65,0.08)" }}>
                         La cotización dice que el total a transferir es <b>${verifyResult.readTotal!.toFixed(2)}</b>, pero lo escrito es <b>${total.toFixed(2)}</b> — la diferencia (${quoteCreditGap.toFixed(2)}) ¿es un crédito pendiente con este proveedor?
                         <button

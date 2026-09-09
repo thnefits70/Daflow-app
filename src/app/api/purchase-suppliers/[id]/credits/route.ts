@@ -2,9 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { canSubmitPurchaseRequests } from "@/lib/guards";
-import { notifyOwner } from "@/lib/notifications";
-import { actorName } from "@/lib/actorName";
 
 const schema = z.object({
   amount: z.number().positive(),
@@ -13,14 +10,16 @@ const schema = z.object({
   proofName: z.string().trim().optional(),
 });
 
-// Confirmado 2026-08-12: pedido explícito del usuario — un crédito también
-// se puede registrar A MANO (sin pasar por un reporte urgente), siempre con
-// comprobante obligatorio. Queda disponible de inmediato (no bloquea nada),
-// pero admin recibe un aviso privado apenas se registra, para supervisar
-// cómo se está usando el crédito manual con cada proveedor.
+// Confirmado 2026-08-12: un crédito también se puede registrar A MANO (sin
+// pasar por un reporte urgente), siempre con comprobante obligatorio. Queda
+// disponible de inmediato (no bloquea nada).
+// Confirmado 2026-09-09: pedido explícito del usuario — restringido a SOLO
+// admin (antes también podían Nairoby y Jariel vía canSubmitPurchaseRequests).
+// Ya no hace falta la notificación de supervisión ni distinguir createdById,
+// porque el único que lo registra ya es admin.
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
-  if (!(await canSubmitPurchaseRequests()) || !session) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+  if (!session || session.user.role !== "admin") return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
   const { id: supplierId } = await params;
   const body = await req.json().catch(() => null);
@@ -30,7 +29,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const supplier = await prisma.supplier.findUnique({ where: { id: supplierId }, select: { id: true, name: true } });
   if (!supplier) return NextResponse.json({ error: "Proveedor no encontrado." }, { status: 404 });
 
-  const isAdmin = session.user.role === "admin";
   const credit = await prisma.supplierCredit.create({
     data: {
       supplierId,
@@ -39,17 +37,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       proofUrl: parsed.data.proofUrl,
       proofName: parsed.data.proofName || null,
       status: "AVAILABLE",
-      createdById: isAdmin ? null : session.user.id,
+      createdById: null,
     },
   });
-
-  // Confirmado 2026-08-12: notificación privada, solo para admin — para
-  // supervisar sin frenar el uso del crédito (que ya queda disponible).
-  await notifyOwner("admin", {
-    title: "🔔 Nuevo crédito manual registrado",
-    body: `${supplier.name} — $${parsed.data.amount.toFixed(2)} · ${parsed.data.reason} · registrado por ${actorName(isAdmin ? null : session.user.name)}`,
-    url: "/admin",
-  }).catch(() => null);
 
   return NextResponse.json(credit, { status: 201 });
 }
