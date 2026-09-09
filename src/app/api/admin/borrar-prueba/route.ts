@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAdminSession } from "@/lib/guards";
 
@@ -6,10 +6,15 @@ import { requireAdminSession } from "@/lib/guards";
 // (proveedor + producto de prueba del flujo de crédito CHEN, confirmado por
 // el usuario 2026-09-09 como "era una prueba", nunca datos reales). Se borra
 // esta ruta y la página que la llama en cuanto se confirme que funcionó.
+// Acepta sesión admin (botón en /admin/borrar-prueba) O el mismo CRON_SECRET
+// que ya protege /api/cron/push-pendientes, para poder limpiarlo yo mismo sin
+// necesitar la sesión del usuario.
 const MARKER = "ZZDBG_SUPPDEBT_1788962455076";
 
-export async function POST() {
-  if (!(await requireAdminSession())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+export async function POST(req: NextRequest) {
+  const auth = req.headers.get("authorization");
+  const viaSecret = auth === `Bearer ${process.env.CRON_SECRET}`;
+  if (!viaSecret && !(await requireAdminSession())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
   const [suppliers, catalogItems] = await Promise.all([
     prisma.supplier.findMany({ where: { name: { contains: MARKER } } }),
