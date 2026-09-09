@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { NominaGrid } from "./NominaGrid";
 import { PayrollWorkspace } from "./PayrollWorkspace";
 import { PayStubsPanel } from "@/components/payroll/PayStubsPanel";
+import { RolesDePagoTabs } from "@/components/payroll/RolesDePagoTabs";
 
 type Dept = { id: string; name: string; code: string };
 type NominaUser = {
@@ -122,7 +123,10 @@ export function NominaPageTabs({
         />
       )}
       {tab === "rolesdepago" && canManagePayStubs && (
-        <PayStubsPanel mode="manage" departments={payStubDepartments} isAdmin={isAdmin} />
+        <RolesDePagoTabs
+          canEditExternal={false}
+          payStubsPanel={<PayStubsPanel mode="manage" departments={payStubDepartments} isAdmin={isAdmin} />}
+        />
       )}
     </div>
   );

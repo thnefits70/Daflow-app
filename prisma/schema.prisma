@@ -367,6 +367,8 @@ model User {
   purchaseRequestsShippingPaidBy                 PurchaseRequest[]                  @relation("PurchaseRequestShippingPaidBy")
   payStubs                                       PayStub[]                          @relation("PayStubOwner")
   payStubsUploaded                               PayStub[]                          @relation("PayStubUploadedBy")
+  externalPayments                               ExternalPayment[]                  @relation("ExternalPaymentOwner")
+  externalPaymentsRegistered                     ExternalPayment[]                  @relation("ExternalPaymentRegisteredBy")
   weeklyReviewsReported                          WeeklyReviewRecord[]               @relation("WeeklyReviewReportedBy")
   weeklyReviewsInvolvingMe                       WeeklyReviewRecord[]               @relation("WeeklyReviewInvolvesUser")
   financeKpiRecordsUploaded                      FinanceKpiRecord[]                 @relation("FinanceKpiRecordUploadedBy")
@@ -3584,8 +3586,56 @@ model PayrollProfile {
   // companyAbsorbsIess.
   monthlySalaryOnly Boolean @default(false)
 
+  // Confirmado 2026-09-09: caso real — Robert, Allan, Bryan, Heidy,
+  // Mercedes, Elsa, Joel y Luis Castillo no están bajo el Rol de pago
+  // formal (con aporte IESS); se les paga aparte por factura o solo
+  // comprobante, y por eso su PayrollProfile nunca tiene
+  // iessDeclaredSalary — countMissingPayStubs() los marcaba como
+  // "faltantes" de Roles de pago todos los meses, una falsa alarma. Este
+  // interruptor los saca de ese conteo y los mete en el de
+  // ExternalPayment (ver getExternalPaymentPendingItem en pendingTasks.ts).
+  externalPaymentMode Boolean @default(false)
+
+  // Dentro del modo externo: si además entrega factura (Robert, Allan,
+  // Heidy, Joel) en vez de solo comprobante de pago (Bryan, Mercedes,
+  // Elsa, Luis Castillo). Sin efecto si externalPaymentMode es false.
+  requiresInvoice Boolean @default(false)
+
   updatedAt DateTime @updatedAt
 
+  @@index([userId])
+}
+
+// Confirmado 2026-09-09: pedido explícito del usuario — registro y control
+// mensual de pagos a colaboradores que están fuera del Rol de pago formal
+// (ver PayrollProfile.externalPaymentMode). Nairoby lo carga desde Roles de
+// pago, un renglón por persona y por mes: comprobante siempre, factura solo
+// si PayrollProfile.requiresInvoice está prendido para esa persona. Mismo
+// dueño (canEditPayrollRoles) que el resto de Roles de pago, admin de solo
+// lectura.
+model ExternalPayment {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation("ExternalPaymentOwner", fields: [userId], references: [id], onDelete: Cascade)
+  month  String // "YYYY-MM"
+
+  amount Float
+  paidAt DateTime @default(now())
+
+  receiptUrl      String
+  receiptFileName String
+
+  invoiceUrl      String?
+  invoiceFileName String?
+  invoiceNumber   String?
+
+  registeredById String?
+  registeredBy   User?   @relation("ExternalPaymentRegisteredBy", fields: [registeredById], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, month])
   @@index([userId])
 }
 

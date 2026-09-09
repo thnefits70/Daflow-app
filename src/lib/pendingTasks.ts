@@ -390,6 +390,7 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   feedback: "Feedback semanal/mensual de departamentos",
   check_in_semanal_estancado: "Feedback semanal — líder sin gestión hace 2+ semanas",
   roles_de_pago: "Roles de pago",
+  pagos_factura_comprobante: "Pagos por factura/comprobante",
   nomina_transferencia: "Transferencia de nómina",
   iess_transferencia: "Transferencia de IESS",
   tasa_devolucion: "Tasa de Devolución General",
@@ -629,17 +630,26 @@ async function getStockoutPendingItem(href: string): Promise<PendingItem | null>
 // Nairoby desde Roles de pago.
 async function countMissingPayStubs(month: number, year: number): Promise<number> {
   const monthStr = `${year}-${pad2(month)}`;
-  const [activeUsers, stubs, roles] = await Promise.all([
+  const [activeUsers, stubs, roles, externalProfiles] = await Promise.all([
     prisma.user.findMany({ where: { isActive: true }, select: { id: true, startDate: true } }),
     prisma.payStub.findMany({ where: { month, year }, select: { userId: true } }),
     prisma.monthlyLegalRole.findMany({ where: { month: monthStr, isCurrent: true }, select: { employeeId: true } }),
+    prisma.payrollProfile.findMany({ where: { externalPaymentMode: true }, select: { userId: true } }),
   ]);
   // Fix confirmado 2026-08-31 (caso real: Elsa Yambay, ingresó 2026-08-14)
   // — mismo bug que eligibleForMonth ya resuelve para Colaborador del mes:
   // sin filtrar por startDate, alguien contratado en agosto aparecía como
   // "faltante" del rol de pago de julio, un mes en el que ni siquiera
   // trabajaba acá.
-  const eligible = eligibleForMonth(activeUsers, monthStr);
+  // Fix confirmado 2026-09-09 (caso real: Robert, Allan, Bryan, Heidy,
+  // Mercedes, Elsa, Joel, Luis Castillo) — quien está en modo de pago
+  // externo (factura/comprobante, ver PayrollProfile.externalPaymentMode)
+  // nunca tiene ni PayStub ni MonthlyLegalRole porque no le corresponden;
+  // sin excluirlos acá quedaban "faltantes" todos los meses para siempre.
+  // Su propio control vive en ExternalPayment, ver
+  // getExternalPaymentPendingItem.
+  const externalIds = new Set(externalProfiles.map((p) => p.userId));
+  const eligible = eligibleForMonth(activeUsers, monthStr).filter((u) => !externalIds.has(u.id));
   const coveredIds = new Set([...stubs.map((s) => s.userId), ...roles.map((r) => r.employeeId)]);
   return eligible.filter((u) => !coveredIds.has(u.id)).length;
 }
@@ -659,6 +669,43 @@ async function getPayStubPendingItem(href: string): Promise<PendingItem | null> 
         type: "roles_de_pago",
         icon: "💳",
         label: "Roles de pago",
+        meta: `Faltan ${missing} persona${missing === 1 ? "" : "s"} · ${formatMonthLabel(prev)} · atrasado`,
+        overdue: true,
+        href,
+      };
+    }
+  }
+  return null;
+}
+
+// Confirmado 2026-09-09: pedido explícito del usuario — control aparte para
+// quien está en modo de pago externo (PayrollProfile.externalPaymentMode,
+// ver countMissingPayStubs de arriba). Mismo patrón día-3 que Roles de pago
+// (mira el mes anterior, recién avisa pasado el plazo), pero contando
+// ExternalPayment en vez de PayStub/MonthlyLegalRole.
+async function countMissingExternalPayments(monthStr: string): Promise<number> {
+  const [activeUsers, externalProfiles, payments] = await Promise.all([
+    prisma.user.findMany({ where: { isActive: true }, select: { id: true, startDate: true } }),
+    prisma.payrollProfile.findMany({ where: { externalPaymentMode: true }, select: { userId: true } }),
+    prisma.externalPayment.findMany({ where: { month: monthStr }, select: { userId: true } }),
+  ]);
+  const externalIds = new Set(externalProfiles.map((p) => p.userId));
+  const eligible = eligibleForMonth(activeUsers, monthStr).filter((u) => externalIds.has(u.id));
+  const paidIds = new Set(payments.map((p) => p.userId));
+  return eligible.filter((u) => !paidIds.has(u.id)).length;
+}
+
+async function getExternalPaymentPendingItem(href: string): Promise<PendingItem | null> {
+  const today = currentMonthStr();
+  const prev = prevMonthStr(today);
+
+  if (fixedDayDeadlinePassed(today, 3)) {
+    const missing = await countMissingExternalPayments(prev);
+    if (missing > 0) {
+      return {
+        type: "pagos_factura_comprobante",
+        icon: "🧾",
+        label: "Pagos por factura/comprobante",
         meta: `Faltan ${missing} persona${missing === 1 ? "" : "s"} · ${formatMonthLabel(prev)} · atrasado`,
         overdue: true,
         href,
@@ -2446,8 +2493,9 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
 
   if (me.leadsDept.code === "FIN") {
     monthly = true;
-    const [payStub, returnRate, warranty, paymentReminders, storeFeedback, pettyCashLow, pettyCashUnconfirmed, purchaseShippingItem, managementDeductionItem, personalPurchaseFinanceItem, personalPurchaseTransferCloseItem, personalPurchaseCashConfirmItem, personalPurchasePaymentWatchItem, merchandiseWeeklyVerificationItem, payrollTransferItem, payrollIessTransferItem] = await Promise.all([
+    const [payStub, externalPayment, returnRate, warranty, paymentReminders, storeFeedback, pettyCashLow, pettyCashUnconfirmed, purchaseShippingItem, managementDeductionItem, personalPurchaseFinanceItem, personalPurchaseTransferCloseItem, personalPurchaseCashConfirmItem, personalPurchasePaymentWatchItem, merchandiseWeeklyVerificationItem, payrollTransferItem, payrollIessTransferItem] = await Promise.all([
       getPayStubPendingItem("/area/roles-de-pago"),
+      getExternalPaymentPendingItem("/area/roles-de-pago?ptab=factura"),
       getReturnRatePendingItem("/area/kpis-generales"),
       getWarrantyPendingItem("/area/kpis-generales"),
       getPaymentReminderPendingItems(me.leadsDeptId, "/area/workspace"),
@@ -2466,6 +2514,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     ]);
     items.push(...pettyCashLow, ...pettyCashUnconfirmed);
     if (payStub) items.push(payStub);
+    if (externalPayment) items.push(externalPayment);
     if (returnRate) items.push(returnRate);
     if (warranty) items.push(warranty);
     items.push(...paymentReminders);

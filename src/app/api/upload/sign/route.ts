@@ -162,6 +162,11 @@ export async function POST(req: NextRequest) {
   if (!allowed && session?.user.role === "employee" && folder === "payroll-individual-payment-proofs") {
     allowed = await canEditPayrollRoles();
   }
+  // Comprobante y factura de quien está en modo de pago externo (fuera del
+  // Rol formal) — mismo dueño que el resto de Roles de pago.
+  if (!allowed && session?.user.role === "employee" && (folder === "external-payment-proofs" || folder === "external-payment-invoices")) {
+    allowed = await canEditPayrollRoles();
+  }
   if (!allowed) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
   if (size > MAX_BYTES) {

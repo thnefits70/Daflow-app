@@ -12,6 +12,8 @@ type Profile = {
   canLogOvertimeHours: boolean;
   usesFullLegalOvertimeSchedule: boolean;
   monthlySalaryOnly: boolean;
+  externalPaymentMode: boolean;
+  requiresInvoice: boolean;
 };
 
 function ToggleRow({ label, hint, value, onChange, disabled }: { label: string; hint: string; value: boolean; onChange: (v: boolean) => void; disabled: boolean }) {
@@ -49,7 +51,7 @@ export function PayrollProfileFields({ userId, canEdit }: { userId: string; canE
     });
   }, [userId]);
 
-  async function save(patch: Partial<{ realSalary: number; iessDeclaredSalary: number; companyAbsorbsIess: boolean; iessPartTime: boolean; iessSpouseExtension: boolean; canLogOvertimeHours: boolean; usesFullLegalOvertimeSchedule: boolean; monthlySalaryOnly: boolean }>) {
+  async function save(patch: Partial<{ realSalary: number; iessDeclaredSalary: number; companyAbsorbsIess: boolean; iessPartTime: boolean; iessSpouseExtension: boolean; canLogOvertimeHours: boolean; usesFullLegalOvertimeSchedule: boolean; monthlySalaryOnly: boolean; externalPaymentMode: boolean; requiresInvoice: boolean }>) {
     setSaving(true);
     const res = await fetch(`/api/payroll/profile/${userId}`, {
       method: "PATCH",
@@ -140,6 +142,22 @@ export function PayrollProfileFields({ userId, canEdit }: { userId: string; canE
         onChange={(v) => save({ monthlySalaryOnly: v })}
         disabled={!canEdit}
       />
+      <ToggleRow
+        label="Pago por factura/comprobante (fuera del Rol formal)"
+        hint="No entra al cálculo de IESS ni al conteo de Roles de pago — se controla aparte, en la pestaña Pagos por factura."
+        value={profile.externalPaymentMode}
+        onChange={(v) => save({ externalPaymentMode: v })}
+        disabled={!canEdit}
+      />
+      {profile.externalPaymentMode && (
+        <ToggleRow
+          label="Entrega factura"
+          hint="Si además de comprobante entrega factura formal para poder pagarle (si no, solo se le pide comprobante)."
+          value={profile.requiresInvoice}
+          onChange={(v) => save({ requiresInvoice: v })}
+          disabled={!canEdit}
+        />
+      )}
       {saving && <div className="text-[10.5px] text-steel-dim mt-2">Guardando…</div>}
     </div>
   );

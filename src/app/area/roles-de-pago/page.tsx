@@ -4,13 +4,15 @@ import { prisma } from "@/lib/prisma";
 import { TopLine } from "@/components/ui/TopLine";
 import { PushTypeToggle } from "@/components/shared/PushTypeToggle";
 import { PayStubsPanel } from "@/components/payroll/PayStubsPanel";
-import { canManagePayroll } from "@/lib/guards";
+import { RolesDePagoTabs } from "@/components/payroll/RolesDePagoTabs";
+import { canManagePayroll, canEditPayrollRoles } from "@/lib/guards";
 
 export default async function AreaRolesDePagoPage() {
   const session = await auth();
   if (!session) redirect("/login");
 
   const canManage = await canManagePayroll();
+  const canEditExternal = await canEditPayrollRoles();
 
   const departments = canManage
     ? await prisma.department.findMany({
@@ -23,11 +25,14 @@ export default async function AreaRolesDePagoPage() {
   return (
     <div>
       <TopLine eyebrow="Nómina" title="Roles de pago" action={<PushTypeToggle type="roles_de_pago" />} />
-      <PayStubsPanel
-        mode={canManage ? "manage" : "own"}
-        departments={departments}
-        ownUserId={canManage ? undefined : session.user.id}
-      />
+      {canManage ? (
+        <RolesDePagoTabs
+          canEditExternal={canEditExternal}
+          payStubsPanel={<PayStubsPanel mode="manage" departments={departments} />}
+        />
+      ) : (
+        <PayStubsPanel mode="own" ownUserId={session.user.id} />
+      )}
     </div>
   );
 }
