@@ -115,17 +115,21 @@ export function WarrantyReasonTrendChart({ series }: { series: WarrantyReasonTre
             const cy = yFor(p.value);
             const color = PALETTE[hover.seriesIndex % PALETTE.length];
             const line2 = `${s.label}: ${p.value}%`;
-            const boxW = Math.max(90, line2.length * 6.2 + 18);
+            const line3 = `${p.count} ${p.count === 1 ? "caso" : "casos"}`;
+            const boxW = Math.max(90, Math.max(line2.length * 6.2, line3.length * 6.2) + 18);
             const boxX = Math.max(padL, Math.min(cx - boxW / 2, width - padR - boxW));
-            const boxY = Math.max(4, cy - 50);
+            const boxY = Math.max(4, cy - 64);
             return (
               <g pointerEvents="none">
-                <rect x={boxX} y={boxY} width={boxW} height={38} rx="5" fill="#101f3b" stroke="#24365a" strokeWidth="1" />
+                <rect x={boxX} y={boxY} width={boxW} height={52} rx="5" fill="#101f3b" stroke="#24365a" strokeWidth="1" />
                 <text x={boxX + boxW / 2} y={boxY + 15} textAnchor="middle" fontSize="10.5" fill="#92a3c0">
                   {formatMonthShort(p.month)}
                 </text>
                 <text x={boxX + boxW / 2} y={boxY + 30} textAnchor="middle" fontSize="12" fontWeight="700" fill={color}>
                   {line2}
+                </text>
+                <text x={boxX + boxW / 2} y={boxY + 44} textAnchor="middle" fontSize="10.5" fill="#92a3c0">
+                  {line3}
                 </text>
               </g>
             );

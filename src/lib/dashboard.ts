@@ -419,7 +419,10 @@ export async function getWarrantyReasonChart(): Promise<PieSlice[]> {
     .sort((a, b) => b.value - a.value);
 }
 
-export type WarrantyReasonTrendSeries = { label: string; points: { month: string; value: number }[] };
+export type WarrantyReasonTrendSeries = {
+  label: string;
+  points: { month: string; value: number; count: number }[];
+};
 
 // Pedido de Daniel 2026-09-09: no solo saber CUÁL motivo se repite más (eso
 // ya lo dice getWarrantyReasonChart arriba), sino cómo se ha movido cada uno
@@ -427,6 +430,9 @@ export type WarrantyReasonTrendSeries = { label: string; points: { month: string
 // motivo del total de garantías de ese mes (no el conteo crudo), mismo
 // criterio de "share" que ya usa el trend up/down de arriba, para que un mes
 // con más volumen general no se vea como que todos los motivos "subieron".
+// `count` se agrega igual (pedido explícito de Daniel el mismo día) para
+// mostrar la cantidad real junto al %, ya que el % solo no dice si "42%" son
+// 8 casos o 80.
 export async function getWarrantyReasonMonthlyTrend(): Promise<WarrantyReasonTrendSeries[]> {
   const months = last12Months();
 
@@ -453,7 +459,7 @@ export async function getWarrantyReasonMonthlyTrend(): Promise<WarrantyReasonTre
     points: distinctMonths.map((month) => {
       const monthTotal = totalByMonth.get(month) ?? 0;
       const count = byMonth.get(month) ?? 0;
-      return { month, value: monthTotal > 0 ? Math.round((count / monthTotal) * 1000) / 10 : 0 };
+      return { month, value: monthTotal > 0 ? Math.round((count / monthTotal) * 1000) / 10 : 0, count };
     }),
   }));
 }
