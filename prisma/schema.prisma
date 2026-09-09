@@ -14,63 +14,66 @@ datasource db {
  * ---------------- Configuración global de la plataforma ----------------
  */
 model PlatformSettings {
-  id                            String    @id @default("singleton")
-  adminPasswordHash             String
-  adminEmail                    String?
+  id                              String    @id @default("singleton")
+  adminPasswordHash               String
+  adminEmail                      String?
   // Confirmado 2026-09-08: correo de respaldo para "¿Olvidaste tu
   // contraseña?" — si el correo principal (adminEmail) queda inaccesible,
   // el enlace de recuperación también llega aquí.
-  adminEmailBackup              String?
+  adminEmailBackup                String?
   // Confirmado 2026-09-08: autenticador 2FA (TOTP, compatible con Google
   // Authenticator) opcional para el login de administrador. Igual patrón
   // que User.twoFactorSecret/twoFactorBackupCodes más abajo, duplicado acá
   // porque el admin no tiene una fila real en User (ver dbUserId en
   // guards.ts).
-  adminTwoFactorEnabled         Boolean   @default(false)
-  adminTwoFactorSecret          String?
-  adminTwoFactorBackupCodes     String[]  @default([])
-  logoUrl                       String?
+  adminTwoFactorEnabled           Boolean   @default(false)
+  adminTwoFactorSecret            String?
+  adminTwoFactorBackupCodes       String[]  @default([])
+  logoUrl                         String?
   // Marca de agua opcional (logo + wordmark) mostrada discretamente en la tarjeta de Inicio.
-  bannerUrl                     String?
+  bannerUrl                       String?
   // Ícono de la pestaña del navegador — si no se sube uno, se usa el /icon.svg genérico por defecto.
-  faviconUrl                    String?
+  faviconUrl                      String?
   // Cumpleaños del admin — el único perfil sin un User real detrás, así que
   // vive aquí en vez de en la tabla User.
-  adminBirthDate                DateTime?
+  adminBirthDate                  DateTime?
   // Confirmado 2026-08-05: contador único para el código correlativo de
   // Control de Compras (SC-001, SC-002...) — una sola secuencia para todo el
   // módulo, sin importar quién solicite. Incrementado dentro de una
   // transacción al crear el primer PurchaseRequest de un grupo nuevo, y
   // copiado a todas las filas de ese mismo grupo.
-  lastPurchaseRequestNumber     Int       @default(0)
+  lastPurchaseRequestNumber       Int       @default(0)
   // Confirmado 2026-08-19: correlativo propio de Reingreso de Mercadería
   // (RM-0001, RM-0002...) — mismo patrón atómico que lastPurchaseRequestNumber,
   // una sola numeración para todo el módulo sin importar quién capture el lote.
-  lastMerchandiseReentryNumber  Int       @default(0)
+  lastMerchandiseReentryNumber    Int       @default(0)
   // Confirmado 2026-08-25: correlativo propio de "Reclamo posterior al
   // cierre" (RPC-0001, RPC-0002...) — mismo patrón atómico que los dos de
   // arriba, distinto de lastPurchaseRequestNumber porque el reclamo puede no
   // tener un origen exacto (mercadería mezclada).
-  lastLateClaimNumber           Int       @default(0)
+  lastLateClaimNumber             Int       @default(0)
   // Confirmado 2026-08-25: correlativo propio de Registro de Egresos
   // (EG-0001, EG-0002...) — mismo patrón atómico que los anteriores, una
   // sola numeración para todo el módulo sin importar el motivo.
-  lastMerchandiseOutflowNumber  Int       @default(0)
+  lastMerchandiseOutflowNumber    Int       @default(0)
   // Confirmado 2026-08-25: correlativo propio de Ventas Externas (VE-0001,
   // VE-0002...) — mismo patrón atómico que los anteriores.
-  lastExternalSaleNumber        Int       @default(0)
+  lastExternalSaleNumber          Int       @default(0)
   // Confirmado 2026-08-25: correlativo propio de Guías Canceladas (GC-0001,
   // GC-0002...) — mismo patrón atómico que los anteriores.
-  lastCancelledGuideNumber      Int       @default(0)
+  lastCancelledGuideNumber        Int       @default(0)
   // Confirmado 2026-09-02: correlativo de LOTES de guías canceladas
   // (LOTE-0001...) — un lote agrupa las guías de una misma transportadora
   // que Yair confirma juntas, para que Bryan las copie/gestione de una.
-  lastCancelledGuideBatchNumber Int       @default(0)
+  lastCancelledGuideBatchNumber   Int       @default(0)
   // Confirmado 2026-09-08: correlativo propio de las tandas de pago a
   // proveedores con crédito (TND-0001, TND-0002...) — mismo patrón atómico
   // que los anteriores, ver SupplierDebtPayment.
-  lastSupplierDebtPaymentNumber Int       @default(0)
-  updatedAt                     DateTime  @updatedAt
+  lastSupplierDebtPaymentNumber   Int       @default(0)
+  // Confirmado 2026-09-09: correlativo propio de Análisis de Mercado
+  // (AM-0001, AM-0002...) — mismo patrón atómico que los anteriores.
+  lastMarketProductProposalNumber Int       @default(0)
+  updatedAt                       DateTime  @updatedAt
 }
 
 // Token temporal para el flujo de "olvidé mi contraseña" del administrador
@@ -319,6 +322,14 @@ model User {
   // puntual, EXCLUSIVO de quien tiene el flag — ni siquiera admin actúa.
   canMarkComboCreatedInDropi Boolean @default(false)
 
+  // Confirmado 2026-09-09 (Fase 2, Análisis de Mercado): mismo patrón
+  // delegado y exclusivo que canConfirmMarketingDesign/
+  // canMarkComboCreatedInDropi — hoy Heidy publica en Dropi y Robert
+  // brandea, pero el código no sabe quiénes son, solo lee estos flags. Ni
+  // siquiera admin actúa.
+  canPublishMarketProduct Boolean @default(false)
+  canBrandMarketProduct   Boolean @default(false)
+
   // Confirmado 2026-09-08: pedido explícito del usuario — Daniel registra
   // cada semana la cantidad de almuerzos pedidos (convenio con el
   // restaurante a un precio fijo por almuerzo, IVA incluido); el monto se
@@ -360,6 +371,12 @@ model User {
   supplierBankAccountsCreated                    SupplierBankAccount[]              @relation("SupplierBankAccountCreatedBy")
   supplierDebtPaymentsCreated                    SupplierDebtPayment[]              @relation("SupplierDebtPaymentCreatedBy")
   supplierDebtTransfersCreated                   SupplierDebtTransfer[]             @relation("SupplierDebtTransferCreatedBy")
+  marketProductProposalsProposed                 MarketProductProposal[]            @relation("MarketProductProposalProposedBy")
+  marketProductProposalsReviewed                 MarketProductProposal[]            @relation("MarketProductProposalReviewedBy")
+  marketProductProposalsPublished                MarketProductProposal[]            @relation("MarketProductProposalPublishedBy")
+  marketProductProposalsBranded                  MarketProductProposal[]            @relation("MarketProductProposalBrandedBy")
+  marketProductProposalsMarkedReadyToBuy         MarketProductProposal[]            @relation("MarketProductProposalReadyToBuyBy")
+  marketProductPriceChangesMade                  MarketProductPriceChange[]         @relation("MarketProductPriceChangeChangedBy")
   purchaseRequestsPaidBy                         PurchaseRequest[]                  @relation("PurchaseRequestPaidBy")
   purchaseRequestsInvoicedBy                     PurchaseRequest[]                  @relation("PurchaseRequestInvoicedBy")
   purchaseRequestsShippingPaymentRequestedBy     PurchaseRequest[]                  @relation("PurchaseRequestShippingPaymentRequestedBy")
@@ -1397,14 +1414,16 @@ model Supplier {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  contacts                   SupplierContact[]
-  channels                   SupplierChannel[]
-  purchaseRequestsAsSupplier PurchaseRequest[]         @relation("PurchaseRequestSupplier")
-  purchaseRequestsAsCarrier  PurchaseRequest[]         @relation("PurchaseRequestCarrier")
-  bankAccounts               SupplierBankAccount[]
-  credits                    SupplierCredit[]
-  merchandiseOutflowBatches  MerchandiseOutflowBatch[]
-  debtPayments               SupplierDebtPayment[]
+  contacts                       SupplierContact[]
+  channels                       SupplierChannel[]
+  purchaseRequestsAsSupplier     PurchaseRequest[]            @relation("PurchaseRequestSupplier")
+  purchaseRequestsAsCarrier      PurchaseRequest[]            @relation("PurchaseRequestCarrier")
+  bankAccounts                   SupplierBankAccount[]
+  credits                        SupplierCredit[]
+  merchandiseOutflowBatches      MerchandiseOutflowBatch[]
+  debtPayments                   SupplierDebtPayment[]
+  marketProductPrices            MarketProductSupplierPrice[]
+  marketProductProposalsAsChosen MarketProductProposal[]
 
   @@index([status])
   @@index([createdByDeptId])
@@ -1553,6 +1572,9 @@ model PurchaseCatalogItem {
   comboSuggestionsAsWinner       ComboSuggestion[]        @relation("ComboSuggestionWinner")
   comboSuggestionsAsLowRotation  ComboSuggestion[]        @relation("ComboSuggestionLowRotation")
   monthlyTopMoverEntries         MonthlyTopMoverEntry[]
+  // Confirmado 2026-09-09: Análisis de Mercado (Fase 2) — se crea/liga solo
+  // cuando Robert termina de brandear una propuesta, con sus 3 fotos reales.
+  marketProductProposal          MarketProductProposal?
 }
 
 enum AtomRentabilityStatus {
@@ -1702,6 +1724,153 @@ model ComboSuggestion {
   @@unique([winnerCatalogItemId, lowRotationCatalogItemId])
   @@index([status])
   @@index([batchId])
+}
+
+// ---------------- Fase 2: Análisis de Mercado ----------------
+// Confirmado 2026-09-09 (spec completa de Bryan, líder de MKT): pipeline
+// completo para evaluar un producto NUEVO antes de comprarlo — hoy vive
+// solo en WhatsApp. Jariel propone (con calculadora de precio) → Bryan
+// aprueba/rechaza y decide bodega/público-privado → Heidy publica en Dropi
+// → Robert brandea (esto matricula el PurchaseCatalogItem real con sus 3
+// fotos) → Bryan ve la trazabilidad completa y decide con qué proveedor
+// comprar (prepago o crédito — ver Supplier.paymentMode, Fase 1). La
+// ejecución real de la compra (paso 7) reutiliza el Control de Compras que
+// ya existe, sin cambios — marketProductProposalId en PurchaseRequest es
+// solo para trazabilidad, nunca obligatorio.
+enum MarketProductPlatform {
+  DROPI
+  ROCKET
+  BOTH
+}
+
+enum MarketProductStatus {
+  PENDING_APPROVAL
+  REJECTED
+  APPROVED
+}
+
+// Mismos nombres que SourceArea (Guías Canceladas) para consistencia, pero
+// un enum propio — ahí existe un 4° valor (FULFILLMENT) que no aplica a un
+// producto que todavía ni se compra.
+enum MarketProductBodega {
+  MKT_DAMIAN
+  MKT_PROVEDIX
+  MKT_SHANGHAI
+}
+
+model MarketProductProposal {
+  id   String @id @default(cuid())
+  code String @unique
+
+  productName       String
+  referenceImageUrl String
+  description       String?
+
+  platform MarketProductPlatform
+
+  // Confirmado 2026-09-08 (pedido de Jariel, ampliado): solo se piden/
+  // muestran si platform incluye DROPI (DROPI o BOTH) — si es solo ROCKET
+  // quedan null, no hay competencia de referencia que cargar.
+  competitorId          String?
+  competitorPrice       Float?
+  competitorBodegaName  String?
+  competitorProductName String?
+
+  // Snapshot del cálculo del paso 1 — el costo real de compra vive en
+  // supplierPrices y NUNCA se edita después. Estos tres sí son editables
+  // luego (ver MarketProductPriceChange) — confirmado 2026-09-09: solo
+  // quien propuso (Jariel) o admin.
+  insuranceRatePercent Float @default(6)
+  fulfillmentCost      Float @default(0.75)
+  marginPercent        Float @default(20)
+  // "Precio de Dropi" — el precio de venta calculado, recalculado server-
+  // side cada vez que cambia un input (nunca confiado del navegador).
+  calculatedSalePrice  Float
+
+  status       MarketProductStatus @default(PENDING_APPROVAL)
+  rejectReason String?
+
+  proposedById String?
+  proposedBy   User?    @relation("MarketProductProposalProposedBy", fields: [proposedById], references: [id], onDelete: SetNull)
+  proposedAt   DateTime @default(now())
+
+  reviewedById String?
+  reviewedBy   User?                @relation("MarketProductProposalReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewedAt   DateTime?
+  // Decisión de Bryan al aprobar — ambos null hasta entonces.
+  bodega       MarketProductBodega?
+  isPublic     Boolean?
+
+  dropiProductId String?
+  publishedById  String?
+  publishedBy    User?     @relation("MarketProductProposalPublishedBy", fields: [publishedById], references: [id], onDelete: SetNull)
+  publishedAt    DateTime?
+
+  brandedById   String?
+  brandedBy     User?                @relation("MarketProductProposalBrandedBy", fields: [brandedById], references: [id], onDelete: SetNull)
+  brandedAt     DateTime?
+  // Se crea/liga automático cuando Robert termina de brandear, usando sus 3
+  // fotos reales — antes de eso no existe ningún PurchaseCatalogItem para
+  // este producto.
+  catalogItemId String?              @unique
+  catalogItem   PurchaseCatalogItem? @relation(fields: [catalogItemId], references: [id], onDelete: SetNull)
+
+  // Paso 6 — decisión de compra de Bryan, viendo la trazabilidad completa.
+  chosenSupplierId String?
+  chosenSupplier   Supplier? @relation(fields: [chosenSupplierId], references: [id], onDelete: SetNull)
+  readyToBuyAt     DateTime?
+  readyToBuyById   String?
+  readyToBuyBy     User?     @relation("MarketProductProposalReadyToBuyBy", fields: [readyToBuyById], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  supplierPrices   MarketProductSupplierPrice[]
+  priceChanges     MarketProductPriceChange[]
+  purchaseRequests PurchaseRequest[]
+
+  @@index([status])
+  @@index([proposedById])
+}
+
+model MarketProductSupplierPrice {
+  id         String                @id @default(cuid())
+  proposalId String
+  proposal   MarketProductProposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+
+  supplierId String
+  supplier   Supplier @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+
+  // El proveedor cotizó $batchCost por un lote de $batchUnits unidades —
+  // así es como Jariel realmente recibe los precios (no siempre por unidad
+  // suelta). freightCost es el flete de ESE lote completo, si aplica.
+  batchCost   Float
+  batchUnits  Int
+  freightCost Float?
+
+  // true = proveedor obligatorio (1°), false = opcional (2°, solo si existe).
+  isPrimary Boolean @default(true)
+
+  createdAt DateTime @default(now())
+
+  @@index([proposalId])
+  @@index([supplierId])
+}
+
+model MarketProductPriceChange {
+  id         String                @id @default(cuid())
+  proposalId String
+  proposal   MarketProductProposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+
+  field    String
+  oldValue Float
+  newValue Float
+
+  changedById String?
+  changedBy   User?    @relation("MarketProductPriceChangeChangedBy", fields: [changedById], references: [id], onDelete: SetNull)
+  changedAt   DateTime @default(now())
+
+  @@index([proposalId])
 }
 
 // Confirmado 2026-08-26 (pedido explícito del usuario): un ID de combo de
@@ -2023,6 +2192,14 @@ model PurchaseRequest {
   debtPaymentId String?
   debtPayment   SupplierDebtPayment? @relation(fields: [debtPaymentId], references: [id], onDelete: SetNull)
 
+  // Confirmado 2026-09-09 (Fase 2, Análisis de Mercado): opcional, solo para
+  // trazabilidad — cuando Bryan marca una propuesta "lista para comprar" y
+  // Jariel ejecuta la compra real acá, se guarda de dónde vino. Nunca
+  // obligatorio, una compra normal (restock, o algo pedido fuera de este
+  // flujo) simplemente no lo tiene.
+  marketProductProposalId String?
+  marketProductProposal   MarketProductProposal? @relation(fields: [marketProductProposalId], references: [id], onDelete: SetNull)
+
   invoiceStatus PurchaseInvoiceStatus @default(PENDING)
   invoiceAmount Float?
   invoiceDocUrl String?
@@ -2070,6 +2247,7 @@ model PurchaseRequest {
   @@index([paymentProofReceiptNumber])
   @@index([shippingPaymentProofReceiptNumber])
   @@index([debtPaymentId])
+  @@index([marketProductProposalId])
 }
 
 // Inventario confirma que de verdad llegó — sin esto el ciclo no se cierra.

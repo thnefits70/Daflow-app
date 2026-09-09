@@ -21,6 +21,8 @@ import {
   canPackExternalSale,
   canManageJustCatalog,
   canEditPayrollRoles,
+  canProposeMarketProduct,
+  canBrandMarketProduct,
 } from "@/lib/guards";
 
 // Confirmado 2026-08-03: bug real — ninguna de estas carpetas de Control de
@@ -166,6 +168,15 @@ export async function POST(req: NextRequest) {
   // Rol formal) — mismo dueño que el resto de Roles de pago.
   if (!allowed && session?.user.role === "employee" && (folder === "external-payment-proofs" || folder === "external-payment-invoices")) {
     allowed = await canEditPayrollRoles();
+  }
+  // Fase 2 (Análisis de Mercado) — imagen referencial del paso 1 (Jariel) y
+  // las 3 fotos reales brandeadas del paso 4 (Robert), carpetas separadas
+  // por permiso propio.
+  if (!allowed && session?.user.role === "employee" && folder === "market-product-reference") {
+    allowed = await canProposeMarketProduct();
+  }
+  if (!allowed && session?.user.role === "employee" && folder === "market-product-branding") {
+    allowed = await canBrandMarketProduct();
   }
   if (!allowed) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 

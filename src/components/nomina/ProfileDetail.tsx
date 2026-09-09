@@ -53,6 +53,8 @@ type UserProfile = {
   canConfirmMarketingAdvisor: boolean;
   canAssignCancelledGuideItems: boolean;
   canMarkComboCreatedInDropi: boolean;
+  canPublishMarketProduct: boolean;
+  canBrandMarketProduct: boolean;
   canViewMarketingArrivalsForDispatch: boolean;
   marketingAdvisorBrand: string | null;
   canManageStoreFeedback: boolean;
@@ -911,6 +913,26 @@ export function ProfileDetail({
               Una vez que Bryan aprueba un lote de Sugerencias de Combos, esta persona (hoy Heidy) es quien arma el combo en Dropi de verdad y lo marca &quot;Creado en Dropi&quot;. El resto del equipo de Análisis de Mercado sigue viendo la cola de aprobados, solo que sin este botón.
             </div>
             <PermToggle value={p.canMarkComboCreatedInDropi} busy={busy} onChange={(v) => save({ canMarkComboCreatedInDropi: v })} />
+          </div>
+
+          <div className="bg-cloud border border-rule rounded p-3.5 mt-3.5">
+            <label className="flex items-center gap-1 mb-2 text-[10.5px] font-semibold uppercase tracking-wide text-steel">
+              <Truck size={11} /> ¿Publica los productos aprobados en Dropi (Análisis de Mercado)?
+            </label>
+            <div className="text-[11px] text-steel mb-2">
+              Una vez que Bryan aprueba una propuesta de producto nuevo, esta persona (hoy Heidy) lo publica de verdad en Dropi y carga el ID real que le da la plataforma.
+            </div>
+            <PermToggle value={p.canPublishMarketProduct} busy={busy} onChange={(v) => save({ canPublishMarketProduct: v })} />
+          </div>
+
+          <div className="bg-cloud border border-rule rounded p-3.5 mt-3.5">
+            <label className="flex items-center gap-1 mb-2 text-[10.5px] font-semibold uppercase tracking-wide text-steel">
+              <Truck size={11} /> ¿Brandea los productos publicados (Análisis de Mercado)?
+            </label>
+            <div className="text-[11px] text-steel mb-2">
+              Una vez publicado en Dropi, esta persona (hoy Robert) sube las fotos/video reales brandeados y marca el producto como terminado — esto lo matricula en el catálogo real.
+            </div>
+            <PermToggle value={p.canBrandMarketProduct} busy={busy} onChange={(v) => save({ canBrandMarketProduct: v })} />
           </div>
 
           <div className="bg-cloud border border-rule rounded p-3.5 mt-3.5">

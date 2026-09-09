@@ -380,6 +380,7 @@ export async function POST(req: NextRequest) {
           requestedByDeptId: effectiveDeptId,
           isEmergency: isEmergencySubmission,
           emergencyReason: isEmergencySubmission ? d.emergencyReason!.trim() : null,
+          marketProductProposalId: d.marketProductProposalId || null,
         },
       })
     )

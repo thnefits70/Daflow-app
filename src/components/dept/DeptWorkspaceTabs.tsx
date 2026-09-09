@@ -34,6 +34,7 @@ import { MerchandiseOutflowPanel } from "@/components/merchandise-outflow/Mercha
 import { ExternalSalesPanel } from "@/components/external-sales/ExternalSalesPanel";
 import { SuppliersPanel, type SupplierDTO } from "@/components/suppliers/SuppliersPanel";
 import { ComboSuggestionsPanel } from "@/components/marketanalysis/ComboSuggestionsPanel";
+import { MarketProductPanel } from "@/components/marketanalysis/MarketProductPanel";
 
 type DocumentDTO = { id: string; title: string; content: string; link: string; fileUrl: string | null; fileName: string | null };
 type ExamSummary = { id: string; title: string; questionCount: number };
@@ -59,6 +60,7 @@ const ALL_TABS = [
   { key: "almuerzos", label: "Almuerzos semanales", icon: UtensilsCrossed },
   { key: "postventa", label: "Servicio Postventa", icon: Heart },
   { key: "combos", label: "Sugerencias de Combos", icon: Combine },
+  { key: "analisis-mercado", label: "Análisis de Mercado", icon: TrendingUp },
   { key: "documentos", label: "Documentos", icon: FileText },
   { key: "examenes", label: "Exámenes", icon: GraduationCap },
   { key: "recordatorios", label: "Recordatorios", icon: BellRing },
@@ -99,6 +101,12 @@ export function DeptWorkspaceTabs({
   canInvoicePurchases = false,
   canPayMerchandisePurchases = false,
   canManageSupplierDebtPayments = false,
+  canProposeMarketProduct = false,
+  canReviewMarketProduct = false,
+  canActOnMarketProductReview = false,
+  canPublishMarketProduct = false,
+  canBrandMarketProduct = false,
+  canDecideMarketProductPurchase = false,
   canAccessSuppliers = false,
   supplierList = [],
   supplierPending = [],
@@ -224,6 +232,13 @@ export function DeptWorkspaceTabs({
   // Fase 1 (proveedores con crédito, CHEN) — confirmado 2026-09-08: exclusivo
   // del admin, ver canManageSupplierDebtPayments en guards.ts.
   canManageSupplierDebtPayments?: boolean;
+  // Fase 2 (Análisis de Mercado) — confirmado 2026-09-09, ver guards.ts.
+  canProposeMarketProduct?: boolean;
+  canReviewMarketProduct?: boolean;
+  canActOnMarketProductReview?: boolean;
+  canPublishMarketProduct?: boolean;
+  canBrandMarketProduct?: boolean;
+  canDecideMarketProductPurchase?: boolean;
   // Proveedores — movido de su propio ítem de sidebar a esta pestaña
   // (confirmado 2026-08-21), entre "Control de Compras" y "Documentos".
   // canAccessSuppliers gatea si la pestaña se ve (ver access.canView /
@@ -372,6 +387,8 @@ export function DeptWorkspaceTabs({
     if (t.key === "cajachica") return !!(pettyCashData?.principal || pettyCashData?.secundaria);
     if (t.key === "postventa") return canManageStoreFeedback || canViewStoreFeedback;
     if (t.key === "combos") return canSyncAtomData || canUploadLowRotationList || canApproveComboSuggestions;
+    if (t.key === "analisis-mercado")
+      return canProposeMarketProduct || canReviewMarketProduct || canPublishMarketProduct || canBrandMarketProduct;
     if (t.key === "pagosadmin") return canManageAdminPayments;
     if (t.key === "almuerzos") return canRegisterLunchPayments;
     return true;
@@ -603,6 +620,16 @@ export function DeptWorkspaceTabs({
           canApprove={canApproveComboSuggestions}
           canAct={canActOnComboSuggestions}
           canMarkCreated={canMarkComboCreatedInDropi}
+        />
+      )}
+      {tab === "analisis-mercado" && (canProposeMarketProduct || canReviewMarketProduct || canPublishMarketProduct || canBrandMarketProduct) && (
+        <MarketProductPanel
+          canPropose={canProposeMarketProduct}
+          canReview={canReviewMarketProduct}
+          canActOnReview={canActOnMarketProductReview}
+          canPublish={canPublishMarketProduct}
+          canBrand={canBrandMarketProduct}
+          canDecidePurchase={canDecideMarketProductPurchase}
         />
       )}
       {tab === "documentos" && <DocumentsPanel deptId={deptId} documents={documents} editable={editable} />}

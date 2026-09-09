@@ -1380,6 +1380,75 @@ export async function canMarkComboCreatedInDropi() {
   return !!user?.canMarkComboCreatedInDropi;
 }
 
+// ---------------- Fase 2: Análisis de Mercado ----------------
+// Mismo patrón exacto que Sugerencias de Combos: proponer = miembro de MKT;
+// ver la bandeja de aprobación = líder de MKT o admin (solo lectura);
+// aprobar/rechazar de verdad = EXCLUSIVO del líder de MKT, admin excluido.
+export async function canProposeMarketProduct() {
+  const session = await auth();
+  if (!session) return false;
+  if (session.user.role === "admin") return true;
+  const user = await prisma.user.findUnique({ where: { id: session.user.id }, select: { department: { select: { code: true } } } });
+  return user?.department?.code === "MKT";
+}
+
+export async function canReviewMarketProduct() {
+  const session = await auth();
+  if (!session) return false;
+  if (session.user.role === "admin") return true;
+  const user = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { isLeader: true, leadsDept: { select: { code: true } } },
+  });
+  return !!user?.isLeader && user.leadsDept?.code === "MKT";
+}
+
+export async function canActOnMarketProductReview() {
+  const session = await auth();
+  if (!session) return false;
+  const user = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { isLeader: true, leadsDept: { select: { code: true } } },
+  });
+  return !!user?.isLeader && user.leadsDept?.code === "MKT";
+}
+
+// Confirmado 2026-09-09: marcar "ya lo publiqué en Dropi" es exclusivo de
+// quien tiene este flag (hoy Heidy) — mismo patrón delegado que
+// canMarkComboCreatedInDropi, ni siquiera admin actúa.
+export async function canPublishMarketProduct() {
+  const session = await auth();
+  if (!session || session.user.role === "admin") return false;
+  const user = await prisma.user.findUnique({ where: { id: session.user.id }, select: { canPublishMarketProduct: true } });
+  return !!user?.canPublishMarketProduct;
+}
+
+// Confirmado 2026-09-09: marcar "ya brandeé" es exclusivo de quien tiene
+// este flag (hoy Robert) — mismo patrón delegado, ni siquiera admin actúa.
+export async function canBrandMarketProduct() {
+  const session = await auth();
+  if (!session || session.user.role === "admin") return false;
+  const user = await prisma.user.findUnique({ where: { id: session.user.id }, select: { canBrandMarketProduct: true } });
+  return !!user?.canBrandMarketProduct;
+}
+
+// Confirmado 2026-09-09: decidir qué comprar y con qué proveedor (paso 6)
+// es exclusivo del líder de MKT (hoy Bryan) — misma exclusión de admin que
+// canActOnMarketProductReview.
+export async function canDecideMarketProductPurchase() {
+  return canActOnMarketProductReview();
+}
+
+// Confirmado con el usuario en la planificación de esta fase: después de
+// aprobada, solo quien propuso originalmente o admin puede seguir ajustando
+// margen/fulfillment/seguro — nunca el costo de compra en sí.
+export async function canEditMarketProductPricing(proposedById: string | null) {
+  const session = await auth();
+  if (!session) return false;
+  if (session.user.role === "admin") return true;
+  return !!proposedById && proposedById === session.user.id;
+}
+
 // How many of the current user's own pay stubs were uploaded/updated since
 // they last opened "Roles de pago" — drives the sidebar badge.
 export async function getUnseenPayStubCount() {

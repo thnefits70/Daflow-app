@@ -328,6 +328,11 @@ export const purchaseSubmissionSchema = z.object({
   // que no sirve para saltarse la aprobación normal.
   isEmergency: z.boolean().optional(),
   emergencyReason: z.string().trim().nullable().optional(),
+  // Confirmado 2026-09-09 (Fase 2, Análisis de Mercado): opcional, solo
+  // trazabilidad — se guarda de dónde vino cuando Jariel ejecuta acá una
+  // propuesta que Bryan ya marcó lista para comprar. Nunca obligatorio ni
+  // valida nada distinto — una solicitud normal simplemente no lo trae.
+  marketProductProposalId: z.string().nullable().optional(),
 });
 
 export type PurchaseSubmissionData = z.infer<typeof purchaseSubmissionSchema>;

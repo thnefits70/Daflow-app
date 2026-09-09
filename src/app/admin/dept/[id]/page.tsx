@@ -232,6 +232,17 @@ export default async function DeptWorkspacePage({ params }: { params: Promise<{ 
         canApproveComboSuggestions={dept.code === "MKT"}
         canActOnComboSuggestions={false}
         canMarkComboCreatedInDropi={false}
+        // Fase 2 (Análisis de Mercado) — confirmado 2026-09-09: mismo
+        // patrón que Sugerencias de Combos — vistas de solo lectura según
+        // dept.code, las acciones exclusivas de un flag delegado (Heidy/
+        // Robert/Bryan de verdad) quedan en false para el admin viendo
+        // desde acá.
+        canProposeMarketProduct={dept.code === "MKT"}
+        canReviewMarketProduct={dept.code === "MKT"}
+        canActOnMarketProductReview={false}
+        canPublishMarketProduct={false}
+        canBrandMarketProduct={false}
+        canDecideMarketProductPurchase={false}
         isAdmin
         editable
       />
