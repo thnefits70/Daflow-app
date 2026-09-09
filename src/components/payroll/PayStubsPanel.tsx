@@ -1,13 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { FileText, Download, Trash2, ChevronLeft, ChevronRight, MessageSquare } from "lucide-react";
+import { FileText, Download, MessageSquare } from "lucide-react";
 import { PayrollChat } from "@/components/payroll/PayrollChat";
 import { MonthlyLegalRolePanel } from "@/components/payroll/MonthlyLegalRolePanel";
 import { MyBankAccountPanel } from "@/components/payroll/MyBankAccountPanel";
 import { MyCeoBonusesPanel } from "@/components/payroll/MyCeoBonusesPanel";
 import { MyManagementDeductionsPanel } from "@/components/payroll/MyManagementDeductionsPanel";
-import { formatDateTime } from "@/lib/formatDateTime";
 
 const MONTHS = [
   "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
@@ -38,24 +37,27 @@ function StubPreview({ url, name }: { url: string; name: string }) {
   return null;
 }
 
+// Confirmado 2026-09-09: pedido explícito del usuario — el listado de
+// comprobantes manuales acá quedó muerto desde el commit 47f7b44
+// (2026-08-24, "retire manual comprobante uploads"): nunca más se sube
+// nada nuevo, así que siempre iba a decir "Sin comprobantes anteriores" y
+// confundía a Nairoby. El comprobante real ahora vive en Rol del mes
+// (MonthlyLegalRolePanel, payoutProofUrl), que cada colaborador ve solo.
+// Se deja acá únicamente el roster + Mensajes, que sí sigue en uso.
 function RosterRow({
   entry,
-  onDelete,
   isAdmin,
   unreadCount,
   autoOpen,
 }: {
   entry: RosterEntry;
-  onDelete: (id: string) => void;
   isAdmin: boolean;
   unreadCount: number;
   autoOpen: boolean;
 }) {
-  const [viewing, setViewing] = useState(false);
-  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [chatOpen, setChatOpen] = useState(autoOpen);
   const rowRef = useRef<HTMLDivElement>(null);
-  const { user, stub } = entry;
+  const { user } = entry;
 
   useEffect(() => {
     if (autoOpen) rowRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -70,49 +72,6 @@ function RosterRow({
           {user.position && <div className="text-[11.5px] text-steel">{user.position}</div>}
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          {stub ? (
-            <>
-              <span className="font-mono text-[10.5px] text-steel">
-                Subido {formatDateTime(stub.updatedAt)}
-              </span>
-              {fileKind(stub.fileName) !== "other" && (
-                <button
-                  type="button"
-                  className="text-[12px] font-semibold border border-rule rounded px-2.5 py-1.5 cursor-pointer"
-                  onClick={() => setViewing((v) => !v)}
-                >
-                  {viewing ? "Ocultar" : "Ver"}
-                </button>
-              )}
-              <a href={stub.fileUrl} download={stub.fileName} className="text-steel hover:text-ink">
-                <Download size={14} />
-              </a>
-              {confirmingDelete ? (
-                <div className="flex items-center gap-1.5">
-                  <button
-                    type="button"
-                    className="text-[11.5px] font-semibold text-red cursor-pointer"
-                    onClick={() => onDelete(stub.id)}
-                  >
-                    Sí, eliminar
-                  </button>
-                  <button
-                    type="button"
-                    className="text-[11.5px] text-steel cursor-pointer"
-                    onClick={() => setConfirmingDelete(false)}
-                  >
-                    Cancelar
-                  </button>
-                </div>
-              ) : (
-                <button type="button" className="text-steel hover:text-red cursor-pointer" onClick={() => setConfirmingDelete(true)}>
-                  <Trash2 size={14} />
-                </button>
-              )}
-            </>
-          ) : (
-            <span className="text-[11.5px] text-steel-dim italic">Sin comprobantes anteriores.</span>
-          )}
           <button
             type="button"
             className="relative inline-flex items-center gap-1.5 text-[12px] font-semibold border border-rule rounded px-2.5 py-1.5 cursor-pointer"
@@ -127,7 +86,6 @@ function RosterRow({
           </button>
         </div>
       </div>
-      {viewing && stub && <StubPreview url={stub.fileUrl} name={stub.fileName} />}
       {chatOpen && <PayrollChat employeeId={user.id} canSend={!isAdmin} />}
     </div>
   );
@@ -145,10 +103,9 @@ export function PayStubsPanel({
   ownUserId?: string;
 }) {
   const now = new Date();
-  const yearOptions = Array.from({ length: 7 }, (_, i) => now.getFullYear() + 1 - i);
   const [deptId, setDeptId] = useState(departments?.[0]?.id ?? "");
-  const [month, setMonth] = useState(now.getMonth() + 1);
-  const [year, setYear] = useState(now.getFullYear());
+  const month = now.getMonth() + 1;
+  const year = now.getFullYear();
   const [roster, setRoster] = useState<RosterEntry[] | null>(null);
   const [ownStubs, setOwnStubs] = useState<OwnStub[] | null>(null);
   const [loading, setLoading] = useState(false);
@@ -211,21 +168,6 @@ export function PayStubsPanel({
     else loadOwn();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, deptId, month, year]);
-
-  const handleDelete = async (id: string) => {
-    if (!confirm("¿Eliminar este rol de pago? Esta acción no se puede deshacer.")) return;
-    await fetch(`/api/pay-stubs/${id}`, { method: "DELETE" });
-    loadRoster();
-  };
-
-  const shiftMonth = (delta: number) => {
-    let m = month + delta;
-    let y = year;
-    if (m < 1) { m = 12; y -= 1; }
-    if (m > 12) { m = 1; y += 1; }
-    setMonth(m);
-    setYear(y);
-  };
 
   if (mode === "own") {
     const ownYears = Array.from(new Set((ownStubs ?? []).map((s) => s.year))).sort((a, b) => b - a);
@@ -334,32 +276,6 @@ export function PayStubsPanel({
             <option key={d.id} value={d.id}>{d.name}</option>
           ))}
         </select>
-        <div className="flex items-center gap-1.5">
-          <button type="button" className="p-1.5 border border-rule rounded cursor-pointer" onClick={() => shiftMonth(-1)}>
-            <ChevronLeft size={14} />
-          </button>
-          <select
-            className="rounded border border-rule bg-surface px-2.5 py-2 text-[13px]"
-            value={month}
-            onChange={(e) => setMonth(Number(e.target.value))}
-          >
-            {MONTHS.map((m, i) => (
-              <option key={m} value={i + 1}>{m}</option>
-            ))}
-          </select>
-          <select
-            className="rounded border border-rule bg-surface px-2.5 py-2 text-[13px]"
-            value={year}
-            onChange={(e) => setYear(Number(e.target.value))}
-          >
-            {yearOptions.map((y) => (
-              <option key={y} value={y}>{y}</option>
-            ))}
-          </select>
-          <button type="button" className="p-1.5 border border-rule rounded cursor-pointer" onClick={() => shiftMonth(1)}>
-            <ChevronRight size={14} />
-          </button>
-        </div>
       </div>
 
       {err && <div className="text-red text-[12.5px] mb-3">{err}</div>}
@@ -377,7 +293,6 @@ export function PayStubsPanel({
           <RosterRow
             key={entry.user.id}
             entry={entry}
-            onDelete={handleDelete}
             isAdmin={isAdmin}
             unreadCount={unreadByEmployee[entry.user.id] ?? 0}
             autoOpen={autoOpenEmployeeId === entry.user.id}
