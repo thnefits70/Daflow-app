@@ -436,7 +436,7 @@ export function DeptWorkspaceTabs({
           había más (le pasó a Bryan con "Caja Chica") — flex-wrap garantiza
           que TODAS las pestañas queden siempre a la vista, aunque ocupen más
           de una línea. */}
-      <div className="flex flex-wrap gap-x-5.5 gap-y-2 border-b border-rule mb-5.5">
+      <div className="print:hidden flex flex-wrap gap-x-5.5 gap-y-2 border-b border-rule mb-5.5">
         {tabs.map((t) => (
           <button
             key={t.key}
