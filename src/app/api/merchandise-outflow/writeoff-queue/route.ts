@@ -4,6 +4,9 @@ import { canViewMerchandiseOutflow } from "@/lib/guards";
 
 const BATCH_INCLUDE = {
   createdBy: { select: { name: true } },
+  // COMPRA_PERSONAL no tiene createdBy (se engancha solo, nadie lo captura a
+  // mano) — Daniel pidió ver igual el nombre de quien hizo la compra.
+  personalPurchaseItem: { select: { order: { select: { employee: { select: { name: true } } } } } },
   items: { include: { catalogItem: { select: { name: true, photos: true, justCode: true } }, damageReason: { select: { name: true } } } },
 } as const;
 

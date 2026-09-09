@@ -14,7 +14,15 @@ type ItemDTO = {
   damageReason: { name: string } | null;
   damageReasonOther: string | null;
 };
-type BatchDTO = { id: string; code: string; reason: keyof typeof OUTFLOW_REASON_LABELS; submittedAt: string | null; createdBy: { name: string } | null; items: ItemDTO[] };
+type BatchDTO = {
+  id: string;
+  code: string;
+  reason: keyof typeof OUTFLOW_REASON_LABELS;
+  submittedAt: string | null;
+  createdBy: { name: string } | null;
+  personalPurchaseItem: { order: { employee: { name: string } } } | null;
+  items: ItemDTO[];
+};
 
 async function postJson(url: string) {
   const res = await fetch(url, { method: "POST" });
@@ -25,6 +33,14 @@ async function postJson(url: string) {
 
 function itemName(item: ItemDTO) {
   return item.catalogItem?.name ?? item.declaredName;
+}
+
+// COMPRA_PERSONAL se engancha solo (nadie lo captura a mano, ver
+// createOutflowForPersonalPurchaseItem) así que no tiene createdBy — mostramos
+// en su lugar el nombre de quien hizo la compra (pedido explícito de Daniel).
+function registeredByName(batch: BatchDTO): string {
+  if (batch.reason === "COMPRA_PERSONAL") return batch.personalPurchaseItem?.order.employee.name ?? "—";
+  return batch.createdBy?.name ?? "—";
 }
 
 // Todo lo que está listo para dar de baja en Just, sin importar el motivo —
@@ -84,7 +100,9 @@ export function WriteOffQueue({ canAct }: { canAct: boolean }) {
               </div>
             ))}
           </div>
-          <div className="text-[10.5px] text-steel mb-2.5">Registrado por {batch.createdBy?.name ?? "—"}{batch.submittedAt ? ` · ${formatDateTime(batch.submittedAt)}` : ""}</div>
+          <div className="text-[10.5px] text-steel mb-2.5">
+            {batch.reason === "COMPRA_PERSONAL" ? "Comprado por" : "Registrado por"} {registeredByName(batch)}{batch.submittedAt ? ` · ${formatDateTime(batch.submittedAt)}` : ""}
+          </div>
 
           {!canAct ? (
             <div className="text-[11.5px] text-steel">Solo Daniel puede confirmar la baja en Just.</div>
