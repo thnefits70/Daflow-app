@@ -96,8 +96,12 @@ export function PurchaseControlPanel({
     // Confirmado 2026-08-08 (ampliado 2026-08-12): historial de solo lectura
     // de todo lo confirmado recibido, para auditar sin poder editar nada —
     // ya no exclusivo del admin, cualquiera con acceso a este módulo
-    // (Bryan/Daniel/Nairoby) también la ve, siempre en modo solo lectura.
-    ...(isAdmin || canSubmit || canReview || canReceive || canInvoice ? [{ key: "auditoria" as Tab, label: "Auditoría" }] : []),
+    // (Daniel/Nairoby, y quien solicita) también la ve, siempre en modo solo
+    // lectura. Fix 2026-09-09: pedido explícito del usuario — se quita
+    // canReview de esta lista, así quien solo aprueba (hoy Bryan) deja de
+    // ver esta pestaña; sigue viendo "Bandeja de aprobación" sin cambios,
+    // eso lo gatea canReview aparte, más abajo.
+    ...(isAdmin || canSubmit || canReceive || canInvoice ? [{ key: "auditoria" as Tab, label: "Auditoría" }] : []),
   ];
   const preferredDefault: Tab[] = ["solicitar", "aprobacion", "inventario", "finanzas", "mias", "comparar", "urgentes", "auditoria"];
   const [tab, setTab] = useState<Tab>(preferredDefault.find((k) => tabs.some((t) => t.key === k)) ?? tabs[0]?.key ?? "solicitar");

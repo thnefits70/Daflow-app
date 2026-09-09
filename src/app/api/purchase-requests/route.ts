@@ -204,16 +204,14 @@ export async function GET(req: NextRequest) {
     // también ven Auditoría, siempre de solo lectura — cada uno ya tiene
     // acceso de escritura a su propia parte de este mismo historial, esto
     // solo les da la vista completa de las transacciones ya registradas.
-    // Fix 2026-09-04: quien solo aprueba (canApprovePurchaseRequests, hoy
-    // Bryan tras la transición a Jariel) también veía la pestaña en
-    // PurchaseControlPanel (canReview la incluye) pero esta ruta lo rechazaba
-    // con 403 — el panel lo traga en silencio y muestra "vacío" en vez del
-    // error real. Se agrega ese permiso para que ambos lados coincidan.
+    // Fix 2026-09-09: pedido explícito del usuario — quien solo aprueba
+    // (canApprovePurchaseRequests, hoy Bryan) ya no ve Auditoría. Se quita
+    // ese permiso de acá y de la pestaña en PurchaseControlPanel para que
+    // ambos lados sigan coincidiendo.
     const hasAuditAccess =
       (await canSubmitPurchaseRequests()) ||
       (await canConfirmPurchaseReceiving()) ||
-      (await canRegisterPurchaseInvoices()) ||
-      (await canApprovePurchaseRequests());
+      (await canRegisterPurchaseInvoices());
     if (!hasAuditAccess) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
     // Confirmado 2026-08-13: pedido explícito del usuario — Auditoría
     // tampoco muestra una operación mientras Finanzas no la haya cerrado
