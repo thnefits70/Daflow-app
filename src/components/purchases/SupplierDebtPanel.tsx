@@ -240,7 +240,14 @@ export function SupplierDebtPanel() {
       return;
     }
     const d = await res.json();
-    setNewLink(`${window.location.origin}/proveedor-ledger/${d.token}`);
+    // Confirmado 2026-09-09: el enlace de CHEN nunca debe mostrar el dominio
+    // real de DAFLOW — se compró un dominio propio para esto
+    // (dunxingchen.cc) y se usa siempre, sin importar desde qué dominio esté
+    // navegando quien genera el enlace.
+    const origin = process.env.NEXT_PUBLIC_SUPPLIER_LEDGER_DOMAIN
+      ? `https://${process.env.NEXT_PUBLIC_SUPPLIER_LEDGER_DOMAIN}`
+      : window.location.origin;
+    setNewLink(`${origin}/proveedor-ledger/${d.token}`);
     load();
   }
 
