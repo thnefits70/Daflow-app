@@ -105,6 +105,15 @@ export type SupplierPricePoint = {
   supplierName: string;
   baseUnitCost: number;
   shippingPerUnit: number;
+  // Confirmado 2026-09-09 (pedido explícito de Jariel): para poder refutar un
+  // precio con el proveedor (o cotizarlo con otro) hace falta tener a mano el
+  // respaldo real de esa compra — el código de solicitud y la imagen de la
+  // cotización (y de la orden de compra, si existía) tal como se subieron
+  // entonces, no solo el número.
+  id: string;
+  requestNumber: number | null;
+  quoteImageUrl: string;
+  purchaseOrderUrl: string | null;
 };
 export type SupplierPriceHistory = {
   supplierId: string;
@@ -115,6 +124,12 @@ export type SupplierPriceHistory = {
   avg: number;
   count: number;
   history: SupplierPricePoint[];
+  // Compra más reciente con este proveedor — mismo dato de arriba, pero a
+  // mano sin tener que buscar el último punto del historial.
+  latestRequestId: string;
+  latestRequestNumber: number | null;
+  latestQuoteImageUrl: string;
+  latestPurchaseOrderUrl: string | null;
 };
 
 // Confirmado 2026-07-31: para un mismo insumo, cada proveedor tiene su propia
@@ -129,6 +144,10 @@ export async function getCatalogItemSupplierComparison(catalogItemId: string): P
   const rows = await prisma.purchaseRequest.findMany({
     where: { catalogItemId, status: { in: PRICED_STATUSES } },
     select: {
+      id: true,
+      requestNumber: true,
+      quoteImageUrl: true,
+      purchaseOrderUrl: true,
       unitCost: true,
       quantity: true,
       shippingIncluded: true,
@@ -154,6 +173,10 @@ export async function getCatalogItemSupplierComparison(catalogItemId: string): P
       supplierName: r.supplier.name,
       baseUnitCost: r.unitCost,
       shippingPerUnit: r.shippingIncluded || !r.shippingCostTotal || r.quantity === 0 ? 0 : r.shippingCostTotal / r.quantity,
+      id: r.id,
+      requestNumber: r.requestNumber,
+      quoteImageUrl: r.quoteImageUrl,
+      purchaseOrderUrl: r.purchaseOrderUrl,
     });
   }
   // Reordenar por fecha efectiva (pago si ya existe, si no la solicitud) —
@@ -164,6 +187,7 @@ export async function getCatalogItemSupplierComparison(catalogItemId: string): P
 
   const suppliers: SupplierPriceHistory[] = [...bySupplier.values()].map((s) => {
     const costs = s.history.map((h) => h.unitCost);
+    const latestPoint = s.history[s.history.length - 1];
     return {
       ...s,
       latest: costs[costs.length - 1],
@@ -171,6 +195,10 @@ export async function getCatalogItemSupplierComparison(catalogItemId: string): P
       max: Math.max(...costs),
       avg: costs.reduce((a, b) => a + b, 0) / costs.length,
       count: costs.length,
+      latestRequestId: latestPoint.id,
+      latestRequestNumber: latestPoint.requestNumber,
+      latestQuoteImageUrl: latestPoint.quoteImageUrl,
+      latestPurchaseOrderUrl: latestPoint.purchaseOrderUrl,
     };
   });
   suppliers.sort((a, b) => a.latest - b.latest);
