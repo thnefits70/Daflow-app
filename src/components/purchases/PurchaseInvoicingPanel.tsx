@@ -39,6 +39,8 @@ type Row = {
   creditSkipJustification: string | null;
   aiReviewSummary: string | null;
   aiReviewOk: boolean | null;
+  aiInvoiceReviewSummary: string | null;
+  aiInvoiceReviewOk: boolean | null;
   catalogItem: { name: string; photos: string[]; justCode: string | null };
   supplier: { id: string; name: string };
   bankAccount: {
@@ -213,12 +215,12 @@ export function PurchaseInvoicingPanel({ isAdmin = false, canPayMerchandise }: {
   const [uploadingProof, setUploadingProof] = useState(false);
   const [proofVerifying, setProofVerifying] = useState(false);
   const [proofVerifyResult, setProofVerifyResult] = useState<{ readAmount: number | null; matches: boolean; receiptNumber: string | null } | null>(null);
-  const [availableCredits, setAvailableCredits] = useState<{ id: string; amount: number; reason: string }[]>([]);
+  const [availableCredits, setAvailableCredits] = useState<{ id: string; amount: number; reason: string; proofUrl: string | null }[]>([]);
   const [selectedCreditIds, setSelectedCreditIds] = useState<string[]>([]);
   // Confirmado 2026-08-12: crédito que ya quedó reservado para esta solicitud
   // desde que Bryan la pidió (ver reserveCreditsForGroup) — se ve como ya
   // aplicado, sin checkbox, separado del crédito adicional que sí se elige acá.
-  const [reservedCredits, setReservedCredits] = useState<{ id: string; amount: number; reason: string }[]>([]);
+  const [reservedCredits, setReservedCredits] = useState<{ id: string; amount: number; reason: string; proofUrl: string | null }[]>([]);
   // Confirmado 2026-08-06: filtro de fechas para "Registrar factura" — sin
   // esto la lista crece para siempre con todo el historial. dateFrom/dateTo
   // vacíos = sin filtro (se ve todo). El selector de mes y "Mes anterior"
@@ -269,6 +271,11 @@ export function PurchaseInvoicingPanel({ isAdmin = false, canPayMerchandise }: {
   // excepción que se elige a propósito, con dos botones de un solo clic
   // (comprobante no fiscal / no entregaron nada) que finalizan al toque.
   const [choice, setChoice] = useState<Record<string, "YES" | "NO">>({});
+  // Confirmado 2026-09-09: pedido explícito de Nairoby — elegir "No hay
+  // factura" no debe guardar de inmediato al tocar una de las dos opciones;
+  // primero se elige cuál aplica (queda resaltada) y recién se confirma con
+  // "Guardar", mismo patrón de dos pasos que ya usa el lado "Sí tiene factura".
+  const [noInvoiceChoice, setNoInvoiceChoice] = useState<Record<string, "NON_FISCAL" | "NONE">>({});
   const [invoiceType, setInvoiceType] = useState<Record<string, "COMPLETE" | "PARTIAL">>({});
   const [invoiceDocUrl, setInvoiceDocUrl] = useState<Record<string, string>>({});
   const [uploadingDoc, setUploadingDoc] = useState<string | null>(null);
@@ -285,7 +292,7 @@ export function PurchaseInvoicingPanel({ isAdmin = false, canPayMerchandise }: {
   // así que el total de la solicitud que se ve acá no es necesariamente lo
   // que de verdad se transfirió cuando parte se cubrió con crédito. Mismo
   // fix ya aplicado en PurchaseAuditPanel.
-  const [appliedCreditsByGroup, setAppliedCreditsByGroup] = useState<Record<string, { id: string; amount: number }[]>>({});
+  const [appliedCreditsByGroup, setAppliedCreditsByGroup] = useState<Record<string, { id: string; amount: number; reason: string; proofUrl: string | null }[]>>({});
 
   // Vista de solo lectura para admin — pedido explícito del usuario: quiere
   // ver qué productos, cantidades y precio unitario trae cada solicitud
@@ -873,7 +880,12 @@ export function PurchaseInvoicingPanel({ isAdmin = false, canPayMerchandise }: {
                           <div className="flex items-center gap-1.5 text-[12px] font-semibold text-teal mb-1.5"><Lock size={13} /> Crédito ya reservado al pedir esta solicitud</div>
                           <div className="flex flex-col gap-1 mb-1.5">
                             {reservedCredits.map((c) => (
-                              <div key={c.id} className="text-[12px] text-ink">{money(c.amount)} — {c.reason}</div>
+                              <div key={c.id} className="text-[12px] text-ink">
+                                {money(c.amount)} — {c.reason}
+                                {c.proofUrl && (
+                                  <a href={c.proofUrl} target="_blank" rel="noopener noreferrer" className="text-blue font-semibold ml-1.5">Ver comprobante</a>
+                                )}
+                              </div>
                             ))}
                           </div>
                           <div className="text-[12px] font-semibold text-ink">Neto a transferir: {money(netAmountFor(groupId))}</div>
@@ -887,6 +899,9 @@ export function PurchaseInvoicingPanel({ isAdmin = false, canPayMerchandise }: {
                               <div key={c.id} className="flex items-center gap-2 text-[12px] text-ink">
                                 <input type="checkbox" className="cursor-pointer" checked={selectedCreditIds.includes(c.id)} onChange={() => toggleCredit(c.id)} />
                                 {money(c.amount)} — {c.reason}
+                                {c.proofUrl && (
+                                  <a href={c.proofUrl} target="_blank" rel="noopener noreferrer" className="text-blue font-semibold">Ver comprobante</a>
+                                )}
                               </div>
                             ))}
                           </div>
@@ -1206,12 +1221,18 @@ export function PurchaseInvoicingPanel({ isAdmin = false, canPayMerchandise }: {
                 <div className="text-[11.5px] text-steel">
                   {r0.supplier.name} —{" "}
                   {(() => {
-                    const appliedCreditTotal = (appliedCreditsByGroup[groupId] ?? []).reduce((s, c) => s + c.amount, 0);
+                    const appliedCredits = appliedCreditsByGroup[groupId] ?? [];
+                    const appliedCreditTotal = appliedCredits.reduce((s, c) => s + c.amount, 0);
                     return appliedCreditTotal > 0 ? (
                       <>
                         <span className="line-through text-steel-dim">{money(total)}</span>{" "}
                         <span className="text-green font-semibold">Pagado {money(Math.max(0, total - appliedCreditTotal))}</span>{" "}
                         <span className="text-steel-dim">(crédito de {money(appliedCreditTotal)} aplicado)</span>
+                        {appliedCredits.filter((c) => c.proofUrl).map((c) => (
+                          <a key={c.id} href={c.proofUrl!} target="_blank" rel="noopener noreferrer" className="text-blue font-semibold ml-1.5">
+                            Ver comprobante del crédito
+                          </a>
+                        ))}
                       </>
                     ) : (
                       <span className="text-green font-semibold">Pagado {money(total)}</span>
@@ -1372,12 +1393,35 @@ export function PurchaseInvoicingPanel({ isAdmin = false, canPayMerchandise }: {
                       </div>
                     </div>
                   ) : (
-                    <div className="flex gap-2">
-                      <button type="button" disabled={isAdmin || busyGroup === groupId} title={isAdmin ? ADMIN_LOCK_TITLE : undefined} className="flex-1 rounded border border-rule px-3 py-2 text-[12px] font-semibold text-steel cursor-pointer disabled:opacity-60" onClick={() => setInvoice(groupId, "NON_FISCAL")}>
-                        Me dieron comprobante (no fiscal)
-                      </button>
-                      <button type="button" disabled={isAdmin || busyGroup === groupId} title={isAdmin ? ADMIN_LOCK_TITLE : undefined} className="flex-1 rounded border border-red/50 text-red px-3 py-2 text-[12px] font-semibold cursor-pointer disabled:opacity-60" onClick={() => setInvoice(groupId, "NONE")}>
-                        No entregaron nada
+                    <div className="bg-cloud border border-rule rounded-md p-3">
+                      <div className="flex gap-2 mb-2.5">
+                        <button
+                          type="button"
+                          disabled={isAdmin}
+                          title={isAdmin ? ADMIN_LOCK_TITLE : undefined}
+                          className={`flex-1 rounded border py-2 text-[12px] font-semibold cursor-pointer disabled:opacity-60 ${noInvoiceChoice[groupId] === "NON_FISCAL" ? "border-teal bg-teal/10 text-teal" : "border-rule text-steel"}`}
+                          onClick={() => setNoInvoiceChoice((c) => ({ ...c, [groupId]: "NON_FISCAL" }))}
+                        >
+                          Me dieron comprobante (no fiscal)
+                        </button>
+                        <button
+                          type="button"
+                          disabled={isAdmin}
+                          title={isAdmin ? ADMIN_LOCK_TITLE : undefined}
+                          className={`flex-1 rounded border py-2 text-[12px] font-semibold cursor-pointer disabled:opacity-60 ${noInvoiceChoice[groupId] === "NONE" ? "border-red/50 bg-red/10 text-red" : "border-rule text-steel"}`}
+                          onClick={() => setNoInvoiceChoice((c) => ({ ...c, [groupId]: "NONE" }))}
+                        >
+                          No entregaron nada
+                        </button>
+                      </div>
+                      <button
+                        type="button"
+                        disabled={isAdmin || busyGroup === groupId || !noInvoiceChoice[groupId]}
+                        title={isAdmin ? ADMIN_LOCK_TITLE : undefined}
+                        className="rounded border border-blue bg-blue px-3.5 py-1.5 text-[12px] font-semibold text-white cursor-pointer disabled:opacity-60"
+                        onClick={() => setInvoice(groupId, noInvoiceChoice[groupId])}
+                      >
+                        Guardar
                       </button>
                     </div>
                   )}
@@ -1393,6 +1437,20 @@ export function PurchaseInvoicingPanel({ isAdmin = false, canPayMerchandise }: {
                     )}
                   </div>
                   <div className="text-[10px] text-steel-dim mt-0.5">Registrada por {actorName(r0.invoicedBy?.name)}{r0.invoicedAt ? ` · ${formatDateTime(r0.invoicedAt)}` : ""}</div>
+                  {r0.aiInvoiceReviewSummary ? (
+                    <div
+                      className={`flex items-start gap-1.5 rounded-md px-2.5 py-1.5 mt-1.5 text-[11.5px] border ${
+                        r0.aiInvoiceReviewOk ? "bg-teal/10 border-teal/30 text-teal" : "bg-gold/10 border-gold/30 text-gold"
+                      }`}
+                    >
+                      <span className="shrink-0">{r0.aiInvoiceReviewOk ? "✅" : "⚠️"}</span>
+                      <span>{r0.aiInvoiceReviewSummary}</span>
+                    </div>
+                  ) : r0.invoiceDocUrl ? (
+                    <div className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 mt-1.5 text-[11px] border border-rule text-steel-dim">
+                      Revisión de IA en proceso — recarga en unos segundos.
+                    </div>
+                  ) : null}
                   {!g.every((r) => r.status === "RECEIVED") && (
                     <div className="flex items-center gap-1.5 text-[11px] mt-1.5 pt-1.5 border-t border-rule" style={{ color: "#D9A441" }}>
                       <AlertTriangle size={12} className="shrink-0" /> Sigue aquí hasta que Inventario confirme que llegó todo — recién ahí pasa a Auditoría.

@@ -427,6 +427,108 @@ export async function reviewApprovedPurchaseGroup(params: {
   return extractJson<PurchaseGroupReviewResult>(textBlock.text);
 }
 
+export type InvoiceDocumentReviewResult = {
+  ok: boolean;
+  summary: string;
+};
+
+// Confirmado 2026-09-09: pedido explícito de Nairoby — hasta ahora ella
+// tenía que abrir cada documento a mano y comparar nombres/cantidades/montos
+// contra la cotización y el crédito aplicado antes de cerrar la operación.
+// Esta es la única revisión de las de purchaseAi.ts que SÍ vuelve a leer una
+// imagen/PDF en este paso (la factura que ella misma acaba de subir) — las
+// demás (reviewApprovedPurchaseGroup, reviewSupplierDebtPayment) solo cruzan
+// datos ya confirmados. Se dispara al guardar "Sí tiene factura" (solo si
+// subió el documento — sin documento no hay nada que leer), nunca bloquea
+// guardar si falla: la factura queda registrada igual, solo sin resumen.
+// Visible tanto para Nairoby como para el admin (mismo patrón que
+// aiReviewSummary de la aprobación, que ya ven ambos).
+export async function reviewInvoiceDocument(params: {
+  actorId: string | null;
+  deptId?: string;
+  invoiceDocUrl: string;
+  supplierName: string;
+  requestNumber: number | null;
+  lines: { name: string; justCode: string | null; quantity: number; unitCost: number; totalCost: number }[];
+  linesTotal: number;
+  invoiceType: "COMPLETE" | "PARTIAL" | "NON_FISCAL";
+  invoiceAmount: number | null;
+  appliedCreditTotal: number;
+  appliedCreditReasons: string[];
+}): Promise<InvoiceDocumentReviewResult> {
+  const client = getAnthropicClient();
+  const fileBlock = await fetchFileContentBlock(params.invoiceDocUrl);
+
+  const netTransferred = Math.max(0, params.linesTotal - params.appliedCreditTotal);
+  const facts = {
+    proveedor: params.supplierName,
+    codigo_solicitud: params.requestNumber ? `SC-${String(params.requestNumber).padStart(3, "0")}` : null,
+    productos_declarados: params.lines.map((l) => ({
+      nombre: l.name,
+      codigo_catalogo: l.justCode,
+      cantidad: l.quantity,
+      precio_unitario: l.unitCost,
+      subtotal: l.totalCost,
+    })),
+    total_de_los_productos_declarados: params.linesTotal,
+    tipo_de_factura:
+      params.invoiceType === "COMPLETE"
+        ? "factura por el total pagado"
+        : params.invoiceType === "PARTIAL"
+        ? "factura por una parte del total"
+        : "comprobante de compra, no es factura fiscal",
+    monto_por_el_que_se_declara_facturado: params.invoiceType === "PARTIAL" ? params.invoiceAmount : params.linesTotal,
+    credito_con_el_proveedor_aplicado_a_esta_compra: params.appliedCreditTotal > 0 ? { monto: params.appliedCreditTotal, motivos: params.appliedCreditReasons } : null,
+    monto_que_realmente_se_le_transfirio_al_proveedor: netTransferred,
+  };
+
+  const response = await client.messages.create({
+    model: PURCHASE_AI_MODEL,
+    max_tokens: 600,
+    system:
+      "Lees el documento de factura/comprobante que Nairoby (líder de Finanzas) acaba de subir para cerrar una " +
+      "compra de Provedix (Guayaquil, Ecuador), y lo cruzas contra los datos que YA están confirmados en el sistema " +
+      "— esta es la última revisión antes de dar la operación por cerrada, así que tu objetivo es que ella no tenga " +
+      "que volver a abrir cada documento a mano para comparar. Verifica específicamente: " +
+      "(1) que los productos/cantidades/precios que de verdad aparecen escritos en el documento sean razonablemente " +
+      "los mismos que productos_declarados — los nombres no tienen que coincidir palabra por palabra, alcanza con " +
+      "que se note que es el mismo producto; (2) que el monto TOTAL que muestra el documento coincida con " +
+      "monto_por_el_que_se_declara_facturado; (3) si credito_con_el_proveedor_aplicado_a_esta_compra no es null, que " +
+      "total_de_los_productos_declarados menos ese crédito dé como resultado monto_que_realmente_se_le_transfirio_al_proveedor " +
+      "(esto es aritmética simple sobre los datos que ya te di, no algo que el documento deba mostrar); " +
+      "(4) si tipo_de_factura es 'comprobante de compra, no es factura fiscal', sé más flexible con el monto exacto " +
+      "(estos documentos suelen ser menos precisos) pero igual señala si el monto es MUY distinto al esperado. " +
+      "Si no logras leer el documento con claridad (foto borrosa, cortada, etc.), dilo en el summary en vez de " +
+      "adivinar. " +
+      'Responde ÚNICAMENTE un JSON: {"ok": boolean, "summary": string}. ' +
+      "Si TODO cuadra, ok=true y summary es UNA frase breve y clara en español simple confirmándolo. " +
+      "Si algo no cuadra, falta, o no se pudo leer bien, ok=false y summary dice EXACTAMENTE qué revisar, en " +
+      "español simple, sin tecnicismos. Nunca inventes datos que no te di ni que no veas de verdad en el documento.",
+    messages: [
+      {
+        role: "user",
+        content: [
+          fileBlock,
+          { type: "text", text: `Datos ya confirmados de esta operación:\n${JSON.stringify(facts, null, 2)}\n\nLee el documento adjunto y devuelve el JSON pedido.` },
+        ],
+      },
+    ],
+  });
+
+  await logAiUsage({
+    feature: "control_compras_revision_factura",
+    model: PURCHASE_AI_MODEL,
+    actorId: params.actorId ?? "admin",
+    deptId: params.deptId,
+    inputTokens: response.usage.input_tokens,
+    outputTokens: response.usage.output_tokens,
+  });
+
+  const textBlock = response.content.find((b) => b.type === "text");
+  if (!textBlock || textBlock.type !== "text") throw new Error("La IA no devolvió contenido de texto.");
+  return extractJson<InvoiceDocumentReviewResult>(textBlock.text);
+}
+
 export type SupplierDebtPaymentReviewResult = {
   ok: boolean;
   summary: string;

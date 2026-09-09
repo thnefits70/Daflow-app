@@ -2211,6 +2211,17 @@ model PurchaseRequest {
   // recién aparece ahí cuando esto ya tiene valor.
   invoicedAt    DateTime?
 
+  // Confirmado 2026-09-09: pedido explícito de Nairoby — la IA lee el mismo
+  // documento de factura que ella acaba de subir y lo cruza contra los
+  // productos/cantidades/precios declarados y el crédito aplicado, para que
+  // no tenga que abrir cada archivo a mano a comparar. Se llena al guardar
+  // "Sí tiene factura" solo si subió documento (sin documento no hay nada
+  // que leer). Visible tanto para ella como para el admin — ver
+  // reviewInvoiceDocument en purchaseAi.ts.
+  aiInvoiceReviewSummary String?   @db.Text
+  aiInvoiceReviewOk      Boolean?
+  aiInvoiceReviewAt      DateTime?
+
   // Confirmado 2026-08-06: Nairoby puede marcar "revisar algo" en la misma
   // operación cuando algo no cuadra en su revisión final — opcional, no
   // obligatorio, y no bloquea nada por sí solo, solo deja visible la nota.

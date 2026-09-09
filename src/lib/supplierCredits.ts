@@ -6,6 +6,12 @@ export type SupplierCreditDTO = {
   reason: string;
   status: "AVAILABLE" | "RESERVED" | "APPLIED" | "REFUNDED" | "CANCELLED";
   createdAt: string;
+  // Confirmado 2026-09-09: pedido explícito de Nairoby — al registrar la
+  // factura necesita poder abrir el comprobante del crédito que el proveedor
+  // había aprobado con anticipación (chat o documento), no solo ver el monto,
+  // para poder cuadrar la operación sin tener que ir a buscarlo a otra pantalla.
+  proofUrl: string | null;
+  proofName: string | null;
 };
 
 // Confirmado 2026-08-06: solo los créditos AVAILABLE cuentan para el saldo
@@ -21,7 +27,7 @@ export async function getAvailableCreditsForSupplier(supplierId: string): Promis
     where: { supplierId, status: "AVAILABLE" },
     orderBy: { createdAt: "asc" },
   });
-  return credits.map((c) => ({ id: c.id, amount: c.amount, reason: c.reason, status: c.status, createdAt: c.createdAt.toISOString() }));
+  return credits.map((c) => ({ id: c.id, amount: c.amount, reason: c.reason, status: c.status, createdAt: c.createdAt.toISOString(), proofUrl: c.proofUrl, proofName: c.proofName }));
 }
 
 // Confirmado 2026-08-12: pedido explícito del usuario — al solicitar una
@@ -74,7 +80,7 @@ export async function getReservedCreditsForGroup(groupId: string): Promise<Suppl
     where: { reservedForGroupId: groupId, status: "RESERVED" },
     orderBy: { createdAt: "asc" },
   });
-  return credits.map((c) => ({ id: c.id, amount: c.amount, reason: c.reason, status: c.status, createdAt: c.createdAt.toISOString() }));
+  return credits.map((c) => ({ id: c.id, amount: c.amount, reason: c.reason, status: c.status, createdAt: c.createdAt.toISOString(), proofUrl: c.proofUrl, proofName: c.proofName }));
 }
 
 // Confirmado 2026-09-04: pedido explícito del usuario (Bryan) — una vez
@@ -88,7 +94,7 @@ export async function getAppliedCreditsForGroup(groupId: string): Promise<Suppli
     where: { appliedToGroupId: groupId, status: "APPLIED" },
     orderBy: { createdAt: "asc" },
   });
-  return credits.map((c) => ({ id: c.id, amount: c.amount, reason: c.reason, status: c.status, createdAt: c.createdAt.toISOString() }));
+  return credits.map((c) => ({ id: c.id, amount: c.amount, reason: c.reason, status: c.status, createdAt: c.createdAt.toISOString(), proofUrl: c.proofUrl, proofName: c.proofName }));
 }
 
 // Confirmado 2026-08-12: si la solicitud se rechaza por completo, cualquier
