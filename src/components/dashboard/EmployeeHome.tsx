@@ -8,14 +8,14 @@ import { RecognitionPodium } from "@/components/recognition/RecognitionPodium";
 import { ScoreGauge } from "./ScoreGauge";
 import { WeeklyTrendChart } from "./WeeklyTrendChart";
 import { CommissionProgressCard } from "./CommissionProgressCard";
-import { KpiTile, FillRateTile, ReturnRateTile, WarrantyMonthTile } from "./KpiTile";
+import { FillRateTile, ReturnRateTile, WarrantyMonthTile } from "./KpiTile";
 import { FillRateBreakdownCard } from "./FillRateBreakdownCard";
 import { StoreFeedbackTile } from "./StoreFeedbackTile";
 import { StockoutBarChart } from "./StockoutBarChart";
-import { PieChart } from "./PieChart";
+import { WarrantyReasonCard } from "./WarrantyReasonCard";
 import { OrgChart } from "./OrgChart";
 import { InventoryKpisHomeCard } from "./InventoryKpisHomeCard";
-import type { DashboardRow, WeeklyTrend, StockoutWeekPoint, WarrantyMonthlyChart, PieSlice, FillRateBreakdown, CommissionProgress } from "@/lib/dashboard";
+import type { DashboardRow, WeeklyTrend, StockoutWeekPoint, WarrantyMonthlyChart, PieSlice, WarrantyReasonTrendSeries, FillRateBreakdown, CommissionProgress } from "@/lib/dashboard";
 import type { StoreFeedbackAggregate, StoreFeedbackStoreDetail, StoreFeedbackTrendPoint } from "@/lib/storeFeedback";
 import type { DuePeriodicReminderDTO } from "@/lib/periodicReminders";
 import { formatDateTime } from "@/lib/formatDateTime";
@@ -60,6 +60,7 @@ export function EmployeeHome({
   stockoutWeeks,
   warrantyMonthlyChart,
   warrantyReasonChart,
+  warrantyReasonTrend = [],
   storeFeedback,
   storeFeedbackTrend = [],
   storeFeedbackDetails,
@@ -87,6 +88,7 @@ export function EmployeeHome({
   stockoutWeeks?: StockoutWeekPoint[];
   warrantyMonthlyChart?: WarrantyMonthlyChart | null;
   warrantyReasonChart?: PieSlice[];
+  warrantyReasonTrend?: WarrantyReasonTrendSeries[];
   storeFeedback?: StoreFeedbackAggregate | null;
   storeFeedbackTrend?: StoreFeedbackTrendPoint[];
   storeFeedbackDetails?: StoreFeedbackStoreDetail[];
@@ -167,13 +169,7 @@ export function EmployeeHome({
           )}
 
           {warrantyReasonChart && warrantyReasonChart.length > 0 && (
-            <KpiTile
-              kicker="Motivos que más se repiten"
-              value={String(warrantyReasonChart.reduce((a, s) => a + s.value, 0))}
-              period="Últimos 12 meses"
-            >
-              <PieChart compact title="Motivos que más se repiten" slices={warrantyReasonChart} emptyMessage="Aún no hay suficiente historial." />
-            </KpiTile>
+            <WarrantyReasonCard slices={warrantyReasonChart} trend={warrantyReasonTrend} />
           )}
 
           {fillRateTrend && <FillRateTile trend={fillRateTrend} />}

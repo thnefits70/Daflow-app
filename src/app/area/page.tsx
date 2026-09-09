@@ -10,6 +10,7 @@ import {
   getDashboardData,
   getWarrantyMonthlyChart,
   getWarrantyReasonChart,
+  getWarrantyReasonMonthlyTrend,
   getCommissionProgress,
 } from "@/lib/dashboard";
 import { getStoreFeedbackAggregate, getStoreFeedbackTrend, getStoreFeedbackStoreDetails } from "@/lib/storeFeedback";
@@ -39,6 +40,7 @@ export default async function AreaHomePage() {
     dashboardData,
     warrantyMonthlyChart,
     warrantyReasonChart,
+    warrantyReasonTrend,
     storeFeedback,
     storeFeedbackTrend,
     duePeriodicReminders,
@@ -63,6 +65,7 @@ export default async function AreaHomePage() {
     getDashboardData(),
     getWarrantyMonthlyChart(),
     getWarrantyReasonChart(),
+    getWarrantyReasonMonthlyTrend(),
     getStoreFeedbackAggregate(),
     getStoreFeedbackTrend(),
     getDuePeriodicReminders({ deptId, userId: session.user.id }),
@@ -104,6 +107,7 @@ export default async function AreaHomePage() {
       stockoutWeeks={stockoutWeeks}
       warrantyMonthlyChart={warrantyMonthlyChart}
       warrantyReasonChart={warrantyReasonChart}
+      warrantyReasonTrend={warrantyReasonTrend}
       storeFeedback={storeFeedback}
       storeFeedbackTrend={storeFeedbackTrend}
       storeFeedbackDetails={storeFeedbackDetails}

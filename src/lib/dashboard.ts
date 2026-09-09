@@ -418,3 +418,42 @@ export async function getWarrantyReasonChart(): Promise<PieSlice[]> {
     })
     .sort((a, b) => b.value - a.value);
 }
+
+export type WarrantyReasonTrendSeries = { label: string; points: { month: string; value: number }[] };
+
+// Pedido de Daniel 2026-09-09: no solo saber CUÁL motivo se repite más (eso
+// ya lo dice getWarrantyReasonChart arriba), sino cómo se ha movido cada uno
+// MES A MES — una línea por motivo. `value` es el % que representó ese
+// motivo del total de garantías de ese mes (no el conteo crudo), mismo
+// criterio de "share" que ya usa el trend up/down de arriba, para que un mes
+// con más volumen general no se vea como que todos los motivos "subieron".
+export async function getWarrantyReasonMonthlyTrend(): Promise<WarrantyReasonTrendSeries[]> {
+  const months = last12Months();
+
+  const counts = await prisma.warrantyCategoryMonthCount.findMany({
+    where: { month: { in: months } },
+    include: { category: { select: { name: true } } },
+  });
+  if (counts.length === 0) return [];
+
+  const distinctMonths = [...new Set(counts.map((c) => c.month))].sort();
+  if (distinctMonths.length < 2) return [];
+
+  const totalByMonth = new Map<string, number>();
+  for (const c of counts) totalByMonth.set(c.month, (totalByMonth.get(c.month) ?? 0) + c.count);
+
+  const countByLabelMonth = new Map<string, Map<string, number>>();
+  for (const c of counts) {
+    if (!countByLabelMonth.has(c.category.name)) countByLabelMonth.set(c.category.name, new Map());
+    countByLabelMonth.get(c.category.name)!.set(c.month, c.count);
+  }
+
+  return [...countByLabelMonth.entries()].map(([label, byMonth]) => ({
+    label,
+    points: distinctMonths.map((month) => {
+      const monthTotal = totalByMonth.get(month) ?? 0;
+      const count = byMonth.get(month) ?? 0;
+      return { month, value: monthTotal > 0 ? Math.round((count / monthTotal) * 1000) / 10 : 0 };
+    }),
+  }));
+}

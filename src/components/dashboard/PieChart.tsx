@@ -6,7 +6,9 @@ import type { PieSlice } from "@/lib/dashboard";
 import { formatMonthShort } from "./WeeklyTrendChart";
 
 // DAFLOW brand-friendly palette, cycles if there are more categories than colors.
-const PALETTE = ["#14C7C7", "#1E5EFF", "#D9A441", "#C4453A", "#8B5CF6", "#22C55E", "#EC4899", "#F97316"];
+// Exported so WarrantyReasonTrendChart can assign the exact same color per
+// category as this pie — as long as callers pass slices in the same order.
+export const PALETTE = ["#14C7C7", "#1E5EFF", "#D9A441", "#C4453A", "#8B5CF6", "#22C55E", "#EC4899", "#F97316"];
 
 // Compares each category's SHARE of the total (not raw count) between the
 // two halves of the trailing-12-month window — see getWarrantyReasonChart().
