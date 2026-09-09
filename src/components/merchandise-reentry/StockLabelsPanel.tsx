@@ -93,8 +93,9 @@ export function StockLabelsPanel() {
         {filtered.map((i) => (
           <label key={i.id} className="flex items-center gap-2 text-[12.5px] px-2 py-1 rounded hover:bg-cloud cursor-pointer">
             <input type="checkbox" checked={selected.has(i.id)} onChange={() => toggle(i.id)} />
-            <span className="flex-1">{i.name}</span>
-            <span className="text-steel font-mono text-[11px]">{stockCodeFor(i)}</span>
+            <span className="flex-1">
+              {i.name} <span className="text-steel font-mono text-[11px]">({stockCodeFor(i)})</span>
+            </span>
           </label>
         ))}
       </div>
