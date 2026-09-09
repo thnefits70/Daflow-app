@@ -3,7 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { canReceivePurchasesTeam, canActOnPurchaseReceiving, getInventoryLeadId } from "@/lib/guards";
-import { sendPushToOwner } from "@/lib/webPush";
+import { notifyOwner } from "@/lib/notifications";
 import { isWithinCreditClaimWindow } from "@/lib/purchaseUrgent";
 
 const schema = z.object({
@@ -98,7 +98,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // solo se avisa a Daniel que tiene algo pendiente.
   const leadId = await getInventoryLeadId();
   if (leadId) {
-    await sendPushToOwner(leadId, {
+    // Confirmado 2026-09-09: mismo fix que receipt/route.ts — antes era solo
+    // push (se pierde en silencio), ahora también queda en la campanita.
+    await notifyOwner(leadId, {
       title: "🚨 Reporte urgente pendiente de tu revisión",
       body: `${existing.catalogItem.name} — ${totalAffected} un. afectadas.`,
       url: "/area/workspace?tab=compras&ptab=inventario",

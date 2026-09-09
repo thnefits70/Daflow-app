@@ -3,7 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { canReceivePurchasesTeam, getInventoryLeadId } from "@/lib/guards";
-import { sendPushToOwner } from "@/lib/webPush";
+import { notifyOwner } from "@/lib/notifications";
 import { nextLateClaimNumber, formatLateClaimCode } from "@/lib/lateDamageClaims";
 
 const schema = z.object({
@@ -61,7 +61,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const leadId = await getInventoryLeadId();
   if (leadId) {
-    await sendPushToOwner(leadId, {
+    // Confirmado 2026-09-09: mismo fix que receipt/route.ts — antes era solo
+    // push (se pierde en silencio), ahora también queda en la campanita.
+    await notifyOwner(leadId, {
       title: "📦 Reclamo posterior al cierre pendiente de tu revisión",
       body: `${existing.catalogItem.name} — ${parsed.data.damagedQty} un. · ${claim.lateClaimCode}`,
       url: "/area/workspace?tab=compras&ptab=inventario",

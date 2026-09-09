@@ -424,6 +424,9 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   reingreso_mercaderia_baja_just: "Reingreso de mercadería — semana de dañados por dar de baja en Just",
   reingreso_mercaderia_verificacion_semanal: "Reingreso de mercadería — lote semanal de dañados por verificar",
   guias_canceladas_reingreso: "Guías canceladas — reingresar mercadería a Just",
+  egresos_baja_just: "Registro de Egresos — confirmar baja en Just",
+  egresos_deterioro_resolucion: "Deterioro en bodega — falta tu decisión",
+  ventas_externas_agrupar: "Ventas Externas — asignar quién agrupa",
   cumpleanos: "Cumpleaños de tu equipo (aviso 1 día antes)",
   compras_pendientes_aprobacion: "Solicitudes de compra por aprobar",
   compras_rechazadas: "Tus solicitudes de compra rechazadas — corregir y reenviar",
@@ -1992,6 +1995,91 @@ async function getCancelledGuidesReingresoPendingItem(href: string): Promise<Pen
   };
 }
 
+// Confirmado 2026-09-09: pedido explícito de Daniel, mismo hallazgo que las
+// guías canceladas — "Dar de baja en Just" (ver writeoff-queue/route.ts) es
+// la cola maestra de TODO lo que sale de bodega sin importar el motivo
+// (despacho, garantía, deterioro ya resuelto como WRITE_OFF, cambio con
+// proveedor, venta externa, compra personal) y antes solo se avisaba con
+// notifyInventoryLeadOutflowPending (un aviso puntual por lote) sin ninguna
+// tarjeta fija en Inicio — la más grande de las tres colas que faltaban.
+async function getMerchandiseOutflowWriteOffPendingItem(href: string): Promise<PendingItem | null> {
+  const rows = await prisma.merchandiseOutflowBatch.findMany({
+    where: {
+      justWrittenOffAt: null,
+      OR: [
+        { reason: { in: ["DESPACHO", "GARANTIA", "COMPRA_PERSONAL", "CAMBIO_PROVEEDOR", "VENTA_EXTERNA"] }, submittedAt: { not: null } },
+        { reason: "DETERIORO", items: { some: { resolution: "WRITE_OFF" } } },
+      ],
+    },
+    select: { code: true, submittedAt: true, createdAt: true },
+  });
+  if (rows.length === 0) return null;
+
+  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const overdue = rows.some((r) => (r.submittedAt ?? r.createdAt) < cutoff);
+  return {
+    type: "egresos_baja_just",
+    icon: "🗑️",
+    label: "Registro de Egresos — confirmar baja en Just",
+    meta: `${rows.length === 1 ? rows[0].code : `${rows.length} lotes`}${overdue ? " · atrasado" : ""}`,
+    overdue,
+    href,
+  };
+}
+
+// Confirmado 2026-09-09: pedido explícito de Daniel — el reporte de un
+// producto encontrado dañado en bodega (no una devolución) le avisa solo con
+// notifyOwner puntual (ver deterioro/route.ts), pero mientras Daniel no
+// decide (solucionado / dar de baja / escalar a Compras) no queda nada
+// recordándoselo en Inicio.
+async function getDeteriorResolutionPendingItem(href: string): Promise<PendingItem | null> {
+  const rows = await prisma.merchandiseOutflowItem.findMany({
+    where: { batch: { reason: "DETERIORO" }, resolution: null },
+    select: { batch: { select: { createdAt: true } } },
+  });
+  if (rows.length === 0) return null;
+
+  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const overdue = rows.some((r) => r.batch.createdAt < cutoff);
+  return {
+    type: "egresos_deterioro_resolucion",
+    icon: "⚠️",
+    label: "Deterioro en bodega — falta tu decisión",
+    meta: `${rows.length === 1 ? "1 producto" : `${rows.length} productos`}${overdue ? " · atrasado" : ""}`,
+    overdue,
+    href,
+  };
+}
+
+// Confirmado 2026-09-09: pedido explícito de Daniel — misma condición exacta
+// que /api/external-sales/pending-dispatch (ventas aprobadas por Bryan, y en
+// pago anticipado ya facturadas por Nairoby, esperando que Daniel asigne a
+// quién de su equipo agrupa) — antes solo llegaba como aviso puntual
+// (notifyInventoryLeadExternalSaleApproved/Invoiced en externalSales.ts).
+async function getExternalSaleDispatchPendingItem(href: string): Promise<PendingItem | null> {
+  const rows = await prisma.externalSale.findMany({
+    where: {
+      reviewStatus: "APPROVED",
+      dispatchAssignedToId: null,
+      deletedAt: null,
+      OR: [{ isContraEntrega: true }, { invoiceUploadedAt: { not: null } }],
+    },
+    select: { code: true, reviewedAt: true, createdAt: true },
+  });
+  if (rows.length === 0) return null;
+
+  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const overdue = rows.some((r) => (r.reviewedAt ?? r.createdAt) < cutoff);
+  return {
+    type: "ventas_externas_agrupar",
+    icon: "📦",
+    label: "Ventas Externas — asignar quién agrupa",
+    meta: `${rows.length === 1 ? rows[0].code : `${rows.length} ventas`}${overdue ? " · atrasado" : ""}`,
+    overdue,
+    href,
+  };
+}
+
 // Confirmado 2026-08-21: pedido explícito del usuario — acceso directo para
 // Daniel cuando ya pasó el corte del sábado de una semana y todavía le
 // falta dar de baja en Just el acumulado de productos "no solucionados"
@@ -2568,7 +2656,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
   }
 
   if (me.leadsDept.code === "INV") {
-    const [stockoutItem, receivingItem, replacementItem, inventoryControlItem, inventoryWeeklySnapshotItem, merchandiseReentryItem, merchandiseWeeklyJustItem, personalPurchaseInventoryItem, lateClaimReviewItem, lateClaimJustItem, urgentUnresolvedItem, nichoBackfillItem, monthlyTopMoversItem, cancelledGuidesReingresoItem] = await Promise.all([
+    const [stockoutItem, receivingItem, replacementItem, inventoryControlItem, inventoryWeeklySnapshotItem, merchandiseReentryItem, merchandiseWeeklyJustItem, personalPurchaseInventoryItem, lateClaimReviewItem, lateClaimJustItem, urgentUnresolvedItem, nichoBackfillItem, monthlyTopMoversItem, cancelledGuidesReingresoItem, outflowWriteOffItem, deteriorResolutionItem, externalSaleDispatchItem] = await Promise.all([
       getStockoutPendingItem("/area/kpis-generales"),
       getPurchaseReceivingPendingItem("/area/workspace?tab=compras&ptab=inventario"),
       getPurchaseReplacementVerificationPendingItem("/area/workspace?tab=compras&ptab=inventario"),
@@ -2583,6 +2671,9 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       getNichoBackfillPendingItem("/area/reingreso-mercaderia?tab=productos"),
       getMonthlyTopMoversPendingItem("/area/kpis-generales"),
       getCancelledGuidesReingresoPendingItem("/area/workspace?tab=egresos&otab=guias"),
+      getMerchandiseOutflowWriteOffPendingItem("/area/workspace?tab=egresos&otab=baja"),
+      getDeteriorResolutionPendingItem("/area/workspace?tab=egresos&otab=deterioro"),
+      getExternalSaleDispatchPendingItem("/area/workspace?tab=ventas-externas&etab=despacho"),
     ]);
     if (stockoutItem) items.push(stockoutItem);
     if (receivingItem) items.push(receivingItem);
@@ -2598,6 +2689,9 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     if (nichoBackfillItem) items.push(nichoBackfillItem);
     if (monthlyTopMoversItem) items.push(monthlyTopMoversItem);
     if (cancelledGuidesReingresoItem) items.push(cancelledGuidesReingresoItem);
+    if (outflowWriteOffItem) items.push(outflowWriteOffItem);
+    if (deteriorResolutionItem) items.push(deteriorResolutionItem);
+    if (externalSaleDispatchItem) items.push(externalSaleDispatchItem);
 
     const justWriteOffItem = await getSupplierExchangeJustWriteOffPendingItem("/area/workspace?tab=egresos&otab=proveedor");
     if (justWriteOffItem) items.push(justWriteOffItem);
@@ -2698,7 +2792,7 @@ export async function getPossiblePendingTypesForActor(
     }
     if (me.leadsDept.trackWeeklyMetric) types.push("pedidos_despachados", "fillrate_justificacion_pendiente");
     if (me.leadsDept.code === "INV") {
-      types.push("ruptura_stock", "compras_recepcion", "compras_cambios_verificar", "control_inventario", "control_inventario_semanal", "reingreso_mercaderia_revision", "reingreso_mercaderia_baja_just", "compras_personales_confirmar", "compras_reclamo_posterior_revision", "compras_reclamo_posterior_just", "combo_sugerencias_nicho_backfill", "monthly_top_movers", "guias_canceladas_reingreso");
+      types.push("ruptura_stock", "compras_recepcion", "compras_cambios_verificar", "control_inventario", "control_inventario_semanal", "reingreso_mercaderia_revision", "reingreso_mercaderia_baja_just", "compras_personales_confirmar", "compras_reclamo_posterior_revision", "compras_reclamo_posterior_just", "combo_sugerencias_nicho_backfill", "monthly_top_movers", "guias_canceladas_reingreso", "egresos_baja_just", "egresos_deterioro_resolucion", "ventas_externas_agrupar");
     }
     // Mismo criterio de elegibilidad que canSubmitPurchaseRequests
     // (guards.ts) — delegado vía canManagePurchases, o líder de COM/FIN —
