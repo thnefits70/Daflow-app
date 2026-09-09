@@ -73,6 +73,22 @@ export function StockLabelsPanel() {
         </button>
       </div>
 
+      <label className="flex items-center gap-2 text-[12.5px] px-2 py-1 mb-1 rounded hover:bg-cloud cursor-pointer print:hidden">
+        <input
+          type="checkbox"
+          checked={filtered.length > 0 && filtered.every((i) => selected.has(i.id))}
+          onChange={(e) => {
+            setSelected((prev) => {
+              const next = new Set(prev);
+              if (e.target.checked) filtered.forEach((i) => next.add(i.id));
+              else filtered.forEach((i) => next.delete(i.id));
+              return next;
+            });
+          }}
+        />
+        <span className="font-semibold text-steel">Marcar todo{query.trim() ? " (resultados)" : ""}</span>
+      </label>
+
       <div className="max-h-64 overflow-y-auto flex flex-col gap-1 print:hidden">
         {filtered.map((i) => (
           <label key={i.id} className="flex items-center gap-2 text-[12.5px] px-2 py-1 rounded hover:bg-cloud cursor-pointer">
