@@ -115,6 +115,56 @@ export function MarketProductPanel({
   );
 }
 
+// Confirmado 2026-09-10, pedido explícito del usuario: con muchos
+// proveedores, el <select> nativo obligaba a scrollear una lista larga —
+// esto filtra en vivo por lo que se va escribiendo, mismo patrón de
+// buscar+elegir que ya usan ProductMatchPicker/ClientMatchPicker.
+function SupplierSelect({ suppliers, value, onChange }: { suppliers: SupplierOption[]; value: string; onChange: (id: string) => void }) {
+  const [query, setQuery] = useState("");
+  const [open, setOpen] = useState(false);
+  const selected = suppliers.find((s) => s.id === value) ?? null;
+  const filtered = query.trim() ? suppliers.filter((s) => s.name.toLowerCase().includes(query.toLowerCase())) : suppliers;
+
+  if (selected && !open) {
+    return (
+      <div className="flex items-center justify-between gap-2 rounded border border-rule px-2.5 py-1.5 text-[13px] mb-2 bg-surface">
+        <span className="truncate">{selected.name}{selected.paymentMode === "CREDITO" ? " (crédito)" : ""}</span>
+        <button type="button" className="text-[11px] font-semibold text-blue cursor-pointer shrink-0" onClick={() => { setOpen(true); setQuery(""); }}>
+          Cambiar
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative mb-2">
+      <input
+        className="w-full rounded border border-rule px-2.5 py-1.5 text-[13px]"
+        placeholder="Buscar proveedor…"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+      />
+      {open && (
+        <div className="absolute z-10 mt-1 w-full max-h-48 overflow-y-auto rounded border border-rule bg-surface shadow-lg">
+          {filtered.length === 0 && <div className="px-2.5 py-2 text-[12px] text-steel">Sin resultados.</div>}
+          {filtered.map((s) => (
+            <button
+              key={s.id}
+              type="button"
+              className="w-full text-left px-2.5 py-1.5 text-[13px] hover:bg-cloud cursor-pointer"
+              onMouseDown={(e) => { e.preventDefault(); onChange(s.id); setOpen(false); setQuery(""); }}
+            >
+              {s.name}{s.paymentMode === "CREDITO" ? " (crédito)" : ""}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ---------------- Paso 1: Proponer (Jariel) ----------------
 function ProposeForm() {
   const [suppliers, setSuppliers] = useState<SupplierOption[]>([]);
@@ -291,10 +341,7 @@ function ProposeForm() {
 
       <div className="mb-3 bg-cloud border border-rule rounded-md p-3">
         <div className="text-[12px] font-semibold text-steel mb-2">Proveedor 1 (obligatorio)</div>
-        <select className="w-full rounded border border-rule px-2.5 py-1.5 text-[13px] mb-2" value={primarySupplierId} onChange={(e) => setPrimarySupplierId(e.target.value)}>
-          <option value="">Selecciona un proveedor</option>
-          {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}{s.paymentMode === "CREDITO" ? " (crédito)" : ""}</option>)}
-        </select>
+        <SupplierSelect suppliers={suppliers} value={primarySupplierId} onChange={setPrimarySupplierId} />
         <div className="grid grid-cols-3 gap-2">
           <input className="rounded border border-rule px-2.5 py-1.5 text-[13px]" placeholder="Costo unitario (USD)" type="number" step="0.01" value={primaryCost} onChange={(e) => setPrimaryCost(e.target.value)} />
           <input className="rounded border border-rule px-2.5 py-1.5 text-[13px]" placeholder="Unidades del lote" type="number" value={primaryUnits} onChange={(e) => setPrimaryUnits(e.target.value)} />
@@ -308,10 +355,7 @@ function ProposeForm() {
             <span className="text-[12px] font-semibold text-steel">Proveedor 2 (opcional)</span>
             <button type="button" className="text-[11px] text-steel underline decoration-dotted cursor-pointer" onClick={() => setAddSecondary(false)}>Quitar</button>
           </div>
-          <select className="w-full rounded border border-rule px-2.5 py-1.5 text-[13px] mb-2" value={secondarySupplierId} onChange={(e) => setSecondarySupplierId(e.target.value)}>
-            <option value="">Selecciona un proveedor</option>
-            {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}{s.paymentMode === "CREDITO" ? " (crédito)" : ""}</option>)}
-          </select>
+          <SupplierSelect suppliers={suppliers} value={secondarySupplierId} onChange={setSecondarySupplierId} />
           <div className="grid grid-cols-3 gap-2">
             <input className="rounded border border-rule px-2.5 py-1.5 text-[13px]" placeholder="Costo unitario (USD)" type="number" step="0.01" value={secondaryCost} onChange={(e) => setSecondaryCost(e.target.value)} />
             <input className="rounded border border-rule px-2.5 py-1.5 text-[13px]" placeholder="Unidades del lote" type="number" value={secondaryUnits} onChange={(e) => setSecondaryUnits(e.target.value)} />
