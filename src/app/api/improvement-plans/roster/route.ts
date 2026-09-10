@@ -21,5 +21,5 @@ export async function GET(req: NextRequest) {
 
   if (!(await canManageImprovementPlan(deptId))) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
-  return NextResponse.json(await getDeptRosterWithImprovementPlanStatus(deptId, session.user.id));
+  return NextResponse.json(await getDeptRosterWithImprovementPlanStatus(deptId, session.user.role === "admin"));
 }

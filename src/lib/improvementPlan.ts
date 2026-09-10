@@ -220,14 +220,14 @@ export type ImprovementPlanRosterEntryDTO = {
 
 // Roster del equipo con el estado de su plan (si tiene uno activo) — usado
 // por ImprovementPlanTeamPanel para decidir a quién ofrecer "Iniciar plan"
-// vs. a quién llevar directo al detalle de su plan en curso. Confirmado
-// 2026-09-10: SÍ puede incluir a otro líder del mismo equipo (un área puede
-// tener más de un líder) — lo único que se excluye es a quien está haciendo
-// la petición, para que nadie se abra un plan a sí mismo.
-export async function getDeptRosterWithImprovementPlanStatus(deptId: string, excludeUserId: string): Promise<ImprovementPlanRosterEntryDTO[]> {
+// vs. a quién llevar directo al detalle de su plan en curso. Corregido
+// 2026-09-10: un líder NUNCA puede abrirle un plan a otro líder (ni a sí
+// mismo) — el desempeño de los líderes lo maneja el admin directamente, no
+// entre pares. Solo el admin ve también a los líderes en este listado.
+export async function getDeptRosterWithImprovementPlanStatus(deptId: string, includeLeaders: boolean): Promise<ImprovementPlanRosterEntryDTO[]> {
   const [members, activePlans] = await Promise.all([
     prisma.user.findMany({
-      where: { deptId, isActive: true, id: { not: excludeUserId } },
+      where: { deptId, isActive: true, ...(includeLeaders ? {} : { isLeader: false }) },
       select: { id: true, name: true },
       orderBy: { name: "asc" },
     }),

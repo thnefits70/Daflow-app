@@ -40,12 +40,20 @@ export async function POST(req: NextRequest) {
 
   const collaborator = await prisma.user.findUnique({
     where: { id: parsed.data.collaboratorId },
-    select: { id: true, deptId: true },
+    select: { id: true, deptId: true, isLeader: true },
   });
   if (!collaborator?.deptId) return NextResponse.json({ error: "Colaborador no encontrado." }, { status: 404 });
 
   if (!(await canManageImprovementPlan(collaborator.deptId))) {
     return NextResponse.json({ error: "No autorizado para abrir un plan en ese equipo." }, { status: 403 });
+  }
+
+  // Un líder nunca puede abrirle un plan a otro líder (ni a sí mismo) — el
+  // desempeño de los líderes lo maneja el admin directamente, no entre
+  // pares. No basta con ocultarlo en el listado del roster: se valida acá
+  // también para que nadie lo dispare mandando el id directo.
+  if (collaborator.isLeader && session.user.role !== "admin") {
+    return NextResponse.json({ error: "Solo el admin puede abrir un Plan de Mejora a un líder." }, { status: 403 });
   }
 
   const existingActive = await prisma.improvementPlan.findFirst({
