@@ -150,6 +150,22 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(rows);
   }
 
+  // Confirmado 2026-09-10, pedido de Jariel: tabla de historial de precios
+  // — un registro por producto (sin importar a cuántos proveedores le
+  // compremos, se usa el proveedor principal), pensada más que nada para
+  // consultar cómo se armó el precio de venta. Cualquier estado, no solo
+  // aprobados — sirve de referencia desde el momento en que se propone.
+  if (view === "pricing") {
+    if (!(await canProposeMarketProduct()) && !(await canReviewMarketProduct())) {
+      return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+    }
+    const rows = await prisma.marketProductProposal.findMany({
+      include: includeFull,
+      orderBy: { proposedAt: "desc" },
+    });
+    return NextResponse.json(rows);
+  }
+
   if (view === "review") {
     if (!(await canReviewMarketProduct())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
     const rows = await prisma.marketProductProposal.findMany({

@@ -64,7 +64,7 @@ function computePreviewPrice(batchCost: number, batchUnits: number, freightCost:
   return (unitCost + fulfillment) / (1 - margin / 100);
 }
 
-type Tab = "proponer" | "mispropuestas" | "aprobacion" | "publicar" | "brandear" | "trazabilidad";
+type Tab = "proponer" | "mispropuestas" | "precios" | "aprobacion" | "publicar" | "brandear" | "trazabilidad";
 
 export function MarketProductPanel({
   canPropose,
@@ -88,6 +88,10 @@ export function MarketProductPanel({
     // antes GET ?view=mine existía en la API pero ninguna pantalla lo
     // consumía.
     ...(canPropose ? [{ key: "mispropuestas" as Tab, label: "Mis propuestas" }] : []),
+    // Confirmado 2026-09-10, pedido de Jariel: tabla de historial de
+    // precios — un registro por producto, para consultar cómo se armó el
+    // precio de venta. Visible a quien propone y a quien revisa.
+    ...(canPropose || canReview ? [{ key: "precios" as Tab, label: "Historial de precios" }] : []),
     ...(canReview ? [{ key: "aprobacion" as Tab, label: "Aprobación" }] : []),
     ...(canPublish ? [{ key: "publicar" as Tab, label: "Publicar en Dropi" }] : []),
     ...(canBrand ? [{ key: "brandear" as Tab, label: "Brandear" }] : []),
@@ -113,6 +117,7 @@ export function MarketProductPanel({
       </div>
       {tab === "proponer" && <ProposeForm />}
       {tab === "mispropuestas" && <MyProposalsView />}
+      {tab === "precios" && <PricingHistoryTable />}
       {tab === "aprobacion" && <ReviewQueue canAct={canActOnReview} />}
       {tab === "publicar" && <PublishQueue />}
       {tab === "brandear" && <BrandQueue />}
@@ -625,6 +630,79 @@ function BrandQueue() {
 }
 
 // ---------------- Paso 5: Trazabilidad + decisión de compra (Bryan) ----------------
+// Confirmado 2026-09-10, pedido explícito de Jariel: tabla de historial de
+// precios al estilo del Excel que ya usaban en Drive — UN registro por
+// producto (sin importar a cuántos proveedores le compremos, se muestra el
+// proveedor principal), pensada más que nada para ver cómo se armó el
+// precio de venta. Reusa GET ?view=pricing (todo estado, no solo
+// aprobados) — mismos datos que ya guarda Análisis de Mercado, sin tocar
+// la base de datos.
+function PricingHistoryTable() {
+  const [rows, setRows] = useState<Proposal[] | null>(null);
+  const [query, setQuery] = useState("");
+
+  useEffect(() => {
+    fetch("/api/market-products?view=pricing").then((r) => (r.ok ? r.json() : [])).then(setRows).catch(() => setRows([]));
+  }, []);
+
+  if (rows === null) return <div className="text-steel text-[13px]">Cargando…</div>;
+
+  const filtered = query.trim() ? rows.filter((p) => p.productName.toLowerCase().includes(query.toLowerCase())) : rows;
+
+  return (
+    <div>
+      <input
+        className="w-full max-w-sm rounded border border-rule px-2.5 py-1.5 text-[13px] mb-3"
+        placeholder="Buscar producto…"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+      />
+      <div className="overflow-x-auto rounded-md border border-rule">
+        <table className="w-full text-[12px] whitespace-nowrap">
+          <thead className="sticky top-0 bg-cloud">
+            <tr>
+              <th className="text-left px-2.5 py-1.5 font-semibold text-steel">ID</th>
+              <th className="text-left px-2.5 py-1.5 font-semibold text-steel">Producto</th>
+              <th className="text-left px-2.5 py-1.5 font-semibold text-steel">Proveedor</th>
+              <th className="text-right px-2.5 py-1.5 font-semibold text-steel">Costo unit.</th>
+              <th className="text-right px-2.5 py-1.5 font-semibold text-steel">Cantidad</th>
+              <th className="text-right px-2.5 py-1.5 font-semibold text-steel">Fulfillment</th>
+              <th className="text-right px-2.5 py-1.5 font-semibold text-steel">Seguro %</th>
+              <th className="text-right px-2.5 py-1.5 font-semibold text-steel">Margen %</th>
+              <th className="text-right px-2.5 py-1.5 font-semibold text-steel">PVP</th>
+              <th className="text-right px-2.5 py-1.5 font-semibold text-steel">Utilidad</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map((p) => {
+              const primary = p.supplierPrices.find((sp) => sp.isPrimary) ?? p.supplierPrices[0] ?? null;
+              if (!primary) return null;
+              const unitCost = (primary.batchCost + (primary.freightCost ?? 0) / primary.batchUnits) * (1 + p.insuranceRatePercent / 100);
+              const costWithoutProfit = unitCost + p.fulfillmentCost;
+              const profit = p.calculatedSalePrice - costWithoutProfit;
+              return (
+                <tr key={p.id} className="border-t border-rule">
+                  <td className="px-2.5 py-1.5 font-mono text-teal">{p.dropiProductId ?? p.code}</td>
+                  <td className="px-2.5 py-1.5">{p.productName}</td>
+                  <td className="px-2.5 py-1.5">{primary.supplier.name}</td>
+                  <td className="px-2.5 py-1.5 text-right tabular-nums">{money(primary.batchCost)}</td>
+                  <td className="px-2.5 py-1.5 text-right tabular-nums">{primary.batchUnits}</td>
+                  <td className="px-2.5 py-1.5 text-right tabular-nums">{money(p.fulfillmentCost)}</td>
+                  <td className="px-2.5 py-1.5 text-right tabular-nums">{p.insuranceRatePercent}%</td>
+                  <td className="px-2.5 py-1.5 text-right tabular-nums">{p.marginPercent}%</td>
+                  <td className="px-2.5 py-1.5 text-right tabular-nums font-bold text-ink">{money(p.calculatedSalePrice)}</td>
+                  <td className="px-2.5 py-1.5 text-right tabular-nums font-semibold text-green">{money(profit)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        {filtered.length === 0 && <div className="px-3 py-4 text-[12.5px] text-steel">Sin resultados.</div>}
+      </div>
+    </div>
+  );
+}
+
 const PROPOSAL_STATUS_LABEL: Record<Proposal["status"], { text: string; color: string }> = {
   PENDING_APPROVAL: { text: "Esperando aprobación de Bryan", color: "text-gold" },
   REJECTED: { text: "Rechazado", color: "text-red" },
