@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Upload, CheckCircle2, AlertTriangle, Clock, Search, ChevronDown, ChevronUp, Pencil, Check, X } from "lucide-react";
 import { uploadFile } from "@/lib/uploadFile";
 import { CatalogCode, CopyCodeButton } from "@/components/shared/CatalogCode";
+import { LegacyUnlinkedItems } from "./LegacyUnlinkedItems";
 
 type CatalogItemDTO = { id: string; name: string; justCode: string | null; photos: string[]; pendingRegistration: boolean };
 type ImportDTO = {
@@ -441,6 +442,7 @@ export function JustCatalogPanel({ canManage }: { canManage: boolean }) {
       {toast && <div className="flex items-center gap-2 text-teal text-[12.5px] bg-teal/10 border border-teal/30 rounded-md px-3 py-2 mb-4"><CheckCircle2 size={14} /> {toast}</div>}
       {err && <div className="text-red text-[12.5px] mb-3">{err}</div>}
 
+      <LegacyUnlinkedItems />
       {canManage && <NichoBackfillButton />}
       {canManage && <MissingReportsQueue />}
 
