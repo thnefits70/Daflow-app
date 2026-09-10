@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { LinkIcon, AlertTriangle } from "lucide-react";
+import { LinkIcon, AlertTriangle, Trash2 } from "lucide-react";
 import { ProductMatchPicker, type ProductMatchResult } from "./ProductMatchPicker";
 
 type LegacyItemDTO = {
@@ -29,6 +29,8 @@ function fmt(iso: string) {
 export function LegacyUnlinkedItems() {
   const [items, setItems] = useState<LegacyItemDTO[] | null>(null);
   const [linkingId, setLinkingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [busyDeleteId, setBusyDeleteId] = useState<string | null>(null);
   const [error, setError] = useState<Record<string, string>>({});
 
   function load() {
@@ -57,6 +59,22 @@ export function LegacyUnlinkedItems() {
     }
   }
 
+  async function confirmDelete(itemId: string) {
+    setBusyDeleteId(itemId);
+    setError((e) => ({ ...e, [itemId]: "" }));
+    try {
+      const res = await fetch(`/api/merchandise-reentry/items/${itemId}/legacy-link`, { method: "DELETE" });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error ?? "No se pudo eliminar.");
+      setDeletingId(null);
+      load();
+    } catch (e) {
+      setError((prev) => ({ ...prev, [itemId]: e instanceof Error ? e.message : "No se pudo eliminar." }));
+    } finally {
+      setBusyDeleteId(null);
+    }
+  }
+
   if (!items || items.length === 0) return null;
 
   return (
@@ -78,14 +96,24 @@ export function LegacyUnlinkedItems() {
                   {item.damagedQty > 0 ? `, ${item.damagedQty} dañadas` : ""}
                 </span>
               </div>
-              {linkingId !== item.id && (
-                <button
-                  type="button"
-                  className="shrink-0 flex items-center gap-1 rounded border border-teal bg-teal px-2.5 py-1 text-[11px] font-bold text-navy cursor-pointer"
-                  onClick={() => setLinkingId(item.id)}
-                >
-                  <LinkIcon size={11} /> Vincular
-                </button>
+              {linkingId !== item.id && deletingId !== item.id && (
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <button
+                    type="button"
+                    className="flex items-center gap-1 rounded border border-teal bg-teal px-2.5 py-1 text-[11px] font-bold text-navy cursor-pointer"
+                    onClick={() => setLinkingId(item.id)}
+                  >
+                    <LinkIcon size={11} /> Vincular
+                  </button>
+                  <button
+                    type="button"
+                    title="No es un producto real — eliminar este renglón"
+                    className="flex items-center gap-1 rounded border border-red/40 text-red px-2.5 py-1 text-[11px] font-bold cursor-pointer hover:bg-red/10"
+                    onClick={() => setDeletingId(item.id)}
+                  >
+                    <Trash2 size={11} /> No es un producto
+                  </button>
+                </div>
               )}
             </div>
             {error[item.id] && <div className="text-red text-[11px] mt-1.5">{error[item.id]}</div>}
@@ -98,6 +126,31 @@ export function LegacyUnlinkedItems() {
                   onConfirm={(result) => confirmLink(item.id, result)}
                   onCancel={() => setLinkingId(null)}
                 />
+              </div>
+            )}
+            {deletingId === item.id && (
+              <div className="mt-2 bg-red/10 border border-red/30 rounded-md p-2.5">
+                <div className="text-[11.5px] mb-2">
+                  ¿Eliminar <b>{item.name}</b> ({item.batchCode}) de forma permanente? No se puede deshacer — úsalo solo cuando el renglón no corresponde a un producto real (ej. una nota, un error de captura).
+                </div>
+                <div className="flex gap-1.5">
+                  <button
+                    type="button"
+                    disabled={busyDeleteId === item.id}
+                    className="rounded border border-red bg-red px-2.5 py-1 text-[11px] font-bold text-white cursor-pointer disabled:opacity-60"
+                    onClick={() => confirmDelete(item.id)}
+                  >
+                    {busyDeleteId === item.id ? "Eliminando…" : "Sí, eliminar"}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busyDeleteId === item.id}
+                    className="rounded border border-rule px-2.5 py-1 text-[11px] font-semibold cursor-pointer disabled:opacity-60"
+                    onClick={() => setDeletingId(null)}
+                  >
+                    Cancelar
+                  </button>
+                </div>
               </div>
             )}
           </div>

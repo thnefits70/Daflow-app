@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireAdminSession, dbUserId } from "@/lib/guards";
+import { maybeMarkBatchClosed } from "@/lib/merchandiseReentry";
 
 const schema = z.object({ catalogItemId: z.string().min(1) });
 
@@ -42,4 +43,26 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   });
 
   return NextResponse.json(updated);
+}
+
+// Confirmado 2026-09-10 (pedido explícito del usuario, caso real: "Silla
+// plegable ALF" en RM-0012 — Daniel ya la había marcado "NO APLICA, NO SE
+// INGRESA" porque no es un producto que corresponda a este flujo). Borra el
+// renglón entero en vez de vincularlo — mismo alcance restringido que el
+// POST de arriba (solo items sin ningún vínculo al catálogo), para que esto
+// nunca pueda usarse para borrar un producto real ya conectado.
+export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const session = await requireAdminSession();
+  if (!session) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+
+  const { id } = await params;
+  const item = await prisma.merchandiseReentryItem.findUnique({ where: { id }, select: { catalogItemId: true, batchId: true } });
+  if (!item) return NextResponse.json({ error: "No encontrado." }, { status: 404 });
+  if (item.catalogItemId) return NextResponse.json({ error: "Este producto ya está vinculado a un producto real — no se puede eliminar desde aquí." }, { status: 409 });
+
+  await prisma.merchandiseReentryItem.delete({ where: { id } });
+  // Si este era el único renglón pendiente del lote, lo cierra automático
+  // (mismo chequeo que corre cada vez que se resuelve un item normalmente).
+  await maybeMarkBatchClosed(item.batchId);
+  return NextResponse.json({ ok: true });
 }
