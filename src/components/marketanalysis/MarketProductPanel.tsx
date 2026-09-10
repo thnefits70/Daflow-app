@@ -64,7 +64,7 @@ function computePreviewPrice(batchCost: number, batchUnits: number, freightCost:
   return (unitCost + fulfillment) / (1 - margin / 100);
 }
 
-type Tab = "proponer" | "aprobacion" | "publicar" | "brandear" | "trazabilidad";
+type Tab = "proponer" | "mispropuestas" | "aprobacion" | "publicar" | "brandear" | "trazabilidad";
 
 export function MarketProductPanel({
   canPropose,
@@ -83,6 +83,11 @@ export function MarketProductPanel({
 }) {
   const tabs: { key: Tab; label: string }[] = [
     ...(canPropose ? [{ key: "proponer" as Tab, label: "Proponer" }] : []),
+    // Confirmado 2026-09-10, pedido de Jariel: seguimiento de sus propios
+    // productos propuestos (en qué van, quién los aprobó/rechazó, etc.) —
+    // antes GET ?view=mine existía en la API pero ninguna pantalla lo
+    // consumía.
+    ...(canPropose ? [{ key: "mispropuestas" as Tab, label: "Mis propuestas" }] : []),
     ...(canReview ? [{ key: "aprobacion" as Tab, label: "Aprobación" }] : []),
     ...(canPublish ? [{ key: "publicar" as Tab, label: "Publicar en Dropi" }] : []),
     ...(canBrand ? [{ key: "brandear" as Tab, label: "Brandear" }] : []),
@@ -107,6 +112,7 @@ export function MarketProductPanel({
         ))}
       </div>
       {tab === "proponer" && <ProposeForm />}
+      {tab === "mispropuestas" && <MyProposalsView />}
       {tab === "aprobacion" && <ReviewQueue canAct={canActOnReview} />}
       {tab === "publicar" && <PublishQueue />}
       {tab === "brandear" && <BrandQueue />}
@@ -619,6 +625,59 @@ function BrandQueue() {
 }
 
 // ---------------- Paso 5: Trazabilidad + decisión de compra (Bryan) ----------------
+const PROPOSAL_STATUS_LABEL: Record<Proposal["status"], { text: string; color: string }> = {
+  PENDING_APPROVAL: { text: "Esperando aprobación de Bryan", color: "text-gold" },
+  REJECTED: { text: "Rechazado", color: "text-red" },
+  APPROVED: { text: "Aprobado", color: "text-teal" },
+};
+
+// Confirmado 2026-09-10, pedido de Jariel: seguimiento de sus propios
+// productos propuestos — reusa GET ?view=mine (ya existía en la API, sin
+// pantalla que lo consumiera) y el mismo estilo de línea de tiempo que
+// TraceabilityView, adaptado para mostrar también lo pendiente y lo
+// rechazado, no solo lo ya aprobado.
+function MyProposalsView() {
+  const [rows, setRows] = useState<Proposal[] | null>(null);
+
+  useEffect(() => {
+    fetch("/api/market-products?view=mine").then((r) => (r.ok ? r.json() : [])).then(setRows).catch(() => setRows([]));
+  }, []);
+
+  if (rows === null) return <div className="text-steel text-[13px]">Cargando…</div>;
+  if (rows.length === 0) return <div className="text-steel text-[13.5px]">Todavía no propusiste ningún producto.</div>;
+
+  return (
+    <div className="flex flex-col gap-3">
+      {rows.map((p) => {
+        const status = PROPOSAL_STATUS_LABEL[p.status];
+        return (
+          <div key={p.id} className="bg-surface border border-rule rounded-md p-3.5">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="font-semibold text-[13.5px]">{p.code} — {p.productName}</span>
+              <span className={`text-[11px] font-semibold ${status.color}`}>{status.text}</span>
+            </div>
+            {p.status === "REJECTED" && p.rejectReason && (
+              <div className="text-[12px] text-red mb-2">Motivo: {p.rejectReason}</div>
+            )}
+            {p.status === "APPROVED" && (
+              <ol className="text-[12.5px] text-steel space-y-0.5">
+                <li>1. Propuesto — {formatDateTime(p.proposedAt)}</li>
+                <li>2. Aprobado por {p.reviewedBy?.name ?? "—"} — {p.reviewedAt ? formatDateTime(p.reviewedAt) : "—"}</li>
+                <li>3. Publicado por {p.publishedBy?.name ?? "—"} — {p.publishedAt ? formatDateTime(p.publishedAt) : "pendiente"}</li>
+                <li>4. Brandeado por {p.brandedBy?.name ?? "—"} — {p.brandedAt ? formatDateTime(p.brandedAt) : "pendiente"}</li>
+                {p.readyToBuyAt && <li>5. Listo para comprar con {p.chosenSupplier?.name} — {formatDateTime(p.readyToBuyAt)}</li>}
+              </ol>
+            )}
+            {p.status === "PENDING_APPROVAL" && (
+              <div className="text-[12px] text-steel">Propuesto — {formatDateTime(p.proposedAt)}</div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function TraceabilityView({ canDecidePurchase }: { canDecidePurchase: boolean }) {
   const [rows, setRows] = useState<Proposal[] | null>(null);
   const [chosen, setChosen] = useState<Record<string, string>>({});
