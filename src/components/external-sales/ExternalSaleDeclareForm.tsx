@@ -41,6 +41,72 @@ type SaleDTO = {
 
 type DraftItem = { product: MatchCatalogItem; quantity: string; unitPrice: string };
 
+function isValidQty(qty: string) {
+  const n = Number(qty);
+  return qty.trim() !== "" && Number.isInteger(n) && n > 0;
+}
+
+// Cantidad (unidades enteras, acento azul) y Precio unitario (acepta
+// centavos, acento verde) comparten forma pero se distinguen a propósito:
+// declarar ventas mezclaba ambos campos por error (12.99 "unidades").
+function QtyPriceFields({
+  qty,
+  price,
+  onQtyChange,
+  onPriceChange,
+}: {
+  qty: string;
+  price: string;
+  onQtyChange: (v: string) => void;
+  onPriceChange: (v: string) => void;
+}) {
+  const qtyNum = Number(qty);
+  const qtyHasDecimal = qty.trim() !== "" && !Number.isNaN(qtyNum) && !Number.isInteger(qtyNum);
+
+  return (
+    <div className="flex gap-2.5 mb-2">
+      <div className="flex-1">
+        <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">
+          Cantidad <span className="normal-case font-normal text-blue">· unidades enteras</span>
+        </label>
+        <div className="relative">
+          <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[13px] font-bold text-blue">#</span>
+          <input
+            type="number"
+            min={1}
+            step={1}
+            inputMode="numeric"
+            className="w-full rounded border border-blue/30 bg-blue/5 pl-6 pr-2.5 py-1.5 text-[13px] font-bold"
+            value={qty}
+            onChange={(e) => onQtyChange(e.target.value)}
+          />
+        </div>
+        {qtyHasDecimal && (
+          <div className="text-red text-[10.5px] mt-1">
+            La cantidad debe ser un número entero (1, 2, 3…). ¿Quisiste escribir {qty} en Precio unitario?
+          </div>
+        )}
+      </div>
+      <div className="flex-1">
+        <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">
+          Precio unitario <span className="normal-case font-normal text-green">· acepta centavos</span>
+        </label>
+        <div className="relative">
+          <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[13px] font-bold text-green">$</span>
+          <input
+            type="number"
+            min={0}
+            step="0.01"
+            className="w-full rounded border border-green/30 bg-green/5 pl-6 pr-2.5 py-1.5 text-[13px] font-bold"
+            value={price}
+            onChange={(e) => onPriceChange(e.target.value)}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 async function postJson(url: string, body?: unknown) {
   const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
   const data = await res.json().catch(() => null);
@@ -76,9 +142,8 @@ function ItemsEditor({ items, onChange, searchUrl }: { items: DraftItem[]; onCha
 
   function addDraft() {
     if (!draftProduct) return;
-    const qty = Number(draftQty) || 0;
     const price = Number(draftPrice) || 0;
-    if (qty <= 0 || price <= 0) return;
+    if (!isValidQty(draftQty) || price <= 0) return;
     onChange([...items, { product: draftProduct, quantity: draftQty, unitPrice: draftPrice }]);
     setDraftProduct(null);
     setDraftQty("");
@@ -132,23 +197,14 @@ function ItemsEditor({ items, onChange, searchUrl }: { items: DraftItem[]; onCha
               </div>
               <button type="button" className="shrink-0 text-[11px] font-semibold text-blue cursor-pointer" onClick={() => setDraftProduct(null)}>Cambiar</button>
             </div>
-            <div className="flex gap-2.5 mb-2">
-              <div className="flex-1">
-                <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Cantidad</label>
-                <input type="number" min={1} className="w-full rounded border border-rule bg-surface px-2.5 py-1.5 text-[13px] font-bold" value={draftQty} onChange={(e) => setDraftQty(e.target.value)} />
-              </div>
-              <div className="flex-1">
-                <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Precio unitario</label>
-                <input type="number" min={0} step="0.01" className="w-full rounded border border-rule bg-surface px-2.5 py-1.5 text-[13px] font-bold" value={draftPrice} onChange={(e) => setDraftPrice(e.target.value)} />
-              </div>
-            </div>
+            <QtyPriceFields qty={draftQty} price={draftPrice} onQtyChange={setDraftQty} onPriceChange={setDraftPrice} />
             <div className="flex gap-2">
               {items.length > 0 && (
                 <button type="button" className="flex-1 rounded border border-rule px-2.5 py-1.5 text-[11.5px] font-semibold cursor-pointer" onClick={() => { setDraftProduct(null); setDraftQty(""); setDraftPrice(""); setPicking(false); }}>
                   Cancelar
                 </button>
               )}
-              <button type="button" disabled={!(Number(draftQty) > 0 && Number(draftPrice) > 0)} className="flex-1 rounded border border-teal bg-teal px-2.5 py-1.5 text-[11.5px] font-bold text-navy cursor-pointer disabled:opacity-40" onClick={addDraft}>
+              <button type="button" disabled={!(isValidQty(draftQty) && Number(draftPrice) > 0)} className="flex-1 rounded border border-teal bg-teal px-2.5 py-1.5 text-[11.5px] font-bold text-navy cursor-pointer disabled:opacity-40" onClick={addDraft}>
                 Agregar producto a la venta
               </button>
             </div>
@@ -206,7 +262,7 @@ export function ExternalSaleDeclareForm() {
   useEffect(load, []);
 
   const total = items.reduce((sum, it) => sum + (Number(it.quantity) || 0) * (Number(it.unitPrice) || 0), 0);
-  const canSave = !!client && items.length > 0 && items.every((it) => Number(it.quantity) > 0 && Number(it.unitPrice) > 0) && pickupPersonName.trim().length > 0 && !saving;
+  const canSave = !!client && items.length > 0 && items.every((it) => isValidQty(it.quantity) && Number(it.unitPrice) > 0) && pickupPersonName.trim().length > 0 && !saving;
 
   async function save() {
     if (!client || items.length === 0) return;
@@ -247,7 +303,7 @@ export function ExternalSaleDeclareForm() {
   }
 
   const editTotal = editItems.reduce((sum, it) => sum + (Number(it.quantity) || 0) * (Number(it.unitPrice) || 0), 0);
-  const canSaveEdit = !!editClient && editItems.length > 0 && editItems.every((it) => Number(it.quantity) > 0 && Number(it.unitPrice) > 0) && editPickupPersonName.trim().length > 0 && !editSaving;
+  const canSaveEdit = !!editClient && editItems.length > 0 && editItems.every((it) => isValidQty(it.quantity) && Number(it.unitPrice) > 0) && editPickupPersonName.trim().length > 0 && !editSaving;
 
   async function saveEdit(saleId: string) {
     if (!editClient || editItems.length === 0) return;
@@ -279,13 +335,12 @@ export function ExternalSaleDeclareForm() {
 
   async function saveFixItem() {
     if (!fixingItem || !fixProduct) return;
-    const qty = Number(fixQty) || 0;
     const price = Number(fixPrice) || 0;
-    if (qty <= 0 || price <= 0) return;
+    if (!isValidQty(fixQty) || price <= 0) return;
     setFixSaving(true);
     setFixError("");
     try {
-      await patchJson(`/api/external-sales/${fixingItem.saleId}/items/${fixingItem.itemId}`, { catalogItemId: fixProduct.id, quantity: qty, unitPrice: price });
+      await patchJson(`/api/external-sales/${fixingItem.saleId}/items/${fixingItem.itemId}`, { catalogItemId: fixProduct.id, quantity: Number(fixQty), unitPrice: price });
       setFixingItem(null);
       setFixProduct(null);
       load();
@@ -407,20 +462,11 @@ export function ExternalSaleDeclareForm() {
                                 {!fixProduct && (
                                   <ProductMatchPicker referencePhotoUrl={null} searchUrl="/api/external-sales/catalog-search" onConfirm={(r) => setFixProduct(r)} />
                                 )}
-                                <div className="flex gap-2 mb-2">
-                                  <div className="flex-1">
-                                    <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Cantidad</label>
-                                    <input type="number" min={1} className="w-full rounded border border-rule bg-surface px-2.5 py-1.5 text-[12.5px] font-bold" value={fixQty} onChange={(e) => setFixQty(e.target.value)} />
-                                  </div>
-                                  <div className="flex-1">
-                                    <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Precio unitario</label>
-                                    <input type="number" min={0} step="0.01" className="w-full rounded border border-rule bg-surface px-2.5 py-1.5 text-[12.5px] font-bold" value={fixPrice} onChange={(e) => setFixPrice(e.target.value)} />
-                                  </div>
-                                </div>
+                                <QtyPriceFields qty={fixQty} price={fixPrice} onQtyChange={setFixQty} onPriceChange={setFixPrice} />
                                 {fixError && <div className="text-red text-[11px] mb-1.5">{fixError}</div>}
                                 <div className="flex gap-2">
                                   <button type="button" className="flex-1 rounded border border-rule px-2.5 py-1.5 text-[11.5px] font-semibold cursor-pointer" onClick={() => setFixingItem(null)}>Cancelar</button>
-                                  <button type="button" disabled={fixSaving || !fixProduct || !(Number(fixQty) > 0 && Number(fixPrice) > 0)} className="flex-1 rounded border border-teal bg-teal px-2.5 py-1.5 text-[11.5px] font-bold text-navy cursor-pointer disabled:opacity-40" onClick={saveFixItem}>
+                                  <button type="button" disabled={fixSaving || !fixProduct || !(isValidQty(fixQty) && Number(fixPrice) > 0)} className="flex-1 rounded border border-teal bg-teal px-2.5 py-1.5 text-[11.5px] font-bold text-navy cursor-pointer disabled:opacity-40" onClick={saveFixItem}>
                                     {fixSaving ? "Guardando…" : "Reenviar este producto"}
                                   </button>
                                 </div>
