@@ -42,6 +42,10 @@ async function resolveItems(items: z.infer<typeof itemSchema>[]) {
 // todos los productos de la venta (confirmado 2026-09-01: ahora puede tener
 // varios) — para corregir un solo producto sin tumbar toda la venta, ver
 // /items/[itemId].
+// Ampliado 2026-09-10, pedido de Marcos: el asesor también puede editar su
+// propia venta mientras siga PENDING (todavía no la vio Bryan) — mismo
+// mecanismo, sin esperar a que la rechace primero. Una vez que Bryan la
+// aprueba, esta ruta ya no acepta cambios.
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!(await canDeclareExternalSales()) || !session) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
@@ -51,10 +55,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const parsed = schema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Datos inválidos." }, { status: 400 });
 
-  const sale = await prisma.externalSale.findUnique({ where: { id }, select: { advisorId: true, reviewStatus: true, code: true } });
+  const sale = await prisma.externalSale.findUnique({ where: { id }, select: { advisorId: true, reviewStatus: true, code: true, deletedAt: true } });
   if (!sale) return NextResponse.json({ error: "No encontrado." }, { status: 404 });
   if (sale.advisorId !== session.user.id && session.user.role !== "admin") return NextResponse.json({ error: "No autorizado." }, { status: 403 });
-  if (sale.reviewStatus !== "REJECTED") return NextResponse.json({ error: "Solo se puede corregir una venta rechazada." }, { status: 409 });
+  if (sale.deletedAt) return NextResponse.json({ error: "Esta venta ya fue cancelada." }, { status: 409 });
+  if (sale.reviewStatus !== "REJECTED" && sale.reviewStatus !== "PENDING") {
+    return NextResponse.json({ error: "Solo se puede editar mientras está pendiente o rechazada — ya fue aprobada por Bryan." }, { status: 409 });
+  }
 
   const client = await prisma.client.findUnique({ where: { id: parsed.data.clientId }, select: { id: true } });
   if (!client) return NextResponse.json({ error: "Cliente no encontrado." }, { status: 404 });
@@ -88,19 +95,26 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   return NextResponse.json(updated);
 }
 
-// Admin puede eliminar una venta entera para volver a declararla desde cero
-// (ej. se equivocaron de producto/monto) — solo mientras el stock no haya
-// salido de bodega todavía (sin outflowBatchId), para no dejar un egreso de
-// inventario huérfano apuntando a una venta que ya no existe. Baja lógica,
-// no delete real: el código (VE-000X) queda en Historial marcado como
-// eliminado, con fecha, en vez de desaparecer sin dejar rastro.
+// Admin puede eliminar CUALQUIER venta (cualquier estado) — solo mientras el
+// stock no haya salido de bodega todavía (sin outflowBatchId), para no dejar
+// un egreso de inventario huérfano apuntando a una venta que ya no existe.
+// Ampliado 2026-09-10, pedido de Marcos: el propio asesor también puede
+// cancelar SU venta, pero solo mientras siga PENDING (todavía no la vio
+// Bryan) — si ya fue aprobada o rechazada, solo el admin puede eliminarla.
+// Baja lógica, no delete real: el código (VE-000X) queda en Historial
+// marcado como eliminado, con fecha, en vez de desaparecer sin dejar rastro.
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
-  if (!session || session.user.role !== "admin") return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+  if (!session) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
   const { id } = await params;
-  const sale = await prisma.externalSale.findUnique({ where: { id }, select: { outflowBatchId: true, deletedAt: true } });
+  const sale = await prisma.externalSale.findUnique({ where: { id }, select: { advisorId: true, reviewStatus: true, outflowBatchId: true, deletedAt: true } });
   if (!sale) return NextResponse.json({ error: "No encontrado." }, { status: 404 });
+
+  const isAdmin = session.user.role === "admin";
+  const isOwnAndPending = sale.advisorId === session.user.id && sale.reviewStatus === "PENDING";
+  if (!isAdmin && !isOwnAndPending) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+
   if (sale.deletedAt) return NextResponse.json({ error: "Ya fue eliminada." }, { status: 409 });
   if (sale.outflowBatchId) return NextResponse.json({ error: "No se puede eliminar: el stock ya salió de bodega para esta venta." }, { status: 409 });
 

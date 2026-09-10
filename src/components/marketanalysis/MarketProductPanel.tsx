@@ -214,7 +214,14 @@ function ProposeForm() {
       <div className="mb-3">
         <label className="text-[12px] font-semibold text-steel">Imagen referencial</label>
         {imageUrl ? (
-          <div className="mt-1 text-[12px] text-teal">Imagen subida ✓ <button type="button" className="text-steel underline decoration-dotted ml-1 cursor-pointer" onClick={() => setImageUrl("")}>Cambiar</button></div>
+          <div className="mt-1.5 flex items-center gap-2.5">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={imageUrl} alt="Imagen referencial" className="w-16 h-16 object-cover rounded border border-rule cursor-pointer" />
+            <div className="text-[12px] text-teal">
+              Imagen subida ✓ <button type="button" className="text-steel underline decoration-dotted ml-1 cursor-pointer" onClick={() => setImageUrl("")}>Cambiar</button>
+              <div className="text-steel text-[11px] mt-0.5">Doble clic en la imagen para verla más grande</div>
+            </div>
+          </div>
         ) : (
           <div
             tabIndex={0}

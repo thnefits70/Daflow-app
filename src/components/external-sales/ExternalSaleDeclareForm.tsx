@@ -122,7 +122,7 @@ async function patchJson(url: string, body: unknown) {
 }
 
 function statusLabel(s: SaleDTO): { text: string; color: string } {
-  if (s.deletedAt) return { text: `Eliminada por admin · ${formatDateTime(s.deletedAt)}`, color: "text-red" };
+  if (s.deletedAt) return { text: `Cancelada · ${formatDateTime(s.deletedAt)}`, color: "text-red" };
   if (s.reviewStatus === "REJECTED") return { text: "Rechazada", color: "text-red" };
   if (s.reviewStatus === "PENDING") return { text: "Esperando aprobación de Bryan", color: "text-gold" };
   if (s.nairobyClosedAt) return { text: `Cerrada · ${formatDateTime(s.nairobyClosedAt)}`, color: "text-green" };
@@ -249,6 +249,10 @@ export function ExternalSaleDeclareForm() {
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState("");
 
+  const [confirmDeleteSaleId, setConfirmDeleteSaleId] = useState<string | null>(null);
+  const [deletingSale, setDeletingSale] = useState(false);
+  const [deleteSaleError, setDeleteSaleError] = useState("");
+
   const [fixingItem, setFixingItem] = useState<{ saleId: string; itemId: string } | null>(null);
   const [fixProduct, setFixProduct] = useState<MatchCatalogItem | null>(null);
   const [fixQty, setFixQty] = useState("");
@@ -322,6 +326,26 @@ export function ExternalSaleDeclareForm() {
       setEditError(e instanceof Error ? e.message : "No se pudo corregir la venta.");
     } finally {
       setEditSaving(false);
+    }
+  }
+
+  // Confirmado 2026-09-10, pedido de Marcos: cancelar el pedido entero
+  // mientras sigue esperando aprobación de Bryan (ej. se equivocó al
+  // declararlo) — deja de existir para todo efecto práctico, pero queda
+  // marcado en Historial con la fecha, no desaparece sin dejar rastro.
+  async function deleteSale(saleId: string) {
+    setDeletingSale(true);
+    setDeleteSaleError("");
+    try {
+      const res = await fetch(`/api/external-sales/${saleId}`, { method: "DELETE" });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error ?? "No se pudo cancelar el pedido.");
+      setConfirmDeleteSaleId(null);
+      load();
+    } catch (e) {
+      setDeleteSaleError(e instanceof Error ? e.message : "No se pudo cancelar el pedido.");
+    } finally {
+      setDeletingSale(false);
     }
   }
 
@@ -493,12 +517,33 @@ export function ExternalSaleDeclareForm() {
                     </div>
                   )}
                   {!s.deletedAt && s.reviewStatus === "REJECTED" && s.rejectionReason && <div className="text-[11.5px] text-red mt-1">{s.rejectionReason}</div>}
-                  {!s.deletedAt && s.reviewStatus === "REJECTED" && editingId !== s.id && (
-                    <button type="button" className="mt-2 text-[11.5px] font-bold border border-teal text-teal rounded px-2.5 py-1.5 cursor-pointer" onClick={() => startEdit(s)}>
-                      Corregir y reenviar
-                    </button>
+                  {!s.deletedAt && (s.reviewStatus === "REJECTED" || s.reviewStatus === "PENDING") && editingId !== s.id && confirmDeleteSaleId !== s.id && (
+                    <div className="flex gap-2 mt-2">
+                      <button type="button" className="text-[11.5px] font-bold border border-teal text-teal rounded px-2.5 py-1.5 cursor-pointer" onClick={() => startEdit(s)}>
+                        {s.reviewStatus === "REJECTED" ? "Corregir y reenviar" : "Editar"}
+                      </button>
+                      {s.reviewStatus === "PENDING" && (
+                        <button type="button" className="text-[11.5px] font-bold border border-red text-red rounded px-2.5 py-1.5 cursor-pointer" onClick={() => { setConfirmDeleteSaleId(s.id); setDeleteSaleError(""); }}>
+                          Cancelar pedido
+                        </button>
+                      )}
+                    </div>
                   )}
-                  {!s.deletedAt && s.reviewStatus === "REJECTED" && editingId === s.id && (
+                  {!s.deletedAt && confirmDeleteSaleId === s.id && (
+                    <div className="bg-red/10 border border-red/40 rounded-md p-2.5 mt-2">
+                      <div className="text-[12px] text-ink mb-1.5">¿Cancelar el pedido {s.code}? Esto no se puede deshacer.</div>
+                      {deleteSaleError && <div className="text-red text-[11px] mb-1.5">{deleteSaleError}</div>}
+                      <div className="flex gap-2">
+                        <button type="button" className="flex-1 rounded border border-rule px-2.5 py-1.5 text-[11.5px] font-semibold cursor-pointer" onClick={() => setConfirmDeleteSaleId(null)}>
+                          No, mantener
+                        </button>
+                        <button type="button" disabled={deletingSale} className="flex-1 rounded border border-red bg-red px-2.5 py-1.5 text-[11.5px] font-bold text-white cursor-pointer disabled:opacity-60" onClick={() => deleteSale(s.id)}>
+                          {deletingSale ? "Cancelando…" : "Sí, cancelar"}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  {!s.deletedAt && (s.reviewStatus === "REJECTED" || s.reviewStatus === "PENDING") && editingId === s.id && (
                     <div className="bg-cloud rounded-md p-2.5 mt-2 flex flex-col gap-2.5">
                       <div>
                         <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Cliente</label>
@@ -520,7 +565,11 @@ export function ExternalSaleDeclareForm() {
                       <div className="flex gap-2">
                         <button type="button" className="flex-1 rounded border border-rule px-2.5 py-1.5 text-[11.5px] font-semibold cursor-pointer" onClick={() => setEditingId(null)}>Cancelar</button>
                         <button type="button" disabled={!canSaveEdit} className="flex-1 rounded border border-teal bg-teal px-2.5 py-1.5 text-[11.5px] font-bold text-navy cursor-pointer disabled:opacity-40" onClick={() => saveEdit(s.id)}>
-                          {editSaving ? "Reenviando…" : `Reenviar a Bryan${editTotal > 0 ? ` — $${editTotal.toFixed(2)}` : ""}`}
+                          {editSaving
+                            ? "Guardando…"
+                            : s.reviewStatus === "REJECTED"
+                              ? `Reenviar a Bryan${editTotal > 0 ? ` — $${editTotal.toFixed(2)}` : ""}`
+                              : `Guardar cambios${editTotal > 0 ? ` — $${editTotal.toFixed(2)}` : ""}`}
                         </button>
                       </div>
                     </div>

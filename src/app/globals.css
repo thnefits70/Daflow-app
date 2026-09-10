@@ -28,6 +28,16 @@
   --color-ink: #f1f5fb;
 }
 
+/* Confirmado 2026-09-10, reportado por Jariel: color-scheme:dark por sí solo
+   no bastó en su navegador — el menú desplegable seguía en blanco. Fondo y
+   texto explícitos en select/option son mucho más confiables entre
+   navegadores que depender solo de color-scheme. */
+select,
+select option {
+  background-color: var(--color-surface);
+  color: var(--color-ink);
+}
+
 @theme inline {
   --color-navy: var(--color-navy);
   --color-blue: var(--color-blue);
