@@ -3,7 +3,7 @@ import { after } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
-import { canSubmitPurchaseRequests } from "@/lib/guards";
+import { canSubmitPurchaseRequests, canManageJustCatalog } from "@/lib/guards";
 import { getCatalogItemPriceStats } from "@/lib/purchases";
 import { actorName } from "@/lib/actorName";
 import { suggestNichoIfMissing } from "@/lib/nichoAi";
@@ -17,7 +17,13 @@ const OWN_DELETE_WINDOW_MS = 2 * 60 * 60 * 1000;
 
 export async function GET(req: NextRequest) {
   const session = await auth();
-  if (!(await canSubmitPurchaseRequests()) || !session) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+  // Confirmado 2026-09-10: "Etiquetas de percha" (INVESTOCK) también lee
+  // este catálogo, y quien la ve (Daniel, líder de Inventario vía
+  // canManageJustCatalog) no necesariamente puede solicitar compras — sin
+  // este OR, la pantalla le cargaba vacía pese a tener acceso a la sección.
+  if (!session || !((await canSubmitPurchaseRequests()) || (await canManageJustCatalog()))) {
+    return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+  }
 
   const isAdmin = session.user.role === "admin";
   function canDelete(i: { createdById: string | null; createdAt: Date }) {
