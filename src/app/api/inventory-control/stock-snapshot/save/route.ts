@@ -5,6 +5,7 @@ import { canManageInventoryControl } from "@/lib/guards";
 import { getFinanzasDeptId, recentInventorySnapshotPeriods } from "@/lib/inventoryKpis";
 import { prisma } from "@/lib/prisma";
 import { computeAndSaveStockComparison } from "@/lib/stockKardexComparison";
+import { countSeedableFromJustSnapshot } from "@/lib/stockKardex";
 
 const rowSchema = z.object({
   productCode: z.string().trim().min(1),
@@ -63,5 +64,15 @@ export async function POST(req: NextRequest) {
     return [];
   });
 
-  return NextResponse.json({ ok: true, period, count: rows.length, comparison });
+  // Confirmado 2026-09-10 (pedido explícito del usuario): "saldo inicial de
+  // INVESTOCK" — solo cuenta acá (no escribe nada), para que la pantalla
+  // muestre el botón solo si de verdad hay algo pendiente de cargar.
+  const seedableCount = await countSeedableFromJustSnapshot(
+    rows.map((r) => ({ productCode: r.productCode, avgCost: r.avgCost, stock: r.stock }))
+  ).catch((err) => {
+    console.error("[stock-snapshot save] No se pudo calcular el conteo de saldo inicial:", err);
+    return 0;
+  });
+
+  return NextResponse.json({ ok: true, period, count: rows.length, comparison, seedableCount });
 }

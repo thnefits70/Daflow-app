@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, Upload, AlertTriangle, TrendingDown, Minus } from "lucide-react";
+import { CheckCircle2, Upload, AlertTriangle, TrendingDown, Minus, PlayCircle } from "lucide-react";
 import type { InventoryControlPeriodDTO, InventorySnapshotPeriodDTO } from "@/lib/inventoryKpis";
 import { usePasteFile } from "@/lib/usePasteFile";
 import { uploadFile } from "@/lib/uploadFile";
@@ -157,6 +157,14 @@ export function InventoryControlPanel({
   // al guardar, contra el número propio de DAFLOW — ordenada por la
   // diferencia más grande primero.
   const [comparison, setComparison] = useState<{ catalogItemId: string; productName: string; productCode: string; justStock: number; investockStock: number; difference: number }[]>([]);
+  // Confirmado 2026-09-10 (pedido explícito del usuario): "cargar saldo
+  // inicial de INVESTOCK" — solo aparece si de verdad hay algo pendiente de
+  // cargar (productos que siguen en 0). savedRows se guarda para poder
+  // sembrar sin volver a pedirle el archivo a Daniel.
+  const [seedableCount, setSeedableCount] = useState(0);
+  const [savedRows, setSavedRows] = useState<{ productCode: string; avgCost: number; stock: number }[]>([]);
+  const [seeding, setSeeding] = useState(false);
+  const [seedResult, setSeedResult] = useState("");
 
   function resetSnapUpload() {
     setSnapPhase("idle");
@@ -217,9 +225,27 @@ export function InventoryControlPanel({
     const json = await res.json().catch(() => null);
     if (!res.ok) { setSnapErr(json?.error ?? "No se pudo guardar."); return; }
     setComparison(json.comparison ?? []);
+    setSeedableCount(json.seedableCount ?? 0);
+    setSavedRows(snapPreview.rows.map((r) => ({ productCode: r.productCode, avgCost: r.avgCost, stock: r.stock })));
+    setSeedResult("");
     resetSnapUpload();
     setSnapToast(`✅ ${weekLabel(snapPreview.period)} guardado — ${json.count} productos. Los KPIs ya se actualizaron.`);
     router.refresh();
+  }
+
+  async function seedInvestock() {
+    setSeeding(true);
+    setSeedResult("");
+    const res = await fetch("/api/inventory-control/stock-snapshot/seed-investock", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ rows: savedRows }),
+    });
+    setSeeding(false);
+    const json = await res.json().catch(() => null);
+    if (!res.ok) { setSeedResult(json?.error ?? "No se pudo cargar el saldo inicial."); return; }
+    setSeedableCount(0);
+    setSeedResult(`✅ ${json.seededCount} producto(s) cargado(s) con su saldo inicial de INVESTOCK.`);
   }
 
   return (
@@ -480,6 +506,25 @@ export function InventoryControlPanel({
           <div className="mt-3 flex items-center gap-2 text-teal text-[12.5px] bg-teal/10 border border-teal/30 rounded-md px-3 py-2">
             <CheckCircle2 size={14} /> {snapToast}
           </div>
+        )}
+
+        {seedableCount > 0 && snapPhase === "idle" && (
+          <div className="mt-3 bg-yellow/10 border border-yellow/35 rounded-md p-3">
+            <div className="text-[12.5px] text-ink mb-2">
+              {seedableCount} producto(s) de este archivo todavía no tienen ningún movimiento propio en INVESTOCK — puedes cargarles su stock y costo promedio real como punto de partida.
+            </div>
+            <button
+              type="button"
+              disabled={seeding}
+              className="flex items-center gap-1.5 rounded border border-teal bg-teal px-3.5 py-2 text-[12.5px] font-bold text-navy cursor-pointer disabled:opacity-60"
+              onClick={seedInvestock}
+            >
+              <PlayCircle size={14} /> {seeding ? "Cargando…" : `Cargar saldo inicial de INVESTOCK (${seedableCount} productos pendientes)`}
+            </button>
+          </div>
+        )}
+        {seedResult && snapPhase === "idle" && (
+          <div className="mt-3 text-teal text-[12.5px] bg-teal/10 border border-teal/30 rounded-md px-3 py-2">{seedResult}</div>
         )}
 
         {comparison.length > 0 && snapPhase === "idle" && (

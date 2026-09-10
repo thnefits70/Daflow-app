@@ -112,6 +112,68 @@ export async function getAllCurrentStock(): Promise<CurrentStockRow[]> {
   });
 }
 
+export type SeedResult = { seededCount: number; skippedNoMatch: number; skippedAlreadyMoved: number };
+type SnapshotRow = { productCode: string; avgCost: number; stock: number };
+
+// Confirmado 2026-09-10 (pedido explícito del usuario): saldo inicial de
+// INVESTOCK a partir del export de Just — solo toca productos que
+// TODAVÍA NO TIENEN ningún movimiento propio (nunca se les llama de nuevo
+// una vez que ya arrancaron, sea por este seed o por una compra/salida
+// real), para nunca pisar un número que ya está corriendo de verdad. Es
+// seguro llamarlo tantas veces como se suba el archivo — cada producto
+// solo se siembra una vez, para siempre.
+async function findSeedCandidates(rows: SnapshotRow[]) {
+  const codes = [...new Set(rows.map((r) => r.productCode))];
+  const items = await prisma.purchaseCatalogItem.findMany({
+    where: { justCode: { in: codes } },
+    select: { id: true, justCode: true },
+  });
+  const itemIdByCode = new Map(items.map((i) => [i.justCode as string, i.id]));
+  const matchedIds = items.map((i) => i.id);
+  const moved = await prisma.stockKardexEntry.findMany({
+    where: { catalogItemId: { in: matchedIds } },
+    distinct: ["catalogItemId"],
+    select: { catalogItemId: true },
+  });
+  const movedSet = new Set(moved.map((m) => m.catalogItemId));
+
+  const candidates: { catalogItemId: string; avgCost: number; stock: number }[] = [];
+  let skippedNoMatch = 0;
+  let skippedAlreadyMoved = 0;
+  for (const r of rows) {
+    const catalogItemId = itemIdByCode.get(r.productCode);
+    if (!catalogItemId) { skippedNoMatch++; continue; }
+    if (movedSet.has(catalogItemId)) { skippedAlreadyMoved++; continue; }
+    candidates.push({ catalogItemId, avgCost: r.avgCost, stock: r.stock });
+  }
+  return { candidates, skippedNoMatch, skippedAlreadyMoved };
+}
+
+// Solo cuenta, no escribe — para que la pantalla sepa si mostrar el botón
+// de "cargar saldo inicial" (y con qué número) sin sembrar nada todavía.
+export async function countSeedableFromJustSnapshot(rows: SnapshotRow[]): Promise<number> {
+  const { candidates } = await findSeedCandidates(rows);
+  return candidates.length;
+}
+
+export async function seedFromJustSnapshot(rows: SnapshotRow[]): Promise<SeedResult> {
+  const { candidates, skippedNoMatch, skippedAlreadyMoved } = await findSeedCandidates(rows);
+  if (candidates.length > 0) {
+    await prisma.stockKardexEntry.createMany({
+      data: candidates.map((c) => ({
+        catalogItemId: c.catalogItemId,
+        type: "SEED" as const,
+        quantity: c.stock,
+        unitCost: c.avgCost,
+        balanceAfter: c.stock,
+        avgCostAfter: c.avgCost,
+        occurredAt: new Date(),
+      })),
+    });
+  }
+  return { seededCount: candidates.length, skippedNoMatch, skippedAlreadyMoved };
+}
+
 // Confirmado 2026-09-09: alerta de stock negativo para la pantalla de KPIs
 // financieros → Inventario — misma idea que ya se ve en el export de Just
 // (4 SKUs negativos encontrados en el análisis inicial), pero calculada

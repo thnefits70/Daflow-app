@@ -942,6 +942,12 @@ model InventoryProductSnapshot {
 enum StockMovementType {
   IN
   OUT
+  // Confirmado 2026-09-10: carga única del saldo inicial real (traído del
+  // export de Just) para un producto que INVESTOCK todavía no había tocado
+  // — matemáticamente se comporta como la primera entrada (IN), pero se
+  // distingue en el Kardex para saber que ese número vino de un arranque,
+  // no de una compra real recibida.
+  SEED
 }
 
 model StockKardexEntry {
