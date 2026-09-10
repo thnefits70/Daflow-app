@@ -1,12 +1,23 @@
 @import "tailwindcss";
 
 :root {
+  /* Confirmado 2026-09-10, reportado por Jariel: sin esto, los controles
+     nativos del navegador (el menú desplegable de un <select>, por
+     ejemplo el de "Selecciona un proveedor") se pintan con el tema CLARO
+     del sistema operativo — ese popup lo dibuja el navegador, no nuestro
+     CSS de Tailwind, así que aunque toda la página sea oscura, el texto
+     gris claro quedaba casi invisible sobre fondo blanco. */
+  color-scheme: dark;
+
   /* Brand / accent */
   --color-navy: #0b1f3a;
   --color-blue: #1e5eff;
   --color-teal: #14c7c7;
   --color-green: #22a67e;
   --color-red: #e0574a;
+  /* Semáforo de Plan de Mejora (AMARILLO/NARANJA) — VERDE y ROJO reusan green/red. */
+  --color-amber: #d9a441;
+  --color-orange: #d97a3f;
 
   /* Dark UI surfaces (professional / tech dashboard look) */
   --color-bg: #0a1526;
@@ -26,6 +37,8 @@
   --color-rule: var(--color-rule);
   --color-green: var(--color-green);
   --color-red: var(--color-red);
+  --color-amber: var(--color-amber);
+  --color-orange: var(--color-orange);
   --color-bg: var(--color-bg);
   --color-surface: var(--color-surface);
   --color-ink: var(--color-ink);

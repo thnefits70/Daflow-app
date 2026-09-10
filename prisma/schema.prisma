@@ -139,6 +139,7 @@ model Department {
   nancyConversations        NancyConversation[]
   checkinConversations      CheckinConversation[]
   purchaseRequests          PurchaseRequest[]
+  improvementPlans          ImprovementPlan[]
 
   @@index([order])
 }
@@ -523,6 +524,12 @@ model User {
   comboSuggestionsReviewed         ComboSuggestion[]        @relation("ComboSuggestionReviewedBy")
   comboSuggestionsCreatedInDropiBy ComboSuggestion[]        @relation("ComboSuggestionCreatedInDropiBy")
   monthlyTopMoverEntriesCreated    MonthlyTopMoverEntry[]   @relation("MonthlyTopMoverEntryCreatedBy")
+
+  improvementPlansAsCollaborator   ImprovementPlan[]       @relation("ImprovementPlanCollaborator")
+  improvementPlansAsLeader         ImprovementPlan[]       @relation("ImprovementPlanLeader")
+  improvementPlanClosuresRequested ImprovementPlan[]       @relation("ImprovementPlanClosureRequestedBy")
+  improvementPlanClosuresApproved  ImprovementPlan[]       @relation("ImprovementPlanClosureApprovedBy")
+  improvementPlanReviewsCreated    ImprovementPlanReview[] @relation("ImprovementPlanReviewCreatedBy")
 
   @@index([deptId])
   @@index([leadsDeptId])
@@ -5331,4 +5338,148 @@ model CancelledGuideItem {
   quantity      Int
 
   @@index([reportId])
+}
+
+/**
+ * ---------------- Plan de Mejora y Acompañamiento ----------------
+ * Confirmado 2026-09-10: herramienta para que cualquier líder abra un plan
+ * formal a UNA persona de su propio equipo (nunca a todo el equipo junto —
+ * es por colaborador, uno a la vez) cuando una situación de desempeño se
+ * repite. Sigue las 3 etapas de 15 días del documento oficial (Primer
+ * período → Extendido → Etapa Final) más el cierre. El líder gestiona todo
+ * el seguimiento semanal solo; cerrar como REUBICACION o
+ * REVISION_CONTINUIDAD (las salidas delicadas) queda pendiente hasta que el
+ * admin lo apruebe — ver approveImprovementPlanClosure en
+ * improvementPlan.ts. El colaborador ve su propio plan completo (compromisos
+ * + cada evaluación semanal), pero nunca decide ni escribe ahí — la IA solo
+ * asiste al líder a redactar, nunca le sugiere nada directo al colaborador.
+ */
+enum ImprovementPlanStage {
+  PRIMER_PERIODO
+  EXTENDIDO
+  ETAPA_FINAL
+  CERRADO
+}
+
+enum ImprovementPlanOutcome {
+  CONTINUIDAD
+  REUBICACION
+  REVISION_CONTINUIDAD
+}
+
+enum ImprovementPlanCommitmentResponsible {
+  COLABORADOR
+  LIDER
+}
+
+enum ImprovementPlanSemaforo {
+  VERDE
+  AMARILLO
+  NARANJA
+  ROJO
+}
+
+model ImprovementPlan {
+  id String @id @default(cuid())
+
+  collaboratorId String
+  collaborator   User   @relation("ImprovementPlanCollaborator", fields: [collaboratorId], references: [id], onDelete: Cascade)
+
+  // Null cuando lo abre el admin — el login de admin no es una fila real de
+  // User (ver dbUserId en guards.ts), igual que en otros módulos.
+  leaderId String?
+  leader   User?   @relation("ImprovementPlanLeader", fields: [leaderId], references: [id], onDelete: SetNull)
+
+  deptId String
+  dept   Department @relation(fields: [deptId], references: [id], onDelete: Cascade)
+
+  situacion         String
+  resultadoEsperado String
+
+  stage             ImprovementPlanStage @default(PRIMER_PERIODO)
+  // Confirmado 2026-09-10: 15 días es el default del documento, pero el
+  // líder puede escribir otro número al abrir el plan si el caso lo amerita.
+  stageDurationDays Int                  @default(15)
+  stageStartedAt    DateTime             @default(now())
+  stageDeadline     DateTime
+
+  outcome      ImprovementPlanOutcome?
+  closureNotes String?
+  closedAt     DateTime?
+
+  // Cierre solicitado por el líder hacia una salida delicada — queda "en
+  // espera" hasta que el admin lo apruebe o lo rechace (ver Resultado
+  // final § 9 del documento). Un cierre hacia CONTINUIDAD nunca pasa por
+  // aquí, el líder lo aplica directo.
+  pendingClosureOutcome       ImprovementPlanOutcome?
+  pendingClosureNotes         String?
+  pendingClosureRequestedAt   DateTime?
+  pendingClosureRequestedById String?
+  pendingClosureRequestedBy   User?                   @relation("ImprovementPlanClosureRequestedBy", fields: [pendingClosureRequestedById], references: [id], onDelete: SetNull)
+  pendingClosureRejectedAt    DateTime?
+
+  adminApprovedAt   DateTime?
+  adminApprovedById String?
+  adminApprovedBy   User?     @relation("ImprovementPlanClosureApprovedBy", fields: [adminApprovedById], references: [id], onDelete: SetNull)
+
+  // Evita re-notificar al admin cada vez que se recalcula el estado — se
+  // dispara una sola vez, al momento exacto en que el plan entra a
+  // ETAPA_FINAL (el momento más delicado, ver § 8 del documento).
+  finalStageNotifiedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  commitments ImprovementPlanCommitment[]
+  reviews     ImprovementPlanReview[]
+
+  @@index([collaboratorId])
+  @@index([deptId])
+  @@index([stage])
+}
+
+model ImprovementPlanCommitment {
+  id     String          @id @default(cuid())
+  planId String
+  plan   ImprovementPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  indicador   String
+  meta        String
+  responsable ImprovementPlanCommitmentResponsible @default(COLABORADOR)
+  order       Int                                  @default(0)
+  createdAt   DateTime                             @default(now())
+
+  @@index([planId])
+}
+
+// Una fila por reunión semanal de seguimiento (§ 6 del documento). scores
+// guarda las calificaciones 1-5 de esa semana como { indicador: nota } — se
+// dejó como Json en vez de una columna por indicador porque la lista de 10
+// indicadores es solo sugerida, no fija, y así no hace falta migrar el
+// schema si un líder evalúa menos o distintos indicadores según el caso.
+model ImprovementPlanReview {
+  id     String          @id @default(cuid())
+  planId String
+  plan   ImprovementPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  weekOf   DateTime
+  scores   Json
+  avgScore Float
+  semaforo ImprovementPlanSemaforo
+
+  queMejoro       String
+  queFalta        String
+  accionSiguiente String
+  apoyoLider      String
+
+  // Si el líder usó "Generar borrador con IA" y lo guardó sin editar nada —
+  // solo informativo/auditable, nunca cambia qué se puede hacer con la fila.
+  aiAssisted Boolean @default(false)
+
+  createdById String?
+  createdBy   User?    @relation("ImprovementPlanReviewCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+
+  @@index([planId])
+  @@index([weekOf])
 }

@@ -243,6 +243,10 @@ export default async function DeptWorkspacePage({ params }: { params: Promise<{ 
         canPublishMarketProduct={false}
         canBrandMarketProduct={false}
         canDecideMarketProductPurchase={false}
+        // Plan de Mejora y Acompañamiento — confirmado 2026-09-10: admin
+        // siempre puede gestionar cualquier plan de cualquier área (ver
+        // canManageImprovementPlan en guards.ts), sin depender de dept.code.
+        canManageImprovementPlan
         isAdmin
         editable
       />

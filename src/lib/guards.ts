@@ -1540,3 +1540,31 @@ export async function canObserveLeader(leaderId: string) {
   const me = await prisma.user.findUnique({ where: { id: session.user.id }, select: { isLeader: true, deptId: true } });
   return !!me && !me.isLeader && me.deptId !== leader.leadsDeptId;
 }
+
+// Plan de Mejora y Acompañamiento — confirmado 2026-09-10: admin siempre
+// puede (gestiona cualquier plan como respaldo, mismo criterio que
+// canEditDeptKpis), o quien lidera ESE departamento en particular.
+export async function canManageImprovementPlan(deptId: string) {
+  const session = await auth();
+  if (!session) return false;
+  if (session.user.role === "admin") return true;
+  if (session.user.role === "employee" && session.user.deptId === deptId) {
+    const user = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { isLeader: true, leadsDeptId: true },
+    });
+    return !!user?.isLeader && user.leadsDeptId === deptId;
+  }
+  return false;
+}
+
+// Ver un plan puntual: admin, el propio colaborador (transparencia total
+// sobre su propio caso, ver docblock de ImprovementPlan en schema.prisma), o
+// quien lidera el departamento del plan.
+export async function canViewImprovementPlan(plan: { deptId: string; collaboratorId: string }) {
+  const session = await auth();
+  if (!session) return false;
+  if (session.user.role === "admin") return true;
+  if (session.user.id === plan.collaboratorId) return true;
+  return canManageImprovementPlan(plan.deptId);
+}

@@ -25,6 +25,7 @@ import {
   LayoutGrid,
   Waypoints,
   TrendingUp,
+  UserCog,
 } from "lucide-react";
 import { BrandMark } from "@/components/brand/DaflowMark";
 import { NotificationBell } from "@/components/shared/NotificationBell";
@@ -233,6 +234,9 @@ export function AdminSidebar({
               1
             </span>
           )}
+        </Link>
+        <Link href="/admin/plan-mejora" className={`${NAV_ITEM} ${pathname.startsWith("/admin/plan-mejora") ? NAV_ACTIVE : NAV_INACTIVE}`}>
+          <UserCog size={15} /> Plan de Mejora
         </Link>
         <Link href="/admin/settings" className={`${NAV_ITEM} ${pathname.startsWith("/admin/settings") ? NAV_ACTIVE : NAV_INACTIVE}`}>
           <Settings size={15} /> Configuración

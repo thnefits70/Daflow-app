@@ -19,6 +19,7 @@ import { getMyLearningPaths, summarizeMyLearningPaths } from "@/lib/learningPath
 import { EmployeeHome } from "@/components/dashboard/EmployeeHome";
 import { canViewInventoryKpisHome, canJustifyFillRate, canManageStoreFeedback, canUseWeeklyCheckin } from "@/lib/guards";
 import { getInventoryKpisData } from "@/lib/inventoryKpis";
+import { getActiveImprovementPlanForCollaborator } from "@/lib/improvementPlan";
 
 export default async function AreaHomePage() {
   const session = await auth();
@@ -47,6 +48,7 @@ export default async function AreaHomePage() {
     myLearningPaths,
     inventoryKpis,
     commissionProgress,
+    improvementPlan,
   ] = await Promise.all([
     prisma.department.findUnique({ where: { id: deptId } }),
     prisma.process.count({ where: { deptId } }),
@@ -72,6 +74,7 @@ export default async function AreaHomePage() {
     getMyLearningPaths(session.user.id),
     canSeeInventoryKpis ? getInventoryKpisData() : Promise.resolve(null),
     getCommissionProgress(),
+    getActiveImprovementPlanForCollaborator(session.user.id),
   ]);
   if (!dept) redirect("/api/auth/force-logout");
 
@@ -113,6 +116,7 @@ export default async function AreaHomePage() {
       storeFeedbackDetails={storeFeedbackDetails}
       duePeriodicReminders={duePeriodicReminders}
       inventoryKpis={inventoryKpis}
+      improvementPlan={improvementPlan}
       rowsSorted={dashboardData.rowsSorted}
       learningPathSummary={summarizeMyLearningPaths(myLearningPaths)}
       scores={scores.map((s) => ({

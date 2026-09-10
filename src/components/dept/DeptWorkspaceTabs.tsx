@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { GitBranch, FileText, GraduationCap, LineChart, TrendingUp, MessageSquare, CalendarClock, BellRing, Heart, ShoppingCart, Package, Pin, Wallet, BarChart3, Landmark, PackageCheck, PackageOpen, PackageMinus, Truck, HandCoins, Combine, UtensilsCrossed, Layers } from "lucide-react";
+import { GitBranch, FileText, GraduationCap, LineChart, TrendingUp, MessageSquare, CalendarClock, BellRing, Heart, ShoppingCart, Package, Pin, Wallet, BarChart3, Landmark, PackageCheck, PackageOpen, PackageMinus, Truck, HandCoins, Combine, UtensilsCrossed, Layers, UserCog } from "lucide-react";
 import { ProcessEmbeddedPanel } from "@/components/process/ProcessEmbeddedPanel";
 import type { ProcessDTO } from "@/components/process/ProcessEditor";
 import type { ProcessUpdateDTO } from "@/components/process/ProcessHistoryPanel";
@@ -36,6 +36,7 @@ import { ExternalSalesPanel } from "@/components/external-sales/ExternalSalesPan
 import { SuppliersPanel, type SupplierDTO } from "@/components/suppliers/SuppliersPanel";
 import { ComboSuggestionsPanel } from "@/components/marketanalysis/ComboSuggestionsPanel";
 import { MarketProductPanel } from "@/components/marketanalysis/MarketProductPanel";
+import { ImprovementPlanTeamPanel } from "@/components/improvement-plan/ImprovementPlanTeamPanel";
 
 type DocumentDTO = { id: string; title: string; content: string; link: string; fileUrl: string | null; fileName: string | null };
 type ExamSummary = { id: string; title: string; questionCount: number };
@@ -63,6 +64,7 @@ const ALL_TABS = [
   { key: "postventa", label: "Servicio Postventa", icon: Heart },
   { key: "combos", label: "Sugerencias de Combos", icon: Combine },
   { key: "analisis-mercado", label: "Análisis de Mercado", icon: TrendingUp },
+  { key: "plan-mejora", label: "Plan de Mejora", icon: UserCog },
   { key: "documentos", label: "Documentos", icon: FileText },
   { key: "examenes", label: "Exámenes", icon: GraduationCap },
   { key: "recordatorios", label: "Recordatorios", icon: BellRing },
@@ -157,6 +159,7 @@ export function DeptWorkspaceTabs({
   canApproveComboSuggestions = false,
   canActOnComboSuggestions = false,
   canMarkComboCreatedInDropi = false,
+  canManageImprovementPlan = false,
   preferredTab = null,
   isAdmin = false,
   editable,
@@ -355,6 +358,10 @@ export function DeptWorkspaceTabs({
   // Confirmado 2026-09-04: exclusivo de quien crea los combos aprobados en
   // Dropi de verdad (hoy Heidy) — el resto del equipo solo VE la cola.
   canMarkComboCreatedInDropi?: boolean;
+  // Plan de Mejora y Acompañamiento — confirmado 2026-09-10: admin siempre
+  // puede (gestiona cualquier plan de cualquier área), o quien lidera ESE
+  // departamento en particular (ver canManageImprovementPlan en guards.ts).
+  canManageImprovementPlan?: boolean;
   isAdmin?: boolean;
   editable: boolean;
   kpisEditable?: boolean;
@@ -394,6 +401,7 @@ export function DeptWorkspaceTabs({
       return canProposeMarketProduct || canReviewMarketProduct || canPublishMarketProduct || canBrandMarketProduct;
     if (t.key === "pagosadmin") return canManageAdminPayments;
     if (t.key === "almuerzos") return canRegisterLunchPayments;
+    if (t.key === "plan-mejora") return canManageImprovementPlan;
     return true;
   });
   // Confirmado 2026-07-30: cada área debería abrir directo en su pestaña más
@@ -662,6 +670,7 @@ export function DeptWorkspaceTabs({
           canDecidePurchase={canDecideMarketProductPurchase}
         />
       )}
+      {tab === "plan-mejora" && canManageImprovementPlan && <ImprovementPlanTeamPanel deptId={deptId} isAdmin={isAdmin} />}
       {tab === "documentos" && <DocumentsPanel deptId={deptId} documents={documents} editable={editable} />}
       {tab === "examenes" && <ExamsPanel deptId={deptId} exams={exams} editable={editable} />}
       {tab === "kpis" && trackKpis && financeKpiData && (

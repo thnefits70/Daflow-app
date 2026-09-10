@@ -15,6 +15,8 @@ import { StockoutBarChart } from "./StockoutBarChart";
 import { WarrantyReasonCard } from "./WarrantyReasonCard";
 import { OrgChart } from "./OrgChart";
 import { InventoryKpisHomeCard } from "./InventoryKpisHomeCard";
+import { ImprovementPlanCollaboratorCard } from "@/components/improvement-plan/ImprovementPlanCollaboratorCard";
+import type { ImprovementPlanDetailDTO } from "@/lib/improvementPlan";
 import type { DashboardRow, WeeklyTrend, StockoutWeekPoint, WarrantyMonthlyChart, PieSlice, WarrantyReasonTrendSeries, FillRateBreakdown, CommissionProgress } from "@/lib/dashboard";
 import type { StoreFeedbackAggregate, StoreFeedbackStoreDetail, StoreFeedbackTrendPoint } from "@/lib/storeFeedback";
 import type { DuePeriodicReminderDTO } from "@/lib/periodicReminders";
@@ -71,6 +73,7 @@ export function EmployeeHome({
   commissionProgress,
   canJustifyFillRate = false,
   showMaryShortcut = false,
+  improvementPlan = null,
 }: {
   userName: string;
   deptName: string;
@@ -97,6 +100,10 @@ export function EmployeeHome({
   learningPathSummary?: MyLearningPathSummaryDTO;
   inventoryKpis?: InventoryKpisDataDTO | null;
   showMaryShortcut?: boolean;
+  // Plan de Mejora y Acompañamiento — confirmado 2026-09-10: null salvo que
+  // ESTE usuario tenga un plan activo (no CERRADO) como colaborador, ver
+  // getActiveImprovementPlanForCollaborator en improvementPlan.ts.
+  improvementPlan?: ImprovementPlanDetailDTO | null;
 }) {
   const avg = scores.length
     ? Math.round(scores.reduce((a, s) => a + pct(s.score, s.total), 0) / scores.length)
@@ -135,6 +142,7 @@ export function EmployeeHome({
           <span className="text-[11px] font-bold text-blue shrink-0">Ir →</span>
         </Link>
       )}
+      {improvementPlan && <ImprovementPlanCollaboratorCard plan={improvementPlan} />}
       <PendingTasksCard />
       <PeriodicRemindersCard items={duePeriodicReminders} />
 
