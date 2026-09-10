@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { BrowserMultiFormatReader } from "@zxing/browser";
 import type { IScannerControls } from "@zxing/browser";
 import { ScanLine, X } from "lucide-react";
+import { useBackButtonGuard } from "@/lib/useBackButtonGuard";
 
 type Props = {
   onScanned: (code: string) => void;
@@ -50,6 +51,15 @@ export function LiveBarcodeScanner({ onScanned, onCancel }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Pedido de Daniel (2026-09-10): el botón "atrás" del celular/navegador
+  // cerraba la cámara sacándolo de toda la pantalla en la que estaba, en
+  // vez de solo cancelar el escaneo. Mientras la cámara está abierta, un
+  // "atrás" ahora equivale a tocar "Cancelar".
+  useBackButtonGuard(!error && !!onCancel, () => {
+    controlsRef.current?.stop();
+    onCancel?.();
+  });
+
   return (
     <div className="bg-cloud border border-rule rounded-md p-3">
       {error ? (
@@ -59,7 +69,7 @@ export function LiveBarcodeScanner({ onScanned, onCancel }: Props) {
           <div className="relative w-full max-w-xs aspect-[4/3] rounded-md overflow-hidden bg-black">
             <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-              <div className="w-3/4 h-1/3 border-2 border-teal rounded-md" />
+              <div className="w-3/5 aspect-square border-2 border-teal rounded-md" />
             </div>
           </div>
           <div className="flex items-center gap-2 mt-2.5 text-[12px] text-steel">

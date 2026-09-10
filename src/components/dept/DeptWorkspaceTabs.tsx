@@ -431,7 +431,9 @@ export function DeptWorkspaceTabs({
   // ya no queda ninguna pestaña visitada de por medio el "atrás" vuelve a
   // comportarse como siempre (sale de la página).
   const tabsRef = useRef(tabs);
-  tabsRef.current = tabs;
+  useEffect(() => {
+    tabsRef.current = tabs;
+  });
   useEffect(() => {
     function handlePopState(e: PopStateEvent) {
       const t = (e.state as { workspaceTab?: string } | null)?.workspaceTab;

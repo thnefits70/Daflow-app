@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Camera, RefreshCw, Upload, X } from "lucide-react";
 import { compressImage } from "@/lib/compressImage";
 import { uploadFile } from "@/lib/uploadFile";
+import { useBackButtonGuard } from "@/lib/useBackButtonGuard";
 
 type Props = {
   folder: string;
@@ -76,6 +77,14 @@ export function LiveCameraCapture({ folder, onCaptured, onCancel, allowUpload = 
     streamRef.current?.getTracks().forEach((t) => t.stop());
     streamRef.current = null;
   }
+
+  // Pedido de Daniel (2026-09-10): mientras la cámara en vivo está abierta
+  // (sin foto tomada todavía), un "atrás" del celular/navegador equivale a
+  // tocar "Cancelar" en vez de sacarlo de toda la pantalla.
+  useBackButtonGuard(!error && !previewUrl && !!onCancel, () => {
+    stopStream();
+    onCancel?.();
+  });
 
   async function hashFile(file: File): Promise<string | undefined> {
     try {
