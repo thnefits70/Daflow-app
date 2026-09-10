@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { GitBranch, FileText, GraduationCap, LineChart, TrendingUp, MessageSquare, CalendarClock, BellRing, Heart, ShoppingCart, Package, Pin, Wallet, BarChart3, Landmark, PackageCheck, PackageOpen, PackageMinus, Truck, HandCoins, Combine, UtensilsCrossed } from "lucide-react";
+import { GitBranch, FileText, GraduationCap, LineChart, TrendingUp, MessageSquare, CalendarClock, BellRing, Heart, ShoppingCart, Package, Pin, Wallet, BarChart3, Landmark, PackageCheck, PackageOpen, PackageMinus, Truck, HandCoins, Combine, UtensilsCrossed, Layers } from "lucide-react";
 import { ProcessEmbeddedPanel } from "@/components/process/ProcessEmbeddedPanel";
 import type { ProcessDTO } from "@/components/process/ProcessEditor";
 import type { ProcessUpdateDTO } from "@/components/process/ProcessHistoryPanel";
@@ -30,6 +30,7 @@ import { AdminPaymentsPanel } from "@/components/finance/AdminPaymentsPanel";
 import { LunchPaymentsPanel } from "@/components/finance/LunchPaymentsPanel";
 import { MarketingArrivalsPanel } from "@/components/marketing/MarketingArrivalsPanel";
 import { MerchandiseReentryPanel } from "@/components/merchandise-reentry/MerchandiseReentryPanel";
+import { StockLevelsPanel } from "@/components/inventory/StockLevelsPanel";
 import { MerchandiseOutflowPanel } from "@/components/merchandise-outflow/MerchandiseOutflowPanel";
 import { ExternalSalesPanel } from "@/components/external-sales/ExternalSalesPanel";
 import { SuppliersPanel, type SupplierDTO } from "@/components/suppliers/SuppliersPanel";
@@ -51,6 +52,7 @@ const ALL_TABS = [
   { key: "proveedores", label: "Proveedores", icon: Truck },
   { key: "llegadas", label: "Mercadería recibida", icon: PackageCheck },
   { key: "inventario", label: "Control de Inventario", icon: Package },
+  { key: "stock-actual", label: "Stock actual", icon: Layers },
   { key: "reingreso", label: "Reingreso de Mercadería", icon: PackageOpen },
   { key: "egresos", label: "Registro de Egresos", icon: PackageMinus },
   { key: "ventas-externas", label: "Ventas Externas", icon: HandCoins },
@@ -380,6 +382,7 @@ export function DeptWorkspaceTabs({
     if (t.key === "proveedores") return canAccessSuppliers;
     if (t.key === "llegadas") return canViewMarketingArrivals;
     if (t.key === "inventario") return canManageInventoryControl;
+    if (t.key === "stock-actual") return canManageJustCatalog;
     if (t.key === "reingreso") return canCaptureMerchandiseReentry || canApproveMerchandiseReentry || canCloseMerchandiseReentry;
     if (t.key === "egresos") return canViewMerchandiseOutflow || canSubmitCancelledGuide || canManageCancelledGuideBatches || canConfirmCancelledGuideFulfillmentRemoval || canAssignCancelledGuideItems || supplierExchangeMineCount > 0 || financeWriteOffPendingCount > 0;
     if (t.key === "ventas-externas") return canViewExternalSales;
@@ -420,6 +423,30 @@ export function DeptWorkspaceTabs({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Pedido de Daniel (2026-09-10): moverse entre pestañas de "Mi área de
+  // trabajo" no dejaba rastro en el historial, así que el botón "atrás"
+  // del celular/navegador sacaba directo a la página principal en vez de
+  // volver a la pestaña anterior. Cada cambio de pestaña ahora agrega una
+  // entrada de historial; "atrás" la retrocede una por una, y solo cuando
+  // ya no queda ninguna pestaña visitada de por medio el "atrás" vuelve a
+  // comportarse como siempre (sale de la página).
+  const tabsRef = useRef(tabs);
+  tabsRef.current = tabs;
+  useEffect(() => {
+    function handlePopState(e: PopStateEvent) {
+      const t = (e.state as { workspaceTab?: string } | null)?.workspaceTab;
+      if (t && tabsRef.current.some((x) => x.key === t)) setTab(t as TabKey);
+    }
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
+
+  function switchTab(key: TabKey) {
+    if (key === tab) return;
+    window.history.pushState({ workspaceTab: key }, "");
+    setTab(key);
+  }
+
   async function pinCurrentTab() {
     setPinned(true);
     await fetch("/api/me/default-workspace-tab", {
@@ -445,7 +472,7 @@ export function DeptWorkspaceTabs({
               tab === t.key ? "text-ink border-teal" : "text-steel border-transparent hover:text-ink"
             }`}
             onClick={() => {
-              setTab(t.key);
+              switchTab(t.key);
               setPinned(false);
               if (t.key === "feedback" && unseenFeedbackCount > 0 && !seenFeedback) {
                 setSeenFeedback(true);
@@ -538,6 +565,7 @@ export function DeptWorkspaceTabs({
           snapshotPeriods={inventoryControlData.snapshotPeriods}
         />
       )}
+      {tab === "stock-actual" && canManageJustCatalog && <StockLevelsPanel />}
       {tab === "reingreso" && (canCaptureMerchandiseReentry || canApproveMerchandiseReentry || canCloseMerchandiseReentry) && (
         <MerchandiseReentryPanel
           canCapture={canCaptureMerchandiseReentry}

@@ -77,6 +77,41 @@ export type StockAlertProduct = {
   balance: number;
 };
 
+export type CurrentStockRow = {
+  catalogItemId: string;
+  name: string;
+  justCode: string | null;
+  balance: number;
+  avgCost: number;
+};
+
+// Confirmado 2026-09-10 (pedido explícito del usuario): pantalla "Stock
+// actual" — ver de un vistazo el saldo de INVESTOCK de TODOS los productos
+// del catálogo, no solo los que ya se movieron. Un producto sin ninguna
+// línea de Kardex todavía (nunca entró ni salió por este sistema) aparece
+// con saldo 0, no se omite.
+export async function getAllCurrentStock(): Promise<CurrentStockRow[]> {
+  const [items, latestPerItem] = await Promise.all([
+    prisma.purchaseCatalogItem.findMany({ select: { id: true, name: true, justCode: true }, orderBy: { name: "asc" } }),
+    prisma.stockKardexEntry.findMany({
+      distinct: ["catalogItemId"],
+      orderBy: [{ catalogItemId: "asc" }, { occurredAt: "desc" }, { createdAt: "desc" }],
+      select: { catalogItemId: true, balanceAfter: true, avgCostAfter: true },
+    }),
+  ]);
+  const byItemId = new Map(latestPerItem.map((e) => [e.catalogItemId, e]));
+  return items.map((i) => {
+    const latest = byItemId.get(i.id);
+    return {
+      catalogItemId: i.id,
+      name: i.name,
+      justCode: i.justCode,
+      balance: latest?.balanceAfter ?? 0,
+      avgCost: latest?.avgCostAfter ?? 0,
+    };
+  });
+}
+
 // Confirmado 2026-09-09: alerta de stock negativo para la pantalla de KPIs
 // financieros → Inventario — misma idea que ya se ve en el export de Just
 // (4 SKUs negativos encontrados en el análisis inicial), pero calculada
