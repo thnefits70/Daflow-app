@@ -445,6 +445,7 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   monthly_top_movers: "KPIs Generales — productos ganadores del mes por subir",
   plan_mejora_evaluacion_pendiente: "Plan de Mejora — evaluación semanal pendiente",
   plan_mejora_etapa_vencida: "Plan de Mejora — etapa vencida, falta decidir cómo siguió",
+  plan_mejora_cierre_aprobacion: "Plan de Mejora — cierre de un líder por aprobar",
 };
 
 // "colaborador_del_mes" es obligatorio — confirmado 2026-08-05: a diferencia
@@ -2490,6 +2491,43 @@ async function getImprovementPlanPendingItems(leaderDeptId: string, href: string
   return items;
 }
 
+const IMPROVEMENT_PLAN_OUTCOME_LABEL: Record<string, string> = {
+  REUBICACION: "Reubicación",
+  REVISION_CONTINUIDAD: "Revisión de continuidad",
+};
+
+// Confirmado 2026-09-10: a diferencia del líder (que sí tiene un recordatorio
+// repetido, ver getImprovementPlanPendingItems), al admin solo se le avisaba
+// UNA vez por push cuando un líder pedía cerrar un plan hacia Reubicación o
+// Revisión de continuidad (ver requestImprovementPlanClosure en
+// improvementPlan.ts) — si lo pasaba por alto, no volvía a aparecer en
+// ningún lado salvo que entrara manualmente a /admin/plan-mejora. Esto lo
+// deja persistente en "Pendientes de esta semana" hasta que de verdad lo
+// apruebe o lo rechace.
+async function getImprovementPlanPendingClosureApprovalItems(href: string): Promise<PendingItem[]> {
+  const plans = await prisma.improvementPlan.findMany({
+    where: { pendingClosureOutcome: { not: null } },
+    select: {
+      pendingClosureOutcome: true,
+      pendingClosureRequestedAt: true,
+      collaborator: { select: { name: true } },
+      dept: { select: { name: true } },
+    },
+  });
+  const now = Date.now();
+  return plans.map((p) => {
+    const daysWaiting = p.pendingClosureRequestedAt ? Math.floor((now - p.pendingClosureRequestedAt.getTime()) / 86400000) : 0;
+    return {
+      type: "plan_mejora_cierre_aprobacion",
+      icon: "🔒",
+      label: "Plan de Mejora — cierre por aprobar",
+      meta: `${p.collaborator.name} (${p.dept.name}) · ${IMPROVEMENT_PLAN_OUTCOME_LABEL[p.pendingClosureOutcome!] ?? p.pendingClosureOutcome} · esperando hace ${daysWaiting} día${daysWaiting === 1 ? "" : "s"}`,
+      overdue: daysWaiting >= 2,
+      href,
+    };
+  });
+}
+
 // ---------------- Entry point ----------------
 // Each person only ever sees what's specifically assigned to them — admin
 // gets Feedback semanal (the one thing only admin can write), a department
@@ -2529,7 +2567,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     // pestaña interna "Pagos" (?etab=pagos, leída por ExternalSalesPanel).
     const mktDept = await prisma.department.findUnique({ where: { code: "MKT" }, select: { id: true } });
     const mktVentasPagosHref = mktDept ? `/admin/dept/${mktDept.id}?tab=ventas-externas&etab=pagos` : "/admin";
-    const [feedbackItems, recognitionItem, weeklyCheckinStalledItems, pettyCashLow, pettyCashUnconfirmed, adminPaymentsItem, purchaseMerchandiseItem, purchaseShippingItem, purchaseCreditsItem, supplierExchangeRejectedItem, overtimeApprovalItem, commissionBonusApprovalItem, salaryAdvanceItem, managementDeductionItem, personalPurchaseFinanceItem, personalPurchaseTransferConfirmItem, personalPurchaseTransferCloseItem, personalPurchaseCashConfirmItem, personalPurchasePaymentWatchItem, payrollTransferItem, payrollIessTransferItem, externalSalePaymentConfirmItem, birthdayItems, nichoBackfillItem, monthlyTopMoversItem] = await Promise.all([
+    const [feedbackItems, recognitionItem, weeklyCheckinStalledItems, pettyCashLow, pettyCashUnconfirmed, adminPaymentsItem, purchaseMerchandiseItem, purchaseShippingItem, purchaseCreditsItem, supplierExchangeRejectedItem, overtimeApprovalItem, commissionBonusApprovalItem, salaryAdvanceItem, managementDeductionItem, personalPurchaseFinanceItem, personalPurchaseTransferConfirmItem, personalPurchaseTransferCloseItem, personalPurchaseCashConfirmItem, personalPurchasePaymentWatchItem, payrollTransferItem, payrollIessTransferItem, externalSalePaymentConfirmItem, birthdayItems, nichoBackfillItem, monthlyTopMoversItem, improvementPlanClosureItems] = await Promise.all([
       getFeedbackPendingItems(),
       getRecognitionAdminPendingItem("/admin/colaborador-destacado"),
       getWeeklyCheckinStalledPendingItems(),
@@ -2555,9 +2593,11 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       getUpcomingBirthdayPendingItems("/admin/nomina"),
       getNichoBackfillPendingItem(nichoBackfillHref),
       getMonthlyTopMoversPendingItem(monthlyTopMoversHref),
+      getImprovementPlanPendingClosureApprovalItems("/admin/plan-mejora"),
     ]);
     const items = [
       ...feedbackItems,
+      ...improvementPlanClosureItems,
       ...(recognitionItem ? [recognitionItem] : []),
       ...weeklyCheckinStalledItems,
       ...pettyCashLow,
@@ -2821,7 +2861,7 @@ export async function getPossiblePendingTypesForActor(
   const types: string[] = [];
 
   if (actor.isAdmin) {
-    types.push("feedback", "caja_chica_saldo", "caja_chica_confirmacion", "cumpleanos", "compras_creditos_pendientes", "anticipos_aprobacion", "descuentos_sin_aceptar", "compras_personales_precio", "compras_personales_transferencia", "compras_personales_cierre", "nomina_transferencia", "iess_transferencia", "combo_sugerencias_nicho_backfill", "monthly_top_movers");
+    types.push("feedback", "caja_chica_saldo", "caja_chica_confirmacion", "cumpleanos", "compras_creditos_pendientes", "anticipos_aprobacion", "descuentos_sin_aceptar", "compras_personales_precio", "compras_personales_transferencia", "compras_personales_cierre", "nomina_transferencia", "iess_transferencia", "combo_sugerencias_nicho_backfill", "monthly_top_movers", "plan_mejora_cierre_aprobacion");
   } else {
     const me = await prisma.user.findUnique({
       where: { id: actor.userId },
