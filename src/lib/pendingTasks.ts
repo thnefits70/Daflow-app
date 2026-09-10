@@ -443,6 +443,8 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   control_inventario_semanal: "Control de Inventario — Excel semanal de stock por SKU",
   combo_sugerencias_nicho_backfill: "Sugerencias de Combos — nichos por asignar (tope de gasto alcanzado)",
   monthly_top_movers: "KPIs Generales — productos ganadores del mes por subir",
+  plan_mejora_evaluacion_pendiente: "Plan de Mejora — evaluación semanal pendiente",
+  plan_mejora_etapa_vencida: "Plan de Mejora — etapa vencida, falta decidir cómo siguió",
 };
 
 // "colaborador_del_mes" es obligatorio — confirmado 2026-08-05: a diferencia
@@ -2433,6 +2435,61 @@ async function getUpcomingBirthdayPendingItems(href: string, deptId?: string, ex
     }));
 }
 
+// Plan de Mejora y Acompañamiento — confirmado 2026-09-10: recordatorio al
+// líder para que no abandone el seguimiento semanal a mitad de camino (el
+// punto donde más se caen estos procesos) y para que decida a tiempo cuando
+// se vence el plazo de una etapa, en vez de dejar el plan "flotando" sin
+// que nadie note que ya tocaba avanzar o cerrarlo. Aplica a CUALQUIER
+// líder (no depende de dept.code) — un plan solo existe si él mismo lo
+// abrió, así que basta con mirar los planes de su propio departamento.
+const IMPROVEMENT_PLAN_REVIEW_OVERDUE_DAYS = 7;
+
+async function getImprovementPlanPendingItems(leaderDeptId: string, href: string): Promise<PendingItem[]> {
+  const plans = await prisma.improvementPlan.findMany({
+    where: { deptId: leaderDeptId, stage: { not: "CERRADO" } },
+    select: {
+      stage: true,
+      stageDeadline: true,
+      createdAt: true,
+      collaborator: { select: { name: true } },
+      reviews: { orderBy: { weekOf: "desc" }, take: 1, select: { weekOf: true } },
+    },
+  });
+  if (plans.length === 0) return [];
+
+  const now = Date.now();
+  const items: PendingItem[] = [];
+  for (const plan of plans) {
+    // Etapa vencida es más urgente que la evaluación semanal — si ambas
+    // aplican, solo se avisa la vencida para no duplicar el mismo caso.
+    if (plan.stageDeadline.getTime() < now) {
+      const daysOverdue = Math.floor((now - plan.stageDeadline.getTime()) / 86400000);
+      items.push({
+        type: "plan_mejora_etapa_vencida",
+        icon: "⏰",
+        label: "Plan de Mejora — etapa vencida",
+        meta: `${plan.collaborator.name} · falta decidir cómo siguió, hace ${daysOverdue} día${daysOverdue === 1 ? "" : "s"}`,
+        overdue: true,
+        href,
+      });
+      continue;
+    }
+    const lastReviewAt = plan.reviews[0]?.weekOf ?? plan.createdAt;
+    const daysSinceReview = Math.floor((now - lastReviewAt.getTime()) / 86400000);
+    if (daysSinceReview >= IMPROVEMENT_PLAN_REVIEW_OVERDUE_DAYS) {
+      items.push({
+        type: "plan_mejora_evaluacion_pendiente",
+        icon: "📋",
+        label: "Plan de Mejora — evaluación pendiente",
+        meta: `${plan.collaborator.name} · sin evaluación hace ${daysSinceReview} días`,
+        overdue: true,
+        href,
+      });
+    }
+  }
+  return items;
+}
+
 // ---------------- Entry point ----------------
 // Each person only ever sees what's specifically assigned to them — admin
 // gets Feedback semanal (the one thing only admin can write), a department
@@ -2714,6 +2771,9 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
   const supplierExchangeGestorItem = await getSupplierExchangeGestorPendingItem(actor.userId, "/area/workspace?tab=egresos&otab=proveedor");
   if (supplierExchangeGestorItem) items.push(supplierExchangeGestorItem);
 
+  const improvementPlanItems = await getImprovementPlanPendingItems(me.leadsDeptId, "/area/workspace?tab=plan-mejora");
+  items.push(...improvementPlanItems);
+
   // Confirmado 2026-08-17: pedido explícito del usuario — a diferencia de lo
   // anterior, esto NO es un dato propio del líder, es company-wide (todos
   // los créditos con proveedores AVAILABLE), así que solo se muestra a quien
@@ -2786,7 +2846,7 @@ export async function getPossiblePendingTypesForActor(
       return types.map((type) => ({ type, label: PENDING_TYPE_CATALOG[type] }));
     }
 
-    types.push("cumpleanos");
+    types.push("cumpleanos", "plan_mejora_evaluacion_pendiente", "plan_mejora_etapa_vencida");
     if (me.leadsDept.code === "FIN") {
       types.push("roles_de_pago", "tasa_devolucion", "kpi_garantias", "pagos_recordatorios", "servicio_postventa", "caja_chica_saldo", "caja_chica_confirmacion", "descuentos_sin_aceptar", "compras_personales_precio", "compras_personales_cierre", "reingreso_mercaderia_verificacion_semanal", "nomina_transferencia", "iess_transferencia");
     }
