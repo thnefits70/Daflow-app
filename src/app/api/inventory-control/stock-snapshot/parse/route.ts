@@ -127,6 +127,19 @@ export async function POST(req: NextRequest) {
     warnings.push("No se encontró ninguna fila válida en el archivo.");
   }
 
+  // Confirmado 2026-09-10 (reportado por Daniel): el archivo real puede
+  // traer el mismo código de producto en más de una fila — sin esto, el
+  // guardado fallaba de golpe más adelante (choque contra la restricción de
+  // código único por semana) sin avisar por qué. Se queda con la ÚLTIMA fila
+  // de cada código repetido (la más reciente en el archivo) y se avisa.
+  const dedupedByCode = new Map<string, (typeof rows)[number]>();
+  for (const r of rows) dedupedByCode.set(r.productCode, r);
+  const duplicateCount = rows.length - dedupedByCode.size;
+  if (duplicateCount > 0) {
+    warnings.push(`${duplicateCount} código(s) aparecen repetidos en el archivo — se usó el último valor de cada uno.`);
+  }
+  const dedupedRows = [...dedupedByCode.values()];
+
   const previousSnapshot = await prisma.inventoryProductSnapshot.findFirst({
     where: { deptId, period: { lt: period } },
     orderBy: { period: "desc" },
@@ -146,7 +159,7 @@ export async function POST(req: NextRequest) {
   const preview = {
     period,
     previousPeriod,
-    rows: rows.map((r) => {
+    rows: dedupedRows.map((r) => {
       const prevStock = previousByCode.get(r.productCode) ?? null;
       return { ...r, previousStock: prevStock, decreased: prevStock === null ? null : r.stock < prevStock };
     }),

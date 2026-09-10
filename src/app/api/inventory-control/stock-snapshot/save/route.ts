@@ -44,16 +44,27 @@ export async function POST(req: NextRequest) {
 
   const createdById = session.user.role === "admin" ? null : session.user.id;
 
-  await prisma.$transaction([
-    prisma.inventoryProductSnapshot.deleteMany({ where: { deptId, period } }),
-    prisma.inventoryProductSnapshot.createMany({
-      data: rows.map((r) => ({
-        deptId, period,
-        productCode: r.productCode, description: r.description, avgCost: r.avgCost, stock: r.stock, costTotal: r.costTotal,
-        createdById,
-      })),
-    }),
-  ]);
+  // Confirmado 2026-09-10 (reportado por Daniel): si por algún motivo llega
+  // un código repetido hasta acá (normalmente ya se filtra en el parseo),
+  // esto evita que choque contra la restricción de código único por semana
+  // y tumbe el guardado sin explicación — se queda con la última ocurrencia.
+  const dedupedRows = [...new Map(rows.map((r) => [r.productCode, r])).values()];
+
+  try {
+    await prisma.$transaction([
+      prisma.inventoryProductSnapshot.deleteMany({ where: { deptId, period } }),
+      prisma.inventoryProductSnapshot.createMany({
+        data: dedupedRows.map((r) => ({
+          deptId, period,
+          productCode: r.productCode, description: r.description, avgCost: r.avgCost, stock: r.stock, costTotal: r.costTotal,
+          createdById,
+        })),
+      }),
+    ]);
+  } catch (err) {
+    console.error("[stock-snapshot save] No se pudo guardar:", err);
+    return NextResponse.json({ error: "No se pudo guardar — revisa el archivo e intenta de nuevo." }, { status: 500 });
+  }
 
   // Confirmado 2026-09-09 (Fase 3, INVESTOCK): mismo momento donde ya se
   // guarda el export de Just — de una vez se compara contra el número que
@@ -68,11 +79,11 @@ export async function POST(req: NextRequest) {
   // INVESTOCK" — solo cuenta acá (no escribe nada), para que la pantalla
   // muestre el botón solo si de verdad hay algo pendiente de cargar.
   const seedableCount = await countSeedableFromJustSnapshot(
-    rows.map((r) => ({ productCode: r.productCode, avgCost: r.avgCost, stock: r.stock }))
+    dedupedRows.map((r) => ({ productCode: r.productCode, avgCost: r.avgCost, stock: r.stock }))
   ).catch((err) => {
     console.error("[stock-snapshot save] No se pudo calcular el conteo de saldo inicial:", err);
     return 0;
   });
 
-  return NextResponse.json({ ok: true, period, count: rows.length, comparison, seedableCount });
+  return NextResponse.json({ ok: true, period, count: dedupedRows.length, comparison, seedableCount });
 }
