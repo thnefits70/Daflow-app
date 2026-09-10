@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Upload, CheckCircle2, XCircle, Sparkles } from "lucide-react";
 import { uploadFile } from "@/lib/uploadFile";
 import { compressImage } from "@/lib/compressImage";
+import { usePasteFile } from "@/lib/usePasteFile";
 import { formatDateTime } from "@/lib/formatDateTime";
 
 type SupplierOption = { id: string; name: string; paymentMode: "PREPAGO" | "CREDITO" };
@@ -157,6 +158,11 @@ function ProposeForm() {
     setImageUrl(uploaded.url);
   }
 
+  // Confirmado 2026-09-10, pedido de Jariel: arrastrar y soltar la imagen
+  // referencial, mismo patrón ya usado en Control de Compras (cotización,
+  // orden de compra) — también deja pegar con Ctrl+V.
+  const { onPaste, onMouseEnter, onMouseLeave, onDragOver, onDragLeave, onDrop, isDragOver } = usePasteFile((file) => uploadImage(file));
+
   async function submit() {
     setErr(""); setOk("");
     if (!productName || !imageUrl || !primarySupplierId || !primaryCost || !primaryUnits) {
@@ -203,9 +209,26 @@ function ProposeForm() {
         {imageUrl ? (
           <div className="mt-1 text-[12px] text-teal">Imagen subida ✓ <button type="button" className="text-steel underline decoration-dotted ml-1 cursor-pointer" onClick={() => setImageUrl("")}>Cambiar</button></div>
         ) : (
-          <button type="button" className="mt-1 flex items-center gap-1.5 border-[1.5px] border-dashed border-rule rounded px-3 py-1.5 text-[12px] text-steel cursor-pointer hover:border-teal" onClick={() => fileRef.current?.click()}>
-            {uploading ? <span className="w-3.5 h-3.5 rounded-full border-2 border-rule border-t-teal animate-spin" /> : <Upload size={13} />} Subir imagen
-          </button>
+          <div
+            tabIndex={0}
+            onPaste={onPaste}
+            onMouseEnter={onMouseEnter}
+            onMouseLeave={onMouseLeave}
+            onDragOver={onDragOver}
+            onDragLeave={onDragLeave}
+            onDrop={onDrop}
+            className={`mt-1 flex flex-col items-center justify-center gap-1 border-[1.5px] border-dashed rounded-md py-3 text-[12px] text-steel cursor-pointer focus:outline-none ${
+              isDragOver ? "border-teal bg-teal/5" : "border-rule hover:border-teal focus:border-teal"
+            }`}
+          >
+            <span className="flex items-center gap-1.5">
+              {uploading ? <span className="w-3.5 h-3.5 rounded-full border-2 border-rule border-t-teal animate-spin" /> : <Upload size={13} />}
+              Pega o arrastra la imagen aquí (Ctrl+V)
+            </span>
+            <button type="button" className="text-[10.5px] underline decoration-dotted opacity-80 hover:opacity-100 cursor-pointer" onClick={() => fileRef.current?.click()}>
+              o selecciona un archivo
+            </button>
+          </div>
         )}
         <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && uploadImage(e.target.files[0])} />
       </div>
