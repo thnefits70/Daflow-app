@@ -26,6 +26,8 @@ const createSchema = z.object({
   competitorPrice: z.number().positive().optional(),
   competitorBodegaName: z.string().trim().optional(),
   competitorProductName: z.string().trim().optional(),
+  noCompetitorData: z.boolean().optional(),
+  discoverySourceNote: z.string().trim().max(300).optional(),
   insuranceRatePercent: z.number().min(0).max(100).optional(),
   fulfillmentCost: z.number().nonnegative().optional(),
   marginPercent: z.number().min(0).max(99).optional(),
@@ -49,6 +51,11 @@ export async function POST(req: NextRequest) {
   if (d.platform === "ROCKET" && (d.competitorId || d.competitorPrice || d.competitorBodegaName || d.competitorProductName)) {
     return NextResponse.json({ error: "Los datos de competencia solo aplican si la plataforma incluye Dropi." }, { status: 400 });
   }
+  // Confirmado 2026-09-10 (pedido de Jariel): si marca "sin datos de
+  // competencia" (producto recomendado por proveedor, sin nada que buscar
+  // en Dropi/Dropkiller/Rocket), esos campos se ignoran aunque vengan
+  // llenos — a propósito vacíos, no un olvido.
+  const skipCompetitor = d.platform === "ROCKET" || !!d.noCompetitorData;
 
   const insuranceRatePercent = d.insuranceRatePercent ?? 6;
   const fulfillmentCost = d.fulfillmentCost ?? 0.75;
@@ -73,10 +80,12 @@ export async function POST(req: NextRequest) {
       referenceImageUrl: d.referenceImageUrl,
       description: d.description || null,
       platform: d.platform,
-      competitorId: d.platform === "ROCKET" ? null : d.competitorId || null,
-      competitorPrice: d.platform === "ROCKET" ? null : d.competitorPrice ?? null,
-      competitorBodegaName: d.platform === "ROCKET" ? null : d.competitorBodegaName || null,
-      competitorProductName: d.platform === "ROCKET" ? null : d.competitorProductName || null,
+      competitorId: skipCompetitor ? null : d.competitorId || null,
+      competitorPrice: skipCompetitor ? null : d.competitorPrice ?? null,
+      competitorBodegaName: skipCompetitor ? null : d.competitorBodegaName || null,
+      competitorProductName: skipCompetitor ? null : d.competitorProductName || null,
+      noCompetitorData: !!d.noCompetitorData,
+      discoverySourceNote: d.noCompetitorData ? d.discoverySourceNote || null : null,
       insuranceRatePercent,
       fulfillmentCost,
       marginPercent,

@@ -22,6 +22,8 @@ type Proposal = {
   competitorPrice: number | null;
   competitorBodegaName: string | null;
   competitorProductName: string | null;
+  noCompetitorData: boolean;
+  discoverySourceNote: string | null;
   insuranceRatePercent: number;
   fulfillmentCost: number;
   marginPercent: number;
@@ -125,6 +127,8 @@ function ProposeForm() {
   const [competitorPrice, setCompetitorPrice] = useState("");
   const [competitorBodegaName, setCompetitorBodegaName] = useState("");
   const [competitorProductName, setCompetitorProductName] = useState("");
+  const [noCompetitorData, setNoCompetitorData] = useState(false);
+  const [discoverySourceNote, setDiscoverySourceNote] = useState("");
   const [insurance, setInsurance] = useState("6");
   const [fulfillment, setFulfillment] = useState("0.75");
   const [margin, setMargin] = useState("20");
@@ -146,7 +150,7 @@ function ProposeForm() {
     fetch("/api/purchase-suppliers").then((r) => (r.ok ? r.json() : [])).then(setSuppliers).catch(() => setSuppliers([]));
   }, []);
 
-  const showsCompetitor = platform !== "ROCKET";
+  const showsCompetitor = platform !== "ROCKET" && !noCompetitorData;
   const preview = computePreviewPrice(Number(primaryCost), Number(primaryUnits), Number(primaryFreight), Number(insurance), Number(fulfillment), Number(margin));
 
   async function uploadImage(file: File) {
@@ -182,6 +186,8 @@ function ProposeForm() {
         competitorPrice: showsCompetitor && competitorPrice ? Number(competitorPrice) : undefined,
         competitorBodegaName: showsCompetitor ? competitorBodegaName || undefined : undefined,
         competitorProductName: showsCompetitor ? competitorProductName || undefined : undefined,
+        noCompetitorData,
+        discoverySourceNote: noCompetitorData ? discoverySourceNote || undefined : undefined,
         insuranceRatePercent: Number(insurance),
         fulfillmentCost: Number(fulfillment),
         marginPercent: Number(margin),
@@ -195,6 +201,7 @@ function ProposeForm() {
     if (!res.ok) { const d = await res.json().catch(() => ({})); setErr(d.error ?? "No se pudo enviar."); return; }
     setOk("Propuesta enviada a Bryan para aprobación.");
     setProductName(""); setDescription(""); setImageUrl(""); setCompetitorId(""); setCompetitorPrice(""); setCompetitorBodegaName(""); setCompetitorProductName("");
+    setNoCompetitorData(false); setDiscoverySourceNote("");
     setPrimarySupplierId(""); setPrimaryCost(""); setPrimaryUnits("100"); setPrimaryFreight(""); setAddSecondary(false);
   }
 
@@ -246,6 +253,12 @@ function ProposeForm() {
           ))}
         </div>
       </div>
+      {platform !== "ROCKET" && (
+        <label className="mb-3 flex items-start gap-2 text-[12px] text-steel cursor-pointer">
+          <input type="checkbox" className="mt-0.5" checked={noCompetitorData} onChange={(e) => setNoCompetitorData(e.target.checked)} />
+          <span>Este producto no tiene datos de Dropi/Dropkiller/Rocket — me lo recomendó un proveedor</span>
+        </label>
+      )}
       {showsCompetitor && (
         <div className="mb-3 bg-cloud border border-rule rounded-md p-3">
           <div className="text-[12px] font-semibold text-steel mb-2">ID ganador de la competencia (Dropi)</div>
@@ -255,6 +268,17 @@ function ProposeForm() {
             <input className="rounded border border-rule px-2.5 py-1.5 text-[13px]" placeholder="Precio de venta" type="number" step="0.01" value={competitorPrice} onChange={(e) => setCompetitorPrice(e.target.value)} />
             <input className="rounded border border-rule px-2.5 py-1.5 text-[13px]" placeholder="Bodega vendedora" value={competitorBodegaName} onChange={(e) => setCompetitorBodegaName(e.target.value)} />
           </div>
+        </div>
+      )}
+      {platform !== "ROCKET" && noCompetitorData && (
+        <div className="mb-3 bg-cloud border border-rule rounded-md p-3">
+          <div className="text-[12px] font-semibold text-steel mb-2">¿Cómo lo encontraste? (opcional)</div>
+          <input
+            className="w-full rounded border border-rule px-2.5 py-1.5 text-[13px]"
+            placeholder="Ej. Recomendado por [proveedor] en su canal de Telegram"
+            value={discoverySourceNote}
+            onChange={(e) => setDiscoverySourceNote(e.target.value)}
+          />
         </div>
       )}
 
@@ -383,6 +407,11 @@ function ReviewQueue({ canAct }: { canAct: boolean }) {
           </ul>
           {p.competitorProductName && (
             <div className="text-[12px] text-steel mb-2">Competencia: {p.competitorProductName} — {p.competitorPrice ? money(p.competitorPrice) : "—"} ({p.competitorBodegaName})</div>
+          )}
+          {p.noCompetitorData && (
+            <div className="text-[12px] text-yellow mb-2">
+              Sin datos de respaldo — recomendado por proveedor{p.discoverySourceNote ? `: ${p.discoverySourceNote}` : ""}
+            </div>
           )}
           {canAct && (
             rejecting === p.id ? (

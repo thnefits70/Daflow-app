@@ -1857,6 +1857,15 @@ model MarketProductProposal {
   competitorBodegaName  String?
   competitorProductName String?
 
+  // Confirmado 2026-09-10 (pedido de Jariel): algunos productos ganadores no
+  // se encuentran investigando en Dropi/Dropkiller/Rocket — se enteran
+  // porque el propio proveedor lo muestra en su canal de WhatsApp/Telegram,
+  // su estado, o lo recomienda directo. Sin dato de competencia que cargar,
+  // a propósito (no es un campo vacío por error). discoverySourceNote es
+  // libre — ej. "Recomendado por [proveedor] en su canal de Telegram".
+  noCompetitorData    Boolean @default(false)
+  discoverySourceNote String?
+
   // Snapshot del cálculo del paso 1 — el costo real de compra vive en
   // supplierPrices y NUNCA se edita después. Estos tres sí son editables
   // luego (ver MarketProductPriceChange) — confirmado 2026-09-09: solo

@@ -75,8 +75,16 @@ export function StockLevelsPanel() {
           {sorted.length === 0 ? (
             <div className="px-3 py-4 text-[12.5px] text-steel">Sin resultados.</div>
           ) : (
-            sorted.map((r) => (
-              <div key={r.catalogItemId} className="grid grid-cols-[1fr_auto_auto] gap-3 px-3 py-2 border-t border-rule items-center">
+            // Confirmado 2026-09-10 (pedido explícito del usuario): con
+            // nombres cortos y las columnas de número lejos a la derecha, se
+            // perdía de vista qué fila conectaba con qué — franjas alternas
+            // (zebra) le dan a cada fila un fondo propio que el ojo puede
+            // seguir de punta a punta sin saltar a la fila de al lado.
+            sorted.map((r, i) => (
+              <div
+                key={r.catalogItemId}
+                className={`grid grid-cols-[1fr_auto_auto] gap-3 px-3 py-2 border-t border-rule items-center ${i % 2 === 1 ? "bg-cloud/40" : ""}`}
+              >
                 <span className="text-[12.5px] flex items-center gap-1.5 min-w-0">
                   <CatalogCode code={r.justCode} />
                   <span className="truncate">{r.name}</span>
