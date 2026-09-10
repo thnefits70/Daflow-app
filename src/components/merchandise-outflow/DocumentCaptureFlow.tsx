@@ -72,6 +72,31 @@ export function DocumentCaptureFlow({ reason, canManageJustCatalog = false }: { 
   // como búsqueda inicial a ProductMatchPicker (que ya busca por justCode).
   const [scanning, setScanning] = useState(false);
   const [scannedQuery, setScannedQuery] = useState<string | null>(null);
+  // Confirmado 2026-09-10 (lotes de caducidad): informativo nada más — no
+  // se obliga a elegir un lote, el Kardex ya resta sola del más antiguo. Es
+  // solo un recordatorio de la disciplina física (nuevo detrás, viejo al
+  // frente) para quien está despachando.
+  const [expirationNote, setExpirationNote] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!manualSelected) return;
+    let cancelled = false;
+    fetch(`/api/purchase-catalog/${manualSelected.id}/expiration-lots?activeOnly=1`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((lots: { expirationDate: string }[]) => {
+        if (cancelled) return;
+        if (lots.length === 0) { setExpirationNote(null); return; }
+        const oldest = lots[0];
+        const label = new Date(oldest.expirationDate).toLocaleDateString("es-EC", { day: "2-digit", month: "short", year: "numeric" });
+        setExpirationNote(
+          lots.length > 1
+            ? `Este producto tiene ${lots.length} lotes activos — recuerda sacar lo más viejo primero, vence ${label}.`
+            : `Recuerda sacar lo más viejo primero — vence ${label}.`
+        );
+      })
+      .catch(() => setExpirationNote(null));
+    return () => { cancelled = true; };
+  }, [manualSelected]);
 
   function startLongPress(url: string) {
     longPressTimer.current = setTimeout(() => setZoomedPhoto(url), 450);
@@ -703,12 +728,19 @@ export function DocumentCaptureFlow({ reason, canManageJustCatalog = false }: { 
             {scannedQuery !== null ? "Escanear en la percha" : "Agregar producto manual"}
           </div>
           {manualSelected ? (
-            <div className="flex items-center gap-2.5 bg-green/10 border border-green/35 rounded-md p-2 mb-2">
-              <div className="flex-1 min-w-0 text-[12px] font-semibold flex items-center gap-1.5">
-                <CatalogCode code={manualSelected.justCode} />
-                <span className="truncate">{manualSelected.name}</span>
+            <div className="mb-2">
+              <div className="flex items-center gap-2.5 bg-green/10 border border-green/35 rounded-md p-2">
+                <div className="flex-1 min-w-0 text-[12px] font-semibold flex items-center gap-1.5">
+                  <CatalogCode code={manualSelected.justCode} />
+                  <span className="truncate">{manualSelected.name}</span>
+                </div>
+                <button type="button" className="text-[11px] font-semibold text-blue cursor-pointer" onClick={() => setManualSelected(null)}>Cambiar</button>
               </div>
-              <button type="button" className="text-[11px] font-semibold text-blue cursor-pointer" onClick={() => setManualSelected(null)}>Cambiar</button>
+              {expirationNote && (
+                <div className="text-[11px] text-yellow mt-1.5 flex items-center gap-1.5">
+                  <ScanLine size={12} className="shrink-0" /> {expirationNote}
+                </div>
+              )}
             </div>
           ) : scanning ? (
             <LiveBarcodeScanner

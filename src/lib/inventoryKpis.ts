@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { computeDerived, consolidateMonth, workingCapitalDays, type FinanceMonthRaw } from "@/lib/financeKpisCalc";
 import { lastOfficeDayAtOrBefore } from "@/lib/businessHours";
-import { getNegativeStockProducts } from "@/lib/stockKardex";
+import { getNegativeStockProducts, getExpiringLots, type ExpiringLot } from "@/lib/stockKardex";
 import {
   gmroi,
   detectOverstockAlert,
@@ -239,6 +239,9 @@ export type InventoryKpisDataDTO = {
   // negativo en el Kardex propio (error de conteo, o algo que salió sin
   // que entrara registrado) — se calcula del Kardex, no del export de Just.
   negativeStockProducts: { catalogItemId: string; name: string; balance: number }[];
+  // Confirmado 2026-09-10, pedido de Daniel: lotes con caducidad dentro de
+  // 6 meses — red de seguridad en pantalla además del aviso por push.
+  expiringLots: ExpiringLot[];
   staleSummary: ReturnType<typeof summarizeStaleStreaks>;
   staleEntries: StaleStreakEntry[];
   staleSnapshotPeriod: string | null;
@@ -262,6 +265,7 @@ export async function getInventoryKpisData(): Promise<InventoryKpisDataDTO> {
     gmroiSeries: { current: null, previous: null, good: null },
     overstockAlert: { alert: false, message: null },
     negativeStockProducts: [],
+    expiringLots: [],
     staleSummary: summarizeStaleStreaks([], null),
     staleEntries: [],
     staleSnapshotPeriod: null,
@@ -271,11 +275,12 @@ export async function getInventoryKpisData(): Promise<InventoryKpisDataDTO> {
   const deptId = await getFinanzasDeptId();
   if (!deptId) return empty;
 
-  const [records, balances, snapshots, negativeStockProducts] = await Promise.all([
+  const [records, balances, snapshots, negativeStockProducts, expiringLots] = await Promise.all([
     prisma.financeKpiRecord.findMany({ where: { deptId }, orderBy: { period: "asc" } }),
     prisma.financeSharedMonthlyBalance.findMany({ where: { deptId }, orderBy: { period: "asc" } }),
     prisma.inventoryProductSnapshot.findMany({ where: { deptId }, orderBy: { period: "asc" } }),
     getNegativeStockProducts(),
+    getExpiringLots(),
   ]);
 
   const staleEntries = computeStaleStreaks(snapshots);
@@ -290,7 +295,7 @@ export async function getInventoryKpisData(): Promise<InventoryKpisDataDTO> {
         .map((s) => ({ productCode: s.productCode, description: s.description, avgCost: s.avgCost, stock: s.stock, costTotal: s.costTotal }))
     : [];
 
-  if (records.length === 0) return { ...empty, staleEntries, staleSnapshotPeriod, staleSummary, latestSnapshotRows, negativeStockProducts };
+  if (records.length === 0) return { ...empty, staleEntries, staleSnapshotPeriod, staleSummary, latestSnapshotRows, negativeStockProducts, expiringLots };
 
   const byPeriod = new Map<string, FinanceMonthRaw[]>();
   for (const r of records) {
@@ -344,6 +349,7 @@ export async function getInventoryKpisData(): Promise<InventoryKpisDataDTO> {
     gmroiSeries: { current: gmroiCurrent, previous: gmroiPrevious, good: gmroiCurrent !== null ? trendIsGood(gmroiCurrent, gmroiPrevious, "up") : null },
     overstockAlert: detectOverstockAlert(overstockSeries),
     negativeStockProducts,
+    expiringLots,
     staleSummary,
     staleEntries,
     staleSnapshotPeriod,

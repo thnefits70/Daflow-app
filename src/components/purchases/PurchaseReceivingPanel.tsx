@@ -18,7 +18,7 @@ type Row = {
   unitCost: number;
   totalCost: number;
   paidAt: string | null;
-  catalogItem: { name: string; photos: string[]; justCode: string | null };
+  catalogItem: { name: string; photos: string[]; justCode: string | null; hasExpiration: boolean };
   supplier: { name: string };
   requestedBy: { name: string } | null;
   paidBy: { name: string } | null;
@@ -258,6 +258,13 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
   const [correctQtyValue, setCorrectQtyValue] = useState("");
   const [correctQtyNote, setCorrectQtyNote] = useState("");
   const [confirmingCorrectQtyId, setConfirmingCorrectQtyId] = useState<string | null>(null);
+
+  // Confirmado 2026-09-10 (lotes de caducidad, pedido de Daniel): antes de
+  // aprobar la recepción de un producto sin marcar, se pregunta si tiene
+  // caducidad — si dice que sí, o si ya estaba marcado, pide fecha de
+  // elaboración (opcional) + vencimiento (obligatoria) + cantidad.
+  const [expirationAnswer, setExpirationAnswer] = useState<Record<string, "yes" | "no">>({});
+  const [expirationForm, setExpirationForm] = useState<Record<string, { manufactureDate: string; expirationDate: string; quantity: string }>>({});
 
   // Informar urgente — cantidad contada + desglose por tipo + evidencia.
   const [urgentCountedQty, setUrgentCountedQty] = useState("");
@@ -501,13 +508,28 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
   async function approveReceipt(id: string) {
     setBusy(true);
     setErr("");
-    const res = await fetch(`/api/purchase-requests/${id}/approve-receipt`, { method: "POST" });
+    const lot = expirationForm[id];
+    const res = await fetch(`/api/purchase-requests/${id}/approve-receipt`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: lot
+        ? JSON.stringify({
+            expirationLot: {
+              manufactureDate: lot.manufactureDate || null,
+              expirationDate: lot.expirationDate,
+              quantity: Number(lot.quantity),
+            },
+          })
+        : undefined,
+    });
     setBusy(false);
     const data = await res.json().catch(() => null);
     if (!res.ok) {
       setErr(data?.error ?? "No se pudo aprobar.");
       return;
     }
+    setExpirationAnswer((m) => { const next = { ...m }; delete next[id]; return next; });
+    setExpirationForm((m) => { const next = { ...m }; delete next[id]; return next; });
     load();
     router.refresh();
   }
@@ -1744,9 +1766,82 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                         ))}
                       </div>
                       {err && <div className="text-red text-[12px] mb-2">{err}</div>}
+                      {r.catalogItem.hasExpiration || expirationAnswer[r.id] === "yes" ? (
+                        <div className="bg-cloud rounded-md p-2.5 mb-2">
+                          <div className="text-[11px] font-semibold text-steel mb-1.5">Este producto tiene caducidad — declara el lote:</div>
+                          <div className="grid grid-cols-3 gap-2">
+                            <div>
+                              <label className="block text-[10px] text-steel mb-0.5">Elaboración (opcional)</label>
+                              <input
+                                type="date"
+                                className="w-full rounded border border-rule bg-surface px-2 py-1.5 text-[12px]"
+                                value={expirationForm[r.id]?.manufactureDate ?? ""}
+                                onChange={(e) =>
+                                  setExpirationForm((m) => ({
+                                    ...m,
+                                    [r.id]: { manufactureDate: e.target.value, expirationDate: m[r.id]?.expirationDate ?? "", quantity: m[r.id]?.quantity ?? String(r.receipt!.receivedQuantity) },
+                                  }))
+                                }
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[10px] text-steel mb-0.5">Vencimiento</label>
+                              <input
+                                type="date"
+                                className="w-full rounded border border-rule bg-surface px-2 py-1.5 text-[12px]"
+                                value={expirationForm[r.id]?.expirationDate ?? ""}
+                                onChange={(e) =>
+                                  setExpirationForm((m) => ({
+                                    ...m,
+                                    [r.id]: { manufactureDate: m[r.id]?.manufactureDate ?? "", expirationDate: e.target.value, quantity: m[r.id]?.quantity ?? String(r.receipt!.receivedQuantity) },
+                                  }))
+                                }
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[10px] text-steel mb-0.5">Cantidad</label>
+                              <input
+                                type="number"
+                                min={1}
+                                className="w-full rounded border border-rule bg-surface px-2 py-1.5 text-[12px]"
+                                value={expirationForm[r.id]?.quantity ?? String(r.receipt!.receivedQuantity)}
+                                onChange={(e) =>
+                                  setExpirationForm((m) => ({
+                                    ...m,
+                                    [r.id]: { manufactureDate: m[r.id]?.manufactureDate ?? "", expirationDate: m[r.id]?.expirationDate ?? "", quantity: e.target.value },
+                                  }))
+                                }
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      ) : expirationAnswer[r.id] !== "no" ? (
+                        <div className="bg-cloud rounded-md p-2.5 mb-2 flex items-center justify-between gap-2">
+                          <span className="text-[12px] text-ink">¿Este producto tiene fecha de caducidad?</span>
+                          <div className="flex gap-2 shrink-0">
+                            <button
+                              type="button"
+                              className="text-[11.5px] font-bold text-teal cursor-pointer"
+                              onClick={() =>
+                                setExpirationAnswer((m) => ({ ...m, [r.id]: "yes" }))
+                              }
+                            >
+                              Sí
+                            </button>
+                            <button type="button" className="text-[11.5px] font-bold text-steel cursor-pointer" onClick={() => setExpirationAnswer((m) => ({ ...m, [r.id]: "no" }))}>
+                              No
+                            </button>
+                          </div>
+                        </div>
+                      ) : null}
                       <button
                         type="button"
-                        disabled={!canApprove || busy}
+                        disabled={
+                          !canApprove ||
+                          busy ||
+                          ((r.catalogItem.hasExpiration || expirationAnswer[r.id] === "yes") &&
+                            !(expirationForm[r.id]?.expirationDate && Number(expirationForm[r.id]?.quantity) > 0))
+                        }
                         title={!canApprove ? "Exclusivo del líder de Inventario" : undefined}
                         className="rounded border border-teal bg-teal px-3.5 py-1.5 text-[12.5px] font-bold text-navy cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                         onClick={() => approveReceipt(r.id)}

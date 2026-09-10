@@ -518,6 +518,7 @@ model User {
   cancelledGuidesItemsAssigned        CancelledGuideReport[] @relation("CancelledGuideItemsAssignedBy")
   cancelledGuidesFulfillmentRemoved   CancelledGuideReport[] @relation("CancelledGuideFulfillmentRemovedBy")
 
+  expirationCohortsDeclared        ExpirationCohort[]       @relation("ExpirationCohortDeclaredBy")
   atomProductStatusesCreated       AtomProductStatus[]      @relation("AtomProductStatusCreatedBy")
   lowRotationWeeklyEntriesCreated  LowRotationWeeklyEntry[] @relation("LowRotationWeeklyEntryCreatedBy")
   comboSuggestionsSelected         ComboSuggestion[]        @relation("ComboSuggestionSelectedBy")
@@ -978,11 +979,80 @@ model StockKardexEntry {
   merchandiseOutflowItemId String?                 @unique
   merchandiseOutflowItem   MerchandiseOutflowItem? @relation(fields: [merchandiseOutflowItemId], references: [id], onDelete: SetNull)
 
+  // Confirmado 2026-09-10 (lotes de caducidad): si esta entrada IN creó un
+  // cohort nuevo (se declaró fecha de caducidad al recibir), queda enlazada
+  // acá — 1:1, solo aplica a compras nuevas de productos con caducidad.
+  sourceExpirationCohortId String?                         @unique
+  sourceExpirationCohort   ExpirationCohort?               @relation(fields: [sourceExpirationCohortId], references: [id], onDelete: SetNull)
+  // Confirmado 2026-09-10: si esta entrada es una salida (OUT) de un
+  // producto con caducidad, acá queda el detalle de de qué cohort(s) salió
+  // — para trazabilidad, sin partir esta fila en varias.
+  lotAllocations           StockKardexEntryLotAllocation[]
+
   occurredAt DateTime
   createdAt  DateTime @default(now())
 
   @@index([catalogItemId])
   @@index([occurredAt])
+}
+
+// ---------------- Lotes de caducidad (sobre INVESTOCK) ----------------
+// Confirmado 2026-09-10, pedido de Daniel: control FEFO (lo más viejo sale
+// primero) para productos con fecha de vencimiento. Nombrado "Cohort" a
+// propósito — evita la palabra "lote", ya usada para
+// MerchandiseOutflowBatch/MerchandiseReentryBatch/tanda de CHEN, para no
+// confundir verbalmente al equipo.
+model ExpirationCohort {
+  id            String              @id @default(cuid())
+  catalogItemId String
+  catalogItem   PurchaseCatalogItem @relation(fields: [catalogItemId], references: [id], onDelete: Restrict)
+
+  // No todo empaque trae fecha de fabricación impresa — opcional para no
+  // bloquear la captura. La de vencimiento sí es obligatoria, es la que
+  // ordena FEFO (la más próxima sale primero).
+  manufactureDate DateTime?
+  expirationDate  DateTime
+
+  // quantityReceived: lo declarado originalmente, nunca se edita (registro
+  // histórico). quantityRemaining: mutable, baja con cada deducción FEFO.
+  quantityReceived  Int
+  quantityRemaining Int
+
+  declaredById String?
+  declaredBy   User?    @relation("ExpirationCohortDeclaredBy", fields: [declaredById], references: [id], onDelete: SetNull)
+  declaredAt   DateTime @default(now())
+
+  // Aviso "faltan 6 meses para vencer" — guard de un solo disparo, mismo
+  // patrón que deliveryOverdueAlertSentAt en ExternalSale (nunca se repite
+  // una vez enviado).
+  sixMonthAlertSentAt DateTime?
+
+  sourceKardexEntry StockKardexEntry?
+  allocations       StockKardexEntryLotAllocation[]
+
+  createdAt DateTime @default(now())
+
+  @@index([catalogItemId])
+  @@index([expirationDate])
+}
+
+// Confirmado 2026-09-10: una salida puede repartirse entre 2+ cohorts si el
+// más viejo no alcanza para cubrir toda la cantidad despachada — esta tabla
+// audita exactamente de cuál(es) salió, sin partir StockKardexEntry (que
+// sigue siendo una sola fila por salida, mismo total de siempre).
+model StockKardexEntryLotAllocation {
+  id            String           @id @default(cuid())
+  kardexEntryId String
+  kardexEntry   StockKardexEntry @relation(fields: [kardexEntryId], references: [id], onDelete: Cascade)
+
+  expirationCohortId String
+  expirationCohort   ExpirationCohort @relation(fields: [expirationCohortId], references: [id], onDelete: Restrict)
+
+  quantity  Int
+  createdAt DateTime @default(now())
+
+  @@index([kardexEntryId])
+  @@index([expirationCohortId])
 }
 
 // Confirmado 2026-09-09: comparación automática, calculada justo después de
@@ -1601,6 +1671,13 @@ model PurchaseCatalogItem {
   // de esta regla, aunque tengan menos de 3 fotos.
   pendingRegistration Boolean @default(false)
 
+  // Confirmado 2026-09-10, pedido de Daniel: en vez de pedirle a alguien que
+  // revise los ~500 productos del catálogo para decidir cuáles caducan, el
+  // sistema "aprende solo" — la primera vez que se recibe una compra de un
+  // producto sin marcar, se pregunta si tiene caducidad; si dice que sí,
+  // queda marcado para siempre y ya no se vuelve a preguntar.
+  hasExpiration Boolean @default(false)
+
   // Confirmado 2026-08-31: nicho sugerido por IA una sola vez (Sugerencias de
   // Combos ATOM+baja rotación) para poder cruzar productos ganadores con
   // productos de baja rotación del mismo nicho. Editable a mano después —
@@ -1656,6 +1733,7 @@ model PurchaseCatalogItem {
   // movimientos de este producto y su comparación semanal contra Just.
   stockKardexEntries             StockKardexEntry[]
   stockKardexJustComparisons     StockKardexJustComparison[]
+  expirationCohorts              ExpirationCohort[]
 }
 
 enum AtomRentabilityStatus {

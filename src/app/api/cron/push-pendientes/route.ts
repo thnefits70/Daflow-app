@@ -9,6 +9,7 @@ import { getStalePersonalPurchaseTransferPushes } from "@/lib/personalPurchases"
 import { getAtomSyncReminderPushes } from "@/lib/atomReminder";
 import { getWeeklyCheckinPushes, getMidweekFollowupPushes } from "@/lib/weeklyCheckin";
 import { getDeliveryOverduePushes, getContraEntregaPaymentOverduePushes } from "@/lib/externalSales";
+import { getExpiringLotPushes } from "@/lib/stockKardex";
 import { sendPushToOwner } from "@/lib/webPush";
 import { runNichoAutoBackfill } from "@/lib/nichoAi";
 
@@ -121,6 +122,14 @@ export async function GET(req: NextRequest) {
   // cerrar desde la entrega, y 48 horas sin comprobante en contra entrega.
   const externalSaleTimingPushes = [...(await getDeliveryOverduePushes()), ...(await getContraEntregaPaymentOverduePushes())];
   for (const r of externalSaleTimingPushes) {
+    await sendPushToOwner(r.ownerId, { title: r.title, body: r.body, url: r.url });
+    notified++;
+  }
+
+  // Lotes de caducidad — aviso al líder de Inventario cuando falten 6 meses
+  // o menos para vencer (confirmado 2026-09-10, pedido de Daniel).
+  const expiringLotPushes = await getExpiringLotPushes();
+  for (const r of expiringLotPushes) {
     await sendPushToOwner(r.ownerId, { title: r.title, body: r.body, url: r.url });
     notified++;
   }

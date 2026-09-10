@@ -121,6 +121,17 @@ export function InventoryKpisPanel({ data }: { data: InventoryKpisDataDTO }) {
         </div>
       </div>
     )}
+    {data.expiringLots.length > 0 && (
+      <div className="flex items-start gap-2 text-[12px] bg-yellow/10 border border-yellow/30 text-yellow rounded-md px-3 py-2.5">
+        <span className="w-1.5 h-1.5 rounded-full bg-yellow shrink-0 mt-1" />
+        <div>
+          <b>{data.expiringLots.length} lote{data.expiringLots.length === 1 ? "" : "s"} vence{data.expiringLots.length === 1 ? "" : "n"} en menos de 6 meses</b>: {" "}
+          {data.expiringLots
+            .map((l) => `${l.productName} (${l.quantityRemaining} un., vence ${new Date(l.expirationDate).toLocaleDateString("es-EC", { day: "2-digit", month: "short", year: "numeric" })})`)
+            .join(", ")}
+        </div>
+      </div>
+    )}
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
       {/* 1. Rotación / DIO */}
       <div className="bg-surface border border-rule rounded-md p-4.5" style={{ borderTop: "2px solid #14c7c7" }}>
