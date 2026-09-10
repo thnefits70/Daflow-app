@@ -296,7 +296,7 @@ function ProposeForm() {
           {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}{s.paymentMode === "CREDITO" ? " (crédito)" : ""}</option>)}
         </select>
         <div className="grid grid-cols-3 gap-2">
-          <input className="rounded border border-rule px-2.5 py-1.5 text-[13px]" placeholder="Costo del lote" type="number" step="0.01" value={primaryCost} onChange={(e) => setPrimaryCost(e.target.value)} />
+          <input className="rounded border border-rule px-2.5 py-1.5 text-[13px]" placeholder="Costo unitario (USD)" type="number" step="0.01" value={primaryCost} onChange={(e) => setPrimaryCost(e.target.value)} />
           <input className="rounded border border-rule px-2.5 py-1.5 text-[13px]" placeholder="Unidades del lote" type="number" value={primaryUnits} onChange={(e) => setPrimaryUnits(e.target.value)} />
           <input className="rounded border border-rule px-2.5 py-1.5 text-[13px]" placeholder="Flete (si aplica)" type="number" step="0.01" value={primaryFreight} onChange={(e) => setPrimaryFreight(e.target.value)} />
         </div>
@@ -313,7 +313,7 @@ function ProposeForm() {
             {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}{s.paymentMode === "CREDITO" ? " (crédito)" : ""}</option>)}
           </select>
           <div className="grid grid-cols-3 gap-2">
-            <input className="rounded border border-rule px-2.5 py-1.5 text-[13px]" placeholder="Costo del lote" type="number" step="0.01" value={secondaryCost} onChange={(e) => setSecondaryCost(e.target.value)} />
+            <input className="rounded border border-rule px-2.5 py-1.5 text-[13px]" placeholder="Costo unitario (USD)" type="number" step="0.01" value={secondaryCost} onChange={(e) => setSecondaryCost(e.target.value)} />
             <input className="rounded border border-rule px-2.5 py-1.5 text-[13px]" placeholder="Unidades del lote" type="number" value={secondaryUnits} onChange={(e) => setSecondaryUnits(e.target.value)} />
             <input className="rounded border border-rule px-2.5 py-1.5 text-[13px]" placeholder="Flete (si aplica)" type="number" step="0.01" value={secondaryFreight} onChange={(e) => setSecondaryFreight(e.target.value)} />
           </div>

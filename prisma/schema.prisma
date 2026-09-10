@@ -1931,9 +1931,14 @@ model MarketProductSupplierPrice {
   supplierId String
   supplier   Supplier @relation(fields: [supplierId], references: [id], onDelete: Restrict)
 
-  // El proveedor cotizó $batchCost por un lote de $batchUnits unidades —
-  // así es como Jariel realmente recibe los precios (no siempre por unidad
-  // suelta). freightCost es el flete de ESE lote completo, si aplica.
+  // Corregido 2026-09-10, pedido explícito del usuario: batchCost es el
+  // costo POR UNIDAD (nunca se divide entre batchUnits) — el nombre del
+  // campo quedó de una versión anterior donde sí representaba el costo
+  // total del lote, pero causaba confusión real (Jariel escribía el costo
+  // unitario sin darse cuenta de que el sistema lo trataba como total).
+  // batchUnits sigue existiendo para saber cuántas unidades trae ese lote
+  // (referencia + para repartir el flete). freightCost es el flete de ESE
+  // lote completo, si aplica — sí se reparte entre batchUnits.
   batchCost   Float
   batchUnits  Int
   freightCost Float?

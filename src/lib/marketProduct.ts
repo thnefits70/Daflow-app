@@ -4,6 +4,14 @@ import { prisma } from "@/lib/prisma";
 // completa de Bryan (líder de MKT). Nunca se confía en el precio calculado
 // que manda el navegador: siempre se recalcula acá, server-side.
 
+// Corregido 2026-09-10, pedido explícito del usuario: `batchCost` es el
+// costo POR UNIDAD (lo que Jariel ya escribía sin querer, confundido por el
+// rótulo "Costo del lote") — ya NO se divide entre las unidades. El flete sí
+// sigue siendo un total por el lote completo (así se cotiza en la realidad),
+// así que ese sí se reparte entre las unidades para sacar el flete por
+// unidad. Verificado que el ejemplo real ya validado (resultado 2.395) sigue
+// dando exactamente igual con costo=1 (antes 100) para el mismo lote de 100
+// unidades y flete=10.
 export function computeMarketProductSalePrice(params: {
   batchCost: number;
   batchUnits: number;
@@ -12,7 +20,7 @@ export function computeMarketProductSalePrice(params: {
   fulfillmentCost: number;
   marginPercent: number;
 }): number {
-  const unitCost = ((params.batchCost + (params.freightCost ?? 0)) * (1 + params.insuranceRatePercent / 100)) / params.batchUnits;
+  const unitCost = (params.batchCost + (params.freightCost ?? 0) / params.batchUnits) * (1 + params.insuranceRatePercent / 100);
   return (unitCost + params.fulfillmentCost) / (1 - params.marginPercent / 100);
 }
 
@@ -44,7 +52,7 @@ export function cheapestSupplierPrice<T extends { batchCost: number; batchUnits:
 ): T | null {
   if (prices.length === 0) return null;
   return prices.reduce((cheapest, p) => {
-    const unitOf = (x: T) => (x.batchCost + (x.freightCost ?? 0)) / x.batchUnits;
+    const unitOf = (x: T) => x.batchCost + (x.freightCost ?? 0) / x.batchUnits;
     return unitOf(p) < unitOf(cheapest) ? p : cheapest;
   }, prices[0]);
 }
