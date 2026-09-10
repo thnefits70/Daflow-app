@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { CommissionProgress } from "@/lib/dashboard";
 
 const TIER_EMOJI: Record<string, string> = { "Raíz": "🌱", "Cosecha": "🌾" };
@@ -35,6 +35,16 @@ export function CommissionProgressCard({ progress }: { progress: CommissionProgr
   const [openTierId, setOpenTierId] = useState<string | null>(null);
   const [myAmounts, setMyAmounts] = useState<Record<string, number> | null>(null);
   const [loading, setLoading] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!openTierId) return;
+    function handleClickOutside(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) setOpenTierId(null);
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [openTierId]);
 
   if (!progress) return null;
   const { dailyAvg, month, tiers } = progress;
@@ -60,7 +70,7 @@ export function CommissionProgressCard({ progress }: { progress: CommissionProgr
   }
 
   return (
-    <div className="bg-surface border border-rule rounded-lg p-5 mb-5">
+    <div ref={containerRef} className="bg-surface border border-rule rounded-lg p-5 mb-5">
       <div className="flex items-center justify-between mb-3">
         <div className="font-mono text-[10.5px] tracking-[.14em] uppercase text-steel">Comisión de equipo</div>
         {dailyAvg !== null && (
