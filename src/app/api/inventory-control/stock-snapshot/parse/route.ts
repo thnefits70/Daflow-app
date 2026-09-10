@@ -132,11 +132,16 @@ export async function POST(req: NextRequest) {
   // guardado fallaba de golpe más adelante (choque contra la restricción de
   // código único por semana) sin avisar por qué. Se queda con la ÚLTIMA fila
   // de cada código repetido (la más reciente en el archivo) y se avisa.
+  const seenCodes = new Set<string>();
+  const duplicateCodes = new Set<string>();
+  for (const r of rows) {
+    if (seenCodes.has(r.productCode)) duplicateCodes.add(r.productCode);
+    seenCodes.add(r.productCode);
+  }
   const dedupedByCode = new Map<string, (typeof rows)[number]>();
   for (const r of rows) dedupedByCode.set(r.productCode, r);
-  const duplicateCount = rows.length - dedupedByCode.size;
-  if (duplicateCount > 0) {
-    warnings.push(`${duplicateCount} código(s) aparecen repetidos en el archivo — se usó el último valor de cada uno.`);
+  if (duplicateCodes.size > 0) {
+    warnings.push(`${duplicateCodes.size} código(s) repetido(s) en el archivo — se usó el último valor de cada uno: ${[...duplicateCodes].join(", ")}.`);
   }
   const dedupedRows = [...dedupedByCode.values()];
 
