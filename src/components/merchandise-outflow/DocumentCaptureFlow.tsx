@@ -742,7 +742,7 @@ export function DocumentCaptureFlow({ reason, canManageJustCatalog = false }: { 
             <ScanLine size={13} /> Escanear en la percha
           </button>
           <button type="button" className="flex-1 flex items-center justify-center gap-1.5 rounded-md border-[1.5px] border-dashed border-rule px-3.5 py-2 text-[12px] font-semibold cursor-pointer hover:border-teal" onClick={() => setManualMode(true)}>
-            <Plus size={13} /> Agregar sin usar la IA
+            <Plus size={13} /> Buscar con ID o nombre del producto
           </button>
         </div>
       )}
