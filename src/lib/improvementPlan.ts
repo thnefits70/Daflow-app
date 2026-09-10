@@ -220,12 +220,14 @@ export type ImprovementPlanRosterEntryDTO = {
 
 // Roster del equipo con el estado de su plan (si tiene uno activo) — usado
 // por ImprovementPlanTeamPanel para decidir a quién ofrecer "Iniciar plan"
-// vs. a quién llevar directo al detalle de su plan en curso. No incluye a
-// quien lidera el área: el plan es para el equipo, no para uno mismo.
-export async function getDeptRosterWithImprovementPlanStatus(deptId: string): Promise<ImprovementPlanRosterEntryDTO[]> {
+// vs. a quién llevar directo al detalle de su plan en curso. Confirmado
+// 2026-09-10: SÍ puede incluir a otro líder del mismo equipo (un área puede
+// tener más de un líder) — lo único que se excluye es a quien está haciendo
+// la petición, para que nadie se abra un plan a sí mismo.
+export async function getDeptRosterWithImprovementPlanStatus(deptId: string, excludeUserId: string): Promise<ImprovementPlanRosterEntryDTO[]> {
   const [members, activePlans] = await Promise.all([
     prisma.user.findMany({
-      where: { deptId, isActive: true, isLeader: false },
+      where: { deptId, isActive: true, id: { not: excludeUserId } },
       select: { id: true, name: true },
       orderBy: { name: "asc" },
     }),
@@ -287,7 +289,7 @@ export async function addWeeklyReview(params: {
   apoyoLider: string;
   aiAssisted: boolean;
 }): Promise<ImprovementPlanDetailDTO> {
-  const plan = await prisma.improvementPlan.findUnique({ where: { id: params.planId }, select: { stage: true } });
+  const plan = await prisma.improvementPlan.findUnique({ where: { id: params.planId }, select: { stage: true, collaboratorId: true } });
   if (!plan) throw new Error("Plan no encontrado.");
   if (plan.stage === "CERRADO") throw new Error("El plan ya está cerrado — no se pueden agregar evaluaciones.");
 
@@ -309,6 +311,16 @@ export async function addWeeklyReview(params: {
       createdById: dbUserId(params.actorId),
     },
   });
+
+  // Confirmado 2026-09-10: antes solo se avisaba al abrir/cerrar el plan —
+  // el colaborador (transparencia total sobre su propio caso) ahora también
+  // se entera cada semana que hay una evaluación nueva, en vez de tener que
+  // entrar a mirar por su cuenta para descubrirla.
+  await notifyOwner(plan.collaboratorId, {
+    title: "Nueva evaluación de tu Plan de Mejora",
+    body: "Tu líder registró cómo te fue esta semana — revisa el detalle en tu cuenta.",
+    url: "/area",
+  }).catch(() => null);
 
   const detail = await getImprovementPlanDTO(params.planId);
   if (!detail) throw new Error("Plan no encontrado.");
