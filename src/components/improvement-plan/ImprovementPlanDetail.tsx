@@ -175,17 +175,17 @@ export function ImprovementPlanDetail({
       </div>
 
       {!canAct && !isClosed && (
-        <div className="text-[12px] text-steel mb-6">
+        <div className="text-[12px] text-steel mb-4">
           Modo lectura — solo {plan.leaderName ?? "el líder a cargo"} puede registrar evaluaciones y decisiones de este plan.
         </div>
       )}
 
-      {!isClosed && canAct && (
-        <WeeklyReviewForm planId={plan.id} onSaved={refresh} />
+      {!isClosed && (
+        <WeeklyReviewForm planId={plan.id} onSaved={refresh} readOnly={!canAct} />
       )}
 
-      {!isClosed && canAct && (
-        <StageActions plan={plan} onChanged={refresh} />
+      {!isClosed && (
+        <StageActions plan={plan} onChanged={refresh} readOnly={!canAct} />
       )}
 
       <div className="mt-7">
@@ -277,7 +277,7 @@ function ApproveClosureBox({ planId, onDone }: { planId: string; onDone: () => v
   );
 }
 
-function WeeklyReviewForm({ planId, onSaved }: { planId: string; onSaved: () => void }) {
+function WeeklyReviewForm({ planId, onSaved, readOnly = false }: { planId: string; onSaved: () => void; readOnly?: boolean }) {
   const [freeText, setFreeText] = useState("");
   const [scores, setScores] = useState<Record<string, number>>({});
   const [queMejoro, setQueMejoro] = useState("");
@@ -355,7 +355,12 @@ function WeeklyReviewForm({ planId, onSaved }: { planId: string; onSaved: () => 
 
   if (!open) {
     return (
-      <button type="button" onClick={() => setOpen(true)} className="text-[12.5px] font-semibold text-blue mb-6 cursor-pointer">
+      <button
+        type="button"
+        disabled={readOnly}
+        onClick={() => setOpen(true)}
+        className="text-[12.5px] font-semibold text-blue mb-6 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+      >
         + Registrar evaluación semanal
       </button>
     );
@@ -420,7 +425,7 @@ function WeeklyReviewForm({ planId, onSaved }: { planId: string; onSaved: () => 
   );
 }
 
-function StageActions({ plan, onChanged }: { plan: ImprovementPlanDetailDTO; onChanged: () => void }) {
+function StageActions({ plan, onChanged, readOnly = false }: { plan: ImprovementPlanDetailDTO; onChanged: () => void; readOnly?: boolean }) {
   const [duration, setDuration] = useState(plan.stageDurationDays);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -429,6 +434,7 @@ function StageActions({ plan, onChanged }: { plan: ImprovementPlanDetailDTO; onC
   const [notes, setNotes] = useState("");
 
   const decide = async (decision: "SATISFACTORIO" | "INSUFICIENTE" | "SIN_MEJORA") => {
+    if (readOnly) return;
     setBusy(true);
     setError(null);
     try {
@@ -441,7 +447,7 @@ function StageActions({ plan, onChanged }: { plan: ImprovementPlanDetailDTO; onC
   };
 
   const requestClosure = async () => {
-    if (!notes.trim()) return;
+    if (readOnly || !notes.trim()) return;
     setBusy(true);
     setError(null);
     try {
@@ -468,25 +474,25 @@ function StageActions({ plan, onChanged }: { plan: ImprovementPlanDetailDTO; onC
             Al llegar al plazo (o antes, si ya está claro), registra cómo quedó {STAGE_LABEL[plan.stage]}:
           </div>
           <div className="flex flex-wrap items-center gap-2 mb-2">
-            <button type="button" disabled={busy} onClick={() => decide("SATISFACTORIO")} className="text-[12px] font-semibold text-white bg-green px-3 py-1.5 rounded-md cursor-pointer disabled:opacity-50">
+            <button type="button" disabled={busy || readOnly} onClick={() => decide("SATISFACTORIO")} className="text-[12px] font-semibold text-white bg-green px-3 py-1.5 rounded-md cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
               Satisfactorio — cerrar como Continuidad
             </button>
-            <button type="button" disabled={busy} onClick={() => decide("INSUFICIENTE")} className="text-[12px] font-semibold text-navy bg-amber px-3 py-1.5 rounded-md cursor-pointer disabled:opacity-50">
+            <button type="button" disabled={busy || readOnly} onClick={() => decide("INSUFICIENTE")} className="text-[12px] font-semibold text-navy bg-amber px-3 py-1.5 rounded-md cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
               {plan.stage === "PRIMER_PERIODO" ? "Mejora pero insuficiente — pasar a Extendido" : "Insuficiente — pasar a Etapa Final"}
             </button>
-            <button type="button" disabled={busy} onClick={() => decide("SIN_MEJORA")} className="text-[12px] font-semibold text-white bg-orange px-3 py-1.5 rounded-md cursor-pointer disabled:opacity-50">
+            <button type="button" disabled={busy || readOnly} onClick={() => decide("SIN_MEJORA")} className="text-[12px] font-semibold text-white bg-orange px-3 py-1.5 rounded-md cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
               Sin mejora — pasar a Etapa Final
             </button>
           </div>
           <label className="flex items-center gap-2 text-[12px] text-steel">
             Duración de la siguiente etapa (días):
-            <input type="number" min={1} max={120} value={duration} onChange={(e) => setDuration(Number(e.target.value))} className="w-16 bg-cloud border border-rule rounded px-1.5 py-0.5 text-[12px]" />
+            <input type="number" min={1} max={120} value={duration} disabled={readOnly} onChange={(e) => setDuration(Number(e.target.value))} className="w-16 bg-cloud border border-rule rounded px-1.5 py-0.5 text-[12px] disabled:opacity-50" />
           </label>
         </div>
       )}
 
       {!showClosure ? (
-        <button type="button" onClick={() => setShowClosure(true)} className="text-[12.5px] font-semibold text-blue cursor-pointer">
+        <button type="button" disabled={readOnly} onClick={() => setShowClosure(true)} className="text-[12.5px] font-semibold text-blue cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
           Solicitar cierre del plan
         </button>
       ) : (
