@@ -13,6 +13,16 @@ function money(n: number) {
   return `$${n.toFixed(2)}`;
 }
 
+function nextMonths(count: number): string[] {
+  const now = new Date();
+  const out: string[] = [];
+  for (let i = 0; i < count; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+    out.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+  }
+  return out;
+}
+
 // Confirmado 2026-09-11: pedido explícito del usuario — deudas de anticipos,
 // compras personales o descuentos de ANTES de que existiera este sistema de
 // nómina, que nunca quedaron registradas. Nairoby las carga una sola vez a
@@ -26,6 +36,7 @@ export function LegacyPayrollDebtsPanel({ canEdit }: { canEdit: boolean }) {
   const [totalAmount, setTotalAmount] = useState("");
   const [reason, setReason] = useState("");
   const [installments, setInstallments] = useState(1);
+  const [startMonth, setStartMonth] = useState(nextMonths(1)[0]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [confirming, setConfirming] = useState(false);
@@ -65,12 +76,12 @@ export function LegacyPayrollDebtsPanel({ canEdit }: { canEdit: boolean }) {
     const res = await fetch("/api/payroll/legacy-debts", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ employeeId, totalAmount: amount, reason: reason.trim(), installments }),
+      body: JSON.stringify({ employeeId, totalAmount: amount, reason: reason.trim(), installments, startMonth }),
     });
     setBusy(false);
     const data = await res.json().catch(() => null);
     if (!res.ok) { setErr(data?.error ?? "No se pudo cargar."); return; }
-    setEmployeeId(""); setTotalAmount(""); setReason(""); setInstallments(1);
+    setEmployeeId(""); setTotalAmount(""); setReason(""); setInstallments(1); setStartMonth(nextMonths(1)[0]);
     load();
   }
 
@@ -97,9 +108,15 @@ export function LegacyPayrollDebtsPanel({ canEdit }: { canEdit: boolean }) {
               <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Cuotas</label>
               <div className="flex gap-2">
                 {[1, 2, 3, 4].map((n) => (
-                  <button key={n} type="button" onClick={() => setInstallments(n)} className={`text-[12px] font-semibold rounded px-3 py-1.5 border cursor-pointer ${installments === n ? "border-teal text-teal bg-teal/10" : "border-rule text-steel"}`}>{n}</button>
+                  <button key={n} type="button" onClick={() => { setInstallments(n); setConfirming(false); }} className={`text-[12px] font-semibold rounded px-3 py-1.5 border cursor-pointer ${installments === n ? "border-teal text-teal bg-teal/10" : "border-rule text-steel"}`}>{n}</button>
                 ))}
               </div>
+            </div>
+            <div>
+              <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Mes de la primera cuota</label>
+              <select className="text-[13px] rounded border border-rule bg-cloud px-2.5 py-1.5" value={startMonth} onChange={(e) => { setStartMonth(e.target.value); setConfirming(false); }}>
+                {nextMonths(6).map((m) => (<option key={m} value={m}>{m}</option>))}
+              </select>
             </div>
             {err && <div className="text-red text-[12.5px]">{err}</div>}
             <div className="flex items-center gap-3">
@@ -119,7 +136,7 @@ export function LegacyPayrollDebtsPanel({ canEdit }: { canEdit: boolean }) {
             </div>
             {confirming && !busy && (
               <div className="text-[11.5px] text-steel-dim">
-                Esto va a descontar {money(Number(totalAmount) || 0)} del rol de {employees.find((e) => e.id === employeeId)?.name ?? "este colaborador"}, en {installments} cuota{installments > 1 ? "s" : ""} empezando este mes — se aplica solo, sin que el colaborador tenga que aceptarlo. Tocá de nuevo para confirmar.
+                Esto va a descontar {money(Number(totalAmount) || 0)} del rol de {employees.find((e) => e.id === employeeId)?.name ?? "este colaborador"}, en {installments} cuota{installments > 1 ? "s" : ""} empezando en {startMonth} — se aplica solo, sin que el colaborador tenga que aceptarlo. Tocá de nuevo para confirmar.
               </div>
             )}
           </div>

@@ -4735,7 +4735,7 @@ model LegacyPayrollDebt {
   reason       String
   installments Int    @default(1)
 
-  firstPayoutMonth String // resuelto al crear vía resolveFirstPayoutMonth, siempre el mes actual
+  firstPayoutMonth String // resuelto al crear vía resolveFirstPayoutMonth, a partir del mes que Nairoby eligió
 
   createdById String?
   createdAt   DateTime @default(now())
