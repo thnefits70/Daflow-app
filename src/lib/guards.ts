@@ -347,6 +347,21 @@ export async function canManageSalaryAdvances() {
   return !!session && session.user.role === "admin";
 }
 
+// Confirmado 2026-09-11: Nairoby (líder de Finanzas) ve el historial de
+// anticipos igual que el admin, de solo lectura — no puede aprobar/rechazar
+// ni ver la cola de pendientes con datos bancarios, eso sigue siendo
+// exclusivo de canManageSalaryAdvances.
+export async function canViewSalaryAdvancesHistory() {
+  const session = await auth();
+  if (!session) return false;
+  if (session.user.role === "admin") return true;
+  const user = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { isLeader: true, leadsDept: { select: { code: true } } },
+  });
+  return !!user?.isLeader && user.leadsDept?.code === "FIN";
+}
+
 export async function canCreateManagementDeduction() {
   const session = await auth();
   return !!session && session.user.role === "admin";

@@ -13,7 +13,7 @@ import { PersonalPurchasesTransferPanel } from "@/components/personal-purchases/
 import { PersonalPurchasesPaymentWatchPanel } from "@/components/personal-purchases/PersonalPurchasesPaymentWatchPanel";
 import { PersonalPurchasesPaymentLedgerPanel } from "@/components/personal-purchases/PersonalPurchasesPaymentLedgerPanel";
 import { PersonalPurchasesHistoryPanel } from "@/components/personal-purchases/PersonalPurchasesHistoryPanel";
-import { SalaryAdvanceApprovalPanel } from "@/components/salary-advances/SalaryAdvanceApprovalPanel";
+import { SalaryAdvanceApprovalPanel, AdvanceHistoryPanel } from "@/components/salary-advances/SalaryAdvanceApprovalPanel";
 import { ManagementDeductionsPanel } from "./ManagementDeductionsPanel";
 import { TabGuide } from "@/components/shared/TabGuide";
 
@@ -33,6 +33,7 @@ export function PayrollWorkspace({
   canGrantCeoBonus,
   canConfirmPersonalPurchaseFinance,
   canManageSalaryAdvances,
+  canViewSalaryAdvancesHistory,
   canCreateManagementDeduction,
   isAdmin = false,
 }: {
@@ -45,6 +46,7 @@ export function PayrollWorkspace({
   canGrantCeoBonus: boolean;
   canConfirmPersonalPurchaseFinance: boolean;
   canManageSalaryAdvances: boolean;
+  canViewSalaryAdvancesHistory: boolean;
   canCreateManagementDeduction: boolean;
   isAdmin?: boolean;
 }) {
@@ -57,7 +59,7 @@ export function PayrollWorkspace({
     ...(canProposeCommissions ? [{ key: "comisiones" as Tab, label: "Comisiones de equipo" }] : []),
     ...(canGrantCeoBonus ? [{ key: "bonosceo" as Tab, label: "Bonos discrecionales" }] : []),
     ...(canConfirmPersonalPurchaseFinance ? [{ key: "comprasfinanzas" as Tab, label: "Compras personales" }] : []),
-    ...(canManageSalaryAdvances ? [{ key: "anticipos" as Tab, label: "Anticipos" }] : []),
+    ...(canManageSalaryAdvances || canViewSalaryAdvancesHistory ? [{ key: "anticipos" as Tab, label: "Anticipos" }] : []),
     ...(canCreateManagementDeduction ? [{ key: "descuentos" as Tab, label: "Descuentos" }] : []),
   ];
   const [tab, setTab] = useState<Tab>(tabs[0]?.key ?? "roles");
@@ -176,6 +178,14 @@ export function PayrollWorkspace({
             Aprueba o rechaza acá los anticipos de sueldo que piden los colaboradores. Al aprobar, sube el comprobante de pago a la cuenta bancaria que ya tienen registrada.
           </TabGuide>
           <SalaryAdvanceApprovalPanel />
+        </>
+      )}
+      {tab === "anticipos" && !canManageSalaryAdvances && canViewSalaryAdvancesHistory && (
+        <>
+          <TabGuide storageKey="nomina-anticipos-historial">
+            Historial de anticipos ya resueltos, de todas las áreas — solo lectura. Aprobar, rechazar o ver la cuenta bancaria de cada colaborador sigue siendo exclusivo del admin.
+          </TabGuide>
+          <AdvanceHistoryPanel />
         </>
       )}
       {tab === "descuentos" && canCreateManagementDeduction && (

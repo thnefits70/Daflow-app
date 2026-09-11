@@ -25,7 +25,7 @@ function money(n: number) {
   return `$${n.toFixed(2)}`;
 }
 
-function AdvanceHistoryPanel() {
+export function AdvanceHistoryPanel() {
   const [items, setItems] = useState<HistoryAdvance[] | null>(null);
 
   useEffect(() => {

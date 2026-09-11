@@ -14,6 +14,7 @@ import {
   canGrantCeoBonus,
   canConfirmPersonalPurchaseFinance,
   canManageSalaryAdvances,
+  canViewSalaryAdvancesHistory,
   canCreateManagementDeduction,
 } from "@/lib/guards";
 
@@ -31,6 +32,7 @@ export default async function AreaNominaPage() {
     canGrantBonus,
     canConfirmPurchasesFinance,
     canAdvances,
+    canViewAdvancesHistory,
     canDeductions,
   ] = await Promise.all([
     canManageNomina(),
@@ -43,6 +45,7 @@ export default async function AreaNominaPage() {
     canGrantCeoBonus(),
     canConfirmPersonalPurchaseFinance(),
     canManageSalaryAdvances(),
+    canViewSalaryAdvancesHistory(),
     canCreateManagementDeduction(),
   ]);
   // Confirmado 2026-08-13: un líder de área habilitada (Inventario,
@@ -86,6 +89,7 @@ export default async function AreaNominaPage() {
         canGrantCeoBonus={canGrantBonus}
         canConfirmPersonalPurchaseFinance={canConfirmPurchasesFinance}
         canManageSalaryAdvances={canAdvances}
+        canViewSalaryAdvancesHistory={canViewAdvancesHistory}
         canCreateManagementDeduction={canDeductions}
         isAdmin={isAdmin}
       />

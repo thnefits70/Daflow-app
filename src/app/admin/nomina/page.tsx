@@ -11,6 +11,7 @@ import {
   canGrantCeoBonus,
   canConfirmPersonalPurchaseFinance,
   canManageSalaryAdvances,
+  canViewSalaryAdvancesHistory,
   canCreateManagementDeduction,
 } from "@/lib/guards";
 
@@ -28,6 +29,7 @@ export default async function NominaPage() {
     canGrantBonus,
     canConfirmPurchasesFinance,
     canAdvances,
+    canViewAdvancesHistory,
     canDeductions,
   ] = await Promise.all([
     prisma.user.findMany({
@@ -60,6 +62,7 @@ export default async function NominaPage() {
     canGrantCeoBonus(),
     canConfirmPersonalPurchaseFinance(),
     canManageSalaryAdvances(),
+    canViewSalaryAdvancesHistory(),
     canCreateManagementDeduction(),
   ]);
 
@@ -80,6 +83,7 @@ export default async function NominaPage() {
         canGrantCeoBonus={canGrantBonus}
         canConfirmPersonalPurchaseFinance={canConfirmPurchasesFinance}
         canManageSalaryAdvances={canAdvances}
+        canViewSalaryAdvancesHistory={canViewAdvancesHistory}
         canCreateManagementDeduction={canDeductions}
         isAdmin
       />
