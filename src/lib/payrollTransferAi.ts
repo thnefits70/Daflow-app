@@ -77,6 +77,13 @@ export async function readIessTransferProof(params: { proofUrl: string; actorId:
   return readTransferProofAmount({ ...params, feature: "nomina_iess_comprobante" });
 }
 
+// Mismo lector, para el sobre aparte del "líquido a pagar" propio de
+// Nairoby dentro de esta misma quincena (ver PayrollNairobySalaryTransfer)
+// — comparado contra ese total, nunca contra el del resto de la nómina.
+export async function readNairobySalaryTransferProof(params: { proofUrl: string; actorId: string }): Promise<PayrollTransferProofReadResult> {
+  return readTransferProofAmount({ ...params, feature: "nomina_sueldo_nairoby_comprobante" });
+}
+
 const COMBINING_DIACRITICS = new RegExp("[\\u0300-\\u036f]", "g");
 
 function normalizeName(name: string): string[] {

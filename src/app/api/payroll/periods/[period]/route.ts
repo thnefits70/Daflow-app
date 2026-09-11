@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { canViewPayrollRoles } from "@/lib/guards";
+import { canViewPayrollRoles, getFinanceLeadId } from "@/lib/guards";
 import { isValidPeriod } from "@/lib/payroll";
 import { isEndOfMonthQuincena, monthOfPeriod } from "@/lib/payrollCalc";
 
@@ -68,5 +68,11 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ per
     missingEmployees = configured.filter((u) => !existingIds.has(u.id));
   }
 
-  return NextResponse.json({ ...record, monthlyRoleIdByEmployee, missingEmployees });
+  // Confirmado 2026-09-11: pedido explícito del usuario — el front necesita
+  // saber cuál rol es el de Nairoby para restarlo de la vista previa del
+  // total de nómina (su líquido a pagar ahora se envía aparte, ver
+  // PayrollNairobySalaryTransfer).
+  const financeLeadId = await getFinanceLeadId();
+
+  return NextResponse.json({ ...record, monthlyRoleIdByEmployee, missingEmployees, financeLeadId });
 }

@@ -4104,9 +4104,10 @@ model PayrollPeriod {
   publishedById String?
   publishedBy   User?     @relation("PayrollPeriodPublishedBy", fields: [publishedById], references: [id], onDelete: SetNull)
 
-  roles        PayrollQuincenaRole[]
-  transfer     PayrollTransfer?
-  iessTransfer PayrollIessTransfer?
+  roles                 PayrollQuincenaRole[]
+  transfer              PayrollTransfer?
+  iessTransfer          PayrollIessTransfer?
+  nairobySalaryTransfer PayrollNairobySalaryTransfer?
 
   @@index([status])
 }
@@ -4209,6 +4210,45 @@ model PayrollIessTransfer {
   // Número de comprobante/transacción que la IA extrae del recibo (pedido
   // explícito 2026-08-27) — no se deja confirmar el pago hasta que tanto el
   // monto como este número se hayan podido leer, ver proof/route.ts.
+  proofNumber String?
+  completedAt DateTime?
+
+  // Mismo patrón que PayrollTransfer.confirmedWithoutProof — ver ahí.
+  confirmedWithoutProof       Boolean   @default(false)
+  confirmedWithoutProofNote   String?
+  confirmedWithoutProofAt     DateTime?
+  confirmedWithoutProofByName String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+}
+
+// Confirmado 2026-09-11: pedido explícito del usuario — el "líquido a
+// pagar" propio de Nairoby (su rol de colaboradora dentro de esta misma
+// quincena) se paga aparte, en su propio sobre, para que quede su propio
+// comprobante de pago separado del resto de la nómina. Mismo ciclo de vida
+// y mismas 3 cuentas destino que PayrollTransfer/PayrollIessTransfer, otro
+// registro totalmente independiente — PayrollTransfer.totalAmount pasa a
+// excluir el netTotal del rol de Nairoby (ver transfer/confirm/route.ts),
+// así nunca se paga dos veces ni se le olvida a alguien.
+model PayrollNairobySalaryTransfer {
+  id       String        @id @default(cuid())
+  periodId String        @unique
+  period   PayrollPeriod @relation(fields: [periodId], references: [id], onDelete: Cascade)
+
+  totalAmount Float
+  destination PayrollTransferDestination
+
+  status PayrollTransferStatus @default(PENDING_APPROVAL)
+
+  rejectionReason String?
+  rejectedAt      DateTime?
+  approvedAt      DateTime?
+
+  proofUrl    String?
+  proofName   String?
   proofNumber String?
   completedAt DateTime?
 

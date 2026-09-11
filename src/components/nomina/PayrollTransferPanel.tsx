@@ -737,3 +737,36 @@ export function PayrollIessTransferPanel({
     />
   );
 }
+
+// Confirmado 2026-09-11: pedido explícito del usuario — el "líquido a
+// pagar" propio de Nairoby dentro de esta misma quincena se paga aparte,
+// con su propio comprobante, para separar su propio pago del resto de la
+// nómina. Mismo ciclo de vida y mismas 3 cuentas destino que
+// PayrollTransfer/PayrollIessTransfer, otro registro totalmente
+// independiente. Default de cuenta: NAIROBY (su propia cuenta).
+export function PayrollNairobySalaryTransferPanel({
+  period,
+  isAdmin,
+  canEdit,
+  transfer,
+  onChanged,
+}: {
+  period: string;
+  isAdmin: boolean;
+  canEdit: boolean;
+  transfer: Transfer | null | undefined;
+  onChanged: () => void;
+}) {
+  return (
+    <TransferPanel
+      apiBase={`/api/payroll/periods/${period}/salary-transfer`}
+      title="Pago de tu sueldo — Nairoby"
+      description="Tu propio líquido a pagar de esta quincena, aparte del resto de la nómina — así queda tu propio comprobante de pago. Elegí a qué cuenta te lo transfieren."
+      defaultDestination="NAIROBY"
+      isAdmin={isAdmin}
+      canEdit={canEdit}
+      transfer={transfer}
+      onChanged={onChanged}
+    />
+  );
+}

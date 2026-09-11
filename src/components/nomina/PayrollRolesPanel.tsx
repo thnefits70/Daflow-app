@@ -5,7 +5,7 @@ import { X, ShieldCheck, Landmark, ChevronDown, CheckCircle2, Eye } from "lucide
 import { ProofPreview } from "@/components/shared/ProofPreview";
 import { PayrollEmployeeSalariesPanel } from "./PayrollEmployeeSalariesPanel";
 import { CeoBonusesForNairobyPanel } from "./CeoBonusesForNairobyPanel";
-import { PayrollTransferPanel, PayrollIessTransferPanel, type Transfer } from "./PayrollTransferPanel";
+import { PayrollTransferPanel, PayrollIessTransferPanel, PayrollNairobySalaryTransferPanel, type Transfer } from "./PayrollTransferPanel";
 import { PayoutUploader } from "./PayrollIndividualPayment";
 import { isEndOfMonthQuincena, IESS_RATE, IESS_EMPLOYER_RATE, IESS_PART_TIME_RATE, IESS_SPOUSE_EXTENSION_RATE } from "@/lib/payrollCalc";
 import { formatDateTime } from "@/lib/formatDateTime";
@@ -39,6 +39,7 @@ type PeriodDetail = {
   roles: Role[];
   monthlyRoleIdByEmployee?: Record<string, string>;
   missingEmployees?: { id: string; name: string; position: string | null }[];
+  financeLeadId?: string | null;
 };
 
 function money(n: number) {
@@ -585,6 +586,7 @@ export function PayrollRolesPanel({ canEdit, canProposeFixedBonus, canApproveFix
   const [detail, setDetail] = useState<PeriodDetail | null>(null);
   const [transfer, setTransfer] = useState<Transfer | null | undefined>(undefined);
   const [iessTransfer, setIessTransfer] = useState<Transfer | null | undefined>(undefined);
+  const [nairobySalaryTransfer, setNairobySalaryTransfer] = useState<Transfer | null | undefined>(undefined);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [confirmingPublish, setConfirmingPublish] = useState(false);
@@ -614,6 +616,11 @@ export function PayrollRolesPanel({ canEdit, canProposeFixedBonus, canApproveFix
   }
   useEffect(loadIessTransfer, [period]);
 
+  function loadNairobySalaryTransfer() {
+    fetch(`/api/payroll/periods/${period}/salary-transfer`).then((r) => (r.ok ? r.json() : null)).then(setNairobySalaryTransfer);
+  }
+  useEffect(loadNairobySalaryTransfer, [period]);
+
   // Confirmado 2026-08-25: bug real encontrado por el usuario — editar las
   // líneas de un rol solo refrescaba `detail`, nunca `transfer`, así que el
   // "Total a transferir" se quedaba congelado con el monto de antes del
@@ -624,6 +631,7 @@ export function PayrollRolesPanel({ canEdit, canProposeFixedBonus, canApproveFix
     loadDetail();
     loadTransfer();
     loadIessTransfer();
+    loadNairobySalaryTransfer();
   }
 
   async function generate() {
@@ -707,12 +715,23 @@ export function PayrollRolesPanel({ canEdit, canProposeFixedBonus, canApproveFix
       {detail && detail.status !== "NOT_GENERATED" && (
         <>
           {(() => {
+            // Confirmado 2026-09-11: pedido explícito del usuario — el
+            // líquido a pagar propio de Nairoby ya no va dentro de "Pago a
+            // nómina", se paga aparte (ver PayrollNairobySalaryTransfer).
+            const ownRole = detail.financeLeadId ? detail.roles.find((r) => r.employeeId === detail.financeLeadId) : undefined;
+            const restNetTotal = detail.roles
+              .filter((r) => r.employeeId !== detail.financeLeadId)
+              .reduce((s, r) => s + r.netTotal, 0);
             const nominaPending = !transfer || (isAdmin && transfer.status === "REJECTED");
             const iessPending =
               isEndOfMonthQuincena(period) &&
               (!iessTransfer || (isAdmin && iessTransfer.status === "REJECTED")) &&
               (iessTransfer || totalIessOwedFromRoles(detail.roles) > 0);
-            if (!nominaPending && !iessPending) return null;
+            const salaryPending =
+              !!ownRole &&
+              ownRole.netTotal > 0 &&
+              (!nairobySalaryTransfer || (isAdmin && nairobySalaryTransfer.status === "REJECTED"));
+            if (!nominaPending && !iessPending && !salaryPending) return null;
             return (
               <div className="bg-surface border border-rule rounded-md p-3.5 mb-4">
                 <div className="text-[11px] font-semibold uppercase tracking-wide text-steel mb-2">Resumen de la quincena</div>
@@ -726,11 +745,18 @@ export function PayrollRolesPanel({ canEdit, canProposeFixedBonus, canApproveFix
                         <div className="text-[9px] text-gold/70">Pago al IESS</div>
                       </div>
                     )}
+                    {salaryPending && (
+                      <div className="flex flex-col items-end gap-0.5 bg-blue/15 border-2 border-blue/50 rounded-md px-3 py-1.5">
+                        <div className="text-[24px] font-extrabold tabular-nums text-blue leading-none">{money(nairobySalaryTransfer?.totalAmount ?? ownRole!.netTotal)}</div>
+                        <div className="text-[9.5px] text-blue/90 uppercase tracking-wide font-semibold">Sueldo de Nairoby</div>
+                        <div className="text-[9px] text-blue/70">Pago aparte, a su cuenta</div>
+                      </div>
+                    )}
                     {nominaPending && (
                       <div className="flex flex-col items-end gap-0.5 bg-teal/15 border-2 border-teal/50 rounded-md px-3 py-1.5">
-                        <div className="text-[24px] font-extrabold tabular-nums text-teal leading-none">{money(transfer?.totalAmount ?? detail.roles.reduce((s, r) => s + r.netTotal, 0))}</div>
+                        <div className="text-[24px] font-extrabold tabular-nums text-teal leading-none">{money(transfer?.totalAmount ?? restNetTotal)}</div>
                         <div className="text-[9.5px] text-teal/90 uppercase tracking-wide font-semibold">Total a transferir</div>
-                        <div className="text-[9px] text-teal/70">Pago a nómina</div>
+                        <div className="text-[9px] text-teal/70">Pago a nómina — sin el sueldo de Nairoby</div>
                       </div>
                     )}
                   </div>
@@ -752,6 +778,11 @@ export function PayrollRolesPanel({ canEdit, canProposeFixedBonus, canApproveFix
                     Rechazaste el envío de IESS anterior — {iessTransfer.rejectionReason}. Esperando que Nairoby corrija y reenvíe.
                   </div>
                 )}
+                {nairobySalaryTransfer?.status === "REJECTED" && (
+                  <div className="text-[11.5px] text-red mt-2 pt-2 border-t border-rule">
+                    Rechazaste el envío de su sueldo — {nairobySalaryTransfer.rejectionReason}. Esperando que Nairoby corrija y reenvíe.
+                  </div>
+                )}
               </div>
             );
           })()}
@@ -764,6 +795,24 @@ export function PayrollRolesPanel({ canEdit, canProposeFixedBonus, canApproveFix
               null+canEdit) quedaba inalcanzable. Ahora solo se excluye la
               espera inicial (undefined) y el caso admin+rechazado ya
               cubierto arriba. */}
+          {(() => {
+            const ownRole = detail.financeLeadId ? detail.roles.find((r) => r.employeeId === detail.financeLeadId) : undefined;
+            const showSalaryPanel = !!ownRole && ownRole.netTotal > 0;
+            return (
+              showSalaryPanel &&
+              nairobySalaryTransfer !== undefined &&
+              !(isAdmin && nairobySalaryTransfer?.status === "REJECTED") && (
+                <PayrollNairobySalaryTransferPanel
+                  period={period}
+                  isAdmin={isAdmin}
+                  canEdit={canEdit}
+                  transfer={nairobySalaryTransfer}
+                  onChanged={loadNairobySalaryTransfer}
+                />
+              )
+            );
+          })()}
+
           {transfer !== undefined && !(isAdmin && transfer?.status === "REJECTED") && (
             <PayrollTransferPanel period={period} isAdmin={isAdmin} canEdit={canEdit} transfer={transfer} onChanged={loadTransfer} />
           )}

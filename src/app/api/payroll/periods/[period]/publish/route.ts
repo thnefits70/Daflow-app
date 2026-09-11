@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { canEditPayrollRoles } from "@/lib/guards";
+import { canEditPayrollRoles, getFinanceLeadId } from "@/lib/guards";
 import { isValidPeriod } from "@/lib/payroll";
 import { isEndOfMonthQuincena, monthOfPeriod, computeMonthlyLegalRole } from "@/lib/payrollCalc";
 import { notifyOwner } from "@/lib/notifications";
@@ -26,7 +26,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ pe
 
   const payrollPeriod = await prisma.payrollPeriod.findUnique({
     where: { period },
-    include: { roles: { where: { isCurrent: true }, include: { employee: { select: { id: true } } } }, transfer: true },
+    include: { roles: { where: { isCurrent: true }, include: { employee: { select: { id: true } } } }, transfer: true, nairobySalaryTransfer: true },
   });
   if (!payrollPeriod) return NextResponse.json({ error: "Primero hay que generar los roles de este período." }, { status: 404 });
   if (payrollPeriod.status === "PUBLISHED") return NextResponse.json({ error: "Ya estaba publicado." }, { status: 409 });
@@ -38,6 +38,18 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ pe
   // dónde se envía el total, mucho antes de este paso.
   if (payrollPeriod.transfer?.status !== "COMPLETED") {
     return NextResponse.json({ error: "Primero hay que enviar el total, que lo aprueben, transferir y subir el comprobante." }, { status: 409 });
+  }
+
+  // Confirmado 2026-09-11: pedido explícito del usuario — el sueldo propio
+  // de Nairoby ahora se paga aparte del resto de la nómina (ver
+  // PayrollNairobySalaryTransfer). Si a ella le corresponde algo este
+  // período (tiene rol propio con líquido a pagar > 0), ese pago también
+  // tiene que estar COMPLETED antes de publicar, mismo criterio que el
+  // total general.
+  const financeLeadId = await getFinanceLeadId();
+  const ownRole = financeLeadId ? payrollPeriod.roles.find((r) => r.employeeId === financeLeadId) : undefined;
+  if (ownRole && ownRole.netTotal > 0 && payrollPeriod.nairobySalaryTransfer?.status !== "COMPLETED") {
+    return NextResponse.json({ error: "Primero hay que enviar el sueldo de Nairoby, que lo aprueben, transferir y subir el comprobante." }, { status: 409 });
   }
 
   // Confirmado 2026-08-24: pedido explícito del usuario — no alcanza con que
