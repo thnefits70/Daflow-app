@@ -84,10 +84,16 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ gro
   if (parsed.data.action === "approve" && !isAdmin) {
     const total = rows.reduce((sum, r) => sum + r.totalCost, 0);
     const totalLabel = total.toLocaleString("es-EC", { style: "currency", currency: "USD" });
+    // Confirmado 2026-09-11: pedido explícito del usuario — el admin no
+    // pertenece a ningún departamento (login sin deptId, ver
+    // src/lib/periodicReminders.ts), así que "/area/workspace" lo mandaba a
+    // /login. Debe abrir /admin/dept/<deptId> con la pestaña de Finanzas y
+    // el groupId puestos, para caer directo en subir el comprobante de
+    // ESTA solicitud (ver focusGroupId en PurchaseInvoicingPanel).
     await sendPushToOwner("admin", {
       title: "Solicitud de compra aprobada",
       body: `${names} — ${totalLabel} — lista para pagar`,
-      url: "/area/workspace",
+      url: `/admin/dept/${rows[0].deptId}?tab=compras&ptab=finanzas&group=${groupId}`,
     }).catch(() => null);
   }
 

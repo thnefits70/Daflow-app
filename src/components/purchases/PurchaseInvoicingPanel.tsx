@@ -197,7 +197,19 @@ const ADMIN_LOCK_TITLE = "Exclusivo de Nairoby (líder de Finanzas)";
 // registrar factura, pagar flete y marcar para revisar, que siguen
 // exclusivos de Nairoby. Por defecto sigue igual que antes (bloqueado
 // cuando isAdmin) para no romper algún caller que no pase el prop nuevo.
-export function PurchaseInvoicingPanel({ isAdmin = false, canPayMerchandise }: { isAdmin?: boolean; canPayMerchandise?: boolean }) {
+export function PurchaseInvoicingPanel({
+  isAdmin = false,
+  canPayMerchandise,
+  focusGroupId,
+}: {
+  isAdmin?: boolean;
+  canPayMerchandise?: boolean;
+  // Confirmado 2026-09-11: pedido explícito del usuario — al tocar el push
+  // de "Solicitud de compra aprobada" (ver group/[groupId]/review/route.ts),
+  // abre directo el paso de subir el comprobante de ESA solicitud en vez de
+  // dejar al admin buscarla entre todas las aprobadas.
+  focusGroupId?: string | null;
+}) {
   const canPay = canPayMerchandise ?? !isAdmin;
   const payLocked = !canPay;
   const router = useRouter();
@@ -324,6 +336,19 @@ export function PurchaseInvoicingPanel({ isAdmin = false, canPayMerchandise }: {
     fetch("/api/purchase-requests/urgent-reports").then((r) => (r.ok ? r.json() : [])).then(setUrgentReports).catch(() => setUrgentReports([]));
   }
   useEffect(load, []);
+
+  const focusedGroupRef = useRef(false);
+  useEffect(() => {
+    if (!rows || !focusGroupId || focusedGroupRef.current) return;
+    const match = rows.find((r) => r.groupId === focusGroupId && r.status === "APPROVED");
+    if (!match) return;
+    focusedGroupRef.current = true;
+    openPay(focusGroupId, match.supplier.id);
+    requestAnimationFrame(() => {
+      document.getElementById(`purchase-group-${focusGroupId}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows, focusGroupId]);
 
   useEffect(() => {
     if (!rows) return;
@@ -744,7 +769,7 @@ export function PurchaseInvoicingPanel({ isAdmin = false, canPayMerchandise }: {
               const linkedCredit = groupCredits[groupId]?.linked ?? 0;
               const netToPay = Math.max(0, total - linkedCredit);
               return (
-                <div key={groupId} className="bg-surface border border-rule rounded-md p-4">
+                <div key={groupId} id={`purchase-group-${groupId}`} className="bg-surface border border-rule rounded-md p-4">
                   <div className="flex items-start justify-between gap-2">
                     <div>
                       {g.map((r) => (

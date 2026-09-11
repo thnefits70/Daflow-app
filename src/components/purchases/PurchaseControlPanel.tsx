@@ -125,6 +125,14 @@ export function PurchaseControlPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Confirmado 2026-09-11: pedido explícito del usuario — el push de
+  // "Solicitud de compra aprobada" que le llega al admin trae ?group=<id>
+  // además de ?ptab=finanzas, para que al tocarlo se abra directo el paso
+  // de subir el comprobante de esa solicitud, sin tener que buscarla.
+  const [focusGroupId] = useState<string | null>(() =>
+    typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("group")
+  );
+
   if (tabs.length === 0) {
     return <div className="text-steel text-[13.5px]">No tienes acceso a ninguna parte de Control de Compras.</div>;
   }
@@ -275,7 +283,7 @@ export function PurchaseControlPanel({
               <>Sube acá la factura de cada pedido ya recibido — con eso se cierra el ciclo de la compra.</>
             )}
           </TabGuide>
-          <PurchaseInvoicingPanel isAdmin={isAdmin} canPayMerchandise={canPayMerchandise} />
+          <PurchaseInvoicingPanel isAdmin={isAdmin} canPayMerchandise={canPayMerchandise} focusGroupId={focusGroupId} />
         </>
       )}
       {tab === "auditoria" && (
