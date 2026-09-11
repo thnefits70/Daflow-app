@@ -186,9 +186,15 @@ export function PayrollEmployeeSalariesPanel({ canEdit, canProposeBonus, canAppr
 
   return (
     <div className="bg-surface border border-rule rounded-md p-4 mb-4">
-      <button type="button" className="flex items-center justify-between w-full cursor-pointer" onClick={() => setOpen((o) => !o)}>
-        <div className="text-[11px] font-semibold uppercase tracking-wide text-steel">Sueldos por colaborador ({employees.length})</div>
-        {open ? <ChevronUp size={14} className="text-steel" /> : <ChevronDown size={14} className="text-steel" />}
+      <button
+        type="button"
+        className="flex items-center justify-between w-full cursor-pointer rounded px-1 -mx-1 py-0.5 hover:bg-cloud transition-colors"
+        onClick={() => setOpen((o) => !o)}
+      >
+        <div className="text-[12.5px] font-semibold text-blue">
+          {open ? "Ocultar" : "Ver / editar"} sueldos por colaborador ({employees.length})
+        </div>
+        {open ? <ChevronUp size={16} className="text-blue" /> : <ChevronDown size={16} className="text-blue" />}
       </button>
 
       {open && (
