@@ -106,11 +106,15 @@ export function LegacyPayrollDebtsPanel({ canEdit }: { canEdit: boolean }) {
             <textarea className="text-[12.5px] rounded border border-rule bg-cloud px-2.5 py-1.5" placeholder="De qué deuda se trata (ej. Anticipo de julio no registrado)" value={reason} onChange={(e) => { setReason(e.target.value); setConfirming(false); }} rows={2} />
             <div>
               <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Cuotas</label>
-              <div className="flex gap-2">
-                {[1, 2, 3, 4].map((n) => (
-                  <button key={n} type="button" onClick={() => { setInstallments(n); setConfirming(false); }} className={`text-[12px] font-semibold rounded px-3 py-1.5 border cursor-pointer ${installments === n ? "border-teal text-teal bg-teal/10" : "border-rule text-steel"}`}>{n}</button>
-                ))}
-              </div>
+              <input
+                className="text-[13px] rounded border border-rule bg-cloud px-2.5 py-1.5 w-24"
+                type="number"
+                min={1}
+                step={1}
+                placeholder="1"
+                value={installments}
+                onChange={(e) => { setInstallments(Math.max(1, Number(e.target.value) || 1)); setConfirming(false); }}
+              />
             </div>
             <div>
               <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Mes de la primera cuota</label>

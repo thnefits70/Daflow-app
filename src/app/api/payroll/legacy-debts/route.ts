@@ -22,7 +22,7 @@ const schema = z.object({
   employeeId: z.string().min(1),
   totalAmount: z.number().positive(),
   reason: z.string().trim().min(1, "Contá de qué deuda se trata."),
-  installments: z.number().int().min(1).max(6),
+  installments: z.number().int().min(1).max(24),
   startMonth: z.string().regex(/^\d{4}-\d{2}$/, "Elegí el mes de la primera cuota."),
 });
 
