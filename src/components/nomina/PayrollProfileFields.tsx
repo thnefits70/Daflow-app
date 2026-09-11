@@ -13,6 +13,7 @@ type Profile = {
   usesFullLegalOvertimeSchedule: boolean;
   monthlySalaryOnly: boolean;
   externalPaymentMode: boolean;
+  externalPaymentModeSince: string | null;
   requiresInvoice: boolean;
 };
 
@@ -51,7 +52,7 @@ export function PayrollProfileFields({ userId, canEdit }: { userId: string; canE
     });
   }, [userId]);
 
-  async function save(patch: Partial<{ realSalary: number; iessDeclaredSalary: number; companyAbsorbsIess: boolean; iessPartTime: boolean; iessSpouseExtension: boolean; canLogOvertimeHours: boolean; usesFullLegalOvertimeSchedule: boolean; monthlySalaryOnly: boolean; externalPaymentMode: boolean; requiresInvoice: boolean }>) {
+  async function save(patch: Partial<{ realSalary: number; iessDeclaredSalary: number; companyAbsorbsIess: boolean; iessPartTime: boolean; iessSpouseExtension: boolean; canLogOvertimeHours: boolean; usesFullLegalOvertimeSchedule: boolean; monthlySalaryOnly: boolean; externalPaymentMode: boolean; externalPaymentModeSince: string | null; requiresInvoice: boolean }>) {
     setSaving(true);
     const res = await fetch(`/api/payroll/profile/${userId}`, {
       method: "PATCH",
@@ -149,6 +150,21 @@ export function PayrollProfileFields({ userId, canEdit }: { userId: string; canE
         onChange={(v) => save({ externalPaymentMode: v })}
         disabled={!canEdit}
       />
+      {profile.externalPaymentMode && (
+        <div className="mt-3">
+          <div className="text-[11.5px] font-semibold text-ink">Desde qué mes rige esto</div>
+          <div className="text-[10.5px] text-steel mb-1.5">
+            Los meses ANTES de este no le van a pedir comprobante (ej. si ya venía cobrando por Rol normal). Dejalo vacío si esto le aplicó siempre.
+          </div>
+          <input
+            className="rounded border border-rule bg-surface px-2.5 py-1.5 text-[13px] disabled:opacity-70"
+            type="month"
+            disabled={!canEdit}
+            value={profile.externalPaymentModeSince ?? ""}
+            onChange={(e) => save({ externalPaymentModeSince: e.target.value || null })}
+          />
+        </div>
+      )}
       {profile.externalPaymentMode && (
         <ToggleRow
           label="Entrega factura"

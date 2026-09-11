@@ -20,6 +20,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ use
       usesFullLegalOvertimeSchedule: false,
       monthlySalaryOnly: false,
       externalPaymentMode: false,
+      externalPaymentModeSince: null,
       requiresInvoice: false,
     }
   );
@@ -35,6 +36,7 @@ const schema = z.object({
   usesFullLegalOvertimeSchedule: z.boolean().optional(),
   monthlySalaryOnly: z.boolean().optional(),
   externalPaymentMode: z.boolean().optional(),
+  externalPaymentModeSince: z.string().regex(/^\d{4}-\d{2}$/).nullable().optional(),
   requiresInvoice: z.boolean().optional(),
 });
 

@@ -695,10 +695,14 @@ async function getPayStubPendingItem(href: string): Promise<PendingItem | null> 
 async function countMissingExternalPayments(monthStr: string): Promise<number> {
   const [activeUsers, externalProfiles, payments] = await Promise.all([
     prisma.user.findMany({ where: { isActive: true }, select: { id: true, startDate: true } }),
-    prisma.payrollProfile.findMany({ where: { externalPaymentMode: true }, select: { userId: true } }),
+    prisma.payrollProfile.findMany({ where: { externalPaymentMode: true }, select: { userId: true, externalPaymentModeSince: true } }),
     prisma.externalPayment.findMany({ where: { month: monthStr }, select: { userId: true } }),
   ]);
-  const externalIds = new Set(externalProfiles.map((p) => p.userId));
+  // externalPaymentModeSince filtra transiciones a mitad de camino — ver su
+  // comentario en schema.prisma. Sin since (null), se exige desde siempre.
+  const externalIds = new Set(
+    externalProfiles.filter((p) => !p.externalPaymentModeSince || monthStr >= p.externalPaymentModeSince).map((p) => p.userId)
+  );
   const eligible = eligibleForMonth(activeUsers, monthStr).filter((u) => externalIds.has(u.id));
   const paidIds = new Set(payments.map((p) => p.userId));
   return eligible.filter((u) => !paidIds.has(u.id)).length;

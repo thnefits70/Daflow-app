@@ -3995,6 +3995,20 @@ model PayrollProfile {
   // ExternalPayment (ver getExternalPaymentPendingItem en pendingTasks.ts).
   externalPaymentMode Boolean @default(false)
 
+  // Confirmado 2026-09-11: pedido explícito del usuario — cuando alguien
+  // pasa a modo externo a mitad de camino (ej. dejó de tener Rol formal
+  // recién desde septiembre en adelante), sin esta fecha
+  // countMissingExternalPayments() lo trataría como "en modo externo desde
+  // siempre" y empezaría a pedir retroactivamente el comprobante de meses
+  // anteriores (ej. agosto) que en realidad se pagaron por Rol normal.
+  // "YYYY-MM", el primer mes que le exige ExternalPayment. null = sin
+  // restricción, se le exige desde siempre (comportamiento previo, para
+  // quienes ya estaban en modo externo sin transición que resguardar).
+  // countMissingPayStubs() no necesita mirar esto: ya excluye a cualquiera
+  // con externalPaymentMode=true de TODOS los meses sin importar la fecha,
+  // que es justo lo que se quiere (que el Rol de agosto deje de pedirse).
+  externalPaymentModeSince String?
+
   // Dentro del modo externo: si además entrega factura (Robert, Allan,
   // Heidy, Joel) en vez de solo comprobante de pago (Bryan, Mercedes,
   // Elsa, Luis Castillo). Sin efecto si externalPaymentMode es false.
