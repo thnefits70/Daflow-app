@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { X, Sparkles } from "lucide-react";
 
-type Celebration = { grantId: string; type: string; label: string; amount: number | null; targetPeriod: string | null; note: string | null; message: string; signature: string };
+type Celebration = { grantId: string; type: string; label: string; note: string | null; message: string; signature: string };
 
 const CONFETTI_COLORS = ["#14C7C7", "#1E5EFF", "#F5C543", "#C4453A", "#8B5CF6", "#22C55E"];
 const AMOUNTS: Record<string, number> = { ADICIONAL: 50, PRODUCTIVIDAD: 100, MERITO: 150 };
@@ -104,18 +104,14 @@ export function CeoBonusPopup() {
           🎉 ¡Felicitaciones! 🎉
         </div>
         <div className="font-display text-[22px] font-bold mb-1.5">
-          {current.label} — ${(current.amount ?? AMOUNTS[current.type] ?? 0).toFixed(2)}
+          {current.label} — ${AMOUNTS[current.type] ?? ""}
         </div>
         {current.note && <div className="text-[13px] text-steel mb-3">{current.note}</div>}
         <div className="mt-5 pt-4 border-t border-rule text-left">
           <div className="text-[13.5px] text-ink/85 italic leading-relaxed">“{current.message}”</div>
           <div className="text-[12px] text-steel font-semibold mt-2 text-right">— {current.signature}</div>
         </div>
-        <div className="text-[10.5px] text-steel-dim mt-4">
-          {current.targetPeriod
-            ? `Este bono va incluido en la quincena ${current.targetPeriod} — es confidencial, solo vos lo ves.`
-            : "Este bono ya viene incluido en tu próxima quincena — es confidencial, solo vos lo ves."}
-        </div>
+        <div className="text-[10.5px] text-steel-dim mt-4">Este bono ya viene incluido en tu próxima quincena — es confidencial, solo vos lo ves.</div>
       </div>
     </div>
   );

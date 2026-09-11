@@ -4,10 +4,8 @@ import { CEO_BONUS_LABELS } from "@/lib/commissionTiers";
 
 export type CeoBonusCelebration = {
   grantId: string;
-  type: "ADICIONAL" | "PRODUCTIVIDAD" | "MERITO" | "PERSONALIZADO";
+  type: "ADICIONAL" | "PRODUCTIVIDAD" | "MERITO";
   label: string;
-  amount: number | null;
-  targetPeriod: string | null;
   note: string | null;
   message: string;
   signature: string;
@@ -16,10 +14,14 @@ export type CeoBonusCelebration = {
 // Confirmado 2026-08-14: confidencial — solo el propio destinatario ve su
 // celebración. El admin nunca recibe un bono de sí mismo, así que su
 // viewerId ("admin") nunca tiene nada pendiente acá.
+// Confirmado 2026-09-11: pedido explícito del usuario — PERSONALIZADO NUNCA
+// dispara esta celebración (ni el aviso de /api/ceo-bonuses al otorgarlo).
+// Por ahora debe verse solo cuando se genera el rol de pago de su quincena,
+// nada más — podría cambiar a futuro, pero hoy no.
 export async function getUnseenCeoBonusesForViewer(viewerId: string): Promise<CeoBonusCelebration[]> {
   if (viewerId === "admin") return [];
   const [grants, seen] = await Promise.all([
-    prisma.ceoBonusGrant.findMany({ where: { userId: viewerId }, orderBy: { grantedAt: "desc" } }),
+    prisma.ceoBonusGrant.findMany({ where: { userId: viewerId, type: { not: "PERSONALIZADO" } }, orderBy: { grantedAt: "desc" } }),
     prisma.ceoBonusGrantSeen.findMany({ where: { viewerId } }),
   ]);
   const seenIds = new Set(seen.map((s) => s.grantId));
@@ -27,10 +29,8 @@ export async function getUnseenCeoBonusesForViewer(viewerId: string): Promise<Ce
     .filter((g) => !seenIds.has(g.id))
     .map((g) => ({
       grantId: g.id,
-      type: g.type,
+      type: g.type as "ADICIONAL" | "PRODUCTIVIDAD" | "MERITO",
       label: CEO_BONUS_LABELS[g.type],
-      amount: g.amount,
-      targetPeriod: g.targetPeriod,
       note: g.note,
       message: pickCeoBonusMessage(viewerId, g.id),
       signature: CEO_BONUS_MESSAGE_SIGNATURE,

@@ -61,11 +61,17 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  await notifyOwner(user.id, {
-    title: "🎉 Recibiste un bono",
-    body: type === "PERSONALIZADO" ? `$${amount!.toFixed(2)} — se paga en la quincena ${targetPeriod}` : CEO_BONUS_LABELS[type],
-    url: "/area",
-  }).catch(() => null);
+  // Confirmado 2026-09-11: pedido explícito del usuario — PERSONALIZADO NO
+  // dispara aviso ni la celebración con confeti que sí tienen los 3 tipos
+  // fijos. Por ahora solo debe aparecer cuando se genera el rol de pago de
+  // su quincena, nada más — podría cambiar a futuro, pero hoy no.
+  if (type !== "PERSONALIZADO") {
+    await notifyOwner(user.id, {
+      title: "🎉 Recibiste un bono",
+      body: CEO_BONUS_LABELS[type],
+      url: "/area",
+    }).catch(() => null);
+  }
 
   return NextResponse.json(grant, { status: 201 });
 }
