@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { canManageImprovementPlan } from "@/lib/guards";
+import { canActOnImprovementPlan } from "@/lib/guards";
 import { addWeeklyReview } from "@/lib/improvementPlan";
 
 const reviewSchema = z.object({
@@ -22,9 +22,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (!session) return NextResponse.json({ error: "No autorizado." }, { status: 401 });
 
   const { id } = await params;
-  const plan = await prisma.improvementPlan.findUnique({ where: { id }, select: { deptId: true } });
+  const plan = await prisma.improvementPlan.findUnique({ where: { id }, select: { deptId: true, leaderId: true } });
   if (!plan) return NextResponse.json({ error: "No encontrado." }, { status: 404 });
-  if (!(await canManageImprovementPlan(plan.deptId))) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+  if (!(await canActOnImprovementPlan(plan))) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
   const body = await req.json().catch(() => null);
   const parsed = reviewSchema.safeParse(body);

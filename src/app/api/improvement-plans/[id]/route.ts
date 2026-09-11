@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { canViewImprovementPlan } from "@/lib/guards";
+import { canViewImprovementPlan, canActOnImprovementPlan } from "@/lib/guards";
 import { getImprovementPlanDTO } from "@/lib/improvementPlan";
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -15,5 +15,6 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "No autorizado." }, { status: 403 });
   }
 
-  return NextResponse.json(plan);
+  const canAct = await canActOnImprovementPlan({ deptId: plan.deptId, leaderId: plan.leaderId });
+  return NextResponse.json({ ...plan, canAct });
 }

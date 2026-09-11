@@ -1594,3 +1594,24 @@ export async function canViewImprovementPlan(plan: { deptId: string; collaborato
   if (session.user.id === plan.collaboratorId) return true;
   return canManageImprovementPlan(plan.deptId);
 }
+
+// Actuar sobre un plan YA ABIERTO (registrar evaluación, decidir etapa,
+// pedir cierre) — confirmado 2026-09-11: exclusivo del líder a cargo, el
+// admin pasa a modo lectura salvo aprobar/rechazar cierres delicados (eso
+// sigue siendo requireAdminSession en approve-closure, sin cambios). Única
+// excepción: planes que el admin abrió directamente (a un líder, único caso
+// donde nadie más puede gestionarlo — ver createImprovementPlan, que graba
+// leaderId=null para el actor "admin" via dbUserId).
+export async function canActOnImprovementPlan(plan: { deptId: string; leaderId: string | null }) {
+  const session = await auth();
+  if (!session) return false;
+  if (session.user.role === "admin") return plan.leaderId === null;
+  if (session.user.role === "employee" && session.user.deptId === plan.deptId) {
+    const user = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { isLeader: true, leadsDeptId: true },
+    });
+    return !!user?.isLeader && user.leadsDeptId === plan.deptId;
+  }
+  return false;
+}

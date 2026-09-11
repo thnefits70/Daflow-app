@@ -116,6 +116,11 @@ export type ImprovementPlanDetailDTO = ImprovementPlanSummaryDTO & {
   adminApprovedByName: string | null;
   commitments: ImprovementPlanCommitmentDTO[];
   reviews: ImprovementPlanReviewDTO[];
+  // Solo presente en la respuesta de GET /api/improvement-plans/[id] (ver
+  // esa route) — si el usuario que mira puede registrar evaluaciones/decidir
+  // etapa/pedir cierre en ESTE plan puntual. No se calcula acá porque
+  // depende de la sesión, no de los datos del plan.
+  canAct?: boolean;
 };
 
 function mapPlanSummary(plan: PlanRow): ImprovementPlanSummaryDTO {

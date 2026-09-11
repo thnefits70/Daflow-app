@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { ArrowLeft, Sparkles } from "lucide-react";
 import { formatDateTime } from "@/lib/formatDateTime";
 import { SUGGESTED_INDICATORS } from "@/lib/improvementPlanConstants";
+import { TabGuide } from "@/components/shared/TabGuide";
 import type { ImprovementPlanDetailDTO } from "@/lib/improvementPlan";
 
 type Semaforo = "VERDE" | "AMARILLO" | "NARANJA" | "ROJO";
@@ -97,6 +98,7 @@ export function ImprovementPlanDetail({
   if (error || !plan) return <div className="text-[13px] text-red">{error ?? "No se pudo cargar el plan."}</div>;
 
   const isClosed = plan.stage === "CERRADO";
+  const canAct = plan.canAct ?? !isAdmin;
 
   return (
     <div>
@@ -116,6 +118,18 @@ export function ImprovementPlanDetail({
         {plan.deptName} · {isClosed ? `Cerrado el ${plan.closedAt ? dateOnly(plan.closedAt) : "—"}` : `Vence esta etapa el ${dateOnly(plan.stageDeadline)}`}
         {plan.leaderName && ` · Líder: ${plan.leaderName}`}
       </div>
+
+      <TabGuide storageKey="plan-mejora-detalle">
+        {canAct ? (
+          <>
+            Cada semana, registra una <strong>evaluación</strong> con “+ Registrar evaluación semanal” — puedes escribir libremente cómo fue la semana y dejar que la IA arme el borrador (calificaciones 1-5, qué mejoró, qué falta, próxima acción, tu apoyo), o llenarlo a mano. Cuando llegue el plazo de la etapa (o antes, si ya está claro), usa <strong>“Decisión de etapa”</strong> para registrar si fue Satisfactorio, Insuficiente o Sin mejora — eso cierra el plan o lo pasa a la siguiente etapa. Si el caso ya está resuelto, “Solicitar cierre del plan”: Continuidad se aplica de inmediato, Reubicación y Revisión de continuidad quedan pendientes de aprobación del admin.
+          </>
+        ) : (
+          <>
+            Vista de solo lectura — registrar evaluaciones, decidir la etapa y pedir el cierre es exclusivo de {plan.leaderName ?? "quien lidera este plan"}. Si hay un cierre delicado (Reubicación o Revisión de continuidad) pendiente de tu aprobación, lo verás resaltado arriba con los botones para aprobar o rechazar.
+          </>
+        )}
+      </TabGuide>
 
       {plan.hasPendingClosureApproval && (
         <div className="border border-amber/50 bg-amber/10 rounded-md p-3.5 mb-5 text-[12.5px]">
@@ -160,11 +174,17 @@ export function ImprovementPlanDetail({
         </div>
       </div>
 
-      {!isClosed && (
+      {!canAct && !isClosed && (
+        <div className="text-[12px] text-steel mb-6">
+          Modo lectura — solo {plan.leaderName ?? "el líder a cargo"} puede registrar evaluaciones y decisiones de este plan.
+        </div>
+      )}
+
+      {!isClosed && canAct && (
         <WeeklyReviewForm planId={plan.id} onSaved={refresh} />
       )}
 
-      {!isClosed && (
+      {!isClosed && canAct && (
         <StageActions plan={plan} onChanged={refresh} />
       )}
 
