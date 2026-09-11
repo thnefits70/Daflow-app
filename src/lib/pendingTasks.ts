@@ -390,6 +390,8 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   feedback: "Feedback semanal/mensual de departamentos",
   check_in_semanal_estancado: "Feedback semanal — líder sin gestión hace 2+ semanas",
   roles_de_pago: "Roles de pago",
+  mensajes_nomina_sin_leer: "Mensajes de Nómina (tu conversación)",
+  mensajes_nomina_sin_leer_lider: "Mensajes de colaboradores (Nómina)",
   pagos_factura_comprobante: "Pagos por factura/comprobante",
   nomina_transferencia: "Transferencia de nómina",
   iess_transferencia: "Transferencia de IESS",
@@ -1900,6 +1902,76 @@ async function getManagementDeductionUnacceptedPendingItem(href: string): Promis
   };
 }
 
+// Confirmado 2026-09-11: pedido explícito del usuario — mensajes sin leer en
+// SU PROPIO hilo de Roles de pago (los que le escribió Nómina) visibles en
+// Inicio con un clic directo al chat, además del push instantáneo que ya
+// dispara notifyOwner en POST /api/payroll-messages/[employeeId]. Aplica a
+// cualquier colaborador — cada quien tiene un único hilo, el suyo.
+async function getMyPayrollMessageUnreadPendingItem(userId: string, href: string): Promise<PendingItem | null> {
+  const rows = await prisma.payrollMessage.findMany({
+    where: { employeeId: userId, senderId: { not: userId }, readAt: null },
+    select: { createdAt: true },
+  });
+  if (rows.length === 0) return null;
+
+  const oldest = rows.reduce((min, r) => (r.createdAt < min ? r.createdAt : min), rows[0].createdAt);
+  const overdue = Date.now() - oldest.getTime() > 24 * 60 * 60 * 1000;
+  return {
+    type: "mensajes_nomina_sin_leer",
+    icon: "💬",
+    label: rows.length === 1 ? "Tienes un mensaje nuevo de Nómina" : `Tienes ${rows.length} mensajes nuevos de Nómina`,
+    meta: `Toca para leer y responder${overdue ? " · atrasado" : ""}`,
+    overdue,
+    href,
+  };
+}
+
+// Misma idea pero del otro lado: mensajes que colaboradores le escribieron a
+// quien gestiona la nómina (líder de Finanzas) y siguen sin leer. Se enlaza
+// directo al hilo más antiguo sin responder (mismos query params que usa el
+// deep-link del push, ver notifyOwner en la ruta POST).
+async function getPayrollMessagesUnreadForManagerPendingItem(baseHref: string): Promise<PendingItem | null> {
+  const unread = await prisma.payrollMessage.findMany({
+    where: { readAt: null },
+    select: { employeeId: true, senderId: true, createdAt: true, employee: { select: { deptId: true } } },
+  });
+  const fromEmployees = unread.filter((m) => m.senderId === m.employeeId);
+  if (fromEmployees.length === 0) return null;
+
+  const perEmployee = new Map<string, { count: number; oldest: Date; deptId: string | null }>();
+  for (const m of fromEmployees) {
+    const entry = perEmployee.get(m.employeeId);
+    if (entry) {
+      entry.count += 1;
+      if (m.createdAt < entry.oldest) entry.oldest = m.createdAt;
+    } else {
+      perEmployee.set(m.employeeId, { count: 1, oldest: m.createdAt, deptId: m.employee.deptId });
+    }
+  }
+
+  let oldestEmployeeId = "";
+  let oldestDate: Date | null = null;
+  let oldestDeptId: string | null = null;
+  for (const [id, v] of perEmployee) {
+    if (!oldestDate || v.oldest < oldestDate) {
+      oldestDate = v.oldest;
+      oldestEmployeeId = id;
+      oldestDeptId = v.deptId;
+    }
+  }
+
+  const overdue = !!oldestDate && Date.now() - oldestDate.getTime() > 24 * 60 * 60 * 1000;
+  const employeesCount = perEmployee.size;
+  return {
+    type: "mensajes_nomina_sin_leer_lider",
+    icon: "💬",
+    label: employeesCount === 1 ? "Tienes un mensaje sin leer" : `Tienes mensajes sin leer de ${employeesCount} personas`,
+    meta: `${fromEmployees.length} mensaje${fromEmployees.length === 1 ? "" : "s"} · toca para responder${overdue ? " · atrasado" : ""}`,
+    overdue,
+    href: `${baseHref}?employee=${oldestEmployeeId}${oldestDeptId ? `&dept=${oldestDeptId}` : ""}`,
+  };
+}
+
 // Confirmado 2026-08-20: pedido explícito del usuario — cuando le crean un
 // descuento por mala gestión, el colaborador AFECTADO (no solo admin/líder
 // de FIN, que ya lo ven vía getManagementDeductionUnacceptedPendingItem)
@@ -2647,6 +2719,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
   const myPersonalPurchasePaymentItem = await getMyPersonalPurchasePaymentPendingItem(actor.userId, "/area/compras-personales");
   const myPersonalPurchaseStatusItem = await getMyPersonalPurchaseStatusPendingItem(actor.userId, "/area/compras-personales");
   const myPettyCashConfirmationItems = await getMyPettyCashConfirmationPendingItems(actor.userId, "/area/workspace");
+  const myPayrollMessageItem = await getMyPayrollMessageUnreadPendingItem(actor.userId, "/area/roles-de-pago");
 
   // Confirmado 2026-08-18: pedido explícito del usuario — acceso directo en
   // Inicio para CUALQUIER colaborador de Inventario (no solo Daniel, su
@@ -2662,6 +2735,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     if (myPersonalPurchasePaymentItem) teamItems.push(myPersonalPurchasePaymentItem);
     if (myPersonalPurchaseStatusItem) teamItems.push(myPersonalPurchaseStatusItem);
     teamItems.push(...myPettyCashConfirmationItems);
+    if (myPayrollMessageItem) teamItems.push(myPayrollMessageItem);
     if (me.department?.code === "INV") {
       const [receivingItem, replacementItem, urgentUnresolvedItem] = await Promise.all([
         getPurchaseReceivingPendingItem("/area/workspace?tab=compras&ptab=inventario"),
@@ -2701,6 +2775,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
   if (myPersonalPurchasePaymentItem) items.push(myPersonalPurchasePaymentItem);
   if (myPersonalPurchaseStatusItem) items.push(myPersonalPurchaseStatusItem);
   items.push(...myPettyCashConfirmationItems);
+  if (myPayrollMessageItem) items.push(myPayrollMessageItem);
   let monthly = false;
 
   if (me.leadsDept.code === "FIN") {
@@ -2743,6 +2818,9 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
 
     const financeWriteOffItem = await getSupplierExchangeFinanceWriteOffPendingItem("/area/workspace?tab=egresos&otab=proveedor");
     if (financeWriteOffItem) items.push(financeWriteOffItem);
+
+    const payrollMessagesManagerItem = await getPayrollMessagesUnreadForManagerPendingItem("/area/roles-de-pago");
+    if (payrollMessagesManagerItem) items.push(payrollMessagesManagerItem);
   }
 
   if (me.leadsDept.trackWeeklyMetric) {

@@ -35,12 +35,23 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ emp
       senderId: m.senderId,
       senderName: m.sender.name,
       body: m.body,
+      attachmentUrl: m.attachmentUrl,
+      attachmentName: m.attachmentName,
+      attachmentType: m.attachmentType,
       createdAt: m.createdAt,
     }))
   );
 }
 
-const sendSchema = z.object({ body: z.string().trim().min(1, "Escribe un mensaje.") });
+// El mensaje necesita texto, adjunto, o ambos — nunca los dos vacíos.
+const sendSchema = z
+  .object({
+    body: z.string().trim().max(4000).optional().default(""),
+    attachmentUrl: z.string().trim().url().optional(),
+    attachmentName: z.string().trim().max(255).optional(),
+    attachmentType: z.string().trim().max(255).optional(),
+  })
+  .refine((d) => d.body.length > 0 || !!d.attachmentUrl, { message: "Escribe un mensaje o adjunta un archivo." });
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ employeeId: string }> }) {
   const session = await auth();
@@ -58,11 +69,22 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ emp
   }
 
   const created = await prisma.payrollMessage.create({
-    data: { employeeId, senderId: session.user.id, body: parsed.data.body },
+    data: {
+      employeeId,
+      senderId: session.user.id,
+      body: parsed.data.body,
+      attachmentUrl: parsed.data.attachmentUrl,
+      attachmentName: parsed.data.attachmentName,
+      attachmentType: parsed.data.attachmentType,
+    },
     include: { sender: { select: { name: true } } },
   });
 
-  const preview = created.body.length > 100 ? `${created.body.slice(0, 100)}…` : created.body;
+  const preview = created.body
+    ? created.body.length > 100
+      ? `${created.body.slice(0, 100)}…`
+      : created.body
+    : `📎 ${created.attachmentName ?? "Archivo adjunto"}`;
 
   if (session.user.id === employeeId) {
     // El colaborador le escribió a Nómina: avisar a quien gestiona nómina
@@ -97,6 +119,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ emp
       senderId: created.senderId,
       senderName: created.sender.name,
       body: created.body,
+      attachmentUrl: created.attachmentUrl,
+      attachmentName: created.attachmentName,
+      attachmentType: created.attachmentType,
       createdAt: created.createdAt,
     },
     { status: 201 }

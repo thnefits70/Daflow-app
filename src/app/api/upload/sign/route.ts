@@ -178,6 +178,13 @@ export async function POST(req: NextRequest) {
   if (!allowed && session?.user.role === "employee" && folder === "market-product-branding") {
     allowed = await canBrandMarketProduct();
   }
+  // Adjuntos del chat de Roles de pago — cualquier colaborador puede subir
+  // aquí; el permiso real (poder escribir en ESE hilo puntual) se valida al
+  // guardar el mensaje en POST /api/payroll-messages/[employeeId], que sí
+  // conoce el employeeId. Esta carpeta solo necesita estar logueado.
+  if (!allowed && session?.user.role === "employee" && folder === "payroll-message-attachments") {
+    allowed = true;
+  }
   if (!allowed) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
   if (size > MAX_BYTES) {
