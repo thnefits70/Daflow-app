@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Landmark, ChevronDown, Send } from "lucide-react";
+import { Landmark, ChevronDown, Send, Copy, Check } from "lucide-react";
 import { ProofPreview } from "@/components/shared/ProofPreview";
 import { usePasteFile } from "@/lib/usePasteFile";
 import { uploadFile } from "@/lib/uploadFile";
@@ -134,6 +134,36 @@ function IessBreakdownBlock({ rows }: { rows: IessBreakdownRow[] }) {
   );
 }
 
+// Confirmado 2026-09-11: pedido explícito del usuario — el número de
+// cuenta y el titular tienen que resaltar y copiarse con un solo clic,
+// para pegarlos directo en la app del banco sin tener que transcribirlos
+// a mano ni buscarlos entre el resto de los datos.
+function CopyableValue({ value, className }: { value: string; className?: string }) {
+  const [copied, setCopied] = useState(false);
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(value);
+    } catch {
+      return;
+    }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={copy}
+      title="Copiar"
+      className={`inline-flex items-center gap-1.5 cursor-pointer rounded px-1.5 py-0.5 -mr-1.5 hover:bg-teal/10 ${className ?? ""}`}
+    >
+      <span>{value}</span>
+      {copied ? <Check size={13} className="text-green shrink-0" /> : <Copy size={13} className="text-steel-dim shrink-0" />}
+    </button>
+  );
+}
+
 function BankAccountBlock({ account }: { account: BankAccount | null }) {
   // Confirmado 2026-08-24: pedido explícito del usuario — la cuenta destino
   // tiene que verse de una, sin un clic extra, porque es el dato que más
@@ -159,10 +189,19 @@ function BankAccountBlock({ account }: { account: BankAccount | null }) {
             <>
               <div className="flex justify-between"><span className="text-steel">Banco</span><span className="font-semibold">{account.bankName}</span></div>
               <div className="flex justify-between"><span className="text-steel">Tipo de cuenta</span><span className="font-semibold">{account.bankAccountType}</span></div>
-              <div className="flex justify-between"><span className="text-steel">N° de cuenta</span><span className="font-semibold tabular-nums">{account.bankAccountNumber}</span></div>
-              <div className="flex justify-between"><span className="text-steel">Titular</span><span className="font-semibold">{account.bankAccountHolder}</span></div>
+              <div className="flex justify-between items-center gap-2 mt-1 pt-1.5 border-t border-rule">
+                <span className="text-steel">N° de cuenta</span>
+                <CopyableValue value={account.bankAccountNumber} className="font-bold tabular-nums text-[14px] text-teal" />
+              </div>
+              <div className="flex justify-between items-center gap-2">
+                <span className="text-steel">Titular</span>
+                <CopyableValue value={account.bankAccountHolder} className="font-bold text-[13px] text-teal" />
+              </div>
               {account.holderIdNumber && (
-                <div className="flex justify-between"><span className="text-steel">{account.holderIdType === "RUC" ? "RUC" : "Cédula"}</span><span className="font-semibold tabular-nums">{account.holderIdNumber}</span></div>
+                <div className="flex justify-between items-center gap-2 pb-1">
+                  <span className="text-steel">{account.holderIdType === "RUC" ? "RUC" : "Cédula"}</span>
+                  <CopyableValue value={account.holderIdNumber} className="font-bold tabular-nums text-[13px] text-teal" />
+                </div>
               )}
             </>
           ) : (
