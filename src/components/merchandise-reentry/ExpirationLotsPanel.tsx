@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Search, CalendarClock, CheckCircle2 } from "lucide-react";
 import { formatDateTime } from "@/lib/formatDateTime";
+import { CatalogCode } from "@/components/shared/CatalogCode";
 
 type CatalogItem = { id: string; name: string; justCode: string | null; hasExpiration: boolean };
 type LotRow = { id: string; manufactureDate: string | null; expirationDate: string; quantityReceived: number; quantityRemaining: number; declaredAt: string };
@@ -25,6 +26,12 @@ export function ExpirationLotsPanel() {
   const [ok, setOk] = useState("");
   const [lots, setLots] = useState<LotRow[]>([]);
   const [loadingLots, setLoadingLots] = useState(false);
+
+  // Confirmado 2026-09-11, pedido de Daniel: poder hacer todo el formulario
+  // con Enter, sin tocar el mouse — de un campo salta al siguiente, y desde
+  // "Cantidad" Enter ya declara el lote directo.
+  const expirationRef = useRef<HTMLInputElement>(null);
+  const quantityRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     fetch("/api/purchase-catalog").then((r) => (r.ok ? r.json() : [])).then(setItems).catch(() => setItems([]));
@@ -115,7 +122,10 @@ export function ExpirationLotsPanel() {
       {selected && (
         <div className="bg-cloud border border-rule rounded-md p-3">
           <div className="flex items-center justify-between gap-2 mb-3">
-            <div className="text-[13px] font-semibold">{selected.name}</div>
+            <div className="text-[13px] font-semibold flex items-center gap-1.5">
+              <CatalogCode code={selected.justCode} />
+              <span>{selected.name}</span>
+            </div>
             <button type="button" className="text-[11.5px] font-semibold text-blue cursor-pointer" onClick={() => setSelectedId(null)}>
               Cambiar producto
             </button>
@@ -124,15 +134,36 @@ export function ExpirationLotsPanel() {
           <div className="grid grid-cols-3 gap-2 mb-2">
             <div>
               <label className="block text-[10px] text-steel mb-0.5">Elaboración (opcional)</label>
-              <input type="date" className="w-full rounded border border-rule bg-surface px-2 py-1.5 text-[12px]" value={manufactureDate} onChange={(e) => setManufactureDate(e.target.value)} />
+              <input
+                type="date"
+                className="w-full rounded border border-rule bg-surface px-2 py-1.5 text-[12px]"
+                value={manufactureDate}
+                onChange={(e) => setManufactureDate(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); expirationRef.current?.focus(); } }}
+              />
             </div>
             <div>
               <label className="block text-[10px] text-steel mb-0.5">Vencimiento</label>
-              <input type="date" className="w-full rounded border border-rule bg-surface px-2 py-1.5 text-[12px]" value={expirationDate} onChange={(e) => setExpirationDate(e.target.value)} />
+              <input
+                ref={expirationRef}
+                type="date"
+                className="w-full rounded border border-rule bg-surface px-2 py-1.5 text-[12px]"
+                value={expirationDate}
+                onChange={(e) => setExpirationDate(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); quantityRef.current?.focus(); } }}
+              />
             </div>
             <div>
               <label className="block text-[10px] text-steel mb-0.5">Cantidad</label>
-              <input type="number" min={1} className="w-full rounded border border-rule bg-surface px-2 py-1.5 text-[12px]" value={quantity} onChange={(e) => setQuantity(e.target.value)} />
+              <input
+                ref={quantityRef}
+                type="number"
+                min={1}
+                className="w-full rounded border border-rule bg-surface px-2 py-1.5 text-[12px]"
+                value={quantity}
+                onChange={(e) => setQuantity(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); declare(); } }}
+              />
             </div>
           </div>
           {err && <div className="text-red text-[12px] mb-2">{err}</div>}
