@@ -127,14 +127,16 @@ export async function getAchievedTier(dailyAvg: number): Promise<CommissionTierR
   return achieved;
 }
 
+// PERSONALIZADO no tiene monto fijo — usa CeoBonusGrant.amount directo.
 export const CEO_BONUS_AMOUNTS: Record<"ADICIONAL" | "PRODUCTIVIDAD" | "MERITO", number> = {
   ADICIONAL: 50,
   PRODUCTIVIDAD: 100,
   MERITO: 150,
 };
 
-export const CEO_BONUS_LABELS: Record<"ADICIONAL" | "PRODUCTIVIDAD" | "MERITO", string> = {
+export const CEO_BONUS_LABELS: Record<"ADICIONAL" | "PRODUCTIVIDAD" | "MERITO" | "PERSONALIZADO", string> = {
   ADICIONAL: "Bono Adicional",
   PRODUCTIVIDAD: "Bono de Productividad",
   MERITO: "Bono al Mérito",
+  PERSONALIZADO: "Bono personalizado",
 };

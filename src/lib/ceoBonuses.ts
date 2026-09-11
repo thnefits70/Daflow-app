@@ -4,8 +4,10 @@ import { CEO_BONUS_LABELS } from "@/lib/commissionTiers";
 
 export type CeoBonusCelebration = {
   grantId: string;
-  type: "ADICIONAL" | "PRODUCTIVIDAD" | "MERITO";
+  type: "ADICIONAL" | "PRODUCTIVIDAD" | "MERITO" | "PERSONALIZADO";
   label: string;
+  amount: number | null;
+  targetPeriod: string | null;
   note: string | null;
   message: string;
   signature: string;
@@ -27,6 +29,8 @@ export async function getUnseenCeoBonusesForViewer(viewerId: string): Promise<Ce
       grantId: g.id,
       type: g.type,
       label: CEO_BONUS_LABELS[g.type],
+      amount: g.amount,
+      targetPeriod: g.targetPeriod,
       note: g.note,
       message: pickCeoBonusMessage(viewerId, g.id),
       signature: CEO_BONUS_MESSAGE_SIGNATURE,

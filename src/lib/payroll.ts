@@ -170,14 +170,16 @@ export async function buildAutomaticLineItems(employeeId: string, period: string
 
       // Bonos discrecionales del CEO otorgados durante el mes fuente —
       // confidencial, confirmado 2026-08-14: nunca se paga en el mismo mes
-      // en que se otorga, siempre en la Q1 del mes siguiente.
+      // en que se otorga, siempre en la Q1 del mes siguiente. PERSONALIZADO
+      // queda afuera de este bloque — tiene su propio manejo por
+      // targetPeriod directo, más abajo, fuera del bloque de Q1.
       const bonuses = await prisma.ceoBonusGrant.findMany({
-        where: { userId: employeeId, grantedAt: { gte: monthStart, lt: monthEnd } },
+        where: { userId: employeeId, type: { not: "PERSONALIZADO" }, grantedAt: { gte: monthStart, lt: monthEnd } },
       });
       for (const b of bonuses) {
         items.push({
           label: `${CEO_BONUS_LABELS[b.type]} (${sourceMonth})`,
-          amount: CEO_BONUS_AMOUNTS[b.type],
+          amount: CEO_BONUS_AMOUNTS[b.type as "ADICIONAL" | "PRODUCTIVIDAD" | "MERITO"],
           kind: "INCOME",
           isAutomatic: true,
         });
@@ -365,6 +367,23 @@ export async function buildAutomaticLineItems(employeeId: string, period: string
         items.push({ label: "Deudas anteriores al sistema", amount: 0, kind: "EXPENSE", isAutomatic: true, note: "No tiene cuotas de deudas anteriores en este período." });
       }
     }
+  }
+
+  // Confirmado 2026-09-11: pedido explícito del usuario — a diferencia de
+  // los bonos discrecionales fijos (siempre Q1 del mes siguiente, arriba),
+  // el bono PERSONALIZADO va directo a la quincena exacta que el admin
+  // eligió al otorgarlo (targetPeriod), sea Q1 o Q2 — por eso vive afuera
+  // del bloque de isFirstQuincenaOfMonth, corre en toda quincena.
+  const personalizedBonuses = await prisma.ceoBonusGrant.findMany({
+    where: { userId: employeeId, type: "PERSONALIZADO", targetPeriod: period },
+  });
+  for (const b of personalizedBonuses) {
+    items.push({
+      label: `Bono personalizado${b.note ? ` — ${b.note}` : ""}`,
+      amount: b.amount ?? 0,
+      kind: "INCOME",
+      isAutomatic: true,
+    });
   }
 
   if (isEndOfMonthQuincena(period) && profile?.iessDeclaredSalary && !profile.companyAbsorbsIess) {

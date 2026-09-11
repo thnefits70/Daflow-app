@@ -4399,6 +4399,7 @@ enum CeoBonusType {
   ADICIONAL
   PRODUCTIVIDAD
   MERITO
+  PERSONALIZADO
 }
 
 // Bono discrecional del CEO — siempre lo otorga el admin (sin fila User),
@@ -4406,6 +4407,13 @@ enum CeoBonusType {
 // quien administra Nómina (Nairoby/admin) — nunca el resto del equipo.
 // Mismo desfase de un mes que horas extra/comisión de equipo: un bono
 // otorgado en el mes M se paga en la quincena Q1 del mes M+1.
+//
+// Confirmado 2026-09-11: pedido explícito del usuario — agregado el tipo
+// PERSONALIZADO, el único que usa `amount` y `targetPeriod`. A diferencia
+// de los 3 tipos fijos (monto fijo por CEO_BONUS_AMOUNTS, siempre Q1 del
+// mes siguiente al otorgado), acá el admin elige el monto exacto Y la
+// quincena exacta donde se paga — buildAutomaticLineItems lo busca por
+// targetPeriod directo, no por grantedAt/mes de origen.
 model CeoBonusGrant {
   id        String       @id @default(cuid())
   userId    String
@@ -4413,6 +4421,9 @@ model CeoBonusGrant {
   type      CeoBonusType
   note      String?
   grantedAt DateTime     @default(now())
+
+  amount       Float? // solo PERSONALIZADO — monto exacto elegido por el admin
+  targetPeriod String? // solo PERSONALIZADO — quincena exacta donde se paga, ej. "2026-10-Q1"
 
   @@index([userId])
 }
