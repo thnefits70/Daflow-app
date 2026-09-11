@@ -250,7 +250,7 @@ function ProofUploader({ apiBase, onSent }: { apiBase: string; onSent: () => voi
   const blockedByMismatch = !!verify && !verify.matches;
 
   async function submit() {
-    if (!proofUrl || blockedByMismatch) return;
+    if (!proofUrl || verifying || blockedByMismatch) return;
     setSubmitting(true);
     setErr("");
     const res = await fetch(`${apiBase}/proof`, {
@@ -319,7 +319,7 @@ function ProofUploader({ apiBase, onSent }: { apiBase: string; onSent: () => voi
           {verify.matches ? "✓ " : verify.readAmount === null ? "" : "⚠ "}{verify.note}
         </div>
       )}
-      <button type="button" disabled={!proofUrl || submitting || blockedByMismatch} className="text-[12px] font-bold bg-teal text-white rounded-md px-3.5 py-1.5 cursor-pointer disabled:opacity-40 mt-2.5" onClick={submit}>
+      <button type="button" disabled={!proofUrl || verifying || submitting || blockedByMismatch} className="text-[12px] font-bold bg-teal text-white rounded-md px-3.5 py-1.5 cursor-pointer disabled:opacity-40 mt-2.5" onClick={submit}>
         {submitting ? "Enviando…" : "Confirmar transferencia hecha"}
       </button>
       {blockedByMismatch && (
