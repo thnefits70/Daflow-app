@@ -29,6 +29,7 @@ export function LegacyPayrollDebtsPanel({ canEdit }: { canEdit: boolean }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [confirming, setConfirming] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   function load() {
     if (canEdit) {
@@ -70,6 +71,13 @@ export function LegacyPayrollDebtsPanel({ canEdit }: { canEdit: boolean }) {
     const data = await res.json().catch(() => null);
     if (!res.ok) { setErr(data?.error ?? "No se pudo cargar."); return; }
     setEmployeeId(""); setTotalAmount(""); setReason(""); setInstallments(1);
+    load();
+  }
+
+  async function remove(id: string) {
+    if (deletingId !== id) { setDeletingId(id); return; }
+    setDeletingId(null);
+    await fetch(`/api/payroll/legacy-debts/${id}`, { method: "DELETE" });
     load();
   }
 
@@ -129,6 +137,16 @@ export function LegacyPayrollDebtsPanel({ canEdit }: { canEdit: boolean }) {
               {d.installments > 1 && <span className="text-steel-dim">({d.installments} cuotas)</span>}
               <span className="text-steel-dim">{d.reason}</span>
               <span className="text-[10.5px] text-steel-dim ml-auto">Cargada el {formatDateTime(d.createdAt)} — descuenta desde {d.firstPayoutMonth}</span>
+              {canEdit && (
+                <button
+                  type="button"
+                  className={`text-[11px] font-semibold cursor-pointer ${deletingId === d.id ? "text-white bg-red rounded px-2 py-0.5" : "text-red"}`}
+                  onClick={() => remove(d.id)}
+                  onBlur={() => setDeletingId((cur) => (cur === d.id ? null : cur))}
+                >
+                  {deletingId === d.id ? "¿Seguro? Tocá de nuevo" : "Borrar"}
+                </button>
+              )}
             </div>
           ))}
         </div>
