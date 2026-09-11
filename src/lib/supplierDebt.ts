@@ -6,6 +6,14 @@ import { prisma } from "@/lib/prisma";
 // Bryan aprueba → Daniel confirma que llegó completo y en buen estado
 // (status RECEIVED) y todavía no se pagó (debtPaymentId null). Nada más
 // cuenta para el total.
+//
+// Confirmado 2026-09-11: pedido explícito del usuario — se agregó un
+// candado más, específico de esto (no de la recepción en sí, que sigue
+// sin cambios): además de RECEIVED, hace falta que quien aprueba compras
+// (hoy Bryan, canActOnPurchaseApproval) confirme APARTE que él sí autorizó
+// esa compra (PurchaseRequest.buyerDebtConfirmedAt) — evita pagarle a CHEN
+// por algo que llegó sin haber sido pedido/aprobado de verdad. Ver
+// /api/purchase-requests/credit-debt-pending y .../[id]/confirm-debt.
 
 export async function nextSupplierDebtPaymentNumber(): Promise<number> {
   const updated = await prisma.platformSettings.update({
@@ -30,10 +38,11 @@ export type SupplierDebtPendingItem = {
 
 // Confirmado 2026-09-08: lo que YA se puede sumar al saldo — recibido
 // completo y en buen estado (RECEIVED), todavía no incluido en ninguna
-// tanda (debtPaymentId null).
+// tanda (debtPaymentId null). Confirmado 2026-09-11: además, ya confirmado
+// por quien aprueba compras (buyerDebtConfirmedAt) — ver comentario arriba.
 export async function getSupplierDebtPendingItems(supplierId: string): Promise<SupplierDebtPendingItem[]> {
   const rows = await prisma.purchaseRequest.findMany({
-    where: { supplierId, status: "RECEIVED", debtPaymentId: null },
+    where: { supplierId, status: "RECEIVED", debtPaymentId: null, buyerDebtConfirmedAt: { not: null } },
     include: { catalogItem: { select: { name: true } } },
     orderBy: { requestedAt: "asc" },
   });
@@ -50,6 +59,43 @@ export async function getSupplierDebtPendingItems(supplierId: string): Promise<S
 export async function getSupplierDebtBalance(supplierId: string): Promise<number> {
   const items = await getSupplierDebtPendingItems(supplierId);
   return items.reduce((sum, i) => sum + i.totalCost, 0);
+}
+
+export type BuyerDebtConfirmationItem = {
+  id: string;
+  requestNumber: number | null;
+  productName: string;
+  supplierName: string;
+  quantity: number;
+  totalCost: number;
+  requestedAt: Date;
+};
+
+// Confirmado 2026-09-11: cola de Bryan (canActOnPurchaseApproval) — todo lo
+// ya RECEIVED de un proveedor de crédito que todavía no confirmó ni
+// rechazó. Cruza todos los proveedores CREDITO, no solo CHEN, para cuando
+// haya más de uno.
+export async function getBuyerDebtConfirmationQueue(): Promise<BuyerDebtConfirmationItem[]> {
+  const rows = await prisma.purchaseRequest.findMany({
+    where: {
+      status: "RECEIVED",
+      debtPaymentId: null,
+      buyerDebtConfirmedAt: null,
+      buyerDebtRejectedAt: null,
+      supplier: { paymentMode: "CREDITO" },
+    },
+    include: { catalogItem: { select: { name: true } }, supplier: { select: { name: true } } },
+    orderBy: { requestedAt: "asc" },
+  });
+  return rows.map((r) => ({
+    id: r.id,
+    requestNumber: r.requestNumber,
+    productName: r.catalogItem.name,
+    supplierName: r.supplier.name,
+    quantity: r.quantity,
+    totalCost: r.totalCost,
+    requestedAt: r.requestedAt,
+  }));
 }
 
 export type SupplierDebtDisputedItem = {

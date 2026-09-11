@@ -12,9 +12,10 @@ import { PurchaseAuditPanel } from "./PurchaseAuditPanel";
 import { PurchaseCreditsPanel } from "./PurchaseCreditsPanel";
 import { PurchaseJustaPanel } from "./PurchaseJustaPanel";
 import { SupplierDebtPanel } from "./SupplierDebtPanel";
+import { BuyerDebtConfirmationPanel } from "./BuyerDebtConfirmationPanel";
 import { TabGuide } from "@/components/shared/TabGuide";
 
-type Tab = "solicitar" | "mias" | "comparar" | "aprobacion" | "inventario" | "justa" | "finanzas" | "urgentes" | "creditos" | "proveedores-credito" | "auditoria";
+type Tab = "solicitar" | "mias" | "comparar" | "aprobacion" | "confirmar-credito" | "inventario" | "justa" | "finanzas" | "urgentes" | "creditos" | "proveedores-credito" | "auditoria";
 
 // Confirmado 2026-07-30: una sola pantalla para todo el módulo — las
 // pestañas que ve cada persona dependen de lo que puede hacer (admin ve
@@ -78,6 +79,13 @@ export function PurchaseControlPanel({
     ...(canCreateNew ? [{ key: "solicitar" as Tab, label: "Solicitar" }] : canSubmitEmergency ? [{ key: "solicitar" as Tab, label: "🚨 Emergencia" }] : []),
     ...(canSubmit ? [{ key: "mias" as Tab, label: "Mis solicitudes" }] : []),
     ...(canReview ? [{ key: "aprobacion" as Tab, label: "Bandeja de aprobación" }] : []),
+    // Confirmado 2026-09-11: pedido explícito del usuario — para un
+    // proveedor de crédito, recibir la mercadería no basta para que cuente
+    // en la deuda a pagar: falta que quien aprueba compras (canActOnApproval,
+    // hoy Bryan) confirme aparte que él sí autorizó esa compra. Mismo
+    // criterio de visibilidad que "Bandeja de aprobación": canReview la ve,
+    // canActOnApproval actúa.
+    ...(canReview ? [{ key: "confirmar-credito" as Tab, label: "Confirmar deuda a crédito" }] : []),
     // Confirmado 2026-09-01: pedido explícito del usuario — Daniel y su
     // equipo de Inventario (canReceive) ahora también ven esta pestaña, pero
     // en solo lectura (ver canAct más abajo): antes se enteraban de un
@@ -188,6 +196,16 @@ export function PurchaseControlPanel({
           <PurchaseApprovalInbox canAct={canActOnApproval} canPayHere={canActOnApproval && canPayMerchandise} canPayMerchandise={canPayMerchandise} isAdmin={isAdmin} />
         </>
       )}
+      {tab === "confirmar-credito" && (
+        <>
+          <TabGuide storageKey="compras-confirmar-credito">
+            {canActOnApproval
+              ? <>Acá aparece lo que ya recibió Inventario de un proveedor de crédito (hoy CHEN). Confirma que tú sí autorizaste esa compra — recién ahí se suma a la deuda que se le va a pagar. Si no la autorizaste, márcalo así con el motivo y avisa directo al admin.</>
+              : <>Vista de solo lectura de lo que espera la confirmación de quien aprueba compras antes de sumarse a la deuda con un proveedor de crédito.</>}
+          </TabGuide>
+          <BuyerDebtConfirmationPanel canAct={canActOnApproval} />
+        </>
+      )}
       {tab === "urgentes" && (
         <>
           <TabGuide storageKey="compras-urgentes">
@@ -209,7 +227,7 @@ export function PurchaseControlPanel({
       {tab === "proveedores-credito" && (
         <>
           <TabGuide storageKey="compras-proveedores-credito">
-            Acá ves el saldo que le debes a un proveedor de crédito (hoy solo CHEN) — solo cuenta lo que Daniel ya confirmó completo y en buen estado. Arma tandas de pago, registra las transferencias, y genera el enlace de solo lectura para que el proveedor vea su propio saldo.
+            Acá ves el saldo que le debes a un proveedor de crédito (hoy solo CHEN) — solo cuenta lo que Daniel ya confirmó completo y en buen estado, Y que quien aprueba compras ya confirmó que sí autorizó (ver pestaña &quot;Confirmar deuda a crédito&quot;). Arma tandas de pago, registra las transferencias, y genera el enlace de solo lectura para que el proveedor vea su propio saldo.
           </TabGuide>
           <SupplierDebtPanel />
         </>

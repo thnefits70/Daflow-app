@@ -383,6 +383,8 @@ model User {
   purchaseRequestsShippingPaymentRequestedBy     PurchaseRequest[]                  @relation("PurchaseRequestShippingPaymentRequestedBy")
   purchaseRequestsBankAccountChangeRequestedBy   PurchaseRequest[]                  @relation("PurchaseRequestBankAccountChangeRequestedBy")
   purchaseRequestsShippingPaidBy                 PurchaseRequest[]                  @relation("PurchaseRequestShippingPaidBy")
+  purchaseRequestsBuyerDebtConfirmedBy           PurchaseRequest[]                  @relation("PurchaseRequestBuyerDebtConfirmedBy")
+  purchaseRequestsBuyerDebtRejectedBy            PurchaseRequest[]                  @relation("PurchaseRequestBuyerDebtRejectedBy")
   payStubs                                       PayStub[]                          @relation("PayStubOwner")
   payStubsUploaded                               PayStub[]                          @relation("PayStubUploadedBy")
   externalPayments                               ExternalPayment[]                  @relation("ExternalPaymentOwner")
@@ -2365,6 +2367,24 @@ model PurchaseRequest {
   // dentro de una tanda cerrada y pagada.
   debtPaymentId String?
   debtPayment   SupplierDebtPayment? @relation(fields: [debtPaymentId], references: [id], onDelete: SetNull)
+
+  // Confirmado 2026-09-11: pedido explícito del usuario — para un proveedor
+  // de crédito (hoy solo CHEN), recibir la mercadería YA NO alcanza para que
+  // cuente en la deuda a pagar: hace falta ADEMÁS que quien aprueba compras
+  // (hoy Bryan, canActOnPurchaseApproval) confirme acá que él sí autorizó
+  // esa compra — protege contra pagarle a CHEN por algo que llegó sin haber
+  // sido pedido/aprobado de verdad. No bloquea la recepción en sí (Inventario
+  // recibe y el producto queda disponible para vender igual); solo bloquea
+  // que getSupplierDebtPendingItems (src/lib/supplierDebt.ts) lo sume al
+  // saldo. Si Bryan rechaza, queda excluido del saldo para siempre hasta que
+  // se resuelva a mano — el admin recibe aviso con el motivo.
+  buyerDebtConfirmedAt     DateTime?
+  buyerDebtConfirmedById   String?
+  buyerDebtConfirmedBy     User?     @relation("PurchaseRequestBuyerDebtConfirmedBy", fields: [buyerDebtConfirmedById], references: [id], onDelete: SetNull)
+  buyerDebtRejectedAt      DateTime?
+  buyerDebtRejectedById    String?
+  buyerDebtRejectedBy      User?     @relation("PurchaseRequestBuyerDebtRejectedBy", fields: [buyerDebtRejectedById], references: [id], onDelete: SetNull)
+  buyerDebtRejectionReason String?
 
   // Confirmado 2026-09-09 (Fase 2, Análisis de Mercado): opcional, solo para
   // trazabilidad — cuando Bryan marca una propuesta "lista para comprar" y
