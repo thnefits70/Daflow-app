@@ -34,7 +34,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ pe
   });
 
   for (const emp of employees) {
-    const lineItems = await buildAutomaticLineItems(emp.id, period);
+    const { items: lineItems, includedCeoBonusGrantIds } = await buildAutomaticLineItems(emp.id, period);
     const totals = totalsFromLineItems(lineItems);
     await prisma.payrollQuincenaRole.create({
       data: {
@@ -45,6 +45,12 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ pe
         lineItems: { create: lineItems },
       },
     });
+    if (includedCeoBonusGrantIds.length > 0) {
+      await prisma.ceoBonusGrant.updateMany({
+        where: { id: { in: includedCeoBonusGrantIds } },
+        data: { includedInPeriod: period },
+      });
+    }
   }
 
   const full = await prisma.payrollPeriod.findUnique({

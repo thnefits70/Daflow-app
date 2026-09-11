@@ -4445,6 +4445,17 @@ model CeoBonusGrant {
   amount       Float? // solo PERSONALIZADO — monto exacto elegido por el admin
   targetPeriod String? // solo PERSONALIZADO — quincena exacta donde se paga, ej. "2026-10-Q1"
 
+  // Confirmado 2026-09-11, pedido explícito del usuario: para los tipos
+  // fijos (ADICIONAL/PRODUCTIVIDAD/MERITO) — antes se buscaban por fecha
+  // (mes anterior a la Q1 en curso), sin ninguna marca de "ya pagado", así
+  // que un bono otorgado después de generarse la Q1 de su propio mes
+  // quedaba programado un mes de más, Y si se corregía a mano en esa Q1, el
+  // sistema igual lo volvía a pagar solo al mes siguiente (duplicado). Ahora
+  // se marca con la quincena exacta en la que quedó incluido apenas se
+  // genera o regenera un rol que lo toma — null significa "todavía sin
+  // pagar", nunca se vuelve a tocar una vez que tiene valor.
+  includedInPeriod String?
+
   @@index([userId])
 }
 

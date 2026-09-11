@@ -41,13 +41,22 @@ export async function resolveFirstPayoutMonth(naturalFirstMonth: string): Promis
   return existing ? addMonthsToMonthStr(naturalFirstMonth, 1) : naturalFirstMonth;
 }
 
+export type AutomaticLineItemsResult = {
+  items: QuincenaLineItemInput[];
+  // Confirmado 2026-09-11: ids de CeoBonusGrant (tipo fijo) que quedaron
+  // incluidos en este cálculo — quien persista el rol debe marcarlos con
+  // includedInPeriod para que nunca se vuelvan a pagar solos.
+  includedCeoBonusGrantIds: string[];
+};
+
 // Confirmado 2026-08-13: todo (sueldo, horas extra, bono, IESS) vive como
 // línea suelta desde el arranque — Nairoby puede editar o quitar cualquiera,
 // incluso las automáticas.
-export async function buildAutomaticLineItems(employeeId: string, period: string): Promise<QuincenaLineItemInput[]> {
+export async function buildAutomaticLineItems(employeeId: string, period: string): Promise<AutomaticLineItemsResult> {
   const profile = await prisma.payrollProfile.findUnique({ where: { userId: employeeId } });
 
   const items: QuincenaLineItemInput[] = [];
+  const includedCeoBonusGrantIds: string[] = [];
   const realSalary = profile?.realSalary ?? 0;
   if (profile?.monthlySalaryOnly) {
     if (isEndOfMonthQuincena(period)) {
@@ -168,21 +177,37 @@ export async function buildAutomaticLineItems(employeeId: string, period: string
         });
       }
 
-      // Bonos discrecionales del CEO otorgados durante el mes fuente —
-      // confidencial, confirmado 2026-08-14: nunca se paga en el mismo mes
-      // en que se otorga, siempre en la Q1 del mes siguiente. PERSONALIZADO
-      // queda afuera de este bloque — tiene su propio manejo por
-      // targetPeriod directo, más abajo, fuera del bloque de Q1.
+      // Bonos discrecionales del CEO (tipos fijos) — confidencial. Siguen
+      // pagándose solo en la primera quincena de un mes, nunca en la
+      // segunda. Corregido 2026-09-11, pedido explícito del usuario: antes
+      // se buscaban por fecha (otorgado en el mes anterior a esta Q1), sin
+      // marca de "ya pagado" — un bono otorgado DESPUÉS de generarse la Q1
+      // de su propio mes esperaba un mes completo de más aunque hubiera
+      // llegado a tiempo para la próxima primera quincena disponible, y si
+      // se corregía a mano, el sistema lo volvía a pagar solo al mes
+      // siguiente (duplicado). Ahora se toma cualquier bono fijo todavía
+      // sin marcar (includedInPeriod: null), sin importar cuándo se otorgó
+      // — entra en la próxima primera quincena que se genere o regenere
+      // después de otorgarlo, y queda marcado para siempre (ver
+      // includedCeoBonusGrantIds, que quien llama esta función debe
+      // persistir). PERSONALIZADO queda afuera de este bloque — tiene su
+      // propio manejo por targetPeriod directo, más abajo.
+      // OR con includedInPeriod === period (no solo null): así una
+      // regeneración de este mismo período vuelve a incluir el bono que ya
+      // había quedado marcado aquí, en vez de perderlo — sin tocar bonos ya
+      // marcados en OTRO período (esos nunca se vuelven a mover).
       const bonuses = await prisma.ceoBonusGrant.findMany({
-        where: { userId: employeeId, type: { not: "PERSONALIZADO" }, grantedAt: { gte: monthStart, lt: monthEnd } },
+        where: { userId: employeeId, type: { not: "PERSONALIZADO" }, OR: [{ includedInPeriod: null }, { includedInPeriod: period }] },
       });
       for (const b of bonuses) {
+        const grantedMonth = b.grantedAt.toISOString().slice(0, 7);
         items.push({
-          label: `${CEO_BONUS_LABELS[b.type]} (${sourceMonth})`,
+          label: `${CEO_BONUS_LABELS[b.type]} (${grantedMonth})`,
           amount: CEO_BONUS_AMOUNTS[b.type as "ADICIONAL" | "PRODUCTIVIDAD" | "MERITO"],
           kind: "INCOME",
           isAutomatic: true,
         });
+        includedCeoBonusGrantIds.push(b.id);
       }
       if (bonuses.length === 0) {
         items.push({
@@ -190,7 +215,7 @@ export async function buildAutomaticLineItems(employeeId: string, period: string
           amount: 0,
           kind: "INCOME",
           isAutomatic: true,
-          note: `No se otorgaron bonos discrecionales del CEO en ${sourceMonth}.`,
+          note: `No se otorgaron bonos discrecionales del CEO pendientes de pago.`,
         });
       }
 
@@ -391,7 +416,7 @@ export async function buildAutomaticLineItems(employeeId: string, period: string
     if (iess > 0) items.push({ label: IESS_LINE_ITEM_LABEL, amount: iess, kind: "EXPENSE", isAutomatic: true });
   }
 
-  return items;
+  return { items, includedCeoBonusGrantIds };
 }
 
 export function totalsFromLineItems(items: { amount: number; kind: "INCOME" | "EXPENSE" }[]) {

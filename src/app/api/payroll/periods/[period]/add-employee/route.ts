@@ -37,7 +37,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ per
 
   const session = await auth();
   const isAdmin = session!.user.role === "admin";
-  const lineItems = await buildAutomaticLineItems(employeeId, period);
+  const { items: lineItems, includedCeoBonusGrantIds } = await buildAutomaticLineItems(employeeId, period);
   const totals = totalsFromLineItems(lineItems);
   const role = await prisma.payrollQuincenaRole.create({
     data: {
@@ -48,6 +48,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ per
       lineItems: { create: lineItems },
     },
   });
+  if (includedCeoBonusGrantIds.length > 0) {
+    await prisma.ceoBonusGrant.updateMany({
+      where: { id: { in: includedCeoBonusGrantIds } },
+      data: { includedInPeriod: period },
+    });
+  }
 
   return NextResponse.json(role, { status: 201 });
 }

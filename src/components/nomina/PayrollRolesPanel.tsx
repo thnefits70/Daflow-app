@@ -636,6 +636,21 @@ export function PayrollRolesPanel({ canEdit, canProposeFixedBonus, canApproveFix
     loadDetail();
   }
 
+  // Confirmado 2026-09-11, pedido explícito del usuario: mientras el
+  // período siga en borrador y sin ningún pago hecho, puede recalcularse
+  // desde cero tomando otra vez la información ya cargada/corregida (sueldos,
+  // bonos, comisiones, etc.) — solo toca las líneas automáticas, lo agregado
+  // a mano queda intacto.
+  async function regenerate() {
+    setBusy(true);
+    setErr("");
+    const res = await fetch(`/api/payroll/periods/${period}/regenerate`, { method: "POST" });
+    setBusy(false);
+    const data = await res.json().catch(() => null);
+    if (!res.ok) { setErr(data?.error ?? "No se pudo regenerar."); return; }
+    refreshAfterRoleEdit();
+  }
+
   async function addMissingEmployee(employeeId: string) {
     setAddingEmployeeId(employeeId);
     setErr("");
@@ -759,6 +774,22 @@ export function PayrollRolesPanel({ canEdit, canProposeFixedBonus, canApproveFix
             (iessTransfer || totalIessOwedFromRoles(detail.roles) > 0) && (
               <PayrollIessTransferPanel period={period} isAdmin={isAdmin} canEdit={canEdit} transfer={iessTransfer} onChanged={loadIessTransfer} breakdown={iessBreakdownFromRoles(detail.roles)} />
             )}
+
+          {detail.status === "DRAFT" && canEdit && pendingPayoutCount === detail.roles.length && (
+            <div className="mb-3">
+              <button
+                type="button"
+                disabled={busy}
+                className="text-[12px] font-semibold border border-rule rounded-md px-3.5 py-1.5 cursor-pointer disabled:opacity-60"
+                onClick={regenerate}
+              >
+                {busy ? "Regenerando…" : "Regenerar roles"}
+              </button>
+              <div className="text-[10.5px] text-steel-dim mt-1">
+                Vuelve a calcular sueldos, bonos y comisiones con la información actual. Los conceptos agregados a mano no se tocan.
+              </div>
+            </div>
+          )}
 
           <button
             type="button"
