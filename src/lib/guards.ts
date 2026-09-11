@@ -216,6 +216,17 @@ export async function canViewPayrollRoles() {
   return canEditPayrollRoles();
 }
 
+// Confirmado 2026-09-11: pedido explícito del usuario — deudas de anticipos/
+// compras/descuentos de antes de que existiera este sistema (nunca quedaron
+// como SalaryAdvance/PersonalPurchaseOrder/ManagementDeduction reales).
+// Mismo criterio de acceso que canEditPayrollRoles (Nairoby, sin bypass de
+// admin) — es la misma persona armando el mismo rol, solo que a mano por
+// esta vez. A propósito NO requiere aceptación del colaborador como
+// ManagementDeduction: es deuda real que ambas partes ya conocen.
+export async function canManageLegacyPayrollDebts() {
+  return canEditPayrollRoles();
+}
+
 // Confirmado 2026-08-13: solo el propio líder de un área habilitada
 // (interruptor PayrollProfile.canLogOvertimeHours en su propio perfil) ve
 // la pantalla de registrar horas extra — carga las suyas y las de su

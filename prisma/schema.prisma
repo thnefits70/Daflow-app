@@ -476,6 +476,7 @@ model User {
   employeeBankAccounts   EmployeeBankAccount[]
   salaryAdvances         SalaryAdvance[]         @relation("SalaryAdvanceEmployee")
   managementDeductions   ManagementDeduction[]   @relation("ManagementDeductionEmployee")
+  legacyPayrollDebts     LegacyPayrollDebt[]     @relation("LegacyPayrollDebtEmployee")
 
   merchandiseReentryBatchesCreated        MerchandiseReentryBatch[]        @relation("MerchandiseReentryBatchCreatedBy")
   merchandiseReentryItemsCorrected        MerchandiseReentryItem[]         @relation("MerchandiseReentryItemCorrectedBy")
@@ -4708,6 +4709,33 @@ model ManagementDeduction {
 
   acceptedAt       DateTime?
   firstPayoutMonth String? // resuelto recién cuando se acepta
+
+  createdById String?
+  createdAt   DateTime @default(now())
+
+  @@index([employeeId])
+}
+
+// Confirmado 2026-09-11: pedido explícito del usuario — deudas de anticipos,
+// compras personales o descuentos de meses ANTERIORES a que existiera este
+// sistema de nómina automatizado (antes de agosto 2026), que nunca quedaron
+// registradas como SalaryAdvance/PersonalPurchaseOrder/ManagementDeduction.
+// Nairoby la carga una sola vez, a mano, en cuotas — y de ahí en adelante
+// buildAutomaticLineItems la descuenta sola, igual que el resto. A
+// diferencia de ManagementDeduction, NO requiere aceptación del colaborador:
+// es deuda real ya conocida por ambas partes, no una sanción nueva.
+// Exclusivo de Nairoby (canEditPayrollRoles, sin bypass de admin) — mismo
+// criterio que el resto de la calculadora de roles de pago.
+model LegacyPayrollDebt {
+  id         String @id @default(cuid())
+  employeeId String
+  employee   User   @relation("LegacyPayrollDebtEmployee", fields: [employeeId], references: [id], onDelete: Cascade)
+
+  totalAmount  Float
+  reason       String
+  installments Int    @default(1)
+
+  firstPayoutMonth String // resuelto al crear vía resolveFirstPayoutMonth, siempre el mes actual
 
   createdById String?
   createdAt   DateTime @default(now())

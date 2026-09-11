@@ -330,6 +330,40 @@ export async function buildAutomaticLineItems(employeeId: string, period: string
       if (!deductionsShown) {
         items.push({ label: "Descuentos por mala gestión", amount: 0, kind: "EXPENSE", isAutomatic: true, note: "No tiene descuentos activos." });
       }
+
+      // Confirmado 2026-09-11: deudas de anticipos/compras/descuentos de
+      // ANTES de que existiera este sistema — Nairoby las carga una sola vez
+      // a mano (`LegacyPayrollDebt`) y de ahí en adelante se descuentan
+      // solas, mismo mecanismo de cuotas que compras personales/anticipos.
+      const legacyDebts = await prisma.legacyPayrollDebt.findMany({ where: { employeeId } });
+      let legacyDebtsShown = false;
+      for (const d of legacyDebts) {
+        const idx = installmentIndexForMonth(d.firstPayoutMonth, d.installments, periodMonth);
+        if (idx !== null) {
+          const amt = installmentAmount(d.totalAmount, d.installments, idx);
+          const cuota = d.installments > 1 ? ` (cuota ${idx + 1}/${d.installments})` : "";
+          items.push({
+            label: `Deuda anterior — ${d.reason}${cuota}`,
+            amount: amt,
+            kind: "EXPENSE",
+            isAutomatic: true,
+            note: `Deuda de antes del sistema — total $${d.totalAmount.toFixed(2)} en ${d.installments} cuota(s), cargada el ${formatDateTime(d.createdAt)}`,
+          });
+          legacyDebtsShown = true;
+        } else if (monthsBetween(periodMonth, d.firstPayoutMonth) > 0) {
+          items.push({
+            label: `Deuda anterior — ${d.reason} (pendiente)`,
+            amount: 0,
+            kind: "EXPENSE",
+            isAutomatic: true,
+            note: `Deuda de $${d.totalAmount.toFixed(2)} en ${d.installments} cuota(s) — la primera cuota corresponde a ${d.firstPayoutMonth}, no a este período.`,
+          });
+          legacyDebtsShown = true;
+        }
+      }
+      if (!legacyDebtsShown && legacyDebts.length > 0) {
+        items.push({ label: "Deudas anteriores al sistema", amount: 0, kind: "EXPENSE", isAutomatic: true, note: "No tiene cuotas de deudas anteriores en este período." });
+      }
     }
   }
 

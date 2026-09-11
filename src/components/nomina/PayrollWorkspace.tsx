@@ -15,9 +15,10 @@ import { PersonalPurchasesPaymentLedgerPanel } from "@/components/personal-purch
 import { PersonalPurchasesHistoryPanel } from "@/components/personal-purchases/PersonalPurchasesHistoryPanel";
 import { SalaryAdvanceApprovalPanel, AdvanceHistoryPanel } from "@/components/salary-advances/SalaryAdvanceApprovalPanel";
 import { ManagementDeductionsPanel } from "./ManagementDeductionsPanel";
+import { LegacyPayrollDebtsPanel } from "./LegacyPayrollDebtsPanel";
 import { TabGuide } from "@/components/shared/TabGuide";
 
-type Tab = "horas" | "aprobar" | "historial" | "roles" | "historialpagos" | "comisiones" | "bonosceo" | "comprasfinanzas" | "anticipos" | "descuentos";
+type Tab = "horas" | "aprobar" | "historial" | "roles" | "historialpagos" | "comisiones" | "bonosceo" | "comprasfinanzas" | "anticipos" | "descuentos" | "deudaanterior";
 
 // Confirmado 2026-08-13: pedido explícito del usuario — todo esto vive
 // dentro de la misma sección "Nómina" que ya existía, como pestañas nuevas,
@@ -61,6 +62,7 @@ export function PayrollWorkspace({
     ...(canConfirmPersonalPurchaseFinance ? [{ key: "comprasfinanzas" as Tab, label: "Compras personales" }] : []),
     ...(canManageSalaryAdvances || canViewSalaryAdvancesHistory ? [{ key: "anticipos" as Tab, label: "Anticipos" }] : []),
     ...(canCreateManagementDeduction ? [{ key: "descuentos" as Tab, label: "Descuentos" }] : []),
+    ...(canViewRoles ? [{ key: "deudaanterior" as Tab, label: "Deuda anterior" }] : []),
   ];
   const [tab, setTab] = useState<Tab>(tabs[0]?.key ?? "roles");
 
@@ -194,6 +196,18 @@ export function PayrollWorkspace({
             Crea acá un descuento administrativo a un colaborador, con motivo y evidencia. No se aplica al rol de pago hasta que el colaborador lo acepte explícitamente.
           </TabGuide>
           <ManagementDeductionsPanel />
+        </>
+      )}
+      {tab === "deudaanterior" && canViewRoles && (
+        <>
+          <TabGuide storageKey="nomina-deudaanterior">
+            {canEditRoles ? (
+              <>Carga acá, una sola vez, una deuda de anticipo/compra/descuento de ANTES de que existiera este sistema (no está en ningún otro registro). Elegí cuotas y se descuenta sola desde este mes, sin que el colaborador tenga que aceptarla — es deuda real ya conocida por ambos.</>
+            ) : (
+              <>Vista de solo lectura de las deudas anteriores al sistema que Nairoby fue cargando a mano.</>
+            )}
+          </TabGuide>
+          <LegacyPayrollDebtsPanel canEdit={canEditRoles} />
         </>
       )}
     </div>
