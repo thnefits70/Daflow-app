@@ -82,9 +82,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ gro
   // al instante cuando se aprueba (antes solo se enteraba por la tarjeta de
   // Inicio o, si nadie pagaba, por el aviso tardío de 24h en el cron).
   if (parsed.data.action === "approve" && !isAdmin) {
+    const total = rows.reduce((sum, r) => sum + r.totalCost, 0);
+    const totalLabel = total.toLocaleString("es-EC", { style: "currency", currency: "USD" });
     await sendPushToOwner("admin", {
       title: "Solicitud de compra aprobada",
-      body: `${names} — lista para pagar`,
+      body: `${names} — ${totalLabel} — lista para pagar`,
       url: "/area/workspace",
     }).catch(() => null);
   }
