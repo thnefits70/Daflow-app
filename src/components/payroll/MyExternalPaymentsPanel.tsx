@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { FileText } from "lucide-react";
+import { FileText, MessageSquare } from "lucide-react";
 import { ProofPreview } from "@/components/shared/ProofPreview";
+import { PayrollChat } from "./PayrollChat";
 import { formatDateTime } from "@/lib/formatDateTime";
 
 const MONTHS = [
@@ -32,7 +33,11 @@ type Payment = {
 // siempre, pero SÍ quiere poder ver que efectivamente se le pagó, con el
 // comprobante real. Mismo espíritu que MonthlyLegalRolePanel (ver el propio
 // rol), pero para este grupo aparte.
-export function MyExternalPaymentsPanel() {
+// Corrección 2026-09-11: a este grupo se le había quedado afuera el chat de
+// nómina (PayrollChat) que sí tiene todo el mundo en PayStubsPanel modo
+// "own" — podían recibir mensajes de Nairoby pero no tenían dónde
+// responder ni adjuntar nada. Se agrega acá con el mismo `canSend`.
+export function MyExternalPaymentsPanel({ ownUserId }: { ownUserId: string }) {
   const [payments, setPayments] = useState<Payment[] | null>(null);
 
   useEffect(() => {
@@ -43,6 +48,13 @@ export function MyExternalPaymentsPanel() {
 
   return (
     <div>
+      <div className="mb-4.5">
+        <div className="font-semibold text-[13.5px] mb-1.5 flex items-center gap-1.5">
+          <MessageSquare size={14} className="text-steel" /> Mensajes con Nómina
+        </div>
+        <PayrollChat employeeId={ownUserId} canSend />
+      </div>
+
       <div className="font-semibold text-[13.5px] mb-1.5">Mis pagos</div>
       <div className="text-[11.5px] text-steel mb-3">
         Acá ves el comprobante de cada pago que se te hizo.

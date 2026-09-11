@@ -40,7 +40,7 @@ export default async function AreaRolesDePagoPage() {
           payStubsPanel={<PayStubsPanel mode="manage" departments={departments} />}
         />
       ) : myProfile?.externalPaymentMode ? (
-        <MyExternalPaymentsPanel />
+        <MyExternalPaymentsPanel ownUserId={session.user.id} />
       ) : (
         <PayStubsPanel mode="own" ownUserId={session.user.id} />
       )}
