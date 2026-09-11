@@ -4,7 +4,33 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { canManageLegacyPayrollDebts, canViewPayrollRoles } from "@/lib/guards";
 import { resolveFirstPayoutMonth } from "@/lib/payroll";
+import { installmentAmount, addMonthsToMonthStr } from "@/lib/payrollCalc";
 import { sendPushToOwner } from "@/lib/webPush";
+
+// Confirmado 2026-09-11: pedido explícito del usuario — como este cobro es
+// automático, Nairoby (y el admin) necesitan ver mes a mes cuánto sale cada
+// cuota y cuáles ya se cobraron. Una cuota cuenta como "cobrada" solo
+// cuando la quincena Q1 de ese mes ya está PUBLISHED — mismo criterio
+// exacto que pendingSalaryAdvanceBalance usa para anticipos.
+async function withSchedule<T extends { totalAmount: number; installments: number; firstPayoutMonth: string }>(
+  debts: T[]
+): Promise<(T & { schedule: { index: number; month: string; amount: number; charged: boolean }[] })[]> {
+  const publishedPeriods = await prisma.payrollPeriod.findMany({ where: { status: "PUBLISHED" }, select: { period: true } });
+  const publishedSet = new Set(publishedPeriods.map((p) => p.period));
+
+  return debts.map((d) => ({
+    ...d,
+    schedule: Array.from({ length: d.installments }, (_, idx) => {
+      const month = addMonthsToMonthStr(d.firstPayoutMonth, idx);
+      return {
+        index: idx,
+        month,
+        amount: installmentAmount(d.totalAmount, d.installments, idx),
+        charged: publishedSet.has(`${month}-Q1`),
+      };
+    }),
+  }));
+}
 
 // Admin ve lo mismo que Nairoby, de solo lectura — mismo criterio que el
 // resto de la calculadora de roles de pago (canViewPayrollRoles).
@@ -15,7 +41,7 @@ export async function GET() {
     include: { employee: { select: { name: true } } },
     orderBy: { createdAt: "desc" },
   });
-  return NextResponse.json(debts);
+  return NextResponse.json(await withSchedule(debts));
 }
 
 const schema = z.object({

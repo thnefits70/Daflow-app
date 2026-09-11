@@ -4,9 +4,10 @@ import { useEffect, useState } from "react";
 import { formatDateTime } from "@/lib/formatDateTime";
 
 type Employee = { id: string; name: string; position: string | null };
+type ScheduleRow = { index: number; month: string; amount: number; charged: boolean };
 type Debt = {
   id: string; totalAmount: number; reason: string; installments: number; firstPayoutMonth: string;
-  createdAt: string; employee: { name: string };
+  createdAt: string; employee: { name: string }; schedule: ScheduleRow[];
 };
 
 function money(n: number) {
@@ -150,26 +151,48 @@ export function LegacyPayrollDebtsPanel({ canEdit }: { canEdit: boolean }) {
       <div className="bg-surface border border-rule rounded-md p-4">
         <div className="text-[11px] font-semibold uppercase tracking-wide text-steel mb-3">Deudas anteriores cargadas ({debts?.length ?? 0})</div>
         {(debts?.length ?? 0) === 0 && <div className="text-steel text-[12.5px]">Todavía no se cargó ninguna.</div>}
-        <div className="flex flex-col gap-1.5">
-          {debts?.map((d) => (
-            <div key={d.id} className="flex items-center gap-3 text-[12.5px] py-1.5 border-b border-rule last:border-0 flex-wrap">
-              <span className="font-semibold flex-1 min-w-[120px]">{d.employee.name}</span>
-              <span className="font-bold tabular-nums">{money(d.totalAmount)}</span>
-              {d.installments > 1 && <span className="text-steel-dim">({d.installments} cuotas)</span>}
-              <span className="text-steel-dim">{d.reason}</span>
-              <span className="text-[10.5px] text-steel-dim ml-auto">Cargada el {formatDateTime(d.createdAt)} — descuenta desde {d.firstPayoutMonth}</span>
-              {canEdit && (
-                <button
-                  type="button"
-                  className={`text-[11px] font-semibold cursor-pointer ${deletingId === d.id ? "text-white bg-red rounded px-2 py-0.5" : "text-red"}`}
-                  onClick={() => remove(d.id)}
-                  onBlur={() => setDeletingId((cur) => (cur === d.id ? null : cur))}
-                >
-                  {deletingId === d.id ? "¿Seguro? Tocá de nuevo" : "Borrar"}
-                </button>
-              )}
-            </div>
-          ))}
+        <div className="flex flex-col gap-3">
+          {debts?.map((d) => {
+            const charged = d.schedule.filter((s) => s.charged).reduce((s, r) => s + r.amount, 0);
+            const pending = d.schedule.filter((s) => !s.charged).reduce((s, r) => s + r.amount, 0);
+            return (
+              <div key={d.id} className="border-b border-rule last:border-0 pb-3">
+                <div className="flex items-center gap-3 text-[12.5px] flex-wrap mb-1.5">
+                  <span className="font-semibold flex-1 min-w-[120px]">{d.employee.name}</span>
+                  <span className="font-bold tabular-nums">{money(d.totalAmount)}</span>
+                  {d.installments > 1 && <span className="text-steel-dim">({d.installments} cuotas)</span>}
+                  <span className="text-steel-dim">{d.reason}</span>
+                  <span className="text-[10.5px] text-steel-dim ml-auto">Cargada el {formatDateTime(d.createdAt)}</span>
+                  {canEdit && (
+                    <button
+                      type="button"
+                      className={`text-[11px] font-semibold cursor-pointer ${deletingId === d.id ? "text-white bg-red rounded px-2 py-0.5" : "text-red"}`}
+                      onClick={() => remove(d.id)}
+                      onBlur={() => setDeletingId((cur) => (cur === d.id ? null : cur))}
+                    >
+                      {deletingId === d.id ? "¿Seguro? Tocá de nuevo" : "Borrar"}
+                    </button>
+                  )}
+                </div>
+                <div className="flex items-center gap-3 text-[11px] mb-1.5">
+                  <span className="text-green font-semibold">Ya cobrado: {money(charged)}</span>
+                  <span className="text-[#D9A441] font-semibold">Falta por cobrar: {money(pending)}</span>
+                </div>
+                <div className="flex flex-col gap-1 rounded border border-rule bg-cloud px-2.5 py-2">
+                  {d.schedule.map((s) => (
+                    <div key={s.index} className="flex items-center gap-3 text-[11.5px]">
+                      <span className="text-steel-dim min-w-[70px]">Cuota {s.index + 1}/{d.installments}</span>
+                      <span className="font-semibold tabular-nums min-w-[60px]">{money(s.amount)}</span>
+                      <span className="text-steel-dim min-w-[60px]">{s.month}</span>
+                      <span className={`text-[10px] font-semibold rounded-full px-2 py-0.5 ml-auto ${s.charged ? "text-green border border-green" : "text-steel border border-rule"}`}>
+                        {s.charged ? "Cobrada" : "Pendiente"}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>
