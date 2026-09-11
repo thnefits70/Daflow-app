@@ -79,7 +79,7 @@ export function NominaGrid({
         <label className="block mb-3 text-[11px] font-semibold tracking-wide uppercase text-steel">
           Añadir persona directamente
         </label>
-        <div className="grid grid-cols-4 gap-3 mb-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
           <input className="rounded border border-rule px-2.5 py-2 text-[13.5px]" placeholder="Nombre (ej. Ana Pérez)" value={name} onChange={(e) => setName(e.target.value)} />
           <input className="rounded border border-rule px-2.5 py-2 text-[13.5px]" placeholder="Usuario (ej. ana.perez)" value={username} onChange={(e) => setUsername(e.target.value)} />
           <input className="rounded border border-rule px-2.5 py-2 text-[13.5px]" placeholder="Contraseña" value={password} onChange={(e) => setPassword(e.target.value)} />
@@ -128,14 +128,14 @@ export function NominaGrid({
         </div>
       )}
 
-      <div className="grid grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
         {shown.map((u) => (
           <Link
             key={u.id}
             href={`${basePath}/${u.id}`}
-            className={`bg-surface border rounded p-4.5 text-center hover:border-blue ${u.isActive ? "border-rule" : "border-rule opacity-60"}`}
+            className={`flex flex-col items-center bg-surface border rounded p-3 sm:p-4.5 text-center hover:border-blue ${u.isActive ? "border-rule" : "border-rule opacity-60"}`}
           >
-            <div className="w-14 h-14 rounded-full overflow-hidden bg-cloud border border-rule flex items-center justify-center mx-auto mb-2.5">
+            <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full overflow-hidden bg-cloud border border-rule flex items-center justify-center mb-2 sm:mb-2.5">
               {u.photoUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={u.photoUrl} alt={u.name} className="w-full h-full object-cover" />
@@ -143,15 +143,15 @@ export function NominaGrid({
                 <User size={22} className="text-steel" />
               )}
             </div>
-            <div className="font-semibold text-[13.5px]">{u.name}</div>
-            <div className="text-[11.5px] text-steel mt-0.5">{u.position || deptById(u.deptId)?.name || "Sin área"}</div>
+            <div className="font-semibold text-[12.5px] sm:text-[13.5px] leading-snug">{u.name}</div>
+            <div className="text-[10.5px] sm:text-[11.5px] text-steel mt-0.5">{u.position || deptById(u.deptId)?.name || "Sin área"}</div>
             {u.isLeader && u.leadsDeptId && (
-              <div className="inline-flex items-center gap-1 font-mono text-[9.5px] bg-cloud border border-rule rounded-full px-2 py-0.5 mt-1.5">
+              <div className="inline-flex items-center gap-1 font-mono text-[9px] sm:text-[9.5px] bg-cloud border border-rule rounded-full px-2 py-0.5 mt-1.5">
                 <Award size={9} /> Líder de {deptById(u.leadsDeptId)?.name || "área"}
               </div>
             )}
             {!u.isActive && (
-              <div className="inline-flex items-center gap-1 font-mono text-[9.5px] bg-red/10 border border-red text-red rounded-full px-2 py-0.5 mt-1.5">
+              <div className="inline-flex items-center gap-1 font-mono text-[9px] sm:text-[9.5px] bg-red/10 border border-red text-red rounded-full px-2 py-0.5 mt-1.5">
                 Inactivo
               </div>
             )}
