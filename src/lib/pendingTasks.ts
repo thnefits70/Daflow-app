@@ -567,6 +567,13 @@ async function getWeeklyMetricPendingItem(deptId: string, href: string): Promise
   };
 }
 
+// Confirmado 2026-09-12: la exigencia de justificación recién se creó el
+// 2026-09-08 (mismo corte que fillRateJustificationRuleAppliesTo en
+// dashboard.ts — no se importa de ahí para no crear un ciclo, dashboard.ts
+// ya importa de este archivo) — no tiene sentido recordarle a Yair una
+// semana de antes de esa fecha, la regla no existía cuando se registró.
+const FILL_RATE_JUSTIFICATION_RULE_START = new Date(Date.UTC(2026, 8, 8));
+
 // Confirmado 2026-09-08: pedido explícito del usuario — hasta ahora, una vez
 // que una semana quedaba en alerta (<95%, mismo umbral que needsJustification
 // en dashboard.ts), la explicación del líder de Fulfillment podía quedar
@@ -581,6 +588,7 @@ async function getFillRateJustificationPendingItem(deptId: string, href: string)
     orderBy: { week: "desc" },
   });
   if (!record || record.fillRateJustification) return null;
+  if (mondayOfIsoWeek(record.week) < FILL_RATE_JUSTIFICATION_RULE_START) return null;
 
   const total = record.value + (record.prepared ?? 0) + (record.generated ?? 0) + (record.outOfStock ?? 0);
   if (total === 0) return null;

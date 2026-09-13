@@ -3,7 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { canEditDeptKpis, canJustifyFillRate } from "@/lib/guards";
-import { getOldestUnjustifiedFillRateWeek } from "@/lib/dashboard";
+import { getOldestUnjustifiedFillRateWeek, fillRateJustificationRuleAppliesTo } from "@/lib/dashboard";
 
 export async function GET(req: NextRequest) {
   const session = await auth();
@@ -79,7 +79,9 @@ export async function POST(req: NextRequest) {
   // queda pendiente como antes, a la espera del líder.
   const total = hasBreakdown ? value + notDispatched! : 0;
   const fillRatePct = total > 0 ? Math.round((value / total) * 100) : null;
-  const needsJustification = fillRatePct !== null && fillRatePct < 95;
+  // Confirmado 2026-09-12: semanas de antes de que la regla existiera
+  // (2026-09-08) quedan exentas — ver fillRateJustificationRuleAppliesTo.
+  const needsJustification = fillRatePct !== null && fillRatePct < 95 && fillRateJustificationRuleAppliesTo(week);
   if (needsJustification && (await canJustifyFillRate())) {
     if (!justification || justification.length < 10) {
       return NextResponse.json(

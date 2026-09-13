@@ -39,6 +39,29 @@ function fillRateColor(pct: number) {
 
 const RECENT_WEEKS = 8;
 
+// Confirmado 2026-09-12: la exigencia de justificación recién se creó el
+// 2026-09-08 (mismo corte que fillRateJustificationRuleAppliesTo en
+// dashboard.ts — no se importa de ahí porque ese archivo toca prisma y este
+// es un componente cliente) — semanas de antes de esa fecha quedan exentas.
+const FILL_RATE_JUSTIFICATION_RULE_START = Date.UTC(2026, 8, 8);
+
+function mondayOfIsoWeekMs(week: string): number {
+  const [yearStr, wStr] = week.split("-W");
+  const year = Number(yearStr);
+  const weekNum = Number(wStr);
+  const jan4 = new Date(Date.UTC(year, 0, 4));
+  const jan4Day = jan4.getUTCDay() || 7;
+  const week1Monday = new Date(jan4);
+  week1Monday.setUTCDate(jan4.getUTCDate() - (jan4Day - 1));
+  const target = new Date(week1Monday);
+  target.setUTCDate(week1Monday.getUTCDate() + (weekNum - 1) * 7);
+  return target.getTime();
+}
+
+function fillRateRuleAppliesTo(week: string): boolean {
+  return mondayOfIsoWeekMs(week) >= FILL_RATE_JUSTIFICATION_RULE_START;
+}
+
 export function WeeklyMetricPanel({
   deptId,
   records,
@@ -78,7 +101,7 @@ export function WeeklyMetricPanel({
     ? Number(value || 0) + Number(prepared || 0) + Number(generated || 0) + Number(outOfStock || 0)
     : 0;
   const draftPct = hasBreakdownDraft && draftTotal > 0 ? Math.round((Number(value || 0) / draftTotal) * 100) : null;
-  const needsJustificationDraft = canJustify && draftPct !== null && draftPct < 95;
+  const needsJustificationDraft = canJustify && draftPct !== null && draftPct < 95 && (!week || fillRateRuleAppliesTo(week));
 
   // Confirmado 2026-09-08: pedido explícito del usuario — si el líder tiene
   // una semana ANTERIOR en alerta sin explicar, no debe poder seguir
@@ -87,7 +110,7 @@ export function WeeklyMetricPanel({
   // de una vez, antes de que intente guardar y le rebote el error.
   const oldestUnjustified = canJustify
     ? sorted
-        .filter((r) => r.prepared !== null && r.generated !== null && r.outOfStock !== null && !r.fillRateJustification)
+        .filter((r) => r.prepared !== null && r.generated !== null && r.outOfStock !== null && !r.fillRateJustification && fillRateRuleAppliesTo(r.week))
         .map((r) => {
           const t = r.value + (r.prepared ?? 0) + (r.generated ?? 0) + (r.outOfStock ?? 0);
           return { week: r.week, pct: t > 0 ? Math.round((r.value / t) * 100) : null };

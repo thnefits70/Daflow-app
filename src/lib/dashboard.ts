@@ -262,6 +262,38 @@ export async function getLatestFillRateBreakdown(): Promise<FillRateBreakdown> {
 
 export type UnjustifiedFillRateWeek = { week: string; fillRatePct: number } | null;
 
+// Mismo cálculo de "lunes de esa semana ISO" que ya usa weeklyCheckin.ts/
+// pendingTasks.ts (mondayOfIsoWeek, privada en cada uno) — copia local,
+// mismo criterio de duplicar date-math pequeño entre archivos que ya
+// siguen entre sí.
+function mondayOfIsoWeek(week: string): Date {
+  const [yearStr, wStr] = week.split("-W");
+  const year = Number(yearStr);
+  const weekNum = Number(wStr);
+  const jan4 = new Date(Date.UTC(year, 0, 4));
+  const jan4Day = jan4.getUTCDay() || 7;
+  const week1Monday = new Date(jan4);
+  week1Monday.setUTCDate(jan4.getUTCDate() - (jan4Day - 1));
+  const target = new Date(week1Monday);
+  target.setUTCDate(week1Monday.getUTCDate() + (weekNum - 1) * 7);
+  return target;
+}
+
+// Confirmado 2026-09-12: la exigencia de justificación (y el candado que la
+// hace obligatoria) recién se creó el 2026-09-08 — antes de esa fecha no
+// existía ni el campo ni el aviso, así que no es justo pedirle a Yair que
+// explique semanas de meses atrás que nunca supo que necesitaban explicación.
+// Cualquier semana anterior a este corte queda exenta para siempre; la regla
+// solo aplica hacia adelante desde que se creó.
+const FILL_RATE_JUSTIFICATION_RULE_START = new Date(Date.UTC(2026, 8, 8));
+
+// Fuente única del corte de fecha de arriba, para que las rutas de
+// weekly-metrics no exijan la explicación "ahora mismo" (needsJustification)
+// sobre una semana que ya es de antes de que la regla existiera.
+export function fillRateJustificationRuleAppliesTo(week: string): boolean {
+  return mondayOfIsoWeek(week) >= FILL_RATE_JUSTIFICATION_RULE_START;
+}
+
 // Confirmado 2026-09-08: pedido explícito del usuario — no basta con exigir
 // la explicación en el momento en que una semana cae en alerta; si el líder
 // de Fulfillment de todos modos se la salta (por ejemplo no entra ese día),
@@ -271,7 +303,8 @@ export type UnjustifiedFillRateWeek = { week: string; fillRatePct: number } | nu
 // avanzar con un registro nuevo mientras quede una semana anterior sin
 // resolver. Se usa tanto al crear como al editar — `excludeWeek` deja
 // afuera la semana que se está guardando en ese mismo request, para no
-// bloquearse a sí misma.
+// bloquearse a sí misma. Ignora semanas de antes de
+// FILL_RATE_JUSTIFICATION_RULE_START (ver comentario ahí).
 export async function getOldestUnjustifiedFillRateWeek(deptId: string, excludeWeek?: string): Promise<UnjustifiedFillRateWeek> {
   const records = await prisma.weeklyMetricRecord.findMany({
     where: {
@@ -285,6 +318,7 @@ export async function getOldestUnjustifiedFillRateWeek(deptId: string, excludeWe
     orderBy: { week: "asc" },
   });
   for (const r of records) {
+    if (mondayOfIsoWeek(r.week) < FILL_RATE_JUSTIFICATION_RULE_START) continue;
     const total = r.value + (r.prepared ?? 0) + (r.generated ?? 0) + (r.outOfStock ?? 0);
     if (total === 0) continue;
     const fillRatePct = Math.round((r.value / total) * 100);
