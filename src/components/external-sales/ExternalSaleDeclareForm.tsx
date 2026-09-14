@@ -889,7 +889,7 @@ export function ExternalSaleDeclareForm() {
                   <div className="text-[10.5px] text-steel mt-0.5">Entrega a: {s.pickupPersonName}{s.courierNote ? ` · Transportadora: ${s.courierNote}` : ""}</div>
                   {s.client && (
                     <div className="text-[10.5px] text-steel mt-0.5">
-                      Cliente: {s.client.name} · {s.client.idType === "RUC" ? "RUC" : "Cédula"}: {s.client.idNumber} · Cel: {s.client.phone}
+                      Cliente: {s.client.name} · {s.client.idNumber ? `${s.client.idType === "RUC" ? "RUC" : "Cédula"}: ${s.client.idNumber} · ` : ""}Cel: {s.client.phone}
                       {s.client.email ? ` · Correo: ${s.client.email}` : ""}
                     </div>
                   )}

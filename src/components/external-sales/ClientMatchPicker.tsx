@@ -6,8 +6,8 @@ import { Search, Plus, CheckCircle2 } from "lucide-react";
 export type ClientDTO = {
   id: string;
   name: string;
-  idType: "RUC" | "CEDULA";
-  idNumber: string;
+  idType: "RUC" | "CEDULA" | null;
+  idNumber: string | null;
   phone: string;
   email: string | null;
   address: string;
@@ -72,7 +72,7 @@ export function ClientMatchPicker({ value, onChange }: { value: ClientDTO | null
   const filtered = query.trim()
     ? results.filter((c) => {
         const q = query.trim().toLowerCase();
-        return c.name.toLowerCase().includes(q) || c.idNumber.toLowerCase().includes(q) || c.phone.toLowerCase().includes(q);
+        return c.name.toLowerCase().includes(q) || (c.idNumber ?? "").toLowerCase().includes(q) || c.phone.toLowerCase().includes(q);
       })
     : results;
 
@@ -95,8 +95,8 @@ export function ClientMatchPicker({ value, onChange }: { value: ClientDTO | null
   }
 
   async function saveNew() {
-    if (!newName.trim() || !newIdNumber.trim() || !newPhone.trim() || !newAddress.trim()) {
-      setErr("Completa nombre, RUC o cédula, celular y dirección referencial.");
+    if (!newName.trim() || !newPhone.trim() || !newAddress.trim()) {
+      setErr("Completa nombre, celular y dirección referencial.");
       return;
     }
     if (newEmail.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail.trim())) {
@@ -150,7 +150,9 @@ export function ClientMatchPicker({ value, onChange }: { value: ClientDTO | null
         <CheckCircle2 size={15} className="text-teal shrink-0" />
         <div className="flex-1 min-w-0">
           <div className="text-[13.5px] font-semibold truncate">{value.name}</div>
-          <div className="text-[11px] text-steel">{value.idType === "RUC" ? "RUC" : "Cédula"}: {value.idNumber} · Cel: {value.phone}</div>
+          <div className="text-[11px] text-steel">
+            {value.idNumber ? `${value.idType === "RUC" ? "RUC" : "Cédula"}: ${value.idNumber} · ` : ""}Cel: {value.phone}
+          </div>
           {value.email && <div className="text-[11px] text-steel">Correo: {value.email}</div>}
           {(value.city || value.country) && (
             <div className="text-[11px] text-steel">{[value.city, value.country].filter(Boolean).join(", ")}</div>
@@ -169,7 +171,7 @@ export function ClientMatchPicker({ value, onChange }: { value: ClientDTO | null
         <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Nombre del cliente</label>
         <input className="w-full rounded border border-rule px-2.5 py-2 text-[13.5px] mb-3" value={newName} onChange={(e) => setNewName(e.target.value)} />
 
-        <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Tipo de identificación</label>
+        <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Tipo de identificación (opcional)</label>
         <div className="flex gap-2 mb-3">
           <button
             type="button"
@@ -187,8 +189,8 @@ export function ClientMatchPicker({ value, onChange }: { value: ClientDTO | null
           </button>
         </div>
 
-        <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Número de {newIdType === "RUC" ? "RUC" : "cédula"}</label>
-        <input className="w-full rounded border border-rule px-2.5 py-2 text-[13.5px] mb-3" value={newIdNumber} onChange={(e) => setNewIdNumber(e.target.value)} />
+        <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Número de {newIdType === "RUC" ? "RUC" : "cédula"} (opcional)</label>
+        <input className="w-full rounded border border-rule px-2.5 py-2 text-[13.5px] mb-3" value={newIdNumber} onChange={(e) => setNewIdNumber(e.target.value)} placeholder="Déjalo vacío si el cliente no lo da" />
 
         <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Celular</label>
         <input type="tel" className="w-full rounded border border-rule px-2.5 py-2 text-[13.5px] mb-3" value={newPhone} onChange={(e) => setNewPhone(e.target.value)} />
@@ -263,7 +265,7 @@ export function ClientMatchPicker({ value, onChange }: { value: ClientDTO | null
             >
               <CheckCircle2 size={13} className="text-teal shrink-0" />
               <span className="truncate">{c.name}</span>
-              <span className="shrink-0 text-[11px] text-steel">{c.idNumber}</span>
+              {c.idNumber && <span className="shrink-0 text-[11px] text-steel">{c.idNumber}</span>}
             </button>
           ))}
           <button

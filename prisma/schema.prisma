@@ -5260,10 +5260,15 @@ enum ExternalSaleReviewStatus {
 // legales existen para que, si el cliente pide factura, Nairoby ya los
 // tenga a mano sin perseguirlos después.
 model Client {
-  id       String       @id @default(cuid())
-  name     String
-  idType   HolderIdType
-  idNumber String       @unique
+  id   String @id @default(cuid())
+  name String
+
+  // Confirmado 2026-09-14, pedido explícito del usuario: la mayoría de los
+  // clientes no da cédula/RUC, así que dejó de ser obligatorio — nullable
+  // en vez de forzar un valor inventado. @unique sigue funcionando: en
+  // Postgres varios NULL no chocan entre sí, solo los valores reales.
+  idType   HolderIdType?
+  idNumber String?       @unique
   phone    String
   email    String? // opcional — para tener el correo del cliente registrado, no todos lo dan
   address  String // dirección referencial
