@@ -6,6 +6,7 @@ import { formatDateTime } from "@/lib/formatDateTime";
 import { SUGGESTED_INDICATORS } from "@/lib/improvementPlanConstants";
 import { TabGuide } from "@/components/shared/TabGuide";
 import type { ImprovementPlanDetailDTO } from "@/lib/improvementPlan";
+import { useFormDraft } from "@/lib/useFormDraft";
 
 type Semaforo = "VERDE" | "AMARILLO" | "NARANJA" | "ROJO";
 type Stage = "PRIMER_PERIODO" | "EXTENDIDO" | "ETAPA_FINAL" | "CERRADO";
@@ -54,6 +55,23 @@ async function postJson(url: string, body: unknown) {
 }
 
 type ReviewDraft = { scores: Record<string, number>; queMejoro: string; queFalta: string; accionSiguiente: string; apoyoLider: string };
+
+type WeeklyReviewDraftData = {
+  freeText: string;
+  scores: Record<string, number>;
+  queMejoro: string;
+  queFalta: string;
+  accionSiguiente: string;
+  apoyoLider: string;
+};
+function isWeeklyReviewDraftEmpty(d: WeeklyReviewDraftData) {
+  return !d.freeText.trim() && Object.keys(d.scores).length === 0 && !d.queMejoro.trim() && !d.queFalta.trim() && !d.accionSiguiente.trim() && !d.apoyoLider.trim();
+}
+
+type StageClosureDraftData = { outcome: Outcome; notes: string };
+function isStageClosureDraftEmpty(d: StageClosureDraftData) {
+  return !d.notes.trim() && d.outcome === "CONTINUIDAD";
+}
 
 export function ImprovementPlanDetail({
   planId,
@@ -290,6 +308,26 @@ function WeeklyReviewForm({ planId, onSaved, readOnly = false }: { planId: strin
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
 
+  // Guardado automático: si sale a revisar otra pantalla antes de terminar
+  // de registrar esta evaluación semanal, al volver encuentra todo lo
+  // escrito tal como lo dejó (y el formulario reabierto si había algo).
+  const { clearDraft: clearReviewDraft } = useFormDraft<WeeklyReviewDraftData>(
+    `improvementPlanReview:${planId}`,
+    { freeText, scores, queMejoro, queFalta, accionSiguiente, apoyoLider },
+    (d) => {
+      setFreeText(d.freeText);
+      setScores(d.scores);
+      setQueMejoro(d.queMejoro);
+      setQueFalta(d.queFalta);
+      setAccionSiguiente(d.accionSiguiente);
+      setApoyoLider(d.apoyoLider);
+      if (!isWeeklyReviewDraftEmpty(d)) setOpen(true);
+    },
+    isWeeklyReviewDraftEmpty,
+    "Evaluación semanal del plan sin terminar",
+    "/area/workspace?tab=plan-mejora"
+  );
+
   const generateDraft = async () => {
     if (!freeText.trim()) return;
     setAiBusy(true);
@@ -330,6 +368,7 @@ function WeeklyReviewForm({ planId, onSaved, readOnly = false }: { planId: strin
     setApoyoLider("");
     setAiUsed(false);
     setOpen(false);
+    clearReviewDraft();
   };
 
   const save = async () => {
@@ -433,6 +472,22 @@ function StageActions({ plan, onChanged, readOnly = false }: { plan: Improvement
   const [outcome, setOutcome] = useState<Outcome>("CONTINUIDAD");
   const [notes, setNotes] = useState("");
 
+  // Guardado automático: si sale a revisar otra pantalla antes de terminar
+  // de pedir el cierre de esta etapa, al volver encuentra la nota y el
+  // resultado elegido tal como los había dejado.
+  const { clearDraft: clearClosureDraft } = useFormDraft<StageClosureDraftData>(
+    `improvementPlanClosure:${plan.id}`,
+    { outcome, notes },
+    (d) => {
+      setOutcome(d.outcome);
+      setNotes(d.notes);
+      if (!isStageClosureDraftEmpty(d)) setShowClosure(true);
+    },
+    isStageClosureDraftEmpty,
+    "Cierre de etapa del plan sin terminar",
+    "/area/workspace?tab=plan-mejora"
+  );
+
   const decide = async (decision: "SATISFACTORIO" | "INSUFICIENTE" | "SIN_MEJORA") => {
     if (readOnly) return;
     setBusy(true);
@@ -454,6 +509,7 @@ function StageActions({ plan, onChanged, readOnly = false }: { plan: Improvement
       await postJson(`/api/improvement-plans/${plan.id}/request-closure`, { outcome, notes });
       setShowClosure(false);
       setNotes("");
+      clearClosureDraft();
       onChanged();
     } catch (e) {
       setError(e instanceof Error ? e.message : "No se pudo procesar el cierre.");
@@ -510,7 +566,7 @@ function StageActions({ plan, onChanged, readOnly = false }: { plan: Improvement
             <button type="button" disabled={busy || !notes.trim()} onClick={requestClosure} className="text-[12.5px] font-semibold text-white bg-blue px-3.5 py-1.5 rounded-md cursor-pointer disabled:opacity-50">
               Confirmar
             </button>
-            <button type="button" onClick={() => setShowClosure(false)} className="text-[12.5px] text-steel cursor-pointer">
+            <button type="button" onClick={() => { setShowClosure(false); setNotes(""); setOutcome("CONTINUIDAD"); clearClosureDraft(); }} className="text-[12.5px] text-steel cursor-pointer">
               Cancelar
             </button>
           </div>

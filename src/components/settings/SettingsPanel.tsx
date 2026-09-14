@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Upload, X, Mail, KeyRound, Cake, Landmark, ShieldCheck, Copy, Check } from "lucide-react";
 import { BrandMark } from "@/components/brand/DaflowMark";
 import { uploadFile } from "@/lib/uploadFile";
+import { useFormDraft } from "@/lib/useFormDraft";
 
 type CompanyBankAccount = {
   bankName: string | null;
@@ -16,6 +17,10 @@ type CompanyBankAccount = {
 };
 
 type AdminPayrollBankAccount = CompanyBankAccount;
+
+function isBankAccountDraftEmpty(d: CompanyBankAccount) {
+  return !d.bankName?.trim() && !d.bankAccountType?.trim() && !d.bankAccountNumber?.trim() && !d.bankAccountHolder?.trim() && !d.holderIdType && !d.holderIdNumber?.trim();
+}
 
 export function SettingsPanel({
   logoUrl,
@@ -76,6 +81,18 @@ export function SettingsPanel({
   const [bankSaved, setBankSaved] = useState(false);
   const [bankErr, setBankErr] = useState("");
 
+  // Guardado automático: si sale a revisar otra pantalla antes de terminar
+  // de cargar esta cuenta (la que reciben transferencias de compras
+  // personales), al volver encuentra los datos tal como los había dejado.
+  const { clearDraft: clearCompanyBankDraft } = useFormDraft<CompanyBankAccount>(
+    "settingsBankAccount:company",
+    bankAccount,
+    setBankAccount,
+    isBankAccountDraftEmpty,
+    "Cuenta bancaria sin terminar de configurar",
+    "/admin/settings"
+  );
+
   useEffect(() => {
     fetch("/api/company-bank-account").then((r) => (r.ok ? r.json() : null)).then((a: CompanyBankAccount | null) => {
       if (a) {
@@ -113,6 +130,7 @@ export function SettingsPanel({
       return;
     }
     setBankSaved(true);
+    clearCompanyBankDraft();
     setTimeout(() => setBankSaved(false), 2500);
   };
 
@@ -127,6 +145,18 @@ export function SettingsPanel({
   const [payrollBankBusy, setPayrollBankBusy] = useState(false);
   const [payrollBankSaved, setPayrollBankSaved] = useState(false);
   const [payrollBankErr, setPayrollBankErr] = useState("");
+
+  // Guardado automático: si sale a revisar otra pantalla antes de terminar
+  // de cargar esta cuenta (la Produbanco para nómina), al volver encuentra
+  // los datos tal como los había dejado.
+  const { clearDraft: clearPayrollBankDraft } = useFormDraft<AdminPayrollBankAccount>(
+    "settingsBankAccount:admin",
+    payrollBankAccount,
+    setPayrollBankAccount,
+    isBankAccountDraftEmpty,
+    "Cuenta bancaria sin terminar de configurar",
+    "/admin/settings"
+  );
 
   useEffect(() => {
     fetch("/api/admin-payroll-bank-account").then((r) => (r.ok ? r.json() : null)).then((a: AdminPayrollBankAccount | null) => {
@@ -165,6 +195,7 @@ export function SettingsPanel({
       return;
     }
     setPayrollBankSaved(true);
+    clearPayrollBankDraft();
     setTimeout(() => setPayrollBankSaved(false), 2500);
   };
 

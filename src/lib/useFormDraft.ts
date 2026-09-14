@@ -67,9 +67,17 @@ export function useFormDraft<T>(
   }, [key, JSON.stringify(value), label, resumeUrl]);
 
   function clearDraft() {
-    if (!key) return;
-    fetch(`/api/form-drafts?key=${encodeURIComponent(key)}`, { method: "DELETE" }).catch(() => {});
+    clearFormDraft(key);
   }
 
   return { clearDraft };
+}
+
+// Versión suelta de clearDraft, para cuando el botón que debe descartar el
+// borrador vive en un componente padre que no monta useFormDraft él mismo
+// (ej. un "Cancelar" que oculta/desmonta un sub-formulario hijo antes de que
+// ese hijo pueda reaccionar).
+export function clearFormDraft(key: string | null) {
+  if (!key) return;
+  fetch(`/api/form-drafts?key=${encodeURIComponent(key)}`, { method: "DELETE" }).catch(() => {});
 }

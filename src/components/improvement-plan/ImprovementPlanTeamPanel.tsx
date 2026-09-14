@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Sparkles } from "lucide-react";
 import { ImprovementPlanDetail } from "./ImprovementPlanDetail";
 import type { ImprovementPlanRosterEntryDTO } from "@/lib/improvementPlan";
+import { useFormDraft } from "@/lib/useFormDraft";
 
 type Semaforo = "VERDE" | "AMARILLO" | "NARANJA" | "ROJO";
 type Responsable = "COLABORADOR" | "LIDER";
@@ -26,6 +27,15 @@ type PlanDraft = {
   resultadoEsperado: string;
   commitments: { indicador: string; meta: string; responsable: Responsable }[];
 };
+
+type CreatePlanDraftData = {
+  freeText: string;
+  draft: PlanDraft;
+  stageDurationDays: number;
+};
+function isCreatePlanDraftEmpty(d: CreatePlanDraftData) {
+  return !d.freeText.trim() && !d.draft.situacion.trim() && !d.draft.resultadoEsperado.trim() && d.draft.commitments.length === 0;
+}
 
 async function postJson(url: string, body: unknown) {
   const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
@@ -161,6 +171,21 @@ function CreatePlanFlow({
   const [stageDurationDays, setStageDurationDays] = useState(15);
   const [saving, setSaving] = useState(false);
 
+  // Guardado automático: si sale a revisar otra pantalla antes de terminar
+  // de crear este plan, al volver encuentra lo escrito tal como lo dejó.
+  const { clearDraft: clearCreatePlanDraft } = useFormDraft<CreatePlanDraftData>(
+    `improvementPlanCreate:${userId}`,
+    { freeText, draft, stageDurationDays },
+    (d) => {
+      setFreeText(d.freeText);
+      setDraft(d.draft);
+      setStageDurationDays(d.stageDurationDays);
+    },
+    isCreatePlanDraftEmpty,
+    "Plan de mejora sin terminar de crear",
+    "/area/workspace?tab=plan-mejora"
+  );
+
   const generateDraft = async () => {
     if (!freeText.trim()) return;
     setAiBusy(true);
@@ -207,6 +232,7 @@ function CreatePlanFlow({
         stageDurationDays,
         commitments: draft.commitments,
       });
+      clearCreatePlanDraft();
       onCreated(plan.id);
     } catch (e) {
       setError(e instanceof Error ? e.message : "No se pudo crear el plan.");
@@ -216,7 +242,7 @@ function CreatePlanFlow({
 
   return (
     <div>
-      <button type="button" onClick={onCancel} className="text-[12.5px] text-steel hover:text-ink mb-4 cursor-pointer">
+      <button type="button" onClick={() => { clearCreatePlanDraft(); onCancel(); }} className="text-[12.5px] text-steel hover:text-ink mb-4 cursor-pointer">
         ← Cancelar
       </button>
       <h2 className="font-display text-[19px] font-bold mb-4">Iniciar Plan de Mejora — {userName}</h2>

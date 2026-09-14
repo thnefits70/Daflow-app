@@ -5,6 +5,7 @@ import { CheckCircle2 } from "lucide-react";
 import { TabGuide } from "@/components/shared/TabGuide";
 import { AdminPayeePicker, type AdminPaymentPayeeDTO } from "@/components/finance/AdminPayeePicker";
 import { formatDateTime } from "@/lib/formatDateTime";
+import { useFormDraft } from "@/lib/useFormDraft";
 
 type PaymentStatus = "PENDING_PAYMENT" | "PAID" | "CONFIRMED";
 
@@ -106,6 +107,26 @@ export function LunchPaymentsPanel() {
   const [actingOnId, setActingOnId] = useState<string | null>(null);
   const [err, setErr] = useState("");
 
+  // Guardado automático del registro de la semana en progreso.
+  type NewLunchWeekDraftData = { weekInput: string; lunchCount: string; montoOverride: string | null; payee: AdminPaymentPayeeDTO | null; bankAccountId: string | null };
+  function isNewLunchWeekDraftEmpty(d: NewLunchWeekDraftData) {
+    return !d.lunchCount.trim() && !d.montoOverride && !d.payee;
+  }
+  const { clearDraft: clearNewLunchWeekDraft } = useFormDraft<NewLunchWeekDraftData>(
+    loaded ? "lunchPayments:new" : null,
+    { weekInput, lunchCount, montoOverride, payee, bankAccountId },
+    (d) => {
+      setWeekInput(d.weekInput);
+      setLunchCount(d.lunchCount);
+      setMontoOverride(d.montoOverride);
+      setPayee(d.payee);
+      setBankAccountId(d.bankAccountId);
+    },
+    isNewLunchWeekDraftEmpty,
+    "Registro de almuerzos sin terminar",
+    "/area/workspace?tab=almuerzos"
+  );
+
   function load() {
     fetch("/api/lunch-payments")
       .then((r) => (r.ok ? r.json() : null))
@@ -166,6 +187,7 @@ export function LunchPaymentsPanel() {
     }
     setLunchCount("");
     setMontoOverride(null);
+    clearNewLunchWeekDraft();
     load();
   }
 

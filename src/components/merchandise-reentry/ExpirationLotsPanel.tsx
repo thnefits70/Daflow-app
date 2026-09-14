@@ -4,9 +4,14 @@ import { useEffect, useRef, useState } from "react";
 import { Search, CalendarClock, CheckCircle2 } from "lucide-react";
 import { formatDateTime } from "@/lib/formatDateTime";
 import { CatalogCode } from "@/components/shared/CatalogCode";
+import { useFormDraft } from "@/lib/useFormDraft";
 
 type CatalogItem = { id: string; name: string; justCode: string | null; hasExpiration: boolean };
 type LotRow = { id: string; manufactureDate: string | null; expirationDate: string; quantityReceived: number; quantityRemaining: number; declaredAt: string };
+type ExpirationLotDraftData = { manufactureDate: string; expirationDate: string; quantity: string };
+function isExpirationLotDraftEmpty(d: ExpirationLotDraftData) {
+  return !d.manufactureDate && !d.expirationDate && !d.quantity;
+}
 
 const DATE_FMT = new Intl.DateTimeFormat("es-EC", { timeZone: "America/Guayaquil", day: "2-digit", month: "short", year: "numeric" });
 
@@ -32,6 +37,23 @@ export function ExpirationLotsPanel() {
   // "Cantidad" Enter ya declara el lote directo.
   const expirationRef = useRef<HTMLInputElement>(null);
   const quantityRef = useRef<HTMLInputElement>(null);
+
+  // Guardado automático: si sale a revisar otra cosa antes de declarar el
+  // lote de este producto, al volver encuentra las fechas/cantidad tal
+  // como las había dejado. Solo activo mientras hay un producto elegido.
+  const draftKey = selectedId ? `expirationLot:${selectedId}` : null;
+  const { clearDraft } = useFormDraft<ExpirationLotDraftData>(
+    draftKey,
+    { manufactureDate, expirationDate, quantity },
+    (d) => {
+      setManufactureDate(d.manufactureDate);
+      setExpirationDate(d.expirationDate);
+      setQuantity(d.quantity);
+    },
+    isExpirationLotDraftEmpty,
+    "Lote de caducidad sin terminar",
+    "/area/workspace?tab=reingreso"
+  );
 
   useEffect(() => {
     fetch("/api/purchase-catalog").then((r) => (r.ok ? r.json() : [])).then(setItems).catch(() => setItems([]));
@@ -77,6 +99,7 @@ export function ExpirationLotsPanel() {
       setErr(data?.error ?? "No se pudo declarar el lote.");
       return;
     }
+    clearDraft();
     setManufactureDate("");
     setExpirationDate("");
     setQuantity("");

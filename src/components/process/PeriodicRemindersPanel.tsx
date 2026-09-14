@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Plus, Check, Undo2, Trash2, Pencil, Bell } from "lucide-react";
 import { PushOptIn } from "@/components/shared/PushOptIn";
 import { formatDateTime } from "@/lib/formatDateTime";
+import { useFormDraft } from "@/lib/useFormDraft";
 
 type CompletionDTO = { period: string; completedAt: string; completedByName: string | null };
 type ReminderDTO = {
@@ -56,6 +57,11 @@ const emptyForm = {
   notifyPush: false,
 };
 
+type ReminderFormData = typeof emptyForm;
+function isReminderFormEmpty(d: ReminderFormData) {
+  return JSON.stringify(d) === JSON.stringify(emptyForm);
+}
+
 // Confirmado 2026-08-05: los recordatorios son estrictamente PERSONALES — el
 // servidor (getPeriodicReminders en periodicReminders.ts) ya filtra por
 // createdById === quien pide la lista, así que ni el líder ni el admin ven
@@ -81,6 +87,18 @@ export function PeriodicRemindersPanel({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+
+  // Guardado automático: si sale a revisar otra pantalla antes de terminar
+  // de crear/editar este recordatorio, al volver encuentra el formulario
+  // tal como lo había dejado.
+  const { clearDraft: clearReminderDraft } = useFormDraft<ReminderFormData>(
+    showForm ? `periodicReminder:${editingId ?? "new"}` : null,
+    form,
+    setForm,
+    isReminderFormEmpty,
+    "Recordatorio sin terminar",
+    "/area/workspace?tab=recordatorios"
+  );
 
   const activeReminders = reminders.filter((r) => r.isActive);
   const inactiveReminders = reminders.filter((r) => !r.isActive);
@@ -147,6 +165,7 @@ export function PeriodicRemindersPanel({
     }
     setShowForm(false);
     setEditingId(null);
+    clearReminderDraft();
     router.refresh();
   };
 
@@ -193,7 +212,7 @@ export function PeriodicRemindersPanel({
 
       <div className="text-[13px] text-steel mb-4 max-w-2xl">
         Recordatorios internos con su propia periodicidad — diario, semanal o una fecha específica, con hora
-        opcional. Cada quien crea y gestiona los suyos; al marcar "Realizado" desaparece hasta que vuelva a tocar
+        opcional. Cada quien crea y gestiona los suyos; al marcar &quot;Realizado&quot; desaparece hasta que vuelva a tocar
         automáticamente (mañana, la próxima semana, o nunca más si es de una sola vez).
       </div>
 
@@ -323,6 +342,7 @@ export function PeriodicRemindersPanel({
               onClick={() => {
                 setShowForm(false);
                 setEditingId(null);
+                clearReminderDraft();
               }}
             >
               Cancelar

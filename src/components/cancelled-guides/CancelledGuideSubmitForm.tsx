@@ -3,9 +3,14 @@
 import { useState } from "react";
 import { Check, X } from "lucide-react";
 import { CARRIER_LABELS, SOURCE_AREA_LABELS, MKT_CANCEL_REASONS, FULFILLMENT_CANCEL_REASONS, allowedSourceAreasFor, splitGuideBuffer, isPossibleGuidePrefix } from "@/lib/cancelledGuidesLabels";
+import { useFormDraft } from "@/lib/useFormDraft";
 
 type SourceArea = "MKT_DAMIAN" | "MKT_PROVEDIX" | "MKT_SHANGHAI" | "FULFILLMENT";
 type DetectedGuide = { id: string; carrier: keyof typeof CARRIER_LABELS; guideNumber: string };
+type SubmitDraftData = { sourceArea: SourceArea | ""; guideBuffer: string; guides: DetectedGuide[]; reason: string; reasonOther: string };
+function isSubmitDraftEmpty(d: SubmitDraftData) {
+  return !d.sourceArea && !d.guideBuffer.trim() && d.guides.length === 0 && !d.reason && !d.reasonOther.trim();
+}
 
 async function postJson(url: string, body?: unknown) {
   const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
@@ -25,6 +30,24 @@ export function CancelledGuideSubmitForm({ onSubmitted, viewerDeptCode }: { onSu
   const [error, setError] = useState("");
   const [sentCount, setSentCount] = useState(0);
   const [duplicateWarning, setDuplicateWarning] = useState("");
+
+  // Guardado automático: si sale a revisar otra cosa antes de terminar de
+  // reportar estas guías canceladas, al volver encuentra el área, las guías
+  // ya escaneadas y el motivo tal como los había dejado.
+  const { clearDraft } = useFormDraft<SubmitDraftData>(
+    "cancelledGuideSubmit:new",
+    { sourceArea, guideBuffer, guides, reason, reasonOther },
+    (d) => {
+      setSourceArea(d.sourceArea);
+      setGuideBuffer(d.guideBuffer);
+      setGuides(d.guides);
+      setReason(d.reason);
+      setReasonOther(d.reasonOther);
+    },
+    isSubmitDraftEmpty,
+    "Guías canceladas sin terminar de reportar",
+    "/area/workspace?tab=egresos"
+  );
 
   const reasonOptions = sourceArea === "FULFILLMENT" ? FULFILLMENT_CANCEL_REASONS : sourceArea ? MKT_CANCEL_REASONS : [];
   const finalReason = reason === "Otro" ? reasonOther.trim() : reason;
@@ -77,6 +100,7 @@ export function CancelledGuideSubmitForm({ onSubmitted, viewerDeptCode }: { onSu
         reason: finalReason,
         guides: guides.map((g) => ({ carrier: g.carrier, guideNumber: g.guideNumber })),
       });
+      clearDraft();
       setSentCount(guides.length);
       onSubmitted?.();
     } catch (e) {

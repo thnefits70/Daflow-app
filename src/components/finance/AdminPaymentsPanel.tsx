@@ -13,6 +13,7 @@ import { TabGuide } from "@/components/shared/TabGuide";
 import { AdminPayeePicker, type AdminPaymentPayeeDTO, type PayeeBankAccountDTO } from "@/components/finance/AdminPayeePicker";
 import type { EligiblePaymentOrderDTO } from "@/lib/pettyCash";
 import { formatDateTime } from "@/lib/formatDateTime";
+import { useFormDraft } from "@/lib/useFormDraft";
 
 type PaymentType = "RECURRING" | "VARIABLE";
 type Status = "PENDING_PAYMENT" | "PAID" | "CONFIRMED";
@@ -145,6 +146,43 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
   const [formDeclarationUrl, setFormDeclarationUrl] = useState<string | null>(null);
   const [formDeclarationName, setFormDeclarationName] = useState<string | null>(null);
   const [uploadingDeclaration, setUploadingDeclaration] = useState(false);
+
+  // Guardado automático de la solicitud nueva en progreso.
+  type NewRequestDraftData = {
+    formLinkMode: "flete" | "otro";
+    formGroupId: string;
+    formType: PaymentType;
+    formMotivo: string;
+    formMonto: string;
+    formIessReceiptNumber: string;
+    formPayee: AdminPaymentPayeeDTO | null;
+    formBankAccountId: string | null;
+    formDeclarationUrl: string | null;
+    formDeclarationName: string | null;
+  };
+  function isNewRequestDraftEmpty(d: NewRequestDraftData) {
+    return !d.formMotivo.trim() && !d.formMonto && !d.formIessReceiptNumber.trim() && !d.formPayee && !d.formDeclarationUrl;
+  }
+  const { clearDraft: clearNewRequestDraft } = useFormDraft<NewRequestDraftData>(
+    "adminPayments:new",
+    { formLinkMode, formGroupId, formType, formMotivo, formMonto, formIessReceiptNumber, formPayee, formBankAccountId, formDeclarationUrl, formDeclarationName },
+    (d) => {
+      setShowForm(true);
+      setFormLinkMode(d.formLinkMode);
+      setFormGroupId(d.formGroupId);
+      setFormType(d.formType);
+      setFormMotivo(d.formMotivo);
+      setFormMonto(d.formMonto);
+      setFormIessReceiptNumber(d.formIessReceiptNumber);
+      setFormPayee(d.formPayee);
+      setFormBankAccountId(d.formBankAccountId);
+      setFormDeclarationUrl(d.formDeclarationUrl);
+      setFormDeclarationName(d.formDeclarationName);
+    },
+    isNewRequestDraftEmpty,
+    "Solicitud de pago administrativo sin terminar",
+    "/area/workspace?tab=pagosadmin"
+  );
   const [submitting, setSubmitting] = useState(false);
   const { onPaste: onPasteDeclaration, onMouseEnter: onDeclarationHoverIn, onMouseLeave: onDeclarationHoverOut } = usePasteFile((file) => uploadDeclaration(file));
   const declarationFileInputRef = useRef<HTMLInputElement>(null);
@@ -316,6 +354,7 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
     setFormPayee(null);
     setFormBankAccountId(null);
     setErr("");
+    clearNewRequestDraft();
   }
 
   function openFormForTemplate(t: TemplateDTO) {

@@ -10,6 +10,7 @@ import { LiveCameraCapture } from "@/components/shared/LiveCameraCapture";
 import { TabGuide } from "@/components/shared/TabGuide";
 import type { PettyCashBoxDTO, EligiblePaymentOrderDTO } from "@/lib/pettyCash";
 import { formatDateTime } from "@/lib/formatDateTime";
+import { useFormDraft } from "@/lib/useFormDraft";
 
 function money(v: number) {
   return "$" + v.toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -349,6 +350,32 @@ function BoxCard({
   const [pEmail, setPEmail] = useState(acc?.email ?? "");
   const [pPhone, setPPhone] = useState(acc?.phone ?? "");
 
+  // Guardado automático de la cuenta de fondeo en edición.
+  type PayoutAccountDraftData = {
+    pBankName: string; pBankAccountType: string; pBankAccountNumber: string; pBankAccountHolder: string;
+    pHolderIdType: "RUC" | "CEDULA"; pHolderIdNumber: string; pEmail: string; pPhone: string;
+  };
+  function isPayoutAccountDraftEmpty(d: PayoutAccountDraftData) {
+    return !d.pBankName.trim() && !d.pBankAccountNumber.trim() && !d.pBankAccountHolder.trim();
+  }
+  const { clearDraft: clearPayoutAccountDraft } = useFormDraft<PayoutAccountDraftData>(
+    editingPayout ? `pettyCash:${box.type}:payoutAccount` : null,
+    { pBankName, pBankAccountType, pBankAccountNumber, pBankAccountHolder, pHolderIdType, pHolderIdNumber, pEmail, pPhone },
+    (d) => {
+      setPBankName(d.pBankName);
+      setPBankAccountType(d.pBankAccountType);
+      setPBankAccountNumber(d.pBankAccountNumber);
+      setPBankAccountHolder(d.pBankAccountHolder);
+      setPHolderIdType(d.pHolderIdType);
+      setPHolderIdNumber(d.pHolderIdNumber);
+      setPEmail(d.pEmail);
+      setPPhone(d.pPhone);
+    },
+    isPayoutAccountDraftEmpty,
+    "Cuenta de caja chica sin terminar de editar",
+    "/area/workspace?tab=cajachica"
+  );
+
   useEffect(() => {
     if (!editingPayout || bankNames.length > 0) return;
     fetch("/api/employee-bank-account/bank-names").then((r) => (r.ok ? r.json() : [])).then(setBankNames);
@@ -361,6 +388,7 @@ function BoxCard({
     setPHolderIdType(acc?.holderIdType ?? "CEDULA"); setPHolderIdNumber(acc?.holderIdNumber ?? "");
     setPEmail(acc?.email ?? ""); setPPhone(acc?.phone ?? "");
     setEditingPayout(false);
+    clearPayoutAccountDraft();
   }
 
   async function savePayoutAccount() {
@@ -380,6 +408,7 @@ function BoxCard({
     setPayoutBusy(false);
     if (!res.ok) { const json = await res.json().catch(() => null); setErr(json?.error ?? "No se pudo guardar la cuenta."); return; }
     setEditingPayout(false);
+    clearPayoutAccountDraft();
     router.refresh();
   }
 
@@ -400,6 +429,46 @@ function BoxCard({
   const canOperate = canManage && !isAdmin;
   const blocked = box.blocked && canOperate;
   const myPending = box.pendingRecharges[0];
+
+  // Guardado automático del desembolso en progreso.
+  type DesembolsoDraftData = { linkMode: "orden" | "motivo"; groupId: string; reason: string; description: string; amount: string; proofUrl: string | null };
+  function isDesembolsoDraftEmpty(d: DesembolsoDraftData) {
+    return !d.description.trim() && !d.amount.trim() && !d.proofUrl && !d.reason.trim();
+  }
+  const { clearDraft: clearDesembolsoDraft } = useFormDraft<DesembolsoDraftData>(
+    canOperate ? `pettyCash:${box.type}:desembolso` : null,
+    { linkMode, groupId, reason, description, amount, proofUrl },
+    (d) => {
+      setLinkMode(d.linkMode);
+      setGroupId(d.groupId);
+      setReason(d.reason);
+      setDescription(d.description);
+      setAmount(d.amount);
+      setProofUrl(d.proofUrl);
+    },
+    isDesembolsoDraftEmpty,
+    "Pago de caja chica sin terminar",
+    "/area/workspace?tab=cajachica"
+  );
+
+  // Guardado automático del fondeo en progreso.
+  type FundDraftData = { fundAmount: string; fundDesc: string; fundProofUrl: string | null };
+  function isFundDraftEmpty(d: FundDraftData) {
+    return !d.fundAmount.trim() && !d.fundDesc.trim() && !d.fundProofUrl;
+  }
+  const { clearDraft: clearFundDraft } = useFormDraft<FundDraftData>(
+    canFund && isAdmin ? `pettyCash:${box.type}:fund` : null,
+    { fundAmount, fundDesc, fundProofUrl },
+    (d) => {
+      setFundOpen(true);
+      setFundAmount(d.fundAmount);
+      setFundDesc(d.fundDesc);
+      setFundProofUrl(d.fundProofUrl);
+    },
+    isFundDraftEmpty,
+    "Fondeo de caja chica sin terminar",
+    "/area/workspace?tab=cajachica"
+  );
 
   async function verifyProof(target: "desembolso" | "recarga", url: string, expected: number) {
     if (target === "desembolso") { setProofVerifying(true); setProofVerifyResult(null); } else { setFundVerifying(true); setFundVerifyResult(null); }
@@ -480,11 +549,13 @@ function BoxCard({
     const json = await res.json().catch(() => null);
     if (!res.ok) { setErr(json?.error ?? "No se pudo guardar."); return; }
     setAmount(""); setDescription(""); setProofUrl(null); setReason(""); setProofVerifyResult(null);
+    clearDesembolsoDraft();
     router.refresh();
   }
 
   function clearDesembolso() {
     setAmount(""); setDescription(""); setProofUrl(null); setReason(""); setProofVerifyResult(null); setErr("");
+    clearDesembolsoDraft();
   }
 
   async function submitFund() {
@@ -502,6 +573,7 @@ function BoxCard({
     const json = await res.json().catch(() => null);
     if (!res.ok) { setErr(json?.error ?? "No se pudo enviar."); return; }
     setFundAmount(""); setFundDesc(""); setFundProofUrl(null); setFundVerifyResult(null);
+    clearFundDraft();
     router.refresh();
   }
 

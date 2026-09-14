@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Banknote, CheckCircle2, Circle, Plus, Trash2, TriangleAlert } from "lucide-react";
 import { installmentAmount } from "@/lib/payrollCalc";
 import { formatDateTime } from "@/lib/formatDateTime";
+import { useFormDraft } from "@/lib/useFormDraft";
 
 type BankAccount = {
   id: string; bankName: string; bankAccountType: string; bankAccountNumber: string; bankAccountHolder: string;
@@ -45,6 +46,16 @@ const REASON_LABEL: Record<string, string> = {
   EMERGENCIA_FAMILIAR: "Emergencia familiar",
   OTRO: "Otro motivo",
 };
+
+type SalaryAdvanceDraftData = {
+  amount: string;
+  reason: "EMERGENCIA_FAMILIAR" | "OTRO" | null;
+  justification: string;
+  installments: number;
+};
+function isSalaryAdvanceDraftEmpty(d: SalaryAdvanceDraftData) {
+  return !d.amount.trim() && d.reason === null && !d.justification.trim() && d.installments === 1;
+}
 
 function BankAccountForm({ hasExisting, onSaved, onCancel }: { hasExisting: boolean; onSaved: () => void; onCancel: () => void }) {
   const [bankName, setBankName] = useState("");
@@ -160,6 +171,23 @@ export function SalaryAdvancesPanel() {
   const [err, setErr] = useState("");
   const [confirming, setConfirming] = useState(false);
 
+  // Guardado automático: si sale a revisar otra pantalla antes de terminar
+  // de armar esta solicitud de anticipo, al volver encuentra el monto,
+  // motivo y cuotas tal como los había dejado.
+  const { clearDraft: clearAdvanceDraft } = useFormDraft<SalaryAdvanceDraftData>(
+    "salaryAdvanceRequest:new",
+    { amount, reason, justification, installments },
+    (d) => {
+      setAmount(d.amount);
+      setReason(d.reason);
+      setJustification(d.justification);
+      setInstallments(d.installments);
+    },
+    isSalaryAdvanceDraftEmpty,
+    "Solicitud de anticipo sin terminar",
+    "/area/anticipos"
+  );
+
   function loadAccounts() {
     fetch("/api/employee-bank-account").then((r) => (r.ok ? r.json() : [])).then((list: BankAccount[]) => {
       setAccounts(list);
@@ -229,6 +257,7 @@ export function SalaryAdvancesPanel() {
     const data = await res.json().catch(() => null);
     if (!res.ok) { setErr(data?.error ?? "No se pudo enviar."); return; }
     setAmount(""); setReason(null); setJustification(""); setInstallments(1); setConfirming(false);
+    clearAdvanceDraft();
     load();
   }
 

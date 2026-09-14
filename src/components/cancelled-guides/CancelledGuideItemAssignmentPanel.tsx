@@ -6,6 +6,7 @@ import { ProductMatchPicker, type MatchCatalogItem, type ProductMatchResult } fr
 import { CARRIER_LABELS, SOURCE_AREA_LABELS } from "@/lib/cancelledGuidesLabels";
 import { formatDateTime } from "@/lib/formatDateTime";
 import { CatalogCode } from "@/components/shared/CatalogCode";
+import { useFormDraft } from "@/lib/useFormDraft";
 
 type ReportDTO = {
   id: string;
@@ -24,6 +25,10 @@ type ReportDTO = {
 };
 
 type Row = { selected: MatchCatalogItem | null; quantity: string };
+type GuideItemsDraftData = { rows: Row[] };
+function isGuideItemsDraftEmpty(d: GuideItemsDraftData) {
+  return d.rows.every((r) => !r.selected && !r.quantity.trim());
+}
 
 async function postJson(url: string, body: unknown) {
   const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
@@ -37,6 +42,18 @@ function GuideCard({ report, onSaved }: { report: ReportDTO; onSaved: () => void
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
+  // Guardado automático: si sale a revisar otra guía antes de terminar de
+  // cargar los productos de esta, al volver encuentra los renglones tal
+  // como los había dejado.
+  const { clearDraft } = useFormDraft<GuideItemsDraftData>(
+    `cancelledGuideItems:${report.id}`,
+    { rows },
+    (d) => setRows(d.rows),
+    isGuideItemsDraftEmpty,
+    "Productos de guía cancelada sin terminar",
+    "/area/workspace?tab=egresos"
+  );
+
   const validRows = rows.filter((r) => r.selected && Number(r.quantity) > 0);
   const canSave = validRows.length > 0 && !saving;
 
@@ -47,6 +64,7 @@ function GuideCard({ report, onSaved }: { report: ReportDTO; onSaved: () => void
       await postJson(`/api/cancelled-guides/${report.id}/items`, {
         items: validRows.map((r) => ({ catalogItemId: r.selected!.id, quantity: Number(r.quantity) })),
       });
+      clearDraft();
       onSaved();
     } catch (e) {
       setError(e instanceof Error ? e.message : "No se pudo guardar.");

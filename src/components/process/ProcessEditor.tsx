@@ -20,6 +20,7 @@ import { Plus, Trash2, CheckCircle2, Circle, ArrowLeft, Upload, X, Download, Max
 import Link from "next/link";
 import { IsoNode, SHAPE_LABEL, type IsoShapeType, type IsoNodeData } from "./IsoNode";
 import { uploadFile } from "@/lib/uploadFile";
+import { useFormDraft } from "@/lib/useFormDraft";
 
 const nodeTypes = { iso: IsoNode };
 
@@ -48,6 +49,14 @@ export type ProcessDTO = {
   title: string;
   description: string;
   flowSteps: FlowStepDTO[];
+};
+
+type ProcessEditorDraftData = {
+  title: string;
+  description: string;
+  nodes: Node<IsoNodeData>[];
+  edges: Edge[];
+  notifyNote: string;
 };
 
 const TOOLBAR_SHAPES: IsoShapeType[] = [
@@ -129,6 +138,26 @@ export function ProcessEditor({
 
   const selectedNode = useMemo(() => nodes.find((n) => n.id === selectedNodeId) ?? null, [nodes, selectedNodeId]);
   const selectedEdge = useMemo(() => edges.find((e) => e.id === selectedEdgeId) ?? null, [edges, selectedEdgeId]);
+
+  // Guardado automático: si sale a revisar otra pantalla antes de terminar
+  // de editar este proceso, al volver encuentra el título, la descripción,
+  // el flujograma y la nota de aviso tal como los había dejado. El editor
+  // siempre arranca con datos reales del proceso (no vacío), por eso no
+  // hay "vacío" que detectar: isEmpty siempre false.
+  const { clearDraft: clearEditorDraft } = useFormDraft<ProcessEditorDraftData>(
+    editable ? `processEditor:${process.id}` : null,
+    { title, description, nodes, edges, notifyNote },
+    (d) => {
+      setTitle(d.title);
+      setDescription(d.description);
+      setNodes(d.nodes);
+      setEdges(d.edges);
+      setNotifyNote(d.notifyNote);
+    },
+    () => false,
+    "Proceso sin terminar de editar",
+    "/area/workspace?tab=procesos"
+  );
 
   const onConnect = useCallback(
     (connection: Connection) => {
@@ -281,6 +310,7 @@ export function ProcessEditor({
     setSelectedNodeId(null);
     setSelectedEdgeId(null);
     setSavedAt(Date.now());
+    clearEditorDraft();
     router.refresh();
   };
 

@@ -7,6 +7,7 @@ import { Combobox } from "@/components/ui/Combobox";
 import { PushTypeToggle } from "@/components/shared/PushTypeToggle";
 import { retentionRiskFor } from "@/lib/storeFeedbackCalc";
 import { formatDateTime } from "@/lib/formatDateTime";
+import { useFormDraft } from "@/lib/useFormDraft";
 
 type EvaluationDTO = {
   id: string;
@@ -242,6 +243,45 @@ export function StoreFeedbackPanel({ stores, editable = true }: { stores: StoreD
   const [actionPlan, setActionPlan] = useState("");
   const [growthNeeds, setGrowthNeeds] = useState("");
   const [err, setErr] = useState("");
+
+  // Guardado automático de la evaluación en progreso — solo tiene sentido en
+  // el modo editable (Nairoby), nunca en la consulta de solo lectura.
+  type StoreFeedbackDraftData = {
+    storeName: string;
+    contactName: string;
+    brand: string;
+    countryDial: string;
+    phoneNumber: string;
+    period: string;
+    loyaltyScore: string;
+    scores: Record<(typeof DRIVER_FIELDS)[number]["key"], string>;
+    comment: string;
+    actionPlan: string;
+    growthNeeds: string;
+  };
+  function isStoreFeedbackDraftEmpty(d: StoreFeedbackDraftData) {
+    return !d.storeName.trim() && !d.contactName.trim() && !d.phoneNumber.trim() && !d.comment.trim() && !d.actionPlan.trim() && !d.growthNeeds.trim();
+  }
+  const { clearDraft: clearStoreFeedbackDraft } = useFormDraft<StoreFeedbackDraftData>(
+    editable ? "storeFeedback:new" : null,
+    { storeName, contactName, brand, countryDial, phoneNumber, period, loyaltyScore, scores, comment, actionPlan, growthNeeds },
+    (d) => {
+      setStoreName(d.storeName);
+      setContactName(d.contactName);
+      setBrand(d.brand);
+      setCountryDial(d.countryDial);
+      setPhoneNumber(d.phoneNumber);
+      setPeriod(d.period);
+      setLoyaltyScore(d.loyaltyScore);
+      setScores(d.scores);
+      setComment(d.comment);
+      setActionPlan(d.actionPlan);
+      setGrowthNeeds(d.growthNeeds);
+    },
+    isStoreFeedbackDraftEmpty,
+    "Evaluación de tienda sin terminar",
+    "/area/workspace?tab=postventa"
+  );
   const [busy, setBusy] = useState(false);
   const [expandedStoreId, setExpandedStoreId] = useState<string | null>(null);
   const [showScript, setShowScript] = useState(false);
@@ -326,6 +366,7 @@ export function StoreFeedbackPanel({ stores, editable = true }: { stores: StoreD
     setComment("");
     setActionPlan("");
     setGrowthNeeds("");
+    clearStoreFeedbackDraft();
     router.refresh();
   };
 

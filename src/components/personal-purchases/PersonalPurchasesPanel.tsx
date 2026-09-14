@@ -9,6 +9,7 @@ import { usePasteFile } from "@/lib/usePasteFile";
 import { uploadFile } from "@/lib/uploadFile";
 import { formatDateTime } from "@/lib/formatDateTime";
 import { CatalogCode } from "@/components/shared/CatalogCode";
+import { useFormDraft } from "@/lib/useFormDraft";
 
 type BuyerRelation = "SELF" | "MINOR_CHILD" | "OTHER_FAMILY";
 type Declaration = { relation: BuyerRelation; note?: string };
@@ -76,6 +77,11 @@ const RELATION_OPTIONS: [BuyerRelation, string][] = [
 
 function emptyDraft(): DraftItem {
   return { employeeProductName: "", catalogItemId: null, catalogItemJustCode: null, quantity: 1, livePhotoUrl: null, optionalPhotoUrl: null, unitDeclarations: [{ relation: "SELF" }] };
+}
+
+type PersonalPurchaseDraftData = { cart: CartItem[]; draft: DraftItem };
+function isPersonalPurchaseDraftEmpty(d: PersonalPurchaseDraftData) {
+  return d.cart.length === 0 && !d.draft.employeeProductName.trim() && !d.draft.livePhotoUrl && !d.draft.optionalPhotoUrl;
 }
 
 // Confirmado 2026-08-19: pedido explícito del usuario tras probarlo real —
@@ -176,6 +182,21 @@ export function PersonalPurchasesPanel() {
   const [armedMethod, setArmedMethod] = useState<Record<string, "PAYROLL" | "TRANSFER" | "CASH" | "CANCEL_TO_PAYROLL" | undefined>>({});
   const [installmentsChoice, setInstallmentsChoice] = useState<Record<string, number>>({});
   const armTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+
+  // Guardado automático: si sale a revisar otra pantalla antes de terminar
+  // de armar este pedido, al volver encuentra el carrito y el producto a
+  // medio completar tal como los había dejado.
+  const { clearDraft: clearPurchaseDraft } = useFormDraft<PersonalPurchaseDraftData>(
+    "personalPurchaseDraft:mine",
+    { cart, draft },
+    (d) => {
+      setCart(d.cart);
+      setDraft(d.draft);
+    },
+    isPersonalPurchaseDraftEmpty,
+    "Compra personal sin terminar",
+    "/area/compras-personales"
+  );
 
   function loadOrders() {
     fetch("/api/personal-purchases").then((r) => (r.ok ? r.json() : [])).then(setOrders);
@@ -306,6 +327,7 @@ export function PersonalPurchasesPanel() {
     setCart([]);
     setDraft(emptyDraft());
     setShowExtraPhoto(false);
+    clearPurchaseDraft();
     loadOrders();
   }
 

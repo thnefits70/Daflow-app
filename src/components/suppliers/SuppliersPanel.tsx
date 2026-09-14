@@ -6,6 +6,7 @@ import { Plus, Trash2, Pencil, MessageCircle, MapPin, Tag, Check, X, Search, Glo
 import { LocationPicker } from "./LocationPicker";
 import { TabGuide } from "@/components/shared/TabGuide";
 import { formatDateTime } from "@/lib/formatDateTime";
+import { useFormDraft } from "@/lib/useFormDraft";
 
 export type SupplierContactDTO = { id?: string; label: string; whatsapp: string };
 export type ChannelPlatform = "TELEGRAM" | "INSTAGRAM" | "FACEBOOK" | "OTHER";
@@ -172,6 +173,48 @@ export function SuppliersPanel({
   const [accountBusy, setAccountBusy] = useState(false);
   const [accountErr, setAccountErr] = useState("");
 
+  // Guardado automático del formulario "Nuevo proveedor/transportista" (o su
+  // edición) en progreso.
+  type SupplierFormDraftData = { formType: SupplierType; form: typeof emptyForm };
+  function isSupplierFormDraftEmpty(d: SupplierFormDraftData) {
+    if (editingId) return false; // edición: siempre parte con datos reales ya guardados.
+    return (
+      !d.form.name.trim() && !d.form.notes.trim() && !d.form.category.trim() && !d.form.location.trim() &&
+      d.form.contacts.every((c) => !c.label.trim() && !c.whatsapp.trim()) &&
+      d.form.channels.length === 0 &&
+      !d.form.bankName.trim() && !d.form.bankAccountNumber.trim() && !d.form.bankAccountHolder.trim()
+    );
+  }
+  const { clearDraft: clearSupplierFormDraft } = useFormDraft<SupplierFormDraftData>(
+    editingId ? `supplier:${editingId}` : "supplier:new",
+    { formType, form },
+    (d) => {
+      setFormOpen(true);
+      setFormType(d.formType);
+      setForm(d.form);
+    },
+    isSupplierFormDraftEmpty,
+    editingId ? "Proveedor sin terminar de editar" : "Proveedor sin terminar de registrar",
+    "/admin/proveedores"
+  );
+
+  // Guardado automático de la cuenta bancaria nueva del proveedor en
+  // progreso — solo mientras el panel de un proveedor puntual está abierto.
+  type SupplierBankAccountDraftData = { accountForm: typeof emptyAccountForm };
+  function isSupplierBankAccountDraftEmpty(d: SupplierBankAccountDraftData) {
+    return !d.accountForm.bankName.trim() && !d.accountForm.bankAccountType.trim() && !d.accountForm.bankAccountNumber.trim() && !d.accountForm.bankAccountHolder.trim() && !d.accountForm.holderIdType && !d.accountForm.holderIdNumber.trim();
+  }
+  const { clearDraft: clearSupplierBankAccountDraft } = useFormDraft<SupplierBankAccountDraftData>(
+    addingAccountId ? `supplierBankAccount:${addingAccountId}` : null,
+    { accountForm },
+    (d) => {
+      setAccountForm(d.accountForm);
+    },
+    isSupplierBankAccountDraftEmpty,
+    "Cuenta bancaria de proveedor sin terminar",
+    "/admin/proveedores"
+  );
+
   const toggleRevealAccount = (id: string) => {
     setRevealedAccountIds((prev) => {
       const next = new Set(prev);
@@ -303,6 +346,7 @@ export function SuppliersPanel({
     }
     setBusy(false);
     setFormOpen(false);
+    clearSupplierFormDraft();
     setEditingId(null);
     router.refresh();
   };
@@ -366,6 +410,7 @@ export function SuppliersPanel({
     }
     setAddingAccountId(null);
     setAccountForm(emptyAccountForm);
+    clearSupplierBankAccountDraft();
     router.refresh();
   };
 
@@ -467,6 +512,7 @@ export function SuppliersPanel({
               onSave={save}
               onCancel={() => {
                 setFormOpen(false);
+                clearSupplierFormDraft();
                 setEditingId(null);
               }}
             />
@@ -673,7 +719,7 @@ export function SuppliersPanel({
                           <button type="button" disabled={accountBusy} className="rounded border border-teal bg-teal px-3 py-1.5 text-[11.5px] font-bold text-navy cursor-pointer disabled:opacity-60" onClick={() => addBankAccount(s.id)}>
                             Guardar cuenta
                           </button>
-                          <button type="button" className="text-steel text-[11.5px] cursor-pointer" onClick={() => { setAddingAccountId(null); setAccountErr(""); }}>
+                          <button type="button" className="text-steel text-[11.5px] cursor-pointer" onClick={() => { setAddingAccountId(null); setAccountErr(""); clearSupplierBankAccountDraft(); }}>
                             Cancelar
                           </button>
                         </div>

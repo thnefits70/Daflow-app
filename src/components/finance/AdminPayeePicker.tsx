@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Search, Plus, CheckCircle2, Trash2 } from "lucide-react";
+import { useFormDraft } from "@/lib/useFormDraft";
 
 export type PayeeBankAccountDTO = {
   id: string;
@@ -68,6 +69,25 @@ export function AdminPayeePicker({
   const [accountBusy, setAccountBusy] = useState(false);
   const [accountErr, setAccountErr] = useState("");
 
+  // Guardado automático de la cuenta bancaria nueva en progreso, por
+  // beneficiario — solo tiene sentido una vez que hay un beneficiario
+  // elegido (`value`).
+  type NewPayeeBankAccountDraftData = { addingAccount: boolean; accountForm: typeof emptyAccountForm };
+  function isPayeeBankAccountDraftEmpty(d: NewPayeeBankAccountDraftData) {
+    return !d.accountForm.bankName.trim() && !d.accountForm.bankAccountType.trim() && !d.accountForm.bankAccountNumber.trim() && !d.accountForm.bankAccountHolder.trim() && !d.accountForm.holderIdType && !d.accountForm.holderIdNumber.trim();
+  }
+  const { clearDraft: clearPayeeBankAccountDraft } = useFormDraft<NewPayeeBankAccountDraftData>(
+    value ? `payeeBankAccount:${value.id}` : null,
+    { addingAccount, accountForm },
+    (d) => {
+      setAddingAccount(d.addingAccount);
+      setAccountForm(d.accountForm);
+    },
+    isPayeeBankAccountDraftEmpty,
+    "Cuenta bancaria sin terminar de agregar",
+    "/area/workspace?tab=pagosadmin"
+  );
+
   const results = payees.filter((p) => p.name.toLowerCase().includes(query.trim().toLowerCase()));
   const exactMatch = payees.some((p) => p.name.toLowerCase() === query.trim().toLowerCase());
 
@@ -117,6 +137,7 @@ export function AdminPayeePicker({
     onSelectBankAccount(data.id);
     setAddingAccount(false);
     setAccountForm(emptyAccountForm);
+    clearPayeeBankAccountDraft();
   }
 
   async function deleteBankAccount(accountId: string) {
@@ -198,7 +219,7 @@ export function AdminPayeePicker({
               <button type="button" disabled={accountBusy} className="rounded border border-teal bg-teal px-3 py-1.5 text-[11.5px] font-bold text-navy cursor-pointer disabled:opacity-60" onClick={addBankAccount}>
                 Guardar cuenta
               </button>
-              <button type="button" className="text-steel text-[11.5px] cursor-pointer" onClick={() => { setAddingAccount(false); setAccountErr(""); }}>
+              <button type="button" className="text-steel text-[11.5px] cursor-pointer" onClick={() => { setAddingAccount(false); setAccountErr(""); clearPayeeBankAccountDraft(); }}>
                 Cancelar
               </button>
             </div>

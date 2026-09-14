@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Upload, FileText, X, AlertTriangle, CheckCircle2, Download } from "lucide-react";
 import type { FinanceKpiDataDTO } from "@/lib/financeKpis";
 import { uploadFile } from "@/lib/uploadFile";
+import { useFormDraft } from "@/lib/useFormDraft";
 
 const MONTH_NAMES = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
 
@@ -71,6 +72,26 @@ export function FinanceUploadPanel({ deptId, data }: { deptId: string; data: Fin
   const [manualOperationId, setManualOperationId] = useState(activeOps[0]?.id ?? "");
   const [manualFields, setManualFields] = useState(EMPTY_MANUAL);
   const [sharedFields, setSharedFields] = useState(EMPTY_SHARED);
+
+  // Guardado automático de lo que se va ingresando a mano (operación +
+  // saldos compartidos), separado por mes de plantilla.
+  type ManualEntryDraftData = { manualOpen: boolean; manualOperationId: string; manualFields: typeof EMPTY_MANUAL; sharedFields: typeof EMPTY_SHARED };
+  function isManualEntryDraftEmpty(d: ManualEntryDraftData) {
+    return Object.values(d.manualFields).every((v) => v === "") && Object.values(d.sharedFields).every((v) => v === "");
+  }
+  const { clearDraft: clearManualEntryDraft } = useFormDraft<ManualEntryDraftData>(
+    `financeManual:${deptId}:${targetPeriod}`,
+    { manualOpen, manualOperationId, manualFields, sharedFields },
+    (d) => {
+      setManualOpen(d.manualOpen);
+      setManualOperationId(d.manualOperationId);
+      setManualFields(d.manualFields);
+      setSharedFields(d.sharedFields);
+    },
+    isManualEntryDraftEmpty,
+    "Datos financieros sin terminar de ingresar",
+    "/area/workspace?tab=kpis"
+  );
 
   const existingRowsForPeriod = activeOps
     .map((op) => ({ op, row: data.recordsByOperation[op.id]?.find((r) => r.period === targetPeriod) }))
@@ -169,6 +190,7 @@ export function FinanceUploadPanel({ deptId, data }: { deptId: string; data: Fin
     const json = await res.json().catch(() => null);
     if (!res.ok) { setErr(json?.error ?? "No se pudo guardar."); return; }
     setManualFields(EMPTY_MANUAL);
+    clearManualEntryDraft();
     setToast(`✅ ${monthLabel(targetPeriod)} guardado para esa operación.`);
     router.refresh();
   }
@@ -195,6 +217,7 @@ export function FinanceUploadPanel({ deptId, data }: { deptId: string; data: Fin
     const json = await res.json().catch(() => null);
     if (!res.ok) { setErr(json?.error ?? "No se pudo guardar."); return; }
     setSharedFields(EMPTY_SHARED);
+    clearManualEntryDraft();
     setToast(`✅ Saldos compartidos de ${monthLabel(targetPeriod)} guardados.`);
     router.refresh();
   }

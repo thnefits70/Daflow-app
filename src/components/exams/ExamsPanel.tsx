@@ -3,10 +3,13 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, Trash2, Pencil, ArrowLeft, GraduationCap } from "lucide-react";
+import { useFormDraft } from "@/lib/useFormDraft";
 
 type ExamSummary = { id: string; title: string; questionCount: number };
 type Question = { id: string; text: string; options: string[]; correctIndex: number };
 type ExamDetail = { id: string; title: string; questions: Question[] };
+
+type ExamEditorDraftData = { title: string; questions: Question[] };
 
 function pct(a: number, b: number) {
   return b === 0 ? 0 : Math.round((a / b) * 100);
@@ -36,6 +39,19 @@ export function ExamEditor({ examId, onBack }: { examId: string; onBack: () => v
       });
   }, [examId]);
 
+  // Guardado automático: si sale a revisar otra pantalla antes de terminar
+  // de editar este examen, al volver encuentra el título y las preguntas
+  // tal como los había dejado. El editor siempre arranca con datos reales
+  // del examen (no vacío), por eso no hay "vacío" que detectar.
+  const { clearDraft: clearExamDraft } = useFormDraft<ExamEditorDraftData>(
+    draft ? `examEditor:${examId}` : null,
+    { title: draft?.title ?? "", questions: draft?.questions ?? [] },
+    (d) => setDraft((prev) => (prev ? { ...prev, title: d.title, questions: d.questions } : prev)),
+    () => false,
+    "Examen sin terminar de editar",
+    "/area/workspace?tab=examenes"
+  );
+
   if (loading || !draft) return <div className="text-steel text-[13px]">Cargando…</div>;
 
   const addQ = () =>
@@ -61,13 +77,14 @@ export function ExamEditor({ examId, onBack }: { examId: string; onBack: () => v
       }),
     });
     setSaving(false);
+    clearExamDraft();
     router.refresh();
     onBack();
   };
 
   return (
     <div>
-      <button type="button" className="inline-flex items-center gap-1.5 text-[13px] text-steel hover:text-ink mb-4.5 cursor-pointer" onClick={onBack}>
+      <button type="button" className="inline-flex items-center gap-1.5 text-[13px] text-steel hover:text-ink mb-4.5 cursor-pointer" onClick={() => { clearExamDraft(); onBack(); }}>
         <ArrowLeft size={14} /> Volver
       </button>
       <div className="mb-4">

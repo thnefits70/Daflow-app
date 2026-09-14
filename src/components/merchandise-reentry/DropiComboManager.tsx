@@ -5,10 +5,15 @@ import { Plus, Trash2, Pencil, PackageSearch } from "lucide-react";
 import { ComboComponentBuilder, type ComboDraftComponent } from "./ComboComponentBuilder";
 import { formatDateTime } from "@/lib/formatDateTime";
 import { CatalogCode } from "@/components/shared/CatalogCode";
+import { useFormDraft } from "@/lib/useFormDraft";
 
 type CatalogItem = { id: string; name: string; photos: string[]; justCode: string | null };
 type ComboComponent = { id: string; quantity: number; catalogItem: CatalogItem };
 type Combo = { id: string; code: string; label: string | null; createdByName: string | null; createdAt: string; components: ComboComponent[] };
+type ComboDraftData = { code: string; label: string; components: ComboDraftComponent[] };
+function isComboDraftEmpty(d: ComboDraftData) {
+  return !d.code.trim() && !d.label.trim() && d.components.length === 0;
+}
 
 // Confirmado 2026-08-26 (pedido explícito del usuario): un ID de combo de
 // Dropi no es un producto real — Dropi los crea con nombres distintos por
@@ -29,6 +34,24 @@ export function DropiComboManager() {
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+
+  // Guardado automático: si sale a revisar otra cosa antes de terminar de
+  // registrar/editar este combo, al volver encuentra código/nombre/productos
+  // tal como los había dejado. Solo activo mientras el formulario está
+  // abierto (editingId !== null) — al cerrarlo no hay nada que respaldar.
+  const draftKey = editingId ? `dropiCombo:${editingId}` : null;
+  const { clearDraft } = useFormDraft<ComboDraftData>(
+    draftKey,
+    { code, label, components },
+    (d) => {
+      setCode(d.code);
+      setLabel(d.label);
+      setComponents(d.components);
+    },
+    isComboDraftEmpty,
+    "Combo sin terminar de registrar",
+    "/area/workspace?tab=reingreso"
+  );
 
   function load() {
     fetch("/api/dropi-combos")
@@ -57,6 +80,7 @@ export function DropiComboManager() {
   }
 
   function cancelForm() {
+    clearDraft();
     setEditingId(null);
     setErr("");
   }
@@ -85,6 +109,7 @@ export function DropiComboManager() {
       return;
     }
     setSaving(false);
+    clearDraft();
     setEditingId(null);
     load();
   }

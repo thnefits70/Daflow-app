@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { User, CheckCircle2, Circle, ArrowLeft, Clock } from "lucide-react";
 import { evaluationDeadline, formatDeadline, currentMonth, PILLAR_ACCENTS, PILLARS, type PillarKey } from "@/lib/recognition";
+import { useFormDraft } from "@/lib/useFormDraft";
 
 export type RecognitionPersonDTO = {
   id: string;
@@ -22,6 +23,11 @@ type PillarDTO = { key: string; label: string; tagline: string; description: str
 type EvaluationData = { month: string; pillars: PillarDTO[]; comment: string; questionsPerPillar: number; liderazgoSource?: "team" | "admin" };
 
 const LIDERAZGO_PILLAR = PILLARS.find((p) => p.key === "liderazgo")!;
+
+type RecognitionDraftData = { answers: Record<string, number>; comment: string };
+function isRecognitionDraftEmpty(d: RecognitionDraftData) {
+  return Object.keys(d.answers).length === 0 && !d.comment.trim();
+}
 
 function ScorePicker({ value, onChange }: { value: number | null; onChange: (v: number) => void }) {
   return (
@@ -103,6 +109,21 @@ export function RecognitionPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId, selectedMonth]);
 
+  // Guardado automático: si sale a revisar otra pantalla antes de terminar
+  // esta evaluación, al volver encuentra las calificaciones y el
+  // comentario tal como los había dejado.
+  const { clearDraft: clearEvalDraft } = useFormDraft<RecognitionDraftData>(
+    selectedId ? `recognitionEval:${selectedId}:${selectedMonth}` : null,
+    { answers, comment },
+    (d) => {
+      setAnswers(d.answers);
+      setComment(d.comment);
+    },
+    isRecognitionDraftEmpty,
+    "Evaluación de reconocimiento sin terminar",
+    "/area/colaborador-destacado"
+  );
+
   const totalQuestions = data ? data.pillars.reduce((a, p) => a + p.questions.length, 0) : 0;
   const answeredCount = Object.keys(answers).length;
   const allAnswered = data !== null && answeredCount === totalQuestions;
@@ -124,6 +145,7 @@ export function RecognitionPanel({
       return;
     }
     setSaved(true);
+    clearEvalDraft();
     router.refresh();
   };
 
@@ -141,7 +163,7 @@ export function RecognitionPanel({
           <button
             type="button"
             className="inline-flex items-center gap-1.5 text-[13px] text-steel hover:text-ink cursor-pointer mb-4"
-            onClick={() => setSelectedId(null)}
+            onClick={() => { clearEvalDraft(); setSelectedId(null); }}
           >
             <ArrowLeft size={14} /> Volver a la lista
           </button>

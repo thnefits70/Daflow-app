@@ -6,6 +6,7 @@ import { uploadFile } from "@/lib/uploadFile";
 import { compressImage } from "@/lib/compressImage";
 import { usePasteFile } from "@/lib/usePasteFile";
 import { formatDateTime } from "@/lib/formatDateTime";
+import { useFormDraft } from "@/lib/useFormDraft";
 
 type SupplierOption = { id: string; name: string; paymentMode: "PREPAGO" | "CREDITO" };
 
@@ -185,6 +186,47 @@ function SupplierSelect({ suppliers, value, onChange }: { suppliers: SupplierOpt
   );
 }
 
+type ProposeDraftData = {
+  productName: string;
+  description: string;
+  imageUrl: string;
+  platform: "DROPI" | "ROCKET" | "BOTH";
+  competitorId: string;
+  competitorPrice: string;
+  competitorBodegaName: string;
+  competitorProductName: string;
+  noCompetitorData: boolean;
+  discoverySourceNote: string;
+  insurance: string;
+  fulfillment: string;
+  margin: string;
+  primarySupplierId: string;
+  primaryCost: string;
+  primaryUnits: string;
+  primaryFreight: string;
+  addSecondary: boolean;
+  secondarySupplierId: string;
+  secondaryCost: string;
+  secondaryUnits: string;
+  secondaryFreight: string;
+};
+function isProposeDraftEmpty(d: ProposeDraftData) {
+  return (
+    !d.productName.trim() &&
+    !d.description.trim() &&
+    !d.imageUrl &&
+    !d.competitorId.trim() &&
+    !d.competitorPrice.trim() &&
+    !d.competitorBodegaName.trim() &&
+    !d.competitorProductName.trim() &&
+    !d.discoverySourceNote.trim() &&
+    !d.primarySupplierId &&
+    !d.primaryCost.trim() &&
+    !d.primaryFreight.trim() &&
+    !d.addSecondary
+  );
+}
+
 // ---------------- Paso 1: Proponer (Jariel) ----------------
 function ProposeForm() {
   const [suppliers, setSuppliers] = useState<SupplierOption[]>([]);
@@ -215,6 +257,48 @@ function ProposeForm() {
   const [err, setErr] = useState("");
   const [ok, setOk] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
+
+  // Guardado automático: si sale a revisar otra pantalla antes de terminar
+  // de proponer este producto, al volver encuentra todo lo llenado tal
+  // como lo había dejado (nombre, imagen, competencia, calculadora, etc.).
+  const { clearDraft: clearProposeDraft } = useFormDraft<ProposeDraftData>(
+    "marketProductPropose:new",
+    {
+      productName, description, imageUrl, platform,
+      competitorId, competitorPrice, competitorBodegaName, competitorProductName,
+      noCompetitorData, discoverySourceNote,
+      insurance, fulfillment, margin,
+      primarySupplierId, primaryCost, primaryUnits, primaryFreight,
+      addSecondary, secondarySupplierId, secondaryCost, secondaryUnits, secondaryFreight,
+    },
+    (d) => {
+      setProductName(d.productName);
+      setDescription(d.description);
+      setImageUrl(d.imageUrl);
+      setPlatform(d.platform);
+      setCompetitorId(d.competitorId);
+      setCompetitorPrice(d.competitorPrice);
+      setCompetitorBodegaName(d.competitorBodegaName);
+      setCompetitorProductName(d.competitorProductName);
+      setNoCompetitorData(d.noCompetitorData);
+      setDiscoverySourceNote(d.discoverySourceNote);
+      setInsurance(d.insurance);
+      setFulfillment(d.fulfillment);
+      setMargin(d.margin);
+      setPrimarySupplierId(d.primarySupplierId);
+      setPrimaryCost(d.primaryCost);
+      setPrimaryUnits(d.primaryUnits);
+      setPrimaryFreight(d.primaryFreight);
+      setAddSecondary(d.addSecondary);
+      setSecondarySupplierId(d.secondarySupplierId);
+      setSecondaryCost(d.secondaryCost);
+      setSecondaryUnits(d.secondaryUnits);
+      setSecondaryFreight(d.secondaryFreight);
+    },
+    isProposeDraftEmpty,
+    "Producto sin terminar de proponer",
+    "/area/workspace?tab=analisis-mercado"
+  );
 
   useEffect(() => {
     fetch("/api/purchase-suppliers").then((r) => (r.ok ? r.json() : [])).then(setSuppliers).catch(() => setSuppliers([]));
@@ -273,6 +357,7 @@ function ProposeForm() {
     setProductName(""); setDescription(""); setImageUrl(""); setCompetitorId(""); setCompetitorPrice(""); setCompetitorBodegaName(""); setCompetitorProductName("");
     setNoCompetitorData(false); setDiscoverySourceNote("");
     setPrimarySupplierId(""); setPrimaryCost(""); setPrimaryUnits("100"); setPrimaryFreight(""); setAddSecondary(false);
+    clearProposeDraft();
   }
 
   return (

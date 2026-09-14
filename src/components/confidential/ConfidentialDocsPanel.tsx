@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Plus, Trash2, Pencil, FileText, Eye, Search } from "lucide-react";
 import { uploadConfidentialFile } from "@/lib/uploadConfidentialFile";
 import { formatDateTime } from "@/lib/formatDateTime";
+import { useFormDraft } from "@/lib/useFormDraft";
 
 function fileKind(name: string): "pdf" | "image" | "other" {
   const n = name.toLowerCase();
@@ -50,6 +51,11 @@ const emptyForm = {
   grantedUserIds: [] as string[],
 };
 
+type ConfidentialDocFormData = typeof emptyForm;
+function isConfidentialDocFormEmpty(d: ConfidentialDocFormData) {
+  return JSON.stringify(d) === JSON.stringify(emptyForm);
+}
+
 export function ConfidentialDocsPanel({
   mode,
   users,
@@ -70,6 +76,19 @@ export function ConfidentialDocsPanel({
   const [err, setErr] = useState("");
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
   const [viewingId, setViewingId] = useState<string | null>(null);
+
+  // Guardado automático: si sale a revisar otra pantalla antes de terminar
+  // de cargar este documento, al volver encuentra título, categoría y a
+  // quién se lo compartió tal como los había dejado. El archivo en sí no
+  // se puede respaldar (no es serializable) — hay que volver a elegirlo.
+  const { clearDraft: clearConfidentialDraft } = useFormDraft<ConfidentialDocFormData>(
+    formOpen ? `confidentialDoc:${editingId ?? "new"}` : null,
+    form,
+    setForm,
+    isConfidentialDocFormEmpty,
+    "Documento confidencial sin terminar",
+    "/area/documentos-confidenciales"
+  );
 
   const load = async () => {
     setLoading(true);
@@ -160,6 +179,7 @@ export function ConfidentialDocsPanel({
     }
     setFormOpen(false);
     setEditingId(null);
+    clearConfidentialDraft();
     load();
     router.refresh();
   };
@@ -301,7 +321,7 @@ export function ConfidentialDocsPanel({
             >
               {busy ? "Guardando…" : editingId ? "Guardar cambios" : "Guardar"}
             </button>
-            <button type="button" className="text-steel text-[13px] cursor-pointer" onClick={() => { setFormOpen(false); setEditingId(null); }}>
+            <button type="button" className="text-steel text-[13px] cursor-pointer" onClick={() => { setFormOpen(false); setEditingId(null); clearConfidentialDraft(); }}>
               Cancelar
             </button>
           </div>

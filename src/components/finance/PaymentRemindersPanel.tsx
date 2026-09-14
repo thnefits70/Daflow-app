@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Plus, Check, Undo2, Trash2, Pencil, Search } from "lucide-react";
 import { PushTypeToggle } from "@/components/shared/PushTypeToggle";
 import { formatDateTime } from "@/lib/formatDateTime";
+import { useFormDraft } from "@/lib/useFormDraft";
 
 type RecordDTO = { period: string; amountPaid: number; completedAt: string; completedByName: string | null };
 type ReminderDTO = {
@@ -45,6 +46,27 @@ export function PaymentRemindersPanel({
   const [dueDay, setDueDay] = useState("5");
   const [reminderStartDay, setReminderStartDay] = useState("3");
   const [err, setErr] = useState("");
+
+  // Guardado automático del formulario "Agregar pago" en progreso.
+  type NewReminderDraftData = { name: string; amount: string; paymentMethod: string; dueDay: string; reminderStartDay: string };
+  function isNewReminderDraftEmpty(d: NewReminderDraftData) {
+    return !d.name.trim() && !d.amount.trim() && !d.paymentMethod.trim();
+  }
+  const { clearDraft: clearNewReminderDraft } = useFormDraft<NewReminderDraftData>(
+    editable ? "paymentReminders:new" : null,
+    { name, amount, paymentMethod, dueDay, reminderStartDay },
+    (d) => {
+      setShowForm(true);
+      setName(d.name);
+      setAmount(d.amount);
+      setPaymentMethod(d.paymentMethod);
+      setDueDay(d.dueDay);
+      setReminderStartDay(d.reminderStartDay);
+    },
+    isNewReminderDraftEmpty,
+    "Recordatorio de pago sin terminar",
+    "/area/workspace?tab=pagos"
+  );
   const [busy, setBusy] = useState(false);
   const [amountDraftFor, setAmountDraftFor] = useState<string | null>(null);
   const [amountValue, setAmountValue] = useState("");
@@ -102,6 +124,7 @@ export function PaymentRemindersPanel({
     setDueDay("5");
     setReminderStartDay("3");
     setShowForm(false);
+    clearNewReminderDraft();
     router.refresh();
   };
 

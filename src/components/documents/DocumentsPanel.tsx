@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, Trash2, Pencil, Download, Upload, X, FileText } from "lucide-react";
 import { uploadFile } from "@/lib/uploadFile";
+import { useFormDraft } from "@/lib/useFormDraft";
 
 type DocumentDTO = {
   id: string;
@@ -36,6 +37,22 @@ export function DocumentsPanel({
   const [draft, setDraft] = useState<DocumentDTO | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+
+  // Guardado automático: si sale a revisar otra pantalla antes de terminar
+  // de editar este documento, al volver encuentra el título, contenido,
+  // enlace y PDF tal como los había dejado. Siempre arranca con datos
+  // reales del documento (nuevo o existente), por eso no hay "vacío".
+  const { clearDraft: clearDocDraft } = useFormDraft<DocumentDTO>(
+    editingId ? `documentEdit:${editingId}` : null,
+    draft ?? { id: "", title: "", content: "", link: "", fileUrl: null, fileName: null },
+    (d) => {
+      setDraft(d);
+      setEditingId(d.id);
+    },
+    () => false,
+    "Documento sin terminar de editar",
+    "/area/leyes"
+  );
 
   const create = async () => {
     setBusy(true);
@@ -73,6 +90,7 @@ export function DocumentsPanel({
       }),
     });
     setBusy(false);
+    clearDocDraft();
     setEditingId(null);
     setDraft(null);
     router.refresh();
@@ -186,7 +204,7 @@ export function DocumentsPanel({
                 <button type="button" disabled={busy} className="rounded border border-blue bg-blue px-4 py-2 text-[13px] font-semibold text-white cursor-pointer" onClick={save}>
                   Guardar
                 </button>
-                <button type="button" className="text-steel text-[13px] cursor-pointer" onClick={() => { setEditingId(null); setDraft(null); }}>
+                <button type="button" className="text-steel text-[13px] cursor-pointer" onClick={() => { clearDocDraft(); setEditingId(null); setDraft(null); }}>
                   Cancelar
                 </button>
               </div>
