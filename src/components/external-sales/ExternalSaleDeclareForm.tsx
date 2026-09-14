@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Check, Upload } from "lucide-react";
 import { ProductMatchPicker, type MatchCatalogItem, type ProductMatchResult } from "@/components/merchandise-reentry/ProductMatchPicker";
 import { ClientMatchPicker, type ClientDTO } from "@/components/external-sales/ClientMatchPicker";
+import { LogisticsProviderPicker } from "@/components/external-sales/LogisticsProviderPicker";
 import { uploadFile } from "@/lib/uploadFile";
 import { usePasteFile } from "@/lib/usePasteFile";
 import { useFormDraft } from "@/lib/useFormDraft";
@@ -723,7 +724,7 @@ export function ExternalSaleDeclareForm() {
             </div>
             <div>
               <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">A quién debe entregarle bodega (motorizado o cliente)</label>
-              <input type="text" className="w-full rounded border border-rule bg-cloud px-2.5 py-1.5 text-[12.5px]" value={pickupPersonName} onChange={(e) => setPickupPersonName(e.target.value)} />
+              <LogisticsProviderPicker value={pickupPersonName} onChange={setPickupPersonName} />
             </div>
             <div>
               <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Transportadora, si no es la habitual (opcional)</label>
@@ -854,7 +855,7 @@ export function ExternalSaleDeclareForm() {
                       </div>
                       <div>
                         <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">A quién debe entregarle bodega</label>
-                        <input type="text" className="w-full rounded border border-rule bg-surface px-2.5 py-1.5 text-[12px]" value={editPickupPersonName} onChange={(e) => setEditPickupPersonName(e.target.value)} />
+                        <LogisticsProviderPicker value={editPickupPersonName} onChange={setEditPickupPersonName} />
                       </div>
                       <div>
                         <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Transportadora (opcional)</label>

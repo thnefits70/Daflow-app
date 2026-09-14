@@ -521,6 +521,7 @@ model User {
   externalSalesClosed             ExternalSale[] @relation("ExternalSaleNairobyClosedBy")
 
   clientsRegistered Client[]
+  logisticsProvidersRegistered LogisticsProvider[]
 
   cancelledGuidesSubmitted            CancelledGuideReport[] @relation("CancelledGuideSubmittedBy")
   cancelledGuidesFulfillmentConfirmed CancelledGuideReport[] @relation("CancelledGuideFulfillmentConfirmedBy")
@@ -5279,6 +5280,24 @@ model Client {
   createdBy   User?    @relation(fields: [createdById], references: [id], onDelete: SetNull)
 
   sales ExternalSale[]
+}
+
+// Proveedores de logística (motorizados u otros couriers puntuales) que
+// entregan pedidos de Ventas Externas — confirmado 2026-09-14, pedido
+// explícito de Marcos: un registro compartido entre TODOS los asesores, para
+// no reescribir el mismo nombre cada vez y que cualquiera pueda reusar el
+// que otro ya registró. Solo el nombre queda guardado en
+// ExternalSale.pickupPersonName (texto libre, sin FK) — este modelo es
+// nada más una lista para elegir rápido o registrar uno nuevo, el mismo
+// espíritu que Client con ClientMatchPicker.
+model LogisticsProvider {
+  id    String  @id @default(cuid())
+  name  String  @unique
+  phone String?
+
+  createdAt   DateTime @default(now())
+  createdById String?
+  createdBy   User?    @relation(fields: [createdById], references: [id], onDelete: SetNull)
 }
 
 model ExternalSale {
