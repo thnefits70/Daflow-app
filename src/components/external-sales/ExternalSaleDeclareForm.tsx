@@ -526,7 +526,9 @@ export function ExternalSaleDeclareForm() {
       setPickupPersonName(d.pickupPersonName);
       setCourierNote(d.courierNote);
     },
-    isDeclareDraftEmpty
+    isDeclareDraftEmpty,
+    "Venta nueva sin terminar de declarar",
+    "/area/workspace?tab=ventas-externas"
   );
 
   const editDraftKey = editingId ? `external-sale-edit:${editingId}` : null;
@@ -539,7 +541,9 @@ export function ExternalSaleDeclareForm() {
       setEditPickupPersonName(d.pickupPersonName);
       setEditCourierNote(d.courierNote);
     },
-    () => false
+    () => false,
+    "Corrección de venta sin terminar",
+    "/area/workspace?tab=ventas-externas"
   );
 
   const canSave = !!client && items.length > 0 && items.every((it) => isValidQty(it.quantity)) && pickupPersonName.trim().length > 0 && !saving;

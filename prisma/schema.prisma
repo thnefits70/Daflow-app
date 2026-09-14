@@ -4746,6 +4746,14 @@ model FormDraft {
 
   formKey String
   data    Json
+  // Para que el borrador se pueda mostrar en Inicio (2026-09-14, pedido
+  // explícito del usuario: que no se quede "perdido" solo porque la persona
+  // se olvidó y nunca volvió a esa pantalla) — label es el texto que ve, y
+  // resumeUrl a dónde lo manda "Continuar". Null en formularios que todavía
+  // no pasan estos datos al hook (no aparecen en Inicio, pero se siguen
+  // restaurando bien dentro de su propia pantalla).
+  label     String?
+  resumeUrl String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

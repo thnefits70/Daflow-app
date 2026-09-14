@@ -7,6 +7,7 @@ import { LiveBarcodeScanner } from "@/components/shared/LiveBarcodeScanner";
 import { ProductMatchPicker, type MatchCatalogItem, type ProductMatchResult } from "@/components/merchandise-reentry/ProductMatchPicker";
 import { ComboComponentBuilder, type ComboDraftComponent } from "@/components/merchandise-reentry/ComboComponentBuilder";
 import { CatalogCode } from "@/components/shared/CatalogCode";
+import { useFormDraft } from "@/lib/useFormDraft";
 
 type ItemDTO = { id: string; declaredName: string; quantity: number; catalogItem: { name: string; photos: string[]; justCode: string | null } | null };
 type BatchDTO = { id: string; code: string; documentPhotoUrls: string[]; items: ItemDTO[] };
@@ -26,6 +27,19 @@ type SuggestedRow = {
   savingCombo?: boolean;
   editingName?: boolean;
 };
+
+type CaptureDraftData = {
+  photos: { url: string; hash?: string }[];
+  rows: SuggestedRow[];
+  noStockItems: { name: string; code: string | null }[];
+  manualMode: boolean;
+  manualQty: string;
+  manualSelected: MatchCatalogItem | null;
+  scannedQuery: string | null;
+};
+function isCaptureDraftEmpty(d: CaptureDraftData) {
+  return d.photos.length === 0 && d.rows.length === 0 && d.noStockItems.length === 0 && !d.manualSelected && !d.manualQty.trim();
+}
 
 const MAX_PHOTOS = 40;
 const CONFIDENCE_LABEL: Record<Confidence, string> = { alta: "Lectura clara", media: "Revisar: letra poco clara", baja: "Revisar: dudosa" };
@@ -115,6 +129,27 @@ export function DocumentCaptureFlow({ reason, canManageJustCatalog = false }: { 
   }
 
   useEffect(loadDraft, [reason]);
+
+  // Guardado automático: leer con IA cuesta dinero (llamada real) y armar
+  // los renglones lleva tiempo — si sale a revisar otra cosa antes de
+  // enviar el lote y vuelve, no hay que tomar las fotos ni leerlas de nuevo.
+  const captureDraftKey = batch ? `outflow-capture:${batch.id}` : null;
+  const { clearDraft: clearCaptureDraft } = useFormDraft<CaptureDraftData>(
+    captureDraftKey,
+    { photos, rows, noStockItems, manualMode, manualQty, manualSelected, scannedQuery },
+    (d) => {
+      setPhotos(d.photos);
+      setRows(d.rows);
+      setNoStockItems(d.noStockItems);
+      setManualMode(d.manualMode);
+      setManualQty(d.manualQty);
+      setManualSelected(d.manualSelected);
+      setScannedQuery(d.scannedQuery);
+    },
+    isCaptureDraftEmpty,
+    reason === "DESPACHO" ? "Captura de despacho sin enviar" : "Captura de garantía sin enviar",
+    "/area/workspace?tab=egresos"
+  );
 
   async function start() {
     setError("");
@@ -330,6 +365,7 @@ export function DocumentCaptureFlow({ reason, canManageJustCatalog = false }: { 
   async function deleteBatch() {
     if (!batch) return;
     await fetch(`/api/merchandise-outflow/batches/${batch.id}`, { method: "DELETE" });
+    clearCaptureDraft();
     setBatch(null);
     setConfirmDeleteBatch(false);
     setPhotos([]);
@@ -343,6 +379,7 @@ export function DocumentCaptureFlow({ reason, canManageJustCatalog = false }: { 
     setError("");
     try {
       await postJson(`/api/merchandise-outflow/batches/${batch.id}/submit`);
+      clearCaptureDraft();
       setSentCode(batch.code);
       setBatch(null);
       setConfirmingSubmit(false);

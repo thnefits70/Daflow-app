@@ -3,6 +3,7 @@ import { GitBranch, FileText, GraduationCap, Scale, ClipboardList, LineChart } f
 import { DailyQuoteBanner } from "./DailyQuoteBanner";
 import { PushOptIn } from "@/components/shared/PushOptIn";
 import { PendingTasksCard } from "./PendingTasksCard";
+import { DraftsPendingCard } from "./DraftsPendingCard";
 import { PeriodicRemindersCard } from "./PeriodicRemindersCard";
 import { RecognitionPodium } from "@/components/recognition/RecognitionPodium";
 import { ScoreGauge } from "./ScoreGauge";
@@ -143,6 +144,7 @@ export function EmployeeHome({
         </Link>
       )}
       {improvementPlan && <ImprovementPlanCollaboratorCard plan={improvementPlan} />}
+      <DraftsPendingCard />
       <PendingTasksCard />
       <PeriodicRemindersCard items={duePeriodicReminders} />
 

@@ -5,8 +5,14 @@ import { Camera, Check } from "lucide-react";
 import { LiveCameraCapture } from "@/components/shared/LiveCameraCapture";
 import { ProductMatchPicker, type MatchCatalogItem, type ProductMatchResult } from "@/components/merchandise-reentry/ProductMatchPicker";
 import { CatalogCode } from "@/components/shared/CatalogCode";
+import { useFormDraft } from "@/lib/useFormDraft";
 
 const DAMAGE_REASONS = ["Producto roto", "Empaque abierto", "Humedad/manchado", "Golpeado", "Otro"];
+
+type DeteriorDraftData = { photoUrl: string | null; selected: MatchCatalogItem | null; quantity: string; damageReason: string; damageReasonOther: string };
+function isDeteriorDraftEmpty(d: DeteriorDraftData) {
+  return !d.photoUrl && !d.selected && !d.quantity.trim();
+}
 
 async function postJson(url: string, body?: unknown) {
   const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
@@ -35,6 +41,21 @@ export function DeteriorCapture({ onReported, allowUpload = false }: { onReporte
   const [error, setError] = useState("");
   const [sent, setSent] = useState(false);
 
+  const { clearDraft: clearDeteriorDraft } = useFormDraft<DeteriorDraftData>(
+    "outflow-deterioro:new",
+    { photoUrl, selected, quantity, damageReason, damageReasonOther },
+    (d) => {
+      setPhotoUrl(d.photoUrl);
+      setSelected(d.selected);
+      setQuantity(d.quantity);
+      setDamageReason(d.damageReason);
+      setDamageReasonOther(d.damageReasonOther);
+    },
+    isDeteriorDraftEmpty,
+    "Reporte de deterioro sin enviar",
+    "/area/workspace?tab=egresos"
+  );
+
   function reset() {
     setPhotoUrl(null);
     setSelected(null);
@@ -62,6 +83,7 @@ export function DeteriorCapture({ onReported, allowUpload = false }: { onReporte
         damageReasonName: damageReason,
         damageReasonOther: damageReason === "Otro" ? damageReasonOther.trim() : undefined,
       });
+      clearDeteriorDraft();
       setSent(true);
       onReported?.();
     } catch (e) {

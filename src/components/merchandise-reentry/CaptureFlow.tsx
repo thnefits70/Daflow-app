@@ -5,8 +5,22 @@ import { Camera, Check, Pencil, Plus, Send, Trash2, X } from "lucide-react";
 import { LiveCameraCapture } from "@/components/shared/LiveCameraCapture";
 import { ProductMatchPicker, type MatchCatalogItem, type ProductMatchResult } from "./ProductMatchPicker";
 import { CatalogCode } from "@/components/shared/CatalogCode";
+import { useFormDraft } from "@/lib/useFormDraft";
 
 const DAMAGE_REASONS = ["Producto roto", "Empaque abierto", "Humedad/manchado", "Golpeado", "Otro"];
+
+type AddItemDraftData = {
+  photoUrl: string | null;
+  photoUrl2: string | null;
+  selected: MatchCatalogItem | null;
+  goodQty: string;
+  damagedQty: string;
+  damageReason: string;
+  damageReasonOther: string;
+};
+function isAddItemDraftEmpty(d: AddItemDraftData) {
+  return !d.photoUrl && !d.selected && !d.goodQty.trim() && !d.damagedQty.trim();
+}
 
 type ItemDTO = {
   id: string;
@@ -338,6 +352,26 @@ function AddItemForm({ batchId, onAdded, onCancel }: { batchId: string; onAdded:
   const [error, setError] = useState("");
   const [confirmingAdd, setConfirmingAdd] = useState(false);
 
+  // Guardado automático: si sale a revisar otra cosa antes de terminar de
+  // agregar este producto al lote, al volver no hay que tomar la foto ni
+  // buscar el producto de nuevo.
+  const { clearDraft: clearAddItemDraft } = useFormDraft<AddItemDraftData>(
+    `reentry-add-item:${batchId}`,
+    { photoUrl, photoUrl2, selected, goodQty, damagedQty, damageReason, damageReasonOther },
+    (d) => {
+      setPhotoUrl(d.photoUrl);
+      setPhotoUrl2(d.photoUrl2);
+      setSelected(d.selected);
+      setGoodQty(d.goodQty);
+      setDamagedQty(d.damagedQty);
+      setDamageReason(d.damageReason);
+      setDamageReasonOther(d.damageReasonOther);
+    },
+    isAddItemDraftEmpty,
+    "Producto sin terminar de agregar al reingreso",
+    "/area/workspace?tab=reingreso"
+  );
+
   function onCaptured(url: string) {
     setPhotoUrl(url);
     setTaking(false);
@@ -377,6 +411,7 @@ function AddItemForm({ batchId, onAdded, onCancel }: { batchId: string; onAdded:
         damageReasonName: dQty > 0 ? damageReason : undefined,
         damageReasonOther: dQty > 0 && damageReason === "Otro" ? damageReasonOther.trim() : undefined,
       });
+      clearAddItemDraft();
       onAdded();
     } catch (e) {
       setError(e instanceof Error ? e.message : "No se pudo guardar el producto.");
@@ -560,7 +595,7 @@ function AddItemForm({ batchId, onAdded, onCancel }: { batchId: string; onAdded:
       {error && <div className="text-red text-[11.5px]">{error}</div>}
 
       <div className="flex gap-2">
-        <button type="button" className="flex-1 rounded border border-rule px-3 py-2 text-[12px] font-semibold cursor-pointer" onClick={onCancel}>
+        <button type="button" className="flex-1 rounded border border-rule px-3 py-2 text-[12px] font-semibold cursor-pointer" onClick={() => { clearAddItemDraft(); onCancel(); }}>
           Cancelar
         </button>
         <button type="button" disabled={!canSave} className="flex-1 rounded border border-teal bg-teal px-3 py-2 text-[12px] font-bold text-navy cursor-pointer disabled:opacity-40" onClick={() => setConfirmingAdd(true)}>

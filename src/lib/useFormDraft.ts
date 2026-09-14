@@ -12,7 +12,18 @@ import { useEffect, useRef } from "react";
 //   guardado — para volcarlo de vuelta a los estados del formulario.
 // - `isEmpty`: para no guardar (ni pisar un borrador previo) un formulario
 //   que todavía no tiene nada útil escrito.
-export function useFormDraft<T>(key: string | null, value: T, onRestore: (data: T) => void, isEmpty: (data: T) => boolean) {
+// - `label`/`resumeUrl`: opcionales — si se pasan, este borrador también
+//   aparece como pendiente en Inicio (ver /api/form-drafts/mine) con ese
+//   texto y ese link para "Continuar". Sin ellos, el borrador se sigue
+//   restaurando bien dentro de su propia pantalla, solo que no aparece ahí.
+export function useFormDraft<T>(
+  key: string | null,
+  value: T,
+  onRestore: (data: T) => void,
+  isEmpty: (data: T) => boolean,
+  label?: string,
+  resumeUrl?: string
+) {
   const fetchedForKeyRef = useRef<string | null>(null);
   // Solo queda === key una vez que el GET de restauración terminó (con o sin
   // borrador) — así el autoguardado nunca pisa un borrador real con el
@@ -47,13 +58,13 @@ export function useFormDraft<T>(key: string | null, value: T, onRestore: (data: 
         fetch("/api/form-drafts", {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ key, data: value }),
+          body: JSON.stringify({ key, data: value, label, resumeUrl }),
         }).catch(() => {});
       }
     }, 800);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key, JSON.stringify(value)]);
+  }, [key, JSON.stringify(value), label, resumeUrl]);
 
   function clearDraft() {
     if (!key) return;
