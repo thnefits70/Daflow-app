@@ -67,3 +67,37 @@ export async function PATCH(req: NextRequest) {
   ]);
   return NextResponse.json({ ok: true });
 }
+
+const deleteSchema = z.object({ id: z.string().trim().min(1) });
+
+export async function DELETE(req: NextRequest) {
+  const session = await auth();
+  if (!session || session.user.role === "admin") return NextResponse.json({ error: "No autorizado." }, { status: 401 });
+
+  const body = await req.json().catch(() => null);
+  const parsed = deleteSchema.safeParse(body);
+  if (!parsed.success) return NextResponse.json({ error: "Datos inválidos." }, { status: 400 });
+
+  const target = await prisma.employeeBankAccount.findUnique({ where: { id: parsed.data.id } });
+  if (!target || target.employeeId !== session.user.id) return NextResponse.json({ error: "Cuenta no encontrada." }, { status: 404 });
+
+  const total = await prisma.employeeBankAccount.count({ where: { employeeId: session.user.id } });
+  if (total <= 1) {
+    return NextResponse.json({ error: "No puedes eliminar tu única cuenta bancaria. Agrega otra antes de eliminar esta." }, { status: 400 });
+  }
+
+  if (target.isSelected) {
+    const nextActive = await prisma.employeeBankAccount.findFirst({
+      where: { employeeId: session.user.id, id: { not: target.id } },
+      orderBy: { createdAt: "desc" },
+    });
+    await prisma.$transaction([
+      prisma.employeeBankAccount.delete({ where: { id: target.id } }),
+      prisma.employeeBankAccount.update({ where: { id: nextActive!.id }, data: { isSelected: true } }),
+    ]);
+  } else {
+    await prisma.employeeBankAccount.delete({ where: { id: target.id } });
+  }
+
+  return NextResponse.json({ ok: true });
+}

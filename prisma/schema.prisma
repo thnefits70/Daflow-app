@@ -485,6 +485,7 @@ model User {
 
   personalPurchaseOrders PersonalPurchaseOrder[] @relation("PersonalPurchaseOrderEmployee")
   employeeBankAccounts   EmployeeBankAccount[]
+  formDrafts             FormDraft[]
   salaryAdvances         SalaryAdvance[]         @relation("SalaryAdvanceEmployee")
   managementDeductions   ManagementDeduction[]   @relation("ManagementDeductionEmployee")
   legacyPayrollDebts     LegacyPayrollDebt[]     @relation("LegacyPayrollDebtEmployee")
@@ -4733,6 +4734,25 @@ model Notification {
 // (autoservicio, sin aprobación), pero solo una está marcada isSelected —
 // esa es la que se usa para transferir sus anticipos. Reutiliza el enum
 // HolderIdType ya existente.
+// Guardado automático y silencioso de formularios en progreso — pedido de
+// Daniel 2026-09-14: si el colaborador sale a revisar otra pantalla antes de
+// terminar una gestión (ej. declarar una venta) y vuelve, no pierde lo que
+// ya había llenado. formKey identifica el formulario (y el registro puntual
+// cuando aplica, ej. "external-sale-edit:<saleId>"); único por usuario.
+model FormDraft {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  formKey String
+  data    Json
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, formKey])
+}
+
 model EmployeeBankAccount {
   id         String @id @default(cuid())
   employeeId String

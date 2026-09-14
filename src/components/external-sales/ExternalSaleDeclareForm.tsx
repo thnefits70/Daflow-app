@@ -6,6 +6,7 @@ import { ProductMatchPicker, type MatchCatalogItem, type ProductMatchResult } fr
 import { ClientMatchPicker, type ClientDTO } from "@/components/external-sales/ClientMatchPicker";
 import { uploadFile } from "@/lib/uploadFile";
 import { usePasteFile } from "@/lib/usePasteFile";
+import { useFormDraft } from "@/lib/useFormDraft";
 import { formatDateTime } from "@/lib/formatDateTime";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 import { B2B_MARGIN_OPTIONS, B2B_MARGIN_DEFAULT } from "@/lib/externalSalesPricingConstants";
@@ -47,6 +48,11 @@ type SaleDTO = {
 type DraftItem = { product: MatchCatalogItem; quantity: string; marginPercent: number };
 
 type PreviewRow = { unitPrice: number; marginPercentUsed: number };
+
+type DeclareDraftData = { client: ClientDTO | null; items: DraftItem[]; pickupPersonName: string; courierNote: string };
+function isDeclareDraftEmpty(d: DeclareDraftData) {
+  return !d.client && d.items.length === 0 && !d.pickupPersonName.trim() && !d.courierNote.trim();
+}
 
 function isValidQty(qty: string) {
   const n = Number(qty);
@@ -508,6 +514,34 @@ export function ExternalSaleDeclareForm() {
   }
   useEffect(load, []);
 
+  // Guardado automático: si sale a revisar otra venta antes de terminar de
+  // declarar esta, al volver encuentra cliente/productos/entrega tal como
+  // los había dejado.
+  const { clearDraft: clearNewSaleDraft } = useFormDraft<DeclareDraftData>(
+    "external-sale-declare:new",
+    { client, items, pickupPersonName, courierNote },
+    (d) => {
+      setClient(d.client);
+      setItems(d.items);
+      setPickupPersonName(d.pickupPersonName);
+      setCourierNote(d.courierNote);
+    },
+    isDeclareDraftEmpty
+  );
+
+  const editDraftKey = editingId ? `external-sale-edit:${editingId}` : null;
+  const { clearDraft: clearEditDraft } = useFormDraft<DeclareDraftData>(
+    editDraftKey,
+    { client: editClient, items: editItems, pickupPersonName: editPickupPersonName, courierNote: editCourierNote },
+    (d) => {
+      setEditClient(d.client);
+      setEditItems(d.items);
+      setEditPickupPersonName(d.pickupPersonName);
+      setEditCourierNote(d.courierNote);
+    },
+    () => false
+  );
+
   const canSave = !!client && items.length > 0 && items.every((it) => isValidQty(it.quantity)) && pickupPersonName.trim().length > 0 && !saving;
 
   async function save() {
@@ -525,6 +559,7 @@ export function ExternalSaleDeclareForm() {
       setItems([]);
       setPickupPersonName("");
       setCourierNote("");
+      clearNewSaleDraft();
       load();
     } catch (e) {
       setError(e instanceof Error ? e.message : "No se pudo declarar la venta.");
@@ -561,6 +596,7 @@ export function ExternalSaleDeclareForm() {
         pickupPersonName: editPickupPersonName.trim(),
         courierNote: editCourierNote.trim() || undefined,
       });
+      clearEditDraft();
       setEditingId(null);
       load();
     } catch (e) {
@@ -797,7 +833,7 @@ export function ExternalSaleDeclareForm() {
                       </div>
                       {editError && <div className="text-red text-[11px]">{editError}</div>}
                       <div className="flex gap-2">
-                        <button type="button" className="flex-1 rounded border border-rule px-2.5 py-1.5 text-[11.5px] font-semibold cursor-pointer" onClick={() => setEditingId(null)}>Cancelar</button>
+                        <button type="button" className="flex-1 rounded border border-rule px-2.5 py-1.5 text-[11.5px] font-semibold cursor-pointer" onClick={() => { clearEditDraft(); setEditingId(null); }}>Cancelar</button>
                         <button type="button" disabled={!canSaveEdit} className="flex-1 rounded border border-teal bg-teal px-2.5 py-1.5 text-[11.5px] font-bold text-navy cursor-pointer disabled:opacity-40" onClick={() => saveEdit(s.id)}>
                           {editSaving ? "Guardando…" : s.reviewStatus === "REJECTED" ? "Reenviar a Bryan" : "Guardar cambios"}
                         </button>
