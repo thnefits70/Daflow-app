@@ -139,6 +139,10 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
   const [emergencyReason, setEmergencyReason] = useState("");
   const [supplier, setSupplier] = useState<PurchaseSupplierDTO | null>(null);
   const [bankAccountId, setBankAccountId] = useState<string | null>(null);
+  // Confirmado 2026-09-14: solo trazabilidad — se llena sola cuando Jariel
+  // viene desde "Listo para comprar" en Análisis de Mercado, nunca se pide
+  // a mano. Nunca cambia ningún otro comportamiento del formulario.
+  const [marketProductProposalId, setMarketProductProposalId] = useState<string | null>(null);
 
   // Confirmado 2026-08-12: pedido explícito del usuario — al elegir
   // proveedor, se ofrece usar el crédito pendiente que ya se tenga con él
@@ -417,6 +421,40 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
       // Borrador corrupto o ilegible — se ignora y se arranca en blanco.
     }
     setHydrated(true);
+  }, []);
+
+  // Confirmado 2026-09-14, pedido explícito del usuario: cuando Jariel viene
+  // desde "Listo para comprar" (Análisis de Mercado), precarga el producto y
+  // el proveedor que Bryan ya eligió, para que no tenga que buscarlos de
+  // nuevo. Nunca pisa un borrador que ya existía — alguien podría estar a
+  // mitad de otra solicitud.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const presetCatalogItemId = params.get("presetCatalogItemId");
+    const presetSupplierId = params.get("presetSupplierId");
+    const presetProposalId = params.get("marketProductProposalId");
+    if (!presetCatalogItemId && !presetSupplierId) return;
+    if (localStorage.getItem(DRAFT_KEY)) return;
+
+    if (presetProposalId) Promise.resolve().then(() => setMarketProductProposalId(presetProposalId));
+    if (presetCatalogItemId) {
+      fetch(`/api/purchase-catalog/${presetCatalogItemId}`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((item) => {
+          if (!item) return;
+          setLines([{ ...emptyLine(), catalogItem: { id: item.id, name: item.name, photos: item.photos } }]);
+          fetchLineStats(0, item.id);
+          fetchSupplierComparison(0, item.id);
+        });
+    }
+    if (presetSupplierId) {
+      fetch(`/api/purchase-suppliers/${presetSupplierId}`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((s) => {
+          if (s) setSupplier(normalizeSupplier(s));
+        });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -757,6 +795,7 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
       creditSkipJustification: needsCreditJustification ? creditSkipJustification.trim() : null,
       isEmergency: emergencyOnly,
       emergencyReason: emergencyOnly ? emergencyReason.trim() : null,
+      marketProductProposalId,
     };
     // Confirmado 2026-08-08: cambio de política — corregir una solicitud
     // rechazada YA NO crea una nueva (eso hacía crecer la lista con

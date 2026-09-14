@@ -44,6 +44,7 @@ type Proposal = {
   brandedBy: { name: string } | null;
   chosenSupplier: { id: string; name: string; paymentMode?: "PREPAGO" | "CREDITO" } | null;
   readyToBuyAt: string | null;
+  catalogItem: { id: string; name: string; photos: string[] } | null;
   supplierPrices: SupplierPrice[];
   traceability?: { totalMinutes: number | null };
   suggestedSupplierId?: string | null;
@@ -65,7 +66,7 @@ function computePreviewPrice(batchCost: number, batchUnits: number, freightCost:
   return (unitCost + fulfillment) / (1 - margin / 100);
 }
 
-type Tab = "proponer" | "mispropuestas" | "precios" | "consulta" | "aprobacion" | "publicar" | "brandear" | "trazabilidad";
+type Tab = "proponer" | "mispropuestas" | "listoparacomprar" | "precios" | "consulta" | "aprobacion" | "publicar" | "brandear" | "trazabilidad";
 
 export function MarketProductPanel({
   canPropose,
@@ -93,6 +94,13 @@ export function MarketProductPanel({
     // antes GET ?view=mine existía en la API pero ninguna pantalla lo
     // consumía.
     ...(canPropose ? [{ key: "mispropuestas" as Tab, label: "Mis propuestas" }] : []),
+    // Confirmado 2026-09-14, pedido explícito del usuario: antes, cuando
+    // Bryan marcaba "listo para comprar", a Jariel solo le llegaba un aviso
+    // pero no tenía ninguna pantalla para actuar — tenía que acordarse solo
+    // y armar la solicitud de compra de cero. Ahora ve la lista acá mismo y
+    // puede saltar directo a Control de Compras con el producto y el
+    // proveedor ya elegidos.
+    ...(canPropose ? [{ key: "listoparacomprar" as Tab, label: "Listo para comprar" }] : []),
     // Confirmado 2026-09-10, pedido de Jariel: tabla de historial de
     // precios — un registro por producto, para consultar cómo se armó el
     // precio de venta. Visible a quien propone y a quien revisa.
@@ -126,6 +134,7 @@ export function MarketProductPanel({
       </div>
       {tab === "proponer" && <ProposeForm />}
       {tab === "mispropuestas" && <MyProposalsView />}
+      {tab === "listoparacomprar" && <ReadyToBuyQueue />}
       {tab === "precios" && <PricingHistoryTable />}
       {tab === "consulta" && <PricingConsultaTable />}
       {tab === "aprobacion" && <ReviewQueue canAct={canActOnReview} />}
@@ -914,6 +923,70 @@ function MyProposalsView() {
             )}
             {p.status === "PENDING_APPROVAL" && (
               <div className="text-[12px] text-steel">Propuesto — {formatDateTime(p.proposedAt)}</div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// Confirmado 2026-09-14, pedido explícito del usuario: antes, cuando Bryan
+// marcaba un producto "listo para comprar", a Jariel solo le llegaba el
+// aviso — no había ninguna pantalla para retomar desde ahí, tenía que
+// acordarse solo y armar la solicitud de compra de cero en Control de
+// Compras. Este tab consume la vista view=ready-to-buy (ya existía en la
+// API, pero ninguna pantalla la usaba) y deja saltar directo a Control de
+// Compras con el producto y el proveedor ya elegidos precargados — ver el
+// nuevo efecto que lee presetCatalogItemId/presetSupplierId en
+// PurchaseRequestForm.tsx. Se navega con <a href> (no router.push) a
+// propósito: ?tab=/?ptab= en Control de Compras se leen en un efecto que
+// solo corre al montar, así que hace falta una navegación real, no un
+// cambio de ruta del lado del cliente.
+function ReadyToBuyQueue() {
+  const [rows, setRows] = useState<Proposal[] | null>(null);
+
+  useEffect(() => {
+    fetch("/api/market-products?view=ready-to-buy").then((r) => (r.ok ? r.json() : [])).then(setRows).catch(() => setRows([]));
+  }, []);
+
+  if (rows === null) return <div className="text-steel text-[13px]">Cargando…</div>;
+  if (rows.length === 0) return <div className="text-steel text-[13.5px]">No hay productos listos para comprar todavía.</div>;
+
+  function buyUrl(p: Proposal): string | null {
+    if (!p.catalogItem || !p.chosenSupplier) return null;
+    const params = new URLSearchParams({
+      tab: "compras",
+      ptab: "solicitar",
+      presetCatalogItemId: p.catalogItem.id,
+      presetSupplierId: p.chosenSupplier.id,
+      marketProductProposalId: p.id,
+    });
+    return `/area/workspace?${params.toString()}`;
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      {rows.map((p) => {
+        const url = buyUrl(p);
+        return (
+          <div key={p.id} className="bg-surface border border-rule rounded-md p-3.5">
+            <div className="font-semibold text-[13.5px] mb-1.5">{p.code} — {p.productName}</div>
+            <div className="text-[12.5px] text-steel mb-2.5">
+              Proveedor elegido: <b className="text-ink">{p.chosenSupplier?.name ?? "—"}</b>
+              {p.chosenSupplier?.paymentMode === "CREDITO" && (
+                <span className="ml-1 font-semibold" style={{ color: "#D9A441" }}>
+                  (crédito)
+                </span>
+              )}
+              {" · "}Listo desde {p.readyToBuyAt ? formatDateTime(p.readyToBuyAt) : "—"}
+            </div>
+            {url ? (
+              <a href={url} className="inline-flex items-center gap-1.5 text-[12px] font-bold text-navy bg-teal border border-teal rounded px-3 py-1.5 cursor-pointer">
+                Comprar en Control de Compras
+              </a>
+            ) : (
+              <div className="text-[11.5px] text-red">Falta el producto o el proveedor elegido — avísale al admin.</div>
             )}
           </div>
         );
