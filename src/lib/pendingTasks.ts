@@ -1175,8 +1175,13 @@ async function getPurchaseMerchandisePaymentsSummary(comDeptId: string | null): 
     return [...byGroup.values()];
   };
 
+  // Confirmado 2026-09-14, mismo bug real reportado por el usuario que en
+  // PurchaseInvoicingPanel.tsx: un proveedor de crédito (hoy CHEN) nunca se
+  // paga por solicitud individual — se excluye acá también para que esta
+  // tarjeta de Inicio no mande a "pagar" algo que en realidad se paga por
+  // tanda desde "Proveedores con Crédito".
   const approvedRows = await prisma.purchaseRequest.findMany({
-    where: { status: "APPROVED" },
+    where: { status: "APPROVED", supplier: { paymentMode: { not: "CREDITO" } } },
     select: { groupId: true, totalCost: true, reviewedAt: true },
   });
 
