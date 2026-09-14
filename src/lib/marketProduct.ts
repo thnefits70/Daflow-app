@@ -1,4 +1,7 @@
 import { prisma } from "@/lib/prisma";
+import { B2B_MARGIN_OPTIONS, B2B_MARGIN_DEFAULT, B2C_FLETE_PROMEDIO } from "@/lib/externalSalesPricingConstants";
+
+export { B2B_MARGIN_OPTIONS, B2B_MARGIN_DEFAULT, B2C_FLETE_PROMEDIO };
 
 // Fase 2 (Análisis de Mercado) — confirmado 2026-09-09 con la especificación
 // completa de Bryan (líder de MKT). Nunca se confía en el precio calculado
@@ -12,6 +15,13 @@ import { prisma } from "@/lib/prisma";
 // unidad. Verificado que el ejemplo real ya validado (resultado 2.395) sigue
 // dando exactamente igual con costo=1 (antes 100) para el mismo lote de 100
 // unidades y flete=10.
+// "Precio puesto en bodega" — proveedor + la parte del flete del lote que le
+// toca a esa unidad. Punto de partida compartido por todos los precios de
+// venta de acá abajo.
+function bodegaUnitCost(batchCost: number, freightCost: number | null, batchUnits: number): number {
+  return batchCost + (freightCost ?? 0) / batchUnits;
+}
+
 export function computeMarketProductSalePrice(params: {
   batchCost: number;
   batchUnits: number;
@@ -20,8 +30,69 @@ export function computeMarketProductSalePrice(params: {
   fulfillmentCost: number;
   marginPercent: number;
 }): number {
-  const unitCost = (params.batchCost + (params.freightCost ?? 0) / params.batchUnits) * (1 + params.insuranceRatePercent / 100);
+  const unitCost = bodegaUnitCost(params.batchCost, params.freightCost, params.batchUnits) * (1 + params.insuranceRatePercent / 100);
   return (unitCost + params.fulfillmentCost) / (1 - params.marginPercent / 100);
+}
+
+// Confirmado 2026-09-14: precios B2B/B2C para Ventas Externas (Heidy/Jariel/
+// Yair venden B2B con pago anticipado; Marcos vende B2C contra entrega o
+// anticipado, siempre menos de 12 unidades). Ver memoria
+// project_external_sales_pricing_tiers_design — fórmulas ya verificadas
+// numéricamente contra un ejemplo real durante el diseño, no re-derivar.
+
+// El costo real del producto, sin ninguna ganancia — bodega + seguro +
+// fulfillment. Queda como valor de referencia/calculable, sin pantalla
+// propia por ahora.
+export function computeBenistockPrice(params: {
+  batchCost: number;
+  batchUnits: number;
+  freightCost: number | null;
+  insuranceRatePercent: number;
+  fulfillmentCost: number;
+}): number {
+  const bodega = bodegaUnitCost(params.batchCost, params.freightCost, params.batchUnits);
+  return bodega * (1 + params.insuranceRatePercent / 100) + params.fulfillmentCost;
+}
+
+// Venta al por mayor (Heidy/Jariel/Yair, siempre pago anticipado). Sin
+// fulfillment ni flete — el margen lo elige el asesor (B2B_MARGIN_OPTIONS),
+// sin mínimo de unidades forzado por el sistema.
+export function computeB2BPrice(params: {
+  batchCost: number;
+  batchUnits: number;
+  freightCost: number | null;
+  insuranceRatePercent: number;
+  marginPercent: number;
+}): number {
+  const bodega = bodegaUnitCost(params.batchCost, params.freightCost, params.batchUnits);
+  const withInsurance = bodega * (1 + params.insuranceRatePercent / 100);
+  return withInsurance / (1 - params.marginPercent / 100);
+}
+
+// El margen de B2C es 100% automático según la cantidad TOTAL de la venta
+// (sumando todos los productos, aunque sean distintos) — nadie lo elige.
+// 12+ unidades ya no es B2C, devuelve null para que el llamador lo rechace.
+export function b2cMarginPercentForQuantity(totalQuantity: number): number | null {
+  if (totalQuantity < 1) return null;
+  if (totalQuantity === 1) return 40;
+  if (totalQuantity <= 11) return 30;
+  return null;
+}
+
+// Venta al por menor (exclusivo Marcos). El flete promedio se suma DESPUÉS
+// de dividir por el margen — no lleva ganancia encima, se pasa tal cual.
+export function computeB2CPrice(params: {
+  batchCost: number;
+  batchUnits: number;
+  freightCost: number | null;
+  insuranceRatePercent: number;
+  totalQuantity: number;
+}): number | null {
+  const marginPercent = b2cMarginPercentForQuantity(params.totalQuantity);
+  if (marginPercent == null) return null;
+  const bodega = bodegaUnitCost(params.batchCost, params.freightCost, params.batchUnits);
+  const withInsurance = bodega * (1 + params.insuranceRatePercent / 100);
+  return withInsurance / (1 - marginPercent / 100) + B2C_FLETE_PROMEDIO;
 }
 
 export async function nextMarketProductProposalNumber(): Promise<number> {

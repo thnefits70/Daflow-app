@@ -3,12 +3,12 @@ import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { canDeclareExternalSales } from "@/lib/guards";
-import { notifyMarketingLeadNewExternalSale } from "@/lib/externalSales";
+import { notifyMarketingLeadNewExternalSale, priceExternalSaleItems } from "@/lib/externalSales";
 
 const schema = z.object({
   catalogItemId: z.string().min(1, "Falta el producto."),
   quantity: z.number().int().positive(),
-  unitPrice: z.number().positive(),
+  marginPercent: z.number().optional(),
 });
 
 async function recomputeSaleTotal(saleId: string) {
@@ -29,7 +29,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const parsed = schema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Datos inválidos." }, { status: 400 });
 
-  const sale = await prisma.externalSale.findUnique({ where: { id }, select: { advisorId: true, reviewStatus: true, code: true } });
+  const sale = await prisma.externalSale.findUnique({ where: { id }, select: { advisorId: true, reviewStatus: true, code: true, isContraEntrega: true } });
   if (!sale) return NextResponse.json({ error: "No encontrado." }, { status: 404 });
   if (sale.advisorId !== session.user.id && session.user.role !== "admin") return NextResponse.json({ error: "No autorizado." }, { status: 403 });
   if (sale.reviewStatus !== "PENDING") return NextResponse.json({ error: "Esta venta ya no está pendiente de revisión." }, { status: 409 });
@@ -41,17 +41,45 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const catalogItem = await prisma.purchaseCatalogItem.findUnique({ where: { id: parsed.data.catalogItemId }, select: { name: true } });
   if (!catalogItem) return NextResponse.json({ error: "Producto no encontrado en el catálogo." }, { status: 404 });
 
-  await prisma.externalSaleItem.update({
-    where: { id: itemId },
-    data: {
-      catalogItemId: parsed.data.catalogItemId,
-      declaredProductName: catalogItem.name,
-      quantity: parsed.data.quantity,
-      unitPrice: parsed.data.unitPrice,
-      totalAmount: parsed.data.quantity * parsed.data.unitPrice,
-      rejectedAt: null,
-      rejectionReason: null,
-    },
+  // En B2C el margen depende de la cantidad TOTAL de la venta (todos los
+  // productos juntos) — hay que recalcular TODOS los renglones, no solo el
+  // que se está corrigiendo, para que no quede uno desactualizado.
+  const otherItems = await prisma.externalSaleItem.findMany({ where: { saleId: id, id: { not: itemId } }, select: { id: true, catalogItemId: true, quantity: true, marginPercentUsed: true } });
+  if (otherItems.some((it) => !it.catalogItemId)) return NextResponse.json({ error: "Uno de los otros productos de la venta no tiene un código de catálogo válido." }, { status: 409 });
+
+  const priced = await priceExternalSaleItems({
+    isContraEntrega: sale.isContraEntrega,
+    items: [
+      { catalogItemId: parsed.data.catalogItemId, quantity: parsed.data.quantity, marginPercent: parsed.data.marginPercent },
+      ...otherItems.map((it) => ({ catalogItemId: it.catalogItemId!, quantity: it.quantity, marginPercent: it.marginPercentUsed ?? undefined })),
+    ],
+  });
+  if (!priced.ok) return NextResponse.json({ error: priced.error }, { status: 400 });
+  // priced.items[0] es el renglón que se está corrigiendo, el resto están
+  // en el mismo orden que otherItems (emparejar por posición, nunca por
+  // catalogItemId — ver el comentario en priceExternalSaleItems).
+  const [fixedPrice, ...otherPrices] = priced.items;
+
+  await prisma.$transaction(async (tx) => {
+    await tx.externalSaleItem.update({
+      where: { id: itemId },
+      data: {
+        catalogItemId: parsed.data.catalogItemId,
+        declaredProductName: catalogItem.name,
+        quantity: parsed.data.quantity,
+        unitPrice: fixedPrice.unitPrice,
+        totalAmount: parsed.data.quantity * fixedPrice.unitPrice,
+        marginPercentUsed: fixedPrice.marginPercentUsed,
+        rejectedAt: null,
+        rejectionReason: null,
+      },
+    });
+    for (let i = 0; i < otherItems.length; i++) {
+      const it = otherItems[i];
+      const price = otherPrices[i];
+      if (price.marginPercentUsed === it.marginPercentUsed) continue; // sin cambios (siempre el caso en B2B)
+      await tx.externalSaleItem.update({ where: { id: it.id }, data: { unitPrice: price.unitPrice, totalAmount: it.quantity * price.unitPrice, marginPercentUsed: price.marginPercentUsed } });
+    }
   });
   await recomputeSaleTotal(id);
   await notifyMarketingLeadNewExternalSale(sale.code);

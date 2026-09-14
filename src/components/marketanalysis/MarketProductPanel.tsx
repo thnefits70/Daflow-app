@@ -64,7 +64,7 @@ function computePreviewPrice(batchCost: number, batchUnits: number, freightCost:
   return (unitCost + fulfillment) / (1 - margin / 100);
 }
 
-type Tab = "proponer" | "mispropuestas" | "precios" | "aprobacion" | "publicar" | "brandear" | "trazabilidad";
+type Tab = "proponer" | "mispropuestas" | "precios" | "consulta" | "aprobacion" | "publicar" | "brandear" | "trazabilidad";
 
 export function MarketProductPanel({
   canPropose,
@@ -73,6 +73,8 @@ export function MarketProductPanel({
   canPublish,
   canBrand,
   canDecidePurchase,
+  canViewB2BPricing,
+  canViewB2CPricing,
 }: {
   canPropose: boolean;
   canReview: boolean;
@@ -80,6 +82,8 @@ export function MarketProductPanel({
   canPublish: boolean;
   canBrand: boolean;
   canDecidePurchase: boolean;
+  canViewB2BPricing: boolean;
+  canViewB2CPricing: boolean;
 }) {
   const tabs: { key: Tab; label: string }[] = [
     ...(canPropose ? [{ key: "proponer" as Tab, label: "Proponer" }] : []),
@@ -92,6 +96,10 @@ export function MarketProductPanel({
     // precios — un registro por producto, para consultar cómo se armó el
     // precio de venta. Visible a quien propone y a quien revisa.
     ...(canPropose || canReview ? [{ key: "precios" as Tab, label: "Historial de precios" }] : []),
+    // Confirmado 2026-09-14: solo consulta de precio de venta (B2B o B2C
+    // según quién pregunta) para quien vende por Ventas Externas — sin
+    // acceso a los costos crudos de la calculadora de Jariel.
+    ...(canViewB2BPricing || canViewB2CPricing ? [{ key: "consulta" as Tab, label: "Consulta de precios" }] : []),
     ...(canReview ? [{ key: "aprobacion" as Tab, label: "Aprobación" }] : []),
     ...(canPublish ? [{ key: "publicar" as Tab, label: "Publicar en Dropi" }] : []),
     ...(canBrand ? [{ key: "brandear" as Tab, label: "Brandear" }] : []),
@@ -118,6 +126,7 @@ export function MarketProductPanel({
       {tab === "proponer" && <ProposeForm />}
       {tab === "mispropuestas" && <MyProposalsView />}
       {tab === "precios" && <PricingHistoryTable />}
+      {tab === "consulta" && <PricingConsultaTable />}
       {tab === "aprobacion" && <ReviewQueue canAct={canActOnReview} />}
       {tab === "publicar" && <PublishQueue />}
       {tab === "brandear" && <BrandQueue />}
@@ -699,6 +708,78 @@ function PricingHistoryTable() {
         </table>
         {filtered.length === 0 && <div className="px-3 py-4 text-[12.5px] text-steel">Sin resultados.</div>}
       </div>
+    </div>
+  );
+}
+
+type ConsultaRow = {
+  catalogItem: { id: string; name: string; justCode: string | null; photos: string[] };
+  b2bPriceDefault?: number;
+  b2cPrice1Unit?: number;
+  b2cPrice2to11?: number;
+};
+
+// Confirmado 2026-09-14: pantalla de solo consulta — buscar un producto y
+// ver a qué precio venderlo, sin ningún dato de costo ni declarar nada.
+// Mismo patrón de búsqueda por nombre/código que ExpirationLotsPanel.tsx.
+function PricingConsultaTable() {
+  const [rows, setRows] = useState<ConsultaRow[] | null>(null);
+  const [query, setQuery] = useState("");
+
+  useEffect(() => {
+    fetch("/api/market-products?view=consulta").then((r) => (r.ok ? r.json() : [])).then(setRows).catch(() => setRows([]));
+  }, []);
+
+  if (rows === null) return <div className="text-steel text-[13px]">Cargando…</div>;
+
+  const q = query.trim().toLowerCase();
+  const filtered = q ? rows.filter((r) => r.catalogItem.name.toLowerCase().includes(q) || (r.catalogItem.justCode ?? "").toLowerCase().includes(q)) : rows;
+
+  return (
+    <div>
+      <input
+        className="w-full max-w-sm rounded border border-rule px-2.5 py-1.5 text-[13px] mb-3"
+        placeholder="Buscar producto o código…"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+      />
+      {filtered.length === 0 ? (
+        <div className="text-[12.5px] text-steel">
+          {rows.length === 0 ? "Todavía no hay ningún producto con precio calculado." : "Sin resultados."}
+        </div>
+      ) : (
+        <div className="flex flex-col gap-1.5">
+          {filtered.map((r) => (
+            <div key={r.catalogItem.id} className="flex items-center gap-2.5 bg-surface border border-rule rounded-md p-2.5">
+              {r.catalogItem.photos[0] && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={r.catalogItem.photos[0]} alt={r.catalogItem.name} className="w-10 h-10 object-cover rounded border border-rule shrink-0" />
+              )}
+              <div className="flex-1 min-w-0">
+                <div className="text-[13px] font-semibold truncate">{r.catalogItem.name}</div>
+                {r.catalogItem.justCode && <div className="text-[10.5px] font-mono text-steel">{r.catalogItem.justCode}</div>}
+              </div>
+              <div className="text-right shrink-0">
+                {r.b2bPriceDefault != null && (
+                  <div className="text-[13px] font-bold text-teal">
+                    {money(r.b2bPriceDefault)} <span className="text-[10px] font-normal text-steel">B2B · 20%</span>
+                  </div>
+                )}
+                {r.b2cPrice1Unit != null && (
+                  <div className="text-[11.5px] text-ink">
+                    1 un: <span className="font-bold">{money(r.b2cPrice1Unit)}</span>
+                  </div>
+                )}
+                {r.b2cPrice2to11 != null && (
+                  <div className="text-[11.5px] text-ink">
+                    2-11 un: <span className="font-bold">{money(r.b2cPrice2to11)}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

@@ -7,8 +7,18 @@ import {
   canReviewMarketProduct,
   canPublishMarketProduct,
   canBrandMarketProduct,
+  canViewB2BPricing,
+  canViewB2CPricing,
 } from "@/lib/guards";
-import { computeMarketProductSalePrice, nextMarketProductProposalNumber, formatMarketProductProposalCode } from "@/lib/marketProduct";
+import {
+  computeMarketProductSalePrice,
+  computeB2BPrice,
+  computeB2CPrice,
+  pickPrimarySupplierPrice,
+  B2B_MARGIN_DEFAULT,
+  nextMarketProductProposalNumber,
+  formatMarketProductProposalCode,
+} from "@/lib/marketProduct";
 
 const supplierPriceSchema = z.object({
   supplierId: z.string(),
@@ -203,6 +213,40 @@ export async function GET(req: NextRequest) {
       include: includeFull,
       orderBy: { proposedAt: "desc" },
     });
+    return NextResponse.json(rows);
+  }
+
+  // Confirmado 2026-09-14: pantalla de solo consulta para quien vende por
+  // Ventas Externas (Heidy/Yair/Jariel/Bryan ven B2B, Marcos ve B2C) — nunca
+  // expone supplierPrices/batchCost, solo el precio de venta que a cada
+  // quien le toca. Mismo criterio de elegibilidad que
+  // priceExternalSaleItems (lib/externalSales.ts): solo productos con
+  // catalogItemId ligado (ya brandeados).
+  if (view === "consulta") {
+    const [canB2B, canB2C] = await Promise.all([canViewB2BPricing(), canViewB2CPricing()]);
+    if (!canB2B && !canB2C) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+
+    const proposals = await prisma.marketProductProposal.findMany({
+      where: { catalogItemId: { not: null } },
+      include: { supplierPrices: true, catalogItem: { select: { id: true, name: true, justCode: true, photos: true } } },
+      orderBy: { productName: "asc" },
+    });
+
+    const rows = proposals
+      .filter((p) => p.catalogItem)
+      .map((p) => {
+        const supplier = pickPrimarySupplierPrice(p.supplierPrices);
+        if (!supplier) return null;
+        const base = { batchCost: supplier.batchCost, batchUnits: supplier.batchUnits, freightCost: supplier.freightCost, insuranceRatePercent: p.insuranceRatePercent };
+        return {
+          catalogItem: p.catalogItem,
+          b2bPriceDefault: canB2B ? computeB2BPrice({ ...base, marginPercent: B2B_MARGIN_DEFAULT }) : undefined,
+          b2cPrice1Unit: canB2C ? computeB2CPrice({ ...base, totalQuantity: 1 }) : undefined,
+          b2cPrice2to11: canB2C ? computeB2CPrice({ ...base, totalQuantity: 2 }) : undefined,
+        };
+      })
+      .filter((r): r is NonNullable<typeof r> => r !== null);
+
     return NextResponse.json(rows);
   }
 

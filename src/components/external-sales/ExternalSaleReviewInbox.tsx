@@ -11,6 +11,7 @@ type SaleItemDTO = {
   quantity: number;
   unitPrice: number;
   totalAmount: number;
+  marginPercentUsed: number | null;
   rejectedAt: string | null;
   rejectionReason: string | null;
 };
@@ -112,7 +113,10 @@ export function ExternalSaleReviewInbox() {
                     {it.catalogItem && <CatalogCode code={it.catalogItem.justCode} />}
                     <span>{it.catalogItem?.name ?? it.declaredProductName}</span>
                   </div>
-                  <div className="text-[11.5px] text-steel">{it.quantity} un. × ${it.unitPrice.toFixed(2)} = <span className="font-bold text-ink">${it.totalAmount.toFixed(2)}</span></div>
+                  <div className="text-[11.5px] text-steel">
+                    {it.quantity} un. × ${it.unitPrice.toFixed(2)} = <span className="font-bold text-ink">${it.totalAmount.toFixed(2)}</span>
+                    {it.marginPercentUsed != null && <span className="ml-1.5 text-[10.5px] font-semibold text-teal">({it.marginPercentUsed}% de ganancia)</span>}
+                  </div>
 
                   {it.rejectedAt ? (
                     <div className="text-[11px] text-red mt-1">Rechazado: {it.rejectionReason} — esperando que {s.advisor?.name ?? "el asesor"} lo corrija.</div>

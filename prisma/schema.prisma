@@ -331,6 +331,15 @@ model User {
   canPublishMarketProduct Boolean @default(false)
   canBrandMarketProduct   Boolean @default(false)
 
+  // Confirmado 2026-09-14: pantalla de solo consulta "Consulta de precios" —
+  // Jariel/Bryan ya ven B2B por su rol existente en Análisis de Mercado
+  // (canProposeMarketProduct/canReviewMarketProduct); estos dos flags cubren
+  // a quien NO tiene ese rol pero igual necesita ver un precio de venta para
+  // vender por Ventas Externas: Heidy y Yair ven B2B, Marcos ve B2C. Mismo
+  // patrón delegado que canPublishMarketProduct/canBrandMarketProduct.
+  canViewB2BPricing Boolean @default(false)
+  canViewB2CPricing Boolean @default(false)
+
   // Confirmado 2026-09-08: pedido explícito del usuario — Daniel registra
   // cada semana la cantidad de almuerzos pedidos (convenio con el
   // restaurante a un precio fijo por almuerzo, IVA incluido); el monto se
@@ -5394,6 +5403,12 @@ model ExternalSaleItem {
   quantity            Int
   unitPrice           Float
   totalAmount         Float // quantity * unitPrice
+
+  // Confirmado 2026-09-14: precios B2B/B2C — el % de ganancia con el que se
+  // calculó unitPrice, congelado al declarar (mismo espíritu que
+  // ExternalSale.isContraEntrega se congela al crear la venta). Nullable
+  // porque las ventas declaradas antes de este cambio no lo tienen.
+  marginPercentUsed Float?
 
   rejectedAt      DateTime?
   rejectionReason String?

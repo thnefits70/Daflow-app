@@ -8,6 +8,7 @@ import { uploadFile } from "@/lib/uploadFile";
 import { usePasteFile } from "@/lib/usePasteFile";
 import { formatDateTime } from "@/lib/formatDateTime";
 import { CatalogCode } from "@/components/shared/CatalogCode";
+import { B2B_MARGIN_OPTIONS, B2B_MARGIN_DEFAULT } from "@/lib/externalSalesPricingConstants";
 
 type SaleItemDTO = {
   id: string;
@@ -17,6 +18,7 @@ type SaleItemDTO = {
   quantity: number;
   unitPrice: number;
   totalAmount: number;
+  marginPercentUsed: number | null;
   rejectedAt: string | null;
   rejectionReason: string | null;
 };
@@ -39,29 +41,92 @@ type SaleDTO = {
   deletedAt: string | null;
 };
 
-type DraftItem = { product: MatchCatalogItem; quantity: string; unitPrice: string };
+// Confirmado 2026-09-14: ya no se escribe un precio a mano — se calcula
+// solo según el tipo de venta (B2B/B2C) y la cantidad. marginPercent solo
+// tiene efecto real en B2B (el asesor lo elige); en B2C queda sin usar.
+type DraftItem = { product: MatchCatalogItem; quantity: string; marginPercent: number };
+
+type PreviewRow = { unitPrice: number; marginPercentUsed: number };
 
 function isValidQty(qty: string) {
   const n = Number(qty);
   return qty.trim() !== "" && Number.isInteger(n) && n > 0;
 }
 
-// Cantidad (unidades enteras, acento azul) y Precio unitario (acepta
-// centavos, acento verde) comparten forma pero se distinguen a propósito:
-// declarar ventas mezclaba ambos campos por error (12.99 "unidades").
-function QtyPriceFields({
+// Recalcula en vivo contra el servidor (nunca se confía en un precio que
+// calcule el propio navegador) cada vez que cambian los productos,
+// cantidades o el margen elegido — con un pequeño debounce para no
+// disparar una llamada por cada tecla.
+function usePricePreview(isContraEntrega: boolean | null, items: DraftItem[]) {
+  const [preview, setPreview] = useState<PreviewRow[] | null>(null);
+  const [error, setError] = useState("");
+
+  const itemsReady = isContraEntrega !== null && items.length > 0 && items.every((it) => isValidQty(it.quantity));
+
+  useEffect(() => {
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      if (cancelled) return;
+      if (!itemsReady) {
+        setPreview(null);
+        setError("");
+        return;
+      }
+      fetch("/api/external-sales/price-preview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          items: items.map((it) => ({ catalogItemId: it.product.id, quantity: Number(it.quantity), marginPercent: isContraEntrega ? undefined : it.marginPercent })),
+        }),
+      })
+        .then(async (r) => {
+          const data = await r.json().catch(() => null);
+          if (cancelled) return;
+          if (!r.ok) {
+            setError(data?.error ?? "No se pudo calcular el precio.");
+            setPreview(null);
+            return;
+          }
+          setError("");
+          setPreview(data.items);
+        })
+        .catch(() => {
+          if (!cancelled) {
+            setError("No se pudo calcular el precio.");
+            setPreview(null);
+          }
+        });
+    }, 300);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [isContraEntrega, items, itemsReady]);
+
+  return { preview, error };
+}
+
+// Cantidad, en unidades enteras — el precio ya no se escribe, se calcula
+// solo (ver usePricePreview). En B2B, el asesor elige el margen de
+// ganancia; en B2C no hay nada que elegir.
+function QtyMarginFields({
   qty,
-  price,
   onQtyChange,
-  onPriceChange,
+  isContraEntrega,
+  marginMode,
+  marginPercent,
+  onMarginChange,
 }: {
   qty: string;
-  price: string;
   onQtyChange: (v: string) => void;
-  onPriceChange: (v: string) => void;
+  isContraEntrega: boolean;
+  marginMode: "same" | "per-item";
+  marginPercent: number;
+  onMarginChange: (v: number) => void;
 }) {
   const qtyNum = Number(qty);
   const qtyHasDecimal = qty.trim() !== "" && !Number.isNaN(qtyNum) && !Number.isInteger(qtyNum);
+  const showMarginSelect = !isContraEntrega && marginMode === "per-item";
 
   return (
     <div className="flex gap-2.5 mb-2">
@@ -81,27 +146,91 @@ function QtyPriceFields({
             onChange={(e) => onQtyChange(e.target.value)}
           />
         </div>
-        {qtyHasDecimal && (
-          <div className="text-red text-[10.5px] mt-1">
-            La cantidad debe ser un número entero (1, 2, 3…). ¿Quisiste escribir {qty} en Precio unitario?
-          </div>
-        )}
+        {qtyHasDecimal && <div className="text-red text-[10.5px] mt-1">La cantidad debe ser un número entero (1, 2, 3…).</div>}
       </div>
-      <div className="flex-1">
-        <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">
-          Precio unitario <span className="normal-case font-normal text-green">· acepta centavos</span>
-        </label>
-        <div className="relative">
-          <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[13px] font-bold text-green">$</span>
-          <input
-            type="number"
-            min={0}
-            step="0.01"
-            className="w-full rounded border border-green/30 bg-green/5 pl-6 pr-2.5 py-1.5 text-[13px] font-bold"
-            value={price}
-            onChange={(e) => onPriceChange(e.target.value)}
-          />
+      {showMarginSelect && (
+        <div className="flex-1">
+          <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Ganancia de este producto</label>
+          <select
+            className="w-full rounded border border-teal/30 bg-teal/5 px-2.5 py-1.5 text-[13px] font-bold"
+            value={marginPercent}
+            onChange={(e) => onMarginChange(Number(e.target.value))}
+          >
+            {B2B_MARGIN_OPTIONS.map((m) => (
+              <option key={m} value={m}>
+                {m}%
+              </option>
+            ))}
+          </select>
         </div>
+      )}
+    </div>
+  );
+}
+
+// Formulario de "corregir un producto rechazado" — componente aparte
+// (necesita su propio usePricePreview, un hook no puede llamarse dentro de
+// un .map() condicional).
+function FixItemForm({
+  product,
+  qty,
+  onQtyChange,
+  marginPercent,
+  onMarginChange,
+  isContraEntrega,
+  error,
+  saving,
+  onCancel,
+  onChangeProduct,
+  onSave,
+}: {
+  product: MatchCatalogItem;
+  qty: string;
+  onQtyChange: (v: string) => void;
+  marginPercent: number;
+  onMarginChange: (v: number) => void;
+  isContraEntrega: boolean;
+  error: string;
+  saving: boolean;
+  onCancel: () => void;
+  onChangeProduct: () => void;
+  onSave: () => void;
+}) {
+  const draftItems: DraftItem[] = isValidQty(qty) ? [{ product, quantity: qty, marginPercent }] : [];
+  const { preview, error: previewError } = usePricePreview(isContraEntrega, draftItems);
+  const previewReady = !!preview && preview.length === 1;
+
+  return (
+    <div>
+      <div className="flex items-center gap-2.5 bg-surface border border-rule rounded-md p-2 mb-2">
+        {product.photos[0] && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={product.photos[0]} alt={product.name} className="w-9 h-9 object-cover rounded border border-rule shrink-0" />
+        )}
+        <div className="flex-1 min-w-0 text-[12px] font-semibold flex items-center gap-1.5">
+          <CatalogCode code={product.justCode} />
+          <span className="truncate">{product.name}</span>
+        </div>
+        <button type="button" className="shrink-0 text-[11px] font-semibold text-blue cursor-pointer" onClick={onChangeProduct}>Cambiar</button>
+      </div>
+      <QtyMarginFields qty={qty} onQtyChange={onQtyChange} isContraEntrega={isContraEntrega} marginMode="per-item" marginPercent={marginPercent} onMarginChange={onMarginChange} />
+      {draftItems.length > 0 && (
+        <div className="text-[12px] mb-2">
+          {previewReady ? (
+            <>
+              Precio: <span className="font-bold text-teal">${preview![0].unitPrice.toFixed(2)}</span> <span className="text-steel">({preview![0].marginPercentUsed}% de ganancia)</span>
+            </>
+          ) : (
+            <span className="text-steel">calculando precio…</span>
+          )}
+        </div>
+      )}
+      {(error || previewError) && <div className="text-red text-[11px] mb-1.5">{error || previewError}</div>}
+      <div className="flex gap-2">
+        <button type="button" className="flex-1 rounded border border-rule px-2.5 py-1.5 text-[11.5px] font-semibold cursor-pointer" onClick={onCancel}>Cancelar</button>
+        <button type="button" disabled={saving || !previewReady} className="flex-1 rounded border border-teal bg-teal px-2.5 py-1.5 text-[11.5px] font-bold text-navy cursor-pointer disabled:opacity-40" onClick={onSave}>
+          {saving ? "Guardando…" : "Reenviar este producto"}
+        </button>
       </div>
     </div>
   );
@@ -133,21 +262,53 @@ function statusLabel(s: SaleDTO): { text: string; color: string } {
 }
 
 // Constructor de productos, reutilizado al declarar una venta nueva y al
-// corregir y reenviar una venta rechazada completa.
-function ItemsEditor({ items, onChange, searchUrl }: { items: DraftItem[]; onChange: (items: DraftItem[]) => void; searchUrl: string }) {
+// corregir y reenviar una venta rechazada completa. El precio ya no se
+// escribe — se calcula solo (ver usePricePreview), incluyendo el producto
+// que se está por agregar, para que el asesor vea el precio ANTES de
+// confirmarlo.
+function ItemsEditor({
+  items,
+  onChange,
+  searchUrl,
+  isContraEntrega,
+}: {
+  items: DraftItem[];
+  onChange: (items: DraftItem[]) => void;
+  searchUrl: string;
+  isContraEntrega: boolean | null;
+}) {
   const [picking, setPicking] = useState(items.length === 0);
   const [draftProduct, setDraftProduct] = useState<MatchCatalogItem | null>(null);
   const [draftQty, setDraftQty] = useState("");
-  const [draftPrice, setDraftPrice] = useState("");
+  const [draftMarginPercent, setDraftMarginPercent] = useState(B2B_MARGIN_DEFAULT);
+  const [marginMode, setMarginMode] = useState<"same" | "per-item">("same");
+  const [sameMarginPercent, setSameMarginPercent] = useState(B2B_MARGIN_DEFAULT);
+
+  const draftValid = !!draftProduct && isValidQty(draftQty);
+  const previewItems: DraftItem[] = draftValid ? [...items, { product: draftProduct!, quantity: draftQty, marginPercent: draftMarginPercent }] : items;
+  const { preview, error: previewError } = usePricePreview(isContraEntrega, previewItems);
+  const previewReady = !!preview && preview.length === previewItems.length;
+
+  // Modo "mismo % para toda la venta": cambiar el selector aplica ese
+  // margen a TODOS los renglones ya agregados, de una — así items[i].margin
+  // siempre queda listo para enviar, sin depender del modo al momento de
+  // guardar.
+  function setSameMarginForAll(m: number) {
+    setSameMarginPercent(m);
+    if (items.length > 0) onChange(items.map((it) => ({ ...it, marginPercent: m })));
+  }
+  function switchToSameMode() {
+    setMarginMode("same");
+    if (items.length > 0) onChange(items.map((it) => ({ ...it, marginPercent: sameMarginPercent })));
+  }
 
   function addDraft() {
-    if (!draftProduct) return;
-    const price = Number(draftPrice) || 0;
-    if (!isValidQty(draftQty) || price <= 0) return;
-    onChange([...items, { product: draftProduct, quantity: draftQty, unitPrice: draftPrice }]);
+    if (!draftProduct || !isValidQty(draftQty)) return;
+    const marginPercent = marginMode === "same" ? sameMarginPercent : draftMarginPercent;
+    onChange([...items, { product: draftProduct, quantity: draftQty, marginPercent }]);
     setDraftProduct(null);
     setDraftQty("");
-    setDraftPrice("");
+    setDraftMarginPercent(marginMode === "same" ? sameMarginPercent : B2B_MARGIN_DEFAULT);
     setPicking(false);
   }
 
@@ -155,10 +316,38 @@ function ItemsEditor({ items, onChange, searchUrl }: { items: DraftItem[]; onCha
     onChange(items.filter((_, idx) => idx !== i));
   }
 
-  const total = items.reduce((sum, it) => sum + (Number(it.quantity) || 0) * (Number(it.unitPrice) || 0), 0);
+  function updateQty(i: number, qty: string) {
+    onChange(items.map((it, idx) => (idx === i ? { ...it, quantity: qty } : it)));
+  }
+
+  function updateMargin(i: number, m: number) {
+    onChange(items.map((it, idx) => (idx === i ? { ...it, marginPercent: m } : it)));
+  }
+
+  const total = preview ? preview.slice(0, items.length).reduce((sum, p, i) => sum + (Number(items[i].quantity) || 0) * p.unitPrice, 0) : 0;
 
   return (
     <div className="flex flex-col gap-2.5">
+      {isContraEntrega === false && (
+        <div className="flex items-center gap-3 text-[11px] font-semibold">
+          <label className="flex items-center gap-1 cursor-pointer">
+            <input type="radio" checked={marginMode === "same"} onChange={switchToSameMode} /> Mismo % para toda la venta
+          </label>
+          <label className="flex items-center gap-1 cursor-pointer">
+            <input type="radio" checked={marginMode === "per-item"} onChange={() => setMarginMode("per-item")} /> % por producto
+          </label>
+          {marginMode === "same" && (
+            <select className="rounded border border-teal/30 bg-teal/5 px-2 py-1 text-[12px] font-bold" value={sameMarginPercent} onChange={(e) => setSameMarginForAll(Number(e.target.value))}>
+              {B2B_MARGIN_OPTIONS.map((m) => (
+                <option key={m} value={m}>
+                  {m}%
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
+      )}
+
       {items.length > 0 && (
         <div className="flex flex-col gap-1.5">
           {items.map((it, i) => (
@@ -172,8 +361,33 @@ function ItemsEditor({ items, onChange, searchUrl }: { items: DraftItem[]; onCha
                   <CatalogCode code={it.product.justCode} />
                   <span className="truncate">{it.product.name}</span>
                 </div>
-                <div className="text-steel">
-                  {Number(it.quantity) || 0} un. × ${(Number(it.unitPrice) || 0).toFixed(2)} = ${((Number(it.quantity) || 0) * (Number(it.unitPrice) || 0)).toFixed(2)}
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min={1}
+                    step={1}
+                    className="w-14 rounded border border-blue/30 bg-blue/5 px-1.5 py-0.5 text-[12px] font-bold"
+                    value={it.quantity}
+                    onChange={(e) => updateQty(i, e.target.value)}
+                  />
+                  {isContraEntrega === false && marginMode === "per-item" && (
+                    <select className="rounded border border-teal/30 bg-teal/5 px-1.5 py-0.5 text-[11.5px] font-bold" value={it.marginPercent} onChange={(e) => updateMargin(i, Number(e.target.value))}>
+                      {B2B_MARGIN_OPTIONS.map((m) => (
+                        <option key={m} value={m}>
+                          {m}%
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                  <span className="text-steel">
+                    {previewReady ? (
+                      <>
+                        × ${preview![i].unitPrice.toFixed(2)} = <span className="font-bold text-ink">${((Number(it.quantity) || 0) * preview![i].unitPrice).toFixed(2)}</span>
+                      </>
+                    ) : (
+                      "calculando…"
+                    )}
+                  </span>
                 </div>
               </div>
               <button type="button" className="shrink-0 text-[11px] font-semibold text-red cursor-pointer" onClick={() => removeAt(i)}>Quitar</button>
@@ -182,6 +396,8 @@ function ItemsEditor({ items, onChange, searchUrl }: { items: DraftItem[]; onCha
           <div className="text-[12px] font-bold">Total: ${total.toFixed(2)}</div>
         </div>
       )}
+
+      {previewError && <div className="text-red text-[11.5px]">{previewError}</div>}
 
       {picking ? (
         draftProduct ? (
@@ -197,14 +413,33 @@ function ItemsEditor({ items, onChange, searchUrl }: { items: DraftItem[]; onCha
               </div>
               <button type="button" className="shrink-0 text-[11px] font-semibold text-blue cursor-pointer" onClick={() => setDraftProduct(null)}>Cambiar</button>
             </div>
-            <QtyPriceFields qty={draftQty} price={draftPrice} onQtyChange={setDraftQty} onPriceChange={setDraftPrice} />
+            <QtyMarginFields
+              qty={draftQty}
+              onQtyChange={setDraftQty}
+              isContraEntrega={isContraEntrega ?? false}
+              marginMode={marginMode}
+              marginPercent={draftMarginPercent}
+              onMarginChange={setDraftMarginPercent}
+            />
+            {draftValid && (
+              <div className="text-[12px] mb-2">
+                {previewReady ? (
+                  <>
+                    Precio: <span className="font-bold text-teal">${preview![items.length].unitPrice.toFixed(2)}</span>{" "}
+                    <span className="text-steel">({preview![items.length].marginPercentUsed}% de ganancia)</span>
+                  </>
+                ) : (
+                  <span className="text-steel">calculando precio…</span>
+                )}
+              </div>
+            )}
             <div className="flex gap-2">
               {items.length > 0 && (
-                <button type="button" className="flex-1 rounded border border-rule px-2.5 py-1.5 text-[11.5px] font-semibold cursor-pointer" onClick={() => { setDraftProduct(null); setDraftQty(""); setDraftPrice(""); setPicking(false); }}>
+                <button type="button" className="flex-1 rounded border border-rule px-2.5 py-1.5 text-[11.5px] font-semibold cursor-pointer" onClick={() => { setDraftProduct(null); setDraftQty(""); setPicking(false); }}>
                   Cancelar
                 </button>
               )}
-              <button type="button" disabled={!(isValidQty(draftQty) && Number(draftPrice) > 0)} className="flex-1 rounded border border-teal bg-teal px-2.5 py-1.5 text-[11.5px] font-bold text-navy cursor-pointer disabled:opacity-40" onClick={addDraft}>
+              <button type="button" disabled={!draftValid || !previewReady} className="flex-1 rounded border border-teal bg-teal px-2.5 py-1.5 text-[11.5px] font-bold text-navy cursor-pointer disabled:opacity-40" onClick={addDraft}>
                 Agregar producto a la venta
               </button>
             </div>
@@ -256,17 +491,24 @@ export function ExternalSaleDeclareForm() {
   const [fixingItem, setFixingItem] = useState<{ saleId: string; itemId: string } | null>(null);
   const [fixProduct, setFixProduct] = useState<MatchCatalogItem | null>(null);
   const [fixQty, setFixQty] = useState("");
-  const [fixPrice, setFixPrice] = useState("");
+  const [fixMarginPercent, setFixMarginPercent] = useState(B2B_MARGIN_DEFAULT);
   const [fixSaving, setFixSaving] = useState(false);
   const [fixError, setFixError] = useState("");
+
+  // Confirmado 2026-09-14: define si esta persona vende B2B (elige margen) o
+  // B2C (margen automático) — se pide una sola vez, nunca cambia mientras
+  // dura la sesión de este formulario.
+  const [isContraEntrega, setIsContraEntrega] = useState<boolean | null>(null);
+  useEffect(() => {
+    fetch("/api/external-sales/my-pricing-mode").then((r) => (r.ok ? r.json() : null)).then((d) => setIsContraEntrega(d ? !!d.isContraEntrega : null));
+  }, []);
 
   function load() {
     fetch("/api/external-sales").then((r) => r.json()).then(setSales).catch(() => setSales([]));
   }
   useEffect(load, []);
 
-  const total = items.reduce((sum, it) => sum + (Number(it.quantity) || 0) * (Number(it.unitPrice) || 0), 0);
-  const canSave = !!client && items.length > 0 && items.every((it) => isValidQty(it.quantity) && Number(it.unitPrice) > 0) && pickupPersonName.trim().length > 0 && !saving;
+  const canSave = !!client && items.length > 0 && items.every((it) => isValidQty(it.quantity)) && pickupPersonName.trim().length > 0 && !saving;
 
   async function save() {
     if (!client || items.length === 0) return;
@@ -275,7 +517,7 @@ export function ExternalSaleDeclareForm() {
     try {
       await postJson("/api/external-sales", {
         clientId: client.id,
-        items: items.map((it) => ({ catalogItemId: it.product.id, quantity: Number(it.quantity), unitPrice: Number(it.unitPrice) })),
+        items: items.map((it) => ({ catalogItemId: it.product.id, quantity: Number(it.quantity), marginPercent: it.marginPercent })),
         pickupPersonName: pickupPersonName.trim(),
         courierNote: courierNote.trim() || undefined,
       });
@@ -298,7 +540,7 @@ export function ExternalSaleDeclareForm() {
       s.items.map((it) => ({
         product: { id: it.catalogItemId ?? "", name: it.catalogItem?.name ?? it.declaredProductName, justCode: it.catalogItem?.justCode ?? null, photos: it.catalogItem?.photos ?? [], pendingRegistration: false },
         quantity: String(it.quantity),
-        unitPrice: String(it.unitPrice),
+        marginPercent: it.marginPercentUsed ?? B2B_MARGIN_DEFAULT,
       }))
     );
     setEditPickupPersonName(s.pickupPersonName);
@@ -306,8 +548,7 @@ export function ExternalSaleDeclareForm() {
     setEditError("");
   }
 
-  const editTotal = editItems.reduce((sum, it) => sum + (Number(it.quantity) || 0) * (Number(it.unitPrice) || 0), 0);
-  const canSaveEdit = !!editClient && editItems.length > 0 && editItems.every((it) => isValidQty(it.quantity) && Number(it.unitPrice) > 0) && editPickupPersonName.trim().length > 0 && !editSaving;
+  const canSaveEdit = !!editClient && editItems.length > 0 && editItems.every((it) => isValidQty(it.quantity)) && editPickupPersonName.trim().length > 0 && !editSaving;
 
   async function saveEdit(saleId: string) {
     if (!editClient || editItems.length === 0) return;
@@ -316,7 +557,7 @@ export function ExternalSaleDeclareForm() {
     try {
       await patchJson(`/api/external-sales/${saleId}`, {
         clientId: editClient.id,
-        items: editItems.map((it) => ({ catalogItemId: it.product.id, quantity: Number(it.quantity), unitPrice: Number(it.unitPrice) })),
+        items: editItems.map((it) => ({ catalogItemId: it.product.id, quantity: Number(it.quantity), marginPercent: it.marginPercent })),
         pickupPersonName: editPickupPersonName.trim(),
         courierNote: editCourierNote.trim() || undefined,
       });
@@ -353,18 +594,17 @@ export function ExternalSaleDeclareForm() {
     setFixingItem({ saleId, itemId: it.id });
     setFixProduct({ id: it.catalogItemId ?? "", name: it.catalogItem?.name ?? it.declaredProductName, justCode: it.catalogItem?.justCode ?? null, photos: it.catalogItem?.photos ?? [], pendingRegistration: false });
     setFixQty(String(it.quantity));
-    setFixPrice(String(it.unitPrice));
+    setFixMarginPercent(it.marginPercentUsed ?? B2B_MARGIN_DEFAULT);
     setFixError("");
   }
 
   async function saveFixItem() {
     if (!fixingItem || !fixProduct) return;
-    const price = Number(fixPrice) || 0;
-    if (!isValidQty(fixQty) || price <= 0) return;
+    if (!isValidQty(fixQty)) return;
     setFixSaving(true);
     setFixError("");
     try {
-      await patchJson(`/api/external-sales/${fixingItem.saleId}/items/${fixingItem.itemId}`, { catalogItemId: fixProduct.id, quantity: Number(fixQty), unitPrice: price });
+      await patchJson(`/api/external-sales/${fixingItem.saleId}/items/${fixingItem.itemId}`, { catalogItemId: fixProduct.id, quantity: Number(fixQty), marginPercent: fixMarginPercent });
       setFixingItem(null);
       setFixProduct(null);
       load();
@@ -424,7 +664,7 @@ export function ExternalSaleDeclareForm() {
           <>
             <div>
               <label className="block mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-steel">Productos</label>
-              <ItemsEditor items={items} onChange={setItems} searchUrl="/api/external-sales/catalog-search" />
+              <ItemsEditor items={items} onChange={setItems} searchUrl="/api/external-sales/catalog-search" isContraEntrega={isContraEntrega} />
             </div>
             <div>
               <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">A quién debe entregarle bodega (motorizado o cliente)</label>
@@ -436,7 +676,7 @@ export function ExternalSaleDeclareForm() {
             </div>
             {error && <div className="text-red text-[11.5px]">{error}</div>}
             <button type="button" disabled={!canSave} className="rounded border border-teal bg-teal px-3 py-2 text-[12.5px] font-bold text-navy cursor-pointer disabled:opacity-40" onClick={save}>
-              {saving ? "Enviando…" : `Declarar venta${total > 0 ? ` — $${total.toFixed(2)}` : ""}`}
+              {saving ? "Enviando…" : "Declarar venta"}
             </button>
           </>
         )}
@@ -463,38 +703,32 @@ export function ExternalSaleDeclareForm() {
                       <div key={it.id}>
                         <div className="text-[12.5px] font-semibold flex items-center gap-1.5 flex-wrap">
                           {it.catalogItem && <CatalogCode code={it.catalogItem.justCode} />}
-                          <span>{it.catalogItem?.name ?? it.declaredProductName} — {it.quantity} un. · ${it.totalAmount.toFixed(2)}</span>
+                          <span>
+                            {it.catalogItem?.name ?? it.declaredProductName} — {it.quantity} un. · ${it.totalAmount.toFixed(2)}
+                            {it.marginPercentUsed != null && <span className="text-[10.5px] font-normal text-steel"> ({it.marginPercentUsed}% de ganancia)</span>}
+                          </span>
                         </div>
                         {s.reviewStatus === "PENDING" && !s.deletedAt && it.rejectedAt && (
                           <div className="bg-red/5 border border-red/30 rounded-md p-2 mt-1">
                             <div className="text-[11px] text-red mb-1.5">Bryan lo rechazó: {it.rejectionReason}</div>
                             {fixingItem?.itemId === it.id ? (
-                              <div>
-                                {fixProduct && (
-                                  <div className="flex items-center gap-2.5 bg-surface border border-rule rounded-md p-2 mb-2">
-                                    {fixProduct.photos[0] && (
-                                      // eslint-disable-next-line @next/next/no-img-element
-                                      <img src={fixProduct.photos[0]} alt={fixProduct.name} className="w-9 h-9 object-cover rounded border border-rule shrink-0" />
-                                    )}
-                                    <div className="flex-1 min-w-0 text-[12px] font-semibold flex items-center gap-1.5">
-                                      <CatalogCode code={fixProduct.justCode} />
-                                      <span className="truncate">{fixProduct.name}</span>
-                                    </div>
-                                    <button type="button" className="shrink-0 text-[11px] font-semibold text-blue cursor-pointer" onClick={() => setFixProduct(null)}>Cambiar</button>
-                                  </div>
-                                )}
-                                {!fixProduct && (
-                                  <ProductMatchPicker referencePhotoUrl={null} searchUrl="/api/external-sales/catalog-search" onConfirm={(r) => setFixProduct(r)} />
-                                )}
-                                <QtyPriceFields qty={fixQty} price={fixPrice} onQtyChange={setFixQty} onPriceChange={setFixPrice} />
-                                {fixError && <div className="text-red text-[11px] mb-1.5">{fixError}</div>}
-                                <div className="flex gap-2">
-                                  <button type="button" className="flex-1 rounded border border-rule px-2.5 py-1.5 text-[11.5px] font-semibold cursor-pointer" onClick={() => setFixingItem(null)}>Cancelar</button>
-                                  <button type="button" disabled={fixSaving || !fixProduct || !(isValidQty(fixQty) && Number(fixPrice) > 0)} className="flex-1 rounded border border-teal bg-teal px-2.5 py-1.5 text-[11.5px] font-bold text-navy cursor-pointer disabled:opacity-40" onClick={saveFixItem}>
-                                    {fixSaving ? "Guardando…" : "Reenviar este producto"}
-                                  </button>
-                                </div>
-                              </div>
+                              fixProduct ? (
+                                <FixItemForm
+                                  product={fixProduct}
+                                  qty={fixQty}
+                                  onQtyChange={setFixQty}
+                                  marginPercent={fixMarginPercent}
+                                  onMarginChange={setFixMarginPercent}
+                                  isContraEntrega={isContraEntrega ?? false}
+                                  error={fixError}
+                                  saving={fixSaving}
+                                  onCancel={() => setFixingItem(null)}
+                                  onChangeProduct={() => setFixProduct(null)}
+                                  onSave={saveFixItem}
+                                />
+                              ) : (
+                                <ProductMatchPicker referencePhotoUrl={null} searchUrl="/api/external-sales/catalog-search" onConfirm={(r) => setFixProduct(r)} />
+                              )
                             ) : (
                               <div className="flex gap-1.5">
                                 <button type="button" className="text-[11px] font-bold text-teal cursor-pointer" onClick={() => startFixItem(s.id, it)}>Corregir</button>
@@ -551,7 +785,7 @@ export function ExternalSaleDeclareForm() {
                       </div>
                       <div>
                         <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Productos</label>
-                        <ItemsEditor items={editItems} onChange={setEditItems} searchUrl="/api/external-sales/catalog-search" />
+                        <ItemsEditor items={editItems} onChange={setEditItems} searchUrl="/api/external-sales/catalog-search" isContraEntrega={isContraEntrega} />
                       </div>
                       <div>
                         <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">A quién debe entregarle bodega</label>
@@ -565,11 +799,7 @@ export function ExternalSaleDeclareForm() {
                       <div className="flex gap-2">
                         <button type="button" className="flex-1 rounded border border-rule px-2.5 py-1.5 text-[11.5px] font-semibold cursor-pointer" onClick={() => setEditingId(null)}>Cancelar</button>
                         <button type="button" disabled={!canSaveEdit} className="flex-1 rounded border border-teal bg-teal px-2.5 py-1.5 text-[11.5px] font-bold text-navy cursor-pointer disabled:opacity-40" onClick={() => saveEdit(s.id)}>
-                          {editSaving
-                            ? "Guardando…"
-                            : s.reviewStatus === "REJECTED"
-                              ? `Reenviar a Bryan${editTotal > 0 ? ` — $${editTotal.toFixed(2)}` : ""}`
-                              : `Guardar cambios${editTotal > 0 ? ` — $${editTotal.toFixed(2)}` : ""}`}
+                          {editSaving ? "Guardando…" : s.reviewStatus === "REJECTED" ? "Reenviar a Bryan" : "Guardar cambios"}
                         </button>
                       </div>
                     </div>

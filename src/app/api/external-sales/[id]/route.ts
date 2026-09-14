@@ -3,12 +3,12 @@ import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { canDeclareExternalSales, dbUserId } from "@/lib/guards";
-import { notifyMarketingLeadNewExternalSale } from "@/lib/externalSales";
+import { notifyMarketingLeadNewExternalSale, priceExternalSaleItems } from "@/lib/externalSales";
 
 const itemSchema = z.object({
   catalogItemId: z.string().min(1, "Falta el producto."),
   quantity: z.number().int().positive(),
-  unitPrice: z.number().positive(),
+  marginPercent: z.number().optional(),
 });
 
 const schema = z.object({
@@ -18,7 +18,7 @@ const schema = z.object({
   clientId: z.string().min(1, "Falta matricular o seleccionar al cliente."),
 });
 
-async function resolveItems(items: z.infer<typeof itemSchema>[]) {
+async function resolveItems(items: z.infer<typeof itemSchema>[], isContraEntrega: boolean) {
   const catalogItems = await prisma.purchaseCatalogItem.findMany({
     where: { id: { in: items.map((it) => it.catalogItemId) } },
     select: { id: true, name: true },
@@ -27,13 +27,21 @@ async function resolveItems(items: z.infer<typeof itemSchema>[]) {
   for (const it of items) {
     if (!byId.has(it.catalogItemId)) throw new Error("Uno de los productos no se encontró en el catálogo.");
   }
-  return items.map((it) => ({
-    catalogItemId: it.catalogItemId,
-    declaredProductName: byId.get(it.catalogItemId)!,
-    quantity: it.quantity,
-    unitPrice: it.unitPrice,
-    totalAmount: it.quantity * it.unitPrice,
-  }));
+
+  const priced = await priceExternalSaleItems({ isContraEntrega, items });
+  if (!priced.ok) throw new Error(priced.error);
+
+  return items.map((it, i) => {
+    const price = priced.items[i];
+    return {
+      catalogItemId: it.catalogItemId,
+      declaredProductName: byId.get(it.catalogItemId)!,
+      quantity: it.quantity,
+      unitPrice: price.unitPrice,
+      totalAmount: it.quantity * price.unitPrice,
+      marginPercentUsed: price.marginPercentUsed,
+    };
+  });
 }
 
 // Confirmado 2026-08-29, pedido explícito del usuario: si Bryan rechaza,
@@ -55,7 +63,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const parsed = schema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Datos inválidos." }, { status: 400 });
 
-  const sale = await prisma.externalSale.findUnique({ where: { id }, select: { advisorId: true, reviewStatus: true, code: true, deletedAt: true } });
+  const sale = await prisma.externalSale.findUnique({ where: { id }, select: { advisorId: true, reviewStatus: true, code: true, deletedAt: true, isContraEntrega: true } });
   if (!sale) return NextResponse.json({ error: "No encontrado." }, { status: 404 });
   if (sale.advisorId !== session.user.id && session.user.role !== "admin") return NextResponse.json({ error: "No autorizado." }, { status: 403 });
   if (sale.deletedAt) return NextResponse.json({ error: "Esta venta ya fue cancelada." }, { status: 409 });
@@ -68,9 +76,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   let resolvedItems;
   try {
-    resolvedItems = await resolveItems(parsed.data.items);
+    resolvedItems = await resolveItems(parsed.data.items, sale.isContraEntrega);
   } catch (e) {
-    return NextResponse.json({ error: e instanceof Error ? e.message : "Producto no encontrado en el catálogo." }, { status: 404 });
+    return NextResponse.json({ error: e instanceof Error ? e.message : "No se pudo calcular el precio." }, { status: 400 });
   }
 
   const updated = await prisma.$transaction(async (tx) => {

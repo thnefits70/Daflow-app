@@ -4,7 +4,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { canDeclareExternalSales } from "@/lib/guards";
 import { nextExternalSaleNumber, formatExternalSaleCode } from "@/lib/merchandiseOutflow";
-import { notifyMarketingLeadNewExternalSale } from "@/lib/externalSales";
+import { notifyMarketingLeadNewExternalSale, priceExternalSaleItems } from "@/lib/externalSales";
 
 const SALE_INCLUDE = {
   items: { include: { catalogItem: { select: { name: true, photos: true, justCode: true } } }, orderBy: { createdAt: "asc" } },
@@ -17,7 +17,10 @@ const SALE_INCLUDE = {
 const itemSchema = z.object({
   catalogItemId: z.string().min(1, "Falta el producto."),
   quantity: z.number().int().positive(),
-  unitPrice: z.number().positive(),
+  // Solo aplica en ventas B2B (pago anticipado) — el asesor elige el
+  // porcentaje de ganancia; en B2C se ignora, se calcula solo según la
+  // cantidad total de la venta.
+  marginPercent: z.number().optional(),
 });
 
 const schema = z.object({
@@ -27,9 +30,11 @@ const schema = z.object({
   clientId: z.string().min(1, "Falta matricular o seleccionar al cliente."),
 });
 
-// Resuelve cada renglón contra el catálogo real y arma los datos listos
-// para prisma.externalSaleItem.create (nombre congelado + total calculado).
-async function resolveItems(items: z.infer<typeof itemSchema>[]) {
+// Resuelve cada renglón contra el catálogo real y el precio calculado
+// (nunca se confía en un precio que mande el navegador — ver
+// priceExternalSaleItems en lib/externalSales.ts) y arma los datos listos
+// para prisma.externalSaleItem.create.
+async function resolveItems(items: z.infer<typeof itemSchema>[], isContraEntrega: boolean) {
   const catalogItems = await prisma.purchaseCatalogItem.findMany({
     where: { id: { in: items.map((it) => it.catalogItemId) } },
     select: { id: true, name: true },
@@ -38,13 +43,21 @@ async function resolveItems(items: z.infer<typeof itemSchema>[]) {
   for (const it of items) {
     if (!byId.has(it.catalogItemId)) throw new Error("Uno de los productos no se encontró en el catálogo.");
   }
-  return items.map((it) => ({
-    catalogItemId: it.catalogItemId,
-    declaredProductName: byId.get(it.catalogItemId)!,
-    quantity: it.quantity,
-    unitPrice: it.unitPrice,
-    totalAmount: it.quantity * it.unitPrice,
-  }));
+
+  const priced = await priceExternalSaleItems({ isContraEntrega, items });
+  if (!priced.ok) throw new Error(priced.error);
+
+  return items.map((it, i) => {
+    const price = priced.items[i];
+    return {
+      catalogItemId: it.catalogItemId,
+      declaredProductName: byId.get(it.catalogItemId)!,
+      quantity: it.quantity,
+      unitPrice: price.unitPrice,
+      totalAmount: it.quantity * price.unitPrice,
+      marginPercentUsed: price.marginPercentUsed,
+    };
+  });
 }
 
 // Las propias declaraciones del asesor — para seguir su estado y subir el
@@ -72,14 +85,15 @@ export async function POST(req: NextRequest) {
   const client = await prisma.client.findUnique({ where: { id: parsed.data.clientId }, select: { id: true } });
   if (!client) return NextResponse.json({ error: "Cliente no encontrado." }, { status: 404 });
 
+  const advisor = await prisma.user.findUnique({ where: { id: session.user.id }, select: { externalSaleContraEntrega: true } });
+  const isContraEntrega = !!advisor?.externalSaleContraEntrega;
+
   let resolvedItems;
   try {
-    resolvedItems = await resolveItems(parsed.data.items);
+    resolvedItems = await resolveItems(parsed.data.items, isContraEntrega);
   } catch (e) {
-    return NextResponse.json({ error: e instanceof Error ? e.message : "Producto no encontrado en el catálogo." }, { status: 404 });
+    return NextResponse.json({ error: e instanceof Error ? e.message : "No se pudo calcular el precio." }, { status: 400 });
   }
-
-  const advisor = await prisma.user.findUnique({ where: { id: session.user.id }, select: { externalSaleContraEntrega: true } });
 
   const saleNumber = await nextExternalSaleNumber();
   const sale = await prisma.externalSale.create({
@@ -92,7 +106,7 @@ export async function POST(req: NextRequest) {
       pickupPersonName: parsed.data.pickupPersonName,
       courierNote: parsed.data.courierNote?.trim() || null,
       clientId: parsed.data.clientId,
-      isContraEntrega: !!advisor?.externalSaleContraEntrega,
+      isContraEntrega,
     },
     include: SALE_INCLUDE,
   });

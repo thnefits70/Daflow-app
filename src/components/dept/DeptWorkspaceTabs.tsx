@@ -111,6 +111,8 @@ export function DeptWorkspaceTabs({
   canPublishMarketProduct = false,
   canBrandMarketProduct = false,
   canDecideMarketProductPurchase = false,
+  canViewB2BPricing = false,
+  canViewB2CPricing = false,
   canAccessSuppliers = false,
   supplierList = [],
   supplierPending = [],
@@ -244,6 +246,9 @@ export function DeptWorkspaceTabs({
   canPublishMarketProduct?: boolean;
   canBrandMarketProduct?: boolean;
   canDecideMarketProductPurchase?: boolean;
+  // Consulta de precios (2026-09-14) — Heidy/Yair ven B2B, Marcos ve B2C.
+  canViewB2BPricing?: boolean;
+  canViewB2CPricing?: boolean;
   // Proveedores — movido de su propio ítem de sidebar a esta pestaña
   // (confirmado 2026-08-21), entre "Control de Compras" y "Documentos".
   // canAccessSuppliers gatea si la pestaña se ve (ver access.canView /
@@ -398,7 +403,7 @@ export function DeptWorkspaceTabs({
     if (t.key === "postventa") return canManageStoreFeedback || canViewStoreFeedback;
     if (t.key === "combos") return canSyncAtomData || canUploadLowRotationList || canApproveComboSuggestions;
     if (t.key === "analisis-mercado")
-      return canProposeMarketProduct || canReviewMarketProduct || canPublishMarketProduct || canBrandMarketProduct;
+      return canProposeMarketProduct || canReviewMarketProduct || canPublishMarketProduct || canBrandMarketProduct || canViewB2BPricing || canViewB2CPricing;
     if (t.key === "pagosadmin") return canManageAdminPayments;
     if (t.key === "almuerzos") return canRegisterLunchPayments;
     if (t.key === "plan-mejora") return canManageImprovementPlan;
@@ -660,7 +665,7 @@ export function DeptWorkspaceTabs({
           canMarkCreated={canMarkComboCreatedInDropi}
         />
       )}
-      {tab === "analisis-mercado" && (canProposeMarketProduct || canReviewMarketProduct || canPublishMarketProduct || canBrandMarketProduct) && (
+      {tab === "analisis-mercado" && (canProposeMarketProduct || canReviewMarketProduct || canPublishMarketProduct || canBrandMarketProduct || canViewB2BPricing || canViewB2CPricing) && (
         <MarketProductPanel
           canPropose={canProposeMarketProduct}
           canReview={canReviewMarketProduct}
@@ -668,6 +673,8 @@ export function DeptWorkspaceTabs({
           canPublish={canPublishMarketProduct}
           canBrand={canBrandMarketProduct}
           canDecidePurchase={canDecideMarketProductPurchase}
+          canViewB2BPricing={canViewB2BPricing}
+          canViewB2CPricing={canViewB2CPricing}
         />
       )}
       {tab === "plan-mejora" && canManageImprovementPlan && <ImprovementPlanTeamPanel deptId={deptId} isAdmin={isAdmin} />}

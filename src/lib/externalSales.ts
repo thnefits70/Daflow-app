@@ -3,8 +3,79 @@ import { notifyOwner } from "@/lib/notifications";
 import { getInventoryLeadId, getMarketingLeadId, getFinanceLeadId, getFulfilmentLeadId } from "@/lib/guards";
 import { nextMerchandiseOutflowNumber, formatMerchandiseOutflowCode } from "@/lib/merchandiseOutflow";
 import { addBusinessDays } from "@/lib/businessHours";
+import { pickPrimarySupplierPrice, computeB2BPrice, computeB2CPrice, b2cMarginPercentForQuantity, B2B_MARGIN_OPTIONS, B2B_MARGIN_DEFAULT } from "@/lib/marketProduct";
 
 const URL_BASE = "/area/workspace?tab=ventas-externas";
+
+// Confirmado 2026-09-14: reemplaza el "Precio unitario" que antes escribía
+// el asesor a mano — el precio siempre se calcula acá, server-side, a partir
+// del costo real que Jariel ya cargó en Análisis de Mercado (nunca se
+// confía en un precio que mande el navegador, mismo principio que
+// market-products/route.ts). La usan tanto la vista previa en vivo del
+// formulario como la creación/edición real de la venta.
+export type PriceExternalSaleItemInput = { catalogItemId: string; quantity: number; marginPercent?: number };
+export type PricedExternalSaleItem = { catalogItemId: string; unitPrice: number; marginPercentUsed: number };
+export type PriceExternalSaleItemsResult = { ok: true; items: PricedExternalSaleItem[] } | { ok: false; error: string };
+
+// El array `items` del resultado viene SIEMPRE en el mismo orden que
+// `params.items` — quien lo consuma debe emparejar por posición, nunca por
+// catalogItemId (un mismo producto puede repetirse en dos renglones de la
+// misma venta con márgenes distintos en modo "por producto").
+export async function priceExternalSaleItems(params: { isContraEntrega: boolean; items: PriceExternalSaleItemInput[] }): Promise<PriceExternalSaleItemsResult> {
+  if (params.items.length === 0) return { ok: false, error: "No hay productos para calcular." };
+
+  const proposals = await prisma.marketProductProposal.findMany({
+    where: { catalogItemId: { in: params.items.map((it) => it.catalogItemId) } },
+    include: { supplierPrices: true, catalogItem: { select: { name: true } } },
+  });
+  const byCatalogItemId = new Map(proposals.filter((p) => p.catalogItemId).map((p) => [p.catalogItemId!, p]));
+
+  for (const it of params.items) {
+    if (!byCatalogItemId.has(it.catalogItemId)) {
+      return { ok: false, error: "Este producto todavía no tiene precio calculado — pídele a Jariel que lo registre en Análisis de Mercado primero." };
+    }
+  }
+
+  if (params.isContraEntrega) {
+    const totalQuantity = params.items.reduce((s, it) => s + it.quantity, 0);
+    const marginPercent = b2cMarginPercentForQuantity(totalQuantity);
+    if (marginPercent == null) {
+      return { ok: false, error: "Una venta al por menor (B2C) no puede pasar de 11 unidades en total — de 12 en adelante es una venta al por mayor (B2B)." };
+    }
+    const items = params.items.map((it) => {
+      const proposal = byCatalogItemId.get(it.catalogItemId)!;
+      const supplier = pickPrimarySupplierPrice(proposal.supplierPrices)!;
+      const unitPrice = computeB2CPrice({
+        batchCost: supplier.batchCost,
+        batchUnits: supplier.batchUnits,
+        freightCost: supplier.freightCost,
+        insuranceRatePercent: proposal.insuranceRatePercent,
+        totalQuantity,
+      })!;
+      return { catalogItemId: it.catalogItemId, unitPrice, marginPercentUsed: marginPercent };
+    });
+    return { ok: true, items };
+  }
+
+  const items: PricedExternalSaleItem[] = [];
+  for (const it of params.items) {
+    const marginPercent = it.marginPercent ?? B2B_MARGIN_DEFAULT;
+    if (!B2B_MARGIN_OPTIONS.includes(marginPercent as (typeof B2B_MARGIN_OPTIONS)[number])) {
+      return { ok: false, error: `Porcentaje de ganancia inválido: ${marginPercent}%.` };
+    }
+    const proposal = byCatalogItemId.get(it.catalogItemId)!;
+    const supplier = pickPrimarySupplierPrice(proposal.supplierPrices)!;
+    const unitPrice = computeB2BPrice({
+      batchCost: supplier.batchCost,
+      batchUnits: supplier.batchUnits,
+      freightCost: supplier.freightCost,
+      insuranceRatePercent: proposal.insuranceRatePercent,
+      marginPercent,
+    });
+    items.push({ catalogItemId: it.catalogItemId, unitPrice, marginPercentUsed: marginPercent });
+  }
+  return { ok: true, items };
+}
 
 // Nombre corto para notificaciones/tarjetas que solo tienen espacio para una
 // línea — el primer producto, +"N más" si hay varios (ver ExternalSaleItem).

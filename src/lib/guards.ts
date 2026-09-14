@@ -1475,6 +1475,34 @@ export async function canEditMarketProductPricing(proposedById: string | null) {
   return !!proposedById && proposedById === session.user.id;
 }
 
+// Confirmado 2026-09-14: pantalla nueva "Consulta de precios" (solo
+// lectura, sin declarar nada) — Jariel/Bryan ya ven B2B por su rol
+// existente en Análisis de Mercado; Heidy y Yair lo ven vía el flag nuevo.
+// Admin ve ambos, mismo criterio que canReviewMarketProduct.
+export async function canViewB2BPricing() {
+  const session = await auth();
+  if (!session) return false;
+  if (session.user.role === "admin") return true;
+  if (await canProposeMarketProduct()) return true;
+  if (await canReviewMarketProduct()) return true;
+  const user = await prisma.user.findUnique({ where: { id: session.user.id }, select: { canViewB2BPricing: true } });
+  return !!user?.canViewB2BPricing;
+}
+
+// Solo Marcos (vía flag) — a diferencia de B2B, no hereda de ningún rol de
+// Análisis de Mercado, es exclusivo de quien vende al por menor.
+export async function canViewB2CPricing() {
+  const session = await auth();
+  if (!session) return false;
+  if (session.user.role === "admin") return true;
+  const user = await prisma.user.findUnique({ where: { id: session.user.id }, select: { canViewB2CPricing: true } });
+  return !!user?.canViewB2CPricing;
+}
+
+export async function canViewMarketProductPricing() {
+  return (await canViewB2BPricing()) || (await canViewB2CPricing());
+}
+
 // How many of the current user's own pay stubs were uploaded/updated since
 // they last opened "Roles de pago" — drives the sidebar badge.
 export async function getUnseenPayStubCount() {
