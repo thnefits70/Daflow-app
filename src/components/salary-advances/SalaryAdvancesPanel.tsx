@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Banknote, CheckCircle2, Circle, Plus, TriangleAlert } from "lucide-react";
+import { Banknote, CheckCircle2, Circle, Plus, Trash2, TriangleAlert } from "lucide-react";
 import { installmentAmount } from "@/lib/payrollCalc";
 import { formatDateTime } from "@/lib/formatDateTime";
 
@@ -101,27 +101,39 @@ function BankAccountForm({ hasExisting, onSaved, onCancel }: { hasExisting: bool
   );
 }
 
-function BankAccountList({ accounts, onSelect, onAddNew, busy }: { accounts: BankAccount[]; onSelect: (id: string) => void; onAddNew: () => void; busy: boolean }) {
+function BankAccountList({ accounts, onSelect, onAddNew, onDelete, busy }: { accounts: BankAccount[]; onSelect: (id: string) => void; onAddNew: () => void; onDelete: (id: string, bankName: string) => void; busy: boolean }) {
   return (
     <div className="bg-surface border border-rule rounded-md p-4 mb-4">
       <div className="text-[11px] font-semibold uppercase tracking-wide text-steel mb-3">Mi cuenta bancaria</div>
       <div className="flex flex-col gap-2 max-w-sm">
         {accounts.map((a) => (
-          <button
-            key={a.id}
-            type="button"
-            disabled={busy || a.isSelected}
-            onClick={() => onSelect(a.id)}
-            className={`text-left rounded-md border px-3 py-2.5 cursor-pointer disabled:cursor-default ${a.isSelected ? "border-teal bg-teal/10" : "border-rule hover:border-steel"}`}
-          >
+          <div key={a.id} className={`rounded-md border px-3 py-2.5 ${a.isSelected ? "border-teal bg-teal/10" : "border-rule hover:border-steel"}`}>
             <div className="flex items-center gap-2">
-              {a.isSelected ? <CheckCircle2 size={15} className="text-teal shrink-0" /> : <Circle size={15} className="text-steel-dim shrink-0" />}
-              <span className="text-[12.5px] font-semibold text-ink">{a.bankName}</span>
-              <span className="text-[11px] text-steel-dim">{a.bankAccountType}</span>
-              {a.isSelected && <span className="ml-auto text-[10px] font-semibold text-teal uppercase tracking-wide">Cuenta activa</span>}
+              <button
+                type="button"
+                disabled={busy || a.isSelected}
+                onClick={() => onSelect(a.id)}
+                className="flex items-center gap-2 flex-1 min-w-0 text-left cursor-pointer disabled:cursor-default"
+              >
+                {a.isSelected ? <CheckCircle2 size={15} className="text-teal shrink-0" /> : <Circle size={15} className="text-steel-dim shrink-0" />}
+                <span className="text-[12.5px] font-semibold text-ink">{a.bankName}</span>
+                <span className="text-[11px] text-steel-dim">{a.bankAccountType}</span>
+                {a.isSelected && <span className="text-[10px] font-semibold text-teal uppercase tracking-wide">Cuenta activa</span>}
+              </button>
+              {accounts.length > 1 && (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => onDelete(a.id, a.bankName)}
+                  title="Eliminar cuenta"
+                  className="text-steel-dim hover:text-red-500 cursor-pointer disabled:cursor-default shrink-0"
+                >
+                  <Trash2 size={14} />
+                </button>
+              )}
             </div>
-            <div className="text-[12px] text-steel-dim mt-0.5">{a.bankAccountNumber} · {a.bankAccountHolder}</div>
-          </button>
+            <div className="text-[12px] text-steel-dim mt-0.5 ml-[21px]">{a.bankAccountNumber} · {a.bankAccountHolder}</div>
+          </div>
         ))}
         <button type="button" onClick={onAddNew} className="flex items-center gap-1.5 text-[12px] font-semibold text-blue cursor-pointer self-start mt-1">
           <Plus size={13} /> Agregar otra cuenta
@@ -175,6 +187,22 @@ export function SalaryAdvancesPanel() {
     loadAccounts();
   }
 
+  async function deleteAccount(id: string, bankName: string) {
+    if (!window.confirm(`¿Eliminar la cuenta de ${bankName}? Esta acción no se puede deshacer.`)) return;
+    setAccountBusy(true);
+    const res = await fetch("/api/employee-bank-account", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => null);
+      alert(data?.error ?? "No se pudo eliminar la cuenta.");
+    }
+    setAccountBusy(false);
+    loadAccounts();
+  }
+
   const amt = Number(amount);
   const amountInRange = !!amount && amt >= MIN_AMOUNT && amt <= MAX_AMOUNT;
   const needsReason = amt > NO_REASON_MAX;
@@ -220,7 +248,7 @@ export function SalaryAdvancesPanel() {
       </div>
 
       {accounts.length > 0 && !showAddAccount && (
-        <BankAccountList accounts={accounts} onSelect={selectAccount} onAddNew={() => setShowAddAccount(true)} busy={accountBusy} />
+        <BankAccountList accounts={accounts} onSelect={selectAccount} onAddNew={() => setShowAddAccount(true)} onDelete={deleteAccount} busy={accountBusy} />
       )}
       {(accounts.length === 0 || showAddAccount) && (
         <BankAccountForm hasExisting={accounts.length > 0} onSaved={loadAccounts} onCancel={() => setShowAddAccount(false)} />
