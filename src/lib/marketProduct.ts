@@ -79,6 +79,15 @@ export function b2cMarginPercentForQuantity(totalQuantity: number): number | nul
   return null;
 }
 
+// Confirmado 2026-09-14, pedido explícito del usuario: el precio B2C
+// SIEMPRE termina en .99 (precio psicológico) — ej. $15.26 calculado se
+// cobra $15.99. Conserva la parte entera (el dólar) y fuerza el centavo a
+// .99; nunca baja el precio, solo sube (o queda igual si ya terminaba en
+// .99 justo).
+function roundUpToNinetyNineCents(price: number): number {
+  return Math.floor(price) + 0.99;
+}
+
 // Venta al por menor (exclusivo Marcos). El flete promedio se suma DESPUÉS
 // de dividir por el margen — no lleva ganancia encima, se pasa tal cual.
 export function computeB2CPrice(params: {
@@ -92,7 +101,8 @@ export function computeB2CPrice(params: {
   if (marginPercent == null) return null;
   const bodega = bodegaUnitCost(params.batchCost, params.freightCost, params.batchUnits);
   const withInsurance = bodega * (1 + params.insuranceRatePercent / 100);
-  return withInsurance / (1 - marginPercent / 100) + B2C_FLETE_PROMEDIO;
+  const rawPrice = withInsurance / (1 - marginPercent / 100) + B2C_FLETE_PROMEDIO;
+  return roundUpToNinetyNineCents(rawPrice);
 }
 
 export async function nextMarketProductProposalNumber(): Promise<number> {
