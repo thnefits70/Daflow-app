@@ -475,6 +475,81 @@ function ItemsEditor({
   );
 }
 
+// Confirmado 2026-09-14, pedido explícito de Marcos: poder revisar el
+// precio de un producto (el que le calcula el sistema según B2B/B2C) sin
+// tener que matricular un cliente primero — para cuando alguien le
+// pregunta el precio antes de decidirse a comprar. Nunca declara nada,
+// solo consulta el mismo cálculo que usa ItemsEditor (usePricePreview).
+function PriceCheckPanel({ searchUrl, isContraEntrega }: { searchUrl: string; isContraEntrega: boolean | null }) {
+  const [open, setOpen] = useState(false);
+  const [product, setProduct] = useState<MatchCatalogItem | null>(null);
+  const [qty, setQty] = useState("1");
+  const [marginPercent, setMarginPercent] = useState(B2B_MARGIN_DEFAULT);
+
+  const checkItems: DraftItem[] = product && isValidQty(qty) ? [{ product, quantity: qty, marginPercent }] : [];
+  const { preview, error } = usePricePreview(isContraEntrega, checkItems);
+  const previewReady = !!preview && preview.length === checkItems.length && checkItems.length > 0;
+
+  function reset() {
+    setProduct(null);
+    setQty("1");
+    setMarginPercent(B2B_MARGIN_DEFAULT);
+  }
+
+  return (
+    <div className="bg-surface border border-rule rounded-md p-3.5 flex flex-col gap-3">
+      <button type="button" className="flex items-center justify-between font-display font-bold text-[14px] cursor-pointer" onClick={() => setOpen((o) => !o)}>
+        Consultar precio
+        <span className="text-[11px] font-normal text-blue">{open ? "Ocultar" : "Ver"}</span>
+      </button>
+      {open && (
+        <>
+          <div className="text-[11.5px] text-steel -mt-1.5">Para cuando alguien te pregunta el precio de un producto — no declara ninguna venta.</div>
+          {product ? (
+            <>
+              <div className="flex items-center gap-2.5">
+                {product.photos[0] && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={product.photos[0]} alt={product.name} className="w-11 h-11 object-cover rounded border border-rule shrink-0" />
+                )}
+                <div className="flex-1 min-w-0 text-[12.5px] font-semibold flex items-center gap-1.5">
+                  <CatalogCode code={product.justCode} />
+                  <span className="truncate">{product.name}</span>
+                </div>
+                <button type="button" className="shrink-0 text-[11px] font-semibold text-blue cursor-pointer" onClick={reset}>Cambiar</button>
+              </div>
+              <QtyMarginFields
+                qty={qty}
+                onQtyChange={setQty}
+                isContraEntrega={isContraEntrega ?? false}
+                marginMode="per-item"
+                marginPercent={marginPercent}
+                onMarginChange={setMarginPercent}
+              />
+              {error && <div className="text-red text-[11.5px]">{error}</div>}
+              {isValidQty(qty) && (
+                <div className="text-[13px]">
+                  {previewReady ? (
+                    <>
+                      Precio: <span className="font-bold text-teal">${preview![0].unitPrice.toFixed(2)}</span>{" "}
+                      <span className="text-steel">({preview![0].marginPercentUsed}% de ganancia) · Total {qty} un.: </span>
+                      <span className="font-bold text-ink">${(Number(qty) * preview![0].unitPrice).toFixed(2)}</span>
+                    </>
+                  ) : (
+                    <span className="text-steel">calculando precio…</span>
+                  )}
+                </div>
+              )}
+            </>
+          ) : (
+            <ProductMatchPicker referencePhotoUrl={null} searchUrl={searchUrl} onConfirm={(r: ProductMatchResult) => setProduct(r)} />
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 export function ExternalSaleDeclareForm() {
   const [sales, setSales] = useState<SaleDTO[] | null>(null);
   const [client, setClient] = useState<ClientDTO | null>(null);
@@ -708,6 +783,8 @@ export function ExternalSaleDeclareForm() {
 
   return (
     <div className="flex flex-col gap-6 max-w-lg">
+      <PriceCheckPanel searchUrl="/api/external-sales/catalog-search" isContraEntrega={isContraEntrega} />
+
       <div className="bg-surface border border-rule rounded-md p-3.5 flex flex-col gap-3">
         <div className="font-display font-bold text-[14px]">Declarar venta</div>
         <div>
