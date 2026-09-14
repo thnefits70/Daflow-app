@@ -45,7 +45,7 @@ type Row = {
   shippingCostTotal: number | null;
   catalogItemId: string;
   catalogItem: { name: string; photos: string[] };
-  supplier: { id: string; name: string };
+  supplier: { id: string; name: string; paymentMode?: "PREPAGO" | "CREDITO" };
   bankAccount: BankAccount | null;
   bankAccountChangeRequestedAt: string | null;
   bankAccountChangeNote: string | null;
@@ -387,7 +387,11 @@ export function PurchaseApprovalInbox({ canAct = true, canPayHere = true, canPay
     return groupIsEmergency(groupId) ? isAdmin : canAct;
   }
 
+  // Confirmado 2026-09-14: a un proveedor de crédito (hoy CHEN) nunca se le
+  // paga por solicitud individual — server-side /pay ya lo rechaza, esto
+  // evita ofrecer el paso combinado "aprobar y pagar" para ese caso.
   function effectiveCanPayHere(groupId: string) {
+    if (currentGroupRows(groupId)[0]?.supplier.paymentMode === "CREDITO") return false;
     return groupIsEmergency(groupId) ? isAdmin && canPayMerchandise : canPayHere;
   }
 

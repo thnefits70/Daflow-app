@@ -42,7 +42,7 @@ type Row = {
   aiInvoiceReviewSummary: string | null;
   aiInvoiceReviewOk: boolean | null;
   catalogItem: { name: string; photos: string[]; justCode: string | null };
-  supplier: { id: string; name: string };
+  supplier: { id: string; name: string; paymentMode?: "PREPAGO" | "CREDITO" };
   bankAccount: {
     bankName: string;
     bankAccountType: string;
@@ -665,7 +665,16 @@ export function PurchaseInvoicingPanel({
 
   if (!rows) return <div className="text-steel text-[13px]">Cargando…</div>;
 
-  const approvedGroups = groupRows(rows.filter((r) => r.status === "APPROVED"));
+  // Confirmado 2026-09-14, bug real reportado por el usuario: a un proveedor
+  // de crédito (hoy CHEN) NUNCA se le paga por solicitud individual — el
+  // pago real ocurre después, agrupado en una tanda desde "Proveedores con
+  // Crédito". Antes de este fix, esta sección igual le mostraba el botón
+  // "Transferir/Subir comprobante" (que server-side siempre iba a rechazar,
+  // ver /group/[groupId]/pay), confundiendo al admin. Una vez que Inventario
+  // reciba, esa fila va a aparecer más abajo (status !== APPROVED) como
+  // cualquier otra operación — acá solo se excluye mientras sigue en
+  // APPROVED, que para crédito nunca significa "falta pagar".
+  const approvedGroups = groupRows(rows.filter((r) => r.status === "APPROVED" && r.supplier.paymentMode !== "CREDITO"));
   // Confirmado 2026-08-12: pedido explícito del usuario (Opción A) — una
   // operación desaparece de "Registrar factura" solo cuando las DOS partes
   // ya cerraron: Nairoby ya declaró la factura (invoiceStatus !== PENDING)

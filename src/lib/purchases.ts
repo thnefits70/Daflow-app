@@ -558,7 +558,7 @@ const bankAccountSelect = { id: true, bankName: true, bankAccountType: true, ban
 // tener 6 copias ligeramente distintas del mismo shape.
 export const purchaseRequestInclude = {
   catalogItem: { select: { id: true, name: true, photos: true, justCode: true, hasExpiration: true } },
-  supplier: { select: { id: true, name: true, bankAccounts: { orderBy: { createdAt: "asc" as const } } } },
+  supplier: { select: { id: true, name: true, paymentMode: true, bankAccounts: { orderBy: { createdAt: "asc" as const } } } },
   carrier: { select: { id: true, name: true, bankAccounts: { orderBy: { createdAt: "asc" as const } } } },
   bankAccount: { select: bankAccountSelect },
   carrierBankAccount: { select: bankAccountSelect },
