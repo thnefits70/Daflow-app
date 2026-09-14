@@ -1,5 +1,5 @@
 import { getAnthropicClient } from "@/lib/nancy";
-import { logAiUsage } from "@/lib/aiUsage";
+import { logAiUsage, type AiUsageFeature } from "@/lib/aiUsage";
 import { SUGGESTED_INDICATORS } from "@/lib/improvementPlanConstants";
 
 const IMPROVEMENT_PLAN_AI_MODEL = "claude-sonnet-5";
@@ -8,6 +8,39 @@ function extractJson<T>(text: string): T {
   const match = text.match(/\{[\s\S]*\}/);
   if (!match) throw new Error("La IA no devolvió un JSON reconocible.");
   return JSON.parse(match[0]) as T;
+}
+
+// A veces la IA responde sin ningún bloque de texto (glitch pasajero del lado
+// de Anthropic, no algo que el líder haya hecho mal). Reintenta una vez antes
+// de rendirse — cada intento se registra en logAiUsage por separado.
+async function generateDraftText(params: {
+  client: ReturnType<typeof getAnthropicClient>;
+  system: string;
+  userText: string;
+  feature: AiUsageFeature;
+  actorId: string;
+}): Promise<string> {
+  const MAX_ATTEMPTS = 2;
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    const response = await params.client.messages.create({
+      model: IMPROVEMENT_PLAN_AI_MODEL,
+      max_tokens: 1024,
+      system: params.system,
+      messages: [{ role: "user", content: params.userText }],
+    });
+
+    await logAiUsage({
+      feature: params.feature,
+      model: IMPROVEMENT_PLAN_AI_MODEL,
+      actorId: params.actorId,
+      inputTokens: response.usage.input_tokens,
+      outputTokens: response.usage.output_tokens,
+    });
+
+    const textBlock = response.content.find((b) => b.type === "text");
+    if (textBlock && textBlock.type === "text") return textBlock.text;
+  }
+  throw new Error("La IA no devolvió contenido de texto.");
 }
 
 export type ImprovementPlanDraft = {
@@ -23,9 +56,11 @@ export type ImprovementPlanDraft = {
 export async function draftImprovementPlan(params: { freeText: string; actorId: string }): Promise<ImprovementPlanDraft> {
   const client = getAnthropicClient();
 
-  const response = await client.messages.create({
-    model: IMPROVEMENT_PLAN_AI_MODEL,
-    max_tokens: 1024,
+  const text = await generateDraftText({
+    client,
+    feature: "plan_mejora_redaccion",
+    actorId: params.actorId,
+    userText: params.freeText,
     system:
       "Ayudas a un líder de equipo en Provedix (Guayaquil, Ecuador) a redactar el BORRADOR de un Plan de Mejora y Acompañamiento formal para un colaborador de su equipo. " +
       "Es un documento de Recursos Humanos serio — nunca inventes detalles, nombres, cifras ni hechos que el líder no haya mencionado. " +
@@ -35,20 +70,9 @@ export async function draftImprovementPlan(params: { freeText: string; actorId: 
       'Responde ÚNICAMENTE un JSON: {"situacion": string, "resultadoEsperado": string, "commitments": [{"indicador": string, "meta": string, "responsable": "COLABORADOR"|"LIDER"}]}. ' +
       "situacion describe qué está pasando hoy (el problema observado). resultadoEsperado describe qué se espera lograr con el plan. " +
       `Si te sirve como referencia, estos son los indicadores típicos que se evalúan después en el seguimiento semanal: ${SUGGESTED_INDICATORS.join(", ")} — pero los compromisos del plan no tienen que limitarse a esa lista.`,
-    messages: [{ role: "user", content: params.freeText }],
   });
 
-  await logAiUsage({
-    feature: "plan_mejora_redaccion",
-    model: IMPROVEMENT_PLAN_AI_MODEL,
-    actorId: params.actorId,
-    inputTokens: response.usage.input_tokens,
-    outputTokens: response.usage.output_tokens,
-  });
-
-  const textBlock = response.content.find((b) => b.type === "text");
-  if (!textBlock || textBlock.type !== "text") throw new Error("La IA no devolvió contenido de texto.");
-  const draft = extractJson<ImprovementPlanDraft>(textBlock.text);
+  const draft = extractJson<ImprovementPlanDraft>(text);
   return {
     situacion: draft.situacion ?? "",
     resultadoEsperado: draft.resultadoEsperado ?? "",
@@ -78,9 +102,11 @@ export async function draftWeeklyReview(params: {
 }): Promise<WeeklyReviewDraft> {
   const client = getAnthropicClient();
 
-  const response = await client.messages.create({
-    model: IMPROVEMENT_PLAN_AI_MODEL,
-    max_tokens: 1024,
+  const text = await generateDraftText({
+    client,
+    feature: "plan_mejora_evaluacion_semanal",
+    actorId: params.actorId,
+    userText: params.freeText,
     system:
       "Ayudas a un líder de equipo en Provedix (Guayaquil, Ecuador) a redactar el BORRADOR de la evaluación semanal de un Plan de Mejora y Acompañamiento. " +
       "Es un documento serio de seguimiento de desempeño — nunca inventes hechos, cifras o calificaciones que no se desprendan de lo que el líder escribió. " +
@@ -90,20 +116,9 @@ export async function draftWeeklyReview(params: {
       'Responde ÚNICAMENTE un JSON: {"scores": {"<indicador>": number, ...}, "queMejoro": string, "queFalta": string, "accionSiguiente": string, "apoyoLider": string}. ' +
       "Las claves de scores deben ser EXACTAMENTE el texto de los indicadores de la lista de arriba, tal cual, sin inventar indicadores nuevos. " +
       "queMejoro: qué mejoró esta semana. queFalta: qué sigue faltando. accionSiguiente: qué se hará la próxima semana. apoyoLider: qué apoyo dará el líder.",
-    messages: [{ role: "user", content: params.freeText }],
   });
 
-  await logAiUsage({
-    feature: "plan_mejora_evaluacion_semanal",
-    model: IMPROVEMENT_PLAN_AI_MODEL,
-    actorId: params.actorId,
-    inputTokens: response.usage.input_tokens,
-    outputTokens: response.usage.output_tokens,
-  });
-
-  const textBlock = response.content.find((b) => b.type === "text");
-  if (!textBlock || textBlock.type !== "text") throw new Error("La IA no devolvió contenido de texto.");
-  const draft = extractJson<WeeklyReviewDraft>(textBlock.text);
+  const draft = extractJson<WeeklyReviewDraft>(text);
   const validIndicators = new Set(params.indicators);
   const scores: Record<string, number> = {};
   for (const [key, value] of Object.entries(draft.scores ?? {})) {
