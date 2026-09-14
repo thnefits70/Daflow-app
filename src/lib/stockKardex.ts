@@ -277,6 +277,24 @@ export async function getAllCurrentStock(): Promise<CurrentStockRow[]> {
   });
 }
 
+// Confirmado 2026-09-14: misma consulta que getAllCurrentStock, pero
+// acotada a una lista de productos puntual — para no traer el catálogo
+// completo (~500 filas) cada vez que se necesita el costo de un puñado de
+// productos (ej. priceExternalSaleItems). Un id sin ninguna línea de
+// Kardex todavía no aparece en el resultado (a diferencia de
+// getAllCurrentStock, que sí lo lista con saldo 0) — quien llame debe
+// tratar un id ausente como "sin costo".
+export async function getCurrentStockByItemIds(catalogItemIds: string[]): Promise<Map<string, { balance: number; avgCost: number }>> {
+  if (catalogItemIds.length === 0) return new Map();
+  const latestPerItem = await prisma.stockKardexEntry.findMany({
+    where: { catalogItemId: { in: catalogItemIds } },
+    distinct: ["catalogItemId"],
+    orderBy: [{ catalogItemId: "asc" }, { occurredAt: "desc" }, { createdAt: "desc" }],
+    select: { catalogItemId: true, balanceAfter: true, avgCostAfter: true },
+  });
+  return new Map(latestPerItem.map((e) => [e.catalogItemId, { balance: e.balanceAfter, avgCost: e.avgCostAfter }]));
+}
+
 export type SeedResult = { seededCount: number; skippedNoMatch: number; skippedAlreadyMoved: number };
 type SnapshotRow = { productCode: string; avgCost: number; stock: number };
 

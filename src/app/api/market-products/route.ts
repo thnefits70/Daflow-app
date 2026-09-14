@@ -19,6 +19,7 @@ import {
   nextMarketProductProposalNumber,
   formatMarketProductProposalCode,
 } from "@/lib/marketProduct";
+import { getAllCurrentStock } from "@/lib/stockKardex";
 
 const supplierPriceSchema = z.object({
   supplierId: z.string(),
@@ -219,27 +220,45 @@ export async function GET(req: NextRequest) {
   // Confirmado 2026-09-14: pantalla de solo consulta para quien vende por
   // Ventas Externas (Heidy/Yair/Jariel/Bryan ven B2B, Marcos ve B2C) — nunca
   // expone supplierPrices/batchCost, solo el precio de venta que a cada
-  // quien le toca. Mismo criterio de elegibilidad que
-  // priceExternalSaleItems (lib/externalSales.ts): solo productos con
-  // catalogItemId ligado (ya brandeados).
+  // quien le toca. Ampliado 2026-09-14: ya no depende de que Jariel haya
+  // calculado el producto — cubre TODO el catálogo (~492 productos),
+  // usando su costo promedio real de Kardex cuando no tiene propuesta
+  // propia (mismo criterio de priceExternalSaleItems en
+  // lib/externalSales.ts). Un producto sin propuesta Y sin costo de Kardex
+  // (nunca tuvo movimiento, costo $0) simplemente no aparece — no hay nada
+  // que calcular.
   if (view === "consulta") {
     const [canB2B, canB2C] = await Promise.all([canViewB2BPricing(), canViewB2CPricing()]);
     if (!canB2B && !canB2C) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
-    const proposals = await prisma.marketProductProposal.findMany({
-      where: { catalogItemId: { not: null } },
-      include: { supplierPrices: true, catalogItem: { select: { id: true, name: true, justCode: true, photos: true } } },
-      orderBy: { productName: "asc" },
-    });
+    const [allStock, proposals] = await Promise.all([
+      getAllCurrentStock(),
+      prisma.marketProductProposal.findMany({
+        where: { catalogItemId: { not: null } },
+        include: { supplierPrices: true },
+      }),
+    ]);
+    const proposalByCatalogItemId = new Map(
+      proposals
+        .filter((p) => p.catalogItemId && pickPrimarySupplierPrice(p.supplierPrices))
+        .map((p) => {
+          const supplier = pickPrimarySupplierPrice(p.supplierPrices)!;
+          return [p.catalogItemId!, { batchCost: supplier.batchCost, batchUnits: supplier.batchUnits, freightCost: supplier.freightCost, insuranceRatePercent: p.insuranceRatePercent }] as const;
+        })
+    );
 
-    const rows = proposals
-      .filter((p) => p.catalogItem)
-      .map((p) => {
-        const supplier = pickPrimarySupplierPrice(p.supplierPrices);
-        if (!supplier) return null;
-        const base = { batchCost: supplier.batchCost, batchUnits: supplier.batchUnits, freightCost: supplier.freightCost, insuranceRatePercent: p.insuranceRatePercent };
+    const catalogItemIds = allStock.map((s) => s.catalogItemId);
+    const catalogItems = await prisma.purchaseCatalogItem.findMany({ where: { id: { in: catalogItemIds } }, select: { id: true, name: true, justCode: true, photos: true } });
+    const catalogItemById = new Map(catalogItems.map((c) => [c.id, c]));
+
+    const rows = allStock
+      .map((s) => {
+        const base = proposalByCatalogItemId.get(s.catalogItemId) ?? (s.avgCost > 0 ? { batchCost: s.avgCost, batchUnits: 1, freightCost: null, insuranceRatePercent: 6 } : null);
+        if (!base) return null;
+        const catalogItem = catalogItemById.get(s.catalogItemId);
+        if (!catalogItem) return null;
         return {
-          catalogItem: p.catalogItem,
+          catalogItem,
           b2bPriceDefault: canB2B ? computeB2BPrice({ ...base, marginPercent: B2B_MARGIN_DEFAULT }) : undefined,
           b2cPrice1Unit: canB2C ? computeB2CPrice({ ...base, totalQuantity: 1 }) : undefined,
           b2cPrice2to11: canB2C ? computeB2CPrice({ ...base, totalQuantity: 2 }) : undefined,

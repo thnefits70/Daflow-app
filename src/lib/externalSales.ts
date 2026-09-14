@@ -4,15 +4,61 @@ import { getInventoryLeadId, getMarketingLeadId, getFinanceLeadId, getFulfilment
 import { nextMerchandiseOutflowNumber, formatMerchandiseOutflowCode } from "@/lib/merchandiseOutflow";
 import { addBusinessDays } from "@/lib/businessHours";
 import { pickPrimarySupplierPrice, computeB2BPrice, computeB2CPrice, b2cMarginPercentForQuantity, B2B_MARGIN_OPTIONS, B2B_MARGIN_DEFAULT } from "@/lib/marketProduct";
+import { getCurrentStockByItemIds } from "@/lib/stockKardex";
 
 const URL_BASE = "/area/workspace?tab=ventas-externas";
 
+type CostBasis = { batchCost: number; batchUnits: number; freightCost: number | null; insuranceRatePercent: number };
+
+// Confirmado 2026-09-14: costo base de un producto para calcular B2B/B2C —
+// en orden de prioridad: (1) si pasó por la calculadora de Jariel en
+// Análisis de Mercado (MarketProductProposal), se usan sus datos exactos;
+// (2) si no, pero ya tiene costo promedio real de Kardex (INVESTOCK,
+// getCurrentStockByItemIds) mayor a 0, ese costo promedio SE USA DIRECTO
+// como "precio puesto en bodega" — ya es el costo real de tenerlo en
+// bodega, no hace falta separar proveedor+flete (se logra pasando
+// batchUnits:1, freightCost:null, así bodegaUnitCost da exactamente el
+// avgCost). Seguro 6% por defecto, igual que usa MarketProductProposal.
+// (3) si no tiene ninguno de los dos, el producto no se puede vender.
+async function resolveCostBasis(catalogItemIds: string[]): Promise<Map<string, CostBasis>> {
+  const ids = [...new Set(catalogItemIds)];
+  const proposals = await prisma.marketProductProposal.findMany({
+    where: { catalogItemId: { in: ids } },
+    include: { supplierPrices: true },
+  });
+  const byCatalogItemId = new Map<string, CostBasis>();
+  const proposalCatalogItemIds = new Set<string>();
+  for (const p of proposals) {
+    if (!p.catalogItemId) continue;
+    const supplier = pickPrimarySupplierPrice(p.supplierPrices);
+    if (!supplier) continue;
+    proposalCatalogItemIds.add(p.catalogItemId);
+    byCatalogItemId.set(p.catalogItemId, {
+      batchCost: supplier.batchCost,
+      batchUnits: supplier.batchUnits,
+      freightCost: supplier.freightCost,
+      insuranceRatePercent: p.insuranceRatePercent,
+    });
+  }
+
+  const missingIds = ids.filter((id) => !proposalCatalogItemIds.has(id));
+  if (missingIds.length > 0) {
+    const stock = await getCurrentStockByItemIds(missingIds);
+    for (const id of missingIds) {
+      const avgCost = stock.get(id)?.avgCost ?? 0;
+      if (avgCost > 0) byCatalogItemId.set(id, { batchCost: avgCost, batchUnits: 1, freightCost: null, insuranceRatePercent: 6 });
+    }
+  }
+
+  return byCatalogItemId;
+}
+
 // Confirmado 2026-09-14: reemplaza el "Precio unitario" que antes escribía
 // el asesor a mano — el precio siempre se calcula acá, server-side, a partir
-// del costo real que Jariel ya cargó en Análisis de Mercado (nunca se
-// confía en un precio que mande el navegador, mismo principio que
-// market-products/route.ts). La usan tanto la vista previa en vivo del
-// formulario como la creación/edición real de la venta.
+// del costo real del producto (nunca se confía en un precio que mande el
+// navegador, mismo principio que market-products/route.ts). La usan tanto
+// la vista previa en vivo del formulario como la creación/edición real de
+// la venta.
 export type PriceExternalSaleItemInput = { catalogItemId: string; quantity: number; marginPercent?: number };
 export type PricedExternalSaleItem = { catalogItemId: string; unitPrice: number; marginPercentUsed: number };
 export type PriceExternalSaleItemsResult = { ok: true; items: PricedExternalSaleItem[] } | { ok: false; error: string };
@@ -24,15 +70,11 @@ export type PriceExternalSaleItemsResult = { ok: true; items: PricedExternalSale
 export async function priceExternalSaleItems(params: { isContraEntrega: boolean; items: PriceExternalSaleItemInput[] }): Promise<PriceExternalSaleItemsResult> {
   if (params.items.length === 0) return { ok: false, error: "No hay productos para calcular." };
 
-  const proposals = await prisma.marketProductProposal.findMany({
-    where: { catalogItemId: { in: params.items.map((it) => it.catalogItemId) } },
-    include: { supplierPrices: true, catalogItem: { select: { name: true } } },
-  });
-  const byCatalogItemId = new Map(proposals.filter((p) => p.catalogItemId).map((p) => [p.catalogItemId!, p]));
+  const byCatalogItemId = await resolveCostBasis(params.items.map((it) => it.catalogItemId));
 
   for (const it of params.items) {
     if (!byCatalogItemId.has(it.catalogItemId)) {
-      return { ok: false, error: "Este producto todavía no tiene precio calculado — pídele a Jariel que lo registre en Análisis de Mercado primero." };
+      return { ok: false, error: "Este producto todavía no tiene costo registrado — no se puede calcular un precio de venta." };
     }
   }
 
@@ -43,15 +85,8 @@ export async function priceExternalSaleItems(params: { isContraEntrega: boolean;
       return { ok: false, error: "Una venta al por menor (B2C) no puede pasar de 11 unidades en total — de 12 en adelante es una venta al por mayor (B2B)." };
     }
     const items = params.items.map((it) => {
-      const proposal = byCatalogItemId.get(it.catalogItemId)!;
-      const supplier = pickPrimarySupplierPrice(proposal.supplierPrices)!;
-      const unitPrice = computeB2CPrice({
-        batchCost: supplier.batchCost,
-        batchUnits: supplier.batchUnits,
-        freightCost: supplier.freightCost,
-        insuranceRatePercent: proposal.insuranceRatePercent,
-        totalQuantity,
-      })!;
+      const cost = byCatalogItemId.get(it.catalogItemId)!;
+      const unitPrice = computeB2CPrice({ ...cost, totalQuantity })!;
       return { catalogItemId: it.catalogItemId, unitPrice, marginPercentUsed: marginPercent };
     });
     return { ok: true, items };
@@ -63,15 +98,8 @@ export async function priceExternalSaleItems(params: { isContraEntrega: boolean;
     if (!B2B_MARGIN_OPTIONS.includes(marginPercent as (typeof B2B_MARGIN_OPTIONS)[number])) {
       return { ok: false, error: `Porcentaje de ganancia inválido: ${marginPercent}%.` };
     }
-    const proposal = byCatalogItemId.get(it.catalogItemId)!;
-    const supplier = pickPrimarySupplierPrice(proposal.supplierPrices)!;
-    const unitPrice = computeB2BPrice({
-      batchCost: supplier.batchCost,
-      batchUnits: supplier.batchUnits,
-      freightCost: supplier.freightCost,
-      insuranceRatePercent: proposal.insuranceRatePercent,
-      marginPercent,
-    });
+    const cost = byCatalogItemId.get(it.catalogItemId)!;
+    const unitPrice = computeB2BPrice({ ...cost, marginPercent });
     items.push({ catalogItemId: it.catalogItemId, unitPrice, marginPercentUsed: marginPercent });
   }
   return { ok: true, items };
