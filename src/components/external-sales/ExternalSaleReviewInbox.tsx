@@ -22,6 +22,7 @@ type SaleDTO = {
   items: SaleItemDTO[];
   pickupPersonName: string;
   courierNote: string | null;
+  freightCost: number | null;
   advisor: { name: string } | null;
 };
 
@@ -150,6 +151,9 @@ export function ExternalSaleReviewInbox() {
             </div>
 
             <div className="text-[12px] font-bold mb-1.5">Total: ${total.toFixed(2)}</div>
+            {s.freightCost != null && (
+              <div className="text-[11.5px] text-steel">Flete: -${s.freightCost.toFixed(2)} · Monto a transferir: ${(total - s.freightCost).toFixed(2)}</div>
+            )}
             <div className="text-[11.5px] text-steel">Entrega a: {s.pickupPersonName}</div>
             {s.courierNote && <div className="text-[11.5px] text-steel">Transportadora: {s.courierNote}</div>}
 

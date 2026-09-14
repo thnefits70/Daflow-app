@@ -16,6 +16,7 @@ const schema = z.object({
   pickupPersonName: z.string().trim().min(1, "Falta a quién debe entregársela bodega."),
   courierNote: z.string().trim().optional(),
   clientId: z.string().min(1, "Falta matricular o seleccionar al cliente."),
+  freightCost: z.number().min(0).optional(),
 });
 
 async function resolveItems(items: z.infer<typeof itemSchema>[], isContraEntrega: boolean) {
@@ -91,6 +92,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         pickupPersonName: parsed.data.pickupPersonName,
         courierNote: parsed.data.courierNote?.trim() || null,
         clientId: parsed.data.clientId,
+        freightCost: parsed.data.freightCost ?? null,
         reviewStatus: "PENDING",
         rejectionReason: null,
         reviewedAt: null,

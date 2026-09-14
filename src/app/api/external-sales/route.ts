@@ -28,6 +28,7 @@ const schema = z.object({
   pickupPersonName: z.string().trim().min(1, "Falta a quién debe entregársela bodega."),
   courierNote: z.string().trim().optional(),
   clientId: z.string().min(1, "Falta matricular o seleccionar al cliente."),
+  freightCost: z.number().min(0).optional(),
 });
 
 // Resuelve cada renglón contra el catálogo real y el precio calculado
@@ -107,6 +108,7 @@ export async function POST(req: NextRequest) {
       courierNote: parsed.data.courierNote?.trim() || null,
       clientId: parsed.data.clientId,
       isContraEntrega,
+      freightCost: parsed.data.freightCost ?? null,
     },
     include: SALE_INCLUDE,
   });

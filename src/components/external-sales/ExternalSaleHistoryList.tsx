@@ -22,6 +22,7 @@ type SaleDTO = {
   totalAmount: number;
   pickupPersonName: string;
   courierNote: string | null;
+  freightCost: number | null;
   client: { name: string; idType: "RUC" | "CEDULA"; idNumber: string; phone: string; email: string | null; city: string | null; country: string | null } | null;
   isContraEntrega: boolean;
   reviewStatus: "PENDING" | "APPROVED" | "REJECTED";
@@ -96,6 +97,9 @@ function SaleDetail({ s }: { s: SaleDTO }) {
           </div>
         ))}
       </div>
+      {s.freightCost != null && (
+        <div className="text-[10.5px] text-steel">Flete: -${s.freightCost.toFixed(2)} · Monto a transferir: ${(s.totalAmount - s.freightCost).toFixed(2)}</div>
+      )}
       <div className="text-[10.5px] text-steel">Entrega a: {s.pickupPersonName}{s.courierNote ? ` · Transportadora: ${s.courierNote}` : ""}</div>
       {s.client && (
         <div className="text-[10.5px] text-steel">

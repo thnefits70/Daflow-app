@@ -31,6 +31,7 @@ type SaleDTO = {
   totalAmount: number;
   pickupPersonName: string;
   courierNote: string | null;
+  freightCost: number | null;
   client: ClientDTO | null;
   reviewStatus: "PENDING" | "APPROVED" | "REJECTED";
   rejectionReason: string | null;
@@ -49,14 +50,20 @@ type DraftItem = { product: MatchCatalogItem; quantity: string; marginPercent: n
 
 type PreviewRow = { unitPrice: number; marginPercentUsed: number };
 
-type DeclareDraftData = { client: ClientDTO | null; items: DraftItem[]; pickupPersonName: string; courierNote: string };
+type DeclareDraftData = { client: ClientDTO | null; items: DraftItem[]; pickupPersonName: string; courierNote: string; freightCost: string };
 function isDeclareDraftEmpty(d: DeclareDraftData) {
-  return !d.client && d.items.length === 0 && !d.pickupPersonName.trim() && !d.courierNote.trim();
+  return !d.client && d.items.length === 0 && !d.pickupPersonName.trim() && !d.courierNote.trim() && !d.freightCost.trim();
 }
 
 function isValidQty(qty: string) {
   const n = Number(qty);
   return qty.trim() !== "" && Number.isInteger(n) && n > 0;
+}
+
+function isValidFreightCost(v: string) {
+  if (v.trim() === "") return true;
+  const n = Number(v);
+  return Number.isFinite(n) && n >= 0;
 }
 
 // Recalcula en vivo contra el servidor (nunca se confía en un precio que
@@ -473,6 +480,7 @@ export function ExternalSaleDeclareForm() {
   const [items, setItems] = useState<DraftItem[]>([]);
   const [pickupPersonName, setPickupPersonName] = useState("");
   const [courierNote, setCourierNote] = useState("");
+  const [freightCost, setFreightCost] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [uploadingFor, setUploadingFor] = useState<string | null>(null);
@@ -487,6 +495,7 @@ export function ExternalSaleDeclareForm() {
   const [editItems, setEditItems] = useState<DraftItem[]>([]);
   const [editPickupPersonName, setEditPickupPersonName] = useState("");
   const [editCourierNote, setEditCourierNote] = useState("");
+  const [editFreightCost, setEditFreightCost] = useState("");
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState("");
 
@@ -519,12 +528,13 @@ export function ExternalSaleDeclareForm() {
   // los había dejado.
   const { clearDraft: clearNewSaleDraft } = useFormDraft<DeclareDraftData>(
     "external-sale-declare:new",
-    { client, items, pickupPersonName, courierNote },
+    { client, items, pickupPersonName, courierNote, freightCost },
     (d) => {
       setClient(d.client);
       setItems(d.items);
       setPickupPersonName(d.pickupPersonName);
       setCourierNote(d.courierNote);
+      setFreightCost(d.freightCost);
     },
     isDeclareDraftEmpty,
     "Venta nueva sin terminar de declarar",
@@ -534,19 +544,20 @@ export function ExternalSaleDeclareForm() {
   const editDraftKey = editingId ? `external-sale-edit:${editingId}` : null;
   const { clearDraft: clearEditDraft } = useFormDraft<DeclareDraftData>(
     editDraftKey,
-    { client: editClient, items: editItems, pickupPersonName: editPickupPersonName, courierNote: editCourierNote },
+    { client: editClient, items: editItems, pickupPersonName: editPickupPersonName, courierNote: editCourierNote, freightCost: editFreightCost },
     (d) => {
       setEditClient(d.client);
       setEditItems(d.items);
       setEditPickupPersonName(d.pickupPersonName);
       setEditCourierNote(d.courierNote);
+      setEditFreightCost(d.freightCost);
     },
     () => false,
     "Corrección de venta sin terminar",
     "/area/workspace?tab=ventas-externas"
   );
 
-  const canSave = !!client && items.length > 0 && items.every((it) => isValidQty(it.quantity)) && pickupPersonName.trim().length > 0 && !saving;
+  const canSave = !!client && items.length > 0 && items.every((it) => isValidQty(it.quantity)) && pickupPersonName.trim().length > 0 && isValidFreightCost(freightCost) && !saving;
 
   async function save() {
     if (!client || items.length === 0) return;
@@ -558,11 +569,13 @@ export function ExternalSaleDeclareForm() {
         items: items.map((it) => ({ catalogItemId: it.product.id, quantity: Number(it.quantity), marginPercent: it.marginPercent })),
         pickupPersonName: pickupPersonName.trim(),
         courierNote: courierNote.trim() || undefined,
+        freightCost: freightCost.trim() ? Number(freightCost) : undefined,
       });
       setClient(null);
       setItems([]);
       setPickupPersonName("");
       setCourierNote("");
+      setFreightCost("");
       clearNewSaleDraft();
       load();
     } catch (e) {
@@ -584,10 +597,11 @@ export function ExternalSaleDeclareForm() {
     );
     setEditPickupPersonName(s.pickupPersonName);
     setEditCourierNote(s.courierNote ?? "");
+    setEditFreightCost(s.freightCost != null ? String(s.freightCost) : "");
     setEditError("");
   }
 
-  const canSaveEdit = !!editClient && editItems.length > 0 && editItems.every((it) => isValidQty(it.quantity)) && editPickupPersonName.trim().length > 0 && !editSaving;
+  const canSaveEdit = !!editClient && editItems.length > 0 && editItems.every((it) => isValidQty(it.quantity)) && editPickupPersonName.trim().length > 0 && isValidFreightCost(editFreightCost) && !editSaving;
 
   async function saveEdit(saleId: string) {
     if (!editClient || editItems.length === 0) return;
@@ -599,6 +613,7 @@ export function ExternalSaleDeclareForm() {
         items: editItems.map((it) => ({ catalogItemId: it.product.id, quantity: Number(it.quantity), marginPercent: it.marginPercent })),
         pickupPersonName: editPickupPersonName.trim(),
         courierNote: editCourierNote.trim() || undefined,
+        freightCost: editFreightCost.trim() ? Number(editFreightCost) : undefined,
       });
       clearEditDraft();
       setEditingId(null);
@@ -714,6 +729,11 @@ export function ExternalSaleDeclareForm() {
               <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Transportadora, si no es la habitual (opcional)</label>
               <input type="text" className="w-full rounded border border-rule bg-cloud px-2.5 py-1.5 text-[12.5px]" value={courierNote} onChange={(e) => setCourierNote(e.target.value)} />
             </div>
+            <div>
+              <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Flete del motorizado, si aplica (opcional)</label>
+              <input type="number" min="0" step="0.01" placeholder="$0.00" className="w-full rounded border border-rule bg-cloud px-2.5 py-1.5 text-[12.5px]" value={freightCost} onChange={(e) => setFreightCost(e.target.value)} />
+              <div className="text-[10.5px] text-steel mt-0.5">Se descuenta del total para saber cuánto debe transferir el motorizado.</div>
+            </div>
             {error && <div className="text-red text-[11.5px]">{error}</div>}
             <button type="button" disabled={!canSave} className="rounded border border-teal bg-teal px-3 py-2 text-[12.5px] font-bold text-navy cursor-pointer disabled:opacity-40" onClick={save}>
               {saving ? "Enviando…" : "Declarar venta"}
@@ -783,6 +803,11 @@ export function ExternalSaleDeclareForm() {
                     ))}
                   </div>
                   <div className="text-[11px] font-bold mt-0.5">Total: ${s.totalAmount.toFixed(2)}</div>
+                  {s.freightCost != null && (
+                    <div className="text-[10.5px] text-steel mt-0.5">
+                      Flete: -${s.freightCost.toFixed(2)} · Monto a transferir: <span className="font-semibold text-ink">${(s.totalAmount - s.freightCost).toFixed(2)}</span>
+                    </div>
+                  )}
                   <div className="text-[10.5px] text-steel mt-0.5">Entrega a: {s.pickupPersonName}{s.courierNote ? ` · Transportadora: ${s.courierNote}` : ""}</div>
                   {s.client && (
                     <div className="text-[10.5px] text-steel mt-0.5">
@@ -834,6 +859,10 @@ export function ExternalSaleDeclareForm() {
                       <div>
                         <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Transportadora (opcional)</label>
                         <input type="text" className="w-full rounded border border-rule bg-surface px-2.5 py-1.5 text-[12px]" value={editCourierNote} onChange={(e) => setEditCourierNote(e.target.value)} />
+                      </div>
+                      <div>
+                        <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Flete del motorizado (opcional)</label>
+                        <input type="number" min="0" step="0.01" placeholder="$0.00" className="w-full rounded border border-rule bg-surface px-2.5 py-1.5 text-[12px]" value={editFreightCost} onChange={(e) => setEditFreightCost(e.target.value)} />
                       </div>
                       {editError && <div className="text-red text-[11px]">{editError}</div>}
                       <div className="flex gap-2">

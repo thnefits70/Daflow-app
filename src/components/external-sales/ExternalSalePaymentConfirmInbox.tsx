@@ -20,6 +20,7 @@ type SaleDTO = {
   code: string;
   items: SaleItemDTO[];
   totalAmount: number;
+  freightCost: number | null;
   paymentProofUrl: string;
   paymentProofName: string | null;
   paymentProofUploadedAt: string | null;
@@ -96,6 +97,11 @@ export function ExternalSalePaymentConfirmInbox() {
             ))}
           </div>
           <div className="text-[12px] font-bold mb-1.5">Total: ${s.totalAmount.toFixed(2)}</div>
+          {s.freightCost != null && (
+            <div className="text-[11px] text-steel mb-1.5">
+              Flete: -${s.freightCost.toFixed(2)} · <span className="font-bold text-ink">Monto esperado a transferir: ${(s.totalAmount - s.freightCost).toFixed(2)}</span>
+            </div>
+          )}
           <div className="text-[11px] text-steel mb-1.5">
             Comprobante subido: {s.paymentProofUploadedAt ? formatDateTime(s.paymentProofUploadedAt) : "—"}
           </div>

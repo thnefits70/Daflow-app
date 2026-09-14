@@ -5319,6 +5319,13 @@ model ExternalSale {
   // del aceite de batana). Nunca cambia el proceso, solo trazabilidad.
   courierNote String?
 
+  // Confirmado 2026-09-14, pedido explícito de Marcos: costo del flete que
+  // cobra el motorizado, declarado por el asesor al crear la venta. Se resta
+  // de totalAmount para mostrar cuánto debe transferir el motorizado en
+  // realidad (ver comentario en paymentProofUrl — hoy lo descontaba de forma
+  // informal, sin quedar registrado). Nullable/0 = sin flete declarado.
+  freightCost Float?
+
   createdAt DateTime @default(now())
 
   reviewStatus    ExternalSaleReviewStatus @default(PENDING)
