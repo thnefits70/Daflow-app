@@ -9,8 +9,25 @@ import { PayrollTransferPanel, PayrollIessTransferPanel, PayrollNairobySalaryTra
 import { PayoutUploader } from "./PayrollIndividualPayment";
 import { isEndOfMonthQuincena, IESS_RATE, IESS_EMPLOYER_RATE, IESS_PART_TIME_RATE, IESS_SPOUSE_EXTENSION_RATE } from "@/lib/payrollCalc";
 import { formatDateTime } from "@/lib/formatDateTime";
+import { useFormDraft } from "@/lib/useFormDraft";
 
 type LineItem = { id?: string; label: string; amount: number; kind: "INCOME" | "EXPENSE"; isAutomatic?: boolean; note?: string | null };
+
+// Guardado automático: protege tanto los renglones ya agregados a mano
+// (todavía no guardados con "Guardar cambios") como lo que se esté
+// escribiendo en "+ Agregar" antes de confirmarlo. savedItems viaja dentro
+// del propio dato guardado (no se restaura) solo para que isEmpty pueda
+// compararlo sin depender de un closure sobre el estado del componente.
+type RoleLineItemsDraftData = {
+  items: LineItem[];
+  savedItems: LineItem[];
+  newLabel: string;
+  newAmount: string;
+  newKind: "INCOME" | "EXPENSE";
+};
+function isRoleLineItemsDraftEmpty(d: RoleLineItemsDraftData) {
+  return JSON.stringify(d.items) === JSON.stringify(d.savedItems) && !d.newLabel.trim() && !d.newAmount.trim();
+}
 type EmployeeBankAccount = {
   bankName: string;
   bankAccountType: string;
@@ -205,15 +222,30 @@ function periodLabel(period: string) {
   return q === "Q1" ? `1-15 ${monthName} ${y}` : `16-fin ${monthName} ${y}`;
 }
 
-function NewConceptForm({ onAdd }: { onAdd: (item: LineItem) => void }) {
-  const [label, setLabel] = useState("");
-  const [amount, setAmount] = useState("");
-  const [kind, setKind] = useState<"INCOME" | "EXPENSE">("EXPENSE");
+// El label/monto/tipo en progreso ahora vive en RoleCard (no acá adentro) para
+// que el mismo borrador de useFormDraft pueda protegerlo junto con `items`.
+function NewConceptForm({
+  label,
+  onLabelChange,
+  amount,
+  onAmountChange,
+  kind,
+  onKindChange,
+  onAdd,
+}: {
+  label: string;
+  onLabelChange: (v: string) => void;
+  amount: string;
+  onAmountChange: (v: string) => void;
+  kind: "INCOME" | "EXPENSE";
+  onKindChange: (v: "INCOME" | "EXPENSE") => void;
+  onAdd: (item: LineItem) => void;
+}) {
   return (
     <div className="flex items-center gap-2 mt-2 flex-wrap">
-      <input className="text-[12px] rounded border border-rule bg-cloud px-2 py-1 flex-1 min-w-[160px]" placeholder="Concepto (ej. Anticipo, Bono)" value={label} onChange={(e) => setLabel(e.target.value)} />
-      <input className="text-[12px] rounded border border-rule bg-cloud px-2 py-1 w-24" type="number" step="0.01" placeholder="Monto" value={amount} onChange={(e) => setAmount(e.target.value)} />
-      <select className="text-[12px] rounded border border-rule bg-cloud px-2 py-1" value={kind} onChange={(e) => setKind(e.target.value as "INCOME" | "EXPENSE")}>
+      <input className="text-[12px] rounded border border-rule bg-cloud px-2 py-1 flex-1 min-w-[160px]" placeholder="Concepto (ej. Anticipo, Bono)" value={label} onChange={(e) => onLabelChange(e.target.value)} />
+      <input className="text-[12px] rounded border border-rule bg-cloud px-2 py-1 w-24" type="number" step="0.01" placeholder="Monto" value={amount} onChange={(e) => onAmountChange(e.target.value)} />
+      <select className="text-[12px] rounded border border-rule bg-cloud px-2 py-1" value={kind} onChange={(e) => onKindChange(e.target.value as "INCOME" | "EXPENSE")}>
         <option value="EXPENSE">Descuento</option>
         <option value="INCOME">Ingreso</option>
       </select>
@@ -224,7 +256,7 @@ function NewConceptForm({ onAdd }: { onAdd: (item: LineItem) => void }) {
           const amt = Number(amount);
           if (!label.trim() || !amt || amt <= 0) return;
           onAdd({ label: label.trim(), amount: amt, kind });
-          setLabel(""); setAmount("");
+          onLabelChange(""); onAmountChange("");
         }}
       >
         + Agregar
@@ -252,7 +284,27 @@ function RoleCard({ role, index, published, canEdit, monthlyRoleId, isEndOfMonth
   const [showZero, setShowZero] = useState(false);
   const [showBank, setShowBank] = useState(false);
   const [undoingPayout, setUndoingPayout] = useState(false);
+  const [newConceptLabel, setNewConceptLabel] = useState("");
+  const [newConceptAmount, setNewConceptAmount] = useState("");
+  const [newConceptKind, setNewConceptKind] = useState<"INCOME" | "EXPENSE">("EXPENSE");
   const bankAccount = role.employee.employeeBankAccounts[0];
+
+  // Guardado automático: si Nairoby sale a revisar otra tarjeta antes de
+  // "Guardar cambios" (o antes de terminar de escribir un concepto nuevo),
+  // al volver encuentra todo tal como lo había dejado.
+  const { clearDraft: clearRoleLineItemsDraft } = useFormDraft<RoleLineItemsDraftData>(
+    `payrollRoleLineItems:${role.id}`,
+    { items, savedItems, newLabel: newConceptLabel, newAmount: newConceptAmount, newKind: newConceptKind },
+    (d) => {
+      setItems(d.items);
+      setNewConceptLabel(d.newLabel);
+      setNewConceptAmount(d.newAmount);
+      setNewConceptKind(d.newKind);
+    },
+    isRoleLineItemsDraftEmpty,
+    "Cambios sin guardar en el rol de pago",
+    "/area/roles-de-pago"
+  );
   // Confirmado 2026-08-25: pedido de Nairoby — en la línea "Sueldo" no se
   // debe mostrar el sueldo real quincenal, sino el sueldo declarado al IESS
   // (es lo que ella usa como referencia). Es solo un cambio visual: el
@@ -325,6 +377,7 @@ function RoleCard({ role, index, published, canEdit, monthlyRoleId, isEndOfMonth
       return;
     }
     setSavedItems(items);
+    clearRoleLineItemsDraft();
     onChanged();
   }
 
@@ -352,6 +405,7 @@ function RoleCard({ role, index, published, canEdit, monthlyRoleId, isEndOfMonth
     }
     setCorrecting(false);
     setChangeNote("");
+    clearRoleLineItemsDraft();
     onChanged();
   }
 
@@ -503,7 +557,17 @@ function RoleCard({ role, index, published, canEdit, monthlyRoleId, isEndOfMonth
         </div>
       )}
 
-      {editingEnabled && <NewConceptForm onAdd={(item) => stageChange([...items, item])} />}
+      {editingEnabled && (
+        <NewConceptForm
+          label={newConceptLabel}
+          onLabelChange={setNewConceptLabel}
+          amount={newConceptAmount}
+          onAmountChange={setNewConceptAmount}
+          kind={newConceptKind}
+          onKindChange={setNewConceptKind}
+          onAdd={(item) => stageChange([...items, item])}
+        />
+      )}
       {isDirty && (
         <div className="flex items-center gap-2 mt-2">
           <button
@@ -514,7 +578,18 @@ function RoleCard({ role, index, published, canEdit, monthlyRoleId, isEndOfMonth
           >
             {saving ? "Guardando…" : "Guardar cambios"}
           </button>
-          <button type="button" disabled={saving} className="text-[11.5px] text-steel cursor-pointer disabled:opacity-50" onClick={() => setItems(savedItems)}>
+          <button
+            type="button"
+            disabled={saving}
+            className="text-[11.5px] text-steel cursor-pointer disabled:opacity-50"
+            onClick={() => {
+              setItems(savedItems);
+              setNewConceptLabel("");
+              setNewConceptAmount("");
+              setNewConceptKind("EXPENSE");
+              clearRoleLineItemsDraft();
+            }}
+          >
             Descartar
           </button>
           <span className="text-[10.5px] text-gold">Cambios sin guardar</span>
@@ -539,7 +614,18 @@ function RoleCard({ role, index, published, canEdit, monthlyRoleId, isEndOfMonth
             <button type="button" disabled={!changeNote.trim() || saving} className="text-[12px] font-bold bg-blue text-white rounded px-3 py-1.5 cursor-pointer disabled:opacity-50" onClick={submitCorrection}>
               Guardar corrección y republicar
             </button>
-            <button type="button" className="text-[12px] text-steel cursor-pointer" onClick={() => { setCorrecting(false); setItems(role.lineItems); }}>
+            <button
+              type="button"
+              className="text-[12px] text-steel cursor-pointer"
+              onClick={() => {
+                setCorrecting(false);
+                setItems(role.lineItems);
+                setNewConceptLabel("");
+                setNewConceptAmount("");
+                setNewConceptKind("EXPENSE");
+                clearRoleLineItemsDraft();
+              }}
+            >
               Cancelar
             </button>
           </div>

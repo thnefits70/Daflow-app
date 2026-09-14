@@ -2,8 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { formatDateTime } from "@/lib/formatDateTime";
+import { useFormDraft } from "@/lib/useFormDraft";
 
 type Employee = { id: string; name: string; position: string | null };
+
+type LegacyDebtDraftData = { employeeId: string; totalAmount: string; reason: string; installments: number; startMonth: string };
+function isLegacyDebtDraftEmpty(d: LegacyDebtDraftData) {
+  return !d.employeeId && !d.totalAmount.trim() && !d.reason.trim();
+}
 type ScheduleRow = { index: number; month: string; amount: number; charged: boolean };
 type Debt = {
   id: string; totalAmount: number; reason: string; installments: number; firstPayoutMonth: string;
@@ -42,6 +48,25 @@ export function LegacyPayrollDebtsPanel({ canEdit }: { canEdit: boolean }) {
   const [err, setErr] = useState("");
   const [confirming, setConfirming] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  // Guardado automático: si Nairoby sale a revisar otra cosa antes de
+  // terminar de cargar esta deuda, al volver la encuentra tal como la
+  // había dejado. Desactivado (key null) si no puede editar — no hay nada
+  // que proteger.
+  const { clearDraft } = useFormDraft<LegacyDebtDraftData>(
+    canEdit ? "legacyPayrollDebt:new" : null,
+    { employeeId, totalAmount, reason, installments, startMonth },
+    (d) => {
+      setEmployeeId(d.employeeId);
+      setTotalAmount(d.totalAmount);
+      setReason(d.reason);
+      setInstallments(d.installments);
+      setStartMonth(d.startMonth);
+    },
+    isLegacyDebtDraftEmpty,
+    "Deuda anterior sin terminar de cargar",
+    "/area/roles-de-pago"
+  );
 
   function load() {
     if (canEdit) {
@@ -83,6 +108,7 @@ export function LegacyPayrollDebtsPanel({ canEdit }: { canEdit: boolean }) {
     const data = await res.json().catch(() => null);
     if (!res.ok) { setErr(data?.error ?? "No se pudo cargar."); return; }
     setEmployeeId(""); setTotalAmount(""); setReason(""); setInstallments(1); setStartMonth(nextMonths(1)[0]);
+    clearDraft();
     load();
   }
 

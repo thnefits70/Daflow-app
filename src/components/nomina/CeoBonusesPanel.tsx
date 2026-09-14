@@ -3,8 +3,14 @@
 import { useEffect, useState } from "react";
 import { Gift } from "lucide-react";
 import { formatDateTime } from "@/lib/formatDateTime";
+import { useFormDraft } from "@/lib/useFormDraft";
 
 type BonusType = "ADICIONAL" | "PRODUCTIVIDAD" | "MERITO" | "PERSONALIZADO";
+
+type CeoBonusDraftData = { userId: string; type: BonusType; note: string; customAmount: string; targetPeriod: string };
+function isCeoBonusDraftEmpty(d: CeoBonusDraftData) {
+  return !d.note.trim() && !d.customAmount.trim();
+}
 type Employee = { id: string; name: string; department: { name: string } | null };
 type Grant = { id: string; type: BonusType; note: string | null; grantedAt: string; amount: number | null; targetPeriod: string | null; user: { name: string } };
 
@@ -45,6 +51,24 @@ export function CeoBonusesPanel() {
   const [toast, setToast] = useState("");
   const [err, setErr] = useState("");
 
+  // Guardado automático: si el CEO sale a revisar otra cosa antes de
+  // terminar de otorgar este bono, al volver lo encuentra tal como lo
+  // había dejado.
+  const { clearDraft } = useFormDraft<CeoBonusDraftData>(
+    "ceoBonus:new",
+    { userId, type, note, customAmount, targetPeriod },
+    (d) => {
+      setUserId(d.userId);
+      setType(d.type);
+      setNote(d.note);
+      setCustomAmount(d.customAmount);
+      setTargetPeriod(d.targetPeriod);
+    },
+    isCeoBonusDraftEmpty,
+    "Bono personalizado sin terminar",
+    "/area/roles-de-pago"
+  );
+
   function load() {
     fetch("/api/payroll/employees").then((r) => (r.ok ? r.json() : [])).then((rows) => {
       setEmployees(rows);
@@ -75,6 +99,7 @@ export function CeoBonusesPanel() {
     setConfirming(false);
     setNote("");
     setCustomAmount("");
+    clearDraft();
     setToast("✓ Bono otorgado");
     setTimeout(() => setToast(""), 2500);
     load();

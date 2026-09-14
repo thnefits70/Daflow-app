@@ -12,6 +12,7 @@ import { PositionPicker } from "@/components/users/PositionPicker";
 import { PayrollProfileFields } from "@/components/nomina/PayrollProfileFields";
 import { uploadFile as uploadToStorage } from "@/lib/uploadFile";
 import { formatDateTime } from "@/lib/formatDateTime";
+import { useFormDraft } from "@/lib/useFormDraft";
 
 type Dept = { id: string; name: string; code: string };
 
@@ -23,6 +24,11 @@ const TWO_FACTOR_DEPT_CODES = ["INV", "COM", "FIN", "MKT", "DIS", "FUL"];
 type Position = { id: string; deptId: string; name: string };
 type Milestone = { id: string; title: string; note: string | null; date: string };
 type ExamScore = { id: string; score: number; total: number; createdAt: string; exam: { title: string } };
+
+type MilestoneDraftData = { mTitle: string; mNote: string };
+function isMilestoneDraftEmpty(d: MilestoneDraftData) {
+  return !d.mTitle.trim() && !d.mNote.trim();
+}
 
 type UserProfile = {
   id: string;
@@ -176,6 +182,20 @@ export function ProfileDetail({
   const [confirmingTwoFactorReset, setConfirmingTwoFactorReset] = useState(false);
   const [twoFactorResetting, setTwoFactorResetting] = useState(false);
 
+  // Guardado automático: si sale a revisar otra cosa antes de terminar de
+  // registrar este hito, al volver lo encuentra tal como lo había dejado.
+  const { clearDraft: clearMilestoneDraft } = useFormDraft<MilestoneDraftData>(
+    `profileMilestone:${p.id}`,
+    { mTitle, mNote },
+    (d) => {
+      setMTitle(d.mTitle);
+      setMNote(d.mNote);
+    },
+    isMilestoneDraftEmpty,
+    "Hito de carrera sin terminar",
+    `/area/nomina/${p.id}`
+  );
+
   const removePosition = async (id: string, name: string) => {
     if (!confirm(`¿Eliminar el puesto "${name}"?`)) return;
     setBusy(true);
@@ -323,6 +343,7 @@ export function ProfileDetail({
     setP({ ...p, milestones: [created, ...p.milestones] });
     setMTitle("");
     setMNote("");
+    clearMilestoneDraft();
   };
 
   const removeMilestone = async (id: string) => {

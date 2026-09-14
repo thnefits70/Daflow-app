@@ -2,11 +2,23 @@
 
 import { useEffect, useState } from "react";
 import { Landmark, CheckCircle2, Circle, Plus, Trash2 } from "lucide-react";
+import { useFormDraft } from "@/lib/useFormDraft";
 
 type BankAccount = {
   id: string; bankName: string; bankAccountType: string; bankAccountNumber: string; bankAccountHolder: string;
   holderIdType: "RUC" | "CEDULA" | null; holderIdNumber: string | null; isSelected: boolean;
 };
+
+type BankAccountDraftData = {
+  bankName: string;
+  bankAccountType: string;
+  bankAccountNumber: string;
+  bankAccountHolder: string;
+  holderIdNumber: string;
+};
+function isBankAccountDraftEmpty(d: BankAccountDraftData) {
+  return !d.bankName.trim() && !d.bankAccountNumber.trim() && !d.bankAccountHolder.trim() && !d.holderIdNumber.trim();
+}
 
 function BankAccountForm({ hasExisting, onSaved, onCancel }: { hasExisting: boolean; onSaved: () => void; onCancel: () => void }) {
   const [bankName, setBankName] = useState("");
@@ -21,6 +33,23 @@ function BankAccountForm({ hasExisting, onSaved, onCancel }: { hasExisting: bool
     fetch("/api/employee-bank-account/bank-names").then((r) => (r.ok ? r.json() : [])).then(setBankNames);
   }, []);
 
+  // Guardado automático: si sale a revisar otra pantalla antes de terminar
+  // de registrar su cuenta, al volver la encuentra tal como la había dejado.
+  const { clearDraft } = useFormDraft<BankAccountDraftData>(
+    "myBankAccount:new",
+    { bankName, bankAccountType, bankAccountNumber, bankAccountHolder, holderIdNumber },
+    (d) => {
+      setBankName(d.bankName);
+      setBankAccountType(d.bankAccountType);
+      setBankAccountNumber(d.bankAccountNumber);
+      setBankAccountHolder(d.bankAccountHolder);
+      setHolderIdNumber(d.holderIdNumber);
+    },
+    isBankAccountDraftEmpty,
+    "Cuenta bancaria sin terminar de registrar",
+    "/area/nomina"
+  );
+
   async function save() {
     if (!bankName.trim() || !bankAccountNumber.trim() || !bankAccountHolder.trim() || !holderIdNumber.trim()) return;
     setBusy(true);
@@ -30,6 +59,7 @@ function BankAccountForm({ hasExisting, onSaved, onCancel }: { hasExisting: bool
       body: JSON.stringify({ bankName: bankName.trim(), bankAccountType, bankAccountNumber: bankAccountNumber.trim(), bankAccountHolder: bankAccountHolder.trim(), holderIdType: "CEDULA", holderIdNumber: holderIdNumber.trim() }),
     });
     setBusy(false);
+    clearDraft();
     onSaved();
   }
 
@@ -49,7 +79,7 @@ function BankAccountForm({ hasExisting, onSaved, onCancel }: { hasExisting: bool
           {busy ? "Guardando…" : "Guardar cuenta"}
         </button>
         {hasExisting && (
-          <button type="button" disabled={busy} className="text-[12px] font-semibold text-steel rounded px-3 py-1.5 cursor-pointer" onClick={onCancel}>
+          <button type="button" disabled={busy} className="text-[12px] font-semibold text-steel rounded px-3 py-1.5 cursor-pointer" onClick={() => { clearDraft(); onCancel(); }}>
             Cancelar
           </button>
         )}

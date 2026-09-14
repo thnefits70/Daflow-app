@@ -4,8 +4,19 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Plus, User, Award } from "lucide-react";
+import { useFormDraft } from "@/lib/useFormDraft";
 
 type Dept = { id: string; name: string; code: string };
+
+// La contraseña queda afuera del borrador a propósito — el borrador se
+// guarda en texto plano en la base (ver /api/form-drafts) y no tiene
+// sentido persistir ahí la contraseña de una cuenta nueva sin encriptar.
+// name/username/deptId sí se protegen; la contraseña hay que volver a
+// escribirla si se interrumpe la creación.
+type NominaGridDraftData = { name: string; username: string; deptId: string };
+function isNominaGridDraftEmpty(d: NominaGridDraftData) {
+  return !d.name.trim() && !d.username.trim();
+}
 type NominaUser = {
   id: string;
   name: string;
@@ -36,6 +47,22 @@ export function NominaGrid({
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
 
+  // Guardado automático (sin la contraseña, ver arriba): si sale a revisar
+  // otra cosa antes de terminar de crear el acceso, al volver encuentra
+  // nombre/usuario/área tal como los había dejado.
+  const { clearDraft } = useFormDraft<NominaGridDraftData>(
+    "nominaGrid:newUser",
+    { name, username, deptId },
+    (d) => {
+      setName(d.name);
+      setUsername(d.username);
+      setDeptId(d.deptId);
+    },
+    isNominaGridDraftEmpty,
+    "Nuevo colaborador sin terminar de crear",
+    "/area/nomina"
+  );
+
   const create = async () => {
     if (!name.trim() || !username.trim() || !password.trim() || !deptId) {
       setErr("Completa nombre, usuario, contraseña y elige un área.");
@@ -57,6 +84,7 @@ export function NominaGrid({
     setName("");
     setUsername("");
     setPassword("");
+    clearDraft();
     router.refresh();
   };
 

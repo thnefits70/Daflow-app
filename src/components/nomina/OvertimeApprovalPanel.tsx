@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useFormDraft } from "@/lib/useFormDraft";
 
 type Pending = {
   id: string;
@@ -57,6 +58,16 @@ function RejectButton({ onConfirm, busy }: { onConfirm: () => void; busy: boolea
 const nowLocal = new Date();
 const todayStr = `${nowLocal.getFullYear()}-${String(nowLocal.getMonth() + 1).padStart(2, "0")}-${String(nowLocal.getDate()).padStart(2, "0")}`;
 
+// showManual viaja dentro del propio dato guardado: mientras el panel de
+// carga manual esté cerrado no hay nada que proteger (isEmpty = true), así
+// que no importa si employeeId/fecha/minutos siguen en sus valores por
+// defecto — solo se guarda de verdad una vez que Daniel/el admin abre el
+// panel para cargar algo.
+type OvertimeManualDraftData = { manualEmployeeId: string; manualDate: string; manualMinutes: number; showManual: boolean };
+function isOvertimeManualDraftEmpty(d: OvertimeManualDraftData) {
+  return !d.showManual;
+}
+
 export function OvertimeApprovalPanel() {
   const [pending, setPending] = useState<Pending[] | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -68,6 +79,24 @@ export function OvertimeApprovalPanel() {
   const [manualBusy, setManualBusy] = useState(false);
   const [manualErr, setManualErr] = useState("");
 
+  // Guardado automático: si el admin sale a revisar otra cosa antes de
+  // terminar de cargar horas extra manuales, al volver encuentra el panel
+  // abierto tal como lo había dejado.
+  const { clearDraft: clearManualDraft } = useFormDraft<OvertimeManualDraftData>(
+    "overtimeManual:new",
+    { manualEmployeeId, manualDate, manualMinutes, showManual },
+    (d) => {
+      setManualEmployeeId(d.manualEmployeeId);
+      setManualDate(d.manualDate);
+      setManualMinutes(d.manualMinutes);
+      setShowManual(d.showManual);
+      if (d.showManual) loadEmployees();
+    },
+    isOvertimeManualDraftEmpty,
+    "Registro manual de horas extra sin terminar",
+    "/area/roles-de-pago"
+  );
+
   function load() {
     fetch("/api/payroll/overtime/pending").then((r) => (r.ok ? r.json() : [])).then(setPending);
   }
@@ -77,7 +106,9 @@ export function OvertimeApprovalPanel() {
     if (employees) return;
     fetch("/api/payroll/employees").then((r) => (r.ok ? r.json() : [])).then((list: Employee[]) => {
       setEmployees(list);
-      if (list[0]) setManualEmployeeId(list[0].id);
+      // No pisar un employeeId ya elegido (a mano, o restaurado desde un
+      // borrador) con el default del primero de la lista.
+      if (list[0] && !manualEmployeeId) setManualEmployeeId(list[0].id);
     });
   }
 
@@ -112,6 +143,7 @@ export function OvertimeApprovalPanel() {
     setManualMinutes(60);
     setManualDate(todayStr);
     setShowManual(false);
+    clearManualDraft();
     load();
   }
 
@@ -126,7 +158,11 @@ export function OvertimeApprovalPanel() {
         <button
           type="button"
           className="text-[12px] font-semibold text-teal border-[1.5px] border-teal rounded-md px-3 py-1.5 cursor-pointer"
-          onClick={() => { setShowManual((v) => !v); if (!showManual) loadEmployees(); }}
+          onClick={() => {
+            if (showManual) clearManualDraft();
+            else loadEmployees();
+            setShowManual((v) => !v);
+          }}
         >
           {showManual ? "Cancelar" : "+ Ingresar horas extra manual"}
         </button>

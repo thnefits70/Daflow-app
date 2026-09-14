@@ -6,6 +6,7 @@ import { ProofPreview } from "@/components/shared/ProofPreview";
 import { usePasteFile } from "@/lib/usePasteFile";
 import { uploadFile } from "@/lib/uploadFile";
 import { formatDateTime } from "@/lib/formatDateTime";
+import { useFormDraft, clearFormDraft } from "@/lib/useFormDraft";
 
 const MONTHS = [
   "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
@@ -29,6 +30,22 @@ type RosterEntry = {
   payment: Payment | null;
 };
 
+function draftKeyFor(userId: string, month: string) {
+  return `externalPayment:${userId}:${month}`;
+}
+
+type ExternalPaymentDraftData = {
+  amount: string;
+  receiptUrl: string | null;
+  receiptName: string | null;
+  invoiceUrl: string | null;
+  invoiceName: string | null;
+  invoiceNumber: string;
+};
+function isExternalPaymentDraftEmpty(d: ExternalPaymentDraftData) {
+  return !d.amount.trim() && !d.receiptUrl && !d.invoiceUrl && !d.invoiceNumber.trim();
+}
+
 function RegisterForm({ userId, month, requiresInvoice, onSaved }: { userId: string; month: string; requiresInvoice: boolean; onSaved: () => void }) {
   const [amount, setAmount] = useState("");
   const [receiptUrl, setReceiptUrl] = useState<string | null>(null);
@@ -40,6 +57,24 @@ function RegisterForm({ userId, month, requiresInvoice, onSaved }: { userId: str
   const [uploadingInvoice, setUploadingInvoice] = useState(false);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
+
+  // Guardado automático: si sale a revisar otra fila antes de terminar de
+  // registrar este pago, al volver lo encuentra tal como lo había dejado.
+  const { clearDraft } = useFormDraft<ExternalPaymentDraftData>(
+    draftKeyFor(userId, month),
+    { amount, receiptUrl, receiptName, invoiceUrl, invoiceName, invoiceNumber },
+    (d) => {
+      setAmount(d.amount);
+      setReceiptUrl(d.receiptUrl);
+      setReceiptName(d.receiptName);
+      setInvoiceUrl(d.invoiceUrl);
+      setInvoiceName(d.invoiceName);
+      setInvoiceNumber(d.invoiceNumber);
+    },
+    isExternalPaymentDraftEmpty,
+    "Pago por factura sin terminar de registrar",
+    "/area/roles-de-pago"
+  );
 
   async function handleReceipt(file: File) {
     setUploadingReceipt(true);
@@ -88,6 +123,7 @@ function RegisterForm({ userId, month, requiresInvoice, onSaved }: { userId: str
       setErr(data?.error ?? "No se pudo registrar el pago.");
       return;
     }
+    clearDraft();
     onSaved();
   }
 
@@ -199,7 +235,10 @@ function RosterRow({ entry, month, canEdit, onChanged }: { entry: RosterEntry; m
           <button
             type="button"
             className="text-[12px] font-semibold border border-rule rounded px-2.5 py-1.5 cursor-pointer"
-            onClick={() => setEditing((v) => !v)}
+            onClick={() => {
+              if (editing) clearFormDraft(draftKeyFor(user.id, month));
+              setEditing((v) => !v);
+            }}
           >
             {editing ? "Cancelar" : "Registrar pago"}
           </button>
