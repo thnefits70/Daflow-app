@@ -7,6 +7,21 @@ const patchSchema = z.object({
   email: z.string().trim().email().optional().or(z.literal("")),
 });
 
+// Confirmado 2026-09-14: para precargar el proveedor en el formulario de
+// solicitud cuando Jariel viene desde "Listo para comprar" (Análisis de
+// Mercado) — mismo shape que ya devuelve GET /api/purchase-suppliers (lista).
+export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  if (!(await canSubmitPurchaseRequests())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+
+  const { id } = await params;
+  const supplier = await prisma.supplier.findUnique({
+    where: { id },
+    include: { contacts: { orderBy: { id: "asc" } }, bankAccounts: { orderBy: { createdAt: "asc" } } },
+  });
+  if (!supplier) return NextResponse.json({ error: "No encontrado." }, { status: 404 });
+  return NextResponse.json(supplier);
+}
+
 // Confirmado 2026-08-03: algunos proveedores piden que el comprobante de
 // pago se les envíe por correo — se puede agregar o actualizar en cualquier
 // momento, no solo al registrar el proveedor por primera vez.

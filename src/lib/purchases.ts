@@ -378,7 +378,7 @@ export type PurchaseSubmissionData = z.infer<typeof purchaseSubmissionSchema>;
 export type PurchaseSubmissionCheck =
   | {
       ok: true;
-      resolvedBankAccountId: string;
+      resolvedBankAccountId: string | null;
       anyOverThreshold: boolean;
       anySupplierNotCheapest: boolean;
       creditSkipJustification: string | null;
@@ -403,31 +403,38 @@ export async function checkPurchaseSubmission(d: PurchaseSubmissionData): Promis
     return { ok: false, status: 400, error: "Falta el transportista, ya que el envío no está incluido." };
   }
 
+  // Confirmado 2026-09-14, pedido explícito de Jariel/del usuario: un
+  // proveedor de crédito (hoy CHEN) se solicita directo con esta
+  // herramienta — ni cotización, ni orden de compra, ni cuenta bancaria
+  // matriculada de antemano (el usuario conversa directo con CHEN y paga a
+  // la cuenta que él le mande al momento del pago real, por tanda — ver
+  // SupplierDebtTransfer). Nada de esto aplica a proveedores de pago
+  // anticipado, que siguen exactamente igual que antes.
+  const supplier = await prisma.supplier.findUnique({ where: { id: d.supplierId }, select: { paymentMode: true } });
+  const isCreditoSupplier = supplier?.paymentMode === "CREDITO";
+
   // Confirmado 2026-08-07: bug real — si el proveedor no tenía NINGUNA cuenta
   // registrada, bankAccountId se guardaba en null sin ningún aviso. Ahora es
   // obligatorio elegir una cuenta real del proveedor.
   // Confirmado 2026-08-18: pedido explícito del usuario — nunca se elige la
   // cuenta en automático, ni siquiera cuando el proveedor solo tiene una;
   // quien solicita siempre debe elegirla a propósito en la UI.
-  const supplierBankAccounts = await prisma.supplierBankAccount.findMany({ where: { supplierId: d.supplierId }, select: { id: true } });
-  if (supplierBankAccounts.length === 0) {
-    return { ok: false, status: 400, error: "Este proveedor no tiene ninguna cuenta bancaria registrada — agrégale una cuenta antes de enviar la solicitud." };
+  let resolvedBankAccountId: string | null = null;
+  if (!isCreditoSupplier) {
+    const supplierBankAccounts = await prisma.supplierBankAccount.findMany({ where: { supplierId: d.supplierId }, select: { id: true } });
+    if (supplierBankAccounts.length === 0) {
+      return { ok: false, status: 400, error: "Este proveedor no tiene ninguna cuenta bancaria registrada — agrégale una cuenta antes de enviar la solicitud." };
+    }
+    if (!d.bankAccountId) {
+      return { ok: false, status: 400, error: "Elige la cuenta bancaria del proveedor a la que se le paga." };
+    }
+    if (!supplierBankAccounts.some((a) => a.id === d.bankAccountId)) {
+      return { ok: false, status: 400, error: "La cuenta bancaria elegida no pertenece a este proveedor." };
+    }
+    resolvedBankAccountId = d.bankAccountId;
   }
-  if (!d.bankAccountId) {
-    return { ok: false, status: 400, error: "Elige la cuenta bancaria del proveedor a la que se le paga." };
-  }
-  if (!supplierBankAccounts.some((a) => a.id === d.bankAccountId)) {
-    return { ok: false, status: 400, error: "La cuenta bancaria elegida no pertenece a este proveedor." };
-  }
-  const resolvedBankAccountId = d.bankAccountId;
 
   const groupTotal = d.items.reduce((sum, it) => sum + it.quantity * it.unitCost, 0);
-  // Confirmado 2026-09-14, pedido explícito de Jariel: un proveedor de
-  // crédito (hoy CHEN) se solicita directo con esta herramienta — ya no se
-  // pide cotización ni orden de compra de respaldo, así que toda esta
-  // verificación se salta por completo para ese caso.
-  const supplier = await prisma.supplier.findUnique({ where: { id: d.supplierId }, select: { paymentMode: true } });
-  const isCreditoSupplier = supplier?.paymentMode === "CREDITO";
 
   if (!isCreditoSupplier && !d.quoteImageUrl) {
     return { ok: false, status: 400, error: "Falta la cotización." };

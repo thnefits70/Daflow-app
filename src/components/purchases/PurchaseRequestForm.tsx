@@ -709,14 +709,16 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
       setErr("Elige el transportista, ya que el envío no está incluido — o marca que todavía no lo sabes.");
       return;
     }
-    const supplierAccounts = supplier.bankAccounts ?? [];
-    if (supplierAccounts.length === 0) {
-      setErr("Este proveedor no tiene ninguna cuenta bancaria registrada — agrégale una cuenta antes de enviar la solicitud.");
-      return;
-    }
-    if (!bankAccountId) {
-      setErr("Elige la cuenta bancaria del proveedor a la que se le paga.");
-      return;
+    if (!isCreditoSupplier) {
+      const supplierAccounts = supplier.bankAccounts ?? [];
+      if (supplierAccounts.length === 0) {
+        setErr("Este proveedor no tiene ninguna cuenta bancaria registrada — agrégale una cuenta antes de enviar la solicitud.");
+        return;
+      }
+      if (!bankAccountId) {
+        setErr("Elige la cuenta bancaria del proveedor a la que se le paga.");
+        return;
+      }
     }
     const missingJustificationIdx = [...justificationNeededIdx].filter((idx) => !lines[idx].justification.trim());
     if (missingJustificationIdx.length > 0) {
