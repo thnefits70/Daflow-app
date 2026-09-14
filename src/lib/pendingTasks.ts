@@ -1304,7 +1304,15 @@ async function getPurchaseShippingPendingItem(href: string): Promise<PendingItem
 async function getPurchaseRequesterPendingItems(userId: string, href: string): Promise<PendingItem[]> {
   const rows = await prisma.purchaseRequest.findMany({
     where: { requestedById: userId },
-    select: { groupId: true, status: true, purchaseOrderUrl: true, shippingCarrierPending: true, bankAccountChangeRequestedAt: true, requestedAt: true },
+    select: {
+      groupId: true,
+      status: true,
+      purchaseOrderUrl: true,
+      shippingCarrierPending: true,
+      bankAccountChangeRequestedAt: true,
+      requestedAt: true,
+      supplier: { select: { paymentMode: true } },
+    },
   });
   if (rows.length === 0) return [];
 
@@ -1326,7 +1334,12 @@ async function getPurchaseRequesterPendingItems(userId: string, href: string): P
     });
   }
 
-  const missingPO = groups.filter((g) => g.status !== "REJECTED" && !g.purchaseOrderUrl);
+  // Confirmado 2026-09-14, mismo bug real reportado por el usuario (ya
+  // corregido en MyPurchaseRequests.tsx y checkPurchaseSubmission): un
+  // proveedor de crédito (hoy CHEN) nunca necesita orden de compra — se
+  // solicita directo con esta herramienta, el control de inventario ya lo
+  // lleva INVESTOCK.
+  const missingPO = groups.filter((g) => g.status !== "REJECTED" && g.supplier.paymentMode !== "CREDITO" && !g.purchaseOrderUrl);
   if (missingPO.length > 0) {
     const overdue = missingPO.some((g) => g.requestedAt < cutoff);
     items.push({

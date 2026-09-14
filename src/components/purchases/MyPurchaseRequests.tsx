@@ -62,7 +62,7 @@ type Row = {
     confirmedBy: { name: string } | null;
     confirmedAt: string | null;
   } | null;
-  supplier: { id: string; name: string; bankAccounts: BankAccountDTO[] };
+  supplier: { id: string; name: string; paymentMode?: "PREPAGO" | "CREDITO"; bankAccounts: BankAccountDTO[] };
   bankAccountId: string | null;
   bankAccountChangeRequestedAt: string | null;
   bankAccountChangeNote: string | null;
@@ -528,7 +528,13 @@ function GroupCard({
   const groupId = g[0].groupId;
   const total = g.reduce((s, r) => s + r.totalCost, 0);
   const rejected = g[0].status === "REJECTED";
-  const needsPurchaseOrder = !rejected && !g[0].purchaseOrderUrl;
+  // Confirmado 2026-09-14, pedido explícito del usuario: un proveedor de
+  // crédito (hoy CHEN) ya no usa órdenes de compra — se solicita directo con
+  // esta herramienta y el control de inventario lo lleva INVESTOCK. Sin
+  // esto, esta pantalla le seguía pidiendo a Jariel subir una orden de
+  // compra que ya no aplica para ese caso.
+  const isCreditoSupplier = g[0].supplier.paymentMode === "CREDITO";
+  const needsPurchaseOrder = !rejected && !isCreditoSupplier && !g[0].purchaseOrderUrl;
   const [uploading, setUploading] = useState(false);
   const [err, setErr] = useState("");
   const [reminded, setReminded] = useState(false);
@@ -736,7 +742,7 @@ export function MyPurchaseRequests({ onResubmit, isAdmin = false }: { onResubmit
   if (rows.length === 0) return <div className="border-[1.5px] border-dashed border-rule rounded-md p-8 text-center text-steel text-[13.5px]">Todavía no has enviado ninguna solicitud.</div>;
 
   const groups = groupRows(rows);
-  const pendingPOCount = groups.filter((g) => g[0].status !== "REJECTED" && !g[0].purchaseOrderUrl).length;
+  const pendingPOCount = groups.filter((g) => g[0].status !== "REJECTED" && g[0].supplier.paymentMode !== "CREDITO" && !g[0].purchaseOrderUrl).length;
 
   function markUploaded(groupId: string, url: string) {
     setRows((rs) => rs && rs.map((r) => (r.groupId === groupId ? { ...r, purchaseOrderUrl: url } : r)));
