@@ -23,7 +23,7 @@ type Row = {
   requestedBy: { name: string } | null;
   paidBy: { name: string } | null;
   invoicedBy: { name: string } | null;
-  quoteImageUrl: string;
+  quoteImageUrl: string | null;
   purchaseOrderUrl: string | null;
   paymentProofUrl: string | null;
   shippingPaymentProofUrl: string | null;

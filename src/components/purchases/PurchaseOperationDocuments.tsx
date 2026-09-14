@@ -9,7 +9,7 @@ import { CatalogCode } from "@/components/shared/CatalogCode";
 export type OperationDocRow = {
   id: string;
   catalogItem: { name: string; photos: string[]; justCode: string | null };
-  quoteImageUrl: string;
+  quoteImageUrl: string | null;
   purchaseOrderUrl: string | null;
   paymentProofUrl: string | null;
   shippingPaymentProofUrl: string | null;

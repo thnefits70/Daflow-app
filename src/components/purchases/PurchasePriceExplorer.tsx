@@ -137,10 +137,12 @@ function ProductComparisonCard({ item, onRemove }: { item: CatalogItem; onRemove
                         {s.latestRequestedByName ? <> · pedido por {s.latestRequestedByName}</> : null}
                       </div>
                       <div className="flex items-center gap-3 flex-wrap">
-                        <a href={s.latestQuoteImageUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-[11.5px] text-blue font-semibold cursor-pointer">
-                          {isPdf(s.latestQuoteImageUrl) ? <FileText size={13} /> : <img src={s.latestQuoteImageUrl} alt="" className="w-6 h-6 rounded object-cover border border-rule" />}
-                          Ver cotización
-                        </a>
+                        {s.latestQuoteImageUrl && (
+                          <a href={s.latestQuoteImageUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-[11.5px] text-blue font-semibold cursor-pointer">
+                            {isPdf(s.latestQuoteImageUrl) ? <FileText size={13} /> : <img src={s.latestQuoteImageUrl} alt="" className="w-6 h-6 rounded object-cover border border-rule" />}
+                            Ver cotización
+                          </a>
+                        )}
                         {s.latestPurchaseOrderUrl && (
                           <a href={s.latestPurchaseOrderUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-[11.5px] text-blue font-semibold cursor-pointer">
                             {isPdf(s.latestPurchaseOrderUrl) ? <FileText size={13} /> : <img src={s.latestPurchaseOrderUrl} alt="" className="w-6 h-6 rounded object-cover border border-rule" />}

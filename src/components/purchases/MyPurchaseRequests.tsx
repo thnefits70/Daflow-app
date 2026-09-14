@@ -30,7 +30,7 @@ type Row = {
   rejectReason: string | null;
   attemptNumber: number;
   catalogItem: { id: string; name: string; photos: string[]; justCode: string | null };
-  quoteImageUrl: string;
+  quoteImageUrl: string | null;
   quoteReadTotal: number | null;
   quoteReferenceCode: string | null;
   justification: string | null;

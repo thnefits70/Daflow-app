@@ -36,7 +36,7 @@ type Row = {
   unitCost: number;
   totalCost: number;
   justification: string | null;
-  quoteImageUrl: string;
+  quoteImageUrl: string | null;
   quoteReadTotal: number | null;
   quoteReferenceCode: string | null;
   purchaseOrderUrl: string | null;
@@ -916,10 +916,14 @@ export function PurchaseApprovalInbox({ canAct = true, canPayHere = true, canPay
             )}
 
             <div className="flex items-center gap-2 mb-2.5">
-              <a href={g[0].quoteImageUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-[11.5px] text-blue font-semibold cursor-pointer">
-                {isPdf(g[0].quoteImageUrl) ? <FileText size={13} /> : <img src={g[0].quoteImageUrl} alt="" className="w-6 h-6 rounded object-cover border border-rule" />}
-                Ver cotización
-              </a>
+              {g[0].quoteImageUrl ? (
+                <a href={g[0].quoteImageUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-[11.5px] text-blue font-semibold cursor-pointer">
+                  {isPdf(g[0].quoteImageUrl) ? <FileText size={13} /> : <img src={g[0].quoteImageUrl} alt="" className="w-6 h-6 rounded object-cover border border-rule" />}
+                  Ver cotización
+                </a>
+              ) : (
+                <span className="text-[11.5px] text-steel">Proveedor de crédito — sin cotización</span>
+              )}
               {g[0].purchaseOrderUrl && (
                 <a href={g[0].purchaseOrderUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-[11.5px] text-blue font-semibold cursor-pointer">
                   {isPdf(g[0].purchaseOrderUrl) ? <FileText size={13} /> : <img src={g[0].purchaseOrderUrl} alt="" className="w-6 h-6 rounded object-cover border border-rule" />}

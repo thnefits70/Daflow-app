@@ -112,7 +112,7 @@ export type SupplierPricePoint = {
   // entonces, no solo el número.
   id: string;
   requestNumber: number | null;
-  quoteImageUrl: string;
+  quoteImageUrl: string | null;
   purchaseOrderUrl: string | null;
   // Confirmado 2026-09-09 (pedido explícito del usuario, trazabilidad): quién
   // gestionó esa compra — null si la cuenta que la creó ya fue eliminada.
@@ -131,7 +131,7 @@ export type SupplierPriceHistory = {
   // mano sin tener que buscar el último punto del historial.
   latestRequestId: string;
   latestRequestNumber: number | null;
-  latestQuoteImageUrl: string;
+  latestQuoteImageUrl: string | null;
   latestPurchaseOrderUrl: string | null;
   latestRequestedByName: string | null;
 };
@@ -334,7 +334,10 @@ export const purchaseSubmissionSchema = z.object({
   items: z.array(purchaseLineSchema).min(1, "Agrega al menos un producto."),
   supplierId: z.string().min(1),
   bankAccountId: z.string().min(1).nullable().optional(),
-  quoteImageUrl: z.string().url(),
+  // Confirmado 2026-09-14: solo obligatoria para proveedores que NO son de
+  // crédito — impuesto en checkPurchaseSubmission (necesita el paymentMode
+  // real del proveedor, no se puede validar acá con el shape solo).
+  quoteImageUrl: z.string().url().nullable().optional(),
   quoteReadTotal: z.number().nullable(),
   quoteReferenceCode: z.string().trim().nullable().optional(),
   purchaseOrderUrl: z.string().url().nullable().optional(),
@@ -419,14 +422,25 @@ export async function checkPurchaseSubmission(d: PurchaseSubmissionData): Promis
   const resolvedBankAccountId = d.bankAccountId;
 
   const groupTotal = d.items.reduce((sum, it) => sum + it.quantity * it.unitCost, 0);
+  // Confirmado 2026-09-14, pedido explícito de Jariel: un proveedor de
+  // crédito (hoy CHEN) se solicita directo con esta herramienta — ya no se
+  // pide cotización ni orden de compra de respaldo, así que toda esta
+  // verificación se salta por completo para ese caso.
+  const supplier = await prisma.supplier.findUnique({ where: { id: d.supplierId }, select: { paymentMode: true } });
+  const isCreditoSupplier = supplier?.paymentMode === "CREDITO";
+
+  if (!isCreditoSupplier && !d.quoteImageUrl) {
+    return { ok: false, status: 400, error: "Falta la cotización." };
+  }
+
   const matches = d.quoteReadTotal !== null && Math.abs(d.quoteReadTotal - groupTotal) < 0.01;
   const manuallyConfirmed = !!d.quoteReferenceCode;
-  if (!matches && !manuallyConfirmed) {
+  if (!isCreditoSupplier && !matches && !manuallyConfirmed) {
     return { ok: false, status: 400, error: "La cotización no coincide con lo escrito — verifícala de nuevo antes de enviar." };
   }
   // Confirmado 2026-07-31: cuando la cotización solo trae un código de
   // proveedor (no el nombre del producto), la orden de compra es obligatoria.
-  if (manuallyConfirmed && !d.purchaseOrderUrl) {
+  if (!isCreditoSupplier && manuallyConfirmed && !d.purchaseOrderUrl) {
     return {
       ok: false,
       status: 400,

@@ -654,11 +654,15 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
     setVerifyResult(data);
   }
 
-  const quoteVerified = verifyResult?.matches || (verifyResult?.referenceCodeFound && manualCodeConfirm);
+  // Confirmado 2026-09-14, pedido explícito de Jariel: un proveedor de
+  // crédito (hoy CHEN) se solicita directo con esta herramienta — ya no se
+  // pide cotización ni orden de compra de respaldo.
+  const isCreditoSupplier = supplier?.paymentMode === "CREDITO";
+  const quoteVerified = isCreditoSupplier || verifyResult?.matches || (verifyResult?.referenceCodeFound && manualCodeConfirm);
   // Confirmado 2026-07-31: cuando la IA no encuentra nombre de producto en la
   // cotización, solo un código, la orden de compra pasa a ser obligatoria —
   // es el único respaldo real de qué se está comprando y solicitando pagar.
-  const needsPurchaseOrder = !!verifyResult?.referenceCodeFound && !verifyResult?.productNameFound;
+  const needsPurchaseOrder = !isCreditoSupplier && !!verifyResult?.referenceCodeFound && !verifyResult?.productNameFound;
   const poAnchored = !!poVerifyResult?.matches;
 
   // Confirmado 2026-09-03: reintenta sola la lectura de la orden de compra
@@ -681,7 +685,7 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
   const validLines = lines.filter((l) => l.catalogItem && Number(l.quantity) > 0 && Number(l.unitCost) > 0);
 
   async function submit() {
-    if (validLines.length === 0 || validLines.length !== lines.length || !supplier || !quoteImageUrl) {
+    if (validLines.length === 0 || validLines.length !== lines.length || !supplier || (!isCreditoSupplier && !quoteImageUrl)) {
       setErr("Completa producto, mercadería o insumo, cantidad y costo de cada línea, el proveedor, y la cotización.");
       return;
     }
@@ -1047,6 +1051,12 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
         </div>
       )}
 
+      {isCreditoSupplier ? (
+        <div className="mb-3.5 text-[11.5px] text-steel bg-cloud border border-rule rounded-md px-3 py-2.5">
+          Este es un proveedor de crédito — se solicita directo con esta herramienta, sin cotización ni orden de compra.
+        </div>
+      ) : (
+        <>
       <div className="mb-3.5">
         <label className="block mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-steel">
           Cotización <span className="text-steel-dim normal-case font-normal">— total de todos los productos: ${total.toFixed(2)}</span>
@@ -1287,6 +1297,8 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
           </div>
         )}
       </div>
+        </>
+      )}
 
       <div className="flex items-center gap-2 mb-3.5 text-[12.5px] text-steel">
         <input type="checkbox" checked={shippingIncluded} onChange={(e) => setShippingIncluded(e.target.checked)} className="w-auto cursor-pointer" />

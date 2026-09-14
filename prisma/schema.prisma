@@ -2271,7 +2271,12 @@ model PurchaseRequest {
   totalCost Float
 
   // Cotización — verificada por IA una sola vez por solicitud (no es un chat).
-  quoteImageUrl      String
+  // Confirmado 2026-09-14, pedido explícito de Jariel: con un proveedor de
+  // crédito (hoy CHEN) ya no se pide cotización ni orden de compra — se le
+  // solicita directo con esta misma herramienta, sin depender de una orden
+  // de compra de Just. Queda nullable solo para ese caso (impuesto en
+  // checkPurchaseSubmission, src/lib/purchases.ts).
+  quoteImageUrl      String?
   quoteReadTotal     Float?
   // Cuando la cotización solo trae un código de proveedor, no el nombre del
   // producto — la persona confirma manualmente a qué insumo corresponde.

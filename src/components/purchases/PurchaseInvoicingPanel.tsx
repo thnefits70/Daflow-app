@@ -68,7 +68,7 @@ type Row = {
   shippingPaymentRequestedBy: { name: string } | null;
   shippingPaidAt: string | null;
   shippingPaidBy: { name: string } | null;
-  quoteImageUrl: string;
+  quoteImageUrl: string | null;
   purchaseOrderUrl: string | null;
   paymentProofUrl: string | null;
   shippingPaymentProofUrl: string | null;
