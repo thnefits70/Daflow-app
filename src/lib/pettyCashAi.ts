@@ -32,6 +32,18 @@ export async function readPettyCashProof(params: {
       "Provedix (Guayaquil, Ecuador). Extrae SOLO el monto que de verdad muestra la foto — nunca inventes un valor. " +
       "Si la foto es una factura o nota de venta con varias líneas de dinero (subtotal, descuento, IVA/impuestos, propina, total), " +
       "usa SIEMPRE el TOTAL final a pagar o recibido — nunca el subtotal ni ningún monto parcial antes de impuestos. " +
+      // Confirmado 2026-09-15, bug real reportado por el usuario: un
+      // comprobante de TRANSFERENCIA BANCARIA (ej. "¡Transferencia exitosa!
+      // $9.59") suele mostrar, aparte del monto transferido, un "Costo de
+      // transacción" y/o "IVA" (la comisión que cobra el banco por hacer la
+      // transferencia) como líneas separadas más abajo — a diferencia de una
+      // factura, esa comisión NO está incluida en el número grande. El monto
+      // real que salió de la cuenta (y que la persona declara en Caja Chica)
+      // es transferido + esa comisión, así que hay que sumarlos.
+      "Si la foto es un comprobante de TRANSFERENCIA BANCARIA que además muestra por separado un 'Costo de transacción' " +
+      "y/o 'IVA' (la comisión del banco por la transferencia, no un impuesto sobre una compra), SUMA esos valores al " +
+      "monto transferido — el total real que salió de la cuenta es el monto transferido MÁS esa comisión, nunca solo " +
+      "el monto transferido. " +
       'Responde ÚNICAMENTE un JSON: {"readAmount": number|null}. ' +
       "readAmount es ese monto total final (sin símbolo de moneda). Si no se distingue con claridad, pon null.",
     messages: [
