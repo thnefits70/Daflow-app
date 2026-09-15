@@ -34,6 +34,8 @@ type SaleDTO = {
   courierNote: string | null;
   freightCost: number | null;
   client: ClientDTO | null;
+  isContraEntrega: boolean;
+  facturaSolicitada: "SI" | "NO" | "PENDIENTE";
   reviewStatus: "PENDING" | "APPROVED" | "REJECTED";
   rejectionReason: string | null;
   paymentProofUrl: string | null;
@@ -51,10 +53,18 @@ type DraftItem = { product: MatchCatalogItem; quantity: string; marginPercent: n
 
 type PreviewRow = { unitPrice: number; marginPercentUsed: number };
 
-type DeclareDraftData = { client: ClientDTO | null; items: DraftItem[]; pickupPersonName: string; courierNote: string; freightCost: string };
+type FacturaSolicitud = "SI" | "NO" | "PENDIENTE";
+
+type DeclareDraftData = { client: ClientDTO | null; items: DraftItem[]; pickupPersonName: string; courierNote: string; freightCost: string; facturaSolicitada: FacturaSolicitud };
 function isDeclareDraftEmpty(d: DeclareDraftData) {
   return !d.client && d.items.length === 0 && !d.pickupPersonName.trim() && !d.courierNote.trim() && !d.freightCost.trim();
 }
+
+const FACTURA_SOLICITUD_OPTIONS: { value: FacturaSolicitud; label: string }[] = [
+  { value: "SI", label: "Sí" },
+  { value: "NO", label: "No" },
+  { value: "PENDIENTE", label: "No sé todavía" },
+];
 
 function isValidQty(qty: string) {
   const n = Number(qty);
@@ -557,6 +567,7 @@ export function ExternalSaleDeclareForm() {
   const [pickupPersonName, setPickupPersonName] = useState("");
   const [courierNote, setCourierNote] = useState("");
   const [freightCost, setFreightCost] = useState("");
+  const [facturaSolicitada, setFacturaSolicitada] = useState<FacturaSolicitud>("PENDIENTE");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [uploadingFor, setUploadingFor] = useState<string | null>(null);
@@ -572,6 +583,7 @@ export function ExternalSaleDeclareForm() {
   const [editPickupPersonName, setEditPickupPersonName] = useState("");
   const [editCourierNote, setEditCourierNote] = useState("");
   const [editFreightCost, setEditFreightCost] = useState("");
+  const [editFacturaSolicitada, setEditFacturaSolicitada] = useState<FacturaSolicitud>("PENDIENTE");
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState("");
 
@@ -604,13 +616,14 @@ export function ExternalSaleDeclareForm() {
   // los había dejado.
   const { clearDraft: clearNewSaleDraft } = useFormDraft<DeclareDraftData>(
     "external-sale-declare:new",
-    { client, items, pickupPersonName, courierNote, freightCost },
+    { client, items, pickupPersonName, courierNote, freightCost, facturaSolicitada },
     (d) => {
       setClient(d.client);
       setItems(d.items);
       setPickupPersonName(d.pickupPersonName);
       setCourierNote(d.courierNote);
       setFreightCost(d.freightCost);
+      setFacturaSolicitada(d.facturaSolicitada ?? "PENDIENTE");
     },
     isDeclareDraftEmpty,
     "Venta nueva sin terminar de declarar",
@@ -620,13 +633,14 @@ export function ExternalSaleDeclareForm() {
   const editDraftKey = editingId ? `external-sale-edit:${editingId}` : null;
   const { clearDraft: clearEditDraft } = useFormDraft<DeclareDraftData>(
     editDraftKey,
-    { client: editClient, items: editItems, pickupPersonName: editPickupPersonName, courierNote: editCourierNote, freightCost: editFreightCost },
+    { client: editClient, items: editItems, pickupPersonName: editPickupPersonName, courierNote: editCourierNote, freightCost: editFreightCost, facturaSolicitada: editFacturaSolicitada },
     (d) => {
       setEditClient(d.client);
       setEditItems(d.items);
       setEditPickupPersonName(d.pickupPersonName);
       setEditCourierNote(d.courierNote);
       setEditFreightCost(d.freightCost);
+      setEditFacturaSolicitada(d.facturaSolicitada ?? "PENDIENTE");
     },
     () => false,
     "Corrección de venta sin terminar",
@@ -646,12 +660,14 @@ export function ExternalSaleDeclareForm() {
         pickupPersonName: pickupPersonName.trim(),
         courierNote: courierNote.trim() || undefined,
         freightCost: freightCost.trim() ? Number(freightCost) : undefined,
+        facturaSolicitada,
       });
       setClient(null);
       setItems([]);
       setPickupPersonName("");
       setCourierNote("");
       setFreightCost("");
+      setFacturaSolicitada("PENDIENTE");
       clearNewSaleDraft();
       load();
     } catch (e) {
@@ -674,6 +690,7 @@ export function ExternalSaleDeclareForm() {
     setEditPickupPersonName(s.pickupPersonName);
     setEditCourierNote(s.courierNote ?? "");
     setEditFreightCost(s.freightCost != null ? String(s.freightCost) : "");
+    setEditFacturaSolicitada(s.facturaSolicitada);
     setEditError("");
   }
 
@@ -690,6 +707,7 @@ export function ExternalSaleDeclareForm() {
         pickupPersonName: editPickupPersonName.trim(),
         courierNote: editCourierNote.trim() || undefined,
         freightCost: editFreightCost.trim() ? Number(editFreightCost) : undefined,
+        facturaSolicitada: editFacturaSolicitada,
       });
       clearEditDraft();
       setEditingId(null);
@@ -812,6 +830,24 @@ export function ExternalSaleDeclareForm() {
               <input type="number" min="0" step="0.01" placeholder="$0.00" className="w-full rounded border border-rule bg-cloud px-2.5 py-1.5 text-[12.5px]" value={freightCost} onChange={(e) => setFreightCost(e.target.value)} />
               <div className="text-[10.5px] text-steel mt-0.5">Se descuenta del total para saber cuánto debe transferir el motorizado.</div>
             </div>
+            {isContraEntrega && (
+              <div>
+                <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">¿El cliente pidió factura?</label>
+                <div className="flex gap-1.5">
+                  {FACTURA_SOLICITUD_OPTIONS.map((opt) => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      className={`flex-1 rounded border px-2 py-1.5 text-[11.5px] font-semibold cursor-pointer ${facturaSolicitada === opt.value ? "border-teal bg-teal text-navy" : "border-rule text-steel"}`}
+                      onClick={() => setFacturaSolicitada(opt.value)}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="text-[10.5px] text-steel mt-0.5">Nairoby se guía por esto para saber a cuáles clientes debe facturarles.</div>
+              </div>
+            )}
             {error && <div className="text-red text-[11.5px]">{error}</div>}
             <button type="button" disabled={!canSave} className="rounded border border-teal bg-teal px-3 py-2 text-[12.5px] font-bold text-navy cursor-pointer disabled:opacity-40" onClick={save}>
               {saving ? "Enviando…" : "Declarar venta"}
@@ -942,6 +978,23 @@ export function ExternalSaleDeclareForm() {
                         <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Flete del motorizado (opcional)</label>
                         <input type="number" min="0" step="0.01" placeholder="$0.00" className="w-full rounded border border-rule bg-surface px-2.5 py-1.5 text-[12px]" value={editFreightCost} onChange={(e) => setEditFreightCost(e.target.value)} />
                       </div>
+                      {s.isContraEntrega && (
+                        <div>
+                          <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">¿El cliente pidió factura?</label>
+                          <div className="flex gap-1.5">
+                            {FACTURA_SOLICITUD_OPTIONS.map((opt) => (
+                              <button
+                                key={opt.value}
+                                type="button"
+                                className={`flex-1 rounded border px-2 py-1.5 text-[11px] font-semibold cursor-pointer ${editFacturaSolicitada === opt.value ? "border-teal bg-teal text-navy" : "border-rule text-steel"}`}
+                                onClick={() => setEditFacturaSolicitada(opt.value)}
+                              >
+                                {opt.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                       {editError && <div className="text-red text-[11px]">{editError}</div>}
                       <div className="flex gap-2">
                         <button type="button" className="flex-1 rounded border border-rule px-2.5 py-1.5 text-[11.5px] font-semibold cursor-pointer" onClick={() => { clearEditDraft(); setEditingId(null); }}>Cancelar</button>

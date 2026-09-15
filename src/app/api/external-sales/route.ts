@@ -29,6 +29,9 @@ const schema = z.object({
   courierNote: z.string().trim().optional(),
   clientId: z.string().min(1, "Falta matricular o seleccionar al cliente."),
   freightCost: z.number().min(0).optional(),
+  // Solo tiene efecto real cuando el asesor vende contra entrega — en pago
+  // anticipado la factura es obligatoria sin importar esto.
+  facturaSolicitada: z.enum(["SI", "NO", "PENDIENTE"]).optional(),
 });
 
 // Resuelve cada renglón contra el catálogo real y el precio calculado
@@ -109,6 +112,7 @@ export async function POST(req: NextRequest) {
       clientId: parsed.data.clientId,
       isContraEntrega,
       freightCost: parsed.data.freightCost ?? null,
+      facturaSolicitada: isContraEntrega ? (parsed.data.facturaSolicitada ?? "PENDIENTE") : "PENDIENTE",
     },
     include: SALE_INCLUDE,
   });

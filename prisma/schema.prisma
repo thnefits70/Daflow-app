@@ -5234,6 +5234,16 @@ enum ExternalSaleReviewStatus {
   REJECTED
 }
 
+// Confirmado 2026-09-15, pedido de Nairoby: en contra entrega no todos los
+// clientes piden factura — necesita saber de antemano a cuáles sí. SI/NO lo
+// declara el asesor al momento de vender; PENDIENTE = todavía no sabe (el
+// cliente puede decidirlo después, en la entrega).
+enum FacturaSolicitud {
+  SI
+  NO
+  PENDIENTE
+}
+
 /**
  * ---------------- Ventas Externas (Fase 3 de Registro de Egresos) ----------------
  * Confirmado 2026-08-25, diseñado con el usuario en varias rondas: ventas por
@@ -5334,6 +5344,13 @@ model ExternalSale {
   // primero y cobra después (máx. 48h desde la entrega); pago anticipado
   // espera el comprobante Y la factura de Nairoby antes de pasar a Daniel.
   isContraEntrega Boolean @default(false)
+
+  // Confirmado 2026-09-15, pedido de Nairoby: solo importa cuando
+  // isContraEntrega es true — en pago anticipado la factura sigue siendo
+  // obligatoria sin importar este campo. El asesor lo declara al vender;
+  // Nairoby puede corregirlo después desde Facturación si el cliente cambia
+  // de opinión (ver PATCH /api/external-sales/[id]/factura-solicitada).
+  facturaSolicitada FacturaSolicitud @default(PENDIENTE)
 
   // A quién debe entregarle bodega el pedido (motorizado o cliente) — el
   // colaborador de Inventario que despacha ve SOLO esto, nunca los montos.

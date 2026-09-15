@@ -17,6 +17,7 @@ const schema = z.object({
   courierNote: z.string().trim().optional(),
   clientId: z.string().min(1, "Falta matricular o seleccionar al cliente."),
   freightCost: z.number().min(0).optional(),
+  facturaSolicitada: z.enum(["SI", "NO", "PENDIENTE"]).optional(),
 });
 
 async function resolveItems(items: z.infer<typeof itemSchema>[], isContraEntrega: boolean) {
@@ -93,6 +94,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         courierNote: parsed.data.courierNote?.trim() || null,
         clientId: parsed.data.clientId,
         freightCost: parsed.data.freightCost ?? null,
+        facturaSolicitada: sale.isContraEntrega ? (parsed.data.facturaSolicitada ?? "PENDIENTE") : "PENDIENTE",
         reviewStatus: "PENDING",
         rejectionReason: null,
         reviewedAt: null,
