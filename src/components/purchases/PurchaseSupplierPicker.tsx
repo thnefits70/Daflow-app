@@ -149,7 +149,14 @@ export function PurchaseSupplierPicker({
   // cuenta; si se empieza a llenar uno, se exige el resto para no guardar una
   // cuenta a medias.
   async function save() {
-    if (!form.name.trim() || !form.notes.trim() || !form.contactLabel.trim() || !form.contactWhatsapp.trim()) {
+    // Confirmado 2026-09-15, bug real reportado por el usuario (bloqueaba a
+    // Jariel): un transportista individual (ej. un motorizado suelto) no
+    // tiene un "asesor" aparte — él mismo es el contacto, y pedirle ese
+    // campo repetido era fricción sin sentido. Para CARRIER, si no se llenó
+    // el campo de asesor/contacto, se usa el nombre tal cual. El celular sí
+    // sigue siendo obligatorio — necesitas alguna forma real de ubicarlo.
+    const effectiveContactLabel = type === "CARRIER" && !form.contactLabel.trim() ? form.name.trim() : form.contactLabel.trim();
+    if (!form.name.trim() || !form.notes.trim() || !effectiveContactLabel || !form.contactWhatsapp.trim()) {
       setErr("Completa todos los campos obligatorios.");
       return;
     }
@@ -169,7 +176,7 @@ export function PurchaseSupplierPicker({
     const res = await fetch("/api/purchase-suppliers", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ type, ...form }),
+      body: JSON.stringify({ type, ...form, contactLabel: effectiveContactLabel }),
     });
     const data = await res.json().catch(() => null);
     if (!res.ok) {

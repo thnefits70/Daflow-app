@@ -7,6 +7,7 @@ import { compressImage } from "@/lib/compressImage";
 import { usePasteFile } from "@/lib/usePasteFile";
 import { formatDateTime } from "@/lib/formatDateTime";
 import { useFormDraft } from "@/lib/useFormDraft";
+import { TabGuide } from "@/components/shared/TabGuide";
 
 type SupplierOption = { id: string; name: string; paymentMode: "PREPAGO" | "CREDITO" };
 
@@ -840,6 +841,9 @@ function PricingConsultaTable() {
 
   return (
     <div>
+      <TabGuide storageKey="analisismercado-consulta">
+        Busca un producto o combo para ver a qué precio venderlo — Benistock es el costo real sin ganancia (solo de referencia), B2B es el precio al por mayor, y B2C (1 unidad / 2 a 11 unidades) es el precio al detalle. No declara ninguna venta, solo consulta.
+      </TabGuide>
       <input
         className="w-full max-w-sm rounded border border-rule px-2.5 py-1.5 text-[13px] mb-3"
         placeholder="Buscar producto o código…"

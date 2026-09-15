@@ -541,6 +541,11 @@ function PriceCheckPanel({ searchUrl, isContraEntrega }: { searchUrl: string; is
                 <div className="text-[13px]">
                   {previewReady ? (
                     <>
+                      {/* Confirmado 2026-09-15, pedido explícito de Marcos: sin esta
+                          etiqueta, el precio se veía igual sin importar el canal —
+                          quería que quedara claro de un vistazo si lo que ve es B2B o
+                          B2C, sin tener que deducirlo del % de ganancia. */}
+                      <span className="font-bold uppercase text-[10.5px] tracking-wide text-blue">{isContraEntrega ? "B2C" : "B2B"}</span>{" "}
                       Precio: <span className="font-bold text-teal">${preview![0].unitPrice.toFixed(2)}</span>{" "}
                       <span className="text-steel">({preview![0].marginPercentUsed}% de ganancia) · Total {qty} un.: </span>
                       <span className="font-bold text-ink">${(Number(qty) * preview![0].unitPrice).toFixed(2)}</span>

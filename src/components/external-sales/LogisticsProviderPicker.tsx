@@ -77,7 +77,13 @@ export function LogisticsProviderPicker({ value, onChange }: { value: string; on
         />
       </div>
       {open && (
-        <div className="mt-1.5 bg-surface2 border border-rule rounded-md overflow-hidden max-h-48 overflow-y-auto absolute z-10 w-full">
+        // Confirmado 2026-09-15, bug real reportado por Marcos: el z-10 no
+        // alcanzaba a ganarle a la etiqueta del campo siguiente del
+        // formulario ("Transportista si no es la habitual"), así que ambos
+        // textos se veían superpuestos e ilegibles. Sube a z-30 (por encima
+        // de cualquier otro elemento normal del formulario) y agrega sombra
+        // para que quede claro que flota ENCIMA, no mezclado con lo de abajo.
+        <div className="mt-1.5 bg-surface2 border border-rule rounded-md overflow-hidden max-h-48 overflow-y-auto absolute z-30 w-full shadow-lg">
           {filtered.map((p) => (
             <button
               key={p.id}
