@@ -849,6 +849,13 @@ function GroupCard({
 export function MyPurchaseRequests({ onResubmit, isAdmin = false }: { onResubmit: (draft: ReturnType<typeof buildResubmitDraft>) => void; isAdmin?: boolean }) {
   const [rows, setRows] = useState<Row[] | null>(null);
   const [canPettyCashSecundaria, setCanPettyCashSecundaria] = useState(false);
+  // Confirmado 2026-09-15, pedido explícito de Jariel: con muchas solicitudes
+  // acumuladas, necesitaba poder acotar la lista por proveedor y por rango
+  // de fechas en vez de desplazarse por todas. Solo filtra lo que ya está en
+  // pantalla — no vuelve a pedir nada al servidor.
+  const [supplierFilter, setSupplierFilter] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
 
   useEffect(() => {
     fetch("/api/purchase-requests?view=mine").then((r) => (r.ok ? r.json() : [])).then(setRows).catch(() => setRows([]));
@@ -858,8 +865,20 @@ export function MyPurchaseRequests({ onResubmit, isAdmin = false }: { onResubmit
   if (!rows) return <div className="text-steel text-[13px]">Cargando…</div>;
   if (rows.length === 0) return <div className="border-[1.5px] border-dashed border-rule rounded-md p-8 text-center text-steel text-[13.5px]">Todavía no has enviado ninguna solicitud.</div>;
 
-  const groups = groupRows(rows);
-  const pendingPOCount = groups.filter((g) => g[0].status !== "REJECTED" && g[0].supplier.paymentMode !== "CREDITO" && !g[0].purchaseOrderUrl).length;
+  const allGroups = groupRows(rows);
+  const pendingPOCount = allGroups.filter((g) => g[0].status !== "REJECTED" && g[0].supplier.paymentMode !== "CREDITO" && !g[0].purchaseOrderUrl).length;
+
+  const supplierOptions = [...new Map(allGroups.map((g) => [g[0].supplier.id, g[0].supplier.name])).entries()].sort((a, b) => a[1].localeCompare(b[1]));
+
+  const fromTime = dateFrom ? new Date(dateFrom + "T00:00:00").getTime() : null;
+  const toTime = dateTo ? new Date(dateTo + "T23:59:59").getTime() : null;
+  const groups = allGroups.filter((g) => {
+    if (supplierFilter && g[0].supplier.id !== supplierFilter) return false;
+    const t = new Date(g[0].requestedAt).getTime();
+    if (fromTime !== null && t < fromTime) return false;
+    if (toTime !== null && t > toTime) return false;
+    return true;
+  });
 
   function markUploaded(groupId: string, url: string) {
     setRows((rs) => rs && rs.map((r) => (r.groupId === groupId ? { ...r, purchaseOrderUrl: url } : r)));
@@ -876,11 +895,40 @@ export function MyPurchaseRequests({ onResubmit, isAdmin = false }: { onResubmit
           Te {pendingPOCount === 1 ? "falta subir la orden de compra de 1 solicitud" : `faltan subir las órdenes de compra de ${pendingPOCount} solicitudes`} — señaladas abajo.
         </div>
       )}
-      <div className="flex flex-col gap-2.5">
-        {groups.map((g) => (
-          <GroupCard key={g[0].groupId} g={g} onPurchaseOrderUploaded={markUploaded} onGroupUpdate={updateGroup} onResubmit={onResubmit} isAdmin={isAdmin} canPettyCashSecundaria={canPettyCashSecundaria} />
-        ))}
+      <div className="flex flex-wrap items-end gap-2.5 mb-3.5">
+        <div>
+          <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Proveedor</label>
+          <select className="rounded border border-rule bg-surface px-2.5 py-1.5 text-[12.5px]" value={supplierFilter} onChange={(e) => setSupplierFilter(e.target.value)}>
+            <option value="">Todos</option>
+            {supplierOptions.map(([id, name]) => (
+              <option key={id} value={id}>{name}</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Desde</label>
+          <input type="date" className="rounded border border-rule bg-surface px-2.5 py-1.5 text-[12.5px]" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+        </div>
+        <div>
+          <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Hasta</label>
+          <input type="date" className="rounded border border-rule bg-surface px-2.5 py-1.5 text-[12.5px]" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+        </div>
+        {(supplierFilter || dateFrom || dateTo) && (
+          <button type="button" className="text-[12px] font-semibold text-blue cursor-pointer mb-1.5" onClick={() => { setSupplierFilter(""); setDateFrom(""); setDateTo(""); }}>
+            Limpiar filtros
+          </button>
+        )}
+        <div className="text-[11.5px] text-steel mb-1.5 ml-auto">{groups.length} de {allGroups.length} solicitud{allGroups.length === 1 ? "" : "es"}</div>
       </div>
+      {groups.length === 0 ? (
+        <div className="border-[1.5px] border-dashed border-rule rounded-md p-8 text-center text-steel text-[13.5px]">Ninguna solicitud coincide con estos filtros.</div>
+      ) : (
+        <div className="flex flex-col gap-2.5">
+          {groups.map((g) => (
+            <GroupCard key={g[0].groupId} g={g} onPurchaseOrderUploaded={markUploaded} onGroupUpdate={updateGroup} onResubmit={onResubmit} isAdmin={isAdmin} canPettyCashSecundaria={canPettyCashSecundaria} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
