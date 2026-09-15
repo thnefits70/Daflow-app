@@ -5,7 +5,18 @@ import { Search, ArrowUpDown } from "lucide-react";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 import { TabGuide } from "@/components/shared/TabGuide";
 
-type StockRow = { catalogItemId: string; name: string; justCode: string | null; photos: string[]; balance: number; avgCost: number };
+type StockRow = {
+  catalogItemId: string;
+  name: string;
+  justCode: string | null;
+  photos: string[];
+  balance: number;
+  avgCost: number;
+  benistockPrice?: number;
+  b2bPriceDefault?: number;
+  b2cPrice1Unit?: number;
+  b2cPrice2to11?: number;
+};
 type SortKey = "name" | "balance";
 
 function money(v: number) {
@@ -65,14 +76,23 @@ export function StockLevelsPanel() {
 
       <div className="text-[12px] text-steel mb-2">{sorted.length} producto(s)</div>
 
-      <div className="border border-rule rounded-md overflow-hidden">
-        <div className="grid grid-cols-[auto_1fr_auto_auto] gap-3 px-3 py-2 bg-cloud text-[10.5px] font-semibold uppercase tracking-wide text-steel">
+      <div className="border border-rule rounded-md overflow-x-auto">
+        <div className="grid grid-cols-[auto_1fr_auto_auto_auto_auto_auto_auto] gap-3 px-3 py-2 bg-cloud text-[10.5px] font-semibold uppercase tracking-wide text-steel min-w-[820px]">
           <span></span>
           <span>Producto</span>
           <span className="text-right">Stock</span>
           <span className="text-right">Costo prom.</span>
+          {/* Confirmado 2026-09-15, pedido explícito del usuario: mismos 3
+              precios de referencia que ya se ven en la consulta de precios
+              de Análisis de Mercado — acá quien ya veía el costo real
+              (Daniel/admin) ahora también ve a qué se traduce ese costo en
+              cada canal de venta. */}
+          <span className="text-right">Benistock</span>
+          <span className="text-right">B2B</span>
+          <span className="text-right">B2C 1u</span>
+          <span className="text-right">B2C 2-11u</span>
         </div>
-        <div className="max-h-[70vh] overflow-y-auto">
+        <div className="max-h-[70vh] overflow-y-auto min-w-[820px]">
           {sorted.length === 0 ? (
             <div className="px-3 py-4 text-[12.5px] text-steel">Sin resultados.</div>
           ) : (
@@ -84,7 +104,7 @@ export function StockLevelsPanel() {
             sorted.map((r, i) => (
               <div
                 key={r.catalogItemId}
-                className={`grid grid-cols-[auto_1fr_auto_auto] gap-3 px-3 py-2 border-t border-rule items-center ${i % 2 === 1 ? "bg-cloud/40" : ""}`}
+                className={`grid grid-cols-[auto_1fr_auto_auto_auto_auto_auto_auto] gap-3 px-3 py-2 border-t border-rule items-center ${i % 2 === 1 ? "bg-cloud/40" : ""}`}
               >
                 {r.photos[0] ? (
                   // Confirmado 2026-09-15 (pedido de Daniel): foto real del
@@ -101,6 +121,10 @@ export function StockLevelsPanel() {
                 </span>
                 <span className={`text-right font-mono text-[12.5px] font-bold ${r.balance < 0 ? "text-red" : "text-ink"}`}>{r.balance}</span>
                 <span className="text-right font-mono text-[12px] text-steel">{money(r.avgCost)}</span>
+                <span className="text-right font-mono text-[12px] text-steel">{r.benistockPrice != null ? money(r.benistockPrice) : "—"}</span>
+                <span className="text-right font-mono text-[12px] text-teal">{r.b2bPriceDefault != null ? money(r.b2bPriceDefault) : "—"}</span>
+                <span className="text-right font-mono text-[12px] text-ink">{r.b2cPrice1Unit != null ? money(r.b2cPrice1Unit) : "—"}</span>
+                <span className="text-right font-mono text-[12px] text-ink">{r.b2cPrice2to11 != null ? money(r.b2cPrice2to11) : "—"}</span>
               </div>
             ))
           )}

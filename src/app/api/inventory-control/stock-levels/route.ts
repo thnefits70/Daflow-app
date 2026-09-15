@@ -1,15 +1,55 @@
 import { NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
 import { canManageJustCatalog } from "@/lib/guards";
 import { getAllCurrentStock } from "@/lib/stockKardex";
+import { computeBenistockPrice, computeB2BPrice, computeB2CPrice, pickPrimarySupplierPrice, B2B_MARGIN_DEFAULT } from "@/lib/marketProduct";
 
 // Confirmado 2026-09-10 (pedido explícito del usuario): pantalla "Stock
 // actual" — mismo permiso que "Etiquetas de percha" (Daniel, líder de
 // Inventario, + admin), para que ambos vean el saldo de INVESTOCK de todos
 // los productos en cualquier momento, sin depender de la subida semanal de
 // Just.
+// Confirmado 2026-09-15, pedido explícito del usuario: además del costo
+// promedio (que ya se veía acá), ahora también trae Benistock/B2B/B2C por
+// producto — mismo criterio de prioridad que la consulta de precios de
+// Análisis de Mercado (MarketProductProposal de Jariel si existe, si no el
+// costo real de Kardex). No es información nueva para quien ve esta
+// pantalla: el costo real ya se mostraba acá tal cual, así que no hay nada
+// más sensible que antes.
 export async function GET() {
   if (!(await canManageJustCatalog())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
-  const rows = await getAllCurrentStock();
-  return NextResponse.json(rows);
+  const [rows, proposals] = await Promise.all([
+    getAllCurrentStock(),
+    prisma.marketProductProposal.findMany({
+      where: { catalogItemId: { not: null } },
+      include: { supplierPrices: true },
+    }),
+  ]);
+
+  const proposalByCatalogItemId = new Map(
+    proposals
+      .filter((p) => p.catalogItemId && pickPrimarySupplierPrice(p.supplierPrices))
+      .map((p) => {
+        const supplier = pickPrimarySupplierPrice(p.supplierPrices)!;
+        return [
+          p.catalogItemId!,
+          { batchCost: supplier.batchCost, batchUnits: supplier.batchUnits, freightCost: supplier.freightCost, insuranceRatePercent: p.insuranceRatePercent, fulfillmentCost: p.fulfillmentCost },
+        ] as const;
+      })
+  );
+
+  const withPrices = rows.map((r) => {
+    const base = proposalByCatalogItemId.get(r.catalogItemId) ?? (r.avgCost > 0 ? { batchCost: r.avgCost, batchUnits: 1, freightCost: null, insuranceRatePercent: 6, fulfillmentCost: 0.75 } : null);
+    if (!base) return r;
+    return {
+      ...r,
+      benistockPrice: computeBenistockPrice(base),
+      b2bPriceDefault: computeB2BPrice({ ...base, marginPercent: B2B_MARGIN_DEFAULT }),
+      b2cPrice1Unit: computeB2CPrice({ ...base, totalQuantity: 1 }),
+      b2cPrice2to11: computeB2CPrice({ ...base, totalQuantity: 2 }),
+    };
+  });
+
+  return NextResponse.json(withPrices);
 }
