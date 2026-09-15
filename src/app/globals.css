@@ -26,6 +26,15 @@
   --color-rule: #24365a;
   --color-steel: #92a3c0;
   --color-ink: #f1f5fb;
+  /* Confirmado 2026-09-15, bug real reportado por Marcos (reproducido 3 veces,
+     no era caché): "surface2" se usaba en 9 archivos (dropdowns/popovers como
+     el buscador de motorizado) pero nunca se definió acá ni en @theme abajo —
+     Tailwind no genera ningún CSS para una clase de color sin registrar, así
+     que bg-surface2 no pintaba NADA: el popup quedaba con fondo transparente,
+     dejando ver el contenido de detrás/debajo por más que su z-index fuera
+     correcto. Tono intermedio entre surface y cloud — una superficie
+     "elevada" (popover/modal) distinguible de ambas. */
+  --color-surface2: #16294a;
 }
 
 /* Confirmado 2026-09-10, reportado por Jariel: color-scheme:dark por sí solo
@@ -51,6 +60,7 @@ select option {
   --color-orange: var(--color-orange);
   --color-bg: var(--color-bg);
   --color-surface: var(--color-surface);
+  --color-surface2: var(--color-surface2);
   --color-ink: var(--color-ink);
   --font-display: var(--font-space-grotesk);
   --font-sans: var(--font-inter);

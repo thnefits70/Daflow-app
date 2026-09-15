@@ -156,12 +156,17 @@ export function PurchaseSupplierPicker({
     // el campo de asesor/contacto, se usa el nombre tal cual. El celular sí
     // sigue siendo obligatorio — necesitas alguna forma real de ubicarlo.
     const effectiveContactLabel = type === "CARRIER" && !form.contactLabel.trim() ? form.name.trim() : form.contactLabel.trim();
-    if (!form.name.trim() || !form.notes.trim() || !effectiveContactLabel || !form.contactWhatsapp.trim()) {
-      setErr("Completa todos los campos obligatorios.");
-      return;
-    }
-    if (type === "SUPPLIER" && !form.location.trim()) {
-      setErr("Falta la ubicación del proveedor.");
+    // Confirmado 2026-09-15, pedido explícito del usuario: el mensaje genérico
+    // "Completa todos los campos obligatorios" dejaba a Jariel adivinando cuál
+    // — ahora dice exactamente cuáles, con el mismo nombre que ve en pantalla.
+    const missing: string[] = [];
+    if (!form.name.trim()) missing.push("Nombre");
+    if (!form.notes.trim()) missing.push("Descripción");
+    if (!effectiveContactLabel) missing.push("Asesor/Contacto");
+    if (!form.contactWhatsapp.trim()) missing.push("Celular/WhatsApp");
+    if (type === "SUPPLIER" && !form.location.trim()) missing.push("Ubicación");
+    if (missing.length > 0) {
+      setErr(`Falta completar: ${missing.join(", ")}.`);
       return;
     }
     const bankFields = [form.bankName, form.bankAccountType, form.bankAccountNumber, form.bankAccountHolder, form.holderIdType, form.holderIdNumber];
