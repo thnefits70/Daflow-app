@@ -246,6 +246,7 @@ export type CurrentStockRow = {
   catalogItemId: string;
   name: string;
   justCode: string | null;
+  photos: string[];
   balance: number;
   avgCost: number;
 };
@@ -257,7 +258,7 @@ export type CurrentStockRow = {
 // con saldo 0, no se omite.
 export async function getAllCurrentStock(): Promise<CurrentStockRow[]> {
   const [items, latestPerItem] = await Promise.all([
-    prisma.purchaseCatalogItem.findMany({ select: { id: true, name: true, justCode: true }, orderBy: { name: "asc" } }),
+    prisma.purchaseCatalogItem.findMany({ select: { id: true, name: true, justCode: true, photos: true }, orderBy: { name: "asc" } }),
     prisma.stockKardexEntry.findMany({
       distinct: ["catalogItemId"],
       orderBy: [{ catalogItemId: "asc" }, { occurredAt: "desc" }, { createdAt: "desc" }],
@@ -271,6 +272,7 @@ export async function getAllCurrentStock(): Promise<CurrentStockRow[]> {
       catalogItemId: i.id,
       name: i.name,
       justCode: i.justCode,
+      photos: i.photos,
       balance: latest?.balanceAfter ?? 0,
       avgCost: latest?.avgCostAfter ?? 0,
     };

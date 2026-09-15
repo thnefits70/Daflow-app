@@ -5,7 +5,7 @@ import { Search, ArrowUpDown } from "lucide-react";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 import { TabGuide } from "@/components/shared/TabGuide";
 
-type StockRow = { catalogItemId: string; name: string; justCode: string | null; balance: number; avgCost: number };
+type StockRow = { catalogItemId: string; name: string; justCode: string | null; photos: string[]; balance: number; avgCost: number };
 type SortKey = "name" | "balance";
 
 function money(v: number) {
@@ -66,7 +66,8 @@ export function StockLevelsPanel() {
       <div className="text-[12px] text-steel mb-2">{sorted.length} producto(s)</div>
 
       <div className="border border-rule rounded-md overflow-hidden">
-        <div className="grid grid-cols-[1fr_auto_auto] gap-3 px-3 py-2 bg-cloud text-[10.5px] font-semibold uppercase tracking-wide text-steel">
+        <div className="grid grid-cols-[auto_1fr_auto_auto] gap-3 px-3 py-2 bg-cloud text-[10.5px] font-semibold uppercase tracking-wide text-steel">
+          <span></span>
           <span>Producto</span>
           <span className="text-right">Stock</span>
           <span className="text-right">Costo prom.</span>
@@ -83,8 +84,17 @@ export function StockLevelsPanel() {
             sorted.map((r, i) => (
               <div
                 key={r.catalogItemId}
-                className={`grid grid-cols-[1fr_auto_auto] gap-3 px-3 py-2 border-t border-rule items-center ${i % 2 === 1 ? "bg-cloud/40" : ""}`}
+                className={`grid grid-cols-[auto_1fr_auto_auto] gap-3 px-3 py-2 border-t border-rule items-center ${i % 2 === 1 ? "bg-cloud/40" : ""}`}
               >
+                {r.photos[0] ? (
+                  // Confirmado 2026-09-15 (pedido de Daniel): foto real del
+                  // catálogo junto al stock, para verificar que el producto
+                  // contado es el mismo que corresponde al código — doble
+                  // clic la amplía (GlobalImageZoom).
+                  <img src={r.photos[0]} alt="" className="w-8 h-8 rounded object-cover border border-rule shrink-0" />
+                ) : (
+                  <div className="w-8 h-8 rounded border border-dashed border-rule shrink-0" />
+                )}
                 <span className="text-[12.5px] flex items-center gap-1.5 min-w-0">
                   <CatalogCode code={r.justCode} />
                   <span className="truncate">{r.name}</span>

@@ -5,7 +5,7 @@ import { Search, X, ChevronDown, Award, FileText } from "lucide-react";
 import { PriceTrendChart } from "./PriceTrendChart";
 import type { SupplierPriceHistory } from "@/lib/purchases";
 
-type CatalogItem = { id: string; name: string; photos: string[]; description?: string | null; code?: string | null };
+type CatalogItem = { id: string; name: string; photos: string[]; description?: string | null; code?: string | null; justCode?: string | null };
 
 function isPdf(url: string) {
   return /\.pdf($|\?)/i.test(url);
@@ -46,6 +46,7 @@ function scoreMatch(item: CatalogItem, query: string): number {
   if (n.includes(q)) return 75;
   if (n.split(/\s+/).some((w) => w.startsWith(q))) return 65;
   if (item.code && normalize(item.code).includes(q)) return 55;
+  if (item.justCode && normalize(item.justCode).includes(q)) return 55;
   const dist = levenshtein(n, q);
   const ratio = 1 - dist / Math.max(n.length, q.length);
   return ratio >= 0.6 ? Math.round(ratio * 50) : -1;
