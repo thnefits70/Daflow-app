@@ -10,13 +10,16 @@ import { SupplierShippingPhotoCapture } from "@/components/supplier-ledger/Suppl
 // nada). Pedido explícito del usuario: no debe verse ninguna marca de
 // DAFLOW acá — el título de la pestaña se sobreescribe abajo, y esta página
 // vive fuera de cualquier layout con navegación/branding de la app.
+//
+// Confirmado 2026-09-15: el layout raíz define `icons` dinámicamente
+// (platformSettings.faviconUrl, el logo real de DAFLOW), y ese valor le
+// gana a cualquier icon.svg de archivo puesto en esta carpeta — probado
+// directo en el navegador. La única forma de taparlo es que ESTA página
+// defina su propio `icons` en metadata (config le gana a config, sin
+// importar el nivel), acá con un ícono transparente.
 export const metadata: Metadata = {
   title: "Estado de cuenta",
   description: "Detalle de mercadería y pagos.",
-  // Confirmado 2026-09-15: sin esto, esta ruta heredaba el favicon de DAFLOW
-  // del layout raíz (Next no hace merge profundo de `icons`, pero si el hijo
-  // no lo define, hereda el del padre). Icono transparente para no mostrar
-  // ninguna marca en la pestaña del navegador de CHEN.
   icons: {
     icon: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
   },
