@@ -33,7 +33,13 @@ export default async function SupplierLedgerPage({ params }: { params: Promise<{
     prisma.supplierDebtPayment.findMany({
       where: { supplierId: supplier.id, closedAt: { not: null } },
       include: {
-        requests: { include: { catalogItem: { select: { name: true } } } },
+        requests: {
+          include: {
+            catalogItem: { select: { name: true } },
+            reviewedBy: { select: { name: true } },
+            receipt: { select: { approvedBy: { select: { name: true } } } },
+          },
+        },
         // Confirmado 2026-09-08: nunca se expone la cuenta de ORIGEN (la
         // nuestra) en esta vista pública — solo lo que le corresponde ver a
         // él (monto, fecha, y su propia cuenta de destino).
@@ -47,22 +53,29 @@ export default async function SupplierLedgerPage({ params }: { params: Promise<{
     // pedirle a CHEN una foto de "lo que está enviando").
     prisma.purchaseRequest.findMany({
       where: { supplierId: supplier.id, status: "APPROVED" },
-      include: { catalogItem: { select: { name: true, justCode: true } } },
+      include: { catalogItem: { select: { name: true } }, reviewedBy: { select: { name: true } } },
       orderBy: { requestedAt: "asc" },
     }),
   ]);
 
   const balance = pendingItems.reduce((s, i) => s + i.totalCost, 0);
 
+  const th = "px-3 py-2 whitespace-nowrap";
+  const td = "px-3 py-2 whitespace-nowrap";
+  const NOMBRE_TH = "px-3 py-2 min-w-[200px]";
+
   return (
     <div className="min-h-screen bg-neutral-50 text-neutral-900">
-      <div className="mx-auto max-w-3xl px-4 py-10 sm:px-6">
+      {/* Confirmado 2026-09-15, pedido explícito del usuario: usar todo el
+          ancho de pantalla (tipo tabla operativa/hoja de cálculo), en vez de
+          la tarjeta angosta y centrada de antes. */}
+      <div className="mx-auto max-w-[1600px] px-4 py-10 sm:px-6">
         <header className="mb-8">
           <h1 className="text-xl font-semibold tracking-tight">Estado de cuenta</h1>
           <p className="mt-1 text-sm text-neutral-500">Actualizado en tiempo real. Esta página es de solo lectura.</p>
         </header>
 
-        <section className="mb-8 rounded-xl border border-neutral-200 bg-white p-6 shadow-sm">
+        <section className="mb-8 rounded-xl border border-neutral-200 bg-white p-6 shadow-sm w-fit">
           <p className="text-sm text-neutral-500">Saldo actual a pagar</p>
           <p className="mt-1 text-3xl font-semibold tabular-nums">{money(balance)}</p>
         </section>
@@ -76,19 +89,25 @@ export default async function SupplierLedgerPage({ params }: { params: Promise<{
               <table className="w-full text-left text-sm">
                 <thead className="border-b border-neutral-200 bg-neutral-50 text-xs uppercase tracking-wide text-neutral-500">
                   <tr>
-                    <th className="px-4 py-2">Fecha</th>
-                    <th className="px-4 py-2">Producto</th>
-                    <th className="px-4 py-2 text-right">Cant.</th>
-                    <th className="px-4 py-2 text-right">Total</th>
+                    <th className={th}>Fecha</th>
+                    <th className={NOMBRE_TH}>Producto</th>
+                    <th className={`${th} text-right`}>Cant.</th>
+                    <th className={`${th} text-right`}>Precio unit.</th>
+                    <th className={`${th} text-right`}>Total</th>
+                    <th className={th}>Aprobado por</th>
+                    <th className={th}>Revisado por</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-neutral-100">
                   {pendingItems.map((i) => (
                     <tr key={i.id}>
-                      <td className="px-4 py-2 text-neutral-600">{DATE_FMT.format(i.requestedAt)}</td>
-                      <td className="px-4 py-2">{i.productName}</td>
-                      <td className="px-4 py-2 text-right tabular-nums">{i.quantity}</td>
-                      <td className="px-4 py-2 text-right tabular-nums">{money(i.totalCost)}</td>
+                      <td className={`${td} text-neutral-600`}>{DATE_FMT.format(i.requestedAt)}</td>
+                      <td className="px-3 py-2">{i.productName}</td>
+                      <td className={`${td} text-right tabular-nums`}>{i.quantity}</td>
+                      <td className={`${td} text-right tabular-nums`}>{money(i.totalCost / i.quantity)}</td>
+                      <td className={`${td} text-right tabular-nums`}>{money(i.totalCost)}</td>
+                      <td className={`${td} text-neutral-600`}>{i.approvedByName ?? "—"}</td>
+                      <td className={`${td} text-neutral-600`}>{i.reviewedByName ?? "—"}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -105,19 +124,31 @@ export default async function SupplierLedgerPage({ params }: { params: Promise<{
           {pendingShipments.length === 0 ? (
             <p className="text-sm text-neutral-400">No hay pedidos pendientes de envío por ahora.</p>
           ) : (
-            <div className="space-y-3">
-              {pendingShipments.map((r) => (
-                <div key={r.id} className="flex items-center justify-between gap-3 rounded-xl border border-neutral-200 bg-white p-4 shadow-sm">
-                  <div>
-                    <p className="text-sm font-medium text-neutral-800">{r.catalogItem.name}</p>
-                    <p className="text-xs text-neutral-500">
-                      Cant. {r.quantity} · aprobado {DATE_FMT.format(r.requestedAt)}
-                      {r.catalogItem.justCode ? ` · ${r.catalogItem.justCode}` : ""}
-                    </p>
-                  </div>
-                  <SupplierShippingPhotoCapture token={token} requestId={r.id} initialPhotoUrl={r.supplierShippingPhotoUrl} />
-                </div>
-              ))}
+            <div className="overflow-x-auto rounded-xl border border-neutral-200 bg-white shadow-sm">
+              <table className="w-full text-left text-sm">
+                <thead className="border-b border-neutral-200 bg-neutral-50 text-xs uppercase tracking-wide text-neutral-500">
+                  <tr>
+                    <th className={th}>Fecha</th>
+                    <th className={NOMBRE_TH}>Producto</th>
+                    <th className={`${th} text-right`}>Cant.</th>
+                    <th className={th}>Aprobado por</th>
+                    <th className={th}>Foto (opcional)</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-neutral-100">
+                  {pendingShipments.map((r) => (
+                    <tr key={r.id}>
+                      <td className={`${td} text-neutral-600`}>{DATE_FMT.format(r.requestedAt)}</td>
+                      <td className="px-3 py-2">{r.catalogItem.name}</td>
+                      <td className={`${td} text-right tabular-nums`}>{r.quantity}</td>
+                      <td className={`${td} text-neutral-600`}>{r.reviewedBy?.name ?? "—"}</td>
+                      <td className="px-3 py-2">
+                        <SupplierShippingPhotoCapture token={token} requestId={r.id} initialPhotoUrl={r.supplierShippingPhotoUrl} />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
         </section>
@@ -131,20 +162,22 @@ export default async function SupplierLedgerPage({ params }: { params: Promise<{
               <table className="w-full text-left text-sm">
                 <thead className="border-b border-amber-200 text-xs uppercase tracking-wide text-amber-700">
                   <tr>
-                    <th className="px-4 py-2">Fecha</th>
-                    <th className="px-4 py-2">Producto</th>
-                    <th className="px-4 py-2 text-right">Cant.</th>
-                    <th className="px-4 py-2">Detalle</th>
-                    <th className="px-4 py-2 text-right">Valor si se resuelve</th>
+                    <th className={th}>Fecha</th>
+                    <th className={NOMBRE_TH}>Producto</th>
+                    <th className={`${th} text-right`}>Cant.</th>
+                    <th className="px-3 py-2">Detalle</th>
+                    <th className={`${th} text-right`}>Valor si se resuelve</th>
+                    <th className={th}>Aprobado por</th>
+                    <th className={th}>Revisado por</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-amber-100">
                   {disputedItems.map((i) => (
                     <tr key={i.id}>
-                      <td className="px-4 py-2 text-amber-800">{DATE_FMT.format(i.requestedAt)}</td>
-                      <td className="px-4 py-2 text-amber-900">{i.productName}</td>
-                      <td className="px-4 py-2 text-right tabular-nums text-amber-800">{i.quantity}</td>
-                      <td className="px-4 py-2 text-amber-800">
+                      <td className={`${td} text-amber-800`}>{DATE_FMT.format(i.requestedAt)}</td>
+                      <td className="px-3 py-2 text-amber-900">{i.productName}</td>
+                      <td className={`${td} text-right tabular-nums text-amber-800`}>{i.quantity}</td>
+                      <td className="px-3 py-2 text-amber-800">
                         {[
                           i.damagedQty > 0 ? `${i.damagedQty} dañadas` : null,
                           i.incompleteQty > 0 ? `${i.incompleteQty} incompletas` : null,
@@ -153,7 +186,9 @@ export default async function SupplierLedgerPage({ params }: { params: Promise<{
                           .filter(Boolean)
                           .join(", ")}
                       </td>
-                      <td className="px-4 py-2 text-right tabular-nums text-amber-800">{money(i.wouldBeValue)}</td>
+                      <td className={`${td} text-right tabular-nums text-amber-800`}>{money(i.wouldBeValue)}</td>
+                      <td className={`${td} text-amber-800`}>{i.approvedByName ?? "—"}</td>
+                      <td className={`${td} text-amber-800`}>{i.reviewedByName ?? "—"}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -167,23 +202,37 @@ export default async function SupplierLedgerPage({ params }: { params: Promise<{
           {closedPayments.length === 0 ? (
             <p className="text-sm text-neutral-400">Todavía no hay tandas pagadas.</p>
           ) : (
-            <div className="space-y-4">
+            <div className="space-y-6">
               {closedPayments.map((p) => (
                 <div key={p.id} className="rounded-xl border border-neutral-200 bg-white p-5 shadow-sm">
                   <div className="mb-3 flex items-baseline justify-between">
                     <span className="text-sm font-medium text-neutral-700">{p.code}</span>
                     <span className="text-sm tabular-nums text-neutral-500">{money(p.totalAmount)}</span>
                   </div>
-                  <ul className="mb-3 space-y-1 text-sm text-neutral-600">
-                    {p.requests.map((r) => (
-                      <li key={r.id} className="flex justify-between">
-                        <span>
-                          {r.catalogItem.name} × {r.quantity}
-                        </span>
-                        <span className="tabular-nums">{money(r.totalCost)}</span>
-                      </li>
-                    ))}
-                  </ul>
+                  <div className="mb-3 overflow-x-auto rounded-lg border border-neutral-100">
+                    <table className="w-full text-left text-sm">
+                      <thead className="border-b border-neutral-200 bg-neutral-50 text-xs uppercase tracking-wide text-neutral-500">
+                        <tr>
+                          <th className={NOMBRE_TH}>Producto</th>
+                          <th className={`${th} text-right`}>Cant.</th>
+                          <th className={`${th} text-right`}>Total</th>
+                          <th className={th}>Aprobado por</th>
+                          <th className={th}>Revisado por</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-neutral-100">
+                        {p.requests.map((r) => (
+                          <tr key={r.id}>
+                            <td className="px-3 py-2">{r.catalogItem.name}</td>
+                            <td className={`${td} text-right tabular-nums`}>{r.quantity}</td>
+                            <td className={`${td} text-right tabular-nums`}>{money(r.totalCost)}</td>
+                            <td className={`${td} text-neutral-600`}>{r.reviewedBy?.name ?? "—"}</td>
+                            <td className={`${td} text-neutral-600`}>{r.receipt?.approvedBy?.name ?? "—"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                   <div className="border-t border-neutral-100 pt-3">
                     <p className="mb-1 text-xs uppercase tracking-wide text-neutral-400">Transferencias</p>
                     <ul className="space-y-1 text-sm text-neutral-600">

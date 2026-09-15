@@ -47,6 +47,12 @@ export type SupplierDebtPendingItem = {
   quantity: number;
   totalCost: number;
   requestedAt: Date;
+  // Confirmado 2026-09-15, pedido explícito del usuario: en el enlace
+  // público de CHEN, quiere ver por cada pedido quién lo aprobó (Bryan,
+  // PurchaseRequest.reviewedBy) y quién confirmó que llegó bien
+  // (Daniel, receipt.approvedBy — "la aprobación final", ver schema.prisma).
+  approvedByName: string | null;
+  reviewedByName: string | null;
 };
 
 // Confirmado 2026-09-08: lo que YA se puede sumar al saldo — recibido
@@ -56,7 +62,11 @@ export type SupplierDebtPendingItem = {
 export async function getSupplierDebtPendingItems(supplierId: string): Promise<SupplierDebtPendingItem[]> {
   const rows = await prisma.purchaseRequest.findMany({
     where: { supplierId, status: "RECEIVED", debtPaymentId: null, buyerDebtConfirmedAt: { not: null } },
-    include: { catalogItem: { select: { name: true } } },
+    include: {
+      catalogItem: { select: { name: true } },
+      reviewedBy: { select: { name: true } },
+      receipt: { select: { approvedBy: { select: { name: true } } } },
+    },
     orderBy: { requestedAt: "asc" },
   });
   return rows.map((r) => ({
@@ -66,6 +76,8 @@ export async function getSupplierDebtPendingItems(supplierId: string): Promise<S
     quantity: r.quantity,
     totalCost: r.totalCost,
     requestedAt: r.requestedAt,
+    approvedByName: r.reviewedBy?.name ?? null,
+    reviewedByName: r.receipt?.approvedBy?.name ?? null,
   }));
 }
 
@@ -121,6 +133,8 @@ export type SupplierDebtDisputedItem = {
   incompleteQty: number;
   differentQty: number;
   requestedAt: Date;
+  approvedByName: string | null;
+  reviewedByName: string | null;
 };
 
 // Confirmado 2026-09-08: pedido explícito del usuario — lo incompleto,
@@ -136,7 +150,16 @@ export async function getSupplierDebtDisputedItems(supplierId: string): Promise<
       status: { in: ["RECEIVED_PENDING_REVIEW", "APPROVED"] },
       urgentReports: { some: {} },
     },
-    include: { catalogItem: { select: { name: true } }, urgentReports: true },
+    include: {
+      catalogItem: { select: { name: true } },
+      urgentReports: true,
+      reviewedBy: { select: { name: true } },
+      // Confirmado 2026-09-15: un pedido en disputa todavía no llegó a
+      // RECEIVED (la aprobación final de Daniel es justo lo que falta), pero
+      // sí puede ya tener un receipt (RECEIVED_PENDING_REVIEW) con quien lo
+      // recibió físicamente — se muestra ese en vez de dejarlo vacío.
+      receipt: { select: { confirmedBy: { select: { name: true } } } },
+    },
     orderBy: { requestedAt: "asc" },
   });
   return rows
@@ -155,6 +178,8 @@ export async function getSupplierDebtDisputedItems(supplierId: string): Promise<
         incompleteQty,
         differentQty,
         requestedAt: r.requestedAt,
+        approvedByName: r.reviewedBy?.name ?? null,
+        reviewedByName: r.receipt?.confirmedBy?.name ?? null,
       };
     });
 }
