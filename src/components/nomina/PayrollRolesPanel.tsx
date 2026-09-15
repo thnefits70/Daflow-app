@@ -549,6 +549,15 @@ function RoleCard({ role, index, published, canEdit, monthlyRoleId, isEndOfMonth
                 </button>
               )}
             </div>
+          ) : role.netTotal === 0 ? (
+            // Confirmado 2026-09-15, pedido explícito de Nairoby: a Mercedes
+            // y Elsa se les paga con un solo pago a fin de mes (ver
+            // PayrollProfile.monthlySalaryOnly) — en el resto de los
+            // períodos su líquido a pagar es $0, así que no hay ninguna
+            // transferencia real que pueda tener comprobante. Exigirle uno
+            // la dejaba trabada sin poder publicar el rol. Ver también el
+            // mismo criterio (netTotal !== 0) en publish/route.ts.
+            <div className="text-[11px] text-steel">Nada que pagar este período — no requiere comprobante.</div>
           ) : canEdit ? (
             <PayoutUploader roleId={role.id} expectedAmount={total} onSent={onChanged} />
           ) : (
@@ -680,7 +689,10 @@ export function PayrollRolesPanel({ canEdit, canProposeFixedBonus, canApproveFix
   const [addingEmployeeId, setAddingEmployeeId] = useState<string | null>(null);
 
   const publishLabel = isEndOfMonthQuincena(period) ? "Generar rol de pago" : "Publicar";
-  const pendingPayoutCount = detail?.roles.filter((r) => !r.paidAt).length ?? 0;
+  // netTotal 0 no cuenta como pendiente — no hay ninguna transferencia real
+  // que confirmar (ver el mismo criterio en publish/route.ts y en la tarjeta
+  // de cada colaborador, más abajo).
+  const pendingPayoutCount = detail?.roles.filter((r) => !r.paidAt && r.netTotal !== 0).length ?? 0;
   // Pedido explícito del usuario 2026-08-27: los que todavía no tienen
   // comprobante confirmado aparecen primero, para no tener que scrollear
   // buscándolos — sort estable, así que dentro de cada grupo se mantiene el

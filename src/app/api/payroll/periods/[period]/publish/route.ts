@@ -57,7 +57,12 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ pe
   // publicar (entregarle el rol a cada colaborador), Nairoby también tiene
   // que haber confirmado, con comprobante verificado por IA, el pago
   // individual a CADA colaborador (ver individual-payment/route.ts).
-  const pendingCount = payrollPeriod.roles.filter((r) => !r.paidAt).length;
+  // Confirmado 2026-09-15, pedido explícito de Nairoby: Mercedes y Elsa
+  // reciben un solo pago a fin de mes (PayrollProfile.monthlySalaryOnly), así
+  // que en el resto de los períodos su líquido a pagar es $0 — no hay
+  // ninguna transferencia real que pueda tener comprobante, así que un rol
+  // con netTotal 0 nunca cuenta como pendiente.
+  const pendingCount = payrollPeriod.roles.filter((r) => !r.paidAt && r.netTotal !== 0).length;
   if (pendingCount > 0) {
     return NextResponse.json(
       { error: `Todavía falta confirmar el comprobante individual de ${pendingCount} colaborador${pendingCount === 1 ? "" : "es"} antes de publicar.` },
