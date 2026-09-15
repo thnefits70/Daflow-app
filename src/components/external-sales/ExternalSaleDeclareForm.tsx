@@ -276,6 +276,85 @@ async function patchJson(url: string, body: unknown) {
   return data;
 }
 
+// Confirmado 2026-09-15, pedido explícito de Marcos: para una venta donde
+// coordina su propio motorizado (no pasa por el equipo de Fulfilment), él
+// mismo puede confirmar la entrega acá — con la foto opcional que el
+// motorizado le manda por fuera (WhatsApp), nunca una captura en vivo (no es
+// él quien está viendo la entrega en persona). Dispara el mismo descuento
+// real de stock que el proceso normal de Fulfilment — solo cambia quién y
+// cuándo lo confirma, nunca el efecto.
+function MarkDeliveredSection({ saleId, onDone }: { saleId: string; onDone: () => void }) {
+  const [confirming, setConfirming] = useState(false);
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState("");
+
+  async function pickPhoto(file: File) {
+    setUploading(true);
+    const compressed = await compressImage(file);
+    const result = await uploadFile(compressed, "external-sale-delivery-photos");
+    setUploading(false);
+    if (result.ok) setPhotoUrl(result.url);
+  }
+
+  async function confirmDelivered() {
+    setSaving(true);
+    setErr("");
+    try {
+      await postJson(`/api/external-sales/${saleId}/deliver`, { photoUrl: photoUrl ?? undefined });
+      onDone();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "No se pudo confirmar la entrega.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (!confirming) {
+    return (
+      <button type="button" className="text-[11.5px] font-bold text-teal cursor-pointer mt-1.5" onClick={() => setConfirming(true)}>
+        Marcar entregado
+      </button>
+    );
+  }
+
+  return (
+    <div className="bg-teal/5 border border-teal/30 rounded-md p-2.5 mt-1.5">
+      <div className="text-[11.5px] font-semibold mb-1.5">¿El motorizado ya entregó el pedido al cliente?</div>
+      <div className="text-[10.5px] text-steel mb-2">
+        Foto opcional — la que te mandó el motorizado al entregar, si te la mandó. No hace falta para confirmar.
+      </div>
+      {photoUrl ? (
+        <div className="flex items-center gap-2 mb-2">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={photoUrl} alt="" className="w-11 h-11 object-cover rounded border border-rule shrink-0" />
+          <button type="button" className="text-[11px] font-semibold text-red cursor-pointer" onClick={() => setPhotoUrl(null)}>Quitar</button>
+        </div>
+      ) : (
+        <label className="inline-flex items-center gap-1.5 rounded border border-rule px-2.5 py-1.5 text-[11.5px] font-semibold cursor-pointer mb-2">
+          <Upload size={12} />
+          {uploading ? "Subiendo…" : "Adjuntar foto (opcional)"}
+          <input
+            type="file"
+            accept="image/*"
+            className="hidden"
+            disabled={uploading}
+            onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) pickPhoto(f); }}
+          />
+        </label>
+      )}
+      {err && <div className="text-red text-[11px] mb-1.5">{err}</div>}
+      <div className="flex items-center gap-2">
+        <button type="button" disabled={saving || uploading} className="rounded border border-teal bg-teal px-3 py-1.5 text-[11.5px] font-bold text-navy cursor-pointer disabled:opacity-60" onClick={confirmDelivered}>
+          {saving ? "Confirmando…" : "Confirmar entrega"}
+        </button>
+        <button type="button" className="text-steel text-[11.5px] cursor-pointer" onClick={() => setConfirming(false)}>Cancelar</button>
+      </div>
+    </div>
+  );
+}
+
 function statusLabel(s: SaleDTO): { text: string; color: string } {
   if (s.deletedAt) return { text: `Cancelada · ${formatDateTime(s.deletedAt)}`, color: "text-red" };
   if (s.reviewStatus === "REJECTED") return { text: "Rechazada", color: "text-red" };
@@ -986,6 +1065,9 @@ export function ExternalSaleDeclareForm() {
                       Cliente: {s.client.name} · {s.client.idNumber ? `${s.client.idType === "RUC" ? "RUC" : "Cédula"}: ${s.client.idNumber} · ` : ""}Cel: {s.client.phone}
                       {s.client.email ? ` · Correo: ${s.client.email}` : ""}
                     </div>
+                  )}
+                  {!s.deletedAt && s.reviewStatus === "APPROVED" && s.paymentConfirmedAt && !s.deliveredAt && (
+                    <MarkDeliveredSection saleId={s.id} onDone={load} />
                   )}
                   {!s.deletedAt && s.reviewStatus === "REJECTED" && s.rejectionReason && <div className="text-[11.5px] text-red mt-1">{s.rejectionReason}</div>}
                   {!s.deletedAt && (s.reviewStatus === "REJECTED" || s.reviewStatus === "PENDING") && editingId !== s.id && confirmDeleteSaleId !== s.id && (

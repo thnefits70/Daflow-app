@@ -158,7 +158,11 @@ export async function POST(req: NextRequest) {
     allowed = await canCaptureMerchandiseOutflow();
   }
   if (!allowed && session?.user.role === "employee" && folder === "external-sale-delivery-photos") {
-    allowed = await canPackExternalSale();
+    // Confirmado 2026-09-15, pedido explícito de Marcos: también puede subir
+    // acá cuando confirma él mismo la entrega de una venta con su propio
+    // motorizado (ver .../[id]/deliver/route.ts) — no solo el equipo de
+    // Fulfilment.
+    allowed = (await canPackExternalSale()) || (await canDeclareExternalSales());
   }
   if (!allowed && session?.user.role === "employee" && folder === "just-catalog-import") {
     allowed = await canManageJustCatalog();
