@@ -43,7 +43,11 @@ function ProofUploadLabel({ children, uploading, onFile }: { children: ReactNode
       }}
     >
       {uploading ? <span className="w-3.5 h-3.5 rounded-full border-2 border-rule border-t-teal animate-spin" /> : <Upload size={12} />}
-      {children}
+      {/* Confirmado 2026-09-15, pedido explícito de Jariel: arrastrar y
+          soltar la imagen ya funcionaba acá (onDrop de arriba), pero no
+          había ninguna pista visual de que se podía — parecía un botón
+          normal de "solo clic". Se aclara en texto para que se note. */}
+      {children} <span className="text-steel/70 font-normal">(o arrástrala aquí)</span>
       <input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])} />
     </label>
   );
