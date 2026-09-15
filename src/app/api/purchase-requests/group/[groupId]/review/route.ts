@@ -34,7 +34,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ gro
     where: { groupId },
     include: {
       catalogItem: { select: { name: true, justCode: true } },
-      supplier: { select: { name: true } },
+      supplier: { select: { name: true, paymentMode: true } },
       bankAccount: { select: { bankName: true, bankAccountType: true, bankAccountNumber: true, bankAccountHolder: true } },
     },
   });
@@ -81,7 +81,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ gro
   // Confirmado 2026-09-03: pedido explícito del usuario — avisar al admin
   // al instante cuando se aprueba (antes solo se enteraba por la tarjeta de
   // Inicio o, si nadie pagaba, por el aviso tardío de 24h en el cron).
-  if (parsed.data.action === "approve" && !isAdmin) {
+  // Confirmado 2026-09-15: pedido explícito del usuario — un proveedor de
+  // crédito (hoy solo CHEN) no se paga solicitud por solicitud (ver
+  // group/[groupId]/pay/route.ts), se paga después por tanda en "Proveedores
+  // con Crédito". Avisarle aquí sería un push que no le toca atender todavía,
+  // así que solo se notifica cuando de verdad hay que transferirle al
+  // proveedor ahora.
+  if (parsed.data.action === "approve" && !isAdmin && rows[0].supplier.paymentMode !== "CREDITO") {
     const total = rows.reduce((sum, r) => sum + r.totalCost, 0);
     const totalLabel = total.toLocaleString("es-EC", { style: "currency", currency: "USD" });
     // Confirmado 2026-09-11: pedido explícito del usuario — el admin no

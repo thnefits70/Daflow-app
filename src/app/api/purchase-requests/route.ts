@@ -412,17 +412,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(full, { status: 201 });
   }
 
-  // Confirmado 2026-07-30: push en tiempo real al admin, aparte de la
-  // notificación diaria de Pendientes — apenas se envía la solicitud.
-  await sendPushToOwner("admin", {
-    title: check.anyOverThreshold ? "🔴 Nueva solicitud — precio por encima del historial" : "Nueva solicitud de compra",
-    body: `${summary} · $${check.groupTotal.toFixed(2)}`,
-    url: "/admin",
-  }).catch(() => null);
-
-  // Confirmado 2026-09-02: pedido explícito del usuario — además del admin,
-  // se avisa a quien tenga el nuevo permiso de aprobación con un clic (hoy
-  // Bryan), para que sepa que hay algo suyo por aprobar.
+  // Confirmado 2026-09-15: pedido explícito del usuario — el admin ya NO se
+  // notifica al crearse la solicitud (eso solo le toca a quien aprueba, hoy
+  // Bryan). El admin se entera recién cuando ya está aprobada y lista para
+  // pagar (ver review/route.ts), para no recibir un push por cada solicitud
+  // que ni siquiera va a pagar todavía.
+  // Confirmado 2026-09-02: pedido explícito del usuario — se avisa a quien
+  // tenga el nuevo permiso de aprobación con un clic (hoy Bryan), para que
+  // sepa que hay algo suyo por aprobar.
   const approverIds = await getPurchaseApproverIds();
   await Promise.all(
     approverIds.map((id) =>
