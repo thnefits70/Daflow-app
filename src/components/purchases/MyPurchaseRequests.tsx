@@ -81,9 +81,21 @@ const STEPS: { key: Row["status"]; label: string; description: string }[] = [
   { key: "RECEIVED", label: "Recibido", description: "La mercadería fue recibida y revisada. La solicitud quedó completada." },
 ];
 
-function stepIndex(status: Row["status"]) {
+function stepIndex(status: Row["status"], steps: typeof STEPS) {
   if (status === "REJECTED") return -1;
-  return STEPS.findIndex((s) => s.key === status);
+  return steps.findIndex((s) => s.key === status);
+}
+
+// Confirmado 2026-09-15, pedido explícito del usuario: un proveedor de
+// crédito (CHEN) nunca pasa por "Pagado" en ESTA solicitud — según
+// receipt/route.ts, Inventario puede recibir apenas queda APROBADO,
+// saltando directo a "Pendiente aprobación" (ver isCreditSupplier ahí). El
+// pago real de CHEN ocurre después, agrupado en una tanda contra la deuda
+// acumulada (ver SupplierDebtPayment), nunca por esta solicitud individual.
+// Mostrar "Pagado" como paso pendiente en la barra confundía — parecía que
+// faltaba pagar ESTA compra cuando en realidad nunca pasa por ese estado.
+function stepsForSupplier(paymentMode?: "PREPAGO" | "CREDITO") {
+  return paymentMode === "CREDITO" ? STEPS.filter((s) => s.key !== "PAID") : STEPS;
 }
 
 function groupRows(rows: Row[]) {
@@ -558,10 +570,15 @@ function GroupCard({
   const reservedTotal = reservedCredits.reduce((s, c) => s + c.amount, 0);
   const netTotal = Math.max(0, total - reservedTotal);
 
+  const steps = stepsForSupplier(g[0].supplier.paymentMode);
+  const approvedIdx = steps.findIndex((s) => s.key === "APPROVED");
+  const paidIdx = steps.findIndex((s) => s.key === "PAID");
+  const receivedIdx = steps.findIndex((s) => s.key === "RECEIVED");
+
   // Si un grupo tiene varios productos, cada uno puede llegar por separado
   // (Inventario confirma producto por producto) — el avance general muestra
   // el paso MÁS ATRASADO de todos.
-  const groupIdx = Math.min(...g.map((r) => stepIndex(r.status)));
+  const groupIdx = Math.min(...g.map((r) => stepIndex(r.status, steps)));
   const statusesDiffer = new Set(g.map((r) => r.status)).size > 1;
   // Confirmado 2026-08-14: antes exigía status RECEIVED (Inventario ya
   // revisó), pero eso bloqueaba pedir el pago del flete mientras la
@@ -623,7 +640,7 @@ function GroupCard({
               <CatalogCode code={r.catalogItem.justCode} />
               {r.catalogItem.name} · {r.quantity} un.
               {statusesDiffer && !rejected && (
-                <span className="ml-2 text-[10.5px] font-semibold text-steel">— {STEPS[stepIndex(r.status)]?.label ?? r.status}</span>
+                <span className="ml-2 text-[10.5px] font-semibold text-steel">— {steps[stepIndex(r.status, steps)]?.label ?? r.status}</span>
               )}
             </div>
           ))}
@@ -652,7 +669,7 @@ function GroupCard({
       ) : (
         <>
           <div className="flex gap-1.5">
-            {STEPS.map((s, i) => (
+            {steps.map((s, i) => (
               <button
                 key={s.key}
                 type="button"
@@ -665,13 +682,13 @@ function GroupCard({
           </div>
           {openStepKey && (
             <div className="mt-1.5 rounded-md border border-rule bg-cloud px-2.5 py-1.5 text-[10.5px] text-steel">
-              {STEPS.find((s) => s.key === openStepKey)?.description}
+              {steps.find((s) => s.key === openStepKey)?.description}
             </div>
           )}
           <div className="text-[10px] text-steel-dim mt-1.5">
-            {groupIdx >= 1 && <>Aprobada por {actorName(g[0].reviewedBy?.name)}{g[0].reviewedAt ? ` · ${formatDateTime(g[0].reviewedAt)}` : ""} · </>}
-            {groupIdx >= 2 && <>Pagada por {actorName(g[0].paidBy?.name)}{g[0].paidAt ? ` · ${formatDateTime(g[0].paidAt)}` : ""} · </>}
-            {groupIdx >= 4 && <>Recibida por {[...new Set(g.map((r) => actorName(r.receipt?.confirmedBy?.name)))].join(", ")}{g[0].receipt?.confirmedAt ? ` · ${formatDateTime(g[0].receipt.confirmedAt)}` : ""}</>}
+            {groupIdx >= approvedIdx && <>Aprobada por {actorName(g[0].reviewedBy?.name)}{g[0].reviewedAt ? ` · ${formatDateTime(g[0].reviewedAt)}` : ""} · </>}
+            {paidIdx !== -1 && groupIdx >= paidIdx && <>Pagada por {actorName(g[0].paidBy?.name)}{g[0].paidAt ? ` · ${formatDateTime(g[0].paidAt)}` : ""} · </>}
+            {groupIdx >= receivedIdx && <>Recibida por {[...new Set(g.map((r) => actorName(r.receipt?.confirmedBy?.name)))].join(", ")}{g[0].receipt?.confirmedAt ? ` · ${formatDateTime(g[0].receipt.confirmedAt)}` : ""}</>}
           </div>
           {groupIdx === 1 && (
             <button
