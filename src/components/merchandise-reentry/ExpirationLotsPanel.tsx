@@ -167,7 +167,7 @@ export function ExpirationLotsPanel() {
 
           <div className="grid grid-cols-3 gap-2 mb-2">
             <div>
-              <label className="block text-[10px] text-steel mb-0.5">Elaboración (opcional)</label>
+              <label className="block text-[10px] text-steel mb-0.5">Elaboración (opcional) — día/mes/año</label>
               <input
                 type="date"
                 className="w-full rounded border border-rule bg-surface px-2 py-1.5 text-[12px]"
@@ -177,7 +177,7 @@ export function ExpirationLotsPanel() {
               />
             </div>
             <div>
-              <label className="block text-[10px] text-steel mb-0.5">Vencimiento</label>
+              <label className="block text-[10px] text-steel mb-0.5">Vencimiento — día/mes/año</label>
               <input
                 ref={expirationRef}
                 type="date"
