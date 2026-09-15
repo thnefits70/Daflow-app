@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Search, ArrowUpDown } from "lucide-react";
+import { Search, ArrowUpDown, Info, X } from "lucide-react";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 import { TabGuide } from "@/components/shared/TabGuide";
 
@@ -18,9 +18,42 @@ type StockRow = {
   b2cPrice2to11?: number;
 };
 type SortKey = "name" | "balance";
+type FormulaKey = "benistock" | "b2b" | "b2c1" | "b2c2";
 
 function money(v: number) {
   return "$" + v.toLocaleString("es-EC", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+// Confirmado 2026-09-15, pedido explícito del usuario: quiere ver, con un
+// clic, exactamente qué fórmula se está calculando en cada columna de
+// precio — mismas fórmulas ya usadas en src/lib/marketProduct.ts
+// (computeBenistockPrice/computeB2BPrice/computeB2CPrice), explicadas en
+// palabras simples, no en código.
+const FORMULA_EXPLANATIONS: Record<FormulaKey, { title: string; text: string }> = {
+  benistock: {
+    title: "Benistock",
+    text: "Costo puesto en bodega (proveedor + flete por unidad) × 1.06 (6% de seguro) + $0.75 (fulfillment). Es el costo real, sin ninguna ganancia — solo de referencia.",
+  },
+  b2b: {
+    title: "B2B",
+    text: "Costo puesto en bodega × 1.06 (6% de seguro) ÷ (1 − 20%). El 20% es el margen de ganancia por defecto para venta al por mayor.",
+  },
+  b2c1: {
+    title: "B2C · 1 unidad",
+    text: "Costo puesto en bodega × 1.06 (6% de seguro) ÷ (1 − 40%) + $7.50 (flete promedio), redondeado hacia arriba a .99. El 40% es el margen cuando se vende 1 sola unidad.",
+  },
+  b2c2: {
+    title: "B2C · 2 a 11 unidades",
+    text: "Igual que B2C de 1 unidad, pero con 30% de margen en vez de 40% — el margen baja cuando se venden de 2 a 11 unidades en la misma venta. De 12 en adelante ya no es B2C.",
+  },
+};
+
+function FormulaInfoButton({ open, onToggle }: { open: boolean; onToggle: () => void }) {
+  return (
+    <button type="button" className="inline-flex items-center cursor-pointer text-steel hover:text-ink" title="Ver cómo se calcula" onClick={onToggle}>
+      <Info size={11} className={open ? "text-blue" : undefined} />
+    </button>
+  );
 }
 
 // Confirmado 2026-09-10 (pedido explícito del usuario): pantalla propia
@@ -32,6 +65,7 @@ export function StockLevelsPanel() {
   const [rows, setRows] = useState<StockRow[] | null>(null);
   const [query, setQuery] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("name");
+  const [openFormula, setOpenFormula] = useState<FormulaKey | null>(null);
 
   useEffect(() => {
     fetch("/api/inventory-control/stock-levels")
@@ -101,11 +135,30 @@ export function StockLevelsPanel() {
           <span>Producto</span>
           <span className="text-right">Stock</span>
           <span className="text-right border-l border-rule pl-3">Costo prom.</span>
-          <span className="text-right">Benistock</span>
-          <span className="text-right border-l border-rule pl-3 text-teal">B2B</span>
-          <span className="text-right text-blue">B2C 1 un.</span>
-          <span className="text-right text-blue">B2C 2-11 un.</span>
+          <span className="flex items-center justify-end gap-1">
+            Benistock <FormulaInfoButton open={openFormula === "benistock"} onToggle={() => setOpenFormula((k) => (k === "benistock" ? null : "benistock"))} />
+          </span>
+          <span className="flex items-center justify-end gap-1 border-l border-rule pl-3 text-teal">
+            B2B <FormulaInfoButton open={openFormula === "b2b"} onToggle={() => setOpenFormula((k) => (k === "b2b" ? null : "b2b"))} />
+          </span>
+          <span className="flex items-center justify-end gap-1 text-blue">
+            B2C 1 un. <FormulaInfoButton open={openFormula === "b2c1"} onToggle={() => setOpenFormula((k) => (k === "b2c1" ? null : "b2c1"))} />
+          </span>
+          <span className="flex items-center justify-end gap-1 text-blue">
+            B2C 2-11 un. <FormulaInfoButton open={openFormula === "b2c2"} onToggle={() => setOpenFormula((k) => (k === "b2c2" ? null : "b2c2"))} />
+          </span>
         </div>
+        {openFormula && (
+          <div className="flex items-start justify-between gap-3 bg-navy border-b border-rule px-3 py-2.5 min-w-[1000px]">
+            <div className="text-[12px]">
+              <span className="font-bold text-ink">{FORMULA_EXPLANATIONS[openFormula].title}: </span>
+              <span className="text-steel">{FORMULA_EXPLANATIONS[openFormula].text}</span>
+            </div>
+            <button type="button" className="shrink-0 text-steel hover:text-ink cursor-pointer" onClick={() => setOpenFormula(null)}>
+              <X size={13} />
+            </button>
+          </div>
+        )}
         <div className="max-h-[70vh] overflow-y-auto min-w-[1000px]">
           {sorted.length === 0 ? (
             <div className="px-3 py-4 text-[12.5px] text-steel">Sin resultados.</div>
