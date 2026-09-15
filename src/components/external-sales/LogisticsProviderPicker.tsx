@@ -77,13 +77,16 @@ export function LogisticsProviderPicker({ value, onChange }: { value: string; on
         />
       </div>
       {open && (
-        // Confirmado 2026-09-15, bug real reportado por Marcos: el z-10 no
-        // alcanzaba a ganarle a la etiqueta del campo siguiente del
-        // formulario ("Transportista si no es la habitual"), así que ambos
-        // textos se veían superpuestos e ilegibles. Sube a z-30 (por encima
-        // de cualquier otro elemento normal del formulario) y agrega sombra
-        // para que quede claro que flota ENCIMA, no mezclado con lo de abajo.
-        <div className="mt-1.5 bg-surface2 border border-rule rounded-md overflow-hidden max-h-48 overflow-y-auto absolute z-30 w-full shadow-lg">
+        // Confirmado 2026-09-15, bug real reportado por Marcos (tercera vez):
+        // el z-30 + fondo sólido del intento anterior no bastaba porque el
+        // problema real no era de color ni de orden de apilamiento — era que
+        // este panel usaba `absolute`, así que no reservaba espacio en el
+        // formulario y flotaba justo ENCIMA del campo siguiente ("Transportadora
+        // si no es la habitual"), tapándolo o mezclándose con su etiqueta según
+        // cuántas opciones tuviera. Quitar `absolute` hace que el formulario
+        // crezca de verdad mientras el panel está abierto — ya no hay nada
+        // debajo con lo que se pueda superponer.
+        <div className="mt-1.5 bg-surface2 border border-rule rounded-md overflow-hidden max-h-48 overflow-y-auto w-full shadow-lg">
           {filtered.map((p) => (
             <button
               key={p.id}
