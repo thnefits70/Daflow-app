@@ -237,13 +237,19 @@ function BankAccountChangeSection({ g, onUpdate }: { g: Row[]; onUpdate: (patch:
 // de pedir con un clic que se pague — y si el transportista todavía no dio
 // su cuenta bancaria (algunos solo la dan al entregar), se puede agregar
 // justo en este momento.
-function ShippingPaymentSection({ g, onUpdate, canPettyCashSecundaria }: { g: Row[]; onUpdate: (patch: Partial<Row>) => void; canPettyCashSecundaria: boolean }) {
+function ShippingPaymentSection({ g, onUpdate, isAdmin, canPettyCashSecundaria }: { g: Row[]; onUpdate: (patch: Partial<Row>) => void; isAdmin: boolean; canPettyCashSecundaria: boolean }) {
   const r0 = g[0];
   const [addingAccount, setAddingAccount] = useState(false);
   const [accountForm, setAccountForm] = useState(emptyAccountForm);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [reverting, setReverting] = useState(false);
+  // Confirmado 2026-09-15, pedido explícito del usuario: Jariel se
+  // equivocó al poner el flete (transportista o monto) — necesita poder
+  // corregirlo ANTES de que se pague/concilie con caja chica, sin que eso
+  // rompa los totales (el endpoint reparte el nuevo monto proporcional por
+  // cantidad, igual que al completarlo la primera vez).
+  const [correcting, setCorrecting] = useState(false);
 
   const carrier = r0.carrier;
   const hasAccount = !!r0.carrierBankAccountId;
@@ -317,10 +323,42 @@ function ShippingPaymentSection({ g, onUpdate, canPettyCashSecundaria }: { g: Ro
     );
   }
 
+  if (correcting) {
+    return (
+      <div className="mt-3 pt-3 border-t border-rule">
+        <div className="flex items-center gap-1.5 text-[12px] font-semibold mb-2" style={{ color: "#D9A441" }}>
+          <Truck size={13} /> Corrigiendo el flete
+        </div>
+        <CarrierInfoForm
+          g={g}
+          onUpdate={onUpdate}
+          isAdmin={isAdmin}
+          canPettyCashSecundaria={canPettyCashSecundaria}
+          initialCarrier={carrier ? { id: carrier.id, name: carrier.name, location: null, email: null, bankAccounts: carrier.bankAccounts, contacts: [] } : null}
+          initialCarrierBankAccountId={r0.carrierBankAccountId}
+          initialCost={r0.shippingCostTotal != null ? String(r0.shippingCostTotal) : ""}
+          initialMethod={r0.shippingPaymentMethod}
+          onDone={() => setCorrecting(false)}
+          submitLabel="Guardar corrección"
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="mt-3 pt-3 border-t border-rule">
-      <div className="flex items-center gap-1.5 text-[12px] font-semibold mb-2" style={{ color: "#D9A441" }}>
-        <Truck size={13} /> Flete pendiente — ${(r0.shippingCostTotal ?? 0).toFixed(2)} a {carrier?.name ?? "transportista"}
+      <div className="flex items-center justify-between gap-2 mb-2">
+        <div className="flex items-center gap-1.5 text-[12px] font-semibold" style={{ color: "#D9A441" }}>
+          <Truck size={13} /> Flete pendiente — ${(r0.shippingCostTotal ?? 0).toFixed(2)} a {carrier?.name ?? "transportista"}
+        </div>
+        {/* Confirmado 2026-09-15, pedido explícito del usuario: Jariel puso
+            mal el transportista/monto en un flete real (SC-064) y no había
+            forma de arreglarlo — solo se puede corregir ANTES de que se
+            pague (ver el guard de shippingPaidAt en carrier-info/route.ts),
+            para no romper una reconciliación ya cerrada con caja chica. */}
+        <button type="button" className="text-[11px] font-semibold text-blue cursor-pointer shrink-0" onClick={() => setCorrecting(true)}>
+          Corregir
+        </button>
       </div>
 
       {!hasAccount && (
@@ -394,11 +432,40 @@ function ShippingPaymentSection({ g, onUpdate, canPettyCashSecundaria }: { g: Ro
 // marcando "todavía no sé el transportista ni el costo del flete", esto
 // aparece hasta que se complete con los datos reales (mismo patrón que la
 // orden de compra pendiente, arriba).
-function ShippingCarrierPendingSection({ g, onUpdate, isAdmin, canPettyCashSecundaria }: { g: Row[]; onUpdate: (patch: Partial<Row>) => void; isAdmin: boolean; canPettyCashSecundaria: boolean }) {
+// Confirmado 2026-09-15, pedido explícito del usuario: mismo formulario para
+// dos casos — completar un flete que se envió sin transportista/costo
+// (initial=null) y CORREGIR uno ya completado si se puso mal (initial=el
+// transportista/costo actuales, ver ShippingPaymentSection). El endpoint
+// (carrier-info) reparte el costo proporcional por cantidad en ambos casos,
+// así que los totales de cada línea siempre cuadran con el nuevo monto — y
+// se congela solo, en el servidor, en cuanto el flete ya se pagó.
+function CarrierInfoForm({
+  g,
+  onUpdate,
+  isAdmin,
+  canPettyCashSecundaria,
+  initialCarrier,
+  initialCarrierBankAccountId,
+  initialCost,
+  initialMethod,
+  onDone,
+  submitLabel,
+}: {
+  g: Row[];
+  onUpdate: (patch: Partial<Row>) => void;
+  isAdmin: boolean;
+  canPettyCashSecundaria: boolean;
+  initialCarrier: PurchaseSupplierDTO | null;
+  initialCarrierBankAccountId: string | null;
+  initialCost: string;
+  initialMethod: "TRANSFER" | "PETTY_CASH" | null;
+  onDone?: () => void;
+  submitLabel: string;
+}) {
   const r0 = g[0];
-  const [carrier, setCarrier] = useState<PurchaseSupplierDTO | null>(null);
-  const [carrierBankAccountId, setCarrierBankAccountId] = useState<string | null>(null);
-  const [cost, setCost] = useState("");
+  const [carrier, setCarrier] = useState<PurchaseSupplierDTO | null>(initialCarrier);
+  const [carrierBankAccountId, setCarrierBankAccountId] = useState<string | null>(initialCarrierBankAccountId);
+  const [cost, setCost] = useState(initialCost);
   // Confirmado 2026-09-04: pedido explícito del usuario — este menú vuelve a
   // aparecer acá (segunda vez, separado del formulario original) para
   // completar transportista/costo reales; sin esto, quien administra caja
@@ -408,8 +475,8 @@ function ShippingCarrierPendingSection({ g, onUpdate, isAdmin, canPettyCashSecun
   // de permiso llega por fetch aparte y puede tardar más que este montaje,
   // por eso se corrige con efecto (no solo el valor inicial del useState) —
   // pero solo mientras la persona no haya tocado el menú a mano.
-  const [method, setMethod] = useState<"TRANSFER" | "PETTY_CASH">("TRANSFER");
-  const methodTouched = useRef(false);
+  const [method, setMethod] = useState<"TRANSFER" | "PETTY_CASH">(initialMethod ?? "TRANSFER");
+  const methodTouched = useRef(!!initialMethod);
   useEffect(() => {
     if (!methodTouched.current && canPettyCashSecundaria) setMethod("PETTY_CASH");
   }, [canPettyCashSecundaria]);
@@ -435,15 +502,14 @@ function ShippingCarrierPendingSection({ g, onUpdate, isAdmin, canPettyCashSecun
       carrier: { id: carrier.id, name: carrier.name, bankAccounts: carrier.bankAccounts },
       carrierBankAccountId,
       shippingCostTotal: n,
+      shippingPaymentMethod: method,
       shippingPaymentTiming: "ON_DELIVERY",
     });
+    onDone?.();
   }
 
   return (
-    <div className="mt-3 pt-3 border-t border-dashed border-gold/40">
-      <div className="flex items-center gap-1.5 text-[12px] font-semibold mb-2" style={{ color: "#D9A441" }}>
-        <Truck size={13} /> Falta completar el transportista y el costo del flete
-      </div>
+    <div>
       <PurchaseSupplierPicker
         type="CARRIER"
         value={carrier}
@@ -467,9 +533,37 @@ function ShippingCarrierPendingSection({ g, onUpdate, isAdmin, canPettyCashSecun
         </div>
       </div>
       {err && <div className="text-red text-[11.5px] mt-2">{err}</div>}
-      <button type="button" disabled={busy} className="mt-2.5 rounded border border-blue bg-blue px-3.5 py-1.5 text-[12px] font-semibold text-white cursor-pointer disabled:opacity-60" onClick={submit}>
-        Guardar
-      </button>
+      <div className="flex items-center gap-2 mt-2.5">
+        <button type="button" disabled={busy} className="rounded border border-blue bg-blue px-3.5 py-1.5 text-[12px] font-semibold text-white cursor-pointer disabled:opacity-60" onClick={submit}>
+          {busy ? "Guardando…" : submitLabel}
+        </button>
+        {onDone && (
+          <button type="button" className="text-steel text-[12px] cursor-pointer" onClick={onDone}>
+            Cancelar
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ShippingCarrierPendingSection({ g, onUpdate, isAdmin, canPettyCashSecundaria }: { g: Row[]; onUpdate: (patch: Partial<Row>) => void; isAdmin: boolean; canPettyCashSecundaria: boolean }) {
+  return (
+    <div className="mt-3 pt-3 border-t border-dashed border-gold/40">
+      <div className="flex items-center gap-1.5 text-[12px] font-semibold mb-2" style={{ color: "#D9A441" }}>
+        <Truck size={13} /> Falta completar el transportista y el costo del flete
+      </div>
+      <CarrierInfoForm
+        g={g}
+        onUpdate={onUpdate}
+        isAdmin={isAdmin}
+        canPettyCashSecundaria={canPettyCashSecundaria}
+        initialCarrier={null}
+        initialCarrierBankAccountId={null}
+        initialCost=""
+        initialMethod={null}
+        submitLabel="Guardar"
+      />
     </div>
   );
 }
@@ -741,7 +835,7 @@ function GroupCard({
         <BankAccountChangeSection g={g} onUpdate={(patch) => onGroupUpdate(groupId, patch)} />
       )}
 
-      {showShippingSection && <ShippingPaymentSection g={g} onUpdate={(patch) => onGroupUpdate(groupId, patch)} canPettyCashSecundaria={canPettyCashSecundaria} />}
+      {showShippingSection && <ShippingPaymentSection g={g} onUpdate={(patch) => onGroupUpdate(groupId, patch)} isAdmin={isAdmin} canPettyCashSecundaria={canPettyCashSecundaria} />}
 
       {/* Confirmado 2026-08-13: pedido explícito del usuario — apenas queda
           Pagada, quien la pidió (hoy Bryan, a cargo provisional de Compras)

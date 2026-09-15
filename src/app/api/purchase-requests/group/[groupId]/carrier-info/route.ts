@@ -17,6 +17,13 @@ const schema = z.object({
 // compra después. El costo se reparte proporcional por cantidad entre las
 // líneas, mismo cálculo que al solicitar. Queda siempre en ON_DELIVERY (ya
 // se sabe el costo recién ahora, después de pedida/pagada la mercadería).
+// Ampliado 2026-09-15, pedido explícito del usuario: además de completar un
+// flete pendiente, esta misma ruta ahora también sirve para CORREGIR uno ya
+// completado si Jariel se equivocó (ej. transportista o monto mal puesto) —
+// mismo reparto proporcional, así que todos los totales siguen cuadrando.
+// El único límite real es shippingPaidAt: en cuanto el flete ya se pagó (por
+// transferencia o ya se concilió con caja chica), se congela para siempre —
+// corregirlo después rompería la reconciliación ya cerrada.
 export async function POST(req: NextRequest, { params }: { params: Promise<{ groupId: string }> }) {
   if (!(await canSubmitPurchaseRequests())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
@@ -27,8 +34,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ gro
 
   const rows = await prisma.purchaseRequest.findMany({ where: { groupId } });
   if (rows.length === 0) return NextResponse.json({ error: "No encontrada." }, { status: 404 });
-  if (!rows[0].shippingCarrierPending) {
-    return NextResponse.json({ error: "Esta solicitud no tiene el flete pendiente de completar." }, { status: 409 });
+  if (rows[0].shippingIncluded) {
+    return NextResponse.json({ error: "Esta solicitud tiene el flete incluido en el precio — no aplica transportista aparte." }, { status: 409 });
+  }
+  if (rows[0].shippingPaidAt) {
+    return NextResponse.json({ error: "El flete ya está pagado — ya no se puede corregir." }, { status: 409 });
   }
 
   const totalQty = rows.reduce((s, r) => s + r.quantity, 0);
