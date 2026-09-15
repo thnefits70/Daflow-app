@@ -1840,6 +1840,31 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                         Recibido por {actorName(r.receipt.confirmedBy?.name)} · {formatDateTime(r.receipt.confirmedAt)}
                         {r.receipt.comment && ` — "${r.receipt.comment}"`}
                       </div>
+                      {/* Confirmado 2026-09-15, pedido explícito del usuario: Daniel
+                          preguntó cómo comparó la IA sin poder ver la foto de
+                          referencia — este paso final (aprobar recepción) mostraba
+                          la nota de la IA y las fotos de lo recibido, pero nunca las
+                          de referencia del catálogo, a diferencia del paso anterior
+                          (declarar recepción) que sí las muestra desde 2026-08-08. */}
+                      {(canApprove || isAdmin) && (
+                        <>
+                          <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">
+                            Fotos de referencia — como se registró el producto
+                          </label>
+                          {r.catalogItem.photos.length > 0 ? (
+                            <div className="grid grid-cols-4 gap-2 mb-2.5">
+                              {r.catalogItem.photos.map((url, i) => (
+                                <a key={`ref${i}`} href={url} target="_blank" rel="noopener noreferrer" className="bg-cloud rounded border border-teal/40 flex items-center justify-center h-32">
+                                  <img src={url} alt="" className="max-w-full max-h-full object-contain" />
+                                </a>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="text-[11px] text-steel-dim mb-2.5">Este producto no tiene fotos de referencia registradas en el catálogo.</div>
+                          )}
+                          <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Fotos de lo recibido</label>
+                        </>
+                      )}
                       <div className="grid grid-cols-4 gap-2 mb-2.5">
                         {r.receipt.photoUrls.map((url, i) => (
                           <a key={`p${i}`} href={url} target="_blank" rel="noopener noreferrer" className="bg-cloud rounded border border-rule flex items-center justify-center h-32">
