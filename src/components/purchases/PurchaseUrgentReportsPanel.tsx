@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, CheckCircle2, Wallet, Upload } from "lucide-react";
 import { uploadFile } from "@/lib/uploadFile";
@@ -22,6 +22,31 @@ type UiResolutionType = ResolutionType | "MISSING_DELIVERY";
 type ResolutionDraftData = { resType: UiResolutionType; resQty: string; resDueDate: string; resNote: string; resProofUrl: string; resProofName: string };
 function isResolutionDraftEmpty(d: ResolutionDraftData) {
   return !d.resDueDate.trim() && !d.resNote.trim() && !d.resProofUrl.trim();
+}
+
+// Confirmado 2026-09-15: pedido explícito del usuario — desde escritorio
+// (laptop/PC) se puede arrastrar y soltar el archivo directo sobre el botón
+// de subir comprobante, sin tener que abrir el selector. En celular no
+// cambia nada (ahí no existe drag-and-drop, sigue siendo tocar y elegir).
+function ProofUploadLabel({ children, uploading, onFile }: { children: ReactNode; uploading?: boolean; onFile: (file: File) => void }) {
+  const [dragOver, setDragOver] = useState(false);
+  return (
+    <label
+      className={`flex items-center gap-1.5 border-[1.5px] border-dashed rounded px-2.5 py-1.5 text-[11px] text-steel cursor-pointer hover:border-teal w-fit transition-colors ${dragOver ? "border-teal bg-teal/5" : "border-rule"}`}
+      onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+      onDragLeave={() => setDragOver(false)}
+      onDrop={(e) => {
+        e.preventDefault();
+        setDragOver(false);
+        const file = e.dataTransfer.files?.[0];
+        if (file) onFile(file);
+      }}
+    >
+      {uploading ? <span className="w-3.5 h-3.5 rounded-full border-2 border-rule border-t-teal animate-spin" /> : <Upload size={12} />}
+      {children}
+      <input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])} />
+    </label>
+  );
 }
 
 type Resolution = {
@@ -447,11 +472,9 @@ export function PurchaseUrgentReportsPanel({ isAdmin, canAct }: { isAdmin: boole
                         <div className="mb-2.5">
                           <label className="block mb-1 text-[10px] text-steel">Comprobante del proveedor (chat, correo, nota de crédito)</label>
                           {!resProofUrl ? (
-                            <label className="flex items-center gap-1.5 border-[1.5px] border-dashed border-rule rounded px-2.5 py-1.5 text-[11px] text-steel cursor-pointer hover:border-teal w-fit">
-                              {resProofUploading ? <span className="w-3.5 h-3.5 rounded-full border-2 border-rule border-t-teal animate-spin" /> : <Upload size={12} />}
+                            <ProofUploadLabel uploading={resProofUploading} onFile={uploadCreditProof}>
                               Subir comprobante
-                              <input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && uploadCreditProof(e.target.files[0])} />
-                            </label>
+                            </ProofUploadLabel>
                           ) : (
                             <div className="flex items-center gap-2">
                               <ProofPreview url={resProofUrl} size={36} filename={resProofName || "comprobante-credito"} />
@@ -572,11 +595,9 @@ function ResolutionRow({
         <div className="mt-1.5">
           {!res.refundProofUrl ? (
             canAct ? (
-              <label className="flex items-center gap-1.5 border-[1.5px] border-dashed border-rule rounded px-2.5 py-1.5 text-[11px] text-steel cursor-pointer hover:border-teal w-fit">
-                {refundUploadingFor === res.id ? <span className="w-3.5 h-3.5 rounded-full border-2 border-rule border-t-teal animate-spin" /> : <Upload size={12} />}
+              <ProofUploadLabel uploading={refundUploadingFor === res.id} onFile={onFileRefund}>
                 Subir comprobante del proveedor
-                <input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && onFileRefund(e.target.files[0])} />
-              </label>
+              </ProofUploadLabel>
             ) : (
               <div className="text-steel italic">Esperando el comprobante del proveedor.</div>
             )

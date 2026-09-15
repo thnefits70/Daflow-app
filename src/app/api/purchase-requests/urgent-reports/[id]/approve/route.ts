@@ -3,7 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { canActOnPurchaseReceiving } from "@/lib/guards";
-import { sendPushToOwner } from "@/lib/webPush";
+import { notifyOwner } from "@/lib/notifications";
 import { isWithinCreditClaimWindow } from "@/lib/purchaseUrgent";
 
 const schema = z.object({
@@ -58,10 +58,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (existing.request.requestedById) notifyTargets.add(existing.request.requestedById);
   await Promise.all(
     [...notifyTargets].map((ownerId) =>
-      sendPushToOwner(ownerId, {
+      // Confirmado 2026-09-15: bug real — Jariel recibía el push (llegaba a
+      // veces sí, a veces no, según el dispositivo) pero nunca quedaba en la
+      // campanita/Inicio, y al tocarlo en laptop lo mandaba a /area/workspace
+      // genérico en vez de directo a la pestaña "Reportes urgentes" donde de
+      // verdad tiene que coordinar con el proveedor. Mismo fix que
+      // receipt/route.ts (notifyOwner en vez de sendPushToOwner) + deep link
+      // correcto (mismo href que usa pendingTasks.ts para este mismo aviso).
+      notifyOwner(ownerId, {
         title: "🚨 Reporte urgente de mercadería",
         body: `${existing.request.catalogItem.name} — ${totalAffected} un. afectadas · $${disputedValue.toFixed(2)} en disputa${windowNote}`,
-        url: ownerId === "admin" ? "/admin" : "/area/workspace",
+        url: ownerId === "admin" ? "/admin" : "/area/workspace?tab=compras&ptab=urgentes",
       }).catch(() => null)
     )
   );

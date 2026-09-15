@@ -2788,6 +2788,14 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       teamItems.push(...purchaseRequesterItems);
       const purchaseCreditsItem = await getPurchaseCreditsPendingItem("/area/workspace?tab=compras&ptab=urgentes");
       if (purchaseCreditsItem) teamItems.push(purchaseCreditsItem);
+      // Confirmado 2026-09-15: bug real — a Jariel (canManagePurchases, quien
+      // hoy coordina con el proveedor en "Reportes urgentes") nunca le
+      // aparecía este aviso en Inicio porque solo estaba conectado para el
+      // líder/equipo de Inventario más arriba. Mismo generador que ya usa
+      // Daniel (getPurchaseUrgentReportsUnresolvedPendingItem), mismo href
+      // que aprove/route.ts ahora manda en la notificación.
+      const purchaseUrgentUnresolvedItem = await getPurchaseUrgentReportsUnresolvedPendingItem("/area/workspace?tab=compras&ptab=urgentes");
+      if (purchaseUrgentUnresolvedItem) teamItems.push(purchaseUrgentUnresolvedItem);
     }
     // Confirmado 2026-09-04: quien aprueba compras (hoy Bryan) puede no
     // liderar ningún departamento — mismo patrón que canManagePurchases
