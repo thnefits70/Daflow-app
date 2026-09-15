@@ -142,6 +142,12 @@ export async function POST(req: NextRequest) {
   if (!allowed && session?.user.role === "employee" && folder === "external-sale-payment-proofs") {
     allowed = await canDeclareExternalSales();
   }
+  // Confirmado 2026-09-15, pedido explícito de Marcos: foto de referencia
+  // opcional que el asesor adjunta al declarar, solo cuando el producto
+  // todavía no está matriculado con fotos reales en el catálogo.
+  if (!allowed && session?.user.role === "employee" && folder === "external-sale-reference-photos") {
+    allowed = await canDeclareExternalSales();
+  }
   if (!allowed && session?.user.role === "employee" && folder === "external-sale-invoices") {
     allowed = await canInvoiceExternalSale();
   }

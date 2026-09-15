@@ -18,7 +18,7 @@ export async function GET() {
       pickupPersonName: true,
       courierNote: true,
       items: {
-        select: { id: true, declaredProductName: true, quantity: true, catalogItem: { select: { name: true, photos: true, justCode: true } } },
+        select: { id: true, declaredProductName: true, quantity: true, sellerReferencePhotoUrl: true, catalogItem: { select: { name: true, photos: true, justCode: true } } },
         orderBy: { createdAt: "asc" },
       },
     },

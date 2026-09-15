@@ -6,6 +6,7 @@ import { ProductMatchPicker, type MatchCatalogItem, type ProductMatchResult } fr
 import { ClientMatchPicker, type ClientDTO } from "@/components/external-sales/ClientMatchPicker";
 import { LogisticsProviderPicker } from "@/components/external-sales/LogisticsProviderPicker";
 import { uploadFile } from "@/lib/uploadFile";
+import { compressImage } from "@/lib/compressImage";
 import { usePasteFile } from "@/lib/usePasteFile";
 import { useFormDraft } from "@/lib/useFormDraft";
 import { formatDateTime } from "@/lib/formatDateTime";
@@ -23,6 +24,7 @@ type SaleItemDTO = {
   marginPercentUsed: number | null;
   rejectedAt: string | null;
   rejectionReason: string | null;
+  sellerReferencePhotoUrl: string | null;
 };
 
 type SaleDTO = {
@@ -49,7 +51,7 @@ type SaleDTO = {
 // Confirmado 2026-09-14: ya no se escribe un precio a mano — se calcula
 // solo según el tipo de venta (B2B/B2C) y la cantidad. marginPercent solo
 // tiene efecto real en B2B (el asesor lo elige); en B2C queda sin usar.
-type DraftItem = { product: MatchCatalogItem; quantity: string; marginPercent: number };
+type DraftItem = { product: MatchCatalogItem; quantity: string; marginPercent: number; sellerReferencePhotoUrl?: string | null };
 
 type PreviewRow = { unitPrice: number; marginPercentUsed: number };
 
@@ -307,6 +309,12 @@ function ItemsEditor({
   const [draftMarginPercent, setDraftMarginPercent] = useState(B2B_MARGIN_DEFAULT);
   const [marginMode, setMarginMode] = useState<"same" | "per-item">("same");
   const [sameMarginPercent, setSameMarginPercent] = useState(B2B_MARGIN_DEFAULT);
+  // Confirmado 2026-09-15, pedido explícito de Marcos: si el producto todavía
+  // no está matriculado (sin fotos reales en el catálogo), puede adjuntar su
+  // propia foto de referencia — puramente opcional, solo para que Fulfillment
+  // sepa qué despachar en vez de adivinar por el nombre.
+  const [draftReferencePhotoUrl, setDraftReferencePhotoUrl] = useState<string | null>(null);
+  const [uploadingReferencePhoto, setUploadingReferencePhoto] = useState(false);
 
   const draftValid = !!draftProduct && isValidQty(draftQty);
   const previewItems: DraftItem[] = draftValid ? [...items, { product: draftProduct!, quantity: draftQty, marginPercent: draftMarginPercent }] : items;
@@ -329,11 +337,20 @@ function ItemsEditor({
   function addDraft() {
     if (!draftProduct || !isValidQty(draftQty)) return;
     const marginPercent = marginMode === "same" ? sameMarginPercent : draftMarginPercent;
-    onChange([...items, { product: draftProduct, quantity: draftQty, marginPercent }]);
+    onChange([...items, { product: draftProduct, quantity: draftQty, marginPercent, sellerReferencePhotoUrl: draftReferencePhotoUrl }]);
     setDraftProduct(null);
     setDraftQty("");
     setDraftMarginPercent(marginMode === "same" ? sameMarginPercent : B2B_MARGIN_DEFAULT);
+    setDraftReferencePhotoUrl(null);
     setPicking(false);
+  }
+
+  async function pickReferencePhoto(file: File) {
+    setUploadingReferencePhoto(true);
+    const compressed = await compressImage(file);
+    const result = await uploadFile(compressed, "external-sale-reference-photos");
+    setUploadingReferencePhoto(false);
+    if (result.ok) setDraftReferencePhotoUrl(result.url);
   }
 
   function removeAt(i: number) {
@@ -376,9 +393,14 @@ function ItemsEditor({
         <div className="flex flex-col gap-1.5">
           {items.map((it, i) => (
             <div key={i} className="flex items-center gap-2 bg-cloud rounded-md p-2">
-              {it.product.photos[0] && (
+              {it.product.photos[0] ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={it.product.photos[0]} alt={it.product.name} className="w-9 h-9 object-cover rounded border border-rule shrink-0" />
+              ) : (
+                it.sellerReferencePhotoUrl && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={it.sellerReferencePhotoUrl} alt={it.product.name} title="Foto de referencia que adjuntaste" className="w-9 h-9 object-cover rounded border border-gold/50 shrink-0" />
+                )
               )}
               <div className="flex-1 min-w-0 text-[12px]">
                 <div className="font-semibold flex items-center gap-1.5 flex-wrap min-w-0">
@@ -445,6 +467,36 @@ function ItemsEditor({
               marginPercent={draftMarginPercent}
               onMarginChange={setDraftMarginPercent}
             />
+            {/* Confirmado 2026-09-15, pedido explícito de Marcos: este producto
+                no tiene ninguna foto real registrada en el catálogo — para que
+                Fulfillment no despache el equivocado adivinando por el nombre,
+                puede adjuntar (opcional) su propia foto de referencia. */}
+            {draftProduct.photos.length === 0 && (
+              <div className="mb-2">
+                <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">
+                  Foto de referencia (opcional) — este producto no tiene fotos en el catálogo
+                </label>
+                {draftReferencePhotoUrl ? (
+                  <div className="flex items-center gap-2">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={draftReferencePhotoUrl} alt="" className="w-11 h-11 object-cover rounded border border-rule shrink-0" />
+                    <button type="button" className="text-[11px] font-semibold text-red cursor-pointer" onClick={() => setDraftReferencePhotoUrl(null)}>Quitar</button>
+                  </div>
+                ) : (
+                  <label className="inline-flex items-center gap-1.5 rounded border border-rule px-2.5 py-1.5 text-[11.5px] font-semibold cursor-pointer">
+                    <Upload size={12} />
+                    {uploadingReferencePhoto ? "Subiendo…" : "Subir foto"}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      disabled={uploadingReferencePhoto}
+                      onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) pickReferencePhoto(f); }}
+                    />
+                  </label>
+                )}
+              </div>
+            )}
             {draftValid && (
               <div className="text-[12px] mb-2">
                 {previewReady ? (
@@ -661,7 +713,7 @@ export function ExternalSaleDeclareForm() {
     try {
       await postJson("/api/external-sales", {
         clientId: client.id,
-        items: items.map((it) => ({ catalogItemId: it.product.id, quantity: Number(it.quantity), marginPercent: it.marginPercent })),
+        items: items.map((it) => ({ catalogItemId: it.product.id, quantity: Number(it.quantity), marginPercent: it.marginPercent, sellerReferencePhotoUrl: it.sellerReferencePhotoUrl ?? undefined })),
         pickupPersonName: pickupPersonName.trim(),
         courierNote: courierNote.trim() || undefined,
         freightCost: freightCost.trim() ? Number(freightCost) : undefined,
@@ -690,6 +742,7 @@ export function ExternalSaleDeclareForm() {
         product: { id: it.catalogItemId ?? "", name: it.catalogItem?.name ?? it.declaredProductName, justCode: it.catalogItem?.justCode ?? null, photos: it.catalogItem?.photos ?? [], pendingRegistration: false },
         quantity: String(it.quantity),
         marginPercent: it.marginPercentUsed ?? B2B_MARGIN_DEFAULT,
+        sellerReferencePhotoUrl: it.sellerReferencePhotoUrl,
       }))
     );
     setEditPickupPersonName(s.pickupPersonName);
@@ -708,7 +761,7 @@ export function ExternalSaleDeclareForm() {
     try {
       await patchJson(`/api/external-sales/${saleId}`, {
         clientId: editClient.id,
-        items: editItems.map((it) => ({ catalogItemId: it.product.id, quantity: Number(it.quantity), marginPercent: it.marginPercent })),
+        items: editItems.map((it) => ({ catalogItemId: it.product.id, quantity: Number(it.quantity), marginPercent: it.marginPercent, sellerReferencePhotoUrl: it.sellerReferencePhotoUrl ?? undefined })),
         pickupPersonName: editPickupPersonName.trim(),
         courierNote: editCourierNote.trim() || undefined,
         freightCost: editFreightCost.trim() ? Number(editFreightCost) : undefined,

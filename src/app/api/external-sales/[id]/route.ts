@@ -9,6 +9,7 @@ const itemSchema = z.object({
   catalogItemId: z.string().min(1, "Falta el producto."),
   quantity: z.number().int().positive(),
   marginPercent: z.number().optional(),
+  sellerReferencePhotoUrl: z.string().url().optional(),
 });
 
 const schema = z.object({
@@ -42,6 +43,7 @@ async function resolveItems(items: z.infer<typeof itemSchema>[], isContraEntrega
       unitPrice: price.unitPrice,
       totalAmount: it.quantity * price.unitPrice,
       marginPercentUsed: price.marginPercentUsed,
+      sellerReferencePhotoUrl: it.sellerReferencePhotoUrl ?? null,
     };
   });
 }

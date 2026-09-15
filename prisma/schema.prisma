@@ -5508,6 +5508,14 @@ model ExternalSaleItem {
   // porque las ventas declaradas antes de este cambio no lo tienen.
   marginPercentUsed Float?
 
+  // Confirmado 2026-09-15, pedido explícito de Marcos: cuando el producto
+  // todavía no está matriculado en el catálogo (catalogItem.photos vacío),
+  // el asesor puede adjuntar su propia foto de referencia al declarar la
+  // venta, para que Fulfillment sepa exactamente qué despachar en vez de
+  // adivinar solo por el nombre — puramente informal, no reemplaza matricular
+  // el producto de verdad con sus fotos reales en el catálogo.
+  sellerReferencePhotoUrl String?
+
   rejectedAt      DateTime?
   rejectionReason String?
 

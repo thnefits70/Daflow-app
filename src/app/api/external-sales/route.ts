@@ -21,6 +21,11 @@ const itemSchema = z.object({
   // porcentaje de ganancia; en B2C se ignora, se calcula solo según la
   // cantidad total de la venta.
   marginPercent: z.number().optional(),
+  // Confirmado 2026-09-15, pedido explícito de Marcos: foto de referencia
+  // opcional que el asesor adjunta cuando el producto todavía no está
+  // matriculado en el catálogo (sin fotos reales) — evita que Fulfillment
+  // despache el producto equivocado adivinando solo por el nombre.
+  sellerReferencePhotoUrl: z.string().url().optional(),
 });
 
 const schema = z.object({
@@ -60,6 +65,7 @@ async function resolveItems(items: z.infer<typeof itemSchema>[], isContraEntrega
       unitPrice: price.unitPrice,
       totalAmount: it.quantity * price.unitPrice,
       marginPercentUsed: price.marginPercentUsed,
+      sellerReferencePhotoUrl: it.sellerReferencePhotoUrl ?? null,
     };
   });
 }
