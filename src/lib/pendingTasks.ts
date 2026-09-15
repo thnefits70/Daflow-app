@@ -1226,21 +1226,11 @@ async function getPurchaseApprovalPendingItem(href: string): Promise<PendingItem
   };
 }
 
-// Confirmado 2026-08-13: pedido explícito del usuario — un solo enlace en
-// Inicio con el TOTAL de pagos de mercadería pendientes (ver criterio
-// arriba). Mismo umbral de 24h que el resto de "atrasado" de este archivo.
-async function getPurchaseMerchandisePendingItem(comDeptId: string | null): Promise<PendingItem | null> {
-  const { count, total, overdue, href } = await getPurchaseMerchandisePaymentsSummary(comDeptId);
-  if (count === 0) return null;
-  return {
-    type: "pagos_mercaderia",
-    icon: "📦",
-    label: "Pagos de mercadería pendientes",
-    meta: `${count} operaci${count === 1 ? "ón" : "ones"} · $${total.toFixed(2)}${overdue ? " · atrasado" : ""}`,
-    overdue,
-    href,
-  };
-}
+// Confirmado 2026-09-15, pedido explícito del usuario: esto duplicaba
+// exactamente la misma información que ya muestra la tarjeta destacada de
+// "Pagos de mercadería pendientes" arriba de esta lista (ver Dashboard.tsx,
+// getPurchaseMerchandisePaymentsShortcut) — el usuario prefiere ver esa
+// tarjeta sola, mejor separada, sin repetirla acá abajo.
 
 // Confirmado 2026-08-17: pedido explícito del usuario — acceso directo en
 // Inicio para ir a pagar mercadería con un solo clic, pero SOLO cuando
@@ -2682,14 +2672,13 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     // pestaña interna "Pagos" (?etab=pagos, leída por ExternalSalesPanel).
     const mktDept = await prisma.department.findUnique({ where: { code: "MKT" }, select: { id: true } });
     const mktVentasPagosHref = mktDept ? `/admin/dept/${mktDept.id}?tab=ventas-externas&etab=pagos` : "/admin";
-    const [feedbackItems, recognitionItem, weeklyCheckinStalledItems, pettyCashLow, pettyCashUnconfirmed, adminPaymentsItem, purchaseMerchandiseItem, purchaseShippingItem, purchaseCreditsItem, supplierExchangeRejectedItem, overtimeApprovalItem, commissionBonusApprovalItem, salaryAdvanceItem, managementDeductionItem, personalPurchaseFinanceItem, personalPurchaseTransferConfirmItem, personalPurchaseTransferCloseItem, personalPurchaseCashConfirmItem, personalPurchasePaymentWatchItem, payrollTransferItem, payrollIessTransferItem, externalSalePaymentConfirmItem, birthdayItems, nichoBackfillItem, monthlyTopMoversItem, improvementPlanClosureItems] = await Promise.all([
+    const [feedbackItems, recognitionItem, weeklyCheckinStalledItems, pettyCashLow, pettyCashUnconfirmed, adminPaymentsItem, purchaseShippingItem, purchaseCreditsItem, supplierExchangeRejectedItem, overtimeApprovalItem, commissionBonusApprovalItem, salaryAdvanceItem, managementDeductionItem, personalPurchaseFinanceItem, personalPurchaseTransferConfirmItem, personalPurchaseTransferCloseItem, personalPurchaseCashConfirmItem, personalPurchasePaymentWatchItem, payrollTransferItem, payrollIessTransferItem, externalSalePaymentConfirmItem, birthdayItems, nichoBackfillItem, monthlyTopMoversItem, improvementPlanClosureItems] = await Promise.all([
       getFeedbackPendingItems(),
       getRecognitionAdminPendingItem("/admin/colaborador-destacado"),
       getWeeklyCheckinStalledPendingItems(),
       getPettyCashLowBalanceItems(financeHref),
       getPettyCashUnconfirmedFunderItems(null, financeHref),
       getAdminPaymentsPendingItem(`${financeHref}?tab=pagosadmin`),
-      getPurchaseMerchandisePendingItem(comDept?.id ?? null),
       getPurchaseShippingPendingItem(comPaymentsHref),
       getPurchaseCreditsPendingItem(comCreditsHref),
       getSupplierExchangeRejectedAdminPendingItem(invEgresosHref),
@@ -2718,7 +2707,6 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       ...pettyCashLow,
       ...pettyCashUnconfirmed,
       ...(adminPaymentsItem ? [adminPaymentsItem] : []),
-      ...(purchaseMerchandiseItem ? [purchaseMerchandiseItem] : []),
       ...(purchaseShippingItem ? [purchaseShippingItem] : []),
       ...(purchaseCreditsItem ? [purchaseCreditsItem] : []),
       ...(supplierExchangeRejectedItem ? [supplierExchangeRejectedItem] : []),
