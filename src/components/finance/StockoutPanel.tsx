@@ -34,6 +34,14 @@ export function StockoutPanel({
   const [expanded, setExpanded] = useState(false);
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
   const [relinkingProductId, setRelinkingProductId] = useState<string | null>(null);
+  // Confirmado 2026-09-15, pedido explícito de Daniel: después de confirmar
+  // "Sí, es el mismo producto", el buscador se quedaba mostrando ESE mismo
+  // producto confirmado en vez de volver a la barra de búsqueda — solo se
+  // reiniciaba al cambiar de semana (key={week} en ProductMatchPicker de
+  // abajo). Sumar este contador a esa key fuerza que también se reinicie
+  // después de cada producto agregado, para poder marcar el siguiente de
+  // una vez.
+  const [addResetCount, setAddResetCount] = useState(0);
 
   // Confirmado 2026-08-29 (pedido explícito del usuario): el producto ya no
   // se escribe a mano — se busca en el mismo catálogo real (Just) que usan
@@ -74,6 +82,7 @@ export function StockoutPanel({
       return;
     }
     setExpanded(false);
+    setAddResetCount((n) => n + 1);
     router.refresh();
   };
 
@@ -160,7 +169,7 @@ export function StockoutPanel({
           <div className="flex-1 min-w-[260px]">
             <label className="block mb-1 text-[10px] text-steel">Producto</label>
             {week ? (
-              <ProductMatchPicker key={week} referencePhotoUrl={null} searchUrl="/api/stockout-catalog-search" onConfirm={handleAdd} />
+              <ProductMatchPicker key={`${week}-${addResetCount}`} referencePhotoUrl={null} searchUrl="/api/stockout-catalog-search" onConfirm={handleAdd} />
             ) : (
               <div className="text-[12px] text-steel border border-dashed border-rule rounded px-2.5 py-2.5">Elige una semana primero.</div>
             )}
