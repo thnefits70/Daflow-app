@@ -10,6 +10,7 @@ import { useFormDraft, clearFormDraft } from "@/lib/useFormDraft";
 type SupplierOption = { id: string; name: string; paymentMode: "PREPAGO" | "CREDITO" };
 
 type PendingItem = { id: string; requestNumber: number | null; productName: string; quantity: number; totalCost: number; requestedAt: string };
+type InTransitItem = { id: string; requestNumber: number | null; productName: string; quantity: number; totalCost: number; requestedAt: string; statusLabel: string };
 type DisputedItem = {
   id: string;
   requestNumber: number | null;
@@ -59,6 +60,7 @@ type Summary = {
   balance: number;
   pendingItems: PendingItem[];
   disputedItems: DisputedItem[];
+  inTransitItems: InTransitItem[];
   openPayments: Payment[];
   closedPayments: Payment[];
 };
@@ -414,6 +416,30 @@ export function SupplierDebtPanel() {
               </div>
             )}
           </div>
+
+          {/* Confirmado 2026-09-15, pedido explícito del usuario: quiere ver
+              TODO lo que tiene con este proveedor, de principio a fin — no
+              solo lo pagable y lo en disputa. Un pedido en camino (aprobado
+              pero sin recibir, o recibido pero sin las dos confirmaciones
+              todavía) antes no aparecía en ningún lado de esta pantalla. */}
+          {summary.inTransitItems.length > 0 && (
+            <div className="mb-6">
+              <h3 className="mb-2 text-[13px] font-semibold text-ink">En camino — todavía no listo para pagar</h3>
+              <div className="flex flex-col gap-1.5">
+                {summary.inTransitItems.map((i) => (
+                  <div key={i.id} className="bg-surface border border-rule rounded-md px-3 py-2 text-[13px]">
+                    <div className="flex justify-between">
+                      <span>{i.productName} × {i.quantity}</span>
+                      <span className="font-semibold tabular-nums text-steel">{money(i.totalCost)}</span>
+                    </div>
+                    <div className="text-[11.5px] text-steel mt-0.5">
+                      {i.statusLabel} — {formatDateTime(i.requestedAt)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {summary.disputedItems.length > 0 && (
             <div className="mb-6">

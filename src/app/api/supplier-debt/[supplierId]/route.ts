@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { canManageSupplierDebtPayments } from "@/lib/guards";
-import { getSupplierDebtPendingItems, getSupplierDebtDisputedItems } from "@/lib/supplierDebt";
+import { getSupplierDebtPendingItems, getSupplierDebtDisputedItems, getSupplierDebtInTransitItems } from "@/lib/supplierDebt";
 
 // Confirmado 2026-09-08 (Fase 1, proveedores con crédito): panorama completo
 // de un proveedor de crédito (hoy solo CHEN) — saldo actual, lo pendiente
@@ -20,9 +20,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ supp
     return NextResponse.json({ error: "Este proveedor no es de crédito." }, { status: 409 });
   }
 
-  const [pendingItems, disputedItems, openPayments, closedPayments] = await Promise.all([
+  const [pendingItems, disputedItems, inTransitItems, openPayments, closedPayments] = await Promise.all([
     getSupplierDebtPendingItems(supplierId),
     getSupplierDebtDisputedItems(supplierId),
+    getSupplierDebtInTransitItems(supplierId),
     prisma.supplierDebtPayment.findMany({
       where: { supplierId, closedAt: null },
       include: {
@@ -65,6 +66,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ supp
     balance,
     pendingItems,
     disputedItems,
+    inTransitItems,
     openPayments,
     closedPayments,
   });

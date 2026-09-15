@@ -184,6 +184,59 @@ export async function getSupplierDebtDisputedItems(supplierId: string): Promise<
     });
 }
 
+export type SupplierDebtInTransitItem = {
+  id: string;
+  requestNumber: number | null;
+  productName: string;
+  quantity: number;
+  totalCost: number;
+  requestedAt: Date;
+  statusLabel: string;
+};
+
+// Confirmado 2026-09-15, pedido explícito del usuario: quiere trazabilidad
+// COMPLETA de todo lo que tiene con un proveedor de crédito, no solo lo
+// pagable (getSupplierDebtPendingItems) y lo en disputa
+// (getSupplierDebtDisputedItems) — un pedido que Bryan ya aprobó pero que
+// CHEN todavía no envió, o que Inventario ya recibió pero Daniel/Bryan
+// todavía no terminan de confirmar, antes no aparecía en ningún lado de
+// esta pantalla. Excluye lo que ya cuenta en otra sección (pagable, en
+// disputa, ya en una tanda) para no duplicar nada.
+export async function getSupplierDebtInTransitItems(supplierId: string): Promise<SupplierDebtInTransitItem[]> {
+  const rows = await prisma.purchaseRequest.findMany({
+    where: {
+      supplierId,
+      OR: [
+        { status: "PENDING_APPROVAL" },
+        { status: "APPROVED", urgentReports: { none: {} } },
+        { status: "RECEIVED_PENDING_REVIEW", urgentReports: { none: {} } },
+        { status: "RECEIVED", buyerDebtConfirmedAt: null, buyerDebtRejectedAt: null, debtPaymentId: null },
+        { status: "RECEIVED", buyerDebtRejectedAt: { not: null } },
+      ],
+    },
+    include: { catalogItem: { select: { name: true } } },
+    orderBy: { requestedAt: "asc" },
+  });
+  return rows.map((r) => ({
+    id: r.id,
+    requestNumber: r.requestNumber,
+    productName: r.catalogItem.name,
+    quantity: r.quantity,
+    totalCost: r.totalCost,
+    requestedAt: r.requestedAt,
+    statusLabel:
+      r.status === "PENDING_APPROVAL"
+        ? "Esperando aprobación de Bryan"
+        : r.status === "APPROVED"
+          ? "Aprobado — esperando que llegue"
+          : r.status === "RECEIVED_PENDING_REVIEW"
+            ? "Recibido — esperando aprobación final de Daniel"
+            : r.buyerDebtRejectedAt
+              ? "Bryan dijo que no autorizó esto — revisar con CHEN"
+              : "Recibido y aprobado — esperando confirmación de Bryan",
+  }));
+}
+
 // Confirmado 2026-09-08: mismo espíritu que findDuplicatePaymentProofUse en
 // purchases.ts — un número de comprobante nunca se reutiliza entre
 // transferencias de tandas distintas.
