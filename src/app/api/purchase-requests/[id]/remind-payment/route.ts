@@ -13,9 +13,20 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   if (!(await canSubmitPurchaseRequests())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
   const { id } = await params;
-  const request = await prisma.purchaseRequest.findUnique({ where: { id }, select: { status: true, totalCost: true, catalogItem: { select: { name: true } } } });
+  const request = await prisma.purchaseRequest.findUnique({
+    where: { id },
+    select: { status: true, totalCost: true, catalogItem: { select: { name: true } }, supplier: { select: { paymentMode: true } } },
+  });
   if (!request) return NextResponse.json({ error: "No encontrada." }, { status: 404 });
   if (request.status !== "APPROVED") return NextResponse.json({ error: "Ya fue pagada." }, { status: 409 });
+  // Confirmado 2026-09-15, mismo bug real de siempre — un proveedor de
+  // crédito (CHEN) no se paga por solicitud individual (ver pay/route.ts),
+  // así que este recordatorio no aplica: no hay nada puntual que el admin
+  // deba pagar todavía. El botón ya no se muestra para estos casos
+  // (MyPurchaseRequests.tsx), esto es el mismo candado del lado servidor.
+  if (request.supplier.paymentMode === "CREDITO") {
+    return NextResponse.json({ error: "Este proveedor es de crédito — no se paga por solicitud individual." }, { status: 409 });
+  }
 
   const title = "🔔 Recordatorio de pago pendiente";
   const body = `${request.catalogItem.name} — $${request.totalCost.toFixed(2)}`;

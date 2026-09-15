@@ -1510,16 +1510,29 @@ async function getSupplierExchangeJustWriteOffPendingItem(href: string): Promise
 // de verdad. Ahora cuenta ambos estados; el timestamp para "atrasado" usa
 // receipt.confirmedAt (cuándo se subió la recepción) si ya existe, si no
 // paidAt.
+// Corregido 2026-09-15 — mismo bug real reportado por el usuario que en
+// /api/purchase-requests?view=receiving: un proveedor de crédito (hoy CHEN)
+// nunca pasa por PAID, se recibe directo desde APPROVED (ver
+// receipt/route.ts, isCreditSupplier). Sin la rama de abajo, este pendiente
+// de Inicio nunca avisaba a Daniel que una compra de CHEN estaba esperando
+// que la reciba — se quedaba invisible mientras seguía "Aprobado" para
+// siempre. El "atrasado" para esos casos ahora cuenta desde reviewedAt (la
+// aprobación) ya que no hay paidAt que usar.
 async function getPurchaseReceivingPendingItem(href: string): Promise<PendingItem | null> {
   const rows = await prisma.purchaseRequest.findMany({
-    where: { status: { in: ["PAID", "RECEIVED_PENDING_REVIEW"] } },
-    select: { groupId: true, totalCost: true, paidAt: true, receipt: { select: { confirmedAt: true } } },
+    where: {
+      OR: [
+        { status: { in: ["PAID", "RECEIVED_PENDING_REVIEW"] } },
+        { status: "APPROVED", supplier: { paymentMode: "CREDITO" } },
+      ],
+    },
+    select: { groupId: true, totalCost: true, paidAt: true, reviewedAt: true, receipt: { select: { confirmedAt: true } } },
   });
   if (rows.length === 0) return null;
 
   const byGroup = new Map<string, { total: number; at: Date | null }>();
   for (const r of rows) {
-    const at = r.receipt?.confirmedAt ?? r.paidAt;
+    const at = r.receipt?.confirmedAt ?? r.paidAt ?? r.reviewedAt;
     const cur = byGroup.get(r.groupId) ?? { total: 0, at };
     cur.total += r.totalCost;
     byGroup.set(r.groupId, cur);

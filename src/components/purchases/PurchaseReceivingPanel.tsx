@@ -1194,7 +1194,12 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
         const receivedCount = g.filter((r) => r.status === "RECEIVED").length;
         const isMulti = g.length > 1;
         const pendingNames = g.filter((r) => r.status === "PAID" || (r.status === "APPROVED" && r.supplier.paymentMode === "CREDITO")).map((r) => r.catalogItem.name);
-        const missingPurchaseOrder = !g[0].purchaseOrderUrl;
+        // Corregido 2026-09-15 — mismo bug de siempre, un paso más adelante:
+        // ahora que un pedido de CHEN sí llega a esta bandeja (ver el fix de
+        // arriba en `pendingNames`), este aviso lo bloqueaba igual pidiendo
+        // una orden de compra que un proveedor de crédito nunca necesita
+        // (ver PurchaseRequestForm.tsx/checkPurchaseSubmission).
+        const missingPurchaseOrder = g[0].supplier.paymentMode !== "CREDITO" && !g[0].purchaseOrderUrl;
         return (
           <div key={groupId} className="bg-surface border border-rule rounded-md p-4">
             {isMulti && (

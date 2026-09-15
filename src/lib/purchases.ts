@@ -243,8 +243,14 @@ export async function getStalePurchaseRequestPushes(): Promise<StalePurchaseRequ
       where: { status: "PENDING_APPROVAL", requestedAt: { lt: cutoff } },
       select: { id: true, totalCost: true, catalogItem: { select: { name: true } } },
     }),
+    // Corregido 2026-09-15 — bug real y automatizado: sin excluir crédito,
+    // este cron le mandaba a diario al admin y a Finanzas "falta pagar" por
+    // cada compra de CHEN que llevara más de 24h en APPROVED, aunque un
+    // proveedor de crédito nunca se paga por solicitud individual (se paga
+    // después, agrupado en una tanda). Mismo criterio que ya usan
+    // PurchaseInvoicingPanel.tsx y getPurchaseMerchandisePaymentsSummary.
     prisma.purchaseRequest.findMany({
-      where: { status: "APPROVED", reviewedAt: { lt: cutoff } },
+      where: { status: "APPROVED", reviewedAt: { lt: cutoff }, supplier: { paymentMode: { not: "CREDITO" } } },
       select: { id: true, totalCost: true, catalogItem: { select: { name: true } } },
     }),
     // Fix confirmado 2026-08-24 (reportado por Daniel): esto solo miraba

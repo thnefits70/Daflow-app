@@ -690,7 +690,13 @@ function GroupCard({
             {paidIdx !== -1 && groupIdx >= paidIdx && <>Pagada por {actorName(g[0].paidBy?.name)}{g[0].paidAt ? ` · ${formatDateTime(g[0].paidAt)}` : ""} · </>}
             {groupIdx >= receivedIdx && <>Recibida por {[...new Set(g.map((r) => actorName(r.receipt?.confirmedBy?.name)))].join(", ")}{g[0].receipt?.confirmedAt ? ` · ${formatDateTime(g[0].receipt.confirmedAt)}` : ""}</>}
           </div>
-          {groupIdx === 1 && (
+          {/* Confirmado 2026-09-15, bug real encontrado revisando la barra de
+              pasos: un proveedor de crédito (CHEN) no se paga por esta
+              solicitud puntual — se paga después, agrupado en una tanda
+              contra la deuda acumulada — así que "recordar pago" acá no
+              tiene sentido; el bloqueo real para CHEN es que Inventario
+              todavía no la recibe, no que al admin le falte pagarla. */}
+          {groupIdx === approvedIdx && !isCreditoSupplier && (
             <button
               type="button"
               className="flex items-center gap-1.5 mt-2 text-[11.5px] font-semibold text-steel border border-rule rounded px-2.5 py-1.5 cursor-pointer"
