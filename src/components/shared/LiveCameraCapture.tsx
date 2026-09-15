@@ -24,6 +24,11 @@ type Props = {
   // demás usos (compras personales, recepción de mercadería, etc.) donde
   // la captura en vivo SÍ es una restricción a propósito.
   allowUpload?: boolean;
+  // Confirmado 2026-09-14: solo para el enlace público de CHEN (sin
+  // sesión) — apunta a una ruta de firma que valida su token en vez de
+  // auth(). El resto de usos de este componente no lo pasan, y siguen
+  // usando /api/upload/sign como siempre.
+  signUrl?: string;
 };
 
 // Confirmado 2026-08-18: pedido explícito del usuario — sin estas
@@ -43,7 +48,7 @@ const CAMERA_CONSTRAINTS: MediaStreamConstraints = {
 // DENTRO de esta pantalla con getUserMedia y la captura se hace sobre un
 // <canvas> — en ningún momento se ofrece un selector de archivos, así que
 // la galería del dispositivo queda inaccesible en todo momento.
-export function LiveCameraCapture({ folder, onCaptured, onCancel, allowUpload = false }: Props) {
+export function LiveCameraCapture({ folder, onCaptured, onCancel, allowUpload = false, signUrl }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -103,7 +108,7 @@ export function LiveCameraCapture({ folder, onCaptured, onCancel, allowUpload = 
     setUploadError("");
     const hash = await hashFile(file);
     const compressed = await compressImage(file);
-    const result = await uploadFile(compressed, folder);
+    const result = signUrl ? await uploadFile(compressed, folder, signUrl) : await uploadFile(compressed, folder);
     setUploading(false);
     if (!result.ok) {
       setUploadError(result.error);

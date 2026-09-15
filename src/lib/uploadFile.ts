@@ -32,9 +32,13 @@ export type UploadFileResult = { ok: true; url: string; name: string } | { ok: f
 // "subiendo" quedaba trabado para siempre, sin aviso y sin forma de
 // reintentar. Se arregla acá, en la raíz — hay ~30 lugares en la app que
 // llaman a esta función y todos esperan que SIEMPRE resuelva, nunca rechace.
-export async function uploadFile(file: File, folder: string): Promise<UploadFileResult> {
+// Confirmado 2026-09-14: signUrl opcional — el enlace público de CHEN
+// (sin sesión) necesita su propia ruta de firma, que valida el token del
+// proveedor en vez de auth(). Por defecto sigue siendo /api/upload/sign
+// para los ~30 lugares que ya llaman a esta función.
+export async function uploadFile(file: File, folder: string, signUrl: string = "/api/upload/sign"): Promise<UploadFileResult> {
   try {
-    const signRes = await fetch("/api/upload/sign", {
+    const signRes = await fetch(signUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ fileName: file.name, folder, size: file.size }),

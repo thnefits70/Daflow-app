@@ -2289,6 +2289,16 @@ model PurchaseRequest {
   // otro caso (se puede subir por adelantado igual).
   purchaseOrderUrl   String?
 
+  // Confirmado 2026-09-14, pedido explícito del usuario: solo para
+  // proveedores de crédito (hoy CHEN) — foto EN VIVO (nunca de galería,
+  // mismo LiveCameraCapture que el resto de la app) que el propio
+  // proveedor sube desde su enlace público, sin login, mostrando lo que
+  // está enviando. Puramente opcional y de referencia — nadie de nuestro
+  // equipo la revisa ni la confirma, no reemplaza la recepción real que
+  // hace Daniel.
+  supplierShippingPhotoUrl String?
+  supplierShippingPhotoAt  DateTime?
+
   shippingIncluded                  Boolean                @default(false)
   // Confirmado 2026-08-11: pedido explícito del usuario — a veces al
   // solicitar todavía no se sabe ni el transportista ni el costo real del

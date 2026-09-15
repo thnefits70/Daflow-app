@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import { getSupplierDebtPendingItems, getSupplierDebtDisputedItems } from "@/lib/supplierDebt";
+import { SupplierShippingPhotoCapture } from "@/components/supplier-ledger/SupplierShippingPhotoCapture";
 
 // Confirmado 2026-09-08 (Fase 1, proveedores con crédito): página pública,
 // SIN auth() — el proveedor de crédito (hoy solo CHEN) accede solo con este
@@ -29,7 +30,7 @@ export default async function SupplierLedgerPage({ params }: { params: Promise<{
   const supplier = await prisma.supplier.findUnique({ where: { publicLedgerTokenHash: tokenHash } });
   if (!supplier || supplier.paymentMode !== "CREDITO") notFound();
 
-  const [pendingItems, disputedItems, closedPayments] = await Promise.all([
+  const [pendingItems, disputedItems, closedPayments, pendingShipments] = await Promise.all([
     getSupplierDebtPendingItems(supplier.id),
     getSupplierDebtDisputedItems(supplier.id),
     prisma.supplierDebtPayment.findMany({
@@ -42,6 +43,15 @@ export default async function SupplierLedgerPage({ params }: { params: Promise<{
         transfers: { select: { amount: true, transferDate: true, accountDestino: true, comprobanteNumber: true } },
       },
       orderBy: { closedAt: "desc" },
+    }),
+    // Confirmado 2026-09-15, pedido explícito del usuario: pedidos que ya
+    // aprobó Bryan pero que Inventario todavía no recibió (en cuanto se
+    // recibe algo pasa a RECEIVED_PENDING_REVIEW, ya no tiene sentido
+    // pedirle a CHEN una foto de "lo que está enviando").
+    prisma.purchaseRequest.findMany({
+      where: { supplierId: supplier.id, status: "APPROVED" },
+      include: { catalogItem: { select: { name: true, justCode: true } } },
+      orderBy: { requestedAt: "asc" },
     }),
   ]);
 
@@ -86,6 +96,31 @@ export default async function SupplierLedgerPage({ params }: { params: Promise<{
                   ))}
                 </tbody>
               </table>
+            </div>
+          )}
+        </section>
+
+        <section className="mb-8">
+          <h2 className="mb-1 text-sm font-medium text-neutral-700">Pedidos que nos falta enviar</h2>
+          <p className="mb-3 text-xs text-neutral-500">
+            Subir una foto en tiempo real de lo que están enviando es opcional — solo un refuerzo, no hace falta para nada más.
+          </p>
+          {pendingShipments.length === 0 ? (
+            <p className="text-sm text-neutral-400">No hay pedidos pendientes de envío por ahora.</p>
+          ) : (
+            <div className="space-y-3">
+              {pendingShipments.map((r) => (
+                <div key={r.id} className="flex items-center justify-between gap-3 rounded-xl border border-neutral-200 bg-white p-4 shadow-sm">
+                  <div>
+                    <p className="text-sm font-medium text-neutral-800">{r.catalogItem.name}</p>
+                    <p className="text-xs text-neutral-500">
+                      Cant. {r.quantity} · aprobado {DATE_FMT.format(r.requestedAt)}
+                      {r.catalogItem.justCode ? ` · ${r.catalogItem.justCode}` : ""}
+                    </p>
+                  </div>
+                  <SupplierShippingPhotoCapture token={token} requestId={r.id} initialPhotoUrl={r.supplierShippingPhotoUrl} />
+                </div>
+              ))}
             </div>
           )}
         </section>
