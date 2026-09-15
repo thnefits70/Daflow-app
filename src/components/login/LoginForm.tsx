@@ -26,6 +26,7 @@ export function LoginForm({ logoUrl }: { logoUrl: string | null }) {
   const [backupCodes, setBackupCodes] = useState<string[]>([]);
   const [enrollToken, setEnrollToken] = useState("");
   const [copied, setCopied] = useState(false);
+  const [secretCopied, setSecretCopied] = useState(false);
 
   const resetTwoFactorState = () => {
     setStep("credentials");
@@ -35,6 +36,7 @@ export function LoginForm({ logoUrl }: { logoUrl: string | null }) {
     setEnrollCode("");
     setBackupCodes([]);
     setEnrollToken("");
+    setSecretCopied(false);
   };
 
   const finishLogin = async (totp?: string, enrollTokenParam?: string) => {
@@ -121,6 +123,13 @@ export function LoginForm({ logoUrl }: { logoUrl: string | null }) {
     navigator.clipboard.writeText(backupCodes.join("\n")).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
+    });
+  };
+
+  const copySecret = () => {
+    navigator.clipboard.writeText(enrollSecret).then(() => {
+      setSecretCopied(true);
+      setTimeout(() => setSecretCopied(false), 1500);
     });
   };
 
@@ -266,6 +275,26 @@ export function LoginForm({ logoUrl }: { logoUrl: string | null }) {
               <div className="flex justify-center mb-4">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={enrollQrDataUrl} alt="Código QR del autenticador" className="w-40 h-40 rounded border border-rule bg-white p-2" />
+              </div>
+            )}
+            {enrollSecret && (
+              <div className="mb-4">
+                <div className="text-[11.5px] text-steel text-center mb-1.5">
+                  ¿No puedes escanear? Copia este código e ingrésalo a mano en tu autenticador.
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <div className="flex-1 rounded border border-rule bg-surface px-2.5 py-2 text-[13px] tracking-wider text-center font-mono text-ink break-all">
+                    {enrollSecret}
+                  </div>
+                  <button
+                    type="button"
+                    className="shrink-0 rounded border border-rule px-2.5 py-2 text-steel hover:text-ink cursor-pointer"
+                    onClick={copySecret}
+                    aria-label="Copiar código"
+                  >
+                    {secretCopied ? <Check size={14} className="text-green" /> : <Copy size={14} />}
+                  </button>
+                </div>
               </div>
             )}
             <input
