@@ -83,15 +83,20 @@ export function StockLevelsPanel() {
           "Costo" (lo que ya cuesta tenerlo) vs. "Precios de venta" (a qué
           venderlo en cada canal) — y cada precio de venta lleva su color
           fijo (B2B teal, B2C azul) en todas las pantallas de la app. */}
+      {/* Confirmado 2026-09-15, pedido explícito del usuario: con columnas de
+          ancho "auto" (se ajustan a su contenido), Producto (1fr) se comía
+          todo el espacio libre y el resto quedaba apiñado a la derecha,
+          dejando un vacío enorme en el medio. Ahora cada columna de número
+          tiene un ancho fijo — se reparten parejo por toda la fila. */}
       <div className="border border-rule rounded-md overflow-x-auto">
-        <div className="grid grid-cols-[auto_1fr_auto_auto_auto_auto_auto_auto] gap-3 px-3 pt-2 min-w-[900px]">
+        <div className="grid grid-cols-[auto_minmax(200px,1fr)_90px_110px_110px_110px_110px_120px] gap-3 px-3 pt-2 min-w-[1000px]">
           <span></span>
           <span></span>
           <span></span>
           <span className="col-span-2 text-center text-[10px] font-bold uppercase tracking-wide text-steel border-b border-rule pb-1">Costo</span>
           <span className="col-span-3 text-center text-[10px] font-bold uppercase tracking-wide text-blue border-b border-rule pb-1">Precios de venta</span>
         </div>
-        <div className="grid grid-cols-[auto_1fr_auto_auto_auto_auto_auto_auto] gap-3 px-3 py-2 bg-cloud text-[11px] font-semibold uppercase tracking-wide text-steel min-w-[900px]">
+        <div className="grid grid-cols-[auto_minmax(200px,1fr)_90px_110px_110px_110px_110px_120px] gap-3 px-3 py-2 bg-cloud text-[11px] font-semibold uppercase tracking-wide text-steel min-w-[1000px]">
           <span></span>
           <span>Producto</span>
           <span className="text-right">Stock</span>
@@ -101,7 +106,7 @@ export function StockLevelsPanel() {
           <span className="text-right text-blue">B2C 1 un.</span>
           <span className="text-right text-blue">B2C 2-11 un.</span>
         </div>
-        <div className="max-h-[70vh] overflow-y-auto min-w-[900px]">
+        <div className="max-h-[70vh] overflow-y-auto min-w-[1000px]">
           {sorted.length === 0 ? (
             <div className="px-3 py-4 text-[12.5px] text-steel">Sin resultados.</div>
           ) : (
@@ -113,7 +118,7 @@ export function StockLevelsPanel() {
             sorted.map((r, i) => (
               <div
                 key={r.catalogItemId}
-                className={`grid grid-cols-[auto_1fr_auto_auto_auto_auto_auto_auto] gap-3 px-3 py-2.5 border-t border-rule items-center ${i % 2 === 1 ? "bg-cloud/40" : ""}`}
+                className={`grid grid-cols-[auto_minmax(200px,1fr)_90px_110px_110px_110px_110px_120px] gap-3 px-3 py-2.5 border-t border-rule items-center ${i % 2 === 1 ? "bg-cloud/40" : ""}`}
               >
                 {r.photos[0] ? (
                   // Confirmado 2026-09-15 (pedido de Daniel): foto real del
