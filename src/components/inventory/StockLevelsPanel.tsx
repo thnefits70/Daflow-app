@@ -76,23 +76,32 @@ export function StockLevelsPanel() {
 
       <div className="text-[12px] text-steel mb-2">{sorted.length} producto(s)</div>
 
+      {/* Confirmado 2026-09-15, pedido explícito del usuario: la primera
+          versión (8 columnas parejas, todas del mismo tamaño y color) se
+          veía chica y confundía cuál precio era cuál. Ahora se agrupan
+          visualmente en dos bloques con su propio encabezado y separador:
+          "Costo" (lo que ya cuesta tenerlo) vs. "Precios de venta" (a qué
+          venderlo en cada canal) — y cada precio de venta lleva su color
+          fijo (B2B teal, B2C azul) en todas las pantallas de la app. */}
       <div className="border border-rule rounded-md overflow-x-auto">
-        <div className="grid grid-cols-[auto_1fr_auto_auto_auto_auto_auto_auto] gap-3 px-3 py-2 bg-cloud text-[10.5px] font-semibold uppercase tracking-wide text-steel min-w-[820px]">
+        <div className="grid grid-cols-[auto_1fr_auto_auto_auto_auto_auto_auto] gap-3 px-3 pt-2 min-w-[900px]">
+          <span></span>
+          <span></span>
+          <span></span>
+          <span className="col-span-2 text-center text-[10px] font-bold uppercase tracking-wide text-steel border-b border-rule pb-1">Costo</span>
+          <span className="col-span-3 text-center text-[10px] font-bold uppercase tracking-wide text-blue border-b border-rule pb-1">Precios de venta</span>
+        </div>
+        <div className="grid grid-cols-[auto_1fr_auto_auto_auto_auto_auto_auto] gap-3 px-3 py-2 bg-cloud text-[11px] font-semibold uppercase tracking-wide text-steel min-w-[900px]">
           <span></span>
           <span>Producto</span>
           <span className="text-right">Stock</span>
-          <span className="text-right">Costo prom.</span>
-          {/* Confirmado 2026-09-15, pedido explícito del usuario: mismos 3
-              precios de referencia que ya se ven en la consulta de precios
-              de Análisis de Mercado — acá quien ya veía el costo real
-              (Daniel/admin) ahora también ve a qué se traduce ese costo en
-              cada canal de venta. */}
+          <span className="text-right border-l border-rule pl-3">Costo prom.</span>
           <span className="text-right">Benistock</span>
-          <span className="text-right">B2B</span>
-          <span className="text-right">B2C 1u</span>
-          <span className="text-right">B2C 2-11u</span>
+          <span className="text-right border-l border-rule pl-3 text-teal">B2B</span>
+          <span className="text-right text-blue">B2C 1 un.</span>
+          <span className="text-right text-blue">B2C 2-11 un.</span>
         </div>
-        <div className="max-h-[70vh] overflow-y-auto min-w-[820px]">
+        <div className="max-h-[70vh] overflow-y-auto min-w-[900px]">
           {sorted.length === 0 ? (
             <div className="px-3 py-4 text-[12.5px] text-steel">Sin resultados.</div>
           ) : (
@@ -104,7 +113,7 @@ export function StockLevelsPanel() {
             sorted.map((r, i) => (
               <div
                 key={r.catalogItemId}
-                className={`grid grid-cols-[auto_1fr_auto_auto_auto_auto_auto_auto] gap-3 px-3 py-2 border-t border-rule items-center ${i % 2 === 1 ? "bg-cloud/40" : ""}`}
+                className={`grid grid-cols-[auto_1fr_auto_auto_auto_auto_auto_auto] gap-3 px-3 py-2.5 border-t border-rule items-center ${i % 2 === 1 ? "bg-cloud/40" : ""}`}
               >
                 {r.photos[0] ? (
                   // Confirmado 2026-09-15 (pedido de Daniel): foto real del
@@ -120,11 +129,11 @@ export function StockLevelsPanel() {
                   <span className="truncate">{r.name}</span>
                 </span>
                 <span className={`text-right font-mono text-[12.5px] font-bold ${r.balance < 0 ? "text-red" : "text-ink"}`}>{r.balance}</span>
-                <span className="text-right font-mono text-[12px] text-steel">{money(r.avgCost)}</span>
-                <span className="text-right font-mono text-[12px] text-steel">{r.benistockPrice != null ? money(r.benistockPrice) : "—"}</span>
-                <span className="text-right font-mono text-[12px] text-teal">{r.b2bPriceDefault != null ? money(r.b2bPriceDefault) : "—"}</span>
-                <span className="text-right font-mono text-[12px] text-ink">{r.b2cPrice1Unit != null ? money(r.b2cPrice1Unit) : "—"}</span>
-                <span className="text-right font-mono text-[12px] text-ink">{r.b2cPrice2to11 != null ? money(r.b2cPrice2to11) : "—"}</span>
+                <span className="text-right font-mono text-[13px] text-steel border-l border-rule pl-3">{money(r.avgCost)}</span>
+                <span className="text-right font-mono text-[13px] text-steel">{r.benistockPrice != null ? money(r.benistockPrice) : "—"}</span>
+                <span className="text-right font-mono text-[13px] font-bold text-teal border-l border-rule pl-3">{r.b2bPriceDefault != null ? money(r.b2bPriceDefault) : "—"}</span>
+                <span className="text-right font-mono text-[13px] font-bold text-blue">{r.b2cPrice1Unit != null ? money(r.b2cPrice1Unit) : "—"}</span>
+                <span className="text-right font-mono text-[13px] font-bold text-blue">{r.b2cPrice2to11 != null ? money(r.b2cPrice2to11) : "—"}</span>
               </div>
             ))
           )}
