@@ -141,13 +141,27 @@ export function PurchaseSupplierPicker({
     return () => clearTimeout(t);
   }, [query, type, value, creating]);
 
+  // Fix confirmado 2026-09-15: pedido explícito del usuario — un transportista
+  // que solo cobra en efectivo (nunca va a tener cuenta bancaria) no se podía
+  // registrar porque esto exigía el banco completo sí o sí. La cuenta ahora es
+  // opcional al crear — mismo criterio "todo o nada" que ya usa Proveedores
+  // (SuppliersPanel.tsx): si no se toca ningún campo de banco, se guarda sin
+  // cuenta; si se empieza a llenar uno, se exige el resto para no guardar una
+  // cuenta a medias.
   async function save() {
-    if (!form.name.trim() || !form.notes.trim() || !form.bankName.trim() || !form.bankAccountType.trim() || !form.bankAccountNumber.trim() || !form.bankAccountHolder.trim() || !form.holderIdType || !form.holderIdNumber.trim() || !form.contactLabel.trim() || !form.contactWhatsapp.trim()) {
+    if (!form.name.trim() || !form.notes.trim() || !form.contactLabel.trim() || !form.contactWhatsapp.trim()) {
       setErr("Completa todos los campos obligatorios.");
       return;
     }
     if (type === "SUPPLIER" && !form.location.trim()) {
       setErr("Falta la ubicación del proveedor.");
+      return;
+    }
+    const bankFields = [form.bankName, form.bankAccountType, form.bankAccountNumber, form.bankAccountHolder, form.holderIdType, form.holderIdNumber];
+    const bankStarted = bankFields.some((v) => v.trim());
+    const bankComplete = bankFields.every((v) => v.trim());
+    if (bankStarted && !bankComplete) {
+      setErr("Completa todos los datos de la cuenta bancaria, o déjalos todos vacíos si paga/cobra solo en efectivo.");
       return;
     }
     setBusy(true);
@@ -157,15 +171,41 @@ export function PurchaseSupplierPicker({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ type, ...form }),
     });
-    setBusy(false);
     const data = await res.json().catch(() => null);
     if (!res.ok) {
+      setBusy(false);
       setErr(data?.error ?? "No se pudo guardar.");
       return;
     }
+    let bankAccounts = data.bankAccounts ?? [];
+    if (bankComplete) {
+      const bankRes = await fetch(`/api/purchase-suppliers/${data.id}/bank-accounts`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          bankName: form.bankName.trim(),
+          bankAccountType: form.bankAccountType.trim(),
+          bankAccountNumber: form.bankAccountNumber.trim(),
+          bankAccountHolder: form.bankAccountHolder.trim(),
+          holderIdType: form.holderIdType,
+          holderIdNumber: form.holderIdNumber.trim(),
+        }),
+      });
+      const bankData = await bankRes.json().catch(() => null);
+      if (!bankRes.ok) {
+        setBusy(false);
+        setErr(`Se registró, pero no se pudo agregar la cuenta bancaria: ${bankData?.error ?? "intenta agregarla después."}`);
+        setCreating(false);
+        clearSupplierCreateDraft();
+        onChange({ ...data, bankAccounts: [], contacts: data.contacts ?? [] });
+        return;
+      }
+      bankAccounts = [bankData];
+    }
+    setBusy(false);
     setCreating(false);
     clearSupplierCreateDraft();
-    const supplier: PurchaseSupplierDTO = { ...data, bankAccounts: data.bankAccounts ?? [], contacts: data.contacts ?? [] };
+    const supplier: PurchaseSupplierDTO = { ...data, bankAccounts, contacts: data.contacts ?? [] };
     onChange(supplier);
     // Confirmado 2026-08-18: pedido explícito del usuario — nunca se
     // preselecciona una cuenta bancaria sola, ni siquiera si el proveedor
@@ -422,6 +462,9 @@ export function PurchaseSupplierPicker({
           <div className="text-[10.5px] text-steel mt-1">
             Esta información también aparece en la sección de Proveedores — mientras más detalle, más fácil encontrarlo ahí.
           </div>
+        </div>
+        <div className="text-[10.5px] text-steel mb-1.5 mt-1">
+          Datos bancarios <span className="text-steel-dim">(opcional — déjalos vacíos si {type === "SUPPLIER" ? "el proveedor" : "el transportista"} solo cobra en efectivo)</span>
         </div>
         <div className="grid grid-cols-2 gap-2.5 mb-2.5">
           <div>

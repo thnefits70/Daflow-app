@@ -38,19 +38,20 @@ export async function GET(req: NextRequest) {
 
 // Confirmado 2026-07-30: debe pedir los MISMOS datos que ya pide la sección
 // Proveedores al crear uno (category opcional, notes obligatoria — ver
-// createSchema en src/app/api/suppliers/route.ts) más los datos bancarios
-// que Proveedores todavía no tiene, para que quede completo en ambos lados.
+// createSchema en src/app/api/suppliers/route.ts).
+// Fix confirmado 2026-09-15: bug real — el banco venía obligatorio incluso
+// para un transportista que solo cobra en efectivo (no tiene cuenta, y
+// nunca la va a tener), bloqueando registrarlo. Mismo criterio "opcional,
+// todo o nada" que ya usa Proveedores (SuppliersPanel.tsx): la cuenta se
+// valida aparte, en el cliente, y si se completó se crea con una llamada
+// separada a POST /api/purchase-suppliers/[id]/bank-accounts (mismo
+// endpoint que ya usa "agregar cuenta" a un proveedor existente) — este
+// endpoint ya no la exige ni la crea.
 const createSchema = z.object({
   type: z.enum(["SUPPLIER", "CARRIER"]),
   name: z.string().trim().min(1, "Falta el nombre."),
   category: z.string().trim().optional(),
   notes: z.string().trim().min(1, "Agrega una descripción — qué provee o qué transporta."),
-  bankName: z.string().trim().min(1, "Falta el banco."),
-  bankAccountType: z.string().trim().min(1, "Falta el tipo de cuenta."),
-  bankAccountNumber: z.string().trim().min(1, "Falta el número de cuenta."),
-  bankAccountHolder: z.string().trim().min(1, "Falta el titular de la cuenta."),
-  holderIdType: z.enum(["RUC", "CEDULA"]),
-  holderIdNumber: z.string().trim().min(1, "Falta el número de RUC o cédula."),
   email: z.string().trim().email().optional().or(z.literal("")),
   // Obligatoria para SUPPLIER, no aplica a CARRIER (no tiene local fijo).
   location: z.string().trim().optional(),
@@ -89,19 +90,6 @@ export async function POST(req: NextRequest) {
       approvedById: isAdmin ? null : session.user.id,
       approvedAt: new Date(),
       contacts: { create: [{ label: parsed.data.contactLabel, whatsapp: parsed.data.contactWhatsapp }] },
-      bankAccounts: {
-        create: [
-          {
-            bankName: parsed.data.bankName,
-            bankAccountType: parsed.data.bankAccountType,
-            bankAccountNumber: parsed.data.bankAccountNumber,
-            bankAccountHolder: parsed.data.bankAccountHolder,
-            holderIdType: parsed.data.holderIdType,
-            holderIdNumber: parsed.data.holderIdNumber,
-            createdById: isAdmin ? null : session.user.id,
-          },
-        ],
-      },
     },
     include: { contacts: true, bankAccounts: true },
   });
