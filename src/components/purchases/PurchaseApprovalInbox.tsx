@@ -798,8 +798,16 @@ export function PurchaseApprovalInbox({ canAct = true, canPayHere = true, canPay
                           <div className="text-[9px] uppercase tracking-wide text-red/70">Precio efectivo — esta solicitud</div>
                           <div className="text-[13.5px] font-bold">${eff.toFixed(2)} <span className="text-[9.5px] font-normal text-red/70">/un. con flete</span></div>
                         </div>
-                        {stats === undefined || stats === null || stats.last3Avg === null ? (
+                        {stats === undefined ? (
                           <div className="text-[10px] text-red/70 self-center">Cargando historial…</div>
+                        ) : stats === null || stats.last3Avg === null ? (
+                          // Confirmado 2026-09-15, bug real reportado por el usuario: esto NO
+                          // es un estado de carga — el fetch ya terminó, simplemente este
+                          // producto todavía no tiene ninguna compra CONFIRMADA (pagada) con
+                          // ningún proveedor (puede estar en justificación por otro motivo, ej.
+                          // "proveedor no es el más barato conocido"). Antes se mostraba
+                          // "Cargando historial…" para siempre en este caso.
+                          <div className="text-[10px] text-red/70 self-center">Sin historial previo — primera vez que se compra este producto.</div>
                         ) : (
                           <>
                             <div>

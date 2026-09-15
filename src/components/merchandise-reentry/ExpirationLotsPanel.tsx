@@ -103,9 +103,14 @@ export function ExpirationLotsPanel() {
     setManufactureDate("");
     setExpirationDate("");
     setQuantity("");
-    setOk("Lote declarado ✓");
     setItems((prev) => prev.map((i) => (i.id === selected.id ? { ...i, hasExpiration: true } : i)));
-    loadLots(selected.id);
+    // Confirmado 2026-09-15, pedido explícito de Daniel: al guardar un lote,
+    // volver directo al buscador para el siguiente producto en vez de dejarlo
+    // parado en la pantalla del producto que ya terminó — así declara varios
+    // lotes seguidos más rápido, sin pasos extra de "Cambiar producto".
+    setOk(`Lote de "${selected.name}" declarado ✓ — busca el siguiente producto.`);
+    setSelectedId(null);
+    setQuery("");
   }
 
   return (
@@ -119,6 +124,12 @@ export function ExpirationLotsPanel() {
         <Search size={13} className="text-steel" />
         <input className="flex-1 text-[13px] outline-none bg-transparent" placeholder="Buscar producto o código…" value={query} onChange={(e) => setQuery(e.target.value)} />
       </div>
+
+      {!selected && ok && (
+        <div className="flex items-center gap-1.5 text-teal text-[12px] mb-2">
+          <CheckCircle2 size={13} /> {ok}
+        </div>
+      )}
 
       {!selected && (
         <div className="max-h-56 overflow-y-auto flex flex-col gap-1 border border-rule rounded-md p-1">
@@ -190,11 +201,6 @@ export function ExpirationLotsPanel() {
             </div>
           </div>
           {err && <div className="text-red text-[12px] mb-2">{err}</div>}
-          {ok && (
-            <div className="flex items-center gap-1.5 text-teal text-[12px] mb-2">
-              <CheckCircle2 size={13} /> {ok}
-            </div>
-          )}
           <button
             type="button"
             disabled={busy || !expirationDate || Number(quantity) <= 0}
