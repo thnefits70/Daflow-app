@@ -1,4 +1,17 @@
+import crypto from "crypto";
 import { prisma } from "@/lib/prisma";
+
+// Confirmado 2026-09-15: busca el proveedor de crédito dueño de este token
+// de enlace público — primero por coincidencia directa (formato actual,
+// desde que se guarda el token tal cual para poder mostrarlo siempre en el
+// panel de admin), y si no, por el hash del formato viejo (para que un
+// enlace generado ANTES de este cambio siga funcionando sin regenerarlo).
+export async function findSupplierByPublicLedgerToken(token: string) {
+  const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+  return prisma.supplier.findFirst({
+    where: { OR: [{ publicLedgerToken: token }, { publicLedgerTokenHash: tokenHash }] },
+  });
+}
 
 // Fase 1 (proveedores con crédito, hoy solo CHEN) — confirmado 2026-09-08:
 // el saldo que se le debe a un proveedor de crédito NUNCA se "hace a mano" —

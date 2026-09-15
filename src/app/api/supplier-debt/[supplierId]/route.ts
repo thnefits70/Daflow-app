@@ -49,7 +49,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ supp
       id: supplier.id,
       name: supplier.name,
       paymentMode: supplier.paymentMode,
-      hasPublicLink: !!supplier.publicLedgerTokenHash,
+      hasPublicLink: !!supplier.publicLedgerToken || !!supplier.publicLedgerTokenHash,
+      // Confirmado 2026-09-15: solo existe para un enlace generado a partir
+      // de este cambio — uno generado antes (hash-only, ya irrecuperable)
+      // sigue funcionando pero no se puede volver a mostrar aquí.
+      publicLedgerToken: supplier.publicLedgerToken,
       publicLedgerTokenCreatedAt: supplier.publicLedgerTokenCreatedAt,
       bankAccounts: supplier.bankAccounts.map((b) => ({
         id: b.id,

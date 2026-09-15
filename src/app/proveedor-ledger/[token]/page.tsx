@@ -1,8 +1,7 @@
-import crypto from "crypto";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
-import { getSupplierDebtPendingItems, getSupplierDebtDisputedItems } from "@/lib/supplierDebt";
+import { getSupplierDebtPendingItems, getSupplierDebtDisputedItems, findSupplierByPublicLedgerToken } from "@/lib/supplierDebt";
 import { SupplierShippingPhotoCapture } from "@/components/supplier-ledger/SupplierShippingPhotoCapture";
 
 // Confirmado 2026-09-08 (Fase 1, proveedores con crédito): página pública,
@@ -25,9 +24,7 @@ const DATETIME_FMT = new Intl.DateTimeFormat("es-EC", { timeZone: "America/Guaya
 
 export default async function SupplierLedgerPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
-  const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
-
-  const supplier = await prisma.supplier.findUnique({ where: { publicLedgerTokenHash: tokenHash } });
+  const supplier = await findSupplierByPublicLedgerToken(token);
   if (!supplier || supplier.paymentMode !== "CREDITO") notFound();
 
   const [pendingItems, disputedItems, closedPayments, pendingShipments] = await Promise.all([

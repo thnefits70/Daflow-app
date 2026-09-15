@@ -1543,9 +1543,16 @@ model Supplier {
   name                       String
   paymentMode                SupplierPaymentMode @default(PREPAGO)
   // Confirmado 2026-09-08: enlace público de solo lectura para un proveedor
-  // con crédito (CHEN) — solo se guarda el hash (igual que
-  // PasswordResetToken), el token crudo nunca se persiste, solo se muestra
-  // una vez al generarlo. Null hasta que el admin lo genera.
+  // con crédito (CHEN). Diseño original: solo se guardaba el hash (igual que
+  // PasswordResetToken), el token crudo nunca se persistía.
+  // Confirmado 2026-09-15, pedido explícito del usuario: quiere poder ver
+  // siempre el enlace activo sin tener que regenerarlo (regenerar invalida
+  // el que CHEN ya tiene guardado). Se guarda el token tal cual desde ahora
+  // — el riesgo es bajo porque solo da acceso de LECTURA al propio estado de
+  // cuenta de ese proveedor, nada más. publicLedgerTokenHash se conserva
+  // nada más para que un enlace generado ANTES de este cambio siga
+  // funcionando sin que nadie tenga que regenerarlo.
+  publicLedgerToken          String?             @unique
   publicLedgerTokenHash      String?             @unique
   publicLedgerTokenCreatedAt DateTime?
   location                   String?

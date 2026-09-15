@@ -1,16 +1,16 @@
 import crypto from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { prisma } from "@/lib/prisma";
 import { supabaseAdmin } from "@/lib/supabase";
+import { findSupplierByPublicLedgerToken } from "@/lib/supplierDebt";
 
 // Confirmado 2026-09-15 (foto opcional de CHEN en su enlace público): esta
 // página no tiene auth() a propósito — el proveedor de crédito entra solo
 // con el token de su enlace, sin usuario ni contraseña. La ruta general
 // /api/upload/sign no se puede reutilizar porque es enteramente por sesión
 // (auth()); acá el token hace el mismo papel, validado igual que en
-// page.tsx: sha256(token) -> Supplier.publicLedgerTokenHash ->
-// paymentMode==="CREDITO". Carpeta fija, no la manda el cliente.
+// page.tsx (ver findSupplierByPublicLedgerToken) + paymentMode==="CREDITO".
+// Carpeta fija, no la manda el cliente.
 const BUCKET = "daflow-files";
 const MAX_BYTES = 50 * 1024 * 1024;
 const FOLDER = "supplier-shipping-photos";
@@ -32,8 +32,7 @@ const signSchema = z.object({
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
-  const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
-  const supplier = await prisma.supplier.findUnique({ where: { publicLedgerTokenHash: tokenHash } });
+  const supplier = await findSupplierByPublicLedgerToken(token);
   if (!supplier || supplier.paymentMode !== "CREDITO") {
     return NextResponse.json({ error: "No autorizado." }, { status: 403 });
   }
