@@ -13,13 +13,18 @@ import { CatalogCode } from "@/components/shared/CatalogCode";
 type Row = {
   id: string;
   groupId: string;
-  status: "PAID" | "RECEIVED_PENDING_REVIEW" | "RECEIVED";
+  // Confirmado 2026-09-15, bug real reportado por el usuario: un proveedor
+  // de crédito (hoy CHEN) nunca pasa por PAID antes de recibir (ver
+  // receipt/route.ts, isCreditSupplier) — así que esta cola tiene que poder
+  // traer también filas APPROVED cuando el proveedor es CREDITO, si no
+  // Inventario nunca ve esos pedidos en ningún lado.
+  status: "APPROVED" | "PAID" | "RECEIVED_PENDING_REVIEW" | "RECEIVED";
   quantity: number;
   unitCost: number;
   totalCost: number;
   paidAt: string | null;
   catalogItem: { name: string; photos: string[]; justCode: string | null; hasExpiration: boolean };
-  supplier: { name: string };
+  supplier: { name: string; paymentMode?: "PREPAGO" | "CREDITO" };
   requestedBy: { name: string } | null;
   paidBy: { name: string } | null;
   invoicedBy: { name: string } | null;
@@ -1181,14 +1186,14 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
       )}
 
       {rows.length === 0 && pendingReplacements.length === 0 && (
-        <div className="border-[1.5px] border-dashed border-rule rounded-md p-8 text-center text-steel text-[13.5px]">No hay mercadería pagada esperando confirmación.</div>
+        <div className="border-[1.5px] border-dashed border-rule rounded-md p-8 text-center text-steel text-[13.5px]">No hay mercadería pagada o de crédito esperando confirmación.</div>
       )}
 
       {groups.map((g) => {
         const groupId = g[0].groupId;
         const receivedCount = g.filter((r) => r.status === "RECEIVED").length;
         const isMulti = g.length > 1;
-        const pendingNames = g.filter((r) => r.status === "PAID").map((r) => r.catalogItem.name);
+        const pendingNames = g.filter((r) => r.status === "PAID" || (r.status === "APPROVED" && r.supplier.paymentMode === "CREDITO")).map((r) => r.catalogItem.name);
         const missingPurchaseOrder = !g[0].purchaseOrderUrl;
         return (
           <div key={groupId} className="bg-surface border border-rule rounded-md p-4">
@@ -1201,7 +1206,12 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
               </div>
             )}
             <div className="text-[10px] text-steel-dim mb-2">
-              Solicitada por {actorName(g[0].requestedBy?.name)} · Pagada por {actorName(g[0].paidBy?.name)}
+              Solicitada por {actorName(g[0].requestedBy?.name)}
+              {/* Confirmado 2026-09-15, bug real: un pedido de crédito (CHEN) llega
+                  acá sin haberse pagado todavía (paidBy null) — actorName cae en el
+                  dueño como fallback, así que sin esta condición se mostraría
+                  "Pagada por Andrés Damián" para algo que en realidad no se pagó. */}
+              {g[0].paidBy && ` · Pagada por ${actorName(g[0].paidBy.name)}`}
             </div>
 
             {missingPurchaseOrder && (
@@ -1263,7 +1273,7 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                     <div className="text-[11.5px] text-steel mb-1">pagado {formatDateTime(r.paidAt)}</div>
                   )}
 
-                  {r.status === "PAID" && !missingPurchaseOrder && (
+                  {(r.status === "PAID" || (r.status === "APPROVED" && r.supplier.paymentMode === "CREDITO")) && !missingPurchaseOrder && (
                     <>
                       {openId === r.id ? (
                         <div className="mt-2">

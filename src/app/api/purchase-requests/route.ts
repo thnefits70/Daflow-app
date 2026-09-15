@@ -64,8 +64,18 @@ export async function GET(req: NextRequest) {
     // RECEIVED_PENDING_REVIEW además de PAID, para que en la misma pestaña
     // el equipo vea lo que falta recibir y Daniel vea lo que ya recibieron y
     // está pendiente de su aprobación final.
+    // Confirmado 2026-09-15, bug real reportado por el usuario: un proveedor
+    // de crédito (hoy CHEN) nunca pasa por PAID antes de recibir — se recibe
+    // primero, el pago real ocurre después agrupado en una tanda (ver
+    // receipt/route.ts, isCreditSupplier). Sin esta rama, esta bandeja nunca
+    // mostraba esos pedidos y Inventario no tenía dónde recibirlos.
     const pending = await prisma.purchaseRequest.findMany({
-      where: { status: { in: ["PAID", "RECEIVED_PENDING_REVIEW"] } },
+      where: {
+        OR: [
+          { status: { in: ["PAID", "RECEIVED_PENDING_REVIEW"] } },
+          { status: "APPROVED", supplier: { paymentMode: "CREDITO" } },
+        ],
+      },
       select: { groupId: true },
       orderBy: { paidAt: "asc" },
     });
