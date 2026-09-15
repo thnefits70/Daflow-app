@@ -807,7 +807,15 @@ function PricingHistoryTable() {
 }
 
 type ConsultaRow = {
-  catalogItem: { id: string; name: string; justCode: string | null; photos: string[] };
+  id: string;
+  name: string;
+  justCode: string | null;
+  photos: string[];
+  // Confirmado 2026-09-15, pedido explícito del usuario: un combo (varios
+  // productos empacados y enviados como uno solo) también aparece acá con
+  // su propio precio de referencia — se distingue con una etiqueta, ya que
+  // no es un producto del catálogo con foto propia.
+  isCombo: boolean;
   benistockPrice?: number;
   b2bPriceDefault?: number;
   b2cPrice1Unit?: number;
@@ -828,7 +836,7 @@ function PricingConsultaTable() {
   if (rows === null) return <div className="text-steel text-[13px]">Cargando…</div>;
 
   const q = query.trim().toLowerCase();
-  const filtered = q ? rows.filter((r) => r.catalogItem.name.toLowerCase().includes(q) || (r.catalogItem.justCode ?? "").toLowerCase().includes(q)) : rows;
+  const filtered = q ? rows.filter((r) => r.name.toLowerCase().includes(q) || (r.justCode ?? "").toLowerCase().includes(q)) : rows;
 
   return (
     <div>
@@ -845,14 +853,19 @@ function PricingConsultaTable() {
       ) : (
         <div className="flex flex-col gap-1.5">
           {filtered.map((r) => (
-            <div key={r.catalogItem.id} className="flex items-center gap-2.5 bg-surface border border-rule rounded-md p-2.5">
-              {r.catalogItem.photos[0] && (
+            <div key={r.id} className="flex items-center gap-2.5 bg-surface border border-rule rounded-md p-2.5">
+              {r.photos[0] && (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={r.catalogItem.photos[0]} alt={r.catalogItem.name} className="w-10 h-10 object-cover rounded border border-rule shrink-0" />
+                <img src={r.photos[0]} alt={r.name} className="w-10 h-10 object-cover rounded border border-rule shrink-0" />
               )}
               <div className="flex-1 min-w-0">
-                <div className="text-[13px] font-semibold truncate">{r.catalogItem.name}</div>
-                {r.catalogItem.justCode && <div className="text-[10.5px] font-mono text-steel">{r.catalogItem.justCode}</div>}
+                <div className="text-[13px] font-semibold truncate flex items-center gap-1.5">
+                  {r.isCombo && (
+                    <span className="text-[9px] font-bold uppercase tracking-wide bg-blue/15 text-blue border border-blue/40 rounded-full px-1.5 py-0.5 shrink-0">Combo</span>
+                  )}
+                  <span className="truncate">{r.name}</span>
+                </div>
+                {r.justCode && <div className="text-[10.5px] font-mono text-steel">{r.justCode}</div>}
               </div>
               <div className="text-right shrink-0">
                 {r.benistockPrice != null && (

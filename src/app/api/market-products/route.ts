@@ -15,6 +15,9 @@ import {
   computeBenistockPrice,
   computeB2BPrice,
   computeB2CPrice,
+  computeComboBenistockPrice,
+  computeComboB2BPrice,
+  computeComboB2CPrice,
   pickPrimarySupplierPrice,
   B2B_MARGIN_DEFAULT,
   nextMarketProductProposalNumber,
@@ -237,12 +240,13 @@ export async function GET(req: NextRequest) {
     const [canB2B, canB2C] = await Promise.all([canViewB2BPricing(), canViewB2CPricing()]);
     if (!canB2B && !canB2C) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
-    const [allStock, proposals] = await Promise.all([
+    const [allStock, proposals, combos] = await Promise.all([
       getAllCurrentStock(),
       prisma.marketProductProposal.findMany({
         where: { catalogItemId: { not: null } },
         include: { supplierPrices: true },
       }),
+      prisma.dropiCombo.findMany({ include: { components: true } }),
     ]);
     const proposalByCatalogItemId = new Map(
       proposals
@@ -255,22 +259,37 @@ export async function GET(req: NextRequest) {
           ] as const;
         })
     );
+    const stockByCatalogItemId = new Map(allStock.map((s) => [s.catalogItemId, s]));
+
+    // Confirmado 2026-09-14: mismo default que MarketProductProposal (seguro
+    // 6%, fulfillment $0.75) para un producto sin propuesta propia, priceado
+    // a partir de su costo promedio de Kardex. Un producto sin propuesta Y
+    // sin costo de Kardex (nunca tuvo movimiento, costo $0) no tiene nada
+    // que calcular.
+    function resolveBase(catalogItemId: string) {
+      const proposalBase = proposalByCatalogItemId.get(catalogItemId);
+      if (proposalBase) return proposalBase;
+      const stock = stockByCatalogItemId.get(catalogItemId);
+      if (stock && stock.avgCost > 0) return { batchCost: stock.avgCost, batchUnits: 1, freightCost: null, insuranceRatePercent: 6, fulfillmentCost: 0.75 };
+      return null;
+    }
 
     const catalogItemIds = allStock.map((s) => s.catalogItemId);
     const catalogItems = await prisma.purchaseCatalogItem.findMany({ where: { id: { in: catalogItemIds } }, select: { id: true, name: true, justCode: true, photos: true } });
     const catalogItemById = new Map(catalogItems.map((c) => [c.id, c]));
 
-    const rows = allStock
+    const productRows = allStock
       .map((s) => {
-        // Confirmado 2026-09-14: mismo default que MarketProductProposal
-        // (seguro 6%, fulfillment $0.75) para un producto sin propuesta
-        // propia, priceado a partir de su costo promedio de Kardex.
-        const base = proposalByCatalogItemId.get(s.catalogItemId) ?? (s.avgCost > 0 ? { batchCost: s.avgCost, batchUnits: 1, freightCost: null, insuranceRatePercent: 6, fulfillmentCost: 0.75 } : null);
+        const base = resolveBase(s.catalogItemId);
         if (!base) return null;
         const catalogItem = catalogItemById.get(s.catalogItemId);
         if (!catalogItem) return null;
         return {
-          catalogItem,
+          id: catalogItem.id,
+          name: catalogItem.name,
+          justCode: catalogItem.justCode,
+          photos: catalogItem.photos,
+          isCombo: false,
           benistockPrice: computeBenistockPrice(base),
           b2bPriceDefault: computeB2BPrice({ ...base, marginPercent: B2B_MARGIN_DEFAULT }),
           b2cPrice1Unit: computeB2CPrice({ ...base, totalQuantity: 1 }),
@@ -279,7 +298,35 @@ export async function GET(req: NextRequest) {
       })
       .filter((r): r is NonNullable<typeof r> => r !== null);
 
-    return NextResponse.json(rows);
+    // Confirmado 2026-09-15, pedido explícito del usuario: un combo (varios
+    // productos reales empacados y enviados como uno solo, ver DropiCombo)
+    // también aparece acá con sus propios Benistock/B2B/B2C — ver
+    // computeComboBenistockPrice/computeComboB2BPrice/computeComboB2CPrice
+    // en marketProduct.ts para el porqué de por qué NO es solo sumar el
+    // precio de cada producto (el fulfillment y el flete de B2C se cobran
+    // una sola vez por combo, no por producto). Un combo con algún
+    // componente sin costo resuelto simplemente no aparece, igual que un
+    // producto individual sin costo.
+    const comboRows = combos
+      .map((combo) => {
+        const components = combo.components.map((c) => ({ base: resolveBase(c.catalogItemId), quantity: c.quantity }));
+        if (components.some((c) => !c.base)) return null;
+        const resolvedComponents = components.map((c) => ({ ...c.base!, quantity: c.quantity }));
+        return {
+          id: combo.id,
+          name: combo.label ?? combo.code,
+          justCode: combo.code,
+          photos: [] as string[],
+          isCombo: true,
+          benistockPrice: computeComboBenistockPrice(resolvedComponents),
+          b2bPriceDefault: computeComboB2BPrice(resolvedComponents, B2B_MARGIN_DEFAULT),
+          b2cPrice1Unit: computeComboB2CPrice(resolvedComponents, 1),
+          b2cPrice2to11: computeComboB2CPrice(resolvedComponents, 2),
+        };
+      })
+      .filter((r): r is NonNullable<typeof r> => r !== null);
+
+    return NextResponse.json([...productRows, ...comboRows]);
   }
 
   if (view === "ready-to-buy") {

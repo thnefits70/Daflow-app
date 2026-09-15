@@ -105,6 +105,54 @@ export function computeB2CPrice(params: {
   return roundUpToNinetyNineCents(rawPrice);
 }
 
+// Confirmado 2026-09-15, pedido explícito del usuario: precios de referencia
+// para un COMBO (DropiCombo — varios productos reales empacados y enviados
+// como uno solo). Un combo es distinto de simplemente sumar el precio
+// individual de cada producto que trae, porque dos cargos son "por envío",
+// no "por producto": el fulfillment ($0.75) y el flete promedio de B2C
+// ($7.50). Sumar el precio completo de cada componente los cobraría una vez
+// por CADA producto del combo (y multiplicado por su cantidad), cuando en
+// realidad el combo se empaca y se envía una sola vez. Por eso estas
+// funciones suman solo la parte "costo + seguro (+ margen)" de cada
+// componente, y agregan el cargo por envío una sola vez al final.
+export const COMBO_FULFILLMENT_COST = 0.75;
+
+type ComboComponentInput = {
+  batchCost: number;
+  batchUnits: number;
+  freightCost: number | null;
+  insuranceRatePercent: number;
+  quantity: number;
+};
+
+export function computeComboBenistockPrice(components: ComboComponentInput[]): number {
+  const sum = components.reduce((acc, c) => {
+    const bodega = bodegaUnitCost(c.batchCost, c.freightCost, c.batchUnits) * (1 + c.insuranceRatePercent / 100);
+    return acc + bodega * c.quantity;
+  }, 0);
+  return sum + COMBO_FULFILLMENT_COST;
+}
+
+export function computeComboB2BPrice(components: ComboComponentInput[], marginPercent: number): number {
+  return components.reduce((acc, c) => acc + computeB2BPrice({ ...c, marginPercent }) * c.quantity, 0);
+}
+
+// Igual que computeB2CPrice, el margen (40%/30%) se decide por la cantidad
+// TOTAL de combos vendidos en la venta (confirmado 2026-09-15: 1 combo
+// vendido = 1 unidad para este cálculo, sin importar cuántos productos
+// distintos traiga adentro) — no por la cantidad de productos que trae cada
+// combo. El redondeo a .99 se hace una sola vez, sobre el total del combo,
+// no por producto.
+export function computeComboB2CPrice(components: ComboComponentInput[], totalQuantity: number): number | null {
+  const marginPercent = b2cMarginPercentForQuantity(totalQuantity);
+  if (marginPercent == null) return null;
+  const sum = components.reduce((acc, c) => {
+    const bodega = bodegaUnitCost(c.batchCost, c.freightCost, c.batchUnits) * (1 + c.insuranceRatePercent / 100);
+    return acc + (bodega / (1 - marginPercent / 100)) * c.quantity;
+  }, 0);
+  return roundUpToNinetyNineCents(sum + B2C_FLETE_PROMEDIO);
+}
+
 export async function nextMarketProductProposalNumber(): Promise<number> {
   const updated = await prisma.platformSettings.update({
     where: { id: "singleton" },
