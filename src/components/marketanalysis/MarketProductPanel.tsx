@@ -808,6 +808,7 @@ function PricingHistoryTable() {
 
 type ConsultaRow = {
   catalogItem: { id: string; name: string; justCode: string | null; photos: string[] };
+  benistockPrice?: number;
   b2bPriceDefault?: number;
   b2cPrice1Unit?: number;
   b2cPrice2to11?: number;
@@ -854,6 +855,11 @@ function PricingConsultaTable() {
                 {r.catalogItem.justCode && <div className="text-[10.5px] font-mono text-steel">{r.catalogItem.justCode}</div>}
               </div>
               <div className="text-right shrink-0">
+                {r.benistockPrice != null && (
+                  <div className="text-[11.5px] text-steel">
+                    <span className="font-bold text-ink">{money(r.benistockPrice)}</span> Benistock (costo, sin ganancia)
+                  </div>
+                )}
                 {r.b2bPriceDefault != null && (
                   <div className="text-[13px] font-bold text-teal">
                     {money(r.b2bPriceDefault)} <span className="text-[10px] font-normal text-steel">B2B · 20%</span>

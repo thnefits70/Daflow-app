@@ -12,6 +12,7 @@ import {
 } from "@/lib/guards";
 import {
   computeMarketProductSalePrice,
+  computeBenistockPrice,
   computeB2BPrice,
   computeB2CPrice,
   pickPrimarySupplierPrice,
@@ -217,16 +218,21 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(rows);
   }
 
-  // Confirmado 2026-09-14: pantalla de solo consulta para quien vende por
-  // Ventas Externas (Heidy/Yair/Jariel/Bryan ven B2B, Marcos ve B2C) — nunca
-  // expone supplierPrices/batchCost, solo el precio de venta que a cada
-  // quien le toca. Ampliado 2026-09-14: ya no depende de que Jariel haya
-  // calculado el producto — cubre TODO el catálogo (~492 productos),
-  // usando su costo promedio real de Kardex cuando no tiene propuesta
-  // propia (mismo criterio de priceExternalSaleItems en
-  // lib/externalSales.ts). Un producto sin propuesta Y sin costo de Kardex
-  // (nunca tuvo movimiento, costo $0) simplemente no aparece — no hay nada
-  // que calcular.
+  // Confirmado 2026-09-08 (Fase 2), ampliado 2026-09-14: pantalla de solo
+  // consulta para quien vende por Ventas Externas — nunca expone
+  // supplierPrices/batchCost crudos, solo precios de venta ya calculados. Ya
+  // no depende de que Jariel haya calculado el producto — cubre TODO el
+  // catálogo (~492 productos), usando su costo promedio real de Kardex
+  // cuando no tiene propuesta propia (mismo criterio de
+  // priceExternalSaleItems en lib/externalSales.ts). Un producto sin
+  // propuesta Y sin costo de Kardex (nunca tuvo movimiento, costo $0)
+  // simplemente no aparece — no hay nada que calcular.
+  // Confirmado 2026-09-15, pedido explícito del usuario: antes cada quien
+  // solo veía el precio de SU propio canal (B2B o B2C, nunca los dos, nunca
+  // Benistock) — ahora cualquiera con acceso a esta pantalla ve las tres
+  // columnas juntas por producto (Benistock = costo real sin ganancia, B2B,
+  // B2C). Decisión consciente: expone el costo real al equipo de ventas,
+  // algo que antes se evitaba a propósito.
   if (view === "consulta") {
     const [canB2B, canB2C] = await Promise.all([canViewB2BPricing(), canViewB2CPricing()]);
     if (!canB2B && !canB2C) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
@@ -243,7 +249,10 @@ export async function GET(req: NextRequest) {
         .filter((p) => p.catalogItemId && pickPrimarySupplierPrice(p.supplierPrices))
         .map((p) => {
           const supplier = pickPrimarySupplierPrice(p.supplierPrices)!;
-          return [p.catalogItemId!, { batchCost: supplier.batchCost, batchUnits: supplier.batchUnits, freightCost: supplier.freightCost, insuranceRatePercent: p.insuranceRatePercent }] as const;
+          return [
+            p.catalogItemId!,
+            { batchCost: supplier.batchCost, batchUnits: supplier.batchUnits, freightCost: supplier.freightCost, insuranceRatePercent: p.insuranceRatePercent, fulfillmentCost: p.fulfillmentCost },
+          ] as const;
         })
     );
 
@@ -253,15 +262,19 @@ export async function GET(req: NextRequest) {
 
     const rows = allStock
       .map((s) => {
-        const base = proposalByCatalogItemId.get(s.catalogItemId) ?? (s.avgCost > 0 ? { batchCost: s.avgCost, batchUnits: 1, freightCost: null, insuranceRatePercent: 6 } : null);
+        // Confirmado 2026-09-14: mismo default que MarketProductProposal
+        // (seguro 6%, fulfillment $0.75) para un producto sin propuesta
+        // propia, priceado a partir de su costo promedio de Kardex.
+        const base = proposalByCatalogItemId.get(s.catalogItemId) ?? (s.avgCost > 0 ? { batchCost: s.avgCost, batchUnits: 1, freightCost: null, insuranceRatePercent: 6, fulfillmentCost: 0.75 } : null);
         if (!base) return null;
         const catalogItem = catalogItemById.get(s.catalogItemId);
         if (!catalogItem) return null;
         return {
           catalogItem,
-          b2bPriceDefault: canB2B ? computeB2BPrice({ ...base, marginPercent: B2B_MARGIN_DEFAULT }) : undefined,
-          b2cPrice1Unit: canB2C ? computeB2CPrice({ ...base, totalQuantity: 1 }) : undefined,
-          b2cPrice2to11: canB2C ? computeB2CPrice({ ...base, totalQuantity: 2 }) : undefined,
+          benistockPrice: computeBenistockPrice(base),
+          b2bPriceDefault: computeB2BPrice({ ...base, marginPercent: B2B_MARGIN_DEFAULT }),
+          b2cPrice1Unit: computeB2CPrice({ ...base, totalQuantity: 1 }),
+          b2cPrice2to11: computeB2CPrice({ ...base, totalQuantity: 2 }),
         };
       })
       .filter((r): r is NonNullable<typeof r> => r !== null);
