@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Search, Plus, CheckCircle2, Trash2, Pencil } from "lucide-react";
+import { useFormDraft } from "@/lib/useFormDraft";
 
 export type BankAccountDTO = {
   id: string;
@@ -38,6 +39,11 @@ const emptyAccountForm = {
   bankName: "", bankAccountType: "", bankAccountNumber: "", bankAccountHolder: "",
   holderIdType: "" as "" | "RUC" | "CEDULA", holderIdNumber: "",
 };
+
+type SupplierCreateDraftData = typeof emptyForm;
+function isSupplierCreateDraftEmpty(d: SupplierCreateDraftData) {
+  return Object.values(d).every((v) => !v.trim());
+}
 
 // Botones rápidos reutilizados para tipo de cuenta y RUC/cédula — confirmado
 // 2026-08-03: evita escribir siempre lo mismo a mano.
@@ -94,6 +100,19 @@ export function PurchaseSupplierPicker({
   const [err, setErr] = useState("");
   const [bankNames, setBankNames] = useState<string[]>([]);
 
+  // Guardado automático: si sale a revisar otra cosa antes de terminar de
+  // registrar este proveedor/transportista nuevo, al volver lo encuentra
+  // tal como lo había dejado. Solo activo mientras el formulario de "crear"
+  // está abierto.
+  const { clearDraft: clearSupplierCreateDraft } = useFormDraft<SupplierCreateDraftData>(
+    creating ? `purchaseSupplier:create:${type}` : null,
+    form,
+    setForm,
+    isSupplierCreateDraftEmpty,
+    `${type === "SUPPLIER" ? "Proveedor" : "Transportista"} nuevo sin terminar de registrar`,
+    "/area/workspace?tab=compras"
+  );
+
   const [addingAccount, setAddingAccount] = useState(false);
   const [accountForm, setAccountForm] = useState(emptyAccountForm);
   const [accountBusy, setAccountBusy] = useState(false);
@@ -145,6 +164,7 @@ export function PurchaseSupplierPicker({
       return;
     }
     setCreating(false);
+    clearSupplierCreateDraft();
     const supplier: PurchaseSupplierDTO = { ...data, bankAccounts: data.bankAccounts ?? [], contacts: data.contacts ?? [] };
     onChange(supplier);
     // Confirmado 2026-08-18: pedido explícito del usuario — nunca se
@@ -455,7 +475,7 @@ export function PurchaseSupplierPicker({
           <button type="button" disabled={busy} className="rounded border border-teal bg-teal px-3.5 py-2 text-[12.5px] font-bold text-navy cursor-pointer disabled:opacity-60" onClick={save}>
             Guardar
           </button>
-          <button type="button" className="text-steel text-[12.5px] cursor-pointer" onClick={() => setCreating(false)}>
+          <button type="button" className="text-steel text-[12.5px] cursor-pointer" onClick={() => { clearSupplierCreateDraft(); setCreating(false); }}>
             Cancelar
           </button>
         </div>

@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Upload, Link2, CheckCircle2, AlertTriangle, Sparkles } from "lucide-react";
+import { Upload, Link2, CheckCircle2, AlertTriangle, Sparkles, Copy, Check } from "lucide-react";
 import { uploadFile } from "@/lib/uploadFile";
 import { compressImage } from "@/lib/compressImage";
 import { formatDateTime } from "@/lib/formatDateTime";
+import { useFormDraft, clearFormDraft } from "@/lib/useFormDraft";
 
 type SupplierOption = { id: string; name: string; paymentMode: "PREPAGO" | "CREDITO" };
 
@@ -51,6 +52,7 @@ type Summary = {
     name: string;
     paymentMode: string;
     hasPublicLink: boolean;
+    publicLedgerToken: string | null;
     publicLedgerTokenCreatedAt: string | null;
     bankAccounts: { id: string; bankName: string; bankAccountNumber: string; bankAccountHolder: string }[];
   };
@@ -65,6 +67,30 @@ function money(n: number) {
   return `$${n.toFixed(2)}`;
 }
 
+type TransferFormData = {
+  amount: string; transferDate: string; bankNameDestino: string; accountDestino: string;
+  bankNameOrigen: string; accountOrigen: string; comprobanteNumber: string; transactionCost: string; iva: string; proofUrl: string;
+};
+function isTransferFormDraftEmpty(d: TransferFormData) {
+  return !d.amount.trim() && !d.bankNameDestino.trim() && !d.accountDestino.trim() && !d.bankNameOrigen.trim() && !d.accountOrigen.trim() && !d.comprobanteNumber.trim() && !d.proofUrl.trim();
+}
+
+// Guardado automático de la transferencia en progreso de una tanda —
+// componente aparte porque puede haber varias tandas abiertas a la vez y
+// un hook no se puede llamar dentro de un .map(). No renderiza nada, solo
+// mantiene sincronizado el borrador con transferForms del padre.
+function TransferDraftSync({ paymentId, f, onRestore }: { paymentId: string; f: TransferFormData; onRestore: (d: TransferFormData) => void }) {
+  useFormDraft<TransferFormData>(
+    `supplierDebtTransfer:${paymentId}`,
+    f,
+    onRestore,
+    isTransferFormDraftEmpty,
+    "Transferencia a proveedor sin terminar de registrar",
+    "/area/workspace?tab=compras"
+  );
+  return null;
+}
+
 // Confirmado 2026-09-08 (Fase 1, proveedores con crédito): pestaña
 // admin-only — saldo, tandas de pago, y el enlace público de solo lectura
 // para un proveedor de crédito (hoy solo CHEN). La IA revisa cada tanda
@@ -77,7 +103,7 @@ export function SupplierDebtPanel() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
-  const [newLink, setNewLink] = useState<string | null>(null);
+  const [copiedLink, setCopiedLink] = useState(false);
   const [transferForms, setTransferForms] = useState<Record<string, { amount: string; transferDate: string; bankNameDestino: string; accountDestino: string; bankNameOrigen: string; accountOrigen: string; comprobanteNumber: string; transactionCost: string; iva: string; proofUrl: string }>>({});
   const [uploadingProof, setUploadingProof] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -155,6 +181,10 @@ export function SupplierDebtPanel() {
     setTransferForms((prev) => ({ ...prev, [paymentId]: { ...transferForm(paymentId), [field]: value } }));
   }
 
+  function setTransferFormBulk(paymentId: string, data: TransferFormData) {
+    setTransferForms((prev) => ({ ...prev, [paymentId]: data }));
+  }
+
   async function uploadProof(file: File) {
     const paymentId = pendingUploadPaymentId.current;
     if (!paymentId) return;
@@ -200,6 +230,7 @@ export function SupplierDebtPanel() {
       return;
     }
     setTransferForms((prev) => ({ ...prev, [paymentId]: blankTransferForm() }));
+    clearFormDraft(`supplierDebtTransfer:${paymentId}`);
     load();
   }
 
@@ -229,6 +260,17 @@ export function SupplierDebtPanel() {
     load();
   }
 
+  // Confirmado 2026-09-09: el enlace de CHEN nunca debe mostrar el dominio
+  // real de DAFLOW — se compró un dominio propio para esto
+  // (dunxingchen.cc) y se usa siempre, sin importar desde qué dominio esté
+  // navegando quien lo ve.
+  function ledgerUrl(token: string) {
+    const origin = process.env.NEXT_PUBLIC_SUPPLIER_LEDGER_DOMAIN
+      ? `https://${process.env.NEXT_PUBLIC_SUPPLIER_LEDGER_DOMAIN}`
+      : window.location.origin;
+    return `${origin}/proveedor-ledger/${token}`;
+  }
+
   async function generateLink() {
     if (!supplierId) return;
     setErr("");
@@ -239,16 +281,23 @@ export function SupplierDebtPanel() {
       setErr("No se pudo generar el enlace.");
       return;
     }
-    const d = await res.json();
-    // Confirmado 2026-09-09: el enlace de CHEN nunca debe mostrar el dominio
-    // real de DAFLOW — se compró un dominio propio para esto
-    // (dunxingchen.cc) y se usa siempre, sin importar desde qué dominio esté
-    // navegando quien genera el enlace.
-    const origin = process.env.NEXT_PUBLIC_SUPPLIER_LEDGER_DOMAIN
-      ? `https://${process.env.NEXT_PUBLIC_SUPPLIER_LEDGER_DOMAIN}`
-      : window.location.origin;
-    setNewLink(`${origin}/proveedor-ledger/${d.token}`);
+    // Confirmado 2026-09-15: ya no hace falta guardar el token devuelto acá
+    // aparte — load() vuelve a traer el resumen, que ahora incluye
+    // publicLedgerToken tal cual, así que el enlace persistente de abajo se
+    // actualiza solo.
     load();
+  }
+
+  async function copyLink(url: string) {
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopiedLink(true);
+      setTimeout(() => setCopiedLink(false), 2000);
+    } catch {
+      // Confirmado 2026-09-15: si el navegador bloquea el portapapeles (ej.
+      // sin HTTPS o sin permiso), el enlace ya está visible en pantalla para
+      // copiarlo a mano — no hace falta mostrar un error.
+    }
   }
 
   if (suppliers === null) return <div className="text-steel text-[13px]">Cargando…</div>;
@@ -286,12 +335,43 @@ export function SupplierDebtPanel() {
               <div className="text-[18px] font-bold text-ink">{money(summary.balance)}</div>
             </div>
             <div>
-              {summary.supplier.hasPublicLink ? (
+              {summary.supplier.publicLedgerToken ? (
+                // Confirmado 2026-09-15, pedido explícito del usuario: quiere
+                // poder ver siempre el enlace activo, sin tener que
+                // regenerarlo (lo que además invalidaría el que CHEN ya tiene
+                // guardado).
+                <div className="text-[12px] text-steel">
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <Link2 size={12} />
+                    <span>
+                      Enlace activo para {summary.supplier.name}
+                      {summary.supplier.publicLedgerTokenCreatedAt && ` — generado ${formatDateTime(summary.supplier.publicLedgerTokenCreatedAt)}`}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 rounded border border-rule bg-cloud px-2.5 py-1.5">
+                    <span className="font-mono text-[11.5px] text-ink break-all">{ledgerUrl(summary.supplier.publicLedgerToken)}</span>
+                    <button
+                      type="button"
+                      className="shrink-0 flex items-center gap-1 text-blue cursor-pointer"
+                      onClick={() => copyLink(ledgerUrl(summary.supplier.publicLedgerToken!))}
+                      title="Copiar enlace"
+                    >
+                      {copiedLink ? <Check size={13} /> : <Copy size={13} />}
+                    </button>
+                  </div>
+                  <button type="button" className="underline decoration-dotted cursor-pointer mt-1" onClick={generateLink} disabled={busy}>
+                    regenerar (invalida este enlace)
+                  </button>
+                </div>
+              ) : summary.supplier.hasPublicLink ? (
+                // Enlace generado ANTES de este cambio (solo hash, ya
+                // irrecuperable) — sigue funcionando para quien ya lo tenga,
+                // pero acá no se puede volver a mostrar.
                 <div className="text-[12px] text-steel">
                   <Link2 size={12} className="inline mr-1" />
-                  Enlace generado {summary.supplier.publicLedgerTokenCreatedAt ? formatDateTime(summary.supplier.publicLedgerTokenCreatedAt) : ""} —{" "}
+                  Enlace generado {summary.supplier.publicLedgerTokenCreatedAt ? formatDateTime(summary.supplier.publicLedgerTokenCreatedAt) : ""} — de un formato anterior, ya no se puede volver a mostrar acá.{" "}
                   <button type="button" className="underline decoration-dotted cursor-pointer" onClick={generateLink} disabled={busy}>
-                    regenerar
+                    regenerar para poder verlo siempre
                   </button>
                 </div>
               ) : (
@@ -303,11 +383,6 @@ export function SupplierDebtPanel() {
                 >
                   <Link2 size={13} /> Generar enlace público para {summary.supplier.name}
                 </button>
-              )}
-              {newLink && (
-                <div className="mt-1.5 rounded border border-teal/40 bg-teal/10 px-2.5 py-1.5 text-[12px] text-ink break-all">
-                  Cópialo ahora, no se vuelve a mostrar: <span className="font-mono">{newLink}</span>
-                </div>
               )}
             </div>
           </div>
@@ -371,6 +446,7 @@ export function SupplierDebtPanel() {
                 const transfersTotal = p.transfers.reduce((s, t) => s + t.amount, 0);
                 return (
                   <div key={p.id} className="bg-surface border border-rule rounded-md p-3.5 mb-3">
+                    <TransferDraftSync paymentId={p.id} f={f} onRestore={(d) => setTransferFormBulk(p.id, d)} />
                     <div className="flex justify-between mb-2">
                       <span className="font-semibold text-[13.5px]">{p.code}</span>
                       <span className="tabular-nums text-[13.5px]">{money(p.totalAmount)}</span>

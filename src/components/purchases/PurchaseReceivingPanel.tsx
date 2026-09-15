@@ -9,6 +9,22 @@ import { LiveCameraCapture } from "@/components/shared/LiveCameraCapture";
 import { LiveVideoCapture } from "@/components/shared/LiveVideoCapture";
 import { PurchaseOperationDocuments, type OperationDocRow } from "./PurchaseOperationDocuments";
 import { CatalogCode } from "@/components/shared/CatalogCode";
+import { useFormDraft } from "@/lib/useFormDraft";
+
+type ReceiptDraftData = { receivedQty: string; receivedPhotoUrls: string[]; receivedVideoUrls: string[]; comment: string; minorDifferenceConfirmed: boolean };
+function isReceiptDraftEmpty(d: ReceiptDraftData) {
+  return !d.receivedQty.trim() && d.receivedPhotoUrls.length === 0 && d.receivedVideoUrls.length === 0 && !d.comment.trim();
+}
+
+type UrgentReportDraftData = { urgentCountedQty: string; urgentDamagedQty: string; urgentDifferentQty: string; urgentIncompleteQty: string; urgentDesc: string; urgentMediaUrls: string[] };
+function isUrgentReportDraftEmpty(d: UrgentReportDraftData) {
+  return !d.urgentDesc.trim() && d.urgentMediaUrls.length === 0;
+}
+
+type LateClaimDraftData = { lateOriginId: string | null; lateOriginUncertain: boolean; lateDamagedQty: string; lateStockStatus: "IN_STOCK" | "SOLD"; lateWhy: string; lateMediaUrls: string[] };
+function isLateClaimDraftEmpty(d: LateClaimDraftData) {
+  return !d.lateDamagedQty.trim() && !d.lateWhy.trim() && d.lateMediaUrls.length === 0;
+}
 
 type Row = {
   id: string;
@@ -312,6 +328,57 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
   const [justAffirmed, setJustAffirmed] = useState(false);
   const [justDoubleConfirm, setJustDoubleConfirm] = useState(false);
 
+  // Guardado automático: si sale a revisar otra solicitud antes de terminar
+  // de confirmar la recepción/informar urgente/reclamar un daño, al volver
+  // encuentra el formulario tal como lo había dejado (incluidas las fotos
+  // ya tomadas).
+  const { clearDraft: clearReceiptDraft } = useFormDraft<ReceiptDraftData>(
+    openId ? `purchaseReceipt:${openId}` : null,
+    { receivedQty, receivedPhotoUrls, receivedVideoUrls, comment, minorDifferenceConfirmed },
+    (d) => {
+      setReceivedQty(d.receivedQty);
+      setReceivedPhotoUrls(d.receivedPhotoUrls);
+      setReceivedVideoUrls(d.receivedVideoUrls);
+      setComment(d.comment);
+      setMinorDifferenceConfirmed(d.minorDifferenceConfirmed);
+    },
+    isReceiptDraftEmpty,
+    "Recepción de compra sin terminar de confirmar",
+    "/area/workspace?tab=compras"
+  );
+
+  const { clearDraft: clearUrgentReportDraft } = useFormDraft<UrgentReportDraftData>(
+    urgentId ? `purchaseUrgentReport:${urgentId}` : null,
+    { urgentCountedQty, urgentDamagedQty, urgentDifferentQty, urgentIncompleteQty, urgentDesc, urgentMediaUrls },
+    (d) => {
+      setUrgentCountedQty(d.urgentCountedQty);
+      setUrgentDamagedQty(d.urgentDamagedQty);
+      setUrgentDifferentQty(d.urgentDifferentQty);
+      setUrgentIncompleteQty(d.urgentIncompleteQty);
+      setUrgentDesc(d.urgentDesc);
+      setUrgentMediaUrls(d.urgentMediaUrls);
+    },
+    isUrgentReportDraftEmpty,
+    "Reporte urgente sin terminar de enviar",
+    "/area/workspace?tab=compras"
+  );
+
+  const { clearDraft: clearLateClaimDraft } = useFormDraft<LateClaimDraftData>(
+    lateOpenId ? `purchaseLateClaim:${lateOpenId}` : null,
+    { lateOriginId, lateOriginUncertain, lateDamagedQty, lateStockStatus, lateWhy, lateMediaUrls },
+    (d) => {
+      setLateOriginId(d.lateOriginId);
+      setLateOriginUncertain(d.lateOriginUncertain);
+      setLateDamagedQty(d.lateDamagedQty);
+      setLateStockStatus(d.lateStockStatus);
+      setLateWhy(d.lateWhy);
+      setLateMediaUrls(d.lateMediaUrls);
+    },
+    isLateClaimDraftEmpty,
+    "Reclamo posterior al cierre sin terminar",
+    "/area/workspace?tab=compras"
+  );
+
   function load() {
     fetch("/api/purchase-requests?view=receiving").then((r) => (r.ok ? r.json() : [])).then(setRows).catch(() => setRows([]));
     fetch("/api/purchase-requests/urgent-resolutions/pending-replacements").then((r) => (r.ok ? r.json() : [])).then(setPendingReplacements).catch(() => setPendingReplacements([]));
@@ -381,6 +448,7 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
     setBusy(false);
     const data = await res.json().catch(() => null);
     if (!res.ok) { setErr(data?.error ?? "No se pudo enviar el reclamo."); return; }
+    clearLateClaimDraft();
     setLateOpenId(null);
     load();
   }
@@ -496,6 +564,7 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
       setErr(data?.error ?? "No se pudo confirmar.");
       return;
     }
+    clearReceiptDraft();
     setOpenId(null);
     setReceivedQty("");
     setReceivedPhotoUrls([]);
@@ -687,6 +756,7 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
       setErr(data?.error ?? "No se pudo enviar el reporte.");
       return;
     }
+    clearUrgentReportDraft();
     setUrgentId(null);
     setUrgentCountedQty("");
     setUrgentDesc("");
@@ -1480,12 +1550,12 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                               <button
                                 type="button"
                                 className="text-[11.5px] font-semibold border border-red/50 text-red rounded px-3 py-1.5 cursor-pointer"
-                                onClick={() => { setOpenId(null); setReceivedPhotoUrls([]); setReceivedVideoUrls([]); setAiResult(null); setMinorDifferenceConfirmed(false); openUrgent(r.id); }}
+                                onClick={() => { clearReceiptDraft(); setOpenId(null); setReceivedPhotoUrls([]); setReceivedVideoUrls([]); setAiResult(null); setMinorDifferenceConfirmed(false); openUrgent(r.id); }}
                               >
                                 🚨 Informar urgente
                               </button>
                             )}
-                            <button type="button" className="text-steel text-[12.5px] cursor-pointer" onClick={() => { setOpenId(null); setReceivedPhotoUrls([]); setReceivedVideoUrls([]); setAiResult(null); setMinorDifferenceConfirmed(false); }}>Cancelar</button>
+                            <button type="button" className="text-steel text-[12.5px] cursor-pointer" onClick={() => { clearReceiptDraft(); setOpenId(null); setReceivedPhotoUrls([]); setReceivedVideoUrls([]); setAiResult(null); setMinorDifferenceConfirmed(false); }}>Cancelar</button>
                           </div>
                         </div>
                       ) : urgentId === r.id ? (
@@ -1615,7 +1685,7 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                             <button type="button" disabled={busy} className="rounded border border-red bg-red px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer disabled:opacity-60" onClick={() => submitUrgent(r.id)}>
                               Enviar reporte
                             </button>
-                            <button type="button" className="text-steel text-[12.5px] cursor-pointer" onClick={() => setUrgentId(null)}>Cancelar</button>
+                            <button type="button" className="text-steel text-[12.5px] cursor-pointer" onClick={() => { clearUrgentReportDraft(); setUrgentId(null); }}>Cancelar</button>
                           </div>
                         </div>
                       ) : (
@@ -1994,7 +2064,7 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                         <button type="button" disabled={busy} className="rounded border border-red bg-red px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer disabled:opacity-60" onClick={submitLateClaim}>
                           Enviar reporte
                         </button>
-                        <button type="button" className="text-steel text-[12.5px] cursor-pointer" onClick={() => setLateOpenId(null)}>Cancelar</button>
+                        <button type="button" className="text-steel text-[12.5px] cursor-pointer" onClick={() => { clearLateClaimDraft(); setLateOpenId(null); }}>Cancelar</button>
                       </div>
                     </div>
                   ) : (

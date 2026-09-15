@@ -9,6 +9,7 @@ import { actorName } from "@/lib/actorName";
 import { formatDateTime } from "@/lib/formatDateTime";
 import { ProofPreview } from "@/components/shared/ProofPreview";
 import { CatalogCode } from "@/components/shared/CatalogCode";
+import { useFormDraft } from "@/lib/useFormDraft";
 
 type ResolutionType = "CREDIT" | "REPLACEMENT" | "REFUND" | "WRITE_OFF";
 type ResolutionStatus = "PENDING" | "COMPLETED" | "CANCELLED";
@@ -17,6 +18,11 @@ type ResolutionStatus = "PENDING" | "COMPLETED" | "CANCELLED";
 // verificación de punta a punta, solo cambia el rótulo (ver
 // resolutionLabel más abajo).
 type UiResolutionType = ResolutionType | "MISSING_DELIVERY";
+
+type ResolutionDraftData = { resType: UiResolutionType; resQty: string; resDueDate: string; resNote: string; resProofUrl: string; resProofName: string };
+function isResolutionDraftEmpty(d: ResolutionDraftData) {
+  return !d.resDueDate.trim() && !d.resNote.trim() && !d.resProofUrl.trim();
+}
 
 type Resolution = {
   id: string;
@@ -159,6 +165,25 @@ export function PurchaseUrgentReportsPanel({ isAdmin, canAct }: { isAdmin: boole
   const [cancelId, setCancelId] = useState<string | null>(null);
   const [cancelReason, setCancelReason] = useState("");
 
+  // Guardado automático: si sale a revisar otro reclamo antes de terminar
+  // de coordinar la resolución, al volver la encuentra tal como la había
+  // dejado.
+  const { clearDraft: clearResolutionDraft } = useFormDraft<ResolutionDraftData>(
+    openReportId ? `purchaseUrgentResolution:${openReportId}` : null,
+    { resType, resQty, resDueDate, resNote, resProofUrl, resProofName },
+    (d) => {
+      setResType(d.resType);
+      setResQty(d.resQty);
+      setResDueDate(d.resDueDate);
+      setResNote(d.resNote);
+      setResProofUrl(d.resProofUrl);
+      setResProofName(d.resProofName);
+    },
+    isResolutionDraftEmpty,
+    "Resolución de reclamo sin terminar de coordinar",
+    "/area/workspace?tab=compras"
+  );
+
   function load() {
     fetch("/api/purchase-requests/urgent-reports").then((r) => (r.ok ? r.json() : [])).then(setReports).catch(() => setReports([]));
   }
@@ -214,6 +239,7 @@ export function PurchaseUrgentReportsPanel({ isAdmin, canAct }: { isAdmin: boole
     setBusy(false);
     const data = await res.json().catch(() => null);
     if (!res.ok) { setErr(data?.error ?? "No se pudo registrar."); return; }
+    clearResolutionDraft();
     setOpenReportId(null);
     load();
     router.refresh();
@@ -445,7 +471,7 @@ export function PurchaseUrgentReportsPanel({ isAdmin, canAct }: { isAdmin: boole
                         <button type="button" disabled={busy || resProofUploading} className="rounded border border-blue bg-blue px-3.5 py-1.5 text-[12px] font-semibold text-white cursor-pointer disabled:opacity-60" onClick={() => submitResolution(r.id)}>
                           Registrar
                         </button>
-                        <button type="button" className="text-steel text-[12px] cursor-pointer" onClick={() => setOpenReportId(null)}>Cancelar</button>
+                        <button type="button" className="text-steel text-[12px] cursor-pointer" onClick={() => { clearResolutionDraft(); setOpenReportId(null); }}>Cancelar</button>
                       </div>
                     </div>
                   ) : (
