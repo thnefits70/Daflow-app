@@ -13,6 +13,13 @@ import { SupplierShippingPhotoCapture } from "@/components/supplier-ledger/Suppl
 export const metadata: Metadata = {
   title: "Estado de cuenta",
   description: "Detalle de mercadería y pagos.",
+  // Confirmado 2026-09-15: sin esto, esta ruta heredaba el favicon de DAFLOW
+  // del layout raíz (Next no hace merge profundo de `icons`, pero si el hijo
+  // no lo define, hereda el del padre). Icono transparente para no mostrar
+  // ninguna marca en la pestaña del navegador de CHEN.
+  icons: {
+    icon: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+  },
 };
 
 function money(n: number) {
