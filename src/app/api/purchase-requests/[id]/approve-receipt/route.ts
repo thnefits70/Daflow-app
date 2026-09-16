@@ -7,6 +7,7 @@ import { sendPushToOwner } from "@/lib/webPush";
 import { notifyOwner } from "@/lib/notifications";
 import { getMarketingArrivalActorIds, getMarketingArrivalDispatchViewerIds } from "@/lib/marketingArrivals";
 import { recordKardexEntry } from "@/lib/stockKardex";
+import { effectiveUnitCost } from "@/lib/purchases";
 
 // Confirmado 2026-08-18: pedido explícito del usuario — la aprobación FINAL
 // de Daniel (líder de Inventario) sobre una recepción que ya hizo su equipo
@@ -65,11 +66,24 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // suma la entrada. No forma parte de la transacción de arriba (es un
   // read-then-write), pero el riesgo de choque es bajo (equipo chico, no
   // dos aprobaciones simultáneas del mismo producto).
+  // Confirmado 2026-09-16, pedido explícito del usuario: el Kardex sumaba
+  // solo el precio del proveedor, sin el flete — mismo `effectiveUnitCost()`
+  // que ya usa la comparación de precios de Bryan (PurchaseApprovalInbox),
+  // ahora también acá, para que "Costo Prom." represente el costo real
+  // puesto en bodega. Usa `existing.quantity` (la cantidad de la solicitud,
+  // sobre la que se cotizó el flete total) para el flete por unidad — no
+  // `receipt.receivedQuantity` (la cantidad real recibida), que es la que
+  // de verdad entra al saldo de stock más abajo.
   await recordKardexEntry({
     catalogItemId: existing.catalogItemId,
     type: "IN",
     quantity: existing.receipt.receivedQuantity,
-    unitCost: existing.unitCost,
+    unitCost: effectiveUnitCost({
+      unitCost: existing.unitCost,
+      quantity: existing.quantity,
+      shippingIncluded: existing.shippingIncluded,
+      shippingCostTotal: existing.shippingCostTotal,
+    }),
     occurredAt: new Date(),
     purchaseRequestReceiptId: existing.receipt.id,
     newExpirationLot: parsedLot?.success
