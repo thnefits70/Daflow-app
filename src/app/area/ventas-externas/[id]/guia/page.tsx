@@ -20,7 +20,7 @@ export default async function ExternalSaleGuidePage({ params }: { params: Promis
       isContraEntrega: true,
       totalAmount: true,
       clientName: true,
-      client: { select: { name: true, address: true } },
+      client: { select: { name: true, address: true, phone: true } },
       advisor: { select: { phone: true } },
       items: { select: { declaredProductName: true, quantity: true, catalogItem: { select: { name: true } } }, orderBy: { createdAt: "asc" } },
     },
@@ -69,6 +69,10 @@ export default async function ExternalSaleGuidePage({ params }: { params: Promis
               <td className="py-2 text-right font-semibold">{sale.client?.address ?? "—"}</td>
             </tr>
             <tr className="border-b border-gray-200">
+              <td className="py-2 text-gray-500">Celular cliente</td>
+              <td className="py-2 text-right font-semibold">{sale.client?.phone ?? "—"}</td>
+            </tr>
+            <tr className="border-b border-gray-200">
               <td className="py-2 text-gray-500">Entregar a (motorizado)</td>
               <td className="py-2 text-right font-semibold">{sale.pickupPersonName}</td>
             </tr>
@@ -78,9 +82,13 @@ export default async function ExternalSaleGuidePage({ params }: { params: Promis
                 <td className="py-2 text-right font-semibold">{sale.courierNote}</td>
               </tr>
             )}
-            <tr>
+            <tr className="border-b border-gray-200">
               <td className="py-2 text-gray-500">Contacto asesor</td>
               <td className="py-2 text-right font-semibold">{sale.advisor.phone ?? "—"}</td>
+            </tr>
+            <tr>
+              <td className="py-2 text-gray-500">Valor total del pedido</td>
+              <td className="py-2 text-right font-semibold">${sale.totalAmount.toFixed(2)}</td>
             </tr>
           </tbody>
         </table>
