@@ -648,6 +648,14 @@ function ResolutionRow({
               </button>
             )
           )}
+          {/* Confirmado 2026-09-16: quien registra/sube el comprobante
+              (Compras) no puede confirmar el banco — eso es solo del admin
+              (ver isAdmin arriba). Sin este aviso, Compras solo veía "En
+              curso" y no tenía forma de saber si ya terminó su parte o si le
+              falta algo a él. */}
+          {res.refundAiMatch && res.status === "PENDING" && !isAdmin && canAct && (
+            <div className="text-teal mt-1 flex items-center gap-1"><CheckCircle2 size={12} /> Ya quedó listo de tu parte — falta que el administrador confirme que el dinero llegó al banco.</div>
+          )}
           {res.status === "COMPLETED" && <div className="text-green mt-1 flex items-center gap-1"><CheckCircle2 size={12} /> Confirmado el {res.bankConfirmedAt ? formatDateTime(res.bankConfirmedAt) : ""}</div>}
         </div>
       )}
