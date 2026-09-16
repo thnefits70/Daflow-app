@@ -4,7 +4,7 @@ import { getInventoryLeadId, getMarketingLeadId, getFinanceLeadId, getFulfilment
 import { nextMerchandiseOutflowNumber, formatMerchandiseOutflowCode } from "@/lib/merchandiseOutflow";
 import { addBusinessDays } from "@/lib/businessHours";
 import { pickPrimarySupplierPrice, computeB2BPrice, computeB2CPriceBreakdown, b2cMarginPercentForQuantity, B2B_MARGIN_OPTIONS, B2B_MARGIN_DEFAULT, type B2CPriceBreakdown } from "@/lib/marketProduct";
-import { getCurrentStockByItemIds } from "@/lib/stockKardex";
+import { getCurrentStockByItemIds, recordKardexEntry } from "@/lib/stockKardex";
 
 const URL_BASE = "/area/workspace?tab=ventas-externas";
 
@@ -211,6 +211,33 @@ export async function notifyEveryoneExternalSaleClosed(sale: { code: string } & 
   );
 }
 
+// Confirmado 2026-09-16, pedido explícito del usuario: cuando el asesor
+// reporta que el cliente no recibió/devolvió el pedido, avisa a TODOS los
+// involucrados (mismo criterio que notifyEveryoneExternalSaleClosed) — y
+// si el pago ya estaba confirmado, además a Finanzas puntualmente, porque
+// ahí sí hay que revisar devolver o no ese dinero.
+export async function notifyEveryoneExternalSaleReturned(sale: { code: string; paymentConfirmedAt: Date | null } & InvolvedSale): Promise<void> {
+  await Promise.all(
+    involvedRecipientIds(sale).map((id) =>
+      notifyOwner(id, {
+        title: "↩️ Venta externa devuelta",
+        body: `${sale.code} — el asesor reportó que el cliente no recibió el pedido. El stock ya volvió a INVESTOCK.`,
+        url: `${URL_BASE}&etab=historial`,
+      }).catch(() => null)
+    )
+  );
+  if (sale.paymentConfirmedAt) {
+    const financeLeadId = await getFinanceLeadId();
+    if (financeLeadId) {
+      await notifyOwner(financeLeadId, {
+        title: "💵 Venta externa devuelta con pago ya confirmado",
+        body: `${sale.code} — revisa si hay que devolver el dinero al cliente.`,
+        url: `${URL_BASE}&etab=historial`,
+      }).catch(() => null);
+    }
+  }
+}
+
 export type ExternalSaleTimingPush = { ownerId: string; title: string; body: string; url: string };
 
 // Alertas de tiempo (Parte 3) — confirmado 2026-09-01. A diferencia del
@@ -222,7 +249,7 @@ export type ExternalSaleTimingPush = { ownerId: string; title: string; body: str
 //    haberse cerrado la venta todavía.
 export async function getDeliveryOverduePushes(): Promise<ExternalSaleTimingPush[]> {
   const candidates = await prisma.externalSale.findMany({
-    where: { deliveredAt: { not: null }, nairobyClosedAt: null, deletedAt: null, deliveryOverdueAlertSentAt: null },
+    where: { deliveredAt: { not: null }, nairobyClosedAt: null, returnedAt: null, deletedAt: null, deliveryOverdueAlertSentAt: null },
     select: {
       id: true,
       code: true,
@@ -305,6 +332,11 @@ export async function getContraEntregaPaymentOverduePushes(): Promise<ExternalSa
 // Se crea apenas el colaborador confirma la entrega física — recién ahí el
 // stock sale de verdad, sin importar si el pago ya se confirmó o no. Un
 // renglón de egreso por cada producto de la venta (ver ExternalSaleItem).
+// Confirmado 2026-09-16, pedido explícito del usuario: Just ya no se usa
+// para llevar el control del inventario — todo ingreso/egreso de
+// mercadería queda conectado únicamente al Kardex propio (INVESTOCK), así
+// que acá mismo, en el momento en que se confirma la entrega, se resta del
+// Kardex igual que hace el envío manual de un lote de Egresos normal.
 export async function createOutflowForExternalSale(sale: { id: string; items: { catalogItemId: string | null; declaredProductName: string; quantity: number }[] }): Promise<string> {
   const batchNumber = await nextMerchandiseOutflowNumber();
   const batch = await prisma.merchandiseOutflowBatch.create({
@@ -315,7 +347,21 @@ export async function createOutflowForExternalSale(sale: { id: string; items: { 
       submittedAt: new Date(),
       items: { create: sale.items.map((it) => ({ catalogItemId: it.catalogItemId, declaredName: it.declaredProductName, quantity: it.quantity })) },
     },
+    include: { items: { select: { id: true, catalogItemId: true, quantity: true } } },
   });
   await prisma.externalSale.update({ where: { id: sale.id }, data: { outflowBatchId: batch.id } });
+
+  for (const item of batch.items) {
+    if (!item.catalogItemId) continue;
+    await recordKardexEntry({
+      catalogItemId: item.catalogItemId,
+      type: "OUT",
+      quantity: item.quantity,
+      unitCost: null,
+      occurredAt: new Date(),
+      merchandiseOutflowItemId: item.id,
+    }).catch((err) => console.error("[external-sales] No se pudo registrar la salida de Kardex:", err));
+  }
+
   return batch.id;
 }

@@ -520,7 +520,7 @@ model User {
   externalSalesInvoiceUploadedBy  ExternalSale[] @relation("ExternalSaleInvoiceUploadedBy")
   externalSalesClosed             ExternalSale[] @relation("ExternalSaleNairobyClosedBy")
 
-  clientsRegistered Client[]
+  clientsRegistered            Client[]
   logisticsProvidersRegistered LogisticsProvider[]
 
   cancelledGuidesSubmitted            CancelledGuideReport[] @relation("CancelledGuideSubmittedBy")
@@ -4767,8 +4767,8 @@ model FormDraft {
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  formKey String
-  data    Json
+  formKey   String
+  data      Json
   // Para que el borrador se pueda mostrar en Inicio (2026-09-14, pedido
   // explícito del usuario: que no se quede "perdido" solo porque la persona
   // se olvidó y nunca volvió a esa pantalla) — label es el texto que ve, y
@@ -5443,6 +5443,16 @@ model ExternalSale {
   deliveredAt      DateTime?
   deliveredById    String?
   deliveredBy      User?     @relation("ExternalSaleDeliveredBy", fields: [deliveredById], references: [id], onDelete: SetNull)
+
+  // Confirmado 2026-09-16, pedido explícito del usuario: si el cliente no
+  // quiso recibir el pedido (o lo devolvió), SOLO el asesor dueño de la
+  // venta (advisorId) puede reportarlo — nunca Fulfilment/Inventario. Al
+  // reportarlo se reingresa automático el stock al Kardex (INVESTOCK), sin
+  // pasar por el flujo manual de aprobación de Reingreso de Mercadería
+  // (ese es para daños/mercadería físicamente dañada; acá el producto
+  // vuelve intacto, tal cual salió). Bloquea que Nairoby cierre la venta.
+  returnedAt   DateTime?
+  returnReason String?
 
   // Nairoby cierra la venta — solo posible cuando pago Y despacho ya están
   // resueltos, sin importar el orden en que hayan pasado.

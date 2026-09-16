@@ -47,6 +47,8 @@ type SaleDTO = {
   packAssignedTo: { name: string } | null;
   deliveredAt: string | null;
   deliveredBy: { name: string } | null;
+  returnedAt: string | null;
+  returnReason: string | null;
   deletedAt: string | null;
 };
 
@@ -142,6 +144,7 @@ function SaleCard({
         <span className="text-[10.5px] text-steel">{s.advisor?.name ?? "—"}</span>
         {s.isContraEntrega && <span className="font-mono text-[8.5px] font-bold uppercase text-blue">Contra entrega</span>}
         {s.deletedAt && <span className="font-mono text-[8.5px] font-bold uppercase text-red">Eliminada</span>}
+        {s.returnedAt && <span className="font-mono text-[8.5px] font-bold uppercase text-red">Devuelta</span>}
       </div>
       <div className="text-[12px] font-semibold flex items-center gap-1.5 flex-wrap">
         {s.items.length === 1 && s.items[0].catalogItem && <CatalogCode code={s.items[0].catalogItem.justCode} />}
@@ -149,6 +152,11 @@ function SaleCard({
       </div>
       <div className="text-[10.5px] text-steel">${s.totalAmount.toFixed(2)} · {formatDateTime(s.createdAt)}</div>
       {s.deletedAt && <div className="text-[10.5px] text-red mt-0.5">Eliminada por admin · {formatDateTime(s.deletedAt)}</div>}
+      {s.returnedAt && (
+        <div className="text-[10.5px] text-red mt-0.5">
+          El cliente no recibió el pedido · {formatDateTime(s.returnedAt)} — stock reingresado a INVESTOCK. Motivo: {s.returnReason}
+        </div>
+      )}
       {s.reviewStatus === "REJECTED" && s.rejectionReason && <div className="text-[10.5px] text-red mt-0.5">{s.rejectionReason}</div>}
 
       {!s.deletedAt && s.reviewStatus !== "REJECTED" && (

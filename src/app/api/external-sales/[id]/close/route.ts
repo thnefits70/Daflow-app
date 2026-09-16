@@ -24,11 +24,13 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
       dispatchAssignedToId: true,
       packAssignedToId: true,
       deliveredById: true,
+      returnedAt: true,
     },
   });
   if (!sale) return NextResponse.json({ error: "No encontrado." }, { status: 404 });
   if (!sale.paymentConfirmedAt || !sale.deliveredAt) return NextResponse.json({ error: "Falta confirmar el pago y/o la entrega." }, { status: 409 });
   if (sale.nairobyClosedAt) return NextResponse.json({ error: "Ya fue cerrada." }, { status: 409 });
+  if (sale.returnedAt) return NextResponse.json({ error: "El asesor reportó que esta venta fue devuelta — no se puede cerrar." }, { status: 409 });
 
   const updated = await prisma.externalSale.update({
     where: { id },

@@ -46,6 +46,8 @@ type SaleDTO = {
   paymentConfirmedAt: string | null;
   deliveredAt: string | null;
   deliveryPhotoUrl: string | null;
+  returnedAt: string | null;
+  returnReason: string | null;
   nairobyClosedAt: string | null;
   deletedAt: string | null;
   createdAt: string;
@@ -403,10 +405,68 @@ function MarkDeliveredSection({ saleId, onDone }: { saleId: string; onDone: () =
   );
 }
 
+// Confirmado 2026-09-16, pedido explícito del usuario: si el cliente no
+// quiso recibir el pedido (o lo devolvió), SOLO el asesor dueño de la
+// venta lo reporta acá — reingresa el stock a INVESTOCK automático, sin
+// pasar por ninguna aprobación.
+function ReportReturnSection({ saleId, onDone }: { saleId: string; onDone: () => void }) {
+  const [reporting, setReporting] = useState(false);
+  const [reason, setReason] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState("");
+
+  async function submit() {
+    setSaving(true);
+    setErr("");
+    try {
+      await postJson(`/api/external-sales/${saleId}/report-return`, { reason: reason.trim() });
+      onDone();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "No se pudo reportar la devolución.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (!reporting) {
+    return (
+      <button type="button" className="text-[11.5px] font-bold text-red cursor-pointer mt-1.5" onClick={() => setReporting(true)}>
+        El cliente no recibió el pedido
+      </button>
+    );
+  }
+
+  return (
+    <div className="bg-red/5 border border-red/30 rounded-md p-2.5 mt-1.5">
+      <div className="text-[11.5px] font-semibold mb-1.5">¿Qué pasó?</div>
+      <textarea
+        className="w-full rounded border border-rule bg-surface px-2.5 py-1.5 text-[12px] mb-2"
+        rows={2}
+        placeholder="Ej: el cliente no quiso recibirlo…"
+        value={reason}
+        onChange={(e) => setReason(e.target.value)}
+      />
+      {err && <div className="text-red text-[11px] mb-1.5">{err}</div>}
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          disabled={saving || reason.trim().length < 3}
+          className="rounded border border-red bg-red px-3 py-1.5 text-[11.5px] font-bold text-white cursor-pointer disabled:opacity-40"
+          onClick={submit}
+        >
+          {saving ? "Reportando…" : "Confirmar devolución"}
+        </button>
+        <button type="button" className="text-steel text-[11.5px] cursor-pointer" onClick={() => setReporting(false)}>Cancelar</button>
+      </div>
+    </div>
+  );
+}
+
 function statusLabel(s: SaleDTO): { text: string; color: string } {
   if (s.deletedAt) return { text: `Cancelada · ${formatDateTime(s.deletedAt)}`, color: "text-red" };
   if (s.reviewStatus === "REJECTED") return { text: "Rechazada", color: "text-red" };
   if (s.reviewStatus === "PENDING") return { text: "Esperando aprobación de Bryan", color: "text-gold" };
+  if (s.returnedAt) return { text: `Devuelta · ${formatDateTime(s.returnedAt)} — stock reingresado a INVESTOCK`, color: "text-red" };
   if (s.nairobyClosedAt) return { text: `Cerrada · ${formatDateTime(s.nairobyClosedAt)}`, color: "text-green" };
   if (!s.paymentProofUrl) return { text: "Aprobada — falta subir comprobante", color: "text-blue" };
   if (!s.paymentConfirmedAt) return { text: "Esperando que confirmen el pago", color: "text-gold" };
@@ -1190,6 +1250,11 @@ export function ExternalSaleDeclareForm() {
                   )}
                   {!s.deletedAt && s.reviewStatus === "APPROVED" && s.paymentConfirmedAt && !s.deliveredAt && (
                     <MarkDeliveredSection saleId={s.id} onDone={load} />
+                  )}
+                  {s.returnedAt ? (
+                    <div className="text-[11px] text-red mt-1">Motivo: {s.returnReason}</div>
+                  ) : (
+                    !s.deletedAt && s.deliveredAt && !s.nairobyClosedAt && <ReportReturnSection saleId={s.id} onDone={load} />
                   )}
                   {!s.deletedAt && s.reviewStatus === "REJECTED" && s.rejectionReason && <div className="text-[11.5px] text-red mt-1">{s.rejectionReason}</div>}
                   {!s.deletedAt && (s.reviewStatus === "REJECTED" || s.reviewStatus === "PENDING") && editingId !== s.id && confirmDeleteSaleId !== s.id && (
