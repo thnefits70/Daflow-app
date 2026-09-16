@@ -41,6 +41,21 @@ function normalize(s: string) {
     .replace(/[̀-ͯ]/g, "");
 }
 
+// Confirmado 2026-09-16, pedido explícito del usuario: buscar "Afeitadora
+// Snar 3 en 1" no encontraba "Afeitadora 2 en 1" porque exigía el texto
+// completo tal cual, incluyendo palabras que el usuario recordaba mal. Mismo
+// criterio de "palabras significativas" ya usado en justCatalog.ts
+// (findSimilarUnlinkedItem) — se ignoran palabras de relleno/números
+// sueltos, y basta con que UNA palabra clave real coincida para aparecer en
+// la lista (ordenado por cuántas palabras coinciden, para que el mejor
+// resultado salga primero).
+const SEARCH_STOPWORDS = new Set(["de", "del", "la", "el", "los", "las", "un", "una", "unos", "unas", "y", "o", "con", "para", "por", "en", "a", "al", "tipo"]);
+function significantWords(s: string): string[] {
+  return normalize(s)
+    .split(/\s+/)
+    .filter((w) => w.length >= 2 && !SEARCH_STOPWORDS.has(w));
+}
+
 // Confirmado 2026-09-15, pedido explícito del usuario: quiere ver, con un
 // clic, exactamente qué fórmula se está calculando en cada columna de
 // precio — mismas fórmulas ya usadas en src/lib/marketProduct.ts
@@ -149,13 +164,26 @@ export function StockLevelsPanel({ isAdmin = false }: { isAdmin?: boolean }) {
 
   if (rows === null) return <div className="text-steel text-[13px]">Cargando…</div>;
 
-  const filtered = query.trim()
-    ? rows.filter((r) => normalize(r.name).includes(normalize(query)) || (r.justCode ?? "").toLowerCase().includes(query.toLowerCase()))
-    : rows;
+  const queryTrimmed = query.trim();
+  const queryWords = queryTrimmed ? significantWords(queryTrimmed) : [];
+  const filtered = !queryTrimmed
+    ? rows
+    : rows
+        .map((r) => {
+          const nameNorm = normalize(r.name);
+          const directMatch = nameNorm.includes(normalize(queryTrimmed)) || (r.justCode ?? "").toLowerCase().includes(queryTrimmed.toLowerCase());
+          const matchCount = queryWords.filter((w) => nameNorm.includes(w)).length;
+          return { row: r, directMatch, matchCount };
+        })
+        .filter((x) => x.directMatch || x.matchCount > 0)
+        .sort((a, b) => Number(b.directMatch) - Number(a.directMatch) || b.matchCount - a.matchCount)
+        .map((x) => x.row);
 
-  const sorted = [...filtered].sort((a, b) =>
-    sortKey === "name" ? a.name.localeCompare(b.name) : a.balance - b.balance
-  );
+  // Mientras hay una búsqueda activa, se ordena por qué tan buena es la
+  // coincidencia (arriba) — el toggle de orden manual solo aplica sin buscar.
+  const sorted = queryTrimmed
+    ? filtered
+    : [...filtered].sort((a, b) => (sortKey === "name" ? a.name.localeCompare(b.name) : a.balance - b.balance));
 
   return (
     <div>
