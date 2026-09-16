@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { formatDateTime } from "@/lib/formatDateTime";
 import { CatalogCode } from "@/components/shared/CatalogCode";
+import { saleSteps, TimelineSteps } from "@/components/external-sales/SaleTimeline";
 
 type SaleItemDTO = {
   id: string;
@@ -49,23 +50,6 @@ type SaleDTO = {
   deletedAt: string | null;
 };
 
-function step(label: string, at: string | null, by: { name: string } | null) {
-  return { label, at, by };
-}
-
-function saleSteps(s: SaleDTO) {
-  return [
-    step("Declarada", s.createdAt, s.advisor),
-    step("Aprobada", s.reviewedAt, s.reviewedBy),
-    step("Pago confirmado", s.paymentConfirmedAt, s.paymentConfirmedBy),
-    step("Facturada", s.invoiceUploadedAt, s.invoiceUploadedBy),
-    step("Agrupada", s.prepReadyAt, s.prepReadyBy),
-    step("Embalaje asignado", s.packAssignedAt, s.packAssignedTo),
-    step("Entregada", s.deliveredAt, s.deliveredBy),
-    step("Cerrada", s.nairobyClosedAt, null),
-  ];
-}
-
 // La columna de una venta es el paso más avanzado que ya se cumplió —
 // caminando desde "Cerrada" hacia atrás hasta "Declarada". Funciona igual de
 // bien en pago anticipado que en contra entrega (donde facturación y pago
@@ -90,13 +74,7 @@ function SaleDetail({ s }: { s: SaleDTO }) {
   const steps = saleSteps(s);
   return (
     <div className="mt-2.5 border-t border-rule pt-2.5 flex flex-col gap-2">
-      <div className="text-[10.5px] text-steel flex flex-col gap-0.5">
-        {steps.filter((st) => st.at).map((st) => (
-          <div key={st.label}>
-            {st.label}{st.by ? ` por ${st.by.name}` : ""} · {formatDateTime(st.at!)}
-          </div>
-        ))}
-      </div>
+      <TimelineSteps steps={steps} />
       {s.freightCost != null && (
         <div className="text-[10.5px] text-steel">Flete: -${s.freightCost.toFixed(2)} · Monto a transferir: ${(s.totalAmount - s.freightCost).toFixed(2)}</div>
       )}

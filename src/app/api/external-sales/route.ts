@@ -11,6 +11,11 @@ const SALE_INCLUDE = {
   advisor: { select: { name: true } },
   reviewedBy: { select: { name: true } },
   dispatchAssignedTo: { select: { name: true } },
+  paymentConfirmedBy: { select: { name: true } },
+  invoiceUploadedBy: { select: { name: true } },
+  prepReadyBy: { select: { name: true } },
+  packAssignedTo: { select: { name: true } },
+  deliveredBy: { select: { name: true } },
   client: true,
 } as const;
 

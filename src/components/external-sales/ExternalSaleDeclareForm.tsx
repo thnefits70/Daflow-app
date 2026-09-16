@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Check, Upload } from "lucide-react";
+import { Check, ChevronDown, ChevronUp, Upload } from "lucide-react";
 import { ProductMatchPicker, type MatchCatalogItem, type ProductMatchResult } from "@/components/merchandise-reentry/ProductMatchPicker";
 import { ClientMatchPicker, type ClientDTO } from "@/components/external-sales/ClientMatchPicker";
 import { LogisticsProviderPicker } from "@/components/external-sales/LogisticsProviderPicker";
@@ -11,6 +11,7 @@ import { usePasteFile } from "@/lib/usePasteFile";
 import { useFormDraft } from "@/lib/useFormDraft";
 import { formatDateTime } from "@/lib/formatDateTime";
 import { CatalogCode } from "@/components/shared/CatalogCode";
+import { saleSteps, TimelineSteps } from "@/components/external-sales/SaleTimeline";
 import { B2B_MARGIN_OPTIONS, B2B_MARGIN_DEFAULT } from "@/lib/externalSalesPricingConstants";
 
 type SaleItemDTO = {
@@ -46,6 +47,18 @@ type SaleDTO = {
   deliveredAt: string | null;
   nairobyClosedAt: string | null;
   deletedAt: string | null;
+  createdAt: string;
+  advisor: { name: string } | null;
+  reviewedAt: string | null;
+  reviewedBy: { name: string } | null;
+  paymentConfirmedBy: { name: string } | null;
+  invoiceUploadedAt: string | null;
+  invoiceUploadedBy: { name: string } | null;
+  prepReadyAt: string | null;
+  prepReadyBy: { name: string } | null;
+  packAssignedAt: string | null;
+  packAssignedTo: { name: string } | null;
+  deliveredBy: { name: string } | null;
 };
 
 // Confirmado 2026-09-14: ya no se escribe un precio a mano — se calcula
@@ -698,6 +711,7 @@ function PriceCheckPanel({ searchUrl, isContraEntrega }: { searchUrl: string; is
 
 export function ExternalSaleDeclareForm() {
   const [sales, setSales] = useState<SaleDTO[] | null>(null);
+  const [openTimelineId, setOpenTimelineId] = useState<string | null>(null);
   const [client, setClient] = useState<ClientDTO | null>(null);
   const [items, setItems] = useState<DraftItem[]>([]);
   const [pickupPersonName, setPickupPersonName] = useState("");
@@ -1005,10 +1019,22 @@ export function ExternalSaleDeclareForm() {
               const status = statusLabel(s);
               return (
                 <div key={s.id} className="bg-surface border border-rule rounded-md p-3">
-                  <div className="flex items-center gap-2 mb-1">
+                  <div className="flex items-center gap-2 mb-1 flex-wrap">
                     <span className="font-mono text-[11px] font-bold text-teal">{s.code}</span>
                     <span className={`text-[11px] font-semibold ${status.color}`}>{status.text}</span>
+                    <button
+                      type="button"
+                      className="flex items-center gap-0.5 text-[10.5px] font-semibold text-blue cursor-pointer ml-auto"
+                      onClick={() => setOpenTimelineId(openTimelineId === s.id ? null : s.id)}
+                    >
+                      {openTimelineId === s.id ? <ChevronUp size={11} /> : <ChevronDown size={11} />} Trazabilidad
+                    </button>
                   </div>
+                  {openTimelineId === s.id && (
+                    <div className="bg-cloud rounded-md p-2 mb-1.5">
+                      <TimelineSteps steps={saleSteps(s)} />
+                    </div>
+                  )}
                   <div className="flex flex-col gap-1">
                     {s.items.map((it) => (
                       <div key={it.id}>
