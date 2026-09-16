@@ -36,6 +36,9 @@ type StockRow = {
   b2cPrice2to11?: number;
 };
 type SortKey = "name" | "balance";
+// Confirmado 2026-09-16, pedido explícito del usuario: poder ver solo los
+// productos reales, solo los combos, o ambos juntos, con un clic.
+type ViewMode = "all" | "products" | "combos";
 type FormulaKey = "proveedor" | "bodega" | "benistock" | "b2b" | "dropi" | "b2c1" | "b2c2";
 
 function money(v: number) {
@@ -122,6 +125,7 @@ export function StockLevelsPanel({ isAdmin = false }: { isAdmin?: boolean }) {
   const [rows, setRows] = useState<StockRow[] | null>(null);
   const [query, setQuery] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("name");
+  const [viewMode, setViewMode] = useState<ViewMode>("all");
   const [openFormula, setOpenFormula] = useState<FormulaKey | null>(null);
 
   // Confirmado 2026-09-16, pedido explícito del usuario: corrección única del
@@ -283,26 +287,52 @@ export function StockLevelsPanel({ isAdmin = false }: { isAdmin?: boolean }) {
         </div>
       )}
 
-      <div className="flex items-center gap-2 mb-3">
-        <div className="flex items-center gap-1.5 flex-1 rounded border border-rule px-2.5 py-1.5">
-          <Search size={13} className="text-steel" />
-          <input
-            className="flex-1 text-[13px] outline-none bg-transparent"
-            placeholder="Buscar producto o código…"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
-        </div>
+      <div className="flex items-center gap-1.5 mb-3">
         <button
           type="button"
-          className="flex items-center gap-1.5 rounded border border-rule px-3 py-1.5 text-[12px] font-semibold cursor-pointer whitespace-nowrap"
-          onClick={() => setSortKey((k) => (k === "name" ? "balance" : "name"))}
+          className={`rounded-full px-3 py-1.5 text-[12px] font-semibold cursor-pointer border ${viewMode === "all" ? "bg-teal border-teal text-navy" : "border-rule text-steel hover:text-ink"}`}
+          onClick={() => setViewMode("all")}
         >
-          <ArrowUpDown size={13} /> {sortKey === "name" ? "Ordenar por stock" : "Ordenar por nombre"}
+          Todo
+        </button>
+        <button
+          type="button"
+          className={`rounded-full px-3 py-1.5 text-[12px] font-semibold cursor-pointer border ${viewMode === "products" ? "bg-teal border-teal text-navy" : "border-rule text-steel hover:text-ink"}`}
+          onClick={() => setViewMode("products")}
+        >
+          Solo productos
+        </button>
+        <button
+          type="button"
+          className={`rounded-full px-3 py-1.5 text-[12px] font-semibold cursor-pointer border ${viewMode === "combos" ? "bg-teal border-teal text-navy" : "border-rule text-steel hover:text-ink"}`}
+          onClick={() => setViewMode("combos")}
+        >
+          Solo combos
         </button>
       </div>
 
-      <div className="text-[12px] text-steel mb-2">{sorted.length} producto(s)</div>
+      {viewMode !== "combos" && (
+        <>
+          <div className="flex items-center gap-2 mb-3">
+            <div className="flex items-center gap-1.5 flex-1 rounded border border-rule px-2.5 py-1.5">
+              <Search size={13} className="text-steel" />
+              <input
+                className="flex-1 text-[13px] outline-none bg-transparent"
+                placeholder="Buscar producto o código…"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+              />
+            </div>
+            <button
+              type="button"
+              className="flex items-center gap-1.5 rounded border border-rule px-3 py-1.5 text-[12px] font-semibold cursor-pointer whitespace-nowrap"
+              onClick={() => setSortKey((k) => (k === "name" ? "balance" : "name"))}
+            >
+              <ArrowUpDown size={13} /> {sortKey === "name" ? "Ordenar por stock" : "Ordenar por nombre"}
+            </button>
+          </div>
+
+          <div className="text-[12px] text-steel mb-2">{sorted.length} producto(s)</div>
 
       {/* Confirmado 2026-09-15, pedido explícito del usuario: la primera
           versión (8 columnas parejas, todas del mismo tamaño y color) se
@@ -401,8 +431,14 @@ export function StockLevelsPanel({ isAdmin = false }: { isAdmin?: boolean }) {
           )}
         </div>
       </div>
+        </>
+      )}
 
-      {combos.length > 0 && (
+      {viewMode === "combos" && combos.length === 0 && (
+        <div className="px-3 py-4 text-[12.5px] text-steel">Todavía no hay combos registrados.</div>
+      )}
+
+      {viewMode !== "products" && combos.length > 0 && (
         <div className="mt-5">
           <div className="text-[13px] font-bold text-ink mb-1">Combos registrados</div>
           <div className="text-[11.5px] text-steel mb-2.5">
