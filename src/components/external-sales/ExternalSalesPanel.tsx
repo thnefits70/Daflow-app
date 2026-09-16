@@ -26,6 +26,7 @@ export function ExternalSalesPanel({
   canAssignPack,
   canPack,
   canClose,
+  isAdmin,
 }: {
   canDeclare: boolean;
   canReview: boolean;
@@ -36,6 +37,7 @@ export function ExternalSalesPanel({
   canAssignPack: boolean;
   canPack: boolean;
   canClose: boolean;
+  isAdmin: boolean;
 }) {
   const defaultTab: Tab = canDeclare ? "declarar" : canReview ? "revision" : canAssignPrep ? "agrupar" : "historial";
   const [tab, setTab] = useState<Tab>(() => {
@@ -140,7 +142,7 @@ export function ExternalSalesPanel({
       {tab === "historial" && (
         <>
           <TabGuide storageKey="externalsales-historial">Registro completo de ventas externas, con trazabilidad de cada paso.</TabGuide>
-          <ExternalSaleHistoryList />
+          <ExternalSaleHistoryList canDelete={isAdmin} />
         </>
       )}
     </div>

@@ -621,6 +621,7 @@ export function DeptWorkspaceTabs({
           canAssignPack={canAssignExternalSalePack}
           canPack={canPackExternalSale}
           canClose={canCloseExternalSale}
+          isAdmin={isAdmin}
         />
       )}
       {tab === "inventoriokpis" && canViewInventoryKpisPanel && inventoryKpisData && (

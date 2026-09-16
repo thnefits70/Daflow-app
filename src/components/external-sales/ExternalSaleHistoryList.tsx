@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ChevronDown, ChevronUp } from "lucide-react";
+import { ChevronDown, ChevronUp, Trash2 } from "lucide-react";
 import { formatDateTime } from "@/lib/formatDateTime";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 import { saleSteps, TimelineSteps } from "@/components/external-sales/SaleTimeline";
@@ -100,7 +100,29 @@ function SaleDetail({ s }: { s: SaleDTO }) {
   );
 }
 
-function SaleCard({ s, isOpen, onToggle }: { s: SaleDTO; isOpen: boolean; onToggle: () => void }) {
+function SaleCard({
+  s,
+  isOpen,
+  onToggle,
+  canDelete,
+  confirmingDelete,
+  onStartDelete,
+  onCancelDelete,
+  onConfirmDelete,
+  deleting,
+  deleteError,
+}: {
+  s: SaleDTO;
+  isOpen: boolean;
+  onToggle: () => void;
+  canDelete: boolean;
+  confirmingDelete: boolean;
+  onStartDelete: () => void;
+  onCancelDelete: () => void;
+  onConfirmDelete: () => void;
+  deleting: boolean;
+  deleteError: string;
+}) {
   return (
     <div className="bg-surface border border-rule rounded-md p-2.5">
       <div className="flex items-center gap-1.5 mb-1 flex-wrap">
@@ -129,17 +151,56 @@ function SaleCard({ s, isOpen, onToggle }: { s: SaleDTO; isOpen: boolean; onTogg
           {isOpen && <SaleDetail s={s} />}
         </>
       )}
+
+      {!s.deletedAt && canDelete && (
+        confirmingDelete ? (
+          <div className="bg-cloud rounded-md p-2 mt-1.5">
+            <div className="text-[10.5px] font-semibold mb-1.5">¿Eliminar {s.code} por completo? No se puede deshacer.</div>
+            {deleteError && <div className="text-red text-[10px] mb-1">{deleteError}</div>}
+            <div className="flex gap-1.5">
+              <button type="button" className="flex-1 rounded border border-rule px-2 py-1 text-[10.5px] font-semibold cursor-pointer" onClick={onCancelDelete}>Cancelar</button>
+              <button type="button" disabled={deleting} className="flex-1 rounded border border-red bg-red px-2 py-1 text-[10.5px] font-bold text-white cursor-pointer disabled:opacity-60" onClick={onConfirmDelete}>
+                {deleting ? "Eliminando…" : "Sí, eliminar"}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button type="button" className="mt-1.5 flex items-center gap-1 text-[10.5px] font-semibold text-red cursor-pointer" onClick={onStartDelete}>
+            <Trash2 size={11} /> Eliminar
+          </button>
+        )
+      )}
     </div>
   );
 }
 
-export function ExternalSaleHistoryList() {
+export function ExternalSaleHistoryList({ canDelete = false }: { canDelete?: boolean }) {
   const [sales, setSales] = useState<SaleDTO[] | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
 
-  useEffect(() => {
+  function load() {
     fetch("/api/external-sales/history").then((r) => r.json()).then(setSales).catch(() => setSales([]));
-  }, []);
+  }
+  useEffect(load, []);
+
+  async function confirmDelete(id: string) {
+    setDeleting(true);
+    setDeleteError("");
+    try {
+      const res = await fetch(`/api/external-sales/${id}`, { method: "DELETE" });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error ?? "No se pudo eliminar.");
+      setConfirmingDeleteId(null);
+      load();
+    } catch (e) {
+      setDeleteError(e instanceof Error ? e.message : "No se pudo eliminar.");
+    } finally {
+      setDeleting(false);
+    }
+  }
 
   if (sales === null) return <div className="text-[13px] text-steel">Cargando…</div>;
   if (sales.length === 0) return <div className="text-[13px] text-steel">Todavía no hay ventas externas registradas.</div>;
@@ -171,7 +232,19 @@ export function ExternalSaleHistoryList() {
                 <div className="text-[11px] text-steel px-1">—</div>
               ) : (
                 col.sales.map((s) => (
-                  <SaleCard key={s.id} s={s} isOpen={expanded === s.id} onToggle={() => setExpanded(expanded === s.id ? null : s.id)} />
+                  <SaleCard
+                    key={s.id}
+                    s={s}
+                    isOpen={expanded === s.id}
+                    onToggle={() => setExpanded(expanded === s.id ? null : s.id)}
+                    canDelete={canDelete}
+                    confirmingDelete={confirmingDeleteId === s.id}
+                    onStartDelete={() => { setConfirmingDeleteId(s.id); setDeleteError(""); }}
+                    onCancelDelete={() => setConfirmingDeleteId(null)}
+                    onConfirmDelete={() => confirmDelete(s.id)}
+                    deleting={deleting}
+                    deleteError={confirmingDeleteId === s.id ? deleteError : ""}
+                  />
                 ))
               )}
             </div>
