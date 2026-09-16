@@ -142,7 +142,7 @@ export function ExternalSalesPanel({
       {tab === "historial" && (
         <>
           <TabGuide storageKey="externalsales-historial">Registro completo de ventas externas, con trazabilidad de cada paso.</TabGuide>
-          <ExternalSaleHistoryList canDelete={isAdmin} />
+          <ExternalSaleHistoryList canDelete={isAdmin} canPrintGuide={canAssignPack} />
         </>
       )}
     </div>

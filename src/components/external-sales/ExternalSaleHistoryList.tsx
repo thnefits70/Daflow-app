@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ChevronDown, ChevronUp, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronUp, Printer, Trash2 } from "lucide-react";
 import { formatDateTime } from "@/lib/formatDateTime";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 import { saleSteps, TimelineSteps } from "@/components/external-sales/SaleTimeline";
@@ -70,11 +70,21 @@ function itemsSummary(s: SaleDTO): string {
 
 const FLOW_COLUMNS = ["Declarada", "Aprobada", "Pago confirmado", "Facturada", "Agrupada", "Embalaje asignado", "Entregada", "Cerrada"];
 
-function SaleDetail({ s }: { s: SaleDTO }) {
+function SaleDetail({ s, canPrintGuide }: { s: SaleDTO; canPrintGuide: boolean }) {
   const steps = saleSteps(s);
   return (
     <div className="mt-2.5 border-t border-rule pt-2.5 flex flex-col gap-2">
       <TimelineSteps steps={steps} />
+      {canPrintGuide && (
+        <a
+          href={`/area/ventas-externas/${s.id}/guia`}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex items-center gap-1.5 text-[10.5px] font-semibold text-blue underline"
+        >
+          <Printer size={12} /> Ver / imprimir guía
+        </a>
+      )}
       {s.freightCost != null && (
         <div className="text-[10.5px] text-steel">Flete: -${s.freightCost.toFixed(2)} · Monto a transferir: ${(s.totalAmount - s.freightCost).toFixed(2)}</div>
       )}
@@ -105,6 +115,7 @@ function SaleCard({
   isOpen,
   onToggle,
   canDelete,
+  canPrintGuide,
   confirmingDelete,
   onStartDelete,
   onCancelDelete,
@@ -116,6 +127,7 @@ function SaleCard({
   isOpen: boolean;
   onToggle: () => void;
   canDelete: boolean;
+  canPrintGuide: boolean;
   confirmingDelete: boolean;
   onStartDelete: () => void;
   onCancelDelete: () => void;
@@ -148,7 +160,7 @@ function SaleCard({
           >
             {isOpen ? <ChevronUp size={12} /> : <ChevronDown size={12} />} {isOpen ? "Ocultar" : "Ver detalle"}
           </button>
-          {isOpen && <SaleDetail s={s} />}
+          {isOpen && <SaleDetail s={s} canPrintGuide={canPrintGuide} />}
         </>
       )}
 
@@ -174,7 +186,7 @@ function SaleCard({
   );
 }
 
-export function ExternalSaleHistoryList({ canDelete = false }: { canDelete?: boolean }) {
+export function ExternalSaleHistoryList({ canDelete = false, canPrintGuide = false }: { canDelete?: boolean; canPrintGuide?: boolean }) {
   const [sales, setSales] = useState<SaleDTO[] | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
@@ -238,6 +250,7 @@ export function ExternalSaleHistoryList({ canDelete = false }: { canDelete?: boo
                     isOpen={expanded === s.id}
                     onToggle={() => setExpanded(expanded === s.id ? null : s.id)}
                     canDelete={canDelete}
+                    canPrintGuide={canPrintGuide}
                     confirmingDelete={confirmingDeleteId === s.id}
                     onStartDelete={() => { setConfirmingDeleteId(s.id); setDeleteError(""); }}
                     onCancelDelete={() => setConfirmingDeleteId(null)}
