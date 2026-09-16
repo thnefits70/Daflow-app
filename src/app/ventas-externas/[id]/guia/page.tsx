@@ -1,7 +1,9 @@
 import { notFound, redirect } from "next/navigation";
 import type { Metadata } from "next";
+import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { canAssignExternalSalePack } from "@/lib/guards";
+import { formatDateTime } from "@/lib/formatDateTime";
 import { PrintButton } from "@/app/rol-del-mes/[id]/PrintButton";
 
 // Confirmado 2026-09-16, pedido explícito del usuario: esta hoja la ve el
@@ -24,12 +26,11 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 // tapando el texto de la guía. Al vivir fuera de /area, esta página nunca
 // carga ese shell — el permiso se revisa acá mismo, no por el layout.
 export default async function ExternalSaleGuidePage({ params }: { params: Promise<{ id: string }> }) {
-  if (!(await canAssignExternalSalePack())) redirect("/login");
-
   const { id } = await params;
   const sale = await prisma.externalSale.findUnique({
     where: { id },
     select: {
+      advisorId: true,
       code: true,
       pickupPersonName: true,
       courierNote: true,
@@ -39,9 +40,20 @@ export default async function ExternalSaleGuidePage({ params }: { params: Promis
       client: { select: { name: true, address: true, phone: true } },
       advisor: { select: { phone: true } },
       items: { select: { declaredProductName: true, quantity: true, catalogItem: { select: { name: true } } }, orderBy: { createdAt: "asc" } },
+      deliveryPhotoUrl: true,
+      deliveredAt: true,
     },
   });
   if (!sale) notFound();
+
+  // Confirmado 2026-09-16, pedido explícito de Marcos: además de
+  // Inventario/Fulfillment/admin, el propio asesor dueño de la venta puede
+  // ver su guía — así puede reenviarla por WhatsApp al cliente o al
+  // motorizado para que sepan qué retirar de bodega, y ver la foto de
+  // entrega como comprobante de que el motorizado ya se la llevó.
+  const session = await auth();
+  const isOwnAdvisor = !!session && session.user.id === sale.advisorId;
+  if (!isOwnAdvisor && !(await canAssignExternalSalePack())) redirect("/login");
 
   const clientName = sale.client?.name ?? sale.clientName;
 
@@ -114,6 +126,16 @@ export default async function ExternalSaleGuidePage({ params }: { params: Promis
             </tr>
           </tbody>
         </table>
+
+        {sale.deliveryPhotoUrl && (
+          <div className="mt-6 print:hidden">
+            <div className="text-[11px] font-bold uppercase tracking-wide text-gray-500 mb-2">
+              Foto de entrega al motorizado{sale.deliveredAt ? ` · ${formatDateTime(sale.deliveredAt.toISOString())}` : ""}
+            </div>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={sale.deliveryPhotoUrl} alt="Entrega al motorizado" className="w-full max-w-xs rounded border border-gray-300" />
+          </div>
+        )}
       </div>
     </div>
   );

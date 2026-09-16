@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Check, ChevronDown, ChevronUp, Upload } from "lucide-react";
+import { Check, ChevronDown, ChevronUp, Printer, Upload } from "lucide-react";
 import { ProductMatchPicker, type MatchCatalogItem, type ProductMatchResult } from "@/components/merchandise-reentry/ProductMatchPicker";
 import { ClientMatchPicker, type ClientDTO } from "@/components/external-sales/ClientMatchPicker";
 import { LogisticsProviderPicker } from "@/components/external-sales/LogisticsProviderPicker";
@@ -45,6 +45,7 @@ type SaleDTO = {
   paymentProofName: string | null;
   paymentConfirmedAt: string | null;
   deliveredAt: string | null;
+  deliveryPhotoUrl: string | null;
   nairobyClosedAt: string | null;
   deletedAt: string | null;
   createdAt: string;
@@ -1161,6 +1162,31 @@ export function ExternalSaleDeclareForm() {
                       Cliente: {s.client.name} · {s.client.idNumber ? `${s.client.idType === "RUC" ? "RUC" : "Cédula"}: ${s.client.idNumber} · ` : ""}Cel: {s.client.phone}
                       {s.client.email ? ` · Correo: ${s.client.email}` : ""}
                     </div>
+                  )}
+                  {/* Confirmado 2026-09-16, pedido explícito de Marcos: poder
+                      ver/imprimir la guía de su propia venta para reenviársela
+                      por WhatsApp al cliente o al motorizado (qué retirar de
+                      bodega) — antes solo Inventario/Fulfillment/admin podían
+                      abrirla. Ver permiso ampliado en la propia página de la
+                      guía (solo el asesor DUEÑO de esta venta, no cualquiera). */}
+                  {!s.deletedAt && (
+                    <a
+                      href={`/ventas-externas/${s.id}/guia`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1.5 text-[10.5px] font-semibold text-blue underline mt-1"
+                    >
+                      <Printer size={12} /> Ver / imprimir guía
+                    </a>
+                  )}
+                  {s.deliveryPhotoUrl && (
+                    <a href={s.deliveryPhotoUrl} target="_blank" rel="noreferrer" className="block mt-1.5">
+                      <div className="text-[10.5px] font-semibold text-steel mb-1">
+                        Foto de entrega al motorizado{s.deliveredAt ? ` · ${formatDateTime(s.deliveredAt)}` : ""}
+                      </div>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={s.deliveryPhotoUrl} alt="Entrega al motorizado" className="w-20 h-20 object-cover rounded border border-rule" />
+                    </a>
                   )}
                   {!s.deletedAt && s.reviewStatus === "APPROVED" && s.paymentConfirmedAt && !s.deliveredAt && (
                     <MarkDeliveredSection saleId={s.id} onDone={load} />
