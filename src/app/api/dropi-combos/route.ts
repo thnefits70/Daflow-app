@@ -60,6 +60,7 @@ export async function GET() {
         id: c.id,
         code: c.code,
         label: c.label,
+        bodega: c.bodega,
         createdByName: c.createdBy?.name ?? null,
         createdAt: c.createdAt,
         components: c.components.map((comp) => ({ id: comp.id, quantity: comp.quantity, catalogItem: comp.catalogItem })),

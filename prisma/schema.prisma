@@ -1716,6 +1716,14 @@ model PurchaseCatalogItem {
   // nunca se vuelve a llamar a la IA una vez asignado, ver src/lib/nichoAi.ts.
   nicho String?
 
+  // Confirmado 2026-09-16, pedido explícito del usuario: a qué marca/bodega
+  // (Provedix/Importadora Damián/Importadora Shanghai) pertenece este ID de
+  // Just — reusa el mismo enum ya usado en MarketProductProposal.bodega, que
+  // sirve como valor de partida cuando ya se eligió ahí (ver migración de
+  // backfill). Editable solo desde "Stock Actual" (canManageJustCatalog:
+  // Daniel o admin), no desde "Base de datos de productos".
+  bodega MarketProductBodega?
+
   createdById String?
   createdBy   User?    @relation("PurchaseCatalogItemCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   createdAt   DateTime @default(now())
@@ -2098,6 +2106,12 @@ model DropiCombo {
   createdById String?
   createdBy   User?    @relation("DropiComboCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   createdAt   DateTime @default(now())
+
+  // Confirmado 2026-09-16, pedido explícito del usuario: a qué marca
+  // pertenece este combo — elegida directamente, independiente de la marca
+  // de sus componentes. Mismo enum y mismo permiso de edición (Stock Actual,
+  // Daniel o admin) que PurchaseCatalogItem.bodega.
+  bodega MarketProductBodega?
 
   components DropiComboComponent[]
 }

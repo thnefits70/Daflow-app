@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { getInventoryLeadId } from "@/lib/guards";
 import { effectiveUnitCost } from "@/lib/purchases";
+import type { MarketProductBodega } from "@/generated/prisma/client";
 
 // Fase 3 (INVESTOCK) — confirmado 2026-09-09: el número de stock propio de
 // DAFLOW, construido como un Kardex real. Cada movimiento (entrada o
@@ -250,6 +251,10 @@ export type CurrentStockRow = {
   photos: string[];
   balance: number;
   avgCost: number;
+  // Confirmado 2026-09-16, pedido explícito del usuario: marca/bodega
+  // (Provedix/Importadora Damián/Importadora Shanghai) de este producto —
+  // ver PurchaseCatalogItem.bodega en el schema.
+  bodega: MarketProductBodega | null;
 };
 
 // Confirmado 2026-09-10 (pedido explícito del usuario): pantalla "Stock
@@ -259,7 +264,7 @@ export type CurrentStockRow = {
 // con saldo 0, no se omite.
 export async function getAllCurrentStock(): Promise<CurrentStockRow[]> {
   const [items, latestPerItem] = await Promise.all([
-    prisma.purchaseCatalogItem.findMany({ select: { id: true, name: true, justCode: true, photos: true }, orderBy: { name: "asc" } }),
+    prisma.purchaseCatalogItem.findMany({ select: { id: true, name: true, justCode: true, photos: true, bodega: true }, orderBy: { name: "asc" } }),
     prisma.stockKardexEntry.findMany({
       distinct: ["catalogItemId"],
       orderBy: [{ catalogItemId: "asc" }, { occurredAt: "desc" }, { createdAt: "desc" }],
@@ -276,6 +281,7 @@ export async function getAllCurrentStock(): Promise<CurrentStockRow[]> {
       photos: i.photos,
       balance: latest?.balanceAfter ?? 0,
       avgCost: latest?.avgCostAfter ?? 0,
+      bodega: i.bodega,
     };
   });
 }

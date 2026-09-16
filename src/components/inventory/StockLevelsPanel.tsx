@@ -13,10 +13,24 @@ type FreightRecomputeRow = { catalogItemId: string; name: string; entriesChanged
 // productos reales que traen), y el stock de CADA producto que lo compone
 // se saca cruzando por catalogItemId contra la misma lista de arriba —
 // nunca se inventa un stock para el combo en sí.
+// Confirmado 2026-09-16, pedido explícito del usuario: a qué marca
+// (Provedix/Importadora Damián/Importadora Shanghai) pertenece cada
+// producto/combo — llamado "marca" acá en el frontend (no "bodega") para no
+// confundirlo con el costo "Puesto en bodega" que ya existe en esta misma
+// pantalla; en el backend el campo se llama `bodega` (mismo enum que ya
+// usa Análisis de Mercado).
+type Marca = "MKT_DAMIAN" | "MKT_PROVEDIX" | "MKT_SHANGHAI";
+const MARCA_LABELS: Record<Marca, string> = {
+  MKT_PROVEDIX: "Provedix",
+  MKT_DAMIAN: "Importadora Damián",
+  MKT_SHANGHAI: "Importadora Shanghai",
+};
+
 type ComboRow = {
   id: string;
   code: string;
   label: string | null;
+  bodega: Marca | null;
   components: { id: string; quantity: number; catalogItem: { id: string; name: string; justCode: string | null } }[];
   benistockPrice: number | null;
   b2bPriceDefault: number | null;
@@ -32,6 +46,7 @@ type StockRow = {
   photos: string[];
   balance: number;
   avgCost: number;
+  bodega: Marca | null;
   providerPrice?: number;
   bodegaPrice?: number;
   benistockPrice?: number;
@@ -69,6 +84,27 @@ function CopyableAmount({ value, className }: { value: number | null | undefined
     >
       {copied ? "✓" : money(value)}
     </span>
+  );
+}
+
+// Confirmado 2026-09-16, pedido explícito del usuario: elegir/corregir la
+// marca de cada producto o combo directamente acá — editable solo en esta
+// pantalla, que ya es exclusiva de Daniel/admin (canManageJustCatalog), no
+// desde "Base de datos de productos".
+function MarcaSelect({ value, onChange }: { value: Marca | null; onChange: (v: Marca | null) => void }) {
+  return (
+    <select
+      className="w-full text-[11px] rounded border border-rule bg-transparent px-1 py-1 cursor-pointer text-steel"
+      value={value ?? ""}
+      onChange={(e) => onChange((e.target.value || null) as Marca | null)}
+    >
+      <option value="">— Sin marca —</option>
+      {(Object.keys(MARCA_LABELS) as Marca[]).map((k) => (
+        <option key={k} value={k}>
+          {MARCA_LABELS[k]}
+        </option>
+      ))}
+    </select>
   );
 }
 
@@ -174,6 +210,28 @@ export function StockLevelsPanel({ isAdmin = false }: { isAdmin?: boolean }) {
       .then((r) => (r.ok ? r.json() : []))
       .then(setRows)
       .catch(() => setRows([]));
+  }
+
+  async function updateProductMarca(catalogItemId: string, bodega: Marca | null) {
+    const prevRows = rows;
+    setRows((r) => (r ? r.map((row) => (row.catalogItemId === catalogItemId ? { ...row, bodega } : row)) : r));
+    const res = await fetch(`/api/merchandise-reentry/catalog-items/${catalogItemId}/bodega`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ bodega }),
+    });
+    if (!res.ok) setRows(prevRows);
+  }
+
+  async function updateComboMarca(comboId: string, bodega: Marca | null) {
+    const prevCombos = combos;
+    setCombos((c) => c.map((combo) => (combo.id === comboId ? { ...combo, bodega } : combo)));
+    const res = await fetch(`/api/dropi-combos/${comboId}/bodega`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ bodega }),
+    });
+    if (!res.ok) setCombos(prevCombos);
   }
 
   useEffect(() => {
@@ -374,16 +432,18 @@ export function StockLevelsPanel({ isAdmin = false }: { isAdmin?: boolean }) {
           dejando un vacío enorme en el medio. Ahora cada columna de número
           tiene un ancho fijo — se reparten parejo por toda la fila. */}
       <div className="border border-rule rounded-md overflow-x-auto">
-        <div className="grid grid-cols-[auto_minmax(200px,1fr)_90px_100px_110px_110px_100px_100px_110px_110px] gap-3 px-3 pt-2 min-w-[1300px]">
+        <div className="grid grid-cols-[auto_minmax(200px,1fr)_110px_90px_100px_110px_110px_100px_100px_110px_110px] gap-3 px-3 pt-2 min-w-[1380px]">
+          <span></span>
           <span></span>
           <span></span>
           <span></span>
           <span className="col-span-3 text-center text-[10px] font-bold uppercase tracking-wide text-steel border-b border-rule pb-1">Costo</span>
           <span className="col-span-4 text-center text-[10px] font-bold uppercase tracking-wide text-blue border-b border-rule pb-1">Precios de venta</span>
         </div>
-        <div className="grid grid-cols-[auto_minmax(200px,1fr)_90px_100px_110px_110px_100px_100px_110px_110px] gap-3 px-3 py-2 bg-cloud text-[11px] font-semibold uppercase tracking-wide text-steel min-w-[1300px]">
+        <div className="grid grid-cols-[auto_minmax(200px,1fr)_110px_90px_100px_110px_110px_100px_100px_110px_110px] gap-3 px-3 py-2 bg-cloud text-[11px] font-semibold uppercase tracking-wide text-steel min-w-[1380px]">
           <span></span>
           <span>Producto</span>
+          <span>Marca</span>
           <span className="text-right">Stock</span>
           <span className="flex items-center justify-end gap-1 border-l border-rule pl-3">
             Proveedor <FormulaInfoButton open={openFormula === "proveedor"} onToggle={() => setOpenFormula((k) => (k === "proveedor" ? null : "proveedor"))} />
@@ -408,7 +468,7 @@ export function StockLevelsPanel({ isAdmin = false }: { isAdmin?: boolean }) {
           </span>
         </div>
         {openFormula && (
-          <div className="flex items-start justify-between gap-3 bg-navy border-b border-rule px-3 py-2.5 min-w-[1300px]">
+          <div className="flex items-start justify-between gap-3 bg-navy border-b border-rule px-3 py-2.5 min-w-[1380px]">
             <div className="text-[12px]">
               <span className="font-bold text-ink">{FORMULA_EXPLANATIONS[openFormula].title}: </span>
               <span className="text-steel">{FORMULA_EXPLANATIONS[openFormula].text}</span>
@@ -418,7 +478,7 @@ export function StockLevelsPanel({ isAdmin = false }: { isAdmin?: boolean }) {
             </button>
           </div>
         )}
-        <div className="max-h-[70vh] overflow-y-auto min-w-[1300px]">
+        <div className="max-h-[70vh] overflow-y-auto min-w-[1380px]">
           {sorted.length === 0 ? (
             <div className="px-3 py-4 text-[12.5px] text-steel">Sin resultados.</div>
           ) : (
@@ -430,7 +490,7 @@ export function StockLevelsPanel({ isAdmin = false }: { isAdmin?: boolean }) {
             sorted.map((r, i) => (
               <div
                 key={r.catalogItemId}
-                className={`grid grid-cols-[auto_minmax(200px,1fr)_90px_100px_110px_110px_100px_100px_110px_110px] gap-3 px-3 py-2.5 border-t border-rule items-center ${i % 2 === 1 ? "bg-cloud/40" : ""}`}
+                className={`grid grid-cols-[auto_minmax(200px,1fr)_110px_90px_100px_110px_110px_100px_100px_110px_110px] gap-3 px-3 py-2.5 border-t border-rule items-center ${i % 2 === 1 ? "bg-cloud/40" : ""}`}
               >
                 {r.photos[0] ? (
                   // Confirmado 2026-09-15 (pedido de Daniel): foto real del
@@ -445,6 +505,7 @@ export function StockLevelsPanel({ isAdmin = false }: { isAdmin?: boolean }) {
                   <CatalogCode code={r.justCode} />
                   <span className="truncate">{r.name}</span>
                 </span>
+                <MarcaSelect value={r.bodega} onChange={(v) => updateProductMarca(r.catalogItemId, v)} />
                 <span className={`text-right font-mono text-[12.5px] font-bold ${r.balance < 0 ? "text-red" : "text-ink"}`}>{r.balance}</span>
                 <CopyableAmount value={r.providerPrice} className="text-right font-mono text-[13px] text-steel border-l border-rule pl-3" />
                 <CopyableAmount value={r.bodegaPrice} className="text-right font-mono text-[13px] text-steel" />
@@ -477,6 +538,9 @@ export function StockLevelsPanel({ isAdmin = false }: { isAdmin?: boolean }) {
                 <div className="flex items-center gap-2 mb-2">
                   <span className="font-mono text-[11.5px] font-bold text-teal">{combo.code}</span>
                   {combo.label && <span className="text-[12px] text-steel">{combo.label}</span>}
+                  <div className="ml-auto w-[170px]">
+                    <MarcaSelect value={combo.bodega} onChange={(v) => updateComboMarca(combo.id, v)} />
+                  </div>
                 </div>
                 <div className="flex flex-wrap gap-1.5 mb-2.5">
                   {combo.components.map((c) => {
