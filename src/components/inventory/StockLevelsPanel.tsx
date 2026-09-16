@@ -309,6 +309,61 @@ export function StockLevelsPanel({ isAdmin = false }: { isAdmin?: boolean }) {
   // estar buscando.
   const unmarkedCount = rows.filter((r) => r.bodega == null).length;
 
+  // Confirmado 2026-09-16, bug real reportado por el usuario: este
+  // encabezado solo vivía en la sección de productos — al elegir "Solo
+  // combos" (que oculta esa sección) el encabezado desaparecía con ella.
+  // Se extrae acá para reusarlo también arriba de los combos.
+  const columnsHeader = (
+    <>
+      <div className="grid grid-cols-[auto_minmax(200px,1fr)_110px_90px_100px_110px_110px_100px_100px_110px_110px] gap-3 px-3 pt-2 min-w-[1380px]">
+        <span></span>
+        <span></span>
+        <span></span>
+        <span></span>
+        <span className="col-span-3 text-center text-[10px] font-bold uppercase tracking-wide text-steel border-b border-rule pb-1">Costo</span>
+        <span className="col-span-4 text-center text-[10px] font-bold uppercase tracking-wide text-blue border-b border-rule pb-1">Precios de venta</span>
+      </div>
+      <div className="grid grid-cols-[auto_minmax(200px,1fr)_110px_90px_100px_110px_110px_100px_100px_110px_110px] gap-3 px-3 py-2 bg-cloud text-[11px] font-semibold uppercase tracking-wide text-steel min-w-[1380px]">
+        <span></span>
+        <span>Producto</span>
+        <span>Marca</span>
+        <span className="text-right">Stock</span>
+        <span className="flex items-center justify-end gap-1 border-l border-rule pl-3">
+          Proveedor <FormulaInfoButton open={openFormula === "proveedor"} onToggle={() => setOpenFormula((k) => (k === "proveedor" ? null : "proveedor"))} />
+        </span>
+        <span className="flex items-center justify-end gap-1">
+          Puesto en bodega <FormulaInfoButton open={openFormula === "bodega"} onToggle={() => setOpenFormula((k) => (k === "bodega" ? null : "bodega"))} />
+        </span>
+        <span className="flex items-center justify-end gap-1">
+          Benistock <FormulaInfoButton open={openFormula === "benistock"} onToggle={() => setOpenFormula((k) => (k === "benistock" ? null : "benistock"))} />
+        </span>
+        <span className="flex items-center justify-end gap-1 border-l border-rule pl-3 text-teal">
+          B2B <FormulaInfoButton open={openFormula === "b2b"} onToggle={() => setOpenFormula((k) => (k === "b2b" ? null : "b2b"))} />
+        </span>
+        <span className="flex items-center justify-end gap-1">
+          Dropi <FormulaInfoButton open={openFormula === "dropi"} onToggle={() => setOpenFormula((k) => (k === "dropi" ? null : "dropi"))} />
+        </span>
+        <span className="flex items-center justify-end gap-1 text-blue">
+          B2C 1 un. <FormulaInfoButton open={openFormula === "b2c1"} onToggle={() => setOpenFormula((k) => (k === "b2c1" ? null : "b2c1"))} />
+        </span>
+        <span className="flex items-center justify-end gap-1 text-blue">
+          B2C 2-11 un. <FormulaInfoButton open={openFormula === "b2c2"} onToggle={() => setOpenFormula((k) => (k === "b2c2" ? null : "b2c2"))} />
+        </span>
+      </div>
+      {openFormula && (
+        <div className="flex items-start justify-between gap-3 bg-navy border-b border-rule px-3 py-2.5 min-w-[1380px]">
+          <div className="text-[12px]">
+            <span className="font-bold text-ink">{FORMULA_EXPLANATIONS[openFormula].title}: </span>
+            <span className="text-steel">{FORMULA_EXPLANATIONS[openFormula].text}</span>
+          </div>
+          <button type="button" className="shrink-0 text-steel hover:text-ink cursor-pointer" onClick={() => setOpenFormula(null)}>
+            <X size={13} />
+          </button>
+        </div>
+      )}
+    </>
+  );
+
   return (
     <div>
       <TabGuide storageKey="stock-actual">
@@ -454,52 +509,7 @@ export function StockLevelsPanel({ isAdmin = false }: { isAdmin?: boolean }) {
           dejando un vacío enorme en el medio. Ahora cada columna de número
           tiene un ancho fijo — se reparten parejo por toda la fila. */}
       <div className="border border-rule rounded-md overflow-x-auto">
-        <div className="grid grid-cols-[auto_minmax(200px,1fr)_110px_90px_100px_110px_110px_100px_100px_110px_110px] gap-3 px-3 pt-2 min-w-[1380px]">
-          <span></span>
-          <span></span>
-          <span></span>
-          <span></span>
-          <span className="col-span-3 text-center text-[10px] font-bold uppercase tracking-wide text-steel border-b border-rule pb-1">Costo</span>
-          <span className="col-span-4 text-center text-[10px] font-bold uppercase tracking-wide text-blue border-b border-rule pb-1">Precios de venta</span>
-        </div>
-        <div className="grid grid-cols-[auto_minmax(200px,1fr)_110px_90px_100px_110px_110px_100px_100px_110px_110px] gap-3 px-3 py-2 bg-cloud text-[11px] font-semibold uppercase tracking-wide text-steel min-w-[1380px]">
-          <span></span>
-          <span>Producto</span>
-          <span>Marca</span>
-          <span className="text-right">Stock</span>
-          <span className="flex items-center justify-end gap-1 border-l border-rule pl-3">
-            Proveedor <FormulaInfoButton open={openFormula === "proveedor"} onToggle={() => setOpenFormula((k) => (k === "proveedor" ? null : "proveedor"))} />
-          </span>
-          <span className="flex items-center justify-end gap-1">
-            Puesto en bodega <FormulaInfoButton open={openFormula === "bodega"} onToggle={() => setOpenFormula((k) => (k === "bodega" ? null : "bodega"))} />
-          </span>
-          <span className="flex items-center justify-end gap-1">
-            Benistock <FormulaInfoButton open={openFormula === "benistock"} onToggle={() => setOpenFormula((k) => (k === "benistock" ? null : "benistock"))} />
-          </span>
-          <span className="flex items-center justify-end gap-1 border-l border-rule pl-3 text-teal">
-            B2B <FormulaInfoButton open={openFormula === "b2b"} onToggle={() => setOpenFormula((k) => (k === "b2b" ? null : "b2b"))} />
-          </span>
-          <span className="flex items-center justify-end gap-1">
-            Dropi <FormulaInfoButton open={openFormula === "dropi"} onToggle={() => setOpenFormula((k) => (k === "dropi" ? null : "dropi"))} />
-          </span>
-          <span className="flex items-center justify-end gap-1 text-blue">
-            B2C 1 un. <FormulaInfoButton open={openFormula === "b2c1"} onToggle={() => setOpenFormula((k) => (k === "b2c1" ? null : "b2c1"))} />
-          </span>
-          <span className="flex items-center justify-end gap-1 text-blue">
-            B2C 2-11 un. <FormulaInfoButton open={openFormula === "b2c2"} onToggle={() => setOpenFormula((k) => (k === "b2c2" ? null : "b2c2"))} />
-          </span>
-        </div>
-        {openFormula && (
-          <div className="flex items-start justify-between gap-3 bg-navy border-b border-rule px-3 py-2.5 min-w-[1380px]">
-            <div className="text-[12px]">
-              <span className="font-bold text-ink">{FORMULA_EXPLANATIONS[openFormula].title}: </span>
-              <span className="text-steel">{FORMULA_EXPLANATIONS[openFormula].text}</span>
-            </div>
-            <button type="button" className="shrink-0 text-steel hover:text-ink cursor-pointer" onClick={() => setOpenFormula(null)}>
-              <X size={13} />
-            </button>
-          </div>
-        )}
+        {columnsHeader}
         <div className="max-h-[70vh] overflow-y-auto min-w-[1380px]">
           {sorted.length === 0 ? (
             <div className="px-3 py-4 text-[12.5px] text-steel">Sin resultados.</div>
@@ -555,6 +565,7 @@ export function StockLevelsPanel({ isAdmin = false }: { isAdmin?: boolean }) {
             Un combo no es un producto real — nunca tiene stock propio (por eso la columna Stock dice &quot;combo&quot;, nunca un número). Mismas columnas de costo y precio que los productos, calculadas sumando cada producto real que trae. Debajo de cada fila ves qué trae y cuánto stock real le queda a cada uno, para saber si alcanza para seguir armándolo.
           </div>
           <div className="border border-rule rounded-md overflow-x-auto">
+            {columnsHeader}
             <div className="min-w-[1380px]">
               {[...combos]
                 .sort((a, b) => Number(a.bodega != null) - Number(b.bodega != null) || a.code.localeCompare(b.code))
