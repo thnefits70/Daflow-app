@@ -29,6 +29,18 @@ function money(v: number) {
   return "$" + v.toLocaleString("es-EC", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+// Confirmado 2026-09-16, bug real reportado por el usuario: buscar "Máquina
+// Anti Ronquidos" (con tilde) no encontraba nada porque el nombre real en el
+// catálogo está sin tilde ("Maquina") — la búsqueda comparaba texto exacto,
+// sin ignorar acentos. Mismo criterio ya usado en otras búsquedas de la app
+// (ej. PurchasePriceExplorer.tsx).
+function normalize(s: string) {
+  return s
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "");
+}
+
 // Confirmado 2026-09-15, pedido explícito del usuario: quiere ver, con un
 // clic, exactamente qué fórmula se está calculando en cada columna de
 // precio — mismas fórmulas ya usadas en src/lib/marketProduct.ts
@@ -138,7 +150,7 @@ export function StockLevelsPanel({ isAdmin = false }: { isAdmin?: boolean }) {
   if (rows === null) return <div className="text-steel text-[13px]">Cargando…</div>;
 
   const filtered = query.trim()
-    ? rows.filter((r) => r.name.toLowerCase().includes(query.toLowerCase()) || (r.justCode ?? "").toLowerCase().includes(query.toLowerCase()))
+    ? rows.filter((r) => normalize(r.name).includes(normalize(query)) || (r.justCode ?? "").toLowerCase().includes(query.toLowerCase()))
     : rows;
 
   const sorted = [...filtered].sort((a, b) =>
