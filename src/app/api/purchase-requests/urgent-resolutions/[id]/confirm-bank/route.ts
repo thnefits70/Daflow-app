@@ -3,6 +3,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { dbUserId } from "@/lib/guards";
 import { sendPushToOwner } from "@/lib/webPush";
+import { resolveNotifications } from "@/lib/notifications";
 
 // Solo admin — es quien de verdad revisa su cuenta bancaria. El doble
 // "¿estás seguro?" vive en el cliente (pantalla de confirmación con los
@@ -25,6 +26,11 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     where: { id },
     data: { status: "COMPLETED", bankConfirmedAt: new Date(), bankConfirmedById: dbUserId(session.user.id) },
   });
+
+  // Confirmado 2026-09-16: limpia de la campanita del admin el aviso "🏦
+  // Verifica en tu banco" que se generó al subir el comprobante — ya se
+  // confirmó, dejarlo ahí sería un pendiente fantasma.
+  await resolveNotifications("admin", "🏦 Verifica en tu banco — reembolso de proveedor", resolution.report.request.catalogItem.name);
 
   // Confirmado 2026-09-02: pedido explícito de Bryan — quien coordinó el
   // reembolso con el proveedor (createdById) no se enteraba de que admin ya

@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { canSubmitPurchaseRequests } from "@/lib/guards";
 import { readPaymentProof } from "@/lib/purchaseAi";
 import { pushOwnerId } from "@/lib/pushOwner";
-import { sendPushToOwner } from "@/lib/webPush";
+import { notifyOwner } from "@/lib/notifications";
 
 const schema = z.object({ proofUrl: z.string().url() });
 
@@ -48,10 +48,18 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   });
 
   if (matches) {
-    await sendPushToOwner("admin", {
+    // Confirmado 2026-09-16: antes iba con sendPushToOwner a secas — un
+    // push del sistema operativo que, si se perdía o el admin no lo tenía
+    // activado en ese dispositivo, no dejaba ningún rastro dentro de
+    // DAFLOW. notifyOwner además deja la fila en la campanita, y el link
+    // ahora apunta directo a la pestaña "Urgentes" de Compras (no a
+    // "/admin" a secas) para que sea un clic hasta el botón "Confirmar que
+    // llegó el dinero".
+    const comDept = await prisma.department.findUnique({ where: { code: "COM" }, select: { id: true } });
+    await notifyOwner("admin", {
       title: "🏦 Verifica en tu banco — reembolso de proveedor",
       body: `${resolution.report.request.catalogItem.name} — $${resolution.amount.toFixed(2)} · confirma si ya llegó el dinero`,
-      url: "/admin",
+      url: comDept ? `/admin/dept/${comDept.id}?tab=compras&ptab=urgentes` : "/admin",
     }).catch(() => null);
   }
 
