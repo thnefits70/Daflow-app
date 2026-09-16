@@ -301,6 +301,12 @@ export function StockLevelsPanel({ isAdmin = false }: { isAdmin?: boolean }) {
         return sortKey === "name" ? a.name.localeCompare(b.name) : a.balance - b.balance;
       });
 
+  // Confirmado 2026-09-16, pedido explícito del usuario: avisar cuántos
+  // productos (IDs sueltos, no combos) siguen sin marca — sobre el total
+  // real (`rows`), no sobre `sorted`, para que el número no cambie solo por
+  // estar buscando.
+  const unmarkedCount = rows.filter((r) => r.bodega == null).length;
+
   return (
     <div>
       <TabGuide storageKey="stock-actual">
@@ -426,7 +432,12 @@ export function StockLevelsPanel({ isAdmin = false }: { isAdmin?: boolean }) {
             </button>
           </div>
 
-          <div className="text-[12px] text-steel mb-2">{sorted.length} producto(s)</div>
+          <div className="text-[12px] text-steel mb-2">
+            {sorted.length} producto(s)
+            {unmarkedCount > 0 && (
+              <span className="ml-2 text-gold font-semibold">· {unmarkedCount} sin marca todavía</span>
+            )}
+          </div>
 
       {/* Confirmado 2026-09-15, pedido explícito del usuario: la primera
           versión (8 columnas parejas, todas del mismo tamaño y color) se
