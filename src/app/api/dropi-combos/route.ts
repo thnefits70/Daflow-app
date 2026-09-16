@@ -3,6 +3,16 @@ import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { canManageJustCatalog, dbUserId } from "@/lib/guards";
+import {
+  resolveCostBasisForCatalogItems,
+  computeComboBenistockPrice,
+  computeComboB2BPrice,
+  computeComboDropiPrice,
+  computeComboB2CPrice,
+  B2B_MARGIN_DEFAULT,
+  DROPI_MARGIN_DEFAULT,
+  type ComboComponentInput,
+} from "@/lib/marketProduct";
 
 const CATALOG_ITEM_SELECT = { id: true, name: true, photos: true, justCode: true } as const;
 
@@ -22,15 +32,40 @@ export async function GET() {
     orderBy: { createdAt: "desc" },
     include: { createdBy: { select: { name: true } }, components: { include: { catalogItem: { select: CATALOG_ITEM_SELECT } } } },
   });
+
+  // Confirmado 2026-09-16, pedido explícito del usuario: los mismos
+  // precios de combo que ya existen (Consulta de precios, vista previa al
+  // armar uno) también acá, en el listado — mismo criterio de costo
+  // (proposal-o-Kardex) que usa el resto de la app. Si a algún componente
+  // le falta el costo, el combo entero queda sin precios (null), nunca a
+  // medias.
+  const allComponentIds = [...new Set(combos.flatMap((c) => c.components.map((comp) => comp.catalogItemId)))];
+  const costBasisByItemId = await resolveCostBasisForCatalogItems(allComponentIds);
+
   return NextResponse.json(
-    combos.map((c) => ({
-      id: c.id,
-      code: c.code,
-      label: c.label,
-      createdByName: c.createdBy?.name ?? null,
-      createdAt: c.createdAt,
-      components: c.components.map((comp) => ({ id: comp.id, quantity: comp.quantity, catalogItem: comp.catalogItem })),
-    }))
+    combos.map((c) => {
+      const componentInputs: ComboComponentInput[] | null = c.components.every((comp) => costBasisByItemId.has(comp.catalogItemId))
+        ? c.components.map((comp) => ({ ...costBasisByItemId.get(comp.catalogItemId)!, quantity: comp.quantity }))
+        : null;
+      const prices = componentInputs
+        ? {
+            benistockPrice: computeComboBenistockPrice(componentInputs),
+            b2bPriceDefault: computeComboB2BPrice(componentInputs, B2B_MARGIN_DEFAULT),
+            dropiPrice: computeComboDropiPrice(componentInputs, DROPI_MARGIN_DEFAULT),
+            b2cPrice1Unit: computeComboB2CPrice(componentInputs, 1),
+            b2cPrice2to11: computeComboB2CPrice(componentInputs, 2),
+          }
+        : { benistockPrice: null, b2bPriceDefault: null, dropiPrice: null, b2cPrice1Unit: null, b2cPrice2to11: null };
+      return {
+        id: c.id,
+        code: c.code,
+        label: c.label,
+        createdByName: c.createdBy?.name ?? null,
+        createdAt: c.createdAt,
+        components: c.components.map((comp) => ({ id: comp.id, quantity: comp.quantity, catalogItem: comp.catalogItem })),
+        ...prices,
+      };
+    })
   );
 }
 

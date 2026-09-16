@@ -18,6 +18,11 @@ type ComboRow = {
   code: string;
   label: string | null;
   components: { id: string; quantity: number; catalogItem: { id: string; name: string; justCode: string | null } }[];
+  benistockPrice: number | null;
+  b2bPriceDefault: number | null;
+  dropiPrice: number | null;
+  b2cPrice1Unit: number | null;
+  b2cPrice2to11: number | null;
 };
 
 type StockRow = {
@@ -473,7 +478,7 @@ export function StockLevelsPanel({ isAdmin = false }: { isAdmin?: boolean }) {
                   <span className="font-mono text-[11.5px] font-bold text-teal">{combo.code}</span>
                   {combo.label && <span className="text-[12px] text-steel">{combo.label}</span>}
                 </div>
-                <div className="flex flex-wrap gap-1.5">
+                <div className="flex flex-wrap gap-1.5 mb-2.5">
                   {combo.components.map((c) => {
                     const stockRow = rows?.find((r) => r.catalogItemId === c.catalogItem.id);
                     const stock = stockRow?.balance ?? null;
@@ -488,6 +493,17 @@ export function StockLevelsPanel({ isAdmin = false }: { isAdmin?: boolean }) {
                     );
                   })}
                 </div>
+                {combo.benistockPrice == null ? (
+                  <div className="text-[11px] text-steel">Sin precios — a algún producto de este combo le falta el costo registrado.</div>
+                ) : (
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px] border-t border-rule pt-2">
+                    <span className="text-steel">Benistock <CopyableAmount value={combo.benistockPrice} className="font-mono font-bold text-steel" /></span>
+                    <span className="text-teal">B2B <CopyableAmount value={combo.b2bPriceDefault} className="font-mono font-bold text-teal" /></span>
+                    <span className="text-ink">Dropi <CopyableAmount value={combo.dropiPrice} className="font-mono font-bold text-ink" /></span>
+                    <span className="text-blue">B2C 1 un. <CopyableAmount value={combo.b2cPrice1Unit} className="font-mono font-bold text-blue" /></span>
+                    <span className="text-blue">B2C 2-11 un. <CopyableAmount value={combo.b2cPrice2to11} className="font-mono font-bold text-blue" /></span>
+                  </div>
+                )}
               </div>
             ))}
           </div>
