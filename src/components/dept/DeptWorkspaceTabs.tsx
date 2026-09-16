@@ -580,7 +580,7 @@ export function DeptWorkspaceTabs({
           snapshotPeriods={inventoryControlData.snapshotPeriods}
         />
       )}
-      {tab === "stock-actual" && canManageJustCatalog && <StockLevelsPanel />}
+      {tab === "stock-actual" && canManageJustCatalog && <StockLevelsPanel isAdmin={isAdmin} />}
       {tab === "reingreso" && (canCaptureMerchandiseReentry || canApproveMerchandiseReentry || canCloseMerchandiseReentry) && (
         <MerchandiseReentryPanel
           canCapture={canCaptureMerchandiseReentry}

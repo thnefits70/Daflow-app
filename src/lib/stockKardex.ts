@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { getInventoryLeadId } from "@/lib/guards";
+import { effectiveUnitCost } from "@/lib/purchases";
 
 // Fase 3 (INVESTOCK) — confirmado 2026-09-09: el número de stock propio de
 // DAFLOW, construido como un Kardex real. Cada movimiento (entrada o
@@ -374,4 +375,107 @@ export async function getNegativeStockProducts(): Promise<StockAlertProduct[]> {
   return latestPerItem
     .filter((e) => e.balanceAfter < 0)
     .map((e) => ({ catalogItemId: e.catalogItemId, name: e.catalogItem.name, balance: e.balanceAfter }));
+}
+
+// Confirmado 2026-09-16, pedido explícito del usuario (Camino A): corrección
+// única, una sola vez, del historial de Kardex de ANTES de que
+// approve-receipt/route.ts empezara a sumar el flete real (effectiveUnitCost)
+// a cada compra nueva. Recorre el historial completo de cada producto, en
+// orden, y rehace el promedio ponderado de punta a punta con el flete real
+// donde aplique (un proveedor que nunca cobra flete aparte no cambia nada).
+// Camino A confirmado con el usuario: una SALIDA (venta/despacho) nunca
+// pierde su "costo con el que quedó valorada ese día" (unitCost) — solo se
+// corrige avgCostAfter, que es el número que de verdad se usa en el resto de
+// la app como "promedio vigente". Es seguro correr esto más de una vez:
+// siempre recalcula desde cero a partir de datos reales que no cambian
+// (PurchaseRequest.unitCost/shippingCostTotal), nunca acumula.
+type KardexReplayUpdate = { id: string; unitCost: number | null; avgCostAfter: number; balanceAfter: number };
+
+async function replayCatalogItemKardex(catalogItemId: string): Promise<{ updates: KardexReplayUpdate[]; oldAvgCost: number; newAvgCost: number } | null> {
+  const entries = await prisma.stockKardexEntry.findMany({
+    where: { catalogItemId },
+    orderBy: [{ occurredAt: "asc" }, { createdAt: "asc" }],
+    include: { purchaseRequestReceipt: { include: { request: true } } },
+  });
+  if (entries.length === 0) return null;
+
+  const oldAvgCost = entries[entries.length - 1].avgCostAfter;
+  let balance = 0;
+  let avgCost = 0;
+  const updates: KardexReplayUpdate[] = [];
+
+  for (const e of entries) {
+    if (e.type === "SEED") {
+      // Saldo inicial importado de Just — no hay ninguna compra real detrás
+      // que pueda tener flete que corregir, se deja tal cual.
+      balance = e.quantity;
+      avgCost = e.unitCost ?? 0;
+      updates.push({ id: e.id, unitCost: e.unitCost, avgCostAfter: avgCost, balanceAfter: balance });
+    } else if (e.type === "IN") {
+      const request = e.purchaseRequestReceipt?.request ?? null;
+      // Sin PurchaseRequest detrás (reingreso, devolución de venta, etc.):
+      // no es una compra nueva, es mercadería que vuelve — reafirma el
+      // promedio vigente, mismo comportamiento que ya tenía recordKardexEntry
+      // con unitCost null.
+      const incomingCost = request
+        ? effectiveUnitCost({ unitCost: request.unitCost, quantity: request.quantity, shippingIncluded: request.shippingIncluded, shippingCostTotal: request.shippingCostTotal })
+        : avgCost;
+      const newBalance = balance + e.quantity;
+      const newAvgCost = newBalance > 0 && balance > 0 ? (balance * avgCost + e.quantity * incomingCost) / newBalance : incomingCost;
+      updates.push({ id: e.id, unitCost: incomingCost, avgCostAfter: newAvgCost, balanceAfter: newBalance });
+      balance = newBalance;
+      avgCost = newAvgCost;
+    } else {
+      // OUT — Camino A: unitCost (el costo con el que se valoró esa salida
+      // el día que pasó) se deja exactamente como está, congelado.
+      const newBalance = balance - e.quantity;
+      updates.push({ id: e.id, unitCost: e.unitCost, avgCostAfter: avgCost, balanceAfter: newBalance });
+      balance = newBalance;
+    }
+  }
+
+  return { updates, oldAvgCost, newAvgCost: avgCost };
+}
+
+export type KardexFreightRecomputeRow = { catalogItemId: string; name: string; entriesChanged: number; oldAvgCost: number; newAvgCost: number };
+
+// Solo lectura — no escribe nada. Para poder ver, antes de tocar la base
+// real, qué productos cambiarían y por cuánto.
+export async function previewKardexFreightRecompute(): Promise<KardexFreightRecomputeRow[]> {
+  const items = await prisma.purchaseCatalogItem.findMany({ select: { id: true, name: true } });
+  const rows: KardexFreightRecomputeRow[] = [];
+  for (const item of items) {
+    const result = await replayCatalogItemKardex(item.id);
+    if (!result) continue;
+    if (Math.abs(result.oldAvgCost - result.newAvgCost) > 0.0001) {
+      rows.push({ catalogItemId: item.id, name: item.name, entriesChanged: result.updates.length, oldAvgCost: result.oldAvgCost, newAvgCost: result.newAvgCost });
+    }
+  }
+  return rows;
+}
+
+export type KardexFreightRecomputeResult = { itemsChanged: number; entriesUpdated: number };
+
+// La aplica de verdad — botón admin-only, un producto a la vez en su propia
+// transacción (si uno falla, no se pierde lo ya corregido de los demás).
+export async function applyKardexFreightRecompute(): Promise<KardexFreightRecomputeResult> {
+  const items = await prisma.purchaseCatalogItem.findMany({ select: { id: true } });
+  let itemsChanged = 0;
+  let entriesUpdated = 0;
+  for (const item of items) {
+    const result = await replayCatalogItemKardex(item.id);
+    if (!result || result.updates.length === 0) continue;
+    if (Math.abs(result.oldAvgCost - result.newAvgCost) <= 0.0001) continue;
+    await prisma.$transaction(
+      result.updates.map((u) =>
+        prisma.stockKardexEntry.update({
+          where: { id: u.id },
+          data: { unitCost: u.unitCost, avgCostAfter: u.avgCostAfter, balanceAfter: u.balanceAfter },
+        })
+      )
+    );
+    itemsChanged++;
+    entriesUpdated += result.updates.length;
+  }
+  return { itemsChanged, entriesUpdated };
 }

@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Search, ArrowUpDown, Info, X } from "lucide-react";
+import { Search, ArrowUpDown, Info, X, Wrench } from "lucide-react";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 import { TabGuide } from "@/components/shared/TabGuide";
+
+type FreightRecomputeRow = { catalogItemId: string; name: string; entriesChanged: number; oldAvgCost: number; newAvgCost: number };
 
 type StockRow = {
   catalogItemId: string;
@@ -76,18 +78,62 @@ function FormulaInfoButton({ open, onToggle }: { open: boolean; onToggle: () => 
 // momento, el stock de INVESTOCK de todos los productos — no solo los
 // negativos (ya cubiertos en KPIs financieros) ni solo lo de la última
 // semana subida (Control de Inventario).
-export function StockLevelsPanel() {
+export function StockLevelsPanel({ isAdmin = false }: { isAdmin?: boolean }) {
   const [rows, setRows] = useState<StockRow[] | null>(null);
   const [query, setQuery] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("name");
   const [openFormula, setOpenFormula] = useState<FormulaKey | null>(null);
 
-  useEffect(() => {
+  // Confirmado 2026-09-16, pedido explícito del usuario: corrección única del
+  // historial de Kardex para que "Costo Prom." incluya el flete real de
+  // compras viejas, no solo de las nuevas (ver applyKardexFreightRecompute
+  // en stockKardex.ts) — exclusivo admin, primero vista previa (solo
+  // lectura), después aplicar de verdad con confirmación explícita.
+  const [freightOpen, setFreightOpen] = useState(false);
+  const [freightLoading, setFreightLoading] = useState(false);
+  const [freightPreview, setFreightPreview] = useState<FreightRecomputeRow[] | null>(null);
+  const [freightConfirming, setFreightConfirming] = useState(false);
+  const [freightApplying, setFreightApplying] = useState(false);
+  const [freightResult, setFreightResult] = useState<{ itemsChanged: number; entriesUpdated: number } | null>(null);
+  const [freightError, setFreightError] = useState("");
+
+  function loadRows() {
     fetch("/api/inventory-control/stock-levels")
       .then((r) => (r.ok ? r.json() : []))
       .then(setRows)
       .catch(() => setRows([]));
+  }
+
+  useEffect(() => {
+    loadRows();
   }, []);
+
+  function loadFreightPreview() {
+    setFreightLoading(true);
+    setFreightError("");
+    setFreightResult(null);
+    fetch("/api/inventory-control/kardex-recompute-freight")
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then(setFreightPreview)
+      .catch(() => setFreightError("No se pudo cargar la vista previa."))
+      .finally(() => setFreightLoading(false));
+  }
+
+  async function applyFreightRecompute() {
+    setFreightApplying(true);
+    setFreightError("");
+    const res = await fetch("/api/inventory-control/kardex-recompute-freight", { method: "POST" });
+    setFreightApplying(false);
+    setFreightConfirming(false);
+    if (!res.ok) {
+      setFreightError("No se pudo aplicar la corrección.");
+      return;
+    }
+    const data = await res.json();
+    setFreightResult(data);
+    setFreightPreview(null);
+    loadRows();
+  }
 
   if (rows === null) return <div className="text-steel text-[13px]">Cargando…</div>;
 
@@ -104,6 +150,81 @@ export function StockLevelsPanel() {
       <TabGuide storageKey="stock-actual">
         Acá ves el saldo de INVESTOCK (el Kardex propio de DAFLOW) de cada producto del catálogo, calculado en tiempo real a partir de lo recibido en Compras y lo despachado en Egresos — sin depender de que alguien suba un archivo. Un saldo en rojo significa stock negativo (algo salió sin haber entrado, o hay un error de conteo por revisar).
       </TabGuide>
+
+      {isAdmin && (
+        <div className="border border-rule rounded-md mb-3">
+          <button
+            type="button"
+            className="w-full flex items-center gap-2 px-3 py-2 text-[12px] font-semibold text-steel hover:text-ink cursor-pointer"
+            onClick={() => {
+              setFreightOpen((v) => !v);
+              if (!freightOpen && freightPreview === null && !freightResult) loadFreightPreview();
+            }}
+          >
+            <Wrench size={13} /> Corregir Costo Prom. con el flete real de compras viejas
+          </button>
+          {freightOpen && (
+            <div className="px-3 pb-3 text-[12px]">
+              <p className="text-steel mb-2">
+                Recalcula el &quot;Costo Prom.&quot; de todos los productos para que las compras de antes de hoy también sumen el flete real que ya pagaste (donde aplicó — un proveedor que nunca cobra flete aparte no cambia). Las ventas/salidas ya hechas se quedan tal como están anotadas, no se tocan. Es seguro correr esto más de una vez.
+              </p>
+              {freightError && <div className="text-red mb-2">{freightError}</div>}
+              {freightLoading && <div className="text-steel">Calculando vista previa…</div>}
+              {freightResult && (
+                <div className="text-teal font-semibold mb-2">
+                  ✓ Corregido: {freightResult.itemsChanged} producto{freightResult.itemsChanged === 1 ? "" : "s"} actualizado{freightResult.itemsChanged === 1 ? "" : "s"} ({freightResult.entriesUpdated} línea{freightResult.entriesUpdated === 1 ? "" : "s"} de Kardex).
+                </div>
+              )}
+              {!freightLoading && freightPreview && (
+                <>
+                  {freightPreview.length === 0 ? (
+                    <div className="text-steel">Ningún producto cambiaría — el historial ya está al día.</div>
+                  ) : (
+                    <>
+                      <div className="text-steel mb-1.5">{freightPreview.length} producto(s) cambiarían:</div>
+                      <div className="max-h-52 overflow-y-auto flex flex-col gap-1 mb-2.5 border border-rule rounded-md p-1.5">
+                        {freightPreview.map((r) => (
+                          <div key={r.catalogItemId} className="flex items-center justify-between gap-2 text-[11.5px] px-1.5 py-1">
+                            <span className="truncate flex-1">{r.name}</span>
+                            <span className="font-mono text-steel shrink-0">
+                              {money(r.oldAvgCost)} → <span className="font-bold text-ink">{money(r.newAvgCost)}</span>
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                      {freightConfirming ? (
+                        <div className="flex items-center gap-2">
+                          <span className="text-steel">¿Aplicar esta corrección a la base real?</span>
+                          <button
+                            type="button"
+                            disabled={freightApplying}
+                            className="font-bold text-red cursor-pointer disabled:opacity-50"
+                            onClick={applyFreightRecompute}
+                          >
+                            {freightApplying ? "Aplicando…" : "Sí, aplicar"}
+                          </button>
+                          <button type="button" className="text-steel cursor-pointer" onClick={() => setFreightConfirming(false)}>
+                            Cancelar
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          className="rounded border border-teal bg-teal px-3 py-1.5 text-[12px] font-bold text-navy cursor-pointer"
+                          onClick={() => setFreightConfirming(true)}
+                        >
+                          Aplicar corrección
+                        </button>
+                      )}
+                    </>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="flex items-center gap-2 mb-3">
         <div className="flex items-center gap-1.5 flex-1 rounded border border-rule px-2.5 py-1.5">
           <Search size={13} className="text-steel" />
