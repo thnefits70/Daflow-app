@@ -45,6 +45,28 @@ function money(v: number) {
   return "$" + v.toLocaleString("es-EC", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+// Confirmado 2026-09-16, pedido explícito del usuario: poder copiar
+// cualquier precio con un clic, sin agregar íconos ni botones nuevos que
+// ensucien la tabla — clic sobre el número mismo, y por un instante se
+// convierte en un "✓" antes de volver a mostrar el precio.
+function CopyableAmount({ value, className }: { value: number | null | undefined; className: string }) {
+  const [copied, setCopied] = useState(false);
+  if (value == null) return <span className={className}>—</span>;
+  return (
+    <span
+      className={`${className} cursor-pointer hover:underline`}
+      title="Clic para copiar"
+      onClick={() => {
+        navigator.clipboard?.writeText(money(value)).catch(() => null);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 900);
+      }}
+    >
+      {copied ? "✓" : money(value)}
+    </span>
+  );
+}
+
 // Confirmado 2026-09-16, bug real reportado por el usuario: buscar "Máquina
 // Anti Ronquidos" (con tilde) no encontraba nada porque el nombre real en el
 // catálogo está sin tilde ("Maquina") — la búsqueda comparaba texto exacto,
@@ -419,13 +441,13 @@ export function StockLevelsPanel({ isAdmin = false }: { isAdmin?: boolean }) {
                   <span className="truncate">{r.name}</span>
                 </span>
                 <span className={`text-right font-mono text-[12.5px] font-bold ${r.balance < 0 ? "text-red" : "text-ink"}`}>{r.balance}</span>
-                <span className="text-right font-mono text-[13px] text-steel border-l border-rule pl-3">{r.providerPrice != null ? money(r.providerPrice) : "—"}</span>
-                <span className="text-right font-mono text-[13px] text-steel">{r.bodegaPrice != null ? money(r.bodegaPrice) : "—"}</span>
-                <span className="text-right font-mono text-[13px] text-steel">{r.benistockPrice != null ? money(r.benistockPrice) : "—"}</span>
-                <span className="text-right font-mono text-[13px] font-bold text-teal border-l border-rule pl-3">{r.b2bPriceDefault != null ? money(r.b2bPriceDefault) : "—"}</span>
-                <span className="text-right font-mono text-[13px] font-bold text-ink">{r.dropiPrice != null ? money(r.dropiPrice) : "—"}</span>
-                <span className="text-right font-mono text-[13px] font-bold text-blue">{r.b2cPrice1Unit != null ? money(r.b2cPrice1Unit) : "—"}</span>
-                <span className="text-right font-mono text-[13px] font-bold text-blue">{r.b2cPrice2to11 != null ? money(r.b2cPrice2to11) : "—"}</span>
+                <CopyableAmount value={r.providerPrice} className="text-right font-mono text-[13px] text-steel border-l border-rule pl-3" />
+                <CopyableAmount value={r.bodegaPrice} className="text-right font-mono text-[13px] text-steel" />
+                <CopyableAmount value={r.benistockPrice} className="text-right font-mono text-[13px] text-steel" />
+                <CopyableAmount value={r.b2bPriceDefault} className="text-right font-mono text-[13px] font-bold text-teal border-l border-rule pl-3" />
+                <CopyableAmount value={r.dropiPrice} className="text-right font-mono text-[13px] font-bold text-ink" />
+                <CopyableAmount value={r.b2cPrice1Unit} className="text-right font-mono text-[13px] font-bold text-blue" />
+                <CopyableAmount value={r.b2cPrice2to11} className="text-right font-mono text-[13px] font-bold text-blue" />
               </div>
             ))
           )}
