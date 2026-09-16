@@ -307,6 +307,8 @@ export function LunchPaymentsPanel() {
             <div key={h.id} className="bg-surface border border-rule rounded-md px-3 py-2.5">
               <div className="flex items-center justify-between gap-2">
                 <span className="text-[12.5px] font-semibold">
+                  <span className="text-teal">Semana {Number(dateToIsoWeek(h.weekStart.slice(0, 10)).split("-W")[1])}</span>
+                  {" · "}
                   {dateEs(h.weekStart.slice(0, 10))} al {dateEs(h.weekEnd.slice(0, 10))}
                 </span>
                 <span className="text-[12.5px] font-semibold shrink-0">{money(h.monto)}</span>

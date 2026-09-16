@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { FileText, Download } from "lucide-react";
+import { FileText, Download, ChevronDown, ChevronUp } from "lucide-react";
 
 function isPdfUrl(url: string) {
   return /\.pdf($|\?)/i.test(url);
@@ -33,6 +33,7 @@ export async function downloadFile(url: string, filename: string) {
 
 export function ProofPreview({ url, filename, size = 56 }: { url: string; filename?: string; size?: number }) {
   const [downloading, setDownloading] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const isPdf = isPdfUrl(url);
   const name = filename ?? (isPdf ? "comprobante.pdf" : "comprobante.jpg");
 
@@ -44,31 +45,44 @@ export function ProofPreview({ url, filename, size = 56 }: { url: string; filena
   }
 
   return (
-    <div className="flex items-center gap-2.5">
-      {isPdf ? (
-        <a
-          href={url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="rounded border border-rule bg-cloud flex items-center justify-center shrink-0"
-          style={{ width: size, height: size }}
-          title="Ver comprobante"
-        >
-          <FileText size={size * 0.4} className="text-steel" />
-        </a>
-      ) : (
-        <a href={url} target="_blank" rel="noopener noreferrer" title="Clic derecho para copiar la imagen · clic para verla completa">
-          <img
-            src={url}
-            alt="Comprobante"
-            className="rounded object-cover border border-rule cursor-pointer"
+    <div className={isPdf ? "w-full" : undefined}>
+      <div className="flex items-center gap-2.5">
+        {isPdf ? (
+          <button
+            type="button"
+            onClick={() => setExpanded((v) => !v)}
+            className="rounded border border-rule bg-cloud flex items-center justify-center shrink-0 cursor-pointer"
             style={{ width: size, height: size }}
-          />
-        </a>
+            title={expanded ? "Ocultar documento" : "Ver documento aquí mismo"}
+          >
+            <FileText size={size * 0.4} className="text-steel" />
+          </button>
+        ) : (
+          <a href={url} target="_blank" rel="noopener noreferrer" title="Clic derecho para copiar la imagen · clic para verla completa">
+            <img
+              src={url}
+              alt="Comprobante"
+              className="rounded object-cover border border-rule cursor-pointer"
+              style={{ width: size, height: size }}
+            />
+          </a>
+        )}
+        <button type="button" disabled={downloading} className="flex items-center gap-1 text-[11px] text-blue font-semibold cursor-pointer disabled:opacity-60" onClick={handleDownload}>
+          <Download size={12} /> {downloading ? "Descargando…" : "Descargar"}
+        </button>
+        {isPdf && (
+          <button
+            type="button"
+            onClick={() => setExpanded((v) => !v)}
+            className="flex items-center gap-1 text-[11px] text-steel font-semibold cursor-pointer"
+          >
+            {expanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />} {expanded ? "Ocultar" : "Ver documento"}
+          </button>
+        )}
+      </div>
+      {isPdf && expanded && (
+        <iframe src={url} title={name} className="w-full rounded border border-rule mt-2" style={{ height: 480 }} />
       )}
-      <button type="button" disabled={downloading} className="flex items-center gap-1 text-[11px] text-blue font-semibold cursor-pointer disabled:opacity-60" onClick={handleDownload}>
-        <Download size={12} /> {downloading ? "Descargando…" : "Descargar"}
-      </button>
     </div>
   );
 }

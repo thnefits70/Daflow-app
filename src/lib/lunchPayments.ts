@@ -50,9 +50,22 @@ function formatDateEs(iso: string): string {
   return `${d} de ${MONTH_NAMES_ES[m - 1]} del ${y}`;
 }
 
+// Número de semana ISO-8601 (1-53) del lunes que empieza esa semana. Se
+// muestra en el motivo para que el admin detecte de un vistazo si una semana
+// ya se pagó antes, sin tener que comparar rangos de fechas a mano — el
+// convenio siempre se paga semana a semana hacia adelante, así que un número
+// repetido o salteado es la señal de alerta.
+export function isoWeekNumber(dateIso: string): number {
+  const d = new Date(`${dateIso}T00:00:00Z`);
+  const day = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - day);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  return Math.ceil(((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
+}
+
 // Compartido entre el registro (Daniel) y la verificación (Nairoby) — el
 // motivo que termina en el AdminPaymentRequest debe ser idéntico al que se
 // mostró cuando se registró la semana.
 export function formatLunchMotivo(weekStartIso: string, weekEndIso: string, lunchCount: number, pricePerLunch: number): string {
-  return `Almuerzos semana del ${formatDateEs(weekStartIso)} al ${formatDateEs(weekEndIso)} — ${lunchCount} almuerzos x $${pricePerLunch.toFixed(2)}`;
+  return `Almuerzos semana ${isoWeekNumber(weekStartIso)} (${formatDateEs(weekStartIso)} al ${formatDateEs(weekEndIso)}) — ${lunchCount} almuerzos x $${pricePerLunch.toFixed(2)}`;
 }
