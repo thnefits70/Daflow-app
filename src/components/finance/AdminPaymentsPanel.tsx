@@ -188,8 +188,7 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
   const declarationFileInputRef = useRef<HTMLInputElement>(null);
 
   const [uploadingProofFor, setUploadingProofFor] = useState<string | null>(null);
-  const [confirmingProofFor, setConfirmingProofFor] = useState<string | null>(null);
-  const [proofDraft, setProofDraft] = useState<Record<string, { url: string; name?: string }>>({});
+  const [confirmingPaymentId, setConfirmingPaymentId] = useState<string | null>(null);
   const proofRowIdRef = useRef<string | null>(null);
   const { onPaste: onPasteProof, onMouseEnter: armProofPaste, onMouseLeave: disarmProofPaste } = usePasteFile((file) => {
     const id = proofRowIdRef.current;
@@ -444,49 +443,49 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
     router.refresh();
   }
 
-  // Pedido explícito del usuario (2026-09-16) — antes, al subir el
-  // comprobante se mandaba directo a la IA y, si coincidía, la solicitud
-  // pasaba a PAID de una y desaparecía de la lista sin que el admin llegara
-  // a ver el archivo que subió. Ahora solo se sube y queda en vista previa;
-  // recién con "Confirmar comprobante" se manda a verificar.
+  // Pedido explícito del usuario (2026-09-16) — la IA analiza el comprobante
+  // apenas se sube (un solo llamado a la IA, no dos, por costo), pero ya no
+  // pasa la solicitud a PAID sola: eso lo hace el admin con "Confirmar
+  // pago", botón que queda bloqueado mientras la IA analiza y solo se
+  // habilita si la IA confirmó que coincide.
   async function uploadProofFor(id: string, file: File) {
     setErr("");
     setUploadingProofFor(id);
     const compressed = await compressImage(file);
     const uploaded = await uploadFile(compressed, "admin-payments");
-    setUploadingProofFor(null);
     if (!uploaded.ok) {
+      setUploadingProofFor(null);
       setErr(uploaded.error);
       return;
     }
-    setProofDraft((cur) => ({ ...cur, [id]: { url: uploaded.url, name: uploaded.name } }));
-  }
-
-  function clearProofDraft(id: string) {
-    setProofDraft((cur) => {
-      const next = { ...cur };
-      delete next[id];
-      return next;
-    });
-  }
-
-  async function confirmProofFor(id: string) {
-    const draft = proofDraft[id];
-    if (!draft) return;
-    setErr("");
-    setConfirmingProofFor(id);
     const res = await fetch(`/api/admin-payments/${id}/upload-proof`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ proofUrl: draft.url, proofName: draft.name }),
+      body: JSON.stringify({ proofUrl: uploaded.url, proofName: uploaded.name }),
     });
-    setConfirmingProofFor(null);
+    setUploadingProofFor(null);
     const data = await res.json().catch(() => null);
     if (!res.ok) {
       setErr(data?.error ?? "No se pudo verificar el comprobante.");
       return;
     }
-    clearProofDraft(id);
+    load();
+    router.refresh();
+  }
+
+  // Confirmado 2026-09-16: solo se habilita cuando paymentAiMatch === true
+  // (la IA ya validó la suma de comprobantes). El admin da el visto bueno
+  // final y recién ahí se marca como pagada y se avisa a quien corresponda.
+  async function confirmPayment(id: string) {
+    setErr("");
+    setConfirmingPaymentId(id);
+    const res = await fetch(`/api/admin-payments/${id}/confirm-payment`, { method: "POST" });
+    setConfirmingPaymentId(null);
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      setErr(data?.error ?? "No se pudo confirmar el pago.");
+      return;
+    }
     load();
     router.refresh();
   }
@@ -1811,32 +1810,9 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
                       )}
                     </div>
                   )}
-                  {confirmingProofFor === r.id ? (
+                  {uploadingProofFor === r.id ? (
                     <div className="flex items-center gap-2 text-[12px] text-steel mb-2">
-                      <span className="w-3.5 h-3.5 rounded-full border-2 border-rule border-t-teal animate-spin" /> Verificando con IA…
-                    </div>
-                  ) : proofDraft[r.id] ? (
-                    <div className="mb-2">
-                      <div className="flex items-center gap-1.5 text-[11.5px] text-teal mb-1.5">
-                        <CheckCircle2 size={13} /> Comprobante subido — revisa que sea el correcto antes de confirmar
-                      </div>
-                      <ProofPreview url={proofDraft[r.id].url} size={56} filename={proofDraft[r.id].name ?? "comprobante-de-pago"} />
-                      <div className="flex items-center gap-3 mt-1.5">
-                        <button
-                          type="button"
-                          className="bg-teal text-white text-[12px] font-semibold px-3 py-1.5 rounded cursor-pointer hover:opacity-90"
-                          onClick={() => confirmProofFor(r.id)}
-                        >
-                          Confirmar comprobante
-                        </button>
-                        <button type="button" className="text-steel text-[11px] underline cursor-pointer" onClick={() => clearProofDraft(r.id)}>
-                          Quitar
-                        </button>
-                      </div>
-                    </div>
-                  ) : uploadingProofFor === r.id ? (
-                    <div className="flex items-center gap-2 text-[12px] text-steel mb-2">
-                      <span className="w-3.5 h-3.5 rounded-full border-2 border-rule border-t-teal animate-spin" /> Subiendo…
+                      <span className="w-3.5 h-3.5 rounded-full border-2 border-rule border-t-teal animate-spin" /> Analizando con IA…
                     </div>
                   ) : (
                     <div>
@@ -1858,6 +1834,24 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
                         ¿Es un PDF? Subir documento
                         <input type="file" accept="application/pdf" className="hidden" onChange={(e) => e.target.files?.[0] && uploadProofFor(r.id, e.target.files[0])} />
                       </label>
+                    </div>
+                  )}
+
+                  {r.proofs.length > 0 && (
+                    <div className="mt-2.5">
+                      <button
+                        type="button"
+                        disabled={r.paymentAiMatch !== true || confirmingPaymentId === r.id}
+                        className="bg-teal text-white text-[12px] font-semibold px-3 py-1.5 rounded cursor-pointer hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
+                        onClick={() => confirmPayment(r.id)}
+                      >
+                        {confirmingPaymentId === r.id ? "Confirmando…" : "✓ Confirmar pago y enviar comprobante"}
+                      </button>
+                      {r.paymentAiMatch !== true && (
+                        <div className="text-[10.5px] text-steel mt-1">
+                          {uploadingProofFor === r.id ? "Se habilita cuando la IA termine de analizar." : "Se habilita solo cuando la IA confirme que el comprobante coincide."}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

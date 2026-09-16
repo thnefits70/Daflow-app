@@ -3,16 +3,16 @@ import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { readPaymentProof } from "@/lib/purchaseAi";
-import { markGroupFreightPaid } from "@/lib/pettyCash";
 import { pushOwnerId } from "@/lib/pushOwner";
-import { notifyOwner } from "@/lib/notifications";
 
 const schema = z.object({ proofUrl: z.string().url(), proofName: z.string().optional() });
 
 // Solo admin — es quien de verdad paga. La IA lee el comprobante y lo
-// compara contra el monto solicitado; si no coincide, no avanza a PAID y la
-// UI debe pedir resubir (mismo espíritu bloqueante que el refund-proof de
-// Control de Compras).
+// compara contra el monto solicitado, pero esto NUNCA pasa la solicitud a
+// PAID por sí solo (confirmado 2026-09-16, pedido explícito del usuario): el
+// admin ve el resultado de la IA y da el visto bueno final con
+// /confirm-payment. Si no coincide, la UI pide resubir o usar el override
+// (mismo espíritu bloqueante que el refund-proof de Control de Compras).
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session || session.user.role !== "admin") return NextResponse.json({ error: "No autorizado." }, { status: 403 });
@@ -22,7 +22,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const parsed = schema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: "Datos inválidos." }, { status: 400 });
 
-  const request = await prisma.adminPaymentRequest.findUnique({ where: { id }, include: { proofs: true, lunchWeekSubmission: { select: { verifiedById: true } } } });
+  const request = await prisma.adminPaymentRequest.findUnique({ where: { id }, include: { proofs: true } });
   if (!request) return NextResponse.json({ error: "No encontrada." }, { status: 404 });
   if (request.status !== "PENDING_PAYMENT") return NextResponse.json({ error: "Ya fue pagada." }, { status: 409 });
 
@@ -68,33 +68,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       paymentAiMatch: matches,
       paymentAiNote: note,
       paymentAiReadAmount: sum,
-      ...(matches ? { status: "PAID", paidAt: new Date(), paidById: null } : {}),
     },
     include: { proofs: { orderBy: { createdAt: "asc" } } },
   });
-
-  if (matches && request.linkedGroupId) {
-    await markGroupFreightPaid(request.linkedGroupId, null, parsed.data.proofUrl, request.monto);
-  }
-
-  if (matches && request.createdById) {
-    await notifyOwner(request.createdById, {
-      title: "✅ Ya se pagó tu solicitud",
-      body: `${request.motivo} — $${request.monto.toFixed(2)} · revisa el comprobante`,
-      url: "/area/workspace",
-    }).catch(() => null);
-  }
-
-  // Confirmado 2026-09-08: pedido explícito del usuario — Nairoby (quien
-  // verificó la semana de almuerzos) debe enterarse cuando ya se pagó, para
-  // su registro de auditorías futuras, aunque no sea ella quien la registró.
-  if (matches && request.lunchWeekSubmission?.verifiedById) {
-    await notifyOwner(request.lunchWeekSubmission.verifiedById, {
-      title: "✅ Ya se pagó — Almuerzos",
-      body: `${request.motivo} — $${request.monto.toFixed(2)} · revisa el comprobante`,
-      url: "/area/workspace",
-    }).catch(() => null);
-  }
 
   return NextResponse.json({ ...updated, matches, note });
 }
