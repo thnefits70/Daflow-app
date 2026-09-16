@@ -175,6 +175,40 @@ async function getAutoLowRotationFromStockSnapshots(): Promise<{ catalogItemId: 
   return out;
 }
 
+// Confirmado 2026-09-16, pedido explícito del usuario: además de ATOM y del
+// archivo semanal de Just, ahora INVESTOCK (el Kardex propio, real, sin
+// depender de que nadie suba nada) también aporta candidatos — a partir de
+// cuánto salió de verdad de bodega (StockKardexEntry tipo OUT) en los
+// últimos 7 días. SUMA candidatos, nunca reemplaza a ATOM ni al archivo de
+// Just — ver el porqué en la memoria del proyecto: ATOM detecta ventas que
+// nunca tocan el Kardex (ej. Marcos vendiendo directo por la plataforma de
+// Dropi, sin pasar por Ventas Externas/nuestra bodega), así que perder esa
+// fuente dejaría ciegos a esos ganadores.
+// Umbral de "ganador" confirmado explícitamente por el usuario: 50+
+// unidades despachadas en 7 días. El de baja rotación reusa
+// LOW_ROTATION_THRESHOLD (8), el mismo que ya usan las otras dos fuentes.
+export const KARDEX_WINNER_THRESHOLD = 50;
+
+async function getWinnersAndLowRotationFromKardex(): Promise<{ winnerIds: string[]; lowRotationCandidates: { catalogItemId: string; unitsMoved: number }[] }> {
+  const since = new Date();
+  since.setDate(since.getDate() - 7);
+
+  const outEntries = await prisma.stockKardexEntry.groupBy({
+    by: ["catalogItemId"],
+    where: { type: "OUT", occurredAt: { gte: since } },
+    _sum: { quantity: true },
+  });
+
+  const winnerIds: string[] = [];
+  const lowRotationCandidates: { catalogItemId: string; unitsMoved: number }[] = [];
+  for (const e of outEntries) {
+    const unitsMoved = e._sum.quantity ?? 0;
+    if (unitsMoved >= KARDEX_WINNER_THRESHOLD) winnerIds.push(e.catalogItemId);
+    else if (unitsMoved < LOW_ROTATION_THRESHOLD) lowRotationCandidates.push({ catalogItemId: e.catalogItemId, unitsMoved });
+  }
+  return { winnerIds, lowRotationCandidates };
+}
+
 // Cruza los productos ganadores más recientes — de ATOM (status RENTABLE) Y
 // del reporte mensual de Daniel de 200+ movimientos (MonthlyTopMoverEntry,
 // solo el mes más reciente cargado) — con los productos de baja rotación más
@@ -191,7 +225,7 @@ async function getAutoLowRotationFromStockSnapshots(): Promise<{ catalogItemId: 
 // actorId: quién disparó esta corrida (para el registro de gasto de IA) —
 // "system" cuando corre desde un flujo sin usuario real.
 export async function generateComboSuggestions(actorId = "system"): Promise<{ created: number }> {
-  const [atomStatuses, lowRotationEntries, catalogItems, autoLowRotation, latestTopMoverMonth] = await Promise.all([
+  const [atomStatuses, lowRotationEntries, catalogItems, autoLowRotation, latestTopMoverMonth, kardexSignal] = await Promise.all([
     prisma.atomProductStatus.findMany({
       where: { status: "RENTABLE", isCombo: false, matchedCatalogItemId: { not: null } },
       orderBy: { capturedAt: "desc" },
@@ -204,6 +238,7 @@ export async function generateComboSuggestions(actorId = "system"): Promise<{ cr
     prisma.purchaseCatalogItem.findMany({ select: { id: true, name: true, nicho: true } }),
     getAutoLowRotationFromStockSnapshots(),
     prisma.monthlyTopMoverEntry.findFirst({ orderBy: { month: "desc" }, select: { month: true } }),
+    getWinnersAndLowRotationFromKardex(),
   ]);
 
   // Confirmado 2026-09-04: pedido explícito de Daniel — sus "productos
@@ -225,6 +260,11 @@ export async function generateComboSuggestions(actorId = "system"): Promise<{ cr
   }
   const winnerIds = new Set(latestAtomByItem.keys());
   for (const m of monthlyTopMovers) winnerIds.add(m.catalogItemId);
+  // INVESTOCK (Kardex real) suma sus propios ganadores — nunca reemplaza a
+  // ATOM ni al reporte mensual, por lo mismo de siempre: hay ventas (ej.
+  // Marcos por la plataforma de Dropi directo) que nunca tocan nuestra
+  // bodega y por lo tanto nunca aparecen en el Kardex.
+  for (const id of kardexSignal.winnerIds) winnerIds.add(id);
 
   // Solo la semana más reciente de Daniel por producto decide si sigue de
   // baja rotación — si ya no aparece bajo el umbral la última vez, se saca
@@ -244,6 +284,11 @@ export async function generateComboSuggestions(actorId = "system"): Promise<{ cr
   for (const a of autoLowRotation) {
     if (isLowRotationNow.has(a.catalogItemId)) continue;
     if (a.unitsMoved < LOW_ROTATION_THRESHOLD) isLowRotationNow.set(a.catalogItemId, true);
+  }
+  // Mismo criterio "suma, nunca apaga" para el cruce directo con INVESTOCK.
+  for (const c of kardexSignal.lowRotationCandidates) {
+    if (isLowRotationNow.has(c.catalogItemId)) continue;
+    isLowRotationNow.set(c.catalogItemId, true);
   }
 
   const catalogById = new Map(catalogItems.map((i) => [i.id, i]));
