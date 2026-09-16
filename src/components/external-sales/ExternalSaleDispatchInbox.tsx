@@ -10,6 +10,7 @@ type SaleItemDTO = {
   declaredProductName: string;
   catalogItem: { name: string; photos: string[]; justCode: string | null } | null;
   quantity: number;
+  sellerReferencePhotoUrl: string | null;
 };
 type SaleDTO = {
   id: string;
@@ -69,13 +70,31 @@ export function ExternalSaleDispatchInbox() {
             <span className="font-mono text-[11px] font-bold text-teal">{s.code}</span>
             <span className="text-[11px] text-steel">{s.advisor?.name ?? "—"}</span>
           </div>
-          <div className="flex flex-col gap-0.5">
-            {s.items.map((it) => (
-              <div key={it.id} className="text-[13px] font-semibold flex items-center gap-1.5 flex-wrap">
-                {it.catalogItem && <CatalogCode code={it.catalogItem.justCode} />}
-                <span>{it.catalogItem?.name ?? it.declaredProductName} — {it.quantity} un.</span>
-              </div>
-            ))}
+          <div className="flex flex-col gap-1.5">
+            {s.items.map((it) => {
+              const photo = it.catalogItem?.photos[0] ?? it.sellerReferencePhotoUrl ?? null;
+              const isReference = !it.catalogItem?.photos[0] && !!it.sellerReferencePhotoUrl;
+              return (
+                <div key={it.id} className="flex items-center gap-2">
+                  {photo && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={photo}
+                      alt={it.catalogItem?.name ?? it.declaredProductName}
+                      title={isReference ? "Foto de referencia del asesor (el producto no está matriculado)" : undefined}
+                      className={`w-10 h-10 object-cover rounded border shrink-0 ${isReference ? "border-gold/60" : "border-rule"}`}
+                    />
+                  )}
+                  <div className="min-w-0">
+                    <div className="text-[13px] font-semibold flex items-center gap-1.5 flex-wrap">
+                      {it.catalogItem && <CatalogCode code={it.catalogItem.justCode} />}
+                      <span>{it.catalogItem?.name ?? it.declaredProductName} — {it.quantity} un.</span>
+                    </div>
+                    {isReference && <div className="text-[10px] text-gold">Foto de referencia del asesor — producto sin matricular</div>}
+                  </div>
+                </div>
+              );
+            })}
           </div>
           <div className="text-[11.5px] text-steel mb-2.5">Entrega a: {s.pickupPersonName}</div>
 
