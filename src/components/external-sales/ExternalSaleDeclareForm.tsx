@@ -749,11 +749,20 @@ export function ExternalSaleDeclareForm() {
   const [fixError, setFixError] = useState("");
 
   // Confirmado 2026-09-14: define si esta persona vende B2B (elige margen) o
-  // B2C (margen automático) — se pide una sola vez, nunca cambia mientras
-  // dura la sesión de este formulario.
+  // B2C (margen automático). Confirmado 2026-09-16, pedido de Marcos: quien
+  // tiene canOverride puede cambiarlo por cada venta (antes quedaba fijo
+  // toda la sesión) — así puede declarar "sin recaudo" cuando el cliente ya
+  // pagó, sin dejar de ser su modo por defecto.
   const [isContraEntrega, setIsContraEntrega] = useState<boolean | null>(null);
+  const [canOverrideRecaudo, setCanOverrideRecaudo] = useState(false);
   useEffect(() => {
-    fetch("/api/external-sales/my-pricing-mode").then((r) => (r.ok ? r.json() : null)).then((d) => setIsContraEntrega(d ? !!d.isContraEntrega : null));
+    fetch("/api/external-sales/my-pricing-mode")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!d) return;
+        setIsContraEntrega(!!d.isContraEntrega);
+        setCanOverrideRecaudo(!!d.canOverride);
+      });
   }, []);
 
   function load() {
@@ -811,6 +820,7 @@ export function ExternalSaleDeclareForm() {
         courierNote: courierNote.trim() || undefined,
         freightCost: freightCost.trim() ? Number(freightCost) : undefined,
         facturaSolicitada,
+        isContraEntrega: canOverrideRecaudo ? !!isContraEntrega : undefined,
       });
       setClient(null);
       setItems([]);
@@ -960,6 +970,30 @@ export function ExternalSaleDeclareForm() {
           <label className="block mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-steel">Cliente</label>
           <ClientMatchPicker value={client} onChange={setClient} />
         </div>
+        {canOverrideRecaudo && (
+          <div>
+            <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">¿Esta venta es con recaudo o sin recaudo?</label>
+            <div className="flex gap-1.5">
+              <button
+                type="button"
+                className={`flex-1 rounded border px-2 py-1.5 text-[11.5px] font-semibold cursor-pointer ${isContraEntrega === true ? "border-teal bg-teal text-navy" : "border-rule text-steel"}`}
+                onClick={() => setIsContraEntrega(true)}
+              >
+                Con recaudo
+              </button>
+              <button
+                type="button"
+                className={`flex-1 rounded border px-2 py-1.5 text-[11.5px] font-semibold cursor-pointer ${isContraEntrega === false ? "border-teal bg-teal text-navy" : "border-rule text-steel"}`}
+                onClick={() => setIsContraEntrega(false)}
+              >
+                Sin recaudo
+              </button>
+            </div>
+            <div className="text-[10.5px] text-steel mt-0.5">
+              Con recaudo: el motorizado cobra al cliente al entregar (precio de consumidor). Sin recaudo: el cliente ya pagó (tú eliges el margen y la factura es obligatoria).
+            </div>
+          </div>
+        )}
         {!client ? (
           <div className="text-[11.5px] text-steel">Primero matricula o selecciona al cliente para poder declarar la venta.</div>
         ) : (

@@ -42,6 +42,14 @@ const schema = z.object({
   // Solo tiene efecto real cuando el asesor vende contra entrega — en pago
   // anticipado la factura es obligatoria sin importar esto.
   facturaSolicitada: z.enum(["SI", "NO", "PENDIENTE"]).optional(),
+  // Confirmado 2026-09-16, pedido explícito de Marcos: antes isContraEntrega
+  // quedaba fijo según el perfil del asesor (siempre true para él, siempre
+  // false para el resto) — ahora el asesor elige por venta si esta es "con
+  // recaudo" o "sin recaudo" (ver guía de salida). Solo tiene efecto para
+  // asesores con externalSaleContraEntrega=true en su perfil (ver POST
+  // abajo); para el resto se ignora y sigue siendo siempre false, igual que
+  // antes, así ningún asesor B2B puede autoasignarse precio de consumidor.
+  isContraEntrega: z.boolean().optional(),
 });
 
 // Resuelve cada renglón contra el catálogo real y el precio calculado
@@ -101,7 +109,8 @@ export async function POST(req: NextRequest) {
   if (!client) return NextResponse.json({ error: "Cliente no encontrado." }, { status: 404 });
 
   const advisor = await prisma.user.findUnique({ where: { id: session.user.id }, select: { externalSaleContraEntrega: true } });
-  const isContraEntrega = !!advisor?.externalSaleContraEntrega;
+  const canOverrideRecaudo = !!advisor?.externalSaleContraEntrega;
+  const isContraEntrega = canOverrideRecaudo ? (parsed.data.isContraEntrega ?? true) : false;
 
   let resolvedItems;
   try {
