@@ -99,7 +99,7 @@ export function ExternalSalePackAssignInbox() {
           <div className="text-[11.5px] text-steel mb-2.5">Entrega a: {s.pickupPersonName}</div>
 
           <a
-            href={`/area/ventas-externas/${s.id}/guia`}
+            href={`/ventas-externas/${s.id}/guia`}
             target="_blank"
             rel="noreferrer"
             className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-blue underline mb-2.5"

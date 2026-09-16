@@ -77,7 +77,7 @@ function SaleDetail({ s, canPrintGuide }: { s: SaleDTO; canPrintGuide: boolean }
       <TimelineSteps steps={steps} />
       {canPrintGuide && (
         <a
-          href={`/area/ventas-externas/${s.id}/guia`}
+          href={`/ventas-externas/${s.id}/guia`}
           target="_blank"
           rel="noreferrer"
           className="inline-flex items-center gap-1.5 text-[10.5px] font-semibold text-blue underline"
