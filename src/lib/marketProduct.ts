@@ -17,8 +17,9 @@ export { B2B_MARGIN_OPTIONS, B2B_MARGIN_DEFAULT, B2C_FLETE_PROMEDIO };
 // unidades y flete=10.
 // "Precio puesto en bodega" — proveedor + la parte del flete del lote que le
 // toca a esa unidad. Punto de partida compartido por todos los precios de
-// venta de acá abajo.
-function bodegaUnitCost(batchCost: number, freightCost: number | null, batchUnits: number): number {
+// venta de acá abajo. Exportada (2026-09-15) para poder mostrarla como su
+// propia columna en Stock Actual, sin margen ni seguro encima todavía.
+export function bodegaUnitCost(batchCost: number, freightCost: number | null, batchUnits: number): number {
   return batchCost + (freightCost ?? 0) / batchUnits;
 }
 

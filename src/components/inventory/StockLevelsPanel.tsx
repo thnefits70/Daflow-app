@@ -12,13 +12,16 @@ type StockRow = {
   photos: string[];
   balance: number;
   avgCost: number;
+  providerPrice?: number;
+  bodegaPrice?: number;
   benistockPrice?: number;
   b2bPriceDefault?: number;
+  dropiPrice?: number;
   b2cPrice1Unit?: number;
   b2cPrice2to11?: number;
 };
 type SortKey = "name" | "balance";
-type FormulaKey = "benistock" | "b2b" | "b2c1" | "b2c2";
+type FormulaKey = "proveedor" | "bodega" | "benistock" | "b2b" | "dropi" | "b2c1" | "b2c2";
 
 function money(v: number) {
   return "$" + v.toLocaleString("es-EC", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -30,6 +33,14 @@ function money(v: number) {
 // (computeBenistockPrice/computeB2BPrice/computeB2CPrice), explicadas en
 // palabras simples, no en código.
 const FORMULA_EXPLANATIONS: Record<FormulaKey, { title: string; text: string }> = {
+  proveedor: {
+    title: "Precio proveedor",
+    text: "Lo que cobra el proveedor por una unidad, tal cual — sin sumarle flete ni nada más. Es el mismo costo real que ya usa el Kardex de INVESTOCK (el promedio ponderado de todas las compras).",
+  },
+  bodega: {
+    title: "Puesto en bodega",
+    text: "Precio proveedor + la parte del flete del lote que le toca a esa unidad. Para productos que nunca pasaron por la calculadora de Análisis de Mercado no se conoce el flete por separado todavía, así que este número sale igual al precio proveedor.",
+  },
   benistock: {
     title: "Benistock",
     text: "Costo puesto en bodega (proveedor + flete por unidad) × 1.06 (6% de seguro) + $0.75 (fulfillment). Es el costo real, sin ninguna ganancia — solo de referencia.",
@@ -37,6 +48,10 @@ const FORMULA_EXPLANATIONS: Record<FormulaKey, { title: string; text: string }> 
   b2b: {
     title: "B2B",
     text: "Costo puesto en bodega × 1.06 (6% de seguro) ÷ (1 − 20%). El 20% es el margen de ganancia por defecto para venta al por mayor.",
+  },
+  dropi: {
+    title: "Precio Dropi",
+    text: "Puesto en bodega × 1.06 (6% de seguro) + fulfillment, ÷ (1 − margen). Es el precio que usa Jariel para decidir si le conviene comprar un producto — 20% de margen por defecto, salvo que el producto ya tenga uno propio calculado en Análisis de Mercado.",
   },
   b2c1: {
     title: "B2C · 1 unidad",
@@ -123,23 +138,31 @@ export function StockLevelsPanel() {
           dejando un vacío enorme en el medio. Ahora cada columna de número
           tiene un ancho fijo — se reparten parejo por toda la fila. */}
       <div className="border border-rule rounded-md overflow-x-auto">
-        <div className="grid grid-cols-[auto_minmax(200px,1fr)_90px_110px_110px_110px_110px_120px] gap-3 px-3 pt-2 min-w-[1000px]">
+        <div className="grid grid-cols-[auto_minmax(200px,1fr)_90px_100px_110px_110px_100px_100px_110px_110px] gap-3 px-3 pt-2 min-w-[1300px]">
           <span></span>
           <span></span>
           <span></span>
-          <span className="col-span-2 text-center text-[10px] font-bold uppercase tracking-wide text-steel border-b border-rule pb-1">Costo</span>
-          <span className="col-span-3 text-center text-[10px] font-bold uppercase tracking-wide text-blue border-b border-rule pb-1">Precios de venta</span>
+          <span className="col-span-3 text-center text-[10px] font-bold uppercase tracking-wide text-steel border-b border-rule pb-1">Costo</span>
+          <span className="col-span-4 text-center text-[10px] font-bold uppercase tracking-wide text-blue border-b border-rule pb-1">Precios de venta</span>
         </div>
-        <div className="grid grid-cols-[auto_minmax(200px,1fr)_90px_110px_110px_110px_110px_120px] gap-3 px-3 py-2 bg-cloud text-[11px] font-semibold uppercase tracking-wide text-steel min-w-[1000px]">
+        <div className="grid grid-cols-[auto_minmax(200px,1fr)_90px_100px_110px_110px_100px_100px_110px_110px] gap-3 px-3 py-2 bg-cloud text-[11px] font-semibold uppercase tracking-wide text-steel min-w-[1300px]">
           <span></span>
           <span>Producto</span>
           <span className="text-right">Stock</span>
-          <span className="text-right border-l border-rule pl-3">Costo prom.</span>
+          <span className="flex items-center justify-end gap-1 border-l border-rule pl-3">
+            Proveedor <FormulaInfoButton open={openFormula === "proveedor"} onToggle={() => setOpenFormula((k) => (k === "proveedor" ? null : "proveedor"))} />
+          </span>
+          <span className="flex items-center justify-end gap-1">
+            Puesto en bodega <FormulaInfoButton open={openFormula === "bodega"} onToggle={() => setOpenFormula((k) => (k === "bodega" ? null : "bodega"))} />
+          </span>
           <span className="flex items-center justify-end gap-1">
             Benistock <FormulaInfoButton open={openFormula === "benistock"} onToggle={() => setOpenFormula((k) => (k === "benistock" ? null : "benistock"))} />
           </span>
           <span className="flex items-center justify-end gap-1 border-l border-rule pl-3 text-teal">
             B2B <FormulaInfoButton open={openFormula === "b2b"} onToggle={() => setOpenFormula((k) => (k === "b2b" ? null : "b2b"))} />
+          </span>
+          <span className="flex items-center justify-end gap-1">
+            Dropi <FormulaInfoButton open={openFormula === "dropi"} onToggle={() => setOpenFormula((k) => (k === "dropi" ? null : "dropi"))} />
           </span>
           <span className="flex items-center justify-end gap-1 text-blue">
             B2C 1 un. <FormulaInfoButton open={openFormula === "b2c1"} onToggle={() => setOpenFormula((k) => (k === "b2c1" ? null : "b2c1"))} />
@@ -149,7 +172,7 @@ export function StockLevelsPanel() {
           </span>
         </div>
         {openFormula && (
-          <div className="flex items-start justify-between gap-3 bg-navy border-b border-rule px-3 py-2.5 min-w-[1000px]">
+          <div className="flex items-start justify-between gap-3 bg-navy border-b border-rule px-3 py-2.5 min-w-[1300px]">
             <div className="text-[12px]">
               <span className="font-bold text-ink">{FORMULA_EXPLANATIONS[openFormula].title}: </span>
               <span className="text-steel">{FORMULA_EXPLANATIONS[openFormula].text}</span>
@@ -159,7 +182,7 @@ export function StockLevelsPanel() {
             </button>
           </div>
         )}
-        <div className="max-h-[70vh] overflow-y-auto min-w-[1000px]">
+        <div className="max-h-[70vh] overflow-y-auto min-w-[1300px]">
           {sorted.length === 0 ? (
             <div className="px-3 py-4 text-[12.5px] text-steel">Sin resultados.</div>
           ) : (
@@ -171,7 +194,7 @@ export function StockLevelsPanel() {
             sorted.map((r, i) => (
               <div
                 key={r.catalogItemId}
-                className={`grid grid-cols-[auto_minmax(200px,1fr)_90px_110px_110px_110px_110px_120px] gap-3 px-3 py-2.5 border-t border-rule items-center ${i % 2 === 1 ? "bg-cloud/40" : ""}`}
+                className={`grid grid-cols-[auto_minmax(200px,1fr)_90px_100px_110px_110px_100px_100px_110px_110px] gap-3 px-3 py-2.5 border-t border-rule items-center ${i % 2 === 1 ? "bg-cloud/40" : ""}`}
               >
                 {r.photos[0] ? (
                   // Confirmado 2026-09-15 (pedido de Daniel): foto real del
@@ -187,9 +210,11 @@ export function StockLevelsPanel() {
                   <span className="truncate">{r.name}</span>
                 </span>
                 <span className={`text-right font-mono text-[12.5px] font-bold ${r.balance < 0 ? "text-red" : "text-ink"}`}>{r.balance}</span>
-                <span className="text-right font-mono text-[13px] text-steel border-l border-rule pl-3">{money(r.avgCost)}</span>
+                <span className="text-right font-mono text-[13px] text-steel border-l border-rule pl-3">{r.providerPrice != null ? money(r.providerPrice) : "—"}</span>
+                <span className="text-right font-mono text-[13px] text-steel">{r.bodegaPrice != null ? money(r.bodegaPrice) : "—"}</span>
                 <span className="text-right font-mono text-[13px] text-steel">{r.benistockPrice != null ? money(r.benistockPrice) : "—"}</span>
                 <span className="text-right font-mono text-[13px] font-bold text-teal border-l border-rule pl-3">{r.b2bPriceDefault != null ? money(r.b2bPriceDefault) : "—"}</span>
+                <span className="text-right font-mono text-[13px] font-bold text-ink">{r.dropiPrice != null ? money(r.dropiPrice) : "—"}</span>
                 <span className="text-right font-mono text-[13px] font-bold text-blue">{r.b2cPrice1Unit != null ? money(r.b2cPrice1Unit) : "—"}</span>
                 <span className="text-right font-mono text-[13px] font-bold text-blue">{r.b2cPrice2to11 != null ? money(r.b2cPrice2to11) : "—"}</span>
               </div>
