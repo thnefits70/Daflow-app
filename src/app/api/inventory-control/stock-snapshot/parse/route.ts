@@ -92,7 +92,11 @@ export async function POST(req: NextRequest) {
   const codeKey = findColumn(columnKeys, ["codig"]);
   const descKey = findColumn(columnKeys, ["descripcion"]);
   const costKey = findColumn(columnKeys, ["costo"]);
-  const stockKey = findColumn(columnKeys, ["stock"]);
+  // Confirmado 2026-09-16, bug real reportado por el usuario: el export real
+  // de Provedix ("saldos costeados y valorizados") nombra esta columna
+  // "saldo actual", no "stock actual" — el archivo real lo rechazaba de
+  // punta a punta por esto.
+  const stockKey = findColumn(columnKeys, ["stock", "saldo"]);
 
   if (!codeKey || !descKey || !costKey || !stockKey) {
     const missing = [
