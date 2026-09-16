@@ -1684,6 +1684,33 @@ async function getPurchaseCreditsPendingItem(href: string): Promise<PendingItem 
   };
 }
 
+// Confirmado 2026-09-16: pedido explícito del usuario — la campanita avisa
+// en el momento en que Compras sube un comprobante que sí coincide, pero si
+// ese día no la revisa se pierde entre el resto de avisos. Este ítem se
+// queda fijo en "Pendientes de esta semana" (mismo criterio que "Créditos
+// pendientes de recuperar" arriba) mientras el reembolso siga esperando que
+// el admin confirme en su banco — solo admin puede confirmar (ver isAdmin
+// en confirm-bank/route.ts), así que este ítem solo aplica a esa sección.
+async function getPurchaseRefundBankConfirmPendingItem(href: string): Promise<PendingItem | null> {
+  const rows = await prisma.purchaseUrgentResolution.findMany({
+    where: { type: "REFUND", status: "PENDING", refundAiMatch: true },
+    select: { amount: true, createdAt: true },
+  });
+  if (rows.length === 0) return null;
+
+  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const overdue = rows.some((r) => r.createdAt < cutoff);
+  const total = rows.reduce((s, r) => s + r.amount, 0);
+  return {
+    type: "compras_reembolsos_por_confirmar",
+    icon: "🏦",
+    label: "Reembolsos esperando que confirmes tu banco",
+    meta: `${rows.length} reembolso${rows.length === 1 ? "" : "s"} · $${total.toFixed(2)}${overdue ? " · atrasado" : ""}`,
+    overdue,
+    href,
+  };
+}
+
 // Confirmado 2026-08-17: pedido explícito del usuario (día 3, mismo plazo
 // que Roles de pago) — la captura mensual de Control de Inventario que
 // Daniel hace a mano no tenía ningún aviso en Inicio, había que entrar a
@@ -2672,7 +2699,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     // pestaña interna "Pagos" (?etab=pagos, leída por ExternalSalesPanel).
     const mktDept = await prisma.department.findUnique({ where: { code: "MKT" }, select: { id: true } });
     const mktVentasPagosHref = mktDept ? `/admin/dept/${mktDept.id}?tab=ventas-externas&etab=pagos` : "/admin";
-    const [feedbackItems, recognitionItem, weeklyCheckinStalledItems, pettyCashLow, pettyCashUnconfirmed, adminPaymentsItem, purchaseShippingItem, purchaseCreditsItem, supplierExchangeRejectedItem, overtimeApprovalItem, commissionBonusApprovalItem, salaryAdvanceItem, managementDeductionItem, personalPurchaseFinanceItem, personalPurchaseTransferConfirmItem, personalPurchaseTransferCloseItem, personalPurchaseCashConfirmItem, personalPurchasePaymentWatchItem, payrollTransferItem, payrollIessTransferItem, externalSalePaymentConfirmItem, birthdayItems, nichoBackfillItem, monthlyTopMoversItem, improvementPlanClosureItems] = await Promise.all([
+    const [feedbackItems, recognitionItem, weeklyCheckinStalledItems, pettyCashLow, pettyCashUnconfirmed, adminPaymentsItem, purchaseShippingItem, purchaseCreditsItem, purchaseRefundBankConfirmItem, supplierExchangeRejectedItem, overtimeApprovalItem, commissionBonusApprovalItem, salaryAdvanceItem, managementDeductionItem, personalPurchaseFinanceItem, personalPurchaseTransferConfirmItem, personalPurchaseTransferCloseItem, personalPurchaseCashConfirmItem, personalPurchasePaymentWatchItem, payrollTransferItem, payrollIessTransferItem, externalSalePaymentConfirmItem, birthdayItems, nichoBackfillItem, monthlyTopMoversItem, improvementPlanClosureItems] = await Promise.all([
       getFeedbackPendingItems(),
       getRecognitionAdminPendingItem("/admin/colaborador-destacado"),
       getWeeklyCheckinStalledPendingItems(),
@@ -2681,6 +2708,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       getAdminPaymentsPendingItem(`${financeHref}?tab=pagosadmin`),
       getPurchaseShippingPendingItem(comPaymentsHref),
       getPurchaseCreditsPendingItem(comCreditsHref),
+      getPurchaseRefundBankConfirmPendingItem(comCreditsHref),
       getSupplierExchangeRejectedAdminPendingItem(invEgresosHref),
       getOvertimeApprovalPendingItem("/admin/nomina?tab=pagos"),
       getCommissionAndBonusApprovalPendingItem("/admin/nomina"),
@@ -2709,6 +2737,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       ...(adminPaymentsItem ? [adminPaymentsItem] : []),
       ...(purchaseShippingItem ? [purchaseShippingItem] : []),
       ...(purchaseCreditsItem ? [purchaseCreditsItem] : []),
+      ...(purchaseRefundBankConfirmItem ? [purchaseRefundBankConfirmItem] : []),
       ...(supplierExchangeRejectedItem ? [supplierExchangeRejectedItem] : []),
       ...(overtimeApprovalItem ? [overtimeApprovalItem] : []),
       ...(commissionBonusApprovalItem ? [commissionBonusApprovalItem] : []),
