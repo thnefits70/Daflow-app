@@ -274,12 +274,14 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
   const [savingLunchPrice, setSavingLunchPrice] = useState(false);
 
   const [lunchVerificationQueue, setLunchVerificationQueue] = useState<LunchQueueDTO[]>([]);
+  const [uploadingLunchId, setUploadingLunchId] = useState<string | null>(null);
   const [verifyingLunchId, setVerifyingLunchId] = useState<string | null>(null);
+  const [lunchInvoiceDraft, setLunchInvoiceDraft] = useState<Record<string, { url: string; name?: string }>>({});
   const [lunchVerifyErr, setLunchVerifyErr] = useState<Record<string, string>>({});
   const lunchVerifyRowIdRef = useRef<string | null>(null);
   const { onPaste: onPasteLunchInvoice, onMouseEnter: armLunchInvoicePaste, onMouseLeave: disarmLunchInvoicePaste } = usePasteFile((file) => {
     const id = lunchVerifyRowIdRef.current;
-    if (id) uploadAndVerifyLunch(id, file);
+    if (id) uploadLunchInvoice(id, file);
   });
 
   function loadLunchSettings() {
@@ -465,24 +467,44 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
     router.refresh();
   }
 
+  // Nairoby pidió (2026-09-16) que subir el archivo NO guarde de una — solo
+  // lo sube y lo deja en vista previa. Recién se envía a la IA y se crea la
+  // solicitud cuando ella confirma con el botón "Guardar factura".
+  async function uploadLunchInvoice(id: string, file: File) {
+    setLunchVerifyErr((cur) => ({ ...cur, [id]: "" }));
+    setUploadingLunchId(id);
+    const compressed = await compressImage(file);
+    const uploaded = await uploadFile(compressed, "admin-payments");
+    setUploadingLunchId(null);
+    if (!uploaded.ok) {
+      setLunchVerifyErr((cur) => ({ ...cur, [id]: uploaded.error }));
+      return;
+    }
+    setLunchInvoiceDraft((cur) => ({ ...cur, [id]: { url: uploaded.url, name: uploaded.name } }));
+  }
+
+  function clearLunchInvoiceDraft(id: string) {
+    setLunchInvoiceDraft((cur) => {
+      const next = { ...cur };
+      delete next[id];
+      return next;
+    });
+    setLunchVerifyErr((cur) => ({ ...cur, [id]: "" }));
+  }
+
   // Confirmado 2026-09-08: pedido explícito del usuario — Nairoby baja ella
   // misma la factura del SRI y la sube acá; la IA la cruza contra lo
   // calculado (cantidad × precio) y si no coincide, bloquea (no crea nada) y
   // deja el error puesto para que reintente con otro archivo.
-  async function uploadAndVerifyLunch(id: string, file: File) {
+  async function confirmLunchInvoice(id: string) {
+    const draft = lunchInvoiceDraft[id];
+    if (!draft) return;
     setLunchVerifyErr((cur) => ({ ...cur, [id]: "" }));
     setVerifyingLunchId(id);
-    const compressed = await compressImage(file);
-    const uploaded = await uploadFile(compressed, "admin-payments");
-    if (!uploaded.ok) {
-      setVerifyingLunchId(null);
-      setLunchVerifyErr((cur) => ({ ...cur, [id]: uploaded.error }));
-      return;
-    }
     const res = await fetch(`/api/lunch-payments/${id}/verify`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ invoiceFileUrl: uploaded.url, invoiceFileName: uploaded.name }),
+      body: JSON.stringify({ invoiceFileUrl: draft.url, invoiceFileName: draft.name }),
     });
     setVerifyingLunchId(null);
     const data = await res.json().catch(() => null);
@@ -490,6 +512,7 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
       setLunchVerifyErr((cur) => ({ ...cur, [id]: data?.error ?? "No se pudo verificar la factura." }));
       return;
     }
+    clearLunchInvoiceDraft(id);
     load();
     router.refresh();
   }
@@ -890,6 +913,29 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
                   <div className="flex items-center gap-2 text-[12px] text-steel mb-1">
                     <span className="w-3.5 h-3.5 rounded-full border-2 border-rule border-t-teal animate-spin" /> Verificando con IA…
                   </div>
+                ) : lunchInvoiceDraft[q.id] ? (
+                  <div>
+                    <div className="flex items-center gap-1.5 text-[11.5px] text-teal mb-1.5">
+                      <CheckCircle2 size={13} /> Factura subida — revisa y guarda para verificar
+                    </div>
+                    <ProofPreview url={lunchInvoiceDraft[q.id].url} size={56} filename={lunchInvoiceDraft[q.id].name ?? "factura"} />
+                    <div className="flex items-center gap-3 mt-1.5">
+                      <button
+                        type="button"
+                        className="bg-teal text-white text-[12px] font-semibold px-3 py-1.5 rounded cursor-pointer hover:opacity-90"
+                        onClick={() => confirmLunchInvoice(q.id)}
+                      >
+                        Guardar factura
+                      </button>
+                      <button type="button" className="text-steel text-[11px] underline cursor-pointer" onClick={() => clearLunchInvoiceDraft(q.id)}>
+                        Quitar
+                      </button>
+                    </div>
+                  </div>
+                ) : uploadingLunchId === q.id ? (
+                  <div className="flex items-center gap-2 text-[12px] text-steel mb-1">
+                    <span className="w-3.5 h-3.5 rounded-full border-2 border-rule border-t-teal animate-spin" /> Subiendo…
+                  </div>
                 ) : (
                   <div>
                     <label
@@ -900,11 +946,11 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
                       className="flex items-center gap-1.5 border-[1.5px] border-dashed border-rule rounded px-3 py-2 text-[12px] text-steel cursor-pointer hover:border-teal focus:border-teal focus:outline-none w-fit"
                     >
                       <Upload size={13} /> Subir o pegar la factura (Ctrl+V)
-                      <input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && uploadAndVerifyLunch(q.id, e.target.files[0])} />
+                      <input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && uploadLunchInvoice(q.id, e.target.files[0])} />
                     </label>
                     <label className="flex items-center gap-1 mt-1 text-[10.5px] text-steel cursor-pointer hover:text-teal w-fit">
                       ¿Es un PDF? Subir documento
-                      <input type="file" accept="application/pdf" className="hidden" onChange={(e) => e.target.files?.[0] && uploadAndVerifyLunch(q.id, e.target.files[0])} />
+                      <input type="file" accept="application/pdf" className="hidden" onChange={(e) => e.target.files?.[0] && uploadLunchInvoice(q.id, e.target.files[0])} />
                     </label>
                   </div>
                 )}
