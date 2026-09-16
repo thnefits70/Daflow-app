@@ -110,9 +110,17 @@ export function ExternalSaleReviewInbox() {
             <div className="flex flex-col gap-2 mb-2">
               {s.items.map((it) => (
                 <div key={it.id} className={`rounded-md p-2 border ${it.rejectedAt ? "bg-red/5 border-red/30" : "bg-cloud border-rule"}`}>
-                  <div className="text-[12.5px] font-semibold flex items-center gap-1.5 flex-wrap">
-                    {it.catalogItem && <CatalogCode code={it.catalogItem.justCode} />}
-                    <span>{it.catalogItem?.name ?? it.declaredProductName}</span>
+                  <div className="flex items-start gap-2">
+                    {it.catalogItem?.photos[0] && (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={it.catalogItem.photos[0]} alt={it.catalogItem.name} className="w-10 h-10 object-cover rounded border border-rule shrink-0" />
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[12.5px] font-semibold flex items-center gap-1.5 flex-wrap">
+                        {it.catalogItem && <CatalogCode code={it.catalogItem.justCode} />}
+                        <span>{it.catalogItem?.name ?? it.declaredProductName}</span>
+                      </div>
+                    </div>
                   </div>
                   <div className="text-[11.5px] text-steel">
                     {it.quantity} un. × ${it.unitPrice.toFixed(2)} = <span className="font-bold text-ink">${it.totalAmount.toFixed(2)}</span>
