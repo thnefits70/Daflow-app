@@ -10,6 +10,7 @@ type SaleItemDTO = {
   declaredProductName: string;
   catalogItem: { name: string; photos: string[]; justCode: string | null } | null;
   quantity: number;
+  sellerReferencePhotoUrl: string | null;
 };
 type SaleDTO = {
   id: string;
@@ -69,12 +70,18 @@ export function ExternalSalePackDeliveryPanel() {
           <div key={s.id} className="bg-surface border border-rule rounded-md p-3.5">
             <div className="flex flex-col gap-2 mb-2.5">
               {s.items.map((it) => {
-                const photo = it.catalogItem?.photos[0] ?? null;
+                const photo = it.catalogItem?.photos[0] ?? it.sellerReferencePhotoUrl ?? null;
+                const isReference = !it.catalogItem?.photos[0] && !!it.sellerReferencePhotoUrl;
                 return (
                   <div key={it.id} className="flex items-center gap-3">
                     {photo && (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={photo} alt={it.catalogItem?.name ?? it.declaredProductName} className="w-14 h-14 object-cover rounded border border-rule shrink-0" />
+                      <img
+                        src={photo}
+                        alt={it.catalogItem?.name ?? it.declaredProductName}
+                        title={isReference ? "Foto de referencia del asesor (el producto no está matriculado)" : undefined}
+                        className={`w-14 h-14 object-cover rounded border shrink-0 ${isReference ? "border-gold/60" : "border-rule"}`}
+                      />
                     )}
                     <div className="flex-1 min-w-0">
                       <div className="text-[13px] font-semibold flex items-center gap-1.5 min-w-0">
@@ -82,6 +89,7 @@ export function ExternalSalePackDeliveryPanel() {
                         <span className="truncate">{it.catalogItem?.name ?? it.declaredProductName}</span>
                       </div>
                       <div className="text-[11.5px] text-steel">{it.quantity} un.</div>
+                      {isReference && <div className="text-[10.5px] text-gold">Foto de referencia del asesor — producto sin matricular</div>}
                     </div>
                   </div>
                 );
