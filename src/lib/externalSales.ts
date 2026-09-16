@@ -3,7 +3,7 @@ import { notifyOwner } from "@/lib/notifications";
 import { getInventoryLeadId, getMarketingLeadId, getFinanceLeadId, getFulfilmentLeadId } from "@/lib/guards";
 import { nextMerchandiseOutflowNumber, formatMerchandiseOutflowCode } from "@/lib/merchandiseOutflow";
 import { addBusinessDays } from "@/lib/businessHours";
-import { pickPrimarySupplierPrice, computeB2BPrice, computeB2CPrice, b2cMarginPercentForQuantity, B2B_MARGIN_OPTIONS, B2B_MARGIN_DEFAULT } from "@/lib/marketProduct";
+import { pickPrimarySupplierPrice, computeB2BPrice, computeB2CPriceBreakdown, b2cMarginPercentForQuantity, B2B_MARGIN_OPTIONS, B2B_MARGIN_DEFAULT, type B2CPriceBreakdown } from "@/lib/marketProduct";
 import { getCurrentStockByItemIds } from "@/lib/stockKardex";
 
 const URL_BASE = "/area/workspace?tab=ventas-externas";
@@ -60,7 +60,10 @@ async function resolveCostBasis(catalogItemIds: string[]): Promise<Map<string, C
 // la vista previa en vivo del formulario como la creación/edición real de
 // la venta.
 export type PriceExternalSaleItemInput = { catalogItemId: string; quantity: number; marginPercent?: number };
-export type PricedExternalSaleItem = { catalogItemId: string; unitPrice: number; marginPercentUsed: number };
+// b2cBreakdown solo viene en ventas contra entrega — pedido explícito de
+// Marcos 2026-09-16 para ver cómo se calculó el precio, no solo el
+// resultado (ver B2CPriceBreakdownNote en ExternalSaleDeclareForm.tsx).
+export type PricedExternalSaleItem = { catalogItemId: string; unitPrice: number; marginPercentUsed: number; b2cBreakdown?: B2CPriceBreakdown };
 export type PriceExternalSaleItemsResult = { ok: true; items: PricedExternalSaleItem[] } | { ok: false; error: string };
 
 // El array `items` del resultado viene SIEMPRE en el mismo orden que
@@ -86,8 +89,8 @@ export async function priceExternalSaleItems(params: { isContraEntrega: boolean;
     }
     const items = params.items.map((it) => {
       const cost = byCatalogItemId.get(it.catalogItemId)!;
-      const unitPrice = computeB2CPrice({ ...cost, totalQuantity })!;
-      return { catalogItemId: it.catalogItemId, unitPrice, marginPercentUsed: marginPercent };
+      const breakdown = computeB2CPriceBreakdown({ ...cost, totalQuantity })!;
+      return { catalogItemId: it.catalogItemId, unitPrice: breakdown.finalPrice, marginPercentUsed: marginPercent, b2cBreakdown: breakdown };
     });
     return { ok: true, items };
   }

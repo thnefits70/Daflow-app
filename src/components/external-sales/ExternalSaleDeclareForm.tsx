@@ -66,7 +66,21 @@ type SaleDTO = {
 // tiene efecto real en B2B (el asesor lo elige); en B2C queda sin usar.
 type DraftItem = { product: MatchCatalogItem; quantity: string; marginPercent: number; sellerReferencePhotoUrl?: string | null };
 
-type PreviewRow = { unitPrice: number; marginPercentUsed: number };
+// Desglose del cálculo B2C (pedido explícito de Marcos 2026-09-16, para
+// verlo cada vez que consulta o declara una venta) — solo viene cuando la
+// venta es con recaudo, ver computeB2CPriceBreakdown en lib/marketProduct.ts.
+type B2CBreakdown = {
+  bodegaUnitCost: number;
+  insuranceRatePercent: number;
+  priceWithInsurance: number;
+  marginPercent: number;
+  priceBeforeFreight: number;
+  fletePromedio: number;
+  priceBeforeRounding: number;
+  finalPrice: number;
+};
+
+type PreviewRow = { unitPrice: number; marginPercentUsed: number; b2cBreakdown?: B2CBreakdown };
 
 type FacturaSolicitud = "SI" | "NO" | "PENDIENTE";
 
@@ -116,6 +130,7 @@ function usePricePreview(isContraEntrega: boolean | null, items: DraftItem[]) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           items: items.map((it) => ({ catalogItemId: it.product.id, quantity: Number(it.quantity), marginPercent: isContraEntrega ? undefined : it.marginPercent })),
+          isContraEntrega: isContraEntrega ?? undefined,
         }),
       })
         .then(async (r) => {
@@ -143,6 +158,24 @@ function usePricePreview(isContraEntrega: boolean | null, items: DraftItem[]) {
   }, [isContraEntrega, items, itemsReady]);
 
   return { preview, error };
+}
+
+// Pedido explícito de Marcos 2026-09-16: quiere ver CÓMO se calculó el
+// precio B2C, no solo el número final — cada paso con los montos reales de
+// ese producto, en el mismo orden que hace computeB2CPriceBreakdown.
+function B2CPriceBreakdownNote({ b }: { b: B2CBreakdown }) {
+  return (
+    <div className="mt-1 rounded border border-blue/20 bg-blue/5 px-2 py-1.5 text-[11px] text-steel leading-relaxed">
+      <div className="font-semibold text-ink mb-0.5">Cómo se calculó este precio:</div>
+      Costo en bodega ${b.bodegaUnitCost.toFixed(2)} + {b.insuranceRatePercent}% de seguro = ${b.priceWithInsurance.toFixed(2)}
+      <br />
+      ${b.priceWithInsurance.toFixed(2)} ÷ (100% − {b.marginPercent}% de ganancia) = ${b.priceBeforeFreight.toFixed(2)}
+      <br />
+      ${b.priceBeforeFreight.toFixed(2)} + ${b.fletePromedio.toFixed(2)} de flete promedio = ${b.priceBeforeRounding.toFixed(2)}
+      <br />
+      Se redondea para que termine en .99 → <span className="font-bold text-ink">${b.finalPrice.toFixed(2)}</span>
+    </div>
+  );
 }
 
 // Cantidad, en unidades enteras — el precio ya no se escribe, se calcula
@@ -258,6 +291,7 @@ function FixItemForm({
           {previewReady ? (
             <>
               Precio: <span className="font-bold text-teal">${preview![0].unitPrice.toFixed(2)}</span> <span className="text-steel">({preview![0].marginPercentUsed}% de ganancia)</span>
+              {preview![0].b2cBreakdown && <B2CPriceBreakdownNote b={preview![0].b2cBreakdown} />}
             </>
           ) : (
             <span className="text-steel">calculando precio…</span>
@@ -595,6 +629,7 @@ function ItemsEditor({
                   <>
                     Precio: <span className="font-bold text-teal">${preview![items.length].unitPrice.toFixed(2)}</span>{" "}
                     <span className="text-steel">({preview![items.length].marginPercentUsed}% de ganancia)</span>
+                    {preview![items.length].b2cBreakdown && <B2CPriceBreakdownNote b={preview![items.length].b2cBreakdown!} />}
                   </>
                 ) : (
                   <span className="text-steel">calculando precio…</span>
@@ -693,6 +728,7 @@ function PriceCheckPanel({ searchUrl, isContraEntrega }: { searchUrl: string; is
                       Precio: <span className="font-bold text-teal">${preview![0].unitPrice.toFixed(2)}</span>{" "}
                       <span className="text-steel">({preview![0].marginPercentUsed}% de ganancia) · Total {qty} un.: </span>
                       <span className="font-bold text-ink">${(Number(qty) * preview![0].unitPrice).toFixed(2)}</span>
+                      {preview![0].b2cBreakdown && <B2CPriceBreakdownNote b={preview![0].b2cBreakdown} />}
                     </>
                   ) : (
                     <span className="text-steel">calculando precio…</span>

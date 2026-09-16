@@ -89,6 +89,47 @@ function roundUpToNinetyNineCents(price: number): number {
   return Math.floor(price) + 0.99;
 }
 
+// Confirmado 2026-09-16, pedido explícito de Marcos: quiere ver el
+// desglose de cómo se llegó al precio B2C (no solo el número final) cada
+// vez que consulta o declara una venta — ver B2CPriceBreakdownNote en
+// ExternalSaleDeclareForm.tsx. Mismos pasos exactos que computeB2CPrice de
+// abajo, solo que expone cada paso intermedio en vez de solo el resultado.
+export type B2CPriceBreakdown = {
+  bodegaUnitCost: number;
+  insuranceRatePercent: number;
+  priceWithInsurance: number;
+  marginPercent: number;
+  priceBeforeFreight: number;
+  fletePromedio: number;
+  priceBeforeRounding: number;
+  finalPrice: number;
+};
+
+export function computeB2CPriceBreakdown(params: {
+  batchCost: number;
+  batchUnits: number;
+  freightCost: number | null;
+  insuranceRatePercent: number;
+  totalQuantity: number;
+}): B2CPriceBreakdown | null {
+  const marginPercent = b2cMarginPercentForQuantity(params.totalQuantity);
+  if (marginPercent == null) return null;
+  const bodega = bodegaUnitCost(params.batchCost, params.freightCost, params.batchUnits);
+  const priceWithInsurance = bodega * (1 + params.insuranceRatePercent / 100);
+  const priceBeforeFreight = priceWithInsurance / (1 - marginPercent / 100);
+  const priceBeforeRounding = priceBeforeFreight + B2C_FLETE_PROMEDIO;
+  return {
+    bodegaUnitCost: bodega,
+    insuranceRatePercent: params.insuranceRatePercent,
+    priceWithInsurance,
+    marginPercent,
+    priceBeforeFreight,
+    fletePromedio: B2C_FLETE_PROMEDIO,
+    priceBeforeRounding,
+    finalPrice: roundUpToNinetyNineCents(priceBeforeRounding),
+  };
+}
+
 // Venta al por menor (exclusivo Marcos). El flete promedio se suma DESPUÉS
 // de dividir por el margen — no lleva ganancia encima, se pasa tal cual.
 export function computeB2CPrice(params: {
@@ -98,12 +139,7 @@ export function computeB2CPrice(params: {
   insuranceRatePercent: number;
   totalQuantity: number;
 }): number | null {
-  const marginPercent = b2cMarginPercentForQuantity(params.totalQuantity);
-  if (marginPercent == null) return null;
-  const bodega = bodegaUnitCost(params.batchCost, params.freightCost, params.batchUnits);
-  const withInsurance = bodega * (1 + params.insuranceRatePercent / 100);
-  const rawPrice = withInsurance / (1 - marginPercent / 100) + B2C_FLETE_PROMEDIO;
-  return roundUpToNinetyNineCents(rawPrice);
+  return computeB2CPriceBreakdown(params)?.finalPrice ?? null;
 }
 
 // Confirmado 2026-09-15, pedido explícito del usuario: precios de referencia

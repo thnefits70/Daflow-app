@@ -13,6 +13,12 @@ const schema = z.object({
       marginPercent: z.number().optional(),
     })
   ),
+  // Confirmado 2026-09-16: mismo override que ahora acepta POST
+  // /api/external-sales al declarar — la vista previa tiene que calcular
+  // exactamente el mismo precio que se va a guardar, así que respeta la
+  // misma elección de con/sin recaudo (con la misma restricción: solo
+  // tiene efecto si el asesor tiene externalSaleContraEntrega=true).
+  isContraEntrega: z.boolean().optional(),
 });
 
 // Confirmado 2026-09-14: vista previa en vivo del precio mientras el asesor
@@ -28,7 +34,9 @@ export async function POST(req: NextRequest) {
   if (parsed.data.items.length === 0) return NextResponse.json({ items: [] });
 
   const advisor = await prisma.user.findUnique({ where: { id: session.user.id }, select: { externalSaleContraEntrega: true } });
-  const priced = await priceExternalSaleItems({ isContraEntrega: !!advisor?.externalSaleContraEntrega, items: parsed.data.items });
+  const canOverrideRecaudo = !!advisor?.externalSaleContraEntrega;
+  const isContraEntrega = canOverrideRecaudo ? (parsed.data.isContraEntrega ?? true) : false;
+  const priced = await priceExternalSaleItems({ isContraEntrega, items: parsed.data.items });
   if (!priced.ok) return NextResponse.json({ error: priced.error }, { status: 400 });
 
   return NextResponse.json(priced);
