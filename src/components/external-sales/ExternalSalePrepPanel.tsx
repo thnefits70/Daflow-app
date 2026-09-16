@@ -21,6 +21,7 @@ type SaleDTO = {
   items: SaleItemDTO[];
   pickupPersonName: string;
   courierNote: string | null;
+  advisor: { name: string } | null;
 };
 
 async function postJson(url: string, body?: unknown) {
@@ -71,6 +72,10 @@ export function ExternalSalePrepPanel() {
       {sales.map((s) => {
         return (
           <div key={s.id} className="bg-surface border border-rule rounded-md p-3.5">
+            <div className="flex items-center gap-2 mb-1.5">
+              <span className="font-mono text-[11px] font-bold text-teal">{s.code}</span>
+              <span className="text-[11px] text-steel">Asesor: {s.advisor?.name ?? "—"}</span>
+            </div>
             <div className="flex flex-col gap-2 mb-2.5">
               {s.items.map((it) => {
                 const photo = it.catalogItem?.photos[0] ?? it.sellerReferencePhotoUrl ?? null;
