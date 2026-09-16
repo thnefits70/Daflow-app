@@ -1087,6 +1087,15 @@ model StockKardexJustComparison {
   investockStock Int
   difference     Float // justStock - investockStock
 
+  // Confirmado 2026-09-16, pedido explícito del usuario: además del stock,
+  // comparar también el costo promedio — Just trae el suyo en el mismo
+  // archivo semanal, INVESTOCK ya tiene el propio (Kardex, con flete real
+  // incluido desde 2737554). Mismo criterio: solo referencia, nunca
+  // sobrescribe el costo real de INVESTOCK.
+  justAvgCost       Float @default(0)
+  investockAvgCost  Float @default(0)
+  avgCostDifference Float @default(0) // justAvgCost - investockAvgCost
+
   createdAt DateTime @default(now())
 
   @@unique([period, catalogItemId])

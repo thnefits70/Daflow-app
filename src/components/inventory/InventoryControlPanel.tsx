@@ -155,8 +155,22 @@ export function InventoryControlPanel({
   const [snapDragOver, setSnapDragOver] = useState(false);
   // Fase 3 (INVESTOCK) — confirmado 2026-09-09: comparación calculada sola
   // al guardar, contra el número propio de DAFLOW — ordenada por la
-  // diferencia más grande primero.
-  const [comparison, setComparison] = useState<{ catalogItemId: string; productName: string; productCode: string; justStock: number; investockStock: number; difference: number }[]>([]);
+  // diferencia más grande primero. Extendida 2026-09-16 con el costo
+  // promedio (antes solo comparaba stock) — mismo criterio, nunca
+  // sobrescribe el costo real de INVESTOCK, solo referencia.
+  const [comparison, setComparison] = useState<
+    {
+      catalogItemId: string;
+      productName: string;
+      productCode: string;
+      justStock: number;
+      investockStock: number;
+      difference: number;
+      justAvgCost: number;
+      investockAvgCost: number;
+      avgCostDifference: number;
+    }[]
+  >([]);
   // Confirmado 2026-09-10 (pedido explícito del usuario): "cargar saldo
   // inicial de INVESTOCK" — solo aparece si de verdad hay algo pendiente de
   // cargar (productos que siguen en 0). savedRows se guarda para poder
@@ -178,6 +192,23 @@ export function InventoryControlPanel({
     resetSnapUpload();
     setSnapToast("");
   }
+
+  // Confirmado 2026-09-16, pedido explícito del usuario: la comparación
+  // contra INVESTOCK antes solo se veía justo al subir un archivo nuevo —
+  // ahora, al elegir una semana que ya tiene datos cargados, se vuelve a
+  // consultar sola (sin tener que resubir el archivo). Sin setState
+  // síncrono en el cuerpo (ver feedback_effect_setstate_pattern) — si la
+  // semana elegida no tiene snapshot, simplemente no busca nada; el render
+  // de abajo ya exige snapData?.hasSnapshot, así que datos viejos de otra
+  // semana no se llegan a mostrar aunque comparison no se limpie acá.
+  function loadComparison() {
+    if (!snapData?.hasSnapshot) return;
+    fetch(`/api/inventory-control/stock-comparison?period=${snapPeriod}`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then(setComparison)
+      .catch(() => setComparison([]));
+  }
+  useEffect(loadComparison, [snapPeriod, snapData?.hasSnapshot]);
 
   async function handleSnapFile(file: File) {
     setSnapErr("");
@@ -527,19 +558,29 @@ export function InventoryControlPanel({
           <div className="mt-3 text-teal text-[12.5px] bg-teal/10 border border-teal/30 rounded-md px-3 py-2">{seedResult}</div>
         )}
 
-        {comparison.length > 0 && snapPhase === "idle" && (
+        {snapData?.hasSnapshot && comparison.length > 0 && snapPhase === "idle" && (
           <div className="mt-4">
             <div className="text-[12px] font-semibold text-steel mb-2">
-              Comparación contra INVESTOCK — {comparison.filter((c) => c.difference !== 0).length} de {comparison.length} productos con diferencia
+              Comparación contra INVESTOCK — {comparison.filter((c) => c.difference !== 0).length} de {comparison.length} con stock distinto, {comparison.filter((c) => Math.abs(c.avgCostDifference) > 0.005).length} con costo promedio distinto
+            </div>
+            <div className="text-[10.5px] text-steel-dim mb-2">
+              Solo de referencia — nunca cambia el número real de INVESTOCK. Sirve para que Daniel revise, producto por producto, si la diferencia es un error propio (falta registrar un movimiento) o si Just está desactualizado.
             </div>
             <div className="max-h-72 overflow-y-auto rounded-md border border-rule">
               <table className="w-full text-[12px]">
                 <thead className="sticky top-0 bg-cloud">
                   <tr>
-                    <th className="text-left px-2.5 py-1.5 font-semibold text-steel">Producto</th>
+                    <th rowSpan={2} className="text-left px-2.5 py-1.5 font-semibold text-steel align-bottom">Producto</th>
+                    <th colSpan={3} className="text-center px-2.5 py-1 font-semibold text-steel border-b border-rule">Stock</th>
+                    <th colSpan={3} className="text-center px-2.5 py-1 font-semibold text-steel border-b border-rule border-l border-rule">Costo promedio</th>
+                  </tr>
+                  <tr>
                     <th className="text-right px-2.5 py-1.5 font-semibold text-steel">Just</th>
                     <th className="text-right px-2.5 py-1.5 font-semibold text-steel">INVESTOCK</th>
-                    <th className="text-right px-2.5 py-1.5 font-semibold text-steel">Diferencia</th>
+                    <th className="text-right px-2.5 py-1.5 font-semibold text-steel">Dif.</th>
+                    <th className="text-right px-2.5 py-1.5 font-semibold text-steel border-l border-rule">Just</th>
+                    <th className="text-right px-2.5 py-1.5 font-semibold text-steel">INVESTOCK</th>
+                    <th className="text-right px-2.5 py-1.5 font-semibold text-steel">Dif.</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -550,6 +591,11 @@ export function InventoryControlPanel({
                       <td className="px-2.5 py-1.5 text-right tabular-nums">{c.investockStock}</td>
                       <td className={`px-2.5 py-1.5 text-right tabular-nums font-semibold ${c.difference === 0 ? "text-steel" : "text-red"}`}>
                         {c.difference > 0 ? "+" : ""}{c.difference}
+                      </td>
+                      <td className="px-2.5 py-1.5 text-right tabular-nums border-l border-rule">{money(c.justAvgCost)}</td>
+                      <td className="px-2.5 py-1.5 text-right tabular-nums">{money(c.investockAvgCost)}</td>
+                      <td className={`px-2.5 py-1.5 text-right tabular-nums font-semibold ${Math.abs(c.avgCostDifference) <= 0.005 ? "text-steel" : "text-red"}`}>
+                        {c.avgCostDifference > 0 ? "+" : c.avgCostDifference < 0 ? "-" : ""}{money(Math.abs(c.avgCostDifference))}
                       </td>
                     </tr>
                   ))}

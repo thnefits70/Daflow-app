@@ -8,6 +8,9 @@ export type StockComparisonRow = {
   justStock: number;
   investockStock: number;
   difference: number;
+  justAvgCost: number;
+  investockAvgCost: number;
+  avgCostDifference: number;
 };
 
 // Fase 3 (INVESTOCK) — confirmado 2026-09-09: el puente que faltaba entre
@@ -20,7 +23,7 @@ export type StockComparisonRow = {
 export async function computeAndSaveStockComparison(deptId: string, period: string): Promise<StockComparisonRow[]> {
   const snapshotRows = await prisma.inventoryProductSnapshot.findMany({
     where: { deptId, period },
-    select: { productCode: true, stock: true },
+    select: { productCode: true, stock: true, avgCost: true },
   });
   if (snapshotRows.length === 0) return [];
 
@@ -35,7 +38,7 @@ export async function computeAndSaveStockComparison(deptId: string, period: stri
   for (const snap of snapshotRows) {
     const catalogItem = byCode.get(snap.productCode.trim());
     if (!catalogItem) continue; // no reconocido en el catálogo real — no hay con qué comparar
-    const { balance } = await getCurrentStock(catalogItem.id);
+    const { balance, avgCost } = await getCurrentStock(catalogItem.id);
     results.push({
       catalogItemId: catalogItem.id,
       productName: catalogItem.name,
@@ -43,6 +46,9 @@ export async function computeAndSaveStockComparison(deptId: string, period: stri
       justStock: snap.stock,
       investockStock: balance,
       difference: snap.stock - balance,
+      justAvgCost: snap.avgCost,
+      investockAvgCost: avgCost,
+      avgCostDifference: snap.avgCost - avgCost,
     });
   }
 
@@ -55,6 +61,9 @@ export async function computeAndSaveStockComparison(deptId: string, period: stri
         justStock: r.justStock,
         investockStock: r.investockStock,
         difference: r.difference,
+        justAvgCost: r.justAvgCost,
+        investockAvgCost: r.investockAvgCost,
+        avgCostDifference: r.avgCostDifference,
       })),
     }),
   ]);
@@ -75,6 +84,9 @@ export async function getStockComparisonForPeriod(period: string): Promise<Stock
       justStock: r.justStock,
       investockStock: r.investockStock,
       difference: r.difference,
+      justAvgCost: r.justAvgCost,
+      investockAvgCost: r.investockAvgCost,
+      avgCostDifference: r.avgCostDifference,
     }))
     .sort((a, b) => Math.abs(b.difference) - Math.abs(a.difference));
 }
