@@ -448,6 +448,16 @@ export function PurchaseUrgentReportsPanel({ isAdmin, canAct }: { isAdmin: boole
 
                   {!canAct ? (
                     <div className="text-[11.5px] text-steel-dim italic">Esperando que Compras coordine con el proveedor.</div>
+                  ) : remaining <= 0 ? (
+                    // Confirmado 2026-09-16: la cantidad reclamada ya está
+                    // cubierta por una resolución en curso (ej. reembolso
+                    // esperando confirmación del banco), pero el reporte
+                    // sigue "abierto" hasta que esa resolución se complete
+                    // (ver resolvedQty arriba). Antes se seguía mostrando el
+                    // formulario para crear OTRA resolución con la cantidad
+                    // vieja precargada — el servidor sí la rechazaba (409),
+                    // pero Jariel solo veía el error sin entender por qué.
+                    <div className="text-[11.5px] text-steel-dim italic">Ya se cubrió todo lo faltante con la resolución de arriba. Esperando a que se complete.</div>
                   ) : openReportId === r.id ? (
                     <div className="bg-cloud rounded-md p-3">
                       <div className="flex gap-1.5 mb-2.5 flex-wrap">
@@ -493,9 +503,12 @@ export function PurchaseUrgentReportsPanel({ isAdmin, canAct }: { isAdmin: boole
                       {resQty && Number(resQty) > 0 && (
                         <div className="text-[12px] font-semibold mb-2.5">Monto: {money(Number(resQty) * claimUnitCost(r))}</div>
                       )}
+                      {Number(resQty) > remaining && (
+                        <div className="text-red text-[12px] mb-2">Solo quedan {remaining} un. sin resolver — reduce la cantidad para registrar.</div>
+                      )}
                       {err && <div className="text-red text-[12px] mb-2">{err}</div>}
                       <div className="flex items-center gap-2">
-                        <button type="button" disabled={busy || resProofUploading} className="rounded border border-blue bg-blue px-3.5 py-1.5 text-[12px] font-semibold text-white cursor-pointer disabled:opacity-60" onClick={() => submitResolution(r.id)}>
+                        <button type="button" disabled={busy || resProofUploading || !resQty || Number(resQty) <= 0 || Number(resQty) > remaining} className="rounded border border-blue bg-blue px-3.5 py-1.5 text-[12px] font-semibold text-white cursor-pointer disabled:opacity-60" onClick={() => submitResolution(r.id)}>
                           Registrar
                         </button>
                         <button type="button" className="text-steel text-[12px] cursor-pointer" onClick={() => { clearResolutionDraft(); setOpenReportId(null); }}>Cancelar</button>
