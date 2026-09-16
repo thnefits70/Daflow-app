@@ -4,6 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { canReceivePurchasesTeam, canActOnPurchaseReceiving, getInventoryLeadId } from "@/lib/guards";
 import { notifyOwner } from "@/lib/notifications";
+import { sendPushToOwner } from "@/lib/webPush";
+import { getMarketingArrivalActorIds, getMarketingArrivalDispatchViewerIds } from "@/lib/marketingArrivals";
 
 const schema = z.object({
   receivedQuantity: z.number().int().nonnegative(),
@@ -124,9 +126,18 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     }),
     // Confirmado 2026-08-18: pedido explícito del usuario — todavía no es
     // RECEIVED de verdad, queda pendiente de que Daniel apruebe (ver
-    // approve-receipt/route.ts, que es donde se crea PurchaseReceiptFollowUp
-    // y se avisa a solicitante/marketing, igual que antes hacía esta ruta).
+    // approve-receipt/route.ts, que es donde de verdad pasa a RECEIVED y se
+    // notifica al solicitante, además de correr el Kardex).
     prisma.purchaseRequest.update({ where: { id }, data: { status: "RECEIVED_PENDING_REVIEW" } }),
+    // Confirmado 2026-09-16, pedido explícito del usuario: antes esta fila
+    // (y el aviso a Análisis de Mercado/despacho de abajo) se creaba recién
+    // en approve-receipt/route.ts, cuando Daniel aprobaba. Ahora se crea acá
+    // mismo, apenas bodega registra la recepción — Robert/Heidy/Jariel/Yair
+    // ya pueden confirmar su parte sin esperar la aprobación de Daniel, que
+    // ahora solo importa para Compras (costo real, Kardex, cierre del ciclo
+    // de compra). getMarketingArrivals() en marketingArrivals.ts se ajustó
+    // para mostrar tanto RECEIVED_PENDING_REVIEW como RECEIVED.
+    prisma.purchaseReceiptFollowUp.create({ data: { requestId: id } }),
   ]);
 
   const leadId = await getInventoryLeadId();
@@ -143,6 +154,27 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       url: "/area/workspace?tab=compras&ptab=inventario",
     }).catch(() => null);
   }
+
+  // Confirmado 2026-09-16: aviso a Análisis de Mercado y despacho, movido acá
+  // desde approve-receipt/route.ts (ver comentario arriba) — mismo contenido
+  // y destinatarios que antes, solo que ahora sale apenas bodega registra.
+  const arrivalBody = `${existing.catalogItem.name} · ${parsed.data.receivedQuantity} un.`;
+  const [designIds, advisorIds, dispatchIds] = await Promise.all([
+    getMarketingArrivalActorIds("design"),
+    getMarketingArrivalActorIds("advisor"),
+    getMarketingArrivalDispatchViewerIds(),
+  ]);
+  await Promise.all([
+    ...designIds.map((uid) =>
+      sendPushToOwner(uid, { title: "Llegó mercadería a bodega", body: arrivalBody, url: "/area/workspace?tab=llegadas" }).catch(() => null)
+    ),
+    ...advisorIds.map((uid) =>
+      sendPushToOwner(uid, { title: "Llegó mercadería a bodega", body: arrivalBody, url: "/area/workspace?tab=llegadas" }).catch(() => null)
+    ),
+    ...dispatchIds.map((uid) =>
+      sendPushToOwner(uid, { title: "Llegó mercadería a bodega", body: `${arrivalBody} — ya puedes ir organizando el despacho.`, url: "/area/workspace?tab=llegadas" }).catch(() => null)
+    ),
+  ]);
 
   return NextResponse.json(updated);
 }

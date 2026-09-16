@@ -17,9 +17,14 @@ const arrivalInclude = {
   },
 };
 
+// Confirmado 2026-09-16, pedido explícito del usuario: antes solo mostraba
+// RECEIVED (aprobado por Daniel). Ahora incluye también
+// RECEIVED_PENDING_REVIEW — Robert/Heidy/Jariel/Yair ven la llegada y pueden
+// confirmar su parte apenas bodega registra la recepción, sin esperar la
+// aprobación de Daniel (que ya solo importa para Compras/Kardex).
 export async function getMarketingArrivals() {
   const rows = await prisma.purchaseRequest.findMany({
-    where: { status: "RECEIVED" },
+    where: { status: { in: ["RECEIVED_PENDING_REVIEW", "RECEIVED"] } },
     orderBy: { receipt: { confirmedAt: "desc" } },
     include: arrivalInclude,
   });
