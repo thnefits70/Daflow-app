@@ -32,6 +32,8 @@ type ComboRow = {
   label: string | null;
   bodega: Marca | null;
   components: { id: string; quantity: number; catalogItem: { id: string; name: string; justCode: string | null } }[];
+  providerPrice: number | null;
+  bodegaPrice: number | null;
   benistockPrice: number | null;
   b2bPriceDefault: number | null;
   dropiPrice: number | null;
@@ -550,48 +552,50 @@ export function StockLevelsPanel({ isAdmin = false }: { isAdmin?: boolean }) {
         <div className="mt-5">
           <div className="text-[13px] font-bold text-ink mb-1">Combos registrados</div>
           <div className="text-[11.5px] text-steel mb-2.5">
-            Un combo no es un producto real — no tiene stock propio. Acá ves qué productos reales trae cada uno y cuánto stock real le queda a cada uno, para saber de un vistazo si alcanza para seguir armándolo.
+            Un combo no es un producto real — nunca tiene stock propio (por eso la columna Stock dice &quot;combo&quot;, nunca un número). Mismas columnas de costo y precio que los productos, calculadas sumando cada producto real que trae. Debajo de cada fila ves qué trae y cuánto stock real le queda a cada uno, para saber si alcanza para seguir armándolo.
           </div>
-          <div className="flex flex-col gap-2">
-            {[...combos]
-              .sort((a, b) => Number(a.bodega != null) - Number(b.bodega != null) || a.code.localeCompare(b.code))
-              .map((combo) => (
-              <div key={combo.id} className="bg-surface border border-rule rounded-md p-3">
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="font-mono text-[11.5px] font-bold text-teal">{combo.code}</span>
-                  {combo.label && <span className="text-[12px] text-steel">{combo.label}</span>}
-                  <div className="ml-auto w-[170px]">
-                    <MarcaSelect value={combo.bodega} onChange={(v) => updateComboMarca(combo.id, v)} />
-                  </div>
-                </div>
-                <div className="flex flex-wrap gap-1.5 mb-2.5">
-                  {combo.components.map((c) => {
-                    const stockRow = rows?.find((r) => r.catalogItemId === c.catalogItem.id);
-                    const stock = stockRow?.balance ?? null;
-                    return (
-                      <span key={c.id} className="inline-flex items-center gap-1.5 text-[12px] bg-cloud border border-rule rounded-full px-2.5 py-1">
-                        <CatalogCode code={c.catalogItem.justCode} />
-                        <span>{c.quantity}× {c.catalogItem.name}</span>
-                        <span className={`font-mono font-bold ${stock != null && stock < 0 ? "text-red" : "text-steel"}`}>
-                          ({stock != null ? `stock: ${stock}` : "sin dato"})
-                        </span>
+          <div className="border border-rule rounded-md overflow-x-auto">
+            <div className="min-w-[1380px]">
+              {[...combos]
+                .sort((a, b) => Number(a.bodega != null) - Number(b.bodega != null) || a.code.localeCompare(b.code))
+                .map((combo, i) => (
+                  <div key={combo.id} className={`border-t first:border-t-0 border-rule ${i % 2 === 1 ? "bg-cloud/40" : ""}`}>
+                    <div className="grid grid-cols-[auto_minmax(200px,1fr)_110px_90px_100px_110px_110px_100px_100px_110px_110px] gap-3 px-3 py-2.5 items-center">
+                      <div className="w-8 h-8 rounded border border-dashed border-rule shrink-0 flex items-center justify-center text-steel-dim">
+                        <Wrench size={12} />
+                      </div>
+                      <span className="text-[12.5px] flex items-center gap-1.5 min-w-0">
+                        <span className="font-mono font-bold text-teal shrink-0">{combo.code}</span>
+                        {combo.label && <span className="truncate text-steel">{combo.label}</span>}
                       </span>
-                    );
-                  })}
-                </div>
-                {combo.benistockPrice == null ? (
-                  <div className="text-[11px] text-steel">Sin precios — a algún producto de este combo le falta el costo registrado.</div>
-                ) : (
-                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px] border-t border-rule pt-2">
-                    <span className="text-steel">Benistock <CopyableAmount value={combo.benistockPrice} className="font-mono font-bold text-steel" /></span>
-                    <span className="text-teal">B2B <CopyableAmount value={combo.b2bPriceDefault} className="font-mono font-bold text-teal" /></span>
-                    <span className="text-ink">Dropi <CopyableAmount value={combo.dropiPrice} className="font-mono font-bold text-ink" /></span>
-                    <span className="text-blue">B2C 1 un. <CopyableAmount value={combo.b2cPrice1Unit} className="font-mono font-bold text-blue" /></span>
-                    <span className="text-blue">B2C 2-11 un. <CopyableAmount value={combo.b2cPrice2to11} className="font-mono font-bold text-blue" /></span>
+                      <MarcaSelect value={combo.bodega} onChange={(v) => updateComboMarca(combo.id, v)} />
+                      <span className="text-right font-mono text-[11px] italic text-steel-dim">combo</span>
+                      <CopyableAmount value={combo.providerPrice} className="text-right font-mono text-[13px] text-steel border-l border-rule pl-3" />
+                      <CopyableAmount value={combo.bodegaPrice} className="text-right font-mono text-[13px] text-steel" />
+                      <CopyableAmount value={combo.benistockPrice} className="text-right font-mono text-[13px] text-steel" />
+                      <CopyableAmount value={combo.b2bPriceDefault} className="text-right font-mono text-[13px] font-bold text-teal border-l border-rule pl-3" />
+                      <CopyableAmount value={combo.dropiPrice} className="text-right font-mono text-[13px] font-bold text-ink" />
+                      <CopyableAmount value={combo.b2cPrice1Unit} className="text-right font-mono text-[13px] font-bold text-blue" />
+                      <CopyableAmount value={combo.b2cPrice2to11} className="text-right font-mono text-[13px] font-bold text-blue" />
+                    </div>
+                    <div className="flex flex-wrap gap-1.5 px-3 pb-2.5 pl-[52px]">
+                      {combo.components.map((c) => {
+                        const stockRow = rows?.find((r) => r.catalogItemId === c.catalogItem.id);
+                        const stock = stockRow?.balance ?? null;
+                        return (
+                          <span key={c.id} className="inline-flex items-center gap-1.5 text-[11.5px] bg-cloud border border-rule rounded-full px-2.5 py-1">
+                            <CatalogCode code={c.catalogItem.justCode} />
+                            <span>{c.quantity}× {c.catalogItem.name}</span>
+                            <span className={`font-mono font-bold ${stock != null && stock < 0 ? "text-red" : "text-steel"}`}>
+                              ({stock != null ? `stock: ${stock}` : "sin dato"})
+                            </span>
+                          </span>
+                        );
+                      })}
+                    </div>
                   </div>
-                )}
-              </div>
-            ))}
+                ))}
+            </div>
           </div>
         </div>
       )}

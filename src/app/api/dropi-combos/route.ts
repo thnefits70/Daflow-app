@@ -9,6 +9,7 @@ import {
   computeComboB2BPrice,
   computeComboDropiPrice,
   computeComboB2CPrice,
+  bodegaUnitCost,
   B2B_MARGIN_DEFAULT,
   DROPI_MARGIN_DEFAULT,
   type ComboComponentInput,
@@ -47,15 +48,22 @@ export async function GET() {
       const componentInputs: ComboComponentInput[] | null = c.components.every((comp) => costBasisByItemId.has(comp.catalogItemId))
         ? c.components.map((comp) => ({ ...costBasisByItemId.get(comp.catalogItemId)!, quantity: comp.quantity }))
         : null;
+      // Confirmado 2026-09-16, pedido explícito del usuario: mismo formato de
+      // columnas que los productos individuales (Proveedor/Puesto en
+      // bodega) — para un combo, cada uno es la suma de ese costo × cantidad
+      // de todos sus componentes (no hay un solo "precio proveedor" para un
+      // combo, así que se suma el total real que cuesta armarlo completo).
       const prices = componentInputs
         ? {
+            providerPrice: componentInputs.reduce((acc, c) => acc + c.batchCost * c.quantity, 0),
+            bodegaPrice: componentInputs.reduce((acc, c) => acc + bodegaUnitCost(c.batchCost, c.freightCost, c.batchUnits) * c.quantity, 0),
             benistockPrice: computeComboBenistockPrice(componentInputs),
             b2bPriceDefault: computeComboB2BPrice(componentInputs, B2B_MARGIN_DEFAULT),
             dropiPrice: computeComboDropiPrice(componentInputs, DROPI_MARGIN_DEFAULT),
             b2cPrice1Unit: computeComboB2CPrice(componentInputs, 1),
             b2cPrice2to11: computeComboB2CPrice(componentInputs, 2),
           }
-        : { benistockPrice: null, b2bPriceDefault: null, dropiPrice: null, b2cPrice1Unit: null, b2cPrice2to11: null };
+        : { providerPrice: null, bodegaPrice: null, benistockPrice: null, b2bPriceDefault: null, dropiPrice: null, b2cPrice1Unit: null, b2cPrice2to11: null };
       return {
         id: c.id,
         code: c.code,
