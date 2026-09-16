@@ -288,9 +288,18 @@ export function StockLevelsPanel({ isAdmin = false }: { isAdmin?: boolean }) {
 
   // Mientras hay una búsqueda activa, se ordena por qué tan buena es la
   // coincidencia (arriba) — el toggle de orden manual solo aplica sin buscar.
+  // Confirmado 2026-09-16, pedido explícito de Daniel: para etiquetar la
+  // marca rápido, lo sin etiquetar (bodega=null) siempre queda arriba y lo
+  // ya etiquetado se va para abajo — así un producto nuevo que se registre
+  // (sin marca todavía por defecto) también aparece arriba solo, sin tener
+  // que acordarse de buscarlo.
   const sorted = queryTrimmed
     ? filtered
-    : [...filtered].sort((a, b) => (sortKey === "name" ? a.name.localeCompare(b.name) : a.balance - b.balance));
+    : [...filtered].sort((a, b) => {
+        const untaggedDiff = Number(a.bodega != null) - Number(b.bodega != null);
+        if (untaggedDiff !== 0) return untaggedDiff;
+        return sortKey === "name" ? a.name.localeCompare(b.name) : a.balance - b.balance;
+      });
 
   return (
     <div>
@@ -533,7 +542,9 @@ export function StockLevelsPanel({ isAdmin = false }: { isAdmin?: boolean }) {
             Un combo no es un producto real — no tiene stock propio. Acá ves qué productos reales trae cada uno y cuánto stock real le queda a cada uno, para saber de un vistazo si alcanza para seguir armándolo.
           </div>
           <div className="flex flex-col gap-2">
-            {combos.map((combo) => (
+            {[...combos]
+              .sort((a, b) => Number(a.bodega != null) - Number(b.bodega != null) || a.code.localeCompare(b.code))
+              .map((combo) => (
               <div key={combo.id} className="bg-surface border border-rule rounded-md p-3">
                 <div className="flex items-center gap-2 mb-2">
                   <span className="font-mono text-[11.5px] font-bold text-teal">{combo.code}</span>
