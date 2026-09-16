@@ -296,14 +296,29 @@ export function StockLevelsPanel({ isAdmin = false }: { isAdmin?: boolean }) {
   // (sin marca todavía por defecto) también aparece arriba solo, sin tener
   // que acordarse de buscarlo.
   // Confirmado 2026-09-16, pedido explícito del usuario: el mismo
-  // buscador (código o nombre, palabras clave) también filtra los combos.
+  // buscador (código o nombre, palabras clave) también filtra los combos —
+  // y debe encontrar un combo tanto por su propio código/nombre COMO por
+  // cualquier producto real que trae adentro (ej. buscar "138397" debe
+  // encontrar el combo que tiene ese producto como componente, no solo
+  // combos cuyo propio código empiece con eso).
   const filteredCombos = !queryTrimmed
     ? combos
     : combos
         .map((c) => {
-          const nameNorm = normalize(c.label ?? "");
-          const directMatch = nameNorm.includes(normalize(queryTrimmed)) || c.code.toLowerCase().includes(queryTrimmed.toLowerCase());
-          const matchCount = queryWords.filter((w) => nameNorm.includes(w)).length;
+          const ownNameNorm = normalize(c.label ?? "");
+          const ownDirectMatch = ownNameNorm.includes(normalize(queryTrimmed)) || c.code.toLowerCase().includes(queryTrimmed.toLowerCase());
+          const ownMatchCount = queryWords.filter((w) => ownNameNorm.includes(w)).length;
+
+          const componentHits = c.components.map((comp) => {
+            const compNameNorm = normalize(comp.catalogItem.name);
+            const compDirectMatch =
+              compNameNorm.includes(normalize(queryTrimmed)) || (comp.catalogItem.justCode ?? "").toLowerCase().includes(queryTrimmed.toLowerCase());
+            const compMatchCount = queryWords.filter((w) => compNameNorm.includes(w)).length;
+            return { directMatch: compDirectMatch, matchCount: compMatchCount };
+          });
+
+          const directMatch = ownDirectMatch || componentHits.some((h) => h.directMatch);
+          const matchCount = ownMatchCount + componentHits.reduce((acc, h) => acc + h.matchCount, 0);
           return { combo: c, directMatch, matchCount };
         })
         .filter((x) => x.directMatch || x.matchCount > 0)
