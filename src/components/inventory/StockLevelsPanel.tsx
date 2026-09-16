@@ -295,6 +295,21 @@ export function StockLevelsPanel({ isAdmin = false }: { isAdmin?: boolean }) {
   // ya etiquetado se va para abajo — así un producto nuevo que se registre
   // (sin marca todavía por defecto) también aparece arriba solo, sin tener
   // que acordarse de buscarlo.
+  // Confirmado 2026-09-16, pedido explícito del usuario: el mismo
+  // buscador (código o nombre, palabras clave) también filtra los combos.
+  const filteredCombos = !queryTrimmed
+    ? combos
+    : combos
+        .map((c) => {
+          const nameNorm = normalize(c.label ?? "");
+          const directMatch = nameNorm.includes(normalize(queryTrimmed)) || c.code.toLowerCase().includes(queryTrimmed.toLowerCase());
+          const matchCount = queryWords.filter((w) => nameNorm.includes(w)).length;
+          return { combo: c, directMatch, matchCount };
+        })
+        .filter((x) => x.directMatch || x.matchCount > 0)
+        .sort((a, b) => Number(b.directMatch) - Number(a.directMatch) || b.matchCount - a.matchCount)
+        .map((x) => x.combo);
+
   const sorted = queryTrimmed
     ? filtered
     : [...filtered].sort((a, b) => {
@@ -468,27 +483,33 @@ export function StockLevelsPanel({ isAdmin = false }: { isAdmin?: boolean }) {
         </button>
       </div>
 
+      {/* Confirmado 2026-09-16, pedido explícito del usuario: el buscador
+          debe funcionar igual en "Solo combos" (por código o nombre del
+          combo) — antes vivía solo dentro del bloque de productos, así que
+          desaparecía junto con la tabla al elegir esa vista. */}
+      <div className="flex items-center gap-2 mb-3">
+        <div className="flex items-center gap-1.5 flex-1 rounded border border-rule px-2.5 py-1.5">
+          <Search size={13} className="text-steel" />
+          <input
+            className="flex-1 text-[13px] outline-none bg-transparent"
+            placeholder="Buscar producto o código…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        </div>
+        {viewMode !== "combos" && (
+          <button
+            type="button"
+            className="flex items-center gap-1.5 rounded border border-rule px-3 py-1.5 text-[12px] font-semibold cursor-pointer whitespace-nowrap"
+            onClick={() => setSortKey((k) => (k === "name" ? "balance" : "name"))}
+          >
+            <ArrowUpDown size={13} /> {sortKey === "name" ? "Ordenar por stock" : "Ordenar por nombre"}
+          </button>
+        )}
+      </div>
+
       {viewMode !== "combos" && (
         <>
-          <div className="flex items-center gap-2 mb-3">
-            <div className="flex items-center gap-1.5 flex-1 rounded border border-rule px-2.5 py-1.5">
-              <Search size={13} className="text-steel" />
-              <input
-                className="flex-1 text-[13px] outline-none bg-transparent"
-                placeholder="Buscar producto o código…"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-              />
-            </div>
-            <button
-              type="button"
-              className="flex items-center gap-1.5 rounded border border-rule px-3 py-1.5 text-[12px] font-semibold cursor-pointer whitespace-nowrap"
-              onClick={() => setSortKey((k) => (k === "name" ? "balance" : "name"))}
-            >
-              <ArrowUpDown size={13} /> {sortKey === "name" ? "Ordenar por stock" : "Ordenar por nombre"}
-            </button>
-          </div>
-
           <div className="text-[12px] text-steel mb-2">
             {sorted.length} producto(s)
             {unmarkedCount > 0 && (
@@ -558,7 +579,11 @@ export function StockLevelsPanel({ isAdmin = false }: { isAdmin?: boolean }) {
         <div className="px-3 py-4 text-[12.5px] text-steel">Todavía no hay combos registrados.</div>
       )}
 
-      {viewMode !== "products" && combos.length > 0 && (
+      {viewMode === "combos" && combos.length > 0 && filteredCombos.length === 0 && (
+        <div className="px-3 py-4 text-[12.5px] text-steel">Ningún combo coincide con esa búsqueda.</div>
+      )}
+
+      {viewMode !== "products" && filteredCombos.length > 0 && (
         <div className="mt-5">
           <div className="text-[13px] font-bold text-ink mb-1">Combos registrados</div>
           <div className="text-[11.5px] text-steel mb-2.5">
@@ -567,7 +592,7 @@ export function StockLevelsPanel({ isAdmin = false }: { isAdmin?: boolean }) {
           <div className="border border-rule rounded-md overflow-x-auto">
             {columnsHeader}
             <div className="min-w-[1380px]">
-              {[...combos]
+              {[...filteredCombos]
                 .sort((a, b) => Number(a.bodega != null) - Number(b.bodega != null) || a.code.localeCompare(b.code))
                 .map((combo, i) => (
                   <div key={combo.id} className={`border-t first:border-t-0 border-rule ${i % 2 === 1 ? "bg-cloud/40" : ""}`}>
