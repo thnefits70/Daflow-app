@@ -10,12 +10,8 @@ import {
   computeMarketProductSalePrice,
   pickPrimarySupplierPrice,
   B2B_MARGIN_DEFAULT,
+  DROPI_MARGIN_DEFAULT,
 } from "@/lib/marketProduct";
-
-// Confirmado 2026-09-15, mismo default que usa Análisis de Mercado
-// (marketProduct.ts: marginPercent ?? 20) cuando un producto todavía no
-// pasó por la calculadora de Jariel — para "Precio Dropi" estimado acá.
-const DROPI_MARGIN_DEFAULT = 20;
 
 // Confirmado 2026-09-10 (pedido explícito del usuario): pantalla "Stock
 // actual" — mismo permiso que "Etiquetas de percha" (Daniel, líder de

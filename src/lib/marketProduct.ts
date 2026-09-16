@@ -3,6 +3,63 @@ import { B2B_MARGIN_OPTIONS, B2B_MARGIN_DEFAULT, B2C_FLETE_PROMEDIO } from "@/li
 
 export { B2B_MARGIN_OPTIONS, B2B_MARGIN_DEFAULT, B2C_FLETE_PROMEDIO };
 
+// Confirmado 2026-09-15/16: mismo default que usa Análisis de Mercado
+// (marginPercent ?? 20) cuando un producto todavía no pasó por la
+// calculadora de Jariel — usado tanto en Stock Actual como en el Precio
+// Dropi de combos.
+export const DROPI_MARGIN_DEFAULT = 20;
+
+export type CostBasis = { batchCost: number; batchUnits: number; freightCost: number | null; insuranceRatePercent: number };
+
+// Confirmado 2026-09-14 (movida acá 2026-09-16 para reusarla desde
+// combos, que necesitaban exactamente lo mismo — antes solo vivía sin
+// exportar en externalSales.ts): costo base de un producto — en orden de
+// prioridad: (1) si pasó por la calculadora de Jariel en Análisis de
+// Mercado (MarketProductProposal), se usan sus datos exactos; (2) si no,
+// pero ya tiene costo promedio real de Kardex (INVESTOCK) mayor a 0, ese
+// costo promedio SE USA DIRECTO como "precio puesto en bodega" (batchUnits:1,
+// freightCost:null, seguro 6% por defecto); (3) si no tiene ninguno de los
+// dos, el producto no se puede calcular — queda ausente del mapa devuelto.
+export async function resolveCostBasisForCatalogItems(catalogItemIds: string[]): Promise<Map<string, CostBasis>> {
+  const ids = [...new Set(catalogItemIds)];
+  if (ids.length === 0) return new Map();
+
+  const [proposals, kardexEntries] = await Promise.all([
+    prisma.marketProductProposal.findMany({
+      where: { catalogItemId: { in: ids } },
+      include: { supplierPrices: true },
+    }),
+    prisma.stockKardexEntry.findMany({
+      where: { catalogItemId: { in: ids } },
+      distinct: ["catalogItemId"],
+      orderBy: [{ catalogItemId: "asc" }, { occurredAt: "desc" }, { createdAt: "desc" }],
+      select: { catalogItemId: true, avgCostAfter: true },
+    }),
+  ]);
+
+  const byCatalogItemId = new Map<string, CostBasis>();
+  const proposalCatalogItemIds = new Set<string>();
+  for (const p of proposals) {
+    if (!p.catalogItemId) continue;
+    const supplier = pickPrimarySupplierPrice(p.supplierPrices);
+    if (!supplier) continue;
+    proposalCatalogItemIds.add(p.catalogItemId);
+    byCatalogItemId.set(p.catalogItemId, {
+      batchCost: supplier.batchCost,
+      batchUnits: supplier.batchUnits,
+      freightCost: supplier.freightCost,
+      insuranceRatePercent: p.insuranceRatePercent,
+    });
+  }
+
+  for (const e of kardexEntries) {
+    if (proposalCatalogItemIds.has(e.catalogItemId)) continue;
+    if (e.avgCostAfter > 0) byCatalogItemId.set(e.catalogItemId, { batchCost: e.avgCostAfter, batchUnits: 1, freightCost: null, insuranceRatePercent: 6 });
+  }
+
+  return byCatalogItemId;
+}
+
 // Fase 2 (Análisis de Mercado) — confirmado 2026-09-09 con la especificación
 // completa de Bryan (líder de MKT). Nunca se confía en el precio calculado
 // que manda el navegador: siempre se recalcula acá, server-side.
@@ -154,7 +211,7 @@ export function computeB2CPrice(params: {
 // componente, y agregan el cargo por envío una sola vez al final.
 export const COMBO_FULFILLMENT_COST = 0.75;
 
-type ComboComponentInput = {
+export type ComboComponentInput = {
   batchCost: number;
   batchUnits: number;
   freightCost: number | null;
@@ -168,6 +225,15 @@ export function computeComboBenistockPrice(components: ComboComponentInput[]): n
     return acc + bodega * c.quantity;
   }, 0);
   return sum + COMBO_FULFILLMENT_COST;
+}
+
+// Confirmado 2026-09-16, pedido explícito del usuario: los combos se suben
+// a Dropi, así que necesitan su propio "Precio Dropi" automático — mismo
+// criterio que el de un producto individual (bodega con seguro + fulfillment,
+// ÷ margen), reusando el Benistock del combo (que ya suma el fulfillment una
+// sola vez) en vez de repetir esa suma.
+export function computeComboDropiPrice(components: ComboComponentInput[], marginPercent: number): number {
+  return computeComboBenistockPrice(components) / (1 - marginPercent / 100);
 }
 
 export function computeComboB2BPrice(components: ComboComponentInput[], marginPercent: number): number {

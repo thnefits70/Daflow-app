@@ -35,6 +35,37 @@ export function DropiComboManager() {
   const [err, setErr] = useState("");
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
+  // Confirmado 2026-09-16, pedido explícito del usuario: los combos se
+  // suben a Dropi, así que mientras se arman acá (antes de guardar nada) se
+  // ve en vivo el Precio Dropi calculado con el costo real de cada
+  // producto — nunca se guarda, es solo vista previa. Si a algún producto
+  // le falta el costo, se avisa explícito en vez de callarlo.
+  const [dropiPreview, setDropiPreview] = useState<{ dropiPrice: number | null; missingCostItemIds: string[] } | null>(null);
+  const [loadingDropiPreview, setLoadingDropiPreview] = useState(false);
+
+  function loadDropiPreview() {
+    if (components.length === 0) {
+      setDropiPreview(null);
+      return;
+    }
+    setLoadingDropiPreview(true);
+    fetch("/api/dropi-combos/price-preview", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ components: components.map((c) => ({ catalogItemId: c.catalogItem.id, quantity: c.quantity })) }),
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then(setDropiPreview)
+      .catch(() => setDropiPreview(null))
+      .finally(() => setLoadingDropiPreview(false));
+  }
+
+  useEffect(() => {
+    const t = setTimeout(loadDropiPreview, 400);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [components]);
+
   // Guardado automático: si sale a revisar otra cosa antes de terminar de
   // registrar/editar este combo, al volver encuentra código/nombre/productos
   // tal como los había dejado. Solo activo mientras el formulario está
@@ -161,6 +192,26 @@ export function DropiComboManager() {
           </div>
 
           <ComboComponentBuilder components={components} onChange={setComponents} />
+
+          {components.length > 0 && (
+            <div className="mt-2.5 text-[12px]">
+              {loadingDropiPreview ? (
+                <span className="text-steel">Calculando Precio Dropi…</span>
+              ) : dropiPreview?.missingCostItemIds.length ? (
+                <span className="text-red">
+                  ⚠ No se puede calcular el Precio Dropi — a{" "}
+                  {dropiPreview.missingCostItemIds
+                    .map((id) => components.find((c) => c.catalogItem.id === id)?.catalogItem.name ?? id)
+                    .join(", ")}{" "}
+                  le falta el costo registrado.
+                </span>
+              ) : dropiPreview?.dropiPrice != null ? (
+                <span className="font-semibold text-ink">
+                  Precio Dropi estimado: <span className="text-teal font-bold">${dropiPreview.dropiPrice.toFixed(2)}</span> (20% de margen, incluye fulfillment $0.75)
+                </span>
+              ) : null}
+            </div>
+          )}
 
           <div className="flex gap-2 mt-3">
             <button type="button" className="flex-1 rounded border border-rule px-3 py-2 text-[12px] font-semibold cursor-pointer" onClick={cancelForm}>

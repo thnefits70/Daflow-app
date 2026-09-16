@@ -7,6 +7,19 @@ import { TabGuide } from "@/components/shared/TabGuide";
 
 type FreightRecomputeRow = { catalogItemId: string; name: string; entriesChanged: number; oldAvgCost: number; newAvgCost: number };
 
+// Confirmado 2026-09-16, pedido explícito del usuario: los combos de Dropi
+// (DropiCombo) no son productos reales — no tienen ni deben tener su propio
+// stock. Se muestran acá aparte, solo como referencia (código/nombre +
+// productos reales que traen), y el stock de CADA producto que lo compone
+// se saca cruzando por catalogItemId contra la misma lista de arriba —
+// nunca se inventa un stock para el combo en sí.
+type ComboRow = {
+  id: string;
+  code: string;
+  label: string | null;
+  components: { id: string; quantity: number; catalogItem: { id: string; name: string; justCode: string | null } }[];
+};
+
 type StockRow = {
   catalogItemId: string;
   name: string;
@@ -123,6 +136,7 @@ export function StockLevelsPanel({ isAdmin = false }: { isAdmin?: boolean }) {
   const [freightApplying, setFreightApplying] = useState(false);
   const [freightResult, setFreightResult] = useState<{ itemsChanged: number; entriesUpdated: number } | null>(null);
   const [freightError, setFreightError] = useState("");
+  const [combos, setCombos] = useState<ComboRow[]>([]);
 
   function loadRows() {
     fetch("/api/inventory-control/stock-levels")
@@ -133,6 +147,10 @@ export function StockLevelsPanel({ isAdmin = false }: { isAdmin?: boolean }) {
 
   useEffect(() => {
     loadRows();
+    fetch("/api/dropi-combos")
+      .then((r) => (r.ok ? r.json() : []))
+      .then(setCombos)
+      .catch(() => setCombos([]));
   }, []);
 
   function loadFreightPreview() {
@@ -383,6 +401,40 @@ export function StockLevelsPanel({ isAdmin = false }: { isAdmin?: boolean }) {
           )}
         </div>
       </div>
+
+      {combos.length > 0 && (
+        <div className="mt-5">
+          <div className="text-[13px] font-bold text-ink mb-1">Combos registrados</div>
+          <div className="text-[11.5px] text-steel mb-2.5">
+            Un combo no es un producto real — no tiene stock propio. Acá ves qué productos reales trae cada uno y cuánto stock real le queda a cada uno, para saber de un vistazo si alcanza para seguir armándolo.
+          </div>
+          <div className="flex flex-col gap-2">
+            {combos.map((combo) => (
+              <div key={combo.id} className="bg-surface border border-rule rounded-md p-3">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="font-mono text-[11.5px] font-bold text-teal">{combo.code}</span>
+                  {combo.label && <span className="text-[12px] text-steel">{combo.label}</span>}
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {combo.components.map((c) => {
+                    const stockRow = rows?.find((r) => r.catalogItemId === c.catalogItem.id);
+                    const stock = stockRow?.balance ?? null;
+                    return (
+                      <span key={c.id} className="inline-flex items-center gap-1.5 text-[12px] bg-cloud border border-rule rounded-full px-2.5 py-1">
+                        <CatalogCode code={c.catalogItem.justCode} />
+                        <span>{c.quantity}× {c.catalogItem.name}</span>
+                        <span className={`font-mono font-bold ${stock != null && stock < 0 ? "text-red" : "text-steel"}`}>
+                          ({stock != null ? `stock: ${stock}` : "sin dato"})
+                        </span>
+                      </span>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
