@@ -48,6 +48,8 @@ type SaleDTO = {
   deliveryPhotoUrl: string | null;
   returnedAt: string | null;
   returnReason: string | null;
+  returnReceivedAt: string | null;
+  returnConfirmedAt: string | null;
   nairobyClosedAt: string | null;
   deletedAt: string | null;
   createdAt: string;
@@ -466,7 +468,9 @@ function statusLabel(s: SaleDTO): { text: string; color: string } {
   if (s.deletedAt) return { text: `Cancelada · ${formatDateTime(s.deletedAt)}`, color: "text-red" };
   if (s.reviewStatus === "REJECTED") return { text: "Rechazada", color: "text-red" };
   if (s.reviewStatus === "PENDING") return { text: "Esperando aprobación de Bryan", color: "text-gold" };
-  if (s.returnedAt) return { text: `Devuelta · ${formatDateTime(s.returnedAt)} — stock reingresado a INVESTOCK`, color: "text-red" };
+  if (s.returnConfirmedAt) return { text: `Devuelta · ${formatDateTime(s.returnConfirmedAt)} — stock reingresado a INVESTOCK`, color: "text-red" };
+  if (s.returnReceivedAt) return { text: "Devuelta — Inventario ya la recibió, esperando aprobación de Daniel", color: "text-red" };
+  if (s.returnedAt) return { text: `Devuelta · ${formatDateTime(s.returnedAt)} — esperando que Inventario la reciba`, color: "text-red" };
   if (s.nairobyClosedAt) return { text: `Cerrada · ${formatDateTime(s.nairobyClosedAt)}`, color: "text-green" };
   if (!s.paymentProofUrl) return { text: "Aprobada — falta subir comprobante", color: "text-blue" };
   if (!s.paymentConfirmedAt) return { text: "Esperando que confirmen el pago", color: "text-gold" };

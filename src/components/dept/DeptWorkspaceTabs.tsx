@@ -620,6 +620,8 @@ export function DeptWorkspaceTabs({
           canPrep={canCaptureMerchandiseOutflow}
           canAssignPack={canAssignExternalSalePack}
           canPack={canPackExternalSale}
+          canReceiveReturn={canCaptureMerchandiseOutflow}
+          canConfirmReturn={canActOnMerchandiseOutflow}
           canClose={canCloseExternalSale}
           isAdmin={isAdmin}
         />

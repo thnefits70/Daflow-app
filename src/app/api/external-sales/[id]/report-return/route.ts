@@ -2,18 +2,17 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { notifyEveryoneExternalSaleReturned } from "@/lib/externalSales";
-import { recordKardexEntry } from "@/lib/stockKardex";
+import { notifyInventoryLeadExternalSaleReturnReported, saleItemsSummary } from "@/lib/externalSales";
 
 const schema = z.object({ reason: z.string().trim().min(3, "Contá brevemente qué pasó.") });
 
 // Confirmado 2026-09-16, pedido explícito del usuario: SOLO el asesor
 // dueño de la venta puede reportar que el cliente no recibió el pedido (lo
-// rechazó, o lo devolvió) — nadie más, ni Fulfilment ni Inventario. El
-// producto vuelve intacto (no es un daño), así que el stock se reingresa
-// AUTOMÁTICO al Kardex (INVESTOCK) en el momento del reporte, sin pasar
-// por la aprobación manual de Reingreso de Mercadería (esa es para
-// mercadería dañada). Deja de poder cerrarse (ver /close).
+// rechazó, o lo devolvió) — nadie más, ni Fulfilment ni Inventario. Esto
+// todavía NO suma nada a INVESTOCK — solo avisa que esa mercadería debe
+// volver físicamente a bodega. El stock recién se reingresa cuando
+// Inventario la recibe y Daniel lo aprueba (ver return-received/ y
+// return-confirm/). Deja de poder cerrarse (ver /close).
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
@@ -31,14 +30,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       returnedAt: true,
       nairobyClosedAt: true,
       deletedAt: true,
-      paymentConfirmedAt: true,
       code: true,
-      reviewedById: true,
-      invoiceUploadedById: true,
-      dispatchAssignedToId: true,
-      packAssignedToId: true,
-      deliveredById: true,
-      items: { select: { catalogItemId: true, quantity: true } },
+      items: { select: { declaredProductName: true, catalogItem: { select: { name: true } } } },
     },
   });
   if (!sale) return NextResponse.json({ error: "No encontrado." }, { status: 404 });
@@ -53,27 +46,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     data: { returnedAt: new Date(), returnReason: parsed.data.reason },
   });
 
-  for (const item of sale.items) {
-    if (!item.catalogItemId) continue;
-    await recordKardexEntry({
-      catalogItemId: item.catalogItemId,
-      type: "IN",
-      quantity: item.quantity,
-      unitCost: null,
-      occurredAt: new Date(),
-    }).catch((err) => console.error("[external-sales report-return] No se pudo reingresar el stock al Kardex:", err));
-  }
-
-  await notifyEveryoneExternalSaleReturned({
-    code: sale.code,
-    paymentConfirmedAt: sale.paymentConfirmedAt,
-    advisorId: sale.advisorId,
-    reviewedById: sale.reviewedById,
-    invoiceUploadedById: sale.invoiceUploadedById,
-    dispatchAssignedToId: sale.dispatchAssignedToId,
-    packAssignedToId: sale.packAssignedToId,
-    deliveredById: sale.deliveredById,
-  });
+  await notifyInventoryLeadExternalSaleReturnReported(sale.code, saleItemsSummary(sale.items));
 
   return NextResponse.json(updated);
 }

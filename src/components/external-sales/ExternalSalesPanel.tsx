@@ -12,9 +12,10 @@ import { ExternalSalePackDeliveryPanel } from "./ExternalSalePackDeliveryPanel";
 import { ExternalSaleClosingInbox } from "./ExternalSaleClosingInbox";
 import { ExternalSaleAuditSummary } from "./ExternalSaleAuditSummary";
 import { ExternalSaleHistoryList } from "./ExternalSaleHistoryList";
+import { ExternalSaleReturnInbox } from "./ExternalSaleReturnInbox";
 import { TabGuide } from "@/components/shared/TabGuide";
 
-type Tab = "declarar" | "revision" | "pagos" | "facturacion" | "agrupar" | "preparar" | "embalaje" | "entregas" | "cierre" | "auditoria" | "historial";
+type Tab = "declarar" | "revision" | "pagos" | "facturacion" | "agrupar" | "preparar" | "embalaje" | "entregas" | "devoluciones" | "cierre" | "auditoria" | "historial";
 
 export function ExternalSalesPanel({
   canDeclare,
@@ -25,6 +26,8 @@ export function ExternalSalesPanel({
   canPrep,
   canAssignPack,
   canPack,
+  canReceiveReturn,
+  canConfirmReturn,
   canClose,
   isAdmin,
 }: {
@@ -36,6 +39,8 @@ export function ExternalSalesPanel({
   canPrep: boolean;
   canAssignPack: boolean;
   canPack: boolean;
+  canReceiveReturn: boolean;
+  canConfirmReturn: boolean;
   canClose: boolean;
   isAdmin: boolean;
 }) {
@@ -43,7 +48,7 @@ export function ExternalSalesPanel({
   const [tab, setTab] = useState<Tab>(() => {
     if (typeof window === "undefined") return defaultTab;
     const t = new URLSearchParams(window.location.search).get("etab");
-    const valid: Tab[] = ["declarar", "revision", "pagos", "facturacion", "agrupar", "preparar", "embalaje", "entregas", "cierre", "auditoria", "historial"];
+    const valid: Tab[] = ["declarar", "revision", "pagos", "facturacion", "agrupar", "preparar", "embalaje", "entregas", "devoluciones", "cierre", "auditoria", "historial"];
     return (valid as string[]).includes(t ?? "") ? (t as Tab) : defaultTab;
   });
 
@@ -56,6 +61,7 @@ export function ExternalSalesPanel({
     ...(canPrep ? [{ id: "preparar" as const, label: "Preparar" }] : []),
     ...(canAssignPack ? [{ id: "embalaje" as const, label: "Embalaje" }] : []),
     ...(canPack ? [{ id: "entregas" as const, label: "Mis entregas" }] : []),
+    ...(canReceiveReturn || canConfirmReturn ? [{ id: "devoluciones" as const, label: "Devoluciones" }] : []),
     ...(canClose ? [{ id: "cierre" as const, label: "Cierre" }] : []),
     ...(canClose ? [{ id: "auditoria" as const, label: "Auditoría" }] : []),
     { id: "historial" as const, label: "Historial" },
@@ -125,6 +131,12 @@ export function ExternalSalesPanel({
         <>
           <TabGuide storageKey="externalsales-entregas">Tus embalajes asignados — entrega al motorizado y tomá la foto en tiempo real de a quién le entregaste.</TabGuide>
           <ExternalSalePackDeliveryPanel />
+        </>
+      )}
+      {tab === "devoluciones" && (canReceiveReturn || canConfirmReturn) && (
+        <>
+          <TabGuide storageKey="externalsales-devoluciones">Ventas que el asesor reportó como devueltas por el cliente. Inventario confirma que llegó físicamente y completo; recién con la aprobación de Daniel se suma de nuevo a INVESTOCK.</TabGuide>
+          <ExternalSaleReturnInbox canReceive={canReceiveReturn} canConfirm={canConfirmReturn} />
         </>
       )}
       {tab === "cierre" && canClose && (

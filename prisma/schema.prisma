@@ -519,6 +519,8 @@ model User {
   externalSalesDelivered          ExternalSale[] @relation("ExternalSaleDeliveredBy")
   externalSalesInvoiceUploadedBy  ExternalSale[] @relation("ExternalSaleInvoiceUploadedBy")
   externalSalesClosed             ExternalSale[] @relation("ExternalSaleNairobyClosedBy")
+  externalSalesReturnReceivedBy   ExternalSale[] @relation("ExternalSaleReturnReceivedBy")
+  externalSalesReturnConfirmedBy  ExternalSale[] @relation("ExternalSaleReturnConfirmedBy")
 
   clientsRegistered            Client[]
   logisticsProvidersRegistered LogisticsProvider[]
@@ -5446,13 +5448,29 @@ model ExternalSale {
 
   // Confirmado 2026-09-16, pedido explícito del usuario: si el cliente no
   // quiso recibir el pedido (o lo devolvió), SOLO el asesor dueño de la
-  // venta (advisorId) puede reportarlo — nunca Fulfilment/Inventario. Al
-  // reportarlo se reingresa automático el stock al Kardex (INVESTOCK), sin
-  // pasar por el flujo manual de aprobación de Reingreso de Mercadería
-  // (ese es para daños/mercadería físicamente dañada; acá el producto
-  // vuelve intacto, tal cual salió). Bloquea que Nairoby cierre la venta.
+  // venta (advisorId) puede reportarlo — nunca Fulfilment/Inventario.
+  // Reportarlo NO suma el stock todavía (eso sería confiar en un número sin
+  // que el producto haya vuelto físicamente) — bloquea que Nairoby cierre
+  // la venta y deja avisado a Inventario que debe llegar esa mercadería.
   returnedAt   DateTime?
   returnReason String?
+
+  // Paso 2 — mismo equipo que ya recibe mercadería de Compras
+  // (canCaptureMerchandiseOutflow, isInventoryTeamMember): cuando el
+  // motorizado de verdad devuelve el paquete a bodega, alguien de
+  // Inventario lo verifica físicamente (cantidad completa) y lo marca acá.
+  returnReceivedAt   DateTime?
+  returnReceivedById String?
+  returnReceivedBy   User?     @relation("ExternalSaleReturnReceivedBy", fields: [returnReceivedById], references: [id], onDelete: SetNull)
+  returnReceivedNote String?
+
+  // Paso 3 — mismo candado real de siempre para Inventario
+  // (canActOnMerchandiseOutflow, Daniel/líder): un clic suyo es lo que de
+  // verdad suma la entrada al Kardex (INVESTOCK) — recién ahí el inventario
+  // en pantalla refleja lo que en verdad está en bodega.
+  returnConfirmedAt   DateTime?
+  returnConfirmedById String?
+  returnConfirmedBy   User?     @relation("ExternalSaleReturnConfirmedBy", fields: [returnConfirmedById], references: [id], onDelete: SetNull)
 
   // Nairoby cierra la venta — solo posible cuando pago Y despacho ya están
   // resueltos, sin importar el orden en que hayan pasado.

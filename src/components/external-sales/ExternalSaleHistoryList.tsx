@@ -49,6 +49,8 @@ type SaleDTO = {
   deliveredBy: { name: string } | null;
   returnedAt: string | null;
   returnReason: string | null;
+  returnReceivedAt: string | null;
+  returnConfirmedAt: string | null;
   deletedAt: string | null;
 };
 
@@ -154,7 +156,12 @@ function SaleCard({
       {s.deletedAt && <div className="text-[10.5px] text-red mt-0.5">Eliminada por admin · {formatDateTime(s.deletedAt)}</div>}
       {s.returnedAt && (
         <div className="text-[10.5px] text-red mt-0.5">
-          El cliente no recibió el pedido · {formatDateTime(s.returnedAt)} — stock reingresado a INVESTOCK. Motivo: {s.returnReason}
+          El cliente no recibió el pedido · {formatDateTime(s.returnedAt)}. Motivo: {s.returnReason}
+          {s.returnConfirmedAt
+            ? ` — stock reingresado a INVESTOCK (${formatDateTime(s.returnConfirmedAt)})`
+            : s.returnReceivedAt
+              ? " — Inventario ya la recibió, esperando aprobación de Daniel"
+              : " — esperando que Inventario la reciba físicamente"}
         </div>
       )}
       {s.reviewStatus === "REJECTED" && s.rejectionReason && <div className="text-[10.5px] text-red mt-0.5">{s.rejectionReason}</div>}

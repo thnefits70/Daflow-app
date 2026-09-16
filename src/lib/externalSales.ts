@@ -211,17 +211,42 @@ export async function notifyEveryoneExternalSaleClosed(sale: { code: string } & 
   );
 }
 
-// Confirmado 2026-09-16, pedido explícito del usuario: cuando el asesor
-// reporta que el cliente no recibió/devolvió el pedido, avisa a TODOS los
-// involucrados (mismo criterio que notifyEveryoneExternalSaleClosed) — y
-// si el pago ya estaba confirmado, además a Finanzas puntualmente, porque
-// ahí sí hay que revisar devolver o no ese dinero.
-export async function notifyEveryoneExternalSaleReturned(sale: { code: string; paymentConfirmedAt: Date | null } & InvolvedSale): Promise<void> {
+// Confirmado 2026-09-16, pedido explícito del usuario: reportar la
+// devolución NO suma el stock todavía — son 3 pasos, cada uno con su
+// propio aviso, para que el número de INVESTOCK solo suba cuando el
+// producto de verdad volvió a bodega:
+// 1) el asesor reporta → avisa a Inventario que debe llegar esa mercadería.
+// 2) el equipo de Inventario la recibe físicamente → avisa a Daniel que
+//    falta su aprobación (mismo criterio que la recepción de Compras).
+// 3) Daniel aprueba con un clic → ahí SÍ se suma al Kardex, y se avisa a
+//    todos los involucrados (mismo criterio que notifyEveryoneExternalSaleClosed).
+
+export async function notifyInventoryLeadExternalSaleReturnReported(code: string, itemsSummary: string): Promise<void> {
+  const leadId = await getInventoryLeadId();
+  if (!leadId) return;
+  await notifyOwner(leadId, {
+    title: "↩️ Venta externa devuelta por el cliente",
+    body: `${code} — ${itemsSummary}. Falta que tu equipo la reciba físicamente en bodega.`,
+    url: `${URL_BASE}&etab=devoluciones`,
+  }).catch(() => null);
+}
+
+export async function notifyInventoryLeadExternalSaleReturnReceived(code: string): Promise<void> {
+  const leadId = await getInventoryLeadId();
+  if (!leadId) return;
+  await notifyOwner(leadId, {
+    title: "Devolución recibida, falta tu aprobación",
+    body: `${code} — tu equipo confirmó que llegó físicamente. Apruébala para que se sume de nuevo a INVESTOCK.`,
+    url: `${URL_BASE}&etab=devoluciones`,
+  }).catch(() => null);
+}
+
+export async function notifyEveryoneExternalSaleReturnConfirmed(sale: { code: string; paymentConfirmedAt: Date | null } & InvolvedSale): Promise<void> {
   await Promise.all(
     involvedRecipientIds(sale).map((id) =>
       notifyOwner(id, {
         title: "↩️ Venta externa devuelta",
-        body: `${sale.code} — el asesor reportó que el cliente no recibió el pedido. El stock ya volvió a INVESTOCK.`,
+        body: `${sale.code} — Inventario confirmó que el producto volvió a bodega. El stock ya se sumó a INVESTOCK.`,
         url: `${URL_BASE}&etab=historial`,
       }).catch(() => null)
     )
