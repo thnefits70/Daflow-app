@@ -51,6 +51,7 @@ type StockRow = {
   bodega: Marca | null;
   justAvgCost?: number | null;
   justStock?: number | null;
+  justStockPeriod?: string | null;
   providerPrice?: number;
   bodegaPrice?: number;
   benistockPrice?: number;
@@ -67,6 +68,24 @@ type FormulaKey = "proveedor" | "just" | "bodega" | "benistock" | "b2b" | "dropi
 
 function money(v: number) {
   return "$" + v.toLocaleString("es-EC", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+// Confirmado 2026-09-17, pedido explícito del usuario: el stock de Just
+// queda "congelado" desde la subida que lo trajo hasta la siguiente — sin
+// la fecha, no se puede saber si ese número es de esta semana o de hace un
+// mes (le pasa a productos que dejan de aparecer en archivos más recientes,
+// ver project_just_catalog_sync). Formatea "YYYY-MM-Wn" localmente (mismo
+// motivo que weekLabel() en InventoryControlPanel.tsx: componente cliente,
+// no puede importar el formateador del server que usa Prisma).
+// Nota: datos viejos (antes de que "Control de Inventario" pasara a
+// subida semanal) usan el formato mensual "YYYY-MM" sin semana — se ven en
+// vivo hoy en 10 productos (ver zzdebugcheckjuststockperiod). Sin el `if`,
+// esos caían en un feo "sem. ? jul" en vez de simplemente "jul 2026".
+const MONTH_SHORT = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+function justPeriodLabel(period: string) {
+  const [y, m, w] = period.split("-");
+  const month = MONTH_SHORT[Number(m) - 1] ?? m;
+  return w ? `sem. ${w.replace("W", "")} ${month}` : `${month} ${y}`;
 }
 
 // Confirmado 2026-09-16, pedido explícito del usuario: poder copiar
@@ -365,7 +384,7 @@ export function StockLevelsPanel({ isAdmin = false }: { isAdmin?: boolean }) {
         <span>Producto</span>
         <span>Marca</span>
         <span className="text-right">Stock</span>
-        <span className="text-right text-gold" title="Stock tal cual venía en el último archivo de Just que subió Daniel, para comparar con el stock real de INVESTOCK.">
+        <span className="text-right text-gold" title="Stock tal cual venía en el último archivo de Just que subió Daniel, para comparar con el stock real de INVESTOCK. Se queda igual hasta que suba un archivo nuevo — abajo de cada número se ve de qué semana es.">
           Stock Just
         </span>
         <span className="flex items-center justify-end gap-1 border-l border-rule pl-3">
@@ -592,14 +611,23 @@ export function StockLevelsPanel({ isAdmin = false }: { isAdmin?: boolean }) {
                     de referencia según el último archivo de Just, junto al
                     stock real de INVESTOCK — resaltado en gold cuando no
                     coinciden, para que el desfase salte a la vista sin tener
-                    que restar los dos números a mano. */}
-                <span
-                  className={`text-right font-mono text-[12.5px] ${
-                    r.justStock == null ? "text-steel-dim" : r.justStock !== r.balance ? "font-bold text-gold" : "text-steel"
-                  }`}
-                  title="Stock del último archivo de Just — solo referencia."
-                >
-                  {r.justStock == null ? "—" : r.justStock}
+                    que restar los dos números a mano. La fecha debajo es de
+                    qué subida salió ese número — se queda "congelado" tal
+                    cual hasta que Daniel suba el siguiente archivo. */}
+                <span className="flex flex-col items-end leading-tight">
+                  <span
+                    className={`font-mono text-[12.5px] ${
+                      r.justStock == null ? "text-steel-dim" : r.justStock !== r.balance ? "font-bold text-gold" : "text-steel"
+                    }`}
+                    title="Stock del último archivo de Just — solo referencia."
+                  >
+                    {r.justStock == null ? "—" : r.justStock}
+                  </span>
+                  {r.justStockPeriod && (
+                    <span className="text-[9px] text-steel-dim" title="Archivo de Just del que salió este número">
+                      {justPeriodLabel(r.justStockPeriod)}
+                    </span>
+                  )}
                 </span>
                 <CopyableAmount value={r.providerPrice} className="text-right font-mono text-[13px] text-steel border-l border-rule pl-3" />
                 <CopyableAmount value={r.justAvgCost} className="text-right font-mono text-[13px] text-gold" />
