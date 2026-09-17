@@ -50,6 +50,7 @@ type StockRow = {
   avgCost: number;
   bodega: Marca | null;
   justAvgCost?: number | null;
+  justStock?: number | null;
   providerPrice?: number;
   bodegaPrice?: number;
   benistockPrice?: number;
@@ -350,7 +351,8 @@ export function StockLevelsPanel({ isAdmin = false }: { isAdmin?: boolean }) {
   // Se extrae acá para reusarlo también arriba de los combos.
   const columnsHeader = (
     <>
-      <div className="grid grid-cols-[auto_minmax(200px,1fr)_110px_90px_100px_90px_110px_110px_100px_100px_110px_110px] gap-3 px-3 pt-2 min-w-[1470px]">
+      <div className="grid grid-cols-[auto_minmax(200px,1fr)_110px_90px_90px_100px_90px_110px_110px_100px_100px_110px_110px] gap-3 px-3 pt-2 min-w-[1560px]">
+        <span></span>
         <span></span>
         <span></span>
         <span></span>
@@ -358,11 +360,14 @@ export function StockLevelsPanel({ isAdmin = false }: { isAdmin?: boolean }) {
         <span className="col-span-4 text-center text-[10px] font-bold uppercase tracking-wide text-steel border-b border-rule pb-1">Costo</span>
         <span className="col-span-4 text-center text-[10px] font-bold uppercase tracking-wide text-blue border-b border-rule pb-1">Precios de venta</span>
       </div>
-      <div className="grid grid-cols-[auto_minmax(200px,1fr)_110px_90px_100px_90px_110px_110px_100px_100px_110px_110px] gap-3 px-3 py-2 bg-cloud text-[11px] font-semibold uppercase tracking-wide text-steel min-w-[1470px]">
+      <div className="grid grid-cols-[auto_minmax(200px,1fr)_110px_90px_90px_100px_90px_110px_110px_100px_100px_110px_110px] gap-3 px-3 py-2 bg-cloud text-[11px] font-semibold uppercase tracking-wide text-steel min-w-[1560px]">
         <span></span>
         <span>Producto</span>
         <span>Marca</span>
         <span className="text-right">Stock</span>
+        <span className="text-right text-gold" title="Stock tal cual venía en el último archivo de Just que subió Daniel, para comparar con el stock real de INVESTOCK.">
+          Stock Just
+        </span>
         <span className="flex items-center justify-end gap-1 border-l border-rule pl-3">
           Proveedor <FormulaInfoButton open={openFormula === "proveedor"} onToggle={() => setOpenFormula((k) => (k === "proveedor" ? null : "proveedor"))} />
         </span>
@@ -389,7 +394,7 @@ export function StockLevelsPanel({ isAdmin = false }: { isAdmin?: boolean }) {
         </span>
       </div>
       {openFormula && (
-        <div className="flex items-start justify-between gap-3 bg-navy border-b border-rule px-3 py-2.5 min-w-[1470px]">
+        <div className="flex items-start justify-between gap-3 bg-navy border-b border-rule px-3 py-2.5 min-w-[1560px]">
           <div className="text-[12px]">
             <span className="font-bold text-ink">{FORMULA_EXPLANATIONS[openFormula].title}: </span>
             <span className="text-steel">{FORMULA_EXPLANATIONS[openFormula].text}</span>
@@ -554,7 +559,7 @@ export function StockLevelsPanel({ isAdmin = false }: { isAdmin?: boolean }) {
           tiene un ancho fijo — se reparten parejo por toda la fila. */}
       <div className="border border-rule rounded-md overflow-x-auto">
         {columnsHeader}
-        <div className="max-h-[70vh] overflow-y-auto min-w-[1470px]">
+        <div className="max-h-[70vh] overflow-y-auto min-w-[1560px]">
           {sorted.length === 0 ? (
             <div className="px-3 py-4 text-[12.5px] text-steel">Sin resultados.</div>
           ) : (
@@ -566,7 +571,7 @@ export function StockLevelsPanel({ isAdmin = false }: { isAdmin?: boolean }) {
             sorted.map((r, i) => (
               <div
                 key={r.catalogItemId}
-                className={`grid grid-cols-[auto_minmax(200px,1fr)_110px_90px_100px_90px_110px_110px_100px_100px_110px_110px] gap-3 px-3 py-2.5 border-t border-rule items-center ${i % 2 === 1 ? "bg-cloud/40" : ""}`}
+                className={`grid grid-cols-[auto_minmax(200px,1fr)_110px_90px_90px_100px_90px_110px_110px_100px_100px_110px_110px] gap-3 px-3 py-2.5 border-t border-rule items-center ${i % 2 === 1 ? "bg-cloud/40" : ""}`}
               >
                 {r.photos[0] ? (
                   // Confirmado 2026-09-15 (pedido de Daniel): foto real del
@@ -583,6 +588,19 @@ export function StockLevelsPanel({ isAdmin = false }: { isAdmin?: boolean }) {
                 </span>
                 <MarcaSelect value={r.bodega} onChange={(v) => updateProductMarca(r.catalogItemId, v)} />
                 <span className={`text-right font-mono text-[12.5px] font-bold ${r.balance < 0 ? "text-red" : "text-ink"}`}>{r.balance}</span>
+                {/* Confirmado 2026-09-17, pedido explícito del usuario: stock
+                    de referencia según el último archivo de Just, junto al
+                    stock real de INVESTOCK — resaltado en gold cuando no
+                    coinciden, para que el desfase salte a la vista sin tener
+                    que restar los dos números a mano. */}
+                <span
+                  className={`text-right font-mono text-[12.5px] ${
+                    r.justStock == null ? "text-steel-dim" : r.justStock !== r.balance ? "font-bold text-gold" : "text-steel"
+                  }`}
+                  title="Stock del último archivo de Just — solo referencia."
+                >
+                  {r.justStock == null ? "—" : r.justStock}
+                </span>
                 <CopyableAmount value={r.providerPrice} className="text-right font-mono text-[13px] text-steel border-l border-rule pl-3" />
                 <CopyableAmount value={r.justAvgCost} className="text-right font-mono text-[13px] text-gold" />
                 <CopyableAmount value={r.bodegaPrice} className="text-right font-mono text-[13px] text-steel" />
@@ -615,12 +633,12 @@ export function StockLevelsPanel({ isAdmin = false }: { isAdmin?: boolean }) {
           </div>
           <div className="border border-rule rounded-md overflow-x-auto">
             {columnsHeader}
-            <div className="min-w-[1470px]">
+            <div className="min-w-[1560px]">
               {[...filteredCombos]
                 .sort((a, b) => Number(a.bodega != null) - Number(b.bodega != null) || a.code.localeCompare(b.code))
                 .map((combo, i) => (
                   <div key={combo.id} className={`border-t first:border-t-0 border-rule ${i % 2 === 1 ? "bg-cloud/40" : ""}`}>
-                    <div className="grid grid-cols-[auto_minmax(200px,1fr)_110px_90px_100px_90px_110px_110px_100px_100px_110px_110px] gap-3 px-3 py-2.5 items-center">
+                    <div className="grid grid-cols-[auto_minmax(200px,1fr)_110px_90px_90px_100px_90px_110px_110px_100px_100px_110px_110px] gap-3 px-3 py-2.5 items-center">
                       <div className="w-8 h-8 rounded border border-dashed border-rule shrink-0 flex items-center justify-center text-steel-dim">
                         <Wrench size={12} />
                       </div>
@@ -630,6 +648,9 @@ export function StockLevelsPanel({ isAdmin = false }: { isAdmin?: boolean }) {
                       </span>
                       <MarcaSelect value={combo.bodega} onChange={(v) => updateComboMarca(combo.id, v)} />
                       <span className="text-right font-mono text-[11px] italic text-steel-dim">combo</span>
+                      <span className="text-right font-mono text-[13px] text-steel-dim" title="Just no rastrea combos, solo productos individuales">
+                        —
+                      </span>
                       <CopyableAmount value={combo.providerPrice} className="text-right font-mono text-[13px] text-steel border-l border-rule pl-3" />
                       <span className="text-right font-mono text-[13px] text-steel-dim" title="Just no rastrea combos, solo productos individuales">
                         —

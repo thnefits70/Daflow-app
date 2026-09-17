@@ -48,11 +48,16 @@ export async function GET() {
           where: { deptId },
           distinct: ["productCode"],
           orderBy: [{ productCode: "asc" }, { createdAt: "desc" }],
-          select: { productCode: true, avgCost: true },
+          select: { productCode: true, avgCost: true, stock: true },
         })
       : Promise.resolve([]),
   ]);
   const justAvgCostByCode = new Map(justSnapshots.map((s) => [s.productCode.trim(), s.avgCost]));
+  // Confirmado 2026-09-17, pedido explícito del usuario: además del costo,
+  // mostrar también el stock tal cual venía en el último archivo de Just
+  // subido por Daniel, como columna de referencia junto al stock real de
+  // INVESTOCK — para poder comparar los dos números a simple vista.
+  const justStockByCode = new Map(justSnapshots.map((s) => [s.productCode.trim(), s.stock]));
 
   const proposalByCatalogItemId = new Map(
     proposals
@@ -85,10 +90,12 @@ export async function GET() {
     const base = proposalByCatalogItemId.get(r.catalogItemId) ??
       (r.avgCost > 0 ? { batchCost: r.avgCost, batchUnits: 1, freightCost: null, insuranceRatePercent: 6, fulfillmentCost: 0.75, marginPercent: DROPI_MARGIN_DEFAULT } : null);
     const justAvgCost = r.justCode ? justAvgCostByCode.get(r.justCode.trim()) ?? null : null;
-    if (!base) return { ...r, justAvgCost };
+    const justStock = r.justCode ? justStockByCode.get(r.justCode.trim()) ?? null : null;
+    if (!base) return { ...r, justAvgCost, justStock };
     return {
       ...r,
       justAvgCost,
+      justStock,
       providerPrice: base.batchCost,
       bodegaPrice: bodegaUnitCost(base.batchCost, base.freightCost, base.batchUnits),
       benistockPrice: computeBenistockPrice(base),
