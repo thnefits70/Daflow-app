@@ -227,6 +227,7 @@ export default async function SupplierLedgerPage({ params }: { params: Promise<{
                 <thead className="border-b border-neutral-200 bg-neutral-50 text-xs uppercase tracking-wide text-neutral-500">
                   <tr>
                     <th className={th}>Fecha recibido</th>
+                    <th className={th}>Imagen</th>
                     <th className={NOMBRE_TH}>Producto</th>
                     <th className={`${th} text-right`}>Cant.</th>
                     <th className={`${th} text-right`}>Costo</th>
@@ -238,6 +239,18 @@ export default async function SupplierLedgerPage({ params }: { params: Promise<{
                   {pendingDebtItems.map((i) => (
                     <tr key={i.id}>
                       <td className={`${td} text-neutral-600`}>{DATE_FMT.format(i.receivedAt ?? i.requestedAt)}</td>
+                      <td className="px-3 py-2">
+                        {i.productImageUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={i.productImageUrl}
+                            alt={i.productName}
+                            className="w-12 h-12 object-cover rounded-md border border-neutral-200"
+                          />
+                        ) : (
+                          <span className="text-neutral-400">—</span>
+                        )}
+                      </td>
                       <td className="px-3 py-2">{i.productName}</td>
                       <td className={`${td} text-right tabular-nums`}>{i.quantity}</td>
                       <td className={`${td} text-right tabular-nums`}>{money(i.totalCost)}</td>

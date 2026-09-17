@@ -81,6 +81,10 @@ export type SupplierDebtPendingItem = {
   // INVESTOCK, ver StockKardexEntry) — esa es la fecha que le importa a
   // CHEN, no cuándo se pidió.
   receivedAt: Date | null;
+  // Confirmado 2026-09-17, pedido explícito del usuario: misma foto que ya
+  // se muestra en "falta enviar"/"ya despachado" — la última subida al
+  // matricular el producto (PurchaseCatalogItem.photos).
+  productImageUrl: string | null;
 };
 
 // Confirmado 2026-09-08: lo que YA se puede sumar al saldo — recibido
@@ -91,7 +95,7 @@ export async function getSupplierDebtPendingItems(supplierId: string): Promise<S
   const rows = await prisma.purchaseRequest.findMany({
     where: { supplierId, status: "RECEIVED", debtPaymentId: null, buyerDebtConfirmedAt: { not: null } },
     include: {
-      catalogItem: { select: { name: true } },
+      catalogItem: { select: { name: true, photos: true } },
       reviewedBy: { select: { name: true } },
       receipt: { select: { approvedAt: true, approvedBy: { select: { name: true } } } },
     },
@@ -107,6 +111,7 @@ export async function getSupplierDebtPendingItems(supplierId: string): Promise<S
     approvedByName: r.reviewedBy?.name ?? null,
     reviewedByName: r.receipt?.approvedBy?.name ?? null,
     receivedAt: r.receipt?.approvedAt ?? null,
+    productImageUrl: r.catalogItem.photos.at(-1) ?? null,
   }));
 }
 
