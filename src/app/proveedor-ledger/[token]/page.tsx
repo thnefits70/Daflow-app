@@ -78,11 +78,21 @@ export default async function SupplierLedgerPage({ params }: { params: Promise<{
       orderBy: { closedAt: "desc" },
     }),
     // Confirmado 2026-09-15, pedido explícito del usuario: pedidos que ya
-    // aprobó Bryan pero que Inventario todavía no recibió (en cuanto se
-    // recibe algo pasa a RECEIVED_PENDING_REVIEW, ya no tiene sentido
-    // pedirle a CHEN una foto de "lo que está enviando").
+    // aprobó Bryan y que CHEN todavía no ha confirmado que envió. Corregido
+    // 2026-09-17: antes exigía status "APPROVED" — así que si Daniel
+    // recibía la mercadería ANTES de que el equipo de CHEN entrara a
+    // apretar "Ya lo enviamos", el pedido desaparecía de esta lista sin que
+    // ellos nunca pudieran confirmarlo (se quedaba invisible para siempre,
+    // ni acá ni en el historial). Esta lista es el propio pendiente de
+    // CHEN, no debe depender de nuestra operación interna — ahora solo
+    // exige que Bryan ya haya aprobado (status distinto de
+    // PENDING_APPROVAL/REJECTED) y que ellos no lo hayan confirmado todavía.
     prisma.purchaseRequest.findMany({
-      where: { supplierId: supplier.id, status: "APPROVED", supplierShippingConfirmedAt: null },
+      where: {
+        supplierId: supplier.id,
+        status: { notIn: ["PENDING_APPROVAL", "REJECTED"] },
+        supplierShippingConfirmedAt: null,
+      },
       include: shipmentInclude,
       orderBy: { requestedAt: "asc" },
     }),

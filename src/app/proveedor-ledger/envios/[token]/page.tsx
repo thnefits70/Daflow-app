@@ -47,8 +47,19 @@ export default async function SupplierShippingLedgerPage({ params }: { params: P
   } as const;
 
   const [pendingShipments, confirmedShipments] = await Promise.all([
+    // Corregido 2026-09-17: antes exigía status "APPROVED" — así que si
+    // Daniel recibía la mercadería ANTES de que el equipo de CHEN entrara a
+    // apretar "Ya lo enviamos", el pedido desaparecía de esta lista sin que
+    // ellos nunca pudieran confirmarlo. Esta lista es el propio pendiente
+    // de CHEN, no debe depender de nuestra operación interna — ahora solo
+    // exige que Bryan ya haya aprobado (status distinto de
+    // PENDING_APPROVAL/REJECTED) y que ellos no lo hayan confirmado todavía.
     prisma.purchaseRequest.findMany({
-      where: { supplierId: supplier.id, status: "APPROVED", supplierShippingConfirmedAt: null },
+      where: {
+        supplierId: supplier.id,
+        status: { notIn: ["PENDING_APPROVAL", "REJECTED"] },
+        supplierShippingConfirmedAt: null,
+      },
       include,
       orderBy: { requestedAt: "asc" },
     }),

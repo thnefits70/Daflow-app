@@ -17,7 +17,18 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
   }
 
   const purchaseRequest = await prisma.purchaseRequest.findUnique({ where: { id: requestId } });
-  if (!purchaseRequest || purchaseRequest.supplierId !== supplier.id || purchaseRequest.status !== "APPROVED") {
+  // Corregido 2026-09-17: antes exigía status "APPROVED" — así que si
+  // Daniel ya había recibido la mercadería (proceso interno nuestro) ANTES
+  // de que el equipo de CHEN entrara a confirmar, este endpoint rechazaba
+  // el clic con un 403. Esta confirmación es de ellos, no debe depender de
+  // en qué status esté el pedido para nosotros — solo que sea de este
+  // proveedor y que Bryan ya lo haya aprobado.
+  if (
+    !purchaseRequest ||
+    purchaseRequest.supplierId !== supplier.id ||
+    purchaseRequest.status === "PENDING_APPROVAL" ||
+    purchaseRequest.status === "REJECTED"
+  ) {
     return NextResponse.json({ error: "No autorizado." }, { status: 403 });
   }
 

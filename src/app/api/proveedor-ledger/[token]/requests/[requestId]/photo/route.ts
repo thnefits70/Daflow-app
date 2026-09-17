@@ -6,10 +6,9 @@ import { findSupplierByAnySupplierLedgerToken } from "@/lib/supplierDebt";
 // Confirmado 2026-09-15 (foto opcional de CHEN en su enlace público): igual
 // que upload-sign/route.ts, sin auth() — valida el token del proveedor. Solo
 // deja guardar la foto en un pedido que sea REALMENTE de este proveedor y
-// que todavía esté APPROVED (esperando que él lo envíe) — así un token
-// filtrado o adivinado no puede tocar pedidos de otro proveedor ni de otro
-// estado. Puramente informativo: no notifica a nadie ni cambia el estado
-// del pedido.
+// que Bryan ya haya aprobado — así un token filtrado o adivinado no puede
+// tocar pedidos de otro proveedor ni uno que nunca se aprobó. Puramente
+// informativo: no notifica a nadie ni cambia el estado del pedido.
 const bodySchema = z.object({
   url: z.string().trim().min(1),
 });
@@ -28,7 +27,16 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
   }
 
   const purchaseRequest = await prisma.purchaseRequest.findUnique({ where: { id: requestId } });
-  if (!purchaseRequest || purchaseRequest.supplierId !== supplier.id || purchaseRequest.status !== "APPROVED") {
+  // Corregido 2026-09-17: antes exigía status "APPROVED" — mismo problema
+  // que confirm-shipped/route.ts (ver ahí): si Daniel ya recibió la
+  // mercadería antes de que CHEN suba la foto, esto rechazaba con 403. Solo
+  // exige que sea de este proveedor y que Bryan ya lo haya aprobado.
+  if (
+    !purchaseRequest ||
+    purchaseRequest.supplierId !== supplier.id ||
+    purchaseRequest.status === "PENDING_APPROVAL" ||
+    purchaseRequest.status === "REJECTED"
+  ) {
     return NextResponse.json({ error: "No autorizado." }, { status: 403 });
   }
 
