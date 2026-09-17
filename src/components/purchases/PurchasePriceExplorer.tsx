@@ -83,7 +83,12 @@ function ProductComparisonCard({ item, onRemove }: { item: CatalogItem; onRemove
       <div className="flex items-center gap-3 mb-3.5">
         {item.photos[0] && <img src={item.photos[0]} alt="" className="w-10 h-10 rounded object-cover border border-rule shrink-0" />}
         <div className="flex-1 min-w-0">
-          <div className="text-[14.5px] font-bold truncate">{item.name}</div>
+          <div className="flex items-center gap-1.5">
+            <div className="text-[14.5px] font-bold truncate">{item.name}</div>
+            {(item.code || item.justCode) && (
+              <span className="text-[10.5px] text-steel font-mono shrink-0">#{item.code || item.justCode}</span>
+            )}
+          </div>
           {item.description && <div className="text-[11.5px] text-steel truncate">{item.description}</div>}
         </div>
         <button type="button" className="text-steel hover:text-red cursor-pointer p-1" onClick={onRemove} title="Quitar">
