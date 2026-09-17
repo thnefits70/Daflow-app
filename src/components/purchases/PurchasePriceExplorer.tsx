@@ -185,10 +185,6 @@ export function PurchasePriceExplorer() {
   const [catalog, setCatalog] = useState<CatalogItem[]>([]);
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<CatalogItem[]>([]);
-  // Confirmado 2026-09-17: pedido explícito del usuario — cuando el nombre
-  // no calza con la búsqueda, Jariel necesita poder recorrer el catálogo
-  // completo (ya viene ordenado A-Z desde la API) y elegir a ojo cuál es.
-  const [browseAll, setBrowseAll] = useState(false);
 
   useEffect(() => {
     fetch("/api/purchase-catalog")
@@ -207,17 +203,9 @@ export function PurchasePriceExplorer() {
       .map((r) => r.item);
   }, [catalog, query, selected]);
 
-  const allAvailable = useMemo(
-    () => catalog.filter((item) => !selected.some((s) => s.id === item.id)),
-    [catalog, selected]
-  );
-
-  const displayed = query.trim() ? results : browseAll ? allAvailable : [];
-
   function select(item: CatalogItem) {
     setSelected((s) => [item, ...s.filter((x) => x.id !== item.id)]);
     setQuery("");
-    setBrowseAll(false);
   }
 
   return (
@@ -228,14 +216,11 @@ export function PurchasePriceExplorer() {
           className="w-full rounded border border-rule px-3 py-2.5 pl-10 text-[14px] bg-surface2"
           placeholder="Busca un producto para comparar precios entre proveedores… ej. audífonos"
           value={query}
-          onChange={(e) => {
-            setQuery(e.target.value);
-            if (browseAll) setBrowseAll(false);
-          }}
+          onChange={(e) => setQuery(e.target.value)}
         />
-        {displayed.length > 0 && (
+        {results.length > 0 && (
           <div className="absolute z-10 mt-1.5 w-full bg-surface2 border border-rule rounded-md overflow-hidden max-h-64 overflow-y-auto shadow-lg">
-            {displayed.map((item) => (
+            {results.map((item) => (
               <button
                 key={item.id}
                 type="button"
@@ -252,16 +237,6 @@ export function PurchasePriceExplorer() {
           </div>
         )}
       </div>
-
-      {!query.trim() && (
-        <button
-          type="button"
-          onClick={() => setBrowseAll((b) => !b)}
-          className="text-[12px] text-blue font-semibold -mt-2.5 mb-4 cursor-pointer"
-        >
-          {browseAll ? "Ocultar lista completa" : `Ver todos los productos (${catalog.length})`}
-        </button>
-      )}
 
       {selected.length === 0 ? (
         <div className="border-[1.5px] border-dashed border-rule rounded-md p-8 text-center text-steel text-[13.5px]">
