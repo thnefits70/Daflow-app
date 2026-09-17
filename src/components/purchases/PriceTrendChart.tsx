@@ -12,12 +12,18 @@ export function PriceTrendChart({ points }: { points: SupplierPricePoint[] }) {
   const [hover, setHover] = useState<number | null>(null);
   if (points.length === 0) return null;
 
+  // Confirmado 2026-09-17: pedido explícito del usuario — con más de 10
+  // compras las fechas fijas debajo de cada punto se amontonan y quedan
+  // ilegibles, así que a partir de ahí se ocultan y la fecha pasa a salir
+  // solo al pasar el mouse (el tooltip de abajo ya la incluye siempre).
+  const showDateLabels = points.length <= 10;
+
   const width = 560;
   const height = 150;
   const padL = 46;
   const padR = 16;
   const padT = 16;
-  const padB = 26;
+  const padB = showDateLabels ? 26 : 10;
   const innerW = width - padL - padR;
   const innerH = height - padT - padB;
 
@@ -69,11 +75,12 @@ export function PriceTrendChart({ points }: { points: SupplierPricePoint[] }) {
         <path key={i} d={s.d} fill="none" stroke={s.color} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
       ))}
 
-      {coords.map((c, i) => (
-        <text key={`d-${i}`} x={c.x} y={height - 8} textAnchor="middle" fontSize="9.5" fill="#92a3c0">
-          {fmtDate(effDate(points[i]))}
-        </text>
-      ))}
+      {showDateLabels &&
+        coords.map((c, i) => (
+          <text key={`d-${i}`} x={c.x} y={height - 8} textAnchor="middle" fontSize="9.5" fill="#92a3c0">
+            {fmtDate(effDate(points[i]))}
+          </text>
+        ))}
 
       {coords.map((c, i) => (
         <circle
