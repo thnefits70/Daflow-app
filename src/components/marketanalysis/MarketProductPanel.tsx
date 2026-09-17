@@ -61,9 +61,16 @@ function money(n: number) {
   return `$${n.toFixed(2)}`;
 }
 
+// Corregido 2026-09-17, pedido explícito del usuario: esta previsualización
+// dividía el costo unitario entre las unidades del lote, como si el costo
+// fuera del lote completo — desde 2026-09-10 batchCost ya es el costo POR
+// UNIDAD (ver bodegaUnitCost en lib/marketProduct.ts), solo el flete se
+// reparte entre unidades. El número que veía Jariel acá no coincidía con el
+// que realmente se guardaba y calculaba server-side.
 function computePreviewPrice(batchCost: number, batchUnits: number, freightCost: number, insurance: number, fulfillment: number, margin: number) {
   if (!batchCost || !batchUnits || margin >= 100) return null;
-  const unitCost = ((batchCost + (freightCost || 0)) * (1 + insurance / 100)) / batchUnits;
+  const bodegaUnitCost = batchCost + (freightCost || 0) / batchUnits;
+  const unitCost = bodegaUnitCost * (1 + insurance / 100);
   return (unitCost + fulfillment) / (1 - margin / 100);
 }
 
