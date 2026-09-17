@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
-import { getSupplierDebtDisputedItems, findSupplierByPublicLedgerToken } from "@/lib/supplierDebt";
+import { getSupplierDebtDisputedItems, getSupplierDebtPendingItems, findSupplierByPublicLedgerToken } from "@/lib/supplierDebt";
 import { SupplierShippingPhotoCapture } from "@/components/supplier-ledger/SupplierShippingPhotoCapture";
 import { SupplierShipmentConfirmButton } from "@/components/supplier-ledger/SupplierShipmentConfirmButton";
 import { SupplierShipmentHistoryTable } from "@/components/supplier-ledger/SupplierShipmentHistoryTable";
@@ -64,8 +64,14 @@ export default async function SupplierLedgerPage({ params }: { params: Promise<{
     reviewedBy: { select: { name: true } },
   } as const;
 
-  const [disputedItems, closedPayments, pendingShipments, confirmedShipments] = await Promise.all([
+  const [disputedItems, pendingDebtItems, closedPayments, pendingShipments, confirmedShipments] = await Promise.all([
     getSupplierDebtDisputedItems(supplier.id),
+    // Confirmado 2026-09-17, pedido explícito del usuario: mostrarle a CHEN
+    // lo que Inventario ya recibió y confirmó (cargado al Kardex de
+    // INVESTOCK con la supervisión de Daniel) y que todavía no entra en
+    // ninguna tanda pagada — es justo lo que les debemos ahora mismo, para
+    // que sepan qué mercadería sí llegó y qué nos falta pagarles por ella.
+    getSupplierDebtPendingItems(supplier.id),
     prisma.supplierDebtPayment.findMany({
       where: { supplierId: supplier.id, closedAt: { not: null } },
       include: {
@@ -124,6 +130,7 @@ export default async function SupplierLedgerPage({ params }: { params: Promise<{
   const th = "px-3 py-2 whitespace-nowrap";
   const td = "px-3 py-2 whitespace-nowrap";
   const NOMBRE_TH = "px-3 py-2 min-w-[200px]";
+  const pendingDebtTotal = pendingDebtItems.reduce((sum, i) => sum + i.totalCost, 0);
 
   return (
     <div className="min-h-screen bg-neutral-50 text-neutral-900">
@@ -205,6 +212,53 @@ export default async function SupplierLedgerPage({ params }: { params: Promise<{
               photoUrl: r.supplierShippingPhotoUrl,
             }))}
           />
+        </section>
+
+        <section className="mb-8">
+          <h2 className="mb-1 text-sm font-medium text-neutral-700">Mercadería que ya recibimos y confirmamos — pendiente de pago</h2>
+          <p className="mb-3 text-xs text-neutral-500">
+            Ya quedó registrada en nuestro sistema de inventario (INVESTOCK), confirmada por el equipo de Inventario. Esto es lo que les
+            debemos ahora mismo — todavía no incluido en ninguna tanda pagada.
+          </p>
+          {pendingDebtItems.length === 0 ? (
+            <p className="text-sm text-neutral-400">No hay mercadería recibida pendiente de pago por ahora.</p>
+          ) : (
+            <div className="overflow-x-auto rounded-xl border border-neutral-200 bg-white shadow-sm">
+              <table className="w-full text-left text-sm">
+                <thead className="border-b border-neutral-200 bg-neutral-50 text-xs uppercase tracking-wide text-neutral-500">
+                  <tr>
+                    <th className={th}>Fecha recibido</th>
+                    <th className={NOMBRE_TH}>Producto</th>
+                    <th className={`${th} text-right`}>Cant.</th>
+                    <th className={`${th} text-right`}>Costo</th>
+                    <th className={th}>Aprobado por</th>
+                    <th className={th}>Confirmado por</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-neutral-100">
+                  {pendingDebtItems.map((i) => (
+                    <tr key={i.id}>
+                      <td className={`${td} text-neutral-600`}>{DATE_FMT.format(i.receivedAt ?? i.requestedAt)}</td>
+                      <td className="px-3 py-2">{i.productName}</td>
+                      <td className={`${td} text-right tabular-nums`}>{i.quantity}</td>
+                      <td className={`${td} text-right tabular-nums`}>{money(i.totalCost)}</td>
+                      <td className={`${td} text-neutral-600`}>{firstName(i.approvedByName) || "—"}</td>
+                      <td className={`${td} text-neutral-600`}>{firstName(i.reviewedByName) || "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="border-t border-neutral-200 bg-neutral-50">
+                    <td className="px-3 py-2 font-medium text-neutral-700" colSpan={3}>
+                      Total pendiente de pago
+                    </td>
+                    <td className="px-3 py-2 text-right font-semibold tabular-nums text-neutral-900">{money(pendingDebtTotal)}</td>
+                    <td className="px-3 py-2" colSpan={2} />
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          )}
         </section>
 
         {disputedItems.length > 0 && (

@@ -74,6 +74,13 @@ export type SupplierDebtPendingItem = {
   // (Daniel, receipt.approvedBy — "la aprobación final", ver schema.prisma).
   approvedByName: string | null;
   reviewedByName: string | null;
+  // Confirmado 2026-09-17, pedido explícito del usuario: en el enlace
+  // público de CHEN quiere ver, aparte de la fecha de solicitud, la fecha
+  // en que Inventario lo confirmó de verdad (PurchaseRequestReceipt.approvedAt
+  // — el mismo momento en que se generó la entrada en el Kardex de
+  // INVESTOCK, ver StockKardexEntry) — esa es la fecha que le importa a
+  // CHEN, no cuándo se pidió.
+  receivedAt: Date | null;
 };
 
 // Confirmado 2026-09-08: lo que YA se puede sumar al saldo — recibido
@@ -86,7 +93,7 @@ export async function getSupplierDebtPendingItems(supplierId: string): Promise<S
     include: {
       catalogItem: { select: { name: true } },
       reviewedBy: { select: { name: true } },
-      receipt: { select: { approvedBy: { select: { name: true } } } },
+      receipt: { select: { approvedAt: true, approvedBy: { select: { name: true } } } },
     },
     orderBy: { requestedAt: "asc" },
   });
@@ -99,6 +106,7 @@ export async function getSupplierDebtPendingItems(supplierId: string): Promise<S
     requestedAt: r.requestedAt,
     approvedByName: r.reviewedBy?.name ?? null,
     reviewedByName: r.receipt?.approvedBy?.name ?? null,
+    receivedAt: r.receipt?.approvedAt ?? null,
   }));
 }
 
