@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import { getSupplierDebtPendingItems, getSupplierDebtDisputedItems, findSupplierByPublicLedgerToken } from "@/lib/supplierDebt";
 import { SupplierShippingPhotoCapture } from "@/components/supplier-ledger/SupplierShippingPhotoCapture";
+import { SupplierShipmentConfirmButton } from "@/components/supplier-ledger/SupplierShipmentConfirmButton";
 
 // Confirmado 2026-09-08 (Fase 1, proveedores con crédito): página pública,
 // SIN auth() — el proveedor de crédito (hoy solo CHEN) accede solo con este
@@ -43,7 +44,19 @@ export default async function SupplierLedgerPage({ params }: { params: Promise<{
   const supplier = await findSupplierByPublicLedgerToken(token);
   if (!supplier || supplier.paymentMode !== "CREDITO") notFound();
 
-  const [pendingItems, disputedItems, closedPayments, pendingShipments] = await Promise.all([
+  const shipmentInclude = {
+    catalogItem: { select: { name: true } },
+    // Confirmado 2026-09-17, pedido explícito del usuario: además de
+    // quién aprobó (Bryan, normalmente), mostrar quién solicitó la
+    // compra — normalmente Jariel o Nairoby; en una emergencia (Bryan
+    // solicita), el que aprueba pasa a ser el admin, nunca la misma
+    // persona (ver isEmergency en schema.prisma). Un solo nombre por
+    // columna.
+    requestedBy: { select: { name: true } },
+    reviewedBy: { select: { name: true } },
+  } as const;
+
+  const [pendingItems, disputedItems, closedPayments, pendingShipments, confirmedShipments] = await Promise.all([
     getSupplierDebtPendingItems(supplier.id),
     getSupplierDebtDisputedItems(supplier.id),
     prisma.supplierDebtPayment.findMany({
@@ -68,19 +81,19 @@ export default async function SupplierLedgerPage({ params }: { params: Promise<{
     // recibe algo pasa a RECEIVED_PENDING_REVIEW, ya no tiene sentido
     // pedirle a CHEN una foto de "lo que está enviando").
     prisma.purchaseRequest.findMany({
-      where: { supplierId: supplier.id, status: "APPROVED" },
-      include: {
-        catalogItem: { select: { name: true } },
-        // Confirmado 2026-09-17, pedido explícito del usuario: además de
-        // quién aprobó (Bryan, normalmente), mostrar quién solicitó la
-        // compra — normalmente Jariel o Nairoby; en una emergencia (Bryan
-        // solicita), el que aprueba pasa a ser el admin, nunca la misma
-        // persona (ver isEmergency en schema.prisma). Un solo nombre por
-        // columna.
-        requestedBy: { select: { name: true } },
-        reviewedBy: { select: { name: true } },
-      },
+      where: { supplierId: supplier.id, status: "APPROVED", supplierShippingConfirmedAt: null },
+      include: shipmentInclude,
       orderBy: { requestedAt: "asc" },
+    }),
+    // Confirmado 2026-09-17, pedido explícito del usuario: una vez que el
+    // equipo de despacho aprieta "Ya lo enviamos", el pedido sale de la
+    // lista de arriba y pasa a este historial de solo lectura, en el mismo
+    // enlace. Puramente informativo (como la foto): no reemplaza la
+    // recepción real de Daniel.
+    prisma.purchaseRequest.findMany({
+      where: { supplierId: supplier.id, status: "APPROVED", supplierShippingConfirmedAt: { not: null } },
+      include: shipmentInclude,
+      orderBy: { supplierShippingConfirmedAt: "desc" },
     }),
   ]);
 
@@ -160,6 +173,7 @@ export default async function SupplierLedgerPage({ params }: { params: Promise<{
                     <th className={th}>Solicitado por</th>
                     <th className={th}>Aprobado por</th>
                     <th className={th}>Foto (opcional)</th>
+                    <th className={th}>¿Ya lo enviaron?</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-neutral-100">
@@ -172,6 +186,48 @@ export default async function SupplierLedgerPage({ params }: { params: Promise<{
                       <td className={`${td} text-neutral-600`}>{r.reviewedBy?.name ?? "—"}</td>
                       <td className="px-3 py-2">
                         <SupplierShippingPhotoCapture token={token} requestId={r.id} initialPhotoUrl={r.supplierShippingPhotoUrl} />
+                      </td>
+                      <td className="px-3 py-2">
+                        <SupplierShipmentConfirmButton token={token} requestId={r.id} />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+
+        <section className="mb-8">
+          <h2 className="mb-3 text-sm font-medium text-neutral-700">Historial de lo que ya confirmaron enviado</h2>
+          {confirmedShipments.length === 0 ? (
+            <p className="text-sm text-neutral-400">Todavía no han confirmado ningún envío.</p>
+          ) : (
+            <div className="overflow-x-auto rounded-xl border border-neutral-200 bg-white shadow-sm">
+              <table className="w-full text-left text-sm">
+                <thead className="border-b border-neutral-200 bg-neutral-50 text-xs uppercase tracking-wide text-neutral-500">
+                  <tr>
+                    <th className={th}>Confirmado</th>
+                    <th className={NOMBRE_TH}>Producto</th>
+                    <th className={`${th} text-right`}>Cant.</th>
+                    <th className={th}>Solicitado por</th>
+                    <th className={th}>Foto</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-neutral-100">
+                  {confirmedShipments.map((r) => (
+                    <tr key={r.id}>
+                      <td className={`${td} text-neutral-600`}>{r.supplierShippingConfirmedAt ? DATETIME_FMT.format(r.supplierShippingConfirmedAt) : "—"}</td>
+                      <td className="px-3 py-2">{r.catalogItem.name}</td>
+                      <td className={`${td} text-right tabular-nums`}>{r.quantity}</td>
+                      <td className={`${td} text-neutral-600`}>{r.requestedBy?.name ?? "—"}</td>
+                      <td className="px-3 py-2">
+                        {r.supplierShippingPhotoUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={r.supplierShippingPhotoUrl} alt="Foto enviada" className="w-16 h-16 object-cover rounded-md border border-neutral-200" />
+                        ) : (
+                          <span className="text-neutral-400">—</span>
+                        )}
                       </td>
                     </tr>
                   ))}

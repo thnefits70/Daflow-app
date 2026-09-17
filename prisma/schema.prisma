@@ -2339,6 +2339,15 @@ model PurchaseRequest {
   supplierShippingPhotoUrl String?
   supplierShippingPhotoAt  DateTime?
 
+  // Confirmado 2026-09-17, pedido explícito del usuario: el equipo de
+  // despacho del proveedor (sin login, mismo token) puede apretar un botón
+  // por pedido para marcar "ya lo enviamos" — con foto o sin ella. Es
+  // puramente informativo (igual que la foto): NO cambia el status real ni
+  // reemplaza la recepción que hace Daniel, solo mueve la fila de "falta
+  // enviar" a un historial de solo lectura en el mismo enlace, para que
+  // ellos mismos lleven registro de lo que ya despacharon.
+  supplierShippingConfirmedAt DateTime?
+
   shippingIncluded                  Boolean                @default(false)
   // Confirmado 2026-08-11: pedido explícito del usuario — a veces al
   // solicitar todavía no se sabe ni el transportista ni el costo real del
