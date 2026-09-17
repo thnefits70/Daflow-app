@@ -74,6 +74,23 @@ function computePreviewPrice(batchCost: number, batchUnits: number, freightCost:
   return (unitCost + fulfillment) / (1 - margin / 100);
 }
 
+// Confirmado 2026-09-17, pedido explícito del usuario: comparación contra el
+// precio de la competencia. El margen resultante de vender a ese precio
+// varía según el fulfillment ($0.75 default vs $0.50 chico, únicas dos
+// opciones de la calculadora) — de ahí sale el rango mínimo/máximo, no de
+// negociar el costo con el proveedor.
+function computeCompetitorComparison(batchCost: number, batchUnits: number, freightCost: number, insurance: number, competitorPrice: number) {
+  if (!batchCost || !batchUnits || !competitorPrice) return null;
+  const bodegaUnitCost = batchCost + (freightCost || 0) / batchUnits;
+  const unitCostWithInsurance = bodegaUnitCost * (1 + insurance / 100);
+  const marginAt = (fulfillment: number) => (1 - (unitCostWithInsurance + fulfillment) / competitorPrice) * 100;
+  return {
+    // Fulfillment $0.75 (más caro) deja el margen más bajo; $0.50 deja el más alto.
+    marginMin: marginAt(0.75),
+    marginMax: marginAt(0.50),
+  };
+}
+
 type Tab = "proponer" | "mispropuestas" | "listoparacomprar" | "consulta" | "aprobacion" | "publicar" | "brandear" | "trazabilidad";
 
 export function MarketProductPanel({
@@ -301,6 +318,9 @@ function ProposeForm() {
 
   const showsCompetitor = platform !== "ROCKET" && !noCompetitorData;
   const preview = computePreviewPrice(Number(primaryCost), Number(primaryUnits), Number(primaryFreight), Number(insurance), Number(fulfillment), Number(margin));
+  const competitorComparison = showsCompetitor && competitorPrice
+    ? computeCompetitorComparison(Number(primaryCost), Number(primaryUnits), Number(primaryFreight), Number(insurance), Number(competitorPrice))
+    : null;
 
   async function uploadImage(file: File) {
     setUploading(true);
@@ -422,6 +442,28 @@ function ProposeForm() {
             <input className="rounded border border-rule px-2.5 py-1.5 text-[13px]" placeholder="Precio de venta" type="number" step="0.01" value={competitorPrice} onChange={(e) => setCompetitorPrice(e.target.value)} />
             <input className="rounded border border-rule px-2.5 py-1.5 text-[13px]" placeholder="Bodega vendedora" value={competitorBodegaName} onChange={(e) => setCompetitorBodegaName(e.target.value)} />
           </div>
+          {competitorPrice && preview !== null && (
+            <div className="mt-2.5 pt-2.5 border-t border-rule text-[12px] space-y-1">
+              <div className="text-ink">
+                Tu precio de Dropi: <b>{money(preview)}</b> vs competencia: <b>{money(Number(competitorPrice))}</b>
+                {" — "}
+                {preview <= Number(competitorPrice) ? (
+                  <span className="text-teal font-semibold">{money(Number(competitorPrice) - preview)} más barato</span>
+                ) : (
+                  <span className="text-red font-semibold">{money(preview - Number(competitorPrice))} más caro</span>
+                )}
+              </div>
+              {competitorComparison && (
+                <div className="text-steel">
+                  Margen si vendieras al precio de la competencia: entre{" "}
+                  <b className={competitorComparison.marginMin >= Number(margin) ? "text-teal" : "text-red"}>{competitorComparison.marginMin.toFixed(1)}%</b>
+                  {" y "}
+                  <b className={competitorComparison.marginMax >= Number(margin) ? "text-teal" : "text-red"}>{competitorComparison.marginMax.toFixed(1)}%</b>
+                  {" "}(tu margen mínimo pedido: {margin}%)
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
       {platform !== "ROCKET" && noCompetitorData && (
