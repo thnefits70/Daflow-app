@@ -3,6 +3,7 @@ import { notifyOwner } from "@/lib/notifications";
 import { getInventoryLeadId, getMarketingLeadId, getFinanceLeadId } from "@/lib/guards";
 import { OUTFLOW_REASON_LABELS } from "@/lib/merchandiseOutflowLabels";
 import { PRICED_STATUSES, effectiveUnitCost } from "@/lib/purchases";
+import { recordKardexEntry } from "@/lib/stockKardex";
 
 export { OUTFLOW_REASON_LABELS };
 
@@ -46,9 +47,15 @@ export function outflowItemDisplayName(item: { declaredName: string; catalogItem
 // crea solo este batch, ya "submitted", sin que nadie lo vuelva a capturar a
 // mano. Un batch por ítem (no por orden completa), porque cada producto de
 // la orden puede tener su propia cantidad/nombre confirmado.
+// Corregido 2026-09-17, bug real encontrado revisando por qué INVESTOCK no
+// tenía ninguna salida registrada todavía: este batch se creaba ya
+// "submitted" (no pasa por batches/[id]/submit/route.ts, que es donde SÍ se
+// registra la salida en el Kardex para los demás motivos), así que las
+// compras personales nunca restaban stock real de INVESTOCK — se quedaban
+// como si el producto nunca hubiera salido de bodega.
 export async function createOutflowForPersonalPurchaseItem(params: { itemId: string; productName: string; catalogItemId?: string | null; quantity: number }): Promise<void> {
   const batchNumber = await nextMerchandiseOutflowNumber();
-  await prisma.merchandiseOutflowBatch.create({
+  const batch = await prisma.merchandiseOutflowBatch.create({
     data: {
       code: formatMerchandiseOutflowCode(batchNumber),
       batchNumber,
@@ -57,7 +64,19 @@ export async function createOutflowForPersonalPurchaseItem(params: { itemId: str
       personalPurchaseItemId: params.itemId,
       items: { create: [{ catalogItemId: params.catalogItemId ?? undefined, declaredName: params.productName, quantity: params.quantity }] },
     },
+    include: { items: true },
   });
+
+  if (params.catalogItemId) {
+    await recordKardexEntry({
+      catalogItemId: params.catalogItemId,
+      type: "OUT",
+      quantity: params.quantity,
+      unitCost: null,
+      occurredAt: new Date(),
+      merchandiseOutflowItemId: batch.items[0].id,
+    }).catch((err) => console.error("[personal-purchases] No se pudo registrar la salida de Kardex:", err));
+  }
 }
 
 // CAMBIO_PROVEEDOR (confirmado 2026-08-26): al agregar un producto ya
