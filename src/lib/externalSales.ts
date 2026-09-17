@@ -26,7 +26,12 @@ export type PriceExternalSaleItemInput = { catalogItemId: string; quantity: numb
 // b2cBreakdown solo viene en ventas contra entrega — pedido explícito de
 // Marcos 2026-09-16 para ver cómo se calculó el precio, no solo el
 // resultado (ver B2CPriceBreakdownNote en ExternalSaleDeclareForm.tsx).
-export type PricedExternalSaleItem = { catalogItemId: string; unitPrice: number; marginPercentUsed: number; b2cBreakdown?: B2CPriceBreakdown };
+// costSource "just" (temporal, pedido explícito del usuario 2026-09-17):
+// el producto todavía no tiene ni propuesta de Jariel ni costo real de
+// Kardex (INVESTOCK), así que el precio se calculó con el costo promedio
+// del último archivo de Just como respaldo — ExternalSaleDeclareForm lo
+// marca para que no se confunda con un costo real.
+export type PricedExternalSaleItem = { catalogItemId: string; unitPrice: number; marginPercentUsed: number; b2cBreakdown?: B2CPriceBreakdown; costSource: "proposal" | "kardex" | "just" };
 export type PriceExternalSaleItemsResult = { ok: true; items: PricedExternalSaleItem[] } | { ok: false; error: string };
 
 // El array `items` del resultado viene SIEMPRE en el mismo orden que
@@ -53,7 +58,7 @@ export async function priceExternalSaleItems(params: { isContraEntrega: boolean;
     const items = params.items.map((it) => {
       const cost = byCatalogItemId.get(it.catalogItemId)!;
       const breakdown = computeB2CPriceBreakdown({ ...cost, totalQuantity })!;
-      return { catalogItemId: it.catalogItemId, unitPrice: breakdown.finalPrice, marginPercentUsed: marginPercent, b2cBreakdown: breakdown };
+      return { catalogItemId: it.catalogItemId, unitPrice: breakdown.finalPrice, marginPercentUsed: marginPercent, b2cBreakdown: breakdown, costSource: cost.costSource };
     });
     return { ok: true, items };
   }
@@ -66,7 +71,7 @@ export async function priceExternalSaleItems(params: { isContraEntrega: boolean;
     }
     const cost = byCatalogItemId.get(it.catalogItemId)!;
     const unitPrice = computeB2BPrice({ ...cost, marginPercent });
-    items.push({ catalogItemId: it.catalogItemId, unitPrice, marginPercentUsed: marginPercent });
+    items.push({ catalogItemId: it.catalogItemId, unitPrice, marginPercentUsed: marginPercent, costSource: cost.costSource });
   }
   return { ok: true, items };
 }

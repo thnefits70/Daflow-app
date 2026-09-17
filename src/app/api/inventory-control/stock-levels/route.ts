@@ -88,6 +88,7 @@ export async function GET() {
             insuranceRatePercent: p.insuranceRatePercent,
             fulfillmentCost: p.fulfillmentCost,
             marginPercent: p.marginPercent,
+            costSource: "proposal" as const,
           },
         ] as const;
       })
@@ -102,17 +103,26 @@ export async function GET() {
     // productos no se conoce el flete por separado (freightCost: null), así
     // que "Puesto en bodega" sale igual a "Precio proveedor" — no es un
     // error, es la única base de costo que existe hoy para ellos.
-    const base = proposalByCatalogItemId.get(r.catalogItemId) ??
-      (r.avgCost > 0 ? { batchCost: r.avgCost, batchUnits: 1, freightCost: null, insuranceRatePercent: 6, fulfillmentCost: 0.75, marginPercent: DROPI_MARGIN_DEFAULT } : null);
     const justAvgCost = r.justCode ? justAvgCostByCode.get(r.justCode.trim()) ?? null : null;
     const justStock = r.justCode ? justStockByCode.get(r.justCode.trim()) ?? null : null;
     const justStockUploadedAt = r.justCode ? justStockUploadedAtByCode.get(r.justCode.trim()) ?? null : null;
+    // Confirmado 2026-09-17, pedido explícito del usuario: si el producto no
+    // tiene ni propuesta de Jariel ni costo real de Kardex (INVESTOCK),
+    // respaldo TEMPORAL con el costo promedio de Just — mismo criterio que
+    // el respaldo de Kardex de arriba — mientras se termina de cargar
+    // INVESTOCK para todos los productos. `costSource` marca cuál se usó
+    // para que el frontend lo resalte quitándole ambigüedad con un costo
+    // real; se quita junto con el respaldo cuando INVESTOCK quede completo.
+    const base = proposalByCatalogItemId.get(r.catalogItemId) ??
+      (r.avgCost > 0 ? { batchCost: r.avgCost, batchUnits: 1, freightCost: null, insuranceRatePercent: 6, fulfillmentCost: 0.75, marginPercent: DROPI_MARGIN_DEFAULT, costSource: "kardex" as const } : null) ??
+      (justAvgCost && justAvgCost > 0 ? { batchCost: justAvgCost, batchUnits: 1, freightCost: null, insuranceRatePercent: 6, fulfillmentCost: 0.75, marginPercent: DROPI_MARGIN_DEFAULT, costSource: "just" as const } : null);
     if (!base) return { ...r, justAvgCost, justStock, justStockUploadedAt };
     return {
       ...r,
       justAvgCost,
       justStock,
       justStockUploadedAt,
+      costSource: base.costSource,
       providerPrice: base.batchCost,
       bodegaPrice: bodegaUnitCost(base.batchCost, base.freightCost, base.batchUnits),
       benistockPrice: computeBenistockPrice(base),

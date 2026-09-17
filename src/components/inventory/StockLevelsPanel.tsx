@@ -41,6 +41,7 @@ type ComboRow = {
   dropiPrice: number | null;
   b2cPrice1Unit: number | null;
   b2cPrice2to11: number | null;
+  costSource?: "proposal" | "kardex" | "just" | null;
 };
 
 type StockRow = {
@@ -54,6 +55,7 @@ type StockRow = {
   justAvgCost?: number | null;
   justStock?: number | null;
   justStockUploadedAt?: string | null;
+  costSource?: "proposal" | "kardex" | "just" | null;
   providerPrice?: number;
   bodegaPrice?: number;
   benistockPrice?: number;
@@ -91,13 +93,13 @@ function compactDateTime(iso: string) {
 // cualquier precio con un clic, sin agregar íconos ni botones nuevos que
 // ensucien la tabla — clic sobre el número mismo, y por un instante se
 // convierte en un "✓" antes de volver a mostrar el precio.
-function CopyableAmount({ value, className }: { value: number | null | undefined; className: string }) {
+function CopyableAmount({ value, className, title }: { value: number | null | undefined; className: string; title?: string }) {
   const [copied, setCopied] = useState(false);
   if (value == null) return <span className={className}>—</span>;
   return (
     <span
       className={`${className} cursor-pointer hover:underline`}
-      title="Clic para copiar"
+      title={title ? `${title} · Clic para copiar` : "Clic para copiar"}
       onClick={() => {
         navigator.clipboard?.writeText(money(value)).catch(() => null);
         setCopied(true);
@@ -107,6 +109,18 @@ function CopyableAmount({ value, className }: { value: number | null | undefined
       {copied ? "✓" : money(value)}
     </span>
   );
+}
+
+// Confirmado 2026-09-17, pedido explícito del usuario: mientras se termina
+// de cargar INVESTOCK para todos los productos, un producto sin propuesta
+// de Jariel ni costo real de Kardex usa el costo promedio de Just como
+// respaldo TEMPORAL (ver resolveCostBasisForCatalogItems en
+// lib/marketProduct.ts) — estas columnas de costo/precio se resaltan en
+// gold para dejar claro que ese número no viene de INVESTOCK todavía.
+const JUST_ESTIMATE_TITLE = "Estimado con el costo promedio de Just (temporal) — este producto todavía no tiene costo real en INVESTOCK.";
+function withCostSourceColor(base: string, costSource?: "proposal" | "kardex" | "just" | null) {
+  if (costSource !== "just") return base;
+  return base.replace(/text-(teal|ink|blue|steel)\b/g, "text-gold");
 }
 
 // Confirmado 2026-09-16, pedido explícito del usuario: elegir/corregir la
@@ -768,14 +782,42 @@ export function StockLevelsPanel({ isAdmin = false }: { isAdmin?: boolean }) {
                     </span>
                   )}
                 </span>
-                <CopyableAmount value={r.providerPrice} className="text-right font-mono text-[13px] text-steel border-l border-rule pl-3" />
+                <CopyableAmount
+                  value={r.providerPrice}
+                  className={withCostSourceColor("text-right font-mono text-[13px] text-steel border-l border-rule pl-3", r.costSource)}
+                  title={r.costSource === "just" ? JUST_ESTIMATE_TITLE : undefined}
+                />
                 <CopyableAmount value={r.justAvgCost} className="text-right font-mono text-[13px] text-gold" />
-                <CopyableAmount value={r.bodegaPrice} className="text-right font-mono text-[13px] text-steel" />
-                <CopyableAmount value={r.benistockPrice} className="text-right font-mono text-[13px] text-steel" />
-                <CopyableAmount value={r.b2bPriceDefault} className="text-right font-mono text-[13px] font-bold text-teal border-l border-rule pl-3" />
-                <CopyableAmount value={r.dropiPrice} className="text-right font-mono text-[13px] font-bold text-ink" />
-                <CopyableAmount value={r.b2cPrice1Unit} className="text-right font-mono text-[13px] font-bold text-blue" />
-                <CopyableAmount value={r.b2cPrice2to11} className="text-right font-mono text-[13px] font-bold text-blue" />
+                <CopyableAmount
+                  value={r.bodegaPrice}
+                  className={withCostSourceColor("text-right font-mono text-[13px] text-steel", r.costSource)}
+                  title={r.costSource === "just" ? JUST_ESTIMATE_TITLE : undefined}
+                />
+                <CopyableAmount
+                  value={r.benistockPrice}
+                  className={withCostSourceColor("text-right font-mono text-[13px] text-steel", r.costSource)}
+                  title={r.costSource === "just" ? JUST_ESTIMATE_TITLE : undefined}
+                />
+                <CopyableAmount
+                  value={r.b2bPriceDefault}
+                  className={withCostSourceColor("text-right font-mono text-[13px] font-bold text-teal border-l border-rule pl-3", r.costSource)}
+                  title={r.costSource === "just" ? JUST_ESTIMATE_TITLE : undefined}
+                />
+                <CopyableAmount
+                  value={r.dropiPrice}
+                  className={withCostSourceColor("text-right font-mono text-[13px] font-bold text-ink", r.costSource)}
+                  title={r.costSource === "just" ? JUST_ESTIMATE_TITLE : undefined}
+                />
+                <CopyableAmount
+                  value={r.b2cPrice1Unit}
+                  className={withCostSourceColor("text-right font-mono text-[13px] font-bold text-blue", r.costSource)}
+                  title={r.costSource === "just" ? JUST_ESTIMATE_TITLE : undefined}
+                />
+                <CopyableAmount
+                  value={r.b2cPrice2to11}
+                  className={withCostSourceColor("text-right font-mono text-[13px] font-bold text-blue", r.costSource)}
+                  title={r.costSource === "just" ? JUST_ESTIMATE_TITLE : undefined}
+                />
               </div>
             ))
           )}
@@ -818,16 +860,44 @@ export function StockLevelsPanel({ isAdmin = false }: { isAdmin?: boolean }) {
                       <span className="text-right font-mono text-[13px] text-steel-dim" title="Just no rastrea combos, solo productos individuales">
                         —
                       </span>
-                      <CopyableAmount value={combo.providerPrice} className="text-right font-mono text-[13px] text-steel border-l border-rule pl-3" />
+                      <CopyableAmount
+                        value={combo.providerPrice}
+                        className={withCostSourceColor("text-right font-mono text-[13px] text-steel border-l border-rule pl-3", combo.costSource)}
+                        title={combo.costSource === "just" ? JUST_ESTIMATE_TITLE : undefined}
+                      />
                       <span className="text-right font-mono text-[13px] text-steel-dim" title="Just no rastrea combos, solo productos individuales">
                         —
                       </span>
-                      <CopyableAmount value={combo.bodegaPrice} className="text-right font-mono text-[13px] text-steel" />
-                      <CopyableAmount value={combo.benistockPrice} className="text-right font-mono text-[13px] text-steel" />
-                      <CopyableAmount value={combo.b2bPriceDefault} className="text-right font-mono text-[13px] font-bold text-teal border-l border-rule pl-3" />
-                      <CopyableAmount value={combo.dropiPrice} className="text-right font-mono text-[13px] font-bold text-ink" />
-                      <CopyableAmount value={combo.b2cPrice1Unit} className="text-right font-mono text-[13px] font-bold text-blue" />
-                      <CopyableAmount value={combo.b2cPrice2to11} className="text-right font-mono text-[13px] font-bold text-blue" />
+                      <CopyableAmount
+                        value={combo.bodegaPrice}
+                        className={withCostSourceColor("text-right font-mono text-[13px] text-steel", combo.costSource)}
+                        title={combo.costSource === "just" ? JUST_ESTIMATE_TITLE : undefined}
+                      />
+                      <CopyableAmount
+                        value={combo.benistockPrice}
+                        className={withCostSourceColor("text-right font-mono text-[13px] text-steel", combo.costSource)}
+                        title={combo.costSource === "just" ? JUST_ESTIMATE_TITLE : undefined}
+                      />
+                      <CopyableAmount
+                        value={combo.b2bPriceDefault}
+                        className={withCostSourceColor("text-right font-mono text-[13px] font-bold text-teal border-l border-rule pl-3", combo.costSource)}
+                        title={combo.costSource === "just" ? JUST_ESTIMATE_TITLE : undefined}
+                      />
+                      <CopyableAmount
+                        value={combo.dropiPrice}
+                        className={withCostSourceColor("text-right font-mono text-[13px] font-bold text-ink", combo.costSource)}
+                        title={combo.costSource === "just" ? JUST_ESTIMATE_TITLE : undefined}
+                      />
+                      <CopyableAmount
+                        value={combo.b2cPrice1Unit}
+                        className={withCostSourceColor("text-right font-mono text-[13px] font-bold text-blue", combo.costSource)}
+                        title={combo.costSource === "just" ? JUST_ESTIMATE_TITLE : undefined}
+                      />
+                      <CopyableAmount
+                        value={combo.b2cPrice2to11}
+                        className={withCostSourceColor("text-right font-mono text-[13px] font-bold text-blue", combo.costSource)}
+                        title={combo.costSource === "just" ? JUST_ESTIMATE_TITLE : undefined}
+                      />
                     </div>
                     <div className="flex flex-wrap gap-1.5 px-3 pb-2.5 pl-[52px]">
                       {combo.components.map((c) => {

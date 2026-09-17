@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { B2B_MARGIN_OPTIONS, B2B_MARGIN_DEFAULT, B2C_FLETE_PROMEDIO } from "@/lib/externalSalesPricingConstants";
+import { getFinanzasDeptId } from "@/lib/inventoryKpis";
 
 export { B2B_MARGIN_OPTIONS, B2B_MARGIN_DEFAULT, B2C_FLETE_PROMEDIO };
 
@@ -9,7 +10,17 @@ export { B2B_MARGIN_OPTIONS, B2B_MARGIN_DEFAULT, B2C_FLETE_PROMEDIO };
 // Dropi de combos.
 export const DROPI_MARGIN_DEFAULT = 20;
 
-export type CostBasis = { batchCost: number; batchUnits: number; freightCost: number | null; insuranceRatePercent: number };
+// `costSource` deja rastro de qué respaldo se usó — "just" es TEMPORAL
+// (pedido explícito del usuario 2026-09-17) mientras se termina de cargar
+// INVESTOCK para todos los productos; se quita junto con el respaldo mismo
+// cuando eso se complete.
+export type CostBasis = {
+  batchCost: number;
+  batchUnits: number;
+  freightCost: number | null;
+  insuranceRatePercent: number;
+  costSource: "proposal" | "kardex" | "just";
+};
 
 // Confirmado 2026-09-14 (movida acá 2026-09-16 para reusarla desde
 // combos, que necesitaban exactamente lo mismo — antes solo vivía sin
@@ -18,8 +29,12 @@ export type CostBasis = { batchCost: number; batchUnits: number; freightCost: nu
 // Mercado (MarketProductProposal), se usan sus datos exactos; (2) si no,
 // pero ya tiene costo promedio real de Kardex (INVESTOCK) mayor a 0, ese
 // costo promedio SE USA DIRECTO como "precio puesto en bodega" (batchUnits:1,
-// freightCost:null, seguro 6% por defecto); (3) si no tiene ninguno de los
-// dos, el producto no se puede calcular — queda ausente del mapa devuelto.
+// freightCost:null, seguro 6% por defecto); (3) confirmado 2026-09-17,
+// pedido explícito del usuario: si no tiene ninguno de los dos, respaldo
+// TEMPORAL con el costo promedio del último archivo de Just (mismo criterio
+// que (2): batchUnits:1, freightCost:null, seguro 6%) — mientras INVESTOCK
+// se termina de cargar para todos los productos. Si tampoco hay costo de
+// Just, el producto no se puede calcular — queda ausente del mapa devuelto.
 export async function resolveCostBasisForCatalogItems(catalogItemIds: string[]): Promise<Map<string, CostBasis>> {
   const ids = [...new Set(catalogItemIds)];
   if (ids.length === 0) return new Map();
@@ -49,12 +64,34 @@ export async function resolveCostBasisForCatalogItems(catalogItemIds: string[]):
       batchUnits: supplier.batchUnits,
       freightCost: supplier.freightCost,
       insuranceRatePercent: p.insuranceRatePercent,
+      costSource: "proposal",
     });
   }
 
   for (const e of kardexEntries) {
     if (proposalCatalogItemIds.has(e.catalogItemId)) continue;
-    if (e.avgCostAfter > 0) byCatalogItemId.set(e.catalogItemId, { batchCost: e.avgCostAfter, batchUnits: 1, freightCost: null, insuranceRatePercent: 6 });
+    if (e.avgCostAfter > 0) byCatalogItemId.set(e.catalogItemId, { batchCost: e.avgCostAfter, batchUnits: 1, freightCost: null, insuranceRatePercent: 6, costSource: "kardex" });
+  }
+
+  const stillMissingIds = ids.filter((id) => !byCatalogItemId.has(id));
+  if (stillMissingIds.length > 0) {
+    const deptId = await getFinanzasDeptId();
+    if (deptId) {
+      const [items, justSnapshots] = await Promise.all([
+        prisma.purchaseCatalogItem.findMany({ where: { id: { in: stillMissingIds }, justCode: { not: null } }, select: { id: true, justCode: true } }),
+        prisma.inventoryProductSnapshot.findMany({
+          where: { deptId },
+          distinct: ["productCode"],
+          orderBy: [{ productCode: "asc" }, { createdAt: "desc" }],
+          select: { productCode: true, avgCost: true },
+        }),
+      ]);
+      const justAvgCostByCode = new Map(justSnapshots.map((s) => [s.productCode.trim(), s.avgCost]));
+      for (const item of items) {
+        const justAvgCost = item.justCode ? justAvgCostByCode.get(item.justCode.trim()) : undefined;
+        if (justAvgCost && justAvgCost > 0) byCatalogItemId.set(item.id, { batchCost: justAvgCost, batchUnits: 1, freightCost: null, insuranceRatePercent: 6, costSource: "just" });
+      }
+    }
   }
 
   return byCatalogItemId;

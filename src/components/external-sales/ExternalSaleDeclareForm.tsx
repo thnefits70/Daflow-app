@@ -85,7 +85,7 @@ type B2CBreakdown = {
   finalPrice: number;
 };
 
-type PreviewRow = { unitPrice: number; marginPercentUsed: number; b2cBreakdown?: B2CBreakdown };
+type PreviewRow = { unitPrice: number; marginPercentUsed: number; b2cBreakdown?: B2CBreakdown; costSource: "proposal" | "kardex" | "just" };
 
 type FacturaSolicitud = "SI" | "NO" | "PENDIENTE";
 
@@ -179,6 +179,19 @@ function B2CPriceBreakdownNote({ b }: { b: B2CBreakdown }) {
       ${b.priceBeforeFreight.toFixed(2)} + ${b.fletePromedio.toFixed(2)} de flete promedio = ${b.priceBeforeRounding.toFixed(2)}
       <br />
       Se redondea para que termine en .99 → <span className="font-bold text-ink">${b.finalPrice.toFixed(2)}</span>
+    </div>
+  );
+}
+
+// Confirmado 2026-09-17, pedido explícito del usuario: respaldo TEMPORAL
+// mientras se termina de cargar INVESTOCK — este precio se calculó con el
+// costo promedio de Just porque el producto todavía no tiene ni propuesta
+// de Jariel ni costo real en Kardex. Se quita cuando INVESTOCK quede
+// completo para todos los productos.
+function JustCostSourceNote() {
+  return (
+    <div className="mt-1 rounded border border-gold/30 bg-gold/5 px-2 py-1 text-[10.5px] text-gold leading-relaxed">
+      Precio estimado con el costo promedio de Just (temporal) — este producto todavía no tiene costo real cargado en INVESTOCK.
     </div>
   );
 }
@@ -297,6 +310,7 @@ function FixItemForm({
             <>
               Precio: <span className="font-bold text-teal">${preview![0].unitPrice.toFixed(2)}</span> <span className="text-steel">({preview![0].marginPercentUsed}% de ganancia)</span>
               {preview![0].b2cBreakdown && <B2CPriceBreakdownNote b={preview![0].b2cBreakdown} />}
+              {preview![0].costSource === "just" && <JustCostSourceNote />}
             </>
           ) : (
             <span className="text-steel">calculando precio…</span>
@@ -695,6 +709,7 @@ function ItemsEditor({
                     Precio: <span className="font-bold text-teal">${preview![items.length].unitPrice.toFixed(2)}</span>{" "}
                     <span className="text-steel">({preview![items.length].marginPercentUsed}% de ganancia)</span>
                     {preview![items.length].b2cBreakdown && <B2CPriceBreakdownNote b={preview![items.length].b2cBreakdown!} />}
+                    {preview![items.length].costSource === "just" && <JustCostSourceNote />}
                   </>
                 ) : (
                   <span className="text-steel">calculando precio…</span>
@@ -794,6 +809,7 @@ function PriceCheckPanel({ searchUrl, isContraEntrega }: { searchUrl: string; is
                       <span className="text-steel">({preview![0].marginPercentUsed}% de ganancia) · Total {qty} un.: </span>
                       <span className="font-bold text-ink">${(Number(qty) * preview![0].unitPrice).toFixed(2)}</span>
                       {preview![0].b2cBreakdown && <B2CPriceBreakdownNote b={preview![0].b2cBreakdown} />}
+                      {preview![0].costSource === "just" && <JustCostSourceNote />}
                     </>
                   ) : (
                     <span className="text-steel">calculando precio…</span>

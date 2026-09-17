@@ -45,16 +45,30 @@ export async function GET() {
 
   return NextResponse.json(
     combos.map((c) => {
-      const componentInputs: ComboComponentInput[] | null = c.components.every((comp) => costBasisByItemId.has(comp.catalogItemId))
-        ? c.components.map((comp) => ({ ...costBasisByItemId.get(comp.catalogItemId)!, quantity: comp.quantity }))
+      const costBasisList = c.components.every((comp) => costBasisByItemId.has(comp.catalogItemId))
+        ? c.components.map((comp) => costBasisByItemId.get(comp.catalogItemId)!)
+        : null;
+      const componentInputs: ComboComponentInput[] | null = costBasisList
+        ? costBasisList.map((cb, i) => ({ ...cb, quantity: c.components[i].quantity }))
         : null;
       // Confirmado 2026-09-16, pedido explícito del usuario: mismo formato de
       // columnas que los productos individuales (Proveedor/Puesto en
       // bodega) — para un combo, cada uno es la suma de ese costo × cantidad
       // de todos sus componentes (no hay un solo "precio proveedor" para un
       // combo, así que se suma el total real que cuesta armarlo completo).
+      // Si algún componente usa un respaldo menos confiable (kardex, o el
+      // temporal de Just), el combo entero se marca con ese — no tiene
+      // sentido mostrarlo como "real" si una sola pieza viene estimada.
+      const costSource = costBasisList
+        ? costBasisList.some((cb) => cb.costSource === "just")
+          ? ("just" as const)
+          : costBasisList.some((cb) => cb.costSource === "kardex")
+            ? ("kardex" as const)
+            : ("proposal" as const)
+        : null;
       const prices = componentInputs
         ? {
+            costSource,
             providerPrice: componentInputs.reduce((acc, c) => acc + c.batchCost * c.quantity, 0),
             bodegaPrice: componentInputs.reduce((acc, c) => acc + bodegaUnitCost(c.batchCost, c.freightCost, c.batchUnits) * c.quantity, 0),
             benistockPrice: computeComboBenistockPrice(componentInputs),
@@ -63,7 +77,7 @@ export async function GET() {
             b2cPrice1Unit: computeComboB2CPrice(componentInputs, 1),
             b2cPrice2to11: computeComboB2CPrice(componentInputs, 2),
           }
-        : { providerPrice: null, bodegaPrice: null, benistockPrice: null, b2bPriceDefault: null, dropiPrice: null, b2cPrice1Unit: null, b2cPrice2to11: null };
+        : { costSource: null, providerPrice: null, bodegaPrice: null, benistockPrice: null, b2bPriceDefault: null, dropiPrice: null, b2cPrice1Unit: null, b2cPrice2to11: null };
       return {
         id: c.id,
         code: c.code,

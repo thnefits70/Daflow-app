@@ -24,6 +24,7 @@ import {
   formatMarketProductProposalCode,
 } from "@/lib/marketProduct";
 import { getAllCurrentStock } from "@/lib/stockKardex";
+import { getFinanzasDeptId } from "@/lib/inventoryKpis";
 
 const supplierPriceSchema = z.object({
   supplierId: z.string(),
@@ -224,13 +225,22 @@ export async function GET(req: NextRequest) {
     const [canB2B, canB2C] = await Promise.all([canViewB2BPricing(), canViewB2CPricing()]);
     if (!canB2B && !canB2C) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
-    const [allStock, proposals, combos] = await Promise.all([
+    const deptId = await getFinanzasDeptId();
+    const [allStock, proposals, combos, justSnapshots] = await Promise.all([
       getAllCurrentStock(),
       prisma.marketProductProposal.findMany({
         where: { catalogItemId: { not: null } },
         include: { supplierPrices: true },
       }),
       prisma.dropiCombo.findMany({ include: { components: true } }),
+      deptId
+        ? prisma.inventoryProductSnapshot.findMany({
+            where: { deptId },
+            distinct: ["productCode"],
+            orderBy: [{ productCode: "asc" }, { createdAt: "desc" }],
+            select: { productCode: true, avgCost: true },
+          })
+        : Promise.resolve([]),
     ]);
     const proposalByCatalogItemId = new Map(
       proposals
@@ -239,28 +249,35 @@ export async function GET(req: NextRequest) {
           const supplier = pickPrimarySupplierPrice(p.supplierPrices)!;
           return [
             p.catalogItemId!,
-            { batchCost: supplier.batchCost, batchUnits: supplier.batchUnits, freightCost: supplier.freightCost, insuranceRatePercent: p.insuranceRatePercent, fulfillmentCost: p.fulfillmentCost },
+            { batchCost: supplier.batchCost, batchUnits: supplier.batchUnits, freightCost: supplier.freightCost, insuranceRatePercent: p.insuranceRatePercent, fulfillmentCost: p.fulfillmentCost, costSource: "proposal" as const },
           ] as const;
         })
     );
     const stockByCatalogItemId = new Map(allStock.map((s) => [s.catalogItemId, s]));
-
-    // Confirmado 2026-09-14: mismo default que MarketProductProposal (seguro
-    // 6%, fulfillment $0.75) para un producto sin propuesta propia, priceado
-    // a partir de su costo promedio de Kardex. Un producto sin propuesta Y
-    // sin costo de Kardex (nunca tuvo movimiento, costo $0) no tiene nada
-    // que calcular.
-    function resolveBase(catalogItemId: string) {
-      const proposalBase = proposalByCatalogItemId.get(catalogItemId);
-      if (proposalBase) return proposalBase;
-      const stock = stockByCatalogItemId.get(catalogItemId);
-      if (stock && stock.avgCost > 0) return { batchCost: stock.avgCost, batchUnits: 1, freightCost: null, insuranceRatePercent: 6, fulfillmentCost: 0.75 };
-      return null;
-    }
+    const justAvgCostByCode = new Map(justSnapshots.map((s) => [s.productCode.trim(), s.avgCost]));
 
     const catalogItemIds = allStock.map((s) => s.catalogItemId);
     const catalogItems = await prisma.purchaseCatalogItem.findMany({ where: { id: { in: catalogItemIds } }, select: { id: true, name: true, justCode: true, photos: true } });
     const catalogItemById = new Map(catalogItems.map((c) => [c.id, c]));
+
+    // Confirmado 2026-09-14: mismo default que MarketProductProposal (seguro
+    // 6%, fulfillment $0.75) para un producto sin propuesta propia, priceado
+    // a partir de su costo promedio de Kardex. Confirmado 2026-09-17, pedido
+    // explícito del usuario: si tampoco tiene costo de Kardex (INVESTOCK),
+    // respaldo TEMPORAL con el costo promedio del último archivo de Just —
+    // mientras se termina de cargar INVESTOCK para todos los productos.
+    // `costSource` marca cuál se usó, para resaltarlo en el frontend. Un
+    // producto sin ninguno de los tres no tiene nada que calcular.
+    function resolveBase(catalogItemId: string) {
+      const proposalBase = proposalByCatalogItemId.get(catalogItemId);
+      if (proposalBase) return proposalBase;
+      const stock = stockByCatalogItemId.get(catalogItemId);
+      if (stock && stock.avgCost > 0) return { batchCost: stock.avgCost, batchUnits: 1, freightCost: null, insuranceRatePercent: 6, fulfillmentCost: 0.75, costSource: "kardex" as const };
+      const justCode = catalogItemById.get(catalogItemId)?.justCode;
+      const justAvgCost = justCode ? justAvgCostByCode.get(justCode.trim()) : undefined;
+      if (justAvgCost && justAvgCost > 0) return { batchCost: justAvgCost, batchUnits: 1, freightCost: null, insuranceRatePercent: 6, fulfillmentCost: 0.75, costSource: "just" as const };
+      return null;
+    }
 
     const productRows = allStock
       .map((s) => {
@@ -274,6 +291,7 @@ export async function GET(req: NextRequest) {
           justCode: catalogItem.justCode,
           photos: catalogItem.photos,
           isCombo: false,
+          costSource: base.costSource,
           benistockPrice: computeBenistockPrice(base),
           b2bPriceDefault: computeB2BPrice({ ...base, marginPercent: B2B_MARGIN_DEFAULT }),
           b2cPrice1Unit: computeB2CPrice({ ...base, totalQuantity: 1 }),
@@ -296,12 +314,21 @@ export async function GET(req: NextRequest) {
         const components = combo.components.map((c) => ({ base: resolveBase(c.catalogItemId), quantity: c.quantity }));
         if (components.some((c) => !c.base)) return null;
         const resolvedComponents = components.map((c) => ({ ...c.base!, quantity: c.quantity }));
+        // Si algún componente del combo usa un respaldo menos confiable, el
+        // combo entero se marca con ese — no tiene sentido mostrarlo como
+        // "real" si una sola pieza viene estimada.
+        const costSource = components.some((c) => c.base!.costSource === "just")
+          ? ("just" as const)
+          : components.some((c) => c.base!.costSource === "kardex")
+            ? ("kardex" as const)
+            : ("proposal" as const);
         return {
           id: combo.id,
           name: combo.label ?? combo.code,
           justCode: combo.code,
           photos: [] as string[],
           isCombo: true,
+          costSource,
           benistockPrice: computeComboBenistockPrice(resolvedComponents),
           b2bPriceDefault: computeComboB2BPrice(resolvedComponents, B2B_MARGIN_DEFAULT),
           b2cPrice1Unit: computeComboB2CPrice(resolvedComponents, 1),
