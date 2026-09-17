@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Upload, FileText, X, AlertTriangle, CheckCircle2, Download } from "lucide-react";
 import type { FinanceKpiDataDTO } from "@/lib/financeKpis";
@@ -97,6 +97,24 @@ export function FinanceUploadPanel({ deptId, data }: { deptId: string; data: Fin
     .map((op) => ({ op, row: data.recordsByOperation[op.id]?.find((r) => r.period === targetPeriod) }))
     .filter((x): x is { op: (typeof activeOps)[number]; row: NonNullable<typeof x.row> } => !!x.row);
   const hasExistingData = existingRowsForPeriod.length > 0;
+
+  // Confirmado 2026-09-17, pedido explícito del usuario: ventas y costo de
+  // ventas automáticos desde INVESTOCK, solo de referencia junto a lo que
+  // ella sube — nunca lo reemplaza (mismo criterio que Just vs INVESTOCK en
+  // Stock Actual). Se recalcula solo al elegir un mes que ya tiene datos
+  // cargados, sin volver a subir nada.
+  const [comparison, setComparison] = useState<{
+    rows: { operationId: string; operationName: string; nairoby: { ventas: number; costoVentas: number } | null; auto: { ventas: number; costoVentas: number } | null }[];
+    sinMarca: { ventas: number; costoVentas: number } | null;
+  } | null>(null);
+  function loadComparison() {
+    if (!hasExistingData) return;
+    fetch(`/api/finance-kpis/sales-comparison?deptId=${deptId}&period=${targetPeriod}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then(setComparison)
+      .catch(() => setComparison(null));
+  }
+  useEffect(loadComparison, [deptId, targetPeriod, hasExistingData]);
 
   function resetUploadState() {
     setPhase("idle");
@@ -252,6 +270,48 @@ export function FinanceUploadPanel({ deptId, data }: { deptId: string; data: Fin
                 </div>
               ))}
             </div>
+          </div>
+        )}
+
+        {hasExistingData && comparison && comparison.rows.length > 0 && (
+          <div className="mb-3.5">
+            <div className="text-[12px] font-semibold text-steel mb-1.5">Comparación contra INVESTOCK — {monthLabel(targetPeriod)}</div>
+            <div className="text-[10.5px] text-steel-dim mb-2">
+              Solo de referencia — nunca reemplaza lo que subes. Para Despacho (Dropi) es un estimado (costo real + margen), no el precio exacto que tú ajustas a mano.
+            </div>
+            <div className="overflow-x-auto rounded-md border border-rule">
+              <table className="w-full text-[12px]">
+                <thead className="bg-cloud">
+                  <tr>
+                    <th rowSpan={2} className="text-left px-2.5 py-1.5 font-semibold text-steel align-bottom">Marca</th>
+                    <th colSpan={2} className="text-center px-2.5 py-1 font-semibold text-steel border-b border-rule">Ventas</th>
+                    <th colSpan={2} className="text-center px-2.5 py-1 font-semibold text-steel border-b border-rule border-l border-rule">Costo de ventas</th>
+                  </tr>
+                  <tr>
+                    <th className="text-right px-2.5 py-1.5 font-semibold text-steel">Nairoby</th>
+                    <th className="text-right px-2.5 py-1.5 font-semibold text-steel">INVESTOCK</th>
+                    <th className="text-right px-2.5 py-1.5 font-semibold text-steel border-l border-rule">Nairoby</th>
+                    <th className="text-right px-2.5 py-1.5 font-semibold text-steel">INVESTOCK</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {comparison.rows.map((r) => (
+                    <tr key={r.operationId} className="border-t border-rule">
+                      <td className="px-2.5 py-1.5 font-semibold">{r.operationName}</td>
+                      <td className="px-2.5 py-1.5 text-right tabular-nums">{r.nairoby ? money(r.nairoby.ventas) : "—"}</td>
+                      <td className="px-2.5 py-1.5 text-right tabular-nums text-steel">{r.auto ? money(r.auto.ventas) : "—"}</td>
+                      <td className="px-2.5 py-1.5 text-right tabular-nums border-l border-rule">{r.nairoby ? money(r.nairoby.costoVentas) : "—"}</td>
+                      <td className="px-2.5 py-1.5 text-right tabular-nums text-steel">{r.auto ? money(r.auto.costoVentas) : "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {comparison.sinMarca && (comparison.sinMarca.ventas > 0 || comparison.sinMarca.costoVentas > 0) && (
+              <div className="text-[10.5px] text-steel mt-1.5">
+                + {money(comparison.sinMarca.ventas)} en ventas de productos sin marca asignada todavía (Daniel sigue etiquetando el catálogo) — no incluido arriba en ninguna marca.
+              </div>
+            )}
           </div>
         )}
 
