@@ -87,12 +87,19 @@ export default async function SupplierLedgerPage({ params }: { params: Promise<{
       orderBy: { requestedAt: "asc" },
     }),
     // Confirmado 2026-09-17, pedido explícito del usuario: una vez que el
-    // equipo de despacho aprieta "Ya lo enviamos", el pedido sale de la
-    // lista de arriba y pasa a este historial de solo lectura, en el mismo
-    // enlace. Puramente informativo (como la foto): no reemplaza la
-    // recepción real de Daniel.
+    // equipo de despacho aprieta "Ya lo enviamos", el pedido pasa a este
+    // historial de solo lectura, en el mismo enlace. A PROPÓSITO sin filtro
+    // de status — esta sección es el registro propio de CHEN de lo que
+    // ELLOS confirmaron, y nunca debe depender de nuestra operación interna
+    // (INVESTOCK/recepción de Daniel). Corregido 2026-09-17: antes exigía
+    // status "APPROVED", así que en cuanto Daniel recibía la mercadería
+    // (proceso nuestro, no de ellos) el pedido desaparecía de acá aunque
+    // Chen sí lo hubiera confirmado — quedaba mezclado con nuestro estado
+    // interno cuando no debía. Ahora solo depende de
+    // supplierShippingConfirmedAt, sin importar en qué status esté el
+    // pedido para nosotros.
     prisma.purchaseRequest.findMany({
-      where: { supplierId: supplier.id, status: "APPROVED", supplierShippingConfirmedAt: { not: null } },
+      where: { supplierId: supplier.id, supplierShippingConfirmedAt: { not: null } },
       include: shipmentInclude,
       orderBy: { supplierShippingConfirmedAt: "desc" },
     }),
