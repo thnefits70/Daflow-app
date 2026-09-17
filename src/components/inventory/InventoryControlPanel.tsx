@@ -1,10 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, Upload, AlertTriangle, TrendingDown, Minus, PlayCircle } from "lucide-react";
 import type { InventoryControlPeriodDTO, InventorySnapshotPeriodDTO } from "@/lib/inventoryKpis";
-import { usePasteFile } from "@/lib/usePasteFile";
 import { uploadFile } from "@/lib/uploadFile";
 import { TabGuide } from "@/components/shared/TabGuide";
 
@@ -54,94 +53,6 @@ export function InventoryControlPanel({
   const router = useRouter();
   const [period, setPeriod] = useState(currentPeriodDefault);
   const selectedData = periods.find((p) => p.period === period) ?? null;
-  const [value, setValue] = useState(selectedData?.value !== null && selectedData?.value !== undefined ? String(selectedData.value) : "");
-  const [savingValue, setSavingValue] = useState(false);
-  const [toast, setToast] = useState("");
-  const [err, setErr] = useState("");
-
-  const [proofUrl, setProofUrl] = useState<string | null>(selectedData?.proofUrl ?? null);
-  const [uploadingProof, setUploadingProof] = useState(false);
-  const [verifying, setVerifying] = useState(false);
-  const [verifyResult, setVerifyResult] = useState<{ readAmount: number | null; matches: boolean } | null>(null);
-  const [confirming, setConfirming] = useState(false);
-
-  function changePeriod(newPeriod: string) {
-    setPeriod(newPeriod);
-    const data = periods.find((p) => p.period === newPeriod) ?? null;
-    setValue(data?.value !== null && data?.value !== undefined ? String(data.value) : "");
-    setProofUrl(data?.proofUrl ?? null);
-    setVerifyResult(null);
-    setConfirming(false);
-    setToast("");
-    setErr("");
-  }
-
-  const { onPaste, onMouseEnter, onMouseLeave } = usePasteFile((file) => uploadProof(file));
-  const proofFileInputRef = useRef<HTMLInputElement>(null);
-
-  async function uploadProof(file: File) {
-    setUploadingProof(true);
-    setErr("");
-    const res = await uploadFile(file, "inventory-proofs");
-    setUploadingProof(false);
-    if (!res.ok) { setErr(res.error); return; }
-    setProofUrl(res.url);
-    setVerifyResult(null);
-  }
-
-  async function verifyProof(url: string, n: number) {
-    setVerifying(true);
-    const res = await fetch("/api/inventory-control/verify-value-proof", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ proofUrl: url, expectedValue: n }),
-    });
-    setVerifying(false);
-    const json = await res.json().catch(() => null);
-    if (!res.ok) { setErr(json?.error ?? "No se pudo leer la captura."); return; }
-    setVerifyResult({ readAmount: json.readAmount, matches: json.matches });
-  }
-
-  // Confirmado 2026-08-31: la verificación con IA debe dispararse sin
-  // importar el orden en que se llenen el valor y la captura — antes solo se
-  // disparaba en el instante de subir la foto (y encima "" se leía como 0,
-  // así que un campo vacío mandaba a verificar contra $0 en vez de no
-  // verificar nada). Ahora reacciona a ambos campos, con debounce al tipear.
-  useEffect(() => {
-    if (!proofUrl) return;
-    if (value.trim() === "") return;
-    const n = Number(value);
-    if (Number.isNaN(n) || n < 0) return;
-    const t = setTimeout(() => verifyProof(proofUrl, n), 600);
-    return () => clearTimeout(t);
-  }, [value, proofUrl]);
-
-  function openConfirm() {
-    const n = Number(value);
-    if (Number.isNaN(n) || n < 0) { setErr("Ingresa un valor válido."); return; }
-    setErr("");
-    setConfirming(true);
-  }
-
-  async function confirmSave() {
-    const n = Number(value);
-    setSavingValue(true);
-    setErr("");
-    const res = await fetch("/api/inventory-control/monthly-value", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ period, value: n, proofUrl }),
-    });
-    setSavingValue(false);
-    if (!res.ok) {
-      const json = await res.json().catch(() => null);
-      setErr(json?.error ?? "No se pudo guardar.");
-      return;
-    }
-    setConfirming(false);
-    setToast(`✅ Inventario de ${monthLabel(period)} guardado.`);
-    router.refresh();
-  }
 
   // --- Sección 2: Excel semanal de stock por SKU ("Productos sin movimiento") ---
   const [snapPeriod, setSnapPeriod] = useState(currentSnapshotPeriodDefault);
@@ -282,108 +193,44 @@ export function InventoryControlPanel({
   return (
     <div className="flex flex-col gap-4.5">
       <TabGuide storageKey="control-inventario">
-        Carga acá dos cosas: el valor total de inventario cada mes (con la captura de tu reporte de saldos costeados y valorizados) y ese mismo reporte en Excel cada semana, para que DAFLOW arme solo el ranking de productos sin movimiento. Con esto se calculan los KPIs de Inventario.
+        Sube acá cada semana tu reporte de saldos costeados y valorizados (Excel). Con eso DAFLOW arma solo el ranking de productos sin movimiento Y calcula el valor de inventario del mes — ya no hace falta escribir ese valor a mano.
       </TabGuide>
-      {err && <div className="text-red text-[12.5px]">{err}</div>}
-      {toast && <div className="flex items-center gap-2 text-teal text-[12.5px] bg-teal/10 border border-teal/30 rounded-md px-3 py-2"><CheckCircle2 size={14} /> {toast}</div>}
-
       <div className="bg-surface border border-rule rounded-md p-4.5">
         <div className="flex items-center justify-between mb-1">
           <div className="font-semibold text-[13.5px]">Valor de inventario del mes</div>
-          <span className="font-mono text-[10px] uppercase text-steel bg-cloud rounded-full px-2 py-0.5">Cada mes</span>
+          <span className="font-mono text-[10px] uppercase text-steel bg-cloud rounded-full px-2 py-0.5">Automático</span>
         </div>
-        <div className="text-[11.5px] text-steel mb-3">El mismo total que ya ves en tu reporte de saldos costeados y valorizados.</div>
+        <div className="text-[11.5px] text-steel mb-3">
+          Ya no hace falta escribirlo ni adjuntar captura — se calcula solo sumando costo promedio × stock de la última semana de Just que subiste ese mes (sección de abajo).
+        </div>
 
-        {!confirming && (
-          <div className="mb-3">
-            <label className="block mb-1 text-[10px] uppercase tracking-wide text-steel">Mes que estás cargando</label>
-            <select
-              className="rounded border border-rule bg-cloud px-2.5 py-2 text-[13px] font-mono"
-              value={period}
-              onChange={(e) => changePeriod(e.target.value)}
-            >
-              {periods.map((p) => (
-                <option key={p.period} value={p.period}>
-                  {monthLabel(p.period)}{p.value !== null ? " · ya cargado" : ""}{p.period === currentPeriodDefault ? " (actual)" : ""}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
+        <div className="mb-3">
+          <label className="block mb-1 text-[10px] uppercase tracking-wide text-steel">Mes</label>
+          <select
+            className="rounded border border-rule bg-cloud px-2.5 py-2 text-[13px] font-mono"
+            value={period}
+            onChange={(e) => setPeriod(e.target.value)}
+          >
+            {periods.map((p) => (
+              <option key={p.period} value={p.period}>
+                {monthLabel(p.period)}{p.value !== null ? " · calculado" : ""}{p.period === currentPeriodDefault ? " (actual)" : ""}
+              </option>
+            ))}
+          </select>
+        </div>
 
-        {!confirming ? (
-          <>
-            <div className="flex items-center gap-2.5 mb-3">
-              <input
-                type="number" step="any" min={0}
-                className="w-48 rounded border border-rule bg-cloud px-2.5 py-2 text-[13px] font-mono text-right"
-                value={value}
-                onChange={(e) => { setValue(e.target.value); setVerifyResult(null); }}
-                placeholder="0.00"
-              />
-              <button
-                type="button" disabled={savingValue}
-                className="rounded border border-blue bg-blue px-3.5 py-2 text-[12.5px] font-semibold text-white cursor-pointer disabled:opacity-60"
-                onClick={openConfirm}
-              >
-                Guardar
-              </button>
-            </div>
-
-            {proofUrl ? (
-              <div className="flex items-center gap-2 text-[11.5px] text-teal">
-                <CheckCircle2 size={13} /> Captura adjunta
-                <button type="button" className="text-steel underline cursor-pointer ml-1" onClick={() => { setProofUrl(null); setVerifyResult(null); }}>quitar</button>
-              </div>
-            ) : uploadingProof ? (
-              <div className="text-[11.5px] text-steel">Subiendo captura…</div>
+        {selectedData?.value !== null && selectedData?.value !== undefined ? (
+          <div>
+            <div className="font-display text-[22px] font-bold mb-1.5">{money(selectedData.value)}</div>
+            {selectedData.source === "auto" ? (
+              <div className="text-[11.5px] text-steel">Calculado con el reporte de {weekLabel(selectedData.sourceWeek!)}.</div>
             ) : (
-              <div
-                tabIndex={0}
-                onPaste={onPaste} onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave}
-                className="flex items-center gap-2 border-[1.5px] border-dashed border-rule rounded-md px-3 py-2.5 cursor-pointer hover:border-teal transition-colors text-[11.5px] text-steel w-fit"
-              >
-                <Upload size={13} />
-                <span>De preferencia, adjunta una captura de tu reporte con este valor — pégala aquí (Ctrl+V)</span>
-                <button type="button" className="text-[10.5px] underline decoration-dotted opacity-80 hover:opacity-100 cursor-pointer" onClick={() => proofFileInputRef.current?.click()}>
-                  o selecciona un archivo
-                </button>
-                <input ref={proofFileInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && uploadProof(e.target.files[0])} />
-              </div>
+              <div className="text-[11.5px] text-steel">Valor histórico cargado a mano antes de automatizar este cálculo.</div>
             )}
-            {verifying && <div className="text-[11px] text-steel mt-1.5">La IA está leyendo la captura…</div>}
-          </>
+          </div>
         ) : (
-          <div className="bg-cloud rounded-md p-3.5">
-            <div className="text-[12.5px] font-semibold mb-2">¿Confirmas que este es el valor correcto de {monthLabel(period)}?</div>
-            <div className="font-display text-[22px] font-bold mb-2">{money(Number(value))}</div>
-            {proofUrl && verifyResult && (
-              verifyResult.matches ? (
-                <div className="flex items-center gap-2 text-[11.5px] text-teal bg-teal/10 border border-teal/30 rounded-md px-2.5 py-1.5 mb-2.5">
-                  <CheckCircle2 size={13} /> La IA leyó {money(verifyResult.readAmount ?? 0)} en la captura — coincide.
-                </div>
-              ) : (
-                <div className="flex items-center gap-2 text-[11.5px] text-red bg-red/10 border border-red/30 rounded-md px-2.5 py-1.5 mb-2.5">
-                  <AlertTriangle size={13} />
-                  {verifyResult.readAmount !== null
-                    ? `La IA leyó ${money(verifyResult.readAmount)} en la captura — no coincide con lo que escribiste. Revisa antes de continuar.`
-                    : "La IA no pudo leer un monto claro en la captura."}
-                </div>
-              )
-            )}
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                disabled={savingValue || verifying || (!!proofUrl && verifyResult?.matches === false)}
-                className="rounded bg-blue text-white px-3.5 py-2 text-[12.5px] font-semibold cursor-pointer disabled:opacity-60"
-                onClick={confirmSave}
-              >
-                Sí, guardar
-              </button>
-              <button type="button" className="text-steel text-[12.5px] cursor-pointer" onClick={() => setConfirming(false)}>
-                Cancelar, revisar
-              </button>
-            </div>
+          <div className="flex items-center gap-2 text-[11.5px] text-steel">
+            <AlertTriangle size={13} /> Pendiente — sube el reporte semanal de {monthLabel(period)} para calcularlo solo.
           </div>
         )}
       </div>

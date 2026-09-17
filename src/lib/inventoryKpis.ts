@@ -160,10 +160,40 @@ export function snapshotPeriodDeadlineLabel(period: string): string {
 export type InventoryControlPeriodDTO = {
   period: string;
   value: number | null;
+  // Confirmado 2026-09-17, pedido explícito del usuario: transición hacia
+  // INVESTOCK — este valor ya no lo escribe Daniel a mano. Se calcula solo
+  // sumando costo×stock de la última semana de Just subida dentro de ese
+  // mes (misma fuente que "Productos sin movimiento", que ya se sube cada
+  // semana). "manual" solo aparece en meses viejos, de antes de que
+  // existiera la carga semanal — se conservan tal cual, sin recalcular.
+  source: "auto" | "manual" | null;
+  sourceWeek: string | null;
   proofUrl: string | null;
   aiMatches: boolean | null;
   hasSnapshot: boolean;
 };
+
+// Última semana con datos, dentro de cada mes, entre TODOS los snapshots
+// semanales guardados — no solo los del rango reciente que se le ofrece a
+// Daniel para cargar, porque acá se usa también para reconstruir meses
+// pasados en la serie de KPIs.
+async function getAutoInventoryValueByMonth(deptId: string): Promise<Map<string, { value: number; sourceWeek: string }>> {
+  const totals = await prisma.inventoryProductSnapshot.groupBy({
+    by: ["period"],
+    where: { deptId },
+    _sum: { costTotal: true },
+  });
+  const result = new Map<string, { value: number; sourceWeek: string }>();
+  for (const t of totals) {
+    if (!/^\d{4}-\d{2}-W[1-4]$/.test(t.period)) continue;
+    const month = t.period.slice(0, 7);
+    const existing = result.get(month);
+    if (!existing || t.period > existing.sourceWeek) {
+      result.set(month, { value: t._sum.costTotal ?? 0, sourceWeek: t.period });
+    }
+  }
+  return result;
+}
 
 export type InventorySnapshotPeriodDTO = {
   period: string;
@@ -183,13 +213,12 @@ export async function getInventoryControlData() {
 
   const periods = recentInventoryPeriods();
   const weeklyPeriods = recentInventorySnapshotPeriods();
-  const [balances, snapshotPeriodRows, weeklySnapshotRows] = await Promise.all([
+  const [balances, weeklySnapshotRows, autoByMonth] = await Promise.all([
     prisma.financeSharedMonthlyBalance.findMany({ where: { deptId, period: { in: periods } } }),
-    prisma.inventoryProductSnapshot.findMany({ where: { deptId, period: { in: periods } }, select: { period: true }, distinct: ["period"] }),
     prisma.inventoryProductSnapshot.findMany({ where: { deptId, period: { in: weeklyPeriods } }, select: { period: true }, distinct: ["period"] }),
+    getAutoInventoryValueByMonth(deptId),
   ]);
   const byPeriod = new Map(balances.map((b) => [b.period, b]));
-  const snapshotSet = new Set(snapshotPeriodRows.map((s) => s.period));
   const weeklySnapshotSet = new Set(weeklySnapshotRows.map((s) => s.period));
 
   return {
@@ -197,12 +226,15 @@ export async function getInventoryControlData() {
     currentPeriod: currentPeriod(),
     periods: periods.map((period): InventoryControlPeriodDTO => {
       const b = byPeriod.get(period);
+      const auto = autoByMonth.get(period);
       return {
         period,
-        value: b?.inventarioFinal ?? null,
+        value: auto ? auto.value : b?.inventarioFinal ?? null,
+        source: auto ? "auto" : b?.inventarioFinal != null ? "manual" : null,
+        sourceWeek: auto?.sourceWeek ?? null,
         proofUrl: b?.inventarioProofUrl ?? null,
         aiMatches: b?.inventarioAiMatches ?? null,
-        hasSnapshot: snapshotSet.has(period),
+        hasSnapshot: !!auto,
       };
     }),
     currentSnapshotPeriod: currentSnapshotPeriod(),
@@ -275,12 +307,13 @@ export async function getInventoryKpisData(): Promise<InventoryKpisDataDTO> {
   const deptId = await getFinanzasDeptId();
   if (!deptId) return empty;
 
-  const [records, balances, snapshots, negativeStockProducts, expiringLots] = await Promise.all([
+  const [records, balances, snapshots, negativeStockProducts, expiringLots, autoByMonth] = await Promise.all([
     prisma.financeKpiRecord.findMany({ where: { deptId }, orderBy: { period: "asc" } }),
     prisma.financeSharedMonthlyBalance.findMany({ where: { deptId }, orderBy: { period: "asc" } }),
     prisma.inventoryProductSnapshot.findMany({ where: { deptId }, orderBy: { period: "asc" } }),
     getNegativeStockProducts(),
     getExpiringLots(),
+    getAutoInventoryValueByMonth(deptId),
   ]);
 
   const staleEntries = computeStaleStreaks(snapshots);
@@ -314,7 +347,7 @@ export async function getInventoryKpisData(): Promise<InventoryKpisDataDTO> {
     const consolidated = computeDerived(consolidateMonth(byPeriod.get(period)!));
     return {
       period,
-      inventario: balanceByPeriod.get(period) ?? null,
+      inventario: autoByMonth.get(period)?.value ?? balanceByPeriod.get(period) ?? null,
       ventas: consolidated.ventas,
       costoVentas: consolidated.costoVentas,
       utilidadBruta: consolidated.utilidadBruta,
