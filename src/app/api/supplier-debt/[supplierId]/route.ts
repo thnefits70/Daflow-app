@@ -56,6 +56,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ supp
       // sigue funcionando pero no se puede volver a mostrar aquí.
       publicLedgerToken: supplier.publicLedgerToken,
       publicLedgerTokenCreatedAt: supplier.publicLedgerTokenCreatedAt,
+      // Confirmado 2026-09-17: segundo enlace, solo "lo que falta enviar",
+      // pensado para que el proveedor se lo pase a su propio equipo.
+      publicShippingToken: supplier.publicShippingToken,
+      publicShippingTokenCreatedAt: supplier.publicShippingTokenCreatedAt,
       bankAccounts: supplier.bankAccounts.map((b) => ({
         id: b.id,
         bankName: b.bankName,

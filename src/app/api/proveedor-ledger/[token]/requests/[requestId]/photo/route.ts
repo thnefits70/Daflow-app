@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { findSupplierByPublicLedgerToken } from "@/lib/supplierDebt";
+import { findSupplierByAnySupplierLedgerToken } from "@/lib/supplierDebt";
 
 // Confirmado 2026-09-15 (foto opcional de CHEN en su enlace público): igual
 // que upload-sign/route.ts, sin auth() — valida el token del proveedor. Solo
@@ -16,7 +16,7 @@ const bodySchema = z.object({
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ token: string; requestId: string }> }) {
   const { token, requestId } = await params;
-  const supplier = await findSupplierByPublicLedgerToken(token);
+  const supplier = await findSupplierByAnySupplierLedgerToken(token);
   if (!supplier || supplier.paymentMode !== "CREDITO") {
     return NextResponse.json({ error: "No autorizado." }, { status: 403 });
   }

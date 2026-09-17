@@ -55,6 +55,8 @@ type Summary = {
     hasPublicLink: boolean;
     publicLedgerToken: string | null;
     publicLedgerTokenCreatedAt: string | null;
+    publicShippingToken: string | null;
+    publicShippingTokenCreatedAt: string | null;
     bankAccounts: { id: string; bankName: string; bankAccountNumber: string; bankAccountHolder: string }[];
   };
   balance: number;
@@ -106,6 +108,7 @@ export function SupplierDebtPanel() {
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
+  const [copiedShippingLink, setCopiedShippingLink] = useState(false);
   const [transferForms, setTransferForms] = useState<Record<string, { amount: string; transferDate: string; bankNameDestino: string; accountDestino: string; bankNameOrigen: string; accountOrigen: string; comprobanteNumber: string; transactionCost: string; iva: string; proofUrl: string }>>({});
   const [uploadingProof, setUploadingProof] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -273,6 +276,16 @@ export function SupplierDebtPanel() {
     return `${origin}/proveedor-ledger/${token}`;
   }
 
+  // Confirmado 2026-09-17: mismo dominio propio de CHEN (dunxingchen.cc),
+  // segundo enlace independiente — solo abre "lo que falta enviar", nunca
+  // el saldo. Pensado para que el proveedor se lo pase a su propio equipo.
+  function shippingUrl(token: string) {
+    const origin = process.env.NEXT_PUBLIC_SUPPLIER_LEDGER_DOMAIN
+      ? `https://${process.env.NEXT_PUBLIC_SUPPLIER_LEDGER_DOMAIN}`
+      : window.location.origin;
+    return `${origin}/proveedor-ledger/envios/${token}`;
+  }
+
   async function generateLink() {
     if (!supplierId) return;
     setErr("");
@@ -290,11 +303,29 @@ export function SupplierDebtPanel() {
     load();
   }
 
-  async function copyLink(url: string) {
+  async function generateShippingLink() {
+    if (!supplierId) return;
+    setErr("");
+    setBusy(true);
+    const res = await fetch(`/api/supplier-debt/${supplierId}/shipping-link`, { method: "POST" });
+    setBusy(false);
+    if (!res.ok) {
+      setErr("No se pudo generar el enlace.");
+      return;
+    }
+    load();
+  }
+
+  async function copyLink(url: string, which: "ledger" | "shipping" = "ledger") {
     try {
       await navigator.clipboard.writeText(url);
-      setCopiedLink(true);
-      setTimeout(() => setCopiedLink(false), 2000);
+      if (which === "shipping") {
+        setCopiedShippingLink(true);
+        setTimeout(() => setCopiedShippingLink(false), 2000);
+      } else {
+        setCopiedLink(true);
+        setTimeout(() => setCopiedLink(false), 2000);
+      }
     } catch {
       // Confirmado 2026-09-15: si el navegador bloquea el portapapeles (ej.
       // sin HTTPS o sin permiso), el enlace ya está visible en pantalla para
@@ -384,6 +415,46 @@ export function SupplierDebtPanel() {
                   disabled={busy}
                 >
                   <Link2 size={13} /> Generar enlace público para {summary.supplier.name}
+                </button>
+              )}
+            </div>
+            <div>
+              {/* Confirmado 2026-09-17, pedido explícito del usuario: un
+                  segundo enlace, aparte del de arriba, para que el proveedor
+                  se lo pase a su propio equipo de despacho — solo muestra
+                  "lo que falta enviar", nunca el saldo ni la plata. */}
+              {summary.supplier.publicShippingToken ? (
+                <div className="text-[12px] text-steel">
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <Link2 size={12} />
+                    <span>
+                      Enlace solo-envíos (para el equipo de {summary.supplier.name})
+                      {summary.supplier.publicShippingTokenCreatedAt && ` — generado ${formatDateTime(summary.supplier.publicShippingTokenCreatedAt)}`}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 rounded border border-rule bg-cloud px-2.5 py-1.5">
+                    <span className="font-mono text-[11.5px] text-ink break-all">{shippingUrl(summary.supplier.publicShippingToken)}</span>
+                    <button
+                      type="button"
+                      className="shrink-0 flex items-center gap-1 text-blue cursor-pointer"
+                      onClick={() => copyLink(shippingUrl(summary.supplier.publicShippingToken!), "shipping")}
+                      title="Copiar enlace"
+                    >
+                      {copiedShippingLink ? <Check size={13} /> : <Copy size={13} />}
+                    </button>
+                  </div>
+                  <button type="button" className="underline decoration-dotted cursor-pointer mt-1" onClick={generateShippingLink} disabled={busy}>
+                    regenerar (invalida este enlace)
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  className="flex items-center gap-1.5 rounded border border-rule bg-surface px-3 py-1.5 text-[12.5px] font-semibold text-ink cursor-pointer disabled:opacity-60"
+                  onClick={generateShippingLink}
+                  disabled={busy}
+                >
+                  <Link2 size={13} /> Generar enlace "solo envíos" para el equipo de {summary.supplier.name}
                 </button>
               )}
             </div>

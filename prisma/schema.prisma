@@ -1566,6 +1566,14 @@ model Supplier {
   publicLedgerToken          String?             @unique
   publicLedgerTokenHash      String?             @unique
   publicLedgerTokenCreatedAt DateTime?
+  // Confirmado 2026-09-17, pedido explícito del usuario: un segundo enlace,
+  // independiente del de arriba, para que el proveedor de crédito se lo
+  // pase a su propio equipo de despacho — muestra SOLO los pedidos que
+  // faltan enviar (producto/cantidad), nunca el saldo/deuda. Es una llave
+  // aparte a propósito: si alguien edita la URL de este enlace no puede
+  // llegar a la página del saldo, porque esa valida un token distinto.
+  publicShippingToken          String? @unique
+  publicShippingTokenCreatedAt DateTime?
   location                   String?
   // Pin exacto marcado en el mapa (OpenStreetMap), opcional — más confiable que
   // una dirección escrita para que alguien nuevo pueda llegar.

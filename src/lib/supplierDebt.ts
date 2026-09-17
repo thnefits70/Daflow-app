@@ -13,6 +13,27 @@ export async function findSupplierByPublicLedgerToken(token: string) {
   });
 }
 
+// Confirmado 2026-09-17, pedido explícito del usuario: un segundo enlace,
+// llave completamente aparte del de arriba, para que el proveedor de
+// crédito (hoy solo CHEN) se lo pase a SU PROPIO equipo de despacho — ve
+// únicamente "lo que falta enviar" (ver /proveedor-ledger/envios/[token]),
+// nunca el saldo/deuda. A propósito NO cae en el fallback del token de
+// arriba: aunque alguien edite la URL, esta llave nunca abre la página del
+// saldo, y la de arriba nunca abre esta.
+export async function findSupplierByPublicShippingToken(token: string) {
+  return prisma.supplier.findFirst({ where: { publicShippingToken: token } });
+}
+
+// Usado solo por las rutas de subida de foto de envío (upload-sign y
+// requests/[id]/photo) — ahí sí da igual con cuál de los dos enlaces entró
+// el proveedor, porque subir una foto de lo que está enviando no expone
+// nada financiero.
+export async function findSupplierByAnySupplierLedgerToken(token: string) {
+  const byLedger = await findSupplierByPublicLedgerToken(token);
+  if (byLedger) return byLedger;
+  return findSupplierByPublicShippingToken(token);
+}
+
 // Fase 1 (proveedores con crédito, hoy solo CHEN) — confirmado 2026-09-08:
 // el saldo que se le debe a un proveedor de crédito NUNCA se "hace a mano" —
 // es la suma de lo que ya pasó por el filtro completo: Jariel solicita →

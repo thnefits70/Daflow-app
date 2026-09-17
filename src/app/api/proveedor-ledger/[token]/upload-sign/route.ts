@@ -2,7 +2,7 @@ import crypto from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { supabaseAdmin } from "@/lib/supabase";
-import { findSupplierByPublicLedgerToken } from "@/lib/supplierDebt";
+import { findSupplierByAnySupplierLedgerToken } from "@/lib/supplierDebt";
 
 // Confirmado 2026-09-15 (foto opcional de CHEN en su enlace público): esta
 // página no tiene auth() a propósito — el proveedor de crédito entra solo
@@ -11,6 +11,10 @@ import { findSupplierByPublicLedgerToken } from "@/lib/supplierDebt";
 // (auth()); acá el token hace el mismo papel, validado igual que en
 // page.tsx (ver findSupplierByPublicLedgerToken) + paymentMode==="CREDITO".
 // Carpeta fija, no la manda el cliente.
+// Confirmado 2026-09-17: acepta el token del enlace completo (saldo) O el
+// del enlace solo-envíos (findSupplierByAnySupplierLedgerToken) — subir una
+// foto de lo que se está enviando no expone nada financiero, así que da
+// igual con cuál de los dos entró el proveedor.
 const BUCKET = "daflow-files";
 const MAX_BYTES = 50 * 1024 * 1024;
 const FOLDER = "supplier-shipping-photos";
@@ -32,7 +36,7 @@ const signSchema = z.object({
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
-  const supplier = await findSupplierByPublicLedgerToken(token);
+  const supplier = await findSupplierByAnySupplierLedgerToken(token);
   if (!supplier || supplier.paymentMode !== "CREDITO") {
     return NextResponse.json({ error: "No autorizado." }, { status: 403 });
   }
