@@ -209,11 +209,6 @@ type ProposeDraftData = {
   primaryCost: string;
   primaryUnits: string;
   primaryFreight: string;
-  addSecondary: boolean;
-  secondarySupplierId: string;
-  secondaryCost: string;
-  secondaryUnits: string;
-  secondaryFreight: string;
 };
 function isProposeDraftEmpty(d: ProposeDraftData) {
   return (
@@ -227,8 +222,7 @@ function isProposeDraftEmpty(d: ProposeDraftData) {
     !d.discoverySourceNote.trim() &&
     !d.primarySupplierId &&
     !d.primaryCost.trim() &&
-    !d.primaryFreight.trim() &&
-    !d.addSecondary
+    !d.primaryFreight.trim()
   );
 }
 
@@ -253,11 +247,6 @@ function ProposeForm() {
   const [primaryCost, setPrimaryCost] = useState("");
   const [primaryUnits, setPrimaryUnits] = useState("100");
   const [primaryFreight, setPrimaryFreight] = useState("");
-  const [addSecondary, setAddSecondary] = useState(false);
-  const [secondarySupplierId, setSecondarySupplierId] = useState("");
-  const [secondaryCost, setSecondaryCost] = useState("");
-  const [secondaryUnits, setSecondaryUnits] = useState("100");
-  const [secondaryFreight, setSecondaryFreight] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [ok, setOk] = useState("");
@@ -274,7 +263,6 @@ function ProposeForm() {
       noCompetitorData, discoverySourceNote,
       insurance, fulfillment, margin,
       primarySupplierId, primaryCost, primaryUnits, primaryFreight,
-      addSecondary, secondarySupplierId, secondaryCost, secondaryUnits, secondaryFreight,
     },
     (d) => {
       setProductName(d.productName);
@@ -294,11 +282,6 @@ function ProposeForm() {
       setPrimaryCost(d.primaryCost);
       setPrimaryUnits(d.primaryUnits);
       setPrimaryFreight(d.primaryFreight);
-      setAddSecondary(d.addSecondary);
-      setSecondarySupplierId(d.secondarySupplierId);
-      setSecondaryCost(d.secondaryCost);
-      setSecondaryUnits(d.secondaryUnits);
-      setSecondaryFreight(d.secondaryFreight);
     },
     isProposeDraftEmpty,
     "Producto sin terminar de proponer",
@@ -351,9 +334,6 @@ function ProposeForm() {
         fulfillmentCost: Number(fulfillment),
         marginPercent: Number(margin),
         primarySupplierPrice: { supplierId: primarySupplierId, batchCost: Number(primaryCost), batchUnits: Number(primaryUnits), freightCost: primaryFreight ? Number(primaryFreight) : undefined },
-        secondarySupplierPrice: addSecondary && secondarySupplierId && secondaryCost && secondaryUnits
-          ? { supplierId: secondarySupplierId, batchCost: Number(secondaryCost), batchUnits: Number(secondaryUnits), freightCost: secondaryFreight ? Number(secondaryFreight) : undefined }
-          : undefined,
       }),
     });
     setBusy(false);
@@ -361,7 +341,7 @@ function ProposeForm() {
     setOk("Propuesta enviada a Bryan para aprobación.");
     setProductName(""); setDescription(""); setImageUrl(""); setCompetitorId(""); setCompetitorPrice(""); setCompetitorBodegaName(""); setCompetitorProductName("");
     setNoCompetitorData(false); setDiscoverySourceNote("");
-    setPrimarySupplierId(""); setPrimaryCost(""); setPrimaryUnits("100"); setPrimaryFreight(""); setAddSecondary(false);
+    setPrimarySupplierId(""); setPrimaryCost(""); setPrimaryUnits("100"); setPrimaryFreight("");
     clearProposeDraft();
   }
 
@@ -450,7 +430,7 @@ function ProposeForm() {
       )}
 
       <div className="mb-3 bg-cloud border border-rule rounded-md p-3">
-        <div className="text-[12px] font-semibold text-steel mb-2">Proveedor 1 (obligatorio)</div>
+        <div className="text-[12px] font-semibold text-steel mb-2">Proveedor</div>
         <SupplierSelect suppliers={suppliers} value={primarySupplierId} onChange={setPrimarySupplierId} />
         <div className="grid grid-cols-3 gap-2">
           <input className="rounded border border-rule px-2.5 py-1.5 text-[13px]" placeholder="Costo unitario (USD)" type="number" step="0.01" value={primaryCost} onChange={(e) => setPrimaryCost(e.target.value)} />
@@ -458,23 +438,6 @@ function ProposeForm() {
           <input className="rounded border border-rule px-2.5 py-1.5 text-[13px]" placeholder="Flete (si aplica)" type="number" step="0.01" value={primaryFreight} onChange={(e) => setPrimaryFreight(e.target.value)} />
         </div>
       </div>
-
-      {addSecondary ? (
-        <div className="mb-3 bg-cloud border border-rule rounded-md p-3">
-          <div className="flex justify-between items-center mb-2">
-            <span className="text-[12px] font-semibold text-steel">Proveedor 2 (opcional)</span>
-            <button type="button" className="text-[11px] text-steel underline decoration-dotted cursor-pointer" onClick={() => setAddSecondary(false)}>Quitar</button>
-          </div>
-          <SupplierSelect suppliers={suppliers} value={secondarySupplierId} onChange={setSecondarySupplierId} />
-          <div className="grid grid-cols-3 gap-2">
-            <input className="rounded border border-rule px-2.5 py-1.5 text-[13px]" placeholder="Costo unitario (USD)" type="number" step="0.01" value={secondaryCost} onChange={(e) => setSecondaryCost(e.target.value)} />
-            <input className="rounded border border-rule px-2.5 py-1.5 text-[13px]" placeholder="Unidades del lote" type="number" value={secondaryUnits} onChange={(e) => setSecondaryUnits(e.target.value)} />
-            <input className="rounded border border-rule px-2.5 py-1.5 text-[13px]" placeholder="Flete (si aplica)" type="number" step="0.01" value={secondaryFreight} onChange={(e) => setSecondaryFreight(e.target.value)} />
-          </div>
-        </div>
-      ) : (
-        <button type="button" className="mb-3 text-[12px] text-blue font-semibold cursor-pointer" onClick={() => setAddSecondary(true)}>+ Agregar 2° proveedor (opcional)</button>
-      )}
 
       <div className="mb-4 bg-surface border border-rule rounded-md p-3">
         <div className="text-[12px] font-semibold text-steel mb-2">Calculadora</div>

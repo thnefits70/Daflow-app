@@ -48,13 +48,16 @@ const createSchema = z.object({
   fulfillmentCost: z.number().nonnegative().optional(),
   marginPercent: z.number().min(0).max(99).optional(),
   primarySupplierPrice: supplierPriceSchema,
-  secondarySupplierPrice: supplierPriceSchema.optional(),
 });
 
 // Confirmado 2026-09-09 (Fase 2, Análisis de Mercado): Jariel propone un
 // producto ganador con su calculadora de precio — el precio de venta se
 // calcula SIEMPRE server-side, nunca se confía en el que manda el
-// navegador. Requiere al menos 1 proveedor (obligatorio); un 2° es opcional.
+// navegador. Requiere 1 proveedor (obligatorio). Confirmado 2026-09-17,
+// pedido explícito del usuario: se quitó la opción de agregar un 2°
+// proveedor en la misma propuesta — el campo secundario sigue existiendo
+// en la base de datos por si hay propuestas viejas con dos, pero ya no se
+// puede crear una nueva con más de uno.
 export async function POST(req: NextRequest) {
   const session = await auth();
   if (!(await canProposeMarketProduct()) || !session) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
@@ -116,17 +119,6 @@ export async function POST(req: NextRequest) {
             freightCost: d.primarySupplierPrice.freightCost ?? null,
             isPrimary: true,
           },
-          ...(d.secondarySupplierPrice
-            ? [
-                {
-                  supplierId: d.secondarySupplierPrice.supplierId,
-                  batchCost: d.secondarySupplierPrice.batchCost,
-                  batchUnits: d.secondarySupplierPrice.batchUnits,
-                  freightCost: d.secondarySupplierPrice.freightCost ?? null,
-                  isPrimary: false,
-                },
-              ]
-            : []),
         ],
       },
     },
