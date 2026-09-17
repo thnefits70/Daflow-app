@@ -3,7 +3,7 @@ import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { nowInEcuador } from "@/lib/payrollCalc";
-import { sendPushToOwner } from "@/lib/webPush";
+import { notifyOwner } from "@/lib/notifications";
 import { actorName } from "@/lib/actorName";
 
 function currentMonthStr(): string {
@@ -107,11 +107,11 @@ export async function POST(req: NextRequest) {
 
   const invLeader = await prisma.user.findFirst({ where: { isLeader: true, leadsDept: { code: "INV" } }, select: { id: true } });
   if (invLeader) {
-    await sendPushToOwner(invLeader.id, {
+    await notifyOwner(invLeader.id, {
       title: "🛒 Nuevo pedido de compra personal — falta confirmar",
       body: `${actorName(session.user.name)} · ${order.items.length} producto${order.items.length === 1 ? "" : "s"}`,
       url: "/area/compras-personales-inventario",
-    }).catch(() => null);
+    });
   }
 
   return NextResponse.json(order, { status: 201 });
