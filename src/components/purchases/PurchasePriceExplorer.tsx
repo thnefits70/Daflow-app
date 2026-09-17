@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Search, X, ChevronDown, Award, FileText } from "lucide-react";
-import { PriceTrendChart } from "./PriceTrendChart";
+import { CombinedPriceChart } from "./PriceTrendChart";
 import type { SupplierPriceHistory } from "@/lib/purchases";
 
 type CatalogItem = { id: string; name: string; photos: string[]; description?: string | null; code?: string | null; justCode?: string | null };
@@ -80,7 +80,11 @@ function ProductComparisonCard({ item, onRemove }: { item: CatalogItem; onRemove
       .catch(() => setSuppliers([]));
   }, [item.id]);
 
-  const cheapestId = suppliers && suppliers.length > 0 ? suppliers[0].supplierId : null;
+  // Confirmado 2026-09-17: solo se marca "más barato" si ese proveedor
+  // tiene compra dentro del último año — ver comentario en getCatalogItem-
+  // SupplierComparison (lib/purchases.ts), que ya deja ordenados primero a
+  // los recientes y de ahí al más barato entre ellos.
+  const cheapestId = suppliers && suppliers.length > 0 && suppliers[0].recentWithinYear ? suppliers[0].supplierId : null;
 
   return (
     <div className="bg-surface border border-rule rounded-md p-4">
@@ -107,7 +111,11 @@ function ProductComparisonCard({ item, onRemove }: { item: CatalogItem; onRemove
           Todavía no hay compras registradas de este producto, mercadería o insumo.
         </div>
       ) : (
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-3">
+          <div className="bg-surface2 border border-rule rounded-md p-3">
+            <CombinedPriceChart suppliers={suppliers} />
+          </div>
+          <div className="flex flex-col gap-2">
           {suppliers.map((s) => {
             const isCheapest = s.supplierId === cheapestId;
             const isOpen = !collapsedIds.has(s.supplierId);
@@ -146,7 +154,6 @@ function ProductComparisonCard({ item, onRemove }: { item: CatalogItem; onRemove
                 </button>
                 {isOpen && (
                   <div className="px-3 pb-3.5 pt-1 border-t border-rule">
-                    <PriceTrendChart points={s.history} />
                     <div className="grid grid-cols-3 gap-2 mt-2">
                       <div className="bg-cloud rounded p-2 text-center">
                         <div className="text-[8.5px] uppercase text-steel">Más bajo</div>
@@ -186,6 +193,7 @@ function ProductComparisonCard({ item, onRemove }: { item: CatalogItem; onRemove
               </div>
             );
           })}
+          </div>
         </div>
       )}
     </div>

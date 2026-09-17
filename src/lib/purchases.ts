@@ -134,6 +134,12 @@ export type SupplierPriceHistory = {
   latestQuoteImageUrl: string | null;
   latestPurchaseOrderUrl: string | null;
   latestRequestedByName: string | null;
+  // Confirmado 2026-09-17, pedido explícito del usuario: si a este proveedor
+  // no se le compra hace más de un año, su precio ya no es realista para
+  // decidir "a quién le compro" hoy — se usa para no marcarlo como "más
+  // barato" con un precio desactualizado.
+  latestDate: string;
+  recentWithinYear: boolean;
 };
 
 // Confirmado 2026-07-31: para un mismo insumo, cada proveedor tiene su propia
@@ -191,9 +197,12 @@ export async function getCatalogItemSupplierComparison(catalogItemId: string): P
     s.history.sort((a, b) => new Date(a.paidAt ?? a.date).getTime() - new Date(b.paidAt ?? b.date).getTime());
   }
 
+  const ONE_YEAR_MS = 365 * 24 * 60 * 60 * 1000;
+  const now = Date.now();
   const suppliers: SupplierPriceHistory[] = [...bySupplier.values()].map((s) => {
     const costs = s.history.map((h) => h.unitCost);
     const latestPoint = s.history[s.history.length - 1];
+    const latestDate = latestPoint.paidAt ?? latestPoint.date;
     return {
       ...s,
       latest: costs[costs.length - 1],
@@ -206,9 +215,20 @@ export async function getCatalogItemSupplierComparison(catalogItemId: string): P
       latestQuoteImageUrl: latestPoint.quoteImageUrl,
       latestPurchaseOrderUrl: latestPoint.purchaseOrderUrl,
       latestRequestedByName: latestPoint.requestedByName,
+      latestDate,
+      recentWithinYear: now - new Date(latestDate).getTime() <= ONE_YEAR_MS,
     };
   });
-  suppliers.sort((a, b) => a.latest - b.latest);
+  // Confirmado 2026-09-17, pedido explícito del usuario: proveedores con
+  // compra dentro del último año van primero (ordenados del más barato al
+  // más caro entre ellos); los que no se les compra hace más de un año caen
+  // al final — su precio quedó viejo y ya no es información confiable para
+  // decidir a quién comprarle hoy, así que no compiten por el puesto de
+  // "más barato" aunque su último precio haya sido bajo.
+  suppliers.sort((a, b) => {
+    if (a.recentWithinYear !== b.recentWithinYear) return a.recentWithinYear ? -1 : 1;
+    return a.latest - b.latest;
+  });
   return suppliers;
 }
 
@@ -496,6 +516,11 @@ export async function checkPurchaseSubmission(d: PurchaseSubmissionData): Promis
     const comparison = await getCatalogItemSupplierComparison(it.catalogItemId);
     if (comparison.length === 0) continue;
     const cheapest = comparison[0];
+    // Confirmado 2026-09-17: si ni siquiera el más barato de la lista tiene
+    // una compra del último año, ningún precio conocido es confiable —
+    // no tiene sentido exigir justificar por no comprarle a un precio
+    // desactualizado.
+    if (!cheapest.recentWithinYear) continue;
     if (cheapest.supplierId !== d.supplierId) {
       anySupplierNotCheapest = true;
       needsJustificationByIndex[i] = true;

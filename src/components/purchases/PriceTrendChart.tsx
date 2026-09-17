@@ -1,9 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import type { SupplierPricePoint } from "@/lib/purchases";
+import { Award } from "lucide-react";
+import type { SupplierPriceHistory, SupplierPricePoint } from "@/lib/purchases";
 
 const STATUS_LABEL: Record<string, string> = { APPROVED: "Aprobado", PAID: "Pagado", RECEIVED: "Recibido" };
+
+// Confirmado 2026-09-17, pedido explícito del usuario: paleta para
+// distinguir proveedores por color en la gráfica combinada — se repite si
+// hay más proveedores que colores (poco probable en la práctica).
+const SUPPLIER_COLORS = ["#14C7C7", "#e8a03c", "#a78bfa", "#fb7185", "#38bdf8", "#a3e635"];
 
 // Chart chico para una sola serie proveedor+insumo — a diferencia de
 // WeeklyTrendChart (semanas regulares, muchos puntos), aquí las fechas son
@@ -132,6 +138,143 @@ export function PriceTrendChart({ points }: { points: SupplierPricePoint[] }) {
           );
         })()}
     </svg>
+  );
+}
+
+// Confirmado 2026-09-17, pedido explícito del usuario: una sola gráfica por
+// producto en vez de una por proveedor — todas las compras conectadas por
+// UNA línea en orden cronológico real (sin importar a qué proveedor se le
+// compró cada vez), y el color de cada punto dice de qué proveedor fue esa
+// compra. Así se ve de un vistazo el patrón completo (ej. "casi siempre le
+// compro barato a Zheng wu, pero esas veces que le compré a Megaxing fue más
+// caro"), en vez de tener que comparar gráficas sueltas una por una.
+export function CombinedPriceChart({ suppliers }: { suppliers: SupplierPriceHistory[] }) {
+  const [hover, setHover] = useState<number | null>(null);
+
+  const colorBySupplierId = new Map(suppliers.map((s, i) => [s.supplierId, SUPPLIER_COLORS[i % SUPPLIER_COLORS.length]]));
+  const effDate = (p: SupplierPricePoint) => p.paidAt ?? p.date;
+
+  const points = suppliers
+    .flatMap((s) => s.history.map((p) => ({ ...p, supplierId: s.supplierId })))
+    .sort((a, b) => new Date(effDate(a)).getTime() - new Date(effDate(b)).getTime());
+
+  if (points.length === 0) return null;
+
+  const showDateLabels = points.length <= 10;
+
+  const width = 560;
+  const height = 150;
+  const padL = 46;
+  const padR = 16;
+  const padT = 16;
+  const padB = showDateLabels ? 26 : 10;
+  const innerW = width - padL - padR;
+  const innerH = height - padT - padB;
+
+  const costs = points.map((p) => p.unitCost);
+  const rawMin = Math.min(...costs);
+  const rawMax = Math.max(...costs);
+  const span = rawMax - rawMin || rawMax * 0.1 || 1;
+  const yMin = Math.max(0, rawMin - span * 0.15);
+  const yMax = rawMax + span * 0.15;
+
+  const stepX = points.length > 1 ? innerW / (points.length - 1) : 0;
+  const coords = points.map((p, i) => ({
+    x: padL + (points.length > 1 ? i * stepX : innerW / 2),
+    y: padT + innerH - ((p.unitCost - yMin) / (yMax - yMin)) * innerH,
+  }));
+
+  const linePath = coords.map((c, i) => `${i === 0 ? "M" : "L"}${c.x.toFixed(1)},${c.y.toFixed(1)}`).join(" ");
+  const fmtDate = (iso: string) => {
+    const d = new Date(iso);
+    return `${d.getDate()}/${d.getMonth() + 1}/${String(d.getFullYear()).slice(2)}`;
+  };
+
+  return (
+    <div>
+      <svg viewBox={`0 0 ${width} ${height}`} width="100%" height={height} preserveAspectRatio="none" className="block" onMouseLeave={() => setHover(null)}>
+        {Array.from({ length: 3 }).map((_, i) => {
+          const v = yMin + ((yMax - yMin) / 2) * i;
+          const y = padT + innerH - ((v - yMin) / (yMax - yMin)) * innerH;
+          return (
+            <g key={i}>
+              <line x1={padL} x2={width - padR} y1={y} y2={y} stroke="#24365a" strokeWidth="1" />
+              <text x={padL - 8} y={y + 3} textAnchor="end" fontSize="10" fill="#92a3c0">${v.toFixed(2)}</text>
+            </g>
+          );
+        })}
+
+        <path d={linePath} fill="none" stroke="#5b6b8c" strokeWidth="1.75" strokeLinejoin="round" strokeLinecap="round" />
+
+        {showDateLabels &&
+          coords.map((c, i) => (
+            <text key={`d-${i}`} x={c.x} y={height - 8} textAnchor="middle" fontSize="9.5" fill="#92a3c0">
+              {fmtDate(effDate(points[i]))}
+            </text>
+          ))}
+
+        {coords.map((c, i) => (
+          <circle
+            key={i}
+            cx={c.x}
+            cy={c.y}
+            r={hover === i ? 6.5 : 4.5}
+            fill={colorBySupplierId.get(points[i].supplierId)}
+            stroke="#0a1526"
+            strokeWidth={hover === i ? 2 : 1.5}
+            onMouseEnter={() => setHover(i)}
+            style={{ cursor: "pointer" }}
+          />
+        ))}
+
+        {hover !== null &&
+          (() => {
+            const c = coords[hover];
+            const p = points[hover];
+            const hasBreakdown = p.shippingPerUnit > 0;
+            const boxW = 132;
+            const boxH = (hasBreakdown ? 70 : 58) + 13;
+            const boxX = Math.max(padL, Math.min(c.x - boxW / 2, width - padR - boxW));
+            const boxY = Math.max(2, c.y - boxH - 10);
+            return (
+              <g pointerEvents="none">
+                <rect x={boxX} y={boxY} width={boxW} height={boxH} rx="5" fill="#101f3b" stroke="#24365a" strokeWidth="1" />
+                <text x={boxX + boxW / 2} y={boxY + 16} textAnchor="middle" fontSize="12" fontWeight="700" fill="#f1f5fb">
+                  ${p.unitCost.toFixed(2)}
+                </text>
+                {hasBreakdown && (
+                  <text x={boxX + boxW / 2} y={boxY + 29} textAnchor="middle" fontSize="8.5" fill="#92a3c0">
+                    ${p.baseUnitCost.toFixed(2)} + ${p.shippingPerUnit.toFixed(2)} flete
+                  </text>
+                )}
+                <text x={boxX + boxW / 2} y={boxY + (hasBreakdown ? 42 : 30)} textAnchor="middle" fontSize="10" fontWeight="600" fill="#f1f5fb">
+                  {p.supplierName}
+                </text>
+                <text x={boxX + boxW / 2} y={boxY + (hasBreakdown ? 55 : 43)} textAnchor="middle" fontSize="9.5" fill="#92a3c0">
+                  {fmtDate(effDate(p))} · {p.quantity} un.
+                </text>
+                <text x={boxX + boxW / 2} y={boxY + (hasBreakdown ? 67 : 55)} textAnchor="middle" fontSize="9.5" fill="#92a3c0">
+                  {p.paidAt ? "Pagado" : `${STATUS_LABEL[p.status] ?? p.status} · pago pendiente`}
+                </text>
+              </g>
+            );
+          })()}
+      </svg>
+
+      <div className="flex items-center gap-x-4 gap-y-1.5 flex-wrap mt-1.5 pl-1">
+        {suppliers.map((s, i) => (
+          <div key={s.supplierId} className="flex items-center gap-1.5 text-[11.5px]">
+            <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: SUPPLIER_COLORS[i % SUPPLIER_COLORS.length] }} />
+            <span className="font-semibold">{s.supplierName}</span>
+            {i === 0 && s.recentWithinYear && (
+              <span className="flex items-center gap-1 text-[9.5px] font-bold uppercase tracking-wide bg-teal/15 text-teal border border-teal/40 rounded-full px-2 py-0.5">
+                <Award size={9} /> Más barato
+              </span>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
