@@ -29,7 +29,13 @@ function money(n: number) {
   return `$${n.toLocaleString("es-EC", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-const DATE_FMT = new Intl.DateTimeFormat("es-EC", { timeZone: "America/Guayaquil", day: "2-digit", month: "short", year: "numeric" });
+const DATE_FMT = new Intl.DateTimeFormat("es-EC", {
+  timeZone: "America/Guayaquil",
+  weekday: "short",
+  day: "2-digit",
+  month: "short",
+  year: "numeric",
+});
 const DATETIME_FMT = new Intl.DateTimeFormat("es-EC", { timeZone: "America/Guayaquil", day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
 
 export default async function SupplierLedgerPage({ params }: { params: Promise<{ token: string }> }) {
@@ -63,7 +69,17 @@ export default async function SupplierLedgerPage({ params }: { params: Promise<{
     // pedirle a CHEN una foto de "lo que está enviando").
     prisma.purchaseRequest.findMany({
       where: { supplierId: supplier.id, status: "APPROVED" },
-      include: { catalogItem: { select: { name: true } }, reviewedBy: { select: { name: true } } },
+      include: {
+        catalogItem: { select: { name: true } },
+        // Confirmado 2026-09-17, pedido explícito del usuario: además de
+        // quién aprobó (Bryan, normalmente), mostrar quién solicitó la
+        // compra — normalmente Jariel o Nairoby; en una emergencia (Bryan
+        // solicita), el que aprueba pasa a ser el admin, nunca la misma
+        // persona (ver isEmergency en schema.prisma). Un solo nombre por
+        // columna.
+        requestedBy: { select: { name: true } },
+        reviewedBy: { select: { name: true } },
+      },
       orderBy: { requestedAt: "asc" },
     }),
   ]);
@@ -141,6 +157,7 @@ export default async function SupplierLedgerPage({ params }: { params: Promise<{
                     <th className={th}>Fecha</th>
                     <th className={NOMBRE_TH}>Producto</th>
                     <th className={`${th} text-right`}>Cant.</th>
+                    <th className={th}>Solicitado por</th>
                     <th className={th}>Aprobado por</th>
                     <th className={th}>Foto (opcional)</th>
                   </tr>
@@ -151,6 +168,7 @@ export default async function SupplierLedgerPage({ params }: { params: Promise<{
                       <td className={`${td} text-neutral-600`}>{DATE_FMT.format(r.requestedAt)}</td>
                       <td className="px-3 py-2">{r.catalogItem.name}</td>
                       <td className={`${td} text-right tabular-nums`}>{r.quantity}</td>
+                      <td className={`${td} text-neutral-600`}>{r.requestedBy?.name ?? "—"}</td>
                       <td className={`${td} text-neutral-600`}>{r.reviewedBy?.name ?? "—"}</td>
                       <td className="px-3 py-2">
                         <SupplierShippingPhotoCapture token={token} requestId={r.id} initialPhotoUrl={r.supplierShippingPhotoUrl} />
