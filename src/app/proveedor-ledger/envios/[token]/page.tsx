@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { findSupplierByPublicShippingToken } from "@/lib/supplierDebt";
 import { SupplierShippingPhotoCapture } from "@/components/supplier-ledger/SupplierShippingPhotoCapture";
 import { SupplierShipmentConfirmButton } from "@/components/supplier-ledger/SupplierShipmentConfirmButton";
+import { SupplierShipmentHistoryTable } from "@/components/supplier-ledger/SupplierShipmentHistoryTable";
 
 // Confirmado 2026-09-17, pedido explícito del usuario: segundo enlace,
 // llave completamente aparte de /proveedor-ledger/[token] (el del saldo) —
@@ -27,15 +28,6 @@ const DATE_FMT = new Intl.DateTimeFormat("es-EC", {
   day: "2-digit",
   month: "short",
   year: "numeric",
-});
-const DATETIME_FMT = new Intl.DateTimeFormat("es-EC", {
-  timeZone: "America/Guayaquil",
-  weekday: "short",
-  day: "2-digit",
-  month: "short",
-  year: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
 });
 
 export default async function SupplierShippingLedgerPage({ params }: { params: Promise<{ token: string }> }) {
@@ -98,7 +90,7 @@ export default async function SupplierShippingLedgerPage({ params }: { params: P
               <table className="w-full text-left text-sm">
                 <thead className="border-b border-neutral-200 bg-neutral-50 text-xs uppercase tracking-wide text-neutral-500">
                   <tr>
-                    <th className={th}>Fecha</th>
+                    <th className={th}>Fecha aprobado</th>
                     <th className={NOMBRE_TH}>Producto</th>
                     <th className={`${th} text-right`}>Cant.</th>
                     <th className={th}>Solicitado por</th>
@@ -110,7 +102,7 @@ export default async function SupplierShippingLedgerPage({ params }: { params: P
                 <tbody className="divide-y divide-neutral-100">
                   {pendingShipments.map((r) => (
                     <tr key={r.id}>
-                      <td className={`${td} text-neutral-600`}>{DATE_FMT.format(r.requestedAt)}</td>
+                      <td className={`${td} text-neutral-600`}>{DATE_FMT.format(r.reviewedAt ?? r.requestedAt)}</td>
                       <td className="px-3 py-2">{r.catalogItem.name}</td>
                       <td className={`${td} text-right tabular-nums`}>{r.quantity}</td>
                       <td className={`${td} text-neutral-600`}>{r.requestedBy?.name ?? "—"}</td>
@@ -131,41 +123,16 @@ export default async function SupplierShippingLedgerPage({ params }: { params: P
 
         <section>
           <h2 className="mb-3 text-sm font-medium text-neutral-700">Historial de lo que ya confirmaron enviado</h2>
-          {confirmedShipments.length === 0 ? (
-            <p className="text-sm text-neutral-400">Todavía no han confirmado ningún envío.</p>
-          ) : (
-            <div className="overflow-x-auto rounded-xl border border-neutral-200 bg-white shadow-sm">
-              <table className="w-full text-left text-sm">
-                <thead className="border-b border-neutral-200 bg-neutral-50 text-xs uppercase tracking-wide text-neutral-500">
-                  <tr>
-                    <th className={th}>Confirmado</th>
-                    <th className={NOMBRE_TH}>Producto</th>
-                    <th className={`${th} text-right`}>Cant.</th>
-                    <th className={th}>Solicitado por</th>
-                    <th className={th}>Foto</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-neutral-100">
-                  {confirmedShipments.map((r) => (
-                    <tr key={r.id}>
-                      <td className={`${td} text-neutral-600`}>{r.supplierShippingConfirmedAt ? DATETIME_FMT.format(r.supplierShippingConfirmedAt) : "—"}</td>
-                      <td className="px-3 py-2">{r.catalogItem.name}</td>
-                      <td className={`${td} text-right tabular-nums`}>{r.quantity}</td>
-                      <td className={`${td} text-neutral-600`}>{r.requestedBy?.name ?? "—"}</td>
-                      <td className="px-3 py-2">
-                        {r.supplierShippingPhotoUrl ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={r.supplierShippingPhotoUrl} alt="Foto enviada" className="w-16 h-16 object-cover rounded-md border border-neutral-200" />
-                        ) : (
-                          <span className="text-neutral-400">—</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+          <SupplierShipmentHistoryTable
+            rows={confirmedShipments.map((r) => ({
+              id: r.id,
+              confirmedAt: (r.supplierShippingConfirmedAt ?? r.requestedAt).toISOString(),
+              productName: r.catalogItem.name,
+              quantity: r.quantity,
+              requestedByName: r.requestedBy?.name ?? null,
+              photoUrl: r.supplierShippingPhotoUrl,
+            }))}
+          />
         </section>
       </div>
     </div>

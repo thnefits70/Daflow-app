@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getSupplierDebtPendingItems, getSupplierDebtDisputedItems, findSupplierByPublicLedgerToken } from "@/lib/supplierDebt";
 import { SupplierShippingPhotoCapture } from "@/components/supplier-ledger/SupplierShippingPhotoCapture";
 import { SupplierShipmentConfirmButton } from "@/components/supplier-ledger/SupplierShipmentConfirmButton";
+import { SupplierShipmentHistoryTable } from "@/components/supplier-ledger/SupplierShipmentHistoryTable";
 
 // Confirmado 2026-09-08 (Fase 1, proveedores con crédito): página pública,
 // SIN auth() — el proveedor de crédito (hoy solo CHEN) accede solo con este
@@ -167,7 +168,7 @@ export default async function SupplierLedgerPage({ params }: { params: Promise<{
               <table className="w-full text-left text-sm">
                 <thead className="border-b border-neutral-200 bg-neutral-50 text-xs uppercase tracking-wide text-neutral-500">
                   <tr>
-                    <th className={th}>Fecha</th>
+                    <th className={th}>Fecha aprobado</th>
                     <th className={NOMBRE_TH}>Producto</th>
                     <th className={`${th} text-right`}>Cant.</th>
                     <th className={th}>Solicitado por</th>
@@ -179,7 +180,7 @@ export default async function SupplierLedgerPage({ params }: { params: Promise<{
                 <tbody className="divide-y divide-neutral-100">
                   {pendingShipments.map((r) => (
                     <tr key={r.id}>
-                      <td className={`${td} text-neutral-600`}>{DATE_FMT.format(r.requestedAt)}</td>
+                      <td className={`${td} text-neutral-600`}>{DATE_FMT.format(r.reviewedAt ?? r.requestedAt)}</td>
                       <td className="px-3 py-2">{r.catalogItem.name}</td>
                       <td className={`${td} text-right tabular-nums`}>{r.quantity}</td>
                       <td className={`${td} text-neutral-600`}>{r.requestedBy?.name ?? "—"}</td>
@@ -200,41 +201,16 @@ export default async function SupplierLedgerPage({ params }: { params: Promise<{
 
         <section className="mb-8">
           <h2 className="mb-3 text-sm font-medium text-neutral-700">Historial de lo que ya confirmaron enviado</h2>
-          {confirmedShipments.length === 0 ? (
-            <p className="text-sm text-neutral-400">Todavía no han confirmado ningún envío.</p>
-          ) : (
-            <div className="overflow-x-auto rounded-xl border border-neutral-200 bg-white shadow-sm">
-              <table className="w-full text-left text-sm">
-                <thead className="border-b border-neutral-200 bg-neutral-50 text-xs uppercase tracking-wide text-neutral-500">
-                  <tr>
-                    <th className={th}>Confirmado</th>
-                    <th className={NOMBRE_TH}>Producto</th>
-                    <th className={`${th} text-right`}>Cant.</th>
-                    <th className={th}>Solicitado por</th>
-                    <th className={th}>Foto</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-neutral-100">
-                  {confirmedShipments.map((r) => (
-                    <tr key={r.id}>
-                      <td className={`${td} text-neutral-600`}>{r.supplierShippingConfirmedAt ? DATETIME_FMT.format(r.supplierShippingConfirmedAt) : "—"}</td>
-                      <td className="px-3 py-2">{r.catalogItem.name}</td>
-                      <td className={`${td} text-right tabular-nums`}>{r.quantity}</td>
-                      <td className={`${td} text-neutral-600`}>{r.requestedBy?.name ?? "—"}</td>
-                      <td className="px-3 py-2">
-                        {r.supplierShippingPhotoUrl ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={r.supplierShippingPhotoUrl} alt="Foto enviada" className="w-16 h-16 object-cover rounded-md border border-neutral-200" />
-                        ) : (
-                          <span className="text-neutral-400">—</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+          <SupplierShipmentHistoryTable
+            rows={confirmedShipments.map((r) => ({
+              id: r.id,
+              confirmedAt: (r.supplierShippingConfirmedAt ?? r.requestedAt).toISOString(),
+              productName: r.catalogItem.name,
+              quantity: r.quantity,
+              requestedByName: r.requestedBy?.name ?? null,
+              photoUrl: r.supplierShippingPhotoUrl,
+            }))}
+          />
         </section>
 
         {disputedItems.length > 0 && (
