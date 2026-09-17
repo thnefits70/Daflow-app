@@ -130,7 +130,6 @@ export default async function SupplierLedgerPage({ params }: { params: Promise<{
   const th = "px-3 py-2 whitespace-nowrap";
   const td = "px-3 py-2 whitespace-nowrap";
   const NOMBRE_TH = "px-3 py-2 min-w-[200px]";
-  const pendingDebtTotal = pendingDebtItems.reduce((sum, i) => sum + i.totalCost, 0);
 
   return (
     <div className="min-h-screen bg-neutral-50 text-neutral-900">
@@ -215,10 +214,10 @@ export default async function SupplierLedgerPage({ params }: { params: Promise<{
         </section>
 
         <section className="mb-8">
-          <h2 className="mb-1 text-sm font-medium text-neutral-700">Mercadería que ya recibimos y confirmamos — pendiente de pago</h2>
+          <h2 className="mb-1 text-sm font-medium text-neutral-700">Mercadería que ya recibimos y confirmamos</h2>
           <p className="mb-3 text-xs text-neutral-500">
-            Ya quedó registrada en nuestro sistema de inventario (INVESTOCK), confirmada por el equipo de Inventario. Esto es lo que les
-            debemos ahora mismo — todavía no incluido en ninguna tanda pagada.
+            Ya quedó registrada en nuestro sistema de inventario (INVESTOCK), confirmada por el equipo de Inventario — todavía no incluida
+            en ninguna tanda pagada.
           </p>
           {pendingDebtItems.length === 0 ? (
             <p className="text-sm text-neutral-400">No hay mercadería recibida pendiente de pago por ahora.</p>
@@ -247,15 +246,6 @@ export default async function SupplierLedgerPage({ params }: { params: Promise<{
                     </tr>
                   ))}
                 </tbody>
-                <tfoot>
-                  <tr className="border-t border-neutral-200 bg-neutral-50">
-                    <td className="px-3 py-2 font-medium text-neutral-700" colSpan={3}>
-                      Total pendiente de pago
-                    </td>
-                    <td className="px-3 py-2 text-right font-semibold tabular-nums text-neutral-900">{money(pendingDebtTotal)}</td>
-                    <td className="px-3 py-2" colSpan={2} />
-                  </tr>
-                </tfoot>
               </table>
             </div>
           )}
