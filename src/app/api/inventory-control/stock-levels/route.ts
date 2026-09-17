@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { canManageJustCatalog } from "@/lib/guards";
 import { getAllCurrentStock } from "@/lib/stockKardex";
+import { getFinanzasDeptId } from "@/lib/inventoryKpis";
 import {
   bodegaUnitCost,
   computeBenistockPrice,
@@ -28,13 +29,30 @@ import {
 export async function GET() {
   if (!(await canManageJustCatalog())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
-  const [rows, proposals] = await Promise.all([
+  const deptId = await getFinanzasDeptId();
+
+  // Confirmado 2026-09-16, pedido explícito del usuario: mostrar acá mismo
+  // el costo promedio según el último archivo de Just que subió Daniel —
+  // por ahora confía más en ese número que en el de INVESTOCK (ver
+  // project_stock_comparison_avg_cost) mientras INVESTOCK/devoluciones
+  // siguen en prueba. Solo referencia — nunca reemplaza nada, ni se guarda
+  // en ningún lado más que en el archivo original de Just.
+  const [rows, proposals, justSnapshots] = await Promise.all([
     getAllCurrentStock(),
     prisma.marketProductProposal.findMany({
       where: { catalogItemId: { not: null } },
       include: { supplierPrices: true },
     }),
+    deptId
+      ? prisma.inventoryProductSnapshot.findMany({
+          where: { deptId },
+          distinct: ["productCode"],
+          orderBy: [{ productCode: "asc" }, { createdAt: "desc" }],
+          select: { productCode: true, avgCost: true },
+        })
+      : Promise.resolve([]),
   ]);
+  const justAvgCostByCode = new Map(justSnapshots.map((s) => [s.productCode.trim(), s.avgCost]));
 
   const proposalByCatalogItemId = new Map(
     proposals
@@ -66,9 +84,11 @@ export async function GET() {
     // error, es la única base de costo que existe hoy para ellos.
     const base = proposalByCatalogItemId.get(r.catalogItemId) ??
       (r.avgCost > 0 ? { batchCost: r.avgCost, batchUnits: 1, freightCost: null, insuranceRatePercent: 6, fulfillmentCost: 0.75, marginPercent: DROPI_MARGIN_DEFAULT } : null);
-    if (!base) return r;
+    const justAvgCost = r.justCode ? justAvgCostByCode.get(r.justCode.trim()) ?? null : null;
+    if (!base) return { ...r, justAvgCost };
     return {
       ...r,
+      justAvgCost,
       providerPrice: base.batchCost,
       bodegaPrice: bodegaUnitCost(base.batchCost, base.freightCost, base.batchUnits),
       benistockPrice: computeBenistockPrice(base),

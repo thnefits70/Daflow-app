@@ -49,6 +49,7 @@ type StockRow = {
   balance: number;
   avgCost: number;
   bodega: Marca | null;
+  justAvgCost?: number | null;
   providerPrice?: number;
   bodegaPrice?: number;
   benistockPrice?: number;
@@ -61,7 +62,7 @@ type SortKey = "name" | "balance";
 // Confirmado 2026-09-16, pedido explícito del usuario: poder ver solo los
 // productos reales, solo los combos, o ambos juntos, con un clic.
 type ViewMode = "all" | "products" | "combos";
-type FormulaKey = "proveedor" | "bodega" | "benistock" | "b2b" | "dropi" | "b2c1" | "b2c2";
+type FormulaKey = "proveedor" | "just" | "bodega" | "benistock" | "b2b" | "dropi" | "b2c1" | "b2c2";
 
 function money(v: number) {
   return "$" + v.toLocaleString("es-EC", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -146,6 +147,10 @@ const FORMULA_EXPLANATIONS: Record<FormulaKey, { title: string; text: string }> 
   proveedor: {
     title: "Precio proveedor",
     text: "Lo que cobra el proveedor por una unidad, tal cual — sin sumarle flete ni nada más. Es el mismo costo real que ya usa el Kardex de INVESTOCK (el promedio ponderado de todas las compras).",
+  },
+  just: {
+    title: "Just",
+    text: "El costo promedio tal cual viene del último archivo semanal que subió Daniel en Control de Inventario — un dato externo, de referencia, nunca se calcula ni se guarda en ningún otro lado. No afecta ni reemplaza el costo real de INVESTOCK.",
   },
   bodega: {
     title: "Puesto en bodega",
@@ -345,21 +350,24 @@ export function StockLevelsPanel({ isAdmin = false }: { isAdmin?: boolean }) {
   // Se extrae acá para reusarlo también arriba de los combos.
   const columnsHeader = (
     <>
-      <div className="grid grid-cols-[auto_minmax(200px,1fr)_110px_90px_100px_110px_110px_100px_100px_110px_110px] gap-3 px-3 pt-2 min-w-[1380px]">
+      <div className="grid grid-cols-[auto_minmax(200px,1fr)_110px_90px_100px_90px_110px_110px_100px_100px_110px_110px] gap-3 px-3 pt-2 min-w-[1470px]">
         <span></span>
         <span></span>
         <span></span>
         <span></span>
-        <span className="col-span-3 text-center text-[10px] font-bold uppercase tracking-wide text-steel border-b border-rule pb-1">Costo</span>
+        <span className="col-span-4 text-center text-[10px] font-bold uppercase tracking-wide text-steel border-b border-rule pb-1">Costo</span>
         <span className="col-span-4 text-center text-[10px] font-bold uppercase tracking-wide text-blue border-b border-rule pb-1">Precios de venta</span>
       </div>
-      <div className="grid grid-cols-[auto_minmax(200px,1fr)_110px_90px_100px_110px_110px_100px_100px_110px_110px] gap-3 px-3 py-2 bg-cloud text-[11px] font-semibold uppercase tracking-wide text-steel min-w-[1380px]">
+      <div className="grid grid-cols-[auto_minmax(200px,1fr)_110px_90px_100px_90px_110px_110px_100px_100px_110px_110px] gap-3 px-3 py-2 bg-cloud text-[11px] font-semibold uppercase tracking-wide text-steel min-w-[1470px]">
         <span></span>
         <span>Producto</span>
         <span>Marca</span>
         <span className="text-right">Stock</span>
         <span className="flex items-center justify-end gap-1 border-l border-rule pl-3">
           Proveedor <FormulaInfoButton open={openFormula === "proveedor"} onToggle={() => setOpenFormula((k) => (k === "proveedor" ? null : "proveedor"))} />
+        </span>
+        <span className="flex items-center justify-end gap-1">
+          Just <FormulaInfoButton open={openFormula === "just"} onToggle={() => setOpenFormula((k) => (k === "just" ? null : "just"))} />
         </span>
         <span className="flex items-center justify-end gap-1">
           Puesto en bodega <FormulaInfoButton open={openFormula === "bodega"} onToggle={() => setOpenFormula((k) => (k === "bodega" ? null : "bodega"))} />
@@ -381,7 +389,7 @@ export function StockLevelsPanel({ isAdmin = false }: { isAdmin?: boolean }) {
         </span>
       </div>
       {openFormula && (
-        <div className="flex items-start justify-between gap-3 bg-navy border-b border-rule px-3 py-2.5 min-w-[1380px]">
+        <div className="flex items-start justify-between gap-3 bg-navy border-b border-rule px-3 py-2.5 min-w-[1470px]">
           <div className="text-[12px]">
             <span className="font-bold text-ink">{FORMULA_EXPLANATIONS[openFormula].title}: </span>
             <span className="text-steel">{FORMULA_EXPLANATIONS[openFormula].text}</span>
@@ -546,7 +554,7 @@ export function StockLevelsPanel({ isAdmin = false }: { isAdmin?: boolean }) {
           tiene un ancho fijo — se reparten parejo por toda la fila. */}
       <div className="border border-rule rounded-md overflow-x-auto">
         {columnsHeader}
-        <div className="max-h-[70vh] overflow-y-auto min-w-[1380px]">
+        <div className="max-h-[70vh] overflow-y-auto min-w-[1470px]">
           {sorted.length === 0 ? (
             <div className="px-3 py-4 text-[12.5px] text-steel">Sin resultados.</div>
           ) : (
@@ -558,7 +566,7 @@ export function StockLevelsPanel({ isAdmin = false }: { isAdmin?: boolean }) {
             sorted.map((r, i) => (
               <div
                 key={r.catalogItemId}
-                className={`grid grid-cols-[auto_minmax(200px,1fr)_110px_90px_100px_110px_110px_100px_100px_110px_110px] gap-3 px-3 py-2.5 border-t border-rule items-center ${i % 2 === 1 ? "bg-cloud/40" : ""}`}
+                className={`grid grid-cols-[auto_minmax(200px,1fr)_110px_90px_100px_90px_110px_110px_100px_100px_110px_110px] gap-3 px-3 py-2.5 border-t border-rule items-center ${i % 2 === 1 ? "bg-cloud/40" : ""}`}
               >
                 {r.photos[0] ? (
                   // Confirmado 2026-09-15 (pedido de Daniel): foto real del
@@ -576,6 +584,7 @@ export function StockLevelsPanel({ isAdmin = false }: { isAdmin?: boolean }) {
                 <MarcaSelect value={r.bodega} onChange={(v) => updateProductMarca(r.catalogItemId, v)} />
                 <span className={`text-right font-mono text-[12.5px] font-bold ${r.balance < 0 ? "text-red" : "text-ink"}`}>{r.balance}</span>
                 <CopyableAmount value={r.providerPrice} className="text-right font-mono text-[13px] text-steel border-l border-rule pl-3" />
+                <CopyableAmount value={r.justAvgCost} className="text-right font-mono text-[13px] text-gold" />
                 <CopyableAmount value={r.bodegaPrice} className="text-right font-mono text-[13px] text-steel" />
                 <CopyableAmount value={r.benistockPrice} className="text-right font-mono text-[13px] text-steel" />
                 <CopyableAmount value={r.b2bPriceDefault} className="text-right font-mono text-[13px] font-bold text-teal border-l border-rule pl-3" />
@@ -606,12 +615,12 @@ export function StockLevelsPanel({ isAdmin = false }: { isAdmin?: boolean }) {
           </div>
           <div className="border border-rule rounded-md overflow-x-auto">
             {columnsHeader}
-            <div className="min-w-[1380px]">
+            <div className="min-w-[1470px]">
               {[...filteredCombos]
                 .sort((a, b) => Number(a.bodega != null) - Number(b.bodega != null) || a.code.localeCompare(b.code))
                 .map((combo, i) => (
                   <div key={combo.id} className={`border-t first:border-t-0 border-rule ${i % 2 === 1 ? "bg-cloud/40" : ""}`}>
-                    <div className="grid grid-cols-[auto_minmax(200px,1fr)_110px_90px_100px_110px_110px_100px_100px_110px_110px] gap-3 px-3 py-2.5 items-center">
+                    <div className="grid grid-cols-[auto_minmax(200px,1fr)_110px_90px_100px_90px_110px_110px_100px_100px_110px_110px] gap-3 px-3 py-2.5 items-center">
                       <div className="w-8 h-8 rounded border border-dashed border-rule shrink-0 flex items-center justify-center text-steel-dim">
                         <Wrench size={12} />
                       </div>
@@ -622,6 +631,9 @@ export function StockLevelsPanel({ isAdmin = false }: { isAdmin?: boolean }) {
                       <MarcaSelect value={combo.bodega} onChange={(v) => updateComboMarca(combo.id, v)} />
                       <span className="text-right font-mono text-[11px] italic text-steel-dim">combo</span>
                       <CopyableAmount value={combo.providerPrice} className="text-right font-mono text-[13px] text-steel border-l border-rule pl-3" />
+                      <span className="text-right font-mono text-[13px] text-steel-dim" title="Just no rastrea combos, solo productos individuales">
+                        —
+                      </span>
                       <CopyableAmount value={combo.bodegaPrice} className="text-right font-mono text-[13px] text-steel" />
                       <CopyableAmount value={combo.benistockPrice} className="text-right font-mono text-[13px] text-steel" />
                       <CopyableAmount value={combo.b2bPriceDefault} className="text-right font-mono text-[13px] font-bold text-teal border-l border-rule pl-3" />
