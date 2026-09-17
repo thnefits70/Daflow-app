@@ -185,7 +185,7 @@ const FORMULA_EXPLANATIONS: Record<FormulaKey, { title: string; text: string }> 
   },
   benistock: {
     title: "Benistock",
-    text: "Costo puesto en bodega (proveedor + flete por unidad) × 1.06 (6% de seguro) + $0.75 (fulfillment). Es el costo real, sin ninguna ganancia — solo de referencia.",
+    text: "Costo puesto en bodega (proveedor + flete por unidad) × 1.06 (6% de seguro) + fulfillment ($0.75 para productos normales, $0.50 para productos pequeños — el valor que Jariel le puso a cada producto en Análisis de Mercado; si un producto todavía no pasó por ahí, se asume $0.75). Es el costo real, sin ninguna ganancia — solo de referencia.",
   },
   b2b: {
     title: "B2B",
