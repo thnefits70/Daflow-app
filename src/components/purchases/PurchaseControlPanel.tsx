@@ -71,11 +71,14 @@ export function PurchaseControlPanel({
   canManageSupplierDebt: boolean;
   isAdmin: boolean;
 }) {
-  // Confirmado 2026-08-08: "Comparar precios" va primera de izquierda a
-  // derecha (pedido explícito del usuario) — el orden visual es independiente
-  // de qué pestaña abre por defecto (eso lo decide preferredDefault abajo).
+  // Confirmado 2026-08-08: esta pestaña va primera de izquierda a derecha
+  // (pedido explícito del usuario) — el orden visual es independiente de
+  // qué pestaña abre por defecto (eso lo decide preferredDefault abajo).
+  // Renombrada 2026-09-17 de "Comparar precios" a "Historial de precios de
+  // compra" (pedido explícito) para dejar claro que muestra compras ya
+  // hechas a cada proveedor, no precios sugeridos ni de venta.
   const tabs: { key: Tab; label: string }[] = [
-    ...(canSubmit || canReview ? [{ key: "comparar" as Tab, label: "Comparar precios" }] : []),
+    ...(canSubmit || canReview ? [{ key: "comparar" as Tab, label: "Historial de precios de compra" }] : []),
     ...(canCreateNew ? [{ key: "solicitar" as Tab, label: "Solicitar" }] : canSubmitEmergency ? [{ key: "solicitar" as Tab, label: "🚨 Emergencia" }] : []),
     ...(canSubmit ? [{ key: "mias" as Tab, label: "Mis solicitudes" }] : []),
     ...(canReview ? [{ key: "aprobacion" as Tab, label: "Bandeja de aprobación" }] : []),
