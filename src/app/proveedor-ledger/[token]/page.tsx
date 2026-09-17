@@ -216,8 +216,8 @@ export default async function SupplierLedgerPage({ params }: { params: Promise<{
         <section className="mb-8">
           <h2 className="mb-1 text-sm font-medium text-neutral-700">Mercadería que ya la bodega TBS confirmó que sí recibió</h2>
           <p className="mb-3 text-xs text-neutral-500">
-            Ya quedó registrada en nuestro sistema de inventario (INVESTOCK), confirmada por el equipo de Inventario — todavía no incluida
-            en ninguna tanda pagada.
+            Ya quedó registrada en nuestro sistema de inventario de la bodega de TBS, confirmada por el equipo de bodega de TBS — todavía no
+            incluida en ninguna tanda pagada. Pendiente de pagar a CHEN, estos pagos los realiza Andrés.
           </p>
           {pendingDebtItems.length === 0 ? (
             <p className="text-sm text-neutral-400">No hay mercadería recibida pendiente de pago por ahora.</p>
