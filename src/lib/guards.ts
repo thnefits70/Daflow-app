@@ -731,6 +731,38 @@ export async function getPurchaseApproverIds(): Promise<string[]> {
   return users.map((u) => u.id);
 }
 
+// Confirmado 2026-09-17, pedido explícito del usuario: quien GESTIONA un
+// DETERIORO escalado con el proveedor (elegir a cuál se le reclama, anclar
+// la compra real, y registrar si dio crédito/reemplazo/rechazo) es
+// exactamente a quien ya se refiere el comentario de arriba en
+// canSubmitEmergencyPurchaseRequest — canManagePurchases hoy solo debe
+// significar "gestiona créditos con proveedores" (hoy Jariel). Admin
+// siempre puede todo, como respaldo de lectura/acción.
+export async function canManageOutflowPurchaseGestion() {
+  const session = await auth();
+  if (!session) return false;
+  if (session.user.role === "admin") return true;
+  const user = await prisma.user.findUnique({ where: { id: session.user.id }, select: { canManagePurchases: true, isActive: true } });
+  return !!user?.isActive && !!user.canManagePurchases;
+}
+
+// Mismo patrón que getMarketingLeadId/getInventoryLeadId — a quién avisarle
+// que tiene un reclamo de deterioro nuevo para gestionar.
+export async function getPurchaseGestionManagerId(): Promise<string | null> {
+  const user = await prisma.user.findFirst({ where: { isActive: true, canManagePurchases: true }, select: { id: true } });
+  return user?.id ?? null;
+}
+
+// Confirmado 2026-09-17, pedido explícito del usuario: si Jariel no
+// encuentra ninguna compra real que respalde un reclamo, no puede decidir
+// solo cómo seguir — pasa a admin como excepción (nunca queda un reclamo
+// sin trámite). Decidir esa excepción es EXCLUSIVO del admin, mismo
+// criterio que canReviewSupplierExchangeRejection.
+export async function canDecidePurchaseException() {
+  const session = await auth();
+  return session?.user.role === "admin";
+}
+
 // Confirmado 2026-08-06: bug real — canManagePurchases es un escape hatch
 // compartido pensado para Solicitar/Facturar (Bryan/Nairoby), pero como esta
 // función también lo aceptaba, cualquiera con ese flag heredaba de paso la

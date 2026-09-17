@@ -138,6 +138,8 @@ export function DeptWorkspaceTabs({
   supplierExchangeMineCount = 0,
   canConfirmFinanceWriteOff = false,
   financeWriteOffPendingCount = 0,
+  canManagePurchaseGestion = false,
+  purchaseGestionPendingCount = 0,
   canSubmitCancelledGuide = false,
   canManageCancelledGuideBatches = false,
   canConfirmCancelledGuideFulfillmentRemoval = false,
@@ -319,6 +321,12 @@ export function DeptWorkspaceTabs({
   // pestaña "egresos" para ella aunque no tenga ningún otro acceso al módulo.
   canConfirmFinanceWriteOff?: boolean;
   financeWriteOffPendingCount?: number;
+  // Confirmado 2026-09-17, pedido explícito del usuario: quien gestiona
+  // compras (hoy Jariel, vía canManagePurchases) elige el proveedor y ancla
+  // reclamos de DETERIORO escalados — mismo patrón de visibilidad que
+  // supplierExchangeMineCount, para la sub-pestaña "proveedor".
+  canManagePurchaseGestion?: boolean;
+  purchaseGestionPendingCount?: number;
   // Guías Canceladas (Fase 4) — vive dentro de la pestaña de Egresos, pero
   // trae gente que no es de Inventario (Bryan/MKT, equipo de FUL), así que
   // amplía la visibilidad de esa pestaña sin tocar canViewMerchandiseOutflow
@@ -396,7 +404,7 @@ export function DeptWorkspaceTabs({
     if (t.key === "inventario") return canManageInventoryControl;
     if (t.key === "stock-actual") return canManageJustCatalog;
     if (t.key === "reingreso") return canCaptureMerchandiseReentry || canApproveMerchandiseReentry || canCloseMerchandiseReentry;
-    if (t.key === "egresos") return canViewMerchandiseOutflow || canSubmitCancelledGuide || canManageCancelledGuideBatches || canConfirmCancelledGuideFulfillmentRemoval || canAssignCancelledGuideItems || supplierExchangeMineCount > 0 || financeWriteOffPendingCount > 0;
+    if (t.key === "egresos") return canViewMerchandiseOutflow || canSubmitCancelledGuide || canManageCancelledGuideBatches || canConfirmCancelledGuideFulfillmentRemoval || canAssignCancelledGuideItems || supplierExchangeMineCount > 0 || financeWriteOffPendingCount > 0 || canManagePurchaseGestion || purchaseGestionPendingCount > 0;
     if (t.key === "ventas-externas") return canViewExternalSales;
     if (t.key === "inventoriokpis") return canViewInventoryKpisPanel;
     if (t.key === "cajachica") return !!(pettyCashData?.principal || pettyCashData?.secundaria);
@@ -506,9 +514,9 @@ export function DeptWorkspaceTabs({
                 {merchandiseReentryPendingCount}
               </span>
             )}
-            {t.key === "egresos" && supplierExchangeMineCount + financeWriteOffPendingCount > 0 && (
+            {t.key === "egresos" && supplierExchangeMineCount + financeWriteOffPendingCount + purchaseGestionPendingCount > 0 && (
               <span className="font-mono text-[10px] font-semibold bg-red/20 text-red rounded-full px-1.5 py-0.5">
-                {supplierExchangeMineCount + financeWriteOffPendingCount}
+                {supplierExchangeMineCount + financeWriteOffPendingCount + purchaseGestionPendingCount}
               </span>
             )}
             {t.key === "proveedores" && canReviewSuppliers && supplierPendingCount > 0 && (
@@ -592,7 +600,7 @@ export function DeptWorkspaceTabs({
           canManageJustCatalog={canManageJustCatalog}
         />
       )}
-      {tab === "egresos" && (canViewMerchandiseOutflow || canSubmitCancelledGuide || canManageCancelledGuideBatches || canConfirmCancelledGuideFulfillmentRemoval || canAssignCancelledGuideItems || supplierExchangeMineCount > 0 || financeWriteOffPendingCount > 0) && (
+      {tab === "egresos" && (canViewMerchandiseOutflow || canSubmitCancelledGuide || canManageCancelledGuideBatches || canConfirmCancelledGuideFulfillmentRemoval || canAssignCancelledGuideItems || supplierExchangeMineCount > 0 || financeWriteOffPendingCount > 0 || canManagePurchaseGestion || purchaseGestionPendingCount > 0) && (
         <MerchandiseOutflowPanel
           canCapture={canCaptureMerchandiseOutflow}
           canAct={canActOnMerchandiseOutflow}
@@ -602,6 +610,8 @@ export function DeptWorkspaceTabs({
           supplierExchangeMineCount={supplierExchangeMineCount}
           canConfirmFinanceWriteOff={canConfirmFinanceWriteOff}
           financeWriteOffPendingCount={financeWriteOffPendingCount}
+          canManagePurchaseGestion={canManagePurchaseGestion}
+          purchaseGestionPendingCount={purchaseGestionPendingCount}
           canSubmitCancelledGuide={canSubmitCancelledGuide}
           canManageCancelledGuideBatches={canManageCancelledGuideBatches}
           canConfirmCancelledGuideFulfillmentRemoval={canConfirmCancelledGuideFulfillmentRemoval}

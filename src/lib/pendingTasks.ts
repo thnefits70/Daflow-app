@@ -441,6 +441,8 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   compras_reclamo_posterior_revision: "Reclamos posteriores al cierre por revisar",
   compras_reclamo_posterior_just: "Reclamos posteriores al cierre por dar de baja en Just",
   compras_creditos_pendientes: "Créditos pendientes de recuperar",
+  deterioro_compras_gestion: "Deterioro escalado — pendiente de gestionar con el proveedor",
+  deterioro_compras_excepcion: "Deterioro sin compra que lo respalde — tu decisión",
   control_inventario: "Control de Inventario — captura mensual",
   control_inventario_semanal: "Control de Inventario — Excel semanal de stock por SKU",
   combo_sugerencias_nicho_backfill: "Sugerencias de Combos — nichos por asignar (tope de gasto alcanzado)",
@@ -1427,6 +1429,59 @@ async function getSupplierExchangeGestorPendingItem(userId: string, href: string
     label: "Cambio con proveedor pendiente de tu gestión",
     meta: `${count} producto${count === 1 ? "" : "s"}`,
     overdue: false,
+    href,
+  };
+}
+
+// Confirmado 2026-09-17, pedido explícito del usuario: reclamos de
+// DETERIORO escalados (ver DeteriorResolutionInbox) pendientes de que quien
+// gestiona compras (hoy Jariel, vía canManagePurchases) elija el proveedor,
+// los ancle a una compra real y registre el resultado — ver purchase-link/
+// purchase-resolve. A diferencia de getSupplierExchangeGestorCount (que
+// filtra por quién pidió la compra original), acá no hay ese dato de
+// antemano — es company-wide, para quien tenga el flag hoy.
+export async function getPurchaseGestionPendingCount(): Promise<number> {
+  return prisma.merchandiseOutflowItem.count({
+    where: {
+      resolution: "ESCALATED_TO_PURCHASES",
+      purchaseResolution: null,
+      OR: [{ purchaseNoMatchReportedAt: null }, { purchaseExceptionDecision: "AUTHORIZED" }],
+    },
+  });
+}
+
+async function getPurchaseGestionPendingItem(href: string): Promise<PendingItem | null> {
+  const count = await getPurchaseGestionPendingCount();
+  if (count === 0) return null;
+  return {
+    type: "deterioro_compras_gestion",
+    icon: "🔧",
+    label: "Deterioro escalado pendiente de gestión con el proveedor",
+    meta: `${count} reclamo${count === 1 ? "" : "s"}`,
+    overdue: false,
+    href,
+  };
+}
+
+// Confirmado 2026-09-17, pedido explícito del usuario: si quien gestiona no
+// encuentra ninguna compra real que respalde un reclamo, nunca se cierra
+// solo — pasa a admin como excepción (ver purchase-exception-decide/route.ts).
+// Company-wide, exclusivo de admin.
+export async function getPurchaseExceptionsPendingCount(): Promise<number> {
+  return prisma.merchandiseOutflowItem.count({
+    where: { purchaseNoMatchReportedAt: { not: null }, purchaseExceptionDecision: null },
+  });
+}
+
+async function getPurchaseExceptionAdminPendingItem(href: string): Promise<PendingItem | null> {
+  const count = await getPurchaseExceptionsPendingCount();
+  if (count === 0) return null;
+  return {
+    type: "deterioro_compras_excepcion",
+    icon: "🚨",
+    label: "Reclamo de deterioro sin compra que lo respalde",
+    meta: `${count} caso${count === 1 ? "" : "s"}`,
+    overdue: true,
     href,
   };
 }
@@ -2692,6 +2747,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     // departamento INV (ver canViewMerchandiseOutflow en admin/dept/[id]/page.tsx).
     const invDept = await prisma.department.findUnique({ where: { code: "INV" }, select: { id: true } });
     const invEgresosHref = invDept ? `/admin/dept/${invDept.id}?tab=egresos&otab=proveedor` : "/admin";
+    const deterioroExcepcionesHref = "/admin/deterioro-excepciones";
     const nichoBackfillHref = "/admin/reingreso-mercaderia?tab=productos";
     const monthlyTopMoversHref = "/admin/kpis-generales";
     // Confirmado 2026-08-31: "Ventas Externas" vive en la página del
@@ -2699,7 +2755,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     // pestaña interna "Pagos" (?etab=pagos, leída por ExternalSalesPanel).
     const mktDept = await prisma.department.findUnique({ where: { code: "MKT" }, select: { id: true } });
     const mktVentasPagosHref = mktDept ? `/admin/dept/${mktDept.id}?tab=ventas-externas&etab=pagos` : "/admin";
-    const [feedbackItems, recognitionItem, weeklyCheckinStalledItems, pettyCashLow, pettyCashUnconfirmed, adminPaymentsItem, purchaseShippingItem, purchaseCreditsItem, purchaseRefundBankConfirmItem, supplierExchangeRejectedItem, overtimeApprovalItem, commissionBonusApprovalItem, salaryAdvanceItem, managementDeductionItem, personalPurchaseFinanceItem, personalPurchaseTransferConfirmItem, personalPurchaseTransferCloseItem, personalPurchaseCashConfirmItem, personalPurchasePaymentWatchItem, payrollTransferItem, payrollIessTransferItem, externalSalePaymentConfirmItem, birthdayItems, nichoBackfillItem, monthlyTopMoversItem, improvementPlanClosureItems] = await Promise.all([
+    const [feedbackItems, recognitionItem, weeklyCheckinStalledItems, pettyCashLow, pettyCashUnconfirmed, adminPaymentsItem, purchaseShippingItem, purchaseCreditsItem, purchaseRefundBankConfirmItem, supplierExchangeRejectedItem, overtimeApprovalItem, commissionBonusApprovalItem, salaryAdvanceItem, managementDeductionItem, personalPurchaseFinanceItem, personalPurchaseTransferConfirmItem, personalPurchaseTransferCloseItem, personalPurchaseCashConfirmItem, personalPurchasePaymentWatchItem, payrollTransferItem, payrollIessTransferItem, externalSalePaymentConfirmItem, birthdayItems, nichoBackfillItem, monthlyTopMoversItem, improvementPlanClosureItems, purchaseExceptionItem] = await Promise.all([
       getFeedbackPendingItems(),
       getRecognitionAdminPendingItem("/admin/colaborador-destacado"),
       getWeeklyCheckinStalledPendingItems(),
@@ -2726,6 +2782,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       getNichoBackfillPendingItem(nichoBackfillHref),
       getMonthlyTopMoversPendingItem(monthlyTopMoversHref),
       getImprovementPlanPendingClosureApprovalItems("/admin/plan-mejora"),
+      getPurchaseExceptionAdminPendingItem(deterioroExcepcionesHref),
     ]);
     const items = [
       ...feedbackItems,
@@ -2754,6 +2811,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       ...birthdayItems,
       ...(nichoBackfillItem ? [nichoBackfillItem] : []),
       ...(monthlyTopMoversItem ? [monthlyTopMoversItem] : []),
+      ...(purchaseExceptionItem ? [purchaseExceptionItem] : []),
     ];
     if (items.length === 0) return null;
     return { title: "Pendientes de esta semana", sub: "Como administrador", items };
@@ -2825,6 +2883,8 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       // que aprove/route.ts ahora manda en la notificación.
       const purchaseUrgentUnresolvedItem = await getPurchaseUrgentReportsUnresolvedPendingItem("/area/workspace?tab=compras&ptab=urgentes");
       if (purchaseUrgentUnresolvedItem) teamItems.push(purchaseUrgentUnresolvedItem);
+      const purchaseGestionItem = await getPurchaseGestionPendingItem("/area/workspace?tab=egresos&otab=proveedor");
+      if (purchaseGestionItem) teamItems.push(purchaseGestionItem);
     }
     // Confirmado 2026-09-04: quien aprueba compras (hoy Bryan) puede no
     // liderar ningún departamento — mismo patrón que canManagePurchases
@@ -2970,6 +3030,10 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     const purchaseCreditsItem = await getPurchaseCreditsPendingItem("/area/workspace?tab=compras&ptab=urgentes");
     if (purchaseCreditsItem) items.push(purchaseCreditsItem);
   }
+  if (me.canManagePurchases) {
+    const purchaseGestionItem = await getPurchaseGestionPendingItem("/area/workspace?tab=egresos&otab=proveedor");
+    if (purchaseGestionItem) items.push(purchaseGestionItem);
+  }
 
   // Confirmado 2026-09-04: pedido explícito del usuario — quien aprueba
   // compras (hoy Bryan) debe ver en su propio Inicio lo que tiene pendiente
@@ -3007,7 +3071,7 @@ export async function getPossiblePendingTypesForActor(
   const types: string[] = [];
 
   if (actor.isAdmin) {
-    types.push("feedback", "caja_chica_saldo", "caja_chica_confirmacion", "cumpleanos", "compras_creditos_pendientes", "anticipos_aprobacion", "descuentos_sin_aceptar", "compras_personales_precio", "compras_personales_transferencia", "compras_personales_cierre", "nomina_transferencia", "iess_transferencia", "combo_sugerencias_nicho_backfill", "monthly_top_movers", "plan_mejora_cierre_aprobacion");
+    types.push("feedback", "caja_chica_saldo", "caja_chica_confirmacion", "cumpleanos", "compras_creditos_pendientes", "anticipos_aprobacion", "descuentos_sin_aceptar", "compras_personales_precio", "compras_personales_transferencia", "compras_personales_cierre", "nomina_transferencia", "iess_transferencia", "combo_sugerencias_nicho_backfill", "monthly_top_movers", "plan_mejora_cierre_aprobacion", "deterioro_compras_excepcion");
   } else {
     const me = await prisma.user.findUnique({
       where: { id: actor.userId },
@@ -3026,7 +3090,7 @@ export async function getPossiblePendingTypesForActor(
       // abajo, pero sin nada del resto (KPIs, roles de pago, etc.) que sigue
       // siendo exclusivo de líderes.
       if (me.canManagePurchases) {
-        types.push("compras_rechazadas", "compras_orden_compra", "compras_transportista", "compras_cuenta_bancaria", "compras_creditos_pendientes");
+        types.push("compras_rechazadas", "compras_orden_compra", "compras_transportista", "compras_cuenta_bancaria", "compras_creditos_pendientes", "deterioro_compras_gestion");
       }
       if (me.canApprovePurchaseRequests) types.push("compras_pendientes_aprobacion");
       return types.map((type) => ({ type, label: PENDING_TYPE_CATALOG[type] }));
@@ -3047,6 +3111,7 @@ export async function getPossiblePendingTypesForActor(
     if (me.canManagePurchases || ["COM", "FIN"].includes(me.leadsDept.code)) {
       types.push("compras_rechazadas", "compras_orden_compra", "compras_transportista", "compras_cuenta_bancaria", "compras_creditos_pendientes");
     }
+    if (me.canManagePurchases) types.push("deterioro_compras_gestion");
     if (me.canApprovePurchaseRequests) types.push("compras_pendientes_aprobacion");
   }
 

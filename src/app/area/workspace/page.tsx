@@ -3,12 +3,12 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { TopLine } from "@/components/ui/TopLine";
 import { DeptWorkspaceTabs } from "@/components/dept/DeptWorkspaceTabs";
-import { getUnseenFeedbackCount, canManageStoreFeedback as checkCanManageStoreFeedback, canViewStoreFeedback as checkCanViewStoreFeedback, canSubmitPurchaseRequests, canCreateNewPurchaseRequests, canSubmitEmergencyPurchaseRequest, canApprovePurchaseRequests as checkCanApprovePurchaseRequests, canActOnPurchaseApproval as checkCanActOnPurchaseApproval, canConfirmPurchaseReceiving, canReceivePurchasesTeam, canActOnPurchaseReceiving, canRegisterPurchaseInvoices, canPayMerchandisePurchases, canManageSupplierDebtPayments, canManageInventoryControl as checkCanManageInventoryControl, canViewInventoryKpisPanel as checkCanViewInventoryKpisPanel, canManageAdminPayments as checkCanManageAdminPayments, canRegisterLunchPayments as checkCanRegisterLunchPayments, canViewMarketingArrivals as checkCanViewMarketingArrivals, canConfirmMarketingDesign as checkCanConfirmMarketingDesign, canConfirmMarketingAdvisor as checkCanConfirmMarketingAdvisor, canSyncAtomData as checkCanSyncAtomData, canUploadLowRotationList as checkCanUploadLowRotationList, canApproveComboSuggestions as checkCanApproveComboSuggestions, canActOnComboSuggestions as checkCanActOnComboSuggestions, canMarkComboCreatedInDropi as checkCanMarkComboCreatedInDropi, canProposeMarketProduct, canReviewMarketProduct, canActOnMarketProductReview, canPublishMarketProduct, canBrandMarketProduct, canDecideMarketProductPurchase, canViewB2BPricing, canViewB2CPricing, canCaptureMerchandiseReentry, canApproveMerchandiseReentry, canActOnMerchandiseReentry, canCloseMerchandiseReentry, canVerifyDamageDisposal, canManageJustUpload, canManageJustCatalog, canCaptureMerchandiseOutflow, canActOnMerchandiseOutflow, canViewMerchandiseOutflow, canConfirmSupplierExchangeFinanceWriteOff, canSubmitCancelledGuide, canManageCancelledGuideBatches, canConfirmCancelledGuideFulfillmentRemoval, canAssignCancelledGuideItems, canDeclareExternalSales, canReviewExternalSales, canConfirmExternalSalePayment, canInvoiceExternalSale, canAssignExternalSalePack, canPackExternalSale, canCloseExternalSale, canViewExternalSales, getSupplierAccess, canAddSupplierBankAccounts, canJustifyFillRate as checkCanJustifyFillRate, canManageImprovementPlan } from "@/lib/guards";
+import { getUnseenFeedbackCount, canManageStoreFeedback as checkCanManageStoreFeedback, canViewStoreFeedback as checkCanViewStoreFeedback, canSubmitPurchaseRequests, canCreateNewPurchaseRequests, canSubmitEmergencyPurchaseRequest, canApprovePurchaseRequests as checkCanApprovePurchaseRequests, canActOnPurchaseApproval as checkCanActOnPurchaseApproval, canConfirmPurchaseReceiving, canReceivePurchasesTeam, canActOnPurchaseReceiving, canRegisterPurchaseInvoices, canPayMerchandisePurchases, canManageSupplierDebtPayments, canManageInventoryControl as checkCanManageInventoryControl, canViewInventoryKpisPanel as checkCanViewInventoryKpisPanel, canManageAdminPayments as checkCanManageAdminPayments, canRegisterLunchPayments as checkCanRegisterLunchPayments, canViewMarketingArrivals as checkCanViewMarketingArrivals, canConfirmMarketingDesign as checkCanConfirmMarketingDesign, canConfirmMarketingAdvisor as checkCanConfirmMarketingAdvisor, canSyncAtomData as checkCanSyncAtomData, canUploadLowRotationList as checkCanUploadLowRotationList, canApproveComboSuggestions as checkCanApproveComboSuggestions, canActOnComboSuggestions as checkCanActOnComboSuggestions, canMarkComboCreatedInDropi as checkCanMarkComboCreatedInDropi, canProposeMarketProduct, canReviewMarketProduct, canActOnMarketProductReview, canPublishMarketProduct, canBrandMarketProduct, canDecideMarketProductPurchase, canViewB2BPricing, canViewB2CPricing, canCaptureMerchandiseReentry, canApproveMerchandiseReentry, canActOnMerchandiseReentry, canCloseMerchandiseReentry, canVerifyDamageDisposal, canManageJustUpload, canManageJustCatalog, canCaptureMerchandiseOutflow, canActOnMerchandiseOutflow, canViewMerchandiseOutflow, canConfirmSupplierExchangeFinanceWriteOff, canManageOutflowPurchaseGestion, canSubmitCancelledGuide, canManageCancelledGuideBatches, canConfirmCancelledGuideFulfillmentRemoval, canAssignCancelledGuideItems, canDeclareExternalSales, canReviewExternalSales, canConfirmExternalSalePayment, canInvoiceExternalSale, canAssignExternalSalePack, canPackExternalSale, canCloseExternalSale, canViewExternalSales, getSupplierAccess, canAddSupplierBankAccounts, canJustifyFillRate as checkCanJustifyFillRate, canManageImprovementPlan } from "@/lib/guards";
 import { getFinanceKpiData } from "@/lib/financeKpis";
 import { getDeptProcessDetail } from "@/lib/processDetail";
 import { getPaymentRemindersData } from "@/lib/paymentReminders";
 import { getPeriodicReminders } from "@/lib/periodicReminders";
-import { getSupplierExchangeGestorCount } from "@/lib/pendingTasks";
+import { getSupplierExchangeGestorCount, getPurchaseGestionPendingCount } from "@/lib/pendingTasks";
 import { getStoreFeedbackData, getStoreFeedbackMonthlyAggregates } from "@/lib/storeFeedback";
 import { getReviewsInvolvingUser, weeksStaleOf } from "@/lib/weeklyCheckin";
 import { getInventoryControlData, getInventoryKpisData } from "@/lib/inventoryKpis";
@@ -164,6 +164,11 @@ export default async function WorkspacePage() {
   const financeWriteOffPendingCount = canConfirmFinanceWriteOffFlag
     ? await prisma.merchandiseOutflowItem.count({ where: { resolution: "REJECTED", financeWriteOffAt: null, justWriteOffConfirmedAt: { not: null } } })
     : 0;
+  // Confirmado 2026-09-17, pedido explícito del usuario: quien gestiona
+  // compras (hoy Jariel) ancla reclamos de DETERIORO escalados a la compra
+  // real — mismo patrón de visibilidad que supplierExchangeMineCount arriba.
+  const canManagePurchaseGestionFlag = await canManageOutflowPurchaseGestion();
+  const purchaseGestionPendingCount = canManagePurchaseGestionFlag ? await getPurchaseGestionPendingCount() : 0;
   // Guías Canceladas (Fase 4), rediseñado 2026-09-02: Bryan gestiona el
   // lote con la transportadora/Dropi (canManageCancelledGuideBatches);
   // Heidy (delegado puntual) carga productos por guía
@@ -350,6 +355,8 @@ export default async function WorkspacePage() {
         supplierExchangeMineCount={supplierExchangeMineCount}
         canConfirmFinanceWriteOff={canConfirmFinanceWriteOffFlag}
         financeWriteOffPendingCount={financeWriteOffPendingCount}
+        canManagePurchaseGestion={canManagePurchaseGestionFlag}
+        purchaseGestionPendingCount={purchaseGestionPendingCount}
         canSubmitCancelledGuide={canSubmitGuide}
         canManageCancelledGuideBatches={canManageGuideBatches}
         canConfirmCancelledGuideFulfillmentRemoval={canConfirmGuideFulfillmentRemoval}

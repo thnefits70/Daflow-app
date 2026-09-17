@@ -501,12 +501,15 @@ model User {
   merchandiseWeeklyWriteOffBatchesJust    MerchandiseWeeklyWriteOffBatch[] @relation("MerchandiseWeeklyWriteOffBatchJustBy")
   merchandiseWeeklyWriteOffBatchesNairoby MerchandiseWeeklyWriteOffBatch[] @relation("MerchandiseWeeklyWriteOffBatchNairobyBy")
 
-  merchandiseOutflowBatchesCreated        MerchandiseOutflowBatch[] @relation("MerchandiseOutflowBatchCreatedBy")
-  merchandiseOutflowBatchesJustWrittenOff MerchandiseOutflowBatch[] @relation("MerchandiseOutflowBatchJustWrittenOffBy")
-  merchandiseOutflowItemsResolved         MerchandiseOutflowItem[]  @relation("MerchandiseOutflowItemResolvedBy")
-  merchandiseOutflowItemsFinanceWriteOff  MerchandiseOutflowItem[]  @relation("MerchandiseOutflowItemFinanceWriteOffBy")
-  merchandiseOutflowItemsJustWriteOff     MerchandiseOutflowItem[]  @relation("MerchandiseOutflowItemJustWriteOffBy")
-  merchandiseOutflowItemsAdminReviewed    MerchandiseOutflowItem[]  @relation("MerchandiseOutflowItemAdminReviewedBy")
+  merchandiseOutflowBatchesCreated         MerchandiseOutflowBatch[] @relation("MerchandiseOutflowBatchCreatedBy")
+  merchandiseOutflowBatchesJustWrittenOff  MerchandiseOutflowBatch[] @relation("MerchandiseOutflowBatchJustWrittenOffBy")
+  merchandiseOutflowItemsResolved          MerchandiseOutflowItem[]  @relation("MerchandiseOutflowItemResolvedBy")
+  merchandiseOutflowItemsFinanceWriteOff   MerchandiseOutflowItem[]  @relation("MerchandiseOutflowItemFinanceWriteOffBy")
+  merchandiseOutflowItemsJustWriteOff      MerchandiseOutflowItem[]  @relation("MerchandiseOutflowItemJustWriteOffBy")
+  merchandiseOutflowItemsAdminReviewed     MerchandiseOutflowItem[]  @relation("MerchandiseOutflowItemAdminReviewedBy")
+  merchandiseOutflowItemsPurchaseResolved  MerchandiseOutflowItem[]  @relation("MerchandiseOutflowItemPurchaseResolvedBy")
+  merchandiseOutflowItemsPurchaseNoMatch   MerchandiseOutflowItem[]  @relation("MerchandiseOutflowItemPurchaseNoMatchBy")
+  merchandiseOutflowItemsPurchaseException MerchandiseOutflowItem[]  @relation("MerchandiseOutflowItemPurchaseExceptionBy")
 
   externalSalesAdvised            ExternalSale[] @relation("ExternalSaleAdvisor")
   externalSalesReviewed           ExternalSale[] @relation("ExternalSaleReviewedBy")
@@ -1544,15 +1547,15 @@ enum SupplierPaymentMode {
 }
 
 model Supplier {
-  id                         String              @id @default(cuid())
+  id                           String              @id @default(cuid())
   // Confirmado 2026-07-30: los transportistas de Control de Compras viven en
   // esta MISMA tabla (type=CARRIER) en vez de un catálogo aparte, para que
   // "se sincroniza con Proveedores" sea automático (una sola fila, nunca dos
   // registros del mismo contacto) — se distinguen y filtran por type, y un
   // transportista simplemente no pide location (no tiene local fijo).
-  type                       SupplierType        @default(SUPPLIER)
-  name                       String
-  paymentMode                SupplierPaymentMode @default(PREPAGO)
+  type                         SupplierType        @default(SUPPLIER)
+  name                         String
+  paymentMode                  SupplierPaymentMode @default(PREPAGO)
   // Confirmado 2026-09-08: enlace público de solo lectura para un proveedor
   // con crédito (CHEN). Diseño original: solo se guardaba el hash (igual que
   // PasswordResetToken), el token crudo nunca se persistía.
@@ -1563,24 +1566,24 @@ model Supplier {
   // cuenta de ese proveedor, nada más. publicLedgerTokenHash se conserva
   // nada más para que un enlace generado ANTES de este cambio siga
   // funcionando sin que nadie tenga que regenerarlo.
-  publicLedgerToken          String?             @unique
-  publicLedgerTokenHash      String?             @unique
-  publicLedgerTokenCreatedAt DateTime?
+  publicLedgerToken            String?             @unique
+  publicLedgerTokenHash        String?             @unique
+  publicLedgerTokenCreatedAt   DateTime?
   // Confirmado 2026-09-17, pedido explícito del usuario: un segundo enlace,
   // independiente del de arriba, para que el proveedor de crédito se lo
   // pase a su propio equipo de despacho — muestra SOLO los pedidos que
   // faltan enviar (producto/cantidad), nunca el saldo/deuda. Es una llave
   // aparte a propósito: si alguien edita la URL de este enlace no puede
   // llegar a la página del saldo, porque esa valida un token distinto.
-  publicShippingToken          String? @unique
+  publicShippingToken          String?             @unique
   publicShippingTokenCreatedAt DateTime?
-  location                   String?
+  location                     String?
   // Pin exacto marcado en el mapa (OpenStreetMap), opcional — más confiable que
   // una dirección escrita para que alguien nuevo pueda llegar.
-  locationLat                Float?
-  locationLng                Float?
-  category                   String?
-  notes                      String?
+  locationLat                  Float?
+  locationLng                  Float?
+  category                     String?
+  notes                        String?
 
   email String?
 
@@ -1601,16 +1604,17 @@ model Supplier {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  contacts                       SupplierContact[]
-  channels                       SupplierChannel[]
-  purchaseRequestsAsSupplier     PurchaseRequest[]            @relation("PurchaseRequestSupplier")
-  purchaseRequestsAsCarrier      PurchaseRequest[]            @relation("PurchaseRequestCarrier")
-  bankAccounts                   SupplierBankAccount[]
-  credits                        SupplierCredit[]
-  merchandiseOutflowBatches      MerchandiseOutflowBatch[]
-  debtPayments                   SupplierDebtPayment[]
-  marketProductPrices            MarketProductSupplierPrice[]
-  marketProductProposalsAsChosen MarketProductProposal[]
+  contacts                               SupplierContact[]
+  channels                               SupplierChannel[]
+  purchaseRequestsAsSupplier             PurchaseRequest[]            @relation("PurchaseRequestSupplier")
+  purchaseRequestsAsCarrier              PurchaseRequest[]            @relation("PurchaseRequestCarrier")
+  bankAccounts                           SupplierBankAccount[]
+  credits                                SupplierCredit[]
+  merchandiseOutflowBatches              MerchandiseOutflowBatch[]
+  merchandiseOutflowItemsPurchaseGestion MerchandiseOutflowItem[]     @relation("OutflowItemPurchaseGestionSupplier")
+  debtPayments                           SupplierDebtPayment[]
+  marketProductPrices                    MarketProductSupplierPrice[]
+  marketProductProposalsAsChosen         MarketProductProposal[]
 
   @@index([status])
   @@index([createdByDeptId])
@@ -5161,6 +5165,23 @@ enum OutflowItemResolution {
   REJECTED
 }
 
+// Confirmado 2026-09-17, pedido explícito del usuario: cuando Jariel
+// gestiona un DETERIORO escalado y no encuentra ninguna compra real que
+// respalde el reclamo con el proveedor que eligió, no puede cerrar el caso
+// solo — nunca debe quedar un reclamo sin trámite. Pasa como excepción a
+// admin, que decide una de estas tres (ver MerchandiseOutflowItem.purchase*).
+enum PurchaseExceptionDecision {
+  // Se corrigió un dato mal cargado (proveedor/compra mal registrada) —
+  // Jariel vuelve a intentar el vínculo, ya no hay excepción abierta.
+  DATA_CORRECTED
+  // Admin autoriza seguir con el reclamo aunque no haya compra registrada
+  // que lo respalde — queda anotado con su nombre y motivo, nunca silencioso.
+  AUTHORIZED
+  // No se puede sustentar de ninguna forma — cierra el reclamo como
+  // rechazado, con admin como responsable de la decisión.
+  REJECTED
+}
+
 model MerchandiseOutflowBatch {
   id          String        @id @default(cuid())
   code        String        @unique // "EG-0001"
@@ -5282,9 +5303,43 @@ model MerchandiseOutflowItem {
   // Null si el ítem no tiene catalogItemId (declarado solo por nombre).
   stockKardexEntry StockKardexEntry?
 
+  // Confirmado 2026-09-17, pedido explícito del usuario: gestión de Jariel
+  // sobre un DETERIORO escalado (resolution = ESCALATED_TO_PURCHASES) — un
+  // segundo paso, de otra persona y en otro momento, separado a propósito
+  // del `resolution` de arriba (que para DETERIORO se queda fijo en
+  // ESCALATED_TO_PURCHASES, la decisión de Daniel). A diferencia de
+  // CAMBIO_PROVEEDOR (donde Daniel ya declara el proveedor al armar el
+  // paquete), acá el proveedor no se conoce de antemano — lo elige Jariel
+  // recién en este paso, por eso vive en el ítem y no en el batch.
+  // Reutiliza linkedPurchaseRequestId/unitCostAtExchange/expectedCreditAmount
+  // (mismos campos de arriba) para anclar el reclamo a la compra real una
+  // vez que Jariel elige el proveedor correcto.
+  purchaseGestionSupplierId String?
+  purchaseGestionSupplier   Supplier?              @relation("OutflowItemPurchaseGestionSupplier", fields: [purchaseGestionSupplierId], references: [id], onDelete: SetNull)
+  purchaseResolution        OutflowItemResolution?
+  purchaseResolutionNote    String?
+  purchaseResolvedAt        DateTime?
+  purchaseResolvedById      String?
+  purchaseResolvedBy        User?                  @relation("MerchandiseOutflowItemPurchaseResolvedBy", fields: [purchaseResolvedById], references: [id], onDelete: SetNull)
+
+  // Pedido explícito del usuario 2026-09-17: si Jariel no encuentra ninguna
+  // compra real que respalde el reclamo con el proveedor elegido, no sigue
+  // solo — nunca debe quedar sin trámite. Pasa a admin como excepción (ver
+  // PurchaseExceptionDecision). Null mientras no se reportó ningún caso así.
+  purchaseNoMatchReportedAt    DateTime?
+  purchaseNoMatchNote          String?
+  purchaseNoMatchReportedById  String?
+  purchaseNoMatchReportedBy    User?                      @relation("MerchandiseOutflowItemPurchaseNoMatchBy", fields: [purchaseNoMatchReportedById], references: [id], onDelete: SetNull)
+  purchaseExceptionDecision    PurchaseExceptionDecision?
+  purchaseExceptionNote        String?
+  purchaseExceptionDecidedAt   DateTime?
+  purchaseExceptionDecidedById String?
+  purchaseExceptionDecidedBy   User?                      @relation("MerchandiseOutflowItemPurchaseExceptionBy", fields: [purchaseExceptionDecidedById], references: [id], onDelete: SetNull)
+
   @@index([batchId])
   @@index([resolution])
   @@index([linkedPurchaseRequestId])
+  @@index([purchaseGestionSupplierId])
 }
 
 enum ExternalSaleReviewStatus {

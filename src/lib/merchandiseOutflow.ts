@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { notifyOwner } from "@/lib/notifications";
-import { getInventoryLeadId, getMarketingLeadId, getFinanceLeadId } from "@/lib/guards";
+import { getInventoryLeadId, getMarketingLeadId, getFinanceLeadId, getPurchaseGestionManagerId } from "@/lib/guards";
 import { OUTFLOW_REASON_LABELS } from "@/lib/merchandiseOutflowLabels";
 import { PRICED_STATUSES, effectiveUnitCost } from "@/lib/purchases";
 import { recordKardexEntry } from "@/lib/stockKardex";
@@ -223,16 +223,60 @@ export async function notifySupplierExchangeJustWriteOffConfirmed(item: {
   }).catch(() => null);
 }
 
-// Deterioro escalado a Compras (mercadería recién llegada) — por ahora solo
-// avisa a Bryan con el detalle; el enganche real con "Reclamo posterior al
-// cierre" / créditos con proveedor se conecta en una fase posterior, una vez
-// ese modelo esté cerrado y comiteado.
+// Deterioro escalado a Compras — confirmado 2026-09-17, pedido explícito
+// del usuario: dos avisos con roles distintos. Bryan (líder de MKT) se
+// entera pero NO gestiona — es informativo. Quien de verdad tiene que
+// gestionar el reclamo con el proveedor (elegir a cuál, anclar la compra
+// real y registrar el resultado, ver purchase-link/purchase-resolve) es
+// quien tenga canManagePurchases (hoy Jariel, ver getPurchaseGestionManagerId
+// en guards.ts). Si algún día nadie tiene ese flag, Bryan sigue siendo el
+// único aviso — nunca se pierde el caso.
 export async function notifyMarketingLeadOutflowEscalated(item: { declaredName: string; quantity: number }): Promise<void> {
-  const leadId = await getMarketingLeadId();
-  if (!leadId) return;
-  await notifyOwner(leadId, {
-    title: "Deterioro escalado desde Inventario",
-    body: `${item.declaredName} — ${item.quantity} un. recién llegadas, dañadas. Daniel pide gestionar crédito o cambio con el proveedor.`,
+  const [leadId, gestionManagerId] = await Promise.all([getMarketingLeadId(), getPurchaseGestionManagerId()]);
+  const detail = `${item.declaredName} — ${item.quantity} un. recién llegadas, dañadas.`;
+  if (leadId) {
+    await notifyOwner(leadId, {
+      title: "Deterioro escalado desde Inventario",
+      body: gestionManagerId
+        ? `${detail} Jariel se va a encargar de gestionar el crédito o cambio con el proveedor.`
+        : `${detail} Daniel pide gestionar crédito o cambio con el proveedor.`,
+      url: "/area/workspace?tab=compras&ptab=urgentes",
+    }).catch(() => null);
+  }
+  if (gestionManagerId) {
+    await notifyOwner(gestionManagerId, {
+      title: "Reclamo de deterioro pendiente de gestionar",
+      body: `${detail} Elige el proveedor para anclarlo a la compra real y reclamar crédito o cambio.`,
+      url: "/area/workspace?tab=compras&ptab=urgentes",
+    }).catch(() => null);
+  }
+}
+
+// Confirmado 2026-09-17, pedido explícito del usuario: si quien gestiona
+// (Jariel) no encuentra ninguna compra real que respalde el reclamo con el
+// proveedor que eligió, no puede cerrar el caso solo — nunca debe quedar un
+// reclamo sin trámite. Avisa a admin, que decide (ver
+// canDecidePurchaseException/purchase-exception-decide route).
+export async function notifyPurchaseExceptionReported(item: { declaredName: string; quantity: number; supplierName: string; note: string }): Promise<void> {
+  await notifyOwner("admin", {
+    title: "🚨 Reclamo de deterioro sin compra que lo respalde",
+    body: `${item.declaredName} — ${item.quantity} un. — proveedor elegido: ${item.supplierName}. Motivo: ${item.note}`,
+    url: "/admin",
+  }).catch(() => null);
+}
+
+// Avisa de vuelta a quien gestiona (Jariel) qué decidió admin sobre una
+// excepción — para que sepa si puede seguir (corregido/autorizado) o si el
+// caso ya se cerró (rechazado).
+export async function notifyPurchaseExceptionDecided(params: { managerId: string; declaredName: string; decision: "DATA_CORRECTED" | "AUTHORIZED" | "REJECTED"; note: string }): Promise<void> {
+  const messageByDecision: Record<typeof params.decision, string> = {
+    DATA_CORRECTED: "corrigió el dato — vuelve a intentar elegir el proveedor",
+    AUTHORIZED: "autorizó seguir con el reclamo aunque no haya compra registrada",
+    REJECTED: "rechazó el reclamo — no se puede sustentar",
+  };
+  await notifyOwner(params.managerId, {
+    title: "Admin decidió sobre tu reclamo sin respaldo",
+    body: `${params.declaredName} — admin ${messageByDecision[params.decision]}. Nota: ${params.note}`,
     url: "/area/workspace?tab=compras&ptab=urgentes",
   }).catch(() => null);
 }
