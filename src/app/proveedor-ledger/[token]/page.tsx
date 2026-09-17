@@ -199,7 +199,7 @@ export default async function SupplierLedgerPage({ params }: { params: Promise<{
         </section>
 
         <section className="mb-8">
-          <h2 className="mb-3 text-sm font-medium text-neutral-700">Historial de lo que ya confirmaron enviado</h2>
+          <h2 className="mb-3 text-sm font-medium text-neutral-700">Historial de lo que ya se despachó a la bodega TBS</h2>
           <SupplierShipmentHistoryTable
             rows={confirmedShipments.map((r) => ({
               id: r.id,
