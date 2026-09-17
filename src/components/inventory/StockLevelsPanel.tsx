@@ -65,7 +65,7 @@ type SortKey = "name" | "balance";
 // Confirmado 2026-09-16, pedido explícito del usuario: poder ver solo los
 // productos reales, solo los combos, o ambos juntos, con un clic.
 type ViewMode = "all" | "products" | "combos";
-type FormulaKey = "stockJust" | "proveedor" | "just" | "bodega" | "benistock" | "b2b" | "dropi" | "b2c1" | "b2c2";
+type FormulaKey = "stock" | "stockJust" | "proveedor" | "just" | "bodega" | "benistock" | "b2b" | "dropi" | "b2c1" | "b2c2";
 
 function money(v: number) {
   return "$" + v.toLocaleString("es-EC", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -162,9 +162,13 @@ function significantWords(s: string): string[] {
 // (computeBenistockPrice/computeB2BPrice/computeB2CPrice), explicadas en
 // palabras simples, no en código.
 const FORMULA_EXPLANATIONS: Record<FormulaKey, { title: string; text: string }> = {
+  stock: {
+    title: "Stock",
+    text: "El saldo real de INVESTOCK (el Kardex propio de DAFLOW) en este momento — se calcula solo, sumando lo que ha entrado en Compras y restando lo que ha salido en Egresos. Se actualiza automáticamente, sin que nadie tenga que subir ningún archivo.",
+  },
   stockJust: {
     title: "Stock Just",
-    text: "El stock tal cual venía en el último archivo semanal que subió Daniel — se queda igual (\"congelado\") hasta que suba uno nuevo, por eso también se ve la fecha y hora de esa subida. Es solo para comparar con el stock real de INVESTOCK a simple vista, nunca lo reemplaza.",
+    text: "El stock tal cual venía en el último archivo semanal que subió Daniel — a diferencia de \"Stock\" (que se actualiza solo, en tiempo real), este número se queda igual (\"congelado\") hasta que Daniel suba un archivo nuevo, por eso también se ve la fecha y hora de esa subida. Es solo para comparar los dos a simple vista, nunca reemplaza al stock real de INVESTOCK.",
   },
   proveedor: {
     title: "Precio proveedor",
@@ -393,7 +397,9 @@ export function StockLevelsPanel({ isAdmin = false }: { isAdmin?: boolean }) {
         <span></span>
         <span>Producto</span>
         <span>Marca</span>
-        <span className="text-right">Stock</span>
+        <span className="flex items-center justify-end gap-1">
+          Stock <FormulaInfoButton open={openFormula === "stock"} onToggle={() => setOpenFormula((k) => (k === "stock" ? null : "stock"))} />
+        </span>
         <span className="flex flex-col items-end text-right text-gold leading-tight">
           <span className="flex items-center gap-1">
             Stock Just <FormulaInfoButton open={openFormula === "stockJust"} onToggle={() => setOpenFormula((k) => (k === "stockJust" ? null : "stockJust"))} />
