@@ -398,7 +398,7 @@ export function StockLevelsPanel({ isAdmin = false }: { isAdmin?: boolean }) {
         <span>Producto</span>
         <span>Marca</span>
         <span className="flex items-center justify-end gap-1">
-          Stock <FormulaInfoButton open={openFormula === "stock"} onToggle={() => setOpenFormula((k) => (k === "stock" ? null : "stock"))} />
+          Stock INVESTOCK <FormulaInfoButton open={openFormula === "stock"} onToggle={() => setOpenFormula((k) => (k === "stock" ? null : "stock"))} />
         </span>
         <span className="flex flex-col items-end text-right text-gold leading-tight">
           <span className="flex items-center gap-1">
