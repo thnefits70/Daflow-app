@@ -67,7 +67,11 @@ function scoreMatch(item: CatalogItem, query: string): number {
 
 function ProductComparisonCard({ item, onRemove }: { item: CatalogItem; onRemove: () => void }) {
   const [suppliers, setSuppliers] = useState<SupplierPriceHistory[] | null>(null);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  // Confirmado 2026-09-17: pedido explícito del usuario — esta sección
+  // existe justamente para ver todo (gráfica de tendencia, mín/prom/máx,
+  // respaldo) con pocos clics, así que todos los proveedores arrancan
+  // expandidos; acá se guardan solo los que la persona cerró a propósito.
+  const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     fetch(`/api/purchase-catalog/${item.id}/supplier-comparison`)
@@ -106,13 +110,20 @@ function ProductComparisonCard({ item, onRemove }: { item: CatalogItem; onRemove
         <div className="flex flex-col gap-2">
           {suppliers.map((s) => {
             const isCheapest = s.supplierId === cheapestId;
-            const isOpen = expandedId === s.supplierId;
+            const isOpen = !collapsedIds.has(s.supplierId);
             return (
               <div key={s.supplierId} className={`rounded-md border ${isCheapest ? "border-teal/50 bg-teal/[0.06]" : "border-rule bg-surface2"}`}>
                 <button
                   type="button"
                   className="w-full flex items-center gap-3 px-3 py-2.5 text-left cursor-pointer"
-                  onClick={() => setExpandedId(isOpen ? null : s.supplierId)}
+                  onClick={() =>
+                    setCollapsedIds((prev) => {
+                      const next = new Set(prev);
+                      if (isOpen) next.add(s.supplierId);
+                      else next.delete(s.supplierId);
+                      return next;
+                    })
+                  }
                 >
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5 flex-wrap">
