@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Search, ArrowUpDown, Info, X, Wrench } from "lucide-react";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 import { TabGuide } from "@/components/shared/TabGuide";
+import { formatDateTime } from "@/lib/formatDateTime";
 
 type FreightRecomputeRow = { catalogItemId: string; name: string; entriesChanged: number; oldAvgCost: number; newAvgCost: number };
 
@@ -51,7 +52,7 @@ type StockRow = {
   bodega: Marca | null;
   justAvgCost?: number | null;
   justStock?: number | null;
-  justStockPeriod?: string | null;
+  justStockUploadedAt?: string | null;
   providerPrice?: number;
   bodegaPrice?: number;
   benistockPrice?: number;
@@ -71,21 +72,18 @@ function money(v: number) {
 }
 
 // Confirmado 2026-09-17, pedido explícito del usuario: el stock de Just
-// queda "congelado" desde la subida que lo trajo hasta la siguiente — sin
-// la fecha, no se puede saber si ese número es de esta semana o de hace un
-// mes (le pasa a productos que dejan de aparecer en archivos más recientes,
-// ver project_just_catalog_sync). Formatea "YYYY-MM-Wn" localmente (mismo
-// motivo que weekLabel() en InventoryControlPanel.tsx: componente cliente,
-// no puede importar el formateador del server que usa Prisma).
-// Nota: datos viejos (antes de que "Control de Inventario" pasara a
-// subida semanal) usan el formato mensual "YYYY-MM" sin semana — se ven en
-// vivo hoy en 10 productos (ver zzdebugcheckjuststockperiod). Sin el `if`,
-// esos caían en un feo "sem. ? jul" en vez de simplemente "jul 2026".
-const MONTH_SHORT = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
-function justPeriodLabel(period: string) {
-  const [y, m, w] = period.split("-");
-  const month = MONTH_SHORT[Number(m) - 1] ?? m;
-  return w ? `sem. ${w.replace("W", "")} ${month}` : `${month} ${y}`;
+// queda "congelado" desde la subida que lo trajo hasta la siguiente — y
+// mientras Just siga siendo una referencia manual (hasta que INVESTOCK sea
+// la única fuente real, sin depender de subir archivos), quiere ver el
+// día/mes/año y la hora exacta en que Daniel subió ese archivo, no solo la
+// semana. Esta es la versión compacta que cabe en cada fila; la fecha
+// completa (con año) se muestra una sola vez arriba de la tabla
+// (lastJustUploadAt) y también en el title (tooltip) de cada número.
+function compactDateTime(iso: string) {
+  const d = new Date(iso);
+  const day = d.toLocaleDateString("es-EC", { day: "2-digit", month: "2-digit" });
+  const time = d.toLocaleTimeString("es-EC", { hour: "2-digit", minute: "2-digit" });
+  return `${day} ${time}`;
 }
 
 // Confirmado 2026-09-16, pedido explícito del usuario: poder copiar
@@ -231,11 +229,19 @@ export function StockLevelsPanel({ isAdmin = false }: { isAdmin?: boolean }) {
   const [freightResult, setFreightResult] = useState<{ itemsChanged: number; entriesUpdated: number } | null>(null);
   const [freightError, setFreightError] = useState("");
   const [combos, setCombos] = useState<ComboRow[]>([]);
+  // Confirmado 2026-09-17, pedido explícito del usuario: fecha/hora exacta
+  // del último archivo de Just que subió Daniel en general, para mostrarla
+  // una sola vez arriba de la tabla (referencia mientras Just siga siendo
+  // manual, antes de depender solo de INVESTOCK en tiempo real).
+  const [lastJustUploadAt, setLastJustUploadAt] = useState<string | null>(null);
 
   function loadRows() {
     fetch("/api/inventory-control/stock-levels")
-      .then((r) => (r.ok ? r.json() : []))
-      .then(setRows)
+      .then((r) => (r.ok ? r.json() : { rows: [], lastJustUploadAt: null }))
+      .then((data) => {
+        setRows(data.rows);
+        setLastJustUploadAt(data.lastJustUploadAt);
+      })
       .catch(() => setRows([]));
   }
 
@@ -384,8 +390,13 @@ export function StockLevelsPanel({ isAdmin = false }: { isAdmin?: boolean }) {
         <span>Producto</span>
         <span>Marca</span>
         <span className="text-right">Stock</span>
-        <span className="text-right text-gold" title="Stock tal cual venía en el último archivo de Just que subió Daniel, para comparar con el stock real de INVESTOCK. Se queda igual hasta que suba un archivo nuevo — abajo de cada número se ve de qué semana es.">
-          Stock Just
+        <span className="flex flex-col items-end text-right text-gold leading-tight" title="Stock tal cual venía en el último archivo de Just que subió Daniel, para comparar con el stock real de INVESTOCK. Es referencia manual por ahora — se queda igual hasta que suba un archivo nuevo. Abajo de cada número se ve la fecha y hora exactas de esa subida.">
+          <span>Stock Just</span>
+          {lastJustUploadAt && (
+            <span className="text-[9px] font-normal normal-case text-steel-dim">
+              últ. subida: {formatDateTime(lastJustUploadAt)}
+            </span>
+          )}
         </span>
         <span className="flex items-center justify-end gap-1 border-l border-rule pl-3">
           Proveedor <FormulaInfoButton open={openFormula === "proveedor"} onToggle={() => setOpenFormula((k) => (k === "proveedor" ? null : "proveedor"))} />
@@ -611,21 +622,22 @@ export function StockLevelsPanel({ isAdmin = false }: { isAdmin?: boolean }) {
                     de referencia según el último archivo de Just, junto al
                     stock real de INVESTOCK — resaltado en gold cuando no
                     coinciden, para que el desfase salte a la vista sin tener
-                    que restar los dos números a mano. La fecha debajo es de
-                    qué subida salió ese número — se queda "congelado" tal
-                    cual hasta que Daniel suba el siguiente archivo. */}
+                    que restar los dos números a mano. La fecha/hora debajo es
+                    de qué subida salió ese número (día/mes/hora, el tooltip
+                    trae el año completo) — se queda "congelado" tal cual
+                    hasta que Daniel suba el siguiente archivo. */}
                 <span className="flex flex-col items-end leading-tight">
                   <span
                     className={`font-mono text-[12.5px] ${
                       r.justStock == null ? "text-steel-dim" : r.justStock !== r.balance ? "font-bold text-gold" : "text-steel"
                     }`}
-                    title="Stock del último archivo de Just — solo referencia."
+                    title={r.justStockUploadedAt ? `Archivo de Just subido: ${formatDateTime(r.justStockUploadedAt)}` : "Stock del último archivo de Just — solo referencia."}
                   >
                     {r.justStock == null ? "—" : r.justStock}
                   </span>
-                  {r.justStockPeriod && (
-                    <span className="text-[9px] text-steel-dim" title="Archivo de Just del que salió este número">
-                      {justPeriodLabel(r.justStockPeriod)}
+                  {r.justStockUploadedAt && (
+                    <span className="text-[9px] text-steel-dim" title={`Archivo de Just subido: ${formatDateTime(r.justStockUploadedAt)}`}>
+                      {compactDateTime(r.justStockUploadedAt)}
                     </span>
                   )}
                 </span>

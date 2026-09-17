@@ -48,7 +48,7 @@ export async function GET() {
           where: { deptId },
           distinct: ["productCode"],
           orderBy: [{ productCode: "asc" }, { createdAt: "desc" }],
-          select: { productCode: true, avgCost: true, stock: true, period: true },
+          select: { productCode: true, avgCost: true, stock: true, createdAt: true },
         })
       : Promise.resolve([]),
   ]);
@@ -58,12 +58,21 @@ export async function GET() {
   // subido por Daniel, como columna de referencia junto al stock real de
   // INVESTOCK — para poder comparar los dos números a simple vista.
   const justStockByCode = new Map(justSnapshots.map((s) => [s.productCode.trim(), s.stock]));
-  // Confirmado 2026-09-17, pedido explícito del usuario: ese stock de Just
-  // queda "congelado" desde la subida que lo trajo hasta que Daniel suba la
-  // siguiente — cada producto puede venir de una subida distinta si dejó de
-  // aparecer en archivos más recientes (ver project_just_catalog_sync), así
-  // que el período se guarda por producto, no uno solo para toda la tabla.
-  const justStockPeriodByCode = new Map(justSnapshots.map((s) => [s.productCode.trim(), s.period]));
+  // Confirmado 2026-09-17, pedido explícito del usuario (y follow-up mismo
+  // día): ese stock de Just queda "congelado" desde la subida que lo trajo
+  // hasta que Daniel suba la siguiente — cada producto puede venir de una
+  // subida distinta si dejó de aparecer en archivos más recientes (ver
+  // project_just_catalog_sync), así que la fecha/hora exacta (día/mes/año/
+  // hora, tal como lo pidió el usuario) se guarda por producto, no una sola
+  // para toda la tabla.
+  const justStockUploadedAtByCode = new Map(justSnapshots.map((s) => [s.productCode.trim(), s.createdAt.toISOString()]));
+  // Fecha/hora del archivo de Just más reciente subido por Daniel en general
+  // (el más nuevo entre TODOS los productos) — para mostrar arriba de la
+  // tabla como referencia principal, aunque algún producto puntual se haya
+  // quedado congelado en una subida más vieja.
+  const lastJustUploadAt = justSnapshots.length
+    ? justSnapshots.reduce((max, s) => (s.createdAt > max ? s.createdAt : max), justSnapshots[0].createdAt).toISOString()
+    : null;
 
   const proposalByCatalogItemId = new Map(
     proposals
@@ -97,13 +106,13 @@ export async function GET() {
       (r.avgCost > 0 ? { batchCost: r.avgCost, batchUnits: 1, freightCost: null, insuranceRatePercent: 6, fulfillmentCost: 0.75, marginPercent: DROPI_MARGIN_DEFAULT } : null);
     const justAvgCost = r.justCode ? justAvgCostByCode.get(r.justCode.trim()) ?? null : null;
     const justStock = r.justCode ? justStockByCode.get(r.justCode.trim()) ?? null : null;
-    const justStockPeriod = r.justCode ? justStockPeriodByCode.get(r.justCode.trim()) ?? null : null;
-    if (!base) return { ...r, justAvgCost, justStock, justStockPeriod };
+    const justStockUploadedAt = r.justCode ? justStockUploadedAtByCode.get(r.justCode.trim()) ?? null : null;
+    if (!base) return { ...r, justAvgCost, justStock, justStockUploadedAt };
     return {
       ...r,
       justAvgCost,
       justStock,
-      justStockPeriod,
+      justStockUploadedAt,
       providerPrice: base.batchCost,
       bodegaPrice: bodegaUnitCost(base.batchCost, base.freightCost, base.batchUnits),
       benistockPrice: computeBenistockPrice(base),
@@ -114,5 +123,5 @@ export async function GET() {
     };
   });
 
-  return NextResponse.json(withPrices);
+  return NextResponse.json({ rows: withPrices, lastJustUploadAt });
 }
