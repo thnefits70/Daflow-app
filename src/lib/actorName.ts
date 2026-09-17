@@ -4,3 +4,10 @@
 export function actorName(name: string | null | undefined): string {
   return name ?? "Andrés Damián";
 }
+
+// Para vistas externas (proveedor-ledger) mostramos solo el primer nombre,
+// sin apellidos.
+export function firstName(name: string | null | undefined): string {
+  if (!name) return name ?? "";
+  return name.trim().split(/\s+/)[0];
+}

@@ -5,6 +5,7 @@ import { getSupplierDebtDisputedItems, findSupplierByPublicLedgerToken } from "@
 import { SupplierShippingPhotoCapture } from "@/components/supplier-ledger/SupplierShippingPhotoCapture";
 import { SupplierShipmentConfirmButton } from "@/components/supplier-ledger/SupplierShipmentConfirmButton";
 import { SupplierShipmentHistoryTable } from "@/components/supplier-ledger/SupplierShipmentHistoryTable";
+import { firstName } from "@/lib/actorName";
 
 // Confirmado 2026-09-08 (Fase 1, proveedores con crédito): página pública,
 // SIN auth() — el proveedor de crédito (hoy solo CHEN) accede solo con este
@@ -175,8 +176,8 @@ export default async function SupplierLedgerPage({ params }: { params: Promise<{
                       </td>
                       <td className="px-3 py-2">{r.catalogItem.name}</td>
                       <td className={`${td} text-right tabular-nums`}>{r.quantity}</td>
-                      <td className={`${td} text-neutral-600`}>{r.requestedBy?.name ?? "—"}</td>
-                      <td className={`${td} text-neutral-600`}>{r.reviewedBy?.name ?? "—"}</td>
+                      <td className={`${td} text-neutral-600`}>{firstName(r.requestedBy?.name) || "—"}</td>
+                      <td className={`${td} text-neutral-600`}>{firstName(r.reviewedBy?.name) || "—"}</td>
                       <td className="px-3 py-2">
                         <SupplierShippingPhotoCapture token={token} requestId={r.id} initialPhotoUrl={r.supplierShippingPhotoUrl} />
                       </td>
@@ -200,7 +201,7 @@ export default async function SupplierLedgerPage({ params }: { params: Promise<{
               productName: r.catalogItem.name,
               productImageUrl: r.catalogItem.photos.at(-1) ?? null,
               quantity: r.quantity,
-              requestedByName: r.requestedBy?.name ?? null,
+              requestedByName: firstName(r.requestedBy?.name) || null,
               photoUrl: r.supplierShippingPhotoUrl,
             }))}
           />
@@ -240,8 +241,8 @@ export default async function SupplierLedgerPage({ params }: { params: Promise<{
                           .join(", ")}
                       </td>
                       <td className={`${td} text-right tabular-nums text-amber-800`}>{money(i.wouldBeValue)}</td>
-                      <td className={`${td} text-amber-800`}>{i.approvedByName ?? "—"}</td>
-                      <td className={`${td} text-amber-800`}>{i.reviewedByName ?? "—"}</td>
+                      <td className={`${td} text-amber-800`}>{firstName(i.approvedByName) || "—"}</td>
+                      <td className={`${td} text-amber-800`}>{firstName(i.reviewedByName) || "—"}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -279,8 +280,8 @@ export default async function SupplierLedgerPage({ params }: { params: Promise<{
                             <td className="px-3 py-2">{r.catalogItem.name}</td>
                             <td className={`${td} text-right tabular-nums`}>{r.quantity}</td>
                             <td className={`${td} text-right tabular-nums`}>{money(r.totalCost)}</td>
-                            <td className={`${td} text-neutral-600`}>{r.reviewedBy?.name ?? "—"}</td>
-                            <td className={`${td} text-neutral-600`}>{r.receipt?.approvedBy?.name ?? "—"}</td>
+                            <td className={`${td} text-neutral-600`}>{firstName(r.reviewedBy?.name) || "—"}</td>
+                            <td className={`${td} text-neutral-600`}>{firstName(r.receipt?.approvedBy?.name) || "—"}</td>
                           </tr>
                         ))}
                       </tbody>

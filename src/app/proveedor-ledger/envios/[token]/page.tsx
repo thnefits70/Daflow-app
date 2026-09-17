@@ -5,6 +5,7 @@ import { findSupplierByPublicShippingToken } from "@/lib/supplierDebt";
 import { SupplierShippingPhotoCapture } from "@/components/supplier-ledger/SupplierShippingPhotoCapture";
 import { SupplierShipmentConfirmButton } from "@/components/supplier-ledger/SupplierShipmentConfirmButton";
 import { SupplierShipmentHistoryTable } from "@/components/supplier-ledger/SupplierShipmentHistoryTable";
+import { firstName } from "@/lib/actorName";
 
 // Confirmado 2026-09-17, pedido explícito del usuario: segundo enlace,
 // llave completamente aparte de /proveedor-ledger/[token] (el del saldo) —
@@ -137,8 +138,8 @@ export default async function SupplierShippingLedgerPage({ params }: { params: P
                       </td>
                       <td className="px-3 py-2">{r.catalogItem.name}</td>
                       <td className={`${td} text-right tabular-nums`}>{r.quantity}</td>
-                      <td className={`${td} text-neutral-600`}>{r.requestedBy?.name ?? "—"}</td>
-                      <td className={`${td} text-neutral-600`}>{r.reviewedBy?.name ?? "—"}</td>
+                      <td className={`${td} text-neutral-600`}>{firstName(r.requestedBy?.name) || "—"}</td>
+                      <td className={`${td} text-neutral-600`}>{firstName(r.reviewedBy?.name) || "—"}</td>
                       <td className="px-3 py-2">
                         <SupplierShippingPhotoCapture token={token} requestId={r.id} initialPhotoUrl={r.supplierShippingPhotoUrl} />
                       </td>
@@ -162,7 +163,7 @@ export default async function SupplierShippingLedgerPage({ params }: { params: P
               productName: r.catalogItem.name,
               productImageUrl: r.catalogItem.photos.at(-1) ?? null,
               quantity: r.quantity,
-              requestedByName: r.requestedBy?.name ?? null,
+              requestedByName: firstName(r.requestedBy?.name) || null,
               photoUrl: r.supplierShippingPhotoUrl,
             }))}
           />
