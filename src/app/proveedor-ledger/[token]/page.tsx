@@ -143,7 +143,7 @@ export default async function SupplierLedgerPage({ params }: { params: Promise<{
         </header>
 
         <section className="mb-8">
-          <h2 className="mb-1 text-sm font-medium text-neutral-700">Pedidos que nos falta enviar</h2>
+          <h2 className="mb-1 text-sm font-medium text-neutral-700">Pedidos que faltan enviar a la bodega TBS</h2>
           <p className="mb-3 text-xs text-neutral-500">
             Subir una foto en tiempo real de lo que están enviando es opcional — solo un refuerzo, no hace falta para nada más.
           </p>
