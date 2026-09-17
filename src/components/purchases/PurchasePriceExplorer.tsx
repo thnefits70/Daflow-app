@@ -41,12 +41,17 @@ function scoreMatch(item: CatalogItem, query: string): number {
   const q = normalize(query);
   if (!q) return 0;
   const n = normalize(item.name);
-  if (n === q) return 100;
-  if (n.startsWith(q)) return 90;
+  // El código/ID es un identificador exacto — si calza, es la respuesta
+  // correcta con certeza, así que pesa más que cualquier coincidencia de
+  // nombre (incluso el nombre exacto, por si dos productos comparten nombre).
+  const nCode = item.code ? normalize(item.code) : null;
+  const nJustCode = item.justCode ? normalize(item.justCode) : null;
+  if (nCode === q || nJustCode === q) return 100;
+  if ((nCode && nCode.includes(q)) || (nJustCode && nJustCode.includes(q))) return 95;
+  if (n === q) return 90;
+  if (n.startsWith(q)) return 85;
   if (n.includes(q)) return 75;
   if (n.split(/\s+/).some((w) => w.startsWith(q))) return 65;
-  if (item.code && normalize(item.code).includes(q)) return 55;
-  if (item.justCode && normalize(item.justCode).includes(q)) return 55;
   // Búsqueda por palabras clave sueltas (ej. "dispensador arroz" encuentra
   // "DISPENSADOR DE ARROZ" aunque el orden/palabras intermedias no calcen).
   const qWords = q.split(/\s+/).filter(Boolean);
@@ -238,7 +243,10 @@ export function PurchasePriceExplorer() {
                 onClick={() => select(item)}
               >
                 {item.photos[0] && <img src={item.photos[0]} alt="" className="w-7 h-7 rounded object-cover shrink-0" />}
-                <span className="truncate">{item.name}</span>
+                <span className="truncate flex-1">{item.name}</span>
+                {(item.code || item.justCode) && (
+                  <span className="text-[10.5px] text-steel shrink-0 font-mono">{item.code || item.justCode}</span>
+                )}
               </button>
             ))}
           </div>
