@@ -37,6 +37,8 @@ const DATE_FMT = new Intl.DateTimeFormat("es-EC", {
   day: "2-digit",
   month: "short",
   year: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
 });
 const DATETIME_FMT = new Intl.DateTimeFormat("es-EC", { timeZone: "America/Guayaquil", day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
 

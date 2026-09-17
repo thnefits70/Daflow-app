@@ -28,6 +28,8 @@ const DATE_FMT = new Intl.DateTimeFormat("es-EC", {
   day: "2-digit",
   month: "short",
   year: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
 });
 
 export default async function SupplierShippingLedgerPage({ params }: { params: Promise<{ token: string }> }) {
