@@ -7,6 +7,7 @@ import { TabGuide } from "@/components/shared/TabGuide";
 import { formatDateTime } from "@/lib/formatDateTime";
 
 type FreightRecomputeRow = { catalogItemId: string; name: string; entriesChanged: number; oldAvgCost: number; newAvgCost: number };
+type PersonalPurchaseBackfillRow = { catalogItemId: string; name: string; missingCount: number; missingUnits: number; oldBalance: number; newBalance: number };
 
 // Confirmado 2026-09-16, pedido explícito del usuario: los combos de Dropi
 // (DropiCombo) no son productos reales — no tienen ni deben tener su propio
@@ -236,6 +237,19 @@ export function StockLevelsPanel({ isAdmin = false }: { isAdmin?: boolean }) {
   const [freightApplying, setFreightApplying] = useState(false);
   const [freightResult, setFreightResult] = useState<{ itemsChanged: number; entriesUpdated: number } | null>(null);
   const [freightError, setFreightError] = useState("");
+
+  // Confirmado 2026-09-17, pedido explícito del usuario (admin): botón
+  // exclusivo suyo, una sola vez, para descontar de INVESTOCK las Compras
+  // Personales que salieron de bodega antes de que se arreglara el bug de
+  // createOutflowForPersonalPurchaseItem — mismo patrón de vista previa +
+  // confirmación explícita que la corrección de flete de arriba.
+  const [backfillOpen, setBackfillOpen] = useState(false);
+  const [backfillLoading, setBackfillLoading] = useState(false);
+  const [backfillPreview, setBackfillPreview] = useState<PersonalPurchaseBackfillRow[] | null>(null);
+  const [backfillConfirming, setBackfillConfirming] = useState(false);
+  const [backfillApplying, setBackfillApplying] = useState(false);
+  const [backfillResult, setBackfillResult] = useState<{ itemsChanged: number; entriesInserted: number } | null>(null);
+  const [backfillError, setBackfillError] = useState("");
   const [combos, setCombos] = useState<ComboRow[]>([]);
   // Confirmado 2026-09-17, pedido explícito del usuario: fecha/hora exacta
   // del último archivo de Just que subió Daniel en general, para mostrarla
@@ -307,6 +321,33 @@ export function StockLevelsPanel({ isAdmin = false }: { isAdmin?: boolean }) {
     const data = await res.json();
     setFreightResult(data);
     setFreightPreview(null);
+    loadRows();
+  }
+
+  function loadBackfillPreview() {
+    setBackfillLoading(true);
+    setBackfillError("");
+    setBackfillResult(null);
+    fetch("/api/inventory-control/kardex-backfill-personal-purchases")
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then(setBackfillPreview)
+      .catch(() => setBackfillError("No se pudo cargar la vista previa."))
+      .finally(() => setBackfillLoading(false));
+  }
+
+  async function applyBackfill() {
+    setBackfillApplying(true);
+    setBackfillError("");
+    const res = await fetch("/api/inventory-control/kardex-backfill-personal-purchases", { method: "POST" });
+    setBackfillApplying(false);
+    setBackfillConfirming(false);
+    if (!res.ok) {
+      setBackfillError("No se pudo aplicar la corrección.");
+      return;
+    }
+    const data = await res.json();
+    setBackfillResult(data);
+    setBackfillPreview(null);
     loadRows();
   }
 
@@ -516,6 +557,80 @@ export function StockLevelsPanel({ isAdmin = false }: { isAdmin?: boolean }) {
                           type="button"
                           className="rounded border border-teal bg-teal px-3 py-1.5 text-[12px] font-bold text-navy cursor-pointer"
                           onClick={() => setFreightConfirming(true)}
+                        >
+                          Aplicar corrección
+                        </button>
+                      )}
+                    </>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {isAdmin && (
+        <div className="border border-rule rounded-md mb-3">
+          <button
+            type="button"
+            className="w-full flex items-center gap-2 px-3 py-2 text-[12px] font-semibold text-steel hover:text-ink cursor-pointer"
+            onClick={() => {
+              setBackfillOpen((v) => !v);
+              if (!backfillOpen && backfillPreview === null && !backfillResult) loadBackfillPreview();
+            }}
+          >
+            <Wrench size={13} /> Descontar de INVESTOCK las Compras Personales de antes del arreglo
+          </button>
+          {backfillOpen && (
+            <div className="px-3 pb-3 text-[12px]">
+              <p className="text-steel mb-2">
+                Antes de hoy, las Compras Personales nunca restaban su stock de INVESTOCK (bug ya corregido para las nuevas). Esto descuenta, de una sola vez, las que ya pasaron y siguen pendientes — insertando la salida en la fecha real en que pasó, no hoy. Es seguro correr esto más de una vez.
+              </p>
+              {backfillError && <div className="text-red mb-2">{backfillError}</div>}
+              {backfillLoading && <div className="text-steel">Calculando vista previa…</div>}
+              {backfillResult && (
+                <div className="text-teal font-semibold mb-2">
+                  ✓ Corregido: {backfillResult.itemsChanged} producto{backfillResult.itemsChanged === 1 ? "" : "s"} actualizado{backfillResult.itemsChanged === 1 ? "" : "s"} ({backfillResult.entriesInserted} salida{backfillResult.entriesInserted === 1 ? "" : "s"} insertada{backfillResult.entriesInserted === 1 ? "" : "s"}).
+                </div>
+              )}
+              {!backfillLoading && backfillPreview && (
+                <>
+                  {backfillPreview.length === 0 ? (
+                    <div className="text-steel">Nada pendiente — todas las Compras Personales ya están descontadas.</div>
+                  ) : (
+                    <>
+                      <div className="text-steel mb-1.5">{backfillPreview.length} producto(s) cambiarían:</div>
+                      <div className="max-h-52 overflow-y-auto flex flex-col gap-1 mb-2.5 border border-rule rounded-md p-1.5">
+                        {backfillPreview.map((r) => (
+                          <div key={r.catalogItemId} className="flex items-center justify-between gap-2 text-[11.5px] px-1.5 py-1">
+                            <span className="truncate flex-1">{r.name} <span className="text-steel">({r.missingCount} compra{r.missingCount === 1 ? "" : "s"}, {r.missingUnits} unidad{r.missingUnits === 1 ? "" : "es"})</span></span>
+                            <span className="font-mono text-steel shrink-0">
+                              {r.oldBalance} → <span className="font-bold text-ink">{r.newBalance}</span>
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                      {backfillConfirming ? (
+                        <div className="flex items-center gap-2">
+                          <span className="text-steel">¿Aplicar esta corrección a la base real?</span>
+                          <button
+                            type="button"
+                            disabled={backfillApplying}
+                            className="font-bold text-red cursor-pointer disabled:opacity-50"
+                            onClick={applyBackfill}
+                          >
+                            {backfillApplying ? "Aplicando…" : "Sí, aplicar"}
+                          </button>
+                          <button type="button" className="text-steel cursor-pointer" onClick={() => setBackfillConfirming(false)}>
+                            Cancelar
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          className="rounded border border-teal bg-teal px-3 py-1.5 text-[12px] font-bold text-navy cursor-pointer"
+                          onClick={() => setBackfillConfirming(true)}
                         >
                           Aplicar corrección
                         </button>

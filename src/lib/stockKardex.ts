@@ -525,3 +525,162 @@ export async function applyKardexFreightRecompute(): Promise<KardexFreightRecomp
   }
   return { itemsChanged, entriesUpdated };
 }
+
+// Confirmado 2026-09-17, pedido explícito del usuario (admin): corrección
+// única del bug real encontrado en merchandiseOutflow.ts — las Compras
+// Personales nunca registraban su salida en el Kardex antes de esta fecha
+// (ver createOutflowForPersonalPurchaseItem), así que su stock nunca se
+// descontó de INVESTOCK. Este botón, exclusivo del admin, inserta las
+// salidas que faltan en la posición correcta de la línea de tiempo de cada
+// producto (por su fecha real, no la de hoy) y rehace el saldo/promedio de
+// ese producto de punta a punta — mismo criterio "Camino A" que el
+// recómputo de flete: una salida YA EXISTENTE nunca pierde el costo con el
+// que quedó valorada ese día, solo se insertan las que faltan y se
+// recalculan los saldos. Idempotente de verdad: una vez insertada, esa
+// misma compra ya no vuelve a aparecer como "faltante" — seguro de correr
+// tantas veces como haga falta.
+export type PersonalPurchaseBackfillCandidate = {
+  merchandiseOutflowItemId: string;
+  catalogItemId: string;
+  quantity: number;
+  occurredAt: Date;
+};
+
+async function findMissingPersonalPurchaseKardexEntries(): Promise<PersonalPurchaseBackfillCandidate[]> {
+  const items = await prisma.merchandiseOutflowItem.findMany({
+    where: { batch: { reason: "COMPRA_PERSONAL", submittedAt: { not: null } }, catalogItemId: { not: null } },
+    select: { id: true, catalogItemId: true, quantity: true, batch: { select: { submittedAt: true } } },
+  });
+  if (items.length === 0) return [];
+  const existing = await prisma.stockKardexEntry.findMany({
+    where: { merchandiseOutflowItemId: { in: items.map((i) => i.id) } },
+    select: { merchandiseOutflowItemId: true },
+  });
+  const done = new Set(existing.map((e) => e.merchandiseOutflowItemId));
+  return items
+    .filter((i) => i.catalogItemId && !done.has(i.id))
+    .map((i) => ({ merchandiseOutflowItemId: i.id, catalogItemId: i.catalogItemId!, quantity: i.quantity, occurredAt: i.batch.submittedAt! }));
+}
+
+type BackfillLine =
+  | { kind: "existing"; id: string; type: "IN" | "OUT" | "SEED"; quantity: number; unitCost: number | null; occurredAt: Date; createdAt: Date }
+  | { kind: "new"; merchandiseOutflowItemId: string; quantity: number; occurredAt: Date };
+
+async function replayCatalogItemWithBackfill(catalogItemId: string, missing: PersonalPurchaseBackfillCandidate[]) {
+  const existingEntries = await prisma.stockKardexEntry.findMany({ where: { catalogItemId }, orderBy: [{ occurredAt: "asc" }, { createdAt: "asc" }] });
+  const oldAvgCost = existingEntries.length > 0 ? existingEntries[existingEntries.length - 1].avgCostAfter : 0;
+  const oldBalance = existingEntries.length > 0 ? existingEntries[existingEntries.length - 1].balanceAfter : 0;
+
+  const lines: BackfillLine[] = [
+    ...existingEntries.map((e): BackfillLine => ({ kind: "existing", id: e.id, type: e.type, quantity: e.quantity, unitCost: e.unitCost, occurredAt: e.occurredAt, createdAt: e.createdAt })),
+    ...missing.map((m): BackfillLine => ({ kind: "new", merchandiseOutflowItemId: m.merchandiseOutflowItemId, quantity: m.quantity, occurredAt: m.occurredAt })),
+  ];
+  // Orden real por fecha del movimiento — a igualdad de fecha, lo ya
+  // existente va antes que lo insertado (createdAt real vs. "ahora mismo").
+  lines.sort((a, b) => a.occurredAt.getTime() - b.occurredAt.getTime() || (a.kind === "existing" ? a.createdAt.getTime() : Infinity) - (b.kind === "existing" ? b.createdAt.getTime() : Infinity));
+
+  let balance = 0;
+  let avgCost = 0;
+  const updates: KardexReplayUpdate[] = [];
+  const inserts: { merchandiseOutflowItemId: string; occurredAt: Date; quantity: number; unitCost: number; balanceAfter: number; avgCostAfter: number }[] = [];
+
+  for (const line of lines) {
+    if (line.kind === "new") {
+      // Una compra personal es siempre una salida — nunca cambia el
+      // promedio, se valora al costo vigente en ese momento.
+      const newBalance = balance - line.quantity;
+      inserts.push({ merchandiseOutflowItemId: line.merchandiseOutflowItemId, occurredAt: line.occurredAt, quantity: line.quantity, unitCost: avgCost, balanceAfter: newBalance, avgCostAfter: avgCost });
+      balance = newBalance;
+      continue;
+    }
+    if (line.type === "SEED") {
+      balance = line.quantity;
+      avgCost = line.unitCost ?? 0;
+      updates.push({ id: line.id, unitCost: line.unitCost, avgCostAfter: avgCost, balanceAfter: balance });
+    } else if (line.type === "IN") {
+      const incomingCost = line.unitCost ?? avgCost;
+      const newBalance = balance + line.quantity;
+      avgCost = newBalance > 0 && balance > 0 ? (balance * avgCost + line.quantity * incomingCost) / newBalance : incomingCost;
+      updates.push({ id: line.id, unitCost: line.unitCost, avgCostAfter: avgCost, balanceAfter: newBalance });
+      balance = newBalance;
+    } else {
+      // OUT ya existente — Camino A: su unitCost (valoración congelada el
+      // día que pasó) nunca se toca, solo el saldo que arrastra.
+      const newBalance = balance - line.quantity;
+      updates.push({ id: line.id, unitCost: line.unitCost, avgCostAfter: avgCost, balanceAfter: newBalance });
+      balance = newBalance;
+    }
+  }
+
+  return { updates, inserts, oldAvgCost, oldBalance, newAvgCost: avgCost, newBalance: balance };
+}
+
+export type PersonalPurchaseBackfillPreviewRow = { catalogItemId: string; name: string; missingCount: number; missingUnits: number; oldBalance: number; newBalance: number };
+
+export async function previewPersonalPurchaseKardexBackfill(): Promise<PersonalPurchaseBackfillPreviewRow[]> {
+  const missing = await findMissingPersonalPurchaseKardexEntries();
+  if (missing.length === 0) return [];
+  const byCatalogItemId = new Map<string, PersonalPurchaseBackfillCandidate[]>();
+  for (const m of missing) {
+    const arr = byCatalogItemId.get(m.catalogItemId) ?? [];
+    arr.push(m);
+    byCatalogItemId.set(m.catalogItemId, arr);
+  }
+  const items = await prisma.purchaseCatalogItem.findMany({ where: { id: { in: [...byCatalogItemId.keys()] } }, select: { id: true, name: true } });
+  const nameById = new Map(items.map((i) => [i.id, i.name]));
+
+  const rows: PersonalPurchaseBackfillPreviewRow[] = [];
+  for (const [catalogItemId, missingForItem] of byCatalogItemId) {
+    const result = await replayCatalogItemWithBackfill(catalogItemId, missingForItem);
+    rows.push({
+      catalogItemId,
+      name: nameById.get(catalogItemId) ?? "Producto",
+      missingCount: missingForItem.length,
+      missingUnits: missingForItem.reduce((s, m) => s + m.quantity, 0),
+      oldBalance: result.oldBalance,
+      newBalance: result.newBalance,
+    });
+  }
+  return rows.sort((a, b) => b.missingUnits - a.missingUnits);
+}
+
+export type PersonalPurchaseBackfillResult = { itemsChanged: number; entriesInserted: number };
+
+export async function applyPersonalPurchaseKardexBackfill(): Promise<PersonalPurchaseBackfillResult> {
+  const missing = await findMissingPersonalPurchaseKardexEntries();
+  if (missing.length === 0) return { itemsChanged: 0, entriesInserted: 0 };
+  const byCatalogItemId = new Map<string, PersonalPurchaseBackfillCandidate[]>();
+  for (const m of missing) {
+    const arr = byCatalogItemId.get(m.catalogItemId) ?? [];
+    arr.push(m);
+    byCatalogItemId.set(m.catalogItemId, arr);
+  }
+
+  let itemsChanged = 0;
+  let entriesInserted = 0;
+  for (const [catalogItemId, missingForItem] of byCatalogItemId) {
+    const result = await replayCatalogItemWithBackfill(catalogItemId, missingForItem);
+    await prisma.$transaction([
+      ...result.updates.map((u) =>
+        prisma.stockKardexEntry.update({ where: { id: u.id }, data: { unitCost: u.unitCost, avgCostAfter: u.avgCostAfter, balanceAfter: u.balanceAfter } })
+      ),
+      ...result.inserts.map((ins) =>
+        prisma.stockKardexEntry.create({
+          data: {
+            catalogItemId,
+            type: "OUT",
+            quantity: ins.quantity,
+            unitCost: ins.unitCost,
+            balanceAfter: ins.balanceAfter,
+            avgCostAfter: ins.avgCostAfter,
+            occurredAt: ins.occurredAt,
+            merchandiseOutflowItemId: ins.merchandiseOutflowItemId,
+          },
+        })
+      ),
+    ]);
+    itemsChanged++;
+    entriesInserted += result.inserts.length;
+  }
+  return { itemsChanged, entriesInserted };
+}
