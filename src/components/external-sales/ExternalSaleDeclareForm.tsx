@@ -1289,9 +1289,27 @@ export function ExternalSaleDeclareForm() {
                       )}
                     </div>
                   )}
+                  {/* Confirmado 2026-09-17, pedido explícito de Marcos: si el
+                      cliente ya no quiere el producto DESPUÉS de que Bryan
+                      aprobó pero ANTES de que salga de bodega (deliveredAt
+                      vacío), el asesor puede cancelarla igual — el stock
+                      nunca se tocó en INVESTOCK, así que no hay nada que
+                      reversar. Si ya se entregó al motorizado, esto
+                      desaparece y en su lugar aplica "El cliente no recibió
+                      el pedido" (devolución real, ver ReportReturnSection). */}
+                  {!s.deletedAt && s.reviewStatus === "APPROVED" && !s.deliveredAt && confirmDeleteSaleId !== s.id && (
+                    <div className="mt-2">
+                      <button type="button" className="text-[11.5px] font-bold border border-red text-red rounded px-2.5 py-1.5 cursor-pointer" onClick={() => { setConfirmDeleteSaleId(s.id); setDeleteSaleError(""); }}>
+                        Cancelar pedido
+                      </button>
+                    </div>
+                  )}
                   {!s.deletedAt && confirmDeleteSaleId === s.id && (
                     <div className="bg-red/10 border border-red/40 rounded-md p-2.5 mt-2">
-                      <div className="text-[12px] text-ink mb-1.5">¿Cancelar el pedido {s.code}? Esto no se puede deshacer.</div>
+                      <div className="text-[12px] text-ink mb-1.5">
+                        ¿Cancelar el pedido {s.code}? Esto no se puede deshacer.
+                        {s.reviewStatus === "APPROVED" && " Si ya se estaba agrupando o embalando en bodega, se avisará que se detenga."}
+                      </div>
                       {deleteSaleError && <div className="text-red text-[11px] mb-1.5">{deleteSaleError}</div>}
                       <div className="flex gap-2">
                         <button type="button" className="flex-1 rounded border border-rule px-2.5 py-1.5 text-[11.5px] font-semibold cursor-pointer" onClick={() => setConfirmDeleteSaleId(null)}>

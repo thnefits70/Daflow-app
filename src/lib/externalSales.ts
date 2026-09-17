@@ -231,6 +231,21 @@ export async function notifyEveryoneExternalSaleReturnConfirmed(sale: { code: st
   }
 }
 
+// Confirmado 2026-09-17, pedido explícito del usuario: el asesor también
+// puede cancelar su venta ya aprobada mientras el stock no haya salido
+// todavía de bodega (deliveredAt vacío — ver DELETE en
+// api/external-sales/[id]/route.ts, que ya bloquea si outflowBatchId
+// existe). A diferencia de cancelar en PENDING (nadie más se enteró todavía),
+// acá Inventario/Fulfilment puede estar en medio de agruparla o embalarla —
+// se les avisa para que dejen de prepararla.
+export async function notifyEveryoneExternalSaleCancelled(sale: { code: string } & InvolvedSale): Promise<void> {
+  await Promise.all(
+    involvedRecipientIds(sale).map((id) =>
+      notifyOwner(id, { title: "🚫 Venta externa cancelada", body: `${sale.code} — el asesor la canceló, el cliente no la quiso. Detén cualquier preparación en curso.`, url: `${URL_BASE}&etab=historial` }).catch(() => null)
+    )
+  );
+}
+
 export type ExternalSaleTimingPush = { ownerId: string; title: string; body: string; url: string };
 
 // Alertas de tiempo (Parte 3) — confirmado 2026-09-01. A diferencia del
