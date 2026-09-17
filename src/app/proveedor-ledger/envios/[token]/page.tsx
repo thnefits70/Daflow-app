@@ -38,7 +38,11 @@ export default async function SupplierShippingLedgerPage({ params }: { params: P
   if (!supplier || supplier.paymentMode !== "CREDITO") notFound();
 
   const include = {
-    catalogItem: { select: { name: true } },
+    // Confirmado 2026-09-17, pedido explícito del usuario: mostrarle a
+    // Chen una foto del producto — la ÚLTIMA que se subió al matricularlo
+    // (PurchaseCatalogItem.photos, orden de subida), sin ningún texto ni
+    // marca nuestra encima, la imagen tal cual.
+    catalogItem: { select: { name: true, photos: true } },
     // Confirmado 2026-09-17, pedido explícito del usuario: además de quién
     // aprobó (Bryan, normalmente), mostrar quién solicitó la compra —
     // normalmente Jariel o Nairoby; en una emergencia (Bryan solicita), el
@@ -106,6 +110,7 @@ export default async function SupplierShippingLedgerPage({ params }: { params: P
                 <thead className="border-b border-neutral-200 bg-neutral-50 text-xs uppercase tracking-wide text-neutral-500">
                   <tr>
                     <th className={th}>Fecha aprobado</th>
+                    <th className={th}>Imagen</th>
                     <th className={NOMBRE_TH}>Producto</th>
                     <th className={`${th} text-right`}>Cant.</th>
                     <th className={th}>Solicitado por</th>
@@ -118,6 +123,18 @@ export default async function SupplierShippingLedgerPage({ params }: { params: P
                   {pendingShipments.map((r) => (
                     <tr key={r.id}>
                       <td className={`${td} text-neutral-600`}>{DATE_FMT.format(r.reviewedAt ?? r.requestedAt)}</td>
+                      <td className="px-3 py-2">
+                        {r.catalogItem.photos.length > 0 ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={r.catalogItem.photos[r.catalogItem.photos.length - 1]}
+                            alt={r.catalogItem.name}
+                            className="w-12 h-12 object-cover rounded-md border border-neutral-200"
+                          />
+                        ) : (
+                          <span className="text-neutral-400">—</span>
+                        )}
+                      </td>
                       <td className="px-3 py-2">{r.catalogItem.name}</td>
                       <td className={`${td} text-right tabular-nums`}>{r.quantity}</td>
                       <td className={`${td} text-neutral-600`}>{r.requestedBy?.name ?? "—"}</td>
@@ -143,6 +160,7 @@ export default async function SupplierShippingLedgerPage({ params }: { params: P
               id: r.id,
               confirmedAt: (r.supplierShippingConfirmedAt ?? r.requestedAt).toISOString(),
               productName: r.catalogItem.name,
+              productImageUrl: r.catalogItem.photos.at(-1) ?? null,
               quantity: r.quantity,
               requestedByName: r.requestedBy?.name ?? null,
               photoUrl: r.supplierShippingPhotoUrl,

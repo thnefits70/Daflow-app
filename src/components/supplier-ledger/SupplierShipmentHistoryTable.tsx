@@ -6,6 +6,7 @@ type HistoryRow = {
   id: string;
   confirmedAt: string; // ISO
   productName: string;
+  productImageUrl: string | null;
   quantity: number;
   requestedByName: string | null;
   photoUrl: string | null;
@@ -79,7 +80,8 @@ export function SupplierShipmentHistoryTable({ rows }: Props) {
             type="date"
             value={desde}
             onChange={(e) => setDesde(e.target.value)}
-            className="rounded border border-neutral-300 px-2 py-1 text-sm"
+            onClick={(e) => e.currentTarget.showPicker?.()}
+            className="rounded border border-neutral-300 px-2 py-1 text-sm cursor-pointer"
           />
         </label>
         <label className="flex flex-col gap-1">
@@ -88,7 +90,8 @@ export function SupplierShipmentHistoryTable({ rows }: Props) {
             type="date"
             value={hasta}
             onChange={(e) => setHasta(e.target.value)}
-            className="rounded border border-neutral-300 px-2 py-1 text-sm"
+            onClick={(e) => e.currentTarget.showPicker?.()}
+            className="rounded border border-neutral-300 px-2 py-1 text-sm cursor-pointer"
           />
         </label>
         {months.length > 0 && (
@@ -132,16 +135,25 @@ export function SupplierShipmentHistoryTable({ rows }: Props) {
             <thead className="border-b border-neutral-200 bg-neutral-50 text-xs uppercase tracking-wide text-neutral-500">
               <tr>
                 <th className={th}>Confirmado</th>
+                <th className={th}>Imagen</th>
                 <th className={NOMBRE_TH}>Producto</th>
                 <th className={`${th} text-right`}>Cant.</th>
                 <th className={th}>Solicitado por</th>
-                <th className={th}>Foto</th>
+                <th className={th}>Foto de envío</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-100">
               {filtered.map((r) => (
                 <tr key={r.id}>
                   <td className={`${td} text-neutral-600`}>{DATETIME_FMT.format(new Date(r.confirmedAt))}</td>
+                  <td className="px-3 py-2">
+                    {r.productImageUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={r.productImageUrl} alt={r.productName} className="w-12 h-12 object-cover rounded-md border border-neutral-200" />
+                    ) : (
+                      <span className="text-neutral-400">—</span>
+                    )}
+                  </td>
                   <td className="px-3 py-2">{r.productName}</td>
                   <td className={`${td} text-right tabular-nums`}>{r.quantity}</td>
                   <td className={`${td} text-neutral-600`}>{r.requestedByName ?? "—"}</td>

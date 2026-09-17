@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
-import { getSupplierDebtPendingItems, getSupplierDebtDisputedItems, findSupplierByPublicLedgerToken } from "@/lib/supplierDebt";
+import { getSupplierDebtDisputedItems, findSupplierByPublicLedgerToken } from "@/lib/supplierDebt";
 import { SupplierShippingPhotoCapture } from "@/components/supplier-ledger/SupplierShippingPhotoCapture";
 import { SupplierShipmentConfirmButton } from "@/components/supplier-ledger/SupplierShipmentConfirmButton";
 import { SupplierShipmentHistoryTable } from "@/components/supplier-ledger/SupplierShipmentHistoryTable";
@@ -20,7 +20,7 @@ import { SupplierShipmentHistoryTable } from "@/components/supplier-ledger/Suppl
 // defina su propio `icons` en metadata (config le gana a config, sin
 // importar el nivel), acá con un ícono transparente.
 export const metadata: Metadata = {
-  title: "Estado de cuenta",
+  title: "IMPORTADORA CHEN",
   description: "Detalle de mercadería y pagos.",
   icons: {
     icon: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
@@ -48,7 +48,11 @@ export default async function SupplierLedgerPage({ params }: { params: Promise<{
   if (!supplier || supplier.paymentMode !== "CREDITO") notFound();
 
   const shipmentInclude = {
-    catalogItem: { select: { name: true } },
+    // Confirmado 2026-09-17, pedido explícito del usuario: mostrarle a
+    // Chen una foto del producto — la ÚLTIMA que se subió al matricularlo
+    // (PurchaseCatalogItem.photos, orden de subida), sin ningún texto ni
+    // marca nuestra encima, la imagen tal cual.
+    catalogItem: { select: { name: true, photos: true } },
     // Confirmado 2026-09-17, pedido explícito del usuario: además de
     // quién aprobó (Bryan, normalmente), mostrar quién solicitó la
     // compra — normalmente Jariel o Nairoby; en una emergencia (Bryan
@@ -59,8 +63,7 @@ export default async function SupplierLedgerPage({ params }: { params: Promise<{
     reviewedBy: { select: { name: true } },
   } as const;
 
-  const [pendingItems, disputedItems, closedPayments, pendingShipments, confirmedShipments] = await Promise.all([
-    getSupplierDebtPendingItems(supplier.id),
+  const [disputedItems, closedPayments, pendingShipments, confirmedShipments] = await Promise.all([
     getSupplierDebtDisputedItems(supplier.id),
     prisma.supplierDebtPayment.findMany({
       where: { supplierId: supplier.id, closedAt: { not: null } },
@@ -117,8 +120,6 @@ export default async function SupplierLedgerPage({ params }: { params: Promise<{
     }),
   ]);
 
-  const balance = pendingItems.reduce((s, i) => s + i.totalCost, 0);
-
   const th = "px-3 py-2 whitespace-nowrap";
   const td = "px-3 py-2 whitespace-nowrap";
   const NOMBRE_TH = "px-3 py-2 min-w-[200px]";
@@ -130,50 +131,9 @@ export default async function SupplierLedgerPage({ params }: { params: Promise<{
           la tarjeta angosta y centrada de antes. */}
       <div className="mx-auto max-w-[1600px] px-4 py-10 sm:px-6">
         <header className="mb-8">
-          <h1 className="text-xl font-semibold tracking-tight">Estado de cuenta</h1>
+          <h1 className="text-xl font-semibold tracking-tight">IMPORTADORA CHEN</h1>
           <p className="mt-1 text-sm text-neutral-500">Actualizado en tiempo real. Esta página es de solo lectura.</p>
         </header>
-
-        <section className="mb-8 rounded-xl border border-neutral-200 bg-white p-6 shadow-sm w-fit">
-          <p className="text-sm text-neutral-500">Saldo actual a pagar</p>
-          <p className="mt-1 text-3xl font-semibold tabular-nums">{money(balance)}</p>
-        </section>
-
-        <section className="mb-8">
-          <h2 className="mb-3 text-sm font-medium text-neutral-700">Mercadería confirmada, pendiente de pago</h2>
-          {pendingItems.length === 0 ? (
-            <p className="text-sm text-neutral-400">No hay mercadería pendiente de pago por ahora.</p>
-          ) : (
-            <div className="overflow-x-auto rounded-xl border border-neutral-200 bg-white shadow-sm">
-              <table className="w-full text-left text-sm">
-                <thead className="border-b border-neutral-200 bg-neutral-50 text-xs uppercase tracking-wide text-neutral-500">
-                  <tr>
-                    <th className={th}>Fecha</th>
-                    <th className={NOMBRE_TH}>Producto</th>
-                    <th className={`${th} text-right`}>Cant.</th>
-                    <th className={`${th} text-right`}>Precio unit.</th>
-                    <th className={`${th} text-right`}>Total</th>
-                    <th className={th}>Aprobado por</th>
-                    <th className={th}>Revisado por</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-neutral-100">
-                  {pendingItems.map((i) => (
-                    <tr key={i.id}>
-                      <td className={`${td} text-neutral-600`}>{DATE_FMT.format(i.requestedAt)}</td>
-                      <td className="px-3 py-2">{i.productName}</td>
-                      <td className={`${td} text-right tabular-nums`}>{i.quantity}</td>
-                      <td className={`${td} text-right tabular-nums`}>{money(i.totalCost / i.quantity)}</td>
-                      <td className={`${td} text-right tabular-nums`}>{money(i.totalCost)}</td>
-                      <td className={`${td} text-neutral-600`}>{i.approvedByName ?? "—"}</td>
-                      <td className={`${td} text-neutral-600`}>{i.reviewedByName ?? "—"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </section>
 
         <section className="mb-8">
           <h2 className="mb-1 text-sm font-medium text-neutral-700">Pedidos que nos falta enviar</h2>
@@ -188,6 +148,7 @@ export default async function SupplierLedgerPage({ params }: { params: Promise<{
                 <thead className="border-b border-neutral-200 bg-neutral-50 text-xs uppercase tracking-wide text-neutral-500">
                   <tr>
                     <th className={th}>Fecha aprobado</th>
+                    <th className={th}>Imagen</th>
                     <th className={NOMBRE_TH}>Producto</th>
                     <th className={`${th} text-right`}>Cant.</th>
                     <th className={th}>Solicitado por</th>
@@ -200,6 +161,18 @@ export default async function SupplierLedgerPage({ params }: { params: Promise<{
                   {pendingShipments.map((r) => (
                     <tr key={r.id}>
                       <td className={`${td} text-neutral-600`}>{DATE_FMT.format(r.reviewedAt ?? r.requestedAt)}</td>
+                      <td className="px-3 py-2">
+                        {r.catalogItem.photos.length > 0 ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={r.catalogItem.photos[r.catalogItem.photos.length - 1]}
+                            alt={r.catalogItem.name}
+                            className="w-12 h-12 object-cover rounded-md border border-neutral-200"
+                          />
+                        ) : (
+                          <span className="text-neutral-400">—</span>
+                        )}
+                      </td>
                       <td className="px-3 py-2">{r.catalogItem.name}</td>
                       <td className={`${td} text-right tabular-nums`}>{r.quantity}</td>
                       <td className={`${td} text-neutral-600`}>{r.requestedBy?.name ?? "—"}</td>
@@ -225,6 +198,7 @@ export default async function SupplierLedgerPage({ params }: { params: Promise<{
               id: r.id,
               confirmedAt: (r.supplierShippingConfirmedAt ?? r.requestedAt).toISOString(),
               productName: r.catalogItem.name,
+              productImageUrl: r.catalogItem.photos.at(-1) ?? null,
               quantity: r.quantity,
               requestedByName: r.requestedBy?.name ?? null,
               photoUrl: r.supplierShippingPhotoUrl,
