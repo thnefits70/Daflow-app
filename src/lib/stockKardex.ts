@@ -262,6 +262,46 @@ export type CurrentStockRow = {
 // del catálogo, no solo los que ya se movieron. Un producto sin ninguna
 // línea de Kardex todavía (nunca entró ni salió por este sistema) aparece
 // con saldo 0, no se omite.
+// Confirmado 2026-09-17, pedido explícito del usuario: "Valor de inventario
+// del mes" debe salir de INVESTOCK (Kardex real), no del archivo semanal de
+// Just — Just queda solo de referencia, igual que en el resto de la app.
+// INVESTOCK no guarda "fotos" mensuales — es un ledger corrido — así que el
+// valor de un mes cerrado se reconstruye tomando, por cada producto, la
+// última línea de Kardex con fecha dentro de ese mes o antes (el "saldo" que
+// tenía justo al cierre). Un solo barrido ordenado por fecha (no una
+// consulta por mes) para no repetir trabajo por cada uno de los 12 meses.
+export async function getInvestockValueByMonthEnd(periods: string[]): Promise<Map<string, number>> {
+  const cutoffs = periods
+    .map((period) => {
+      const [y, m] = period.split("-").map(Number);
+      return { period, cutoff: new Date(Date.UTC(y, m, 0, 23, 59, 59, 999)) }; // último instante calendario de ese mes
+    })
+    .sort((a, b) => a.cutoff.getTime() - b.cutoff.getTime());
+
+  const entries = await prisma.stockKardexEntry.findMany({
+    orderBy: [{ occurredAt: "asc" }, { createdAt: "asc" }],
+    select: { catalogItemId: true, occurredAt: true, balanceAfter: true, avgCostAfter: true },
+  });
+
+  const lastByItem = new Map<string, { balanceAfter: number; avgCostAfter: number }>();
+  let idx = 0;
+  const result = new Map<string, number>();
+  for (const { period, cutoff } of cutoffs) {
+    while (idx < entries.length && entries[idx].occurredAt <= cutoff) {
+      lastByItem.set(entries[idx].catalogItemId, entries[idx]);
+      idx++;
+    }
+    // Sin ningún movimiento todavía a esa fecha (mes anterior a que
+    // existiera INVESTOCK) — null, no $0, para no confundir "sin datos" con
+    // "inventario en cero".
+    if (lastByItem.size === 0) continue;
+    let total = 0;
+    for (const v of lastByItem.values()) total += v.balanceAfter * v.avgCostAfter;
+    result.set(period, total);
+  }
+  return result;
+}
+
 export async function getAllCurrentStock(): Promise<CurrentStockRow[]> {
   const [items, latestPerItem] = await Promise.all([
     prisma.purchaseCatalogItem.findMany({ select: { id: true, name: true, justCode: true, photos: true, bodega: true }, orderBy: { name: "asc" } }),

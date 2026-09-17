@@ -193,7 +193,7 @@ export function InventoryControlPanel({
   return (
     <div className="flex flex-col gap-4.5">
       <TabGuide storageKey="control-inventario">
-        Sube acá cada semana tu reporte de saldos costeados y valorizados (Excel). Con eso DAFLOW arma solo el ranking de productos sin movimiento Y calcula el valor de inventario del mes — ya no hace falta escribir ese valor a mano.
+        Sube acá cada semana tu reporte de saldos costeados y valorizados (Excel) para el ranking de productos sin movimiento. El valor de inventario del mes ya no se sube — se calcula solo desde INVESTOCK.
       </TabGuide>
       <div className="bg-surface border border-rule rounded-md p-4.5">
         <div className="flex items-center justify-between mb-1">
@@ -201,7 +201,7 @@ export function InventoryControlPanel({
           <span className="font-mono text-[10px] uppercase text-steel bg-cloud rounded-full px-2 py-0.5">Automático</span>
         </div>
         <div className="text-[11.5px] text-steel mb-3">
-          Ya no hace falta escribirlo ni adjuntar captura — se calcula solo sumando costo promedio × stock de la última semana de Just que subiste ese mes (sección de abajo).
+          Ya no hace falta escribirlo ni adjuntar captura — se calcula solo desde INVESTOCK (stock real × costo promedio real de cada producto, al cierre de ese mes).
         </div>
 
         <div className="mb-3">
@@ -223,7 +223,7 @@ export function InventoryControlPanel({
           <div>
             <div className="font-display text-[22px] font-bold mb-1.5">{money(selectedData.value)}</div>
             {selectedData.source === "auto" ? (
-              <div className="text-[11.5px] text-steel">Calculado con el reporte de {weekLabel(selectedData.sourceWeek!)}.</div>
+              <div className="text-[11.5px] text-steel">Calculado en tiempo real desde INVESTOCK.</div>
             ) : (
               <div className="text-[11.5px] text-steel">Valor histórico cargado a mano antes de automatizar este cálculo.</div>
             )}
