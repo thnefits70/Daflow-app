@@ -532,7 +532,7 @@ function ReviewQueue({ canAct }: { canAct: boolean }) {
     setErr(""); setBusy(id);
     const res = await fetch(`/api/market-products/${id}/review`, {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ decision: "APPROVED", bodega: bodega[id], isPublic: !!isPublic[id] }),
+      body: JSON.stringify({ decision: "APPROVED", bodega: bodega[id], isPublic: isPublic[id] !== false }),
     });
     setBusy(null);
     if (!res.ok) { const d = await res.json().catch(() => ({})); setErr(d.error ?? "No se pudo aprobar."); return; }
@@ -597,7 +597,7 @@ function ReviewQueue({ canAct }: { canAct: boolean }) {
                   <option value="MKT_SHANGHAI">Importadora Shanghai</option>
                 </select>
                 <label className="flex items-center gap-1 text-[12px] text-steel">
-                  <input type="checkbox" checked={!!isPublic[p.id]} onChange={(e) => setIsPublic((s) => ({ ...s, [p.id]: e.target.checked }))} /> Público
+                  <input type="checkbox" checked={isPublic[p.id] !== false} onChange={(e) => setIsPublic((s) => ({ ...s, [p.id]: e.target.checked }))} /> Público
                 </label>
                 <button type="button" disabled={busy === p.id} className="flex items-center gap-1 rounded border border-teal bg-teal px-3 py-1.5 text-[12px] font-semibold text-white cursor-pointer disabled:opacity-60" onClick={() => approve(p.id)}>
                   <CheckCircle2 size={13} /> Aprobar
