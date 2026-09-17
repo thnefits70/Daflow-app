@@ -374,6 +374,9 @@ function ProposeForm() {
 
   return (
     <div className="max-w-xl">
+      <TabGuide storageKey="analisismercado-proponer">
+        Llena los datos del producto y de tu proveedor — la calculadora de abajo te va sacando el precio de Dropi solo. Cuando pongas el precio de la competencia, te va a salir automáticamente: (1) cuánto más barato o más caro sale tu precio comparado con el de ella, y (2) qué margen te quedaría si vendieras al mismo precio que la competencia (en verde si alcanza tu margen mínimo, en rojo si no). Así ves de una vez si el producto conviene, sin sacar cuentas a mano.
+      </TabGuide>
       <div className="mb-3">
         <label className="text-[12px] font-semibold text-steel">Nombre comercial</label>
         <input className="w-full rounded border border-rule px-2.5 py-1.5 text-[13px] mt-1" value={productName} onChange={(e) => setProductName(e.target.value)} />
