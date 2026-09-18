@@ -25,6 +25,7 @@ import {
 } from "@/lib/marketProduct";
 import { getAllCurrentStock } from "@/lib/stockKardex";
 import { getFinanzasDeptId } from "@/lib/inventoryKpis";
+import { notifyOwner } from "@/lib/notifications";
 
 const supplierPriceSchema = z.object({
   supplierId: z.string(),
@@ -124,6 +125,19 @@ export async function POST(req: NextRequest) {
     },
     include: { supplierPrices: { include: { supplier: { select: { name: true } } } } },
   });
+
+  // Bug reportado por Jariel 2026-09-18: a Bryan nunca le llegaba aviso de
+  // que había una propuesta nueva esperando su aprobación — notifyOwner solo
+  // se disparaba al aprobar/rechazar, nunca al proponer. Mismo patrón que
+  // brand/route.ts para ubicar al líder de MKT.
+  const marketingLead = await prisma.user.findFirst({ where: { isLeader: true, leadsDept: { code: "MKT" } }, select: { id: true } });
+  if (marketingLead) {
+    await notifyOwner(marketingLead.id, {
+      title: "Nueva propuesta de producto",
+      body: `${created.productName} — esperando tu aprobación`,
+      url: "/area/workspace?tab=analisis-mercado",
+    }).catch(() => null);
+  }
 
   return NextResponse.json(created, { status: 201 });
 }
