@@ -872,26 +872,36 @@ function MyProposalsView() {
     <div className="flex flex-col gap-3">
       {rows.map((p) => {
         const status = PROPOSAL_STATUS_LABEL[p.status];
+        const image = p.catalogItem?.photos?.[0] || p.referenceImageUrl;
         return (
-          <div key={p.id} className="bg-surface border border-rule rounded-md p-3.5">
-            <div className="flex items-center gap-2 mb-2">
-              <span className="font-semibold text-[13.5px]">{p.code} — {p.productName}</span>
-              <span className={`text-[11px] font-semibold ${status.color}`}>{status.text}</span>
+          <div key={p.id} className="bg-surface border border-rule rounded-md p-3.5 flex items-start gap-3.5">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="font-semibold text-[13.5px]">{p.code} — {p.productName}</span>
+                <span className={`text-[11px] font-semibold ${status.color}`}>{status.text}</span>
+              </div>
+              {p.status === "REJECTED" && p.rejectReason && (
+                <div className="text-[12px] text-red mb-2">Motivo: {p.rejectReason}</div>
+              )}
+              {p.status === "APPROVED" && (
+                <ol className="text-[12.5px] text-steel space-y-0.5">
+                  <li>1. Propuesto — {formatDateTime(p.proposedAt)}</li>
+                  <li>2. Aprobado por {p.reviewedBy?.name ?? "—"} — {p.reviewedAt ? formatDateTime(p.reviewedAt) : "—"}</li>
+                  <li>3. Publicado por {p.publishedBy?.name ?? "—"} — {p.publishedAt ? formatDateTime(p.publishedAt) : "pendiente"}</li>
+                  <li>4. Brandeado por {p.brandedBy?.name ?? "—"} — {p.brandedAt ? formatDateTime(p.brandedAt) : "pendiente"}</li>
+                  {p.readyToBuyAt && <li>5. Listo para comprar con {p.chosenSupplier?.name} — {formatDateTime(p.readyToBuyAt)}</li>}
+                </ol>
+              )}
+              {p.status === "PENDING_APPROVAL" && (
+                <div className="text-[12px] text-steel">Propuesto — {formatDateTime(p.proposedAt)}</div>
+              )}
             </div>
-            {p.status === "REJECTED" && p.rejectReason && (
-              <div className="text-[12px] text-red mb-2">Motivo: {p.rejectReason}</div>
-            )}
-            {p.status === "APPROVED" && (
-              <ol className="text-[12.5px] text-steel space-y-0.5">
-                <li>1. Propuesto — {formatDateTime(p.proposedAt)}</li>
-                <li>2. Aprobado por {p.reviewedBy?.name ?? "—"} — {p.reviewedAt ? formatDateTime(p.reviewedAt) : "—"}</li>
-                <li>3. Publicado por {p.publishedBy?.name ?? "—"} — {p.publishedAt ? formatDateTime(p.publishedAt) : "pendiente"}</li>
-                <li>4. Brandeado por {p.brandedBy?.name ?? "—"} — {p.brandedAt ? formatDateTime(p.brandedAt) : "pendiente"}</li>
-                {p.readyToBuyAt && <li>5. Listo para comprar con {p.chosenSupplier?.name} — {formatDateTime(p.readyToBuyAt)}</li>}
-              </ol>
-            )}
-            {p.status === "PENDING_APPROVAL" && (
-              <div className="text-[12px] text-steel">Propuesto — {formatDateTime(p.proposedAt)}</div>
+            {image && (
+              <img
+                src={image}
+                alt={p.productName}
+                className="w-28 h-28 object-cover rounded border border-rule shrink-0 cursor-pointer"
+              />
             )}
           </div>
         );
