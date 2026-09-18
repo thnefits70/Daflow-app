@@ -228,14 +228,18 @@ export async function getEligiblePaymentOrdersForFreight(): Promise<EligiblePaym
   }));
 }
 
-export type PendingMotorizadoFreightDTO = { saleId: string; label: string; freightCost: number; paymentConfirmedAt: string };
+export type PendingMotorizadoFreightDTO = { saleId: string; label: string; freightCost: number; deliveredAt: string };
 
 // Confirmado 2026-09-18, pedido explícito del usuario: ventas externas SIN
 // recaudo donde el cliente ya transfirió el total completo (paymentConfirmedAt)
-// pero el flete que le corresponde al motorizado todavía no se le pagó por
-// fuera (freightPaidAt null) — en con recaudo esto no existe porque el
-// motorizado se autopaga el flete al cobrar. Cualquiera de las dos cajas
-// (Jariel en Secundaria, Nairoby en Principal) puede pagarlo.
+// Y el motorizado ya le confirmó al asesor que entregó el pedido
+// (deliveredAt) — no basta con que llegó el pago, hay que esperar también
+// la entrega real antes de poder pagarle, para no adelantarle el flete a
+// alguien que todavía no entregó. El flete que le corresponde al motorizado
+// todavía no se le pagó por fuera (freightPaidAt null) — en con recaudo esto
+// no existe porque el motorizado se autopaga el flete al cobrar. Cualquiera
+// de las dos cajas (Jariel en Secundaria, Nairoby en Principal) puede
+// pagarlo.
 export async function getPendingMotorizadoFreights(): Promise<PendingMotorizadoFreightDTO[]> {
   const rows = await prisma.externalSale.findMany({
     where: {
@@ -243,16 +247,17 @@ export async function getPendingMotorizadoFreights(): Promise<PendingMotorizadoF
       isContraEntrega: false,
       freightCost: { gt: 0 },
       paymentConfirmedAt: { not: null },
+      deliveredAt: { not: null },
       freightPaidAt: null,
     },
-    select: { id: true, code: true, pickupPersonName: true, freightCost: true, paymentConfirmedAt: true },
-    orderBy: { paymentConfirmedAt: "asc" },
+    select: { id: true, code: true, pickupPersonName: true, freightCost: true, deliveredAt: true },
+    orderBy: { deliveredAt: "asc" },
   });
   return rows.map((r) => ({
     saleId: r.id,
     label: `${r.code} — ${r.pickupPersonName} — $${r.freightCost!.toFixed(2)}`,
     freightCost: r.freightCost!,
-    paymentConfirmedAt: r.paymentConfirmedAt!.toISOString(),
+    deliveredAt: r.deliveredAt!.toISOString(),
   }));
 }
 
