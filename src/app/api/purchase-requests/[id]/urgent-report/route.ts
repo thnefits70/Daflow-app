@@ -61,9 +61,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // Ya no bloquea — lo de más queda como excedente, separado de lo dañado/
   // incompleto/diferente/faltante (eso sigue siendo lo contrario: un
   // reclamo de crédito contra el proveedor). El excedente nunca cuenta como
-  // stock real solo porque Inventario lo contó — Jariel gestiona con CHEN y
-  // Bryan confirma antes de que "Confirmar que llegó" pueda incluirlo (ver
-  // excess-gestion/excess-confirm y receipt/route.ts).
+  // stock real solo porque Inventario lo contó — Jariel gestiona con CHEN,
+  // Bryan confirma, y recién ahí Daniel lo ingresa al Kardex como su propia
+  // entrada, separada de "Confirmar que llegó" (ver excess-gestion,
+  // excess-confirm y excess-receive).
   const excessQty = parsed.data.countedQty !== undefined ? Math.max(0, parsed.data.countedQty - existing.quantity) : 0;
 
   if (parsed.data.countedQty !== undefined && flaggedQty > parsed.data.countedQty) {

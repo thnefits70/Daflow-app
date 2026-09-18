@@ -201,6 +201,10 @@ export function PurchaseUrgentReportsPanel({
   const [reports, setReports] = useState<Report[] | null>(null);
   const [excessGestionId, setExcessGestionId] = useState<string | null>(null);
   const [excessGestionNoteInput, setExcessGestionNoteInput] = useState("");
+  // Confirmado 2026-09-18: pedido explícito del usuario — confirmar el
+  // excedente es irreversible (habilita que sume al Kardex), así que un solo
+  // clic accidental no basta — requiere un paso intermedio de "¿seguro?".
+  const [confirmExcessId, setConfirmExcessId] = useState<string | null>(null);
   const [openReportId, setOpenReportId] = useState<string | null>(null);
   const [resType, setResType] = useState<UiResolutionType>("CREDIT");
   const [resQty, setResQty] = useState("");
@@ -270,6 +274,7 @@ export function PurchaseUrgentReportsPanel({
     setBusy(false);
     const data = await res.json().catch(() => null);
     if (!res.ok) { setErr(data?.error ?? "No se pudo confirmar."); return; }
+    setConfirmExcessId(null);
     load();
     router.refresh();
   }
@@ -443,9 +448,19 @@ export function PurchaseUrgentReportsPanel({
                       Gestionado por {actorName(r.excessGestionBy?.name)} · {formatDateTime(r.excessGestionAt)} — &quot;{r.excessGestionNote}&quot;
                     </div>
                     {canConfirmExcess ? (
-                      <button type="button" disabled={busy} className="rounded border border-green bg-green px-3 py-1.5 text-[11.5px] font-semibold text-white cursor-pointer disabled:opacity-60" onClick={() => confirmExcess(r.id)}>
-                        Confirmar excedente
-                      </button>
+                      confirmExcessId === r.id ? (
+                        <div className="bg-surface border border-green/40 rounded-md p-2.5">
+                          <div className="text-[11.5px] font-semibold mb-1.5">¿Confirmas que las {r.excessQty} un. de más son reales y ya se puede sumar al Kardex?</div>
+                          <div className="flex items-center gap-2">
+                            <button type="button" disabled={busy} className="rounded border border-green bg-green px-3 py-1.5 text-[11.5px] font-semibold text-white cursor-pointer disabled:opacity-60" onClick={() => confirmExcess(r.id)}>Sí, confirmo</button>
+                            <button type="button" className="text-steel text-[11.5px] cursor-pointer" onClick={() => setConfirmExcessId(null)}>Cancelar</button>
+                          </div>
+                        </div>
+                      ) : (
+                        <button type="button" className="rounded border border-green bg-green px-3 py-1.5 text-[11.5px] font-semibold text-white cursor-pointer" onClick={() => setConfirmExcessId(r.id)}>
+                          Confirmar excedente
+                        </button>
+                      )
                     ) : (
                       <div className="text-steel-dim italic text-[11.5px]">Esperando que Bryan confirme el excedente.</div>
                     )}

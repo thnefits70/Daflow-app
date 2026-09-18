@@ -97,22 +97,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     (s, r) => s + r.damagedQty + r.incompleteQty + r.differentQty + r.missingQty,
     0
   );
-  // Confirmado 2026-09-17: pedido explícito del usuario — un "Informar
-  // urgente" con excedente (llegó más de lo pedido, ver excessQty en
-  // [id]/urgent-report/route.ts) solo suma a lo que se puede confirmar acá
-  // una vez Jariel lo gestionó con el proveedor y Bryan lo confirmó (ver
-  // excess-confirm/route.ts) — antes de eso, esas unidades de más quedan
-  // fuera, aunque físicamente estén en bodega.
-  const confirmedExcessQty = existing.urgentReports.reduce((s, r) => s + (r.excessConfirmedAt ? r.excessQty : 0), 0);
-  const expectedQuantity = existing.quantity - totalAffected + confirmedExcessQty;
+  const expectedQuantity = existing.quantity - totalAffected;
   if (totalAffected > 0 && expectedQuantity <= 0) {
     return NextResponse.json({ error: "Ya se reportó como afectado el 100% de lo pedido — no hay cantidad buena que confirmar." }, { status: 409 });
   }
   if (parsed.data.receivedQuantity !== expectedQuantity) {
-    const excessNote = confirmedExcessQty > 0 ? ` más ${confirmedExcessQty} de excedente ya confirmado` : "";
     const msg = canSeeAmounts
-      ? totalAffected > 0 || confirmedExcessQty > 0
-        ? `La cantidad buena a confirmar es ${expectedQuantity} un. (${existing.quantity} pedidas menos ${totalAffected} ya reportadas${excessNote}).`
+      ? totalAffected > 0
+        ? `La cantidad buena a confirmar es ${expectedQuantity} un. (${existing.quantity} pedidas menos ${totalAffected} ya reportadas).`
         : `La cantidad recibida no coincide con lo pedido (${existing.quantity} un.) — usa 'Informar urgente' para reportar la diferencia.`
       : "La cantidad no coincide con lo registrado — vuelve a contar. Si de verdad llegó una cantidad distinta, usa 'Informar urgente' para reportarlo.";
     return NextResponse.json({ error: msg }, { status: 409 });

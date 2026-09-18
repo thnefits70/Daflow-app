@@ -74,8 +74,6 @@ type Row = {
     incompleteQty: number;
     differentQty: number;
     missingQty: number;
-    excessQty: number;
-    excessConfirmedAt: string | null;
     description: string;
     reportedAt: string;
     reportedBy: { name: string } | null;
@@ -103,6 +101,23 @@ type PendingUrgentReport = {
     unitCost: number;
     totalCost: number;
     catalogItem: { name: string; photos: string[]; justCode: string | null };
+    supplier: { name: string };
+  };
+};
+
+// Confirmado 2026-09-18: cola de Daniel — excedente ya confirmado por Bryan,
+// pendiente de ingresar como su propia entrada al Kardex (ver
+// urgent-reports/pending-excess-kardex/route.ts).
+type PendingExcessKardex = {
+  id: string;
+  excessQty: number;
+  excessGestionNote: string | null;
+  excessGestionBy: { name: string } | null;
+  excessConfirmedBy: { name: string } | null;
+  excessConfirmedAt: string;
+  request: {
+    quantity: number;
+    catalogItem: { name: string; justCode: string | null };
     supplier: { name: string };
   };
 };
@@ -209,12 +224,7 @@ function isVideoUrl(url: string) {
 // de lo que sí llegó bien.
 function goodQuantity(r: Row): number {
   const affected = r.urgentReports.reduce((s, rep) => s + rep.damagedQty + rep.incompleteQty + rep.differentQty + rep.missingQty, 0);
-  // Confirmado 2026-09-17: excedente confirmado (llegó más de lo pedido, ya
-  // gestionado con el proveedor y confirmado por Bryan — ver excessConfirmedAt
-  // en excess-confirm/route.ts) suma a lo que se puede confirmar acá, mismo
-  // criterio que expectedQuantity en receipt/route.ts.
-  const confirmedExcess = r.urgentReports.reduce((s, rep) => s + (rep.excessConfirmedAt ? rep.excessQty : 0), 0);
-  return r.quantity - affected + confirmedExcess;
+  return r.quantity - affected;
 }
 
 const CREDIT_CLAIM_WINDOW_DAYS = 7;
@@ -262,6 +272,11 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
 
   // Cola de Daniel: "Informar urgente" que el equipo subió y todavía no revisó.
   const [pendingUrgentReports, setPendingUrgentReports] = useState<PendingUrgentReport[]>([]);
+  // Confirmado 2026-09-18: pedido explícito del usuario — excedente ya
+  // confirmado por Bryan, pendiente de que Daniel lo ingrese al Kardex
+  // (entrada separada de "Confirmar que llegó" — ver excess-receive/route.ts).
+  const [pendingExcessKardex, setPendingExcessKardex] = useState<PendingExcessKardex[]>([]);
+  const [excessReceiveId, setExcessReceiveId] = useState<string | null>(null);
   // Confirmado 2026-08-27: pedido explícito del usuario — Daniel es quien
   // ajusta la cantidad faltante antes de aprobar (él sí ve pr.request.quantity),
   // el equipo que reporta nunca la escribe. Un input editable por reporte.
@@ -395,6 +410,7 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
     }
     if (canApprove || isAdmin) {
       fetch("/api/purchase-requests/urgent-reports/pending-review").then((r) => (r.ok ? r.json() : [])).then(setPendingUrgentReports).catch(() => setPendingUrgentReports([]));
+      fetch("/api/purchase-requests/urgent-reports/pending-excess-kardex").then((r) => (r.ok ? r.json() : [])).then(setPendingExcessKardex).catch(() => setPendingExcessKardex([]));
       fetch("/api/purchase-requests/late-claims/pending-review").then((r) => (r.ok ? r.json() : [])).then(setLateClaimsReview).catch(() => setLateClaimsReview([]));
       fetch("/api/purchase-requests/late-claims/pending-just").then((r) => (r.ok ? r.json() : [])).then(setLateClaimsJust).catch(() => setLateClaimsJust([]));
     }
@@ -637,6 +653,20 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
       return next;
     });
     setConfirmingMissingId(null);
+  }
+
+  async function receiveExcessKardex(id: string) {
+    setBusy(true);
+    setErr("");
+    const res = await fetch(`/api/purchase-requests/urgent-reports/${id}/excess-receive`, { method: "POST" });
+    setBusy(false);
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      setErr(data?.error ?? "No se pudo ingresar al Kardex.");
+      return;
+    }
+    setPendingExcessKardex((rs) => rs.filter((r) => r.id !== id));
+    setExcessReceiveId(null);
   }
 
   async function resolveUrgentReportInternally(id: string, missingQty: number, note: string) {
@@ -990,6 +1020,52 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                 </div>
               );
             })}
+          </div>
+        </div>
+      )}
+
+      {(canApprove || isAdmin) && pendingExcessKardex.length > 0 && (
+        <div className="bg-surface border border-teal/40 rounded-md p-4 mb-1">
+          <div className="flex items-center gap-1.5 text-[12px] font-bold mb-2 text-teal">
+            <Package size={14} /> Excedente confirmado — pendiente de ingresar al Kardex
+          </div>
+          <div className="flex flex-col gap-2.5">
+            {pendingExcessKardex.map((ex) => (
+              <div key={ex.id} className="bg-cloud rounded-md p-3">
+                <div className="text-[13px] font-bold flex items-center gap-1.5">
+                  <CatalogCode code={ex.request.catalogItem.justCode} />
+                  <span>{ex.request.catalogItem.name}</span>
+                </div>
+                <div className="text-[11.5px] text-steel mb-1.5">
+                  {ex.request.supplier.name} — se pidieron {ex.request.quantity} un., {ex.excessQty} de excedente confirmado por {actorName(ex.excessConfirmedBy?.name)} · {formatDateTime(ex.excessConfirmedAt)}
+                </div>
+                {ex.excessGestionNote && (
+                  <div className="text-[11.5px] text-steel-dim mb-2">Gestión de {actorName(ex.excessGestionBy?.name)}: &quot;{ex.excessGestionNote}&quot;</div>
+                )}
+                {err && <div className="text-red text-[12px] mb-2">{err}</div>}
+                {excessReceiveId === ex.id ? (
+                  <div className="bg-surface border border-teal/40 rounded-md p-2.5">
+                    <div className="text-[11.5px] font-semibold mb-1.5">¿Confirmas que las {ex.excessQty} un. ya están físicamente en bodega y se pueden sumar al Kardex?</div>
+                    <div className="flex items-center gap-2">
+                      <button type="button" disabled={busy} className="rounded border border-teal bg-teal px-3 py-1.5 text-[11.5px] font-bold text-navy cursor-pointer disabled:opacity-60" onClick={() => receiveExcessKardex(ex.id)}>
+                        Sí, ingresar al Kardex
+                      </button>
+                      <button type="button" className="text-steel text-[11.5px] cursor-pointer" onClick={() => setExcessReceiveId(null)}>Cancelar</button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={!canApprove || busy}
+                    title={!canApprove ? "Exclusivo del líder de Inventario" : undefined}
+                    className="rounded border border-teal bg-teal px-3.5 py-1.5 text-[12px] font-bold text-navy cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                    onClick={() => setExcessReceiveId(ex.id)}
+                  >
+                    Confirmar ingreso del excedente al Kardex
+                  </button>
+                )}
+              </div>
+            ))}
           </div>
         </div>
       )}

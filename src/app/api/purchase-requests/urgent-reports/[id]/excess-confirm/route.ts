@@ -4,14 +4,16 @@ import { canActOnPurchaseApproval, getInventoryLeadId } from "@/lib/guards";
 import { notifyOwner } from "@/lib/notifications";
 import { auth } from "@/auth";
 
-// Confirmado 2026-09-17: pedido explícito del usuario — confirmación FINAL
-// de que el excedente (llegó más de lo pedido) es real, exclusiva de Bryan
-// (mismo criterio que canActOnPurchaseApproval en el resto de Compras — ni
-// siquiera admin). Requiere que Jariel ya haya dejado constancia de la
-// gestión con el proveedor (ver excess-gestion/route.ts). Solo después de
-// esto, "Confirmar que llegó" puede incluir el excedente (ver
-// receipt/route.ts y goodQuantity() en PurchaseReceivingPanel.tsx) — recién
-// ahí el Kardex de INVESTOCK suma esas unidades.
+// Confirmado 2026-09-17 (ajustado 2026-09-18): pedido explícito del usuario
+// — confirmación FINAL de que el excedente (llegó más de lo pedido) es
+// real, exclusiva de Bryan (mismo criterio que canActOnPurchaseApproval en
+// el resto de Compras — ni siquiera admin). Requiere que Jariel ya haya
+// dejado constancia de la gestión con el proveedor (ver
+// excess-gestion/route.ts). Ajuste 2026-09-18: esto ya NO afecta "Confirmar
+// que llegó" (eso sigue siendo solo lo pedido bueno, para no bloquear esa
+// recepción esperando al proveedor) — habilita una entrada SEPARADA al
+// Kardex que Daniel dispara aparte (ver excess-receive/route.ts), sin
+// importar si la recepción normal ya se cerró antes o no.
 export async function POST(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!(await canActOnPurchaseApproval()) || !session) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
@@ -34,8 +36,8 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   const leadId = await getInventoryLeadId();
   if (leadId) {
     await notifyOwner(leadId, {
-      title: "✅ Excedente confirmado — ya se puede recibir",
-      body: `${existing.request.catalogItem.name} — las ${existing.excessQty} un. de más ya están confirmadas, tu equipo ya puede usar 'Confirmar que llegó' con el total.`,
+      title: "✅ Excedente confirmado — pendiente de ingresar al Kardex",
+      body: `${existing.request.catalogItem.name} — las ${existing.excessQty} un. de más ya están confirmadas, ya puedes ingresarlas al Kardex.`,
       url: "/area/workspace?tab=compras&ptab=inventario",
     }).catch(() => null);
   }
