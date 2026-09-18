@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
-import { canActOnPurchaseReceiving, getPurchaseGestionManagerId } from "@/lib/guards";
+import { canActOnPurchaseReceiving } from "@/lib/guards";
 import { notifyOwner } from "@/lib/notifications";
 import { isWithinCreditClaimWindow } from "@/lib/purchaseUrgent";
 
@@ -73,20 +73,19 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     )
   );
 
-  // Confirmado 2026-09-17: pedido explícito del usuario — cuando el reporte
-  // incluye excedente (llegó más de lo pedido, ver excessQty en
-  // [id]/urgent-report/route.ts), Jariel es quien gestiona eso con el
-  // proveedor (verificar factura, preguntarle a CHEN) — recién visible para
-  // él una vez Daniel revisó, mismo criterio que el resto de esta bandeja.
-  if (existing.excessQty > 0) {
-    const gestionId = await getPurchaseGestionManagerId();
-    if (gestionId) {
-      await notifyOwner(gestionId, {
-        title: "📦 Excedente por gestionar con el proveedor",
-        body: `${existing.request.catalogItem.name} — llegaron ${existing.excessQty} un. de más sobre lo pedido.`,
-        url: "/area/workspace?tab=compras&ptab=urgentes",
-      }).catch(() => null);
-    }
+  // Confirmado 2026-09-18: pedido explícito del usuario — el aviso de
+  // gestionar el excedente con el proveedor va a quien de verdad hizo ESA
+  // compra (existing.request.requestedById), no a "quien tenga el flag de
+  // gestión" en general (hoy ese flag lo comparten Jariel y Nairoby — un
+  // findFirst() arbitrario podía avisarle a la persona equivocada, o a
+  // nadie si esa consulta fallaba). Quien la pidió es quien tiene el
+  // contexto real con el proveedor de esa compra puntual.
+  if (existing.excessQty > 0 && existing.request.requestedById) {
+    await notifyOwner(existing.request.requestedById, {
+      title: "📦 Excedente por gestionar con el proveedor",
+      body: `${existing.request.catalogItem.name} — llegaron ${existing.excessQty} un. de más sobre lo pedido.`,
+      url: "/area/workspace?tab=compras&ptab=urgentes",
+    }).catch(() => null);
   }
 
   return NextResponse.json(updated);
