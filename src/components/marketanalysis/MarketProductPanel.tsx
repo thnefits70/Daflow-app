@@ -233,6 +233,7 @@ type ProposeDraftData = {
   primaryCost: string;
   primaryUnits: string;
   primaryFreight: string;
+  primaryNoFreight: boolean;
 };
 function isProposeDraftEmpty(d: ProposeDraftData) {
   return (
@@ -271,6 +272,7 @@ function ProposeForm() {
   const [primaryCost, setPrimaryCost] = useState("");
   const [primaryUnits, setPrimaryUnits] = useState("100");
   const [primaryFreight, setPrimaryFreight] = useState("");
+  const [primaryNoFreight, setPrimaryNoFreight] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [ok, setOk] = useState("");
@@ -286,7 +288,7 @@ function ProposeForm() {
       competitorId, competitorPrice, competitorBodegaName, competitorProductName,
       noCompetitorData, discoverySourceNote,
       insurance, fulfillment, margin,
-      primarySupplierId, primaryCost, primaryUnits, primaryFreight,
+      primarySupplierId, primaryCost, primaryUnits, primaryFreight, primaryNoFreight,
     },
     (d) => {
       setProductName(d.productName);
@@ -306,6 +308,7 @@ function ProposeForm() {
       setPrimaryCost(d.primaryCost);
       setPrimaryUnits(d.primaryUnits);
       setPrimaryFreight(d.primaryFreight);
+      setPrimaryNoFreight(d.primaryNoFreight);
     },
     isProposeDraftEmpty,
     "Producto sin terminar de proponer",
@@ -342,6 +345,10 @@ function ProposeForm() {
       setErr("Completa nombre, imagen, y el proveedor obligatorio con su costo y unidades.");
       return;
     }
+    if (!primaryNoFreight && !primaryFreight.trim()) {
+      setErr("Falta el flete del proveedor. Ponlo, o marca \"Este proveedor no cobra flete\" si de verdad no aplica.");
+      return;
+    }
     setBusy(true);
     const res = await fetch("/api/market-products", {
       method: "POST",
@@ -360,7 +367,7 @@ function ProposeForm() {
         insuranceRatePercent: Number(insurance),
         fulfillmentCost: Number(fulfillment),
         marginPercent: Number(margin),
-        primarySupplierPrice: { supplierId: primarySupplierId, batchCost: Number(primaryCost), batchUnits: Number(primaryUnits), freightCost: primaryFreight ? Number(primaryFreight) : undefined },
+        primarySupplierPrice: { supplierId: primarySupplierId, batchCost: Number(primaryCost), batchUnits: Number(primaryUnits), freightCost: primaryNoFreight ? 0 : Number(primaryFreight) },
       }),
     });
     setBusy(false);
@@ -368,7 +375,7 @@ function ProposeForm() {
     setOk("Propuesta enviada a Bryan para aprobación.");
     setProductName(""); setDescription(""); setImageUrl(""); setCompetitorId(""); setCompetitorPrice(""); setCompetitorBodegaName(""); setCompetitorProductName("");
     setNoCompetitorData(false); setDiscoverySourceNote("");
-    setPrimarySupplierId(""); setPrimaryCost(""); setPrimaryUnits("100"); setPrimaryFreight("");
+    setPrimarySupplierId(""); setPrimaryCost(""); setPrimaryUnits("100"); setPrimaryFreight(""); setPrimaryNoFreight(false);
     clearProposeDraft();
   }
 
@@ -487,8 +494,20 @@ function ProposeForm() {
         <div className="grid grid-cols-3 gap-2">
           <input className="rounded border border-rule px-2.5 py-1.5 text-[13px]" placeholder="Costo unitario (USD)" type="number" step="0.01" value={primaryCost} onChange={(e) => setPrimaryCost(e.target.value)} />
           <input className="rounded border border-rule px-2.5 py-1.5 text-[13px]" placeholder="Unidades del lote" type="number" value={primaryUnits} onChange={(e) => setPrimaryUnits(e.target.value)} />
-          <input className="rounded border border-rule px-2.5 py-1.5 text-[13px]" placeholder="Flete (si aplica)" type="number" step="0.01" value={primaryFreight} onChange={(e) => setPrimaryFreight(e.target.value)} />
+          <input
+            className="rounded border border-rule px-2.5 py-1.5 text-[13px] disabled:bg-cloud disabled:text-steel"
+            placeholder="Flete del lote (USD)"
+            type="number"
+            step="0.01"
+            value={primaryNoFreight ? "" : primaryFreight}
+            disabled={primaryNoFreight}
+            onChange={(e) => setPrimaryFreight(e.target.value)}
+          />
         </div>
+        <label className="mt-2 flex items-center gap-2 text-[12px] text-steel cursor-pointer">
+          <input type="checkbox" checked={primaryNoFreight} onChange={(e) => setPrimaryNoFreight(e.target.checked)} />
+          Este proveedor no cobra flete
+        </label>
       </div>
 
       <div className="mb-4 bg-surface border border-rule rounded-md p-3">
