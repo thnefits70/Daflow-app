@@ -448,6 +448,8 @@ model User {
   purchaseRequestUrgentReportsRejected           PurchaseRequestUrgentReport[]      @relation("PurchaseRequestUrgentReportRejectedBy")
   purchaseRequestUrgentReportsJustConfirmed      PurchaseRequestUrgentReport[]      @relation("PurchaseRequestUrgentReportJustConfirmedBy")
   purchaseRequestUrgentReportsResolvedInternally PurchaseRequestUrgentReport[]      @relation("PurchaseRequestUrgentReportResolvedInternallyBy")
+  purchaseRequestUrgentReportsExcessGestion      PurchaseRequestUrgentReport[]      @relation("PurchaseRequestUrgentReportExcessGestionBy")
+  purchaseRequestUrgentReportsExcessConfirmed    PurchaseRequestUrgentReport[]      @relation("PurchaseRequestUrgentReportExcessConfirmedBy")
   storeFeedbackEvaluations                       StoreFeedbackEvaluation[]          @relation("StoreFeedbackEvaluatedBy")
   confidentialAccess                             ConfidentialDocumentAccess[]
   monthlyEvaluationsReceived                     MonthlyEvaluation[]
@@ -2800,6 +2802,26 @@ model PurchaseRequestUrgentReport {
   resolvedInternallyNote String?
 
   resolutions PurchaseUrgentResolution[]
+
+  // ---------------- Excedente (llegó más de lo pedido) ----------------
+  // Confirmado 2026-09-17: pedido explícito del usuario — "Informar urgente"
+  // solo sabía manejar que llegara MENOS de lo pedido; detectado con
+  // mercadería de CHEN que llegó de MÁS (240 contadas vs 200 pedidas), sin
+  // forma de dejarlo asentado (el servidor lo bloqueaba, ver urgent-report/
+  // route.ts). excessQty es lo contado de más sobre lo pedido — nunca cuenta
+  // como stock real solo porque Inventario lo contó: Jariel gestiona con el
+  // proveedor (deja nota de lo que averiguó) y Bryan da la confirmación
+  // final que lo habilita (ver urgent-reports/[id]/excess-gestion y
+  // excess-confirm) — solo entonces "Confirmar que llegó" puede incluirlo
+  // (ver receipt/route.ts y goodQuantity() en PurchaseReceivingPanel.tsx).
+  excessQty           Int       @default(0)
+  excessGestionNote   String?
+  excessGestionById   String?
+  excessGestionBy     User?     @relation("PurchaseRequestUrgentReportExcessGestionBy", fields: [excessGestionById], references: [id], onDelete: SetNull)
+  excessGestionAt     DateTime?
+  excessConfirmedById String?
+  excessConfirmedBy   User?     @relation("PurchaseRequestUrgentReportExcessConfirmedBy", fields: [excessConfirmedById], references: [id], onDelete: SetNull)
+  excessConfirmedAt   DateTime?
 
   @@index([requestId])
   @@index([isLateClaim])

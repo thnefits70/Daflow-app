@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, CheckCircle2, Wallet, Upload } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Wallet, Upload, Package } from "lucide-react";
 import { uploadFile } from "@/lib/uploadFile";
 import { compressImage } from "@/lib/compressImage";
 import { actorName } from "@/lib/actorName";
@@ -105,6 +105,16 @@ type Report = {
   withinCreditWindow: boolean;
   creditClaimDeadline: string | null;
   resolutions: Resolution[];
+  // Confirmado 2026-09-17: excedente (llegó más de lo pedido) — separado de
+  // lo dañado/incompleto/diferente/faltante (eso es un reclamo de crédito,
+  // esto es lo opuesto). Jariel gestiona con el proveedor, Bryan confirma —
+  // ver excess-gestion/excess-confirm.
+  excessQty: number;
+  excessGestionNote: string | null;
+  excessGestionBy: { name: string } | null;
+  excessGestionAt: string | null;
+  excessConfirmedBy: { name: string } | null;
+  excessConfirmedAt: string | null;
   request: { quantity: number; unitCost: number; totalCost: number; catalogItem: { name: string; justCode: string | null }; supplier: { id: string; name: string } };
   // Confirmado 2026-08-25: "Reclamo posterior al cierre" — mismo modelo,
   // isLateClaim distingue este camino del "Informar urgente" normal. Ya
@@ -171,9 +181,26 @@ function resolutionLabel(res: Resolution): string {
 // reembolso ni confirmar banco. Así tienen a la vista qué sigue sin resolver
 // y cómo se resolvió cada reclamo de su equipo, sin poder negociar nada
 // ellos mismos — eso se queda exclusivo de quien coordina con el proveedor.
-export function PurchaseUrgentReportsPanel({ isAdmin, canAct }: { isAdmin: boolean; canAct: boolean }) {
+export function PurchaseUrgentReportsPanel({
+  isAdmin,
+  canAct,
+  canManageGestion = false,
+  canConfirmExcess = false,
+}: {
+  isAdmin: boolean;
+  canAct: boolean;
+  // Confirmado 2026-09-17: pedido explícito del usuario — quien gestiona el
+  // excedente con el proveedor (hoy Jariel, canManageOutflowPurchaseGestion)
+  // y quien da la confirmación final (hoy Bryan, canActOnPurchaseApproval)
+  // son roles distintos entre sí y distintos de canAct (que sigue gateando
+  // las resoluciones normales de dañado/incompleto/diferente/faltante).
+  canManageGestion?: boolean;
+  canConfirmExcess?: boolean;
+}) {
   const router = useRouter();
   const [reports, setReports] = useState<Report[] | null>(null);
+  const [excessGestionId, setExcessGestionId] = useState<string | null>(null);
+  const [excessGestionNoteInput, setExcessGestionNoteInput] = useState("");
   const [openReportId, setOpenReportId] = useState<string | null>(null);
   const [resType, setResType] = useState<UiResolutionType>("CREDIT");
   const [resQty, setResQty] = useState("");
@@ -217,6 +244,35 @@ export function PurchaseUrgentReportsPanel({ isAdmin, canAct }: { isAdmin: boole
     fetch("/api/purchase-requests/urgent-reports").then((r) => (r.ok ? r.json() : [])).then(setReports).catch(() => setReports([]));
   }
   useEffect(load, []);
+
+  async function submitExcessGestion(reportId: string) {
+    if (!excessGestionNoteInput.trim()) { setErr("Explica qué averiguaste con el proveedor."); return; }
+    setBusy(true);
+    setErr("");
+    const res = await fetch(`/api/purchase-requests/urgent-reports/${reportId}/excess-gestion`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ note: excessGestionNoteInput.trim() }),
+    });
+    setBusy(false);
+    const data = await res.json().catch(() => null);
+    if (!res.ok) { setErr(data?.error ?? "No se pudo registrar."); return; }
+    setExcessGestionId(null);
+    setExcessGestionNoteInput("");
+    load();
+    router.refresh();
+  }
+
+  async function confirmExcess(reportId: string) {
+    setBusy(true);
+    setErr("");
+    const res = await fetch(`/api/purchase-requests/urgent-reports/${reportId}/excess-confirm`, { method: "POST" });
+    setBusy(false);
+    const data = await res.json().catch(() => null);
+    if (!res.ok) { setErr(data?.error ?? "No se pudo confirmar."); return; }
+    load();
+    router.refresh();
+  }
 
   // Confirmado 2026-09-02 (pedido explícito del usuario): la mayoría de las
   // veces el reclamo entero va por un solo camino (crédito, reembolso,
@@ -330,9 +386,77 @@ export function PurchaseUrgentReportsPanel({ isAdmin, canAct }: { isAdmin: boole
   const openReports = reports.filter((r) => resolvedQty(r.resolutions) < totalReported(r));
   const closedReports = reports.filter((r) => resolvedQty(r.resolutions) >= totalReported(r));
   const pendingCredits = reports.flatMap((r) => r.resolutions.filter((res) => res.credit?.status === "AVAILABLE").map((res) => ({ report: r, res })));
+  // Confirmado 2026-09-17: pendiente de gestión/confirmación del excedente —
+  // independiente de openReports/closedReports (esos clasifican por
+  // resoluciones de dañado/incompleto/diferente/faltante, que un reporte de
+  // solo excedente nunca tiene).
+  const pendingExcess = reports.filter((r) => r.excessQty > 0 && !r.excessConfirmedAt);
 
   return (
     <div className="flex flex-col gap-4">
+      {pendingExcess.length > 0 && (
+        <div className="bg-surface border border-teal/40 rounded-md p-4">
+          <div className="flex items-center gap-1.5 text-[12px] font-bold mb-2 text-teal">
+            <Package size={14} /> Excedente por gestionar ({pendingExcess.length})
+          </div>
+          <div className="flex flex-col gap-2.5">
+            {pendingExcess.map((r) => (
+              <div key={r.id} className="bg-cloud rounded-md p-3 text-[12px]">
+                <div className="flex items-center gap-1.5 font-semibold">
+                  <CatalogCode code={r.request.catalogItem.justCode} />
+                  <span>{r.request.catalogItem.name}</span>
+                </div>
+                <div className="text-steel text-[11.5px] mb-1.5">
+                  {r.request.supplier.name} — se pidieron {r.request.quantity} un., llegaron {r.excessQty} de más · reportado por {actorName(r.reportedBy?.name)} · {formatDateTime(r.reportedAt)}
+                </div>
+
+                {!r.excessGestionAt ? (
+                  canManageGestion ? (
+                    excessGestionId === r.id ? (
+                      <div className="mt-1.5">
+                        <textarea
+                          className="w-full rounded border border-rule px-2.5 py-2 text-[12px] mb-2"
+                          rows={2}
+                          placeholder="¿Qué averiguaste con el proveedor? (factura, guía, respuesta de CHEN...)"
+                          value={excessGestionNoteInput}
+                          onChange={(e) => setExcessGestionNoteInput(e.target.value)}
+                        />
+                        {err && <div className="text-red text-[11.5px] mb-2">{err}</div>}
+                        <div className="flex items-center gap-2">
+                          <button type="button" disabled={busy} className="rounded border border-blue bg-blue px-3 py-1.5 text-[11.5px] font-semibold text-white cursor-pointer disabled:opacity-60" onClick={() => submitExcessGestion(r.id)}>
+                            Guardar gestión
+                          </button>
+                          <button type="button" className="text-steel text-[11.5px] cursor-pointer" onClick={() => { setExcessGestionId(null); setErr(""); }}>Cancelar</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button type="button" className="rounded border border-teal/50 text-teal px-2.5 py-1.5 text-[11px] font-semibold cursor-pointer" onClick={() => { setExcessGestionId(r.id); setExcessGestionNoteInput(""); setErr(""); }}>
+                        Dejar constancia de la gestión con el proveedor
+                      </button>
+                    )
+                  ) : (
+                    <div className="text-steel-dim italic text-[11.5px]">Esperando que Compras gestione esto con el proveedor.</div>
+                  )
+                ) : (
+                  <>
+                    <div className="text-steel text-[11.5px] mb-1.5">
+                      Gestionado por {actorName(r.excessGestionBy?.name)} · {formatDateTime(r.excessGestionAt)} — &quot;{r.excessGestionNote}&quot;
+                    </div>
+                    {canConfirmExcess ? (
+                      <button type="button" disabled={busy} className="rounded border border-green bg-green px-3 py-1.5 text-[11.5px] font-semibold text-white cursor-pointer disabled:opacity-60" onClick={() => confirmExcess(r.id)}>
+                        Confirmar excedente
+                      </button>
+                    ) : (
+                      <div className="text-steel-dim italic text-[11.5px]">Esperando que Bryan confirme el excedente.</div>
+                    )}
+                  </>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {pendingCredits.length > 0 && (
         <div className="bg-surface border border-gold/40 rounded-md p-4">
           <div className="flex items-center gap-1.5 text-[12px] font-bold mb-2" style={{ color: "#D9A441" }}>

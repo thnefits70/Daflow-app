@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
-import { canReceivePurchasesTeam, canActOnPurchaseReceiving, getInventoryLeadId } from "@/lib/guards";
+import { canReceivePurchasesTeam, canActOnPurchaseReceiving, getInventoryLeadId, getPurchaseGestionManagerId } from "@/lib/guards";
 import { notifyOwner } from "@/lib/notifications";
 import { isWithinCreditClaimWindow } from "@/lib/purchaseUrgent";
 
@@ -55,17 +55,23 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // servidor (existing.quantity - countedQty) — Bryan/Joel nunca lo escriben
   // a mano porque no ven existing.quantity. Daniel lo ve y ajusta al aprobar.
   const computedMissingQty = parsed.data.countedQty !== undefined ? Math.max(0, existing.quantity - parsed.data.countedQty) : parsed.data.missingQty;
+  // Confirmado 2026-09-17: pedido explícito del usuario — hasta ahora esto
+  // bloqueaba sin forma de dejarlo asentado cuando lo contado era MAYOR a lo
+  // pedido (detectado con mercadería de CHEN: 240 contadas vs 200 pedidas).
+  // Ya no bloquea — lo de más queda como excedente, separado de lo dañado/
+  // incompleto/diferente/faltante (eso sigue siendo lo contrario: un
+  // reclamo de crédito contra el proveedor). El excedente nunca cuenta como
+  // stock real solo porque Inventario lo contó — Jariel gestiona con CHEN y
+  // Bryan confirma antes de que "Confirmar que llegó" pueda incluirlo (ver
+  // excess-gestion/excess-confirm y receipt/route.ts).
+  const excessQty = parsed.data.countedQty !== undefined ? Math.max(0, parsed.data.countedQty - existing.quantity) : 0;
 
-  if (parsed.data.countedQty !== undefined && parsed.data.countedQty > existing.quantity) {
-    const msg = canSeeAmounts ? `No puede haber contado más de lo pedido (${existing.quantity} un.).` : "La cantidad contada no puede ser mayor a lo pedido — revisa el conteo.";
-    return NextResponse.json({ error: msg }, { status: 400 });
-  }
   if (parsed.data.countedQty !== undefined && flaggedQty > parsed.data.countedQty) {
     return NextResponse.json({ error: "Lo dañado/incompleto/diferente no puede ser más que lo que contaste en total." }, { status: 400 });
   }
 
   const totalAffected = flaggedQty + computedMissingQty;
-  if (totalAffected <= 0) {
+  if (totalAffected <= 0 && excessQty <= 0) {
     return NextResponse.json({ error: "Ingresa al menos una cantidad afectada, o ajusta la cantidad contada si no coincide con lo comprado." }, { status: 400 });
   }
   if (totalAffected > existing.quantity) {
@@ -80,6 +86,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       missingQty: computedMissingQty,
       incompleteQty: parsed.data.incompleteQty,
       differentQty: parsed.data.differentQty,
+      excessQty,
       description: parsed.data.description,
       mediaUrls: parsed.data.mediaUrls,
       reportedById: isAdmin ? null : session.user.id,

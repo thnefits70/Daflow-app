@@ -30,14 +30,25 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const existing = await prisma.purchaseRequest.findUnique({
     where: { id },
-    select: { id: true, quantity: true, status: true, receipt: { select: { receivedQuantity: true, originalReceivedQuantity: true } } },
+    select: {
+      id: true,
+      quantity: true,
+      status: true,
+      receipt: { select: { receivedQuantity: true, originalReceivedQuantity: true } },
+      // Confirmado 2026-09-17: si hay excedente ya confirmado (ver
+      // excess-confirm/route.ts), el tope de esta corrección también debe
+      // incluirlo — igual que receipt/route.ts.
+      urgentReports: { select: { excessQty: true, excessConfirmedAt: true } },
+    },
   });
   if (!existing) return NextResponse.json({ error: "No encontrada." }, { status: 404 });
   if (existing.status !== "RECEIVED_PENDING_REVIEW" || !existing.receipt) {
     return NextResponse.json({ error: "Solo se puede corregir mientras está pendiente de aprobación." }, { status: 409 });
   }
-  if (parsed.data.receivedQuantity > existing.quantity) {
-    return NextResponse.json({ error: `No puede ser mayor a lo comprado (${existing.quantity} un.).` }, { status: 400 });
+  const confirmedExcessQty = existing.urgentReports.reduce((s, r) => s + (r.excessConfirmedAt ? r.excessQty : 0), 0);
+  const maxQty = existing.quantity + confirmedExcessQty;
+  if (parsed.data.receivedQuantity > maxQty) {
+    return NextResponse.json({ error: `No puede ser mayor a lo comprado (${maxQty} un.).` }, { status: 400 });
   }
 
   const isAdmin = session.user.role === "admin";

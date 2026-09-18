@@ -74,6 +74,8 @@ type Row = {
     incompleteQty: number;
     differentQty: number;
     missingQty: number;
+    excessQty: number;
+    excessConfirmedAt: string | null;
     description: string;
     reportedAt: string;
     reportedBy: { name: string } | null;
@@ -91,6 +93,7 @@ type PendingUrgentReport = {
   incompleteQty: number;
   differentQty: number;
   missingQty: number;
+  excessQty: number;
   description: string;
   mediaUrls: string[];
   reportedAt: string;
@@ -206,7 +209,12 @@ function isVideoUrl(url: string) {
 // de lo que sí llegó bien.
 function goodQuantity(r: Row): number {
   const affected = r.urgentReports.reduce((s, rep) => s + rep.damagedQty + rep.incompleteQty + rep.differentQty + rep.missingQty, 0);
-  return r.quantity - affected;
+  // Confirmado 2026-09-17: excedente confirmado (llegó más de lo pedido, ya
+  // gestionado con el proveedor y confirmado por Bryan — ver excessConfirmedAt
+  // en excess-confirm/route.ts) suma a lo que se puede confirmar acá, mismo
+  // criterio que expectedQuantity en receipt/route.ts.
+  const confirmedExcess = r.urgentReports.reduce((s, rep) => s + (rep.excessConfirmedAt ? rep.excessQty : 0), 0);
+  return r.quantity - affected + confirmedExcess;
 }
 
 const CREDIT_CLAIM_WINDOW_DAYS = 7;
@@ -854,6 +862,11 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                     {pr.request.supplier.name} — se pidieron {pr.request.quantity} un., contó {countedQty} · reportado por {actorName(pr.reportedBy?.name)} · {formatDateTime(pr.reportedAt)}
                   </div>
                   {parts.length > 0 && <div className="text-[11.5px] text-steel mb-2">{parts.join(" · ")}</div>}
+                  {pr.excessQty > 0 && (
+                    <div className="text-[11.5px] text-teal mb-2">
+                      + {pr.excessQty} de más (excedente) — pendiente de que Compras lo gestione con el proveedor.
+                    </div>
+                  )}
                   <div className="text-[11.5px] text-ink mb-2">&quot;{pr.description}&quot;</div>
                   <div className="grid grid-cols-4 gap-2 mb-2.5">
                     {pr.mediaUrls.map((url, i) =>

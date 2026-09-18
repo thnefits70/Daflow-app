@@ -42,6 +42,8 @@ export async function GET(_req: NextRequest) {
     orderBy: { reportedAt: "desc" },
     include: {
       reportedBy: { select: { name: true } },
+      excessGestionBy: { select: { name: true } },
+      excessConfirmedBy: { select: { name: true } },
       resolutions: {
         orderBy: { createdAt: "asc" },
         include: {

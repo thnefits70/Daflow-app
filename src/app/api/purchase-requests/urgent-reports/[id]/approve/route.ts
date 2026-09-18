@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
-import { canActOnPurchaseReceiving } from "@/lib/guards";
+import { canActOnPurchaseReceiving, getPurchaseGestionManagerId } from "@/lib/guards";
 import { notifyOwner } from "@/lib/notifications";
 import { isWithinCreditClaimWindow } from "@/lib/purchaseUrgent";
 
@@ -72,6 +72,22 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       }).catch(() => null)
     )
   );
+
+  // Confirmado 2026-09-17: pedido explícito del usuario — cuando el reporte
+  // incluye excedente (llegó más de lo pedido, ver excessQty en
+  // [id]/urgent-report/route.ts), Jariel es quien gestiona eso con el
+  // proveedor (verificar factura, preguntarle a CHEN) — recién visible para
+  // él una vez Daniel revisó, mismo criterio que el resto de esta bandeja.
+  if (existing.excessQty > 0) {
+    const gestionId = await getPurchaseGestionManagerId();
+    if (gestionId) {
+      await notifyOwner(gestionId, {
+        title: "📦 Excedente por gestionar con el proveedor",
+        body: `${existing.request.catalogItem.name} — llegaron ${existing.excessQty} un. de más sobre lo pedido.`,
+        url: "/area/workspace?tab=compras&ptab=urgentes",
+      }).catch(() => null);
+    }
+  }
 
   return NextResponse.json(updated);
 }

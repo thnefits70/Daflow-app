@@ -563,6 +563,7 @@ export function DeptWorkspaceTabs({
           canInvoice={canInvoicePurchases}
           canPayMerchandise={canPayMerchandisePurchases}
           canManageSupplierDebt={canManageSupplierDebtPayments}
+          canManageGestion={canManagePurchaseGestion}
           isAdmin={isAdmin}
         />
       )}

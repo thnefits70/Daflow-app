@@ -34,6 +34,7 @@ export function PurchaseControlPanel({
   canInvoice,
   canPayMerchandise,
   canManageSupplierDebt,
+  canManageGestion,
   isAdmin,
 }: {
   deptId: string;
@@ -69,6 +70,12 @@ export function PurchaseControlPanel({
   // proveedor de crédito (hoy solo CHEN), a diferencia del pago normal de
   // mercadería (canPayMerchandise), que también puede hacer Finanzas.
   canManageSupplierDebt: boolean;
+  // Confirmado 2026-09-17: pedido explícito del usuario — quien gestiona con
+  // el proveedor el excedente de un "Informar urgente" (hoy Jariel, mismo
+  // rol que ya gestiona reclamos de deterioro escalados —
+  // canManageOutflowPurchaseGestion). Distinto de canActOnApproval (Bryan,
+  // quien da la confirmación final).
+  canManageGestion: boolean;
   isAdmin: boolean;
 }) {
   // Confirmado 2026-08-08: esta pestaña va primera de izquierda a derecha
@@ -224,7 +231,7 @@ export function PurchaseControlPanel({
               ? <>Acá resuelves los &quot;informar urgente&quot; que sube Daniel cuando algo llega mal: reparte la cantidad afectada entre crédito, cambio, reembolso o pérdida — nunca a mano, siempre según el costo real de la cotización. El reembolso lo confirma el admin en su banco.</>
               : <>Acá ves en solo lectura el estado de los reclamos de tu equipo con el proveedor: qué sigue sin resolver y cómo se resolvió cada uno (crédito, cambio de mercadería, reembolso o pérdida). Coordinar la solución con el proveedor lo hace Compras, no tú.</>}
           </TabGuide>
-          <PurchaseUrgentReportsPanel isAdmin={isAdmin} canAct={canSubmit || canReview} />
+          <PurchaseUrgentReportsPanel isAdmin={isAdmin} canAct={canSubmit || canReview} canManageGestion={canManageGestion} canConfirmExcess={canActOnApproval} />
         </>
       )}
       {tab === "creditos" && (
