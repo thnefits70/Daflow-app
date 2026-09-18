@@ -38,6 +38,7 @@ type Row = {
   quantity: number;
   unitCost: number;
   totalCost: number;
+  requestedAt: string;
   paidAt: string | null;
   catalogItem: { name: string; photos: string[]; justCode: string | null; hasExpiration: boolean };
   supplier: { name: string; paymentMode?: "PREPAGO" | "CREDITO" };
@@ -1370,7 +1371,7 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
               </div>
             )}
             <div className="text-[10px] text-steel-dim mb-2">
-              Solicitada por {actorName(g[0].requestedBy?.name)}
+              Solicitada por {actorName(g[0].requestedBy?.name)} · {formatDateTime(g[0].requestedAt)}
               {/* Confirmado 2026-09-15, bug real: un pedido de crédito (CHEN) llega
                   acá sin haberse pagado todavía (paidBy null) — actorName cae en el
                   dueño como fallback, así que sin esta condición se mostraría
