@@ -450,6 +450,8 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   plan_mejora_evaluacion_pendiente: "Plan de Mejora — evaluación semanal pendiente",
   plan_mejora_etapa_vencida: "Plan de Mejora — etapa vencida, falta decidir cómo siguió",
   plan_mejora_cierre_aprobacion: "Plan de Mejora — cierre de un líder por aprobar",
+  analisis_mercado_aprobacion: "Análisis de Mercado — propuestas por aprobar",
+  analisis_mercado_listo_comprar: "Análisis de Mercado — productos listos para comprar",
 };
 
 // "colaborador_del_mes" es obligatorio — confirmado 2026-08-05: a diferencia
@@ -1223,6 +1225,54 @@ async function getPurchaseApprovalPendingItem(href: string): Promise<PendingItem
     icon: "✅",
     label: "Solicitudes de compra por aprobar",
     meta: `${groups.length} solicitud${groups.length === 1 ? "" : "es"} · $${total.toFixed(2)}${overdue ? " · atrasado" : ""}`,
+    overdue,
+    href,
+  };
+}
+
+// Confirmado 2026-09-18, pedido de Jariel vía Bryan: contraparte en Inicio
+// del aviso de campanita que se agregó al proponer un producto (ver
+// notifyOwner en api/market-products/route.ts) — para que a Bryan también le
+// quede un acceso directo aunque se le haya pasado el push. Company-wide
+// igual que getPurchaseApprovalPendingItem, mismo criterio (bandeja única de
+// quien aprueba, no hay "approverId" por fila).
+async function getMarketProductReviewPendingItem(href: string): Promise<PendingItem | null> {
+  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const rows = await prisma.marketProductProposal.findMany({
+    where: { status: "PENDING_APPROVAL" },
+    select: { proposedAt: true },
+  });
+  if (rows.length === 0) return null;
+  const overdue = rows.some((r) => r.proposedAt < cutoff);
+
+  return {
+    type: "analisis_mercado_aprobacion",
+    icon: "🏆",
+    label: "Propuestas de productos por aprobar",
+    meta: `${rows.length} propuesta${rows.length === 1 ? "" : "s"}${overdue ? " · atrasado" : ""}`,
+    overdue,
+    href,
+  };
+}
+
+// Confirmado 2026-09-18, mismo pedido: contraparte para Jariel de la vista
+// "Listo para comprar" (view=ready-to-buy en api/market-products/route.ts) —
+// lo que Bryan ya decidió comprar y todavía no tiene ninguna solicitud de
+// compra real generada.
+async function getMarketProductReadyToBuyPendingItem(href: string): Promise<PendingItem | null> {
+  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const rows = await prisma.marketProductProposal.findMany({
+    where: { readyToBuyAt: { not: null }, purchaseRequests: { none: {} } },
+    select: { readyToBuyAt: true },
+  });
+  if (rows.length === 0) return null;
+  const overdue = rows.some((r) => r.readyToBuyAt! < cutoff);
+
+  return {
+    type: "analisis_mercado_listo_comprar",
+    icon: "🛒",
+    label: "Productos listos para comprar",
+    meta: `${rows.length} producto${rows.length === 1 ? "" : "s"}${overdue ? " · atrasado" : ""}`,
     overdue,
     href,
   };
@@ -2864,6 +2914,14 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       if (replacementItem) teamItems.push(replacementItem);
       if (urgentUnresolvedItem) teamItems.push(urgentUnresolvedItem);
     }
+    // Confirmado 2026-09-18, pedido de Jariel: contraparte en Inicio de su
+    // propia bandeja "Listo para comprar" (Análisis de Mercado) — Jariel es
+    // miembro de MKT pero no su líder (Bryan lo es), así que cae acá igual
+    // que el bloque de INV arriba.
+    if (me.department?.code === "MKT") {
+      const marketProductReadyToBuyItem = await getMarketProductReadyToBuyPendingItem("/area/workspace?tab=analisis-mercado");
+      if (marketProductReadyToBuyItem) teamItems.push(marketProductReadyToBuyItem);
+    }
     // Confirmado 2026-09-03: Jariel (transición Bryan→Jariel en Compras) es
     // delegado vía canManagePurchases pero no lidera ningún departamento —
     // mismo criterio de elegibilidad que canSubmitPurchaseRequests
@@ -3000,6 +3058,11 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     if (justWriteOffItem) items.push(justWriteOffItem);
   }
 
+  if (me.leadsDept.code === "MKT") {
+    const marketProductReviewItem = await getMarketProductReviewPendingItem("/area/workspace?tab=analisis-mercado");
+    if (marketProductReviewItem) items.push(marketProductReviewItem);
+  }
+
   const recognitionItem = await getRecognitionLeaderPendingItem(me.leadsDeptId, "/area/colaborador-destacado");
   if (recognitionItem) items.push(recognitionItem);
 
@@ -3081,6 +3144,7 @@ export async function getPossiblePendingTypesForActor(
         canManagePurchases: true,
         canApprovePurchaseRequests: true,
         leadsDept: { select: { code: true, trackWeeklyMetric: true } },
+        department: { select: { code: true } },
       },
     });
     if (!me) return [];
@@ -3093,6 +3157,9 @@ export async function getPossiblePendingTypesForActor(
         types.push("compras_rechazadas", "compras_orden_compra", "compras_transportista", "compras_cuenta_bancaria", "compras_creditos_pendientes", "deterioro_compras_gestion");
       }
       if (me.canApprovePurchaseRequests) types.push("compras_pendientes_aprobacion");
+      // Confirmado 2026-09-18: Jariel es miembro de MKT (canProposeMarketProduct)
+      // pero no su líder — mismo criterio que el resto de este bloque.
+      if (me.department?.code === "MKT") types.push("analisis_mercado_listo_comprar");
       return types.map((type) => ({ type, label: PENDING_TYPE_CATALOG[type] }));
     }
 
@@ -3113,6 +3180,7 @@ export async function getPossiblePendingTypesForActor(
     }
     if (me.canManagePurchases) types.push("deterioro_compras_gestion");
     if (me.canApprovePurchaseRequests) types.push("compras_pendientes_aprobacion");
+    if (me.leadsDept.code === "MKT") types.push("analisis_mercado_aprobacion");
   }
 
   return types.map((type) => ({ type, label: PENDING_TYPE_CATALOG[type] }));
