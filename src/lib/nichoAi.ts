@@ -95,18 +95,44 @@ export async function suggestNichoIfMissing(catalogItemId: string, actorId = "sy
 // falta 1 producto por asignar, así que no hace falta duplicar el aviso.
 export const NICHO_AUTO_MONTHLY_BUDGET_USD = 10;
 
-export async function runNichoAutoBackfill(): Promise<{ processed: number; skippedOverBudget: boolean }> {
-  const now = new Date();
-  const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+// Confirmado 2026-09-18: el 2026-09-02 este backfill disparó 477 llamadas a
+// la IA en simultáneo (todo el catálogo sin nicho de una sola vez), sin
+// límite de concurrencia y revisando el presupuesto solo una vez al inicio.
+// Contribuyó a un pico de CPU en Vercel. Se procesa en lotes chicos y se
+// vuelve a revisar el gasto entre lote y lote, para que una carga masiva
+// futura (ej. importación grande de productos nuevos) no dispare todo de
+// golpe ni se pase del techo de gasto en una sola corrida.
+const NICHO_AUTO_BATCH_SIZE = 5;
+
+async function getNichoSpentThisMonth(monthStart: Date): Promise<number> {
   const spent = await prisma.aiUsageLog.aggregate({
     where: { feature: "combo_sugerencias_nicho", createdAt: { gte: monthStart } },
     _sum: { costUsd: true },
   });
-  if ((spent._sum.costUsd ?? 0) >= NICHO_AUTO_MONTHLY_BUDGET_USD) {
+  return spent._sum.costUsd ?? 0;
+}
+
+export async function runNichoAutoBackfill(): Promise<{ processed: number; skippedOverBudget: boolean }> {
+  const now = new Date();
+  const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+
+  if ((await getNichoSpentThisMonth(monthStart)) >= NICHO_AUTO_MONTHLY_BUDGET_USD) {
     return { processed: 0, skippedOverBudget: true };
   }
 
   const missing = await prisma.purchaseCatalogItem.findMany({ where: { nicho: null }, select: { id: true } });
-  await Promise.allSettled(missing.map((i) => suggestNichoIfMissing(i.id, "cron")));
-  return { processed: missing.length, skippedOverBudget: false };
+
+  let processed = 0;
+  let skippedOverBudget = false;
+  for (let i = 0; i < missing.length; i += NICHO_AUTO_BATCH_SIZE) {
+    if ((await getNichoSpentThisMonth(monthStart)) >= NICHO_AUTO_MONTHLY_BUDGET_USD) {
+      skippedOverBudget = true;
+      break;
+    }
+    const batch = missing.slice(i, i + NICHO_AUTO_BATCH_SIZE);
+    await Promise.allSettled(batch.map((i) => suggestNichoIfMissing(i.id, "cron")));
+    processed += batch.length;
+  }
+
+  return { processed, skippedOverBudget };
 }
