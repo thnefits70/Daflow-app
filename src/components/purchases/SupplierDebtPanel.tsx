@@ -9,7 +9,20 @@ import { useFormDraft, clearFormDraft } from "@/lib/useFormDraft";
 
 type SupplierOption = { id: string; name: string; paymentMode: "PREPAGO" | "CREDITO" };
 
-type PendingItem = { id: string; requestNumber: number | null; productName: string; quantity: number; totalCost: number; requestedAt: string };
+type PendingItem = {
+  id: string;
+  requestNumber: number | null;
+  productName: string;
+  quantity: number;
+  totalCost: number;
+  requestedAt: string;
+  approvedByName: string | null;
+  approvedAt: string | null;
+  reviewedByName: string | null;
+  receivedAt: string | null;
+  buyerDebtConfirmedByName: string | null;
+  buyerDebtConfirmedAt: string | null;
+};
 type InTransitItem = { id: string; requestNumber: number | null; productName: string; quantity: number; totalCost: number; requestedAt: string; statusLabel: string };
 type DisputedItem = {
   id: string;
@@ -467,13 +480,33 @@ export function SupplierDebtPanel() {
             ) : (
               <div className="flex flex-col gap-1.5">
                 {summary.pendingItems.map((i) => (
-                  <label key={i.id} className="flex items-center gap-2.5 bg-surface border border-rule rounded-md px-3 py-2 text-[13px] cursor-pointer">
-                    <input type="checkbox" checked={selected.has(i.id)} onChange={() => toggleSelected(i.id)} />
-                    <span className="flex-1">
-                      {i.productName} × {i.quantity}{" "}
-                      <span className="text-steel">— {formatDateTime(i.requestedAt)}</span>
-                    </span>
-                    <span className="font-semibold tabular-nums">{money(i.totalCost)}</span>
+                  <label key={i.id} className="flex flex-col gap-1.5 bg-surface border border-rule rounded-md px-3 py-2 text-[13px] cursor-pointer">
+                    <div className="flex items-center gap-2.5">
+                      <input type="checkbox" checked={selected.has(i.id)} onChange={() => toggleSelected(i.id)} />
+                      <span className="flex-1">
+                        {i.productName} × {i.quantity}{" "}
+                        <span className="text-steel">— {formatDateTime(i.requestedAt)}</span>
+                      </span>
+                      <span className="font-semibold tabular-nums">{money(i.totalCost)}</span>
+                    </div>
+                    {/* Confirmado 2026-09-18, pedido explícito del usuario: quiere ver
+                        quién firmó cada visto bueno, con fecha y hora exacta, antes de
+                        armar la tanda de pago — sobre todo el de Daniel (llegó a bodega)
+                        y el de Bryan (él sí autorizó esta compra a CHEN). */}
+                    <div className="ml-6 flex flex-col gap-0.5 text-[11.5px] text-steel">
+                      <span>
+                        Compra aprobada por: <span className="font-medium">{i.approvedByName ?? "admin"}</span>
+                        {i.approvedAt && <> — {formatDateTime(i.approvedAt)}</>}
+                      </span>
+                      <span>
+                        Recepción confirmada por (Daniel/Inventario): <span className="font-medium">{i.reviewedByName ?? "admin"}</span>
+                        {i.receivedAt && <> — {formatDateTime(i.receivedAt)}</>}
+                      </span>
+                      <span>
+                        Deuda confirmada por (Bryan): <span className="font-medium">{i.buyerDebtConfirmedByName ?? "admin"}</span>
+                        {i.buyerDebtConfirmedAt && <> — {formatDateTime(i.buyerDebtConfirmedAt)}</>}
+                      </span>
+                    </div>
                   </label>
                 ))}
                 <button

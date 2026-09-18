@@ -81,6 +81,13 @@ export type SupplierDebtPendingItem = {
   // INVESTOCK, ver StockKardexEntry) — esa es la fecha que le importa a
   // CHEN, no cuándo se pidió.
   receivedAt: Date | null;
+  // Confirmado 2026-09-18, pedido explícito del usuario: en el panel interno
+  // (admin) quiere ver, antes de pagar, la fecha/hora exacta y el nombre
+  // completo de cada visto bueno — cuándo se aprobó la compra, y sobre todo
+  // cuándo y quién (Bryan) confirmó que él sí autorizó esta deuda con CHEN.
+  approvedAt: Date | null;
+  buyerDebtConfirmedAt: Date | null;
+  buyerDebtConfirmedByName: string | null;
   // Confirmado 2026-09-17, pedido explícito del usuario: misma foto que ya
   // se muestra en "falta enviar"/"ya despachado" — la última subida al
   // matricular el producto (PurchaseCatalogItem.photos).
@@ -98,6 +105,7 @@ export async function getSupplierDebtPendingItems(supplierId: string): Promise<S
       catalogItem: { select: { name: true, photos: true } },
       reviewedBy: { select: { name: true } },
       receipt: { select: { approvedAt: true, approvedBy: { select: { name: true } } } },
+      buyerDebtConfirmedBy: { select: { name: true } },
     },
     orderBy: { requestedAt: "asc" },
   });
@@ -111,6 +119,9 @@ export async function getSupplierDebtPendingItems(supplierId: string): Promise<S
     approvedByName: r.reviewedBy?.name ?? null,
     reviewedByName: r.receipt?.approvedBy?.name ?? null,
     receivedAt: r.receipt?.approvedAt ?? null,
+    approvedAt: r.reviewedAt,
+    buyerDebtConfirmedAt: r.buyerDebtConfirmedAt,
+    buyerDebtConfirmedByName: r.buyerDebtConfirmedBy?.name ?? null,
     productImageUrl: r.catalogItem.photos.at(-1) ?? null,
   }));
 }
