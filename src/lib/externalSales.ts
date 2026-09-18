@@ -38,7 +38,16 @@ export type PriceExternalSaleItemsResult = { ok: true; items: PricedExternalSale
 // `params.items` — quien lo consuma debe emparejar por posición, nunca por
 // catalogItemId (un mismo producto puede repetirse en dos renglones de la
 // misma venta con márgenes distintos en modo "por producto").
-export async function priceExternalSaleItems(params: { isContraEntrega: boolean; items: PriceExternalSaleItemInput[] }): Promise<PriceExternalSaleItemsResult> {
+//
+// Confirmado 2026-09-18, pedido explícito del usuario: useB2CPricing viene
+// del PERFIL del asesor (User.externalSaleContraEntrega), no del switch
+// "con/sin recaudo" de la venta puntual — ese switch ahora solo decide quién
+// cobra y el orden del flujo (ver ExternalSale.isContraEntrega), nunca la
+// fórmula de precio. Antes ambas cosas compartían el mismo booleano, así que
+// Marcos (100% B2C) veía el precio cambiar de fórmula (y bajar) apenas
+// marcaba "sin recaudo" para una venta ya cobrada — el precio que cotizó con
+// el consultador debe quedar igual sin importar el switch.
+export async function priceExternalSaleItems(params: { useB2CPricing: boolean; items: PriceExternalSaleItemInput[] }): Promise<PriceExternalSaleItemsResult> {
   if (params.items.length === 0) return { ok: false, error: "No hay productos para calcular." };
 
   const byCatalogItemId = await resolveCostBasisForCatalogItems(params.items.map((it) => it.catalogItemId));
@@ -49,7 +58,7 @@ export async function priceExternalSaleItems(params: { isContraEntrega: boolean;
     }
   }
 
-  if (params.isContraEntrega) {
+  if (params.useB2CPricing) {
     const totalQuantity = params.items.reduce((s, it) => s + it.quantity, 0);
     const marginPercent = b2cMarginPercentForQuantity(totalQuantity);
     if (marginPercent == null) {

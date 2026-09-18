@@ -29,7 +29,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const parsed = schema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Datos inválidos." }, { status: 400 });
 
-  const sale = await prisma.externalSale.findUnique({ where: { id }, select: { advisorId: true, reviewStatus: true, code: true, isContraEntrega: true } });
+  const sale = await prisma.externalSale.findUnique({
+    where: { id },
+    select: { advisorId: true, reviewStatus: true, code: true, advisor: { select: { externalSaleContraEntrega: true } } },
+  });
   if (!sale) return NextResponse.json({ error: "No encontrado." }, { status: 404 });
   if (sale.advisorId !== session.user.id && session.user.role !== "admin") return NextResponse.json({ error: "No autorizado." }, { status: 403 });
   if (sale.reviewStatus !== "PENDING") return NextResponse.json({ error: "Esta venta ya no está pendiente de revisión." }, { status: 409 });
@@ -48,7 +51,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (otherItems.some((it) => !it.catalogItemId)) return NextResponse.json({ error: "Uno de los otros productos de la venta no tiene un código de catálogo válido." }, { status: 409 });
 
   const priced = await priceExternalSaleItems({
-    isContraEntrega: sale.isContraEntrega,
+    useB2CPricing: sale.advisor.externalSaleContraEntrega,
     items: [
       { catalogItemId: parsed.data.catalogItemId, quantity: parsed.data.quantity, marginPercent: parsed.data.marginPercent },
       ...otherItems.map((it) => ({ catalogItemId: it.catalogItemId!, quantity: it.quantity, marginPercent: it.marginPercentUsed ?? undefined })),

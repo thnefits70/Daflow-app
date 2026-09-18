@@ -21,7 +21,7 @@ const schema = z.object({
   facturaSolicitada: z.enum(["SI", "NO", "PENDIENTE"]).optional(),
 });
 
-async function resolveItems(items: z.infer<typeof itemSchema>[], isContraEntrega: boolean) {
+async function resolveItems(items: z.infer<typeof itemSchema>[], useB2CPricing: boolean) {
   const catalogItems = await prisma.purchaseCatalogItem.findMany({
     where: { id: { in: items.map((it) => it.catalogItemId) } },
     select: { id: true, name: true },
@@ -31,7 +31,7 @@ async function resolveItems(items: z.infer<typeof itemSchema>[], isContraEntrega
     if (!byId.has(it.catalogItemId)) throw new Error("Uno de los productos no se encontró en el catálogo.");
   }
 
-  const priced = await priceExternalSaleItems({ isContraEntrega, items });
+  const priced = await priceExternalSaleItems({ useB2CPricing, items });
   if (!priced.ok) throw new Error(priced.error);
 
   return items.map((it, i) => {
@@ -67,7 +67,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const parsed = schema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Datos inválidos." }, { status: 400 });
 
-  const sale = await prisma.externalSale.findUnique({ where: { id }, select: { advisorId: true, reviewStatus: true, code: true, deletedAt: true, isContraEntrega: true } });
+  const sale = await prisma.externalSale.findUnique({
+    where: { id },
+    select: { advisorId: true, reviewStatus: true, code: true, deletedAt: true, isContraEntrega: true, advisor: { select: { externalSaleContraEntrega: true } } },
+  });
   if (!sale) return NextResponse.json({ error: "No encontrado." }, { status: 404 });
   if (sale.advisorId !== session.user.id && session.user.role !== "admin") return NextResponse.json({ error: "No autorizado." }, { status: 403 });
   if (sale.deletedAt) return NextResponse.json({ error: "Esta venta ya fue cancelada." }, { status: 409 });
@@ -78,9 +81,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const client = await prisma.client.findUnique({ where: { id: parsed.data.clientId }, select: { id: true } });
   if (!client) return NextResponse.json({ error: "Cliente no encontrado." }, { status: 404 });
 
+  // La fórmula de precio depende del perfil del asesor (B2C para Marcos),
+  // no del isContraEntrega guardado en esta venta puntual — ver comentario
+  // en priceExternalSaleItems.
   let resolvedItems;
   try {
-    resolvedItems = await resolveItems(parsed.data.items, sale.isContraEntrega);
+    resolvedItems = await resolveItems(parsed.data.items, sale.advisor.externalSaleContraEntrega);
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : "No se pudo calcular el precio." }, { status: 400 });
   }

@@ -115,11 +115,17 @@ function isValidFreightCost(v: string) {
 // calcule el propio navegador) cada vez que cambian los productos,
 // cantidades o el margen elegido — con un pequeño debounce para no
 // disparar una llamada por cada tecla.
-function usePricePreview(isContraEntrega: boolean | null, items: DraftItem[]) {
+//
+// Confirmado 2026-09-18, pedido explícito del usuario: useB2CPricing viene
+// del perfil del asesor (canOverrideRecaudo), no del switch "con/sin
+// recaudo" de la venta puntual — el servidor ya calcula el precio así (ver
+// priceExternalSaleItems), esto solo mantiene la vista previa en sincro. El
+// switch con/sin recaudo sigue existiendo, pero ya no cambia el precio.
+function usePricePreview(useB2CPricing: boolean | null, items: DraftItem[]) {
   const [preview, setPreview] = useState<PreviewRow[] | null>(null);
   const [error, setError] = useState("");
 
-  const itemsReady = isContraEntrega !== null && items.length > 0 && items.every((it) => isValidQty(it.quantity));
+  const itemsReady = useB2CPricing !== null && items.length > 0 && items.every((it) => isValidQty(it.quantity));
 
   useEffect(() => {
     let cancelled = false;
@@ -134,8 +140,7 @@ function usePricePreview(isContraEntrega: boolean | null, items: DraftItem[]) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          items: items.map((it) => ({ catalogItemId: it.product.id, quantity: Number(it.quantity), marginPercent: isContraEntrega ? undefined : it.marginPercent })),
-          isContraEntrega: isContraEntrega ?? undefined,
+          items: items.map((it) => ({ catalogItemId: it.product.id, quantity: Number(it.quantity), marginPercent: useB2CPricing ? undefined : it.marginPercent })),
         }),
       })
         .then(async (r) => {
@@ -160,7 +165,7 @@ function usePricePreview(isContraEntrega: boolean | null, items: DraftItem[]) {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [isContraEntrega, items, itemsReady]);
+  }, [useB2CPricing, items, itemsReady]);
 
   return { preview, error };
 }
@@ -202,21 +207,21 @@ function JustCostSourceNote() {
 function QtyMarginFields({
   qty,
   onQtyChange,
-  isContraEntrega,
+  useB2CPricing,
   marginMode,
   marginPercent,
   onMarginChange,
 }: {
   qty: string;
   onQtyChange: (v: string) => void;
-  isContraEntrega: boolean;
+  useB2CPricing: boolean;
   marginMode: "same" | "per-item";
   marginPercent: number;
   onMarginChange: (v: number) => void;
 }) {
   const qtyNum = Number(qty);
   const qtyHasDecimal = qty.trim() !== "" && !Number.isNaN(qtyNum) && !Number.isInteger(qtyNum);
-  const showMarginSelect = !isContraEntrega && marginMode === "per-item";
+  const showMarginSelect = !useB2CPricing && marginMode === "per-item";
 
   return (
     <div className="flex gap-2.5 mb-2">
@@ -267,7 +272,7 @@ function FixItemForm({
   onQtyChange,
   marginPercent,
   onMarginChange,
-  isContraEntrega,
+  useB2CPricing,
   error,
   saving,
   onCancel,
@@ -279,7 +284,7 @@ function FixItemForm({
   onQtyChange: (v: string) => void;
   marginPercent: number;
   onMarginChange: (v: number) => void;
-  isContraEntrega: boolean;
+  useB2CPricing: boolean;
   error: string;
   saving: boolean;
   onCancel: () => void;
@@ -287,7 +292,7 @@ function FixItemForm({
   onSave: () => void;
 }) {
   const draftItems: DraftItem[] = isValidQty(qty) ? [{ product, quantity: qty, marginPercent }] : [];
-  const { preview, error: previewError } = usePricePreview(isContraEntrega, draftItems);
+  const { preview, error: previewError } = usePricePreview(useB2CPricing, draftItems);
   const previewReady = !!preview && preview.length === 1;
 
   return (
@@ -303,7 +308,7 @@ function FixItemForm({
         </div>
         <button type="button" className="shrink-0 text-[11px] font-semibold text-blue cursor-pointer" onClick={onChangeProduct}>Cambiar</button>
       </div>
-      <QtyMarginFields qty={qty} onQtyChange={onQtyChange} isContraEntrega={isContraEntrega} marginMode="per-item" marginPercent={marginPercent} onMarginChange={onMarginChange} />
+      <QtyMarginFields qty={qty} onQtyChange={onQtyChange} useB2CPricing={useB2CPricing} marginMode="per-item" marginPercent={marginPercent} onMarginChange={onMarginChange} />
       {draftItems.length > 0 && (
         <div className="text-[12px] mb-2">
           {previewReady ? (
@@ -501,12 +506,12 @@ function ItemsEditor({
   items,
   onChange,
   searchUrl,
-  isContraEntrega,
+  useB2CPricing,
 }: {
   items: DraftItem[];
   onChange: (items: DraftItem[]) => void;
   searchUrl: string;
-  isContraEntrega: boolean | null;
+  useB2CPricing: boolean;
 }) {
   const [picking, setPicking] = useState(items.length === 0);
   const [draftProduct, setDraftProduct] = useState<MatchCatalogItem | null>(null);
@@ -523,7 +528,7 @@ function ItemsEditor({
 
   const draftValid = !!draftProduct && isValidQty(draftQty);
   const previewItems: DraftItem[] = draftValid ? [...items, { product: draftProduct!, quantity: draftQty, marginPercent: draftMarginPercent }] : items;
-  const { preview, error: previewError } = usePricePreview(isContraEntrega, previewItems);
+  const { preview, error: previewError } = usePricePreview(useB2CPricing, previewItems);
   const previewReady = !!preview && preview.length === previewItems.length;
 
   // Modo "mismo % para toda la venta": cambiar el selector aplica ese
@@ -574,7 +579,7 @@ function ItemsEditor({
 
   return (
     <div className="flex flex-col gap-2.5">
-      {isContraEntrega === false && (
+      {!useB2CPricing && (
         <div className="flex items-center gap-3 text-[11px] font-semibold">
           <label className="flex items-center gap-1 cursor-pointer">
             <input type="radio" checked={marginMode === "same"} onChange={switchToSameMode} /> Mismo % para toda la venta
@@ -621,7 +626,7 @@ function ItemsEditor({
                     value={it.quantity}
                     onChange={(e) => updateQty(i, e.target.value)}
                   />
-                  {isContraEntrega === false && marginMode === "per-item" && (
+                  {!useB2CPricing && marginMode === "per-item" && (
                     <select className="rounded border border-teal/30 bg-teal/5 px-1.5 py-0.5 text-[11.5px] font-bold" value={it.marginPercent} onChange={(e) => updateMargin(i, Number(e.target.value))}>
                       {B2B_MARGIN_OPTIONS.map((m) => (
                         <option key={m} value={m}>
@@ -667,7 +672,7 @@ function ItemsEditor({
             <QtyMarginFields
               qty={draftQty}
               onQtyChange={setDraftQty}
-              isContraEntrega={isContraEntrega ?? false}
+              useB2CPricing={useB2CPricing}
               marginMode={marginMode}
               marginPercent={draftMarginPercent}
               onMarginChange={setDraftMarginPercent}
@@ -749,14 +754,14 @@ function ItemsEditor({
 // tener que matricular un cliente primero — para cuando alguien le
 // pregunta el precio antes de decidirse a comprar. Nunca declara nada,
 // solo consulta el mismo cálculo que usa ItemsEditor (usePricePreview).
-function PriceCheckPanel({ searchUrl, isContraEntrega }: { searchUrl: string; isContraEntrega: boolean | null }) {
+function PriceCheckPanel({ searchUrl, useB2CPricing }: { searchUrl: string; useB2CPricing: boolean }) {
   const [open, setOpen] = useState(false);
   const [product, setProduct] = useState<MatchCatalogItem | null>(null);
   const [qty, setQty] = useState("1");
   const [marginPercent, setMarginPercent] = useState(B2B_MARGIN_DEFAULT);
 
   const checkItems: DraftItem[] = product && isValidQty(qty) ? [{ product, quantity: qty, marginPercent }] : [];
-  const { preview, error } = usePricePreview(isContraEntrega, checkItems);
+  const { preview, error } = usePricePreview(useB2CPricing, checkItems);
   const previewReady = !!preview && preview.length === checkItems.length && checkItems.length > 0;
 
   function reset() {
@@ -790,7 +795,7 @@ function PriceCheckPanel({ searchUrl, isContraEntrega }: { searchUrl: string; is
               <QtyMarginFields
                 qty={qty}
                 onQtyChange={setQty}
-                isContraEntrega={isContraEntrega ?? false}
+                useB2CPricing={useB2CPricing}
                 marginMode="per-item"
                 marginPercent={marginPercent}
                 onMarginChange={setMarginPercent}
@@ -804,7 +809,7 @@ function PriceCheckPanel({ searchUrl, isContraEntrega }: { searchUrl: string; is
                           etiqueta, el precio se veía igual sin importar el canal —
                           quería que quedara claro de un vistazo si lo que ve es B2B o
                           B2C, sin tener que deducirlo del % de ganancia. */}
-                      <span className="font-bold uppercase text-[10.5px] tracking-wide text-blue">{isContraEntrega ? "B2C" : "B2B"}</span>{" "}
+                      <span className="font-bold uppercase text-[10.5px] tracking-wide text-blue">{useB2CPricing ? "B2C" : "B2B"}</span>{" "}
                       Precio: <span className="font-bold text-teal">${preview![0].unitPrice.toFixed(2)}</span>{" "}
                       <span className="text-steel">({preview![0].marginPercentUsed}% de ganancia) · Total {qty} un.: </span>
                       <span className="font-bold text-ink">${(Number(qty) * preview![0].unitPrice).toFixed(2)}</span>
@@ -1079,7 +1084,7 @@ export function ExternalSaleDeclareForm() {
 
   return (
     <div className="flex flex-col gap-6 max-w-lg">
-      <PriceCheckPanel searchUrl="/api/external-sales/catalog-search" isContraEntrega={isContraEntrega} />
+      <PriceCheckPanel searchUrl="/api/external-sales/catalog-search" useB2CPricing={canOverrideRecaudo} />
 
       <div className="bg-surface border border-rule rounded-md p-3.5 flex flex-col gap-3">
         <div className="font-display font-bold text-[14px]">Declarar venta</div>
@@ -1107,7 +1112,7 @@ export function ExternalSaleDeclareForm() {
               </button>
             </div>
             <div className="text-[10.5px] text-steel mt-0.5">
-              Con recaudo: el motorizado cobra al cliente al entregar (precio de consumidor). Sin recaudo: el cliente ya pagó (tú eliges el margen y la factura es obligatoria).
+              Con recaudo: el motorizado cobra al cliente al entregar. Sin recaudo: el cliente ya pagó. El precio es el mismo en ambos casos — este switch no lo cambia.
             </div>
           </div>
         )}
@@ -1117,7 +1122,7 @@ export function ExternalSaleDeclareForm() {
           <>
             <div>
               <label className="block mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-steel">Productos</label>
-              <ItemsEditor items={items} onChange={setItems} searchUrl="/api/external-sales/catalog-search" isContraEntrega={isContraEntrega} />
+              <ItemsEditor items={items} onChange={setItems} searchUrl="/api/external-sales/catalog-search" useB2CPricing={canOverrideRecaudo} />
             </div>
             <div>
               <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">A quién debe entregarle bodega (motorizado o cliente)</label>
@@ -1207,7 +1212,7 @@ export function ExternalSaleDeclareForm() {
                                   onQtyChange={setFixQty}
                                   marginPercent={fixMarginPercent}
                                   onMarginChange={setFixMarginPercent}
-                                  isContraEntrega={isContraEntrega ?? false}
+                                  useB2CPricing={canOverrideRecaudo}
                                   error={fixError}
                                   saving={fixSaving}
                                   onCancel={() => setFixingItem(null)}
@@ -1329,7 +1334,7 @@ export function ExternalSaleDeclareForm() {
                       </div>
                       <div>
                         <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Productos</label>
-                        <ItemsEditor items={editItems} onChange={setEditItems} searchUrl="/api/external-sales/catalog-search" isContraEntrega={isContraEntrega} />
+                        <ItemsEditor items={editItems} onChange={setEditItems} searchUrl="/api/external-sales/catalog-search" useB2CPricing={canOverrideRecaudo} />
                       </div>
                       <div>
                         <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">A quién debe entregarle bodega</label>

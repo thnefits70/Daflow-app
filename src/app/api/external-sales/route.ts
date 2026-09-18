@@ -56,7 +56,7 @@ const schema = z.object({
 // (nunca se confía en un precio que mande el navegador — ver
 // priceExternalSaleItems en lib/externalSales.ts) y arma los datos listos
 // para prisma.externalSaleItem.create.
-async function resolveItems(items: z.infer<typeof itemSchema>[], isContraEntrega: boolean) {
+async function resolveItems(items: z.infer<typeof itemSchema>[], useB2CPricing: boolean) {
   const catalogItems = await prisma.purchaseCatalogItem.findMany({
     where: { id: { in: items.map((it) => it.catalogItemId) } },
     select: { id: true, name: true },
@@ -66,7 +66,7 @@ async function resolveItems(items: z.infer<typeof itemSchema>[], isContraEntrega
     if (!byId.has(it.catalogItemId)) throw new Error("Uno de los productos no se encontró en el catálogo.");
   }
 
-  const priced = await priceExternalSaleItems({ isContraEntrega, items });
+  const priced = await priceExternalSaleItems({ useB2CPricing, items });
   if (!priced.ok) throw new Error(priced.error);
 
   return items.map((it, i) => {
@@ -114,7 +114,7 @@ export async function POST(req: NextRequest) {
 
   let resolvedItems;
   try {
-    resolvedItems = await resolveItems(parsed.data.items, isContraEntrega);
+    resolvedItems = await resolveItems(parsed.data.items, canOverrideRecaudo);
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : "No se pudo calcular el precio." }, { status: 400 });
   }
