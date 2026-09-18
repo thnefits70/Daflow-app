@@ -17,6 +17,12 @@ const SALE_INCLUDE = {
   packAssignedTo: { select: { name: true } },
   deliveredBy: { select: { name: true } },
   client: true,
+  // Confirmado 2026-09-18, pedido explícito del usuario: Jariel/Nairoby
+  // pagan el flete del motorizado desde Caja Chica, pero no tienen contacto
+  // con él — es el asesor quien se lo reenvía. El asesor necesita poder ver
+  // y descargar el comprobante de ESE pago desde su propia venta, sin tener
+  // que pedírselo a quien pagó.
+  freightPettyCashEntries: { select: { proofUrl: true, amount: true, createdAt: true } },
 } as const;
 
 const itemSchema = z.object({

@@ -11,6 +11,7 @@ import { usePasteFile } from "@/lib/usePasteFile";
 import { useFormDraft } from "@/lib/useFormDraft";
 import { formatDateTime } from "@/lib/formatDateTime";
 import { CatalogCode } from "@/components/shared/CatalogCode";
+import { ProofPreview } from "@/components/shared/ProofPreview";
 import { saleSteps, TimelineSteps } from "@/components/external-sales/SaleTimeline";
 import { B2B_MARGIN_OPTIONS, B2B_MARGIN_DEFAULT } from "@/lib/externalSalesPricingConstants";
 
@@ -36,6 +37,8 @@ type SaleDTO = {
   pickupPersonName: string;
   courierNote: string | null;
   freightCost: number | null;
+  freightPaidAt: string | null;
+  freightPettyCashEntries: { proofUrl: string | null; amount: number; createdAt: string }[];
   client: ClientDTO | null;
   isContraEntrega: boolean;
   facturaSolicitada: "SI" | "NO" | "PENDIENTE";
@@ -1273,6 +1276,23 @@ export function ExternalSaleDeclareForm() {
                     <div className="text-[10.5px] text-steel mt-0.5">
                       Monto a transferir: <span className="font-semibold text-ink">${s.totalAmount.toFixed(2)}</span> (sin recaudo) · el flete (${s.freightCost.toFixed(2)}) se le paga aparte al motorizado, desde Caja Chica
                     </div>
+                  )}
+                  {/* Confirmado 2026-09-18, pedido explícito del usuario:
+                      Jariel/Nairoby pagan el flete desde Caja Chica pero no
+                      tienen contacto con el motorizado — el asesor sí, así
+                      que acá puede descargar el comprobante de ESE pago (no
+                      el del cliente) para reenviárselo él mismo. */}
+                  {!s.isContraEntrega && s.freightPaidAt && s.freightPettyCashEntries[0]?.proofUrl && (
+                    <div className="mt-1.5">
+                      <div className="text-[10.5px] font-semibold text-teal">
+                        ✓ Flete pagado al motorizado · {formatDateTime(s.freightPaidAt)}
+                      </div>
+                      <div className="text-[10px] text-steel mb-1">Descarga este comprobante y reenvíaselo al motorizado.</div>
+                      <ProofPreview url={s.freightPettyCashEntries[0].proofUrl} size={40} />
+                    </div>
+                  )}
+                  {!s.isContraEntrega && s.freightCost != null && !s.freightPaidAt && (
+                    <div className="text-[10px] text-gold mt-0.5">Flete todavía no pagado al motorizado.</div>
                   )}
                   <div className="text-[10.5px] text-steel mt-0.5">Entrega a: {s.pickupPersonName}{s.courierNote ? ` · Transportadora: ${s.courierNote}` : ""}</div>
                   {s.client && (
