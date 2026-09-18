@@ -20,6 +20,7 @@ type SaleDTO = {
   code: string;
   items: SaleItemDTO[];
   totalAmount: number;
+  isContraEntrega: boolean;
   freightCost: number | null;
   paymentProofUrl: string;
   paymentProofName: string | null;
@@ -97,9 +98,21 @@ export function ExternalSalePaymentConfirmInbox() {
             ))}
           </div>
           <div className="text-[12px] font-bold mb-1.5">Total: ${s.totalAmount.toFixed(2)}</div>
-          {s.freightCost != null && (
+          {/* Confirmado 2026-09-18, pedido explícito del usuario: con
+              recaudo el motorizado cobra el total al cliente y se queda el
+              flete él mismo, así que a la cuenta solo llega el resto. Sin
+              recaudo el cliente transfiere directo el total completo — nadie
+              descuenta el flete en el camino, así que hay que esperar el
+              total y pagarle el flete al motorizado aparte (ver Caja Chica). */}
+          {s.isContraEntrega && s.freightCost != null && (
             <div className="text-[11px] text-steel mb-1.5">
               Flete: -${s.freightCost.toFixed(2)} · <span className="font-bold text-ink">Monto esperado a transferir: ${(s.totalAmount - s.freightCost).toFixed(2)}</span>
+            </div>
+          )}
+          {!s.isContraEntrega && (
+            <div className="text-[11px] text-steel mb-1.5">
+              <span className="font-bold text-ink">Monto esperado a transferir: ${s.totalAmount.toFixed(2)}</span> (sin recaudo — el cliente paga el total completo)
+              {s.freightCost != null && <> · el flete (${s.freightCost.toFixed(2)}) se le paga al motorizado aparte, desde Caja Chica</>}
             </div>
           )}
           <div className="text-[11px] text-steel mb-1.5">

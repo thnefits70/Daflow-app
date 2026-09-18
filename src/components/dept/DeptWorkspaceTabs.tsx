@@ -653,6 +653,7 @@ export function DeptWorkspaceTabs({
             canFundPrincipal={pettyCashData.canFundPrincipal}
             canFundSecundaria={pettyCashData.canFundSecundaria}
             eligibleOrders={pettyCashData.eligibleOrders}
+            pendingMotorizadoFreights={pettyCashData.pendingMotorizadoFreights}
             isAdmin={isAdmin}
             focusBox={focusBox}
           />

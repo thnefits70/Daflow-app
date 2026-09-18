@@ -16,6 +16,7 @@ const schema = z.object({
   description: z.string().trim().min(1),
   proofUrl: z.string().url().nullable().optional(),
   linkedGroupId: z.string().nullable().optional(),
+  linkedExternalSaleId: z.string().nullable().optional(),
   manualReason: z.string().trim().nullable().optional(),
 });
 
@@ -52,6 +53,22 @@ export async function POST(req: NextRequest) {
         );
       }
     }
+  }
+
+  // Confirmado 2026-09-18: pagar el flete de motorizado de una venta externa
+  // sin recaudo — solo si ya se confirmó que llegó el pago del cliente
+  // (para no adelantar el flete antes de saber si de verdad va a llegar el
+  // dinero) y solo una vez (freightPaidAt null).
+  let externalSale: { id: string; isContraEntrega: boolean; paymentConfirmedAt: Date | null; freightPaidAt: Date | null; deletedAt: Date | null } | null = null;
+  if (d.linkedExternalSaleId) {
+    externalSale = await prisma.externalSale.findUnique({
+      where: { id: d.linkedExternalSaleId },
+      select: { id: true, isContraEntrega: true, paymentConfirmedAt: true, freightPaidAt: true, deletedAt: true },
+    });
+    if (!externalSale || externalSale.deletedAt) return NextResponse.json({ error: "Venta no encontrada." }, { status: 404 });
+    if (externalSale.isContraEntrega) return NextResponse.json({ error: "Esta venta es con recaudo — el motorizado ya se descuenta el flete solo, no hay nada que pagarle aparte." }, { status: 409 });
+    if (!externalSale.paymentConfirmedAt) return NextResponse.json({ error: "Todavía no se confirmó que llegó el pago de esta venta." }, { status: 409 });
+    if (externalSale.freightPaidAt) return NextResponse.json({ error: "El flete de esta venta ya fue pagado." }, { status: 409 });
   }
 
   let proofHash: string | null = null;
@@ -98,7 +115,8 @@ export async function POST(req: NextRequest) {
       aiReadAmount,
       aiMatches,
       linkedGroupId: d.linkedGroupId || null,
-      manualReason: d.linkedGroupId ? null : d.manualReason || null,
+      linkedExternalSaleId: d.linkedExternalSaleId || null,
+      manualReason: d.linkedGroupId || d.linkedExternalSaleId ? null : d.manualReason || null,
       createdById: isAdmin ? null : session.user.id,
       updatedById: isAdmin ? null : session.user.id,
     },
@@ -106,6 +124,13 @@ export async function POST(req: NextRequest) {
 
   if (d.linkedGroupId) {
     await markGroupFreightPaid(d.linkedGroupId, isAdmin ? null : session.user.id, d.proofUrl || null, d.amount);
+  }
+
+  if (externalSale) {
+    await prisma.externalSale.update({
+      where: { id: externalSale.id },
+      data: { freightPaidAt: new Date(), freightPaidById: isAdmin ? null : session.user.id },
+    });
   }
 
   return NextResponse.json({ ok: true, entry });

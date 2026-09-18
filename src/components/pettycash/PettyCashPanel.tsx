@@ -8,7 +8,7 @@ import { uploadFile } from "@/lib/uploadFile";
 import { ProofPreview } from "@/components/shared/ProofPreview";
 import { LiveCameraCapture } from "@/components/shared/LiveCameraCapture";
 import { TabGuide } from "@/components/shared/TabGuide";
-import type { PettyCashBoxDTO, EligiblePaymentOrderDTO } from "@/lib/pettyCash";
+import type { PettyCashBoxDTO, EligiblePaymentOrderDTO, PendingMotorizadoFreightDTO } from "@/lib/pettyCash";
 import { formatDateTime } from "@/lib/formatDateTime";
 import { useFormDraft } from "@/lib/useFormDraft";
 
@@ -170,7 +170,7 @@ function EntryRow({
           </div>
         ) : (
           <div className="text-steel text-[10.5px] mt-0.5">
-            {entry.kind === "DESEMBOLSO" ? (entry.linkedOrderLabel ?? entry.manualReason ?? "Sin vínculo") : "Recarga"}
+            {entry.kind === "DESEMBOLSO" ? (entry.linkedOrderLabel ?? entry.linkedExternalSaleLabel ?? entry.manualReason ?? "Sin vínculo") : "Recarga"}
             {" · "}{formatDateTime(entry.createdAt)} · {entry.createdByName}
             {entry.aiMatches === false && <span className="text-red"> · monto no coincide con la foto</span>}
           </div>
@@ -226,13 +226,14 @@ function EntryRow({
 }
 
 function BoxCard({
-  box, canManage, canFund, showOrderLink, eligibleOrders, isAdmin, highlight = false,
+  box, canManage, canFund, showOrderLink, eligibleOrders, motorizadoFreights, isAdmin, highlight = false,
 }: {
   box: PettyCashBoxDTO;
   canManage: boolean;
   canFund: boolean;
   showOrderLink: boolean;
   eligibleOrders: EligiblePaymentOrderDTO[];
+  motorizadoFreights: PendingMotorizadoFreightDTO[];
   isAdmin: boolean;
   highlight?: boolean;
 }) {
@@ -252,8 +253,9 @@ function BoxCard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [highlight]);
 
-  const [linkMode, setLinkMode] = useState<"orden" | "motivo">("orden");
+  const [linkMode, setLinkMode] = useState<"orden" | "moto" | "motivo">(showOrderLink ? "orden" : "motivo");
   const [groupId, setGroupId] = useState(eligibleOrders[0]?.groupId ?? "");
+  const [saleId, setSaleId] = useState(motorizadoFreights[0]?.saleId ?? "");
   const [reason, setReason] = useState("");
   // Fix confirmado 2026-08-27/28 (caso real de Bryan): antes había que leer
   // el monto del pedido en el desplegable y volver a escribirlo a mano acá
@@ -263,17 +265,27 @@ function BoxCard({
   // sigue siendo editable por si el pago real terminó siendo distinto.
   // Se hace en los handlers (selección del pedido / cambio de modo), no en
   // un useEffect, para no disparar un setState síncrono dentro de un efecto.
+  // Confirmado 2026-09-18: mismo patrón para "moto" (flete de motorizado de
+  // una venta externa sin recaudo, ver getPendingMotorizadoFreights).
   function amountForGroup(id: string): string {
     return eligibleOrders.find((o) => o.groupId === id)?.shippingCostTotal.toFixed(2) ?? "";
   }
-  const [amount, setAmount] = useState(() => amountForGroup(eligibleOrders[0]?.groupId ?? ""));
+  function amountForSale(id: string): string {
+    return motorizadoFreights.find((f) => f.saleId === id)?.freightCost.toFixed(2) ?? "";
+  }
+  const [amount, setAmount] = useState(() => (showOrderLink ? amountForGroup(eligibleOrders[0]?.groupId ?? "") : ""));
   function selectGroup(id: string) {
     setGroupId(id);
     setAmount(amountForGroup(id));
   }
-  function selectLinkMode(mode: "orden" | "motivo") {
+  function selectSale(id: string) {
+    setSaleId(id);
+    setAmount(amountForSale(id));
+  }
+  function selectLinkMode(mode: "orden" | "moto" | "motivo") {
     setLinkMode(mode);
     if (mode === "orden") setAmount(amountForGroup(groupId));
+    else if (mode === "moto") setAmount(amountForSale(saleId));
   }
   const [description, setDescription] = useState("");
   const [proofUrl, setProofUrl] = useState<string | null>(null);
@@ -431,16 +443,17 @@ function BoxCard({
   const myPending = box.pendingRecharges[0];
 
   // Guardado automático del desembolso en progreso.
-  type DesembolsoDraftData = { linkMode: "orden" | "motivo"; groupId: string; reason: string; description: string; amount: string; proofUrl: string | null };
+  type DesembolsoDraftData = { linkMode: "orden" | "moto" | "motivo"; groupId: string; saleId: string; reason: string; description: string; amount: string; proofUrl: string | null };
   function isDesembolsoDraftEmpty(d: DesembolsoDraftData) {
     return !d.description.trim() && !d.amount.trim() && !d.proofUrl && !d.reason.trim();
   }
   const { clearDraft: clearDesembolsoDraft } = useFormDraft<DesembolsoDraftData>(
     canOperate ? `pettyCash:${box.type}:desembolso` : null,
-    { linkMode, groupId, reason, description, amount, proofUrl },
+    { linkMode, groupId, saleId, reason, description, amount, proofUrl },
     (d) => {
       setLinkMode(d.linkMode);
       setGroupId(d.groupId);
+      setSaleId(d.saleId ?? "");
       setReason(d.reason);
       setDescription(d.description);
       setAmount(d.amount);
@@ -526,6 +539,7 @@ function BoxCard({
     const n = Number(amount);
     if (Number.isNaN(n) || n <= 0) { setErr("Ingresa un monto válido."); return; }
     if (!description.trim()) { setErr("Escribe una descripción."); return; }
+    if (linkMode === "moto" && !saleId) { setErr("Elige a qué venta le vas a pagar el flete."); return; }
     if (proofUrl && proofVerifyResult?.matches === false) { setErr("El comprobante no coincide con el monto — cambia la foto o corrige el monto antes de guardar."); return; }
     // Confirmado 2026-08-27/28: caso real donde se registró la fracción de
     // un solo producto pensando que era el flete completo — este chequeo
@@ -542,6 +556,7 @@ function BoxCard({
       body: JSON.stringify({
         boxType: box.type, amount: n, description, proofUrl,
         linkedGroupId: showOrderLink && linkMode === "orden" ? groupId : null,
+        linkedExternalSaleId: linkMode === "moto" ? saleId : null,
         manualReason: showOrderLink && linkMode === "motivo" ? reason : (!showOrderLink ? null : null),
       }),
     });
@@ -740,9 +755,14 @@ function BoxCard({
       {canOperate && !blocked && (
         <div className="mt-4 pt-3.5 border-t border-dashed border-rule">
           <div className="text-[12px] font-semibold mb-2">Registrar solicitud de pago</div>
-          {showOrderLink && (
-            <div className="flex gap-1.5 mb-2.5">
-              <button type="button" className={`flex-1 rounded px-2 py-1.5 text-[11px] font-semibold cursor-pointer ${linkMode === "orden" ? "bg-blue text-white" : "bg-cloud text-steel"}`} onClick={() => selectLinkMode("orden")}>🚚 Flete</button>
+          {(showOrderLink || motorizadoFreights.length > 0) && (
+            <div className="flex gap-1.5 mb-2.5 flex-wrap">
+              {showOrderLink && (
+                <button type="button" className={`flex-1 rounded px-2 py-1.5 text-[11px] font-semibold cursor-pointer ${linkMode === "orden" ? "bg-blue text-white" : "bg-cloud text-steel"}`} onClick={() => selectLinkMode("orden")}>🚚 Flete</button>
+              )}
+              {motorizadoFreights.length > 0 && (
+                <button type="button" className={`flex-1 rounded px-2 py-1.5 text-[11px] font-semibold cursor-pointer ${linkMode === "moto" ? "bg-blue text-white" : "bg-cloud text-steel"}`} onClick={() => selectLinkMode("moto")}>🛵 Flete motorizado</button>
+              )}
               <button type="button" className={`flex-1 rounded px-2 py-1.5 text-[11px] font-semibold cursor-pointer ${linkMode === "motivo" ? "bg-blue text-white" : "bg-cloud text-steel"}`} onClick={() => selectLinkMode("motivo")}>✏️ Otro gasto</button>
             </div>
           )}
@@ -750,6 +770,17 @@ function BoxCard({
             <select className="w-full rounded border border-rule bg-cloud px-2.5 py-2 text-[12px] mb-2.5" value={groupId} onChange={(e) => selectGroup(e.target.value)}>
               {eligibleOrders.length === 0 && <option value="">No hay órdenes con flete pendiente</option>}
               {eligibleOrders.map((o) => <option key={o.groupId} value={o.groupId}>{o.label}</option>)}
+            </select>
+          )}
+          {/* Confirmado 2026-09-18, pedido explícito del usuario: paga el
+              flete de un motorizado de una venta SIN recaudo — el cliente ya
+              transfirió el total completo, así que ese flete nadie lo
+              descontó en el camino y la empresa tiene que pagárselo aparte al
+              motorizado. Disponible en cualquiera de las dos cajas. */}
+          {linkMode === "moto" && (
+            <select className="w-full rounded border border-rule bg-cloud px-2.5 py-2 text-[12px] mb-2.5" value={saleId} onChange={(e) => selectSale(e.target.value)}>
+              {motorizadoFreights.length === 0 && <option value="">No hay fletes de motorizado pendientes</option>}
+              {motorizadoFreights.map((f) => <option key={f.saleId} value={f.saleId}>{f.label}</option>)}
             </select>
           )}
           {showOrderLink && linkMode === "motivo" && (
@@ -977,7 +1008,7 @@ function BoxCard({
 }
 
 export function PettyCashPanel({
-  principal, secundaria, canManagePrincipal, canManageSecundaria, canFundPrincipal, canFundSecundaria, eligibleOrders, isAdmin = false, focusBox = null,
+  principal, secundaria, canManagePrincipal, canManageSecundaria, canFundPrincipal, canFundSecundaria, eligibleOrders, pendingMotorizadoFreights, isAdmin = false, focusBox = null,
 }: {
   principal: PettyCashBoxDTO | null;
   secundaria: PettyCashBoxDTO | null;
@@ -986,6 +1017,7 @@ export function PettyCashPanel({
   canFundPrincipal: boolean;
   canFundSecundaria: boolean;
   eligibleOrders: EligiblePaymentOrderDTO[];
+  pendingMotorizadoFreights: PendingMotorizadoFreightDTO[];
   isAdmin?: boolean;
   // Confirmado 2026-08-06: "principal" | "secundaria" (en minúscula, viene
   // del query param ?box=... armado en src/lib/pendingTasks.ts) — hace
@@ -1008,8 +1040,8 @@ export function PettyCashPanel({
         )}
       </TabGuide>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {principal && <BoxCard box={principal} canManage={canManagePrincipal} canFund={canFundPrincipal} showOrderLink={false} eligibleOrders={[]} isAdmin={isAdmin} highlight={focusBox === "principal"} />}
-        {secundaria && <BoxCard box={secundaria} canManage={canManageSecundaria} canFund={canFundSecundaria} showOrderLink={true} eligibleOrders={eligibleOrders} isAdmin={isAdmin} highlight={focusBox === "secundaria"} />}
+        {principal && <BoxCard box={principal} canManage={canManagePrincipal} canFund={canFundPrincipal} showOrderLink={false} eligibleOrders={[]} motorizadoFreights={pendingMotorizadoFreights} isAdmin={isAdmin} highlight={focusBox === "principal"} />}
+        {secundaria && <BoxCard box={secundaria} canManage={canManageSecundaria} canFund={canFundSecundaria} showOrderLink={true} eligibleOrders={eligibleOrders} motorizadoFreights={pendingMotorizadoFreights} isAdmin={isAdmin} highlight={focusBox === "secundaria"} />}
       </div>
     </div>
   );

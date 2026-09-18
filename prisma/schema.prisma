@@ -526,6 +526,7 @@ model User {
   externalSalesClosed             ExternalSale[] @relation("ExternalSaleNairobyClosedBy")
   externalSalesReturnReceivedBy   ExternalSale[] @relation("ExternalSaleReturnReceivedBy")
   externalSalesReturnConfirmedBy  ExternalSale[] @relation("ExternalSaleReturnConfirmedBy")
+  externalSalesFreightPaidBy      ExternalSale[] @relation("ExternalSaleFreightPaidBy")
 
   clientsRegistered            Client[]
   logisticsProvidersRegistered LogisticsProvider[]
@@ -1183,9 +1184,16 @@ model PettyCashEntry {
   aiMatches    Boolean?
 
   // Desembolso — vínculo con una orden de compra (groupId de
-  // PurchaseRequest) o, como última opción, un motivo manual.
-  linkedGroupId String?
-  manualReason  String?
+  // PurchaseRequest), con el flete de motorizado de una venta externa sin
+  // recaudo (ver ExternalSale.freightPaidAt) o, como última opción, un
+  // motivo manual. linkedExternalSaleId es un campo aparte de linkedGroupId
+  // (2026-09-18) porque este último tiene su propia lógica de "flete ya
+  // pagado"/excepciones (checkFreightAlreadyPaid) exclusiva de órdenes de
+  // compra, que no aplica acá.
+  linkedGroupId        String?
+  linkedExternalSaleId String?
+  linkedExternalSale   ExternalSale? @relation("PettyCashEntryExternalSale", fields: [linkedExternalSaleId], references: [id], onDelete: SetNull)
+  manualReason         String?
 
   // Recarga — no se acredita al saldo hasta que quien la recibe confirma.
   // Mientras confirmedAt sea null, la persona queda bloqueada para crear
@@ -1214,6 +1222,7 @@ model PettyCashEntry {
 
   @@index([boxId])
   @@index([linkedGroupId])
+  @@index([linkedExternalSaleId])
 }
 
 // Confirmado 2026-08-05: si una orden de compra ya tiene flete pagado (por
@@ -5497,11 +5506,25 @@ model ExternalSale {
   courierNote String?
 
   // Confirmado 2026-09-14, pedido explícito de Marcos: costo del flete que
-  // cobra el motorizado, declarado por el asesor al crear la venta. Se resta
-  // de totalAmount para mostrar cuánto debe transferir el motorizado en
-  // realidad (ver comentario en paymentProofUrl — hoy lo descontaba de forma
-  // informal, sin quedar registrado). Nullable/0 = sin flete declarado.
+  // cobra el motorizado, declarado por el asesor al crear la venta. Nullable/0
+  // = sin flete declarado.
+  //
+  // Confirmado 2026-09-18: solo se resta de totalAmount cuando la venta es
+  // CON recaudo — ahí el motorizado cobra el total al cliente y se queda el
+  // flete él mismo, así que a la empresa solo le transfiere el resto. En SIN
+  // recaudo el cliente transfiere el total completo directo a la empresa (el
+  // motorizado no cobra nada), así que el flete hay que pagárselo aparte —
+  // ver freightPaidAt abajo y PettyCashEntry.linkedExternalSaleId.
   freightCost Float?
+
+  // Cuándo y quién le pagó el flete al motorizado por fuera (Caja Chica) —
+  // solo aplica en ventas SIN recaudo con flete declarado. Null mientras
+  // sigue pendiente de pagar.
+  freightPaidAt   DateTime?
+  freightPaidById String?
+  freightPaidBy   User?     @relation("ExternalSaleFreightPaidBy", fields: [freightPaidById], references: [id], onDelete: SetNull)
+
+  freightPettyCashEntries PettyCashEntry[] @relation("PettyCashEntryExternalSale")
 
   createdAt DateTime @default(now())
 
@@ -5511,9 +5534,11 @@ model ExternalSale {
   reviewedBy      User?                    @relation("ExternalSaleReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
   rejectionReason String?
 
-  // Pista 1 — pago. El asesor sube el comprobante (Pichincha o wallet a
-  // wallet Dropi, o lo que transfiera el motorizado de Marcos ya
-  // descontado su flete); admin confirma con doble check que llegó.
+  // Pista 1 — pago. El asesor sube el comprobante: con recaudo, lo que
+  // transfiere el motorizado ya descontado su flete; sin recaudo, el total
+  // completo que transfirió el cliente directo. Admin confirma con doble
+  // check que llegó (ver freightCost arriba para el monto que corresponde
+  // esperar en cada caso).
   paymentProofUrl        String?
   paymentProofName       String?
   paymentProofUploadedAt DateTime?

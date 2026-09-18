@@ -89,8 +89,11 @@ function SaleDetail({ s, canPrintGuide }: { s: SaleDTO; canPrintGuide: boolean }
           <Printer size={12} /> Ver / imprimir guía
         </a>
       )}
-      {s.freightCost != null && (
+      {s.isContraEntrega && s.freightCost != null && (
         <div className="text-[10.5px] text-steel">Flete: -${s.freightCost.toFixed(2)} · Monto a transferir: ${(s.totalAmount - s.freightCost).toFixed(2)}</div>
+      )}
+      {!s.isContraEntrega && s.freightCost != null && (
+        <div className="text-[10.5px] text-steel">Monto a transferir: ${s.totalAmount.toFixed(2)} (sin recaudo) · flete (${s.freightCost.toFixed(2)}) pagado aparte al motorizado</div>
       )}
       <div className="text-[10.5px] text-steel">Entrega a: {s.pickupPersonName}{s.courierNote ? ` · Transportadora: ${s.courierNote}` : ""}</div>
       {s.client && (

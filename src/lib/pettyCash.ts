@@ -59,6 +59,8 @@ export type PettyCashEntryDTO = {
   aiMatches: boolean | null;
   linkedGroupId: string | null;
   linkedOrderLabel: string | null;
+  linkedExternalSaleId: string | null;
+  linkedExternalSaleLabel: string | null;
   manualReason: string | null;
   confirmedAt: string | null;
   confirmedByName: string | null;
@@ -79,10 +81,19 @@ export async function orderLabel(groupId: string | null): Promise<string | null>
   return `Orden de pago — ${names}`;
 }
 
+// Confirmado 2026-09-18: mismo patrón que orderLabel, para el desembolso que
+// paga el flete de un motorizado de una venta externa sin recaudo.
+export async function externalSaleFreightLabel(saleId: string | null): Promise<string | null> {
+  if (!saleId) return null;
+  const sale = await prisma.externalSale.findUnique({ where: { id: saleId }, select: { code: true, pickupPersonName: true } });
+  if (!sale) return `Flete motorizado ${saleId.slice(-6)}`;
+  return `Flete motorizado — ${sale.code} — ${sale.pickupPersonName}`;
+}
+
 async function toEntryDTO(e: {
   id: string; requestNumber: number; kind: string; amount: number; description: string;
   proofUrl: string | null; aiReadAmount: number | null; aiMatches: boolean | null;
-  linkedGroupId: string | null; manualReason: string | null; confirmedAt: Date | null;
+  linkedGroupId: string | null; linkedExternalSaleId: string | null; manualReason: string | null; confirmedAt: Date | null;
   archived: boolean; createdAt: Date; createdBy: { name: string } | null; confirmedBy: { name: string } | null;
 }, boxType: PettyCashBoxTypeStr): Promise<PettyCashEntryDTO> {
   return {
@@ -97,6 +108,8 @@ async function toEntryDTO(e: {
     aiMatches: e.aiMatches,
     linkedGroupId: e.linkedGroupId,
     linkedOrderLabel: await orderLabel(e.linkedGroupId),
+    linkedExternalSaleId: e.linkedExternalSaleId,
+    linkedExternalSaleLabel: await externalSaleFreightLabel(e.linkedExternalSaleId),
     manualReason: e.manualReason,
     confirmedAt: e.confirmedAt?.toISOString() ?? null,
     confirmedByName: e.confirmedBy ? actorName(e.confirmedBy.name) : null,
@@ -215,6 +228,34 @@ export async function getEligiblePaymentOrdersForFreight(): Promise<EligiblePaym
   }));
 }
 
+export type PendingMotorizadoFreightDTO = { saleId: string; label: string; freightCost: number; paymentConfirmedAt: string };
+
+// Confirmado 2026-09-18, pedido explícito del usuario: ventas externas SIN
+// recaudo donde el cliente ya transfirió el total completo (paymentConfirmedAt)
+// pero el flete que le corresponde al motorizado todavía no se le pagó por
+// fuera (freightPaidAt null) — en con recaudo esto no existe porque el
+// motorizado se autopaga el flete al cobrar. Cualquiera de las dos cajas
+// (Jariel en Secundaria, Nairoby en Principal) puede pagarlo.
+export async function getPendingMotorizadoFreights(): Promise<PendingMotorizadoFreightDTO[]> {
+  const rows = await prisma.externalSale.findMany({
+    where: {
+      deletedAt: null,
+      isContraEntrega: false,
+      freightCost: { gt: 0 },
+      paymentConfirmedAt: { not: null },
+      freightPaidAt: null,
+    },
+    select: { id: true, code: true, pickupPersonName: true, freightCost: true, paymentConfirmedAt: true },
+    orderBy: { paymentConfirmedAt: "asc" },
+  });
+  return rows.map((r) => ({
+    saleId: r.id,
+    label: `${r.code} — ${r.pickupPersonName} — $${r.freightCost!.toFixed(2)}`,
+    freightCost: r.freightCost!,
+    paymentConfirmedAt: r.paymentConfirmedAt!.toISOString(),
+  }));
+}
+
 export type FreightPaymentCheck =
   | { alreadyPaid: false }
   | { alreadyPaid: true; paidAt: string; paidByName: string; needsException: boolean };
@@ -313,6 +354,7 @@ export type PettyCashViewerData = {
   canFundPrincipal: boolean;
   canFundSecundaria: boolean;
   eligibleOrders: EligiblePaymentOrderDTO[];
+  pendingMotorizadoFreights: PendingMotorizadoFreightDTO[];
   pendingExceptions: PendingExceptionDTO[];
 };
 
@@ -328,13 +370,14 @@ export async function getPettyCashViewerData(isAdmin: boolean): Promise<PettyCas
   ]);
 
   if (!canViewPrincipal && !canViewSecundaria) {
-    return { principal: null, secundaria: null, canManagePrincipal: false, canManageSecundaria: false, canFundPrincipal: false, canFundSecundaria: false, eligibleOrders: [], pendingExceptions: [] };
+    return { principal: null, secundaria: null, canManagePrincipal: false, canManageSecundaria: false, canFundPrincipal: false, canFundSecundaria: false, eligibleOrders: [], pendingMotorizadoFreights: [], pendingExceptions: [] };
   }
 
-  const [principal, secundaria, eligibleOrders, pendingExceptions] = await Promise.all([
+  const [principal, secundaria, eligibleOrders, pendingMotorizadoFreights, pendingExceptions] = await Promise.all([
     canViewPrincipal ? getPettyCashBoxData("PRINCIPAL") : Promise.resolve(null),
     canViewSecundaria ? getPettyCashBoxData("SECUNDARIA") : Promise.resolve(null),
     canManageSecundaria ? getEligiblePaymentOrdersForFreight() : Promise.resolve([]),
+    canManagePrincipal || canManageSecundaria ? getPendingMotorizadoFreights() : Promise.resolve([]),
     isAdmin ? getPendingExceptions() : Promise.resolve([]),
   ]);
 
@@ -346,6 +389,7 @@ export async function getPettyCashViewerData(isAdmin: boolean): Promise<PettyCas
     canFundPrincipal: isAdmin,
     canFundSecundaria: isAdmin || canManagePrincipal,
     eligibleOrders,
+    pendingMotorizadoFreights,
     pendingExceptions,
   };
 }

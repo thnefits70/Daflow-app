@@ -1236,9 +1236,14 @@ export function ExternalSaleDeclareForm() {
                     ))}
                   </div>
                   <div className="text-[11px] font-bold mt-0.5">Total: ${s.totalAmount.toFixed(2)}</div>
-                  {s.freightCost != null && (
+                  {s.isContraEntrega && s.freightCost != null && (
                     <div className="text-[10.5px] text-steel mt-0.5">
                       Flete: -${s.freightCost.toFixed(2)} · Monto a transferir: <span className="font-semibold text-ink">${(s.totalAmount - s.freightCost).toFixed(2)}</span>
+                    </div>
+                  )}
+                  {!s.isContraEntrega && s.freightCost != null && (
+                    <div className="text-[10.5px] text-steel mt-0.5">
+                      Monto a transferir: <span className="font-semibold text-ink">${s.totalAmount.toFixed(2)}</span> (sin recaudo) · el flete (${s.freightCost.toFixed(2)}) se le paga aparte al motorizado, desde Caja Chica
                     </div>
                   )}
                   <div className="text-[10.5px] text-steel mt-0.5">Entrega a: {s.pickupPersonName}{s.courierNote ? ` · Transportadora: ${s.courierNote}` : ""}</div>
