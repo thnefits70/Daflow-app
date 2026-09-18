@@ -527,6 +527,7 @@ model User {
   externalSalesReturnReceivedBy   ExternalSale[] @relation("ExternalSaleReturnReceivedBy")
   externalSalesReturnConfirmedBy  ExternalSale[] @relation("ExternalSaleReturnConfirmedBy")
   externalSalesFreightPaidBy      ExternalSale[] @relation("ExternalSaleFreightPaidBy")
+  externalSalesPaymentOverrideBy  ExternalSale[] @relation("ExternalSalePaymentOverrideBy")
 
   clientsRegistered            Client[]
   logisticsProvidersRegistered LogisticsProvider[]
@@ -5542,9 +5543,33 @@ model ExternalSale {
   paymentProofUrl        String?
   paymentProofName       String?
   paymentProofUploadedAt DateTime?
-  paymentConfirmedAt     DateTime?
-  paymentConfirmedById   String?
-  paymentConfirmedBy     User?     @relation("ExternalSalePaymentConfirmedBy", fields: [paymentConfirmedById], references: [id], onDelete: SetNull)
+
+  // Confirmado 2026-09-18, pedido explícito del usuario: apenas el asesor
+  // sube el comprobante, la IA lo lee y lo compara contra lo que de verdad
+  // corresponde esperar (total completo si es sin recaudo, total menos
+  // flete si es con recaudo — ver freightCost arriba). El botón "Confirmar
+  // recibido" del admin queda bloqueado mientras esto no sea true (ver
+  // ExternalSalePaymentConfirmInbox). null = la IA no pudo leer la foto con
+  // claridad (nunca bloquea el guardado del comprobante en sí, solo el
+  // botón de confirmar).
+  paymentProofAiReadAmount Float?
+  paymentProofAiMatches    Boolean?
+
+  paymentConfirmedAt   DateTime?
+  paymentConfirmedById String?
+  paymentConfirmedBy   User?     @relation("ExternalSalePaymentConfirmedBy", fields: [paymentConfirmedById], references: [id], onDelete: SetNull)
+
+  // Confirmado 2026-09-18, pedido explícito del usuario: cuando la IA no
+  // verificó el comprobante (no coincide o no pudo leerlo), el ASESOR es
+  // quien mejor sabe por qué (ej. el cliente transfirió de más/de menos por
+  // error) — así que él (o admin, como respaldo) explica acá antes de que
+  // el botón "Confirmar recibido" del admin se desbloquee. Null cuando la
+  // IA sí verificó (paymentProofAiMatches true) y no hizo falta ninguna
+  // explicación — ver /payment-amount-note.
+  paymentOverrideNote String?
+  paymentOverrideAt   DateTime?
+  paymentOverrideById String?
+  paymentOverrideBy   User?     @relation("ExternalSalePaymentOverrideBy", fields: [paymentOverrideById], references: [id], onDelete: SetNull)
 
   // Factura de Nairoby — confirmado 2026-08-29: obligatoria en pago
   // anticipado (bloquea a Daniel hasta que se sube), opcional en contra

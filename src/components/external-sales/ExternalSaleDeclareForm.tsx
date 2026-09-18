@@ -43,6 +43,9 @@ type SaleDTO = {
   rejectionReason: string | null;
   paymentProofUrl: string | null;
   paymentProofName: string | null;
+  paymentProofAiReadAmount: number | null;
+  paymentProofAiMatches: boolean | null;
+  paymentOverrideNote: string | null;
   paymentConfirmedAt: string | null;
   deliveredAt: string | null;
   deliveryPhotoUrl: string | null;
@@ -1082,6 +1085,31 @@ export function ExternalSaleDeclareForm() {
     }
   }
 
+  // Confirmado 2026-09-18, pedido explícito del usuario: si la IA lee el
+  // comprobante y el monto no coincide exactamente (ej. el cliente
+  // transfirió de más por error), el propio asesor —quien sabe por qué—
+  // explica acá antes de que admin pueda confirmar que llegó el pago (ver
+  // el mismo formulario, como respaldo, en ExternalSalePaymentConfirmInbox).
+  const [explainingSaleId, setExplainingSaleId] = useState<string | null>(null);
+  const [amountNote, setAmountNote] = useState("");
+  const [amountNoteSaving, setAmountNoteSaving] = useState(false);
+  const [amountNoteError, setAmountNoteError] = useState("");
+
+  async function saveAmountNote(saleId: string) {
+    setAmountNoteSaving(true);
+    setAmountNoteError("");
+    try {
+      await postJson(`/api/external-sales/${saleId}/payment-amount-note`, { note: amountNote });
+      setExplainingSaleId(null);
+      setAmountNote("");
+      load();
+    } catch (e) {
+      setAmountNoteError(e instanceof Error ? e.message : "No se pudo guardar la explicación.");
+    } finally {
+      setAmountNoteSaving(false);
+    }
+  }
+
   return (
     <div className="flex flex-col gap-6 max-w-lg">
       <PriceCheckPanel searchUrl="/api/external-sales/catalog-search" useB2CPricing={canOverrideRecaudo} />
@@ -1406,6 +1434,46 @@ export function ExternalSaleDeclareForm() {
                         Ver comprobante{s.paymentProofName ? ` (${s.paymentProofName})` : ""}
                       </a>
                       {!s.paymentConfirmedAt && <span className="flex items-center gap-1 text-blue font-semibold"><Check size={12} /> esperando confirmación</span>}
+                    </div>
+                  )}
+                  {/* Confirmado 2026-09-18: la IA ya comparó el comprobante
+                      contra lo esperado al subirlo (ver payment-proof/route.ts)
+                      — si no coincide, admin no puede confirmar hasta que
+                      Marcos explique por qué está bien igual. */}
+                  {s.paymentProofUrl && !s.paymentConfirmedAt && s.paymentProofAiMatches !== true && (
+                    <div className="mt-1.5">
+                      <div className={`text-[10.5px] font-semibold ${s.paymentProofAiMatches === false ? "text-red" : "text-gold"}`}>
+                        {s.paymentProofAiMatches === false
+                          ? `⚠ La IA leyó $${s.paymentProofAiReadAmount?.toFixed(2)} en el comprobante — no coincide exactamente con lo esperado.`
+                          : "⚠ La IA no pudo leer el comprobante con claridad."}
+                      </div>
+                      {s.paymentOverrideNote ? (
+                        <div className="text-[10.5px] text-steel bg-cloud rounded px-2 py-1 mt-1">
+                          <span className="font-semibold text-ink">Tu explicación:</span> {s.paymentOverrideNote}
+                        </div>
+                      ) : explainingSaleId === s.id ? (
+                        <div className="bg-cloud rounded-md p-2 mt-1">
+                          <textarea
+                            rows={2}
+                            autoFocus
+                            placeholder="¿Por qué está bien igual? (ej: el cliente transfirió de más por error)…"
+                            className="w-full rounded border border-rule bg-surface px-2 py-1.5 text-[11px] resize-none"
+                            value={amountNote}
+                            onChange={(e) => setAmountNote(e.target.value)}
+                          />
+                          {amountNoteError && <div className="text-red text-[10.5px] mt-1">{amountNoteError}</div>}
+                          <div className="flex gap-1.5 mt-1.5">
+                            <button type="button" className="flex-1 rounded border border-rule px-2 py-1 text-[10.5px] font-semibold cursor-pointer" onClick={() => { setExplainingSaleId(null); setAmountNote(""); }}>Cancelar</button>
+                            <button type="button" disabled={amountNoteSaving || amountNote.trim().length < 3} className="flex-1 rounded border border-teal bg-teal px-2 py-1 text-[10.5px] font-bold text-navy cursor-pointer disabled:opacity-60" onClick={() => saveAmountNote(s.id)}>
+                              {amountNoteSaving ? "Guardando…" : "Guardar explicación"}
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <button type="button" className="text-[10.5px] font-semibold text-blue cursor-pointer mt-0.5" onClick={() => { setExplainingSaleId(s.id); setAmountNote(""); setAmountNoteError(""); }}>
+                          Explicar por qué está bien confirmar igual
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>

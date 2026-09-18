@@ -16,6 +16,26 @@ import { recordKardexEntry } from "@/lib/stockKardex";
 
 const URL_BASE = "/area/workspace?tab=ventas-externas";
 
+// Confirmado 2026-09-18: monto que de verdad corresponde esperar en la
+// cuenta de la empresa por esta venta — con recaudo, el motorizado cobra el
+// total al cliente y se queda el flete él mismo (a la empresa solo le
+// transfiere el resto); sin recaudo, el cliente transfiere el total
+// completo directo (nadie descuenta el flete en el camino). Un solo punto
+// para este cálculo — lo usan tanto la verificación con IA del comprobante
+// (readExternalSalePaymentProof) como las pantallas que muestran "monto
+// esperado a transferir".
+export function expectedTransferAmount(sale: { totalAmount: number; isContraEntrega: boolean; freightCost: number | null }): number {
+  return sale.isContraEntrega ? sale.totalAmount - (sale.freightCost ?? 0) : sale.totalAmount;
+}
+
+// Confirmado 2026-09-18, pedido explícito del usuario: los precios B2C
+// siempre terminan en .99 (roundUpToNinetyNineCents en marketProduct.ts) —
+// es normal y esperable que el cliente redondee al dólar completo al
+// transferir (ej. $39.99 → $40.00, una diferencia de un centavo). Esta
+// tolerancia cubre ese redondeo típico sin dejar pasar un monto de verdad
+// distinto.
+export const PAYMENT_PROOF_AMOUNT_TOLERANCE = 0.05;
+
 // Confirmado 2026-09-14: reemplaza el "Precio unitario" que antes escribía
 // el asesor a mano — el precio siempre se calcula acá, server-side, a partir
 // del costo real del producto (nunca se confía en un precio que mande el

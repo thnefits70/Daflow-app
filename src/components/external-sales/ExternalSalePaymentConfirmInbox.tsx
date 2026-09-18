@@ -25,12 +25,15 @@ type SaleDTO = {
   paymentProofUrl: string;
   paymentProofName: string | null;
   paymentProofUploadedAt: string | null;
+  paymentProofAiReadAmount: number | null;
+  paymentProofAiMatches: boolean | null;
+  paymentOverrideNote: string | null;
   client: { name: string; idType: "RUC" | "CEDULA" | null; idNumber: string | null; phone: string; email: string | null } | null;
   advisor: { name: string } | null;
 };
 
-async function postJson(url: string) {
-  const res = await fetch(url, { method: "POST" });
+async function postJson(url: string, body?: unknown) {
+  const res = await fetch(url, { method: "POST", headers: body ? { "Content-Type": "application/json" } : undefined, body: body ? JSON.stringify(body) : undefined });
   const data = await res.json().catch(() => null);
   if (!res.ok) throw new Error(data?.error ?? "Ocurrió un error.");
   return data;
@@ -39,6 +42,8 @@ async function postJson(url: string) {
 export function ExternalSalePaymentConfirmInbox() {
   const [sales, setSales] = useState<SaleDTO[] | null>(null);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
+  const [explainingId, setExplainingId] = useState<string | null>(null);
+  const [amountNote, setAmountNote] = useState("");
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -57,6 +62,25 @@ export function ExternalSalePaymentConfirmInbox() {
       load();
     } catch (e) {
       setError(e instanceof Error ? e.message : "No se pudo confirmar.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  // Confirmado 2026-09-18, pedido explícito del usuario: cuando la IA no
+  // verifica el monto, admin puede escribir él mismo la explicación acá
+  // como respaldo (lo normal es que la escriba el asesor, ver el mismo
+  // formulario en ExternalSaleDeclareForm) — mismo endpoint para los dos.
+  async function saveAmountNote(id: string) {
+    setSaving(true);
+    setError("");
+    try {
+      await postJson(`/api/external-sales/${id}/payment-amount-note`, { note: amountNote });
+      setExplainingId(null);
+      setAmountNote("");
+      load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "No se pudo guardar la explicación.");
     } finally {
       setSaving(false);
     }
@@ -123,6 +147,57 @@ export function ExternalSalePaymentConfirmInbox() {
           </div>
           <ProofPreview url={s.paymentProofUrl} filename={s.paymentProofName ?? undefined} size={56} />
 
+          {/* Confirmado 2026-09-18, pedido explícito del usuario: apenas
+              Marcos sube el comprobante, la IA ya lo leyó y comparó contra lo
+              esperado (ver payment-proof/route.ts) — acá solo se muestra el
+              resultado, nunca se vuelve a llamar a la IA. Si no coincide, el
+              botón "Confirmar recibido" queda bloqueado hasta que exista una
+              explicación (normalmente la escribe el asesor, ver
+              ExternalSaleDeclareForm — admin también puede escribirla acá
+              como respaldo). */}
+          {s.paymentProofAiMatches === true && (
+            <div className="flex items-center gap-1 text-teal text-[11px] font-semibold mt-1.5">
+              <CheckCircle2 size={12} /> La IA verificó: el comprobante coincide con lo esperado.
+            </div>
+          )}
+          {s.paymentProofAiMatches !== true && (
+            <div className={`text-[11px] font-semibold mt-1.5 ${s.paymentProofAiMatches === false ? "text-red" : "text-gold"}`}>
+              {s.paymentProofAiMatches === false
+                ? `⚠ La IA leyó $${s.paymentProofAiReadAmount?.toFixed(2)} en el comprobante — no coincide exactamente con lo esperado.`
+                : "⚠ La IA no pudo leer el comprobante con claridad."}
+            </div>
+          )}
+          {s.paymentProofAiMatches !== true && s.paymentOverrideNote && (
+            <div className="text-[11px] text-steel bg-cloud rounded px-2 py-1.5 mt-1">
+              <span className="font-semibold text-ink">Explicación:</span> {s.paymentOverrideNote}
+            </div>
+          )}
+          {s.paymentProofAiMatches !== true && !s.paymentOverrideNote && (
+            explainingId === s.id ? (
+              <div className="bg-cloud rounded-md p-2.5 mt-1.5">
+                <textarea
+                  rows={2}
+                  autoFocus
+                  placeholder="¿Por qué está bien confirmar igual? (ej: el cliente transfirió de más por error)…"
+                  className="w-full rounded border border-rule bg-surface px-2.5 py-1.5 text-[11.5px] resize-none"
+                  value={amountNote}
+                  onChange={(e) => setAmountNote(e.target.value)}
+                />
+                {error && <div className="text-red text-[11px] mt-1">{error}</div>}
+                <div className="flex gap-2 mt-1.5">
+                  <button type="button" className="flex-1 rounded border border-rule px-2.5 py-1.5 text-[11px] font-semibold cursor-pointer" onClick={() => { setExplainingId(null); setAmountNote(""); }}>Cancelar</button>
+                  <button type="button" disabled={saving || amountNote.trim().length < 3} className="flex-1 rounded border border-teal bg-teal px-2.5 py-1.5 text-[11px] font-bold text-navy cursor-pointer disabled:opacity-60" onClick={() => saveAmountNote(s.id)}>
+                    {saving ? "Guardando…" : "Guardar explicación"}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button type="button" className="text-[10.5px] font-semibold text-blue cursor-pointer mt-1" onClick={() => { setExplainingId(s.id); setAmountNote(""); setError(""); }}>
+                Explicar por qué está bien confirmar igual
+              </button>
+            )
+          )}
+
           {confirmingId === s.id ? (
             <div className="bg-cloud rounded-md p-2.5 mt-2.5">
               <div className="text-[12px] font-semibold mb-2">¿Confirmás que llegó el dinero completo?</div>
@@ -147,7 +222,13 @@ export function ExternalSalePaymentConfirmInbox() {
             </div>
           ) : (
             <div className="flex items-center gap-2 mt-2.5">
-              <button type="button" className="flex items-center gap-1.5 text-[11.5px] font-bold border border-teal text-teal rounded px-2.5 py-1.5 cursor-pointer" onClick={() => setConfirmingId(s.id)}>
+              <button
+                type="button"
+                disabled={s.paymentProofAiMatches !== true && !s.paymentOverrideNote}
+                title={s.paymentProofAiMatches !== true && !s.paymentOverrideNote ? "Primero hace falta una explicación de por qué el monto no coincide" : undefined}
+                className="flex items-center gap-1.5 text-[11.5px] font-bold border border-teal text-teal rounded px-2.5 py-1.5 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                onClick={() => setConfirmingId(s.id)}
+              >
                 <CheckCircle2 size={13} /> Confirmar recibido
               </button>
               <button type="button" className="flex items-center gap-1.5 text-[11.5px] font-bold border border-rule text-steel rounded px-2.5 py-1.5 cursor-pointer" onClick={() => setDeletingId(s.id)}>

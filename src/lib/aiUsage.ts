@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { computeCostUsd } from "@/lib/aiPricing";
 
-export type AiUsageFeature = "nancy" | "fernick" | "weekly_checkin" | "rutas_conocimiento" | "control_compras_cotizacion" | "control_compras_catalogo" | "control_compras_comprobante_pago" | "control_compras_orden_compra" | "control_compras_recepcion_fotos" | "control_compras_revision_pago" | "control_compras_revision_factura" | "caja_chica_comprobante" | "control_inventario_comprobante" | "pagos_admin_declaracion" | "reingreso_mercaderia_reconocimiento" | "anticipos_comprobante" | "nomina_transferencia_comprobante" | "nomina_pago_individual_comprobante" | "nomina_iess_comprobante" | "nomina_sueldo_nairoby_comprobante" | "registro_egresos_manifiesto" | "registro_egresos_catalogo_match" | "combo_sugerencias_nicho" | "combo_sugerencias_match" | "proveedor_credito_pago" | "plan_mejora_redaccion" | "plan_mejora_evaluacion_semanal";
+export type AiUsageFeature = "nancy" | "fernick" | "weekly_checkin" | "rutas_conocimiento" | "control_compras_cotizacion" | "control_compras_catalogo" | "control_compras_comprobante_pago" | "control_compras_orden_compra" | "control_compras_recepcion_fotos" | "control_compras_revision_pago" | "control_compras_revision_factura" | "caja_chica_comprobante" | "control_inventario_comprobante" | "pagos_admin_declaracion" | "reingreso_mercaderia_reconocimiento" | "anticipos_comprobante" | "nomina_transferencia_comprobante" | "nomina_pago_individual_comprobante" | "nomina_iess_comprobante" | "nomina_sueldo_nairoby_comprobante" | "registro_egresos_manifiesto" | "registro_egresos_catalogo_match" | "combo_sugerencias_nicho" | "combo_sugerencias_match" | "proveedor_credito_pago" | "plan_mejora_redaccion" | "plan_mejora_evaluacion_semanal" | "ventas_externas_comprobante";
 
 const FEATURE_LABELS: Record<AiUsageFeature, string> = {
   nancy: "Nancy · chat financiero",
@@ -31,6 +31,7 @@ const FEATURE_LABELS: Record<AiUsageFeature, string> = {
   proveedor_credito_pago: "Proveedores con Crédito · revisión de tanda de pago",
   plan_mejora_redaccion: "Plan de Mejora · redactar plan",
   plan_mejora_evaluacion_semanal: "Plan de Mejora · evaluación semanal",
+  ventas_externas_comprobante: "Ventas Externas · verificar comprobante de pago",
 };
 
 // Confirmado 2026-07-29: no debe poder tumbar el flujo principal (Nancy o la
