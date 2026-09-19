@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { canClosePersonalPurchaseTransfer } from "@/lib/guards";
 import { getOrCreateBox } from "@/lib/pettyCash";
-import { sendPushToOwner } from "@/lib/webPush";
+import { notifyOwner } from "@/lib/notifications";
 
 // Confirmado 2026-09-07: un solo clic de Nairoby/FIN — ella entregó el
 // efectivo en mano, así que su propio clic YA es la confirmación de
@@ -44,11 +44,11 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     });
   });
 
-  await sendPushToOwner(order.employeeId, {
+  await notifyOwner(order.employeeId, {
     title: "🎉 Recibimos tu pago en efectivo",
     body: `$${order.totalAmount?.toFixed(2)} — ¡disfrutá tu compra!`,
     url: "/area/compras-personales",
-  }).catch(() => null);
+  });
 
   return NextResponse.json(updated);
 }

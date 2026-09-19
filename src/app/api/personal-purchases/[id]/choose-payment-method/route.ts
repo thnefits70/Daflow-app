@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { resolveFirstPayoutMonth } from "@/lib/payroll";
 import { addMonthsToMonthStr } from "@/lib/payrollCalc";
-import { sendPushToOwner } from "@/lib/webPush";
+import { notifyOwner } from "@/lib/notifications";
 import { maxInstallmentsForAmount } from "@/lib/personalPurchases";
 
 const schema = z.object({ method: z.enum(["PAYROLL", "TRANSFER", "CASH"]), installments: z.number().int().min(1).max(3).optional() });
@@ -70,11 +70,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   });
 
   const cuotaText = installments > 1 ? ` en ${installments} cuotas` : "";
-  await sendPushToOwner(session.user.id, {
+  await notifyOwner(session.user.id, {
     title: "✅ Tu compra personal quedó en rol",
     body: `Total $${order.totalAmount?.toFixed(2)}${cuotaText} — se va a descontar de tu rol a partir de ${firstPayoutMonth}.`,
     url: "/area/compras-personales",
-  }).catch(() => null);
+  });
 
   return NextResponse.json(updated);
 }

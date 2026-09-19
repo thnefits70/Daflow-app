@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
-import { sendPushToOwner } from "@/lib/webPush";
+import { notifyOwner } from "@/lib/notifications";
 import { releaseCreditsForGroup, getReservedCreditsForGroup, getAvailableCreditsForSupplier } from "@/lib/supplierCredits";
 import { canActOnPurchaseApproval } from "@/lib/guards";
 import { reviewApprovedPurchaseGroup } from "@/lib/purchaseAi";
@@ -71,11 +71,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ gro
 
   const requestedById = rows[0].requestedById;
   if (requestedById) {
-    await sendPushToOwner(requestedById, {
+    await notifyOwner(requestedById, {
       title: parsed.data.action === "approve" ? "Solicitud aprobada" : "Solicitud rechazada",
       body: `${names} — ${parsed.data.action === "approve" ? "sigue con el pago" : parsed.data.rejectReason || "sin motivo especificado"}`,
       url: "/area/workspace",
-    }).catch(() => null);
+    });
   }
 
   // Confirmado 2026-09-03: pedido explícito del usuario — avisar al admin
@@ -96,11 +96,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ gro
     // /login. Debe abrir /admin/dept/<deptId> con la pestaña de Finanzas y
     // el groupId puestos, para caer directo en subir el comprobante de
     // ESTA solicitud (ver focusGroupId en PurchaseInvoicingPanel).
-    await sendPushToOwner("admin", {
+    await notifyOwner("admin", {
       title: "Solicitud de compra aprobada",
       body: `${names} — ${totalLabel} — lista para pagar`,
       url: `/admin/dept/${rows[0].deptId}?tab=compras&ptab=finanzas&group=${groupId}`,
-    }).catch(() => null);
+    });
   }
 
   // Confirmado 2026-09-04: pedido explícito del usuario (admin/Andrés) — en

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { canSubmitPurchaseRequests } from "@/lib/guards";
-import { sendPushToOwner } from "@/lib/webPush";
+import { notifyOwner } from "@/lib/notifications";
 
 // Confirmado 2026-08-03: cuando el flete quedó pendiente hasta la entrega,
 // quien solicitó la compra avisa con un clic que ya llegó la mercadería y
@@ -51,11 +51,11 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ gr
   if (finLeader) pushTargets.add(finLeader.id);
   await Promise.all(
     [...pushTargets].map((ownerId) =>
-      sendPushToOwner(ownerId, {
+      notifyOwner(ownerId, {
         title: "🚚 Piden pagar un flete",
         body: `${names} — ${r0.carrier?.name ?? "transportista"} · $${(r0.shippingCostTotal ?? 0).toFixed(2)}`,
         url: ownerId === "admin" ? "/admin" : "/area/workspace?tab=compras&ptab=finanzas",
-      }).catch(() => null)
+      })
     )
   );
 

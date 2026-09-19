@@ -3,7 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { canConfirmPersonalPurchaseInventory, canConfirmPersonalPurchaseFinance } from "@/lib/guards";
-import { sendPushToOwner } from "@/lib/webPush";
+import { notifyOwner } from "@/lib/notifications";
 
 const schema = z.object({ reason: z.string().trim().min(1) });
 
@@ -34,11 +34,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     data: { status: "REJECTED", rejectedAt: new Date(), rejectedById: isAdmin ? null : session!.user.id, rejectionReason: parsed.data.reason },
   });
 
-  await sendPushToOwner(order.employeeId, {
+  await notifyOwner(order.employeeId, {
     title: "❌ Tu compra personal fue rechazada",
     body: parsed.data.reason,
     url: "/area/compras-personales",
-  }).catch(() => null);
+  });
 
   return NextResponse.json(updated);
 }

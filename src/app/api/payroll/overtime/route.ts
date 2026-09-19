@@ -4,7 +4,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { canLogOvertimeHours } from "@/lib/guards";
 import { isValidOvertimeDate, isOvertimeEntryEditable, nowInEcuador } from "@/lib/payrollCalc";
-import { sendPushToOwner } from "@/lib/webPush";
+import { notifyOwner } from "@/lib/notifications";
 import { actorName } from "@/lib/actorName";
 
 // Confirmado 2026-08-13: el líder solo ve/carga horas de su propia área —
@@ -86,11 +86,11 @@ export async function POST(req: NextRequest) {
 
   const employeeName = await prisma.user.findUnique({ where: { id: employee.id }, select: { name: true } });
   const hours = (parsed.data.minutesExtra / 60).toFixed(2).replace(/\.?0+$/, "");
-  await sendPushToOwner("admin", {
+  await notifyOwner("admin", {
     title: "⏱️ Horas extra por aprobar",
     body: `${employeeName?.name ?? "Colaborador"} — ${date.toLocaleDateString("es-EC")} · ${hours}h · cargado por ${actorName(session!.user.name)}`,
     url: "/admin",
-  }).catch(() => null);
+  });
 
   return NextResponse.json(entry, { status: 201 });
 }

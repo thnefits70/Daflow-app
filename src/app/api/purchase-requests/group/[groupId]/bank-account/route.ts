@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { canSubmitPurchaseRequests } from "@/lib/guards";
-import { sendPushToOwner } from "@/lib/webPush";
+import { notifyOwner } from "@/lib/notifications";
 
 const schema = z.object({ bankAccountId: z.string().min(1) });
 
@@ -32,11 +32,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ gro
     },
   });
 
-  await sendPushToOwner("admin", {
+  await notifyOwner("admin", {
     title: "🏦 Cuenta bancaria actualizada",
     body: `${existing.catalogItem.name} — ya puedes intentar pagar de nuevo`,
     url: "/admin",
-  }).catch(() => null);
+  });
 
   const updated = await prisma.purchaseRequest.findMany({ where: { groupId } });
   return NextResponse.json(updated);

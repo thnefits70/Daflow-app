@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { sendPushToOwner } from "@/lib/webPush";
+import { notifyOwner } from "@/lib/notifications";
 import { actorName } from "@/lib/actorName";
 import {
   pendingSalaryAdvanceBalance,
@@ -87,11 +87,11 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  await sendPushToOwner("admin", {
+  await notifyOwner("admin", {
     title: "💵 Nueva solicitud de anticipo",
     body: `${actorName(session.user.name)} · $${parsed.data.amount.toFixed(2)}${parsed.data.installments > 1 ? ` a ${parsed.data.installments} cuotas` : ""}`,
     url: "/admin/nomina?tab=pagos&ptab=anticipos",
-  }).catch(() => null);
+  });
 
   return NextResponse.json(advance, { status: 201 });
 }

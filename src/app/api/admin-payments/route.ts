@@ -7,7 +7,7 @@ import { readAdminPaymentDeclaration } from "@/lib/adminPaymentAi";
 import { getAdminPaymentTemplates, getAdminPaymentTemplatesPendingThisMonth, getAdminPaymentPayees, currentPeriod } from "@/lib/adminPayments";
 import { getEligiblePaymentOrdersForFreight, checkFreightAlreadyPaid, orderLabel } from "@/lib/pettyCash";
 import { pushOwnerId } from "@/lib/pushOwner";
-import { sendPushToOwner } from "@/lib/webPush";
+import { notifyOwner } from "@/lib/notifications";
 
 export async function GET() {
   if (!(await canManageAdminPayments())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
@@ -150,11 +150,11 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  await sendPushToOwner("admin", {
+  await notifyOwner("admin", {
     title: "💰 Nueva solicitud de pago administrativo",
     body: `${d.motivo} — $${d.monto.toFixed(2)}`,
     url: "/admin",
-  }).catch(() => null);
+  });
 
   return NextResponse.json(created, { status: 201 });
 }

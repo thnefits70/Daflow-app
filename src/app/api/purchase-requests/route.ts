@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { canSubmitPurchaseRequests, canCreateNewPurchaseRequests, canSubmitEmergencyPurchaseRequest, canApprovePurchaseRequests, canConfirmPurchaseReceiving, canRegisterPurchaseInvoices, getPurchaseApproverIds } from "@/lib/guards";
 import { checkPurchaseSubmission, purchaseSubmissionSchema, nextPurchaseRequestNumber, purchaseRequestInclude } from "@/lib/purchases";
-import { sendPushToOwner } from "@/lib/webPush";
+import { notifyOwner } from "@/lib/notifications";
 import { reserveCreditsForGroup, getReservedCreditsForGroup, getAvailableCreditsForSupplier } from "@/lib/supplierCredits";
 import { reviewApprovedPurchaseGroup } from "@/lib/purchaseAi";
 
@@ -110,7 +110,7 @@ export async function GET(req: NextRequest) {
         quantity: true,
         unitCost: true,
         supplierId: true,
-        catalogItem: { select: { id: true, name: true, photos: true, justCode: true } },
+        catalogItem: { select: { id: true, name: true, photos: true, justCode: true, awaitingDropiId: true } },
         supplier: { select: { id: true, name: true } },
         receipt: { select: { confirmedAt: true } },
         urgentReports: {
@@ -402,11 +402,11 @@ export async function POST(req: NextRequest) {
   // hoy Bryan, que sería la misma persona que la subió) — solo el admin
   // puede actuar sobre esto, ver GET view=approval y review/route.ts.
   if (isEmergencySubmission) {
-    await sendPushToOwner("admin", {
+    await notifyOwner("admin", {
       title: "🚨 Solicitud de emergencia de compra",
       body: `${summary} · $${check.groupTotal.toFixed(2)} — motivo: ${d.emergencyReason!.trim()}`,
       url: "/admin",
-    }).catch(() => null);
+    });
 
     const full = await prisma.purchaseRequest.findMany({ where: { groupId }, include: purchaseRequestInclude });
     return NextResponse.json(full, { status: 201 });
@@ -423,11 +423,11 @@ export async function POST(req: NextRequest) {
   const approverIds = await getPurchaseApproverIds();
   await Promise.all(
     approverIds.map((id) =>
-      sendPushToOwner(id, {
+      notifyOwner(id, {
         title: check.anyOverThreshold ? "🔴 Nueva solicitud — precio por encima del historial" : "Nueva solicitud de compra",
         body: `${summary} · $${check.groupTotal.toFixed(2)}`,
         url: "/area/workspace",
-      }).catch(() => null)
+      })
     )
   );
 

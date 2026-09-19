@@ -4,7 +4,7 @@ import { auth } from "@/auth";
 import { canManagePettyCashSecundaria } from "@/lib/guards";
 import { getOrCreateBox } from "@/lib/pettyCash";
 import { prisma } from "@/lib/prisma";
-import { sendPushToOwner } from "@/lib/webPush";
+import { notifyOwner } from "@/lib/notifications";
 
 const schema = z.object({ groupId: z.string().min(1), reason: z.string().trim().min(1) });
 
@@ -32,11 +32,11 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  await sendPushToOwner("admin", {
+  await notifyOwner("admin", {
     title: "⚠️ Excepción de doble pago de flete",
     body: parsed.data.reason,
     url: "/admin",
-  }).catch(() => null);
+  });
 
   return NextResponse.json({ ok: true, exception });
 }

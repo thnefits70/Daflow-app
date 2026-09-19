@@ -6,7 +6,7 @@ import { getOrCreateBox, hasPendingConfirmation } from "@/lib/pettyCash";
 import { hashFileFromUrl } from "@/lib/fileHash";
 import { readPettyCashProof } from "@/lib/pettyCashAi";
 import { prisma } from "@/lib/prisma";
-import { sendPushToOwner } from "@/lib/webPush";
+import { notifyOwner } from "@/lib/notifications";
 
 const schema = z.object({
   boxType: z.enum(["PRINCIPAL", "SECUNDARIA"]),
@@ -100,11 +100,11 @@ export async function POST(req: NextRequest) {
     select: { id: true },
   });
   if (recipient) {
-    await sendPushToOwner(recipient.id, {
+    await notifyOwner(recipient.id, {
       title: "💰 Te fondearon la Caja Chica",
       body: `$${d.amount.toFixed(2)} — confirma que lo recibiste`,
       url: "/area/workspace",
-    }).catch(() => null);
+    });
   }
 
   return NextResponse.json({ ok: true, entry });

@@ -3,7 +3,7 @@ import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { canCreateManagementDeduction } from "@/lib/guards";
-import { sendPushToOwner } from "@/lib/webPush";
+import { notifyOwner } from "@/lib/notifications";
 
 // Colaborador ve sus propios descuentos (aceptados o esperando su
 // aceptación). Admin ve todos (para referencia/seguimiento).
@@ -47,11 +47,11 @@ export async function POST(req: NextRequest) {
 
   const deduction = await prisma.managementDeduction.create({ data: parsed.data });
 
-  await sendPushToOwner(parsed.data.employeeId, {
+  await notifyOwner(parsed.data.employeeId, {
     title: "⚠️ Descuento por confirmar",
     body: `$${parsed.data.totalAmount.toFixed(2)} — ${parsed.data.reason}`,
     url: "/area/roles-de-pago",
-  }).catch(() => null);
+  });
 
   return NextResponse.json(deduction, { status: 201 });
 }

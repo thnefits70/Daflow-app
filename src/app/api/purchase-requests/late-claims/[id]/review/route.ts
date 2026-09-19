@@ -3,7 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { canActOnPurchaseReceiving } from "@/lib/guards";
-import { sendPushToOwner } from "@/lib/webPush";
+import { notifyOwner } from "@/lib/notifications";
 
 const schema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("approve") }),
@@ -44,11 +44,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     });
     await Promise.all(
       [...notifyTargets].map((ownerId) =>
-        sendPushToOwner(ownerId, {
+        notifyOwner(ownerId, {
           title: "Reclamo posterior al cierre rechazado",
           body: `${existing.request.catalogItem.name} — ${existing.lateClaimCode}: ${reason}`,
           url: ownerId === "admin" ? "/admin" : "/area/workspace?tab=compras&ptab=inventario",
-        }).catch(() => null)
+        })
       )
     );
     return NextResponse.json({ ok: true });
@@ -65,11 +65,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   await Promise.all(
     [...notifyTargets].map((ownerId) =>
-      sendPushToOwner(ownerId, {
+      notifyOwner(ownerId, {
         title: "✓ Reclamo posterior al cierre aprobado",
         body: `${existing.request.catalogItem.name} — ${existing.lateClaimCode}: falta darlo de baja en Just.`,
         url: ownerId === "admin" ? "/admin" : "/area/workspace?tab=compras&ptab=inventario",
-      }).catch(() => null)
+      })
     )
   );
 

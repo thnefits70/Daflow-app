@@ -2,8 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { dbUserId } from "@/lib/guards";
-import { sendPushToOwner } from "@/lib/webPush";
-import { resolveNotifications } from "@/lib/notifications";
+import { notifyOwner, resolveNotifications } from "@/lib/notifications";
 
 // Solo admin — es quien de verdad revisa su cuenta bancaria. El doble
 // "¿estás seguro?" vive en el cliente (pantalla de confirmación con los
@@ -37,11 +36,11 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   // revisó su banco y cerró la operación. Sin esto, el mismo Bryan tenía que
   // volver a preguntar si el dinero había llegado.
   if (resolution.createdById) {
-    await sendPushToOwner(resolution.createdById, {
+    await notifyOwner(resolution.createdById, {
       title: "✅ Reembolso cerrado — el dinero sí llegó",
       body: `${resolution.report.request.catalogItem.name} — $${resolution.amount.toFixed(2)} confirmado en el banco`,
       url: "/area/workspace",
-    }).catch(() => null);
+    });
   }
 
   return NextResponse.json(updated);

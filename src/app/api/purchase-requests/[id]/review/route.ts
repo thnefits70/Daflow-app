@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
-import { sendPushToOwner } from "@/lib/webPush";
+import { notifyOwner } from "@/lib/notifications";
 import { canActOnPurchaseApproval } from "@/lib/guards";
 
 const schema = z.object({ action: z.enum(["approve", "reject"]), rejectReason: z.string().trim().optional() });
@@ -36,11 +36,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   });
 
   if (existing.requestedById) {
-    await sendPushToOwner(existing.requestedById, {
+    await notifyOwner(existing.requestedById, {
       title: parsed.data.action === "approve" ? "Solicitud aprobada" : "Solicitud rechazada",
       body: `${existing.catalogItem.name} — ${parsed.data.action === "approve" ? "sigue con el pago" : parsed.data.rejectReason || "sin motivo especificado"}`,
       url: "/area/workspace",
-    }).catch(() => null);
+    });
   }
 
   return NextResponse.json(updated);

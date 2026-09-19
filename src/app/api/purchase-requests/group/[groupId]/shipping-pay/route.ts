@@ -3,7 +3,6 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { canActOnPurchaseInvoices } from "@/lib/guards";
-import { sendPushToOwner } from "@/lib/webPush";
 import { notifyOwner } from "@/lib/notifications";
 import { findDuplicatePaymentProofUse, formatPurchaseRequestCode } from "@/lib/purchases";
 
@@ -60,7 +59,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ gro
       title: "Flete pagado",
       body: `Ya se pagó el flete de ${names}`,
       url: "/area/workspace",
-    }).catch(() => null);
+    });
   }
 
   // Confirmado 2026-08-14: pedido explícito del usuario — como ahora el
@@ -74,11 +73,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ gro
     if (invLeader) reviewTargets.add(invLeader.id);
     await Promise.all(
       [...reviewTargets].map((ownerId) =>
-        sendPushToOwner(ownerId, {
+        notifyOwner(ownerId, {
           title: "📦 Flete pagado — falta revisar la mercadería",
           body: `${names} — ya se pagó el flete, confirma que llegó todo bien`,
           url: ownerId === "admin" ? "/admin" : "/area/workspace",
-        }).catch(() => null)
+        })
       )
     );
   }

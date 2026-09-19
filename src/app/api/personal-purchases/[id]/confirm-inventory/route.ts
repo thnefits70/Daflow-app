@@ -4,7 +4,6 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { canConfirmPersonalPurchaseInventory } from "@/lib/guards";
 import { computeUnitPriceModes, type UnitDeclaration } from "@/lib/personalPurchases";
-import { sendPushToOwner } from "@/lib/webPush";
 import { notifyOwner } from "@/lib/notifications";
 import { actorName } from "@/lib/actorName";
 import { createOutflowForPersonalPurchaseItem, notifyInventoryLeadOutflowPending } from "@/lib/merchandiseOutflow";
@@ -93,18 +92,18 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const finLeader = await prisma.user.findFirst({ where: { isLeader: true, leadsDept: { code: "FIN" } }, select: { id: true } });
   if (finLeader) {
-    await sendPushToOwner(finLeader.id, {
+    await notifyOwner(finLeader.id, {
       title: "🛒 Compra personal lista para fijar precio",
       body: `${order.employee.name} · ${itemCount} producto${itemCount === 1 ? "" : "s"}`,
       url: "/area/nomina?tab=pagos&ptab=comprasfinanzas",
-    }).catch(() => null);
+    });
   }
 
-  await sendPushToOwner(order.employee.id, {
+  await notifyOwner(order.employee.id, {
     title: "✅ Ya podés retirarlo",
     body: "Daniel ya lo tiene listo en bodega.",
     url: "/area/compras-personales",
-  }).catch(() => null);
+  });
 
   return NextResponse.json(updated);
 }

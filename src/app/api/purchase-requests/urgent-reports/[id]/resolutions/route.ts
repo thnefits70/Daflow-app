@@ -3,7 +3,7 @@ import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { canSubmitPurchaseRequests } from "@/lib/guards";
-import { sendPushToOwner } from "@/lib/webPush";
+import { notifyOwner } from "@/lib/notifications";
 import { totalReportedQty, claimedQty } from "@/lib/purchaseUrgent";
 
 const schema = z.discriminatedUnion("type", [
@@ -110,11 +110,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const invLeader = await prisma.user.findFirst({ where: { isLeader: true, leadsDept: { code: "INV" } }, select: { id: true } });
     if (invLeader) {
       const isMissingDelivery = parsed.data.missingDelivery ?? false;
-      await sendPushToOwner(invLeader.id, {
+      await notifyOwner(invLeader.id, {
         title: isMissingDelivery ? "📦 Entrega de mercadería faltante pendiente de verificar" : "📦 Cambio de mercadería pendiente de verificar",
         body: `${report.request.catalogItem.name} — ${parsed.data.quantity} un. · llega hasta ${new Date(parsed.data.dueDate).toLocaleDateString("es-MX")}`,
         url: "/area/workspace",
-      }).catch(() => null);
+      });
     }
   }
 

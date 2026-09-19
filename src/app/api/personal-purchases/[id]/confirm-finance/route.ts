@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { canSetPersonalPurchasePrice } from "@/lib/guards";
 import { addBusinessDays } from "@/lib/businessHours";
-import { sendPushToOwner } from "@/lib/webPush";
+import { notifyOwner } from "@/lib/notifications";
 
 const schema = z.object({
   items: z.array(z.object({ itemId: z.string().min(1), costUnitPrice: z.number().nonnegative(), dropiUnitPrice: z.number().nonnegative() })).min(1),
@@ -68,11 +68,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     },
   });
 
-  await sendPushToOwner(order.employee.id, {
+  await notifyOwner(order.employee.id, {
     title: "💵 Tu compra personal quedó lista",
     body: `Total $${totalAmount.toFixed(2)} — elegí cómo pagarla.`,
     url: "/area/compras-personales",
-  }).catch(() => null);
+  });
 
   return NextResponse.json(updated);
 }

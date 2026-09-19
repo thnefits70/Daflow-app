@@ -3,7 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { canActOnPurchaseReceiving } from "@/lib/guards";
-import { sendPushToOwner } from "@/lib/webPush";
+import { notifyOwner } from "@/lib/notifications";
 
 const schema = z.object({ confirmedQty: z.number().int() });
 
@@ -44,11 +44,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (existing.reportedById) notifyTargets.add(existing.reportedById);
   await Promise.all(
     [...notifyTargets].map((ownerId) =>
-      sendPushToOwner(ownerId, {
+      notifyOwner(ownerId, {
         title: "📦 Reclamo posterior al cierre — dado de baja en Just",
         body: `${existing.request.catalogItem.name} — ${existing.lateClaimCode}: listo para gestionar con el proveedor.`,
         url: ownerId === "admin" ? "/admin" : "/area/workspace?tab=compras&ptab=urgentes",
-      }).catch(() => null)
+      })
     )
   );
 

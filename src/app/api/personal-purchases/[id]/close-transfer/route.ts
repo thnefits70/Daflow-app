@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { canClosePersonalPurchaseTransfer } from "@/lib/guards";
-import { sendPushToOwner } from "@/lib/webPush";
+import { notifyOwner } from "@/lib/notifications";
 
 // Confirmado 2026-08-20: último paso — exclusivo de Nairoby/FIN, pedido
 // explícito del usuario (el admin puede ver esta cola pero no cerrarla).
@@ -22,11 +22,11 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     data: { status: "APPROVED", transferClosedAt: new Date(), transferClosedById: session!.user.id },
   });
 
-  await sendPushToOwner(order.employeeId, {
+  await notifyOwner(order.employeeId, {
     title: "🎉 Recibimos tu transferencia",
     body: `$${order.totalAmount?.toFixed(2)} — ¡disfrutá tu compra!`,
     url: "/area/compras-personales",
-  }).catch(() => null);
+  });
 
   return NextResponse.json(updated);
 }

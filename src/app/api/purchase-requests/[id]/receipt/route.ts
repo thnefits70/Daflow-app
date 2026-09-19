@@ -4,7 +4,6 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { canReceivePurchasesTeam, canActOnPurchaseReceiving, getInventoryLeadId } from "@/lib/guards";
 import { notifyOwner } from "@/lib/notifications";
-import { sendPushToOwner } from "@/lib/webPush";
 import { getMarketingArrivalActorIds, getMarketingArrivalDispatchViewerIds } from "@/lib/marketingArrivals";
 
 const schema = z.object({
@@ -152,7 +151,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       title: "Recepción pendiente de tu aprobación",
       body: `${existing.catalogItem.name} — ${parsed.data.receivedQuantity} un. recibidas por el equipo, esperando que apruebes.`,
       url: "/area/workspace?tab=compras&ptab=inventario",
-    }).catch(() => null);
+    });
   }
 
   // Confirmado 2026-09-16: aviso a Análisis de Mercado y despacho, movido acá
@@ -166,13 +165,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   ]);
   await Promise.all([
     ...designIds.map((uid) =>
-      sendPushToOwner(uid, { title: "Llegó mercadería a bodega", body: arrivalBody, url: "/area/workspace?tab=llegadas" }).catch(() => null)
+      notifyOwner(uid, { title: "Llegó mercadería a bodega", body: arrivalBody, url: "/area/workspace?tab=llegadas" })
     ),
     ...advisorIds.map((uid) =>
-      sendPushToOwner(uid, { title: "Llegó mercadería a bodega", body: arrivalBody, url: "/area/workspace?tab=llegadas" }).catch(() => null)
+      notifyOwner(uid, { title: "Llegó mercadería a bodega", body: arrivalBody, url: "/area/workspace?tab=llegadas" })
     ),
     ...dispatchIds.map((uid) =>
-      sendPushToOwner(uid, { title: "Llegó mercadería a bodega", body: `${arrivalBody} — ya puedes ir organizando el despacho.`, url: "/area/workspace?tab=llegadas" }).catch(() => null)
+      notifyOwner(uid, { title: "Llegó mercadería a bodega", body: `${arrivalBody} — ya puedes ir organizando el despacho.`, url: "/area/workspace?tab=llegadas" })
     ),
   ]);
 

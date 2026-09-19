@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { canManageLegacyPayrollDebts, canViewPayrollRoles } from "@/lib/guards";
 import { resolveFirstPayoutMonth } from "@/lib/payroll";
 import { installmentAmount, addMonthsToMonthStr } from "@/lib/payrollCalc";
-import { sendPushToOwner } from "@/lib/webPush";
+import { notifyOwner } from "@/lib/notifications";
 
 // Confirmado 2026-09-11: pedido explícito del usuario — como este cobro es
 // automático, Nairoby (y el admin) necesitan ver mes a mes cuánto sale cada
@@ -74,11 +74,11 @@ export async function POST(req: NextRequest) {
     include: { employee: { select: { name: true } } },
   });
 
-  await sendPushToOwner(parsed.data.employeeId, {
+  await notifyOwner(parsed.data.employeeId, {
     title: "Deuda anterior registrada en tu rol de pago",
     body: `$${parsed.data.totalAmount.toFixed(2)} — ${parsed.data.reason} (en ${parsed.data.installments} cuota${parsed.data.installments > 1 ? "s" : ""}, desde ${firstPayoutMonth})`,
     url: "/area/roles-de-pago",
-  }).catch(() => null);
+  });
 
   return NextResponse.json(debt, { status: 201 });
 }

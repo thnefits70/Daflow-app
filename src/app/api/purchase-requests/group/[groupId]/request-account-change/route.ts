@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { sendPushToOwner } from "@/lib/webPush";
+import { notifyOwner } from "@/lib/notifications";
 
 const schema = z.object({ note: z.string().trim().optional() });
 
@@ -35,11 +35,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ gro
   });
 
   if (existing.requestedById) {
-    await sendPushToOwner(existing.requestedById, {
+    await notifyOwner(existing.requestedById, {
       title: "🏦 Cambia la cuenta bancaria para pagar",
       body: `${existing.catalogItem.name}${parsed.data.note ? ` — ${parsed.data.note}` : ""}`,
       url: "/area/workspace",
-    }).catch(() => null);
+    });
   }
 
   const updated = await prisma.purchaseRequest.findMany({ where: { groupId } });

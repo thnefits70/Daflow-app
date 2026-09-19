@@ -3,7 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { canProposeFixedMonthlyBonus } from "@/lib/guards";
-import { sendPushToOwner } from "@/lib/webPush";
+import { notifyOwner } from "@/lib/notifications";
 import { actorName } from "@/lib/actorName";
 
 const schema = z.object({ pendingAmount: z.number().nonnegative() });
@@ -30,11 +30,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ us
     create: { userId, pendingAmount: parsed.data.pendingAmount, proposedAt: new Date(), proposedById: isAdmin ? null : session!.user.id },
   });
 
-  await sendPushToOwner("admin", {
+  await notifyOwner("admin", {
     title: "💰 Bono especial fijo propuesto — falta tu aprobación",
     body: `${user.name} · $${parsed.data.pendingAmount.toFixed(2)}/mes · propuesto por ${actorName(session!.user.name)}`,
     url: "/admin/nomina?tab=pagos",
-  }).catch(() => null);
+  });
 
   return NextResponse.json(bonus);
 }

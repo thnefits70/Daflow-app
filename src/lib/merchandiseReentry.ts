@@ -1,6 +1,5 @@
 import { prisma } from "@/lib/prisma";
 import { getFinanceLeadId } from "@/lib/guards";
-import { sendPushToOwner } from "@/lib/webPush";
 import { notifyOwner } from "@/lib/notifications";
 import { isBusinessDay } from "@/lib/recognition";
 
@@ -131,11 +130,11 @@ export async function maybeMarkBatchApproved(batchId: string) {
 
   const leadId = await getFinanceLeadId();
   if (leadId) {
-    await sendPushToOwner(leadId, {
+    await notifyOwner(leadId, {
       title: "Reingreso de mercadería listo para cerrar",
       body: `${batch.code} — Daniel ya aprobó todo, listo para subir a Just o dar de baja.`,
       url: "/area/reingreso-mercaderia?tab=cierre",
-    }).catch(() => null);
+    });
   }
 }
 

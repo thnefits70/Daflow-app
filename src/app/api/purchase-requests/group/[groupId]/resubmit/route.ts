@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { canSubmitPurchaseRequests } from "@/lib/guards";
 import { checkPurchaseSubmission, purchaseSubmissionSchema, purchaseRequestInclude } from "@/lib/purchases";
-import { sendPushToOwner } from "@/lib/webPush";
+import { notifyOwner } from "@/lib/notifications";
 import { reserveCreditsForGroup } from "@/lib/supplierCredits";
 
 // Confirmado 2026-08-08: cambio de política pedido explícitamente por el
@@ -101,7 +101,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ gro
   ]);
 
   const summary = d.items.length === 1 ? check.nameById.get(d.items[0].catalogItemId) : `${d.items.length} productos`;
-  await sendPushToOwner("admin", {
+  await notifyOwner("admin", {
     title: r0.isEmergency
       ? "🚨 Solicitud de emergencia corregida y reenviada"
       : check.anyOverThreshold ? "🔴 Solicitud corregida — precio por encima del historial" : "Solicitud de compra corregida y reenviada",
@@ -109,7 +109,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ gro
       ? `${summary} · $${check.groupTotal.toFixed(2)} · intento ${attemptNumber} — motivo: ${r0.emergencyReason ?? ""}`
       : `${summary} · $${check.groupTotal.toFixed(2)} · intento ${attemptNumber}`,
     url: "/admin",
-  }).catch(() => null);
+  });
 
   const full = await prisma.purchaseRequest.findMany({ where: { groupId }, include: purchaseRequestInclude });
   return NextResponse.json(full);
