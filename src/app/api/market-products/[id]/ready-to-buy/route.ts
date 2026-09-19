@@ -26,8 +26,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     include: { supplierPrices: true },
   });
   if (!existing) return NextResponse.json({ error: "No encontrada." }, { status: 404 });
-  if (existing.status !== "APPROVED" || !existing.brandedAt) {
-    return NextResponse.json({ error: "El producto todavía no terminó Publicar/Brandear." }, { status: 409 });
+  // Confirmado 2026-09-18, pedido explícito del usuario: ya no se espera a
+  // que Heidy publique ni a que Robert brandee — el catálogo (y por lo tanto
+  // la posibilidad de comprar) existe desde que Bryan aprobó la idea (Etapa
+  // 2). El Kardex sigue esperando el ID real (ver awaitingDropiId).
+  if (existing.status !== "APPROVED" || !existing.catalogItemId) {
+    return NextResponse.json({ error: "El producto todavía no tiene catálogo — falta que Bryan lo apruebe." }, { status: 409 });
   }
   if (!existing.supplierPrices.some((sp) => sp.supplierId === parsed.data.chosenSupplierId)) {
     return NextResponse.json({ error: "Ese proveedor no está entre los cargados en la propuesta." }, { status: 400 });

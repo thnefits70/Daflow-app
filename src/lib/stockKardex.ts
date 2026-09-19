@@ -132,6 +132,51 @@ export async function recordKardexEntry(params: {
   });
 }
 
+export type KardexReleaseResult = { entriesPosted: number; catalogItemId: string };
+
+// Confirmado 2026-09-18, pedido explícito del usuario: liberación final de
+// Bryan para un producto nuevo (Análisis de Mercado) que se compró y recibió
+// antes de que Heidy tuviera su ID de Dropi — ver awaitingDropiId en
+// PurchaseCatalogItem. Le pone el justCode real al catálogo y recién ahí
+// suma al Kardex, en orden real (por fecha de recepción, no la de hoy), cada
+// compra que ya había llegado mientras se esperaba el ID — mismo criterio
+// "insertar en la posición correcta de la línea de tiempo" que ya usan los
+// backfills de arriba. Como el producto es nuevo, nunca hay líneas de Kardex
+// previas que reordenar: cada receipt pendiente solo se agrega una vez, con
+// su propio costo real, en el orden en que de verdad llegaron.
+export async function releasePendingKardexForCatalogItem(catalogItemId: string, dropiProductId: string): Promise<KardexReleaseResult> {
+  const justCodeTaken = await prisma.purchaseCatalogItem.findUnique({ where: { justCode: dropiProductId } });
+  await prisma.purchaseCatalogItem.update({
+    where: { id: catalogItemId },
+    data: { awaitingDropiId: false, justCode: justCodeTaken && justCodeTaken.id !== catalogItemId ? null : dropiProductId },
+  });
+
+  const pendingRequests = await prisma.purchaseRequest.findMany({
+    where: { catalogItemId, status: "RECEIVED", receipt: { approvedAt: { not: null }, stockKardexEntry: null } },
+    include: { receipt: true },
+    orderBy: { receipt: { approvedAt: "asc" } },
+  });
+
+  for (const request of pendingRequests) {
+    if (!request.receipt?.approvedAt) continue;
+    await recordKardexEntry({
+      catalogItemId,
+      type: "IN",
+      quantity: request.receipt.receivedQuantity,
+      unitCost: effectiveUnitCost({
+        unitCost: request.unitCost,
+        quantity: request.quantity,
+        shippingIncluded: request.shippingIncluded,
+        shippingCostTotal: request.shippingCostTotal,
+      }),
+      occurredAt: request.receipt.approvedAt,
+      purchaseRequestReceiptId: request.receipt.id,
+    });
+  }
+
+  return { entriesPosted: pendingRequests.length, catalogItemId };
+}
+
 // Confirmado 2026-09-10 (pedido de Daniel): declarar el lote de un producto
 // que YA está en percha, sin depender de esperar la próxima compra — no
 // toca el Kardex (esa mercadería ya está reflejada en el saldo), solo le

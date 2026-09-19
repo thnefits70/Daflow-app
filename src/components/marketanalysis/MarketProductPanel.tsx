@@ -45,7 +45,9 @@ type Proposal = {
   brandedBy: { name: string } | null;
   chosenSupplier: { id: string; name: string; paymentMode?: "PREPAGO" | "CREDITO" } | null;
   readyToBuyAt: string | null;
-  catalogItem: { id: string; name: string; photos: string[] } | null;
+  kardexReleasedAt: string | null;
+  kardexReleasedBy: { name: string } | null;
+  catalogItem: { id: string; name: string; photos: string[]; awaitingDropiId?: boolean } | null;
   supplierPrices: SupplierPrice[];
   traceability?: { totalMinutes: number | null };
   suggestedSupplierId?: string | null;
@@ -649,6 +651,12 @@ function PublishQueue() {
   const [dropiId, setDropiId] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState("");
+  // Confirmado 2026-09-18, pedido explícito del usuario: doble confirmación
+  // antes de guardar el ID — Heidy puede tener varios productos pendientes a
+  // la vez, esto evita que le pegue el ID equivocado a un producto por
+  // apuro. Primero escribe el ID, después tiene que confirmar viendo la
+  // foto+nombre del producto exacto antes de que se guarde de verdad.
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
 
   function load() {
     fetch("/api/market-products?view=publish").then((r) => (r.ok ? r.json() : [])).then(setRows).catch(() => setRows([]));
@@ -663,6 +671,7 @@ function PublishQueue() {
       body: JSON.stringify({ dropiProductId: dropiId[id].trim(), quantity: 100 }),
     });
     setBusy(null);
+    setConfirmingId(null);
     if (!res.ok) { const d = await res.json().catch(() => ({})); setErr(d.error ?? "No se pudo publicar."); return; }
     load();
   }
@@ -683,12 +692,37 @@ function PublishQueue() {
               <div className="text-[13px] font-bold text-ink mt-1">Precio de Dropi: {money(p.calculatedSalePrice)}</div>
             </div>
           </div>
-          <div className="flex gap-2">
-            <input className="flex-1 rounded border border-rule px-2.5 py-1.5 text-[13px]" placeholder="ID que te dio Dropi" value={dropiId[p.id] ?? ""} onChange={(e) => setDropiId((s) => ({ ...s, [p.id]: e.target.value }))} />
-            <button type="button" disabled={busy === p.id} className="rounded border border-teal bg-teal px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer disabled:opacity-60" onClick={() => publish(p.id)}>
-              Confirmar publicado
-            </button>
-          </div>
+          {confirmingId === p.id ? (
+            <div className="bg-navy rounded-md p-3">
+              <div className="text-[13px] font-bold mb-1.5">¿Seguro?</div>
+              <div className="flex items-center gap-2.5 mb-2.5">
+                <img src={p.referenceImageUrl} alt="" className="w-12 h-12 rounded object-cover border border-rule shrink-0" />
+                <div className="text-[12px] text-steel">
+                  Vas a guardar el ID <b className="text-ink">{dropiId[p.id]}</b> para <b className="text-ink">{p.productName}</b> — verifica que sea esta foto y no la de otro producto que estés subiendo al mismo tiempo.
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button type="button" disabled={busy === p.id} className="rounded border border-teal bg-teal px-3.5 py-1.5 text-[12px] font-bold text-navy cursor-pointer disabled:opacity-60" onClick={() => publish(p.id)}>
+                  Sí, este ID es de este producto
+                </button>
+                <button type="button" className="text-steel text-[12px] cursor-pointer" onClick={() => setConfirmingId(null)}>
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex gap-2">
+              <input className="flex-1 rounded border border-rule px-2.5 py-1.5 text-[13px]" placeholder="ID que te dio Dropi" value={dropiId[p.id] ?? ""} onChange={(e) => setDropiId((s) => ({ ...s, [p.id]: e.target.value }))} />
+              <button
+                type="button"
+                className="rounded border border-teal bg-teal px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer disabled:opacity-60"
+                disabled={!dropiId[p.id]?.trim()}
+                onClick={() => { setErr(""); setConfirmingId(p.id); }}
+              >
+                Confirmar publicado
+              </button>
+            </div>
+          )}
         </div>
       ))}
     </div>
@@ -1017,6 +1051,20 @@ function TraceabilityView({ canDecidePurchase }: { canDecidePurchase: boolean })
     load();
   }
 
+  // Confirmado 2026-09-18, pedido explícito del usuario: liberación final —
+  // recién acá el catálogo recibe su justCode real y cualquier compra ya
+  // recibida mientras se esperaba el ID entra al Kardex. Doble confirmación
+  // (window.confirm) porque no se puede deshacer.
+  const [releasingId, setReleasingId] = useState<string | null>(null);
+  async function releaseKardex(id: string, productName: string) {
+    if (!confirm(`¿Confirmas que el ID de Dropi de "${productName}" es correcto? Se le va a poner ese ID al catálogo y se va a sumar al Kardex de INVESTOCK lo que ya haya llegado — no se puede deshacer.`)) return;
+    setErr(""); setReleasingId(id);
+    const res = await fetch(`/api/market-products/${id}/release-kardex`, { method: "POST" });
+    setReleasingId(null);
+    if (!res.ok) { const d = await res.json().catch(() => ({})); setErr(d.error ?? "No se pudo liberar."); return; }
+    load();
+  }
+
   if (rows === null) return <div className="text-steel text-[13px]">Cargando…</div>;
   if (rows.length === 0) return <div className="text-steel text-[13.5px]">No hay productos aprobados todavía.</div>;
 
@@ -1035,7 +1083,27 @@ function TraceabilityView({ canDecidePurchase }: { canDecidePurchase: boolean })
           {p.traceability?.totalMinutes != null && (
             <div className="text-[12px] font-semibold text-ink mb-3">Tiempo total: {Math.floor(p.traceability.totalMinutes / 60)}h {p.traceability.totalMinutes % 60}min</div>
           )}
-          {canDecidePurchase && !p.readyToBuyAt && p.brandedAt && (
+          {canDecidePurchase && p.catalogItem?.awaitingDropiId && p.publishedAt && !p.kardexReleasedAt && (
+            <div className="bg-blue/10 border border-blue/30 rounded-md p-2.5 mb-3">
+              <div className="text-[12px] text-ink mb-2">
+                Heidy confirmó el ID de Dropi ({p.dropiProductId}). Cualquier compra de este producto que ya haya llegado a bodega está esperando esta liberación para sumarse a INVESTOCK.
+              </div>
+              <button
+                type="button"
+                disabled={releasingId === p.id}
+                className="rounded border border-blue bg-blue px-3.5 py-1.5 text-[12px] font-semibold text-white cursor-pointer disabled:opacity-60"
+                onClick={() => releaseKardex(p.id, p.productName)}
+              >
+                {releasingId === p.id ? "Liberando…" : "Confirmar y liberar al Kardex"}
+              </button>
+            </div>
+          )}
+          {p.kardexReleasedAt && (
+            <div className="text-[12px] text-teal font-semibold mb-2">
+              Liberado al Kardex por {p.kardexReleasedBy?.name ?? "—"} — {formatDateTime(p.kardexReleasedAt)}
+            </div>
+          )}
+          {canDecidePurchase && !p.readyToBuyAt && p.catalogItem && (
             <div className="flex flex-wrap items-center gap-2">
               <select className="rounded border border-rule px-2 py-1.5 text-[12px]" value={chosen[p.id] ?? p.suggestedSupplierId ?? ""} onChange={(e) => setChosen((c) => ({ ...c, [p.id]: e.target.value }))}>
                 <option value="">Elige proveedor…</option>

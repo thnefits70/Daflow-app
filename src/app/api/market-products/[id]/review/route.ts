@@ -38,11 +38,40 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const isAdmin = session.user.role === "admin";
   const reviewedById = isAdmin ? null : session.user.id;
 
+  let catalogItemId: string | undefined;
+  if (parsed.data.decision === "APPROVED") {
+    // Confirmado 2026-09-18: pedido explícito del usuario — el catálogo real
+    // se crea AQUÍ, apenas Bryan aprueba la idea, ya no cuando Robert termina
+    // de brandear (Etapa 4). Así Jariel puede ejecutar la compra en Control
+    // de Compras de inmediato, sin esperar el ID de Dropi de Heidy ni las
+    // fotos de marca de Robert — el Kardex sí espera el ID (ver
+    // awaitingDropiId y releasePendingKardexForCatalogItem en stockKardex.ts).
+    const nameTaken = await prisma.purchaseCatalogItem.findFirst({
+      where: { name: { equals: existing.productName, mode: "insensitive" } },
+    });
+    if (nameTaken) {
+      return NextResponse.json(
+        { error: `Ya existe "${nameTaken.name}" en el catálogo — no se puede crear un duplicado. Avisa al admin.` },
+        { status: 409 }
+      );
+    }
+    const catalogItem = await prisma.purchaseCatalogItem.create({
+      data: {
+        name: existing.productName,
+        photos: [existing.referenceImageUrl],
+        description: existing.description,
+        bodega: parsed.data.bodega,
+        awaitingDropiId: true,
+      },
+    });
+    catalogItemId = catalogItem.id;
+  }
+
   const updated = await prisma.marketProductProposal.update({
     where: { id },
     data:
       parsed.data.decision === "APPROVED"
-        ? { status: "APPROVED", reviewedById, reviewedAt: new Date(), bodega: parsed.data.bodega, isPublic: parsed.data.isPublic }
+        ? { status: "APPROVED", reviewedById, reviewedAt: new Date(), bodega: parsed.data.bodega, isPublic: parsed.data.isPublic, catalogItemId }
         : { status: "REJECTED", reviewedById, reviewedAt: new Date(), rejectReason: parsed.data.rejectReason },
   });
 

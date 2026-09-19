@@ -40,7 +40,7 @@ type Row = {
   totalCost: number;
   requestedAt: string;
   paidAt: string | null;
-  catalogItem: { name: string; photos: string[]; justCode: string | null; hasExpiration: boolean };
+  catalogItem: { name: string; photos: string[]; justCode: string | null; hasExpiration: boolean; awaitingDropiId: boolean };
   supplier: { name: string; paymentMode?: "PREPAGO" | "CREDITO" };
   requestedBy: { name: string } | null;
   paidBy: { name: string } | null;
@@ -152,7 +152,7 @@ type ReceivedRow = {
   quantity: number;
   unitCost: number;
   supplierId: string;
-  catalogItem: { id: string; name: string; photos: string[]; justCode: string | null };
+  catalogItem: { id: string; name: string; photos: string[]; justCode: string | null; awaitingDropiId: boolean };
   supplier: { id: string; name: string };
   receipt: { confirmedAt: string } | null;
   urgentReports: {
@@ -1966,7 +1966,13 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                         ))}
                       </div>
                       {err && <div className="text-red text-[12px] mb-2">{err}</div>}
-                      {r.catalogItem.hasExpiration || expirationAnswer[r.id] === "yes" ? (
+                      {r.catalogItem.awaitingDropiId && (
+                        <div className="flex items-center gap-1.5 text-[11.5px] font-semibold text-blue bg-blue/10 border border-blue/30 rounded-md px-2.5 py-2 mb-2">
+                          <AlertTriangle size={13} className="shrink-0" />
+                          Producto nuevo pendiente de ID de Dropi — al aprobar, queda RECIBIDO pero no se suma a INVESTOCK todavía. Entra al Kardex cuando Heidy confirme el ID y Bryan lo libere.
+                        </div>
+                      )}
+                      {r.catalogItem.awaitingDropiId ? null : r.catalogItem.hasExpiration || expirationAnswer[r.id] === "yes" ? (
                         <div className="bg-cloud rounded-md p-2.5 mb-2">
                           <div className="text-[11px] font-semibold text-steel mb-1.5">Este producto tiene caducidad — declara el lote:</div>
                           <div className="grid grid-cols-3 gap-2">
@@ -2053,6 +2059,11 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
 
                   {r.status === "RECEIVED" && r.receipt?.approvedBy && (
                     <div className="text-[10px] text-steel-dim mt-1">Aprobado por {actorName(r.receipt.approvedBy.name)}</div>
+                  )}
+                  {r.status === "RECEIVED" && r.catalogItem.awaitingDropiId && (
+                    <div className="flex items-center gap-1.5 text-[10.5px] font-semibold text-blue mt-1">
+                      <AlertTriangle size={11} className="shrink-0" /> Pendiente de ID Dropi — todavía no suma a INVESTOCK.
+                    </div>
                   )}
                 </div>
                 );

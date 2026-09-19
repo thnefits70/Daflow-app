@@ -148,8 +148,9 @@ const includeFull = {
   publishedBy: { select: { name: true } },
   brandedBy: { select: { name: true } },
   readyToBuyBy: { select: { name: true } },
+  kardexReleasedBy: { select: { name: true } },
   chosenSupplier: { select: { id: true, name: true } },
-  catalogItem: { select: { id: true, name: true, photos: true } },
+  catalogItem: { select: { id: true, name: true, photos: true, awaitingDropiId: true } },
   supplierPrices: { include: { supplier: { select: { id: true, name: true } } } },
 } as const;
 

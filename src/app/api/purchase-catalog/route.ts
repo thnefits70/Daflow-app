@@ -57,6 +57,7 @@ export async function GET(req: NextRequest) {
       code: i.code,
       justCode: i.justCode,
       pendingRegistration: i.pendingRegistration,
+      awaitingDropiId: i.awaitingDropiId,
       hasExpiration: i.hasExpiration,
       hasPendingDelete: !!i.deleteRequest,
       canDelete: canDelete(i),

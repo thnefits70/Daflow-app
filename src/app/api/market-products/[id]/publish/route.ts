@@ -43,5 +43,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     }).catch(() => null);
   }
 
+  // Confirmado 2026-09-18: ya con el ID confirmado por Heidy, Bryan puede
+  // liberar al Kardex cualquier compra de este producto que ya haya llegado
+  // mientras se esperaba (ver release-kardex/route.ts).
+  const marketingLead = await prisma.user.findFirst({ where: { isLeader: true, leadsDept: { code: "MKT" } }, select: { id: true } });
+  if (marketingLead) {
+    await notifyOwner(marketingLead.id, {
+      title: "ID de Dropi confirmado — falta liberar al Kardex",
+      body: `${existing.productName} ya tiene ID de Dropi. Confírmalo para sumar al Kardex lo que ya haya llegado.`,
+      url: "/area/workspace?tab=analisis-mercado",
+    }).catch(() => null);
+  }
+
   return NextResponse.json(updated);
 }

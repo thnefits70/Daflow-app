@@ -27,6 +27,11 @@ export type CatalogItemDTO = {
   code?: string | null;
   justCode?: string | null;
   pendingRegistration?: boolean;
+  // Confirmado 2026-09-18: true para un producto nuevo de Análisis de
+  // Mercado que ya se puede comprar, pero cuyo ID de Dropi todavía no está
+  // confirmado — distinto de pendingRegistration (esqueleto de Just sin
+  // fotos). Sí se puede seleccionar y comprar; solo el Kardex espera.
+  awaitingDropiId?: boolean;
   canDelete?: boolean;
   canRequestDelete?: boolean;
   hasPendingDelete?: boolean;
@@ -308,6 +313,14 @@ export function PurchaseCatalogPicker({
           <div className="text-[13.5px] font-semibold flex items-center gap-1.5">
             <CatalogCode code={value.justCode} />
             <span>{value.name}</span>
+            {value.awaitingDropiId && (
+              <span
+                className="shrink-0 font-mono text-[9px] font-bold uppercase rounded-full px-1.5 py-0.5 bg-blue/15 border border-blue/40 text-blue"
+                title="Se puede comprar ya — el Kardex de INVESTOCK espera a que Heidy confirme el ID de Dropi"
+              >
+                Pendiente ID Dropi
+              </span>
+            )}
           </div>
           {value.description && <div className="text-[11px] text-steel truncate">{value.description}</div>}
         </div>
@@ -505,6 +518,14 @@ export function PurchaseCatalogPicker({
                     {item.pendingRegistration && (
                       <span className="shrink-0 font-mono text-[9px] font-bold uppercase rounded-full px-1.5 py-0.5 bg-gold/15 border border-gold/40" style={{ color: "#D9A441" }}>
                         Sin fotos — matricular
+                      </span>
+                    )}
+                    {item.awaitingDropiId && (
+                      <span
+                        className="shrink-0 font-mono text-[9px] font-bold uppercase rounded-full px-1.5 py-0.5 bg-blue/15 border border-blue/40 text-blue"
+                        title="Se puede comprar ya — el Kardex de INVESTOCK espera a que Heidy confirme el ID de Dropi"
+                      >
+                        Pendiente ID Dropi
                       </span>
                     )}
                   </button>

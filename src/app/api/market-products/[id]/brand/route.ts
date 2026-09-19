@@ -10,11 +10,13 @@ const schema = z.object({
 });
 
 // Confirmado 2026-09-09 (Fase 2, Análisis de Mercado): Robert sube sus 3
-// fotos reales brandeadas — esto crea/matricula el PurchaseCatalogItem de
-// verdad (antes de esto, el producto no existe en el catálogo real de
-// Compras/Inventario). El justCode se pre-llena con el ID de Dropi, para
-// que cuando Daniel suba el export de Just más adelante, este producto ya
-// aparezca vinculado en vez de crear un esqueleto duplicado.
+// fotos reales brandeadas para el catálogo (Compras/Inventario) y para la
+// ficha de Dropi.
+// Confirmado 2026-09-18: el PurchaseCatalogItem ya NO se crea acá — nace en
+// review/route.ts apenas Bryan aprueba (Etapa 2), para que la compra pueda
+// arrancar sin esperar a Robert. Esta ruta solo actualiza sus fotos/
+// descripción con el contenido brandeado; el justCode real (el ID de Dropi)
+// lo asigna la liberación final de Bryan en release-kardex/route.ts.
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!(await canBrandMarketProduct()) || !session) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
@@ -28,33 +30,16 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (!existing) return NextResponse.json({ error: "No encontrada." }, { status: 404 });
   if (!existing.publishedAt) return NextResponse.json({ error: "Este producto todavía no está publicado en Dropi." }, { status: 409 });
   if (existing.brandedAt) return NextResponse.json({ error: "Ya está brandeado." }, { status: 409 });
+  if (!existing.catalogItemId) return NextResponse.json({ error: "Falta el catálogo de este producto — avisa al admin." }, { status: 409 });
 
-  const nameTaken = await prisma.purchaseCatalogItem.findFirst({
-    where: { name: { equals: existing.productName, mode: "insensitive" } },
-  });
-  if (nameTaken) {
-    return NextResponse.json(
-      { error: `Ya existe "${nameTaken.name}" en el catálogo — no se puede crear un duplicado. Avisa al admin.` },
-      { status: 409 }
-    );
-  }
-
-  const justCodeTaken = existing.dropiProductId
-    ? await prisma.purchaseCatalogItem.findUnique({ where: { justCode: existing.dropiProductId } })
-    : null;
-
-  const catalogItem = await prisma.purchaseCatalogItem.create({
-    data: {
-      name: existing.productName,
-      photos: parsed.data.photos,
-      description: existing.description,
-      justCode: justCodeTaken ? null : existing.dropiProductId,
-    },
+  await prisma.purchaseCatalogItem.update({
+    where: { id: existing.catalogItemId },
+    data: { photos: parsed.data.photos, description: existing.description },
   });
 
   const updated = await prisma.marketProductProposal.update({
     where: { id },
-    data: { brandedById: session.user.id, brandedAt: new Date(), catalogItemId: catalogItem.id },
+    data: { brandedById: session.user.id, brandedAt: new Date() },
   });
 
   const marketingLead = await prisma.user.findFirst({ where: { isLeader: true, leadsDept: { code: "MKT" } }, select: { id: true } });

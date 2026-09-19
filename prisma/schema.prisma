@@ -386,6 +386,7 @@ model User {
   marketProductProposalsPublished                  MarketProductProposal[]            @relation("MarketProductProposalPublishedBy")
   marketProductProposalsBranded                    MarketProductProposal[]            @relation("MarketProductProposalBrandedBy")
   marketProductProposalsMarkedReadyToBuy           MarketProductProposal[]            @relation("MarketProductProposalReadyToBuyBy")
+  marketProductProposalsKardexReleased             MarketProductProposal[]            @relation("MarketProductProposalKardexReleasedBy")
   marketProductPriceChangesMade                    MarketProductPriceChange[]         @relation("MarketProductPriceChangeChangedBy")
   purchaseRequestsPaidBy                           PurchaseRequest[]                  @relation("PurchaseRequestPaidBy")
   purchaseRequestsInvoicedBy                       PurchaseRequest[]                  @relation("PurchaseRequestInvoicedBy")
@@ -1728,6 +1729,14 @@ model PurchaseCatalogItem {
   // de esta regla, aunque tengan menos de 3 fotos.
   pendingRegistration Boolean @default(false)
 
+  // Confirmado 2026-09-18: true desde que Bryan aprueba un producto nuevo
+  // propuesto en Análisis de Mercado (se crea el catálogo ahí mismo, para
+  // no bloquear la compra) hasta que Bryan hace la liberación final del
+  // Kardex con el ID real de Dropi ya confirmado por Heidy. Mientras es
+  // true, approve-receipt no suma nada a INVESTOCK todavía — ver
+  // releasePendingKardexForCatalogItem en src/lib/stockKardex.ts.
+  awaitingDropiId Boolean @default(false)
+
   // Confirmado 2026-09-10, pedido de Daniel: en vez de pedirle a alguien que
   // revise los ~500 productos del catálogo para decidir cuáles caducan, el
   // sistema "aprende solo" — la primera vez que se recibe una compra de un
@@ -2042,11 +2051,21 @@ model MarketProductProposal {
   brandedById   String?
   brandedBy     User?                @relation("MarketProductProposalBrandedBy", fields: [brandedById], references: [id], onDelete: SetNull)
   brandedAt     DateTime?
-  // Se crea/liga automático cuando Robert termina de brandear, usando sus 3
-  // fotos reales — antes de eso no existe ningún PurchaseCatalogItem para
-  // este producto.
+  // Confirmado 2026-09-18: ahora se crea/liga apenas Bryan aprueba (Etapa 2),
+  // no cuando Robert brandea — para que Jariel pueda comprar de inmediato sin
+  // esperar el ID de Dropi ni las fotos de marca. Nace con justCode null y
+  // awaitingDropiId true; Robert (Etapa 4) solo actualiza sus fotos/
+  // descripción, ya no lo crea.
   catalogItemId String?              @unique
   catalogItem   PurchaseCatalogItem? @relation(fields: [catalogItemId], references: [id], onDelete: SetNull)
+
+  // Confirmado 2026-09-18: liberación final de Bryan — recién acá se le pone
+  // el justCode real (el dropiProductId que Heidy confirmó) al catálogo y se
+  // suman al Kardex las compras que ya habían llegado mientras se esperaba el
+  // ID. Independiente de reviewedAt (esa es la aprobación de la idea, Etapa 2).
+  kardexReleasedById String?
+  kardexReleasedBy   User?     @relation("MarketProductProposalKardexReleasedBy", fields: [kardexReleasedById], references: [id], onDelete: SetNull)
+  kardexReleasedAt   DateTime?
 
   // Paso 6 — decisión de compra de Bryan, viendo la trazabilidad completa.
   chosenSupplierId String?
