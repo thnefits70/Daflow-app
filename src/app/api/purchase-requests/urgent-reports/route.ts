@@ -29,14 +29,28 @@ export async function GET(_req: NextRequest) {
     // late-claims/[id]/just-confirm). rejectedAt siempre lo excluye.
     where: {
       rejectedAt: null,
-      // Confirmado 2026-09-08: pedido explícito de Daniel — un reporte que
-      // él mismo resolvió internamente con su equipo (sin escalarlo) nunca
-      // debe aparecer en la bandeja de Compras, aunque reviewedByLeadAt ya
-      // esté marcado (ver urgent-reports/[id]/resolve-internal/route.ts).
-      resolvedInternallyAt: null,
       OR: [
-        { isLateClaim: false, reviewedByLeadAt: { not: null } },
-        { isLateClaim: true, justConfirmedAt: { not: null } },
+        {
+          // Confirmado 2026-09-08: pedido explícito de Daniel — un reporte
+          // que él mismo resolvió internamente con su equipo (sin
+          // escalarlo) nunca debe aparecer en la bandeja de Compras, aunque
+          // reviewedByLeadAt ya esté marcado (ver
+          // urgent-reports/[id]/resolve-internal/route.ts).
+          resolvedInternallyAt: null,
+          OR: [
+            { isLateClaim: false, reviewedByLeadAt: { not: null } },
+            { isLateClaim: true, justConfirmedAt: { not: null } },
+          ],
+        },
+        // Fix 2026-09-19: bug real — resolve-internal solo revisa
+        // dañado/incompleto/diferente antes de cerrar, nunca excessQty. Un
+        // reporte de solo excedente (todo lo demás en 0) quedaba marcado
+        // resolvedInternallyAt y desaparecía de esta bandeja para siempre,
+        // sin que Jariel pudiera gestionar esas unidades de más con el
+        // proveedor. El excedente sigue su propio camino
+        // (excessGestion/excessConfirm/excessKardex), independiente de si
+        // el reclamo de dañado/faltante ya se resolvió internamente.
+        { excessQty: { gt: 0 }, excessKardexRecordedAt: null },
       ],
     },
     orderBy: { reportedAt: "desc" },
