@@ -41,6 +41,7 @@ type SaleDTO = {
   reviewedAt: string | null;
   reviewedBy: { name: string } | null;
   dispatchAssignedTo: { name: string } | null;
+  dispatchAssignedAt: string | null;
   prepReadyAt: string | null;
   prepReadyBy: { name: string } | null;
   packAssignedAt: string | null;
@@ -64,6 +65,27 @@ function saleColumn(s: SaleDTO): string {
     if (steps[i].at) return steps[i].label;
   }
   return "Declarada";
+}
+
+// Pedido explícito de Yair (2026-09-19, por audio): desde el tablero de
+// Historial una venta "pegada" en Aprobada/Pago confirmado/Facturada/
+// Agrupada parece rota, pero casi siempre solo está esperando a otra
+// persona (Nairoby con la factura, Daniel con la agrupación, el propio
+// Yair con el embalaje). Esto hace explícito a quién le toca el siguiente
+// paso, para no confundir "está esperando a alguien" con "el sistema no
+// avanza". No usa saleColumn() porque pago/facturación/cierre son
+// independientes del tramo de despacho — este hint sigue ESE tramo
+// puntual (agrupar → embalar → entregar → cerrar) sin importar en qué
+// columna cae la venta.
+function nextActionHint(s: SaleDTO): string | null {
+  if (s.deletedAt || s.reviewStatus === "REJECTED") return null;
+  if (!s.reviewedAt) return "Esperando que Bryan la apruebe";
+  if (s.deliveredAt) return s.nairobyClosedAt ? null : "Esperando que Nairoby cierre la venta";
+  if (s.packAssignedTo) return `Esperando que ${s.packAssignedTo.name} confirme la entrega`;
+  if (s.prepReadyAt) return "Esperando que Yair asigne quién embala";
+  if (s.dispatchAssignedTo) return `Esperando que ${s.dispatchAssignedTo.name} agrupe y marque listo`;
+  if (!s.isContraEntrega && !s.invoiceUploadedAt) return "Esperando que Nairoby suba la factura";
+  return "Esperando que Daniel asigne quién agrupa";
 }
 
 function itemsSummary(s: SaleDTO): string {
@@ -168,6 +190,9 @@ function SaleCard({
         </div>
       )}
       {s.reviewStatus === "REJECTED" && s.rejectionReason && <div className="text-[10.5px] text-red mt-0.5">{s.rejectionReason}</div>}
+      {!s.deletedAt && !s.returnedAt && nextActionHint(s) && (
+        <div className="text-[10.5px] font-semibold text-gold mt-0.5">{nextActionHint(s)}</div>
+      )}
 
       {!s.deletedAt && s.reviewStatus !== "REJECTED" && (
         <>

@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Package, Printer } from "lucide-react";
+import { Camera, Check, Package, Printer } from "lucide-react";
 import { CatalogCode } from "@/components/shared/CatalogCode";
+import { LiveCameraCapture } from "@/components/shared/LiveCameraCapture";
 
 type TeamMember = { id: string; name: string };
 type SaleItemDTO = {
@@ -35,6 +36,12 @@ export function ExternalSalePackAssignInbox() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
+  const [dispatching, setDispatching] = useState<string | null>(null);
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+  const [taking, setTaking] = useState(false);
+  const [dispatchSaving, setDispatchSaving] = useState(false);
+  const [dispatchError, setDispatchError] = useState("");
+
   function load() {
     fetch("/api/external-sales/pending-pack")
       .then((r) => r.json())
@@ -56,6 +63,22 @@ export function ExternalSalePackAssignInbox() {
       setError(e instanceof Error ? e.message : "No se pudo asignar.");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function confirmSelfDispatch(id: string) {
+    if (!photoUrl) return;
+    setDispatchSaving(true);
+    setDispatchError("");
+    try {
+      await postJson(`/api/external-sales/${id}/self-dispatch`, { photoUrl });
+      setDispatching(null);
+      setPhotoUrl(null);
+      load();
+    } catch (e) {
+      setDispatchError(e instanceof Error ? e.message : "No se pudo confirmar el despacho.");
+    } finally {
+      setDispatchSaving(false);
     }
   }
 
@@ -107,6 +130,36 @@ export function ExternalSalePackAssignInbox() {
             <Printer size={12} /> Ver / imprimir guía
           </a>
 
+          {dispatching === s.id ? (
+            <div className="bg-cloud rounded-md p-2.5 mb-2">
+              <div className="text-[11px] text-steel mb-2">Tomá la foto de a quién le entregaste para confirmar el despacho.</div>
+              {photoUrl ? (
+                <div className="flex items-center gap-2 mb-2">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={photoUrl} alt="Foto de la entrega" className="w-16 h-16 object-cover rounded border border-rule" />
+                  <button type="button" className="text-[11px] text-blue font-semibold cursor-pointer" onClick={() => { setPhotoUrl(null); setTaking(true); }}>Volver a tomar</button>
+                </div>
+              ) : taking ? (
+                <LiveCameraCapture folder="external-sale-delivery-photos" onCaptured={(url) => { setPhotoUrl(url); setTaking(false); }} onCancel={() => setTaking(false)} />
+              ) : (
+                <button type="button" className="flex items-center gap-1.5 text-[12px] font-bold border-[1.5px] border-rule rounded-md px-3 py-1.5 cursor-pointer mb-2" onClick={() => setTaking(true)}>
+                  <Camera size={13} /> Tomar foto de la entrega
+                </button>
+              )}
+              {dispatchError && <div className="text-red text-[11px] mb-1.5">{dispatchError}</div>}
+              <div className="flex gap-2">
+                <button type="button" className="flex-1 rounded border border-rule px-2.5 py-1.5 text-[11.5px] font-semibold cursor-pointer" onClick={() => { setDispatching(null); setPhotoUrl(null); }}>Cancelar</button>
+                <button type="button" disabled={dispatchSaving || !photoUrl} className="flex-1 rounded border border-teal bg-teal px-2.5 py-1.5 text-[11.5px] font-bold text-navy cursor-pointer disabled:opacity-40" onClick={() => confirmSelfDispatch(s.id)}>
+                  {dispatchSaving ? "Guardando…" : "Confirmar despacho"}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button type="button" className="flex items-center gap-1.5 text-[11.5px] font-bold border border-teal text-teal rounded px-2.5 py-1.5 cursor-pointer mb-2" onClick={() => setDispatching(s.id)}>
+              <Check size={13} /> Ya lo despaché yo mismo
+            </button>
+          )}
+
           {assigning === s.id ? (
             <div className="bg-cloud rounded-md p-2.5">
               <select className="w-full rounded border border-rule bg-surface px-2.5 py-1.5 text-[12.5px] mb-2" value={colaboradorId} onChange={(e) => setColaboradorId(e.target.value)}>
@@ -125,7 +178,7 @@ export function ExternalSalePackAssignInbox() {
             </div>
           ) : (
             <button type="button" className="flex items-center gap-1.5 text-[11.5px] font-bold border border-teal text-teal rounded px-2.5 py-1.5 cursor-pointer" onClick={() => setAssigning(s.id)}>
-              <Package size={13} /> Asignar embalaje
+              <Package size={13} /> Asignar a un colaborador
             </button>
           )}
         </div>

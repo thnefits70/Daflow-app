@@ -123,7 +123,7 @@ export function ExternalSalesPanel({
       )}
       {tab === "embalaje" && canAssignPack && (
         <>
-          <TabGuide storageKey="externalsales-embalaje">Inventario ya dejó listos los productos — asigna a alguien de tu equipo para embalar y entregar. Podés imprimir la guía de salida.</TabGuide>
+          <TabGuide storageKey="externalsales-embalaje">Inventario ya dejó listos los productos — asigna a alguien de tu equipo para embalar y entregar, o si el despacho lo hacés vos mismo usá &quot;Ya lo despaché yo mismo&quot; con la foto de entrega para cerrarlo de una vez. Podés imprimir la guía de salida.</TabGuide>
           <ExternalSalePackAssignInbox />
         </>
       )}
