@@ -29,7 +29,7 @@ export function FulfillmentRequestPanel({ canSubmit }: { canSubmit: boolean }) {
 
   return (
     <div>
-      {result && <CompiledResult batch={result} />}
+      {result && <CompiledResult key={result.id} batch={result} canEditVariants={canSubmit} />}
 
       {canSubmit && (
         <div className="flex flex-col gap-6 mb-5">

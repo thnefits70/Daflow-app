@@ -416,6 +416,7 @@ model User {
   dropiCombosCreated                               DropiCombo[]                       @relation("DropiComboCreatedBy")
   rocketCodeMappingsCreated                        RocketCodeMapping[]                @relation("RocketCodeMappingCreatedBy")
   fulfillmentRequestBatchesRequested               FulfillmentRequestBatch[]          @relation("FulfillmentRequestBatchRequestedBy")
+  fulfillmentRequestVariantNotesCreated            FulfillmentRequestVariantNote[]    @relation("FulfillmentRequestVariantNoteCreatedBy")
   supplierCreditsCreated                           SupplierCredit[]                   @relation("SupplierCreditCreatedBy")
   urgentResolutionsCreated                         PurchaseUrgentResolution[]         @relation("UrgentResolutionCreatedBy")
   urgentResolutionsReplacementSubmitted            PurchaseUrgentResolution[]         @relation("UrgentResolutionReplacementSubmittedBy")
@@ -1806,8 +1807,8 @@ model PurchaseCatalogItem {
   // — el colaborador lo elige al declarar, Daniel lo reconfirma/relinkea al
   // aprobar bodega (dos relaciones separadas, mismo criterio que
   // employeeProductName/confirmedProductName).
-  personalPurchaseItemsPicked    PersonalPurchaseItem[]      @relation("PersonalPurchaseItemCatalogItem")
-  personalPurchaseItemsConfirmed PersonalPurchaseItem[]      @relation("PersonalPurchaseItemConfirmedCatalogItem")
+  personalPurchaseItemsPicked    PersonalPurchaseItem[]          @relation("PersonalPurchaseItemCatalogItem")
+  personalPurchaseItemsConfirmed PersonalPurchaseItem[]          @relation("PersonalPurchaseItemConfirmedCatalogItem")
   // Confirmado 2026-08-29: Ruptura de Stock (KPIs Generales) también reusa
   // este catálogo compartido.
   stockoutProduct                StockoutProduct?
@@ -1816,8 +1817,8 @@ model PurchaseCatalogItem {
   // LowRotationWeeklyEntry, ComboSuggestion.
   atomProductStatuses            AtomProductStatus[]
   lowRotationWeeklyEntries       LowRotationWeeklyEntry[]
-  comboSuggestionsAsWinner       ComboSuggestion[]           @relation("ComboSuggestionWinner")
-  comboSuggestionsAsLowRotation  ComboSuggestion[]           @relation("ComboSuggestionLowRotation")
+  comboSuggestionsAsWinner       ComboSuggestion[]               @relation("ComboSuggestionWinner")
+  comboSuggestionsAsLowRotation  ComboSuggestion[]               @relation("ComboSuggestionLowRotation")
   monthlyTopMoverEntries         MonthlyTopMoverEntry[]
   // Confirmado 2026-09-09: Análisis de Mercado (Fase 2) — se crea/liga solo
   // cuando Robert termina de brandear una propuesta, con sus 3 fotos reales.
@@ -1831,6 +1832,7 @@ model PurchaseCatalogItem {
   // RocketCodeMapping y FulfillmentRequestItem.
   rocketCodeMappings             RocketCodeMapping[]
   fulfillmentRequestItems        FulfillmentRequestItem[]
+  fulfillmentRequestVariantNotes FulfillmentRequestVariantNote[]
 }
 
 enum AtomRentabilityStatus {
@@ -2318,7 +2320,8 @@ model FulfillmentRequestBatch {
   // quedan contadas para que el resumen cuadre con totalRows.
   skippedCount Int @default(0)
 
-  items FulfillmentRequestItem[]
+  items        FulfillmentRequestItem[]
+  variantNotes FulfillmentRequestVariantNote[]
 
   @@index([requestedAt])
 }
@@ -2344,6 +2347,38 @@ model FulfillmentRequestItem {
 
   @@index([batchId])
   @@index([catalogItemId])
+}
+
+// Confirmado 2026-09-21, pedido explícito del usuario: INVESTOCK no maneja
+// variantes (color/talla) como stock separado — cada producto sigue
+// teniendo un solo número de stock, eso no cambia acá. Esto es solo la
+// versión digital de lo que Yair ya anotaba a mano en el papel ("5 rojas, 3
+// azules") junto al producto: información de picking para que Daniel sepa
+// qué decirle a su equipo, guardada por producto compendiado de un batch
+// (no por cada fila cruda del archivo — un mismo producto puede venir de
+// varias filas/combos distintos, y a Yair lo que le importa anotar es el
+// desglose contra el TOTAL ya sumado). Se valida que la suma cuadre con la
+// cantidad total de ese producto en el batch antes de guardar (ver
+// fulfillmentRequestShared en el API) — a diferencia del papel, acá si no
+// cuadra se avisa antes de que Daniel vea el error.
+model FulfillmentRequestVariantNote {
+  id      String                  @id @default(cuid())
+  batchId String
+  batch   FulfillmentRequestBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  catalogItemId String
+  catalogItem   PurchaseCatalogItem @relation(fields: [catalogItemId], references: [id], onDelete: Cascade)
+
+  // Texto libre tal como Yair lo escribe (ej. "Rojo", "Talla M") — no hay
+  // catálogo de variantes, es la misma libertad que tenía a mano en papel.
+  label    String
+  quantity Int
+
+  createdById String?
+  createdBy   User?    @relation("FulfillmentRequestVariantNoteCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+
+  @@index([batchId, catalogItemId])
 }
 
 // La sola existencia de esta fila ES el estado "pendiente de eliminar" —
