@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Search, ArrowUpDown, Info, X, Wrench, Check } from "lucide-react";
+import { Search, ArrowUpDown, Info, X, Wrench, Check, Trash2 } from "lucide-react";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 import { TabGuide } from "@/components/shared/TabGuide";
 import { formatDateTime } from "@/lib/formatDateTime";
@@ -9,6 +9,7 @@ import { formatDateTime } from "@/lib/formatDateTime";
 type FreightRecomputeRow = { catalogItemId: string; name: string; entriesChanged: number; oldAvgCost: number; newAvgCost: number };
 type PersonalPurchaseBackfillRow = { catalogItemId: string; name: string; missingCount: number; missingUnits: number; oldBalance: number; newBalance: number };
 type JustCostDeclarationRow = { catalogItemId: string; name: string; justCode: string | null; suggestedCost: number };
+type UnregisteredSkeletonRow = { catalogItemId: string; name: string; justCode: string | null };
 
 // Confirmado 2026-09-16, pedido explícito del usuario: los combos de Dropi
 // (DropiCombo) no son productos reales — no tienen ni deben tener su propio
@@ -440,6 +441,19 @@ export function StockLevelsPanel({ isAdmin = false }: { isAdmin?: boolean }) {
   const [bulkDeclareApplying, setBulkDeclareApplying] = useState(false);
   const [bulkDeclareResult, setBulkDeclareResult] = useState<{ declaredCount: number; totalCandidates: number } | null>(null);
   const [bulkDeclareError, setBulkDeclareError] = useState("");
+  // Confirmado 2026-09-21, pedido explícito del usuario (admin): borrar de
+  // verdad los productos "esqueleto" que crea la importación de Just
+  // (código+nombre nada más, nunca matriculados, nunca comprados) — mismo
+  // patrón de vista previa + confirmación explícita que los 3 botones de
+  // arriba, pero este SÍ borra filas reales (irreversible), por eso lleva
+  // su propia advertencia.
+  const [cleanupOpen, setCleanupOpen] = useState(false);
+  const [cleanupLoading, setCleanupLoading] = useState(false);
+  const [cleanupPreview, setCleanupPreview] = useState<UnregisteredSkeletonRow[] | null>(null);
+  const [cleanupConfirming, setCleanupConfirming] = useState(false);
+  const [cleanupApplying, setCleanupApplying] = useState(false);
+  const [cleanupResult, setCleanupResult] = useState<{ deletedCount: number; totalCandidates: number } | null>(null);
+  const [cleanupError, setCleanupError] = useState("");
   const [combos, setCombos] = useState<ComboRow[]>([]);
   // Confirmado 2026-09-17, pedido explícito del usuario: fecha/hora exacta
   // del último archivo de Just que subió Daniel en general, para mostrarla
@@ -565,6 +579,33 @@ export function StockLevelsPanel({ isAdmin = false }: { isAdmin?: boolean }) {
     const data = await res.json();
     setBulkDeclareResult(data);
     setBulkDeclarePreview(null);
+    loadRows();
+  }
+
+  function loadCleanupPreview() {
+    setCleanupLoading(true);
+    setCleanupError("");
+    setCleanupResult(null);
+    fetch("/api/inventory-control/cleanup-unregistered-products")
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then(setCleanupPreview)
+      .catch(() => setCleanupError("No se pudo cargar la vista previa."))
+      .finally(() => setCleanupLoading(false));
+  }
+
+  async function applyCleanup() {
+    setCleanupApplying(true);
+    setCleanupError("");
+    const res = await fetch("/api/inventory-control/cleanup-unregistered-products", { method: "POST" });
+    setCleanupApplying(false);
+    setCleanupConfirming(false);
+    if (!res.ok) {
+      setCleanupError("No se pudo eliminar.");
+      return;
+    }
+    const data = await res.json();
+    setCleanupResult(data);
+    setCleanupPreview(null);
     loadRows();
   }
 
@@ -937,6 +978,77 @@ export function StockLevelsPanel({ isAdmin = false }: { isAdmin?: boolean }) {
                           onClick={() => setBulkDeclareConfirming(true)}
                         >
                           Declarar todos
+                        </button>
+                      )}
+                    </>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {isAdmin && (
+        <div className="border border-red/40 rounded-md mb-3">
+          <button
+            type="button"
+            className="w-full flex items-center gap-2 px-3 py-2 text-[12px] font-semibold text-red hover:text-red cursor-pointer"
+            onClick={() => {
+              setCleanupOpen((v) => !v);
+              if (!cleanupOpen && cleanupPreview === null && !cleanupResult) loadCleanupPreview();
+            }}
+          >
+            <Trash2 size={13} /> Eliminar productos esqueleto nunca comprados (código de Just sin matricular)
+          </button>
+          {cleanupOpen && (
+            <div className="px-3 pb-3 text-[12px]">
+              <p className="text-steel mb-2">
+                Productos que la importación de Just creó solo con código y nombre (sin fotos, nunca matriculados en &quot;Base de datos de productos&quot;) y que nunca se compraron de verdad — son la razón real detrás de buena parte de &quot;Sin precio&quot;/&quot;Sin stock&quot; de arriba. <span className="text-red font-semibold">Esto SÍ borra el producto de verdad, no se puede deshacer</span> — solo incluye productos sin ninguna compra, lote de caducidad, combo o solicitud de Fulfillment real detrás (se revisa uno por uno, otra vez, justo antes de borrar).
+              </p>
+              {cleanupError && <div className="text-red mb-2">{cleanupError}</div>}
+              {cleanupLoading && <div className="text-steel">Calculando vista previa…</div>}
+              {cleanupResult && (
+                <div className="text-teal font-semibold mb-2">
+                  ✓ Eliminados: {cleanupResult.deletedCount} de {cleanupResult.totalCandidates} producto{cleanupResult.totalCandidates === 1 ? "" : "s"}.
+                </div>
+              )}
+              {!cleanupLoading && cleanupPreview && (
+                <>
+                  {cleanupPreview.length === 0 ? (
+                    <div className="text-steel">Ningún producto esqueleto sin usar por ahora.</div>
+                  ) : (
+                    <>
+                      <div className="text-steel mb-1.5">{cleanupPreview.length} producto(s) se eliminarían:</div>
+                      <div className="max-h-52 overflow-y-auto flex flex-col gap-1 mb-2.5 border border-rule rounded-md p-1.5">
+                        {cleanupPreview.map((r) => (
+                          <div key={r.catalogItemId} className="flex items-center gap-2 text-[11.5px] px-1.5 py-1">
+                            <CatalogCode code={r.justCode} size="text-[10px]" /> <span className="truncate">{r.name}</span>
+                          </div>
+                        ))}
+                      </div>
+                      {cleanupConfirming ? (
+                        <div className="flex items-center gap-2">
+                          <span className="text-steel">¿Eliminar estos {cleanupPreview.length} productos para siempre?</span>
+                          <button
+                            type="button"
+                            disabled={cleanupApplying}
+                            className="font-bold text-red cursor-pointer disabled:opacity-50"
+                            onClick={applyCleanup}
+                          >
+                            {cleanupApplying ? "Eliminando…" : "Sí, eliminar"}
+                          </button>
+                          <button type="button" className="text-steel cursor-pointer" onClick={() => setCleanupConfirming(false)}>
+                            Cancelar
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          className="rounded border border-red bg-red px-3 py-1.5 text-[12px] font-bold text-navy cursor-pointer"
+                          onClick={() => setCleanupConfirming(true)}
+                        >
+                          Eliminar todos
                         </button>
                       )}
                     </>

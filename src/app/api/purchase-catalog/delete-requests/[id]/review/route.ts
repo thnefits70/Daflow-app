@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireAdminSession } from "@/lib/guards";
+import { checkCatalogItemDeletable } from "@/lib/stockKardex";
 
 const schema = z.object({ action: z.enum(["approve", "reject"]) });
 
@@ -21,19 +22,22 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ ok: true, deleted: false });
   }
 
-  // Un insumo con historial de compras no se puede borrar de verdad (rompería
-  // el rastro de auditoría) — se avisa en vez de dejar que la base de datos
-  // reviente con un error de llave foránea.
-  const inUse = await prisma.purchaseRequest.count({ where: { catalogItemId: deleteRequest.itemId } });
-  if (inUse > 0) {
-    return NextResponse.json(
-      { error: "Este producto, mercadería o insumo ya tiene compras registradas — no se puede eliminar sin perder ese historial." },
-      { status: 409 }
-    );
+  // Confirmado 2026-09-21: además de compras (PurchaseRequest), un producto
+  // tampoco se puede borrar de verdad si tiene lotes de caducidad, es
+  // componente de un combo, ya se pidió en Fulfillment, o tiene movimiento
+  // real en el Kardex — todas relaciones con onDelete: Restrict en el
+  // schema. Antes solo se revisaba PurchaseRequest, así que esto podía
+  // reventar con un error crudo de llave foránea (y de paso nunca borraba
+  // la línea "SEED" que todo producto tiene en el Kardex desde la carga
+  // inicial de INVESTOCK). Ver checkCatalogItemDeletable en stockKardex.ts.
+  const check = await checkCatalogItemDeletable(deleteRequest.itemId);
+  if (!check.deletable) {
+    return NextResponse.json({ error: check.reason }, { status: 409 });
   }
 
   await prisma.$transaction([
     prisma.purchaseCatalogItemDeleteRequest.delete({ where: { id } }),
+    prisma.stockKardexEntry.deleteMany({ where: { catalogItemId: deleteRequest.itemId } }),
     prisma.purchaseCatalogItem.delete({ where: { id: deleteRequest.itemId } }),
   ]);
   return NextResponse.json({ ok: true, deleted: true });

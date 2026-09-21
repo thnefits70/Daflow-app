@@ -531,6 +531,103 @@ export async function declareManualCost(params: {
   return { balanceAfter: entry.balanceAfter, avgCostAfter: entry.avgCostAfter };
 }
 
+// Confirmado 2026-09-21, pedido explícito del usuario (admin): productos
+// "esqueleto" que la importación de Just crea automáticamente para un
+// código que todavía no existe en DAFLOW (`pendingRegistration: true`,
+// sin fotos, nunca matriculados — ver el campo en el schema) nunca
+// tuvieron una compra real y no deberían seguir ensuciando "Sin precio"/
+// "Sin stock" en Stock Actual. Se pueden borrar de verdad SOLO si no
+// dejan ningún rastro real detrás — mismas 5 relaciones con onDelete:
+// Restrict que tiene PurchaseCatalogItem en el schema (PurchaseRequest,
+// ExpirationCohort, DropiComboComponent, FulfillmentRequestItem,
+// StockKardexEntry), revisadas explícitamente en vez de confiar en que
+// Postgres tire el error de llave foránea por nosotros. La única
+// excepción es StockKardexEntry: TODO producto tiene una línea "SEED"
+// (quantity 0, costo 0) de la carga inicial de INVESTOCK — esa sí se
+// borra junto con el producto, no cuenta como "rastro real".
+export async function checkCatalogItemDeletable(catalogItemId: string): Promise<{ deletable: true } | { deletable: false; reason: string }> {
+  const [purchaseCount, cohortCount, comboComponentCount, fulfillmentItemCount, kardexEntries] = await Promise.all([
+    prisma.purchaseRequest.count({ where: { catalogItemId } }),
+    prisma.expirationCohort.count({ where: { catalogItemId } }),
+    prisma.dropiComboComponent.count({ where: { catalogItemId } }),
+    prisma.fulfillmentRequestItem.count({ where: { catalogItemId } }),
+    prisma.stockKardexEntry.findMany({ where: { catalogItemId }, select: { type: true, quantity: true } }),
+  ]);
+  if (purchaseCount > 0) return { deletable: false, reason: "Este producto ya tiene compras registradas — no se puede eliminar sin perder ese historial." };
+  if (cohortCount > 0) return { deletable: false, reason: "Este producto ya tiene lotes de caducidad registrados." };
+  if (comboComponentCount > 0) return { deletable: false, reason: "Este producto es componente de un combo registrado." };
+  if (fulfillmentItemCount > 0) return { deletable: false, reason: "Este producto ya se pidió en una solicitud de Fulfillment." };
+  if (!kardexEntries.every((e) => e.type === "SEED" && e.quantity === 0)) {
+    return { deletable: false, reason: "Este producto ya tiene movimiento real en el Kardex." };
+  }
+  return { deletable: true };
+}
+
+export type UnusedSkeletonCandidate = { catalogItemId: string; name: string; justCode: string | null };
+
+// Universo de candidatos: solo los "esqueleto" de Just (pendingRegistration)
+// — nunca un producto matriculado de verdad, aunque hoy esté en $0/sin
+// stock (ese caso se resuelve poniéndole precio/comprándolo, no borrándolo).
+// Confirmado 2026-09-21: en la base real hay 404 de estos — revisarlos uno
+// por uno con checkCatalogItemDeletable (5 consultas cada uno) tardaba
+// varios minutos y arriesgaba timeout en Vercel. Acá se hacen las mismas 5
+// verificaciones pero en lote (5 consultas en total, no 5×404).
+async function findUnusedSkeletonCandidateIds(): Promise<UnusedSkeletonCandidate[]> {
+  const skeletons = await prisma.purchaseCatalogItem.findMany({
+    where: { pendingRegistration: true },
+    select: { id: true, name: true, justCode: true },
+  });
+  if (skeletons.length === 0) return [];
+  const ids = skeletons.map((s) => s.id);
+
+  const [purchases, cohorts, comboComponents, fulfillmentItems, kardexEntries] = await Promise.all([
+    prisma.purchaseRequest.findMany({ where: { catalogItemId: { in: ids } }, select: { catalogItemId: true }, distinct: ["catalogItemId"] }),
+    prisma.expirationCohort.findMany({ where: { catalogItemId: { in: ids } }, select: { catalogItemId: true }, distinct: ["catalogItemId"] }),
+    prisma.dropiComboComponent.findMany({ where: { catalogItemId: { in: ids } }, select: { catalogItemId: true }, distinct: ["catalogItemId"] }),
+    prisma.fulfillmentRequestItem.findMany({ where: { catalogItemId: { in: ids } }, select: { catalogItemId: true }, distinct: ["catalogItemId"] }),
+    prisma.stockKardexEntry.findMany({ where: { catalogItemId: { in: ids } }, select: { catalogItemId: true, type: true, quantity: true } }),
+  ]);
+  const purchasedIds = new Set(purchases.map((p) => p.catalogItemId));
+  const cohortIds = new Set(cohorts.map((c) => c.catalogItemId));
+  const comboIds = new Set(comboComponents.map((c) => c.catalogItemId));
+  const fulfillmentIds = new Set(fulfillmentItems.map((f) => f.catalogItemId));
+  const kardexByItem = new Map<string, { type: string; quantity: number }[]>();
+  for (const e of kardexEntries) {
+    const arr = kardexByItem.get(e.catalogItemId);
+    if (arr) arr.push(e);
+    else kardexByItem.set(e.catalogItemId, [e]);
+  }
+
+  return skeletons
+    .filter((s) => {
+      if (purchasedIds.has(s.id) || cohortIds.has(s.id) || comboIds.has(s.id) || fulfillmentIds.has(s.id)) return false;
+      const entries = kardexByItem.get(s.id) ?? [];
+      return entries.every((e) => e.type === "SEED" && e.quantity === 0);
+    })
+    .map((s) => ({ catalogItemId: s.id, name: s.name, justCode: s.justCode }));
+}
+
+export async function findUnusedSkeletonCatalogItems(): Promise<UnusedSkeletonCandidate[]> {
+  const candidates = await findUnusedSkeletonCandidateIds();
+  return candidates.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+// Versión masiva de deleteUnusedCatalogItem — re-revisa todo (mismo criterio,
+// otra vez desde cero, por si algo cambió desde la vista previa) y borra en
+// UNA sola transacción con deleteMany, en vez de una transacción por
+// producto — necesario para no reventar el límite de tiempo de la función
+// serverless con cientos de productos.
+export async function deleteUnusedSkeletonCatalogItemsBulk(): Promise<{ deletedCount: number; totalCandidates: number }> {
+  const candidates = await findUnusedSkeletonCandidateIds();
+  if (candidates.length === 0) return { deletedCount: 0, totalCandidates: 0 };
+  const ids = candidates.map((c) => c.catalogItemId);
+  await prisma.$transaction([
+    prisma.stockKardexEntry.deleteMany({ where: { catalogItemId: { in: ids } } }),
+    prisma.purchaseCatalogItem.deleteMany({ where: { id: { in: ids } } }),
+  ]);
+  return { deletedCount: ids.length, totalCandidates: ids.length };
+}
+
 // Confirmado 2026-09-09: alerta de stock negativo para la pantalla de KPIs
 // financieros → Inventario — misma idea que ya se ve en el export de Just
 // (4 SKUs negativos encontrados en el análisis inicial), pero calculada
