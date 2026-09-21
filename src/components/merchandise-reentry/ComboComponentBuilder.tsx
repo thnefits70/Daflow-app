@@ -14,16 +14,27 @@ export type ComboDraftComponent = { catalogItem: MatchCatalogItem; quantity: num
 // parecidos. Compartido entre DropiComboManager (gestión) y
 // DocumentCaptureFlow (desglosar un combo nuevo en el momento de leer un
 // documento).
-export function ComboComponentBuilder({ components, onChange }: { components: ComboDraftComponent[]; onChange: (next: ComboDraftComponent[]) => void }) {
+export function ComboComponentBuilder({
+  components,
+  onChange,
+  searchUrl = "/api/merchandise-reentry/catalog-search",
+}: {
+  components: ComboDraftComponent[];
+  onChange: (next: ComboDraftComponent[]) => void;
+  // Confirmado 2026-09-21: reusado desde Solicitud Fulfillment (Yair/FUL),
+  // que no tiene acceso al buscador de Reingreso — mismo criterio que
+  // ProductMatchPicker's searchUrl.
+  searchUrl?: string;
+}) {
   const [catalog, setCatalog] = useState<MatchCatalogItem[] | null>(null);
   const [query, setQuery] = useState("");
 
   useEffect(() => {
-    fetch("/api/merchandise-reentry/catalog-search")
+    fetch(searchUrl)
       .then((r) => (r.ok ? r.json() : []))
       .then(setCatalog)
       .catch(() => setCatalog([]));
-  }, []);
+  }, [searchUrl]);
 
   function addComponent(item: MatchCatalogItem) {
     if (components.some((c) => c.catalogItem.id === item.id)) return;

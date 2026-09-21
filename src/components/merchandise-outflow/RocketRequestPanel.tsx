@@ -3,12 +3,13 @@
 import { useState } from "react";
 import { Upload, AlertTriangle, Search } from "lucide-react";
 import { uploadFile } from "@/lib/uploadFile";
+import { RegisterComboForm, type RegisteredCombo } from "./RegisterComboForm";
 
-type RocketTarget = { type: "product" | "combo"; id: string; name: string; componentsCount: number | null };
+type RocketTarget = { type: "product" | "combo"; id: string; name: string; componentsCount: number | null; comboCode: string | null };
 type ReadyRow = { code: string; name: string; quantity: number; target: RocketTarget };
 type SuggestedRow = { code: string; name: string; quantity: number; suggestion: RocketTarget; matchType: "exact" | "similar" };
 type UnmatchedRow = { code: string; name: string; quantity: number };
-type Candidate = { type: "product" | "combo"; id: string; name: string; componentsCount: number | null };
+type Candidate = { type: "product" | "combo"; id: string; name: string; componentsCount: number | null; comboCode: string | null };
 type Preview = { totalRows: number; readyRows: ReadyRow[]; suggestedRows: SuggestedRow[]; unmatchedRows: UnmatchedRow[]; candidates: Candidate[] };
 
 type Decision = { target: Candidate | null; skip: boolean };
@@ -71,6 +72,14 @@ export function RocketRequestPanel({ onApplied }: { onApplied: (batchId: string)
   const [decisions, setDecisions] = useState<Record<string, Decision>>({});
   const [err, setErr] = useState("");
   const [dragOver, setDragOver] = useState(false);
+  const [registeringFor, setRegisteringFor] = useState<string | null>(null);
+
+  function onComboRegistered(code: string, combo: RegisteredCombo) {
+    const target: Candidate = { type: "combo", id: combo.id, name: combo.label ?? combo.code, componentsCount: combo.componentsCount, comboCode: combo.code };
+    setPreview((prev) => (prev ? { ...prev, candidates: [...prev.candidates.filter((c) => c.id !== combo.id), target] } : prev));
+    setDecision(code, { target, skip: false });
+    setRegisteringFor(null);
+  }
 
   async function handleFile(file: File) {
     setErr("");
@@ -111,12 +120,14 @@ export function RocketRequestPanel({ onApplied }: { onApplied: (batchId: string)
     setErr("");
   }
 
-  const pendingCount = preview
-    ? [...preview.suggestedRows.map((r) => r.code), ...preview.unmatchedRows.map((r) => r.code)].filter((code) => {
-        const d = decisions[code];
-        return !d || (!d.target && !d.skip);
-      }).length
-    : 0;
+  const brokenReadyCount = preview ? preview.readyRows.filter((r) => r.target.type === "combo" && r.target.componentsCount === 0).length : 0;
+  const pendingCount =
+    (preview
+      ? [...preview.suggestedRows.map((r) => r.code), ...preview.unmatchedRows.map((r) => r.code)].filter((code) => {
+          const d = decisions[code];
+          return !d || (!d.target && !d.skip);
+        }).length
+      : 0) + brokenReadyCount;
 
   async function confirmApply() {
     if (!preview) return;
@@ -216,6 +227,41 @@ export function RocketRequestPanel({ onApplied }: { onApplied: (batchId: string)
             </div>
           )}
 
+          {preview.readyRows
+            .filter((r) => r.target.type === "combo" && r.target.componentsCount === 0)
+            .map((r) => (
+              <div key={r.code} className="mb-2.5 rounded-md p-2.5 bg-red/10 border border-red/30">
+                <div className="text-[11.5px] mb-1.5 flex items-center gap-1.5 flex-wrap">
+                  <span className="font-mono text-steel">{r.code}</span>
+                  <span>
+                    <b>{r.name}</b> — cantidad pedida: <b>{r.quantity}</b>
+                  </span>
+                  <span className="text-red flex items-center gap-1">
+                    <AlertTriangle size={12} /> combo &quot;{r.target.name}&quot; sin receta registrada
+                  </span>
+                </div>
+                {registeringFor === r.code ? (
+                  <RegisterComboForm
+                    initialCode={r.target.comboCode ?? ""}
+                    initialLabel={r.target.name}
+                    onRegistered={(combo) => {
+                      setPreview((prev) =>
+                        prev
+                          ? { ...prev, readyRows: prev.readyRows.map((row) => (row.code === r.code ? { ...row, target: { ...row.target, componentsCount: combo.componentsCount } } : row)) }
+                          : prev
+                      );
+                      setRegisteringFor(null);
+                    }}
+                    onCancel={() => setRegisteringFor(null)}
+                  />
+                ) : (
+                  <button type="button" className="text-[11px] font-semibold text-teal cursor-pointer" onClick={() => setRegisteringFor(r.code)}>
+                    Registrar receta de este combo
+                  </button>
+                )}
+              </div>
+            ))}
+
           {[...preview.suggestedRows.map((r) => ({ ...r, kind: "suggested" as const })), ...preview.unmatchedRows.map((r) => ({ ...r, kind: "unmatched" as const, suggestion: null, matchType: null }))].map(
             (r) => {
               const d = decisions[r.code] ?? { target: null, skip: false };
@@ -259,13 +305,40 @@ export function RocketRequestPanel({ onApplied }: { onApplied: (batchId: string)
                   )}
 
                   {r.kind === "suggested" && r.suggestion?.type === "combo" && r.suggestion.componentsCount === 0 && (
-                    <div className="text-[11px] text-red mb-1 flex items-center gap-1">
-                      <AlertTriangle size={12} /> Este combo no tiene receta registrada — no se puede calcular la cantidad real. Búscalo de nuevo abajo o ignóralo, y pide que registren su receta en &quot;Base de datos de productos&quot;.
+                    <div className="text-[11px] text-red mb-1.5 flex items-center gap-1">
+                      <AlertTriangle size={12} /> Este combo no tiene receta registrada todavía.
                     </div>
                   )}
 
-                  {(!d.target || (r.kind === "suggested" && r.suggestion && d.target.id !== r.suggestion.id)) && !d.skip && (
+                  {r.kind === "suggested" && r.suggestion?.type === "combo" && r.suggestion.componentsCount === 0 && registeringFor !== r.code && (
+                    <button type="button" className="text-[11px] font-semibold text-teal cursor-pointer mb-1.5" onClick={() => setRegisteringFor(r.code)}>
+                      Registrar receta de este combo
+                    </button>
+                  )}
+                  {registeringFor === r.code && (
+                    <div className="mb-1.5">
+                      <RegisterComboForm
+                        initialCode={r.suggestion?.comboCode ?? ""}
+                        initialLabel={r.suggestion?.name ?? r.name}
+                        onRegistered={(combo) => onComboRegistered(r.code, combo)}
+                        onCancel={() => setRegisteringFor(null)}
+                      />
+                    </div>
+                  )}
+
+                  {(!d.target || (r.kind === "suggested" && r.suggestion && d.target.id !== r.suggestion.id)) && !d.skip && registeringFor !== r.code && (
                     <ManualSearch candidates={preview.candidates} onPick={(c) => setDecision(r.code, { target: c, skip: false })} />
+                  )}
+
+                  {r.kind === "unmatched" && registeringFor !== r.code && !d.target && !d.skip && (
+                    <button type="button" className="text-[10.5px] text-teal cursor-pointer mt-1" onClick={() => setRegisteringFor(r.code)}>
+                      ¿Es un combo nuevo que no está registrado? Regístralo aquí
+                    </button>
+                  )}
+                  {r.kind === "unmatched" && registeringFor === r.code && (
+                    <div className="mt-1.5">
+                      <RegisterComboForm initialCode="" initialLabel={r.name} onRegistered={(combo) => onComboRegistered(r.code, combo)} onCancel={() => setRegisteringFor(null)} />
+                    </div>
                   )}
 
                   {d.target && (!r.suggestion || d.target.id !== r.suggestion.id) && (

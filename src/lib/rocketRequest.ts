@@ -5,11 +5,11 @@ import { normalize, significantWords, findSimilarUnlinkedItem } from "@/lib/just
 // y el modelo RocketCodeMapping en schema.prisma para el porqué completo.
 export type RocketParsedRow = { code: string; name: string; quantity: number };
 
-export type RocketTarget = { type: "product" | "combo"; id: string; name: string; componentsCount: number | null };
+export type RocketTarget = { type: "product" | "combo"; id: string; name: string; componentsCount: number | null; comboCode: string | null };
 export type RocketReadyRow = { code: string; name: string; quantity: number; target: RocketTarget };
 export type RocketSuggestedRow = { code: string; name: string; quantity: number; suggestion: RocketTarget; matchType: "exact" | "similar" };
 export type RocketUnmatchedRow = { code: string; name: string; quantity: number };
-export type RocketCandidate = { type: "product" | "combo"; id: string; name: string; componentsCount: number | null };
+export type RocketCandidate = { type: "product" | "combo"; id: string; name: string; componentsCount: number | null; comboCode: string | null };
 
 export type RocketRequestPreview = {
   totalRows: number;
@@ -37,13 +37,13 @@ export async function classifyRocketRows(rows: RocketParsedRow[]): Promise<Rocke
 
   const mappingByCode = new Map(mappings.map((m) => [m.rocketCode, m]));
 
-  type Candidate = { id: string; name: string; words: Set<string>; type: "product" | "combo"; componentsCount: number | null };
-  const productCandidates: Candidate[] = catalogItems.map((c) => ({ id: c.id, name: c.name, words: significantWords(c.name), type: "product", componentsCount: null }));
+  type Candidate = { id: string; name: string; words: Set<string>; type: "product" | "combo"; componentsCount: number | null; comboCode: string | null };
+  const productCandidates: Candidate[] = catalogItems.map((c) => ({ id: c.id, name: c.name, words: significantWords(c.name), type: "product", componentsCount: null, comboCode: null }));
   // Los combos sin `label` (nombre de Dropi) no tienen con qué compararse por
   // nombre — igual quedan disponibles para búsqueda manual (ver `candidates`).
   const comboCandidates: Candidate[] = combos
     .filter((c) => c.label)
-    .map((c) => ({ id: c.id, name: c.label as string, words: significantWords(c.label as string), type: "combo", componentsCount: c.components.length }));
+    .map((c) => ({ id: c.id, name: c.label as string, words: significantWords(c.label as string), type: "combo", componentsCount: c.components.length, comboCode: c.code }));
   const allCandidates = [...productCandidates, ...comboCandidates];
   const byNormalizedName = new Map(allCandidates.map((c) => [normalize(c.name), c]));
 
@@ -56,8 +56,14 @@ export async function classifyRocketRows(rows: RocketParsedRow[]): Promise<Rocke
     const mapping = mappingByCode.get(row.code);
     if (mapping && (mapping.catalogItem || mapping.dropiCombo)) {
       const target: RocketTarget = mapping.catalogItem
-        ? { type: "product", id: mapping.catalogItem.id, name: mapping.catalogItem.name, componentsCount: null }
-        : { type: "combo", id: mapping.dropiCombo!.id, name: mapping.dropiCombo!.label ?? mapping.dropiCombo!.code, componentsCount: mapping.dropiCombo!.components.length };
+        ? { type: "product", id: mapping.catalogItem.id, name: mapping.catalogItem.name, componentsCount: null, comboCode: null }
+        : {
+            type: "combo",
+            id: mapping.dropiCombo!.id,
+            name: mapping.dropiCombo!.label ?? mapping.dropiCombo!.code,
+            componentsCount: mapping.dropiCombo!.components.length,
+            comboCode: mapping.dropiCombo!.code,
+          };
       readyRows.push({ code: row.code, name: row.name, quantity: row.quantity, target });
       continue;
     }
@@ -70,7 +76,7 @@ export async function classifyRocketRows(rows: RocketParsedRow[]): Promise<Rocke
         name: row.name,
         quantity: row.quantity,
         matchType: "exact",
-        suggestion: { type: exact.type, id: exact.id, name: exact.name, componentsCount: exact.componentsCount },
+        suggestion: { type: exact.type, id: exact.id, name: exact.name, componentsCount: exact.componentsCount, comboCode: exact.comboCode },
       });
       continue;
     }
@@ -87,7 +93,7 @@ export async function classifyRocketRows(rows: RocketParsedRow[]): Promise<Rocke
         name: row.name,
         quantity: row.quantity,
         matchType: "similar",
-        suggestion: { type: full.type, id: full.id, name: full.name, componentsCount: full.componentsCount },
+        suggestion: { type: full.type, id: full.id, name: full.name, componentsCount: full.componentsCount, comboCode: full.comboCode },
       });
       continue;
     }
@@ -100,7 +106,7 @@ export async function classifyRocketRows(rows: RocketParsedRow[]): Promise<Rocke
     readyRows,
     suggestedRows,
     unmatchedRows,
-    candidates: allCandidates.map((c) => ({ type: c.type, id: c.id, name: c.name, componentsCount: c.componentsCount })),
+    candidates: allCandidates.map((c) => ({ type: c.type, id: c.id, name: c.name, componentsCount: c.componentsCount, comboCode: c.comboCode })),
   };
 }
 

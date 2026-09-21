@@ -5,6 +5,7 @@ import { Camera, AlertTriangle, Package, X } from "lucide-react";
 import { uploadFile } from "@/lib/uploadFile";
 import { ProductMatchPicker, type MatchCatalogItem } from "@/components/merchandise-reentry/ProductMatchPicker";
 import { CatalogCode } from "@/components/shared/CatalogCode";
+import { RegisterComboForm } from "./RegisterComboForm";
 
 type Confidence = "alta" | "media" | "baja";
 type CatalogItemLite = { id: string; name: string; photos: string[]; justCode: string | null; pendingRegistration: boolean };
@@ -39,6 +40,7 @@ export function DropiRequestPanel({ onApplied }: { onApplied: (batchId: string) 
   const [preview, setPreview] = useState<Preview | null>(null);
   const [decisions, setDecisions] = useState<Record<number, Decision>>({});
   const [pickingIndex, setPickingIndex] = useState<number | null>(null);
+  const [registeringCombo, setRegisteringCombo] = useState<string | null>(null);
   const [err, setErr] = useState("");
 
   async function handleFiles(files: FileList) {
@@ -175,15 +177,31 @@ export function DropiRequestPanel({ onApplied }: { onApplied: (batchId: string) 
         <div className="bg-surface border border-rule rounded-md p-4 mb-5">
           <div className="font-display font-bold text-[14.5px] mb-3">Revisa antes de aplicar</div>
 
-          {preview.combosMissingRecipe.length > 0 && (
-            <div className="text-[11.5px] text-red mb-3 flex items-start gap-1.5 bg-red/10 border border-red/30 rounded-md p-2.5">
-              <AlertTriangle size={14} className="mt-0.5 shrink-0" />
-              <span>
-                Estos combos no tienen receta registrada, así que sus productos NO aparecen en la lista de abajo — pide que registren la receta en &quot;Base de datos de productos&quot; y vuelve a subir la captura:{" "}
-                {preview.combosMissingRecipe.map((c) => `${c.name} (pedido ${c.quantity}x)`).join(", ")}.
-              </span>
+          {preview.combosMissingRecipe.map((c) => (
+            <div key={c.code} className="text-[11.5px] mb-3 bg-red/10 border border-red/30 rounded-md p-2.5">
+              <div className="flex items-start gap-1.5 mb-1.5">
+                <AlertTriangle size={14} className="mt-0.5 shrink-0 text-red" />
+                <span className="text-red">
+                  <b>{c.name}</b> (código {c.code}, pedido {c.quantity}x) no tiene receta registrada — sus productos NO aparecen en la lista de abajo hasta que la registres.
+                </span>
+              </div>
+              {registeringCombo === c.code ? (
+                <RegisterComboForm
+                  initialCode={c.code}
+                  initialLabel={c.name}
+                  onRegistered={() => {
+                    setRegisteringCombo(null);
+                    readDocument();
+                  }}
+                  onCancel={() => setRegisteringCombo(null)}
+                />
+              ) : (
+                <button type="button" className="text-[11px] font-semibold text-teal cursor-pointer" onClick={() => setRegisteringCombo(c.code)}>
+                  Registrar receta de este combo
+                </button>
+              )}
             </div>
-          )}
+          ))}
 
           {preview.excludedNoStock.length > 0 && (
             <div className="text-[11.5px] text-steel mb-3">
@@ -246,11 +264,24 @@ export function DropiRequestPanel({ onApplied }: { onApplied: (batchId: string) 
                       }}
                       onCancel={() => setPickingIndex(null)}
                     />
+                  ) : registeringCombo === `row:${i}` ? (
+                    <RegisterComboForm
+                      initialCode={r.sourceCode ?? ""}
+                      initialLabel={r.name}
+                      onRegistered={() => {
+                        setRegisteringCombo(null);
+                        readDocument();
+                      }}
+                      onCancel={() => setRegisteringCombo(null)}
+                    />
                   ) : (
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-[11px] text-steel">Sin coincidencia en el catálogo.</span>
                       <button type="button" className="text-[11px] font-semibold text-teal cursor-pointer" onClick={() => setPickingIndex(i)}>
                         Buscar producto
+                      </button>
+                      <button type="button" className="text-[11px] font-semibold text-teal cursor-pointer" onClick={() => setRegisteringCombo(`row:${i}`)}>
+                        ¿Es un combo nuevo?
                       </button>
                     </div>
                   )}
@@ -272,7 +303,7 @@ export function DropiRequestPanel({ onApplied }: { onApplied: (batchId: string) 
           <div className="flex items-center gap-2.5">
             <button
               type="button"
-              disabled={phase === "applying" || pendingCount > 0}
+              disabled={phase === "applying" || pendingCount > 0 || preview.combosMissingRecipe.length > 0}
               className="rounded border border-teal bg-teal px-3.5 py-2 text-[12.5px] font-bold text-navy cursor-pointer disabled:opacity-60"
               onClick={confirmApply}
             >
@@ -281,6 +312,9 @@ export function DropiRequestPanel({ onApplied }: { onApplied: (batchId: string) 
             <button type="button" className="text-steel text-[12.5px] cursor-pointer" onClick={cancelPreview}>
               Cancelar
             </button>
+            {preview.combosMissingRecipe.length > 0 && (
+              <span className="text-[11.5px] text-red">Registra la(s) receta(s) de combo pendientes antes de aplicar.</span>
+            )}
             {pendingCount > 0 && (
               <span className="text-[11.5px]" style={{ color: "#D9A441" }}>
                 Resuelve las {pendingCount} fila(s) pendientes antes de aplicar.
