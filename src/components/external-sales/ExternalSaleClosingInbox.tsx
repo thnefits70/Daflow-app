@@ -22,6 +22,8 @@ type SaleDTO = {
   paymentProofUrl: string | null;
   paymentProofName: string | null;
   deliveryPhotoUrl: string | null;
+  isContraEntrega: boolean;
+  invoiceUploadedAt: string | null;
   advisor: { name: string } | null;
   dispatchAssignedTo: { name: string } | null;
   deliveredBy: { name: string } | null;
@@ -64,7 +66,9 @@ export function ExternalSaleClosingInbox() {
 
   return (
     <div className="flex flex-col gap-2.5 max-w-lg">
-      {sales.map((s) => (
+      {sales.map((s) => {
+        const missingInvoice = !s.isContraEntrega && !s.invoiceUploadedAt;
+        return (
         <div key={s.id} className="bg-surface border border-rule rounded-md p-3.5">
           <div className="flex items-center gap-2 mb-1.5">
             <span className="font-mono text-[11px] font-bold text-teal">{s.code}</span>
@@ -88,7 +92,9 @@ export function ExternalSaleClosingInbox() {
             )}
           </div>
 
-          {closingId === s.id ? (
+          {missingInvoice ? (
+            <div className="text-[11.5px] font-semibold text-gold">Falta subir la factura para poder cerrar (pestaña Facturación).</div>
+          ) : closingId === s.id ? (
             <div className="bg-cloud rounded-md p-2.5">
               <div className="text-[12px] font-semibold mb-2">¿Confirmás registrar esta venta como cerrada?</div>
               {error && <div className="text-red text-[11px] mb-1.5">{error}</div>}
@@ -105,7 +111,8 @@ export function ExternalSaleClosingInbox() {
             </button>
           )}
         </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

@@ -95,15 +95,18 @@ type PreviewRow = { unitPrice: number; marginPercentUsed: number; b2cBreakdown?:
 
 type FacturaSolicitud = "SI" | "NO" | "PENDIENTE";
 
-type DeclareDraftData = { client: ClientDTO | null; items: DraftItem[]; pickupPersonName: string; courierNote: string; freightCost: string; facturaSolicitada: FacturaSolicitud };
+type DeclareDraftData = { client: ClientDTO | null; items: DraftItem[]; pickupPersonName: string; courierNote: string; freightCost: string; facturaSolicitada: FacturaSolicitud | null };
 function isDeclareDraftEmpty(d: DeclareDraftData) {
   return !d.client && d.items.length === 0 && !d.pickupPersonName.trim() && !d.courierNote.trim() && !d.freightCost.trim();
 }
 
+// Confirmado 2026-09-21: al declarar/corregir, el asesor tiene que elegir
+// Sí o No — "No sé todavía" se quitó de acá. El valor PENDIENTE sigue
+// existiendo en la base (ventas viejas) y Nairoby lo sigue viendo y
+// corrigiendo desde su pestaña de Facturación.
 const FACTURA_SOLICITUD_OPTIONS: { value: FacturaSolicitud; label: string }[] = [
   { value: "SI", label: "Sí" },
   { value: "NO", label: "No" },
-  { value: "PENDIENTE", label: "No sé todavía" },
 ];
 
 function isValidQty(qty: string) {
@@ -845,7 +848,7 @@ export function ExternalSaleDeclareForm() {
   const [pickupPersonName, setPickupPersonName] = useState("");
   const [courierNote, setCourierNote] = useState("");
   const [freightCost, setFreightCost] = useState("");
-  const [facturaSolicitada, setFacturaSolicitada] = useState<FacturaSolicitud>("PENDIENTE");
+  const [facturaSolicitada, setFacturaSolicitada] = useState<FacturaSolicitud | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [uploadingFor, setUploadingFor] = useState<string | null>(null);
@@ -910,7 +913,7 @@ export function ExternalSaleDeclareForm() {
       setPickupPersonName(d.pickupPersonName);
       setCourierNote(d.courierNote);
       setFreightCost(d.freightCost);
-      setFacturaSolicitada(d.facturaSolicitada ?? "PENDIENTE");
+      setFacturaSolicitada(d.facturaSolicitada ?? null);
     },
     isDeclareDraftEmpty,
     "Venta nueva sin terminar de declarar",
@@ -934,7 +937,7 @@ export function ExternalSaleDeclareForm() {
     "/area/workspace?tab=ventas-externas"
   );
 
-  const canSave = !!client && items.length > 0 && items.every((it) => isValidQty(it.quantity)) && pickupPersonName.trim().length > 0 && isValidFreightCost(freightCost) && !saving;
+  const canSave = !!client && items.length > 0 && items.every((it) => isValidQty(it.quantity)) && pickupPersonName.trim().length > 0 && isValidFreightCost(freightCost) && (!isContraEntrega || facturaSolicitada !== null) && !saving;
 
   async function save() {
     if (!client || items.length === 0) return;
@@ -947,7 +950,7 @@ export function ExternalSaleDeclareForm() {
         pickupPersonName: pickupPersonName.trim(),
         courierNote: courierNote.trim() || undefined,
         freightCost: freightCost.trim() ? Number(freightCost) : undefined,
-        facturaSolicitada,
+        facturaSolicitada: facturaSolicitada ?? undefined,
         isContraEntrega: canOverrideRecaudo ? !!isContraEntrega : undefined,
       });
       setClient(null);
@@ -955,7 +958,7 @@ export function ExternalSaleDeclareForm() {
       setPickupPersonName("");
       setCourierNote("");
       setFreightCost("");
-      setFacturaSolicitada("PENDIENTE");
+      setFacturaSolicitada(null);
       clearNewSaleDraft();
       load();
     } catch (e) {
@@ -1183,7 +1186,7 @@ export function ExternalSaleDeclareForm() {
                     </button>
                   ))}
                 </div>
-                <div className="text-[10.5px] text-steel mt-0.5">Nairoby se guía por esto para saber a cuáles clientes debe facturarles.</div>
+                <div className="text-[10.5px] text-steel mt-0.5">Obligatorio — Nairoby se guía por esto para saber a cuáles clientes debe facturarles.</div>
               </div>
             )}
             {error && <div className="text-red text-[11.5px]">{error}</div>}

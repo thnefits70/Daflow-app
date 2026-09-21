@@ -152,20 +152,10 @@ export async function notifyColaboradorDispatchAssigned(colaboradorId: string, c
   await notifyOwner(colaboradorId, { title: "📦 Preparación asignada", body: `${code} — ${productName}. Agrupa, toma fotos y marca listo.`, url: `${URL_BASE}&etab=entregas` }).catch(() => null);
 }
 
-// Confirmado 2026-08-29: en pago anticipado, Daniel recién se entera cuando
-// Nairoby ya facturó; en contra entrega se le avisa apenas Bryan aprueba
-// (ver notifyInventoryLeadExternalSaleApproved arriba, llamada distinta
-// según isContraEntrega).
 export async function notifyFinanceLeadExternalSalePendingInvoice(code: string): Promise<void> {
   const leadId = await getFinanceLeadId();
   if (!leadId) return;
   await notifyOwner(leadId, { title: "🧾 Venta externa lista para facturar", body: `${code} — pago confirmado, ya puedes subir la factura.`, url: `${URL_BASE}&etab=pagos` }).catch(() => null);
-}
-
-export async function notifyInventoryLeadExternalSaleInvoiced(code: string): Promise<void> {
-  const leadId = await getInventoryLeadId();
-  if (!leadId) return;
-  await notifyOwner(leadId, { title: "📦 Venta externa lista para agrupar", body: `${code} — Nairoby ya facturó, asigna quién la agrupa.`, url: `${URL_BASE}&etab=despacho` }).catch(() => null);
 }
 
 export async function notifyFulfilmentLeadExternalSalePrepReady(code: string): Promise<void> {

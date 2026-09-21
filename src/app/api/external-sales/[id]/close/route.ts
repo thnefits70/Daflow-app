@@ -6,6 +6,10 @@ import { notifyEveryoneExternalSaleClosed } from "@/lib/externalSales";
 
 // Nairoby cierra con el valor completo y toda la trazabilidad — solo
 // posible cuando pago y despacho ya están resueltos, sin importar el orden.
+// Confirmado 2026-09-21: en pago anticipado la factura ya no bloquea el
+// despacho ni la entrega (ver pending-dispatch/route.ts), pero se mantiene
+// como requisito para cerrar — así no se pierde de vista una venta sin
+// facturar, sin hacer esperar al cliente por eso.
 export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!(await canCloseExternalSale()) || !session) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
@@ -21,6 +25,8 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
       advisorId: true,
       reviewedById: true,
       invoiceUploadedById: true,
+      invoiceUploadedAt: true,
+      isContraEntrega: true,
       dispatchAssignedToId: true,
       packAssignedToId: true,
       deliveredById: true,
@@ -31,6 +37,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   if (!sale.paymentConfirmedAt || !sale.deliveredAt) return NextResponse.json({ error: "Falta confirmar el pago y/o la entrega." }, { status: 409 });
   if (sale.nairobyClosedAt) return NextResponse.json({ error: "Ya fue cerrada." }, { status: 409 });
   if (sale.returnedAt) return NextResponse.json({ error: "El asesor reportó que esta venta fue devuelta — no se puede cerrar." }, { status: 409 });
+  if (!sale.isContraEntrega && !sale.invoiceUploadedAt) return NextResponse.json({ error: "Falta subir la factura." }, { status: 409 });
 
   const updated = await prisma.externalSale.update({
     where: { id },
