@@ -39,13 +39,6 @@ async function postJson(url: string, body?: unknown) {
   return data;
 }
 
-async function patchJson(url: string, body: unknown) {
-  const res = await fetch(url, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-  const data = await res.json().catch(() => null);
-  if (!res.ok) throw new Error(data?.error ?? "Ocurrió un error.");
-  return data;
-}
-
 // Solo contra entrega puede quedar "sin requerir factura" — pago anticipado
 // siempre la necesita, sin importar este campo (ver comentario en el schema).
 function noRequiereFactura(s: SaleDTO) {
@@ -62,7 +55,6 @@ function facturaBadge(s: SaleDTO) {
 export function ExternalSaleInvoiceInbox() {
   const [sales, setSales] = useState<SaleDTO[] | null>(null);
   const [uploadingFor, setUploadingFor] = useState<string | null>(null);
-  const [updatingFor, setUpdatingFor] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>("requieren");
   const [error, setError] = useState("");
 
@@ -87,19 +79,6 @@ export function ExternalSaleInvoiceInbox() {
       setError(e instanceof Error ? e.message : "No se pudo subir la factura.");
     } finally {
       setUploadingFor(null);
-    }
-  }
-
-  async function setFacturaSolicitada(saleId: string, value: FacturaSolicitud) {
-    setUpdatingFor(saleId);
-    setError("");
-    try {
-      await patchJson(`/api/external-sales/${saleId}/factura-solicitada`, { facturaSolicitada: value });
-      load();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "No se pudo actualizar.");
-    } finally {
-      setUpdatingFor(null);
     }
   }
 
@@ -173,25 +152,6 @@ export function ExternalSaleInvoiceInbox() {
                 {(s.client.city || s.client.country) && (
                   <div className="text-steel">{[s.client.city, s.client.country].filter(Boolean).join(", ")}</div>
                 )}
-              </div>
-            )}
-
-            {s.isContraEntrega && (
-              <div className="mt-2.5">
-                <div className="text-[10px] font-semibold uppercase tracking-wide text-steel mb-1">¿El cliente pidió factura?</div>
-                <div className="flex gap-1.5">
-                  {(["SI", "NO"] as const).map((v) => (
-                    <button
-                      key={v}
-                      type="button"
-                      disabled={updatingFor === s.id}
-                      className={`rounded border px-2 py-1 text-[10.5px] font-semibold cursor-pointer disabled:opacity-40 ${s.facturaSolicitada === v ? "border-teal bg-teal text-navy" : "border-rule text-steel"}`}
-                      onClick={() => setFacturaSolicitada(s.id, v)}
-                    >
-                      {v === "SI" ? "Sí" : "No"}
-                    </button>
-                  ))}
-                </div>
               </div>
             )}
 
