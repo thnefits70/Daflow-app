@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { canAssignExternalSalePack, canDeclareExternalSales } from "@/lib/guards";
+import { canAssignExternalSalePack } from "@/lib/guards";
 import { createOutflowForExternalSale, notifyFinanceLeadExternalSaleReadyToClose } from "@/lib/externalSales";
 
 const schema = z.object({ photoUrl: z.string().min(1).optional() });
@@ -11,12 +11,6 @@ const schema = z.object({ photoUrl: z.string().min(1).optional() });
 // confirma la entrega al motorizado — foto en tiempo real, nunca un
 // archivo subido. Acá es cuando el stock sale de verdad, así que dispara
 // el enganche automático a Registro de Egresos.
-// Confirmado 2026-09-15, pedido explícito de Marcos: para ventas donde ÉL
-// coordina su propio motorizado (sin pasar por el equipo de Fulfilment),
-// el asesor dueño de la venta puede confirmar la entrega directo acá mismo
-// — mismo efecto real (dispara el mismo enganche a Egresos), pero sin
-// exigir que antes se haya asignado quién embala, y con foto OPCIONAL
-// (la que el motorizado le manda por fuera, no una captura en vivo).
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
@@ -41,18 +35,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const isAssignee = sale.packAssignedToId === session.user.id;
   const isFulfillmentLead = await canAssignExternalSalePack();
-  const isOwnAdvisor = sale.advisorId === session.user.id && (await canDeclareExternalSales());
 
-  if (!isAssignee && !isFulfillmentLead && !isOwnAdvisor) {
+  if (!isAssignee && !isFulfillmentLead) {
     return NextResponse.json({ error: "No autorizado." }, { status: 403 });
   }
-  // El requisito de "ya se asignó quién embala" solo aplica al camino
-  // normal de Fulfillment — el propio asesor puede confirmar directo
-  // (motorizado propio), sin pasar por esa asignación.
-  if (!isOwnAdvisor && !sale.packAssignedToId) {
+  if (!sale.packAssignedToId) {
     return NextResponse.json({ error: "Todavía no se asigna quién embala." }, { status: 409 });
   }
-  if (!isOwnAdvisor && !parsed.data.photoUrl) {
+  if (!parsed.data.photoUrl) {
     return NextResponse.json({ error: "Falta la foto de la entrega." }, { status: 400 });
   }
   if (sale.deliveredAt) return NextResponse.json({ error: "Ya fue entregada." }, { status: 409 });
