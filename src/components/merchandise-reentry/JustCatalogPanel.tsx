@@ -242,6 +242,98 @@ function RenameCatalogItem({ item, onRenamed }: { item: CatalogItemDTO; onRename
   );
 }
 
+// Corregir a mano el código de Just de un producto ya existente — pedido
+// explícito del usuario 2026-09-21: el export semanal de Daniel trae
+// productos que ya están en el catálogo (mismo nombre) pero que quedaron
+// sin código o con uno equivocado, y hasta ahora la única forma de
+// arreglarlo era re-crear el producto. Mismo permiso y mismo patrón que
+// RenameCatalogItem.
+function EditJustCode({ item, onChanged }: { item: CatalogItemDTO; onChanged: (justCode: string) => void }) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(item.justCode ?? "");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function save() {
+    const trimmed = value.trim();
+    if (!trimmed || trimmed === item.justCode) {
+      setEditing(false);
+      setValue(item.justCode ?? "");
+      return;
+    }
+    setBusy(true);
+    setError("");
+    try {
+      const res = await fetch(`/api/merchandise-reentry/catalog-items/${item.id}/just-code`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ justCode: trimmed }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error ?? "No se pudo guardar.");
+      onChanged(trimmed);
+      setEditing(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "No se pudo guardar.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!editing) {
+    return (
+      <div className="flex items-center gap-1 shrink-0">
+        {item.justCode ? (
+          <CatalogCode code={item.justCode} />
+        ) : (
+          <span className="text-[10.5px] text-steel italic">sin código</span>
+        )}
+        <button type="button" title="Corregir código de Just" className="text-steel hover:text-teal cursor-pointer" onClick={() => setEditing(true)}>
+          <Pencil size={11} />
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-1.5 shrink-0">
+      <input
+        autoFocus
+        disabled={busy}
+        className="w-24 rounded border border-teal bg-cloud px-1.5 py-0.5 text-[11px] font-mono disabled:opacity-60"
+        value={value}
+        placeholder="Código Just"
+        onChange={(e) => setValue(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") save();
+          if (e.key === "Escape") {
+            setEditing(false);
+            setValue(item.justCode ?? "");
+            setError("");
+          }
+        }}
+      />
+      <button type="button" disabled={busy} title="Guardar" className="text-teal cursor-pointer disabled:opacity-50" onClick={save}>
+        <Check size={13} />
+      </button>
+      <button
+        type="button"
+        disabled={busy}
+        title="Cancelar"
+        className="text-steel hover:text-red cursor-pointer disabled:opacity-50"
+        onClick={() => {
+          setEditing(false);
+          setValue(item.justCode ?? "");
+          setError("");
+        }}
+      >
+        <X size={13} />
+      </button>
+      {error && <span className="text-red text-[10.5px]">{error}</span>}
+    </div>
+  );
+}
+
 export function JustCatalogPanel({ canManage }: { canManage: boolean }) {
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<CatalogItemDTO[]>([]);
@@ -703,7 +795,14 @@ export function JustCatalogPanel({ canManage }: { canManage: boolean }) {
                 <Clock size={13} />
               </div>
             )}
-            <CatalogCode code={item.justCode} />
+            {canManage ? (
+              <EditJustCode
+                item={item}
+                onChanged={(justCode) => setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, justCode } : i)))}
+              />
+            ) : (
+              <CatalogCode code={item.justCode} />
+            )}
             {canManage ? (
               <RenameCatalogItem
                 item={item}
