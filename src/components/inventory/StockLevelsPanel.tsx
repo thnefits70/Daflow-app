@@ -8,6 +8,7 @@ import { formatDateTime } from "@/lib/formatDateTime";
 
 type FreightRecomputeRow = { catalogItemId: string; name: string; entriesChanged: number; oldAvgCost: number; newAvgCost: number };
 type PersonalPurchaseBackfillRow = { catalogItemId: string; name: string; missingCount: number; missingUnits: number; oldBalance: number; newBalance: number };
+type JustCostDeclarationRow = { catalogItemId: string; name: string; justCode: string | null; suggestedCost: number };
 
 // Confirmado 2026-09-16, pedido explícito del usuario: los combos de Dropi
 // (DropiCombo) no son productos reales — no tienen ni deben tener su propio
@@ -376,6 +377,18 @@ export function StockLevelsPanel({ isAdmin = false }: { isAdmin?: boolean }) {
   const [backfillApplying, setBackfillApplying] = useState(false);
   const [backfillResult, setBackfillResult] = useState<{ itemsChanged: number; entriesInserted: number } | null>(null);
   const [backfillError, setBackfillError] = useState("");
+  // Confirmado 2026-09-21, pedido explícito del usuario (admin): versión
+  // masiva del botón "Declarar costo" — declara de una vez el precio de
+  // Just (sin flete, no se conoce por producto) para todos los que siguen
+  // en $0 real, en vez de entrar uno por uno. Mismo patrón de vista previa
+  // + confirmación explícita que los dos botones de arriba.
+  const [bulkDeclareOpen, setBulkDeclareOpen] = useState(false);
+  const [bulkDeclareLoading, setBulkDeclareLoading] = useState(false);
+  const [bulkDeclarePreview, setBulkDeclarePreview] = useState<JustCostDeclarationRow[] | null>(null);
+  const [bulkDeclareConfirming, setBulkDeclareConfirming] = useState(false);
+  const [bulkDeclareApplying, setBulkDeclareApplying] = useState(false);
+  const [bulkDeclareResult, setBulkDeclareResult] = useState<{ declaredCount: number; totalCandidates: number } | null>(null);
+  const [bulkDeclareError, setBulkDeclareError] = useState("");
   const [combos, setCombos] = useState<ComboRow[]>([]);
   // Confirmado 2026-09-17, pedido explícito del usuario: fecha/hora exacta
   // del último archivo de Just que subió Daniel en general, para mostrarla
@@ -474,6 +487,33 @@ export function StockLevelsPanel({ isAdmin = false }: { isAdmin?: boolean }) {
     const data = await res.json();
     setBackfillResult(data);
     setBackfillPreview(null);
+    loadRows();
+  }
+
+  function loadBulkDeclarePreview() {
+    setBulkDeclareLoading(true);
+    setBulkDeclareError("");
+    setBulkDeclareResult(null);
+    fetch("/api/inventory-control/declare-just-costs")
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then(setBulkDeclarePreview)
+      .catch(() => setBulkDeclareError("No se pudo cargar la vista previa."))
+      .finally(() => setBulkDeclareLoading(false));
+  }
+
+  async function applyBulkDeclare() {
+    setBulkDeclareApplying(true);
+    setBulkDeclareError("");
+    const res = await fetch("/api/inventory-control/declare-just-costs", { method: "POST" });
+    setBulkDeclareApplying(false);
+    setBulkDeclareConfirming(false);
+    if (!res.ok) {
+      setBulkDeclareError("No se pudo declarar el costo.");
+      return;
+    }
+    const data = await res.json();
+    setBulkDeclareResult(data);
+    setBulkDeclarePreview(null);
     loadRows();
   }
 
@@ -759,6 +799,80 @@ export function StockLevelsPanel({ isAdmin = false }: { isAdmin?: boolean }) {
                           onClick={() => setBackfillConfirming(true)}
                         >
                           Aplicar corrección
+                        </button>
+                      )}
+                    </>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {isAdmin && (
+        <div className="border border-rule rounded-md mb-3">
+          <button
+            type="button"
+            className="w-full flex items-center gap-2 px-3 py-2 text-[12px] font-semibold text-steel hover:text-ink cursor-pointer"
+            onClick={() => {
+              setBulkDeclareOpen((v) => !v);
+              if (!bulkDeclareOpen && bulkDeclarePreview === null && !bulkDeclareResult) loadBulkDeclarePreview();
+            }}
+          >
+            <Wrench size={13} /> Declarar costo estimado (precio de Just) para todos los que siguen en $0
+          </button>
+          {bulkDeclareOpen && (
+            <div className="px-3 pb-3 text-[12px]">
+              <p className="text-steel mb-2">
+                Declara de una sola vez el precio de Just como costo estimado de todo producto que ya se movió pero sigue en $0 en INVESTOCK — mismo criterio que el botón &quot;Declarar costo&quot; de cada fila, pero para todos a la vez. <span className="text-gold font-semibold">Ojo: acá NO se suma flete</span> (no se conoce por producto en un lote) — si sabes el flete de alguno en particular, mejor decláralo aparte con su propio botón en la fila. Nunca pisa un producto que ya tenga costo real. Es seguro correr esto más de una vez.
+              </p>
+              {bulkDeclareError && <div className="text-red mb-2">{bulkDeclareError}</div>}
+              {bulkDeclareLoading && <div className="text-steel">Calculando vista previa…</div>}
+              {bulkDeclareResult && (
+                <div className="text-teal font-semibold mb-2">
+                  ✓ Declarado: {bulkDeclareResult.declaredCount} de {bulkDeclareResult.totalCandidates} producto{bulkDeclareResult.totalCandidates === 1 ? "" : "s"}.
+                </div>
+              )}
+              {!bulkDeclareLoading && bulkDeclarePreview && (
+                <>
+                  {bulkDeclarePreview.length === 0 ? (
+                    <div className="text-steel">Nada pendiente — ningún producto sigue en $0 con precio de Just disponible.</div>
+                  ) : (
+                    <>
+                      <div className="text-steel mb-1.5">{bulkDeclarePreview.length} producto(s) recibirían un costo declarado:</div>
+                      <div className="max-h-52 overflow-y-auto flex flex-col gap-1 mb-2.5 border border-rule rounded-md p-1.5">
+                        {bulkDeclarePreview.map((r) => (
+                          <div key={r.catalogItemId} className="flex items-center justify-between gap-2 text-[11.5px] px-1.5 py-1">
+                            <span className="truncate flex-1">
+                              <CatalogCode code={r.justCode} size="text-[10px]" /> {r.name}
+                            </span>
+                            <span className="font-mono font-bold text-gold shrink-0">{money(r.suggestedCost)}</span>
+                          </div>
+                        ))}
+                      </div>
+                      {bulkDeclareConfirming ? (
+                        <div className="flex items-center gap-2">
+                          <span className="text-steel">¿Declarar el costo de estos {bulkDeclarePreview.length} productos?</span>
+                          <button
+                            type="button"
+                            disabled={bulkDeclareApplying}
+                            className="font-bold text-red cursor-pointer disabled:opacity-50"
+                            onClick={applyBulkDeclare}
+                          >
+                            {bulkDeclareApplying ? "Declarando…" : "Sí, declarar"}
+                          </button>
+                          <button type="button" className="text-steel cursor-pointer" onClick={() => setBulkDeclareConfirming(false)}>
+                            Cancelar
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          className="rounded border border-teal bg-teal px-3 py-1.5 text-[12px] font-bold text-navy cursor-pointer"
+                          onClick={() => setBulkDeclareConfirming(true)}
+                        >
+                          Declarar todos
                         </button>
                       )}
                     </>
