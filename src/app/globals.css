@@ -18,6 +18,14 @@
   /* Semáforo de Plan de Mejora (AMARILLO/NARANJA) — VERDE y ROJO reusan green/red. */
   --color-amber: #d9a441;
   --color-orange: #d97a3f;
+  /* Confirmado 2026-09-21, bug real reportado por el usuario: "gold" se usa
+     como clase de Tailwind (text-gold, bg-gold/N, border-gold/N) en ~60
+     archivos pero nunca se registró acá ni en @theme abajo — mismo problema
+     que "surface2" (ver comentario abajo): Tailwind no genera CSS para un
+     color sin registrar, así que esas clases no pintaban nada. Mismo valor
+     que amber (varios lugares ya lo hardcodeaban como "#D9A441" al notar
+     que no se veía). */
+  --color-gold: #d9a441;
 
   /* Dark UI surfaces (professional / tech dashboard look) */
   --color-bg: #0a1526;
@@ -58,6 +66,7 @@ select option {
   --color-red: var(--color-red);
   --color-amber: var(--color-amber);
   --color-orange: var(--color-orange);
+  --color-gold: var(--color-gold);
   --color-bg: var(--color-bg);
   --color-surface: var(--color-surface);
   --color-surface2: var(--color-surface2);
