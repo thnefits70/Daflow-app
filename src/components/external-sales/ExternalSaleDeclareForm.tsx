@@ -101,10 +101,11 @@ function isDeclareDraftEmpty(d: DeclareDraftData) {
 }
 
 // Confirmado 2026-09-21: al declarar/corregir, el asesor tiene que elegir
-// Sí o No — "No sé todavía" se quitó de acá. El valor PENDIENTE sigue
-// existiendo en la base (ventas viejas) y Nairoby lo sigue viendo y
-// corrigiendo desde su pestaña de Facturación.
-const FACTURA_SOLICITUD_OPTIONS: { value: FacturaSolicitud; label: string }[] = [
+// Sí o No — "No sé todavía" se quitó de acá. El valor PENDIENTE solo puede
+// quedar en ventas viejas (declaradas antes de este cambio); el propio
+// asesor lo resuelve luego con estos mismos botones en "Mis ventas"
+// (resolveFacturaSolicitada) — Nairoby ya no puede tocar esta respuesta.
+const FACTURA_SOLICITUD_OPTIONS: { value: "SI" | "NO"; label: string }[] = [
   { value: "SI", label: "Sí" },
   { value: "NO", label: "No" },
 ];
@@ -852,6 +853,7 @@ export function ExternalSaleDeclareForm() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [uploadingFor, setUploadingFor] = useState<string | null>(null);
+  const [resolvingFacturaFor, setResolvingFacturaFor] = useState<string | null>(null);
   const armedProofSaleIdRef = useRef<string | null>(null);
   const { onPaste: onPasteProof, onMouseEnter: onPasteProofHoverIn, onMouseLeave: onPasteProofHoverOut, onTapPaste, tapHint: tapHintProof } = usePasteFile((file) => {
     const saleId = armedProofSaleIdRef.current;
@@ -900,6 +902,22 @@ export function ExternalSaleDeclareForm() {
     fetch("/api/external-sales").then((r) => r.json()).then(setSales).catch(() => setSales([]));
   }
   useEffect(load, []);
+
+  // Resuelve el valor "Pendiente" de ventas ya aprobadas (declaradas antes
+  // de que esta pregunta fuera obligatoria) — no reabre la venta completa,
+  // solo esta respuesta puntual, sin importar el estado de revisión.
+  async function resolveFacturaSolicitada(saleId: string, value: "SI" | "NO") {
+    setResolvingFacturaFor(saleId);
+    setError("");
+    try {
+      await patchJson(`/api/external-sales/${saleId}/factura-solicitada`, { facturaSolicitada: value });
+      load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "No se pudo actualizar.");
+    } finally {
+      setResolvingFacturaFor(null);
+    }
+  }
 
   // Guardado automático: si sale a revisar otra venta antes de terminar de
   // declarar esta, al volver encuentra cliente/productos/entrega tal como
@@ -1296,6 +1314,24 @@ export function ExternalSaleDeclareForm() {
                   )}
                   {!s.isContraEntrega && s.freightCost != null && !s.freightPaidAt && (
                     <div className="text-[10px] text-gold mt-0.5">Flete todavía no pagado al motorizado.</div>
+                  )}
+                  {!s.deletedAt && s.isContraEntrega && s.facturaSolicitada === "PENDIENTE" && (
+                    <div className="mt-1.5">
+                      <div className="text-[10px] font-semibold uppercase tracking-wide text-gold mb-1">Falta contestar: ¿el cliente pidió factura?</div>
+                      <div className="flex gap-1.5">
+                        {FACTURA_SOLICITUD_OPTIONS.map((opt) => (
+                          <button
+                            key={opt.value}
+                            type="button"
+                            disabled={resolvingFacturaFor === s.id}
+                            className="rounded border border-teal px-2 py-1 text-[10.5px] font-semibold text-teal cursor-pointer disabled:opacity-40"
+                            onClick={() => resolveFacturaSolicitada(s.id, opt.value)}
+                          >
+                            {opt.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                   )}
                   <div className="text-[10.5px] text-steel mt-0.5">Entrega a: {s.pickupPersonName}{s.courierNote ? ` · Transportadora: ${s.courierNote}` : ""}</div>
                   {s.client && (

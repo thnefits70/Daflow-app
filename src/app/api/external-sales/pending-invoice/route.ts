@@ -3,8 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { canInvoiceExternalSale } from "@/lib/guards";
 
 // Pago ya confirmado, todavía sin factura — obligatoria en pago anticipado
-// (bloquea a Daniel), opcional en contra entrega (Marcos, solo si el
-// cliente la pidió, no bloquea nada río abajo).
+// (solo bloquea que Nairoby cierre la venta, ver close/route.ts), opcional
+// en contra entrega (Marcos, solo si el cliente la pidió, no bloquea nada).
 export async function GET() {
   if (!(await canInvoiceExternalSale())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
   const sales = await prisma.externalSale.findMany({
