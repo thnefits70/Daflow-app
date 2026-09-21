@@ -1,5 +1,6 @@
 "use client";
 
+import { Check } from "lucide-react";
 import { formatDateTime } from "@/lib/formatDateTime";
 
 // Los mismos 8 pasos que ya arma ExternalSaleHistoryList para el Kanban de
@@ -43,17 +44,47 @@ export function saleSteps(s: SaleTimelineDTO): Step[] {
   ];
 }
 
+// Ruta vertical del pedido (pedido explícito de Marcos 2026-09-21, misma idea
+// que el tablero por columnas de Historial pero para UN pedido): muestra los
+// 8 pasos siempre, no solo los ya cumplidos, para que se vea de un vistazo
+// dónde va y qué falta. "Actual" es el primer paso sin cumplir después del
+// último cumplido en el orden de la lista — en contra entrega puede haber
+// pasos cumplidos fuera de orden (ver saleColumn en ExternalSaleHistoryList),
+// así que un paso saltado simplemente queda gris, sin marcarse como actual.
 export function TimelineSteps({ steps }: { steps: Step[] }) {
-  const reached = steps.filter((st) => st.at);
-  if (reached.length === 0) return null;
+  const lastDoneIndex = steps.reduce((acc, st, i) => (st.at ? i : acc), -1);
   return (
-    <div className="text-[10.5px] text-steel flex flex-col gap-0.5">
-      {reached.map((st) => (
-        <div key={st.label}>
-          {st.label}
-          {st.by ? ` por ${st.by.name}` : ""} · {formatDateTime(st.at!)}
-        </div>
-      ))}
+    <div className="flex flex-col">
+      {steps.map((st, i) => {
+        const done = !!st.at;
+        const isCurrent = !done && i === lastDoneIndex + 1;
+        const isLast = i === steps.length - 1;
+        return (
+          <div key={st.label} className="flex gap-2.5">
+            <div className="flex flex-col items-center">
+              <div
+                className={`flex items-center justify-center w-5 h-5 rounded-full border-2 shrink-0 ${
+                  done ? "bg-teal border-teal" : isCurrent ? "border-gold bg-cloud" : "border-rule bg-cloud"
+                }`}
+              >
+                {done && <Check size={12} className="text-navy" strokeWidth={3} />}
+              </div>
+              {!isLast && <div className={`w-0.5 flex-1 min-h-[14px] ${done ? "bg-teal" : "bg-rule"}`} />}
+            </div>
+            <div className={isLast ? "pb-0" : "pb-2.5"}>
+              <div className={`text-[11.5px] font-semibold ${done ? "text-ink" : isCurrent ? "text-gold" : "text-steel"}`}>{st.label}</div>
+              {done ? (
+                <div className="text-[10.5px] text-steel">
+                  {st.by ? `${st.by.name} · ` : ""}
+                  {formatDateTime(st.at!)}
+                </div>
+              ) : isCurrent ? (
+                <div className="text-[10.5px] text-gold">En curso</div>
+              ) : null}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
