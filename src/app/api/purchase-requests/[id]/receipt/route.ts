@@ -62,18 +62,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (existing.status !== "PAID" && !(isCreditSupplier && existing.status === "APPROVED")) {
     return NextResponse.json({ error: "Todavía no está pagada." }, { status: 409 });
   }
-  // Confirmado 2026-08-06: sin la orden de compra, Daniel no tiene el
-  // respaldo completo de qué se pidió — no se puede cerrar el ciclo de
-  // recepción hasta que quien solicitó la suba. Excepción confirmada
-  // 2026-09-14: un proveedor de crédito (hoy CHEN) nunca pide orden de
-  // compra (ver checkPurchaseSubmission en purchases.ts) — este chequeo se
-  // había quedado sin la misma excepción, bloqueando en el servidor lo que
-  // ya no se mostraba como advertencia en el cliente (missingPurchaseOrder
-  // en PurchaseReceivingPanel.tsx).
-  if (!isCreditSupplier && !existing.purchaseOrderUrl) {
-    return NextResponse.json({ error: "Falta que suban la orden de compra — no se puede confirmar la recepción todavía." }, { status: 409 });
-  }
-
   // Fix confirmado 2026-08-08: cambio de política pedido explícitamente por
   // el usuario — antes esto era puramente informativo (nunca bloqueaba);
   // ahora, si la IA detectó que el producto no corresponde, se bloquea del

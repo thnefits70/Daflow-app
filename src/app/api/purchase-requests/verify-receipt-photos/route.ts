@@ -11,8 +11,8 @@ const schema = z.object({
   receivedPhotoUrls: z.array(z.string().url()).min(2).max(3),
 });
 
-// Mismo patrón que verify-quote/verify-purchase-order — sin escritura, la IA
-// compara UNA vez y el resultado se reutiliza al confirmar la recepción.
+// Mismo patrón que verify-quote — sin escritura, la IA compara UNA vez y el
+// resultado se reutiliza al confirmar la recepción.
 // Fix confirmado 2026-08-08: cambio de política — YA NO es puramente
 // informativo. El cliente (PurchaseReceivingPanel.tsx) deshabilita el botón
 // "Confirmar que llegó" si likelyMatch da false (producto distinto), para

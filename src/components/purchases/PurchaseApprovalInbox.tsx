@@ -151,22 +151,26 @@ function groupRows<T extends Row>(rows: T[]) {
 
 // Confirmado 2026-08-03: descripción determinista (no un llamado nuevo a la
 // IA) armada con datos que YA quedaron verificados al solicitar — si el
-// grupo existe es porque el total ya cuadró con la cotización o se confirmó
-// manualmente el código con la orden de compra de respaldo. Solo dos cosas
-// cuentan como "novedad" real: precio sobre el historial, o código sin
-// nombre de producto.
+// grupo existe es porque el total ya cuadró con la cotización o, para las
+// líneas con código sin nombre, ese código ya quedó confirmado y guardado en
+// el catálogo (ver checkPurchaseSubmission, ya no depende de una orden de
+// compra de respaldo). Solo dos cosas cuentan como "novedad" real: precio
+// sobre el historial, o código sin nombre de producto.
 function buildValidationSummary(g: Row[]) {
-  const r0 = g[0];
   const total = g.reduce((s, r) => s + r.totalCost, 0);
   // Confirmado 2026-09-07 — ya no se cita UNA justificación como si
   // representara a todo el grupo (ese era justo el origen del bug reportado:
   // mostrar la nota de un producto pegada sobre otro). El texto de cada
   // producto se muestra por separado más abajo, esto solo dice cuántos.
   const justifiedCount = g.filter((r) => r.justification).length;
-  const codeOnly = !!r0.quoteReferenceCode;
+  // Confirmado 2026-09-21: ya no es solo la primera línea (r0) — cada línea
+  // puede traer su propio código de proveedor distinto (ver PurchaseRequestForm).
+  const codeOnlyCount = g.filter((r) => !!r.quoteReferenceCode).length;
   const parts: string[] = [];
-  if (codeOnly) {
-    parts.push("La cotización solo traía el código del proveedor, sin nombre de producto — se confirmó manualmente y hay una orden de compra de respaldo.");
+  if (codeOnlyCount > 0) {
+    parts.push(
+      `${codeOnlyCount === g.length ? "La cotización" : `${codeOnlyCount} de ${g.length} productos de la cotización`} solo traía código de proveedor, sin nombre — ya se confirmó a qué producto corresponde y quedó guardado en el catálogo.`
+    );
   } else {
     parts.push(`Cotización verificada por IA — el total leído coincide con los $${total.toFixed(2)} escritos.`);
   }

@@ -36,22 +36,39 @@ function extractJson<T>(text: string): T {
   return JSON.parse(match[0]) as T;
 }
 
-export type QuoteReadResult = {
-  readTotal: number | null;
+export type QuoteReadLine = {
+  quantity: number | null;
+  unitPrice: number | null;
   productNameFound: string | null;
   referenceCodeFound: string | null;
 };
 
-// Lee una cotización UNA VEZ por solicitud (no es un chat) — extrae el total,
-// y el nombre del producto si aparece, o el código de referencia si es lo
-// único que trae (pasa seguido). El llamador decide qué hacer con esto
-// (comparar contra lo escrito, pedir confirmación manual, etc.) — esta
-// función solo extrae.
+export type QuoteReadResult = {
+  readTotal: number | null;
+  // Confirmado 2026-09-21, pedido explícito del usuario: ya no se usará más
+  // Just, así que ya no hay quien cruce a mano un código de proveedor contra
+  // el catálogo de Just para saber a qué producto corresponde. Una misma
+  // cotización suele traer VARIAS líneas, cada una con SU PROPIO código
+  // (ej. una nota de venta manuscrita con 4 productos, cada uno con un
+  // código distinto) — antes esto solo devolvía UN nombre/código para toda
+  // la imagen, así que con más de un producto sin nombre se quedaba corto.
+  // Ahora se lee línea por línea; el llamador cruza cada línea contra lo que
+  // la persona ya escribió (por cantidad y precio unitario, que deben
+  // coincidir exacto si se transcribió bien) para saber a qué producto
+  // del formulario corresponde cada código.
+  lines: QuoteReadLine[];
+};
+
+// Lee una cotización UNA VEZ por solicitud (no es un chat) — extrae el total
+// y, línea por línea, el nombre del producto si aparece, o el código de
+// referencia si es lo único que trae (pasa seguido). El llamador decide qué
+// hacer con esto (comparar contra lo escrito, pedir confirmación manual,
+// etc.) — esta función solo extrae.
 // Confirmado 2026-09-09 (bug real reportado por el usuario): muchas
 // cotizaciones son notas de venta escritas A MANO, y la descripción del
 // producto suele venir junto al código en letra cursiva/apretada — la IA a
-// veces la pasaba por alto y devolvía solo el código, forzando a subir una
-// orden de compra de respaldo aunque el nombre sí estuviera escrito ahí.
+// veces la pasaba por alto y devolvía solo el código, sin darle a la persona
+// forma de confirmar a qué producto correspondía.
 // expectedProductNames son los nombres que la persona YA tipeó/eligió en el
 // formulario antes de subir la foto — se los damos como pista de qué buscar
 // (ayuda a leer letra difícil), nunca como algo que inventar: si de verdad
@@ -76,20 +93,26 @@ export async function readPurchaseQuote(params: {
       "solo con el código si hay palabras describiendo el producto en algún lado cerca de él, aunque sea difícil " +
       "de leer a primera vista — mira con atención antes de rendirte y poner null. " +
       "Extrae SOLO lo que de verdad está en la imagen — nunca inventes un valor. " +
-      'Responde ÚNICAMENTE un JSON: {"readTotal": number|null, "productNameFound": string|null, "referenceCodeFound": string|null}. ' +
-      "readTotal es el monto TOTAL a pagar que muestra el documento (sin símbolo de moneda). " +
-      "productNameFound es el nombre del producto tal como está escrito en la imagen, si aparece descrito con palabras " +
-      "(no hace falta que sea el nombre completo o perfectamente legible — con que haya una descripción real en palabras basta). " +
-      "referenceCodeFound es un código/SKU del proveedor si eso es lo único que identifica al producto (sin ninguna palabra descriptiva cerca). " +
-      "Si no encuentras alguno de estos tres datos, pon null en ese campo — no adivines." +
+      "La cotización puede traer UN SOLO producto o VARIOS — lee TODAS las líneas/renglones que muestre el " +
+      "documento, uno por uno, no solo el primero. " +
+      'Responde ÚNICAMENTE un JSON: {"readTotal": number|null, "lines": [{"quantity": number|null, ' +
+      '"unitPrice": number|null, "productNameFound": string|null, "referenceCodeFound": string|null}, ...]}. ' +
+      "readTotal es el monto TOTAL a pagar que muestra el documento completo (sin símbolo de moneda), sumando todas las líneas. " +
+      "Cada elemento de \"lines\" es UN renglón/producto de la cotización, en el mismo orden en que aparecen en el documento: " +
+      "quantity es la cantidad de ese renglón; unitPrice es el precio unitario de ese renglón (sin símbolo de moneda); " +
+      "productNameFound es el nombre del producto tal como está escrito en esa línea, si aparece descrito con palabras " +
+      "(no hace falta que sea el nombre completo o perfectamente legible — con que haya una descripción real en palabras basta); " +
+      "referenceCodeFound es un código/SKU del proveedor si eso es lo único que identifica al producto en esa línea (sin ninguna palabra descriptiva cerca). " +
+      "Si no encuentras alguno de estos datos para una línea, pon null en ese campo — no adivines. " +
+      "Si la cotización trae un solo producto, \"lines\" tiene un solo elemento." +
       (expectedNames.length > 0
         ? " La persona que sube esta cotización ya escribió estos nombres de producto en su formulario, en este " +
           `orden: ${expectedNames.map((n) => `"${n}"`).join(", ")}. Úsalos SOLO como pista para leer mejor la letra ` +
-          "manuscrita de la imagen (si uno de estos nombres, o algo muy parecido, aparece escrito ahí aunque sea " +
+          "manuscrita de la imagen (si uno de estos nombres, o algo muy parecido, aparece escrito en una línea aunque sea " +
           "con letra difícil, es más probable que sea eso) — pero reporta productNameFound como el texto que DE " +
-          "VERDAD ves escrito en la imagen, nunca copies uno de estos nombres si no hay una descripción real " +
-          "correspondiente en la foto. Si la imagen de verdad solo trae el código sin ninguna palabra, sigue " +
-          "devolviendo productNameFound como null aunque tengas estos nombres esperados."
+          "VERDAD ves escrito en esa línea de la imagen, nunca copies uno de estos nombres si no hay una descripción real " +
+          "correspondiente en la foto. Si una línea de verdad solo trae el código sin ninguna palabra, sigue " +
+          "devolviendo productNameFound como null en esa línea aunque tengas estos nombres esperados."
         : ""),
     messages: [
       {
@@ -113,7 +136,8 @@ export async function readPurchaseQuote(params: {
 
   const textBlock = response.content.find((b) => b.type === "text");
   if (!textBlock || textBlock.type !== "text") throw new Error("La IA no devolvió contenido de texto.");
-  return extractJson<QuoteReadResult>(textBlock.text);
+  const result = extractJson<QuoteReadResult>(textBlock.text);
+  return { ...result, lines: result.lines ?? [] };
 }
 
 export type PaymentProofReadResult = {
@@ -188,55 +212,6 @@ export async function readPaymentProof(params: {
   const textBlock = response.content.find((b) => b.type === "text");
   if (!textBlock || textBlock.type !== "text") throw new Error("La IA no devolvió contenido de texto.");
   return extractJson<PaymentProofReadResult>(textBlock.text);
-}
-
-export type PurchaseOrderReadResult = {
-  readTotal: number | null;
-};
-
-// Confirmado 2026-08-06: cuando la cotización solo trae un código (sin
-// nombre de producto) y la orden de compra pasa a ser obligatoria, la IA
-// también la lee UNA vez y su monto se cruza contra lo que la persona
-// escribió a mano — el mismo total que ya se comparó contra la cotización.
-// Objetivo explícito del usuario: que cotización, lo tipeado a mano, y la
-// orden de compra sean transparentes entre sí en cuanto a precio y pagos,
-// no solo dos de los tres documentos.
-export async function readPurchaseOrder(params: {
-  purchaseOrderUrl: string;
-  actorId: string;
-  deptId?: string;
-}): Promise<PurchaseOrderReadResult> {
-  const client = getAnthropicClient();
-  const fileBlock = await fetchFileContentBlock(params.purchaseOrderUrl);
-
-  const response = await client.messages.create({
-    model: PURCHASE_AI_MODEL,
-    max_tokens: 512,
-    system:
-      "Lees órdenes de compra para Control de Compras de Provedix (Guayaquil, Ecuador). " +
-      "Extrae SOLO el monto TOTAL que de verdad muestra el documento — nunca inventes un valor. " +
-      'Responde ÚNICAMENTE un JSON: {"readTotal": number|null}. ' +
-      "readTotal es el monto TOTAL de la orden de compra (sin símbolo de moneda). Si no se distingue con claridad, pon null.",
-    messages: [
-      {
-        role: "user",
-        content: [fileBlock, { type: "text", text: "Lee esta orden de compra y devuelve el JSON pedido." }],
-      },
-    ],
-  });
-
-  await logAiUsage({
-    feature: "control_compras_orden_compra",
-    model: PURCHASE_AI_MODEL,
-    actorId: params.actorId,
-    deptId: params.deptId,
-    inputTokens: response.usage.input_tokens,
-    outputTokens: response.usage.output_tokens,
-  });
-
-  const textBlock = response.content.find((b) => b.type === "text");
-  if (!textBlock || textBlock.type !== "text") throw new Error("La IA no devolvió contenido de texto.");
-  return extractJson<PurchaseOrderReadResult>(textBlock.text);
 }
 
 export type ReceiptPhotoComparisonResult = {
@@ -351,8 +326,7 @@ export async function reviewApprovedPurchaseGroup(params: {
   lines: { name: string; justCode: string | null; quantity: number; unitCost: number; totalCost: number; justification: string | null }[];
   totalCost: number;
   quoteReadTotal: number | null;
-  quoteReferenceCode: string | null;
-  hasPurchaseOrder: boolean;
+  anyLineCodeOnly: boolean;
   bankAccount: { bankName: string; bankAccountType: string; bankAccountNumber: string; bankAccountHolder: string } | null;
   reservedCreditTotal: number;
   // Confirmado 2026-09-04 (fix reportado por el usuario): crédito AVAILABLE
@@ -379,8 +353,13 @@ export async function reviewApprovedPurchaseGroup(params: {
     })),
     total_a_pagar_por_las_lineas: params.totalCost,
     total_leido_por_ia_en_la_cotizacion_al_solicitar: params.quoteReadTotal,
-    cotizacion_solo_traia_codigo_sin_nombre: !!params.quoteReferenceCode,
-    tiene_orden_de_compra_de_respaldo: params.hasPurchaseOrder,
+    // Confirmado 2026-09-21: ya no se pide una orden de compra de respaldo —
+    // cuando una línea trae solo código (sin nombre), quien solicitó ya
+    // confirmó a mano a qué producto corresponde y ese código quedó
+    // guardado en el catálogo antes de poder enviar la solicitud (ver
+    // /api/purchase-requests/confirm-code) — no hay nada más que este paso
+    // deba exigir por eso.
+    alguna_linea_traia_solo_codigo_sin_nombre_y_ya_fue_confirmada: params.anyLineCodeOnly,
     cuenta_bancaria_para_transferir: params.bankAccount,
     credito_con_proveedor_ya_aplicado: params.reservedCreditTotal,
     credito_disponible_con_el_proveedor_sin_aplicar: params.availableCreditTotal,
@@ -399,9 +378,10 @@ export async function reviewApprovedPurchaseGroup(params: {
       "(si este último es null, no lo marques como problema — pasa cuando la cotización solo traía código); " +
       "(2) que CUALQUIER producto con justificacion_precio_sobre_historial en null tenga sentido como precio normal " +
       "(no puedes saber el historial exacto, así que no inventes un problema aquí — solo repórtalo si el patrón se ve " +
-      "claramente anómalo, ej. precio 0 o negativo); (3) que si cotizacion_solo_traia_codigo_sin_nombre es true, " +
-      "tiene_orden_de_compra_de_respaldo también sea true; (4) que cuenta_bancaria_para_transferir no sea null; " +
-      "(5) que si credito_disponible_con_el_proveedor_sin_aplicar es MAYOR A 0 y credito_con_proveedor_ya_aplicado " +
+      "claramente anómalo, ej. precio 0 o negativo); (3) que cuenta_bancaria_para_transferir no sea null " +
+      "(alguna_linea_traia_solo_codigo_sin_nombre_y_ya_fue_confirmada es solo informativo, nunca lo marques como " +
+      "problema — ese paso ya se resolvió antes de que esta solicitud pudiera existir); " +
+      "(4) que si credito_disponible_con_el_proveedor_sin_aplicar es MAYOR A 0 y credito_con_proveedor_ya_aplicado " +
       "es 0 y no hay justificacion_de_no_aplicar_credito_disponible, lo señales (hay crédito real sin usar). " +
       "Si credito_disponible_con_el_proveedor_sin_aplicar es 0, NUNCA marques esto como problema — no había nada " +
       "que aplicar, así que credito_con_proveedor_ya_aplicado en 0 es exactamente lo esperado. " +

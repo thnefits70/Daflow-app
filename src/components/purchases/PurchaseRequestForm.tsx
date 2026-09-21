@@ -12,12 +12,17 @@ import type { SupplierPriceHistory } from "@/lib/purchases";
 
 type PriceStats = { count: number; min: number | null; avg: number | null; max: number | null; last3Avg: number | null };
 type SupplierCreditDTO = { id: string; amount: number; reason: string; status: "AVAILABLE" | "RESERVED" | "APPLIED" | "REFUNDED"; createdAt: string };
-type QuoteReadResult = {
-  readTotal: number | null;
+type QuoteReadLine = {
+  quantity: number | null;
+  unitPrice: number | null;
   productNameFound: string | null;
   referenceCodeFound: string | null;
-  matches: boolean;
   suggestedCatalogItem: { id: string; name: string } | null;
+};
+type QuoteReadResult = {
+  readTotal: number | null;
+  matches: boolean;
+  lines: QuoteReadLine[];
 };
 
 // Confirmado 2026-09-07 (bug real reportado por el usuario) — justification
@@ -54,9 +59,6 @@ type Draft = {
   bankAccountId: string | null;
   quoteImageUrl: string | null;
   verifyResult: QuoteReadResult | null;
-  manualCodeConfirm: boolean;
-  purchaseOrderUrl: string | null;
-  poVerifyResult: { readTotal: number | null; matches: boolean } | null;
   shippingIncluded: boolean;
   shippingCarrierPending: boolean;
   carrier: PurchaseSupplierDTO | null;
@@ -83,8 +85,13 @@ type Draft = {
 // sueltos — un borrador viejo (v1) sin ese arreglo tumbaba la página entera
 // al restaurarlo (PurchaseSupplierPicker llamaba .map sobre undefined). v3:
 // se agregó email y RUC/cédula por cuenta — normalizeSupplier() de todas
-// formas rellena lo que falte, por las dudas.
-export const DRAFT_KEY = "daflow.purchaseRequestDraft.v3";
+// formas rellena lo que falte, por las dudas. v4 (2026-09-21): se eliminó la
+// orden de compra y verifyResult pasó de un código/nombre único a `lines[]`
+// (una cotización puede traer varios productos, cada uno con su propio
+// código) — un borrador v3 viejo con la forma anterior de verifyResult
+// tumbaba la página al intentar leer verifyResult.lines.map sobre undefined,
+// así que se descarta en vez de restaurarse.
+export const DRAFT_KEY = "daflow.purchaseRequestDraft.v4";
 
 function normalizeSupplier(s: PurchaseSupplierDTO | null | undefined): PurchaseSupplierDTO | null {
   if (!s) return null;
@@ -99,7 +106,7 @@ function normalizeSupplier(s: PurchaseSupplierDTO | null | undefined): PurchaseS
   };
 }
 
-function draftHasContent(d: Pick<Draft, "lines" | "supplier" | "quoteImageUrl" | "purchaseOrderUrl">) {
+function draftHasContent(d: Pick<Draft, "lines" | "supplier" | "quoteImageUrl">) {
   return (
     d.lines.some(
       (l) =>
@@ -117,8 +124,7 @@ function draftHasContent(d: Pick<Draft, "lines" | "supplier" | "quoteImageUrl" |
         (l.createDraft?.creating && (l.createDraft.newName.trim() || l.createDraft.photos.length > 0))
     ) ||
     !!d.supplier ||
-    !!d.quoteImageUrl ||
-    !!d.purchaseOrderUrl
+    !!d.quoteImageUrl
   );
 }
 
@@ -173,7 +179,16 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
   const [uploadingQuote, setUploadingQuote] = useState(false);
   const [verifying, setVerifying] = useState(false);
   const [verifyResult, setVerifyResult] = useState<QuoteReadResult | null>(null);
-  const [manualCodeConfirm, setManualCodeConfirm] = useState(false);
+  // Confirmado 2026-09-21, pedido explícito del usuario (ya no se usará
+  // Just): cuando una línea de la cotización solo trae código de proveedor
+  // (sin nombre), Jariel confirma con DOBLE clic a qué producto corresponde
+  // — confirmingLineIdx es la línea que está a mitad de esa confirmación
+  // (primer clic ya dado, esperando el segundo "sí, confirmar"). Una vez
+  // confirmada, el código queda guardado en el catálogo (ver
+  // /api/purchase-requests/confirm-code) — no hace falta volver a pedirlo la
+  // próxima vez que aparezca ese mismo código.
+  const [confirmingLineIdx, setConfirmingLineIdx] = useState<number | null>(null);
+  const [confirmingLineBusy, setConfirmingLineBusy] = useState(false);
   // Confirmado 2026-08-17: una vez que la IA confirma que el monto coincide,
   // el documento queda anclado — no se puede cambiar ni "eliminar" con un
   // clic, para que no se pueda subir el documento real, dejar que pase la
@@ -186,24 +201,6 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
   const { onPaste: onPasteQuote, onMouseEnter: onPasteQuoteHoverIn, onMouseLeave: onPasteQuoteHoverOut, onDragOver: onDragOverQuote, onDragLeave: onDragLeaveQuote, onDrop: onDropQuote, isDragOver: isDragOverQuote } = usePasteFile((file) => handleQuoteFile(file));
   const quoteFileInputRef = useRef<HTMLInputElement>(null);
 
-  const [purchaseOrderFile, setPurchaseOrderFile] = useState<File | null>(null);
-  const [purchaseOrderUrl, setPurchaseOrderUrl] = useState<string | null>(null);
-  const [uploadingPurchaseOrder, setUploadingPurchaseOrder] = useState(false);
-  const [poVerifying, setPoVerifying] = useState(false);
-  const [poVerifyResult, setPoVerifyResult] = useState<{ readTotal: number | null; matches: boolean } | null>(null);
-  // Confirmado 2026-09-03: la lectura automática al subir el archivo solo se
-  // intentaba una vez — si fallaba por algo pasajero (conexión, timeout de la
-  // IA), se quedaba trabada para siempre sin ningún aviso claro ni forma de
-  // reintentar. Este contador deja que el useEffect de más abajo reintente
-  // solo, con espera creciente, hasta 3 veces antes de pedirle a la persona
-  // que suba una foto más clara — así no se reintenta sin límite un caso
-  // donde la foto de verdad no se puede leer (cada lectura le cuesta a la
-  // empresa).
-  const [poVerifyAttempts, setPoVerifyAttempts] = useState(0);
-  const [confirmUnlockPO, setConfirmUnlockPO] = useState(false);
-  const { onPaste: onPastePurchaseOrder, onMouseEnter: onPastePOHoverIn, onMouseLeave: onPastePOHoverOut, onDragOver: onDragOverPO, onDragLeave: onDragLeavePO, onDrop: onDropPO, isDragOver: isDragOverPO } = usePasteFile((file) => handlePurchaseOrderFile(file));
-  const purchaseOrderFileInputRef = useRef<HTMLInputElement>(null);
-
   // Confirmado 2026-08-07: antes venía marcado por default (asumía "envío
   // incluido"), lo que hacía que muchas solicitudes se enviaran sin costo de
   // flete cuando en realidad SÍ se cobraba aparte. Ahora arranca sin marcar
@@ -214,7 +211,7 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
   // no se sabe ni el transportista ni el costo real del flete al momento
   // de solicitar. Con esto marcado, esos dos campos dejan de ser
   // obligatorios y quedan pendientes de completar después desde "Mis
-  // solicitudes" (mismo patrón que la orden de compra).
+  // solicitudes".
   const [shippingCarrierPending, setShippingCarrierPending] = useState(false);
   const [carrier, setCarrier] = useState<PurchaseSupplierDTO | null>(null);
   const [carrierBankAccountId, setCarrierBankAccountId] = useState<string | null>(null);
@@ -399,9 +396,6 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
         setBankAccountId(d.bankAccountId ?? null);
         setQuoteImageUrl(d.quoteImageUrl ?? null);
         setVerifyResult(d.verifyResult ?? null);
-        setManualCodeConfirm(d.manualCodeConfirm ?? false);
-        setPurchaseOrderUrl(d.purchaseOrderUrl ?? null);
-        setPoVerifyResult(d.poVerifyResult ?? null);
         setShippingIncluded(d.shippingIncluded ?? false);
         setShippingCarrierPending(d.shippingCarrierPending ?? false);
         setCarrier(normalizeSupplier(d.carrier));
@@ -465,9 +459,6 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
       bankAccountId,
       quoteImageUrl,
       verifyResult,
-      manualCodeConfirm,
-      purchaseOrderUrl,
-      poVerifyResult,
       shippingIncluded,
       shippingCarrierPending,
       carrier,
@@ -483,7 +474,7 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
     } else {
       localStorage.removeItem(DRAFT_KEY);
     }
-  }, [hydrated, lines, supplier, bankAccountId, quoteImageUrl, verifyResult, manualCodeConfirm, purchaseOrderUrl, poVerifyResult, shippingIncluded, shippingCarrierPending, carrier, carrierBankAccountId, shippingCostTotal, shippingPaymentMethod, shippingPaymentTiming, editingGroupId, resubmitAttemptHint]);
+  }, [hydrated, lines, supplier, bankAccountId, quoteImageUrl, verifyResult, shippingIncluded, shippingCarrierPending, carrier, carrierBankAccountId, shippingCostTotal, shippingPaymentMethod, shippingPaymentTiming, editingGroupId, resubmitAttemptHint]);
 
   function resetForm() {
     setLines([emptyLine()]);
@@ -492,10 +483,7 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
     setQuoteFile(null);
     setQuoteImageUrl(null);
     setVerifyResult(null);
-    setManualCodeConfirm(false);
-    setPurchaseOrderFile(null);
-    setPurchaseOrderUrl(null);
-    setPoVerifyResult(null);
+    setConfirmingLineIdx(null);
     setCarrier(null);
     setCarrierBankAccountId(null);
     setShippingCostTotal("");
@@ -528,34 +516,73 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
   const total = lineTotals.reduce((s, t) => s + t, 0);
 
   // Confirmado 2026-08-31: si el total cambia (cantidad, costo, IVA, o
-  // agregar/quitar un producto) DESPUÉS de que la cotización u orden de
-  // compra ya se verificó contra el total anterior, ese "coincide" queda
-  // obsoleto — invalida ambas verificaciones para forzar un chequeo nuevo
-  // contra el total real antes de poder enviar (submit() ya exige
-  // quoteVerified/poVerifyResult.matches, así que ponerlos en null vuelve a
-  // bloquear el envío hasta reverificar).
+  // agregar/quitar un producto) DESPUÉS de que la cotización ya se verificó
+  // contra el total anterior, ese "coincide" queda obsoleto — invalida la
+  // verificación para forzar un chequeo nuevo contra el total real antes de
+  // poder enviar (submit() ya exige quoteVerified, así que ponerlo en null
+  // vuelve a bloquear el envío hasta reverificar).
   const lastVerifiedTotalRef = useRef<number | null>(null);
   useEffect(() => {
     if (!hydrated) return;
     if (lastVerifiedTotalRef.current !== null && lastVerifiedTotalRef.current !== total) {
       setVerifyResult(null);
-      setPoVerifyResult(null);
     }
     lastVerifiedTotalRef.current = total;
   }, [hydrated, total]);
 
   // Confirmado 2026-08-17: pedido explícito del usuario — cuando la
   // cotización solo trae código (sin nombre de producto), antes el total que
-  // leía la IA (readTotal) se descartaba en silencio: solo se comparaba la
-  // orden de compra contra lo escrito. Si el proveedor ya tenía un crédito
-  // pendiente y lo aplicó directo en la cotización (el "total a transferir"
-  // que puso ahí ya viene descontado), esa diferencia nunca se detectaba ni
-  // se registraba como crédito — se terminaba pagando de más. Con esto, si
-  // el total leído de la cotización es menor a lo escrito, se ofrece
-  // registrar la diferencia como crédito de una vez (ver bloque de
-  // "Cotización" más abajo).
+  // leía la IA (readTotal) se descartaba en silencio. Si el proveedor ya
+  // tenía un crédito pendiente y lo aplicó directo en la cotización (el
+  // "total a transferir" que puso ahí ya viene descontado), esa diferencia
+  // nunca se detectaba ni se registraba como crédito — se terminaba pagando
+  // de más. Con esto, si el total leído de la cotización es menor a lo
+  // escrito, se ofrece registrar la diferencia como crédito de una vez (ver
+  // bloque de "Cotización" más abajo).
+  // Confirmado 2026-09-21, pedido explícito del usuario (ya no se usará
+  // Just): una misma cotización puede traer VARIOS productos, cada uno con
+  // SU PROPIO código de proveedor (ej. una nota de venta manuscrita con 4
+  // renglones, cada uno con un código distinto) — la IA ahora lee línea por
+  // línea, y acá se cruza cada línea leída contra lo que la persona ya
+  // escribió en el formulario, por cantidad y precio unitario (deben
+  // coincidir exacto si se transcribió bien). Si no hay match exacto y las
+  // dos listas tienen el mismo largo, se asocia por posición como respaldo —
+  // esto SOLO guía la interfaz; lo que de verdad protege el envío es que el
+  // código quede guardado contra el producto en el catálogo antes de poder
+  // enviar (ver checkPurchaseSubmission en lib/purchases.ts).
+  const aiLines = verifyResult?.lines ?? [];
+  const claimedAiIdx = new Set<number>();
+  const matchedAiLineByForm: (QuoteReadLine | null)[] = lines.map((l) => {
+    const qty = Number(l.quantity) || 0;
+    const cost = Number(l.unitCost) || 0;
+    const foundIdx = aiLines.findIndex(
+      (al, ai) => !claimedAiIdx.has(ai) && al.quantity !== null && al.unitPrice !== null && Math.abs(al.quantity - qty) < 0.5 && Math.abs(al.unitPrice - cost) < 0.01
+    );
+    if (foundIdx === -1) return null;
+    claimedAiIdx.add(foundIdx);
+    return aiLines[foundIdx];
+  });
+  if (aiLines.length === lines.length) {
+    matchedAiLineByForm.forEach((m, i) => {
+      if (m === null && !claimedAiIdx.has(i)) {
+        matchedAiLineByForm[i] = aiLines[i];
+        claimedAiIdx.add(i);
+      }
+    });
+  }
+  function isLineCodeOnly(idx: number) {
+    const ml = matchedAiLineByForm[idx];
+    return !!ml?.referenceCodeFound && !ml?.productNameFound;
+  }
+  function lineCodeRecognized(idx: number) {
+    const ml = matchedAiLineByForm[idx];
+    return !!ml?.suggestedCatalogItem && ml.suggestedCatalogItem.id === lines[idx].catalogItem?.id;
+  }
+  const codeOnlyIdxs = lines.map((_, i) => i).filter((i) => isLineCodeOnly(i));
+  const allCodeOnlyResolved = codeOnlyIdxs.every((i) => lineCodeRecognized(i));
+
   const quoteCreditGap =
-    verifyResult?.referenceCodeFound && verifyResult.readTotal !== null && total - verifyResult.readTotal > 0.01
+    codeOnlyIdxs.length > 0 && verifyResult?.readTotal !== null && verifyResult && total - verifyResult.readTotal > 0.01
       ? total - verifyResult.readTotal
       : null;
 
@@ -613,12 +640,11 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
   });
   if (supplier) draftSummaryParts.push(`Proveedor: ${supplier.name}`);
   if (quoteImageUrl) draftSummaryParts.push("Cotización ya subida");
-  if (purchaseOrderUrl) draftSummaryParts.push("Orden de compra ya subida");
 
   async function handleQuoteFile(file: File) {
     setQuoteFile(file);
     setVerifyResult(null);
-    setManualCodeConfirm(false);
+    setConfirmingLineIdx(null);
     setUploadingQuote(true);
     setErr("");
     const compressed = await compressImage(file);
@@ -631,41 +657,35 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
     setQuoteImageUrl(uploaded.url);
   }
 
-  async function handlePurchaseOrderFile(file: File) {
-    setPurchaseOrderFile(file);
-    setPoVerifyResult(null);
-    setPoVerifyAttempts(0);
-    setUploadingPurchaseOrder(true);
-    setErr("");
-    const compressed = await compressImage(file);
-    const uploaded = await uploadFile(compressed, "purchase-orders");
-    setUploadingPurchaseOrder(false);
-    if (!uploaded.ok) {
-      setErr(uploaded.error);
-      return;
-    }
-    setPurchaseOrderUrl(uploaded.url);
-    // La verificación en sí la dispara el useEffect de más abajo (mira
-    // needsPurchaseOrder/purchaseOrderUrl/poVerifyResult) — así también
-    // reintenta solo si el intento automático falla, en vez de depender de
-    // que este momento exacto tenga todo lo necesario listo.
-  }
-
-  async function verifyPurchaseOrder(url: string) {
-    setPoVerifying(true);
-    const res = await fetch("/api/purchase-requests/verify-purchase-order", {
+  // Confirmado 2026-09-21, pedido explícito del usuario (ya no se usará
+  // Just): guarda a qué producto corresponde un código de proveedor
+  // detectado en la cotización, la primera vez que aparece — esto es lo que
+  // reemplaza a la vieja "orden de compra de respaldo". Requiere el doble
+  // clic ya hecho en la UI (ver confirmingLineIdx) antes de llamarse, para
+  // evitar un error por apuro. Una vez guardado, se refleja en verifyResult
+  // mismo (en vez de un estado aparte) para que quede consistente si el
+  // borrador se guarda y se restaura después.
+  async function confirmLineCode(idx: number) {
+    const ml = matchedAiLineByForm[idx];
+    const catalogItem = lines[idx].catalogItem;
+    if (!ml?.referenceCodeFound || !catalogItem) return;
+    setConfirmingLineBusy(true);
+    const res = await fetch("/api/purchase-requests/confirm-code", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ purchaseOrderUrl: url, expectedTotal: total }),
+      body: JSON.stringify({ catalogItemId: catalogItem.id, code: ml.referenceCodeFound }),
     }).catch(() => null);
-    setPoVerifying(false);
-    const data = res ? await res.json().catch(() => null) : null;
+    setConfirmingLineBusy(false);
     if (!res || !res.ok) {
-      setPoVerifyAttempts((n) => n + 1);
+      setErr("No se pudo guardar la confirmación — intenta de nuevo.");
       return;
     }
-    setPoVerifyResult(data);
-    setPoVerifyAttempts(0);
+    const code = ml.referenceCodeFound;
+    setVerifyResult((vr) => {
+      if (!vr) return vr;
+      return { ...vr, lines: vr.lines.map((l) => (l.referenceCodeFound === code ? { ...l, suggestedCatalogItem: { id: catalogItem.id, name: catalogItem.name } } : l)) };
+    });
+    setConfirmingLineIdx(null);
   }
 
   async function verifyQuote() {
@@ -694,32 +714,14 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
 
   // Confirmado 2026-09-14, pedido explícito de Jariel: un proveedor de
   // crédito (hoy CHEN) se solicita directo con esta herramienta — ya no se
-  // pide cotización ni orden de compra de respaldo.
+  // pide cotización.
   const isCreditoSupplier = supplier?.paymentMode === "CREDITO";
-  const quoteVerified = isCreditoSupplier || verifyResult?.matches || (verifyResult?.referenceCodeFound && manualCodeConfirm);
-  // Confirmado 2026-07-31: cuando la IA no encuentra nombre de producto en la
-  // cotización, solo un código, la orden de compra pasa a ser obligatoria —
-  // es el único respaldo real de qué se está comprando y solicitando pagar.
-  const needsPurchaseOrder = !isCreditoSupplier && !!verifyResult?.referenceCodeFound && !verifyResult?.productNameFound;
-  const poAnchored = !!poVerifyResult?.matches;
-
-  // Confirmado 2026-09-03: reintenta sola la lectura de la orden de compra
-  // cuando falta (recién subida, o el borrador guardado se quedó sin
-  // verificar de una sesión anterior) y también cuando el intento previo
-  // falló — con espera creciente (0s, 3s, 8s) para no golpear la IA de
-  // inmediato tres veces seguidas. Se detiene a los 3 intentos fallidos: si
-  // la foto de verdad no se puede leer, seguir reintentando para siempre
-  // solo generaría gasto sin resolver nada — ahí se le pide a la persona que
-  // suba una foto más clara.
-  useEffect(() => {
-    if (!needsPurchaseOrder || !purchaseOrderUrl || total <= 0) return;
-    if (poVerifyResult || poVerifying) return;
-    if (poVerifyAttempts >= 3) return;
-    const delay = poVerifyAttempts === 0 ? 0 : poVerifyAttempts === 1 ? 3000 : 8000;
-    const t = setTimeout(() => verifyPurchaseOrder(purchaseOrderUrl), delay);
-    return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [needsPurchaseOrder, purchaseOrderUrl, poVerifyResult, poVerifying, total, poVerifyAttempts]);
+  // Confirmado 2026-09-21: si hay líneas con código sin nombre, el total no
+  // se exige que cuadre exacto (mismo criterio que ya existía) — lo que se
+  // exige en su lugar es que cada una de esas líneas ya esté reconocida
+  // (recién confirmada, o ya sabida de antes). Si no hay ninguna línea así,
+  // se vuelve a exigir que el total coincida, como siempre.
+  const quoteVerified = isCreditoSupplier || (!!verifyResult && (codeOnlyIdxs.length > 0 ? allCodeOnlyResolved : verifyResult.matches));
   const validLines = lines.filter((l) => l.catalogItem && Number(l.quantity) > 0 && Number(l.unitCost) > 0);
 
   async function submit() {
@@ -735,12 +737,8 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
       setErr("Verifica la cotización antes de enviar.");
       return;
     }
-    if (needsPurchaseOrder && !purchaseOrderUrl) {
-      setErr("La cotización solo trae un código, sin nombre de producto — sube la orden de compra antes de enviar.");
-      return;
-    }
-    if (needsPurchaseOrder && !poVerifyResult?.matches) {
-      setErr("El monto de la orden de compra todavía no está verificado — debe coincidir con lo que escribiste.");
+    if (codeOnlyIdxs.length > 0 && !allCodeOnlyResolved) {
+      setErr("Confirma a qué producto corresponde cada código de la cotización antes de enviar.");
       return;
     }
     if (!shippingIncluded && !carrier && !shippingCarrierPending) {
@@ -777,13 +775,12 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
         quantity: Number(l.quantity),
         unitCost: effectiveLineUnitCost(l),
         justification: justificationNeededIdx.has(i) ? l.justification.trim() : null,
+        quoteReferenceCode: isLineCodeOnly(i) ? matchedAiLineByForm[i]!.referenceCodeFound : null,
       })),
       supplierId: supplier.id,
       bankAccountId,
       quoteImageUrl,
       quoteReadTotal: verifyResult?.readTotal ?? null,
-      quoteReferenceCode: verifyResult?.referenceCodeFound ?? null,
-      purchaseOrderUrl,
       shippingIncluded,
       shippingCarrierPending: !shippingIncluded && shippingCarrierPending,
       carrierId: shippingIncluded ? null : carrier?.id,
@@ -1094,10 +1091,9 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
 
       {isCreditoSupplier ? (
         <div className="mb-3.5 text-[11.5px] text-steel bg-cloud border border-rule rounded-md px-3 py-2.5">
-          Este es un proveedor de crédito — se solicita directo con esta herramienta, sin cotización ni orden de compra.
+          Este es un proveedor de crédito — se solicita directo con esta herramienta, sin cotización.
         </div>
       ) : (
-        <>
       <div className="mb-3.5">
         <label className="block mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-steel">
           Cotización <span className="text-steel-dim normal-case font-normal">— total de todos los productos: ${total.toFixed(2)}</span>
@@ -1140,20 +1136,11 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
 
             {verifyResult && (
               <>
-                {verifyResult.matches ? (
-                  <div className="flex items-center gap-2 text-[12.5px] text-teal">
-                    <CheckCircle2 size={14} /> Coinciden — total leído ${verifyResult.readTotal?.toFixed(2)}
-                  </div>
-                ) : verifyResult.referenceCodeFound ? (
+                {codeOnlyIdxs.length > 0 ? (
                   <div>
                     <div className="flex items-center gap-2 text-[12.5px] text-gold mb-2" style={{ color: "#D9A441" }}>
-                      🔎 La cotización solo trae el código &quot;{verifyResult.referenceCodeFound}&quot;, sin nombre de producto.
+                      🔎 La cotización trae {codeOnlyIdxs.length === 1 ? "un código de proveedor" : `${codeOnlyIdxs.length} códigos de proveedor`} sin nombre de producto — confirma a qué producto corresponde cada uno.
                     </div>
-                    {verifyResult.suggestedCatalogItem && (
-                      <div className="text-[11.5px] text-steel mb-2">
-                        Ese código ya está guardado como <b className="text-ink">{verifyResult.suggestedCatalogItem.name}</b> en el catálogo.
-                      </div>
-                    )}
                     {isAdmin && quoteCreditGap !== null && (
                       <div className="text-[11.5px] mb-2 rounded-md border p-2" style={{ borderColor: "#D9A441", color: "#D9A441", background: "rgba(217,164,65,0.08)" }}>
                         La cotización dice que el total a transferir es <b>${verifyResult.readTotal!.toFixed(2)}</b>, pero lo escrito es <b>${total.toFixed(2)}</b> — la diferencia (${quoteCreditGap.toFixed(2)}) ¿es un crédito pendiente con este proveedor?
@@ -1162,7 +1149,7 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
                           className="block mt-1.5 text-[11.5px] font-semibold text-blue cursor-pointer"
                           onClick={() => {
                             setManualCreditAmount(quoteCreditGap.toFixed(2));
-                            setManualCreditReason(`Cotización (código ${verifyResult.referenceCodeFound}) indicó $${verifyResult.readTotal!.toFixed(2)} a transferir — diferencia con lo escrito por crédito pendiente`);
+                            setManualCreditReason(`Cotización indicó $${verifyResult.readTotal!.toFixed(2)} a transferir — diferencia con lo escrito por crédito pendiente`);
                             setManualCreditProofUrl(quoteImageUrl);
                             setManualCreditProofName("Cotización");
                             setManualCreditOpen(true);
@@ -1172,13 +1159,61 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
                         </button>
                       </div>
                     )}
-                    {!manualCodeConfirm ? (
-                      <button type="button" className="rounded border border-teal bg-teal px-3 py-1.5 text-[11.5px] font-bold text-navy cursor-pointer" onClick={() => setManualCodeConfirm(true)}>
-                        ✓ Sí, confirmo a qué producto(s) corresponde
-                      </button>
-                    ) : (
-                      <div className="flex items-center gap-2 text-[12.5px] text-teal"><CheckCircle2 size={14} /> Confirmado</div>
-                    )}
+                    <div className="space-y-2">
+                      {codeOnlyIdxs.map((idx) => {
+                        const l = lines[idx];
+                        const ml = matchedAiLineByForm[idx]!;
+                        const recognized = lineCodeRecognized(idx);
+                        const mismatch = !!ml.suggestedCatalogItem && ml.suggestedCatalogItem.id !== l.catalogItem?.id;
+                        return (
+                          <div key={idx} className="border border-rule rounded-md p-2.5 bg-surface2">
+                            <div className="text-[12px] text-steel mb-1.5">
+                              Código <b className="text-ink">&quot;{ml.referenceCodeFound}&quot;</b> → <b className="text-ink">{l.catalogItem?.name ?? `línea ${idx + 1}`}</b>
+                              {ml.quantity !== null && ml.unitPrice !== null && <span className="text-steel-dim"> ({ml.quantity} × ${ml.unitPrice.toFixed(2)})</span>}
+                            </div>
+                            {recognized ? (
+                              <div className="flex items-center gap-2 text-[12px] text-teal">
+                                <CheckCircle2 size={13} /> Código ya reconocido — no hace falta confirmar de nuevo.
+                              </div>
+                            ) : confirmingLineIdx === idx ? (
+                              <div className="border border-teal/40 rounded-md bg-teal/5 p-2">
+                                <div className="text-[11.5px] text-ink mb-1.5">
+                                  ¿Seguro que el código &quot;{ml.referenceCodeFound}&quot; es <b>{l.catalogItem?.name}</b>? Se va a guardar para reconocerlo solo la próxima vez.
+                                </div>
+                                <div className="flex gap-2">
+                                  <button type="button" className="text-[11px] text-steel border border-rule rounded px-2.5 py-1 cursor-pointer" onClick={() => setConfirmingLineIdx(null)}>
+                                    Cancelar
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={confirmingLineBusy}
+                                    className="text-[11px] font-semibold text-navy bg-teal rounded px-2.5 py-1 cursor-pointer disabled:opacity-60"
+                                    onClick={() => confirmLineCode(idx)}
+                                  >
+                                    {confirmingLineBusy ? "Guardando…" : "Sí, confirmar y guardar"}
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <>
+                                {mismatch && (
+                                  <div className="flex items-center gap-2 text-[11.5px] text-red mb-1.5">
+                                    <AlertTriangle size={12} /> Ese código ya está guardado como {ml.suggestedCatalogItem!.name} — revisa que elegiste el producto correcto antes de confirmar.
+                                  </div>
+                                )}
+                                <button type="button" className="rounded border border-teal bg-teal px-3 py-1.5 text-[11.5px] font-bold text-navy cursor-pointer" onClick={() => setConfirmingLineIdx(idx)}>
+                                  ✓ Confirmar a qué producto corresponde
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : verifyResult.matches ? (
+                  <div className="flex items-center gap-2 text-[12.5px] text-teal">
+                    <CheckCircle2 size={14} /> Coinciden — total leído ${verifyResult.readTotal?.toFixed(2)}
                   </div>
                 ) : (
                   <div className="flex items-center gap-2 text-[12.5px] text-red">
@@ -1188,7 +1223,7 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
               </>
             )}
             {!quoteVerified ? (
-              <button type="button" className="text-[11px] text-steel mt-2 cursor-pointer" onClick={() => { setQuoteFile(null); setQuoteImageUrl(null); setVerifyResult(null); }}>
+              <button type="button" className="text-[11px] text-steel mt-2 cursor-pointer" onClick={() => { setQuoteFile(null); setQuoteImageUrl(null); setVerifyResult(null); setConfirmingLineIdx(null); }}>
                 Cambiar imagen
               </button>
             ) : !confirmUnlockQuote ? (
@@ -1208,7 +1243,7 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
                   <button
                     type="button"
                     className="text-[11px] font-semibold text-white bg-red rounded px-2.5 py-1 cursor-pointer"
-                    onClick={() => { setQuoteFile(null); setQuoteImageUrl(null); setVerifyResult(null); setManualCodeConfirm(false); setConfirmUnlockQuote(false); }}
+                    onClick={() => { setQuoteFile(null); setQuoteImageUrl(null); setVerifyResult(null); setConfirmingLineIdx(null); setConfirmUnlockQuote(false); }}
                   >
                     Sí, quitar verificación
                   </button>
@@ -1218,127 +1253,6 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
           </div>
         )}
       </div>
-
-      <div className="mb-3.5">
-        <label className="block mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-steel">
-          Orden de compra{" "}
-          {needsPurchaseOrder ? (
-            <span className="text-red normal-case font-semibold">— obligatoria</span>
-          ) : (
-            <span className="text-steel-dim normal-case font-normal">(opcional — puedes subirla por adelantado)</span>
-          )}
-        </label>
-        {needsPurchaseOrder && (
-          <div className="text-[11.5px] text-red mb-2">
-            La cotización solo trae un código, sin nombre de producto — sin eso, no hay respaldo de qué se está comprando ni de que el monto sea el correcto.
-            Sube la orden de compra: la IA la va a leer y cruzar su monto contra lo que escribiste, para que cotización, lo tipeado y la orden de compra sean transparentes entre sí.
-          </div>
-        )}
-        {!purchaseOrderUrl ? (
-          <div>
-            <div
-              tabIndex={0}
-              onPaste={onPastePurchaseOrder}
-              onMouseEnter={onPastePOHoverIn}
-              onMouseLeave={onPastePOHoverOut}
-              onDragOver={onDragOverPO}
-              onDragLeave={onDragLeavePO}
-              onDrop={onDropPO}
-              className={`flex flex-col items-center justify-center gap-1 border-[1.5px] border-dashed rounded-md py-3.5 cursor-pointer text-[12.5px] focus:outline-none ${
-                isDragOverPO
-                  ? "border-teal bg-teal/5 text-steel"
-                  : needsPurchaseOrder
-                  ? "border-red/45 text-red hover:border-red"
-                  : "border-rule text-steel hover:border-teal focus:border-teal"
-              }`}
-            >
-              <span className="flex items-center gap-2">
-                {uploadingPurchaseOrder ? <span className="w-4 h-4 rounded-full border-2 border-rule border-t-teal animate-spin" /> : <Upload size={15} />}
-                Pega o arrastra la orden de compra aquí (Ctrl+V)
-              </span>
-              <button type="button" className="text-[10.5px] underline decoration-dotted opacity-80 hover:opacity-100 cursor-pointer" onClick={() => purchaseOrderFileInputRef.current?.click()}>
-                o selecciona una imagen
-              </button>
-              {/* Confirmado 2026-08-03: accept="image/*,application/pdf" hacía que el
-                  celular mostrara el selector genérico de "Cámara y archivos" en vez
-                  del acceso directo a la última foto — se separa el PDF como opción
-                  aparte para que la foto (el caso más común) siga siendo un solo toque. */}
-              <input ref={purchaseOrderFileInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && handlePurchaseOrderFile(e.target.files[0])} />
-            </div>
-            <label className="flex items-center justify-center gap-1.5 mt-1.5 text-[11px] text-steel cursor-pointer hover:text-teal">
-              <FileText size={11} /> ¿Es un PDF? Subir documento
-              <input type="file" accept="application/pdf" className="hidden" onChange={(e) => e.target.files?.[0] && handlePurchaseOrderFile(e.target.files[0])} />
-            </label>
-          </div>
-        ) : (
-          <div className="bg-cloud border border-rule rounded-md p-3">
-            <div className="flex items-center gap-3">
-              {/\.pdf($|\?)/i.test(purchaseOrderUrl) ? (
-                <FileText size={22} className="text-steel shrink-0" />
-              ) : (
-                <img src={purchaseOrderUrl} alt="" className="w-11 h-11 rounded object-cover border border-rule shrink-0" />
-              )}
-              <div className="flex-1 flex items-center gap-1.5 text-[12px] text-teal">
-                <CheckCircle2 size={13} /> Orden de compra subida
-              </div>
-              {!poAnchored ? (
-                <button type="button" className="text-[11px] text-steel cursor-pointer" onClick={() => { setPurchaseOrderFile(null); setPurchaseOrderUrl(null); setPoVerifyResult(null); setPoVerifyAttempts(0); }}>
-                  Cambiar
-                </button>
-              ) : !confirmUnlockPO ? (
-                <button type="button" className="flex items-center gap-1 text-[11px] text-steel underline cursor-pointer shrink-0" onClick={() => setConfirmUnlockPO(true)}>
-                  <Lock size={11} /> Quitar verificación
-                </button>
-              ) : null}
-            </div>
-            {poAnchored && confirmUnlockPO && (
-              <div className="mt-2.5 pt-2.5 border-t border-rule">
-                <div className="border border-red/40 rounded-md bg-red/5 p-2.5">
-                  <div className="text-[11.5px] text-ink mb-2">¿Seguro? Se pierde este documento y su verificación — vas a tener que subir la orden de compra de nuevo y volver a verificarla con la IA.</div>
-                  <div className="flex gap-2">
-                    <button type="button" className="text-[11px] text-steel border border-rule rounded px-2.5 py-1 cursor-pointer" onClick={() => setConfirmUnlockPO(false)}>
-                      Cancelar
-                    </button>
-                    <button
-                      type="button"
-                      className="text-[11px] font-semibold text-white bg-red rounded px-2.5 py-1 cursor-pointer"
-                      onClick={() => { setPurchaseOrderFile(null); setPurchaseOrderUrl(null); setPoVerifyResult(null); setConfirmUnlockPO(false); }}
-                    >
-                      Sí, quitar verificación
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-            {needsPurchaseOrder && (
-              <div className="mt-2.5 pt-2.5 border-t border-rule">
-                {poVerifying ? (
-                  <div className="flex items-center gap-2 text-[12px] text-steel">
-                    <span className="w-3.5 h-3.5 rounded-full border-2 border-rule border-t-teal animate-spin" /> Leyendo el monto de la orden de compra…
-                  </div>
-                ) : poVerifyResult?.matches ? (
-                  <div className="flex items-center gap-2 text-[12px] text-teal">
-                    <CheckCircle2 size={14} /> Coincide — la orden de compra dice ${poVerifyResult.readTotal?.toFixed(2)}, igual que la cotización y lo escrito.
-                  </div>
-                ) : poVerifyResult ? (
-                  <div className="flex items-center gap-2 text-[12px] text-red">
-                    <Lock size={14} /> No coincide — la orden de compra dice ${poVerifyResult.readTotal?.toFixed(2) ?? "?"}, pero se escribió ${total.toFixed(2)}. Corrige el número o sube la orden de compra correcta.
-                  </div>
-                ) : poVerifyAttempts >= 3 ? (
-                  <div className="flex items-center gap-2 text-[12px] text-red">
-                    <AlertTriangle size={14} /> No se pudo leer el monto de la orden de compra después de varios intentos. Sube una foto más clara.
-                  </div>
-                ) : poVerifyAttempts > 0 ? (
-                  <div className="flex items-center gap-2 text-[12px] text-steel">
-                    <span className="w-3.5 h-3.5 rounded-full border-2 border-rule border-t-teal animate-spin" /> No se pudo leer a la primera — reintentando…
-                  </div>
-                ) : null}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-        </>
       )}
 
       <div className="flex items-center gap-2 mb-3.5 text-[12.5px] text-steel">

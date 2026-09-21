@@ -433,7 +433,6 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   cumpleanos: "Cumpleaños de tu equipo (aviso 1 día antes)",
   compras_pendientes_aprobacion: "Solicitudes de compra por aprobar",
   compras_rechazadas: "Tus solicitudes de compra rechazadas — corregir y reenviar",
-  compras_orden_compra: "Tus solicitudes de compra — falta subir orden de compra",
   compras_transportista: "Tus solicitudes de compra — falta transportista",
   compras_cuenta_bancaria: "Tus solicitudes de compra — cambiar cuenta bancaria",
   compras_pago_seguimiento: "Tus solicitudes de compra — seguimiento después del pago (mientras Inventario confirma la recepción)",
@@ -1337,20 +1336,19 @@ async function getPurchaseShippingPendingItem(href: string): Promise<PendingItem
 // Confirmado 2026-08-17: pedido explícito del usuario — Bryan (o cualquier
 // otro delegado de Control de Compras, hoy o en el futuro) quiere ver en
 // Inicio, con un solo clic, sus PROPIAS solicitudes de compra que quedaron
-// esperando algo de él: rechazada (falta corregir y reenviar), falta subir
-// la orden de compra, falta completar transportista/costo de envío, o
-// admin/Finanzas le pidió cambiar la cuenta bancaria del proveedor. Filtra
-// por requestedById (el DATO de quién la creó, no un permiso) — así aparece
-// solo para quien de verdad tiene algo propio pendiente, sin importar su
-// departamento real (mismo espíritu que el resto de "Control de Compras",
-// que ya vive fuera de dept.code — ver canSubmitPurchaseRequests).
+// esperando algo de él: rechazada (falta corregir y reenviar), falta
+// completar transportista/costo de envío, o admin/Finanzas le pidió cambiar
+// la cuenta bancaria del proveedor. Filtra por requestedById (el DATO de
+// quién la creó, no un permiso) — así aparece solo para quien de verdad
+// tiene algo propio pendiente, sin importar su departamento real (mismo
+// espíritu que el resto de "Control de Compras", que ya vive fuera de
+// dept.code — ver canSubmitPurchaseRequests).
 async function getPurchaseRequesterPendingItems(userId: string, href: string): Promise<PendingItem[]> {
   const rows = await prisma.purchaseRequest.findMany({
     where: { requestedById: userId },
     select: {
       groupId: true,
       status: true,
-      purchaseOrderUrl: true,
       shippingCarrierPending: true,
       bankAccountChangeRequestedAt: true,
       requestedAt: true,
@@ -1373,24 +1371,6 @@ async function getPurchaseRequesterPendingItems(userId: string, href: string): P
       label: "Solicitudes de compra rechazadas — corregir y reenviar",
       meta: `${rejected.length} solicitud${rejected.length === 1 ? "" : "es"} · atrasado`,
       overdue: true,
-      href,
-    });
-  }
-
-  // Confirmado 2026-09-14, mismo bug real reportado por el usuario (ya
-  // corregido en MyPurchaseRequests.tsx y checkPurchaseSubmission): un
-  // proveedor de crédito (hoy CHEN) nunca necesita orden de compra — se
-  // solicita directo con esta herramienta, el control de inventario ya lo
-  // lleva INVESTOCK.
-  const missingPO = groups.filter((g) => g.status !== "REJECTED" && g.supplier.paymentMode !== "CREDITO" && !g.purchaseOrderUrl);
-  if (missingPO.length > 0) {
-    const overdue = missingPO.some((g) => g.requestedAt < cutoff);
-    items.push({
-      type: "compras_orden_compra",
-      icon: "📄",
-      label: "Falta subir la orden de compra",
-      meta: `${missingPO.length} solicitud${missingPO.length === 1 ? "" : "es"}${overdue ? " · atrasado" : ""}`,
-      overdue,
       href,
     });
   }
@@ -3185,7 +3165,7 @@ export async function getPossiblePendingTypesForActor(
       // abajo, pero sin nada del resto (KPIs, roles de pago, etc.) que sigue
       // siendo exclusivo de líderes.
       if (me.canManagePurchases) {
-        types.push("compras_rechazadas", "compras_orden_compra", "compras_transportista", "compras_cuenta_bancaria", "compras_creditos_pendientes", "deterioro_compras_gestion");
+        types.push("compras_rechazadas", "compras_transportista", "compras_cuenta_bancaria", "compras_creditos_pendientes", "deterioro_compras_gestion");
       }
       if (me.canApprovePurchaseRequests) types.push("compras_pendientes_aprobacion");
       // Confirmado 2026-09-18: Jariel es miembro de MKT (canProposeMarketProduct)
@@ -3207,7 +3187,7 @@ export async function getPossiblePendingTypesForActor(
     // pero calculado acá sin sesión, para poder listar los tipos posibles de
     // cualquier líder (usado también por el barrido del cron).
     if (me.canManagePurchases || ["COM", "FIN"].includes(me.leadsDept.code)) {
-      types.push("compras_rechazadas", "compras_orden_compra", "compras_transportista", "compras_cuenta_bancaria", "compras_creditos_pendientes");
+      types.push("compras_rechazadas", "compras_transportista", "compras_cuenta_bancaria", "compras_creditos_pendientes");
     }
     if (me.canManagePurchases) types.push("deterioro_compras_gestion");
     if (me.canApprovePurchaseRequests) types.push("compras_pendientes_aprobacion");

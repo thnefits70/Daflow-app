@@ -1,10 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { FileText, Upload, Truck, CheckCircle2, Plus, Bell, AlertTriangle } from "lucide-react";
-import { uploadFile } from "@/lib/uploadFile";
-import { compressImage } from "@/lib/compressImage";
-import { usePasteFile } from "@/lib/usePasteFile";
+import { Truck, CheckCircle2, Plus, Bell, AlertTriangle } from "lucide-react";
 import { PurchaseSupplierPicker, type BankAccountDTO, type PurchaseSupplierDTO } from "./PurchaseSupplierPicker";
 import { PurchaseOperationDocuments } from "./PurchaseOperationDocuments";
 import { actorName } from "@/lib/actorName";
@@ -590,20 +587,22 @@ function buildResubmitDraft(g: Row[]) {
     supplier: { id: r0.supplier.id, name: r0.supplier.name, location: null, email: null, bankAccounts: r0.supplier.bankAccounts, contacts: [] },
     bankAccountId: r0.bankAccountId,
     quoteImageUrl: r0.quoteImageUrl,
+    // Confirmado 2026-09-21: si una línea tenía quoteReferenceCode guardado,
+    // es porque ya había quedado confirmada (código = producto) en el envío
+    // original (checkPurchaseSubmission lo exige) — se reconstruye como
+    // reconocida (suggestedCatalogItem = su propio producto) en vez de
+    // volver a pedir la confirmación al reenviar.
     verifyResult: {
       readTotal: r0.quoteReadTotal,
-      productNameFound: r0.quoteReferenceCode ? null : r0.catalogItem.name,
-      referenceCodeFound: r0.quoteReferenceCode,
-      matches: !r0.quoteReferenceCode,
-      suggestedCatalogItem: null,
+      matches: !g.some((r) => r.quoteReferenceCode),
+      lines: g.map((r) => ({
+        quantity: r.quantity,
+        unitPrice: r.unitCost,
+        productNameFound: r.quoteReferenceCode ? null : r.catalogItem.name,
+        referenceCodeFound: r.quoteReferenceCode,
+        suggestedCatalogItem: r.quoteReferenceCode ? { id: r.catalogItem.id, name: r.catalogItem.name } : null,
+      })),
     },
-    manualCodeConfirm: !!r0.quoteReferenceCode,
-    purchaseOrderUrl: r0.purchaseOrderUrl,
-    // Si ya había orden de compra subida, es porque ya había pasado la
-    // verificación en el envío original (submit() lo exige) — se reconstruye
-    // como coincidente en vez de null, igual que ya se hace arriba con
-    // verifyResult para la cotización.
-    poVerifyResult: r0.purchaseOrderUrl ? { readTotal: g.reduce((s, r) => s + r.totalCost, 0), matches: true } : null,
     shippingIncluded: r0.shippingIncluded,
     shippingCarrierPending: r0.shippingCarrierPending,
     carrier: r0.carrier ? { id: r0.carrier.id, name: r0.carrier.name, location: null, email: null, bankAccounts: r0.carrier.bankAccounts, contacts: [] } : null,
@@ -618,14 +617,12 @@ function buildResubmitDraft(g: Row[]) {
 
 function GroupCard({
   g,
-  onPurchaseOrderUploaded,
   onGroupUpdate,
   onResubmit,
   isAdmin,
   canPettyCashSecundaria,
 }: {
   g: Row[];
-  onPurchaseOrderUploaded: (groupId: string, url: string) => void;
   onGroupUpdate: (groupId: string, patch: Partial<Row>) => void;
   onResubmit: (draft: ReturnType<typeof buildResubmitDraft>) => void;
   isAdmin: boolean;
@@ -634,19 +631,9 @@ function GroupCard({
   const groupId = g[0].groupId;
   const total = g.reduce((s, r) => s + r.totalCost, 0);
   const rejected = g[0].status === "REJECTED";
-  // Confirmado 2026-09-14, pedido explícito del usuario: un proveedor de
-  // crédito (hoy CHEN) ya no usa órdenes de compra — se solicita directo con
-  // esta herramienta y el control de inventario lo lleva INVESTOCK. Sin
-  // esto, esta pantalla le seguía pidiendo a Jariel subir una orden de
-  // compra que ya no aplica para ese caso.
   const isCreditoSupplier = g[0].supplier.paymentMode === "CREDITO";
-  const needsPurchaseOrder = !rejected && !isCreditoSupplier && !g[0].purchaseOrderUrl;
-  const [uploading, setUploading] = useState(false);
-  const [err, setErr] = useState("");
   const [reminded, setReminded] = useState(false);
   const [openStepKey, setOpenStepKey] = useState<Row["status"] | null>(null);
-  const { onPaste, onMouseEnter: onPasteHoverIn, onMouseLeave: onPasteHoverOut } = usePasteFile((file) => handleFile(file));
-  const poFileInputRef = useRef<HTMLInputElement>(null);
 
   // Confirmado 2026-08-13: pedido explícito del usuario — Bryan también
   // tiene que ver reflejado, en su propio "Mis solicitudes", el crédito que
@@ -683,29 +670,6 @@ function GroupCard({
   // revisar (ver shipping-pay/route.ts).
   const showShippingSection = !rejected && !g[0].shippingIncluded && g[0].shippingPaymentTiming === "ON_DELIVERY" && g[0].status !== "PENDING_APPROVAL";
 
-  async function handleFile(file: File) {
-    setUploading(true);
-    setErr("");
-    const compressed = await compressImage(file);
-    const uploaded = await uploadFile(compressed, "purchase-orders");
-    if (!uploaded.ok) {
-      setUploading(false);
-      setErr(uploaded.error);
-      return;
-    }
-    const res = await fetch(`/api/purchase-requests/group/${groupId}/purchase-order`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ purchaseOrderUrl: uploaded.url }),
-    });
-    setUploading(false);
-    if (!res.ok) {
-      setErr("No se pudo guardar la orden de compra.");
-      return;
-    }
-    onPurchaseOrderUploaded(groupId, uploaded.url);
-  }
-
   async function remindPayment() {
     const target = g.find((r) => r.status === "APPROVED") ?? g[0];
     await fetch(`/api/purchase-requests/${target.id}/remind-payment`, { method: "POST" }).catch(() => null);
@@ -714,7 +678,7 @@ function GroupCard({
   }
 
   return (
-    <div className={`bg-surface border rounded-md p-4 ${needsPurchaseOrder ? "border-gold/40" : "border-rule"}`}>
+    <div className="bg-surface border border-rule rounded-md p-4">
       <div className="flex items-center justify-between gap-3 flex-wrap mb-2.5">
         <div>
           {g[0].requestNumber !== null && (
@@ -802,31 +766,6 @@ function GroupCard({
         </>
       )}
 
-      {needsPurchaseOrder && (
-        <div className="mt-3 pt-3 border-t border-rule">
-          <div
-            tabIndex={0}
-            onPaste={onPaste}
-            onMouseEnter={onPasteHoverIn}
-            onMouseLeave={onPasteHoverOut}
-            className="flex items-center justify-center gap-2 border-[1.5px] border-dashed border-gold/50 rounded-md py-2.5 cursor-pointer text-[12px] focus:outline-none focus:border-gold"
-            style={{ color: "#D9A441" }}
-          >
-            {uploading ? <span className="w-3.5 h-3.5 rounded-full border-2 border-rule border-t-teal animate-spin" /> : <Upload size={14} />}
-            Falta subir la orden de compra — pega la imagen aquí (Ctrl+V)
-            <button type="button" className="text-[10.5px] underline decoration-dotted opacity-80 hover:opacity-100 cursor-pointer" onClick={() => poFileInputRef.current?.click()}>
-              o selecciona un archivo
-            </button>
-            <input ref={poFileInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])} />
-          </div>
-          <label className="flex items-center justify-center gap-1.5 mt-1.5 text-[10.5px] text-steel cursor-pointer hover:text-teal">
-            <FileText size={10.5} /> ¿Es un PDF? Subir documento
-            <input type="file" accept="application/pdf" className="hidden" onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])} />
-          </label>
-          {err && <div className="text-red text-[11.5px] mt-1.5">{err}</div>}
-        </div>
-      )}
-
       {!rejected && g[0].shippingCarrierPending && (
         <ShippingCarrierPendingSection g={g} onUpdate={(patch) => onGroupUpdate(groupId, patch)} isAdmin={isAdmin} canPettyCashSecundaria={canPettyCashSecundaria} />
       )}
@@ -866,7 +805,6 @@ export function MyPurchaseRequests({ onResubmit, isAdmin = false }: { onResubmit
   if (rows.length === 0) return <div className="border-[1.5px] border-dashed border-rule rounded-md p-8 text-center text-steel text-[13.5px]">Todavía no has enviado ninguna solicitud.</div>;
 
   const allGroups = groupRows(rows);
-  const pendingPOCount = allGroups.filter((g) => g[0].status !== "REJECTED" && g[0].supplier.paymentMode !== "CREDITO" && !g[0].purchaseOrderUrl).length;
 
   const supplierOptions = [...new Map(allGroups.map((g) => [g[0].supplier.id, g[0].supplier.name])).entries()].sort((a, b) => a[1].localeCompare(b[1]));
 
@@ -880,21 +818,12 @@ export function MyPurchaseRequests({ onResubmit, isAdmin = false }: { onResubmit
     return true;
   });
 
-  function markUploaded(groupId: string, url: string) {
-    setRows((rs) => rs && rs.map((r) => (r.groupId === groupId ? { ...r, purchaseOrderUrl: url } : r)));
-  }
   function updateGroup(groupId: string, patch: Partial<Row>) {
     setRows((rs) => rs && rs.map((r) => (r.groupId === groupId ? { ...r, ...patch } : r)));
   }
 
   return (
     <div>
-      {pendingPOCount > 0 && (
-        <div className="flex items-center gap-2 bg-gold/10 border border-gold/35 rounded-md px-3.5 py-2.5 mb-3.5 text-[12.5px]" style={{ color: "#D9A441" }}>
-          <FileText size={15} />
-          Te {pendingPOCount === 1 ? "falta subir la orden de compra de 1 solicitud" : `faltan subir las órdenes de compra de ${pendingPOCount} solicitudes`} — señaladas abajo.
-        </div>
-      )}
       <div className="flex flex-wrap items-end gap-2.5 mb-3.5">
         <div>
           <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Proveedor</label>
@@ -925,7 +854,7 @@ export function MyPurchaseRequests({ onResubmit, isAdmin = false }: { onResubmit
       ) : (
         <div className="flex flex-col gap-2.5">
           {groups.map((g) => (
-            <GroupCard key={g[0].groupId} g={g} onPurchaseOrderUploaded={markUploaded} onGroupUpdate={updateGroup} onResubmit={onResubmit} isAdmin={isAdmin} canPettyCashSecundaria={canPettyCashSecundaria} />
+            <GroupCard key={g[0].groupId} g={g} onGroupUpdate={updateGroup} onResubmit={onResubmit} isAdmin={isAdmin} canPettyCashSecundaria={canPettyCashSecundaria} />
           ))}
         </div>
       )}

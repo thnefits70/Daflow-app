@@ -348,6 +348,15 @@ export const purchaseLineSchema = z.object({
   // líneas que de verdad la necesitan (superó el historial o el proveedor
   // elegido no es el más barato para ESE producto).
   justification: z.string().trim().nullable().optional(),
+  // Confirmado 2026-09-21, pedido explícito del usuario (ya no se usará
+  // Just): cuando la cotización solo trae un código de proveedor para ESTA
+  // línea (sin nombre de producto), viene el código que la IA detectó — el
+  // servidor exige que ese código YA esté guardado en el producto elegido
+  // (PurchaseCatalogItem.code), es decir que Jariel ya lo haya confirmado a
+  // mano con el doble clic antes de poder enviar (ver /confirm-code). Nunca
+  // se confía en que el cliente diga "ya confirmé" sin verificarlo contra la
+  // base de datos.
+  quoteReferenceCode: z.string().trim().nullable().optional(),
 });
 
 // Confirmado 2026-08-08: compartido entre crear una solicitud nueva
@@ -365,8 +374,6 @@ export const purchaseSubmissionSchema = z.object({
   // real del proveedor, no se puede validar acá con el shape solo).
   quoteImageUrl: z.string().url().nullable().optional(),
   quoteReadTotal: z.number().nullable(),
-  quoteReferenceCode: z.string().trim().nullable().optional(),
-  purchaseOrderUrl: z.string().url().nullable().optional(),
   shippingIncluded: z.boolean(),
   // Confirmado 2026-08-11: a veces todavía no se sabe transportista ni costo
   // real del flete al solicitar — con esto en true, ninguno de los dos es
@@ -467,18 +474,27 @@ export async function checkPurchaseSubmission(d: PurchaseSubmissionData): Promis
   }
 
   const matches = d.quoteReadTotal !== null && Math.abs(d.quoteReadTotal - groupTotal) < 0.01;
-  const manuallyConfirmed = !!d.quoteReferenceCode;
-  if (!isCreditoSupplier && !matches && !manuallyConfirmed) {
+  const anyLineManuallyConfirmed = d.items.some((it) => !!it.quoteReferenceCode);
+  if (!isCreditoSupplier && !matches && !anyLineManuallyConfirmed) {
     return { ok: false, status: 400, error: "La cotización no coincide con lo escrito — verifícala de nuevo antes de enviar." };
   }
-  // Confirmado 2026-07-31: cuando la cotización solo trae un código de
-  // proveedor (no el nombre del producto), la orden de compra es obligatoria.
-  if (!isCreditoSupplier && manuallyConfirmed && !d.purchaseOrderUrl) {
-    return {
-      ok: false,
-      status: 400,
-      error: "La cotización solo trae un código, sin nombre de producto — sube la orden de compra como respaldo antes de enviar.",
-    };
+  // Confirmado 2026-09-21, pedido explícito del usuario (ya no se usará
+  // Just): cuando una línea trae solo un código de proveedor (sin nombre de
+  // producto), en vez de exigir una orden de compra de respaldo, se exige
+  // que ese código YA esté guardado contra el producto elegido — es decir,
+  // que Jariel ya lo haya confirmado con el doble clic en el formulario
+  // (ver /api/purchase-requests/confirm-code). Nunca se confía en un booleano
+  // que mande el cliente: se vuelve a consultar el catálogo acá mismo.
+  for (const it of d.items) {
+    if (!it.quoteReferenceCode) continue;
+    const item = await prisma.purchaseCatalogItem.findUnique({ where: { id: it.catalogItemId }, select: { name: true, code: true } });
+    if (!item || (item.code ?? "").trim().toLowerCase() !== it.quoteReferenceCode.trim().toLowerCase()) {
+      return {
+        ok: false,
+        status: 400,
+        error: `La cotización solo trae un código para "${item?.name ?? "un producto"}", sin nombre — confirma a qué producto corresponde antes de enviar.`,
+      };
+    }
   }
 
   const totalQty = d.items.reduce((s, it) => s + it.quantity, 0);

@@ -1354,12 +1354,6 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
         const receivedCount = g.filter((r) => r.status === "RECEIVED").length;
         const isMulti = g.length > 1;
         const pendingNames = g.filter((r) => r.status === "PAID" || (r.status === "APPROVED" && r.supplier.paymentMode === "CREDITO")).map((r) => r.catalogItem.name);
-        // Corregido 2026-09-15 — mismo bug de siempre, un paso más adelante:
-        // ahora que un pedido de CHEN sí llega a esta bandeja (ver el fix de
-        // arriba en `pendingNames`), este aviso lo bloqueaba igual pidiendo
-        // una orden de compra que un proveedor de crédito nunca necesita
-        // (ver PurchaseRequestForm.tsx/checkPurchaseSubmission).
-        const missingPurchaseOrder = g[0].supplier.paymentMode !== "CREDITO" && !g[0].purchaseOrderUrl;
         return (
           <div key={groupId} className="bg-surface border border-rule rounded-md p-4">
             {isMulti && (
@@ -1378,13 +1372,6 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                   "Pagada por Andrés Damián" para algo que en realidad no se pagó. */}
               {g[0].paidBy && ` · Pagada por ${actorName(g[0].paidBy.name)}`}
             </div>
-
-            {missingPurchaseOrder && (
-              <div className="flex items-center gap-2 bg-gold/10 border border-gold/35 rounded-md px-3 py-2 mb-3 text-[12px]" style={{ color: "#D9A441" }}>
-                <AlertTriangle size={14} className="shrink-0" />
-                Falta que suban la orden de compra — no se puede confirmar la recepción todavía.
-              </div>
-            )}
 
             <div className="flex flex-col gap-3 mb-3">
               {g.map((r) => {
@@ -1438,7 +1425,7 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                     <div className="text-[11.5px] text-steel mb-1">pagado {formatDateTime(r.paidAt)}</div>
                   )}
 
-                  {(r.status === "PAID" || (r.status === "APPROVED" && r.supplier.paymentMode === "CREDITO")) && !missingPurchaseOrder && (
+                  {(r.status === "PAID" || (r.status === "APPROVED" && r.supplier.paymentMode === "CREDITO")) && (
                     <>
                       {openId === r.id ? (
                         <div className="mt-2">
