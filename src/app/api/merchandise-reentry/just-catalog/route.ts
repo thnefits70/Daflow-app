@@ -14,7 +14,6 @@ export async function GET() {
 
   const [items, imports] = await Promise.all([
     prisma.purchaseCatalogItem.findMany({
-      where: { justCode: { not: null } },
       orderBy: { name: "asc" },
       select: { id: true, name: true, justCode: true, photos: true, pendingRegistration: true },
     }),
