@@ -1072,7 +1072,13 @@ export function ExternalSaleDeclareForm() {
   }
 
   return (
-    <div className="flex flex-col gap-6 max-w-lg">
+    <div className="flex flex-col gap-6">
+      {/* Confirmado 2026-09-21: el formulario de declarar se queda angosto
+          (max-w-lg) porque es más cómodo de llenar así, pero "Mis ventas" ya
+          no va acá adentro — pedido explícito de Marcos, el tablero por
+          columnas necesita todo el ancho de la pantalla para que la barra de
+          desplazamiento no quede apretada en una tira angosta. */}
+      <div className="flex flex-col gap-6 max-w-lg">
       <PriceCheckPanel searchUrl="/api/external-sales/catalog-search" useB2CPricing={canOverrideRecaudo} />
 
       <div className="bg-surface border border-rule rounded-md p-3.5 flex flex-col gap-3">
@@ -1150,6 +1156,7 @@ export function ExternalSaleDeclareForm() {
             </button>
           </>
         )}
+      </div>
       </div>
 
       <div>
