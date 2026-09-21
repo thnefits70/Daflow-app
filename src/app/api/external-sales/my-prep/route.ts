@@ -17,6 +17,7 @@ export async function GET() {
       code: true,
       pickupPersonName: true,
       courierNote: true,
+      dispatchAssignedAt: true,
       advisor: { select: { name: true } },
       items: {
         select: { id: true, declaredProductName: true, quantity: true, sellerReferencePhotoUrl: true, catalogItem: { select: { name: true, photos: true, justCode: true } } },

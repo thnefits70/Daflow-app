@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Camera, Check } from "lucide-react";
 import { LiveCameraCapture } from "@/components/shared/LiveCameraCapture";
 import { CatalogCode } from "@/components/shared/CatalogCode";
+import { formatDateTime } from "@/lib/formatDateTime";
 
 type SaleItemDTO = {
   id: string;
@@ -21,6 +22,7 @@ type SaleDTO = {
   items: SaleItemDTO[];
   pickupPersonName: string;
   courierNote: string | null;
+  dispatchAssignedAt: string | null;
   advisor: { name: string } | null;
 };
 
@@ -75,6 +77,7 @@ export function ExternalSalePrepPanel() {
             <div className="flex items-center gap-2 mb-1.5">
               <span className="font-mono text-[11px] font-bold text-teal">{s.code}</span>
               <span className="text-[11px] text-steel">Asesor: {s.advisor?.name ?? "—"}</span>
+              {s.dispatchAssignedAt && <span className="text-[11px] text-steel ml-auto">Asignado: {formatDateTime(s.dispatchAssignedAt)}</span>}
             </div>
             <div className="flex flex-col gap-2 mb-2.5">
               {s.items.map((it) => {
