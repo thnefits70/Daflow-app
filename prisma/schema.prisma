@@ -411,6 +411,7 @@ model User {
   catalogMissingReportsReported                    CatalogMissingReport[]             @relation("CatalogMissingReportReportedBy")
   catalogMissingReportsResolved                    CatalogMissingReport[]             @relation("CatalogMissingReportResolvedBy")
   justCatalogImports                               JustCatalogImport[]                @relation("JustCatalogImportImportedBy")
+  stockKardexCostDeclarations                      StockKardexEntry[]                 @relation("StockKardexEntryDeclaredCostBy")
   justCatalogDuplicateResolutions                  JustCatalogDuplicateResolution[]   @relation("JustCatalogDuplicateResolutionDecidedBy")
   dropiCombosCreated                               DropiCombo[]                       @relation("DropiComboCreatedBy")
   rocketCodeMappingsCreated                        RocketCodeMapping[]                @relation("RocketCodeMappingCreatedBy")
@@ -983,6 +984,15 @@ enum StockMovementType {
   // distingue en el Kardex para saber que ese número vino de un arranque,
   // no de una compra real recibida.
   SEED
+  // Confirmado 2026-09-21, pedido explícito del usuario: desbloqueo rápido
+  // para un producto que YA se movió (no aplica SEED) pero cuyo costo
+  // promedio quedó en $0 porque nunca se le cargó la compra real — el
+  // admin declara a mano el costo (típicamente el de Just) para poder
+  // cotizar hoy mismo. quantity siempre 0 (no toca el saldo real, solo
+  // corrige el costo). Queda separado de IN/OUT/SEED a propósito, para que
+  // nadie confunda esto con una compra real en una auditoría — se
+  // reemplaza solo el día que entre una compra de verdad de ese producto.
+  COST_DECLARATION
 }
 
 model StockKardexEntry {
@@ -999,6 +1009,13 @@ model StockKardexEntry {
 
   balanceAfter Int
   avgCostAfter Float
+
+  // Confirmado 2026-09-21: solo aplica a type=COST_DECLARATION — quién
+  // declaró el costo estimado a mano. IN/OUT/SEED no lo usan, ya se
+  // rastrean por su propio origen (receipt/outflow item, o simplemente no
+  // llevan responsable individual como SEED).
+  declaredCostById String?
+  declaredCostBy   User?   @relation("StockKardexEntryDeclaredCostBy", fields: [declaredCostById], references: [id], onDelete: SetNull)
 
   // Origen — exactamente uno debe estar lleno, según el type.
   purchaseRequestReceiptId String?                 @unique

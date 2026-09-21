@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Search, ArrowUpDown, Info, X, Wrench } from "lucide-react";
+import { Search, ArrowUpDown, Info, X, Wrench, Check } from "lucide-react";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 import { TabGuide } from "@/components/shared/TabGuide";
 import { formatDateTime } from "@/lib/formatDateTime";
@@ -121,6 +121,89 @@ const JUST_ESTIMATE_TITLE = "Estimado con el costo promedio de Just (temporal) �
 function withCostSourceColor(base: string, costSource?: "proposal" | "kardex" | "just" | null) {
   if (costSource !== "just") return base;
   return base.replace(/text-(teal|ink|blue|steel)\b/g, "text-gold");
+}
+
+// Confirmado 2026-09-21, pedido explícito del usuario (admin): desbloqueo
+// rápido para un producto que ya se movió en INVESTOCK pero cuyo costo
+// sigue en $0 (por eso aparece con el respaldo de Just, costSource="just")
+// — declara a mano el costo real (normalmente el mismo de Just) para poder
+// cotizar hoy mismo. Exclusivo del admin, a propósito: es una decisión
+// financiera, no un dato operativo del día a día. Queda registrado en el
+// Kardex como su propio tipo de línea (COST_DECLARATION, ver
+// declareManualCost en stockKardex.ts), nunca se confunde con una compra
+// real — el botón desaparece solo cuando entre la compra real de verdad.
+function DeclareCostButton({ catalogItemId, suggestedCost, onDeclared }: { catalogItemId: string; suggestedCost: number; onDeclared: () => void }) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(suggestedCost > 0 ? String(suggestedCost) : "");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function save() {
+    const cost = Number(value);
+    if (!cost || cost <= 0) {
+      setError("Ingresa un costo mayor a 0.");
+      return;
+    }
+    if (!window.confirm(`¿Declarar $${cost.toFixed(2)} como costo estimado de este producto?\n\nNo es una compra real — queda marcado así en el historial, y se reemplaza solo cuando se cargue la compra real en Control de Compras.`)) {
+      return;
+    }
+    setBusy(true);
+    setError("");
+    try {
+      const res = await fetch(`/api/inventory-control/catalog-items/${catalogItemId}/declare-cost`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ declaredCost: cost }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error ?? "No se pudo declarar el costo.");
+      setEditing(false);
+      onDeclared();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "No se pudo declarar el costo.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!editing) {
+    return (
+      <button
+        type="button"
+        title="Declarar costo estimado — no es una compra real, se reemplaza cuando entre la compra real."
+        className="text-[9.5px] font-bold uppercase text-gold hover:underline cursor-pointer shrink-0"
+        onClick={() => setEditing(true)}
+      >
+        Declarar costo
+      </button>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-1 shrink-0">
+      <input
+        autoFocus
+        type="number"
+        step="0.01"
+        min="0.01"
+        disabled={busy}
+        className="w-16 rounded border border-teal bg-cloud px-1 py-0.5 text-[11px] font-mono disabled:opacity-60"
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") save();
+          if (e.key === "Escape") setEditing(false);
+        }}
+      />
+      <button type="button" disabled={busy} title="Guardar" className="text-teal cursor-pointer disabled:opacity-50" onClick={save}>
+        <Check size={12} />
+      </button>
+      <button type="button" disabled={busy} title="Cancelar" className="text-steel hover:text-red cursor-pointer disabled:opacity-50" onClick={() => setEditing(false)}>
+        <X size={12} />
+      </button>
+      {error && <span className="text-red text-[9.5px]">{error}</span>}
+    </div>
+  );
 }
 
 // Confirmado 2026-09-16, pedido explícito del usuario: elegir/corregir la
@@ -782,11 +865,16 @@ export function StockLevelsPanel({ isAdmin = false }: { isAdmin?: boolean }) {
                     </span>
                   )}
                 </span>
-                <CopyableAmount
-                  value={r.providerPrice}
-                  className={withCostSourceColor("text-right font-mono text-[13px] text-steel border-l border-rule pl-3", r.costSource)}
-                  title={r.costSource === "just" ? JUST_ESTIMATE_TITLE : undefined}
-                />
+                <span className="flex flex-col items-end gap-0.5 border-l border-rule pl-3">
+                  <CopyableAmount
+                    value={r.providerPrice}
+                    className={withCostSourceColor("text-right font-mono text-[13px] text-steel", r.costSource)}
+                    title={r.costSource === "just" ? JUST_ESTIMATE_TITLE : undefined}
+                  />
+                  {isAdmin && r.costSource === "just" && (
+                    <DeclareCostButton catalogItemId={r.catalogItemId} suggestedCost={r.justAvgCost ?? 0} onDeclared={loadRows} />
+                  )}
+                </span>
                 <CopyableAmount value={r.justAvgCost} className="text-right font-mono text-[13px] text-gold" />
                 <CopyableAmount
                   value={r.bodegaPrice}

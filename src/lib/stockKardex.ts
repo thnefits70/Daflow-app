@@ -300,6 +300,10 @@ export type CurrentStockRow = {
   // (Provedix/Importadora Damián/Importadora Shanghai) de este producto —
   // ver PurchaseCatalogItem.bodega en el schema.
   bodega: MarketProductBodega | null;
+  // Confirmado 2026-09-21: true cuando el costo actual viene de
+  // declareManualCost (admin lo escribió a mano, no de una compra real) —
+  // para que Stock Actual lo marque distinto de un costo real de Kardex.
+  costDeclaredManually: boolean;
 };
 
 // Confirmado 2026-09-10 (pedido explícito del usuario): pantalla "Stock
@@ -353,7 +357,7 @@ export async function getAllCurrentStock(): Promise<CurrentStockRow[]> {
     prisma.stockKardexEntry.findMany({
       distinct: ["catalogItemId"],
       orderBy: [{ catalogItemId: "asc" }, { occurredAt: "desc" }, { createdAt: "desc" }],
-      select: { catalogItemId: true, balanceAfter: true, avgCostAfter: true },
+      select: { catalogItemId: true, balanceAfter: true, avgCostAfter: true, type: true },
     }),
   ]);
   const byItemId = new Map(latestPerItem.map((e) => [e.catalogItemId, e]));
@@ -367,6 +371,7 @@ export async function getAllCurrentStock(): Promise<CurrentStockRow[]> {
       balance: latest?.balanceAfter ?? 0,
       avgCost: latest?.avgCostAfter ?? 0,
       bodega: i.bodega,
+      costDeclaredManually: latest?.type === "COST_DECLARATION",
     };
   });
 }
@@ -451,6 +456,47 @@ export async function seedFromJustSnapshot(rows: SnapshotRow[]): Promise<SeedRes
   return { seededCount: candidates.length, skippedNoMatch, skippedAlreadyMoved };
 }
 
+// Confirmado 2026-09-21, pedido explícito del usuario: desbloqueo rápido
+// para un producto que YA tiene movimiento real en Kardex (por eso no
+// califica para seedFromJustSnapshot, que solo toca productos sin ningún
+// movimiento) pero cuyo costo promedio quedó en $0 porque nunca se le
+// cargó la compra real — bloqueaba poder cotizarlo. El admin declara a
+// mano el costo (normalmente el de Just/Daniel) SOLO mientras siga en $0;
+// no se puede usar para pisar un costo real ya existente. Queda como su
+// propia línea de Kardex (type=COST_DECLARATION, quantity=0 — no toca el
+// saldo real) para que quede clara la diferencia con una compra real en
+// cualquier auditoría futura. El día que entre la compra real de ese
+// producto, el Kardex sigue corriendo normal desde ahí.
+export async function declareManualCost(params: {
+  catalogItemId: string;
+  declaredCost: number;
+  // null cuando lo declara el admin — su sesión no es un User real (ver
+  // auth.ts, id sintético "admin"), mismo criterio que createdById en
+  // stock-snapshot/save/route.ts.
+  declaredById: string | null;
+}): Promise<{ balanceAfter: number; avgCostAfter: number }> {
+  if (params.declaredCost <= 0) {
+    throw new Error("El costo declarado debe ser mayor a 0.");
+  }
+  const current = await getCurrentStock(params.catalogItemId);
+  if (current.avgCost > 0) {
+    throw new Error("Este producto ya tiene un costo real en INVESTOCK — no se puede reemplazar con un costo declarado a mano.");
+  }
+  const entry = await prisma.stockKardexEntry.create({
+    data: {
+      catalogItemId: params.catalogItemId,
+      type: "COST_DECLARATION",
+      quantity: 0,
+      unitCost: params.declaredCost,
+      balanceAfter: current.balance,
+      avgCostAfter: params.declaredCost,
+      declaredCostById: params.declaredById,
+      occurredAt: new Date(),
+    },
+  });
+  return { balanceAfter: entry.balanceAfter, avgCostAfter: entry.avgCostAfter };
+}
+
 // Confirmado 2026-09-09: alerta de stock negativo para la pantalla de KPIs
 // financieros → Inventario — misma idea que ya se ve en el export de Just
 // (4 SKUs negativos encontrados en el análisis inicial), pero calculada
@@ -516,6 +562,12 @@ async function replayCatalogItemKardex(catalogItemId: string): Promise<{ updates
       updates.push({ id: e.id, unitCost: incomingCost, avgCostAfter: newAvgCost, balanceAfter: newBalance });
       balance = newBalance;
       avgCost = newAvgCost;
+    } else if (e.type === "COST_DECLARATION") {
+      // Declaración manual de costo (ver declareManualCost) — quantity
+      // siempre 0, no hay flete que corregir, solo se re-arrastra el costo
+      // declarado para que el recómputo no lo borre.
+      avgCost = e.unitCost ?? avgCost;
+      updates.push({ id: e.id, unitCost: e.unitCost, avgCostAfter: avgCost, balanceAfter: balance });
     } else {
       // OUT — Camino A: unitCost (el costo con el que se valoró esa salida
       // el día que pasó) se deja exactamente como está, congelado.
@@ -608,7 +660,7 @@ async function findMissingPersonalPurchaseKardexEntries(): Promise<PersonalPurch
 }
 
 type BackfillLine =
-  | { kind: "existing"; id: string; type: "IN" | "OUT" | "SEED"; quantity: number; unitCost: number | null; occurredAt: Date; createdAt: Date }
+  | { kind: "existing"; id: string; type: "IN" | "OUT" | "SEED" | "COST_DECLARATION"; quantity: number; unitCost: number | null; occurredAt: Date; createdAt: Date }
   | { kind: "new"; merchandiseOutflowItemId: string; quantity: number; occurredAt: Date };
 
 async function replayCatalogItemWithBackfill(catalogItemId: string, missing: PersonalPurchaseBackfillCandidate[]) {
@@ -648,6 +700,12 @@ async function replayCatalogItemWithBackfill(catalogItemId: string, missing: Per
       avgCost = newBalance > 0 && balance > 0 ? (balance * avgCost + line.quantity * incomingCost) / newBalance : incomingCost;
       updates.push({ id: line.id, unitCost: line.unitCost, avgCostAfter: avgCost, balanceAfter: newBalance });
       balance = newBalance;
+    } else if (line.type === "COST_DECLARATION") {
+      // Declaración manual de costo (ver declareManualCost) — quantity
+      // siempre 0, nunca mueve el saldo, solo fija el costo promedio desde
+      // ese punto en adelante.
+      avgCost = line.unitCost ?? avgCost;
+      updates.push({ id: line.id, unitCost: line.unitCost, avgCostAfter: avgCost, balanceAfter: balance });
     } else {
       // OUT ya existente — Camino A: su unitCost (valoración congelada el
       // día que pasó) nunca se toca, solo el saldo que arrastra.
