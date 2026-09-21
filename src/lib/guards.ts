@@ -1087,6 +1087,29 @@ export async function canViewMerchandiseOutflow() {
   return canCaptureMerchandiseOutflow();
 }
 
+// Confirmado 2026-09-21: Solicitud de Fulfillment (Yair) — captura mismo
+// criterio de membresía que canCaptureMerchandiseOutflow (equipo, sin
+// bypass de admin — admin nunca captura Registro de Egresos, solo supervisa
+// en modo lectura, ver canViewFulfillmentRequests) pero para el
+// departamento FUL en vez de INV. Cualquiera del equipo puede subir el
+// Excel de Rocket, no solo Yair (líder).
+export async function canSubmitFulfillmentRequest() {
+  const session = await auth();
+  if (!session) return false;
+  const user = await purchasesUserContext(session.user.id);
+  if (!user) return false;
+  return isFulfilmentTeamMember(user);
+}
+
+// Visibilidad de solo lectura del compendiado — Daniel/admin (mismo criterio
+// que administra el catálogo/combos) además de quien puede subir.
+export async function canViewFulfillmentRequests() {
+  const session = await auth();
+  if (!session) return false;
+  if (session.user.role === "admin") return true;
+  return (await canManageJustCatalog()) || (await canSubmitFulfillmentRequest());
+}
+
 // Confirmado 2026-08-27, pedido explícito del usuario: cuando un proveedor
 // rechaza un cambio (ni cambia el producto ni da crédito), Nairoby es quien
 // registra la pérdida en la parte financiera — a propósito SIN admin de

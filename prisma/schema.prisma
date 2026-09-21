@@ -413,6 +413,8 @@ model User {
   justCatalogImports                               JustCatalogImport[]                @relation("JustCatalogImportImportedBy")
   justCatalogDuplicateResolutions                  JustCatalogDuplicateResolution[]   @relation("JustCatalogDuplicateResolutionDecidedBy")
   dropiCombosCreated                               DropiCombo[]                       @relation("DropiComboCreatedBy")
+  rocketCodeMappingsCreated                        RocketCodeMapping[]                @relation("RocketCodeMappingCreatedBy")
+  fulfillmentRequestBatchesRequested               FulfillmentRequestBatch[]          @relation("FulfillmentRequestBatchRequestedBy")
   supplierCreditsCreated                           SupplierCredit[]                   @relation("SupplierCreditCreatedBy")
   urgentResolutionsCreated                         PurchaseUrgentResolution[]         @relation("UrgentResolutionCreatedBy")
   urgentResolutionsReplacementSubmitted            PurchaseUrgentResolution[]         @relation("UrgentResolutionReplacementSubmittedBy")
@@ -1808,6 +1810,10 @@ model PurchaseCatalogItem {
   stockKardexEntries             StockKardexEntry[]
   stockKardexJustComparisons     StockKardexJustComparison[]
   expirationCohorts              ExpirationCohort[]
+  // Confirmado 2026-09-21: Solicitud de Fulfillment (Yair) — ver
+  // RocketCodeMapping y FulfillmentRequestItem.
+  rocketCodeMappings             RocketCodeMapping[]
+  fulfillmentRequestItems        FulfillmentRequestItem[]
 }
 
 enum AtomRentabilityStatus {
@@ -2157,7 +2163,10 @@ model DropiCombo {
   // Daniel o admin) que PurchaseCatalogItem.bodega.
   bodega MarketProductBodega?
 
-  components DropiComboComponent[]
+  components         DropiComboComponent[]
+  // Confirmado 2026-09-21: Rocket vende el mismo combo con un código propio,
+  // distinto al de Dropi — ver RocketCodeMapping.
+  rocketCodeMappings RocketCodeMapping[]
 }
 
 model DropiComboComponent {
@@ -2231,6 +2240,93 @@ model JustCatalogDuplicateResolution {
   decidedById String?
   decidedBy   User?    @relation("JustCatalogDuplicateResolutionDecidedBy", fields: [decidedById], references: [id], onDelete: SetNull)
   decidedAt   DateTime @default(now())
+}
+
+// Confirmado 2026-09-21 (idea nacida de una conversación con Yair, líder de
+// Fulfillment, sobre por qué el manifiesto de despacho no coincide con lo
+// que realmente hay que sacar de bodega — ver
+// project_investock_fulfillment_request_control.md): Rocket es una segunda
+// plataforma de venta que usa códigos DE ELLA MISMA, totalmente distintos al
+// justCode/Dropi que ya comparten Just y DAFLOW — no se puede matchear por
+// código directo. La primera vez que aparece un código Rocket, se sugiere un
+// vínculo por coincidencia de nombre (mismo criterio sin IA que
+// findSimilarUnlinkedItem en justCatalog.ts) contra productos Y combos ya
+// existentes; una vez que Yair confirma, queda guardado para siempre — no
+// se le vuelve a preguntar por ese código en subidas futuras. Nunca crea
+// productos nuevos (a diferencia de Just): un código Rocket siempre debe
+// corresponder a algo que YA existe físicamente en el catálogo.
+model RocketCodeMapping {
+  id         String @id @default(cuid())
+  rocketCode String @unique
+  // Nombre tal cual lo trae el Excel de Rocket la última vez — solo
+  // referencia para mostrarle a Yair de dónde salió el vínculo guardado.
+  rocketName String
+
+  // Exactamente uno de los dos: un producto real, o un combo (que se
+  // desglosa por su receta ya registrada — ver DropiComboComponent).
+  catalogItemId String?
+  catalogItem   PurchaseCatalogItem? @relation(fields: [catalogItemId], references: [id], onDelete: Cascade)
+  dropiComboId  String?
+  dropiCombo    DropiCombo?          @relation(fields: [dropiComboId], references: [id], onDelete: Cascade)
+
+  createdById String?
+  createdBy   User?    @relation("RocketCodeMappingCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+}
+
+enum FulfillmentRequestSource {
+  ROCKET
+  DROPI
+}
+
+// Confirmado 2026-09-21: "lo que Fulfillment necesita" compendiado por
+// producto real, con los combos ya expandidos por su receta — reemplaza la
+// corrección a mano que hacía Yair sobre el manifiesto impreso (ver memoria
+// project_outflow_manifest_annotation_workflow). Por ahora solo Rocket
+// alimenta esto (source=ROCKET); Dropi se suma después reusando la IA de
+// readOutflowManifest (source=DROPI). Pensado para más adelante compararse
+// contra lo que Inventario realmente contó/escaneó al despachar — todavía
+// no construido, ver memoria de la idea completa.
+model FulfillmentRequestBatch {
+  id     String                   @id @default(cuid())
+  source FulfillmentRequestSource
+
+  requestedById String?
+  requestedBy   User?    @relation("FulfillmentRequestBatchRequestedBy", fields: [requestedById], references: [id], onDelete: SetNull)
+  requestedAt   DateTime @default(now())
+
+  totalRows    Int
+  // Filas del archivo que Yair marcó explícitamente como "no es un
+  // producto" (ej. fila de flete/totales) — no generan ningún item, pero
+  // quedan contadas para que el resumen cuadre con totalRows.
+  skippedCount Int @default(0)
+
+  items FulfillmentRequestItem[]
+
+  @@index([requestedAt])
+}
+
+model FulfillmentRequestItem {
+  id      String                  @id @default(cuid())
+  batchId String
+  batch   FulfillmentRequestBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  catalogItemId String
+  catalogItem   PurchaseCatalogItem @relation(fields: [catalogItemId], references: [id], onDelete: Restrict)
+
+  // Cantidad real de este producto que aporta ESTA fila del archivo
+  // original — ya expandida por la receta del combo cuando corresponde
+  // (ej. combo pedido 3 veces, receta 1:1 -> quantity=3 por componente).
+  quantity Int
+
+  // Código tal como venía en el archivo de origen — trazabilidad, mismo
+  // criterio que sourceCode en OutflowRowGroup (merchandiseOutflowGrouping.ts).
+  sourceCode    String
+  // Si esta fila vino de un combo, qué código de combo la generó.
+  fromComboCode String?
+
+  @@index([batchId])
+  @@index([catalogItemId])
 }
 
 // La sola existencia de esta fila ES el estado "pendiente de eliminar" —

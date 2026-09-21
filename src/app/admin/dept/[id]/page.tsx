@@ -179,6 +179,12 @@ export default async function DeptWorkspacePage({ params }: { params: Promise<{ 
         canCaptureMerchandiseOutflow={false}
         canActOnMerchandiseOutflow={false}
         canViewMerchandiseOutflow={dept.code === "INV"}
+        // Solicitud de Fulfillment — admin nunca sube el Excel de Rocket
+        // (mismo criterio "admin nunca captura" de arriba), pero sí puede
+        // ver el compendiado en modo lectura al navegar FUL (donde Yair
+        // sube) o INV (donde Daniel lo consulta).
+        canSubmitFulfillmentRequest={false}
+        canViewFulfillmentRequests={dept.code === "INV" || dept.code === "FUL"}
         // Guías Canceladas (Fase 4), rediseñado 2026-09-02 — admin nunca
         // reporta ni carga productos (canAssignCancelledGuideItems es
         // EXCLUSIVO de quien tiene el flag, ni siquiera admin, mismo

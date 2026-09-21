@@ -11,9 +11,10 @@ import { PurchaseDeteriorGestionPanel } from "./PurchaseDeteriorGestionPanel";
 import { WriteOffQueue } from "./WriteOffQueue";
 import { HistoryList } from "./HistoryList";
 import { CancelledGuidesPanel } from "@/components/cancelled-guides/CancelledGuidesPanel";
+import { RocketRequestPanel } from "./RocketRequestPanel";
 import { TabGuide } from "@/components/shared/TabGuide";
 
-type Tab = "despacho" | "garantia" | "deterioro" | "proveedor" | "guias" | "baja" | "historial";
+type Tab = "despacho" | "garantia" | "deterioro" | "proveedor" | "guias" | "solicitud" | "baja" | "historial";
 
 export function MerchandiseOutflowPanel({
   canCapture,
@@ -30,6 +31,8 @@ export function MerchandiseOutflowPanel({
   canManageCancelledGuideBatches = false,
   canConfirmCancelledGuideFulfillmentRemoval = false,
   canAssignCancelledGuideItems = false,
+  canSubmitFulfillmentRequest = false,
+  canViewFulfillmentRequests = false,
   isAdmin = false,
   viewerDeptCode = null,
 }: {
@@ -97,6 +100,12 @@ export function MerchandiseOutflowPanel({
   canManageCancelledGuideBatches?: boolean;
   canConfirmCancelledGuideFulfillmentRemoval?: boolean;
   canAssignCancelledGuideItems?: boolean;
+  // Confirmado 2026-09-21: Solicitud de Fulfillment (Yair sube el Excel de
+  // Rocket, compendiado por producto real con combos ya expandidos por
+  // receta) — canSubmit captura (equipo FUL), canView es lectura para
+  // Daniel/admin.
+  canSubmitFulfillmentRequest?: boolean;
+  canViewFulfillmentRequests?: boolean;
   // Confirmado 2026-08-28, pedido explícito del usuario: el admin puede
   // revisar/comentar (opcional) un rechazo total del proveedor — puro
   // historial, no gatea a Nairoby ni a Daniel. Ver canReviewAsAdmin en
@@ -157,6 +166,7 @@ export function MerchandiseOutflowPanel({
     ...(canCapture ? [{ id: "deterioro" as const, label: "Deterioro" }] : []),
     ...(canSeeProveedorTab ? [{ id: "proveedor" as const, label: "Cambio con proveedor" }] : []),
     ...(canSubmitCancelledGuide || canManageCancelledGuideBatches || canConfirmCancelledGuideFulfillmentRemoval || canAssignCancelledGuideItems || canAct ? [{ id: "guias" as const, label: "Guías canceladas" }] : []),
+    ...(canSubmitFulfillmentRequest || canViewFulfillmentRequests ? [{ id: "solicitud" as const, label: "Solicitud Fulfillment" }] : []),
     ...(canView ? [{ id: "baja" as const, label: "Dar de baja en Just" }, { id: "historial" as const, label: "Historial" }] : []),
   ];
 
@@ -255,6 +265,16 @@ export function MerchandiseOutflowPanel({
             Aunque el resultado final sea reingresar mercadería a Just (no darla de baja), las guías canceladas viven acá junto a los demás motivos para no saltar entre módulos.
           </TabGuide>
           <CancelledGuidesPanel canSubmit={canSubmitCancelledGuide} canManageBatches={canManageCancelledGuideBatches} canConfirmFulfillmentRemoval={canConfirmCancelledGuideFulfillmentRemoval} canAssignItems={canAssignCancelledGuideItems} canReingreso={canAct} viewerDeptCode={viewerDeptCode} />
+        </>
+      )}
+      {tab === "solicitud" && (canSubmitFulfillmentRequest || canViewFulfillmentRequests) && (
+        <>
+          <TabGuide storageKey="merchoutflow-solicitud">
+            {canSubmitFulfillmentRequest
+              ? "Sube el Excel de Rocket con lo que Fulfillment necesita despachar — DAFLOW lo agrupa por producto real, ya con los combos expandidos por su receta, para que Daniel entregue un solo listado claro a su equipo."
+              : "Lo que Fulfillment declaró necesitar, ya agrupado por producto real y con los combos expandidos por su receta."}
+          </TabGuide>
+          <RocketRequestPanel canSubmit={canSubmitFulfillmentRequest} />
         </>
       )}
       {tab === "baja" && canView && (

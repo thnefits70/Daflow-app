@@ -20,6 +20,7 @@ import {
   canInvoiceExternalSale,
   canPackExternalSale,
   canManageJustCatalog,
+  canSubmitFulfillmentRequest,
   canEditPayrollRoles,
   canProposeMarketProduct,
   canBrandMarketProduct,
@@ -166,6 +167,11 @@ export async function POST(req: NextRequest) {
   }
   if (!allowed && session?.user.role === "employee" && folder === "just-catalog-import") {
     allowed = await canManageJustCatalog();
+  }
+  // Confirmado 2026-09-21: Solicitud de Fulfillment — Yair sube el Excel de
+  // Rocket con lo que necesita despachar.
+  if (!allowed && session?.user.role === "employee" && folder === "rocket-request-import") {
+    allowed = await canSubmitFulfillmentRequest();
   }
   // Comprobante del pago individual a cada colaborador (después de que
   // Nairoby ya tiene el total en su poder) — lo sube ella, no el admin, a
