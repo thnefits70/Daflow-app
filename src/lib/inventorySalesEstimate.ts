@@ -22,8 +22,16 @@ import type { MarketProductBodega } from "@/generated/prisma/client";
 //    puede anticipar solo.
 // Garantía/Deterioro/Cambio de proveedor nunca cuentan como venta.
 
-export type MarcaBucketKey = MarketProductBodega | "SIN_MARCA";
+// A propósito NO deriva de MarketProductBodega directo: la plantilla de
+// Nairoby solo tiene columnas para estas 3 marcas — cualquier otro valor del
+// enum (ej. MKT_SUMINISTROS, agregada 2026-09-21 solo como etiqueta en Stock
+// Actual) cae en "SIN_MARCA" igual que un producto todavía sin marca.
+export type MarcaBucketKey = "MKT_PROVEDIX" | "MKT_DAMIAN" | "MKT_SHANGHAI" | "SIN_MARCA";
 export const MARCA_BUCKET_KEYS: MarcaBucketKey[] = ["MKT_PROVEDIX", "MKT_DAMIAN", "MKT_SHANGHAI", "SIN_MARCA"];
+
+function bucketKeyForBodega(bodega: MarketProductBodega | null | undefined): MarcaBucketKey {
+  return bodega === "MKT_PROVEDIX" || bodega === "MKT_DAMIAN" || bodega === "MKT_SHANGHAI" ? bodega : "SIN_MARCA";
+}
 
 export type SalesEstimateBucket = { ventas: number; costoVentas: number };
 export type SalesEstimateRow = Record<MarcaBucketKey, SalesEstimateBucket>;
@@ -129,7 +137,7 @@ export async function getAutoSalesEstimateByMonth(periods: string[]): Promise<Ma
 
     let row = result.get(period);
     if (!row) { row = emptyRow(); result.set(period, row); }
-    const bucket = row[bodegaByCatalogItemId.get(e.catalogItemId) ?? "SIN_MARCA"];
+    const bucket = row[bucketKeyForBodega(bodegaByCatalogItemId.get(e.catalogItemId))];
     bucket.costoVentas += e.quantity * (e.unitCost ?? 0);
 
     if (reason === "VENTA_EXTERNA") {

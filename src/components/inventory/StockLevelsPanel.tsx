@@ -23,11 +23,12 @@ type UnregisteredSkeletonRow = { catalogItemId: string; name: string; justCode: 
 // confundirlo con el costo "Puesto en bodega" que ya existe en esta misma
 // pantalla; en el backend el campo se llama `bodega` (mismo enum que ya
 // usa Análisis de Mercado).
-type Marca = "MKT_DAMIAN" | "MKT_PROVEDIX" | "MKT_SHANGHAI";
+type Marca = "MKT_DAMIAN" | "MKT_PROVEDIX" | "MKT_SHANGHAI" | "MKT_SUMINISTROS";
 const MARCA_LABELS: Record<Marca, string> = {
   MKT_PROVEDIX: "Provedix",
   MKT_DAMIAN: "Importadora Damián",
   MKT_SHANGHAI: "Importadora Shanghai",
+  MKT_SUMINISTROS: "Suministros",
 };
 
 type ComboRow = {

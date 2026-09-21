@@ -3,7 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { canManageJustCatalog } from "@/lib/guards";
 
-const schema = z.object({ bodega: z.enum(["MKT_DAMIAN", "MKT_PROVEDIX", "MKT_SHANGHAI"]).nullable() });
+const schema = z.object({ bodega: z.enum(["MKT_DAMIAN", "MKT_PROVEDIX", "MKT_SHANGHAI", "MKT_SUMINISTROS"]).nullable() });
 
 // Confirmado 2026-09-16, pedido explícito del usuario: marcar a qué marca
 // (Provedix/Importadora Damián/Importadora Shanghai) pertenece cada

@@ -2014,6 +2014,11 @@ enum MarketProductBodega {
   MKT_DAMIAN
   MKT_PROVEDIX
   MKT_SHANGHAI
+  // Agregada 2026-09-21, pedido explícito del usuario: solo como etiqueta de
+  // "Marca" en Stock Actual (productos/combos) — a propósito NO aparece como
+  // opción en Análisis de Mercado (BODEGA_LABELS ahí sigue con las 3 marcas
+  // originales), porque no es una bodega de compra/envío real como las otras.
+  MKT_SUMINISTROS
 }
 
 model MarketProductProposal {
