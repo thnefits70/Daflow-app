@@ -134,17 +134,25 @@ function withCostSourceColor(base: string, costSource?: "proposal" | "kardex" | 
 // real — el botón desaparece solo cuando entre la compra real de verdad.
 function DeclareCostButton({ catalogItemId, suggestedCost, onDeclared }: { catalogItemId: string; suggestedCost: number; onDeclared: () => void }) {
   const [editing, setEditing] = useState(false);
-  const [value, setValue] = useState(suggestedCost > 0 ? String(suggestedCost) : "");
+  // Confirmado 2026-09-21, pedido explícito del usuario: el precio de Just
+  // NUNCA trae el flete (es solo el costo del proveedor), así que declarar
+  // ese número tal cual deja el costo corto — se separan los dos campos
+  // para que quede claro qué es cada uno, y el total (lo que de verdad se
+  // declara) sale de sumarlos.
+  const [productCost, setProductCost] = useState(suggestedCost > 0 ? String(suggestedCost) : "");
+  const [freightCost, setFreightCost] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
+  const total = (Number(productCost) || 0) + (Number(freightCost) || 0);
+
   async function save() {
-    const cost = Number(value);
-    if (!cost || cost <= 0) {
-      setError("Ingresa un costo mayor a 0.");
+    if (!total || total <= 0) {
+      setError("Ingresa un costo de producto mayor a 0.");
       return;
     }
-    if (!window.confirm(`¿Declarar $${cost.toFixed(2)} como costo estimado de este producto?\n\nNo es una compra real — queda marcado así en el historial, y se reemplaza solo cuando se cargue la compra real en Control de Compras.`)) {
+    const breakdown = freightCost.trim() ? `\n\nCosto producto: $${(Number(productCost) || 0).toFixed(2)} + flete estimado: $${(Number(freightCost) || 0).toFixed(2)}` : "";
+    if (!window.confirm(`¿Declarar $${total.toFixed(2)} como costo estimado puesto en bodega de este producto?${breakdown}\n\nNo es una compra real — queda marcado así en el historial, y se reemplaza solo cuando se cargue la compra real en Control de Compras.`)) {
       return;
     }
     setBusy(true);
@@ -153,7 +161,7 @@ function DeclareCostButton({ catalogItemId, suggestedCost, onDeclared }: { catal
       const res = await fetch(`/api/inventory-control/catalog-items/${catalogItemId}/declare-cost`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ declaredCost: cost }),
+        body: JSON.stringify({ declaredCost: total }),
       });
       const data = await res.json().catch(() => null);
       if (!res.ok) throw new Error(data?.error ?? "No se pudo declarar el costo.");
@@ -180,27 +188,48 @@ function DeclareCostButton({ catalogItemId, suggestedCost, onDeclared }: { catal
   }
 
   return (
-    <div className="flex items-center gap-1 shrink-0">
-      <input
-        autoFocus
-        type="number"
-        step="0.01"
-        min="0.01"
-        disabled={busy}
-        className="w-16 rounded border border-teal bg-cloud px-1 py-0.5 text-[11px] font-mono disabled:opacity-60"
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") save();
-          if (e.key === "Escape") setEditing(false);
-        }}
-      />
-      <button type="button" disabled={busy} title="Guardar" className="text-teal cursor-pointer disabled:opacity-50" onClick={save}>
-        <Check size={12} />
-      </button>
-      <button type="button" disabled={busy} title="Cancelar" className="text-steel hover:text-red cursor-pointer disabled:opacity-50" onClick={() => setEditing(false)}>
-        <X size={12} />
-      </button>
+    <div className="flex flex-col items-end gap-1 shrink-0">
+      <div className="flex items-center gap-1">
+        <input
+          autoFocus
+          type="number"
+          step="0.01"
+          min="0.01"
+          disabled={busy}
+          title="Costo del producto (sin flete) — el que trae Just"
+          placeholder="Producto"
+          className="w-16 rounded border border-teal bg-cloud px-1 py-0.5 text-[11px] font-mono disabled:opacity-60"
+          value={productCost}
+          onChange={(e) => setProductCost(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") save();
+            if (e.key === "Escape") setEditing(false);
+          }}
+        />
+        <span className="text-steel text-[10px]">+</span>
+        <input
+          type="number"
+          step="0.01"
+          min="0"
+          disabled={busy}
+          title="Flete estimado por unidad (opcional) — para que el total se acerque al costo real puesto en bodega"
+          placeholder="Flete"
+          className="w-14 rounded border border-rule bg-cloud px-1 py-0.5 text-[11px] font-mono disabled:opacity-60"
+          value={freightCost}
+          onChange={(e) => setFreightCost(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") save();
+            if (e.key === "Escape") setEditing(false);
+          }}
+        />
+        <button type="button" disabled={busy} title="Guardar" className="text-teal cursor-pointer disabled:opacity-50" onClick={save}>
+          <Check size={12} />
+        </button>
+        <button type="button" disabled={busy} title="Cancelar" className="text-steel hover:text-red cursor-pointer disabled:opacity-50" onClick={() => setEditing(false)}>
+          <X size={12} />
+        </button>
+      </div>
+      <span className="text-[9.5px] text-steel">Total puesto en bodega: <span className="font-mono font-bold text-ink">${total.toFixed(2)}</span></span>
       {error && <span className="text-red text-[9.5px]">{error}</span>}
     </div>
   );
