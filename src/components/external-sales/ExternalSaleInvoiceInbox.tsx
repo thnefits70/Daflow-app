@@ -180,7 +180,7 @@ export function ExternalSaleInvoiceInbox() {
               <div className="mt-2.5">
                 <div className="text-[10px] font-semibold uppercase tracking-wide text-steel mb-1">¿El cliente pidió factura?</div>
                 <div className="flex gap-1.5">
-                  {(["SI", "NO", "PENDIENTE"] as const).map((v) => (
+                  {(["SI", "NO"] as const).map((v) => (
                     <button
                       key={v}
                       type="button"
@@ -188,7 +188,7 @@ export function ExternalSaleInvoiceInbox() {
                       className={`rounded border px-2 py-1 text-[10.5px] font-semibold cursor-pointer disabled:opacity-40 ${s.facturaSolicitada === v ? "border-teal bg-teal text-navy" : "border-rule text-steel"}`}
                       onClick={() => setFacturaSolicitada(s.id, v)}
                     >
-                      {v === "SI" ? "Sí" : v === "NO" ? "No" : "No sé todavía"}
+                      {v === "SI" ? "Sí" : "No"}
                     </button>
                   ))}
                 </div>
