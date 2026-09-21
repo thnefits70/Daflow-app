@@ -65,7 +65,46 @@ type StockRow = {
   b2cPrice1Unit?: number;
   b2cPrice2to11?: number;
 };
-type SortKey = "name" | "balance";
+type SortKey = "name" | "balance" | "proveedor" | "just" | "bodega" | "benistock" | "b2b" | "dropi" | "b2c1" | "b2c2";
+// Confirmado 2026-09-21, pedido explícito del usuario: además de ordenar
+// por nombre/stock, poder ordenar de mayor a menor por cualquier columna de
+// costo o precio de venta (ej. "puesto en bodega") — se guarda solo el
+// valor numérico de cada fila para esa columna, sin marca (los sin marca
+// siguen apareciendo arriba, igual que antes).
+function priceForSort(r: StockRow, key: SortKey): number {
+  switch (key) {
+    case "proveedor":
+      return r.providerPrice ?? -1;
+    case "just":
+      return r.justAvgCost ?? -1;
+    case "bodega":
+      return r.bodegaPrice ?? -1;
+    case "benistock":
+      return r.benistockPrice ?? -1;
+    case "b2b":
+      return r.b2bPriceDefault ?? -1;
+    case "dropi":
+      return r.dropiPrice ?? -1;
+    case "b2c1":
+      return r.b2cPrice1Unit ?? -1;
+    case "b2c2":
+      return r.b2cPrice2to11 ?? -1;
+    default:
+      return 0;
+  }
+}
+const SORT_OPTIONS: { key: SortKey; label: string }[] = [
+  { key: "name", label: "Nombre (A-Z)" },
+  { key: "balance", label: "Stock (menor a mayor)" },
+  { key: "bodega", label: "Puesto en bodega (mayor a menor)" },
+  { key: "proveedor", label: "Proveedor (mayor a menor)" },
+  { key: "just", label: "Just (mayor a menor)" },
+  { key: "benistock", label: "Benistock (mayor a menor)" },
+  { key: "b2b", label: "B2B (mayor a menor)" },
+  { key: "dropi", label: "Dropi (mayor a menor)" },
+  { key: "b2c1", label: "B2C 1 un. (mayor a menor)" },
+  { key: "b2c2", label: "B2C 2-11 un. (mayor a menor)" },
+];
 // Confirmado 2026-09-16, pedido explícito del usuario: poder ver solo los
 // productos reales, solo los combos, o ambos juntos, con un clic.
 type ViewMode = "all" | "products" | "combos";
@@ -350,6 +389,11 @@ export function StockLevelsPanel({ isAdmin = false }: { isAdmin?: boolean }) {
   const [query, setQuery] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("name");
   const [viewMode, setViewMode] = useState<ViewMode>("all");
+  // Confirmado 2026-09-21, pedido explícito del usuario: filtro de un clic
+  // para ver solo los productos/combos de una marca de bodega en concreto
+  // (Provedix, Importadora Damián o Importadora Shanghai) — clic de nuevo
+  // sobre la misma marca lo quita y vuelve a mostrar todas.
+  const [marcaFilter, setMarcaFilter] = useState<Marca | null>(null);
   const [openFormula, setOpenFormula] = useState<FormulaKey | null>(null);
 
   // Confirmado 2026-09-16, pedido explícito del usuario: corrección única del
@@ -519,11 +563,14 @@ export function StockLevelsPanel({ isAdmin = false }: { isAdmin?: boolean }) {
 
   if (rows === null) return <div className="text-steel text-[13px]">Cargando…</div>;
 
+  const marcaFilteredRows = marcaFilter ? rows.filter((r) => r.bodega === marcaFilter) : rows;
+  const marcaFilteredCombosBase = marcaFilter ? combos.filter((c) => c.bodega === marcaFilter) : combos;
+
   const queryTrimmed = query.trim();
   const queryWords = queryTrimmed ? significantWords(queryTrimmed) : [];
   const filtered = !queryTrimmed
-    ? rows
-    : rows
+    ? marcaFilteredRows
+    : marcaFilteredRows
         .map((r) => {
           const nameNorm = normalize(r.name);
           const directMatch = nameNorm.includes(normalize(queryTrimmed)) || (r.justCode ?? "").toLowerCase().includes(queryTrimmed.toLowerCase());
@@ -548,8 +595,8 @@ export function StockLevelsPanel({ isAdmin = false }: { isAdmin?: boolean }) {
   // encontrar el combo que tiene ese producto como componente, no solo
   // combos cuyo propio código empiece con eso).
   const filteredCombos = !queryTrimmed
-    ? combos
-    : combos
+    ? marcaFilteredCombosBase
+    : marcaFilteredCombosBase
         .map((c) => {
           const ownNameNorm = normalize(c.label ?? "");
           const ownDirectMatch = ownNameNorm.includes(normalize(queryTrimmed)) || c.code.toLowerCase().includes(queryTrimmed.toLowerCase());
@@ -576,7 +623,9 @@ export function StockLevelsPanel({ isAdmin = false }: { isAdmin?: boolean }) {
     : [...filtered].sort((a, b) => {
         const untaggedDiff = Number(a.bodega != null) - Number(b.bodega != null);
         if (untaggedDiff !== 0) return untaggedDiff;
-        return sortKey === "name" ? a.name.localeCompare(b.name) : a.balance - b.balance;
+        if (sortKey === "name") return a.name.localeCompare(b.name);
+        if (sortKey === "balance") return a.balance - b.balance;
+        return priceForSort(b, sortKey) - priceForSort(a, sortKey);
       });
 
   // Confirmado 2026-09-16, pedido explícito del usuario: avisar cuántos
@@ -908,6 +957,24 @@ export function StockLevelsPanel({ isAdmin = false }: { isAdmin?: boolean }) {
         </button>
       </div>
 
+      {/* Confirmado 2026-09-21, pedido explícito del usuario: filtro de un
+          clic por marca de bodega (Provedix / Importadora Damián /
+          Importadora Shanghai), separado de los botones de Todo/productos/
+          combos de arriba porque son dos filtros independientes que se
+          pueden combinar entre sí. */}
+      <div className="flex items-center gap-1.5 mb-3">
+        {(Object.keys(MARCA_LABELS) as Marca[]).map((m) => (
+          <button
+            key={m}
+            type="button"
+            className={`rounded-full px-3 py-1.5 text-[12px] font-semibold cursor-pointer border ${marcaFilter === m ? "bg-blue border-blue text-navy" : "border-rule text-steel hover:text-ink"}`}
+            onClick={() => setMarcaFilter((v) => (v === m ? null : m))}
+          >
+            {MARCA_LABELS[m]}
+          </button>
+        ))}
+      </div>
+
       {/* Confirmado 2026-09-16, pedido explícito del usuario: el buscador
           debe funcionar igual en "Solo combos" (por código o nombre del
           combo) — antes vivía solo dentro del bloque de productos, así que
@@ -923,13 +990,20 @@ export function StockLevelsPanel({ isAdmin = false }: { isAdmin?: boolean }) {
           />
         </div>
         {viewMode !== "combos" && (
-          <button
-            type="button"
-            className="flex items-center gap-1.5 rounded border border-rule px-3 py-1.5 text-[12px] font-semibold cursor-pointer whitespace-nowrap"
-            onClick={() => setSortKey((k) => (k === "name" ? "balance" : "name"))}
-          >
-            <ArrowUpDown size={13} /> {sortKey === "name" ? "Ordenar por stock" : "Ordenar por nombre"}
-          </button>
+          <label className="flex items-center gap-1.5 rounded border border-rule px-2.5 py-1.5 text-[12px] font-semibold cursor-pointer whitespace-nowrap">
+            <ArrowUpDown size={13} className="shrink-0" />
+            <select
+              className="bg-transparent outline-none cursor-pointer"
+              value={sortKey}
+              onChange={(e) => setSortKey(e.target.value as SortKey)}
+            >
+              {SORT_OPTIONS.map((opt) => (
+                <option key={opt.key} value={opt.key}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </label>
         )}
       </div>
 
