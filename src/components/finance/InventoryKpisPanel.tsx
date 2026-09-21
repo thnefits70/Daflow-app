@@ -7,6 +7,7 @@ import type { StaleStreakBucket } from "@/lib/inventoryKpisCalc";
 import { TrendSpark } from "@/components/shared/TrendSpark";
 import { KpiInfoTip } from "@/components/shared/KpiInfoTip";
 import { TabGuide } from "@/components/shared/TabGuide";
+import { formatCalendarDate } from "@/lib/formatDateTime";
 
 const BUCKET_STYLE: Record<StaleStreakBucket, { label: string; color: string }> = {
   "1-3": { label: "recién detectado", color: "#92a3c0" },
@@ -127,7 +128,7 @@ export function InventoryKpisPanel({ data }: { data: InventoryKpisDataDTO }) {
         <div>
           <b>{data.expiringLots.length} lote{data.expiringLots.length === 1 ? "" : "s"} vence{data.expiringLots.length === 1 ? "" : "n"} en menos de 6 meses</b>: {" "}
           {data.expiringLots
-            .map((l) => `${l.productName} (${l.quantityRemaining} un., vence ${new Date(l.expirationDate).toLocaleDateString("es-EC", { day: "2-digit", month: "short", year: "numeric" })})`)
+            .map((l) => `${l.productName} (${l.quantityRemaining} un., vence ${formatCalendarDate(l.expirationDate)})`)
             .join(", ")}
         </div>
       </div>

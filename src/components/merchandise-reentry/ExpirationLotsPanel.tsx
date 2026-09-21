@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Search, CalendarClock, CheckCircle2, Trash2 } from "lucide-react";
-import { formatDateTime } from "@/lib/formatDateTime";
+import { formatDateTime, formatCalendarDate } from "@/lib/formatDateTime";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 import { useFormDraft } from "@/lib/useFormDraft";
 
@@ -12,8 +12,6 @@ type ExpirationLotDraftData = { manufactureDate: string; expirationDate: string;
 function isExpirationLotDraftEmpty(d: ExpirationLotDraftData) {
   return !d.manufactureDate && !d.expirationDate && !d.quantity;
 }
-
-const DATE_FMT = new Intl.DateTimeFormat("es-EC", { timeZone: "America/Guayaquil", day: "2-digit", month: "short", year: "numeric" });
 
 // Confirmado 2026-09-10, pedido de Daniel: declarar el lote de un producto
 // que YA está en percha (llegó antes de esta función, o nadie lo marcó a
@@ -285,8 +283,8 @@ export function ExpirationLotsPanel() {
                   return (
                     <div key={l.id} className="bg-surface border border-rule rounded-md p-2 text-[12px] flex items-center justify-between gap-2">
                       <div>
-                        <span className={l.quantityRemaining === 0 ? "text-steel" : "font-semibold text-ink"}>Vence {DATE_FMT.format(new Date(l.expirationDate))}</span>
-                        {l.manufactureDate && <span className="text-steel"> · elaborado {DATE_FMT.format(new Date(l.manufactureDate))}</span>}
+                        <span className={l.quantityRemaining === 0 ? "text-steel" : "font-semibold text-ink"}>Vence {formatCalendarDate(l.expirationDate)}</span>
+                        {l.manufactureDate && <span className="text-steel"> · elaborado {formatCalendarDate(l.manufactureDate)}</span>}
                         <div className="text-[10.5px] text-steel-dim">Declarado {formatDateTime(l.declaredAt)}</div>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">

@@ -8,6 +8,7 @@ import { ProductMatchPicker, type MatchCatalogItem, type ProductMatchResult } fr
 import { ComboComponentBuilder, type ComboDraftComponent } from "@/components/merchandise-reentry/ComboComponentBuilder";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 import { useFormDraft } from "@/lib/useFormDraft";
+import { formatCalendarDate } from "@/lib/formatDateTime";
 
 type ItemDTO = { id: string; declaredName: string; quantity: number; catalogItem: { name: string; photos: string[]; justCode: string | null } | null };
 type BatchDTO = { id: string; code: string; documentPhotoUrls: string[]; items: ItemDTO[] };
@@ -101,7 +102,7 @@ export function DocumentCaptureFlow({ reason, canManageJustCatalog = false }: { 
         if (cancelled) return;
         if (lots.length === 0) { setExpirationNote(null); return; }
         const oldest = lots[0];
-        const label = new Date(oldest.expirationDate).toLocaleDateString("es-EC", { day: "2-digit", month: "short", year: "numeric" });
+        const label = formatCalendarDate(oldest.expirationDate);
         setExpirationNote(
           lots.length > 1
             ? `Este producto tiene ${lots.length} lotes activos — recuerda sacar lo más viejo primero, vence ${label}.`
