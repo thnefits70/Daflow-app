@@ -451,9 +451,17 @@ export function StockLevelsPanel({ isAdmin = false }: { isAdmin?: boolean }) {
   const [cleanupOpen, setCleanupOpen] = useState(false);
   const [cleanupLoading, setCleanupLoading] = useState(false);
   const [cleanupPreview, setCleanupPreview] = useState<UnregisteredSkeletonRow[] | null>(null);
+  // Confirmado 2026-09-21, corrección pedida por el usuario: el filtro
+  // automático (nunca matriculado + nunca comprado por Control de Compras)
+  // encontró productos que SÍ existen de verdad en la lista — no alcanza
+  // para decidir solo, así que ahora es un checklist: el admin marca a mano
+  // cuáles borrar en vez de "todos o ninguno". Arranca con todo
+  // seleccionado (la mayoría sí son basura real) pero cualquiera se puede
+  // destildar antes de confirmar.
+  const [cleanupSelected, setCleanupSelected] = useState<Set<string>>(new Set());
   const [cleanupConfirming, setCleanupConfirming] = useState(false);
   const [cleanupApplying, setCleanupApplying] = useState(false);
-  const [cleanupResult, setCleanupResult] = useState<{ deletedCount: number; totalCandidates: number } | null>(null);
+  const [cleanupResult, setCleanupResult] = useState<{ deletedCount: number; totalRequested: number } | null>(null);
   const [cleanupError, setCleanupError] = useState("");
   const [combos, setCombos] = useState<ComboRow[]>([]);
   // Confirmado 2026-09-17, pedido explícito del usuario: fecha/hora exacta
@@ -589,15 +597,31 @@ export function StockLevelsPanel({ isAdmin = false }: { isAdmin?: boolean }) {
     setCleanupResult(null);
     fetch("/api/inventory-control/cleanup-unregistered-products")
       .then((r) => (r.ok ? r.json() : Promise.reject()))
-      .then(setCleanupPreview)
+      .then((rows: UnregisteredSkeletonRow[]) => {
+        setCleanupPreview(rows);
+        setCleanupSelected(new Set(rows.map((r) => r.catalogItemId)));
+      })
       .catch(() => setCleanupError("No se pudo cargar la vista previa."))
       .finally(() => setCleanupLoading(false));
+  }
+
+  function toggleCleanupSelected(catalogItemId: string) {
+    setCleanupSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(catalogItemId)) next.delete(catalogItemId);
+      else next.add(catalogItemId);
+      return next;
+    });
   }
 
   async function applyCleanup() {
     setCleanupApplying(true);
     setCleanupError("");
-    const res = await fetch("/api/inventory-control/cleanup-unregistered-products", { method: "POST" });
+    const res = await fetch("/api/inventory-control/cleanup-unregistered-products", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ catalogItemIds: Array.from(cleanupSelected) }),
+    });
     setCleanupApplying(false);
     setCleanupConfirming(false);
     if (!res.ok) {
@@ -607,6 +631,7 @@ export function StockLevelsPanel({ isAdmin = false }: { isAdmin?: boolean }) {
     const data = await res.json();
     setCleanupResult(data);
     setCleanupPreview(null);
+    setCleanupSelected(new Set());
     loadRows();
   }
 
@@ -1005,13 +1030,13 @@ export function StockLevelsPanel({ isAdmin = false }: { isAdmin?: boolean }) {
           {cleanupOpen && (
             <div className="px-3 pb-3 text-[12px]">
               <p className="text-steel mb-2">
-                Productos que la importación de Just creó solo con código y nombre (sin fotos, nunca matriculados en &quot;Base de datos de productos&quot;) y que nunca se compraron de verdad — son la razón real detrás de buena parte de &quot;Sin precio&quot;/&quot;Sin stock&quot; de arriba. <span className="text-red font-semibold">Esto SÍ borra el producto de verdad, no se puede deshacer</span> — solo incluye productos sin ninguna compra, lote de caducidad, combo o solicitud de Fulfillment real detrás (se revisa uno por uno, otra vez, justo antes de borrar).
+                Productos que la importación de Just creó solo con código y nombre (sin fotos, nunca matriculados en &quot;Base de datos de productos&quot;) y que nunca se compraron por Control de Compras — son la razón real detrás de buena parte de &quot;Sin precio&quot;/&quot;Sin stock&quot; de arriba. <span className="text-gold font-semibold">Ojo: esto NO garantiza que el producto no exista de verdad</span> — solo que nadie terminó de registrarlo en la app (puede haberse comprado antes de usar DAFLOW, por ejemplo). Revisa la lista y destilda los que sepas que sí existen. <span className="text-red font-semibold">Lo que quede marcado se borra para siempre, no se puede deshacer.</span>
               </p>
               {cleanupError && <div className="text-red mb-2">{cleanupError}</div>}
               {cleanupLoading && <div className="text-steel">Calculando vista previa…</div>}
               {cleanupResult && (
                 <div className="text-teal font-semibold mb-2">
-                  ✓ Eliminados: {cleanupResult.deletedCount} de {cleanupResult.totalCandidates} producto{cleanupResult.totalCandidates === 1 ? "" : "s"}.
+                  ✓ Eliminados: {cleanupResult.deletedCount} de {cleanupResult.totalRequested} seleccionado{cleanupResult.totalRequested === 1 ? "" : "s"}.
                 </div>
               )}
               {!cleanupLoading && cleanupPreview && (
@@ -1020,17 +1045,35 @@ export function StockLevelsPanel({ isAdmin = false }: { isAdmin?: boolean }) {
                     <div className="text-steel">Ningún producto esqueleto sin usar por ahora.</div>
                   ) : (
                     <>
-                      <div className="text-steel mb-1.5">{cleanupPreview.length} producto(s) se eliminarían:</div>
-                      <div className="max-h-52 overflow-y-auto flex flex-col gap-1 mb-2.5 border border-rule rounded-md p-1.5">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-steel">
+                          {cleanupPreview.length} producto(s) candidato(s) · {cleanupSelected.size} seleccionado(s)
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <button type="button" className="text-teal cursor-pointer font-semibold" onClick={() => setCleanupSelected(new Set(cleanupPreview.map((r) => r.catalogItemId)))}>
+                            Marcar todos
+                          </button>
+                          <button type="button" className="text-steel cursor-pointer font-semibold" onClick={() => setCleanupSelected(new Set())}>
+                            Desmarcar todos
+                          </button>
+                        </div>
+                      </div>
+                      <div className="max-h-64 overflow-y-auto flex flex-col gap-1 mb-2.5 border border-rule rounded-md p-1.5">
                         {cleanupPreview.map((r) => (
-                          <div key={r.catalogItemId} className="flex items-center gap-2 text-[11.5px] px-1.5 py-1">
+                          <label key={r.catalogItemId} className="flex items-center gap-2 text-[11.5px] px-1.5 py-1 cursor-pointer hover:bg-cloud rounded">
+                            <input
+                              type="checkbox"
+                              className="cursor-pointer shrink-0"
+                              checked={cleanupSelected.has(r.catalogItemId)}
+                              onChange={() => toggleCleanupSelected(r.catalogItemId)}
+                            />
                             <CatalogCode code={r.justCode} size="text-[10px]" /> <span className="truncate">{r.name}</span>
-                          </div>
+                          </label>
                         ))}
                       </div>
                       {cleanupConfirming ? (
                         <div className="flex items-center gap-2">
-                          <span className="text-steel">¿Eliminar estos {cleanupPreview.length} productos para siempre?</span>
+                          <span className="text-steel">¿Eliminar estos {cleanupSelected.size} productos para siempre?</span>
                           <button
                             type="button"
                             disabled={cleanupApplying}
@@ -1046,10 +1089,11 @@ export function StockLevelsPanel({ isAdmin = false }: { isAdmin?: boolean }) {
                       ) : (
                         <button
                           type="button"
-                          className="rounded border border-red bg-red px-3 py-1.5 text-[12px] font-bold text-navy cursor-pointer"
+                          disabled={cleanupSelected.size === 0}
+                          className="rounded border border-red bg-red px-3 py-1.5 text-[12px] font-bold text-navy cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                           onClick={() => setCleanupConfirming(true)}
                         >
-                          Eliminar todos
+                          Eliminar seleccionados ({cleanupSelected.size})
                         </button>
                       )}
                     </>

@@ -612,20 +612,29 @@ export async function findUnusedSkeletonCatalogItems(): Promise<UnusedSkeletonCa
   return candidates.sort((a, b) => a.name.localeCompare(b.name));
 }
 
-// Versión masiva de deleteUnusedCatalogItem — re-revisa todo (mismo criterio,
-// otra vez desde cero, por si algo cambió desde la vista previa) y borra en
-// UNA sola transacción con deleteMany, en vez de una transacción por
-// producto — necesario para no reventar el límite de tiempo de la función
-// serverless con cientos de productos.
-export async function deleteUnusedSkeletonCatalogItemsBulk(): Promise<{ deletedCount: number; totalCandidates: number }> {
+// Confirmado 2026-09-21, corrección pedida por el usuario: "pendingRegistration
+// + nunca comprado por Control de Compras" NO alcanza para saber que un
+// producto "no existe de verdad" — solo significa que nadie terminó de
+// matricularlo con fotos en la app, algo que también le pasa a productos
+// reales que Daniel simplemente no ha completado ahí (ej. se compraron
+// antes de existir DAFLOW, o por fuera de Control de Compras). El admin ya
+// vio en la vista previa que algunos de la lista SÍ existen — por eso esto
+// ya NO borra "todos los candidatos" ciegamente, borra SOLO los ids que el
+// admin marcó a mano en pantalla, uno por uno. Igual se re-valida cada id
+// contra la lista de candidatos recién calculada (por si algo cambió desde
+// que se mostró la vista previa) — nunca confía ciegamente en lo que mandó
+// el navegador.
+export async function deleteUnusedSkeletonCatalogItemsBulk(selectedIds: string[]): Promise<{ deletedCount: number; totalRequested: number }> {
+  if (selectedIds.length === 0) return { deletedCount: 0, totalRequested: 0 };
   const candidates = await findUnusedSkeletonCandidateIds();
-  if (candidates.length === 0) return { deletedCount: 0, totalCandidates: 0 };
-  const ids = candidates.map((c) => c.catalogItemId);
+  const safeIds = new Set(candidates.map((c) => c.catalogItemId));
+  const idsToDelete = selectedIds.filter((id) => safeIds.has(id));
+  if (idsToDelete.length === 0) return { deletedCount: 0, totalRequested: selectedIds.length };
   await prisma.$transaction([
-    prisma.stockKardexEntry.deleteMany({ where: { catalogItemId: { in: ids } } }),
-    prisma.purchaseCatalogItem.deleteMany({ where: { id: { in: ids } } }),
+    prisma.stockKardexEntry.deleteMany({ where: { catalogItemId: { in: idsToDelete } } }),
+    prisma.purchaseCatalogItem.deleteMany({ where: { id: { in: idsToDelete } } }),
   ]);
-  return { deletedCount: ids.length, totalCandidates: ids.length };
+  return { deletedCount: idsToDelete.length, totalRequested: selectedIds.length };
 }
 
 // Confirmado 2026-09-09: alerta de stock negativo para la pantalla de KPIs
