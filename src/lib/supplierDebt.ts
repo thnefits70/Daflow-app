@@ -126,9 +126,60 @@ export async function getSupplierDebtPendingItems(supplierId: string): Promise<S
   }));
 }
 
+export type SupplierDebtPendingExcessItem = {
+  id: string;
+  requestId: string;
+  requestNumber: number | null;
+  productName: string;
+  excessQty: number;
+  amount: number;
+  excessConfirmedAt: Date | null;
+  excessConfirmedByName: string | null;
+  productImageUrl: string | null;
+};
+
+// Confirmado 2026-09-21: pedido explícito del usuario — el excedente (llegó
+// más de lo pedido) SÍ se le paga al proveedor de crédito (hoy CHEN), en
+// cuanto Bryan lo confirma real (excessConfirmedAt), al mismo costo unitario
+// EXACTO de esa misma solicitud (request.unitCost × excessQty — nunca el
+// costo efectivo con flete que usa el Kardex, ese flete no se le paga a
+// CHEN). Nunca se crea una solicitud de compra nueva para esto: queda
+// anclado al mismo requestId de siempre, con su propio estado de pago
+// (excessDebtPaymentId) separado del de la solicitud base, para que uno
+// pueda pagarse sin el otro sin nunca duplicar un pago.
+export async function getSupplierDebtPendingExcessItems(supplierId: string): Promise<SupplierDebtPendingExcessItem[]> {
+  const rows = await prisma.purchaseRequestUrgentReport.findMany({
+    where: {
+      excessQty: { gt: 0 },
+      excessConfirmedAt: { not: null },
+      excessDebtPaymentId: null,
+      request: { supplierId },
+    },
+    include: {
+      excessConfirmedBy: { select: { name: true } },
+      request: { select: { requestNumber: true, unitCost: true, catalogItem: { select: { name: true, photos: true } } } },
+    },
+    orderBy: { excessConfirmedAt: "asc" },
+  });
+  return rows.map((r) => ({
+    id: r.id,
+    requestId: r.requestId,
+    requestNumber: r.request.requestNumber,
+    productName: r.request.catalogItem.name,
+    excessQty: r.excessQty,
+    amount: Math.round(r.request.unitCost * r.excessQty * 100) / 100,
+    excessConfirmedAt: r.excessConfirmedAt,
+    excessConfirmedByName: r.excessConfirmedBy?.name ?? null,
+    productImageUrl: r.request.catalogItem.photos.at(-1) ?? null,
+  }));
+}
+
 export async function getSupplierDebtBalance(supplierId: string): Promise<number> {
-  const items = await getSupplierDebtPendingItems(supplierId);
-  return items.reduce((sum, i) => sum + i.totalCost, 0);
+  const [items, excessItems] = await Promise.all([
+    getSupplierDebtPendingItems(supplierId),
+    getSupplierDebtPendingExcessItems(supplierId),
+  ]);
+  return items.reduce((sum, i) => sum + i.totalCost, 0) + excessItems.reduce((sum, i) => sum + i.amount, 0);
 }
 
 export type BuyerDebtConfirmationItem = {

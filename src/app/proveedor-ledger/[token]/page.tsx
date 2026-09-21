@@ -1,7 +1,8 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
-import { getSupplierDebtDisputedItems, getSupplierDebtPendingItems, findSupplierByPublicLedgerToken } from "@/lib/supplierDebt";
+import { getSupplierDebtDisputedItems, getSupplierDebtPendingItems, getSupplierDebtPendingExcessItems, findSupplierByPublicLedgerToken } from "@/lib/supplierDebt";
+import { formatPurchaseRequestCode } from "@/lib/purchases";
 import { SupplierShippingPhotoCapture } from "@/components/supplier-ledger/SupplierShippingPhotoCapture";
 import { SupplierShipmentConfirmButton } from "@/components/supplier-ledger/SupplierShipmentConfirmButton";
 import { SupplierShipmentHistoryTable } from "@/components/supplier-ledger/SupplierShipmentHistoryTable";
@@ -64,7 +65,7 @@ export default async function SupplierLedgerPage({ params }: { params: Promise<{
     reviewedBy: { select: { name: true } },
   } as const;
 
-  const [disputedItems, pendingDebtItems, closedPayments, pendingShipments, confirmedShipments] = await Promise.all([
+  const [disputedItems, pendingDebtItems, pendingExcessItems, closedPayments, pendingShipments, confirmedShipments] = await Promise.all([
     getSupplierDebtDisputedItems(supplier.id),
     // Confirmado 2026-09-17, pedido explícito del usuario: mostrarle a CHEN
     // lo que Inventario ya recibió y confirmó (cargado al Kardex de
@@ -72,6 +73,11 @@ export default async function SupplierLedgerPage({ params }: { params: Promise<{
     // ninguna tanda pagada — es justo lo que les debemos ahora mismo, para
     // que sepan qué mercadería sí llegó y qué nos falta pagarles por ella.
     getSupplierDebtPendingItems(supplier.id),
+    // Confirmado 2026-09-21, pedido explícito del usuario: el excedente
+    // (llegó más de lo pedido) que Bryan ya confirmó real también se le
+    // debe a Chen — se le muestra anclado a la solicitud que lo originó,
+    // nunca como una compra aparte.
+    getSupplierDebtPendingExcessItems(supplier.id),
     prisma.supplierDebtPayment.findMany({
       where: { supplierId: supplier.id, closedAt: { not: null } },
       include: {
@@ -82,6 +88,7 @@ export default async function SupplierLedgerPage({ params }: { params: Promise<{
             receipt: { select: { approvedBy: { select: { name: true } } } },
           },
         },
+        excessReports: { include: { request: { select: { requestNumber: true, unitCost: true, catalogItem: { select: { name: true } } } } } },
         // Confirmado 2026-09-08: nunca se expone la cuenta de ORIGEN (la
         // nuestra) en esta vista pública — solo lo que le corresponde ver a
         // él (monto, fecha, y su propia cuenta de destino).
@@ -219,7 +226,7 @@ export default async function SupplierLedgerPage({ params }: { params: Promise<{
             Ya quedó registrada en nuestro sistema de inventario de la bodega de TBS, confirmada por el equipo de bodega de TBS — todavía no
             incluida en ninguna tanda pagada. Pendiente de pagar a CHEN, estos pagos los realiza Andrés.
           </p>
-          {pendingDebtItems.length === 0 ? (
+          {pendingDebtItems.length === 0 && pendingExcessItems.length === 0 ? (
             <p className="text-sm text-neutral-400">No hay mercadería recibida pendiente de pago por ahora.</p>
           ) : (
             <div className="overflow-x-auto rounded-xl border border-neutral-200 bg-white shadow-sm">
@@ -256,6 +263,30 @@ export default async function SupplierLedgerPage({ params }: { params: Promise<{
                       <td className={`${td} text-right tabular-nums`}>{money(i.totalCost)}</td>
                       <td className={`${td} text-neutral-600`}>{firstName(i.approvedByName) || "—"}</td>
                       <td className={`${td} text-neutral-600`}>{firstName(i.reviewedByName) || "—"}</td>
+                    </tr>
+                  ))}
+                  {/* Confirmado 2026-09-21, pedido explícito del usuario:
+                      excedente (llegó más de lo pedido) ya confirmado —
+                      anclado a la solicitud que lo originó, mismo costo
+                      unitario, nunca una compra aparte. */}
+                  {pendingExcessItems.map((i) => (
+                    <tr key={`excess-${i.id}`} className="bg-amber-50/50">
+                      <td className={`${td} text-neutral-600`}>{i.excessConfirmedAt ? DATE_FMT.format(i.excessConfirmedAt) : "—"}</td>
+                      <td className="px-3 py-2">
+                        {i.productImageUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={i.productImageUrl} alt={i.productName} className="w-12 h-12 object-cover rounded-md border border-neutral-200" />
+                        ) : (
+                          <span className="text-neutral-400">—</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2">
+                        {i.productName} <span className="text-neutral-500">(excedente, {i.requestNumber != null ? formatPurchaseRequestCode(i.requestNumber) : "—"})</span>
+                      </td>
+                      <td className={`${td} text-right tabular-nums`}>{i.excessQty}</td>
+                      <td className={`${td} text-right tabular-nums`}>{money(i.amount)}</td>
+                      <td className={`${td} text-neutral-600`}>—</td>
+                      <td className={`${td} text-neutral-600`}>{firstName(i.excessConfirmedByName) || "—"}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -339,6 +370,17 @@ export default async function SupplierLedgerPage({ params }: { params: Promise<{
                             <td className={`${td} text-right tabular-nums`}>{money(r.totalCost)}</td>
                             <td className={`${td} text-neutral-600`}>{firstName(r.reviewedBy?.name) || "—"}</td>
                             <td className={`${td} text-neutral-600`}>{firstName(r.receipt?.approvedBy?.name) || "—"}</td>
+                          </tr>
+                        ))}
+                        {p.excessReports.map((r) => (
+                          <tr key={`excess-${r.id}`}>
+                            <td className="px-3 py-2">
+                              {r.request.catalogItem.name} <span className="text-neutral-500">(excedente, {r.request.requestNumber != null ? formatPurchaseRequestCode(r.request.requestNumber) : "—"})</span>
+                            </td>
+                            <td className={`${td} text-right tabular-nums`}>{r.excessQty}</td>
+                            <td className={`${td} text-right tabular-nums`}>{money(Math.round(r.request.unitCost * r.excessQty * 100) / 100)}</td>
+                            <td className={`${td} text-neutral-600`}>—</td>
+                            <td className={`${td} text-neutral-600`}>—</td>
                           </tr>
                         ))}
                       </tbody>

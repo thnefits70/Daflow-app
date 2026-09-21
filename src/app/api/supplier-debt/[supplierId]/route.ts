@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { canManageSupplierDebtPayments } from "@/lib/guards";
-import { getSupplierDebtPendingItems, getSupplierDebtDisputedItems, getSupplierDebtInTransitItems } from "@/lib/supplierDebt";
+import { getSupplierDebtPendingItems, getSupplierDebtPendingExcessItems, getSupplierDebtDisputedItems, getSupplierDebtInTransitItems } from "@/lib/supplierDebt";
 
 // Confirmado 2026-09-08 (Fase 1, proveedores con crédito): panorama completo
 // de un proveedor de crédito (hoy solo CHEN) — saldo actual, lo pendiente
@@ -20,14 +20,18 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ supp
     return NextResponse.json({ error: "Este proveedor no es de crédito." }, { status: 409 });
   }
 
-  const [pendingItems, disputedItems, inTransitItems, openPayments, closedPayments] = await Promise.all([
+  const [pendingItems, pendingExcessItems, disputedItems, inTransitItems, openPayments, closedPayments] = await Promise.all([
     getSupplierDebtPendingItems(supplierId),
+    getSupplierDebtPendingExcessItems(supplierId),
     getSupplierDebtDisputedItems(supplierId),
     getSupplierDebtInTransitItems(supplierId),
     prisma.supplierDebtPayment.findMany({
       where: { supplierId, closedAt: null },
       include: {
         requests: { include: { catalogItem: { select: { name: true } } } },
+        // Confirmado 2026-09-21: excedentes incluidos en esta tanda, cada
+        // uno anclado a su propia solicitud (request.requestNumber).
+        excessReports: { include: { request: { select: { requestNumber: true, unitCost: true, catalogItem: { select: { name: true } } } } } },
         transfers: true,
       },
       orderBy: { createdAt: "desc" },
@@ -36,6 +40,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ supp
       where: { supplierId, closedAt: { not: null } },
       include: {
         requests: { include: { catalogItem: { select: { name: true } } } },
+        excessReports: { include: { request: { select: { requestNumber: true, unitCost: true, catalogItem: { select: { name: true } } } } } },
         transfers: true,
       },
       orderBy: { closedAt: "desc" },
@@ -43,7 +48,18 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ supp
     }),
   ]);
 
-  const balance = pendingItems.reduce((s, i) => s + i.totalCost, 0);
+  const balance =
+    pendingItems.reduce((s, i) => s + i.totalCost, 0) + pendingExcessItems.reduce((s, i) => s + i.amount, 0);
+
+  // Confirmado 2026-09-21: excessReports no guarda un monto propio (se
+  // calcula del unitCost de su solicitud ancla, igual que
+  // getSupplierDebtPendingExcessItems) — se agrega acá para que la tanda
+  // muestre el mismo monto exacto que se le pagó.
+  function withExcessAmount<T extends { excessReports: { excessQty: number; request: { unitCost: number } }[] }>(payment: T) {
+    return { ...payment, excessReports: payment.excessReports.map((r) => ({ ...r, amount: Math.round(r.request.unitCost * r.excessQty * 100) / 100 })) };
+  }
+  const openPaymentsOut = openPayments.map(withExcessAmount);
+  const closedPaymentsOut = closedPayments.map(withExcessAmount);
 
   return NextResponse.json({
     supplier: {
@@ -69,9 +85,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ supp
     },
     balance,
     pendingItems,
+    pendingExcessItems,
     disputedItems,
     inTransitItems,
-    openPayments,
-    closedPayments,
+    openPayments: openPaymentsOut,
+    closedPayments: closedPaymentsOut,
   });
 }

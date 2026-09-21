@@ -2786,8 +2786,12 @@ model SupplierDebtPayment {
   createdBy   User?     @relation("SupplierDebtPaymentCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   createdAt   DateTime  @default(now())
 
-  requests  PurchaseRequest[]
-  transfers SupplierDebtTransfer[]
+  requests      PurchaseRequest[]
+  transfers     SupplierDebtTransfer[]
+  // Confirmado 2026-09-21: excedentes (llegó más de lo pedido) confirmados
+  // por Bryan e incluidos en esta tanda — cada uno anclado a su propio
+  // PurchaseRequestUrgentReport.requestId, nunca una solicitud nueva.
+  excessReports PurchaseRequestUrgentReport[] @relation("SupplierDebtPaymentExcessReports")
 
   @@index([supplierId])
   @@index([closedAt])
@@ -2976,8 +2980,22 @@ model PurchaseRequestUrgentReport {
   excessKardexRecordedBy   User?     @relation("PurchaseRequestUrgentReportExcessKardexRecordedBy", fields: [excessKardexRecordedById], references: [id], onDelete: SetNull)
   excessKardexRecordedAt   DateTime?
 
+  // Confirmado 2026-09-21: pedido explícito del usuario — el excedente
+  // confirmado (excessConfirmedAt) SÍ se le paga al proveedor de crédito
+  // (hoy CHEN), al mismo costo unitario de esta misma solicitud
+  // (request.unitCost × excessQty, nunca un monto distinto) — sin crear
+  // ninguna solicitud de compra nueva, queda anclado a este mismo reporte
+  // y su requestId de siempre. Estado de pago SEPARADO del
+  // PurchaseRequest.debtPaymentId de la solicitud original a propósito:
+  // la solicitud base puede haberse pagado en una tanda ANTES de que el
+  // excedente se confirmara, así que cada uno se marca "ya pagado" por su
+  // cuenta — nunca se puede pagar dos veces ni una vez sí y la otra no.
+  excessDebtPaymentId String?
+  excessDebtPayment   SupplierDebtPayment? @relation("SupplierDebtPaymentExcessReports", fields: [excessDebtPaymentId], references: [id], onDelete: SetNull)
+
   @@index([requestId])
   @@index([isLateClaim])
+  @@index([excessDebtPaymentId])
 }
 
 enum LateClaimStockStatus {

@@ -24,6 +24,16 @@ type PendingItem = {
   buyerDebtConfirmedAt: string | null;
 };
 type InTransitItem = { id: string; requestNumber: number | null; productName: string; quantity: number; totalCost: number; requestedAt: string; statusLabel: string };
+type PendingExcessItem = {
+  id: string;
+  requestId: string;
+  requestNumber: number | null;
+  productName: string;
+  excessQty: number;
+  amount: number;
+  excessConfirmedAt: string | null;
+  excessConfirmedByName: string | null;
+};
 type DisputedItem = {
   id: string;
   requestNumber: number | null;
@@ -57,6 +67,7 @@ type Payment = {
   aiReviewOk: boolean | null;
   aiReviewAt: string | null;
   requests: { id: string; quantity: number; totalCost: number; catalogItem: { name: string } }[];
+  excessReports: { id: string; excessQty: number; amount: number; request: { requestNumber: number | null; catalogItem: { name: string } } }[];
   transfers: Transfer[];
 };
 
@@ -74,6 +85,7 @@ type Summary = {
   };
   balance: number;
   pendingItems: PendingItem[];
+  pendingExcessItems: PendingExcessItem[];
   disputedItems: DisputedItem[];
   inTransitItems: InTransitItem[];
   openPayments: Payment[];
@@ -118,6 +130,7 @@ export function SupplierDebtPanel() {
   const [supplierId, setSupplierId] = useState<string | null>(null);
   const [summary, setSummary] = useState<Summary | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [selectedExcess, setSelectedExcess] = useState<Set<string>>(new Set());
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
@@ -157,14 +170,23 @@ export function SupplierDebtPanel() {
     });
   }
 
+  function toggleSelectedExcess(id: string) {
+    setSelectedExcess((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
   async function createPayment() {
-    if (!supplierId || selected.size === 0) return;
+    if (!supplierId || (selected.size === 0 && selectedExcess.size === 0)) return;
     setErr("");
     setBusy(true);
     const res = await fetch(`/api/supplier-debt/${supplierId}/payments`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ requestIds: [...selected] }),
+      body: JSON.stringify({ requestIds: [...selected], excessReportIds: [...selectedExcess] }),
     });
     setBusy(false);
     if (!res.ok) {
@@ -173,6 +195,7 @@ export function SupplierDebtPanel() {
       return;
     }
     setSelected(new Set());
+    setSelectedExcess(new Set());
     load();
   }
 
@@ -475,10 +498,33 @@ export function SupplierDebtPanel() {
 
           <div className="mb-6">
             <h3 className="mb-2 text-[13px] font-semibold text-ink">Confirmado, pendiente de pago</h3>
-            {summary.pendingItems.length === 0 ? (
+            {summary.pendingItems.length === 0 && summary.pendingExcessItems.length === 0 ? (
               <p className="text-steel text-[13px]">No hay nada pendiente por ahora.</p>
             ) : (
               <div className="flex flex-col gap-1.5">
+                {summary.pendingExcessItems.map((i) => (
+                  // Confirmado 2026-09-21, pedido explícito del usuario: el
+                  // excedente (llegó más de lo pedido) SÍ se le paga a Chen,
+                  // al mismo costo unitario de la solicitud que lo originó —
+                  // se muestra anclado a esa solicitud (SC-XXX), nunca como
+                  // una compra aparte.
+                  <label key={`excess-${i.id}`} className="flex flex-col gap-1.5 bg-gold/5 border border-gold/30 rounded-md px-3 py-2 text-[13px] cursor-pointer">
+                    <div className="flex items-center gap-2.5">
+                      <input type="checkbox" checked={selectedExcess.has(i.id)} onChange={() => toggleSelectedExcess(i.id)} />
+                      <span className="flex-1">
+                        Excedente — {i.productName} × {i.excessQty} un. de más
+                        {i.requestNumber != null && <span className="text-steel"> — Solicitud SC-{String(i.requestNumber).padStart(3, "0")}</span>}
+                      </span>
+                      <span className="font-semibold tabular-nums">{money(i.amount)}</span>
+                    </div>
+                    <div className="ml-6 flex flex-col gap-0.5 text-[11.5px] text-steel">
+                      <span>
+                        Excedente confirmado por (Bryan): <span className="font-medium">{i.excessConfirmedByName ?? "admin"}</span>
+                        {i.excessConfirmedAt && <> — {formatDateTime(i.excessConfirmedAt)}</>}
+                      </span>
+                    </div>
+                  </label>
+                ))}
                 {summary.pendingItems.map((i) => (
                   <label key={i.id} className="flex flex-col gap-1.5 bg-surface border border-rule rounded-md px-3 py-2 text-[13px] cursor-pointer">
                     <div className="flex items-center gap-2.5">
@@ -512,10 +558,10 @@ export function SupplierDebtPanel() {
                 <button
                   type="button"
                   className="mt-1 w-fit rounded border border-blue bg-blue px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer disabled:opacity-60"
-                  disabled={selected.size === 0 || busy}
+                  disabled={selected.size + selectedExcess.size === 0 || busy}
                   onClick={createPayment}
                 >
-                  Crear tanda con {selected.size} ítem{selected.size === 1 ? "" : "s"} seleccionado{selected.size === 1 ? "" : "s"}
+                  Crear tanda con {selected.size + selectedExcess.size} ítem{selected.size + selectedExcess.size === 1 ? "" : "s"} seleccionado{selected.size + selectedExcess.size === 1 ? "" : "s"}
                 </button>
               </div>
             )}
@@ -586,6 +632,15 @@ export function SupplierDebtPanel() {
                         <li key={r.id} className="flex justify-between">
                           <span>{r.catalogItem.name} × {r.quantity}</span>
                           <span className="tabular-nums">{money(r.totalCost)}</span>
+                        </li>
+                      ))}
+                      {p.excessReports.map((r) => (
+                        <li key={`excess-${r.id}`} className="flex justify-between">
+                          <span>
+                            Excedente — {r.request.catalogItem.name} × {r.excessQty} un.
+                            {r.request.requestNumber != null && ` — SC-${String(r.request.requestNumber).padStart(3, "0")}`}
+                          </span>
+                          <span className="tabular-nums">{money(r.amount)}</span>
                         </li>
                       ))}
                     </ul>
