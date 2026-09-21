@@ -13,7 +13,7 @@ type ItemDTO = {
   catalogItem: { name: string; photos: string[]; justCode: string | null } | null;
   damageReason: { name: string } | null;
   damageReasonOther: string | null;
-  batch: { code: string; createdAt: string; createdBy: { name: string } | null };
+  batch: { code: string; createdAt: string; createdBy: { name: string } | null; supplier: { name: string } | null; documentPhotoUrls: string[] };
 };
 
 type Resolution = "SOLVED_ONSITE" | "WRITE_OFF" | "ESCALATED_TO_PURCHASES";
@@ -68,9 +68,9 @@ export function DeteriorResolutionInbox({ canAct }: { canAct: boolean }) {
       {items.map((item) => (
         <div key={item.id} className="bg-surface border border-rule rounded-md p-3.5">
           <div className="flex items-center gap-3 mb-2.5">
-            {item.photoUrls[0] && (
+            {(item.photoUrls[0] ?? item.batch.documentPhotoUrls[0]) && (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={item.photoUrls[0]} alt={itemName(item)} className="w-12 h-12 object-cover rounded border border-rule shrink-0" />
+              <img src={item.photoUrls[0] ?? item.batch.documentPhotoUrls[0]} alt={itemName(item)} className="w-12 h-12 object-cover rounded border border-rule shrink-0" />
             )}
             <div className="flex-1 min-w-0">
               <div className="text-[13px] font-semibold flex items-center gap-1.5 min-w-0">
@@ -78,7 +78,10 @@ export function DeteriorResolutionInbox({ canAct }: { canAct: boolean }) {
                 <span className="truncate">{itemName(item)}</span>
               </div>
               <div className="text-[11px] text-steel">{item.quantity} un. · {item.damageReason?.name ?? item.damageReasonOther ?? "Sin motivo"}</div>
-              <div className="text-[10.5px] text-steel">{item.batch.code} · {item.batch.createdBy?.name ?? "—"} · {formatDateTime(item.batch.createdAt)}</div>
+              <div className="text-[10.5px] text-steel">
+                {item.batch.code} · {item.batch.createdBy?.name ?? "—"} · {formatDateTime(item.batch.createdAt)}
+                {item.batch.supplier && <> · Proveedor: <span className="font-semibold text-ink">{item.batch.supplier.name}</span></>}
+              </div>
             </div>
           </div>
 

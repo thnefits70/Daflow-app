@@ -4,12 +4,12 @@ import { prisma } from "@/lib/prisma";
 import { canCaptureMerchandiseOutflow, canActOnMerchandiseOutflow } from "@/lib/guards";
 import { nextMerchandiseOutflowNumber, formatMerchandiseOutflowCode } from "@/lib/merchandiseOutflow";
 
-const ITEM_INCLUDE = { catalogItem: { select: { name: true, photos: true, justCode: true } } } as const;
+const ITEM_INCLUDE = { catalogItem: { select: { name: true, photos: true, justCode: true } }, damageReason: { select: { name: true } } } as const;
 
-type Reason = "DESPACHO" | "GARANTIA" | "CAMBIO_PROVEEDOR";
+type Reason = "DESPACHO" | "GARANTIA" | "CAMBIO_PROVEEDOR" | "DETERIORO";
 
 function parseReason(value: string | null): Reason | null {
-  return value === "DESPACHO" || value === "GARANTIA" || value === "CAMBIO_PROVEEDOR" ? value : null;
+  return value === "DESPACHO" || value === "GARANTIA" || value === "CAMBIO_PROVEEDOR" || value === "DETERIORO" ? value : null;
 }
 
 // CAMBIO_PROVEEDOR queda exclusivo de Daniel (canActOnMerchandiseOutflow) —
@@ -17,6 +17,9 @@ function parseReason(value: string | null): Reason | null {
 // 2026-08-31, pedido explícito del usuario: DESPACHO pasa a ser exclusivo de
 // Daniel también — el resto del equipo de Inventario ya no ve ni gestiona la
 // hoja de despacho diaria. Garantía sigue abierta a cualquiera del equipo.
+// DETERIORO (confirmado 2026-09-21) se queda abierto a todo el equipo, igual
+// que antes — solo se le agregó el proveedor de entrada, no cambió quién
+// puede reportar.
 async function canUseDraftReason(reason: Reason): Promise<boolean> {
   if (reason === "CAMBIO_PROVEEDOR" || reason === "DESPACHO") return canActOnMerchandiseOutflow();
   return canCaptureMerchandiseOutflow();
@@ -51,7 +54,7 @@ export async function POST(req: NextRequest) {
   if (!(await canUseDraftReason(reason))) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
   let supplierId: string | undefined;
-  if (reason === "CAMBIO_PROVEEDOR") {
+  if (reason === "CAMBIO_PROVEEDOR" || reason === "DETERIORO") {
     supplierId = typeof body?.supplierId === "string" ? body.supplierId : undefined;
     if (!supplierId) return NextResponse.json({ error: "Falta el proveedor." }, { status: 400 });
     const supplier = await prisma.supplier.findUnique({ where: { id: supplierId }, select: { id: true } });

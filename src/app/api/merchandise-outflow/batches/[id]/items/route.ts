@@ -9,6 +9,8 @@ const schema = z.object({
   catalogItemId: z.string().min(1).optional(),
   declaredName: z.string().trim().min(1).optional(),
   quantity: z.number().int().positive(),
+  damageReasonName: z.string().trim().min(1).optional(),
+  damageReasonOther: z.string().trim().optional(),
 });
 
 // Agrega un renglón ya confirmado (contra el catálogo, vía ProductMatchPicker
@@ -16,6 +18,10 @@ const schema = z.object({
 // cada fila se confirma antes de quedar guardada. CAMBIO_PROVEEDOR y DESPACHO
 // quedan exclusivos de Daniel (canActOnMerchandiseOutflow, este último
 // confirmado 2026-08-31); garantía sigue abierta a todo el equipo de Inventario.
+// DETERIORO (confirmado 2026-09-21, pedido explícito del usuario/Daniel):
+// cada producto lleva su propio motivo de daño — solo la foto y el proveedor
+// se comparten a nivel de lote — mismo catálogo fijo de chips que ya usaba
+// el reporte de un solo producto.
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
@@ -40,6 +46,23 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     declaredName = catalogItem.name;
   }
 
+  let damageReasonId: string | null = null;
+  let damageReasonOther: string | null = null;
+  if (batch.reason === "DETERIORO") {
+    if (!parsed.data.damageReasonName) return NextResponse.json({ error: "Falta el motivo del daño." }, { status: 400 });
+    if (parsed.data.damageReasonName === "Otro") {
+      if (!parsed.data.damageReasonOther) return NextResponse.json({ error: "Describe el motivo del daño." }, { status: 400 });
+      damageReasonOther = parsed.data.damageReasonOther;
+    } else {
+      const reason = await prisma.merchandiseDamageReason.upsert({
+        where: { name: parsed.data.damageReasonName },
+        update: {},
+        create: { name: parsed.data.damageReasonName },
+      });
+      damageReasonId = reason.id;
+    }
+  }
+
   let linkedPurchaseRequestId: string | null = null;
   let unitCostAtExchange: number | null = null;
   let expectedCreditAmount: number | null = null;
@@ -58,12 +81,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       catalogItemId: parsed.data.catalogItemId ?? null,
       declaredName,
       quantity: parsed.data.quantity,
+      damageReasonId,
+      damageReasonOther,
       linkedPurchaseRequestId,
       unitCostAtExchange,
       expectedCreditAmount,
     },
     include: {
       catalogItem: { select: { name: true, photos: true, justCode: true } },
+      damageReason: { select: { name: true } },
       linkedPurchaseRequest: { select: { requestNumber: true, requestedAt: true, requestedBy: { select: { name: true } } } },
     },
   });

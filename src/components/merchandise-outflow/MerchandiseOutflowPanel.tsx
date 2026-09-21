@@ -11,7 +11,7 @@ import { PurchaseDeteriorGestionPanel } from "./PurchaseDeteriorGestionPanel";
 import { WriteOffQueue } from "./WriteOffQueue";
 import { HistoryList } from "./HistoryList";
 import { CancelledGuidesPanel } from "@/components/cancelled-guides/CancelledGuidesPanel";
-import { RocketRequestPanel } from "./RocketRequestPanel";
+import { FulfillmentRequestPanel } from "./FulfillmentRequestPanel";
 import { TabGuide } from "@/components/shared/TabGuide";
 
 type Tab = "despacho" | "garantia" | "deterioro" | "proveedor" | "guias" | "solicitud" | "baja" | "historial";
@@ -154,6 +154,7 @@ export function MerchandiseOutflowPanel({
   // fuerza que se remonte (y vuelva a pedir la lista) cada vez que se envía
   // una solicitud nueva.
   const [proveedorRefreshKey, setProveedorRefreshKey] = useState(0);
+  const [deteriorRefreshKey, setDeteriorRefreshKey] = useState(0);
 
   const canSeeProveedorTab = canAct || canViewSupplierExchangeResolution || supplierExchangeMineCount > 0 || financeWriteOffPendingCount > 0 || canManagePurchaseGestion || purchaseGestionPendingCount > 0;
 
@@ -213,14 +214,14 @@ export function MerchandiseOutflowPanel({
         <>
           <TabGuide storageKey="merchoutflow-deterioro">
             {canAct
-              ? "Reporta acá un producto encontrado dañado en bodega (no una devolución). Abajo ves los reportes pendientes de tu resolución: solucionado ahí mismo (no deja rastro), dar de baja, o escalar a Compras si es mercadería recién llegada."
-              : "Reporta acá un producto encontrado dañado en bodega (no una devolución). Daniel decide qué hacer con cada reporte."}
+              ? "Elige el proveedor y agrega uno o varios productos encontrados dañados en bodega (no una devolución) con una sola foto compartida. Abajo ves los reportes pendientes de tu resolución: solucionado ahí mismo (no deja rastro), dar de baja, o escalar a Compras si es mercadería recién llegada."
+              : "Elige el proveedor y agrega uno o varios productos encontrados dañados en bodega (no una devolución) con una sola foto compartida. Daniel decide qué hacer con cada producto reportado."}
           </TabGuide>
           <div className="flex flex-col gap-6">
-            <DeteriorCapture allowUpload={canAct} />
+            <DeteriorCapture allowUpload={canAct} onReported={() => setDeteriorRefreshKey((k) => k + 1)} />
             <div>
               <div className="font-display font-bold text-[14px] mb-2.5">Pendientes de resolución</div>
-              <DeteriorResolutionInbox canAct={canAct} />
+              <DeteriorResolutionInbox key={deteriorRefreshKey} canAct={canAct} />
             </div>
           </div>
         </>
@@ -271,10 +272,10 @@ export function MerchandiseOutflowPanel({
         <>
           <TabGuide storageKey="merchoutflow-solicitud">
             {canSubmitFulfillmentRequest
-              ? "Sube el Excel de Rocket con lo que Fulfillment necesita despachar — DAFLOW lo agrupa por producto real, ya con los combos expandidos por su receta, para que Daniel entregue un solo listado claro a su equipo."
-              : "Lo que Fulfillment declaró necesitar, ya agrupado por producto real y con los combos expandidos por su receta."}
+              ? "Sube el Excel de Rocket, o la captura del manifiesto de Dropi, con lo que Fulfillment necesita despachar — DAFLOW lo agrupa por producto real, ya con los combos expandidos por su receta, para que Daniel entregue un solo listado claro a su equipo."
+              : "Lo que Fulfillment declaró necesitar (Rocket y Dropi), ya agrupado por producto real y con los combos expandidos por su receta."}
           </TabGuide>
-          <RocketRequestPanel canSubmit={canSubmitFulfillmentRequest} />
+          <FulfillmentRequestPanel canSubmit={canSubmitFulfillmentRequest} />
         </>
       )}
       {tab === "baja" && canView && (

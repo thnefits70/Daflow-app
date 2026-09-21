@@ -2,10 +2,13 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { canCaptureMerchandiseOutflow, canActOnMerchandiseOutflow } from "@/lib/guards";
-import { notifyInventoryLeadOutflowPending, notifySupplierExchangeGestors } from "@/lib/merchandiseOutflow";
+import { notifyInventoryLeadOutflowPending, notifyInventoryLeadDeteriorReported, notifySupplierExchangeGestors } from "@/lib/merchandiseOutflow";
 import { recordKardexEntry } from "@/lib/stockKardex";
 
-const MIN_DOCUMENT_PHOTOS_BY_REASON: Partial<Record<string, number>> = { CAMBIO_PROVEEDOR: 1 };
+// DETERIORO (confirmado 2026-09-21): también exige su única foto compartida
+// antes de poder enviar el reporte — ver MAX_PHOTOS_BY_REASON en
+// batches/[id]/photos/route.ts, que ya limita esa foto a una sola.
+const MIN_DOCUMENT_PHOTOS_BY_REASON: Partial<Record<string, number>> = { CAMBIO_PROVEEDOR: 1, DETERIORO: 1 };
 
 // Congela el lote — a partir de acá ya no se puede editar, y queda listo en
 // la cola de "dar de baja en Just". CAMBIO_PROVEEDOR además exige al menos
@@ -49,7 +52,11 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     }).catch((err) => console.error("[merchandise-outflow submit] No se pudo registrar la salida de Kardex:", err));
   }
 
-  await notifyInventoryLeadOutflowPending(updated);
+  if (updated.reason === "DETERIORO") {
+    await notifyInventoryLeadDeteriorReported(updated, batch.items.length, session.user.name ?? "un colaborador");
+  } else {
+    await notifyInventoryLeadOutflowPending(updated);
+  }
   if (updated.reason === "CAMBIO_PROVEEDOR") {
     const withDetails = await prisma.merchandiseOutflowBatch.findUnique({
       where: { id },

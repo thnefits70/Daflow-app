@@ -15,7 +15,7 @@ type ItemDTO = {
   catalogItem: { name: string; photos: string[]; justCode: string | null } | null;
   damageReason: { name: string } | null;
   damageReasonOther: string | null;
-  batch: { code: string };
+  batch: { code: string; supplier: SupplierOption | null };
   purchaseGestionSupplier: SupplierOption | null;
   linkedPurchaseRequest: { requestNumber: number | null; requestedAt: string; quantity: number; unitCost: number } | null;
   unitCostAtExchange: number | null;
@@ -189,6 +189,16 @@ function GestionCard({ item, onChanged }: { item: ItemDTO; onChanged: () => void
       {(!item.purchaseGestionSupplier || pickingAgain) && !canResolve && (
         <div className="bg-cloud rounded-md p-2.5 mb-2">
           <div className="text-[11px] font-semibold uppercase tracking-wide text-steel mb-1.5">Elige el proveedor</div>
+          {item.batch.supplier && !item.purchaseGestionSupplier && (
+            <div className="flex items-center gap-2.5 bg-blue/10 border border-blue/35 rounded-md p-2.5 mb-2">
+              <div className="flex-1 min-w-0 text-[12.5px]">
+                Sugerido por quien reportó: <span className="font-semibold">{item.batch.supplier.name}</span>
+              </div>
+              <button type="button" disabled={linking} className="shrink-0 text-[11.5px] font-bold text-blue cursor-pointer disabled:opacity-50" onClick={() => linkSupplier(item.batch.supplier!)}>
+                Confirmar
+              </button>
+            </div>
+          )}
           <div className="flex items-center gap-1.5 rounded border border-rule bg-surface px-2.5 py-2">
             <Search size={13} className="text-steel" />
             <input type="text" placeholder="Buscá el proveedor…" className="flex-1 text-[12.5px] outline-none bg-transparent" value={query} onChange={(e) => setQuery(e.target.value)} />

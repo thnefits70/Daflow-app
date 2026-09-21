@@ -10,6 +10,11 @@ import { canManageOutflowPurchaseGestion } from "@/lib/guards";
 // que están esperando una decisión de admin (purchaseNoMatchReportedAt sin
 // decidir) quedan afuera — Jariel ya no puede actuar sobre esos hasta que
 // admin resuelva (ver purchase-exceptions/route.ts).
+// Confirmado 2026-09-21: batch.supplier es el proveedor que quien reportó el
+// deterioro ya eligió de entrada (ver DeteriorCapture) — es solo una
+// SUGERENCIA para que Jariel sepa con quién comunicarse más rápido, nunca lo
+// vincula solo; Jariel lo sigue confirmando a mano con purchase-link (mismo
+// criterio que nunca anclar sin que él elija).
 export async function GET() {
   const session = await auth();
   if (!session || !(await canManageOutflowPurchaseGestion())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
@@ -23,7 +28,7 @@ export async function GET() {
     include: {
       catalogItem: { select: { name: true, photos: true, justCode: true } },
       damageReason: { select: { name: true } },
-      batch: { select: { code: true } },
+      batch: { select: { code: true, supplier: { select: { id: true, name: true } } } },
       purchaseGestionSupplier: { select: { id: true, name: true } },
       linkedPurchaseRequest: { select: { requestNumber: true, requestedAt: true, quantity: true, unitCost: true } },
       resolvedBy: { select: { name: true } },

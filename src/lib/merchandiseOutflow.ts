@@ -97,18 +97,35 @@ export async function findMostRecentSupplierPurchase(supplierId: string, catalog
 
 // Avisa a Daniel que hay algo nuevo esperando en la cola de baja en Just —
 // se llama cada vez que un batch queda "submitted" (despacho/garantía
-// confirmados, deterioro dado de baja, o el enganche automático de compra
-// personal), para que no dependa de que él entre a revisar por su cuenta.
-// CAMBIO_PROVEEDOR queda afuera a propósito: lo captura el propio Daniel, no
-// tiene sentido avisarle de algo que él mismo acaba de armar.
+// confirmados, o el enganche automático de compra personal), para que no
+// dependa de que él entre a revisar por su cuenta. CAMBIO_PROVEEDOR queda
+// afuera a propósito: lo captura el propio Daniel, no tiene sentido avisarle
+// de algo que él mismo acaba de armar. DETERIORO también queda afuera —
+// tiene su propio aviso (ver notifyInventoryLeadDeteriorReported) porque no
+// entra directo a la cola de baja: primero pasa por la resolución de Daniel.
 export async function notifyInventoryLeadOutflowPending(batch: { code: string; reason: string }): Promise<void> {
-  if (batch.reason === "CAMBIO_PROVEEDOR") return;
+  if (batch.reason === "CAMBIO_PROVEEDOR" || batch.reason === "DETERIORO") return;
   const leadId = await getInventoryLeadId();
   if (!leadId) return;
   await notifyOwner(leadId, {
     title: "Egreso pendiente de dar de baja en Just",
     body: `${batch.code} — ${OUTFLOW_REASON_LABELS[batch.reason] ?? batch.reason} listo para confirmar.`,
     url: "/area/workspace?tab=egresos&otab=baja",
+  }).catch(() => null);
+}
+
+// Confirmado 2026-09-21, pedido explícito de Daniel: ahora un reporte de
+// deterioro puede traer varios productos del mismo proveedor en un solo
+// envío (antes era uno por uno) — este aviso reemplaza al que antes se
+// mandaba directo desde deterioro/route.ts, mismo destino (Daniel) pero
+// contando cuántos productos trajo el reporte en vez de nombrar uno solo.
+export async function notifyInventoryLeadDeteriorReported(batch: { code: string }, itemCount: number, reporterName: string): Promise<void> {
+  const leadId = await getInventoryLeadId();
+  if (!leadId) return;
+  await notifyOwner(leadId, {
+    title: "Deterioro reportado",
+    body: `${batch.code} — ${itemCount} producto(s) reportado(s) por ${reporterName}.`,
+    url: "/area/workspace?tab=egresos&otab=deterioro",
   }).catch(() => null);
 }
 
