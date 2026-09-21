@@ -169,8 +169,9 @@ export async function POST(req: NextRequest) {
     allowed = await canManageJustCatalog();
   }
   // Confirmado 2026-09-21: Solicitud de Fulfillment — Yair sube el Excel de
-  // Rocket con lo que necesita despachar.
-  if (!allowed && session?.user.role === "employee" && folder === "rocket-request-import") {
+  // Rocket con lo que necesita despachar, o la captura del manifiesto de
+  // Dropi (limpio, antes de que nadie lo resalte con marcador).
+  if (!allowed && session?.user.role === "employee" && (folder === "rocket-request-import" || folder === "dropi-request-screenshots")) {
     allowed = await canSubmitFulfillmentRequest();
   }
   // Comprobante del pago individual a cada colaborador (después de que

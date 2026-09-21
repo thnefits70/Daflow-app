@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Upload, CheckCircle2, AlertTriangle, ChevronDown, ChevronUp, Package, Search } from "lucide-react";
+import { useState } from "react";
+import { Upload, AlertTriangle, Search } from "lucide-react";
 import { uploadFile } from "@/lib/uploadFile";
 
 type RocketTarget = { type: "product" | "combo"; id: string; name: string; componentsCount: number | null };
@@ -11,16 +11,7 @@ type UnmatchedRow = { code: string; name: string; quantity: number };
 type Candidate = { type: "product" | "combo"; id: string; name: string; componentsCount: number | null };
 type Preview = { totalRows: number; readyRows: ReadyRow[]; suggestedRows: SuggestedRow[]; unmatchedRows: UnmatchedRow[]; candidates: Candidate[] };
 
-type CompiledLine = { catalogItemId: string; name: string; photos: string[]; quantity: number };
-type CompiledBatch = { id: string; source: string; requestedAt: string; requestedByName: string; totalRows: number; skippedCount: number; lines: CompiledLine[] };
-
-type BatchListItem = { id: string; source: string; requestedAt: string; requestedByName: string; totalRows: number; skippedCount: number; lineCount: number };
-
 type Decision = { target: Candidate | null; skip: boolean };
-
-function fmt(iso: string) {
-  return new Date(iso).toLocaleString("es-EC", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
-}
 
 function TargetBadge({ target }: { target: RocketTarget | Candidate }) {
   const broken = target.type === "combo" && target.componentsCount === 0;
@@ -73,58 +64,16 @@ function ManualSearch({ candidates, onPick }: { candidates: Candidate[]; onPick:
   );
 }
 
-function CompiledResult({ batch }: { batch: CompiledBatch }) {
-  return (
-    <div className="bg-surface border border-rule rounded-md p-4 mb-5">
-      <div className="flex items-center gap-1.5 text-teal text-[13px] font-bold mb-1">
-        <CheckCircle2 size={15} /> Compendiado listo
-      </div>
-      <div className="text-[11.5px] text-steel mb-3">
-        {fmt(batch.requestedAt)} · subido por {batch.requestedByName} · {batch.totalRows} filas del archivo
-        {batch.skippedCount > 0 ? `, ${batch.skippedCount} ignoradas` : ""} → {batch.lines.length} productos reales distintos.
-      </div>
-      <div className="flex flex-col gap-1.5 max-h-96 overflow-y-auto">
-        {batch.lines.map((l) => (
-          <div key={l.catalogItemId} className="flex items-center gap-2.5 bg-cloud rounded-md px-3 py-2">
-            {l.photos[0] ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={l.photos[0]} alt="" className="w-7 h-7 object-cover rounded border border-rule shrink-0" />
-            ) : (
-              <div className="w-7 h-7 rounded border border-dashed border-rule shrink-0 flex items-center justify-center text-steel">
-                <Package size={12} />
-              </div>
-            )}
-            <span className="text-[12.5px] flex-1 min-w-0 truncate">{l.name}</span>
-            <span className="font-mono text-[13px] font-bold text-teal shrink-0">{l.quantity}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-export function RocketRequestPanel({ canSubmit }: { canSubmit: boolean }) {
+export function RocketRequestPanel({ onApplied }: { onApplied: (batchId: string) => void }) {
   const [phase, setPhase] = useState<"idle" | "reading" | "preview" | "applying">("idle");
   const [preview, setPreview] = useState<Preview | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
   const [decisions, setDecisions] = useState<Record<string, Decision>>({});
   const [err, setErr] = useState("");
   const [dragOver, setDragOver] = useState(false);
-  const [result, setResult] = useState<CompiledBatch | null>(null);
-  const [history, setHistory] = useState<BatchListItem[] | null>(null);
-  const [showHistory, setShowHistory] = useState(false);
-
-  function loadHistory() {
-    fetch("/api/fulfillment-requests")
-      .then((r) => (r.ok ? r.json() : []))
-      .then(setHistory)
-      .catch(() => setHistory([]));
-  }
-  useEffect(loadHistory, []);
 
   async function handleFile(file: File) {
     setErr("");
-    setResult(null);
     setPhase("reading");
     const uploaded = await uploadFile(file, "rocket-request-import");
     if (!uploaded.ok) {
@@ -201,31 +150,20 @@ export function RocketRequestPanel({ canSubmit }: { canSubmit: boolean }) {
     }
     setPreview(null);
     setPhase("idle");
-    loadHistory();
-    const detail = await fetch(`/api/fulfillment-requests/${json.batchId}`).then((r) => (r.ok ? r.json() : null));
-    setResult(detail);
+    onApplied(json.batchId);
   }
 
   function setDecision(code: string, d: Decision) {
     setDecisions((prev) => ({ ...prev, [code]: d }));
   }
 
-  async function viewBatch(id: string) {
-    const detail = await fetch(`/api/fulfillment-requests/${id}`).then((r) => (r.ok ? r.json() : null));
-    if (detail) setResult(detail);
-  }
-
   return (
     <div>
-      {canSubmit && (
-        <div className="text-[12.5px] mb-3 bg-teal/10 border border-teal/25 rounded px-2.5 py-2">
-          <b>Qué hacer aquí:</b> descarga de Rocket el Excel con lo que hay que despachar (código, producto y cantidad) y súbelo abajo. DAFLOW reconoce solo los códigos que ya vinculaste antes; los nuevos te los muestra para que confirmes a qué producto o combo corresponden — la próxima vez ya no te pregunta por ese mismo código.
-        </div>
-      )}
+      <div className="text-[12.5px] mb-3 bg-teal/10 border border-teal/25 rounded px-2.5 py-2">
+        <b>Rocket:</b> descarga de Rocket el Excel con lo que hay que despachar (código, producto y cantidad) y súbelo abajo. DAFLOW reconoce solo los códigos que ya vinculaste antes; los nuevos te los muestra para que confirmes a qué producto o combo corresponden — la próxima vez ya no te pregunta por ese mismo código.
+      </div>
 
-      {result && <CompiledResult batch={result} />}
-
-      {canSubmit && phase === "idle" && (
+      {phase === "idle" && (
         <label
           className={`flex flex-col items-center justify-center gap-1.5 border-[1.5px] border-dashed rounded-md py-6 cursor-pointer transition-colors mb-5 ${dragOver ? "border-teal bg-teal/10" : "border-rule hover:border-teal"}`}
           onDragOver={(e) => {
@@ -369,31 +307,6 @@ export function RocketRequestPanel({ canSubmit }: { canSubmit: boolean }) {
               </span>
             )}
           </div>
-        </div>
-      )}
-
-      {history && history.length > 0 && (
-        <div>
-          <button type="button" className="flex items-center gap-1 text-[11px] font-semibold text-steel hover:text-teal cursor-pointer" onClick={() => setShowHistory((s) => !s)}>
-            {showHistory ? <ChevronUp size={12} /> : <ChevronDown size={12} />} Historial de subidas ({history.length})
-          </button>
-          {showHistory && (
-            <div className="mt-2 flex flex-col gap-1">
-              {history.map((b) => (
-                <button
-                  key={b.id}
-                  type="button"
-                  className="text-left text-[11px] text-steel hover:text-teal cursor-pointer flex flex-wrap items-center gap-x-1.5"
-                  onClick={() => viewBatch(b.id)}
-                >
-                  <span className="font-mono">{fmt(b.requestedAt)}</span>
-                  <span>—</span>
-                  <span className="font-semibold">{b.requestedByName}</span>
-                  <span>· {b.source === "ROCKET" ? "Rocket" : "Dropi"} · {b.totalRows} filas{b.skippedCount > 0 ? `, ${b.skippedCount} ignoradas` : ""}</span>
-                </button>
-              ))}
-            </div>
-          )}
         </div>
       )}
     </div>
