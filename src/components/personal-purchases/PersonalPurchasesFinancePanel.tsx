@@ -21,18 +21,25 @@ type Order = {
   items: Item[];
 };
 
+type AwaitingCostItem = { confirmedProductName: string | null; employeeProductName: string; quantity: number; confirmedCatalogItem: { justCode: string | null } | null };
+type AwaitingCostOrder = { id: string; employee: { name: string }; items: AwaitingCostItem[] };
+
 function money(n: number) {
   return `$${n.toFixed(2)}`;
 }
 
-// Confirmado 2026-08-18/20: Nairoby digita el precio en dólares acá — sin
-// ningún catálogo, sin nada precargado. Ya se sabe (unitPriceModes,
-// calculado al confirmar Daniel) cuántas unidades de cada producto van a
-// costo y cuántas a Dropi. Pedido explícito del usuario: el admin ve esta
-// misma cola pero sin poder tocar nada — ni precio, ni rechazo.
+// Confirmado 2026-09-21, pedido explícito del usuario: el precio ya NO se
+// digita acá en el primer cierre — se calcula solo con el costo de
+// INVESTOCK apenas Daniel confirma bodega (ver attemptAutoPriceOrder en
+// personalPurchases.ts). Esta pantalla (para Nairoby) ahora solo muestra
+// pedidos que ELLA MISMA reabrió para corregir un precio ya cerrado
+// (priceReopenedAt no nulo) — ahí sí sigue digitando el monto a mano, sin
+// catálogo, igual que antes. El admin ve esta misma cola sin poder tocar
+// nada — ni precio, ni rechazo — más una sección aparte (arriba) exclusiva
+// de admin con los pedidos que se quedaron esperando costo de INVESTOCK.
 // Confirmado 2026-09-08 (pedido explícito del usuario): las cuotas ya NO
 // se deciden acá — las elige el colaborador recién al escoger "Descuento
-// en rol" (con tope según el total). Nairoby solo pone precio.
+// en rol" (con tope según el total).
 export function PersonalPurchasesFinancePanel({ isAdmin = false }: { isAdmin?: boolean }) {
   const [orders, setOrders] = useState<Order[] | null>(null);
   const [prices, setPrices] = useState<Record<string, { cost: string; dropi: string }>>({});
@@ -41,6 +48,8 @@ export function PersonalPurchasesFinancePanel({ isAdmin = false }: { isAdmin?: b
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<Record<string, string>>({});
   const [zoomedPhoto, setZoomedPhoto] = useState<string | null>(null);
+  const [awaitingCost, setAwaitingCost] = useState<AwaitingCostOrder[] | null>(null);
+  const [awaitingCostErr, setAwaitingCostErr] = useState<Record<string, string>>({});
 
   function load() {
     fetch("/api/personal-purchases/pending-finance")
@@ -60,8 +69,23 @@ export function PersonalPurchasesFinancePanel({ isAdmin = false }: { isAdmin?: b
           return next;
         });
       });
+    if (isAdmin) {
+      fetch("/api/personal-purchases/awaiting-cost")
+        .then((r) => (r.ok ? r.json() : []))
+        .then(setAwaitingCost);
+    }
   }
   useEffect(load, []);
+
+  async function retryAutoPrice(id: string) {
+    setBusy(true);
+    setAwaitingCostErr((e) => ({ ...e, [id]: "" }));
+    const res = await fetch(`/api/personal-purchases/${id}/retry-auto-price`, { method: "POST" });
+    setBusy(false);
+    const data = await res.json().catch(() => null);
+    if (!res.ok) { setAwaitingCostErr((e) => ({ ...e, [id]: data?.error ?? "No se pudo reintentar." })); return; }
+    load();
+  }
 
   function priceFor(itemId: string) {
     return prices[itemId] ?? { cost: "", dropi: "" };
@@ -113,6 +137,31 @@ export function PersonalPurchasesFinancePanel({ isAdmin = false }: { isAdmin?: b
 
   return (
     <div>
+      {isAdmin && awaitingCost && awaitingCost.length > 0 && (
+        <div className="mb-5">
+          <div className="text-[11px] font-semibold uppercase tracking-wide text-steel mb-2">Esperando costo en INVESTOCK ({awaitingCost.length})</div>
+          <div className="text-[11.5px] text-steel-dim mb-2.5">Bodega ya confirmó estos pedidos, pero algún producto todavía no tiene costo cargado — nadie puede escribir un precio a mano acá. Reintentá una vez esté cargado en INVESTOCK.</div>
+          <div className="flex flex-col gap-2">
+            {awaitingCost.map((o) => (
+              <div key={o.id} className="bg-surface border border-rule rounded-md p-3">
+                <div className="font-bold text-[12.5px] mb-1">{o.employee.name}</div>
+                <div className="text-[11.5px] text-steel-dim mb-2">
+                  {o.items.map((it, i) => (
+                    <span key={i}>
+                      {i > 0 && ", "}
+                      {it.confirmedProductName ?? it.employeeProductName} × {it.quantity}
+                    </span>
+                  ))}
+                </div>
+                <button type="button" disabled={busy} className="text-[11.5px] font-semibold text-blue cursor-pointer" onClick={() => retryAutoPrice(o.id)}>
+                  Reintentar precio automático
+                </button>
+                {awaitingCostErr[o.id] && <div className="text-red text-[11px] mt-1">{awaitingCostErr[o.id]}</div>}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       <div className="text-[11px] font-semibold uppercase tracking-wide text-steel mb-3">Compras personales — cerrar precio ({orders.length})</div>
       {orders.length === 0 && <div className="border-[1.5px] border-dashed border-rule rounded-md p-6 text-center text-steel text-[13px]">Nada pendiente por ahora.</div>}
       <div className="flex flex-col gap-3">

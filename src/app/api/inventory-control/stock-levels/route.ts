@@ -12,6 +12,7 @@ import {
   pickPrimarySupplierPrice,
   B2B_MARGIN_DEFAULT,
   DROPI_MARGIN_DEFAULT,
+  DROPI_FULFILLMENT_DEFAULT,
 } from "@/lib/marketProduct";
 
 // Confirmado 2026-09-10 (pedido explícito del usuario): pantalla "Stock
@@ -114,8 +115,8 @@ export async function GET() {
     // para que el frontend lo resalte quitándole ambigüedad con un costo
     // real; se quita junto con el respaldo cuando INVESTOCK quede completo.
     const base = proposalByCatalogItemId.get(r.catalogItemId) ??
-      (r.avgCost > 0 ? { batchCost: r.avgCost, batchUnits: 1, freightCost: null, insuranceRatePercent: 6, fulfillmentCost: 0.75, marginPercent: DROPI_MARGIN_DEFAULT, costSource: "kardex" as const } : null) ??
-      (justAvgCost && justAvgCost > 0 ? { batchCost: justAvgCost, batchUnits: 1, freightCost: null, insuranceRatePercent: 6, fulfillmentCost: 0.75, marginPercent: DROPI_MARGIN_DEFAULT, costSource: "just" as const } : null);
+      (r.avgCost > 0 ? { batchCost: r.avgCost, batchUnits: 1, freightCost: null, insuranceRatePercent: 6, fulfillmentCost: DROPI_FULFILLMENT_DEFAULT, marginPercent: DROPI_MARGIN_DEFAULT, costSource: "kardex" as const } : null) ??
+      (justAvgCost && justAvgCost > 0 ? { batchCost: justAvgCost, batchUnits: 1, freightCost: null, insuranceRatePercent: 6, fulfillmentCost: DROPI_FULFILLMENT_DEFAULT, marginPercent: DROPI_MARGIN_DEFAULT, costSource: "just" as const } : null);
     if (!base) return { ...r, justAvgCost, justStock, justStockUploadedAt };
     return {
       ...r,

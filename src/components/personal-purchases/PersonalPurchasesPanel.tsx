@@ -59,7 +59,7 @@ function deadlineText(iso: string) {
 
 const STATUS_LABEL: Record<string, { label: string; color: string }> = {
   PENDING_INVENTORY: { label: "Esperando confirmación de bodega", color: "#D9A441" },
-  PENDING_FINANCE: { label: "Bodega confirmó — falta que Nairoby cierre el precio", color: "#1E5EFF" },
+  PENDING_FINANCE: { label: "Bodega confirmó — cerrando el precio", color: "#1E5EFF" },
   PENDING_PAYMENT_METHOD: { label: "Elegí cómo pagarla", color: "#D9A441" },
   PENDING_TRANSFER_PROOF: { label: "Falta que subas el comprobante", color: "#D9A441" },
   PENDING_ADMIN_CONFIRM: { label: "Comprobante en revisión", color: "#1E5EFF" },

@@ -1,4 +1,8 @@
 import { prisma } from "@/lib/prisma";
+import { bodegaUnitCost, computeMarketProductSalePrice, pickPrimarySupplierPrice, DROPI_MARGIN_DEFAULT, DROPI_FULFILLMENT_DEFAULT } from "@/lib/marketProduct";
+import { getCurrentStockByItemIds } from "@/lib/stockKardex";
+import { getFinanzasDeptId } from "@/lib/inventoryKpis";
+import { addBusinessDays } from "@/lib/businessHours";
 
 // Confirmado 2026-08-18: rediseño completo — el precio al costo por unidad
 // se declara al momento de la compra (hasta 3 unidades por producto). Hijo
@@ -121,6 +125,126 @@ export async function computeUnitPriceModes(
   }
   while (modes.length < quantity) modes.push("DROPI");
   return modes;
+}
+
+export type AutoUnitPricing = { costUnitPrice: number; dropiUnitPrice: number };
+
+// Confirmado 2026-09-21, pedido explícito del usuario: precio automático al
+// confirmar bodega — ya NO lo escribe Nairoby a mano. Mismo criterio de
+// costo (y mismas fórmulas) que ya usa "Stock Actual" para "Puesto en
+// bodega"/"Precio Dropi" — en orden de prioridad: (1) propuesta de Jariel en
+// Análisis de Mercado, (2) costo promedio real de Kardex/INVESTOCK, (3)
+// respaldo TEMPORAL del último archivo de Just (se quita junto con ese
+// respaldo cuando INVESTOCK quede completo, ver project_just_cost_fallback_
+// temporary). Productos combo se calculan IGUAL que un producto individual
+// (pedido explícito del usuario) — no se les da un tratamiento aparte. Si un
+// producto no tiene ninguna de las 3 fuentes, queda AUSENTE del mapa — el
+// llamador nunca debe inventar un valor, el pedido se queda esperando.
+export async function resolveAutoUnitPricing(catalogItemIds: string[]): Promise<Map<string, AutoUnitPricing>> {
+  const ids = [...new Set(catalogItemIds)];
+  if (ids.length === 0) return new Map();
+
+  const [proposals, stockByItem, deptId] = await Promise.all([
+    prisma.marketProductProposal.findMany({
+      where: { catalogItemId: { in: ids } },
+      include: { supplierPrices: true },
+    }),
+    getCurrentStockByItemIds(ids),
+    getFinanzasDeptId(),
+  ]);
+
+  const proposalById = new Map(
+    proposals
+      .filter((p) => p.catalogItemId && pickPrimarySupplierPrice(p.supplierPrices))
+      .map((p) => {
+        const supplier = pickPrimarySupplierPrice(p.supplierPrices)!;
+        return [
+          p.catalogItemId!,
+          { batchCost: supplier.batchCost, batchUnits: supplier.batchUnits, freightCost: supplier.freightCost, insuranceRatePercent: p.insuranceRatePercent, fulfillmentCost: p.fulfillmentCost, marginPercent: p.marginPercent },
+        ] as const;
+      })
+  );
+
+  const stillMissingIds = ids.filter((id) => !proposalById.has(id) && !((stockByItem.get(id)?.avgCost ?? 0) > 0));
+  const justAvgCostById = new Map<string, number>();
+  if (stillMissingIds.length > 0 && deptId) {
+    const items = await prisma.purchaseCatalogItem.findMany({ where: { id: { in: stillMissingIds }, justCode: { not: null } }, select: { id: true, justCode: true } });
+    const justCodes = items.map((i) => i.justCode).filter((c): c is string => !!c);
+    if (justCodes.length > 0) {
+      const snapshots = await prisma.inventoryProductSnapshot.findMany({
+        where: { deptId, productCode: { in: justCodes } },
+        distinct: ["productCode"],
+        orderBy: [{ productCode: "asc" }, { createdAt: "desc" }],
+        select: { productCode: true, avgCost: true },
+      });
+      const justAvgCostByCode = new Map(snapshots.map((s) => [s.productCode.trim(), s.avgCost]));
+      for (const item of items) {
+        const cost = item.justCode ? justAvgCostByCode.get(item.justCode.trim()) : undefined;
+        if (cost && cost > 0) justAvgCostById.set(item.id, cost);
+      }
+    }
+  }
+
+  const result = new Map<string, AutoUnitPricing>();
+  for (const id of ids) {
+    const proposal = proposalById.get(id);
+    if (proposal) {
+      result.set(id, { costUnitPrice: bodegaUnitCost(proposal.batchCost, proposal.freightCost, proposal.batchUnits), dropiUnitPrice: computeMarketProductSalePrice(proposal) });
+      continue;
+    }
+    const kardexAvgCost = stockByItem.get(id)?.avgCost ?? 0;
+    const justAvgCost = justAvgCostById.get(id);
+    const base =
+      kardexAvgCost > 0 ? { batchCost: kardexAvgCost, batchUnits: 1, freightCost: null } : justAvgCost && justAvgCost > 0 ? { batchCost: justAvgCost, batchUnits: 1, freightCost: null } : null;
+    if (!base) continue;
+    result.set(id, {
+      costUnitPrice: bodegaUnitCost(base.batchCost, base.freightCost, base.batchUnits),
+      dropiUnitPrice: computeMarketProductSalePrice({ ...base, insuranceRatePercent: 6, fulfillmentCost: DROPI_FULFILLMENT_DEFAULT, marginPercent: DROPI_MARGIN_DEFAULT }),
+    });
+  }
+  return result;
+}
+
+export type AutoPriceAttemptResult = { priced: true; totalAmount: number; employeeId: string } | { priced: false };
+
+// Confirmado 2026-09-21, pedido explícito del usuario: intenta cerrar el
+// precio de una orden que está en PENDING_FINANCE usando el costo
+// automático de INVESTOCK (resolveAutoUnitPricing). La usan dos lugares:
+// confirm-inventory (apenas Daniel confirma bodega, el caso normal) y
+// retry-auto-price (botón de admin para reintentar pedidos que se quedaron
+// esperando costo). Si TODOS los productos ya tienen costo, cierra el
+// precio y la orden pasa a "elegir cómo pagar"; si a alguno le sigue
+// faltando, no toca nada y devuelve priced:false — nunca cierra a medias.
+export async function attemptAutoPriceOrder(orderId: string): Promise<AutoPriceAttemptResult> {
+  const order = await prisma.personalPurchaseOrder.findUnique({
+    where: { id: orderId },
+    select: { status: true, employeeId: true, items: { select: { id: true, confirmedCatalogItemId: true, unitPriceModes: true } } },
+  });
+  if (!order || order.status !== "PENDING_FINANCE") return { priced: false };
+  if (order.items.some((it) => !it.confirmedCatalogItemId)) return { priced: false };
+
+  const catalogItemIds = order.items.map((it) => it.confirmedCatalogItemId!);
+  const autoPricing = await resolveAutoUnitPricing(catalogItemIds);
+  const allPriced = order.items.every((it) => autoPricing.has(it.confirmedCatalogItemId!));
+  if (!allPriced) return { priced: false };
+
+  let totalAmount = 0;
+  for (const it of order.items) {
+    const pricing = autoPricing.get(it.confirmedCatalogItemId!)!;
+    const modes = (Array.isArray(it.unitPriceModes) ? it.unitPriceModes : []) as PriceMode[];
+    const costCount = modes.filter((m) => m === "COST").length;
+    const dropiCount = modes.filter((m) => m === "DROPI").length;
+    const itemTotal = costCount * pricing.costUnitPrice + dropiCount * pricing.dropiUnitPrice;
+    totalAmount += itemTotal;
+    await prisma.personalPurchaseItem.update({ where: { id: it.id }, data: { costUnitPrice: pricing.costUnitPrice, dropiUnitPrice: pricing.dropiUnitPrice, itemTotal } });
+  }
+
+  await prisma.personalPurchaseOrder.update({
+    where: { id: orderId },
+    data: { status: "PENDING_PAYMENT_METHOD", totalAmount, transferDeadlineAt: addBusinessDays(new Date(), 3), financeConfirmedAt: new Date() },
+  });
+
+  return { priced: true, totalAmount, employeeId: order.employeeId };
 }
 
 export type StalePersonalPurchasePush = { ownerId: string; title: string; body: string; url: string };

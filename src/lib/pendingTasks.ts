@@ -417,6 +417,7 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   mi_cuenta_bancaria: "Tu cuenta bancaria — falta registrarla",
   compras_personales_confirmar: "Compras personales — falta confirmar producto/cantidad",
   compras_personales_precio: "Compras personales — falta cerrar el precio",
+  compras_personales_esperando_costo: "Compras personales — esperando costo en INVESTOCK",
   compras_personales_transferencia: "Compras personales — comprobante por confirmar",
   compras_personales_cierre: "Compras personales — transferencia confirmada, falta cerrar",
   compras_personales_metodo_pago: "Tus compras personales — falta que elijas cómo pagar o subas el comprobante",
@@ -2441,14 +2442,42 @@ async function getPersonalPurchasePendingInventoryItem(href: string): Promise<Pe
   };
 }
 
-// Confirmado 2026-08-18: pedido explícito del usuario — una vez que Daniel
-// confirma un pedido de compra personal, la información completa le tiene
-// que llegar a Nairoby (o admin) como un pendiente de ACCIÓN (ella decide
-// precio y cuotas) — a diferencia del aviso a Andrés, que es puramente
-// informativo y va a la campanita, no acá.
+// Confirmado 2026-09-21, pedido explícito del usuario: el precio ya NO lo
+// fija Nairoby a mano — se calcula solo apenas Daniel confirma bodega (ver
+// resolveAutoUnitPricing en personalPurchases.ts). Un pedido solo llega
+// acá vivo (como pendiente de ACCIÓN para ella) si lo REABRIÓ ella misma
+// para corregir un precio que ya estaba mal (priceReopenedAt no nulo) —
+// nunca en el primer cierre. Ver getPersonalPurchaseAwaitingCostPendingItem
+// para el otro caso (le faltó costo en INVESTOCK, no es acción de Nairoby).
 async function getPersonalPurchasePendingFinanceItem(href: string): Promise<PendingItem | null> {
   const rows = await prisma.personalPurchaseOrder.findMany({
-    where: { status: "PENDING_FINANCE" },
+    where: { status: "PENDING_FINANCE", priceReopenedAt: { not: null } },
+    select: { priceReopenedAt: true, employee: { select: { name: true } } },
+  });
+  if (rows.length === 0) return null;
+
+  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const overdue = rows.some((r) => (r.priceReopenedAt ?? new Date()) < cutoff);
+  const names = rows.map((r) => r.employee.name).join(", ");
+  return {
+    type: "compras_personales_precio",
+    icon: "🛒",
+    label: "Compras personales — falta cerrar el precio",
+    meta: `${rows.length === 1 ? names : `${rows.length} pedidos`}${overdue ? " · atrasado" : ""}`,
+    overdue,
+    href,
+  };
+}
+
+// Confirmado 2026-09-21, pedido explícito del usuario: cuando el precio
+// automático no se pudo calcular porque el producto todavía no tiene costo
+// en ninguna de las 3 fuentes (propuesta/Kardex/Just), el pedido se queda
+// esperando SIN que nadie lo pueda forzar a mano. Es puramente informativo
+// (nadie tiene una acción concreta que tomar acá salvo cargar el costo en
+// INVESTOCK) — solo para admin, para que no se pierda de vista.
+async function getPersonalPurchaseAwaitingCostPendingItem(href: string): Promise<PendingItem | null> {
+  const rows = await prisma.personalPurchaseOrder.findMany({
+    where: { status: "PENDING_FINANCE", priceReopenedAt: null },
     select: { inventoryConfirmedAt: true, employee: { select: { name: true } } },
   });
   if (rows.length === 0) return null;
@@ -2457,9 +2486,9 @@ async function getPersonalPurchasePendingFinanceItem(href: string): Promise<Pend
   const overdue = rows.some((r) => (r.inventoryConfirmedAt ?? new Date()) < cutoff);
   const names = rows.map((r) => r.employee.name).join(", ");
   return {
-    type: "compras_personales_precio",
-    icon: "🛒",
-    label: "Compras personales — falta cerrar el precio",
+    type: "compras_personales_esperando_costo",
+    icon: "⏳",
+    label: "Compras personales — esperando costo en INVESTOCK",
     meta: `${rows.length === 1 ? names : `${rows.length} pedidos`}${overdue ? " · atrasado" : ""}`,
     overdue,
     href,
@@ -2805,7 +2834,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     // pestaña interna "Pagos" (?etab=pagos, leída por ExternalSalesPanel).
     const mktDept = await prisma.department.findUnique({ where: { code: "MKT" }, select: { id: true } });
     const mktVentasPagosHref = mktDept ? `/admin/dept/${mktDept.id}?tab=ventas-externas&etab=pagos` : "/admin";
-    const [feedbackItems, recognitionItem, weeklyCheckinStalledItems, pettyCashLow, pettyCashUnconfirmed, adminPaymentsItem, purchaseShippingItem, purchaseCreditsItem, purchaseRefundBankConfirmItem, supplierExchangeRejectedItem, overtimeApprovalItem, commissionBonusApprovalItem, salaryAdvanceItem, managementDeductionItem, personalPurchaseFinanceItem, personalPurchaseTransferConfirmItem, personalPurchaseTransferCloseItem, personalPurchaseCashConfirmItem, personalPurchasePaymentWatchItem, payrollTransferItem, payrollIessTransferItem, externalSalePaymentConfirmItem, birthdayItems, nichoBackfillItem, monthlyTopMoversItem, improvementPlanClosureItems, purchaseExceptionItem] = await Promise.all([
+    const [feedbackItems, recognitionItem, weeklyCheckinStalledItems, pettyCashLow, pettyCashUnconfirmed, adminPaymentsItem, purchaseShippingItem, purchaseCreditsItem, purchaseRefundBankConfirmItem, supplierExchangeRejectedItem, overtimeApprovalItem, commissionBonusApprovalItem, salaryAdvanceItem, managementDeductionItem, personalPurchaseFinanceItem, personalPurchaseAwaitingCostItem, personalPurchaseTransferConfirmItem, personalPurchaseTransferCloseItem, personalPurchaseCashConfirmItem, personalPurchasePaymentWatchItem, payrollTransferItem, payrollIessTransferItem, externalSalePaymentConfirmItem, birthdayItems, nichoBackfillItem, monthlyTopMoversItem, improvementPlanClosureItems, purchaseExceptionItem] = await Promise.all([
       getFeedbackPendingItems(),
       getRecognitionAdminPendingItem("/admin/colaborador-destacado"),
       getWeeklyCheckinStalledPendingItems(),
@@ -2821,6 +2850,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       getSalaryAdvancePendingItem("/admin/nomina?tab=pagos&ptab=anticipos"),
       getManagementDeductionUnacceptedPendingItem("/admin/nomina?tab=pagos&ptab=descuentos"),
       getPersonalPurchasePendingFinanceItem("/admin/nomina?tab=pagos&ptab=comprasfinanzas"),
+      getPersonalPurchaseAwaitingCostPendingItem("/admin/nomina?tab=pagos&ptab=comprasfinanzas"),
       getPersonalPurchaseTransferConfirmPendingItem("/admin/nomina?tab=pagos&ptab=comprasfinanzas"),
       getPersonalPurchaseTransferClosePendingItem("/admin/nomina?tab=pagos&ptab=comprasfinanzas"),
       getPersonalPurchaseCashConfirmPendingItem("/admin/nomina?tab=pagos&ptab=comprasfinanzas"),
@@ -2851,6 +2881,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       ...(salaryAdvanceItem ? [salaryAdvanceItem] : []),
       ...(managementDeductionItem ? [managementDeductionItem] : []),
       ...(personalPurchaseFinanceItem ? [personalPurchaseFinanceItem] : []),
+      ...(personalPurchaseAwaitingCostItem ? [personalPurchaseAwaitingCostItem] : []),
       ...(personalPurchaseTransferConfirmItem ? [personalPurchaseTransferConfirmItem] : []),
       ...(personalPurchaseTransferCloseItem ? [personalPurchaseTransferCloseItem] : []),
       ...(personalPurchaseCashConfirmItem ? [personalPurchaseCashConfirmItem] : []),

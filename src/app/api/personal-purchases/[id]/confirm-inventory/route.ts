@@ -3,7 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { canConfirmPersonalPurchaseInventory } from "@/lib/guards";
-import { computeUnitPriceModes, type UnitDeclaration } from "@/lib/personalPurchases";
+import { computeUnitPriceModes, attemptAutoPriceOrder, type UnitDeclaration, type PriceMode } from "@/lib/personalPurchases";
 import { notifyOwner } from "@/lib/notifications";
 import { actorName } from "@/lib/actorName";
 import { createOutflowForPersonalPurchaseItem, notifyInventoryLeadOutflowPending } from "@/lib/merchandiseOutflow";
@@ -17,8 +17,11 @@ const schema = z.object({
 // se calculan las unidades a precio al costo, enfriamiento de 6 meses) Y
 // habilita el retiro físico al mismo tiempo. Ya no existe un segundo paso
 // manual de "aprobar salida"; el push de "ya podés retirarlo" sale acá
-// mismo. A Andrés le llega solo un aviso informativo (campanita); a
-// Nairoby le llega como pendiente de acción (ella tiene que fijar el precio).
+// mismo. A Andrés le llega solo un aviso informativo (campanita).
+// Confirmado 2026-09-21, pedido explícito del usuario: el precio ya NO pasa
+// por Nairoby — se calcula acá mismo (ver resolveAutoUnitPricing). Ella
+// solo vuelve a intervenir si reabre un precio ya cerrado para corregirlo
+// (reopen-price), nunca en el primer cierre.
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   if (!(await canConfirmPersonalPurchaseInventory())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
@@ -47,6 +50,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const catalogById = new Map(catalogItems.map((c) => [c.id, c]));
 
   const nameById = new Map<string, string>();
+  const unitPriceModesById = new Map<string, PriceMode[]>();
   for (const it of order.items) {
     const catalogItemId = catalogItemIdById.get(it.id)!;
     const catalogItem = catalogById.get(catalogItemId);
@@ -55,15 +59,19 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     nameById.set(it.id, confirmedProductName);
     const declarations = (Array.isArray(it.unitDeclarations) ? it.unitDeclarations : []) as unknown as UnitDeclaration[];
     const unitPriceModes = await computeUnitPriceModes(order.employeeId, confirmedProductName, it.quantity, declarations, catalogItem.justCode, it.id);
+    unitPriceModesById.set(it.id, unitPriceModes);
+  }
+
+  for (const it of order.items) {
     await prisma.personalPurchaseItem.update({
       where: { id: it.id },
-      data: { confirmedProductName, confirmedCatalogItemId: catalogItemId, unitPriceModes },
+      data: { confirmedProductName: nameById.get(it.id), confirmedCatalogItemId: catalogItemIdById.get(it.id), unitPriceModes: unitPriceModesById.get(it.id) },
     });
   }
 
   const isAdmin = session!.user.role === "admin";
   const now = new Date();
-  const updated = await prisma.personalPurchaseOrder.update({
+  await prisma.personalPurchaseOrder.update({
     where: { id },
     data: {
       status: "PENDING_FINANCE",
@@ -73,6 +81,20 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       pickedUpApprovedById: isAdmin ? null : session!.user.id,
     },
   });
+
+  // Confirmado 2026-09-21, pedido explícito del usuario: el precio ya NO lo
+  // escribe Nairoby a mano — se calcula acá mismo con el costo de INVESTOCK
+  // (ver attemptAutoPriceOrder/resolveAutoUnitPricing en personalPurchases.ts).
+  // Si TODOS los productos tienen costo disponible, la orden salta directo a
+  // "elegir cómo pagar" (se salta por completo el paso de Finanzas). Si a
+  // alguno le falta costo, se queda esperando en PENDING_FINANCE — nadie lo
+  // puede forzar a mano, queda como pendiente informativo hasta que ese
+  // producto tenga costo cargado en INVESTOCK (o hasta que admin reintente
+  // desde retry-auto-price una vez cargado).
+  const priceResult = await attemptAutoPriceOrder(id);
+  const allPriced = priceResult.priced;
+  const totalAmount = priceResult.priced ? priceResult.totalAmount : 0;
+  const updated = await prisma.personalPurchaseOrder.findUnique({ where: { id } });
 
   // Confirmado 2026-08-25: enganche automático a Registro de Egresos — en
   // cuanto Daniel aprueba el retiro físico, cada producto de la orden cae
@@ -86,24 +108,26 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const itemCount = order.items.length;
   await notifyOwner("admin", {
     title: "🛒 Compra personal confirmada por bodega",
-    body: `${order.employee.name} · ${itemCount} producto${itemCount === 1 ? "" : "s"} · confirmado por ${actorName(isAdmin ? null : session!.user.name)}`,
+    body: `${order.employee.name} · ${itemCount} producto${itemCount === 1 ? "" : "s"} · confirmado por ${actorName(isAdmin ? null : session!.user.name)}${allPriced ? "" : " · esperando costo en INVESTOCK"}`,
     url: "/area/nomina?tab=pagos&ptab=comprasfinanzas",
   });
-
-  const finLeader = await prisma.user.findFirst({ where: { isLeader: true, leadsDept: { code: "FIN" } }, select: { id: true } });
-  if (finLeader) {
-    await notifyOwner(finLeader.id, {
-      title: "🛒 Compra personal lista para fijar precio",
-      body: `${order.employee.name} · ${itemCount} producto${itemCount === 1 ? "" : "s"}`,
-      url: "/area/nomina?tab=pagos&ptab=comprasfinanzas",
-    });
-  }
 
   await notifyOwner(order.employee.id, {
     title: "✅ Ya podés retirarlo",
     body: "Daniel ya lo tiene listo en bodega.",
     url: "/area/compras-personales",
   });
+
+  // Confirmado 2026-09-21, pedido explícito del usuario: el precio ya no lo
+  // cierra Nairoby a mano — si se pudo calcular acá mismo, el colaborador ya
+  // se entera del monto de una, sin esperar a nadie más.
+  if (allPriced) {
+    await notifyOwner(order.employee.id, {
+      title: "💵 Tu compra personal quedó lista",
+      body: `Total $${totalAmount.toFixed(2)} — elegí cómo pagarla.`,
+      url: "/area/compras-personales",
+    });
+  }
 
   return NextResponse.json(updated);
 }

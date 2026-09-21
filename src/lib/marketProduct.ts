@@ -10,6 +10,12 @@ export { B2B_MARGIN_OPTIONS, B2B_MARGIN_DEFAULT, B2C_FLETE_PROMEDIO };
 // Dropi de combos.
 export const DROPI_MARGIN_DEFAULT = 20;
 
+// Mismo default de fulfillment ($0.75) que ya usaba Stock Actual para
+// productos sin propuesta de Jariel — movido acá (2026-09-21) para que
+// Compras Personales (precio automático) use exactamente el mismo número,
+// sin duplicarlo.
+export const DROPI_FULFILLMENT_DEFAULT = 0.75;
+
 // `costSource` deja rastro de qué respaldo se usó — "just" es TEMPORAL
 // (pedido explícito del usuario 2026-09-17) mientras se termina de cargar
 // INVESTOCK para todos los productos; se quita junto con el respaldo mismo
