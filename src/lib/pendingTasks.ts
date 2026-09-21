@@ -2301,17 +2301,17 @@ async function getExternalSaleReviewPendingItem(href: string): Promise<PendingIt
 }
 
 // Confirmado 2026-09-09: pedido explícito de Daniel — misma condición exacta
-// que /api/external-sales/pending-dispatch (ventas aprobadas por Bryan, y en
-// pago anticipado ya facturadas por Nairoby, esperando que Daniel asigne a
-// quién de su equipo agrupa) — antes solo llegaba como aviso puntual
-// (notifyInventoryLeadExternalSaleApproved/Invoiced en externalSales.ts).
+// que /api/external-sales/pending-dispatch (ventas aprobadas por Bryan,
+// esperando que Daniel asigne a quién de su equipo agrupa) — antes solo
+// llegaba como aviso puntual (notifyInventoryLeadExternalSaleApproved en
+// externalSales.ts). Confirmado 2026-09-21: ya no espera a que Nairoby
+// facture primero en pago anticipado (ver pending-dispatch/route.ts).
 async function getExternalSaleDispatchPendingItem(href: string): Promise<PendingItem | null> {
   const rows = await prisma.externalSale.findMany({
     where: {
       reviewStatus: "APPROVED",
       dispatchAssignedToId: null,
       deletedAt: null,
-      OR: [{ isContraEntrega: true }, { invoiceUploadedAt: { not: null } }],
     },
     select: { code: true, reviewedAt: true, createdAt: true },
   });
