@@ -44,6 +44,24 @@ export function saleSteps(s: SaleTimelineDTO): Step[] {
   ];
 }
 
+export const FLOW_COLUMNS = ["Declarada", "Aprobada", "Pago confirmado", "Facturada", "Agrupada", "Embalaje asignado", "Entregada", "Cerrada"];
+
+// La columna de una venta es el paso más avanzado que ya se cumplió —
+// caminando desde "Cerrada" hacia atrás hasta "Declarada". Funciona igual de
+// bien en pago anticipado que en contra entrega (donde facturación y pago
+// pueden pasar DESPUÉS de la entrega), porque no asume un orden fijo.
+// Compartida por el Kanban de Historial y el de "Mis ventas" del asesor
+// (pedido explícito de Marcos 2026-09-21: quiere ver sus propios pedidos
+// agrupados por columna igual que en Historial), para que ambos lados
+// clasifiquen cada venta exactamente igual.
+export function saleColumn(s: SaleTimelineDTO): string {
+  const steps = saleSteps(s);
+  for (let i = steps.length - 1; i >= 0; i--) {
+    if (steps[i].at) return steps[i].label;
+  }
+  return "Declarada";
+}
+
 // Ruta vertical del pedido (pedido explícito de Marcos 2026-09-21, misma idea
 // que el tablero por columnas de Historial pero para UN pedido): muestra los
 // 8 pasos siempre, no solo los ya cumplidos, para que se vea de un vistazo

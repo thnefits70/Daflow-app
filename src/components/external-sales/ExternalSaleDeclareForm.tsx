@@ -12,7 +12,7 @@ import { useFormDraft } from "@/lib/useFormDraft";
 import { formatDateTime } from "@/lib/formatDateTime";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 import { ProofPreview } from "@/components/shared/ProofPreview";
-import { saleSteps, TimelineSteps } from "@/components/external-sales/SaleTimeline";
+import { saleSteps, saleColumn, FLOW_COLUMNS, TimelineSteps } from "@/components/external-sales/SaleTimeline";
 import { B2B_MARGIN_OPTIONS, B2B_MARGIN_DEFAULT } from "@/lib/externalSalesPricingConstants";
 
 type SaleItemDTO = {
@@ -426,6 +426,22 @@ function statusLabel(s: SaleDTO): { text: string; color: string } {
   if (!s.paymentConfirmedAt) return { text: "Esperando que confirmen el pago", color: "text-gold" };
   if (!s.deliveredAt) return { text: `Pago confirmado · ${formatDateTime(s.paymentConfirmedAt)} — esperando entrega`, color: "text-blue" };
   return { text: `Entregado · ${formatDateTime(s.deliveredAt)} — esperando cierre de Nairoby`, color: "text-gold" };
+}
+
+// Pedido explícito de Marcos 2026-09-21: quiere ver sus propios pedidos
+// agrupados por columna (una por paso del proceso), igual que el tablero de
+// Historial — de un vistazo, en qué etapa va cada uno, en vez de una lista
+// plana. Misma clasificación (saleColumn) que usa Historial, para que ambas
+// vistas coincidan siempre.
+function myColumns(sales: SaleDTO[]): { label: string; sales: SaleDTO[] }[] {
+  const active = sales.filter((s) => !s.deletedAt && s.reviewStatus !== "REJECTED");
+  const rejected = sales.filter((s) => !s.deletedAt && s.reviewStatus === "REJECTED");
+  const cancelled = sales.filter((s) => s.deletedAt);
+  return [
+    ...FLOW_COLUMNS.map((label) => ({ label, sales: active.filter((s) => saleColumn(s) === label) })),
+    ...(rejected.length > 0 ? [{ label: "Rechazada", sales: rejected }] : []),
+    ...(cancelled.length > 0 ? [{ label: "Cancelada", sales: cancelled }] : []),
+  ];
 }
 
 // Constructor de productos, reutilizado al declarar una venta nueva y al
@@ -1137,14 +1153,25 @@ export function ExternalSaleDeclareForm() {
       </div>
 
       <div>
-        <div className="font-display font-bold text-[14px] mb-2.5">Mis ventas</div>
+        <div className="font-display font-bold text-[14px] mb-1">Mis ventas</div>
+        <div className="text-[11.5px] text-steel mb-2.5">Cada columna es un paso del proceso — así ves de un vistazo en qué va cada pedido, igual que en Historial.</div>
         {sales === null ? (
           <div className="text-[13px] text-steel">Cargando…</div>
         ) : sales.length === 0 ? (
           <div className="text-[13px] text-steel">Todavía no declaraste ninguna venta.</div>
         ) : (
-          <div className="flex flex-col gap-2">
-            {sales.map((s) => {
+          <div className="flex gap-3 overflow-x-auto pb-2">
+            {myColumns(sales).map((col) => (
+              <div key={col.label} className="shrink-0 w-[300px] flex flex-col gap-2">
+                <div className="flex items-center justify-between px-1">
+                  <span className="font-display font-bold text-[12.5px]">{col.label}</span>
+                  <span className="font-mono text-[11px] tabular-nums text-steel bg-cloud border border-rule rounded-full px-2 py-0.5">{col.sales.length}</span>
+                </div>
+                <div className="flex flex-col gap-2 min-h-[40px]">
+                {col.sales.length === 0 ? (
+                  <div className="text-[11px] text-steel px-1">—</div>
+                ) : (
+                  col.sales.map((s) => {
               const status = statusLabel(s);
               return (
                 <div key={s.id} className="bg-surface border border-rule rounded-md p-3">
@@ -1454,8 +1481,12 @@ export function ExternalSaleDeclareForm() {
                     </div>
                   )}
                 </div>
-              );
-            })}
+                    );
+                  })
+                )}
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </div>

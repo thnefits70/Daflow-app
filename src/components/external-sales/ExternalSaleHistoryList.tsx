@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { ChevronDown, ChevronUp, Printer, Trash2 } from "lucide-react";
 import { formatDateTime } from "@/lib/formatDateTime";
 import { CatalogCode } from "@/components/shared/CatalogCode";
-import { saleSteps, TimelineSteps } from "@/components/external-sales/SaleTimeline";
+import { saleSteps, saleColumn, FLOW_COLUMNS, TimelineSteps } from "@/components/external-sales/SaleTimeline";
 
 type SaleItemDTO = {
   id: string;
@@ -55,18 +55,6 @@ type SaleDTO = {
   deletedAt: string | null;
 };
 
-// La columna de una venta es el paso más avanzado que ya se cumplió —
-// caminando desde "Cerrada" hacia atrás hasta "Declarada". Funciona igual de
-// bien en pago anticipado que en contra entrega (donde facturación y pago
-// pueden pasar DESPUÉS de la entrega), porque no asume un orden fijo.
-function saleColumn(s: SaleDTO): string {
-  const steps = saleSteps(s);
-  for (let i = steps.length - 1; i >= 0; i--) {
-    if (steps[i].at) return steps[i].label;
-  }
-  return "Declarada";
-}
-
 // Pedido explícito de Yair (2026-09-19, por audio): desde el tablero de
 // Historial una venta "pegada" en Aprobada/Pago confirmado/Facturada/
 // Agrupada parece rota, pero casi siempre solo está esperando a otra
@@ -92,8 +80,6 @@ function itemsSummary(s: SaleDTO): string {
   const first = s.items[0].catalogItem?.name ?? s.items[0].declaredProductName;
   return s.items.length === 1 ? first : `${first} +${s.items.length - 1} más`;
 }
-
-const FLOW_COLUMNS = ["Declarada", "Aprobada", "Pago confirmado", "Facturada", "Agrupada", "Embalaje asignado", "Entregada", "Cerrada"];
 
 function SaleDetail({ s, canPrintGuide }: { s: SaleDTO; canPrintGuide: boolean }) {
   const steps = saleSteps(s);
