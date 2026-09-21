@@ -395,6 +395,13 @@ export function StockLevelsPanel({ isAdmin = false }: { isAdmin?: boolean }) {
   // sobre la misma marca lo quita y vuelve a mostrar todas.
   const [marcaFilter, setMarcaFilter] = useState<Marca | null>(null);
   const [openFormula, setOpenFormula] = useState<FormulaKey | null>(null);
+  // Confirmado 2026-09-21, pedido explícito del usuario: ver de un clic qué
+  // productos del catálogo (todo lo que ya está registrado en INVESTOCK) se
+  // quedaron sin ningún precio real (ni propuesta de Jariel, ni costo de
+  // Kardex, ni siquiera el de Just) o sin stock — mismo patrón de chip que
+  // el filtro de marca, independiente y combinable con él.
+  const [sinPrecioFilter, setSinPrecioFilter] = useState(false);
+  const [sinStockFilter, setSinStockFilter] = useState(false);
 
   // Confirmado 2026-09-16, pedido explícito del usuario: corrección única del
   // historial de Kardex para que "Costo Prom." incluya el flete real de
@@ -563,7 +570,10 @@ export function StockLevelsPanel({ isAdmin = false }: { isAdmin?: boolean }) {
 
   if (rows === null) return <div className="text-steel text-[13px]">Cargando…</div>;
 
-  const marcaFilteredRows = marcaFilter ? rows.filter((r) => r.bodega === marcaFilter) : rows;
+  const marcaFilteredRows = rows
+    .filter((r) => !marcaFilter || r.bodega === marcaFilter)
+    .filter((r) => !sinPrecioFilter || r.providerPrice === undefined)
+    .filter((r) => !sinStockFilter || r.balance === 0);
   const marcaFilteredCombosBase = marcaFilter ? combos.filter((c) => c.bodega === marcaFilter) : combos;
 
   const queryTrimmed = query.trim();
@@ -633,6 +643,11 @@ export function StockLevelsPanel({ isAdmin = false }: { isAdmin?: boolean }) {
   // real (`rows`), no sobre `sorted`, para que el número no cambie solo por
   // estar buscando.
   const unmarkedCount = rows.filter((r) => r.bodega == null).length;
+  // Confirmado 2026-09-21: mismos totales para los chips de abajo — sobre el
+  // catálogo completo (`rows`), no sobre `sorted`, mismo criterio que
+  // unmarkedCount de arriba.
+  const sinPrecioCount = rows.filter((r) => r.providerPrice === undefined).length;
+  const sinStockCount = rows.filter((r) => r.balance === 0).length;
 
   // Confirmado 2026-09-16, bug real reportado por el usuario: este
   // encabezado solo vivía en la sección de productos — al elegir "Solo
@@ -975,6 +990,36 @@ export function StockLevelsPanel({ isAdmin = false }: { isAdmin?: boolean }) {
         ))}
       </div>
 
+      {/* Confirmado 2026-09-21, pedido explícito del usuario: chips de alerta
+          para ver de un clic qué productos del catálogo (todo lo que ya está
+          registrado en INVESTOCK) se quedaron sin precio o sin stock —
+          combinables entre sí y con marca/búsqueda, mismo patrón que los
+          chips de marca de arriba. */}
+      {viewMode !== "combos" && (sinPrecioCount > 0 || sinStockCount > 0) && (
+        <div className="flex items-center gap-1.5 mb-3">
+          {sinPrecioCount > 0 && (
+            <button
+              type="button"
+              className={`rounded-full px-3 py-1.5 text-[12px] font-semibold cursor-pointer border ${sinPrecioFilter ? "bg-red border-red text-navy" : "border-rule text-red hover:text-red"}`}
+              onClick={() => setSinPrecioFilter((v) => !v)}
+              title="Productos sin ninguna base de costo real: ni propuesta de Análisis de Mercado, ni compra en INVESTOCK, ni Just."
+            >
+              Sin precio · {sinPrecioCount}
+            </button>
+          )}
+          {sinStockCount > 0 && (
+            <button
+              type="button"
+              className={`rounded-full px-3 py-1.5 text-[12px] font-semibold cursor-pointer border ${sinStockFilter ? "bg-gold border-gold text-navy" : "border-rule text-gold hover:text-gold"}`}
+              onClick={() => setSinStockFilter((v) => !v)}
+              title="Productos con 0 de stock en INVESTOCK ahora mismo."
+            >
+              Sin stock · {sinStockCount}
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Confirmado 2026-09-16, pedido explícito del usuario: el buscador
           debe funcionar igual en "Solo combos" (por código o nombre del
           combo) — antes vivía solo dentro del bloque de productos, así que
@@ -1088,7 +1133,7 @@ export function StockLevelsPanel({ isAdmin = false }: { isAdmin?: boolean }) {
                     className={withCostSourceColor("text-right font-mono text-[13px] text-steel", r.costSource)}
                     title={r.costSource === "just" ? JUST_ESTIMATE_TITLE : undefined}
                   />
-                  {isAdmin && r.costSource === "just" && (
+                  {isAdmin && r.costSource !== "proposal" && r.costSource !== "kardex" && (
                     <DeclareCostButton catalogItemId={r.catalogItemId} suggestedCost={r.justAvgCost ?? 0} onDeclared={loadRows} />
                   )}
                 </span>
