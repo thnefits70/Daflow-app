@@ -33,6 +33,7 @@ export function ExpirationLotsPanel() {
   const [loadingLots, setLoadingLots] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [markingExpiration, setMarkingExpiration] = useState(false);
 
   // Confirmado 2026-09-11, pedido de Daniel: poder hacer todo el formulario
   // con Enter, sin tocar el mouse — de un campo salta al siguiente, y desde
@@ -107,6 +108,27 @@ export function ExpirationLotsPanel() {
     }
     setLots((prev) => prev.filter((l) => l.id !== lotId));
     setItems((prev) => prev.map((i) => (i.id === selected.id && lots.length <= 1 ? { ...i, hasExpiration: false } : i)));
+  }
+
+  // Confirmado 2026-09-21, pedido de Daniel: si borrar el último lote apagó
+  // hasExpiration de un producto que sí lo necesita, reactivarlo sin
+  // obligarlo a declarar un lote real solo para "encenderlo" de nuevo.
+  async function markNeedsExpiration() {
+    if (!selected) return;
+    setMarkingExpiration(true);
+    setErr("");
+    const res = await fetch(`/api/purchase-catalog/${selected.id}/expiration-lots`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ hasExpiration: true }),
+    });
+    setMarkingExpiration(false);
+    if (!res.ok) {
+      const data = await res.json().catch(() => null);
+      setErr(data?.error ?? "No se pudo activar la marca.");
+      return;
+    }
+    setItems((prev) => prev.map((i) => (i.id === selected.id ? { ...i, hasExpiration: true } : i)));
   }
 
   async function declare() {
@@ -190,6 +212,20 @@ export function ExpirationLotsPanel() {
               Cambiar producto
             </button>
           </div>
+
+          {!selected.hasExpiration && (
+            <div className="flex items-center justify-between gap-2 mb-3 bg-surface border border-rule rounded px-2.5 py-2">
+              <span className="text-[11.5px] text-steel">Este producto no está marcado para pedir fecha de caducidad en la próxima compra.</span>
+              <button
+                type="button"
+                disabled={markingExpiration}
+                className="text-[11.5px] font-bold text-teal cursor-pointer shrink-0 disabled:opacity-40"
+                onClick={markNeedsExpiration}
+              >
+                {markingExpiration ? "..." : "Sí la necesita"}
+              </button>
+            </div>
+          )}
 
           <div className="grid grid-cols-3 gap-2 mb-2">
             <div>

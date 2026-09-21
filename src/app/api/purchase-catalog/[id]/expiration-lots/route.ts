@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/auth";
 import { canManageJustCatalog } from "@/lib/guards";
-import { declareExpirationLot, deleteExpirationLot, getActiveExpirationLots, getAllExpirationLots } from "@/lib/stockKardex";
+import { declareExpirationLot, deleteExpirationLot, getActiveExpirationLots, getAllExpirationLots, setHasExpiration } from "@/lib/stockKardex";
 
 // Confirmado 2026-09-10 (pedido de Daniel): declarar el lote de un producto
 // que YA está en percha, sin depender de esperar la próxima compra — mismo
@@ -69,5 +69,23 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
 
   const result = await deleteExpirationLot({ catalogItemId: id, lotId: parsed.data.lotId });
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
+  return NextResponse.json({ ok: true });
+}
+
+// Confirmado 2026-09-21, pedido de Daniel: reactivar hasExpiration sin
+// declarar un lote real, para cuando borrar el último lote apagó la marca
+// de un producto que sí la necesita.
+const patchSchema = z.object({ hasExpiration: z.boolean() });
+
+export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const session = await auth();
+  if (!(await canManageJustCatalog()) || !session) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+
+  const { id } = await params;
+  const body = await req.json().catch(() => null);
+  const parsed = patchSchema.safeParse(body);
+  if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Datos inválidos." }, { status: 400 });
+
+  await setHasExpiration(id, parsed.data.hasExpiration);
   return NextResponse.json({ ok: true });
 }

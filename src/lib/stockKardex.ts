@@ -230,6 +230,15 @@ export async function deleteExpirationLot(params: { catalogItemId: string; lotId
   return { ok: true };
 }
 
+// Confirmado 2026-09-21, pedido de Daniel: si borrar el último lote de un
+// producto apagó hasExpiration por error (era un producto que sí necesita
+// caducidad, solo que no tiene un lote real para declarar ahora mismo), esto
+// lo reactiva directo — la próxima compra vuelve a pedir las fechas sin
+// obligarlo a declarar un lote falso solo para "encender" la marca.
+export async function setHasExpiration(catalogItemId: string, value: boolean) {
+  await prisma.purchaseCatalogItem.update({ where: { id: catalogItemId }, data: { hasExpiration: value } });
+}
+
 export type ExpirationLotRow = {
   id: string;
   manufactureDate: Date | null;
