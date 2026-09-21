@@ -205,6 +205,31 @@ export async function declareExpirationLot(params: {
   });
 }
 
+// Confirmado 2026-09-21, pedido puntual de Daniel: borrar un lote declarado
+// por error (prueba, o fecha que el sistema le cambió mal). Solo se permite
+// si el lote sigue intacto (quantityRemaining === quantityReceived) — si ya
+// se descontó stock de él por FEFO, no se puede borrar sin perder trazabilidad.
+// Si era el último lote del producto, también le quita hasExpiration para que
+// la próxima compra no vuelva a pedir fechas de un producto que no lo necesita.
+export async function deleteExpirationLot(params: { catalogItemId: string; lotId: string }): Promise<{ ok: true } | { ok: false; error: string }> {
+  const cohort = await prisma.expirationCohort.findUnique({ where: { id: params.lotId } });
+  if (!cohort || cohort.catalogItemId !== params.catalogItemId) {
+    return { ok: false, error: "Lote no encontrado." };
+  }
+  if (cohort.quantityRemaining !== cohort.quantityReceived) {
+    return { ok: false, error: "Este lote ya tiene salidas registradas, no se puede eliminar." };
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.expirationCohort.delete({ where: { id: params.lotId } });
+    const remaining = await tx.expirationCohort.count({ where: { catalogItemId: params.catalogItemId } });
+    if (remaining === 0) {
+      await tx.purchaseCatalogItem.update({ where: { id: params.catalogItemId }, data: { hasExpiration: false } });
+    }
+  });
+  return { ok: true };
+}
+
 export type ExpirationLotRow = {
   id: string;
   manufactureDate: Date | null;

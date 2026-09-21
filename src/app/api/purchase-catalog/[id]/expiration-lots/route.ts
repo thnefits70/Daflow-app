@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/auth";
 import { canManageJustCatalog } from "@/lib/guards";
-import { declareExpirationLot, getActiveExpirationLots, getAllExpirationLots } from "@/lib/stockKardex";
+import { declareExpirationLot, deleteExpirationLot, getActiveExpirationLots, getAllExpirationLots } from "@/lib/stockKardex";
 
 // Confirmado 2026-09-10 (pedido de Daniel): declarar el lote de un producto
 // que YA está en percha, sin depender de esperar la próxima compra — mismo
@@ -49,4 +49,25 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
   const lots = activeOnly ? await getActiveExpirationLots(id) : await getAllExpirationLots(id);
   return NextResponse.json(lots);
+}
+
+// Confirmado 2026-09-21, pedido puntual de Daniel: por esta vez, poder borrar
+// lotes que declaró mal — pruebas (ej. "VIP MEN solo era prueba") o casos
+// donde el sistema le cambió la fecha. Solo permite borrar lotes intactos
+// (sin ninguna salida FEFO ya descontada de ellos) para no romper trazabilidad
+// de stock real ya despachado.
+const deleteSchema = z.object({ lotId: z.string().trim().min(1) });
+
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const session = await auth();
+  if (!(await canManageJustCatalog()) || !session) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+
+  const { id } = await params;
+  const body = await req.json().catch(() => null);
+  const parsed = deleteSchema.safeParse(body);
+  if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Datos inválidos." }, { status: 400 });
+
+  const result = await deleteExpirationLot({ catalogItemId: id, lotId: parsed.data.lotId });
+  if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
+  return NextResponse.json({ ok: true });
 }

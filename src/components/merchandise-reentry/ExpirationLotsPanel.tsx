@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Search, CalendarClock, CheckCircle2 } from "lucide-react";
+import { Search, CalendarClock, CheckCircle2, Trash2 } from "lucide-react";
 import { formatDateTime } from "@/lib/formatDateTime";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 import { useFormDraft } from "@/lib/useFormDraft";
@@ -31,6 +31,8 @@ export function ExpirationLotsPanel() {
   const [ok, setOk] = useState("");
   const [lots, setLots] = useState<LotRow[]>([]);
   const [loadingLots, setLoadingLots] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   // Confirmado 2026-09-11, pedido de Daniel: poder hacer todo el formulario
   // con Enter, sin tocar el mouse — de un campo salta al siguiente, y desde
@@ -80,7 +82,31 @@ export function ExpirationLotsPanel() {
     setQuantity("");
     setErr("");
     setOk("");
+    setConfirmDeleteId(null);
     loadLots(id);
+  }
+
+  // Confirmado 2026-09-21, pedido puntual de Daniel: por esta vez, poder
+  // borrar lotes declarados por error (pruebas, o fechas que el sistema le
+  // cambió). Solo deja borrar lotes intactos (sin salidas ya descontadas).
+  async function deleteLot(lotId: string) {
+    if (!selected) return;
+    setDeletingId(lotId);
+    setErr("");
+    const res = await fetch(`/api/purchase-catalog/${selected.id}/expiration-lots`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ lotId }),
+    });
+    setDeletingId(null);
+    setConfirmDeleteId(null);
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      setErr(data?.error ?? "No se pudo eliminar el lote.");
+      return;
+    }
+    setLots((prev) => prev.filter((l) => l.id !== lotId));
+    setItems((prev) => prev.map((i) => (i.id === selected.id && lots.length <= 1 ? { ...i, hasExpiration: false } : i)));
   }
 
   async function declare() {
@@ -218,19 +244,54 @@ export function ExpirationLotsPanel() {
               <div className="text-[12px] text-steel">Todavía no tiene ningún lote declarado.</div>
             ) : (
               <div className="flex flex-col gap-1.5">
-                {lots.map((l) => (
-                  <div key={l.id} className="bg-surface border border-rule rounded-md p-2 text-[12px] flex items-center justify-between gap-2">
-                    <div>
-                      <span className={l.quantityRemaining === 0 ? "text-steel" : "font-semibold text-ink"}>Vence {DATE_FMT.format(new Date(l.expirationDate))}</span>
-                      {l.manufactureDate && <span className="text-steel"> · elaborado {DATE_FMT.format(new Date(l.manufactureDate))}</span>}
-                      <div className="text-[10.5px] text-steel-dim">Declarado {formatDateTime(l.declaredAt)}</div>
+                {lots.map((l) => {
+                  const intact = l.quantityRemaining === l.quantityReceived;
+                  return (
+                    <div key={l.id} className="bg-surface border border-rule rounded-md p-2 text-[12px] flex items-center justify-between gap-2">
+                      <div>
+                        <span className={l.quantityRemaining === 0 ? "text-steel" : "font-semibold text-ink"}>Vence {DATE_FMT.format(new Date(l.expirationDate))}</span>
+                        {l.manufactureDate && <span className="text-steel"> · elaborado {DATE_FMT.format(new Date(l.manufactureDate))}</span>}
+                        <div className="text-[10.5px] text-steel-dim">Declarado {formatDateTime(l.declaredAt)}</div>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <div className="text-right">
+                          <div className="font-mono font-bold">{l.quantityRemaining} / {l.quantityReceived}</div>
+                          <div className="text-[10px] text-steel-dim">{l.quantityRemaining === 0 ? "agotado" : "disponible"}</div>
+                        </div>
+                        {intact && (
+                          confirmDeleteId === l.id ? (
+                            <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                disabled={deletingId === l.id}
+                                className="text-[10.5px] font-bold text-red border border-red rounded px-1.5 py-1 cursor-pointer disabled:opacity-40"
+                                onClick={() => deleteLot(l.id)}
+                              >
+                                {deletingId === l.id ? "..." : "Confirmar"}
+                              </button>
+                              <button
+                                type="button"
+                                className="text-[10.5px] text-steel cursor-pointer px-1"
+                                onClick={() => setConfirmDeleteId(null)}
+                              >
+                                Cancelar
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              title="Eliminar lote"
+                              className="text-steel hover:text-red cursor-pointer p-1"
+                              onClick={() => setConfirmDeleteId(l.id)}
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          )
+                        )}
+                      </div>
                     </div>
-                    <div className="text-right shrink-0">
-                      <div className="font-mono font-bold">{l.quantityRemaining} / {l.quantityReceived}</div>
-                      <div className="text-[10px] text-steel-dim">{l.quantityRemaining === 0 ? "agotado" : "disponible"}</div>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
