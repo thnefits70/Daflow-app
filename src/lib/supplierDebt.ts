@@ -239,12 +239,21 @@ export type SupplierDebtDisputedItem = {
 // PurchaseRequestUrgentReport sin resolver (reviewedByLeadAt null, o
 // resuelto pero la resolución no cubrió el 100% — para Fase 1 se muestra
 // mientras el reporte exista y la solicitud no haya llegado a RECEIVED).
+//
+// Confirmado 2026-09-21, bug real reportado por el usuario (Kit Pulidor de
+// Uñas, SC-082 de CHEN): un reporte resuelto internamente
+// (resolvedInternallyAt, ver resolve-internal/route.ts — solo pasa cuando
+// era puramente un malentendido de conteo, ej. venía en bultos de más
+// unidades cada uno, nunca faltó nada) o rechazado (rejectedAt) seguía
+// contando como "en disputa" para siempre, aunque ya no había ningún
+// problema real. Ahora solo un reporte SIN resolver (ni internamente ni
+// rechazado) mantiene la solicitud en esta sección.
 export async function getSupplierDebtDisputedItems(supplierId: string): Promise<SupplierDebtDisputedItem[]> {
   const rows = await prisma.purchaseRequest.findMany({
     where: {
       supplierId,
       status: { in: ["RECEIVED_PENDING_REVIEW", "APPROVED"] },
-      urgentReports: { some: {} },
+      urgentReports: { some: { resolvedInternallyAt: null, rejectedAt: null } },
     },
     include: {
       catalogItem: { select: { name: true } },
@@ -259,6 +268,7 @@ export async function getSupplierDebtDisputedItems(supplierId: string): Promise<
     orderBy: { requestedAt: "asc" },
   });
   return rows
+    .map((r) => ({ ...r, urgentReports: r.urgentReports.filter((u) => u.resolvedInternallyAt === null && u.rejectedAt === null) }))
     .filter((r) => r.urgentReports.length > 0)
     .map((r) => {
       const damagedQty = r.urgentReports.reduce((s, u) => s + u.damagedQty, 0);
@@ -298,14 +308,23 @@ export type SupplierDebtInTransitItem = {
 // todavía no terminan de confirmar, antes no aparecía en ningún lado de
 // esta pantalla. Excluye lo que ya cuenta en otra sección (pagable, en
 // disputa, ya en una tanda) para no duplicar nada.
+//
+// Confirmado 2026-09-21, mismo bug que getSupplierDebtDisputedItems: un
+// pedido con SOLO reportes ya resueltos/rechazados exigía "none: {}" (cero
+// reportes en total) para entrar acá, así que quedaba sin aparecer en
+// ninguna sección — ya no estaba en disputa (con el fix de arriba) pero
+// tampoco calificaba como "en camino". Ahora exige que no tenga NINGÚN
+// reporte todavía abierto, sin importar si alguna vez tuvo uno que ya se
+// cerró.
 export async function getSupplierDebtInTransitItems(supplierId: string): Promise<SupplierDebtInTransitItem[]> {
+  const openUrgentReport = { resolvedInternallyAt: null, rejectedAt: null } as const;
   const rows = await prisma.purchaseRequest.findMany({
     where: {
       supplierId,
       OR: [
         { status: "PENDING_APPROVAL" },
-        { status: "APPROVED", urgentReports: { none: {} } },
-        { status: "RECEIVED_PENDING_REVIEW", urgentReports: { none: {} } },
+        { status: "APPROVED", urgentReports: { none: openUrgentReport } },
+        { status: "RECEIVED_PENDING_REVIEW", urgentReports: { none: openUrgentReport } },
         { status: "RECEIVED", buyerDebtConfirmedAt: null, buyerDebtRejectedAt: null, debtPaymentId: null },
         { status: "RECEIVED", buyerDebtRejectedAt: { not: null } },
       ],
