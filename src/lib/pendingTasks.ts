@@ -408,6 +408,7 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   pagos_administrativos: "Pagos administrativos pendientes de pago",
   pagos_mercaderia: "Pagos de mercadería pendientes",
   pagos_flete: "Fletes pendientes de pago",
+  ventas_externas_revisar: "Ventas Externas — venta nueva por aprobar",
   ventas_externas_pago_confirmar: "Ventas Externas — comprobante de pago por confirmar",
   horas_extra_aprobacion: "Horas extra por aprobar",
   comisiones_bonos_aprobacion: "Comisiones y bonos por aprobar",
@@ -2272,6 +2273,33 @@ async function getDeteriorResolutionPendingItem(href: string): Promise<PendingIt
   };
 }
 
+// Bug real reportado 2026-09-21 (Bryan Rios): cuando un asesor (ej. Marcos)
+// declara una venta externa nueva, notifyMarketingLeadNewExternalSale le
+// manda a Bryan un push/campanita puntual, pero nunca quedaba un acceso en
+// la tarjeta "Pendientes de esta semana" de Inicio — a diferencia de
+// getExternalSaleDispatchPendingItem (su contraparte para Daniel), esta
+// bandeja de revisión no tenía generador. Si Bryan pierde ese aviso puntual
+// (o tiene el push apagado), la venta nunca vuelve a aparecerle en ningún
+// lado. Mismo criterio de "overdue" (24h) que el resto de este archivo.
+async function getExternalSaleReviewPendingItem(href: string): Promise<PendingItem | null> {
+  const rows = await prisma.externalSale.findMany({
+    where: { reviewStatus: "PENDING", deletedAt: null },
+    select: { code: true, createdAt: true },
+  });
+  if (rows.length === 0) return null;
+
+  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const overdue = rows.some((r) => r.createdAt < cutoff);
+  return {
+    type: "ventas_externas_revisar",
+    icon: "🛍️",
+    label: "Ventas Externas — venta nueva por aprobar",
+    meta: `${rows.length === 1 ? rows[0].code : `${rows.length} ventas`}${overdue ? " · atrasado" : ""}`,
+    overdue,
+    href,
+  };
+}
+
 // Confirmado 2026-09-09: pedido explícito de Daniel — misma condición exacta
 // que /api/external-sales/pending-dispatch (ventas aprobadas por Bryan, y en
 // pago anticipado ya facturadas por Nairoby, esperando que Daniel asigne a
@@ -3072,6 +3100,8 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
   if (me.leadsDept.code === "MKT") {
     const marketProductReviewItem = await getMarketProductReviewPendingItem("/area/workspace?tab=analisis-mercado");
     if (marketProductReviewItem) items.push(marketProductReviewItem);
+    const externalSaleReviewItem = await getExternalSaleReviewPendingItem("/area/workspace?tab=ventas-externas&etab=revision");
+    if (externalSaleReviewItem) items.push(externalSaleReviewItem);
   }
 
   const recognitionItem = await getRecognitionLeaderPendingItem(me.leadsDeptId, "/area/colaborador-destacado");
@@ -3191,7 +3221,7 @@ export async function getPossiblePendingTypesForActor(
     }
     if (me.canManagePurchases) types.push("deterioro_compras_gestion");
     if (me.canApprovePurchaseRequests) types.push("compras_pendientes_aprobacion");
-    if (me.leadsDept.code === "MKT") types.push("analisis_mercado_aprobacion");
+    if (me.leadsDept.code === "MKT") types.push("analisis_mercado_aprobacion", "ventas_externas_revisar");
   }
 
   return types.map((type) => ({ type, label: PENDING_TYPE_CATALOG[type] }));
