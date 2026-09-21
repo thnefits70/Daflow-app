@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Truck } from "lucide-react";
 import { CatalogCode } from "@/components/shared/CatalogCode";
+import { formatDateTime } from "@/lib/formatDateTime";
 
 type TeamMember = { id: string; name: string };
 type SaleItemDTO = {
@@ -15,6 +16,7 @@ type SaleItemDTO = {
 type SaleDTO = {
   id: string;
   code: string;
+  createdAt: string;
   items: SaleItemDTO[];
   pickupPersonName: string;
   advisor: { name: string } | null;
@@ -69,6 +71,7 @@ export function ExternalSaleDispatchInbox() {
           <div className="flex items-center gap-2 mb-1.5">
             <span className="font-mono text-[11px] font-bold text-teal">{s.code}</span>
             <span className="text-[11px] text-steel">{s.advisor?.name ?? "—"}</span>
+            <span className="text-[10.5px] text-steel/70 ml-auto">{formatDateTime(s.createdAt)}</span>
           </div>
           <div className="flex flex-col gap-1.5">
             {s.items.map((it) => {
