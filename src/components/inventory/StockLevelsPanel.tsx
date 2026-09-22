@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Search, ArrowUpDown, Info, X, Wrench, Check, Trash2 } from "lucide-react";
+import { Search, ArrowUpDown, Info, X, Wrench, Check, Trash2, RefreshCw } from "lucide-react";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 import { TabGuide } from "@/components/shared/TabGuide";
 import { formatDateTime } from "@/lib/formatDateTime";
@@ -10,6 +10,7 @@ type FreightRecomputeRow = { catalogItemId: string; name: string; entriesChanged
 type PersonalPurchaseBackfillRow = { catalogItemId: string; name: string; missingCount: number; missingUnits: number; oldBalance: number; newBalance: number };
 type JustCostDeclarationRow = { catalogItemId: string; name: string; justCode: string | null; suggestedCost: number };
 type UnregisteredSkeletonRow = { catalogItemId: string; name: string; justCode: string | null };
+type CutoverSyncRow = { catalogItemId: string; name: string; justCode: string | null; oldBalance: number; newBalance: number; oldAvgCost: number; newAvgCost: number };
 
 // Confirmado 2026-09-16, pedido explícito del usuario: los combos de Dropi
 // (DropiCombo) no son productos reales — no tienen ni deben tener su propio
@@ -405,6 +406,21 @@ export function StockLevelsPanel({ isAdmin = false }: { isAdmin?: boolean }) {
   const [sinPrecioFilter, setSinPrecioFilter] = useState(false);
   const [sinStockFilter, setSinStockFilter] = useState(false);
 
+  // Confirmado 2026-09-22, pedido explícito del usuario (admin): corte único
+  // — "de ahora en adelante ya solo trabajaremos con INVESTOCK". Pone el
+  // stock y costo del último archivo de Just como nuevo punto de partida,
+  // incluso en productos con historial real (a diferencia de "Cargar saldo
+  // inicial" en Control de Inventario, que solo toca productos sin ningún
+  // movimiento) — decisión explícita del usuario después de ver que 230 de
+  // 400 productos con movimiento real no coincidían con Just.
+  const [cutoverOpen, setCutoverOpen] = useState(false);
+  const [cutoverLoading, setCutoverLoading] = useState(false);
+  const [cutoverPreview, setCutoverPreview] = useState<CutoverSyncRow[] | null>(null);
+  const [cutoverConfirming, setCutoverConfirming] = useState(false);
+  const [cutoverApplying, setCutoverApplying] = useState(false);
+  const [cutoverResult, setCutoverResult] = useState<{ syncedCount: number } | null>(null);
+  const [cutoverError, setCutoverError] = useState("");
+
   // Confirmado 2026-09-16, pedido explícito del usuario: corrección única del
   // historial de Kardex para que "Costo Prom." incluya el flete real de
   // compras viejas, no solo de las nuevas (ver applyKardexFreightRecompute
@@ -509,6 +525,33 @@ export function StockLevelsPanel({ isAdmin = false }: { isAdmin?: boolean }) {
       .then(setCombos)
       .catch(() => setCombos([]));
   }, []);
+
+  function loadCutoverPreview() {
+    setCutoverLoading(true);
+    setCutoverError("");
+    setCutoverResult(null);
+    fetch("/api/inventory-control/just-cutover-sync")
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then(setCutoverPreview)
+      .catch(() => setCutoverError("No se pudo cargar la vista previa."))
+      .finally(() => setCutoverLoading(false));
+  }
+
+  async function applyCutover() {
+    setCutoverApplying(true);
+    setCutoverError("");
+    const res = await fetch("/api/inventory-control/just-cutover-sync", { method: "POST" });
+    setCutoverApplying(false);
+    setCutoverConfirming(false);
+    if (!res.ok) {
+      setCutoverError("No se pudo sincronizar.");
+      return;
+    }
+    const data = await res.json();
+    setCutoverResult(data);
+    setCutoverPreview(null);
+    loadRows();
+  }
 
   function loadFreightPreview() {
     setFreightLoading(true);
@@ -792,6 +835,82 @@ export function StockLevelsPanel({ isAdmin = false }: { isAdmin?: boolean }) {
       <TabGuide storageKey="stock-actual">
         Acá ves el saldo de INVESTOCK (el Kardex propio de DAFLOW) de cada producto del catálogo, calculado en tiempo real a partir de lo recibido en Compras y lo despachado en Egresos — sin depender de que alguien suba un archivo. Un saldo en rojo significa stock negativo (algo salió sin haber entrado, o hay un error de conteo por revisar).
       </TabGuide>
+
+      {isAdmin && (
+        <div className="border border-gold/40 rounded-md mb-3">
+          <button
+            type="button"
+            className="w-full flex items-center gap-2 px-3 py-2 text-[12px] font-semibold text-gold hover:text-gold cursor-pointer"
+            onClick={() => {
+              setCutoverOpen((v) => !v);
+              if (!cutoverOpen && cutoverPreview === null && !cutoverResult) loadCutoverPreview();
+            }}
+          >
+            <RefreshCw size={13} /> Sincronizar INVESTOCK con el último archivo de Just (corte único)
+          </button>
+          {cutoverOpen && (
+            <div className="px-3 pb-3 text-[12px]">
+              <p className="text-steel mb-2">
+                Pone el stock y costo del último archivo que subió Daniel como el nuevo punto de partida de cada producto — incluso en los que ya tienen compras/salidas reales registradas. <span className="text-gold font-semibold">De ahora en adelante, INVESTOCK deja de compararse con Just</span>: todo lo que pase después de esto son movimientos reales (compras/egresos), no más archivos de Just. Seguro de correr más de una vez — solo lista productos donde el número realmente cambiaría.
+              </p>
+              {cutoverError && <div className="text-red mb-2">{cutoverError}</div>}
+              {cutoverLoading && <div className="text-steel">Calculando vista previa…</div>}
+              {cutoverResult && (
+                <div className="text-teal font-semibold mb-2">
+                  ✓ Sincronizados: {cutoverResult.syncedCount} producto{cutoverResult.syncedCount === 1 ? "" : "s"}.
+                </div>
+              )}
+              {!cutoverLoading && cutoverPreview && (
+                <>
+                  {cutoverPreview.length === 0 ? (
+                    <div className="text-steel">Nada por sincronizar — INVESTOCK ya coincide con el último archivo de Just en todo.</div>
+                  ) : (
+                    <>
+                      <div className="text-steel mb-1.5">{cutoverPreview.length} producto(s) cambiarían:</div>
+                      <div className="max-h-64 overflow-y-auto flex flex-col gap-1 mb-2.5 border border-rule rounded-md p-1.5">
+                        {cutoverPreview.map((r) => (
+                          <div key={r.catalogItemId} className="flex items-center justify-between gap-2 text-[11.5px] px-1.5 py-1">
+                            <span className="truncate flex-1 flex items-center gap-1.5">
+                              <CatalogCode code={r.justCode} size="text-[10px]" /> {r.name}
+                            </span>
+                            <span className="font-mono text-steel shrink-0">
+                              stock {r.oldBalance}→<span className="font-bold text-ink">{r.newBalance}</span> · costo {money(r.oldAvgCost)}→<span className="font-bold text-ink">{money(r.newAvgCost)}</span>
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                      {cutoverConfirming ? (
+                        <div className="flex items-center gap-2">
+                          <span className="text-steel">¿Sincronizar estos {cutoverPreview.length} productos con Just ahora?</span>
+                          <button
+                            type="button"
+                            disabled={cutoverApplying}
+                            className="font-bold text-red cursor-pointer disabled:opacity-50"
+                            onClick={applyCutover}
+                          >
+                            {cutoverApplying ? "Sincronizando…" : "Sí, sincronizar"}
+                          </button>
+                          <button type="button" className="text-steel cursor-pointer" onClick={() => setCutoverConfirming(false)}>
+                            Cancelar
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          className="rounded border border-gold bg-gold px-3 py-1.5 text-[12px] font-bold text-navy cursor-pointer"
+                          onClick={() => setCutoverConfirming(true)}
+                        >
+                          Sincronizar todos
+                        </button>
+                      )}
+                    </>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {isAdmin && (
         <div className="border border-rule rounded-md mb-3">

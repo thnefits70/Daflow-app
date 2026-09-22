@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { getInventoryLeadId } from "@/lib/guards";
 import { effectiveUnitCost } from "@/lib/purchases";
-import type { MarketProductBodega } from "@/generated/prisma/client";
+import type { MarketProductBodega, StockMovementType } from "@/generated/prisma/client";
 
 // Fase 3 (INVESTOCK) — confirmado 2026-09-09: el número de stock propio de
 // DAFLOW, construido como un Kardex real. Cada movimiento (entrada o
@@ -438,6 +438,15 @@ type SnapshotRow = { productCode: string; avgCost: number; stock: number };
 // real), para nunca pisar un número que ya está corriendo de verdad. Es
 // seguro llamarlo tantas veces como se suba el archivo — cada producto
 // solo se siembra una vez, para siempre.
+// Corregido 2026-09-21, bug real encontrado por el usuario: "ya tuvo
+// movimiento" contaba CUALQUIER línea de Kardex, incluida la línea "SEED"
+// fantasma (quantity: 0, costo: 0) que la migración inicial de INVESTOCK
+// le puso a TODOS los productos el 2026-09-10 — eso bloqueaba este botón
+// en silencio para cualquier producto que de verdad nunca se movió (5
+// casos reales encontrados: Fundas 25x35/30x42/40x52, Tetera de Cristal,
+// Kit Pulidor de Uñas). Ahora solo cuenta como "movido" una línea con
+// quantity != 0 (una entrada/salida real) — una línea SEED o
+// COST_DECLARATION en $0/0 unidades nunca movió nada de verdad.
 async function findSeedCandidates(rows: SnapshotRow[]) {
   const codes = [...new Set(rows.map((r) => r.productCode))];
   const items = await prisma.purchaseCatalogItem.findMany({
@@ -447,7 +456,7 @@ async function findSeedCandidates(rows: SnapshotRow[]) {
   const itemIdByCode = new Map(items.map((i) => [i.justCode as string, i.id]));
   const matchedIds = items.map((i) => i.id);
   const moved = await prisma.stockKardexEntry.findMany({
-    where: { catalogItemId: { in: matchedIds } },
+    where: { catalogItemId: { in: matchedIds }, quantity: { not: 0 } },
     distinct: ["catalogItemId"],
     select: { catalogItemId: true },
   });
@@ -463,6 +472,94 @@ async function findSeedCandidates(rows: SnapshotRow[]) {
     candidates.push({ catalogItemId, avgCost: r.avgCost, stock: r.stock });
   }
   return { candidates, skippedNoMatch, skippedAlreadyMoved };
+}
+
+export type JustCutoverSyncRow = {
+  catalogItemId: string;
+  name: string;
+  justCode: string | null;
+  oldBalance: number;
+  newBalance: number;
+  oldAvgCost: number;
+  newAvgCost: number;
+};
+
+// Confirmado 2026-09-22, pedido explícito del usuario: corte único —
+// "de ahora en adelante ya solo trabajaremos con INVESTOCK". A diferencia
+// de findSeedCandidates (solo productos SIN ningún movimiento), esto
+// recorre TODOS los productos conectados al último archivo de Just, se
+// hayan movido antes o no, y calcula qué cambiaría si su saldo/costo
+// pasara a ser el de ese archivo — el admin decidió confiar en ese número
+// como el nuevo punto de partida, incluso para productos que ya tenían
+// historial real (ver conversación: 230 de 400 productos con movimiento
+// real no coincidían con Just, algunos con diferencias grandes). Solo
+// incluye productos donde algo realmente cambiaría (mismo saldo/costo no
+// genera una línea de Kardex de la nada).
+async function findJustCutoverCandidates(): Promise<JustCutoverSyncRow[]> {
+  const dept = await prisma.department.findUnique({ where: { code: "FIN" }, select: { id: true } });
+  if (!dept) return [];
+  const snapshots = await prisma.inventoryProductSnapshot.findMany({
+    where: { deptId: dept.id },
+    distinct: ["productCode"],
+    orderBy: [{ productCode: "asc" }, { createdAt: "desc" }],
+    select: { productCode: true, avgCost: true, stock: true },
+  });
+  if (snapshots.length === 0) return [];
+
+  const codes = snapshots.map((s) => s.productCode.trim());
+  const items = await prisma.purchaseCatalogItem.findMany({
+    where: { justCode: { in: codes } },
+    select: { id: true, name: true, justCode: true },
+  });
+  const itemByCode = new Map(items.map((i) => [i.justCode as string, i]));
+  const ids = items.map((i) => i.id);
+
+  const latestPerItem = await prisma.stockKardexEntry.findMany({
+    where: { catalogItemId: { in: ids } },
+    distinct: ["catalogItemId"],
+    orderBy: [{ catalogItemId: "asc" }, { occurredAt: "desc" }, { createdAt: "desc" }],
+    select: { catalogItemId: true, balanceAfter: true, avgCostAfter: true },
+  });
+  const latestByItem = new Map(latestPerItem.map((e) => [e.catalogItemId, e]));
+
+  const results: JustCutoverSyncRow[] = [];
+  for (const s of snapshots) {
+    const item = itemByCode.get(s.productCode.trim());
+    if (!item) continue;
+    const latest = latestByItem.get(item.id);
+    const oldBalance = latest?.balanceAfter ?? 0;
+    const oldAvgCost = latest?.avgCostAfter ?? 0;
+    if (oldBalance === s.stock && oldAvgCost === s.avgCost) continue;
+    results.push({ catalogItemId: item.id, name: item.name, justCode: item.justCode, oldBalance, oldAvgCost, newBalance: s.stock, newAvgCost: s.avgCost });
+  }
+  return results.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+export async function previewJustCutoverSync(): Promise<JustCutoverSyncRow[]> {
+  return findJustCutoverCandidates();
+}
+
+// quantity = la diferencia contra el saldo anterior (no el saldo nuevo
+// directo, como sí hace SEED) — para que en un producto con historial
+// real, la suma de todos los movimientos del Kardex se mantenga
+// consistente con balanceAfter, y quede claro en cualquier auditoría
+// futura cuántas unidades "aparecieron o desaparecieron" en este corte.
+export async function applyJustCutoverSync(): Promise<{ syncedCount: number }> {
+  const candidates = await findJustCutoverCandidates();
+  if (candidates.length === 0) return { syncedCount: 0 };
+  const now = new Date();
+  await prisma.stockKardexEntry.createMany({
+    data: candidates.map((c) => ({
+      catalogItemId: c.catalogItemId,
+      type: "JUST_CUTOVER_SYNC" as const,
+      quantity: c.newBalance - c.oldBalance,
+      unitCost: c.newAvgCost,
+      balanceAfter: c.newBalance,
+      avgCostAfter: c.newAvgCost,
+      occurredAt: now,
+    })),
+  });
+  return { syncedCount: candidates.length };
 }
 
 // Solo cuenta, no escribe — para que la pantalla sepa si mostrar el botón
@@ -800,7 +897,7 @@ async function findMissingPersonalPurchaseKardexEntries(): Promise<PersonalPurch
 }
 
 type BackfillLine =
-  | { kind: "existing"; id: string; type: "IN" | "OUT" | "SEED" | "COST_DECLARATION"; quantity: number; unitCost: number | null; occurredAt: Date; createdAt: Date }
+  | { kind: "existing"; id: string; type: StockMovementType; quantity: number; unitCost: number | null; occurredAt: Date; createdAt: Date }
   | { kind: "new"; merchandiseOutflowItemId: string; quantity: number; occurredAt: Date };
 
 async function replayCatalogItemWithBackfill(catalogItemId: string, missing: PersonalPurchaseBackfillCandidate[]) {

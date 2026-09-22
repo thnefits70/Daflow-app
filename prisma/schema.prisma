@@ -994,6 +994,16 @@ enum StockMovementType {
   // nadie confunda esto con una compra real en una auditoría — se
   // reemplaza solo el día que entre una compra de verdad de ese producto.
   COST_DECLARATION
+  // Confirmado 2026-09-22, pedido explícito del usuario: corte único —
+  // "de ahora en adelante ya solo trabajaremos con INVESTOCK". A
+  // diferencia de SEED (solo productos SIN ningún movimiento todavía),
+  // esto sí puede tocar productos con historial real, poniendo el stock y
+  // costo promedio del último archivo de Just como el nuevo punto de
+  // partida (quantity = la diferencia contra el saldo que tenía antes, no
+  // 0, para que la suma de movimientos del Kardex se mantenga consistente
+  // con balanceAfter). Después de este corte, Just deja de consultarse —
+  // todo lo que pase de aquí en adelante son compras/salidas reales.
+  JUST_CUTOVER_SYNC
 }
 
 model StockKardexEntry {
