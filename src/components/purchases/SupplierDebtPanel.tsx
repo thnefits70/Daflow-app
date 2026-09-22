@@ -15,6 +15,8 @@ type PendingItem = {
   productName: string;
   quantity: number;
   totalCost: number;
+  grossCost: number;
+  creditDeduction: number;
   requestedAt: string;
   approvedByName: string | null;
   approvedAt: string | null;
@@ -44,6 +46,7 @@ type DisputedItem = {
   incompleteQty: number;
   differentQty: number;
   requestedAt: string;
+  paymentOnHold: boolean;
 };
 type Transfer = {
   id: string;
@@ -66,7 +69,7 @@ type Payment = {
   aiReviewSummary: string | null;
   aiReviewOk: boolean | null;
   aiReviewAt: string | null;
-  requests: { id: string; quantity: number; totalCost: number; catalogItem: { name: string } }[];
+  requests: { id: string; quantity: number; totalCost: number; creditDeduction: number; catalogItem: { name: string } }[];
   excessReports: { id: string; excessQty: number; amount: number; request: { requestNumber: number | null; catalogItem: { name: string } } }[];
   transfers: Transfer[];
 };
@@ -535,6 +538,14 @@ export function SupplierDebtPanel() {
                       </span>
                       <span className="font-semibold tabular-nums">{money(i.totalCost)}</span>
                     </div>
+                    {/* Confirmado 2026-09-22, pedido explícito del usuario: si CHEN
+                        aceptó descontar lo dañado en vez de reponerlo, se le paga solo
+                        lo bueno — se muestra de dónde sale el monto. */}
+                    {i.creditDeduction > 0 && (
+                      <div className="ml-6 text-[11.5px] text-gold">
+                        Valor del pedido {money(i.grossCost)} − descuento por mercadería dañada {money(i.creditDeduction)}
+                      </div>
+                    )}
                     {/* Confirmado 2026-09-18, pedido explícito del usuario: quiere ver
                         quién firmó cada visto bueno, con fecha y hora exacta, antes de
                         armar la tanda de pago — sobre todo el de Daniel (llegó a bodega)
@@ -594,7 +605,7 @@ export function SupplierDebtPanel() {
           {summary.disputedItems.length > 0 && (
             <div className="mb-6">
               <h3 className="mb-2 text-[13px] font-semibold text-ink flex items-center gap-1.5">
-                <AlertTriangle size={13} className="text-gold" /> En disputa — visible, no cuenta en el saldo
+                <AlertTriangle size={13} className="text-gold" /> En disputa — no se puede pagar hasta resolverse
               </h3>
               <div className="flex flex-col gap-1.5">
                 {summary.disputedItems.map((i) => (
@@ -607,6 +618,10 @@ export function SupplierDebtPanel() {
                       {[i.damagedQty > 0 ? `${i.damagedQty} dañadas` : null, i.incompleteQty > 0 ? `${i.incompleteQty} incompletas` : null, i.differentQty > 0 ? `${i.differentQty} distintas` : null]
                         .filter(Boolean)
                         .join(", ")}
+                      {/* Confirmado 2026-09-22: la parte buena ya entró a bodega,
+                          pero se retiene el pago del pedido entero hasta que el
+                          proveedor reponga (o acepte descontar) lo que llegó mal. */}
+                      {i.paymentOnHold && " — la parte buena ya llegó; pago retenido hasta que el proveedor reponga lo que llegó mal"}
                     </div>
                   </div>
                 ))}
@@ -630,7 +645,10 @@ export function SupplierDebtPanel() {
                     <ul className="text-[12.5px] text-steel mb-2.5">
                       {p.requests.map((r) => (
                         <li key={r.id} className="flex justify-between">
-                          <span>{r.catalogItem.name} × {r.quantity}</span>
+                          <span>
+                            {r.catalogItem.name} × {r.quantity}
+                            {r.creditDeduction > 0 && <span className="text-gold"> (con descuento de {money(r.creditDeduction)})</span>}
+                          </span>
                           <span className="tabular-nums">{money(r.totalCost)}</span>
                         </li>
                       ))}

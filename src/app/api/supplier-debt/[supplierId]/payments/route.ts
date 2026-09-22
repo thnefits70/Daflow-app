@@ -3,7 +3,13 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { canManageSupplierDebtPayments } from "@/lib/guards";
-import { nextSupplierDebtPaymentNumber, formatSupplierDebtPaymentCode } from "@/lib/supplierDebt";
+import {
+  nextSupplierDebtPaymentNumber,
+  formatSupplierDebtPaymentCode,
+  getSupplierDebtPendingItems,
+  getSupplierDebtPendingExcessItems,
+  tandaCreditMarker,
+} from "@/lib/supplierDebt";
 
 const schema = z
   .object({ requestIds: z.array(z.string()).default([]), excessReportIds: z.array(z.string()).default([]) })
@@ -27,56 +33,85 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ sup
   if (!supplier) return NextResponse.json({ error: "No encontrado." }, { status: 404 });
   if (supplier.paymentMode !== "CREDITO") return NextResponse.json({ error: "Este proveedor no es de crédito." }, { status: 409 });
 
-  const requests = parsed.data.requestIds.length
-    ? await prisma.purchaseRequest.findMany({
-        where: { id: { in: parsed.data.requestIds }, supplierId, status: "RECEIVED", debtPaymentId: null },
-      })
-    : [];
-  if (requests.length !== parsed.data.requestIds.length) {
-    return NextResponse.json({ error: "Uno o más ítems ya no están disponibles para pagar (revisados o ya incluidos en otra tanda)." }, { status: 409 });
+  // Confirmado 2026-09-22, pedido explícito del usuario (evitar pagar doble
+  // o pagar lo que llegó mal): la tanda solo acepta ítems que HOY son
+  // pagables según exactamente la misma regla que ve el panel —
+  // getSupplierDebtPendingItems (RECEIVED, sin tanda, confirmado por Bryan,
+  // sin ningún reporte abierto de dañado/incompleto/distinto) y
+  // getSupplierDebtPendingExcessItems. El monto de cada pedido ya viene neto
+  // de descuentos aceptados por el proveedor (creditDeduction).
+  const [payableItems, payableExcess] = await Promise.all([
+    getSupplierDebtPendingItems(supplierId),
+    getSupplierDebtPendingExcessItems(supplierId),
+  ]);
+  const payableById = new Map(payableItems.map((i) => [i.id, i]));
+  const excessById = new Map(payableExcess.map((i) => [i.id, i]));
+  const requests = parsed.data.requestIds.map((id) => payableById.get(id));
+  if (requests.some((r) => !r)) {
+    return NextResponse.json(
+      { error: "Uno o más ítems ya no se pueden pagar (tienen un reporte abierto de mercadería dañada/incompleta, o ya están en otra tanda)." },
+      { status: 409 }
+    );
   }
-
-  // Confirmado 2026-09-21: excedente (llegó más de lo pedido) confirmado por
-  // Bryan — se paga aparte, anclado a su propio requestId, nunca una
-  // solicitud nueva. excessDebtPaymentId null evita pagarlo dos veces.
-  const excessReports = parsed.data.excessReportIds.length
-    ? await prisma.purchaseRequestUrgentReport.findMany({
-        where: {
-          id: { in: parsed.data.excessReportIds },
-          excessQty: { gt: 0 },
-          excessConfirmedAt: { not: null },
-          excessDebtPaymentId: null,
-          request: { supplierId },
-        },
-        select: { id: true, excessQty: true, request: { select: { unitCost: true } } },
-      })
-    : [];
-  if (excessReports.length !== parsed.data.excessReportIds.length) {
+  const excessReports = parsed.data.excessReportIds.map((id) => excessById.get(id));
+  if (excessReports.some((r) => !r)) {
     return NextResponse.json({ error: "Uno o más excedentes ya no están disponibles para pagar (ya incluidos en otra tanda)." }, { status: 409 });
   }
+  const okRequests = requests.filter((r): r is NonNullable<typeof r> => !!r);
+  const okExcess = excessReports.filter((r): r is NonNullable<typeof r> => !!r);
+  const creditIds = okRequests.flatMap((r) => r.creditIds);
 
   const totalAmount =
-    requests.reduce((s, r) => s + r.totalCost, 0) +
-    excessReports.reduce((s, r) => s + Math.round(r.request.unitCost * r.excessQty * 100) / 100, 0);
+    Math.round((okRequests.reduce((s, r) => s + r.totalCost, 0) + okExcess.reduce((s, r) => s + r.amount, 0)) * 100) / 100;
   const isAdmin = session.user.role === "admin";
 
   const number = await nextSupplierDebtPaymentNumber();
-  const created = await prisma.supplierDebtPayment.create({
-    data: {
-      code: formatSupplierDebtPaymentCode(number),
-      supplierId,
-      totalAmount,
-      createdById: isAdmin ? null : session.user.id,
-    },
-  });
-  await Promise.all([
-    parsed.data.requestIds.length
-      ? prisma.purchaseRequest.updateMany({ where: { id: { in: parsed.data.requestIds } }, data: { debtPaymentId: created.id } })
-      : null,
-    parsed.data.excessReportIds.length
-      ? prisma.purchaseRequestUrgentReport.updateMany({ where: { id: { in: parsed.data.excessReportIds } }, data: { excessDebtPaymentId: created.id } })
-      : null,
-  ]);
+  // Todo o nada: cada ítem se "reclama" solo si sigue libre en este mismo
+  // instante (debtPaymentId null) — si otra persona armó una tanda con el
+  // mismo ítem un segundo antes, el conteo no cuadra y se deshace todo, así
+  // un pedido nunca queda en dos tandas.
+  let created;
+  try {
+    created = await prisma.$transaction(async (tx) => {
+      const payment = await tx.supplierDebtPayment.create({
+        data: {
+          code: formatSupplierDebtPaymentCode(number),
+          supplierId,
+          totalAmount,
+          createdById: isAdmin ? null : session.user.id,
+        },
+      });
+      if (parsed.data.requestIds.length) {
+        const claimed = await tx.purchaseRequest.updateMany({
+          where: { id: { in: parsed.data.requestIds }, supplierId, status: "RECEIVED", debtPaymentId: null },
+          data: { debtPaymentId: payment.id },
+        });
+        if (claimed.count !== parsed.data.requestIds.length) throw new Error("CONFLICT");
+      }
+      if (parsed.data.excessReportIds.length) {
+        const claimed = await tx.purchaseRequestUrgentReport.updateMany({
+          where: { id: { in: parsed.data.excessReportIds }, excessDebtPaymentId: null },
+          data: { excessDebtPaymentId: payment.id },
+        });
+        if (claimed.count !== parsed.data.excessReportIds.length) throw new Error("CONFLICT");
+      }
+      // El descuento que el proveedor aceptó queda usado en ESTA tanda —
+      // nunca se vuelve a descontar en otra compra (ver tandaCreditMarker).
+      if (creditIds.length) {
+        const applied = await tx.supplierCredit.updateMany({
+          where: { id: { in: creditIds }, status: "AVAILABLE" },
+          data: { status: "APPLIED", appliedToGroupId: tandaCreditMarker(payment.id), appliedAt: new Date() },
+        });
+        if (applied.count !== creditIds.length) throw new Error("CONFLICT");
+      }
+      return payment;
+    });
+  } catch (e) {
+    if (e instanceof Error && e.message === "CONFLICT") {
+      return NextResponse.json({ error: "Alguien más acaba de incluir uno de estos ítems en otra tanda. Recarga la página y vuelve a intentar." }, { status: 409 });
+    }
+    throw e;
+  }
 
   return NextResponse.json(created);
 }

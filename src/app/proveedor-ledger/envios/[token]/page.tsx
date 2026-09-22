@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
-import { findSupplierByPublicShippingToken } from "@/lib/supplierDebt";
+import { findSupplierByPublicShippingToken, SUPPLIER_PUBLIC_LINK_START } from "@/lib/supplierDebt";
 import { SupplierPendingShipmentsList } from "@/components/supplier-ledger/SupplierPendingShipmentsList";
 import { SupplierShipmentHistoryTable } from "@/components/supplier-ledger/SupplierShipmentHistoryTable";
 import { firstName } from "@/lib/actorName";
@@ -42,6 +42,10 @@ export default async function SupplierShippingLedgerPage({ params }: { params: P
     reviewedBy: { select: { name: true } },
   } as const;
 
+  // Confirmado 2026-09-22, pedido explícito del usuario: igual que el enlace
+  // principal, el equipo de CHEN solo ve solicitudes hechas desde el
+  // 21-sep-2026 (SUPPLIER_PUBLIC_LINK_START).
+  const since = SUPPLIER_PUBLIC_LINK_START;
   const [pendingShipments, confirmedShipments] = await Promise.all([
     // Corregido 2026-09-17: antes exigía status "APPROVED" — así que si
     // Daniel recibía la mercadería ANTES de que el equipo de CHEN entrara a
@@ -55,6 +59,7 @@ export default async function SupplierShippingLedgerPage({ params }: { params: P
         supplierId: supplier.id,
         status: { notIn: ["PENDING_APPROVAL", "REJECTED"] },
         supplierShippingConfirmedAt: null,
+        requestedAt: { gte: since },
       },
       include,
       orderBy: { requestedAt: "asc" },
@@ -69,7 +74,7 @@ export default async function SupplierShippingLedgerPage({ params }: { params: P
     // mercadería (proceso nuestro, no de ellos) el pedido desaparecía de
     // acá aunque Chen sí lo hubiera confirmado.
     prisma.purchaseRequest.findMany({
-      where: { supplierId: supplier.id, supplierShippingConfirmedAt: { not: null } },
+      where: { supplierId: supplier.id, supplierShippingConfirmedAt: { not: null }, requestedAt: { gte: since } },
       include,
       orderBy: { supplierShippingConfirmedAt: "desc" },
     }),

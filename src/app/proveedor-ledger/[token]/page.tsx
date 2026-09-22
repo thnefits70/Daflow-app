@@ -1,7 +1,15 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
-import { getSupplierDebtDisputedItems, getSupplierDebtPendingItems, getSupplierDebtPendingExcessItems, findSupplierByPublicLedgerToken } from "@/lib/supplierDebt";
+import {
+  getSupplierDebtDisputedItems,
+  getSupplierDebtPendingItems,
+  getSupplierDebtPendingExcessItems,
+  findSupplierByPublicLedgerToken,
+  SUPPLIER_PUBLIC_LINK_START,
+  supplierDebtReportsInclude,
+  appliedTandaCreditDeduction,
+} from "@/lib/supplierDebt";
 import { formatPurchaseRequestCode } from "@/lib/purchases";
 import { SupplierPendingShipmentsList, ProductThumb } from "@/components/supplier-ledger/SupplierPendingShipmentsList";
 import { SupplierShipmentHistoryTable } from "@/components/supplier-ledger/SupplierShipmentHistoryTable";
@@ -65,7 +73,12 @@ export default async function SupplierLedgerPage({ params }: { params: Promise<{
     reviewedBy: { select: { name: true } },
   } as const;
 
-  const [disputedItems, pendingDebtItems, pendingExcessItems, closedPayments, pendingShipments, confirmedShipments] = await Promise.all([
+  // Confirmado 2026-09-22, pedido explícito del usuario: CHEN solo ve
+  // solicitudes hechas desde SUPPLIER_PUBLIC_LINK_START (21-sep-2026) — en
+  // TODAS las secciones, incluidas las tandas pagadas (se oculta cualquier
+  // tanda que incluya algo anterior). El panel interno sigue viendo todo.
+  const since = SUPPLIER_PUBLIC_LINK_START;
+  const [allDisputedItems, allPendingDebtItems, allPendingExcessItems, closedPayments, pendingShipments, confirmedShipments] = await Promise.all([
     getSupplierDebtDisputedItems(supplier.id),
     // Confirmado 2026-09-17, pedido explícito del usuario: mostrarle a CHEN
     // lo que Inventario ya recibió y confirmó (cargado al Kardex de
@@ -79,10 +92,16 @@ export default async function SupplierLedgerPage({ params }: { params: Promise<{
     // nunca como una compra aparte.
     getSupplierDebtPendingExcessItems(supplier.id),
     prisma.supplierDebtPayment.findMany({
-      where: { supplierId: supplier.id, closedAt: { not: null } },
+      where: {
+        supplierId: supplier.id,
+        closedAt: { not: null },
+        requests: { none: { requestedAt: { lt: since } } },
+        excessReports: { none: { request: { requestedAt: { lt: since } } } },
+      },
       include: {
         requests: {
           include: {
+            ...supplierDebtReportsInclude,
             catalogItem: { select: { name: true } },
             reviewedBy: { select: { name: true } },
             receipt: { select: { approvedBy: { select: { name: true } } } },
@@ -111,6 +130,7 @@ export default async function SupplierLedgerPage({ params }: { params: Promise<{
         supplierId: supplier.id,
         status: { notIn: ["PENDING_APPROVAL", "REJECTED"] },
         supplierShippingConfirmedAt: null,
+        requestedAt: { gte: since },
       },
       include: shipmentInclude,
       orderBy: { requestedAt: "asc" },
@@ -128,11 +148,15 @@ export default async function SupplierLedgerPage({ params }: { params: Promise<{
     // supplierShippingConfirmedAt, sin importar en qué status esté el
     // pedido para nosotros.
     prisma.purchaseRequest.findMany({
-      where: { supplierId: supplier.id, supplierShippingConfirmedAt: { not: null } },
+      where: { supplierId: supplier.id, supplierShippingConfirmedAt: { not: null }, requestedAt: { gte: since } },
       include: shipmentInclude,
       orderBy: { supplierShippingConfirmedAt: "desc" },
     }),
   ]);
+
+  const disputedItems = allDisputedItems.filter((i) => i.requestedAt >= since);
+  const pendingDebtItems = allPendingDebtItems.filter((i) => i.requestedAt >= since);
+  const pendingExcessItems = allPendingExcessItems.filter((i) => i.requestedAt >= since);
 
   const th = "px-3 py-2 whitespace-nowrap";
   const td = "px-3 py-2 whitespace-nowrap";
@@ -227,6 +251,7 @@ export default async function SupplierLedgerPage({ params }: { params: Promise<{
                         <p className="mt-0.5 text-xs text-neutral-500">
                           {i.quantity} uds · {SHORT_DATE_FMT.format(i.receivedAt ?? i.requestedAt)}
                         </p>
+                        {i.creditDeduction > 0 && <p className="text-xs text-amber-700">{discountNote(i)}</p>}
                         <p className="text-xs text-neutral-500">
                           Aprobó {firstName(i.approvedByName) || "—"} · Confirmó {firstName(i.reviewedByName) || "—"}
                         </p>
@@ -275,7 +300,10 @@ export default async function SupplierLedgerPage({ params }: { params: Promise<{
                         <td className="px-3 py-2">
                           <ProductThumb url={i.productImageUrl} alt={i.productName} size="sm" />
                         </td>
-                        <td className="px-3 py-2">{i.productName}</td>
+                        <td className="px-3 py-2">
+                          {i.productName}
+                          {i.creditDeduction > 0 && <span className="block text-xs text-amber-700">{discountNote(i)}</span>}
+                        </td>
                         <td className={`${td} text-right tabular-nums`}>{i.quantity}</td>
                         <td className={`${td} text-right tabular-nums`}>{money(i.totalCost)}</td>
                         <td className={`${td} text-neutral-600`}>{firstName(i.approvedByName) || "—"}</td>
@@ -311,8 +339,16 @@ export default async function SupplierLedgerPage({ params }: { params: Promise<{
         {disputedItems.length > 0 && (
           <section id="revision" className="mb-8 scroll-mt-4">
             <SectionTitle count={disputedItems.length}>
-              Mercadería en revisión (incompleta, dañada o distinta) — no se incluye en ningún pago hasta resolverse
+              Mercadería en revisión (incompleta, dañada o distinta)
             </SectionTitle>
+            {/* Confirmado 2026-09-22, pedido explícito del usuario: solo se paga
+                lo que llegó completo y en buen estado — un pedido con algo mal se
+                retiene ENTERO hasta que CHEN lo reponga (o acepte descontarlo). */}
+            <p className="mb-3 text-xs text-neutral-500">
+              Estos pedidos llegaron incompletos, dañados o distintos a lo pedido. Solo pagamos la mercadería que llega completa y en buen
+              estado: el pago de cada uno de estos pedidos queda pendiente hasta que CHEN envíe el reemplazo de lo que llegó mal y la
+              bodega TBS lo confirme.
+            </p>
             {/* Celular */}
             <ul className="divide-y divide-amber-100 overflow-hidden rounded-xl border border-amber-200 bg-amber-50 shadow-sm md:hidden">
               {disputedItems.map((i) => (
@@ -324,6 +360,7 @@ export default async function SupplierLedgerPage({ params }: { params: Promise<{
                   <p className="mt-0.5 text-xs text-amber-800">
                     {i.quantity} uds · {disputeDetail(i)}
                   </p>
+                  <p className="text-xs font-medium text-amber-900">{holdNote(i)}</p>
                   <p className="text-xs text-amber-700">
                     {SHORT_DATE_FMT.format(i.requestedAt)} · Aprobó {firstName(i.approvedByName) || "—"} · Revisó {firstName(i.reviewedByName) || "—"}
                   </p>
@@ -350,7 +387,10 @@ export default async function SupplierLedgerPage({ params }: { params: Promise<{
                       <td className={`${td} text-amber-800`}>{DATE_FMT.format(i.requestedAt)}</td>
                       <td className="px-3 py-2 text-amber-900">{i.productName}</td>
                       <td className={`${td} text-right tabular-nums text-amber-800`}>{i.quantity}</td>
-                      <td className="px-3 py-2 text-amber-800">{disputeDetail(i)}</td>
+                      <td className="px-3 py-2 text-amber-800">
+                        {disputeDetail(i)}
+                        <span className="block text-xs font-medium text-amber-900">{holdNote(i)}</span>
+                      </td>
                       <td className={`${td} text-right tabular-nums text-amber-800`}>{money(i.wouldBeValue)}</td>
                       <td className={`${td} text-amber-800`}>{firstName(i.approvedByName) || "—"}</td>
                       <td className={`${td} text-amber-800`}>{firstName(i.reviewedByName) || "—"}</td>
@@ -368,7 +408,15 @@ export default async function SupplierLedgerPage({ params }: { params: Promise<{
             <EmptyBox>Todavía no hay tandas pagadas.</EmptyBox>
           ) : (
             <div className="space-y-4 sm:space-y-6">
-              {closedPayments.map((p) => (
+              {closedPayments
+                .map((tanda) => ({
+                  ...tanda,
+                  requests: tanda.requests.map((r) => {
+                    const creditDeduction = appliedTandaCreditDeduction(r.urgentReports, tanda.id);
+                    return { ...r, creditDeduction, totalCost: Math.round((r.totalCost - creditDeduction) * 100) / 100 };
+                  }),
+                }))
+                .map((p) => (
                 <div key={p.id} className="rounded-xl border border-neutral-200 bg-white p-3 shadow-sm sm:p-5">
                   <div className="mb-3 flex items-baseline justify-between gap-2">
                     <span className="text-sm font-semibold text-neutral-800">{p.code}</span>
@@ -385,6 +433,7 @@ export default async function SupplierLedgerPage({ params }: { params: Promise<{
                         <p className="text-xs text-neutral-500">
                           {r.quantity} uds · Aprobó {firstName(r.reviewedBy?.name) || "—"} · Revisó {firstName(r.receipt?.approvedBy?.name) || "—"}
                         </p>
+                        {r.creditDeduction > 0 && <p className="text-xs text-amber-700">Con descuento de {money(r.creditDeduction)} por mercadería dañada</p>}
                       </li>
                     ))}
                     {p.excessReports.map((r) => (
@@ -414,7 +463,10 @@ export default async function SupplierLedgerPage({ params }: { params: Promise<{
                       <tbody className="divide-y divide-neutral-100">
                         {p.requests.map((r) => (
                           <tr key={r.id}>
-                            <td className="px-3 py-2">{r.catalogItem.name}</td>
+                            <td className="px-3 py-2">
+                              {r.catalogItem.name}
+                              {r.creditDeduction > 0 && <span className="block text-xs text-amber-700">Con descuento de {money(r.creditDeduction)} por mercadería dañada</span>}
+                            </td>
                             <td className={`${td} text-right tabular-nums`}>{r.quantity}</td>
                             <td className={`${td} text-right tabular-nums`}>{money(r.totalCost)}</td>
                             <td className={`${td} text-neutral-600`}>{firstName(r.reviewedBy?.name) || "—"}</td>
@@ -456,6 +508,16 @@ export default async function SupplierLedgerPage({ params }: { params: Promise<{
       </div>
     </div>
   );
+}
+
+function discountNote(i: { grossCost: number; creditDeduction: number }) {
+  return `Valor del pedido ${money(i.grossCost)} menos ${money(i.creditDeduction)} de descuento por mercadería dañada`;
+}
+
+function holdNote(i: { paymentOnHold: boolean }) {
+  return i.paymentOnHold
+    ? "La parte buena ya llegó — el pago de este pedido queda pendiente hasta que se reponga lo que llegó mal."
+    : "Pendiente de pago hasta que se resuelva.";
 }
 
 function disputeDetail(i: { damagedQty: number; incompleteQty: number; differentQty: number }) {

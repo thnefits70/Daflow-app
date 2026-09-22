@@ -32,9 +32,21 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const parsed = schema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Datos inválidos." }, { status: 400 });
 
-  const payment = await prisma.supplierDebtPayment.findUnique({ where: { id } });
+  const payment = await prisma.supplierDebtPayment.findUnique({ where: { id }, include: { transfers: { select: { amount: true } } } });
   if (!payment) return NextResponse.json({ error: "No encontrada." }, { status: 404 });
   if (payment.closedAt) return NextResponse.json({ error: "Esta tanda ya está cerrada." }, { status: 409 });
+  // Confirmado 2026-09-22, pedido explícito del usuario (evitar pagar doble):
+  // se sigue permitiendo pagar la tanda en varias transferencias o de forma
+  // parcial, pero nunca registrar MÁS de lo que vale la tanda — así una
+  // transferencia repetida por error salta acá, antes de cerrar.
+  const alreadyTransferred = payment.transfers.reduce((s, t) => s + t.amount, 0);
+  if (alreadyTransferred + parsed.data.amount > payment.totalAmount + 0.01) {
+    const remaining = Math.max(0, Math.round((payment.totalAmount - alreadyTransferred) * 100) / 100);
+    return NextResponse.json(
+      { error: `Con esta transferencia se pagaría más de lo que vale la tanda (${payment.totalAmount.toFixed(2)}). Falta pagar solo ${remaining.toFixed(2)}.` },
+      { status: 409 }
+    );
+  }
 
   const dup = await findDuplicateDebtComprobante(parsed.data.comprobanteNumber);
   if (dup) {

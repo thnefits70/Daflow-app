@@ -1,7 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { canManageSupplierDebtPayments } from "@/lib/guards";
-import { getSupplierDebtPendingItems, getSupplierDebtPendingExcessItems, getSupplierDebtDisputedItems, getSupplierDebtInTransitItems } from "@/lib/supplierDebt";
+import {
+  getSupplierDebtPendingItems,
+  getSupplierDebtPendingExcessItems,
+  getSupplierDebtDisputedItems,
+  getSupplierDebtInTransitItems,
+  supplierDebtReportsInclude,
+  appliedTandaCreditDeduction,
+} from "@/lib/supplierDebt";
 
 // Confirmado 2026-09-08 (Fase 1, proveedores con crédito): panorama completo
 // de un proveedor de crédito (hoy solo CHEN) — saldo actual, lo pendiente
@@ -28,7 +35,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ supp
     prisma.supplierDebtPayment.findMany({
       where: { supplierId, closedAt: null },
       include: {
-        requests: { include: { catalogItem: { select: { name: true } } } },
+        requests: { include: { catalogItem: { select: { name: true } }, ...supplierDebtReportsInclude } },
         // Confirmado 2026-09-21: excedentes incluidos en esta tanda, cada
         // uno anclado a su propia solicitud (request.requestNumber).
         excessReports: { include: { request: { select: { requestNumber: true, unitCost: true, catalogItem: { select: { name: true } } } } } },
@@ -39,7 +46,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ supp
     prisma.supplierDebtPayment.findMany({
       where: { supplierId, closedAt: { not: null } },
       include: {
-        requests: { include: { catalogItem: { select: { name: true } } } },
+        requests: { include: { catalogItem: { select: { name: true } }, ...supplierDebtReportsInclude } },
         excessReports: { include: { request: { select: { requestNumber: true, unitCost: true, catalogItem: { select: { name: true } } } } } },
         transfers: true,
       },
@@ -55,8 +62,25 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ supp
   // calcula del unitCost de su solicitud ancla, igual que
   // getSupplierDebtPendingExcessItems) — se agrega acá para que la tanda
   // muestre el mismo monto exacto que se le pagó.
-  function withExcessAmount<T extends { excessReports: { excessQty: number; request: { unitCost: number } }[] }>(payment: T) {
-    return { ...payment, excessReports: payment.excessReports.map((r) => ({ ...r, amount: Math.round(r.request.unitCost * r.excessQty * 100) / 100 })) };
+  // Confirmado 2026-09-22: cada pedido de la tanda se muestra NETO del
+  // descuento aceptado por el proveedor (ver appliedTandaCreditDeduction),
+  // así las filas suman exactamente el total pagado. urgentReports se quita
+  // de la respuesta, solo hacía falta para este cálculo.
+  function withExcessAmount<
+    T extends {
+      id: string;
+      excessReports: { excessQty: number; request: { unitCost: number } }[];
+      requests: { totalCost: number; urgentReports: Parameters<typeof appliedTandaCreditDeduction>[0] }[];
+    },
+  >(payment: T) {
+    return {
+      ...payment,
+      requests: payment.requests.map(({ urgentReports, ...r }) => {
+        const creditDeduction = appliedTandaCreditDeduction(urgentReports, payment.id);
+        return { ...r, grossCost: r.totalCost, creditDeduction, totalCost: Math.round((r.totalCost - creditDeduction) * 100) / 100 };
+      }),
+      excessReports: payment.excessReports.map((r) => ({ ...r, amount: Math.round(r.request.unitCost * r.excessQty * 100) / 100 })),
+    };
   }
   const openPaymentsOut = openPayments.map(withExcessAmount);
   const closedPaymentsOut = closedPayments.map(withExcessAmount);

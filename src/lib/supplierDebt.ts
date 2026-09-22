@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import { prisma } from "@/lib/prisma";
+import { isReportOpen } from "@/lib/purchaseUrgent";
 
 // Confirmado 2026-09-15: busca el proveedor de crédito dueño de este token
 // de enlace público — primero por coincidencia directa (formato actual,
@@ -66,7 +67,11 @@ export type SupplierDebtPendingItem = {
   requestNumber: number | null;
   productName: string;
   quantity: number;
+  // Neto: lo que de verdad se le paga (grossCost − creditDeduction).
   totalCost: number;
+  grossCost: number;
+  creditDeduction: number;
+  creditIds: string[];
   requestedAt: Date;
   // Confirmado 2026-09-15, pedido explícito del usuario: en el enlace
   // público de CHEN, quiere ver por cada pedido quién lo aprobó (Bryan,
@@ -94,10 +99,94 @@ export type SupplierDebtPendingItem = {
   productImageUrl: string | null;
 };
 
+// Confirmado 2026-09-22, pedido explícito del usuario: en los dos enlaces
+// públicos de CHEN solo aparecen solicitudes hechas desde el 21-sep-2026
+// (medianoche de Guayaquil, UTC-5) — todo lo anterior queda únicamente en el
+// panel interno (SupplierDebtPanel), que sigue mostrando todo para que nada
+// viejo pendiente de pago se pierda.
+export const SUPPLIER_PUBLIC_LINK_START = new Date("2026-09-21T05:00:00.000Z");
+
+type ReportForDebtCheck = {
+  damagedQty: number;
+  missingQty: number;
+  incompleteQty: number;
+  differentQty: number;
+  rejectedAt: Date | null;
+  resolvedInternallyAt: Date | null;
+  resolutions: {
+    type: "CREDIT" | "REPLACEMENT" | "REFUND" | "WRITE_OFF";
+    quantity: number;
+    status: "PENDING" | "COMPLETED" | "CANCELLED";
+    credit: { id: string; amount: number; status: string; appliedToGroupId: string | null } | null;
+  }[];
+};
+
+const reportDebtInclude = {
+  resolutions: {
+    select: {
+      type: true,
+      quantity: true,
+      status: true,
+      credit: { select: { id: true, amount: true, status: true, appliedToGroupId: true } },
+    },
+  },
+} as const;
+
+// Confirmado 2026-09-22, pedido explícito del usuario: a un proveedor de
+// crédito (hoy CHEN) solo se le paga lo que llegó COMPLETO y en BUEN ESTADO.
+// Antes, un pedido con parte dañada/incompleta/distinta (ej. 100 pedidos, 10
+// dañados) pasaba a RECEIVED en cuanto Daniel aprobaba los 90 buenos, y
+// quedaba "listo para pagar" por los 100 aunque el reporte siguiera abierto.
+// Ahora cualquier reporte todavía abierto — ni rechazado, ni resuelto
+// internamente, ni cubierto al 100% por resoluciones COMPLETED (reemplazo que
+// ya llegó, descuento, etc.) — retiene el pedido ENTERO hasta resolverse.
+// Incluye reclamos tardíos (isLateClaim) mientras el pedido no esté pagado.
+export function isReportBlockingDebtPayment(report: ReportForDebtCheck): boolean {
+  if (report.rejectedAt || report.resolvedInternallyAt) return false;
+  return isReportOpen(report, report.resolutions);
+}
+
+// Confirmado 2026-09-22, pedido explícito del usuario: si CHEN no repone y
+// en cambio acepta descontar lo dañado (resolución CREDIT), se le paga SOLO
+// lo bueno — el crédito se descuenta de ESTE pedido al pagarlo. Solo cuenta
+// un crédito todavía AVAILABLE (uno ya usado en otra compra no se descuenta
+// dos veces); al crear la tanda queda APPLIED con appliedToGroupId
+// "TANDA:<id>" (ver payments/route.ts), y así se reconoce después al
+// mostrar la tanda. REPLACEMENT (llegó el cambio) se paga completo; REFUND
+// (ya nos devolvieron el dinero aparte) y WRITE_OFF (nosotros asumimos la
+// pérdida) tampoco descuentan, para no descontar dos veces.
+function availableCreditsForDebt(reports: ReportForDebtCheck[]): { id: string; amount: number }[] {
+  return reports
+    .filter((u) => !u.rejectedAt)
+    .flatMap((u) => u.resolutions)
+    .filter((res) => res.type === "CREDIT" && res.status === "COMPLETED" && res.credit?.status === "AVAILABLE")
+    .map((res) => ({ id: res.credit!.id, amount: res.credit!.amount }));
+}
+
+export function tandaCreditMarker(debtPaymentId: string) {
+  return `TANDA:${debtPaymentId}`;
+}
+
+// Descuento ya aplicado a un pedido dentro de una tanda — para mostrar la
+// tanda con el mismo monto exacto que se pagó (ver tandaCreditMarker).
+export function appliedTandaCreditDeduction(reports: ReportForDebtCheck[], debtPaymentId: string): number {
+  const marker = tandaCreditMarker(debtPaymentId);
+  const total = reports
+    .flatMap((u) => u.resolutions)
+    .filter((res) => res.type === "CREDIT" && res.credit?.status === "APPLIED" && res.credit.appliedToGroupId === marker)
+    .reduce((s, res) => s + res.credit!.amount, 0);
+  return Math.round(total * 100) / 100;
+}
+
+export const supplierDebtReportsInclude = { urgentReports: { include: reportDebtInclude } } as const;
+
 // Confirmado 2026-09-08: lo que YA se puede sumar al saldo — recibido
 // completo y en buen estado (RECEIVED), todavía no incluido en ninguna
 // tanda (debtPaymentId null). Confirmado 2026-09-11: además, ya confirmado
 // por quien aprueba compras (buyerDebtConfirmedAt) — ver comentario arriba.
+// Confirmado 2026-09-22: y sin ningún reporte abierto
+// (isReportBlockingDebtPayment); totalCost ya viene NETO de descuentos
+// (creditDeduction), grossCost es el valor original del pedido.
 export async function getSupplierDebtPendingItems(supplierId: string): Promise<SupplierDebtPendingItem[]> {
   const rows = await prisma.purchaseRequest.findMany({
     where: { supplierId, status: "RECEIVED", debtPaymentId: null, buyerDebtConfirmedAt: { not: null } },
@@ -106,15 +195,22 @@ export async function getSupplierDebtPendingItems(supplierId: string): Promise<S
       reviewedBy: { select: { name: true } },
       receipt: { select: { approvedAt: true, approvedBy: { select: { name: true } } } },
       buyerDebtConfirmedBy: { select: { name: true } },
+      urgentReports: { include: reportDebtInclude },
     },
     orderBy: { requestedAt: "asc" },
   });
-  return rows.map((r) => ({
+  return rows.filter((r) => !r.urgentReports.some(isReportBlockingDebtPayment)).map((r) => {
+    const credits = availableCreditsForDebt(r.urgentReports);
+    const creditDeduction = Math.min(r.totalCost, Math.round(credits.reduce((s, c) => s + c.amount, 0) * 100) / 100);
+    return {
     id: r.id,
     requestNumber: r.requestNumber,
     productName: r.catalogItem.name,
     quantity: r.quantity,
-    totalCost: r.totalCost,
+    totalCost: Math.round((r.totalCost - creditDeduction) * 100) / 100,
+    grossCost: r.totalCost,
+    creditDeduction,
+    creditIds: credits.map((c) => c.id),
     requestedAt: r.requestedAt,
     approvedByName: r.reviewedBy?.name ?? null,
     reviewedByName: r.receipt?.approvedBy?.name ?? null,
@@ -123,7 +219,8 @@ export async function getSupplierDebtPendingItems(supplierId: string): Promise<S
     buyerDebtConfirmedAt: r.buyerDebtConfirmedAt,
     buyerDebtConfirmedByName: r.buyerDebtConfirmedBy?.name ?? null,
     productImageUrl: r.catalogItem.photos.at(-1) ?? null,
-  }));
+    };
+  });
 }
 
 export type SupplierDebtPendingExcessItem = {
@@ -136,6 +233,7 @@ export type SupplierDebtPendingExcessItem = {
   excessConfirmedAt: Date | null;
   excessConfirmedByName: string | null;
   productImageUrl: string | null;
+  requestedAt: Date;
 };
 
 // Confirmado 2026-09-21: pedido explícito del usuario — el excedente (llegó
@@ -157,11 +255,22 @@ export async function getSupplierDebtPendingExcessItems(supplierId: string): Pro
     },
     include: {
       excessConfirmedBy: { select: { name: true } },
-      request: { select: { requestNumber: true, unitCost: true, catalogItem: { select: { name: true, photos: true } } } },
+      request: {
+        select: {
+          requestNumber: true,
+          unitCost: true,
+          requestedAt: true,
+          catalogItem: { select: { name: true, photos: true } },
+          urgentReports: { include: reportDebtInclude },
+        },
+      },
     },
     orderBy: { excessConfirmedAt: "asc" },
   });
-  return rows.map((r) => ({
+  // Confirmado 2026-09-22: mismo criterio que getSupplierDebtPendingItems —
+  // si la solicitud ancla todavía tiene un reporte abierto (dañado,
+  // incompleto, distinto), el excedente también espera.
+  return rows.filter((r) => !r.request.urgentReports.some(isReportBlockingDebtPayment)).map((r) => ({
     id: r.id,
     requestId: r.requestId,
     requestNumber: r.request.requestNumber,
@@ -171,6 +280,7 @@ export async function getSupplierDebtPendingExcessItems(supplierId: string): Pro
     excessConfirmedAt: r.excessConfirmedAt,
     excessConfirmedByName: r.excessConfirmedBy?.name ?? null,
     productImageUrl: r.request.catalogItem.photos.at(-1) ?? null,
+    requestedAt: r.request.requestedAt,
   }));
 }
 
@@ -231,6 +341,10 @@ export type SupplierDebtDisputedItem = {
   requestedAt: Date;
   approvedByName: string | null;
   reviewedByName: string | null;
+  // Confirmado 2026-09-22: true cuando la parte buena ya se recibió
+  // (RECEIVED) pero el pago del pedido entero queda retenido hasta que se
+  // resuelva el reporte (ver isReportBlockingDebtPayment).
+  paymentOnHold: boolean;
 };
 
 // Confirmado 2026-09-08: pedido explícito del usuario — lo incompleto,
@@ -252,12 +366,18 @@ export async function getSupplierDebtDisputedItems(supplierId: string): Promise<
   const rows = await prisma.purchaseRequest.findMany({
     where: {
       supplierId,
-      status: { in: ["RECEIVED_PENDING_REVIEW", "APPROVED"] },
+      // Confirmado 2026-09-22: también RECEIVED sin pagar — la parte buena ya
+      // entró, pero el pedido entero queda retenido (y CHEN lo ve acá, con
+      // el motivo) hasta que se resuelva lo dañado/incompleto/distinto.
+      OR: [
+        { status: { in: ["RECEIVED_PENDING_REVIEW", "APPROVED"] } },
+        { status: "RECEIVED", debtPaymentId: null },
+      ],
       urgentReports: { some: { resolvedInternallyAt: null, rejectedAt: null } },
     },
     include: {
       catalogItem: { select: { name: true } },
-      urgentReports: true,
+      urgentReports: { include: reportDebtInclude },
       reviewedBy: { select: { name: true } },
       // Confirmado 2026-09-15: un pedido en disputa todavía no llegó a
       // RECEIVED (la aprobación final de Daniel es justo lo que falta), pero
@@ -268,7 +388,12 @@ export async function getSupplierDebtDisputedItems(supplierId: string): Promise<
     orderBy: { requestedAt: "asc" },
   });
   return rows
-    .map((r) => ({ ...r, urgentReports: r.urgentReports.filter((u) => u.resolvedInternallyAt === null && u.rejectedAt === null) }))
+    .map((r) => ({
+      ...r,
+      urgentReports: r.urgentReports.filter((u) =>
+        r.status === "RECEIVED" ? isReportBlockingDebtPayment(u) : u.resolvedInternallyAt === null && u.rejectedAt === null
+      ),
+    }))
     .filter((r) => r.urgentReports.length > 0)
     .map((r) => {
       const damagedQty = r.urgentReports.reduce((s, u) => s + u.damagedQty, 0);
@@ -286,6 +411,7 @@ export async function getSupplierDebtDisputedItems(supplierId: string): Promise<
         requestedAt: r.requestedAt,
         approvedByName: r.reviewedBy?.name ?? null,
         reviewedByName: r.receipt?.confirmedBy?.name ?? null,
+        paymentOnHold: r.status === "RECEIVED",
       };
     });
 }
