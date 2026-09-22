@@ -99,12 +99,17 @@ export type SupplierDebtPendingItem = {
   productImageUrl: string | null;
 };
 
-// Confirmado 2026-09-22, pedido explícito del usuario: en los dos enlaces
-// públicos de CHEN solo aparecen solicitudes hechas desde el 21-sep-2026
-// (medianoche de Guayaquil, UTC-5) — todo lo anterior queda únicamente en el
-// panel interno (SupplierDebtPanel), que sigue mostrando todo para que nada
-// viejo pendiente de pago se pierda.
-export const SUPPLIER_PUBLIC_LINK_START = new Date("2026-09-21T05:00:00.000Z");
+// Confirmado 2026-09-22, pedido explícito del usuario: la cuenta con los
+// proveedores de crédito (hoy CHEN) arranca de cero desde el lunes
+// 21-sep-2026 (medianoche de Guayaquil, UTC-5) — "para que quede todo
+// organizado y cuadrado y evitar pagar doble". Solo las solicitudes hechas
+// desde esa fecha cuentan en el saldo, se pueden meter en una tanda, pasan
+// por la cola de Bryan ("Confirmar deuda a crédito") y se ven, tanto en el
+// panel interno como en los dos enlaces de CHEN. Lo anterior NO se borra de
+// la base de datos — solo queda fuera de este flujo.
+export const SUPPLIER_DEBT_TRACKING_START = new Date("2026-09-21T05:00:00.000Z");
+export const SUPPLIER_PUBLIC_LINK_START = SUPPLIER_DEBT_TRACKING_START;
+const sinceTrackingStart = { gte: SUPPLIER_DEBT_TRACKING_START };
 
 type ReportForDebtCheck = {
   damagedQty: number;
@@ -189,7 +194,7 @@ export const supplierDebtReportsInclude = { urgentReports: { include: reportDebt
 // (creditDeduction), grossCost es el valor original del pedido.
 export async function getSupplierDebtPendingItems(supplierId: string): Promise<SupplierDebtPendingItem[]> {
   const rows = await prisma.purchaseRequest.findMany({
-    where: { supplierId, status: "RECEIVED", debtPaymentId: null, buyerDebtConfirmedAt: { not: null } },
+    where: { supplierId, status: "RECEIVED", debtPaymentId: null, buyerDebtConfirmedAt: { not: null }, requestedAt: sinceTrackingStart },
     include: {
       catalogItem: { select: { name: true, photos: true } },
       reviewedBy: { select: { name: true } },
@@ -251,7 +256,7 @@ export async function getSupplierDebtPendingExcessItems(supplierId: string): Pro
       excessQty: { gt: 0 },
       excessConfirmedAt: { not: null },
       excessDebtPaymentId: null,
-      request: { supplierId },
+      request: { supplierId, requestedAt: sinceTrackingStart },
     },
     include: {
       excessConfirmedBy: { select: { name: true } },
@@ -314,6 +319,7 @@ export async function getBuyerDebtConfirmationQueue(): Promise<BuyerDebtConfirma
       buyerDebtConfirmedAt: null,
       buyerDebtRejectedAt: null,
       supplier: { paymentMode: "CREDITO" },
+      requestedAt: sinceTrackingStart,
     },
     include: { catalogItem: { select: { name: true } }, supplier: { select: { name: true } } },
     orderBy: { requestedAt: "asc" },
@@ -366,6 +372,7 @@ export async function getSupplierDebtDisputedItems(supplierId: string): Promise<
   const rows = await prisma.purchaseRequest.findMany({
     where: {
       supplierId,
+      requestedAt: sinceTrackingStart,
       // Confirmado 2026-09-22: también RECEIVED sin pagar — la parte buena ya
       // entró, pero el pedido entero queda retenido (y CHEN lo ve acá, con
       // el motivo) hasta que se resuelva lo dañado/incompleto/distinto.
@@ -447,6 +454,7 @@ export async function getSupplierDebtInTransitItems(supplierId: string): Promise
   const rows = await prisma.purchaseRequest.findMany({
     where: {
       supplierId,
+      requestedAt: sinceTrackingStart,
       OR: [
         { status: "PENDING_APPROVAL" },
         { status: "APPROVED", urgentReports: { none: openUrgentReport } },

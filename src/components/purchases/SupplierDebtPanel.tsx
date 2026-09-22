@@ -405,6 +405,9 @@ export function SupplierDebtPanel() {
             <div className="bg-surface border border-rule rounded-md px-4 py-2.5">
               <div className="text-[10px] font-semibold uppercase tracking-wide text-steel">Saldo actual a pagar</div>
               <div className="text-[18px] font-bold text-ink">{money(summary.balance)}</div>
+              {/* Confirmado 2026-09-22, pedido explícito del usuario: la cuenta
+                  arranca de cero desde esta fecha (SUPPLIER_DEBT_TRACKING_START). */}
+              <div className="text-[10.5px] text-steel">Solo solicitudes desde el lun 21/9/2026</div>
             </div>
             <div>
               {summary.supplier.publicLedgerToken ? (

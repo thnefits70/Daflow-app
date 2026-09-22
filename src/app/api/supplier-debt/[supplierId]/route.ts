@@ -8,6 +8,7 @@ import {
   getSupplierDebtInTransitItems,
   supplierDebtReportsInclude,
   appliedTandaCreditDeduction,
+  SUPPLIER_DEBT_TRACKING_START,
 } from "@/lib/supplierDebt";
 
 // Confirmado 2026-09-08 (Fase 1, proveedores con crédito): panorama completo
@@ -43,8 +44,17 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ supp
       },
       orderBy: { createdAt: "desc" },
     }),
+    // Confirmado 2026-09-22, pedido explícito del usuario: el historial de
+    // tandas pagadas también arranca el 21-sep-2026 (se oculta cualquier
+    // tanda con algo anterior). Las tandas EN CURSO siempre se ven, para que
+    // ninguna quede abierta sin poder cerrarse.
     prisma.supplierDebtPayment.findMany({
-      where: { supplierId, closedAt: { not: null } },
+      where: {
+        supplierId,
+        closedAt: { not: null },
+        requests: { none: { requestedAt: { lt: SUPPLIER_DEBT_TRACKING_START } } },
+        excessReports: { none: { request: { requestedAt: { lt: SUPPLIER_DEBT_TRACKING_START } } } },
+      },
       include: {
         requests: { include: { catalogItem: { select: { name: true } }, ...supplierDebtReportsInclude } },
         excessReports: { include: { request: { select: { requestNumber: true, unitCost: true, catalogItem: { select: { name: true } } } } } },
