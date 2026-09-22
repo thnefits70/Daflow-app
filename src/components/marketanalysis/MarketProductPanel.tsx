@@ -732,6 +732,7 @@ function PublishQueue() {
               <div className="text-[13px] font-bold text-ink mt-1">Precio de Dropi: {money(p.calculatedSalePrice)}</div>
             </div>
           </div>
+          <PublishPriceGuide p={p} />
           {confirmingId === p.id ? (
             <div className="bg-navy rounded-md p-3">
               <div className="text-[13px] font-bold mb-1.5">¿Seguro?</div>
@@ -765,6 +766,97 @@ function PublishQueue() {
           )}
         </div>
       ))}
+    </div>
+  );
+}
+
+// Confirmado 2026-09-22, pedido explícito del usuario: Heidy veía solo el
+// precio de Dropi sin saber de dónde salía ni contra qué competía. El
+// objetivo al publicar es quedar MÁS BARATO que la competencia pero con el
+// mayor margen posible — nunca más caro. Por eso siempre ve el precio de la
+// competencia al lado, el rango en el que conviene publicar, y (con un
+// click) el desglose paso a paso de nuestro precio.
+function PublishPriceGuide({ p }: { p: Proposal }) {
+  const [open, setOpen] = useState(false);
+  const sp = p.supplierPrices.find((x) => x.isPrimary) ?? p.supplierPrices[0] ?? null;
+  const ourPrice = p.calculatedSalePrice;
+  const comp = p.competitorPrice && p.competitorPrice > 0 ? p.competitorPrice : null;
+
+  let bodega: number | null = null;
+  let freightPerUnit = 0;
+  let totalCost: number | null = null;
+  if (sp && sp.batchUnits > 0) {
+    freightPerUnit = (sp.freightCost ?? 0) / sp.batchUnits;
+    bodega = sp.batchCost + freightPerUnit;
+    totalCost = bodega * (1 + p.insuranceRatePercent / 100) + p.fulfillmentCost;
+  }
+  // Un centavo menos que la competencia: el precio más alto que igual sale
+  // más barato que ella.
+  const bestPrice = comp !== null ? Math.round((comp - 0.01) * 100) / 100 : null;
+  const bestMargin = bestPrice !== null && totalCost !== null && bestPrice > 0 ? (1 - totalCost / bestPrice) * 100 : null;
+  const compRef = comp !== null && (p.competitorBodegaName || p.competitorId)
+    ? ` (${[p.competitorBodegaName, p.competitorId ? `ID ${p.competitorId}` : null].filter(Boolean).join(" · ")})`
+    : "";
+
+  return (
+    <div className="mb-2.5 bg-cloud border border-rule rounded-md p-2.5 text-[12px]">
+      {comp === null ? (
+        <div className="text-steel">
+          {p.noCompetitorData
+            ? `Jariel no registró precio de la competencia para este producto (${p.discoverySourceNote || "recomendado por proveedor"}).`
+            : "No se registró precio de la competencia para este producto."}{" "}
+          Si lo encuentras en Dropi, ponlo más barato que la competencia pero nunca por debajo de <b className="text-ink">{money(ourPrice)}</b>.
+        </div>
+      ) : (
+        <div className="space-y-1">
+          <div className="text-ink">
+            Precio de la competencia: <b>{money(comp)}</b><span className="text-steel">{compRef}</span>
+          </div>
+          {ourPrice < comp ? (
+            <div className="text-steel">
+              Pon en Dropi un precio entre <b className="text-ink">{money(ourPrice)}</b> (lo mínimo, deja el {p.marginPercent}% de margen) y{" "}
+              <b className="text-teal">{money(bestPrice!)}</b> (un centavo menos que la competencia
+              {bestMargin !== null ? <>, deja el <b className="text-teal">{bestMargin.toFixed(1)}%</b> de margen</> : null}).
+              Mientras más cerca de {money(comp)}, más ganamos — pero nunca igual o más caro que la competencia.
+            </div>
+          ) : (
+            <div className="text-red font-semibold">
+              Ojo: nuestro precio mínimo ({money(ourPrice)}) no queda más barato que la competencia ({money(comp)}). Para quedar más baratos habría que bajar del margen mínimo — avísale a Bryan antes de publicarlo.
+            </div>
+          )}
+        </div>
+      )}
+
+      <button type="button" className="mt-1.5 text-[11.5px] font-semibold text-teal cursor-pointer" onClick={() => setOpen((v) => !v)}>
+        {open ? "Ocultar cálculo ▴" : "Ver cómo se calculó el precio de Dropi ▾"}
+      </button>
+      {open && (
+        sp && bodega !== null && totalCost !== null ? (
+          <table className="mt-1.5 w-full text-[12px]">
+            <tbody>
+              <tr><td className="text-steel py-0.5">Costo del proveedor por unidad</td><td className="text-right text-ink">{money(sp.batchCost)}</td></tr>
+              <tr>
+                <td className="text-steel py-0.5">+ Flete repartido {sp.freightCost ? `(${money(sp.freightCost)} ÷ ${sp.batchUnits} unidades)` : "(sin flete)"}</td>
+                <td className="text-right text-ink">{money(freightPerUnit)}</td>
+              </tr>
+              <tr className="border-t border-rule"><td className="text-steel py-0.5">= Costo puesto en bodega</td><td className="text-right text-ink">{money(bodega)}</td></tr>
+              <tr><td className="text-steel py-0.5">+ Seguro ({p.insuranceRatePercent}%)</td><td className="text-right text-ink">{money((bodega * p.insuranceRatePercent) / 100)}</td></tr>
+              <tr><td className="text-steel py-0.5">+ Fulfillment</td><td className="text-right text-ink">{money(p.fulfillmentCost)}</td></tr>
+              <tr className="border-t border-rule"><td className="text-steel py-0.5">= Lo que nos cuesta cada unidad</td><td className="text-right font-semibold text-ink">{money(totalCost)}</td></tr>
+              <tr>
+                <td className="text-steel py-0.5">Con {p.marginPercent}% de margen ({money(totalCost)} ÷ {((100 - p.marginPercent) / 100).toFixed(2)})</td>
+                <td className="text-right font-bold text-ink">{money(ourPrice)}</td>
+              </tr>
+              <tr><td className="text-steel py-0.5">Ganancia por unidad a {money(ourPrice)}</td><td className="text-right text-teal font-semibold">{money(ourPrice - totalCost)}</td></tr>
+              {comp !== null && bestPrice !== null && ourPrice < comp && (
+                <tr><td className="text-steel py-0.5">Ganancia por unidad a {money(bestPrice)}</td><td className="text-right text-teal font-semibold">{money(bestPrice - totalCost)}</td></tr>
+              )}
+            </tbody>
+          </table>
+        ) : (
+          <div className="mt-1.5 text-steel">No hay datos del proveedor guardados para mostrar el cálculo.</div>
+        )
+      )}
     </div>
   );
 }
