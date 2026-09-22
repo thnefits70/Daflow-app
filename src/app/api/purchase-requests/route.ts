@@ -3,7 +3,7 @@ import { randomUUID } from "crypto";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
-import { canSubmitPurchaseRequests, canCreateNewPurchaseRequests, canSubmitEmergencyPurchaseRequest, canApprovePurchaseRequests, canConfirmPurchaseReceiving, canRegisterPurchaseInvoices, getPurchaseApproverIds } from "@/lib/guards";
+import { canSubmitPurchaseRequests, canViewOwnPurchaseHistory, canCreateNewPurchaseRequests, canSubmitEmergencyPurchaseRequest, canApprovePurchaseRequests, canConfirmPurchaseReceiving, canRegisterPurchaseInvoices, getPurchaseApproverIds } from "@/lib/guards";
 import { checkPurchaseSubmission, purchaseSubmissionSchema, nextPurchaseRequestNumber, purchaseRequestInclude } from "@/lib/purchases";
 import { notifyOwner } from "@/lib/notifications";
 import { reserveCreditsForGroup, getReservedCreditsForGroup, getAvailableCreditsForSupplier } from "@/lib/supplierCredits";
@@ -265,7 +265,12 @@ export async function GET(req: NextRequest) {
   }
 
   // "mine" — lo que yo mismo pedí, para seguir el avance de mi solicitud.
-  if (!(await canSubmitPurchaseRequests())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+  // Confirmado 2026-09-22: pedido explícito del usuario — canSubmitPurchaseRequests
+  // ya no alcanza sola; quien perdió el permiso pero ya tiene historial propio
+  // (ej. Bryan, tras pasar a liderar Marketing) conserva acceso de solo
+  // lectura vía canViewOwnPurchaseHistory (ver guards.ts). El filtro por
+  // requestedById de abajo no cambia, así que nunca ve solicitudes ajenas.
+  if (!(await canViewOwnPurchaseHistory())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
   const isAdmin = session.user.role === "admin";
   const rows = await prisma.purchaseRequest.findMany({
     where: isAdmin ? {} : { requestedById: session.user.id },

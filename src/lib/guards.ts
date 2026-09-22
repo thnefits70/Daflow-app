@@ -652,6 +652,25 @@ export async function canSubmitPurchaseRequests() {
   return !!user.isLeader && !!user.leadsDept && ["COM", "FIN"].includes(user.leadsDept.code);
 }
 
+// Confirmado 2026-09-22: pedido explícito del usuario — Bryan perdió
+// canManagePurchases del todo al pasar a liderar Marketing (ya no cae ni
+// en el caso "transición con solicitudes abiertas" de arriba), y con eso
+// "Mis solicitudes" le desapareció por completo — incluyendo lo que ya
+// tenía RECIBIDO y pagado hace semanas, sin ninguna forma de volver a
+// verlo. Esta función da acceso de SOLO LECTURA a quien ya tiene
+// solicitudes propias en el historial aunque hoy no cumpla
+// canSubmitPurchaseRequests: nunca habilita crear, corregir ni ninguna
+// acción de escritura — esas rutas siguen exigiendo
+// canSubmitPurchaseRequests() sin cambios, y el listado en sí ya filtra
+// siempre por requestedById para quien no es admin.
+export async function canViewOwnPurchaseHistory() {
+  const session = await auth();
+  if (!session) return false;
+  if (await canSubmitPurchaseRequests()) return true;
+  const count = await prisma.purchaseRequest.count({ where: { requestedById: session.user.id } });
+  return count > 0;
+}
+
 // Confirmado 2026-09-02: pedido explícito del usuario — transición Bryan →
 // Jariel en Control de Compras. Mismo criterio que canSubmitPurchaseRequests
 // de arriba, pero además bloquea a quien tenga purchasingNewRequestsBlocked

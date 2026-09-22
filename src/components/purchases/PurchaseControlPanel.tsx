@@ -24,6 +24,7 @@ type Tab = "solicitar" | "mias" | "comparar" | "aprobacion" | "confirmar-credito
 export function PurchaseControlPanel({
   deptId,
   canSubmit,
+  canViewOwnPurchases = false,
   canCreateNew,
   canSubmitEmergency,
   canReview,
@@ -39,6 +40,11 @@ export function PurchaseControlPanel({
 }: {
   deptId: string;
   canSubmit: boolean;
+  // Confirmado 2026-09-22: pedido explícito del usuario — quien perdió
+  // canSubmit del todo (ej. Bryan, tras liderar Marketing) pero ya tiene
+  // solicitudes propias en el historial conserva "Mis solicitudes" en modo
+  // SOLO LECTURA (ver canViewOwnPurchaseHistory en guards.ts).
+  canViewOwnPurchases?: boolean;
   // Confirmado 2026-09-02: pedido explícito del usuario — transición Bryan →
   // Jariel. canSubmit sigue gateando "Mis solicitudes" (y todo lo demás del
   // módulo, sin cambios); canCreateNew gatea SOLO la pestaña "Solicitar"
@@ -87,7 +93,7 @@ export function PurchaseControlPanel({
   const tabs: { key: Tab; label: string }[] = [
     ...(canSubmit || canReview ? [{ key: "comparar" as Tab, label: "Historial de precios de compra" }] : []),
     ...(canCreateNew ? [{ key: "solicitar" as Tab, label: "Solicitar" }] : canSubmitEmergency ? [{ key: "solicitar" as Tab, label: "🚨 Emergencia" }] : []),
-    ...(canSubmit ? [{ key: "mias" as Tab, label: "Mis solicitudes" }] : []),
+    ...(canSubmit || canViewOwnPurchases ? [{ key: "mias" as Tab, label: "Mis solicitudes" }] : []),
     ...(canReview ? [{ key: "aprobacion" as Tab, label: "Bandeja de aprobación" }] : []),
     // Confirmado 2026-09-11: pedido explícito del usuario — para un
     // proveedor de crédito, recibir la mercadería no basta para que cuente

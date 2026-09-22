@@ -128,6 +128,7 @@ export function DeptWorkspaceTabs({
   storeFeedbackStores = [],
   storeFeedbackAggregates = [],
   canSubmitPurchases = false,
+  canViewOwnPurchases = false,
   canCreatePurchases = false,
   canSubmitEmergencyPurchases = false,
   canApprovePurchases = false,
@@ -246,6 +247,13 @@ export function DeptWorkspaceTabs({
   // así que se ve en la propia "Mi área de trabajo" de cada quien sin
   // importar a qué departamento pertenezcan de verdad.
   canSubmitPurchases?: boolean;
+  // Confirmado 2026-09-22: pedido explícito del usuario — quien pierde
+  // canSubmitPurchases del todo (ej. Bryan, tras pasar a liderar Marketing)
+  // pero ya tiene solicitudes propias en el historial conserva "Mis
+  // solicitudes" en modo SOLO LECTURA vía este flag (canViewOwnPurchaseHistory
+  // en guards.ts) — antes la pestaña desaparecía por completo con todo su
+  // historial adentro.
+  canViewOwnPurchases?: boolean;
   // Confirmado 2026-09-02: pedido explícito del usuario — transición Bryan →
   // Jariel. canSubmitPurchases sigue gateando "Mis solicitudes" (sin
   // cambios); canCreatePurchases gatea SOLO "Solicitar" (armar una compra
@@ -447,7 +455,7 @@ export function DeptWorkspaceTabs({
     if (t.key === "pagos") return trackPaymentReminders;
     if (t.key === "semanal") return trackWeeklyMetric;
     if (t.key === "feedback") return trackWeeklyReview;
-    if (t.key === "compras") return canSubmitPurchases || canSubmitEmergencyPurchases || canApprovePurchases || canReceivePurchases || canInvoicePurchases;
+    if (t.key === "compras") return canSubmitPurchases || canViewOwnPurchases || canSubmitEmergencyPurchases || canApprovePurchases || canReceivePurchases || canInvoicePurchases;
     if (t.key === "proveedores") return canAccessSuppliers;
     if (t.key === "llegadas") return canViewMarketingArrivals;
     if (t.key === "inventario") return canManageInventoryControl;
@@ -602,10 +610,11 @@ export function DeptWorkspaceTabs({
           currentUserId={currentUserId}
         />
       )}
-      {tab === "compras" && (canSubmitPurchases || canSubmitEmergencyPurchases || canApprovePurchases || canReceivePurchases || canInvoicePurchases) && (
+      {tab === "compras" && (canSubmitPurchases || canViewOwnPurchases || canSubmitEmergencyPurchases || canApprovePurchases || canReceivePurchases || canInvoicePurchases) && (
         <PurchaseControlPanel
           deptId={deptId}
           canSubmit={canSubmitPurchases}
+          canViewOwnPurchases={canViewOwnPurchases}
           canCreateNew={canCreatePurchases}
           canSubmitEmergency={canSubmitEmergencyPurchases}
           canReview={isAdmin || canApprovePurchases}
