@@ -1,0 +1,2 @@
+-- AlterEnum
+ALTER TYPE "StockMovementType" ADD VALUE 'CUTOVER_CORRECTION';

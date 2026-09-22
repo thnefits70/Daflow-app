@@ -1004,6 +1004,17 @@ enum StockMovementType {
   // con balanceAfter). Después de este corte, Just deja de consultarse —
   // todo lo que pase de aquí en adelante son compras/salidas reales.
   JUST_CUTOVER_SYNC
+  // Confirmado 2026-09-22, bug real encontrado por el usuario (caso
+  // 172320): JUST_CUTOVER_SYNC usaba el saldo del ultimo archivo de Just
+  // sin revisar si el producto ya tenia una compra o salida MAS NUEVA que
+  // ese archivo -- en 59 productos si la tenia, asi que el corte piso un
+  // movimiento real (ej. una compra que Daniel y Bryan ya habian
+  // confirmado) con el numero viejo de Just. Esta linea restaura el
+  // saldo/costo real que tenia el producto justo antes de que el corte lo
+  // pisara por error -- separada de JUST_CUTOVER_SYNC a proposito, para
+  // que quede clara la diferencia en cualquier auditoria futura entre "el
+  // corte original" y "la correccion de ese error".
+  CUTOVER_CORRECTION
 }
 
 model StockKardexEntry {

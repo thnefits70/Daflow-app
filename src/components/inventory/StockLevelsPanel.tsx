@@ -11,6 +11,17 @@ type PersonalPurchaseBackfillRow = { catalogItemId: string; name: string; missin
 type JustCostDeclarationRow = { catalogItemId: string; name: string; justCode: string | null; suggestedCost: number };
 type UnregisteredSkeletonRow = { catalogItemId: string; name: string; justCode: string | null };
 type CutoverSyncRow = { catalogItemId: string; name: string; justCode: string | null; oldBalance: number; newBalance: number; oldAvgCost: number; newAvgCost: number };
+type CutoverDamageRow = {
+  catalogItemId: string;
+  name: string;
+  justCode: string | null;
+  currentBalance: number;
+  currentAvgCost: number;
+  restoreBalance: number;
+  restoreAvgCost: number;
+  realMovementType: "IN" | "OUT";
+  realMovementAt: string;
+};
 
 // Confirmado 2026-09-16, pedido explícito del usuario: los combos de Dropi
 // (DropiCombo) no son productos reales — no tienen ni deben tener su propio
@@ -406,6 +417,21 @@ export function StockLevelsPanel({ isAdmin = false }: { isAdmin?: boolean }) {
   const [sinPrecioFilter, setSinPrecioFilter] = useState(false);
   const [sinStockFilter, setSinStockFilter] = useState(false);
 
+  // Confirmado 2026-09-22, bug real reportado por el usuario (caso 172320):
+  // el corte con Just de abajo pisó 59 productos que ya tenían una compra
+  // o salida real más nueva que el archivo usado (Daniel/Bryan habían
+  // confirmado esas compras el 21/09, el archivo de Just era del 19/09).
+  // Restaura el saldo/costo real de esos 59 — ver findCutoverDamageCandidates
+  // en stockKardex.ts. El bug de origen ya está arreglado, esto solo repara
+  // el daño que ya se había hecho.
+  const [damageOpen, setDamageOpen] = useState(false);
+  const [damageLoading, setDamageLoading] = useState(false);
+  const [damagePreview, setDamagePreview] = useState<CutoverDamageRow[] | null>(null);
+  const [damageConfirming, setDamageConfirming] = useState(false);
+  const [damageApplying, setDamageApplying] = useState(false);
+  const [damageResult, setDamageResult] = useState<{ restoredCount: number } | null>(null);
+  const [damageError, setDamageError] = useState("");
+
   // Confirmado 2026-09-22, pedido explícito del usuario (admin): corte único
   // — "de ahora en adelante ya solo trabajaremos con INVESTOCK". Pone el
   // stock y costo del último archivo de Just como nuevo punto de partida,
@@ -525,6 +551,33 @@ export function StockLevelsPanel({ isAdmin = false }: { isAdmin?: boolean }) {
       .then(setCombos)
       .catch(() => setCombos([]));
   }, []);
+
+  function loadDamagePreview() {
+    setDamageLoading(true);
+    setDamageError("");
+    setDamageResult(null);
+    fetch("/api/inventory-control/cutover-damage-correction")
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then(setDamagePreview)
+      .catch(() => setDamageError("No se pudo cargar la vista previa."))
+      .finally(() => setDamageLoading(false));
+  }
+
+  async function applyDamageCorrection() {
+    setDamageApplying(true);
+    setDamageError("");
+    const res = await fetch("/api/inventory-control/cutover-damage-correction", { method: "POST" });
+    setDamageApplying(false);
+    setDamageConfirming(false);
+    if (!res.ok) {
+      setDamageError("No se pudo restaurar.");
+      return;
+    }
+    const data = await res.json();
+    setDamageResult(data);
+    setDamagePreview(null);
+    loadRows();
+  }
 
   function loadCutoverPreview() {
     setCutoverLoading(true);
@@ -835,6 +888,82 @@ export function StockLevelsPanel({ isAdmin = false }: { isAdmin?: boolean }) {
       <TabGuide storageKey="stock-actual">
         Acá ves el saldo de INVESTOCK (el Kardex propio de DAFLOW) de cada producto del catálogo, calculado en tiempo real a partir de lo recibido en Compras y lo despachado en Egresos — sin depender de que alguien suba un archivo. Un saldo en rojo significa stock negativo (algo salió sin haber entrado, o hay un error de conteo por revisar).
       </TabGuide>
+
+      {isAdmin && (
+        <div className="border border-red rounded-md mb-3">
+          <button
+            type="button"
+            className="w-full flex items-center gap-2 px-3 py-2 text-[12px] font-semibold text-red hover:text-red cursor-pointer"
+            onClick={() => {
+              setDamageOpen((v) => !v);
+              if (!damageOpen && damagePreview === null && !damageResult) loadDamagePreview();
+            }}
+          >
+            <RefreshCw size={13} /> Restaurar compras/salidas reales que el corte con Just pisó por error
+          </button>
+          {damageOpen && (
+            <div className="px-3 pb-3 text-[12px]">
+              <p className="text-steel mb-2">
+                El corte con Just de abajo usó el archivo del 19/9 sin revisar si algún producto ya tenía una compra o salida real MÁS NUEVA que ese archivo — en 59 productos sí la tenía (ej. una compra que Daniel y Bryan ya habían confirmado el 21/9), y el corte la pisó con el número viejo de Just. <span className="text-red font-semibold">Esto restaura el saldo y costo real que tenía cada producto justo antes de ese error.</span> El bug de origen ya está arreglado — esto solo repara lo que ya se pisó.
+              </p>
+              {damageError && <div className="text-red mb-2">{damageError}</div>}
+              {damageLoading && <div className="text-steel">Calculando vista previa…</div>}
+              {damageResult && (
+                <div className="text-teal font-semibold mb-2">
+                  ✓ Restaurados: {damageResult.restoredCount} producto{damageResult.restoredCount === 1 ? "" : "s"}.
+                </div>
+              )}
+              {!damageLoading && damagePreview && (
+                <>
+                  {damagePreview.length === 0 ? (
+                    <div className="text-steel">Nada por restaurar — no hay daño pendiente del corte con Just.</div>
+                  ) : (
+                    <>
+                      <div className="text-steel mb-1.5">{damagePreview.length} producto(s) se restaurarían:</div>
+                      <div className="max-h-64 overflow-y-auto flex flex-col gap-1 mb-2.5 border border-rule rounded-md p-1.5">
+                        {damagePreview.map((r) => (
+                          <div key={r.catalogItemId} className="flex items-center justify-between gap-2 text-[11.5px] px-1.5 py-1">
+                            <span className="truncate flex-1 flex items-center gap-1.5">
+                              <CatalogCode code={r.justCode} size="text-[10px]" /> {r.name}
+                            </span>
+                            <span className="font-mono text-steel shrink-0">
+                              stock {r.currentBalance}→<span className="font-bold text-teal">{r.restoreBalance}</span> · costo {money(r.currentAvgCost)}→<span className="font-bold text-teal">{money(r.restoreAvgCost)}</span>
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                      {damageConfirming ? (
+                        <div className="flex items-center gap-2">
+                          <span className="text-steel">¿Restaurar estos {damagePreview.length} productos a su número real?</span>
+                          <button
+                            type="button"
+                            disabled={damageApplying}
+                            className="font-bold text-teal cursor-pointer disabled:opacity-50"
+                            onClick={applyDamageCorrection}
+                          >
+                            {damageApplying ? "Restaurando…" : "Sí, restaurar"}
+                          </button>
+                          <button type="button" className="text-steel cursor-pointer" onClick={() => setDamageConfirming(false)}>
+                            Cancelar
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          className="rounded border border-teal bg-teal px-3 py-1.5 text-[12px] font-bold text-navy cursor-pointer"
+                          onClick={() => setDamageConfirming(true)}
+                        >
+                          Restaurar todos
+                        </button>
+                      )}
+                    </>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {isAdmin && (
         <div className="border border-gold/40 rounded-md mb-3">

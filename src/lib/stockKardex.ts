@@ -495,6 +495,14 @@ export type JustCutoverSyncRow = {
 // real no coincidían con Just, algunos con diferencias grandes). Solo
 // incluye productos donde algo realmente cambiaría (mismo saldo/costo no
 // genera una línea de Kardex de la nada).
+// Corregido 2026-09-22, bug real encontrado por el usuario (caso 172320):
+// la primera versión no revisaba si el producto ya tenía una compra o
+// salida MÁS NUEVA que el archivo de Just — en 59 productos sí la tenía
+// (Daniel y Bryan habían confirmado compras reales el 21/09, pero el
+// último archivo de Just era del 19/09), así que el corte pisó ese
+// movimiento real con el número viejo de Just. Ahora se salta cualquier
+// producto cuyo último movimiento REAL (quantity != 0) sea más nuevo que
+// la subida del archivo — ahí se confía en INVESTOCK, no en Just.
 async function findJustCutoverCandidates(): Promise<JustCutoverSyncRow[]> {
   const dept = await prisma.department.findUnique({ where: { code: "FIN" }, select: { id: true } });
   if (!dept) return [];
@@ -502,7 +510,7 @@ async function findJustCutoverCandidates(): Promise<JustCutoverSyncRow[]> {
     where: { deptId: dept.id },
     distinct: ["productCode"],
     orderBy: [{ productCode: "asc" }, { createdAt: "desc" }],
-    select: { productCode: true, avgCost: true, stock: true },
+    select: { productCode: true, avgCost: true, stock: true, createdAt: true },
   });
   if (snapshots.length === 0) return [];
 
@@ -522,10 +530,20 @@ async function findJustCutoverCandidates(): Promise<JustCutoverSyncRow[]> {
   });
   const latestByItem = new Map(latestPerItem.map((e) => [e.catalogItemId, e]));
 
+  const latestRealPerItem = await prisma.stockKardexEntry.findMany({
+    where: { catalogItemId: { in: ids }, type: { in: ["IN", "OUT"] }, quantity: { not: 0 } },
+    distinct: ["catalogItemId"],
+    orderBy: [{ catalogItemId: "asc" }, { occurredAt: "desc" }],
+    select: { catalogItemId: true, occurredAt: true },
+  });
+  const latestRealOccurredAtByItem = new Map(latestRealPerItem.map((e) => [e.catalogItemId, e.occurredAt]));
+
   const results: JustCutoverSyncRow[] = [];
   for (const s of snapshots) {
     const item = itemByCode.get(s.productCode.trim());
     if (!item) continue;
+    const latestRealOccurredAt = latestRealOccurredAtByItem.get(item.id);
+    if (latestRealOccurredAt && latestRealOccurredAt > s.createdAt) continue;
     const latest = latestByItem.get(item.id);
     const oldBalance = latest?.balanceAfter ?? 0;
     const oldAvgCost = latest?.avgCostAfter ?? 0;
@@ -560,6 +578,103 @@ export async function applyJustCutoverSync(): Promise<{ syncedCount: number }> {
     })),
   });
   return { syncedCount: candidates.length };
+}
+
+export type CutoverDamageRow = {
+  catalogItemId: string;
+  name: string;
+  justCode: string | null;
+  currentBalance: number;
+  currentAvgCost: number;
+  restoreBalance: number;
+  restoreAvgCost: number;
+  realMovementType: "IN" | "OUT";
+  realMovementAt: string;
+};
+
+// Confirmado 2026-09-22, corrección de un bug real: antes de arreglar
+// findJustCutoverCandidates, ya se habían aplicado 235 líneas
+// JUST_CUTOVER_SYNC (commit b5588da) — 59 de esas pisaron un movimiento
+// real (IN/OUT) más nuevo que el archivo de Just que se usó. Esto busca
+// exactamente esos casos: un producto cuya línea JUST_CUTOVER_SYNC más
+// reciente vino justo después de una línea IN/OUT real en el Kardex — y
+// calcula qué haría falta para restaurar el saldo/costo real que tenía
+// antes de que el corte lo pisara.
+async function findCutoverDamageCandidates(): Promise<CutoverDamageRow[]> {
+  const cutoverEntries = await prisma.stockKardexEntry.findMany({
+    where: { type: "JUST_CUTOVER_SYNC" },
+    select: { id: true, catalogItemId: true, occurredAt: true },
+  });
+  if (cutoverEntries.length === 0) return [];
+  const catalogItemIds = [...new Set(cutoverEntries.map((e) => e.catalogItemId))];
+
+  const items = await prisma.purchaseCatalogItem.findMany({
+    where: { id: { in: catalogItemIds } },
+    select: { id: true, name: true, justCode: true },
+  });
+  const itemById = new Map(items.map((i) => [i.id, i]));
+
+  const allEntries = await prisma.stockKardexEntry.findMany({
+    where: { catalogItemId: { in: catalogItemIds } },
+    orderBy: [{ occurredAt: "asc" }, { createdAt: "asc" }],
+    select: { id: true, catalogItemId: true, type: true, quantity: true, balanceAfter: true, avgCostAfter: true, occurredAt: true },
+  });
+  const entriesByItem = new Map<string, typeof allEntries>();
+  for (const e of allEntries) {
+    const arr = entriesByItem.get(e.catalogItemId);
+    if (arr) arr.push(e);
+    else entriesByItem.set(e.catalogItemId, [e]);
+  }
+
+  const results: CutoverDamageRow[] = [];
+  for (const catalogItemId of catalogItemIds) {
+    const entries = entriesByItem.get(catalogItemId) ?? [];
+    // Última línea del Kardex de este producto — si ya no es la del corte
+    // (ej. ya se corrigió, o entró una compra real nueva después), no hay
+    // nada que restaurar: lo más reciente ya es lo correcto.
+    const latest = entries[entries.length - 1];
+    if (!latest || latest.type !== "JUST_CUTOVER_SYNC") continue;
+    const idx = entries.length - 1;
+    const prev = entries[idx - 1];
+    if (!prev || (prev.type !== "IN" && prev.type !== "OUT") || prev.quantity === 0) continue;
+
+    const item = itemById.get(catalogItemId);
+    if (!item) continue;
+    results.push({
+      catalogItemId,
+      name: item.name,
+      justCode: item.justCode,
+      currentBalance: latest.balanceAfter,
+      currentAvgCost: latest.avgCostAfter,
+      restoreBalance: prev.balanceAfter,
+      restoreAvgCost: prev.avgCostAfter,
+      realMovementType: prev.type as "IN" | "OUT",
+      realMovementAt: prev.occurredAt.toISOString(),
+    });
+  }
+  return results.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+export async function previewCutoverDamageCorrection(): Promise<CutoverDamageRow[]> {
+  return findCutoverDamageCandidates();
+}
+
+export async function applyCutoverDamageCorrection(): Promise<{ restoredCount: number }> {
+  const candidates = await findCutoverDamageCandidates();
+  if (candidates.length === 0) return { restoredCount: 0 };
+  const now = new Date();
+  await prisma.stockKardexEntry.createMany({
+    data: candidates.map((c) => ({
+      catalogItemId: c.catalogItemId,
+      type: "CUTOVER_CORRECTION" as const,
+      quantity: c.restoreBalance - c.currentBalance,
+      unitCost: c.restoreAvgCost,
+      balanceAfter: c.restoreBalance,
+      avgCostAfter: c.restoreAvgCost,
+      occurredAt: now,
+    })),
+  });
+  return { restoredCount: candidates.length };
 }
 
 // Solo cuenta, no escribe — para que la pantalla sepa si mostrar el botón
