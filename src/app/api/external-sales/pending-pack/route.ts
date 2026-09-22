@@ -15,7 +15,7 @@ export async function GET() {
       },
       orderBy: { prepReadyAt: "asc" },
     }),
-    prisma.user.findMany({ where: { department: { code: "FUL" } }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
+    prisma.user.findMany({ where: { department: { code: "FUL" }, isActive: true }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
   ]);
   return NextResponse.json({ sales, team });
 }

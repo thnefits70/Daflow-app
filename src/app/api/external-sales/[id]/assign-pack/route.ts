@@ -24,7 +24,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (!sale.prepReadyAt) return NextResponse.json({ error: "Inventario todavía no la deja lista." }, { status: 409 });
   if (sale.packAssignedToId) return NextResponse.json({ error: "Ya fue asignada." }, { status: 409 });
 
-  const colaborador = await prisma.user.findFirst({ where: { id: parsed.data.colaboradorId, department: { code: "FUL" } }, select: { id: true } });
+  const colaborador = await prisma.user.findFirst({ where: { id: parsed.data.colaboradorId, department: { code: "FUL" }, isActive: true }, select: { id: true } });
   if (!colaborador) return NextResponse.json({ error: "Colaborador no encontrado en Fulfilment." }, { status: 404 });
 
   const updated = await prisma.externalSale.update({
