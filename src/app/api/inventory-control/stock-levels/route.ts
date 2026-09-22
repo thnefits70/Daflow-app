@@ -42,7 +42,7 @@ export async function GET() {
   // project_stock_comparison_avg_cost) mientras INVESTOCK/devoluciones
   // siguen en prueba. Solo referencia — nunca reemplaza nada, ni se guarda
   // en ningún lado más que en el archivo original de Just.
-  const [rows, proposals, justSnapshots] = await Promise.all([
+  const [rows, proposals, justSnapshots, pendingAdjustments] = await Promise.all([
     getAllCurrentStock(),
     prisma.marketProductProposal.findMany({
       where: { catalogItemId: { not: null } },
@@ -56,7 +56,12 @@ export async function GET() {
           select: { productCode: true, avgCost: true, stock: true, createdAt: true },
         })
       : Promise.resolve([]),
+    // Confirmado 2026-09-22, pedido explícito del usuario: para que la fila
+    // muestre "pendiente de aprobación" en vez del botón normal cuando
+    // Daniel ya dejó una solicitud de ajuste de stock sin resolver.
+    prisma.stockPhysicalCountAdjustmentRequest.findMany({ select: { catalogItemId: true, requestedQuantity: true } }),
   ]);
+  const pendingAdjustmentByItem = new Map(pendingAdjustments.map((a) => [a.catalogItemId, a.requestedQuantity]));
   const justAvgCostByCode = new Map(justSnapshots.map((s) => [s.productCode.trim(), s.avgCost]));
   // Confirmado 2026-09-17, pedido explícito del usuario: además del costo,
   // mostrar también el stock tal cual venía en el último archivo de Just
@@ -121,12 +126,14 @@ export async function GET() {
     const base = proposalByCatalogItemId.get(r.catalogItemId) ??
       (r.avgCost > 0 ? { batchCost: r.avgCost, batchUnits: 1, freightCost: null, insuranceRatePercent: 6, fulfillmentCost: DROPI_FULFILLMENT_DEFAULT, marginPercent: DROPI_MARGIN_DEFAULT, costSource: "kardex" as const } : null) ??
       (justAvgCost && justAvgCost > 0 ? { batchCost: justAvgCost, batchUnits: 1, freightCost: null, insuranceRatePercent: 6, fulfillmentCost: DROPI_FULFILLMENT_DEFAULT, marginPercent: DROPI_MARGIN_DEFAULT, costSource: "just" as const } : null);
-    if (!base) return { ...r, justAvgCost, justStock, justStockUploadedAt };
+    const pendingAdjustmentQuantity = pendingAdjustmentByItem.get(r.catalogItemId) ?? null;
+    if (!base) return { ...r, justAvgCost, justStock, justStockUploadedAt, pendingAdjustmentQuantity };
     return {
       ...r,
       justAvgCost,
       justStock,
       justStockUploadedAt,
+      pendingAdjustmentQuantity,
       costSource: base.costSource,
       providerPrice: base.batchCost,
       bodegaPrice: bodegaUnitCost(base.batchCost, base.freightCost, base.batchUnits),

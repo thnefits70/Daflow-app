@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Search, ArrowUpDown, Info, X, Wrench, Check, Trash2, RefreshCw } from "lucide-react";
+import { Search, ArrowUpDown, Info, X, Wrench, Check, Trash2, RefreshCw, ClipboardCheck } from "lucide-react";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 import { TabGuide } from "@/components/shared/TabGuide";
 import { formatDateTime } from "@/lib/formatDateTime";
@@ -21,6 +21,18 @@ type CutoverDamageRow = {
   restoreAvgCost: number;
   realMovementType: "IN" | "OUT";
   realMovementAt: string;
+};
+type PendingAdjustmentRow = {
+  id: string;
+  catalogItemId: string;
+  name: string;
+  justCode: string | null;
+  currentQuantityAtRequest: number;
+  currentQuantityNow: number;
+  requestedQuantity: number;
+  reason: string;
+  requestedByName: string | null;
+  requestedAt: string;
 };
 
 // Confirmado 2026-09-16, pedido explícito del usuario: los combos de Dropi
@@ -78,6 +90,7 @@ type StockRow = {
   dropiPrice?: number;
   b2cPrice1Unit?: number;
   b2cPrice2to11?: number;
+  pendingAdjustmentQuantity?: number | null;
 };
 type SortKey = "name" | "balance" | "proveedor" | "just" | "bodega" | "benistock" | "b2b" | "dropi" | "b2c1" | "b2c2";
 // Confirmado 2026-09-21, pedido explícito del usuario: además de ordenar
@@ -289,6 +302,132 @@ function DeclareCostButton({ catalogItemId, suggestedCost, onDeclared }: { catal
   );
 }
 
+// Confirmado 2026-09-22, pedido explícito del usuario (admin): única forma
+// de "escribir" el stock a mano en INVESTOCK, a propósito muy controlada —
+// nace de un conteo físico real. El admin aplica el ajuste directo; Daniel
+// (canEdit sin ser admin) solo deja una solicitud pendiente que el admin
+// tiene que aprobar aparte (bandeja arriba de la tabla) — nunca mueve el
+// stock él mismo, para que esto no se vuelva un botón de uso diario.
+function StockAdjustmentTrigger({
+  catalogItemId,
+  currentBalance,
+  isAdmin,
+  pendingQuantity,
+  onChanged,
+}: {
+  catalogItemId: string;
+  currentBalance: number;
+  isAdmin: boolean;
+  pendingQuantity: number | null | undefined;
+  onChanged: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [quantity, setQuantity] = useState(String(currentBalance));
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  if (pendingQuantity != null) {
+    return (
+      <span className="text-[9.5px] font-bold uppercase text-gold shrink-0" title="Esperando que el admin apruebe o rechace este ajuste.">
+        Pendiente: {pendingQuantity}
+      </span>
+    );
+  }
+
+  async function submit() {
+    const qty = Number(quantity);
+    if (!Number.isInteger(qty) || qty < 0) {
+      setError("La cantidad debe ser un número entero, 0 o mayor.");
+      return;
+    }
+    if (!reason.trim()) {
+      setError("Escribe el motivo.");
+      return;
+    }
+    const confirmMsg = isAdmin
+      ? `¿Aplicar de una vez el ajuste? Stock pasa de ${currentBalance} a ${qty}.`
+      : `¿Enviar la solicitud a Andrés? Stock actual: ${currentBalance}, contaste: ${qty}. No se aplica hasta que la apruebe.`;
+    if (!window.confirm(confirmMsg)) return;
+    setBusy(true);
+    setError("");
+    try {
+      const res = await fetch(`/api/inventory-control/catalog-items/${catalogItemId}/physical-count-adjustment`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ requestedQuantity: qty, reason: reason.trim() }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error ?? "No se pudo procesar el ajuste.");
+      setOpen(false);
+      setReason("");
+      onChanged();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "No se pudo procesar el ajuste.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        title="Ajustar el stock por un conteo físico real"
+        className="text-[9.5px] font-bold uppercase text-steel hover:text-ink cursor-pointer shrink-0"
+        onClick={() => {
+          setQuantity(String(currentBalance));
+          setOpen(true);
+        }}
+      >
+        Ajustar (conteo)
+      </button>
+    );
+  }
+
+  // Apilado verticalmente (no en fila) a propósito — la columna de Stock
+  // solo tiene 90px, y dos inputs uno al lado del otro no caben ahí sin
+  // desbordarse encima de la columna vecina (mismo ancho que ya usa
+  // "Declarar costo" en la columna de Proveedor, 100px).
+  return (
+    <div className="flex flex-col items-end gap-1 shrink-0 w-full">
+      <input
+        autoFocus
+        type="number"
+        step="1"
+        min="0"
+        disabled={busy}
+        title="Cantidad real que contaste"
+        placeholder="Cantidad"
+        className="w-full rounded border border-teal bg-cloud px-1 py-0.5 text-[11px] font-mono disabled:opacity-60"
+        value={quantity}
+        onChange={(e) => setQuantity(e.target.value)}
+      />
+      <input
+        type="text"
+        disabled={busy}
+        placeholder="Motivo"
+        className="w-full rounded border border-rule bg-cloud px-1 py-0.5 text-[10px]"
+        value={reason}
+        onChange={(e) => setReason(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") submit();
+          if (e.key === "Escape") setOpen(false);
+        }}
+      />
+      <div className="flex items-center gap-1.5">
+        <button type="button" disabled={busy} title="Confirmar" className="text-teal cursor-pointer disabled:opacity-50" onClick={submit}>
+          <Check size={12} />
+        </button>
+        <button type="button" disabled={busy} title="Cancelar" className="text-steel hover:text-red cursor-pointer disabled:opacity-50" onClick={() => setOpen(false)}>
+          <X size={12} />
+        </button>
+      </div>
+      {error && <span className="text-red text-[9px] text-right">{error}</span>}
+    </div>
+  );
+}
+
 // Confirmado 2026-09-16, pedido explícito del usuario: elegir/corregir la
 // marca de cada producto o combo directamente acá — editable solo en esta
 // pantalla, que ya es exclusiva de Daniel/admin (canManageJustCatalog), no
@@ -423,6 +562,16 @@ export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?
   const [sinPrecioFilter, setSinPrecioFilter] = useState(false);
   const [sinStockFilter, setSinStockFilter] = useState(false);
 
+  // Confirmado 2026-09-22, pedido explícito del usuario (admin): bandeja
+  // para aprobar/rechazar las solicitudes de ajuste de stock que Daniel
+  // dejó pendientes (StockAdjustmentTrigger, por fila) — exclusiva del
+  // admin, cada solicitud se decide una por una, no hay "aprobar todas".
+  const [pendingAdjustmentsOpen, setPendingAdjustmentsOpen] = useState(false);
+  const [pendingAdjustmentsLoading, setPendingAdjustmentsLoading] = useState(false);
+  const [pendingAdjustments, setPendingAdjustments] = useState<PendingAdjustmentRow[] | null>(null);
+  const [pendingAdjustmentsError, setPendingAdjustmentsError] = useState("");
+  const [reviewingAdjustmentId, setReviewingAdjustmentId] = useState<string | null>(null);
+
   // Confirmado 2026-09-22, bug real reportado por el usuario (caso 172320):
   // el corte con Just de abajo pisó 59 productos que ya tenían una compra
   // o salida real más nueva que el archivo usado (Daniel/Bryan habían
@@ -556,7 +705,38 @@ export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?
       .then((r) => (r.ok ? r.json() : []))
       .then(setCombos)
       .catch(() => setCombos([]));
+    // Confirmado 2026-09-22: carga el conteo de solicitudes pendientes en
+    // segundo plano para que el número aparezca en el título del bloque
+    // sin que el admin tenga que abrirlo primero.
+    if (isAdmin) loadPendingAdjustments();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  function loadPendingAdjustments() {
+    setPendingAdjustmentsLoading(true);
+    setPendingAdjustmentsError("");
+    fetch("/api/inventory-control/physical-count-adjustments")
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then(setPendingAdjustments)
+      .catch(() => setPendingAdjustmentsError("No se pudo cargar la lista."))
+      .finally(() => setPendingAdjustmentsLoading(false));
+  }
+
+  async function reviewAdjustment(id: string, action: "approve" | "reject") {
+    setReviewingAdjustmentId(id);
+    const res = await fetch(`/api/inventory-control/physical-count-adjustments/${id}/review`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action }),
+    });
+    setReviewingAdjustmentId(null);
+    if (!res.ok) {
+      setPendingAdjustmentsError("No se pudo procesar la solicitud.");
+      return;
+    }
+    loadPendingAdjustments();
+    loadRows();
+  }
 
   function loadDamagePreview() {
     setDamageLoading(true);
@@ -894,6 +1074,77 @@ export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?
       <TabGuide storageKey="stock-actual">
         Acá ves el saldo de INVESTOCK (el Kardex propio de DAFLOW) de cada producto del catálogo, calculado en tiempo real a partir de lo recibido en Compras y lo despachado en Egresos — sin depender de que alguien suba un archivo. Un saldo en rojo significa stock negativo (algo salió sin haber entrado, o hay un error de conteo por revisar).
       </TabGuide>
+
+      {isAdmin && (
+        <div className="border border-gold rounded-md mb-3">
+          <button
+            type="button"
+            className="w-full flex items-center gap-2 px-3 py-2 text-[12px] font-semibold text-gold hover:text-gold cursor-pointer"
+            onClick={() => {
+              setPendingAdjustmentsOpen((v) => !v);
+              if (!pendingAdjustmentsOpen && pendingAdjustments === null) loadPendingAdjustments();
+            }}
+          >
+            <ClipboardCheck size={13} /> Solicitudes de ajuste de stock por conteo físico
+            {pendingAdjustments && pendingAdjustments.length > 0 && ` (${pendingAdjustments.length})`}
+          </button>
+          {pendingAdjustmentsOpen && (
+            <div className="px-3 pb-3 text-[12px]">
+              <p className="text-steel mb-2">
+                Daniel encontró un conteo físico que no coincide con INVESTOCK y pidió ajustarlo — revisa cada uno y decide. Nada se mueve hasta que apruebes.
+              </p>
+              {pendingAdjustmentsError && <div className="text-red mb-2">{pendingAdjustmentsError}</div>}
+              {pendingAdjustmentsLoading && <div className="text-steel">Cargando…</div>}
+              {!pendingAdjustmentsLoading && pendingAdjustments && (
+                <>
+                  {pendingAdjustments.length === 0 ? (
+                    <div className="text-steel">No hay solicitudes pendientes.</div>
+                  ) : (
+                    <div className="flex flex-col gap-2">
+                      {pendingAdjustments.map((a) => (
+                        <div key={a.id} className="border border-rule rounded-md p-2.5">
+                          <div className="flex items-center justify-between gap-2 mb-1">
+                            <span className="text-[12.5px] font-semibold flex items-center gap-1.5">
+                              <CatalogCode code={a.justCode} size="text-[10px]" /> {a.name}
+                            </span>
+                            <span className="font-mono text-[12px] text-steel shrink-0">
+                              {a.currentQuantityNow} → <span className="font-bold text-gold">{a.requestedQuantity}</span>
+                            </span>
+                          </div>
+                          <div className="text-[11px] text-steel mb-1.5">
+                            &quot;{a.reason}&quot; — pedido por {a.requestedByName ?? "—"} el {formatDateTime(a.requestedAt)}
+                            {a.currentQuantityNow !== a.currentQuantityAtRequest && (
+                              <span className="text-gold"> (el saldo cambió desde que pidió: tenía {a.currentQuantityAtRequest} en ese momento)</span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              disabled={reviewingAdjustmentId === a.id}
+                              className="rounded border border-teal bg-teal px-2.5 py-1 text-[11px] font-bold text-navy cursor-pointer disabled:opacity-50"
+                              onClick={() => reviewAdjustment(a.id, "approve")}
+                            >
+                              {reviewingAdjustmentId === a.id ? "…" : "Aprobar"}
+                            </button>
+                            <button
+                              type="button"
+                              disabled={reviewingAdjustmentId === a.id}
+                              className="rounded border border-red px-2.5 py-1 text-[11px] font-bold text-red cursor-pointer disabled:opacity-50"
+                              onClick={() => reviewAdjustment(a.id, "reject")}
+                            >
+                              Rechazar
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {isAdmin && (
         <div className="border border-red rounded-md mb-3">
@@ -1514,7 +1765,18 @@ export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?
                   <span className="truncate">{r.name}</span>
                 </span>
                 <MarcaSelect value={r.bodega} onChange={(v) => updateProductMarca(r.catalogItemId, v)} readOnly={!canEdit} />
-                <span className={`text-right font-mono text-[12.5px] font-bold ${r.balance < 0 ? "text-red" : "text-ink"}`}>{r.balance}</span>
+                <span className="flex flex-col items-end gap-0.5">
+                  <span className={`text-right font-mono text-[12.5px] font-bold ${r.balance < 0 ? "text-red" : "text-ink"}`}>{r.balance}</span>
+                  {canEdit && (
+                    <StockAdjustmentTrigger
+                      catalogItemId={r.catalogItemId}
+                      currentBalance={r.balance}
+                      isAdmin={isAdmin}
+                      pendingQuantity={r.pendingAdjustmentQuantity}
+                      onChanged={loadRows}
+                    />
+                  )}
+                </span>
                 {/* Confirmado 2026-09-17, pedido explícito del usuario: stock
                     de referencia según el último archivo de Just, junto al
                     stock real de INVESTOCK — resaltado en gold cuando no

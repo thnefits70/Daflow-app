@@ -376,97 +376,98 @@ model User {
   examScores                                       ExamScore[]
   milestones                                       Milestone[]
   ackUpdates                                       UserAckUpdate[]
-  suppliersCreated                                 Supplier[]                         @relation("SupplierCreatedBy")
-  suppliersApproved                                Supplier[]                         @relation("SupplierApprovedBy")
-  supplierBankAccountsCreated                      SupplierBankAccount[]              @relation("SupplierBankAccountCreatedBy")
-  supplierDebtPaymentsCreated                      SupplierDebtPayment[]              @relation("SupplierDebtPaymentCreatedBy")
-  supplierDebtTransfersCreated                     SupplierDebtTransfer[]             @relation("SupplierDebtTransferCreatedBy")
-  marketProductProposalsProposed                   MarketProductProposal[]            @relation("MarketProductProposalProposedBy")
-  marketProductProposalsReviewed                   MarketProductProposal[]            @relation("MarketProductProposalReviewedBy")
-  marketProductProposalsPublished                  MarketProductProposal[]            @relation("MarketProductProposalPublishedBy")
-  marketProductProposalsBranded                    MarketProductProposal[]            @relation("MarketProductProposalBrandedBy")
-  marketProductProposalsMarkedReadyToBuy           MarketProductProposal[]            @relation("MarketProductProposalReadyToBuyBy")
-  marketProductProposalsKardexReleased             MarketProductProposal[]            @relation("MarketProductProposalKardexReleasedBy")
-  marketProductPriceChangesMade                    MarketProductPriceChange[]         @relation("MarketProductPriceChangeChangedBy")
-  purchaseRequestsPaidBy                           PurchaseRequest[]                  @relation("PurchaseRequestPaidBy")
-  purchaseRequestsInvoicedBy                       PurchaseRequest[]                  @relation("PurchaseRequestInvoicedBy")
-  purchaseRequestsShippingPaymentRequestedBy       PurchaseRequest[]                  @relation("PurchaseRequestShippingPaymentRequestedBy")
-  purchaseRequestsBankAccountChangeRequestedBy     PurchaseRequest[]                  @relation("PurchaseRequestBankAccountChangeRequestedBy")
-  purchaseRequestsShippingPaidBy                   PurchaseRequest[]                  @relation("PurchaseRequestShippingPaidBy")
-  purchaseRequestsBuyerDebtConfirmedBy             PurchaseRequest[]                  @relation("PurchaseRequestBuyerDebtConfirmedBy")
-  purchaseRequestsBuyerDebtRejectedBy              PurchaseRequest[]                  @relation("PurchaseRequestBuyerDebtRejectedBy")
-  payStubs                                         PayStub[]                          @relation("PayStubOwner")
-  payStubsUploaded                                 PayStub[]                          @relation("PayStubUploadedBy")
-  externalPayments                                 ExternalPayment[]                  @relation("ExternalPaymentOwner")
-  externalPaymentsRegistered                       ExternalPayment[]                  @relation("ExternalPaymentRegisteredBy")
-  weeklyReviewsReported                            WeeklyReviewRecord[]               @relation("WeeklyReviewReportedBy")
-  weeklyReviewsInvolvingMe                         WeeklyReviewRecord[]               @relation("WeeklyReviewInvolvesUser")
-  financeKpiRecordsUploaded                        FinanceKpiRecord[]                 @relation("FinanceKpiRecordUploadedBy")
-  financeKpiUploadsBy                              FinanceKpiUpload[]                 @relation("FinanceKpiUploadUploadedBy")
-  paymentReminderRecordsCompleted                  PaymentReminderRecord[]            @relation("PaymentReminderCompletedBy")
-  periodicReminderCompletions                      PeriodicReminderCompletion[]       @relation("PeriodicReminderCompletedBy")
-  periodicRemindersCreated                         PeriodicReminder[]                 @relation("PeriodicReminderCreatedBy")
-  purchaseCatalogItemsCreated                      PurchaseCatalogItem[]              @relation("PurchaseCatalogItemCreatedBy")
-  purchaseCatalogItemDeleteRequests                PurchaseCatalogItemDeleteRequest[] @relation("PurchaseCatalogItemDeleteRequestedBy")
-  catalogMissingReportsReported                    CatalogMissingReport[]             @relation("CatalogMissingReportReportedBy")
-  catalogMissingReportsResolved                    CatalogMissingReport[]             @relation("CatalogMissingReportResolvedBy")
-  justCatalogImports                               JustCatalogImport[]                @relation("JustCatalogImportImportedBy")
-  stockKardexCostDeclarations                      StockKardexEntry[]                 @relation("StockKardexEntryDeclaredCostBy")
-  justCatalogDuplicateResolutions                  JustCatalogDuplicateResolution[]   @relation("JustCatalogDuplicateResolutionDecidedBy")
-  dropiCombosCreated                               DropiCombo[]                       @relation("DropiComboCreatedBy")
-  rocketCodeMappingsCreated                        RocketCodeMapping[]                @relation("RocketCodeMappingCreatedBy")
-  fulfillmentRequestBatchesRequested               FulfillmentRequestBatch[]          @relation("FulfillmentRequestBatchRequestedBy")
-  fulfillmentRequestVariantNotesCreated            FulfillmentRequestVariantNote[]    @relation("FulfillmentRequestVariantNoteCreatedBy")
-  supplierCreditsCreated                           SupplierCredit[]                   @relation("SupplierCreditCreatedBy")
-  urgentResolutionsCreated                         PurchaseUrgentResolution[]         @relation("UrgentResolutionCreatedBy")
-  urgentResolutionsReplacementSubmitted            PurchaseUrgentResolution[]         @relation("UrgentResolutionReplacementSubmittedBy")
-  urgentResolutionsReplacementVerified             PurchaseUrgentResolution[]         @relation("UrgentResolutionReplacementVerifiedBy")
-  urgentResolutionsJustaUploaded                   PurchaseUrgentResolution[]         @relation("UrgentResolutionJustaUploadedBy")
-  urgentResolutionsBankConfirmed                   PurchaseUrgentResolution[]         @relation("UrgentResolutionBankConfirmedBy")
-  urgentResolutionsCancelled                       PurchaseUrgentResolution[]         @relation("UrgentResolutionCancelledBy")
-  purchaseRequestsFinanceFlagged                   PurchaseRequest[]                  @relation("PurchaseRequestFinanceFlaggedBy")
-  adminPaymentTemplatesCreated                     AdminPaymentTemplate[]             @relation("AdminPaymentTemplateCreatedBy")
-  adminPaymentRequestsCreated                      AdminPaymentRequest[]              @relation("AdminPaymentRequestCreatedBy")
-  adminPaymentsPaid                                AdminPaymentRequest[]              @relation("AdminPaymentPaidBy")
-  adminPaymentsConfirmed                           AdminPaymentRequest[]              @relation("AdminPaymentConfirmedBy")
-  adminPaymentPayeesCreated                        AdminPaymentPayee[]                @relation("AdminPaymentPayeeCreatedBy")
-  adminPaymentPayeeBankAccountsCreated             AdminPaymentPayeeBankAccount[]     @relation("AdminPaymentPayeeBankAccountCreatedBy")
-  inventoryProductSnapshotsCreated                 InventoryProductSnapshot[]         @relation("InventoryProductSnapshotCreatedBy")
-  pettyCashEntriesCreated                          PettyCashEntry[]                   @relation("PettyCashEntryCreatedBy")
-  pettyCashEntriesUpdated                          PettyCashEntry[]                   @relation("PettyCashEntryUpdatedBy")
-  pettyCashEntriesArchived                         PettyCashEntry[]                   @relation("PettyCashEntryArchivedBy")
-  pettyCashEntriesRestored                         PettyCashEntry[]                   @relation("PettyCashEntryRestoredBy")
-  pettyCashEntriesConfirmed                        PettyCashEntry[]                   @relation("PettyCashEntryConfirmedBy")
-  pettyCashExceptionsRequested                     PettyCashFreightException[]        @relation("PettyCashExceptionRequestedBy")
+  suppliersCreated                                 Supplier[]                            @relation("SupplierCreatedBy")
+  suppliersApproved                                Supplier[]                            @relation("SupplierApprovedBy")
+  supplierBankAccountsCreated                      SupplierBankAccount[]                 @relation("SupplierBankAccountCreatedBy")
+  supplierDebtPaymentsCreated                      SupplierDebtPayment[]                 @relation("SupplierDebtPaymentCreatedBy")
+  supplierDebtTransfersCreated                     SupplierDebtTransfer[]                @relation("SupplierDebtTransferCreatedBy")
+  marketProductProposalsProposed                   MarketProductProposal[]               @relation("MarketProductProposalProposedBy")
+  marketProductProposalsReviewed                   MarketProductProposal[]               @relation("MarketProductProposalReviewedBy")
+  marketProductProposalsPublished                  MarketProductProposal[]               @relation("MarketProductProposalPublishedBy")
+  marketProductProposalsBranded                    MarketProductProposal[]               @relation("MarketProductProposalBrandedBy")
+  marketProductProposalsMarkedReadyToBuy           MarketProductProposal[]               @relation("MarketProductProposalReadyToBuyBy")
+  marketProductProposalsKardexReleased             MarketProductProposal[]               @relation("MarketProductProposalKardexReleasedBy")
+  marketProductPriceChangesMade                    MarketProductPriceChange[]            @relation("MarketProductPriceChangeChangedBy")
+  purchaseRequestsPaidBy                           PurchaseRequest[]                     @relation("PurchaseRequestPaidBy")
+  purchaseRequestsInvoicedBy                       PurchaseRequest[]                     @relation("PurchaseRequestInvoicedBy")
+  purchaseRequestsShippingPaymentRequestedBy       PurchaseRequest[]                     @relation("PurchaseRequestShippingPaymentRequestedBy")
+  purchaseRequestsBankAccountChangeRequestedBy     PurchaseRequest[]                     @relation("PurchaseRequestBankAccountChangeRequestedBy")
+  purchaseRequestsShippingPaidBy                   PurchaseRequest[]                     @relation("PurchaseRequestShippingPaidBy")
+  purchaseRequestsBuyerDebtConfirmedBy             PurchaseRequest[]                     @relation("PurchaseRequestBuyerDebtConfirmedBy")
+  purchaseRequestsBuyerDebtRejectedBy              PurchaseRequest[]                     @relation("PurchaseRequestBuyerDebtRejectedBy")
+  payStubs                                         PayStub[]                             @relation("PayStubOwner")
+  payStubsUploaded                                 PayStub[]                             @relation("PayStubUploadedBy")
+  externalPayments                                 ExternalPayment[]                     @relation("ExternalPaymentOwner")
+  externalPaymentsRegistered                       ExternalPayment[]                     @relation("ExternalPaymentRegisteredBy")
+  weeklyReviewsReported                            WeeklyReviewRecord[]                  @relation("WeeklyReviewReportedBy")
+  weeklyReviewsInvolvingMe                         WeeklyReviewRecord[]                  @relation("WeeklyReviewInvolvesUser")
+  financeKpiRecordsUploaded                        FinanceKpiRecord[]                    @relation("FinanceKpiRecordUploadedBy")
+  financeKpiUploadsBy                              FinanceKpiUpload[]                    @relation("FinanceKpiUploadUploadedBy")
+  paymentReminderRecordsCompleted                  PaymentReminderRecord[]               @relation("PaymentReminderCompletedBy")
+  periodicReminderCompletions                      PeriodicReminderCompletion[]          @relation("PeriodicReminderCompletedBy")
+  periodicRemindersCreated                         PeriodicReminder[]                    @relation("PeriodicReminderCreatedBy")
+  purchaseCatalogItemsCreated                      PurchaseCatalogItem[]                 @relation("PurchaseCatalogItemCreatedBy")
+  purchaseCatalogItemDeleteRequests                PurchaseCatalogItemDeleteRequest[]    @relation("PurchaseCatalogItemDeleteRequestedBy")
+  stockPhysicalCountAdjustmentRequests             StockPhysicalCountAdjustmentRequest[] @relation("StockPhysicalCountAdjustmentRequestedBy")
+  catalogMissingReportsReported                    CatalogMissingReport[]                @relation("CatalogMissingReportReportedBy")
+  catalogMissingReportsResolved                    CatalogMissingReport[]                @relation("CatalogMissingReportResolvedBy")
+  justCatalogImports                               JustCatalogImport[]                   @relation("JustCatalogImportImportedBy")
+  stockKardexCostDeclarations                      StockKardexEntry[]                    @relation("StockKardexEntryDeclaredCostBy")
+  justCatalogDuplicateResolutions                  JustCatalogDuplicateResolution[]      @relation("JustCatalogDuplicateResolutionDecidedBy")
+  dropiCombosCreated                               DropiCombo[]                          @relation("DropiComboCreatedBy")
+  rocketCodeMappingsCreated                        RocketCodeMapping[]                   @relation("RocketCodeMappingCreatedBy")
+  fulfillmentRequestBatchesRequested               FulfillmentRequestBatch[]             @relation("FulfillmentRequestBatchRequestedBy")
+  fulfillmentRequestVariantNotesCreated            FulfillmentRequestVariantNote[]       @relation("FulfillmentRequestVariantNoteCreatedBy")
+  supplierCreditsCreated                           SupplierCredit[]                      @relation("SupplierCreditCreatedBy")
+  urgentResolutionsCreated                         PurchaseUrgentResolution[]            @relation("UrgentResolutionCreatedBy")
+  urgentResolutionsReplacementSubmitted            PurchaseUrgentResolution[]            @relation("UrgentResolutionReplacementSubmittedBy")
+  urgentResolutionsReplacementVerified             PurchaseUrgentResolution[]            @relation("UrgentResolutionReplacementVerifiedBy")
+  urgentResolutionsJustaUploaded                   PurchaseUrgentResolution[]            @relation("UrgentResolutionJustaUploadedBy")
+  urgentResolutionsBankConfirmed                   PurchaseUrgentResolution[]            @relation("UrgentResolutionBankConfirmedBy")
+  urgentResolutionsCancelled                       PurchaseUrgentResolution[]            @relation("UrgentResolutionCancelledBy")
+  purchaseRequestsFinanceFlagged                   PurchaseRequest[]                     @relation("PurchaseRequestFinanceFlaggedBy")
+  adminPaymentTemplatesCreated                     AdminPaymentTemplate[]                @relation("AdminPaymentTemplateCreatedBy")
+  adminPaymentRequestsCreated                      AdminPaymentRequest[]                 @relation("AdminPaymentRequestCreatedBy")
+  adminPaymentsPaid                                AdminPaymentRequest[]                 @relation("AdminPaymentPaidBy")
+  adminPaymentsConfirmed                           AdminPaymentRequest[]                 @relation("AdminPaymentConfirmedBy")
+  adminPaymentPayeesCreated                        AdminPaymentPayee[]                   @relation("AdminPaymentPayeeCreatedBy")
+  adminPaymentPayeeBankAccountsCreated             AdminPaymentPayeeBankAccount[]        @relation("AdminPaymentPayeeBankAccountCreatedBy")
+  inventoryProductSnapshotsCreated                 InventoryProductSnapshot[]            @relation("InventoryProductSnapshotCreatedBy")
+  pettyCashEntriesCreated                          PettyCashEntry[]                      @relation("PettyCashEntryCreatedBy")
+  pettyCashEntriesUpdated                          PettyCashEntry[]                      @relation("PettyCashEntryUpdatedBy")
+  pettyCashEntriesArchived                         PettyCashEntry[]                      @relation("PettyCashEntryArchivedBy")
+  pettyCashEntriesRestored                         PettyCashEntry[]                      @relation("PettyCashEntryRestoredBy")
+  pettyCashEntriesConfirmed                        PettyCashEntry[]                      @relation("PettyCashEntryConfirmedBy")
+  pettyCashExceptionsRequested                     PettyCashFreightException[]           @relation("PettyCashExceptionRequestedBy")
   pettyCashPayoutAccountsUpdated                   PettyCashPayoutAccount[]
-  pettyCashExceptionsReviewed                      PettyCashFreightException[]        @relation("PettyCashExceptionReviewedBy")
-  purchaseRequestsMade                             PurchaseRequest[]                  @relation("PurchaseRequestRequestedBy")
-  purchaseRequestsReviewed                         PurchaseRequest[]                  @relation("PurchaseRequestReviewedBy")
-  purchaseRequestReceiptsConfirmed                 PurchaseRequestReceipt[]           @relation("PurchaseRequestReceiptConfirmedBy")
-  purchaseRequestReceiptsApproved                  PurchaseRequestReceipt[]           @relation("PurchaseRequestReceiptApprovedBy")
-  purchaseRequestReceiptsJustaUploaded             PurchaseRequestReceipt[]           @relation("PurchaseRequestReceiptJustaUploadedBy")
-  purchaseRequestReceiptsQuantityCorrected         PurchaseRequestReceipt[]           @relation("PurchaseRequestReceiptQuantityCorrectedBy")
-  marketingFollowUpsDesignConfirmed                PurchaseReceiptFollowUp[]          @relation("PurchaseReceiptFollowUpDesignConfirmedBy")
-  marketingFollowUpsAdvisorConfirmed               PurchaseReceiptFollowUp[]          @relation("PurchaseReceiptFollowUpAdvisorConfirmedBy")
-  purchaseRequestUrgentReports                     PurchaseRequestUrgentReport[]      @relation("PurchaseRequestUrgentReportedBy")
-  purchaseRequestUrgentReportsReviewed             PurchaseRequestUrgentReport[]      @relation("PurchaseRequestUrgentReportReviewedByLead")
-  purchaseRequestUrgentReportsRejected             PurchaseRequestUrgentReport[]      @relation("PurchaseRequestUrgentReportRejectedBy")
-  purchaseRequestUrgentReportsJustConfirmed        PurchaseRequestUrgentReport[]      @relation("PurchaseRequestUrgentReportJustConfirmedBy")
-  purchaseRequestUrgentReportsResolvedInternally   PurchaseRequestUrgentReport[]      @relation("PurchaseRequestUrgentReportResolvedInternallyBy")
-  purchaseRequestUrgentReportsExcessGestion        PurchaseRequestUrgentReport[]      @relation("PurchaseRequestUrgentReportExcessGestionBy")
-  purchaseRequestUrgentReportsExcessConfirmed      PurchaseRequestUrgentReport[]      @relation("PurchaseRequestUrgentReportExcessConfirmedBy")
-  purchaseRequestUrgentReportsExcessKardexRecorded PurchaseRequestUrgentReport[]      @relation("PurchaseRequestUrgentReportExcessKardexRecordedBy")
-  storeFeedbackEvaluations                         StoreFeedbackEvaluation[]          @relation("StoreFeedbackEvaluatedBy")
+  pettyCashExceptionsReviewed                      PettyCashFreightException[]           @relation("PettyCashExceptionReviewedBy")
+  purchaseRequestsMade                             PurchaseRequest[]                     @relation("PurchaseRequestRequestedBy")
+  purchaseRequestsReviewed                         PurchaseRequest[]                     @relation("PurchaseRequestReviewedBy")
+  purchaseRequestReceiptsConfirmed                 PurchaseRequestReceipt[]              @relation("PurchaseRequestReceiptConfirmedBy")
+  purchaseRequestReceiptsApproved                  PurchaseRequestReceipt[]              @relation("PurchaseRequestReceiptApprovedBy")
+  purchaseRequestReceiptsJustaUploaded             PurchaseRequestReceipt[]              @relation("PurchaseRequestReceiptJustaUploadedBy")
+  purchaseRequestReceiptsQuantityCorrected         PurchaseRequestReceipt[]              @relation("PurchaseRequestReceiptQuantityCorrectedBy")
+  marketingFollowUpsDesignConfirmed                PurchaseReceiptFollowUp[]             @relation("PurchaseReceiptFollowUpDesignConfirmedBy")
+  marketingFollowUpsAdvisorConfirmed               PurchaseReceiptFollowUp[]             @relation("PurchaseReceiptFollowUpAdvisorConfirmedBy")
+  purchaseRequestUrgentReports                     PurchaseRequestUrgentReport[]         @relation("PurchaseRequestUrgentReportedBy")
+  purchaseRequestUrgentReportsReviewed             PurchaseRequestUrgentReport[]         @relation("PurchaseRequestUrgentReportReviewedByLead")
+  purchaseRequestUrgentReportsRejected             PurchaseRequestUrgentReport[]         @relation("PurchaseRequestUrgentReportRejectedBy")
+  purchaseRequestUrgentReportsJustConfirmed        PurchaseRequestUrgentReport[]         @relation("PurchaseRequestUrgentReportJustConfirmedBy")
+  purchaseRequestUrgentReportsResolvedInternally   PurchaseRequestUrgentReport[]         @relation("PurchaseRequestUrgentReportResolvedInternallyBy")
+  purchaseRequestUrgentReportsExcessGestion        PurchaseRequestUrgentReport[]         @relation("PurchaseRequestUrgentReportExcessGestionBy")
+  purchaseRequestUrgentReportsExcessConfirmed      PurchaseRequestUrgentReport[]         @relation("PurchaseRequestUrgentReportExcessConfirmedBy")
+  purchaseRequestUrgentReportsExcessKardexRecorded PurchaseRequestUrgentReport[]         @relation("PurchaseRequestUrgentReportExcessKardexRecordedBy")
+  storeFeedbackEvaluations                         StoreFeedbackEvaluation[]             @relation("StoreFeedbackEvaluatedBy")
   confidentialAccess                               ConfidentialDocumentAccess[]
   monthlyEvaluationsReceived                       MonthlyEvaluation[]
   monthlyRecognitionResults                        MonthlyRecognitionResult[]
   monthlyEvaluationSummaries                       MonthlyEvaluationSummary[]
-  leaderTeamFeedbackReceived                       LeaderTeamFeedback[]               @relation("LeaderTeamFeedbackLeader")
-  leaderExternalObservationsReceived               LeaderExternalObservation[]        @relation("LeaderExternalObsLeader")
-  learningPathsAssigned                            LearningPathAssignment[]           @relation("LearningPathAssignedTo")
-  learningPathStepProgress                         LearningPathStepProgress[]         @relation("LearningPathStepProgressBy")
-  payrollMessagesReceived                          PayrollMessage[]                   @relation("PayrollMessageEmployee")
-  payrollMessagesSent                              PayrollMessage[]                   @relation("PayrollMessageSender")
+  leaderTeamFeedbackReceived                       LeaderTeamFeedback[]                  @relation("LeaderTeamFeedbackLeader")
+  leaderExternalObservationsReceived               LeaderExternalObservation[]           @relation("LeaderExternalObsLeader")
+  learningPathsAssigned                            LearningPathAssignment[]              @relation("LearningPathAssignedTo")
+  learningPathStepProgress                         LearningPathStepProgress[]            @relation("LearningPathStepProgressBy")
+  payrollMessagesReceived                          PayrollMessage[]                      @relation("PayrollMessageEmployee")
+  payrollMessagesSent                              PayrollMessage[]                      @relation("PayrollMessageSender")
 
   payrollProfile              PayrollProfile?
   overtimeEntriesOwn          OvertimeEntry[]        @relation("OvertimeEntryEmployee")
@@ -1015,6 +1016,14 @@ enum StockMovementType {
   // que quede clara la diferencia en cualquier auditoria futura entre "el
   // corte original" y "la correccion de ese error".
   CUTOVER_CORRECTION
+  // Confirmado 2026-09-22, pedido explicito del usuario: ajuste manual de
+  // stock por un conteo fisico real -- unica puerta que existe para
+  // "escribir" un saldo a mano en INVESTOCK, a proposito muy controlada:
+  // Daniel (lider de Inventario) solo puede pedirla
+  // (StockPhysicalCountAdjustmentRequest), nunca aplicarla el mismo; solo
+  // el admin aprueba o aplica un ajuste directo. quantity = la diferencia
+  // real contra el saldo justo antes (puede ser positiva o negativa).
+  PHYSICAL_COUNT_ADJUSTMENT
 }
 
 model StockKardexEntry {
@@ -1803,8 +1812,9 @@ model PurchaseCatalogItem {
   createdBy   User?    @relation("PurchaseCatalogItemCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   createdAt   DateTime @default(now())
 
-  requests      PurchaseRequest[]
-  deleteRequest PurchaseCatalogItemDeleteRequest?
+  requests                       PurchaseRequest[]
+  deleteRequest                  PurchaseCatalogItemDeleteRequest?
+  physicalCountAdjustmentRequest StockPhysicalCountAdjustmentRequest?
 
   // Confirmado 2026-08-19: Reingreso de Mercadería reusa este mismo catálogo
   // — un producto puede quedar registrado aquí sea porque alguien lo dio de
@@ -2419,6 +2429,35 @@ model PurchaseCatalogItemDeleteRequest {
   reason        String?
   requestedById String?
   requestedBy   User?    @relation("PurchaseCatalogItemDeleteRequestedBy", fields: [requestedById], references: [id], onDelete: SetNull)
+  requestedAt   DateTime @default(now())
+}
+
+// Confirmado 2026-09-22, pedido explícito del usuario (admin): tras el bug
+// del corte con Just, quiso una puerta controlada para que Daniel (líder
+// de Inventario) pueda avisar cuando un conteo físico real no coincide con
+// INVESTOCK — pero SIN poder mover el stock él mismo, a propósito ("que
+// Daniel no esté a cada rato manejando ese botón"). La sola existencia de
+// esta fila ES el estado "pendiente de aprobar" — mismo patrón que
+// PurchaseCatalogItemDeleteRequest (@unique en catalogItemId impide dos
+// solicitudes a la vez sobre el mismo producto). Se borra al rechazar; al
+// aprobar, se borra y en su lugar queda la línea real en StockKardexEntry
+// (type=PHYSICAL_COUNT_ADJUSTMENT, ver applyPhysicalCountAdjustment en
+// stockKardex.ts). El admin (Andrés) sí puede aplicar un ajuste directo,
+// sin pasar por esta tabla — ver la misma función.
+model StockPhysicalCountAdjustmentRequest {
+  id            String              @id @default(cuid())
+  catalogItemId String              @unique
+  catalogItem   PurchaseCatalogItem @relation(fields: [catalogItemId], references: [id], onDelete: Cascade)
+
+  // Saldo que INVESTOCK tenía en el momento de pedirlo — solo para mostrar
+  // el antes/después al admin; el aprobado real se recalcula desde cero
+  // contra el saldo actual, por si cambió algo mientras esperaba.
+  currentQuantityAtRequest Int
+  requestedQuantity        Int
+  reason                   String
+
+  requestedById String?
+  requestedBy   User?    @relation("StockPhysicalCountAdjustmentRequestedBy", fields: [requestedById], references: [id], onDelete: SetNull)
   requestedAt   DateTime @default(now())
 }
 

@@ -677,6 +677,124 @@ export async function applyCutoverDamageCorrection(): Promise<{ restoredCount: n
   return { restoredCount: candidates.length };
 }
 
+// Confirmado 2026-09-22, pedido explícito del usuario (admin): única puerta
+// para "escribir" un saldo a mano en INVESTOCK, a propósito muy
+// controlada — nace de un conteo físico real que no coincide con lo que
+// muestra el sistema. Daniel (líder de Inventario) solo puede PEDIRLO
+// (queda pendiente); solo el admin puede aplicarlo directo o aprobar la
+// solicitud de Daniel. `reason` es obligatorio — queda en el Kardex como
+// evidencia de por qué cambió el número.
+export type PhysicalCountAdjustmentResult =
+  | { kind: "applied"; balanceAfter: number; avgCostAfter: number }
+  | { kind: "requested"; requestId: string };
+
+export async function submitPhysicalCountAdjustment(params: {
+  catalogItemId: string;
+  requestedQuantity: number;
+  reason: string;
+  isAdmin: boolean;
+  userId: string | null;
+}): Promise<PhysicalCountAdjustmentResult> {
+  if (!Number.isInteger(params.requestedQuantity) || params.requestedQuantity < 0) {
+    throw new Error("La cantidad contada debe ser un número entero, 0 o mayor.");
+  }
+  const reason = params.reason.trim();
+  if (!reason) throw new Error("Escribe el motivo del ajuste.");
+
+  const current = await getCurrentStock(params.catalogItemId);
+
+  if (params.isAdmin) {
+    const entry = await prisma.stockKardexEntry.create({
+      data: {
+        catalogItemId: params.catalogItemId,
+        type: "PHYSICAL_COUNT_ADJUSTMENT",
+        quantity: params.requestedQuantity - current.balance,
+        unitCost: current.avgCost,
+        balanceAfter: params.requestedQuantity,
+        avgCostAfter: current.avgCost,
+        occurredAt: new Date(),
+      },
+    });
+    // Si Daniel ya tenía una solicitud pendiente de este mismo producto, el
+    // admin acaba de resolverlo directo — esa solicitud ya no aplica.
+    await prisma.stockPhysicalCountAdjustmentRequest.deleteMany({ where: { catalogItemId: params.catalogItemId } });
+    return { kind: "applied", balanceAfter: entry.balanceAfter, avgCostAfter: entry.avgCostAfter };
+  }
+
+  const request = await prisma.stockPhysicalCountAdjustmentRequest.upsert({
+    where: { catalogItemId: params.catalogItemId },
+    update: { currentQuantityAtRequest: current.balance, requestedQuantity: params.requestedQuantity, reason, requestedById: params.userId, requestedAt: new Date() },
+    create: { catalogItemId: params.catalogItemId, currentQuantityAtRequest: current.balance, requestedQuantity: params.requestedQuantity, reason, requestedById: params.userId },
+  });
+  return { kind: "requested", requestId: request.id };
+}
+
+export type PendingPhysicalCountAdjustmentRow = {
+  id: string;
+  catalogItemId: string;
+  name: string;
+  justCode: string | null;
+  currentQuantityAtRequest: number;
+  currentQuantityNow: number;
+  requestedQuantity: number;
+  reason: string;
+  requestedByName: string | null;
+  requestedAt: string;
+};
+
+export async function getPendingPhysicalCountAdjustments(): Promise<PendingPhysicalCountAdjustmentRow[]> {
+  const requests = await prisma.stockPhysicalCountAdjustmentRequest.findMany({
+    orderBy: { requestedAt: "asc" },
+    include: { catalogItem: { select: { name: true, justCode: true } }, requestedBy: { select: { name: true } } },
+  });
+  const results: PendingPhysicalCountAdjustmentRow[] = [];
+  for (const r of requests) {
+    const current = await getCurrentStock(r.catalogItemId);
+    results.push({
+      id: r.id,
+      catalogItemId: r.catalogItemId,
+      name: r.catalogItem.name,
+      justCode: r.catalogItem.justCode,
+      currentQuantityAtRequest: r.currentQuantityAtRequest,
+      currentQuantityNow: current.balance,
+      requestedQuantity: r.requestedQuantity,
+      reason: r.reason,
+      requestedByName: r.requestedBy?.name ?? null,
+      requestedAt: r.requestedAt.toISOString(),
+    });
+  }
+  return results;
+}
+
+// Aprobar recalcula el ajuste contra el saldo ACTUAL (no el que tenía al
+// pedirlo) — por si entró una compra/salida real mientras esperaba.
+export async function reviewPhysicalCountAdjustment(params: { id: string; action: "approve" | "reject" }): Promise<{ ok: true }> {
+  const request = await prisma.stockPhysicalCountAdjustmentRequest.findUnique({ where: { id: params.id } });
+  if (!request) throw new Error("Solicitud no encontrada.");
+
+  if (params.action === "reject") {
+    await prisma.stockPhysicalCountAdjustmentRequest.delete({ where: { id: params.id } });
+    return { ok: true };
+  }
+
+  const current = await getCurrentStock(request.catalogItemId);
+  await prisma.$transaction([
+    prisma.stockKardexEntry.create({
+      data: {
+        catalogItemId: request.catalogItemId,
+        type: "PHYSICAL_COUNT_ADJUSTMENT",
+        quantity: request.requestedQuantity - current.balance,
+        unitCost: current.avgCost,
+        balanceAfter: request.requestedQuantity,
+        avgCostAfter: current.avgCost,
+        occurredAt: new Date(),
+      },
+    }),
+    prisma.stockPhysicalCountAdjustmentRequest.delete({ where: { id: params.id } }),
+  ]);
+  return { ok: true };
+}
+
 // Solo cuenta, no escribe — para que la pantalla sepa si mostrar el botón
 // de "cargar saldo inicial" (y con qué número) sin sembrar nada todavía.
 export async function countSeedableFromJustSnapshot(rows: SnapshotRow[]): Promise<number> {
