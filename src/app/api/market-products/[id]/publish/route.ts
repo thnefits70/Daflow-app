@@ -55,5 +55,20 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     }).catch(() => null);
   }
 
+  // Confirmado 2026-09-22, pedido explícito del usuario: en este mismo
+  // instante (ID ya confirmado por Heidy) Robert se entera de que ya puede
+  // brandear — antes solo lo veía si abría la pestaña "Brandear" por su
+  // cuenta. Se avisa a todos los que tengan el permiso, no por nombre.
+  const brandUsers = await prisma.user.findMany({ where: { canBrandMarketProduct: true, isActive: true }, select: { id: true } });
+  await Promise.all(
+    brandUsers.map((u) =>
+      notifyOwner(u.id, {
+        title: "Nuevo producto para brandear",
+        body: `${existing.productName} — ID Dropi ${parsed.data.dropiProductId}. Sube las 3 fotos brandeadas.`,
+        url: "/area/workspace?tab=analisis-mercado",
+      }).catch(() => null)
+    )
+  );
+
   return NextResponse.json(updated);
 }

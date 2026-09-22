@@ -453,6 +453,7 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   plan_mejora_cierre_aprobacion: "Plan de Mejora — cierre de un líder por aprobar",
   analisis_mercado_aprobacion: "Análisis de Mercado — propuestas por aprobar",
   analisis_mercado_listo_comprar: "Análisis de Mercado — productos listos para comprar",
+  analisis_mercado_brandear: "Análisis de Mercado — productos por brandear",
 };
 
 // "colaborador_del_mes" es obligatorio — confirmado 2026-08-05: a diferencia
@@ -1230,6 +1231,29 @@ async function getMarketProductReadyToBuyPendingItem(href: string): Promise<Pend
     type: "analisis_mercado_listo_comprar",
     icon: "🛒",
     label: "Productos listos para comprar",
+    meta: `${rows.length} producto${rows.length === 1 ? "" : "s"}${overdue ? " · atrasado" : ""}`,
+    overdue,
+    href,
+  };
+}
+
+// Confirmado 2026-09-22, pedido explícito del usuario: contraparte en Inicio
+// del aviso que le llega a Robert (canBrandMarketProduct) apenas Heidy
+// confirma el ID de Dropi (ver publish/route.ts) — mismo filtro que su
+// pestaña "Brandear" (view=brand en api/market-products/route.ts).
+async function getMarketProductBrandPendingItem(href: string): Promise<PendingItem | null> {
+  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const rows = await prisma.marketProductProposal.findMany({
+    where: { publishedAt: { not: null }, brandedAt: null },
+    select: { publishedAt: true },
+  });
+  if (rows.length === 0) return null;
+  const overdue = rows.some((r) => r.publishedAt! < cutoff);
+
+  return {
+    type: "analisis_mercado_brandear",
+    icon: "🎨",
+    label: "Productos por brandear",
     meta: `${rows.length} producto${rows.length === 1 ? "" : "s"}${overdue ? " · atrasado" : ""}`,
     overdue,
     href,
@@ -2868,6 +2892,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       leadsDeptId: true,
       canManagePurchases: true,
       canApprovePurchaseRequests: true,
+      canBrandMarketProduct: true,
       leadsDept: { select: { code: true, name: true, trackWeeklyMetric: true } },
       department: { select: { code: true } },
     },
@@ -2918,6 +2943,10 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     if (me.department?.code === "MKT") {
       const marketProductReadyToBuyItem = await getMarketProductReadyToBuyPendingItem("/area/workspace?tab=analisis-mercado");
       if (marketProductReadyToBuyItem) teamItems.push(marketProductReadyToBuyItem);
+    }
+    if (me.canBrandMarketProduct) {
+      const marketProductBrandItem = await getMarketProductBrandPendingItem("/area/workspace?tab=analisis-mercado");
+      if (marketProductBrandItem) teamItems.push(marketProductBrandItem);
     }
     // Confirmado 2026-09-03: Jariel (transición Bryan→Jariel en Compras) es
     // delegado vía canManagePurchases pero no lidera ningún departamento —
@@ -3062,6 +3091,11 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     if (externalSaleReviewItem) items.push(externalSaleReviewItem);
   }
 
+  if (me.canBrandMarketProduct) {
+    const marketProductBrandItem = await getMarketProductBrandPendingItem("/area/workspace?tab=analisis-mercado");
+    if (marketProductBrandItem) items.push(marketProductBrandItem);
+  }
+
   const recognitionItem = await getRecognitionLeaderPendingItem(me.leadsDeptId, "/area/colaborador-destacado");
   if (recognitionItem) items.push(recognitionItem);
 
@@ -3142,6 +3176,7 @@ export async function getPossiblePendingTypesForActor(
         leadsDeptId: true,
         canManagePurchases: true,
         canApprovePurchaseRequests: true,
+        canBrandMarketProduct: true,
         leadsDept: { select: { code: true, trackWeeklyMetric: true } },
         department: { select: { code: true } },
       },
@@ -3159,10 +3194,12 @@ export async function getPossiblePendingTypesForActor(
       // Confirmado 2026-09-18: Jariel es miembro de MKT (canProposeMarketProduct)
       // pero no su líder — mismo criterio que el resto de este bloque.
       if (me.department?.code === "MKT") types.push("analisis_mercado_listo_comprar");
+      if (me.canBrandMarketProduct) types.push("analisis_mercado_brandear");
       return types.map((type) => ({ type, label: PENDING_TYPE_CATALOG[type] }));
     }
 
     types.push("cumpleanos", "plan_mejora_evaluacion_pendiente", "plan_mejora_etapa_vencida");
+    if (me.canBrandMarketProduct) types.push("analisis_mercado_brandear");
     if (me.leadsDept.code === "FIN") {
       types.push("roles_de_pago", "tasa_devolucion", "kpi_garantias", "pagos_recordatorios", "servicio_postventa", "caja_chica_saldo", "caja_chica_confirmacion", "descuentos_sin_aceptar", "compras_personales_precio", "compras_personales_cierre", "reingreso_mercaderia_verificacion_semanal", "nomina_transferencia", "iess_transferencia");
     }
