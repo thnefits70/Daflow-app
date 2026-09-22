@@ -393,6 +393,15 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
         const restoredLines: Line[] = (d.lines?.length ? d.lines : [emptyLine()]).map((l) => ({ ...l, productQuery: l.productQuery ?? "", createDraft: l.createDraft ?? null, ivaIncluded: l.ivaIncluded ?? false, justification: l.justification ?? "", stats: null }));
         setLines(restoredLines);
         setSupplier(normalizeSupplier(d.supplier));
+        // Fix confirmado 2026-09-22: el borrador guarda una COPIA del
+        // proveedor — si después el admin lo marcó "con crédito" (CHEN), la
+        // copia vieja seguía diciendo pago anticipado y a Jariel se le
+        // volvía a exigir cotización. Se refresca desde el servidor.
+        if (d.supplier?.id) {
+          fetch(`/api/purchase-suppliers/${d.supplier.id}`)
+            .then((r) => (r.ok ? r.json() : null))
+            .then((s) => { if (s) setSupplier(normalizeSupplier(s)); });
+        }
         setBankAccountId(d.bankAccountId ?? null);
         setQuoteImageUrl(d.quoteImageUrl ?? null);
         setVerifyResult(d.verifyResult ?? null);
