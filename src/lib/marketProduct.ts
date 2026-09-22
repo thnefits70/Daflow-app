@@ -25,6 +25,7 @@ export type CostBasis = {
   batchUnits: number;
   freightCost: number | null;
   insuranceRatePercent: number;
+  fulfillmentCost: number;
   costSource: "proposal" | "kardex" | "just";
 };
 
@@ -70,13 +71,14 @@ export async function resolveCostBasisForCatalogItems(catalogItemIds: string[]):
       batchUnits: supplier.batchUnits,
       freightCost: supplier.freightCost,
       insuranceRatePercent: p.insuranceRatePercent,
+      fulfillmentCost: p.fulfillmentCost,
       costSource: "proposal",
     });
   }
 
   for (const e of kardexEntries) {
     if (proposalCatalogItemIds.has(e.catalogItemId)) continue;
-    if (e.avgCostAfter > 0) byCatalogItemId.set(e.catalogItemId, { batchCost: e.avgCostAfter, batchUnits: 1, freightCost: null, insuranceRatePercent: 6, costSource: "kardex" });
+    if (e.avgCostAfter > 0) byCatalogItemId.set(e.catalogItemId, { batchCost: e.avgCostAfter, batchUnits: 1, freightCost: null, insuranceRatePercent: 6, fulfillmentCost: DROPI_FULFILLMENT_DEFAULT, costSource: "kardex" });
   }
 
   const stillMissingIds = ids.filter((id) => !byCatalogItemId.has(id));
@@ -95,7 +97,7 @@ export async function resolveCostBasisForCatalogItems(catalogItemIds: string[]):
       const justAvgCostByCode = new Map(justSnapshots.map((s) => [s.productCode.trim(), s.avgCost]));
       for (const item of items) {
         const justAvgCost = item.justCode ? justAvgCostByCode.get(item.justCode.trim()) : undefined;
-        if (justAvgCost && justAvgCost > 0) byCatalogItemId.set(item.id, { batchCost: justAvgCost, batchUnits: 1, freightCost: null, insuranceRatePercent: 6, costSource: "just" });
+        if (justAvgCost && justAvgCost > 0) byCatalogItemId.set(item.id, { batchCost: justAvgCost, batchUnits: 1, freightCost: null, insuranceRatePercent: 6, fulfillmentCost: DROPI_FULFILLMENT_DEFAULT, costSource: "just" });
       }
     }
   }
@@ -194,10 +196,19 @@ function roundUpToNinetyNineCents(price: number): number {
 // vez que consulta o declara una venta — ver B2CPriceBreakdownNote en
 // ExternalSaleDeclareForm.tsx. Mismos pasos exactos que computeB2CPrice de
 // abajo, solo que expone cada paso intermedio en vez de solo el resultado.
+//
+// Confirmado 2026-09-22, pedido explícito del usuario: el fulfillment
+// ($0.75 por defecto, o el de la propuesta de Jariel) faltaba en el precio
+// B2C — se suma junto con bodega+seguro ANTES de dividir por el margen (así
+// sí lleva ganancia encima, igual que ya hacía computeMarketProductSalePrice
+// para Dropi/B2B), a diferencia del flete promedio que se suma después sin
+// margen porque es un costo de envío, no de producto.
 export type B2CPriceBreakdown = {
   bodegaUnitCost: number;
   insuranceRatePercent: number;
   priceWithInsurance: number;
+  fulfillmentCost: number;
+  priceWithFulfillment: number;
   marginPercent: number;
   priceBeforeFreight: number;
   fletePromedio: number;
@@ -210,18 +221,22 @@ export function computeB2CPriceBreakdown(params: {
   batchUnits: number;
   freightCost: number | null;
   insuranceRatePercent: number;
+  fulfillmentCost: number;
   totalQuantity: number;
 }): B2CPriceBreakdown | null {
   const marginPercent = b2cMarginPercentForQuantity(params.totalQuantity);
   if (marginPercent == null) return null;
   const bodega = bodegaUnitCost(params.batchCost, params.freightCost, params.batchUnits);
   const priceWithInsurance = bodega * (1 + params.insuranceRatePercent / 100);
-  const priceBeforeFreight = priceWithInsurance / (1 - marginPercent / 100);
+  const priceWithFulfillment = priceWithInsurance + params.fulfillmentCost;
+  const priceBeforeFreight = priceWithFulfillment / (1 - marginPercent / 100);
   const priceBeforeRounding = priceBeforeFreight + B2C_FLETE_PROMEDIO;
   return {
     bodegaUnitCost: bodega,
     insuranceRatePercent: params.insuranceRatePercent,
     priceWithInsurance,
+    fulfillmentCost: params.fulfillmentCost,
+    priceWithFulfillment,
     marginPercent,
     priceBeforeFreight,
     fletePromedio: B2C_FLETE_PROMEDIO,
@@ -231,12 +246,14 @@ export function computeB2CPriceBreakdown(params: {
 }
 
 // Venta al por menor (exclusivo Marcos). El flete promedio se suma DESPUÉS
-// de dividir por el margen — no lleva ganancia encima, se pasa tal cual.
+// de dividir por el margen — no lleva ganancia encima, se pasa tal cual (a
+// diferencia del fulfillment, que sí la lleva — ver nota arriba).
 export function computeB2CPrice(params: {
   batchCost: number;
   batchUnits: number;
   freightCost: number | null;
   insuranceRatePercent: number;
+  fulfillmentCost: number;
   totalQuantity: number;
 }): number | null {
   return computeB2CPriceBreakdown(params)?.finalPrice ?? null;
@@ -289,6 +306,11 @@ export function computeComboB2BPrice(components: ComboComponentInput[], marginPe
 // distintos traiga adentro) — no por la cantidad de productos que trae cada
 // combo. El redondeo a .99 se hace una sola vez, sobre el total del combo,
 // no por producto.
+//
+// Confirmado 2026-09-22, pedido explícito del usuario: igual que el resto
+// de precios de combo, el fulfillment se cobra UNA SOLA VEZ por combo
+// (COMBO_FULFILLMENT_COST), no por cada componente — y lleva margen encima
+// como el resto del costo, mismo criterio que computeB2CPriceBreakdown.
 export function computeComboB2CPrice(components: ComboComponentInput[], totalQuantity: number): number | null {
   const marginPercent = b2cMarginPercentForQuantity(totalQuantity);
   if (marginPercent == null) return null;
@@ -296,7 +318,8 @@ export function computeComboB2CPrice(components: ComboComponentInput[], totalQua
     const bodega = bodegaUnitCost(c.batchCost, c.freightCost, c.batchUnits) * (1 + c.insuranceRatePercent / 100);
     return acc + (bodega / (1 - marginPercent / 100)) * c.quantity;
   }, 0);
-  return roundUpToNinetyNineCents(sum + B2C_FLETE_PROMEDIO);
+  const fulfillmentWithMargin = COMBO_FULFILLMENT_COST / (1 - marginPercent / 100);
+  return roundUpToNinetyNineCents(sum + fulfillmentWithMargin + B2C_FLETE_PROMEDIO);
 }
 
 export async function nextMarketProductProposalNumber(): Promise<number> {

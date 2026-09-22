@@ -84,6 +84,8 @@ type B2CBreakdown = {
   bodegaUnitCost: number;
   insuranceRatePercent: number;
   priceWithInsurance: number;
+  fulfillmentCost: number;
+  priceWithFulfillment: number;
   marginPercent: number;
   priceBeforeFreight: number;
   fletePromedio: number;
@@ -189,7 +191,9 @@ function B2CPriceBreakdownNote({ b }: { b: B2CBreakdown }) {
       <div className="font-semibold text-ink mb-0.5">Cómo se calculó este precio:</div>
       Costo en bodega ${b.bodegaUnitCost.toFixed(2)} + {b.insuranceRatePercent}% de seguro = ${b.priceWithInsurance.toFixed(2)}
       <br />
-      ${b.priceWithInsurance.toFixed(2)} ÷ (100% − {b.marginPercent}% de ganancia) = ${b.priceBeforeFreight.toFixed(2)}
+      ${b.priceWithInsurance.toFixed(2)} + ${b.fulfillmentCost.toFixed(2)} de fulfillment = ${b.priceWithFulfillment.toFixed(2)}
+      <br />
+      ${b.priceWithFulfillment.toFixed(2)} ÷ (100% − {b.marginPercent}% de ganancia) = ${b.priceBeforeFreight.toFixed(2)}
       <br />
       ${b.priceBeforeFreight.toFixed(2)} + ${b.fletePromedio.toFixed(2)} de flete promedio = ${b.priceBeforeRounding.toFixed(2)}
       <br />
