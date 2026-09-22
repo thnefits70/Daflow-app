@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { getMergedJustCodes } from "@/lib/catalogItemMerge";
 
 export type JustCatalogParsedRow = { code: string; name: string };
 
@@ -149,7 +150,9 @@ export async function classifyJustCatalogRows(rows: JustCatalogParsedRow[]): Pro
   // Códigos que Daniel ya decidió NO crear nunca (el resto de un grupo
   // donde eligió "mantener" un código distinto) — se descartan por completo,
   // no pasan por ninguna clasificación.
-  const permanentlySkippedCodes = new Set<string>();
+  // Confirmado 2026-09-22: también los códigos de un ID que el admin juntó
+  // con otro (ver catalogItemMerge.ts) — ya viven dentro del oficial.
+  const permanentlySkippedCodes = await getMergedJustCodes();
   let autoResolvedDuplicateGroups = 0;
   const dupedCodes = new Set<string>();
   const duplicateGroups: DuplicateGroupPreviewRow[] = [];

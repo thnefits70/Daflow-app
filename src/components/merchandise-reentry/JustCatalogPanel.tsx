@@ -5,6 +5,7 @@ import { Upload, CheckCircle2, AlertTriangle, Clock, Search, ChevronDown, Chevro
 import { uploadFile } from "@/lib/uploadFile";
 import { CatalogCode, CopyCodeButton } from "@/components/shared/CatalogCode";
 import { LegacyUnlinkedItems } from "./LegacyUnlinkedItems";
+import { CatalogItemMergeTool } from "./CatalogItemMergeTool";
 
 type CatalogItemDTO = { id: string; name: string; justCode: string | null; photos: string[]; pendingRegistration: boolean };
 type ImportDTO = {
@@ -535,6 +536,7 @@ export function JustCatalogPanel({ canManage }: { canManage: boolean }) {
       {err && <div className="text-red text-[12.5px] mb-3">{err}</div>}
 
       <LegacyUnlinkedItems />
+      <CatalogItemMergeTool items={items} onChanged={load} />
       {canManage && <NichoBackfillButton />}
       {canManage && <MissingReportsQueue />}
 

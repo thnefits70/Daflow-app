@@ -606,7 +606,14 @@ async function findCutoverDamageCandidates(): Promise<CutoverDamageRow[]> {
     select: { id: true, catalogItemId: true, occurredAt: true },
   });
   if (cutoverEntries.length === 0) return [];
-  const catalogItemIds = [...new Set(cutoverEntries.map((e) => e.catalogItemId))];
+  // Confirmado 2026-09-22: un producto que recibió otro ID juntado (ver
+  // catalogItemMerge.ts) tiene dos historiales intercalados — su "línea
+  // anterior" puede ser del otro producto, así que esta detección no
+  // aplica. Juntar ya se bloquea mientras cualquiera de los dos siga en
+  // esta lista, así que nunca se pierde un caso real.
+  const mergedOfficials = await prisma.catalogItemMerge.findMany({ where: { kind: "MERGE" }, select: { officialItemId: true } });
+  const mergedIds = new Set(mergedOfficials.map((m) => m.officialItemId));
+  const catalogItemIds = [...new Set(cutoverEntries.map((e) => e.catalogItemId))].filter((id) => !mergedIds.has(id));
 
   const items = await prisma.purchaseCatalogItem.findMany({
     where: { id: { in: catalogItemIds } },
@@ -1014,9 +1021,13 @@ async function replayCatalogItemKardex(catalogItemId: string): Promise<{ updates
   for (const e of entries) {
     if (e.type === "SEED") {
       // Saldo inicial importado de Just — no hay ninguna compra real detrás
-      // que pueda tener flete que corregir, se deja tal cual.
-      balance = e.quantity;
-      avgCost = e.unitCost ?? 0;
+      // que pueda tener flete que corregir, se deja tal cual. Se suma (no
+      // reemplaza) desde 2026-09-22: un producto juntado con otro tiene dos
+      // SEED — en uno normal es la primera línea, así que da lo mismo.
+      const seedCost = e.unitCost ?? 0;
+      const seedBalance = balance + e.quantity;
+      avgCost = seedBalance > 0 && balance > 0 ? (balance * avgCost + e.quantity * seedCost) / seedBalance : seedCost;
+      balance = seedBalance;
       updates.push({ id: e.id, unitCost: e.unitCost, avgCostAfter: avgCost, balanceAfter: balance });
     } else if (e.type === "IN") {
       const request = e.purchaseRequestReceipt?.request ?? null;
@@ -1161,8 +1172,11 @@ async function replayCatalogItemWithBackfill(catalogItemId: string, missing: Per
       continue;
     }
     if (line.type === "SEED") {
-      balance = line.quantity;
-      avgCost = line.unitCost ?? 0;
+      // Se suma, no reemplaza — ver la misma nota en replayCatalogItemKardex.
+      const seedCost = line.unitCost ?? 0;
+      const seedBalance = balance + line.quantity;
+      avgCost = seedBalance > 0 && balance > 0 ? (balance * avgCost + line.quantity * seedCost) / seedBalance : seedCost;
+      balance = seedBalance;
       updates.push({ id: line.id, unitCost: line.unitCost, avgCostAfter: avgCost, balanceAfter: balance });
     } else if (line.type === "IN") {
       const incomingCost = line.unitCost ?? avgCost;

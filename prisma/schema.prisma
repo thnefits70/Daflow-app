@@ -2338,6 +2338,40 @@ model JustCatalogDuplicateResolution {
   decidedAt   DateTime @default(now())
 }
 
+// Confirmado 2026-09-22, pedido explícito del usuario (solo admin): juntar
+// un ID duplicado con el ID oficial (todo lo del duplicado — compras,
+// reingresos, salidas, ventas, lotes, Kardex — pasa al oficial y el stock
+// se suma) o eliminar un ID mal creado que no tiene nada registrado. El
+// producto borrado ya no existe, así que acá queda la foto de lo que era y
+// de lo que se movió, para cualquier auditoría futura. Ids/nombres guardados
+// como texto a propósito (no relación): tienen que sobrevivir aunque el
+// oficial también se junte o borre más adelante.
+model CatalogItemMerge {
+  id   String @id @default(cuid())
+  // "MERGE" (juntar) o "DELETE" (eliminar sin nada registrado).
+  kind String
+
+  removedItemId   String
+  removedName     String
+  // Si el código de Just del ID quitado aparece en una subida futura, se
+  // ignora (en MERGE) — ya vive dentro del oficial.
+  removedJustCode String?
+
+  officialItemId   String?
+  officialName     String?
+  officialJustCode String?
+
+  // Conteos de lo que se movió + saldo/costo antes y después.
+  summary Json
+
+  performedById   String?
+  performedByName String
+  performedAt     DateTime @default(now())
+
+  @@index([removedJustCode])
+  @@index([officialItemId])
+}
+
 // Confirmado 2026-09-21 (idea nacida de una conversación con Yair, líder de
 // Fulfillment, sobre por qué el manifiesto de despacho no coincide con lo
 // que realmente hay que sacar de bodega — ver
