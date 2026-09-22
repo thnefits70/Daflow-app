@@ -10,6 +10,7 @@ import { LiveVideoCapture } from "@/components/shared/LiveVideoCapture";
 import { PurchaseOperationDocuments, type OperationDocRow } from "./PurchaseOperationDocuments";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 import { useFormDraft } from "@/lib/useFormDraft";
+import { isScreenPhotoNote } from "@/lib/receiptPhotoScreen";
 
 type ReceiptDraftData = { receivedQty: string; receivedPhotoUrls: string[]; receivedVideoUrls: string[]; comment: string; minorDifferenceConfirmed: boolean };
 function isReceiptDraftEmpty(d: ReceiptDraftData) {
@@ -247,7 +248,7 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
   const [receivedPhotoUrls, setReceivedPhotoUrls] = useState<string[]>([]);
   const [takingPhoto, setTakingPhoto] = useState(false);
   const [aiChecking, setAiChecking] = useState(false);
-  const [aiResult, setAiResult] = useState<{ likelyMatch: boolean | null; note: string; minorDifferenceOnly?: boolean } | null>(null);
+  const [aiResult, setAiResult] = useState<{ likelyMatch: boolean | null; note: string; minorDifferenceOnly?: boolean; screenPhotoSuspected?: boolean } | null>(null);
   const [minorDifferenceConfirmed, setMinorDifferenceConfirmed] = useState(false);
   const [comment, setComment] = useState("");
   const [busy, setBusy] = useState(false);
@@ -1315,7 +1316,7 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                       ))}
                     </div>
                     {pr.replacementAiNote && (
-                      <div className={`text-[11px] mb-2 ${pr.replacementAiMatch ? "text-teal" : "text-red font-semibold"}`}>🤖 {pr.replacementAiNote}</div>
+                      <div className={`text-[11px] mb-2 ${pr.replacementAiMatch && !isScreenPhotoNote(pr.replacementAiNote) ? "text-teal" : "text-red font-semibold"}`}>🤖 {pr.replacementAiNote}</div>
                     )}
                     {err && <div className="text-red text-[12px] mb-2">{err}</div>}
                     <button
@@ -1568,8 +1569,15 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
 
                           {aiChecking && <div className="text-[11.5px] text-steel mb-2">🤖 Comparando con las fotos de referencia del catálogo…</div>}
                           {aiResult && (
-                            <div className={`flex items-start gap-1.5 text-[11.5px] mb-1 ${aiResult.likelyMatch ? "text-teal" : "text-red font-semibold"}`}>
+                            <div className={`flex items-start gap-1.5 text-[11.5px] mb-1 ${aiResult.likelyMatch && !aiResult.screenPhotoSuspected ? "text-teal" : "text-red font-semibold"}`}>
                               🤖 {aiResult.note}
+                            </div>
+                          )}
+                          {/* Confirmado 2026-09-22 (caso SC-017): solo avisa, no bloquea —
+                              Daniel igual ve la nota al aprobar la recepción. */}
+                          {aiResult?.screenPhotoSuspected && (
+                            <div className="text-[11.5px] text-red bg-red/10 border border-red/30 rounded-md px-2.5 py-2 mb-2">
+                              Toma la foto directamente a las cajas o al producto, no a la pantalla de otro celular. Borra esa foto con la ✕ y vuelve a tomarla.
                             </div>
                           )}
                           {/* Confirmado 2026-08-08: cambio de política pedido explícitamente
@@ -1952,6 +1960,13 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                           <video key={`v${i}`} src={url} controls className="w-full h-32 rounded object-contain border border-rule bg-cloud" />
                         ))}
                       </div>
+                      {/* Confirmado 2026-09-22 (caso SC-017): Daniel ve el aviso de la IA
+                          antes de aprobar — en especial si una foto parece de una pantalla. */}
+                      {r.receipt.aiPhotoNote && (
+                        <div className={`text-[11.5px] mb-2.5 ${isScreenPhotoNote(r.receipt.aiPhotoNote) ? "text-red font-semibold bg-red/10 border border-red/30 rounded-md px-2.5 py-2" : r.receipt.aiPhotoMatch ? "text-teal" : "text-steel"}`}>
+                          🤖 {r.receipt.aiPhotoNote}
+                        </div>
+                      )}
                       {err && <div className="text-red text-[12px] mb-2">{err}</div>}
                       {r.catalogItem.awaitingDropiId && (
                         <div className="flex items-center gap-1.5 text-[11.5px] font-semibold text-blue bg-blue/10 border border-blue/30 rounded-md px-2.5 py-2 mb-2">

@@ -1,6 +1,7 @@
 import { getAnthropicClient } from "@/lib/nancy";
 import { logAiUsage } from "@/lib/aiUsage";
 import { prisma } from "@/lib/prisma";
+import { SCREEN_PHOTO_NOTE_PREFIX } from "@/lib/receiptPhotoScreen";
 
 const PURCHASE_AI_MODEL = "claude-sonnet-5";
 
@@ -225,6 +226,13 @@ export type ReceiptPhotoComparisonResult = {
   // el líder de Inventario decida si lo deja pasar o lo reporta — un
   // producto realmente distinto sigue bloqueado igual que antes.
   minorDifferenceOnly: boolean;
+  // Confirmado 2026-09-22, pedido explícito del usuario (caso SC-017): la
+  // foto se toma con cámara en vivo, pero alguien igual puede apuntarla a
+  // la pantalla de otro celular que muestra una foto recibida por chat. La
+  // misma llamada de IA avisa (no bloquea) — y la nota queda con el prefijo
+  // SCREEN_PHOTO_NOTE_PREFIX para que Daniel lo vea al aprobar y quede en
+  // la auditoría, sin columna nueva.
+  screenPhotoSuspected: boolean;
 };
 
 // Confirmado 2026-08-06: cuando Daniel (líder de Inventario) confirma que
@@ -239,7 +247,7 @@ export async function compareReceiptPhotos(params: {
   deptId?: string;
 }): Promise<ReceiptPhotoComparisonResult> {
   if (params.referencePhotoUrls.length === 0) {
-    return { likelyMatch: null, minorDifferenceOnly: false, note: "Este producto no tiene fotos de referencia en el catálogo — no se pudo comparar." };
+    return { likelyMatch: null, minorDifferenceOnly: false, screenPhotoSuspected: false, note: "Este producto no tiene fotos de referencia en el catálogo — no se pudo comparar." };
   }
 
   const client = getAnthropicClient();
@@ -270,7 +278,11 @@ export async function compareReceiptPhotos(params: {
       "debe ser false. Ante la duda de si es o no el mismo producto, marca minorDifferenceOnly como false (el " +
       "líder de Inventario decide con más contexto, pero solo debe ver la opción rápida cuando es claramente el " +
       "mismo producto). Cuando likelyMatch es true, minorDifferenceOnly siempre debe ser false. " +
-      'Responde ÚNICAMENTE un JSON: {"likelyMatch": boolean, "minorDifferenceOnly": boolean, "note": string}. ' +
+      "Además, revisa si CUALQUIERA de las fotos de recepción parece tomada a la PANTALLA de otro celular, " +
+      "computadora o monitor (se ven bordes/marco del teléfono, barra de chat, botones como 'Responder' o " +
+      "emojis, reflejos de vidrio, patrón de píxeles/moiré) en vez de a la mercadería física: en ese caso " +
+      "screenPhotoSuspected debe ser true. Una foto normal del producto o sus cajas es false. " +
+      'Responde ÚNICAMENTE un JSON: {"likelyMatch": boolean, "minorDifferenceOnly": boolean, "screenPhotoSuspected": boolean, "note": string}. ' +
       'note es una frase breve en español explicando tu conclusión, mencionando específicamente cuál foto no ' +
       'corresponde y qué cambia si aplica (ej. "Coincide — mismo empaque y forma" o "No coincide — la 3ra foto ' +
       'de recepción muestra un producto distinto (otra forma)" o "No coincide — mismo producto pero llegó en ' +
@@ -301,7 +313,13 @@ export async function compareReceiptPhotos(params: {
   const textBlock = response.content.find((b) => b.type === "text");
   if (!textBlock || textBlock.type !== "text") throw new Error("La IA no devolvió contenido de texto.");
   const result = extractJson<ReceiptPhotoComparisonResult>(textBlock.text);
-  return { ...result, minorDifferenceOnly: result.likelyMatch === false && !!result.minorDifferenceOnly };
+  const screenPhotoSuspected = !!result.screenPhotoSuspected;
+  return {
+    ...result,
+    minorDifferenceOnly: result.likelyMatch === false && !!result.minorDifferenceOnly,
+    screenPhotoSuspected,
+    note: screenPhotoSuspected ? `${SCREEN_PHOTO_NOTE_PREFIX}, no de la mercadería real. ${result.note}` : result.note,
+  };
 }
 
 export type PurchaseGroupReviewResult = {
