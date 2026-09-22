@@ -120,7 +120,9 @@ export function PurchaseOperationDocuments({ rows }: { rows: OperationDocRow[] }
           label="Orden de compra"
           url={r0.purchaseOrderUrl}
           meta={`Subida por ${actorName(r0.requestedBy?.name)}`}
-          missingNote="Todavía no se ha subido"
+          // Fix confirmado 2026-09-22: la orden de compra de Just ya no se
+          // usa — solo se muestra en compras viejas que sí la tienen, nunca
+          // como "pendiente" en las nuevas.
         />
         <DocRow
           icon={<Receipt size={16} />}
