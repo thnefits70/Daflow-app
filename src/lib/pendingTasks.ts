@@ -2,7 +2,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { isFixedHoliday, evaluationDeadline, adminConfirmDeadline, summaryFieldsFromScores } from "@/lib/recognition";
 import { addBusinessHours } from "@/lib/businessHours";
-import { getPettyCashBoxData, type PettyCashBoxTypeStr } from "@/lib/pettyCash";
+import { getPettyCashBoxData, getPendingMotorizadoFreights, type PettyCashBoxTypeStr } from "@/lib/pettyCash";
 import { getUpcomingBirthdays } from "@/lib/birthdays";
 import { getFinanzasDeptId, recentInventorySnapshotPeriods, isSnapshotPeriodOverdue, snapshotPeriodLabel } from "@/lib/inventoryKpis";
 import { isEndOfMonthQuincena, monthOfPeriod } from "@/lib/payrollCalc";
@@ -404,6 +404,7 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   caja_chica_saldo: "Caja Chica — saldo bajo",
   caja_chica_confirmacion: "Caja Chica — falta que confirmen una recarga",
   caja_chica_recarga_pendiente: "Caja Chica — te fondearon, falta que confirmes",
+  caja_chica_flete_motorizado: "Caja Chica — flete por pagar al motorizado",
   pagos_administrativos: "Pagos administrativos pendientes de pago",
   pagos_mercaderia: "Pagos de mercadería pendientes",
   pagos_flete: "Fletes pendientes de pago",
@@ -1033,6 +1034,30 @@ async function getPettyCashUnconfirmedFunderItems(funderId: string | null, hrefB
 // Bryan en Secundaria no lidera ningún departamento). A diferencia de
 // getPettyCashUnconfirmedFunderItems, este aparece de inmediato (no espera
 // 8h) porque es el aviso principal, no un recordatorio de atraso.
+// Confirmado 2026-09-22, pedido de Marcos (aprobado por el usuario): además
+// de la notificación única, el flete por pagar al motorizado queda en
+// Pendientes de Nairoby (Principal) y de quien tenga la Secundaria (Jariel)
+// hasta que alguno de los dos lo pague — misma lista que muestra Caja Chica
+// (getPendingMotorizadoFreights), así que desaparece sola al pagarse.
+async function getMyMotorizadoFreightPendingItems(userId: string, hrefBase: string): Promise<PendingItem[]> {
+  const me = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { isLeader: true, leadsDept: { select: { code: true } }, canManagePettyCashSecundaria: true },
+  });
+  if (!me) return [];
+  const box = me.isLeader && me.leadsDept?.code === "FIN" ? "principal" : me.canManagePettyCashSecundaria ? "secundaria" : null;
+  if (!box) return [];
+  const rows = await getPendingMotorizadoFreights();
+  return rows.map((r) => ({
+    type: "caja_chica_flete_motorizado",
+    icon: "🛵",
+    label: `Pagar flete al motorizado: ${r.label}`,
+    meta: "El cliente ya recibió el pedido — págalo desde Caja Chica.",
+    overdue: false,
+    href: `${hrefBase}?tab=cajachica&box=${box}`,
+  }));
+}
+
 async function getMyPettyCashConfirmationPendingItems(userId: string, hrefBase: string): Promise<PendingItem[]> {
   const me = await prisma.user.findUnique({
     where: { id: userId },
@@ -2855,7 +2880,10 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
   const myBankAccountItem = await getMyBankAccountPendingItem(actor.userId, "/area/roles-de-pago");
   const myPersonalPurchasePaymentItem = await getMyPersonalPurchasePaymentPendingItem(actor.userId, "/area/compras-personales");
   const myPersonalPurchaseStatusItem = await getMyPersonalPurchaseStatusPendingItem(actor.userId, "/area/compras-personales");
-  const myPettyCashConfirmationItems = await getMyPettyCashConfirmationPendingItems(actor.userId, "/area/workspace");
+  const myPettyCashConfirmationItems = [
+    ...(await getMyPettyCashConfirmationPendingItems(actor.userId, "/area/workspace")),
+    ...(await getMyMotorizadoFreightPendingItems(actor.userId, "/area/workspace")),
+  ];
   const myPayrollMessageItem = await getMyPayrollMessageUnreadPendingItem(actor.userId, "/area/roles-de-pago");
 
   // Confirmado 2026-08-18: pedido explícito del usuario — acceso directo en

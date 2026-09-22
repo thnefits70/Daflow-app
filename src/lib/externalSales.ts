@@ -392,3 +392,32 @@ export async function createOutflowForExternalSale(sale: { id: string; items: { 
 
   return batch.id;
 }
+
+// Confirmado 2026-09-22, pedido de Marcos (aprobado por el usuario): en una
+// venta SIN recaudo con flete, apenas el asesor confirma que el cliente
+// recibió el pedido (y el pago del cliente ya está confirmado), se avisa a
+// quienes pueden pagar el flete desde Caja Chica — Nairoby (Principal) y
+// quien tenga la Secundaria (Jariel). Paga el primero que lo vea; la lista
+// de Caja Chica deja de mostrarlo apenas uno lo paga (freightPaidAt).
+export async function notifyPettyCashFreightPayable(sale: { code: string; pickupPersonName: string; freightCost: number }): Promise<void> {
+  const financeLeadId = await getFinanceLeadId();
+  const secundaria = await prisma.user.findMany({ where: { canManagePettyCashSecundaria: true, isActive: true }, select: { id: true } });
+  const recipients: { id: string; box: "principal" | "secundaria" }[] = [];
+  if (financeLeadId) recipients.push({ id: financeLeadId, box: "principal" });
+  for (const u of secundaria) if (!recipients.some((r) => r.id === u.id)) recipients.push({ id: u.id, box: "secundaria" });
+  await Promise.all(
+    recipients.map((r) =>
+      notifyOwner(r.id, {
+        title: "🛵 Flete por pagar al motorizado",
+        body: `${sale.code} — ${sale.pickupPersonName} — $${sale.freightCost.toFixed(2)}. El cliente ya recibió el pedido, págalo desde Caja Chica.`,
+        url: `/area/workspace?tab=cajachica&box=${r.box}`,
+      }).catch(() => null)
+    )
+  );
+}
+
+// Solo aplica si la venta de verdad tiene un flete pendiente de pagar aparte
+// (sin recaudo, flete > 0, pago y recepción confirmados, todavía sin pagar).
+export function isFreightPayable(sale: { isContraEntrega: boolean; freightCost: number | null; paymentConfirmedAt: Date | null; clientReceivedAt: Date | null; freightPaidAt: Date | null; deletedAt: Date | null }): boolean {
+  return !sale.deletedAt && !sale.isContraEntrega && (sale.freightCost ?? 0) > 0 && !!sale.paymentConfirmedAt && !!sale.clientReceivedAt && !sale.freightPaidAt;
+}

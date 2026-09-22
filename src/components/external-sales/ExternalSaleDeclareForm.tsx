@@ -11,6 +11,7 @@ import { usePasteFile } from "@/lib/usePasteFile";
 import { useFormDraft } from "@/lib/useFormDraft";
 import { formatDateTime } from "@/lib/formatDateTime";
 import { CatalogCode } from "@/components/shared/CatalogCode";
+import { ExpandableName } from "@/components/ui/ExpandableName";
 import { ProofPreview } from "@/components/shared/ProofPreview";
 import { saleSteps, saleColumn, FLOW_COLUMNS, TimelineSteps } from "@/components/external-sales/SaleTimeline";
 import { B2B_MARGIN_OPTIONS, B2B_MARGIN_DEFAULT } from "@/lib/externalSalesPricingConstants";
@@ -52,6 +53,7 @@ type SaleDTO = {
   paymentConfirmedAt: string | null;
   deliveredAt: string | null;
   deliveryPhotoUrl: string | null;
+  clientReceivedAt: string | null;
   returnedAt: string | null;
   returnReason: string | null;
   returnReceivedAt: string | null;
@@ -318,7 +320,7 @@ function FixItemForm({
         )}
         <div className="flex-1 min-w-0 text-[12px] font-semibold flex items-center gap-1.5">
           <CatalogCode code={product.justCode} />
-          <span className="truncate">{product.name}</span>
+          <ExpandableName text={product.name} />
         </div>
         <button type="button" className="shrink-0 text-[11px] font-semibold text-blue cursor-pointer" onClick={onChangeProduct}>Cambiar</button>
       </div>
@@ -359,6 +361,42 @@ async function patchJson(url: string, body: unknown) {
   const data = await res.json().catch(() => null);
   if (!res.ok) throw new Error(data?.error ?? "Ocurrió un error.");
   return data;
+}
+
+// Confirmado 2026-09-22, pedido de Marcos (aprobado por el usuario): el
+// asesor confirma que el cliente recibió el pedido — en SIN recaudo con
+// flete, esto avisa a Nairoby/Jariel para que le paguen el flete al
+// motorizado desde Caja Chica (ver /client-received).
+function ClientReceivedButton({ saleId, onDone }: { saleId: string; onDone: () => void }) {
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState("");
+
+  async function submit() {
+    setSaving(true);
+    setErr("");
+    try {
+      await postJson(`/api/external-sales/${saleId}/client-received`, {});
+      onDone();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "No se pudo confirmar.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="mt-1.5">
+      <button
+        type="button"
+        disabled={saving}
+        className="rounded border border-teal px-2.5 py-1.5 text-[11.5px] font-bold text-teal cursor-pointer disabled:opacity-40"
+        onClick={submit}
+      >
+        {saving ? "Confirmando…" : "✓ El cliente recibió el pedido"}
+      </button>
+      {err && <div className="text-red text-[11px] mt-1">{err}</div>}
+    </div>
+  );
 }
 
 // Confirmado 2026-09-16, pedido explícito del usuario: si el cliente no
@@ -566,7 +604,7 @@ function ItemsEditor({
               <div className="flex-1 min-w-0 text-[12px]">
                 <div className="font-semibold flex items-center gap-1.5 flex-wrap min-w-0">
                   <CatalogCode code={it.product.justCode} />
-                  <span className="truncate">{it.product.name}</span>
+                  <ExpandableName text={it.product.name} />
                 </div>
                 <div className="flex items-center gap-2">
                   <input
@@ -616,7 +654,7 @@ function ItemsEditor({
               )}
               <div className="flex-1 min-w-0 text-[12.5px] font-semibold flex items-center gap-1.5">
                 <CatalogCode code={draftProduct.justCode} />
-                <span className="truncate">{draftProduct.name}</span>
+                <ExpandableName text={draftProduct.name} />
               </div>
               <button type="button" className="shrink-0 text-[11px] font-semibold text-blue cursor-pointer" onClick={() => setDraftProduct(null)}>Cambiar</button>
             </div>
@@ -739,7 +777,7 @@ function PriceCheckPanel({ searchUrl, useB2CPricing }: { searchUrl: string; useB
                 )}
                 <div className="flex-1 min-w-0 text-[12.5px] font-semibold flex items-center gap-1.5">
                   <CatalogCode code={product.justCode} />
-                  <span className="truncate">{product.name}</span>
+                  <ExpandableName text={product.name} />
                 </div>
                 <button type="button" className="shrink-0 text-[11px] font-semibold text-blue cursor-pointer" onClick={reset}>Cambiar</button>
               </div>
@@ -1271,8 +1309,14 @@ export function ExternalSaleDeclareForm() {
                       <ProofPreview url={s.freightPettyCashEntries[0].proofUrl} size={40} />
                     </div>
                   )}
-                  {!s.isContraEntrega && s.freightCost != null && !s.freightPaidAt && (
-                    <div className="text-[10px] text-gold mt-0.5">Flete todavía no pagado al motorizado.</div>
+                  {!s.isContraEntrega && s.freightCost != null && s.freightCost > 0 && !s.freightPaidAt && (
+                    <div className="text-[10px] text-gold mt-0.5">
+                      {s.clientReceivedAt
+                        ? `✓ Cliente recibió el pedido · ${formatDateTime(s.clientReceivedAt)} — Nairoby/Jariel ya fueron avisados para pagar el flete.`
+                        : s.deliveredAt
+                          ? "Flete todavía no pagado al motorizado — cuando el cliente reciba el pedido, confírmalo abajo para que Nairoby/Jariel se lo paguen."
+                          : "Flete todavía no pagado al motorizado."}
+                    </div>
                   )}
                   {!s.deletedAt && canOverrideRecaudo && s.facturaSolicitada === "PENDIENTE" && (
                     <div className="mt-1.5">
@@ -1327,7 +1371,12 @@ export function ExternalSaleDeclareForm() {
                   {s.returnedAt ? (
                     <div className="text-[11px] text-red mt-1">Motivo: {s.returnReason}</div>
                   ) : (
-                    !s.deletedAt && s.deliveredAt && !s.nairobyClosedAt && <ReportReturnSection saleId={s.id} onDone={load} />
+                    !s.deletedAt && s.deliveredAt && !s.clientReceivedAt && (
+                      <>
+                        {!s.isContraEntrega && (s.freightCost ?? 0) > 0 && <ClientReceivedButton saleId={s.id} onDone={load} />}
+                        {!s.nairobyClosedAt && <ReportReturnSection saleId={s.id} onDone={load} />}
+                      </>
+                    )
                   )}
                   {!s.deletedAt && s.reviewStatus === "REJECTED" && s.rejectionReason && <div className="text-[11.5px] text-red mt-1">{s.rejectionReason}</div>}
                   {!s.deletedAt && (s.reviewStatus === "REJECTED" || s.reviewStatus === "PENDING") && editingId !== s.id && confirmDeleteSaleId !== s.id && (

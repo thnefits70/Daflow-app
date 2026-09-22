@@ -61,16 +61,20 @@ export async function POST(req: NextRequest) {
   // dinero), solo si el motorizado ya le confirmó al asesor que entregó el
   // pedido (deliveredAt — pedido explícito del usuario: no pagarle mientras
   // todavía no haya entregado), y solo una vez (freightPaidAt null).
-  let externalSale: { id: string; isContraEntrega: boolean; paymentConfirmedAt: Date | null; deliveredAt: Date | null; freightPaidAt: Date | null; deletedAt: Date | null } | null = null;
+  // Confirmado 2026-09-22 (pedido de Marcos): deliveredAt solo es la entrega
+  // de bodega al motorizado — además hace falta que el asesor confirme que
+  // el CLIENTE lo recibió (clientReceivedAt).
+  let externalSale: { id: string; isContraEntrega: boolean; paymentConfirmedAt: Date | null; deliveredAt: Date | null; clientReceivedAt: Date | null; freightPaidAt: Date | null; deletedAt: Date | null } | null = null;
   if (d.linkedExternalSaleId) {
     externalSale = await prisma.externalSale.findUnique({
       where: { id: d.linkedExternalSaleId },
-      select: { id: true, isContraEntrega: true, paymentConfirmedAt: true, deliveredAt: true, freightPaidAt: true, deletedAt: true },
+      select: { id: true, isContraEntrega: true, paymentConfirmedAt: true, deliveredAt: true, clientReceivedAt: true, freightPaidAt: true, deletedAt: true },
     });
     if (!externalSale || externalSale.deletedAt) return NextResponse.json({ error: "Venta no encontrada." }, { status: 404 });
     if (externalSale.isContraEntrega) return NextResponse.json({ error: "Esta venta es con recaudo — el motorizado ya se descuenta el flete solo, no hay nada que pagarle aparte." }, { status: 409 });
     if (!externalSale.paymentConfirmedAt) return NextResponse.json({ error: "Todavía no se confirmó que llegó el pago de esta venta." }, { status: 409 });
     if (!externalSale.deliveredAt) return NextResponse.json({ error: "El motorizado todavía no confirmó que entregó el pedido." }, { status: 409 });
+    if (!externalSale.clientReceivedAt) return NextResponse.json({ error: "El asesor todavía no confirmó que el cliente recibió el pedido." }, { status: 409 });
     if (externalSale.freightPaidAt) return NextResponse.json({ error: "El flete de esta venta ya fue pagado." }, { status: 409 });
   }
 

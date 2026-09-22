@@ -29,6 +29,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       deliveredAt: true,
       returnedAt: true,
       nairobyClosedAt: true,
+      clientReceivedAt: true,
       deletedAt: true,
       code: true,
       items: { select: { declaredProductName: true, catalogItem: { select: { name: true } } } },
@@ -39,6 +40,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (sale.deletedAt) return NextResponse.json({ error: "Esta venta fue cancelada." }, { status: 409 });
   if (!sale.deliveredAt) return NextResponse.json({ error: "Todavía no se registró la entrega al motorizado." }, { status: 409 });
   if (sale.returnedAt) return NextResponse.json({ error: "Ya se reportó esta devolución." }, { status: 409 });
+  if (sale.clientReceivedAt) return NextResponse.json({ error: "Ya confirmaste que el cliente recibió este pedido." }, { status: 409 });
   if (sale.nairobyClosedAt) return NextResponse.json({ error: "Esta venta ya fue cerrada, no se puede reportar como devuelta." }, { status: 409 });
 
   const updated = await prisma.externalSale.update({

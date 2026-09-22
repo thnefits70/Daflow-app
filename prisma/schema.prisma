@@ -5829,6 +5829,13 @@ model ExternalSale {
 
   freightPettyCashEntries PettyCashEntry[] @relation("PettyCashEntryExternalSale")
 
+  // Confirmado 2026-09-22, pedido de Marcos (aprobado por el usuario): el
+  // asesor confirma que el CLIENTE de verdad recibió el pedido — deliveredAt
+  // solo marca que bodega se lo entregó al motorizado. En SIN recaudo con
+  // flete, recién desde acá se le puede pagar el flete al motorizado desde
+  // Caja Chica, y en ese momento se avisa a Nairoby y a Jariel.
+  clientReceivedAt DateTime?
+
   createdAt DateTime @default(now())
 
   reviewStatus    ExternalSaleReviewStatus @default(PENDING)

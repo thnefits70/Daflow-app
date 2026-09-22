@@ -248,6 +248,9 @@ export async function getPendingMotorizadoFreights(): Promise<PendingMotorizadoF
       freightCost: { gt: 0 },
       paymentConfirmedAt: { not: null },
       deliveredAt: { not: null },
+      // Confirmado 2026-09-22 (pedido de Marcos): además, el asesor confirmó
+      // que el cliente de verdad recibió el pedido.
+      clientReceivedAt: { not: null },
       freightPaidAt: null,
     },
     select: { id: true, code: true, pickupPersonName: true, freightCost: true, deliveredAt: true },
