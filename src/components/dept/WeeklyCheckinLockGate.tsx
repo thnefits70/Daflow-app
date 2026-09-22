@@ -28,7 +28,8 @@ export function WeeklyCheckinLockGate({ weeksStale, reason }: { weeksStale: numb
         <p className="text-[13px] text-steel mb-6 leading-relaxed">
           Esta sección quedó bloqueada hasta que te pongas al día con tu feedback semanal. Tus tareas del día a día
           (despachos, recepción, egresos, ventas externas, compras) siguen disponibles como siempre — solo esta
-          parte administrativa queda a la espera.
+          parte administrativa queda a la espera. Si llegas a 3 semanas sin resolverlo, se bloquea la cuenta
+          completa hasta que hables con Mary.
         </p>
         <button
           type="button"

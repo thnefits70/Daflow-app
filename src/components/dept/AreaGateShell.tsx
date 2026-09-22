@@ -8,6 +8,7 @@ import { EmployeeSidebar } from "@/components/shell/EmployeeSidebar";
 import { TopBanner } from "@/components/shell/TopBanner";
 import { UpdateGate } from "@/components/dept/UpdateGate";
 import { WeeklyCheckinLockGate } from "@/components/dept/WeeklyCheckinLockGate";
+import { WeeklyCheckinFullLockGate } from "@/components/dept/WeeklyCheckinFullLockGate";
 import { LeaderBanner } from "@/components/dept/LeaderBanner";
 import { BirthdayPopup } from "@/components/birthday/BirthdayPopup";
 import { MonthlyRecognitionPopup } from "@/components/recognition/MonthlyRecognitionPopup";
@@ -22,6 +23,11 @@ import { isFutureDate } from "@/lib/time";
 type PendingUpdate = { id: string; processId: string; processTitle: string; note: string; createdAt: string };
 type LeaderAlert = { id: string; processTitle: string; pendingCount: number; teamSize: number };
 type WeeklyCheckinLockout = { weeksStale: number; reason: "stale_pending" | "no_contact" };
+
+// Debe coincidir con WEEKLY_CHECKIN_FULL_LOCKOUT_WEEKS en weeklyCheckin.ts —
+// copiado acá en vez de importado porque ese archivo trae `prisma` a nivel
+// de módulo (server-only) y este componente es "use client".
+const WEEKLY_CHECKIN_FULL_LOCKOUT_WEEKS = 3;
 
 // Páginas administrativas/documentales que quedan bloqueadas para un líder
 // 2+ semanas atrasado con Mary (ver weeklyCheckinLockout) — pedido explícito
@@ -109,6 +115,7 @@ export function AreaGateShell({
   const showGate = !!activeUpdate && !isSnoozed && !snoozedNow;
   const showWeeklyCheckinRouteLock =
     !!weeklyCheckinLockout && BLOCKED_STANDALONE_ROUTES.some((r) => pathname === r || pathname.startsWith(`${r}/`));
+  const showWeeklyCheckinFullLockout = !!weeklyCheckinLockout && weeklyCheckinLockout.weeksStale >= WEEKLY_CHECKIN_FULL_LOCKOUT_WEEKS;
 
   // Confirmado 2026-08-07: el bloqueo de Colaborador del mes gana sobre
   // cualquier otro gate — reemplaza TODO el shell, sin importar qué otra
@@ -122,6 +129,18 @@ export function AreaGateShell({
         emptyMessage="Aún no tienes personas asignadas a tu equipo."
         logoUrl={logoUrl}
       />
+    );
+  }
+
+  // Bloqueo TOTAL de Feedback semanal (3+ semanas, ver
+  // WEEKLY_CHECKIN_FULL_LOCKOUT_WEEKS) — pedido explícito del usuario
+  // 2026-09-22: escala desde el bloqueo parcial (2 semanas) cuando el
+  // líder sigue sin resolverlo. Gana sobre el gate de actualización de
+  // proceso (showGate) porque es más severo — lo único que puede hacer acá
+  // es escribirle a Mary.
+  if (showWeeklyCheckinFullLockout && weeklyCheckinLockout) {
+    return (
+      <WeeklyCheckinFullLockGate weeksStale={weeklyCheckinLockout.weeksStale} reason={weeklyCheckinLockout.reason} logoUrl={logoUrl} />
     );
   }
 

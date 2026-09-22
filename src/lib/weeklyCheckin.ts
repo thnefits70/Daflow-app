@@ -180,15 +180,28 @@ export async function getOpenPreviousReports(leaderId: string, currentWeek: stri
 
 export type WeeklyCheckinLockoutStatus = { weeksStale: number; reason: "stale_pending" | "no_contact" };
 
-// Bloqueo operativo parcial — pedido explícito del usuario 2026-09-22: un
-// líder que lleva 2+ semanas sin resolver su feedback con Mary (o sin
-// hablarle en absoluto) queda bloqueado de las pestañas/páginas
-// administrativas de su panel hasta que lo resuelva — nunca de las
-// operativas del día a día (ver BLOCKED_TABS en DeptWorkspaceTabs.tsx y
-// BLOCKED_STANDALONE_ROUTES en AreaGateShell.tsx). Reemplaza al antiguo
-// aviso "check_in_semanal_estancado" que solo le llegaba al admin
-// (retirado de pendingTasks.ts) — el bloqueo se encarga solo, sin que el
-// admin tenga que perseguir a nadie.
+// Umbral de bloqueo TOTAL (ver AreaGateShell.tsx) — pedido explícito del
+// usuario 2026-09-22: 2 semanas es bloqueo parcial (con excepción
+// operativa, ver más abajo), pero a partir de 3 semanas la cuenta entera se
+// bloquea y lo ÚNICO que puede hacer el líder es escribirle a Mary — nada
+// de despachos, recepción, ni nada más — hasta terminar su feedback.
+export const WEEKLY_CHECKIN_FULL_LOCKOUT_WEEKS = 3;
+
+// Semana en que se lanzó el check-in semanal (2026-08-26/27) — usado como
+// piso para un líder que JAMÁS le ha escrito nada a Mary (sin esto, "hace
+// cuántas semanas" no tendría de dónde partir y el bloqueo total nunca
+// llegaría para ese caso).
+const MARY_LAUNCH_WEEK = "2026-W35";
+
+// Bloqueo operativo — pedido explícito del usuario 2026-09-22: un líder que
+// lleva 2+ semanas sin resolver su feedback con Mary (o sin hablarle en
+// absoluto) queda bloqueado de las pestañas/páginas administrativas de su
+// panel (ver BLOCKED_TABS en DeptWorkspaceTabs.tsx y
+// BLOCKED_STANDALONE_ROUTES en AreaGateShell.tsx); a partir de 3 semanas
+// (WEEKLY_CHECKIN_FULL_LOCKOUT_WEEKS) el bloqueo pasa a ser total. Reemplaza
+// al antiguo aviso "check_in_semanal_estancado" que solo le llegaba al
+// admin (retirado de pendingTasks.ts) — el bloqueo se encarga solo, sin que
+// el admin tenga que perseguir a nadie.
 //
 // Un pendiente atrasado por depender de OTRA área (involvesDeptId, ver
 // notifyInvolvedParties) no cuenta como inacción propia del líder, así que
@@ -211,7 +224,7 @@ export async function getWeeklyCheckinLockoutStatus(leaderId: string): Promise<W
 
   if (stalePending) return { weeksStale: weeksStaleOf(stalePending.week), reason: "stale_pending" };
   if (!mostRecent || mostRecent.week < twoWeeksAgo) {
-    return { weeksStale: mostRecent ? weeksStaleOf(mostRecent.week) : 2, reason: "no_contact" };
+    return { weeksStale: mostRecent ? weeksStaleOf(mostRecent.week) : weeksStaleOf(MARY_LAUNCH_WEEK), reason: "no_contact" };
   }
   return null;
 }

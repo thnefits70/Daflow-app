@@ -34,7 +34,14 @@ type SpeechWindow = Window & {
 // así que no necesita props ni una vista de "lista".
 // Posición bottom-left (Nancy usa bottom-right) para no chocar si alguien
 // llega a ver ambos widgets en la misma sesión.
-export function WeeklyCheckinPanel() {
+//
+// `embedded` (pedido explícito del usuario 2026-09-22): cuando un líder
+// lleva 3+ semanas sin gestión, WeeklyCheckinFullLockGate.tsx reutiliza
+// este mismo componente en modo incrustado — sin botón flotante, sin modal,
+// sin poder cerrarlo — como la ÚNICA cosa que puede hacer en toda la
+// cuenta. Misma lógica de chat/streaming/dictado que el widget flotante;
+// solo cambia el envoltorio visual.
+export function WeeklyCheckinPanel({ embedded = false }: { embedded?: boolean } = {}) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [open, setOpen] = useState(false);
@@ -96,7 +103,7 @@ export function WeeklyCheckinPanel() {
   }
 
   useEffect(() => {
-    if (!open || loadedOnce) return;
+    if ((!open && !embedded) || loadedOnce) return;
     (async () => {
       const res = await fetch("/api/weekly-checkin");
       if (res.ok) {
@@ -105,7 +112,7 @@ export function WeeklyCheckinPanel() {
       }
       setLoadedOnce(true);
     })();
-  }, [open, loadedOnce]);
+  }, [open, embedded, loadedOnce]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -156,6 +163,93 @@ export function WeeklyCheckinPanel() {
     }
   }
 
+  // Cuerpo del chat compartido entre el widget flotante y el modo
+  // incrustado (embedded) — mismo mensaje/input/dictado, solo cambia el
+  // envoltorio (modal con header+cerrar vs. contenedor fijo sin salida).
+  const chatBody = (
+    <>
+      <div className="flex-1 overflow-y-auto px-5 py-4 min-h-[320px]">
+        {messages.length === 0 && (
+          <div className="text-[13.5px] text-steel">
+            Cuéntame qué problemas tuviste esta semana y armamos juntos el plan para resolverlos.
+          </div>
+        )}
+        <div className="space-y-3">
+          {messages.map((m, i) => (
+            <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
+              <div
+                className={`max-w-[80%] rounded-md px-3.5 py-2.5 text-[13.5px] leading-relaxed whitespace-pre-wrap ${
+                  m.role === "user" ? "bg-blue text-white" : "bg-cloud border border-rule text-ink"
+                }`}
+              >
+                {m.content || (loading && i === messages.length - 1 ? "…" : "")}
+              </div>
+            </div>
+          ))}
+          <div ref={bottomRef} />
+        </div>
+      </div>
+
+      {error && <div className="px-5 text-[11.5px] text-red">{error}</div>}
+
+      <div className="px-5 pt-3 pb-4 border-t border-rule shrink-0">
+        <div className="flex gap-2">
+          <input
+            type="text"
+            className="flex-1 rounded border border-rule bg-cloud px-3 py-2.5 text-[13.5px] min-w-0"
+            placeholder={listening ? "Escuchando..." : "Escribe o dicta tu respuesta..."}
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                send();
+              }
+            }}
+            disabled={loading}
+          />
+          {micSupported && (
+            <button
+              type="button"
+              title={listening ? "Detener dictado" : "Dictar por voz"}
+              className={`px-2.5 py-2 rounded-md border shrink-0 cursor-pointer ${
+                listening ? "bg-red/20 border-red text-red" : "border-rule text-steel hover:text-ink"
+              } ${listening && !reducedMotion ? "animate-pulse" : ""}`}
+              onClick={toggleListening}
+              disabled={loading}
+            >
+              {listening ? <MicOff size={15} /> : <Mic size={15} />}
+            </button>
+          )}
+          <button
+            type="button"
+            className="px-3.5 py-2 rounded-md bg-teal text-navy font-semibold text-[12.5px] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 shrink-0"
+            onClick={send}
+            disabled={loading || !input.trim()}
+          >
+            <Send size={14} />
+          </button>
+        </div>
+      </div>
+    </>
+  );
+
+  if (embedded) {
+    return (
+      <div
+        className="flex-1 min-h-0 flex flex-col bg-surface border border-rule rounded-md shadow-sm"
+        role="dialog"
+        aria-label="Feedback semanal"
+      >
+        <div className="flex items-center gap-2 px-4 py-3 border-b border-rule shrink-0">
+          <ClipboardList size={15} className="text-teal shrink-0" />
+          <div className="font-mono text-[10px] uppercase tracking-wide text-steel font-bold truncate">Feedback semanal</div>
+        </div>
+        {chatBody}
+      </div>
+    );
+  }
+
   return (
     <>
       {open && (
@@ -178,70 +272,7 @@ export function WeeklyCheckinPanel() {
               <X size={15} />
             </button>
           </div>
-
-          <div className="flex-1 overflow-y-auto px-5 py-4 min-h-[320px]">
-            {messages.length === 0 && (
-              <div className="text-[13.5px] text-steel">
-                Cuéntame qué problemas tuviste esta semana y armamos juntos el plan para resolverlos.
-              </div>
-            )}
-            <div className="space-y-3">
-              {messages.map((m, i) => (
-                <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
-                  <div
-                    className={`max-w-[80%] rounded-md px-3.5 py-2.5 text-[13.5px] leading-relaxed whitespace-pre-wrap ${
-                      m.role === "user" ? "bg-blue text-white" : "bg-cloud border border-rule text-ink"
-                    }`}
-                  >
-                    {m.content || (loading && i === messages.length - 1 ? "…" : "")}
-                  </div>
-                </div>
-              ))}
-              <div ref={bottomRef} />
-            </div>
-          </div>
-
-          {error && <div className="px-5 text-[11.5px] text-red">{error}</div>}
-
-          <div className="px-5 pt-3 pb-4 border-t border-rule shrink-0">
-            <div className="flex gap-2">
-              <input
-                type="text"
-                className="flex-1 rounded border border-rule bg-cloud px-3 py-2.5 text-[13.5px] min-w-0"
-                placeholder={listening ? "Escuchando..." : "Escribe o dicta tu respuesta..."}
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    send();
-                  }
-                }}
-                disabled={loading}
-              />
-              {micSupported && (
-                <button
-                  type="button"
-                  title={listening ? "Detener dictado" : "Dictar por voz"}
-                  className={`px-2.5 py-2 rounded-md border shrink-0 cursor-pointer ${
-                    listening ? "bg-red/20 border-red text-red" : "border-rule text-steel hover:text-ink"
-                  } ${listening && !reducedMotion ? "animate-pulse" : ""}`}
-                  onClick={toggleListening}
-                  disabled={loading}
-                >
-                  {listening ? <MicOff size={15} /> : <Mic size={15} />}
-                </button>
-              )}
-              <button
-                type="button"
-                className="px-3.5 py-2 rounded-md bg-teal text-navy font-semibold text-[12.5px] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 shrink-0"
-                onClick={send}
-                disabled={loading || !input.trim()}
-              >
-                <Send size={14} />
-              </button>
-            </div>
-          </div>
+          {chatBody}
         </div>
         </div>
       )}
