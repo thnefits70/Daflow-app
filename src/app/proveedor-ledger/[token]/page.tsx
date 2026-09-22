@@ -3,8 +3,7 @@ import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import { getSupplierDebtDisputedItems, getSupplierDebtPendingItems, getSupplierDebtPendingExcessItems, findSupplierByPublicLedgerToken } from "@/lib/supplierDebt";
 import { formatPurchaseRequestCode } from "@/lib/purchases";
-import { SupplierShippingPhotoCapture } from "@/components/supplier-ledger/SupplierShippingPhotoCapture";
-import { SupplierShipmentConfirmButton } from "@/components/supplier-ledger/SupplierShipmentConfirmButton";
+import { SupplierPendingShipmentsList, ProductThumb } from "@/components/supplier-ledger/SupplierPendingShipmentsList";
 import { SupplierShipmentHistoryTable } from "@/components/supplier-ledger/SupplierShipmentHistoryTable";
 import { firstName } from "@/lib/actorName";
 
@@ -42,6 +41,7 @@ const DATE_FMT = new Intl.DateTimeFormat("es-EC", {
   hour: "2-digit",
   minute: "2-digit",
 });
+const SHORT_DATE_FMT = new Intl.DateTimeFormat("es-EC", { timeZone: "America/Guayaquil", weekday: "short", day: "2-digit", month: "short" });
 const DATETIME_FMT = new Intl.DateTimeFormat("es-EC", { timeZone: "America/Guayaquil", day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
 
 export default async function SupplierLedgerPage({ params }: { params: Promise<{ token: string }> }) {
@@ -138,75 +138,55 @@ export default async function SupplierLedgerPage({ params }: { params: Promise<{
   const td = "px-3 py-2 whitespace-nowrap";
   const NOMBRE_TH = "px-3 py-2 min-w-[200px]";
 
+  // Confirmado 2026-09-22, pedido explícito del usuario: se veía bien solo en
+  // computadora — ahora cada sección, en celular, pasa de tabla ancha a
+  // tarjetas compactas (md:hidden / hidden md:block), y arriba hay un
+  // resumen rápido de cuánto falta enviar y cuánto está recibido sin pagar.
+  const pendingReceivedTotal =
+    Math.round((pendingDebtItems.reduce((s, i) => s + i.totalCost, 0) + pendingExcessItems.reduce((s, i) => s + i.amount, 0)) * 100) / 100;
+  const pendingReceivedCount = pendingDebtItems.length + pendingExcessItems.length;
+
   return (
     <div className="min-h-screen bg-neutral-50 text-neutral-900">
       {/* Confirmado 2026-09-15, pedido explícito del usuario: usar todo el
           ancho de pantalla (tipo tabla operativa/hoja de cálculo), en vez de
           la tarjeta angosta y centrada de antes. */}
-      <div className="mx-auto max-w-[1600px] px-4 py-10 sm:px-6">
-        <header className="mb-8">
+      <div className="mx-auto max-w-[1600px] px-3 py-5 sm:px-6 sm:py-10">
+        <header className="mb-4 sm:mb-6">
           <h1 className="text-xl font-semibold tracking-tight">IMPORTADORA CHEN</h1>
           <p className="mt-1 text-sm text-neutral-500">Actualizado en tiempo real. Esta página es de solo lectura.</p>
         </header>
 
-        <section className="mb-8">
-          <h2 className="mb-1 text-sm font-medium text-neutral-700">Pedidos que faltan enviar a la bodega TBS</h2>
+        <div className="mb-6 grid grid-cols-2 gap-2 sm:mb-8 sm:flex sm:gap-3">
+          <SummaryTile label="Falta enviar" value={`${pendingShipments.length}`} hint={pendingShipments.length === 1 ? "pedido" : "pedidos"} href="#por-enviar" />
+          <SummaryTile label="Recibido, pendiente de pago" value={money(pendingReceivedTotal)} hint={`${pendingReceivedCount} ${pendingReceivedCount === 1 ? "producto" : "productos"}`} href="#recibido" />
+          {disputedItems.length > 0 && (
+            <SummaryTile label="En revisión" value={`${disputedItems.length}`} hint="no suma al saldo" href="#revision" tone="amber" />
+          )}
+        </div>
+
+        <section id="por-enviar" className="mb-8 scroll-mt-4">
+          <SectionTitle count={pendingShipments.length}>Pedidos que faltan enviar a la bodega TBS</SectionTitle>
           <p className="mb-3 text-xs text-neutral-500">
             Subir una foto en tiempo real de lo que están enviando es opcional — solo un refuerzo, no hace falta para nada más.
           </p>
-          {pendingShipments.length === 0 ? (
-            <p className="text-sm text-neutral-400">No hay pedidos pendientes de envío por ahora.</p>
-          ) : (
-            <div className="overflow-x-auto rounded-xl border border-neutral-200 bg-white shadow-sm">
-              <table className="w-full text-left text-sm">
-                <thead className="border-b border-neutral-200 bg-neutral-50 text-xs uppercase tracking-wide text-neutral-500">
-                  <tr>
-                    <th className={th}>Fecha aprobado</th>
-                    <th className={th}>Imagen</th>
-                    <th className={NOMBRE_TH}>Producto</th>
-                    <th className={`${th} text-right`}>Cant.</th>
-                    <th className={th}>Solicitado por</th>
-                    <th className={th}>Aprobado por</th>
-                    <th className={th}>Foto (opcional)</th>
-                    <th className={th}>¿Ya lo enviaron?</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-neutral-100">
-                  {pendingShipments.map((r) => (
-                    <tr key={r.id}>
-                      <td className={`${td} text-neutral-600`}>{DATE_FMT.format(r.reviewedAt ?? r.requestedAt)}</td>
-                      <td className="px-3 py-2">
-                        {r.catalogItem.photos.length > 0 ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            src={r.catalogItem.photos[r.catalogItem.photos.length - 1]}
-                            alt={r.catalogItem.name}
-                            className="w-12 h-12 object-cover rounded-md border border-neutral-200"
-                          />
-                        ) : (
-                          <span className="text-neutral-400">—</span>
-                        )}
-                      </td>
-                      <td className="px-3 py-2">{r.catalogItem.name}</td>
-                      <td className={`${td} text-right tabular-nums`}>{r.quantity}</td>
-                      <td className={`${td} text-neutral-600`}>{firstName(r.requestedBy?.name) || "—"}</td>
-                      <td className={`${td} text-neutral-600`}>{firstName(r.reviewedBy?.name) || "—"}</td>
-                      <td className="px-3 py-2">
-                        <SupplierShippingPhotoCapture token={token} requestId={r.id} initialPhotoUrl={r.supplierShippingPhotoUrl} />
-                      </td>
-                      <td className="px-3 py-2">
-                        <SupplierShipmentConfirmButton token={token} requestId={r.id} />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+          <SupplierPendingShipmentsList
+            token={token}
+            rows={pendingShipments.map((r) => ({
+              id: r.id,
+              approvedAt: r.reviewedAt ?? r.requestedAt,
+              productName: r.catalogItem.name,
+              productImageUrl: r.catalogItem.photos.at(-1) ?? null,
+              quantity: r.quantity,
+              requestedByName: firstName(r.requestedBy?.name) || null,
+              approvedByName: firstName(r.reviewedBy?.name) || null,
+              photoUrl: r.supplierShippingPhotoUrl,
+            }))}
+          />
         </section>
 
         <section className="mb-8">
-          <h2 className="mb-3 text-sm font-medium text-neutral-700">Historial de lo que ya se despachó a la bodega TBS</h2>
+          <SectionTitle count={confirmedShipments.length}>Historial de lo que ya se despachó a la bodega TBS</SectionTitle>
           <SupplierShipmentHistoryTable
             rows={confirmedShipments.map((r) => ({
               id: r.id,
@@ -220,87 +200,146 @@ export default async function SupplierLedgerPage({ params }: { params: Promise<{
           />
         </section>
 
-        <section className="mb-8">
-          <h2 className="mb-1 text-sm font-medium text-neutral-700">Mercadería que ya la bodega TBS confirmó que sí recibió</h2>
+        <section id="recibido" className="mb-8 scroll-mt-4">
+          <SectionTitle count={pendingReceivedCount}>Mercadería que ya la bodega TBS confirmó que sí recibió</SectionTitle>
           <p className="mb-3 text-xs text-neutral-500">
             Ya quedó registrada en nuestro sistema de inventario de la bodega de TBS, confirmada por el equipo de bodega de TBS — todavía no
             incluida en ninguna tanda pagada. Pendiente de pagar a CHEN, estos pagos los realiza Andrés.
           </p>
-          {pendingDebtItems.length === 0 && pendingExcessItems.length === 0 ? (
-            <p className="text-sm text-neutral-400">No hay mercadería recibida pendiente de pago por ahora.</p>
+          {pendingReceivedCount === 0 ? (
+            <EmptyBox>No hay mercadería recibida pendiente de pago por ahora.</EmptyBox>
           ) : (
-            <div className="overflow-x-auto rounded-xl border border-neutral-200 bg-white shadow-sm">
-              <table className="w-full text-left text-sm">
-                <thead className="border-b border-neutral-200 bg-neutral-50 text-xs uppercase tracking-wide text-neutral-500">
-                  <tr>
-                    <th className={th}>Fecha recibido</th>
-                    <th className={th}>Imagen</th>
-                    <th className={NOMBRE_TH}>Producto</th>
-                    <th className={`${th} text-right`}>Cant.</th>
-                    <th className={`${th} text-right`}>Costo</th>
-                    <th className={th}>Aprobado por</th>
-                    <th className={th}>Confirmado por</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-neutral-100">
+            <>
+              {/* Celular */}
+              <div className="overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-sm md:hidden">
+                <ul className="divide-y divide-neutral-100">
                   {pendingDebtItems.map((i) => (
-                    <tr key={i.id}>
-                      <td className={`${td} text-neutral-600`}>{DATE_FMT.format(i.receivedAt ?? i.requestedAt)}</td>
-                      <td className="px-3 py-2">
-                        {i.productImageUrl ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            src={i.productImageUrl}
-                            alt={i.productName}
-                            className="w-12 h-12 object-cover rounded-md border border-neutral-200"
-                          />
-                        ) : (
-                          <span className="text-neutral-400">—</span>
-                        )}
-                      </td>
-                      <td className="px-3 py-2">{i.productName}</td>
-                      <td className={`${td} text-right tabular-nums`}>{i.quantity}</td>
-                      <td className={`${td} text-right tabular-nums`}>{money(i.totalCost)}</td>
-                      <td className={`${td} text-neutral-600`}>{firstName(i.approvedByName) || "—"}</td>
-                      <td className={`${td} text-neutral-600`}>{firstName(i.reviewedByName) || "—"}</td>
-                    </tr>
+                    <li key={i.id} className="flex gap-3 p-3">
+                      <ProductThumb url={i.productImageUrl} alt={i.productName} size="sm" />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-start justify-between gap-2">
+                          <p className="text-sm font-medium leading-snug">{i.productName}</p>
+                          <span className="shrink-0 text-sm font-semibold tabular-nums">{money(i.totalCost)}</span>
+                        </div>
+                        <p className="mt-0.5 text-xs text-neutral-500">
+                          {i.quantity} uds · {SHORT_DATE_FMT.format(i.receivedAt ?? i.requestedAt)}
+                        </p>
+                        <p className="text-xs text-neutral-500">
+                          Aprobó {firstName(i.approvedByName) || "—"} · Confirmó {firstName(i.reviewedByName) || "—"}
+                        </p>
+                      </div>
+                    </li>
                   ))}
-                  {/* Confirmado 2026-09-21, pedido explícito del usuario:
-                      excedente (llegó más de lo pedido) ya confirmado —
-                      anclado a la solicitud que lo originó, mismo costo
-                      unitario, nunca una compra aparte. */}
                   {pendingExcessItems.map((i) => (
-                    <tr key={`excess-${i.id}`} className="bg-amber-50/50">
-                      <td className={`${td} text-neutral-600`}>{i.excessConfirmedAt ? DATE_FMT.format(i.excessConfirmedAt) : "—"}</td>
-                      <td className="px-3 py-2">
-                        {i.productImageUrl ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={i.productImageUrl} alt={i.productName} className="w-12 h-12 object-cover rounded-md border border-neutral-200" />
-                        ) : (
-                          <span className="text-neutral-400">—</span>
-                        )}
-                      </td>
-                      <td className="px-3 py-2">
-                        {i.productName} <span className="text-neutral-500">(excedente, {i.requestNumber != null ? formatPurchaseRequestCode(i.requestNumber) : "—"})</span>
-                      </td>
-                      <td className={`${td} text-right tabular-nums`}>{i.excessQty}</td>
-                      <td className={`${td} text-right tabular-nums`}>{money(i.amount)}</td>
-                      <td className={`${td} text-neutral-600`}>—</td>
-                      <td className={`${td} text-neutral-600`}>{firstName(i.excessConfirmedByName) || "—"}</td>
-                    </tr>
+                    <li key={`excess-${i.id}`} className="flex gap-3 bg-amber-50/60 p-3">
+                      <ProductThumb url={i.productImageUrl} alt={i.productName} size="sm" />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-start justify-between gap-2">
+                          <p className="text-sm font-medium leading-snug">{i.productName}</p>
+                          <span className="shrink-0 text-sm font-semibold tabular-nums">{money(i.amount)}</span>
+                        </div>
+                        <p className="mt-0.5 text-xs text-amber-700">
+                          Excedente, {i.requestNumber != null ? formatPurchaseRequestCode(i.requestNumber) : "—"}
+                        </p>
+                        <p className="text-xs text-neutral-500">
+                          {i.excessQty} uds · {i.excessConfirmedAt ? SHORT_DATE_FMT.format(i.excessConfirmedAt) : "—"} · Confirmó{" "}
+                          {firstName(i.excessConfirmedByName) || "—"}
+                        </p>
+                      </div>
+                    </li>
                   ))}
-                </tbody>
-              </table>
-            </div>
+                </ul>
+                <div className="flex items-center justify-between border-t border-neutral-200 bg-neutral-50 px-3 py-2 text-sm">
+                  <span className="text-neutral-600">Total</span>
+                  <span className="font-semibold tabular-nums">{money(pendingReceivedTotal)}</span>
+                </div>
+              </div>
+
+              {/* Computadora */}
+              <div className="hidden overflow-x-auto rounded-xl border border-neutral-200 bg-white shadow-sm md:block">
+                <table className="w-full text-left text-sm">
+                  <thead className="border-b border-neutral-200 bg-neutral-50 text-xs uppercase tracking-wide text-neutral-500">
+                    <tr>
+                      <th className={th}>Fecha recibido</th>
+                      <th className={th}>Imagen</th>
+                      <th className={NOMBRE_TH}>Producto</th>
+                      <th className={`${th} text-right`}>Cant.</th>
+                      <th className={`${th} text-right`}>Costo</th>
+                      <th className={th}>Aprobado por</th>
+                      <th className={th}>Confirmado por</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-neutral-100">
+                    {pendingDebtItems.map((i) => (
+                      <tr key={i.id}>
+                        <td className={`${td} text-neutral-600`}>{DATE_FMT.format(i.receivedAt ?? i.requestedAt)}</td>
+                        <td className="px-3 py-2">
+                          <ProductThumb url={i.productImageUrl} alt={i.productName} size="sm" />
+                        </td>
+                        <td className="px-3 py-2">{i.productName}</td>
+                        <td className={`${td} text-right tabular-nums`}>{i.quantity}</td>
+                        <td className={`${td} text-right tabular-nums`}>{money(i.totalCost)}</td>
+                        <td className={`${td} text-neutral-600`}>{firstName(i.approvedByName) || "—"}</td>
+                        <td className={`${td} text-neutral-600`}>{firstName(i.reviewedByName) || "—"}</td>
+                      </tr>
+                    ))}
+                    {/* Confirmado 2026-09-21, pedido explícito del usuario:
+                        excedente (llegó más de lo pedido) ya confirmado —
+                        anclado a la solicitud que lo originó, mismo costo
+                        unitario, nunca una compra aparte. */}
+                    {pendingExcessItems.map((i) => (
+                      <tr key={`excess-${i.id}`} className="bg-amber-50/50">
+                        <td className={`${td} text-neutral-600`}>{i.excessConfirmedAt ? DATE_FMT.format(i.excessConfirmedAt) : "—"}</td>
+                        <td className="px-3 py-2">
+                          <ProductThumb url={i.productImageUrl} alt={i.productName} size="sm" />
+                        </td>
+                        <td className="px-3 py-2">
+                          {i.productName} <span className="text-neutral-500">(excedente, {i.requestNumber != null ? formatPurchaseRequestCode(i.requestNumber) : "—"})</span>
+                        </td>
+                        <td className={`${td} text-right tabular-nums`}>{i.excessQty}</td>
+                        <td className={`${td} text-right tabular-nums`}>{money(i.amount)}</td>
+                        <td className={`${td} text-neutral-600`}>—</td>
+                        <td className={`${td} text-neutral-600`}>{firstName(i.excessConfirmedByName) || "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot className="border-t border-neutral-200 bg-neutral-50">
+                    <tr>
+                      <td colSpan={4} className="px-3 py-2 text-right text-xs uppercase tracking-wide text-neutral-500">Total</td>
+                      <td className={`${td} text-right font-semibold tabular-nums`}>{money(pendingReceivedTotal)}</td>
+                      <td colSpan={2} />
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </>
           )}
         </section>
 
         {disputedItems.length > 0 && (
-          <section className="mb-8">
-            <h2 className="mb-3 text-sm font-medium text-neutral-700">
+          <section id="revision" className="mb-8 scroll-mt-4">
+            <SectionTitle count={disputedItems.length}>
               Mercadería en revisión (incompleta, dañada o distinta) — no se incluye en el saldo hasta resolverse
-            </h2>
-            <div className="overflow-x-auto rounded-xl border border-amber-200 bg-amber-50 shadow-sm">
+            </SectionTitle>
+            {/* Celular */}
+            <ul className="divide-y divide-amber-100 overflow-hidden rounded-xl border border-amber-200 bg-amber-50 shadow-sm md:hidden">
+              {disputedItems.map((i) => (
+                <li key={i.id} className="p-3 text-amber-900">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-sm font-medium leading-snug">{i.productName}</p>
+                    <span className="shrink-0 text-sm font-semibold tabular-nums">{money(i.wouldBeValue)}</span>
+                  </div>
+                  <p className="mt-0.5 text-xs text-amber-800">
+                    {i.quantity} uds · {disputeDetail(i)}
+                  </p>
+                  <p className="text-xs text-amber-700">
+                    {SHORT_DATE_FMT.format(i.requestedAt)} · Aprobó {firstName(i.approvedByName) || "—"} · Revisó {firstName(i.reviewedByName) || "—"}
+                  </p>
+                </li>
+              ))}
+            </ul>
+            {/* Computadora */}
+            <div className="hidden overflow-x-auto rounded-xl border border-amber-200 bg-amber-50 shadow-sm md:block">
               <table className="w-full text-left text-sm">
                 <thead className="border-b border-amber-200 text-xs uppercase tracking-wide text-amber-700">
                   <tr>
@@ -319,15 +358,7 @@ export default async function SupplierLedgerPage({ params }: { params: Promise<{
                       <td className={`${td} text-amber-800`}>{DATE_FMT.format(i.requestedAt)}</td>
                       <td className="px-3 py-2 text-amber-900">{i.productName}</td>
                       <td className={`${td} text-right tabular-nums text-amber-800`}>{i.quantity}</td>
-                      <td className="px-3 py-2 text-amber-800">
-                        {[
-                          i.damagedQty > 0 ? `${i.damagedQty} dañadas` : null,
-                          i.incompleteQty > 0 ? `${i.incompleteQty} incompletas` : null,
-                          i.differentQty > 0 ? `${i.differentQty} distintas` : null,
-                        ]
-                          .filter(Boolean)
-                          .join(", ")}
-                      </td>
+                      <td className="px-3 py-2 text-amber-800">{disputeDetail(i)}</td>
                       <td className={`${td} text-right tabular-nums text-amber-800`}>{money(i.wouldBeValue)}</td>
                       <td className={`${td} text-amber-800`}>{firstName(i.approvedByName) || "—"}</td>
                       <td className={`${td} text-amber-800`}>{firstName(i.reviewedByName) || "—"}</td>
@@ -340,18 +371,44 @@ export default async function SupplierLedgerPage({ params }: { params: Promise<{
         )}
 
         <section>
-          <h2 className="mb-3 text-sm font-medium text-neutral-700">Historial de tandas pagadas</h2>
+          <SectionTitle count={closedPayments.length}>Historial de tandas pagadas</SectionTitle>
           {closedPayments.length === 0 ? (
-            <p className="text-sm text-neutral-400">Todavía no hay tandas pagadas.</p>
+            <EmptyBox>Todavía no hay tandas pagadas.</EmptyBox>
           ) : (
-            <div className="space-y-6">
+            <div className="space-y-4 sm:space-y-6">
               {closedPayments.map((p) => (
-                <div key={p.id} className="rounded-xl border border-neutral-200 bg-white p-5 shadow-sm">
-                  <div className="mb-3 flex items-baseline justify-between">
-                    <span className="text-sm font-medium text-neutral-700">{p.code}</span>
-                    <span className="text-sm tabular-nums text-neutral-500">{money(p.totalAmount)}</span>
+                <div key={p.id} className="rounded-xl border border-neutral-200 bg-white p-3 shadow-sm sm:p-5">
+                  <div className="mb-3 flex items-baseline justify-between gap-2">
+                    <span className="text-sm font-semibold text-neutral-800">{p.code}</span>
+                    <span className="text-base font-semibold tabular-nums text-neutral-900">{money(p.totalAmount)}</span>
                   </div>
-                  <div className="mb-3 overflow-x-auto rounded-lg border border-neutral-100">
+                  {/* Celular */}
+                  <ul className="mb-3 divide-y divide-neutral-100 rounded-lg border border-neutral-100 md:hidden">
+                    {p.requests.map((r) => (
+                      <li key={r.id} className="px-3 py-2">
+                        <div className="flex items-start justify-between gap-2 text-sm">
+                          <span className="leading-snug">{r.catalogItem.name}</span>
+                          <span className="shrink-0 tabular-nums">{money(r.totalCost)}</span>
+                        </div>
+                        <p className="text-xs text-neutral-500">
+                          {r.quantity} uds · Aprobó {firstName(r.reviewedBy?.name) || "—"} · Revisó {firstName(r.receipt?.approvedBy?.name) || "—"}
+                        </p>
+                      </li>
+                    ))}
+                    {p.excessReports.map((r) => (
+                      <li key={`excess-${r.id}`} className="px-3 py-2">
+                        <div className="flex items-start justify-between gap-2 text-sm">
+                          <span className="leading-snug">{r.request.catalogItem.name}</span>
+                          <span className="shrink-0 tabular-nums">{money(Math.round(r.request.unitCost * r.excessQty * 100) / 100)}</span>
+                        </div>
+                        <p className="text-xs text-neutral-500">
+                          {r.excessQty} uds · excedente, {r.request.requestNumber != null ? formatPurchaseRequestCode(r.request.requestNumber) : "—"}
+                        </p>
+                      </li>
+                    ))}
+                  </ul>
+                  {/* Computadora */}
+                  <div className="mb-3 hidden overflow-x-auto rounded-lg border border-neutral-100 md:block">
                     <table className="w-full text-left text-sm">
                       <thead className="border-b border-neutral-200 bg-neutral-50 text-xs uppercase tracking-wide text-neutral-500">
                         <tr>
@@ -390,11 +447,11 @@ export default async function SupplierLedgerPage({ params }: { params: Promise<{
                     <p className="mb-1 text-xs uppercase tracking-wide text-neutral-400">Transferencias</p>
                     <ul className="space-y-1 text-sm text-neutral-600">
                       {p.transfers.map((t, idx) => (
-                        <li key={idx} className="flex justify-between">
-                          <span>
+                        <li key={idx} className="flex justify-between gap-3">
+                          <span className="min-w-0">
                             {DATETIME_FMT.format(t.transferDate)} · comp. {t.comprobanteNumber}
                           </span>
-                          <span className="tabular-nums">{money(t.amount)}</span>
+                          <span className="shrink-0 tabular-nums">{money(t.amount)}</span>
                         </li>
                       ))}
                     </ul>
@@ -406,5 +463,39 @@ export default async function SupplierLedgerPage({ params }: { params: Promise<{
         </section>
       </div>
     </div>
+  );
+}
+
+function disputeDetail(i: { damagedQty: number; incompleteQty: number; differentQty: number }) {
+  return [
+    i.damagedQty > 0 ? `${i.damagedQty} dañadas` : null,
+    i.incompleteQty > 0 ? `${i.incompleteQty} incompletas` : null,
+    i.differentQty > 0 ? `${i.differentQty} distintas` : null,
+  ]
+    .filter(Boolean)
+    .join(", ");
+}
+
+function SectionTitle({ children, count }: { children: React.ReactNode; count: number }) {
+  return (
+    <div className="mb-1.5 flex items-start gap-2">
+      <h2 className="text-sm font-medium leading-snug text-neutral-800">{children}</h2>
+      <span className="mt-px shrink-0 rounded-full bg-neutral-200 px-2 py-0.5 text-xs font-medium tabular-nums text-neutral-700">{count}</span>
+    </div>
+  );
+}
+
+function EmptyBox({ children }: { children: React.ReactNode }) {
+  return <p className="rounded-xl border border-dashed border-neutral-300 bg-white px-4 py-6 text-center text-sm text-neutral-400">{children}</p>;
+}
+
+function SummaryTile({ label, value, hint, href, tone }: { label: string; value: string; hint: string; href: string; tone?: "amber" }) {
+  const box = tone === "amber" ? "border-amber-200 bg-amber-50" : "border-neutral-200 bg-white";
+  return (
+    <a href={href} className={`block rounded-xl border px-3 py-2.5 shadow-sm sm:min-w-[200px] sm:px-4 sm:py-3 ${box}`}>
+      <p className="text-[11px] uppercase tracking-wide text-neutral-500">{label}</p>
+      <p className="mt-0.5 text-lg font-semibold tabular-nums leading-tight text-neutral-900">{value}</p>
+      <p className="text-xs text-neutral-500">{hint}</p>
+    </a>
   );
 }

@@ -25,6 +25,14 @@ const DATETIME_FMT = new Intl.DateTimeFormat("es-EC", {
   hour: "2-digit",
   minute: "2-digit",
 });
+const SHORT_DATETIME_FMT = new Intl.DateTimeFormat("es-EC", {
+  timeZone: "America/Guayaquil",
+  weekday: "short",
+  day: "2-digit",
+  month: "short",
+  hour: "2-digit",
+  minute: "2-digit",
+});
 const MONTH_LABEL_FMT = new Intl.DateTimeFormat("es-EC", { timeZone: "America/Guayaquil", month: "long", year: "numeric" });
 const DATE_KEY_FMT = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Guayaquil", year: "numeric", month: "2-digit", day: "2-digit" });
 
@@ -73,7 +81,7 @@ export function SupplierShipmentHistoryTable({ rows }: Props) {
 
   return (
     <div>
-      <div className="mb-3 flex flex-wrap items-end gap-3 text-xs text-neutral-600">
+      <div className="mb-3 grid grid-cols-2 items-end gap-2 text-xs text-neutral-600 sm:flex sm:flex-wrap sm:gap-3">
         <label className="flex flex-col gap-1">
           <span>Desde</span>
           <input
@@ -81,7 +89,7 @@ export function SupplierShipmentHistoryTable({ rows }: Props) {
             value={desde}
             onChange={(e) => setDesde(e.target.value)}
             onClick={(e) => e.currentTarget.showPicker?.()}
-            className="rounded border border-neutral-300 px-2 py-1 text-sm cursor-pointer"
+            className="w-full rounded-md border border-neutral-300 bg-white px-2 py-1.5 text-sm cursor-pointer"
           />
         </label>
         <label className="flex flex-col gap-1">
@@ -91,20 +99,20 @@ export function SupplierShipmentHistoryTable({ rows }: Props) {
             value={hasta}
             onChange={(e) => setHasta(e.target.value)}
             onClick={(e) => e.currentTarget.showPicker?.()}
-            className="rounded border border-neutral-300 px-2 py-1 text-sm cursor-pointer"
+            className="w-full rounded-md border border-neutral-300 bg-white px-2 py-1.5 text-sm cursor-pointer"
           />
         </label>
         {months.length > 0 && (
-          <label className="flex flex-col gap-1">
+          <label className="col-span-2 flex flex-col gap-1">
             <span>O elegir un mes completo</span>
             <select
               defaultValue=""
               onChange={(e) => pickMonth(e.target.value)}
-              className="rounded border border-neutral-300 px-2 py-1 text-sm capitalize"
+              className="w-full rounded-md border border-neutral-300 bg-white! px-2 py-1.5 text-sm text-neutral-900! capitalize"
             >
               <option value="">Elegir mes…</option>
               {months.map((m) => (
-                <option key={m.value} value={m.value} className="capitalize">
+                <option key={m.value} value={m.value} className="bg-white! text-neutral-900! capitalize">
                   {m.label}
                 </option>
               ))}
@@ -114,7 +122,7 @@ export function SupplierShipmentHistoryTable({ rows }: Props) {
         {(desde || hasta) && (
           <button
             type="button"
-            className="rounded border border-neutral-300 px-3 py-1.5 text-sm text-neutral-600 hover:bg-neutral-50"
+            className="col-span-2 rounded-md border border-neutral-300 bg-white px-3 py-1.5 text-sm text-neutral-600 hover:bg-neutral-50"
             onClick={() => {
               setDesde("");
               setHasta("");
@@ -130,7 +138,35 @@ export function SupplierShipmentHistoryTable({ rows }: Props) {
           {rows.length === 0 ? "Todavía no han confirmado ningún envío." : "No hay envíos confirmados en ese rango de fechas."}
         </p>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-neutral-200 bg-white shadow-sm">
+        <>
+        {/* Celular: tarjetas compactas (ver SupplierPendingShipmentsList). */}
+        <ul className="divide-y divide-neutral-100 overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-sm md:hidden">
+          {filtered.map((r) => (
+            <li key={r.id} className="flex gap-3 p-3">
+              {r.productImageUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={r.productImageUrl} alt={r.productName} className="w-12 h-12 shrink-0 object-cover rounded-lg border border-neutral-200" />
+              ) : (
+                <div className="w-12 h-12 shrink-0 rounded-lg border border-neutral-200 bg-neutral-100" />
+              )}
+              <div className="min-w-0 flex-1">
+                <div className="flex items-start justify-between gap-2">
+                  <p className="text-sm font-medium leading-snug text-neutral-900">{r.productName}</p>
+                  <span className="shrink-0 text-sm font-semibold tabular-nums text-neutral-900">{r.quantity}</span>
+                </div>
+                <p className="mt-0.5 text-xs text-neutral-500">
+                  {SHORT_DATETIME_FMT.format(new Date(r.confirmedAt))}
+                  {r.requestedByName ? ` · ${r.requestedByName}` : ""}
+                </p>
+              </div>
+              {r.photoUrl && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={r.photoUrl} alt="Foto enviada" className="w-12 h-12 shrink-0 object-cover rounded-lg border border-emerald-200" />
+              )}
+            </li>
+          ))}
+        </ul>
+        <div className="hidden overflow-x-auto rounded-xl border border-neutral-200 bg-white shadow-sm md:block">
           <table className="w-full text-left text-sm">
             <thead className="border-b border-neutral-200 bg-neutral-50 text-xs uppercase tracking-wide text-neutral-500">
               <tr>
@@ -170,6 +206,7 @@ export function SupplierShipmentHistoryTable({ rows }: Props) {
             </tbody>
           </table>
         </div>
+        </>
       )}
     </div>
   );
