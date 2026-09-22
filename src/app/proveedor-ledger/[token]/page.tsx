@@ -141,9 +141,12 @@ export default async function SupplierLedgerPage({ params }: { params: Promise<{
   // Confirmado 2026-09-22, pedido explícito del usuario: se veía bien solo en
   // computadora — ahora cada sección, en celular, pasa de tabla ancha a
   // tarjetas compactas (md:hidden / hidden md:block), y arriba hay un
-  // resumen rápido de cuánto falta enviar y cuánto está recibido sin pagar.
-  const pendingReceivedTotal =
-    Math.round((pendingDebtItems.reduce((s, i) => s + i.totalCost, 0) + pendingExcessItems.reduce((s, i) => s + i.amount, 0)) * 100) / 100;
+  // resumen rápido de cuánto falta enviar y cuántos productos están
+  // recibidos sin pagar. Corregido 2026-09-22: el rediseño había vuelto a
+  // mostrar la SUMA en $ (arriba y como fila "Total") — eso contradice lo
+  // confirmado el 2026-09-17 (931a3bf, 4fb1427): a CHEN nunca se le muestra
+  // un total de deuda fuera de una tanda ya cerrada. Solo el costo por
+  // producto y el conteo, nada que lo sume.
   const pendingReceivedCount = pendingDebtItems.length + pendingExcessItems.length;
 
   return (
@@ -159,9 +162,9 @@ export default async function SupplierLedgerPage({ params }: { params: Promise<{
 
         <div className="mb-6 grid grid-cols-2 gap-2 sm:mb-8 sm:flex sm:gap-3">
           <SummaryTile label="Falta enviar" value={`${pendingShipments.length}`} hint={pendingShipments.length === 1 ? "pedido" : "pedidos"} href="#por-enviar" />
-          <SummaryTile label="Recibido, pendiente de pago" value={money(pendingReceivedTotal)} hint={`${pendingReceivedCount} ${pendingReceivedCount === 1 ? "producto" : "productos"}`} href="#recibido" />
+          <SummaryTile label="Recibido, pendiente de pago" value={`${pendingReceivedCount}`} hint={pendingReceivedCount === 1 ? "producto" : "productos"} href="#recibido" />
           {disputedItems.length > 0 && (
-            <SummaryTile label="En revisión" value={`${disputedItems.length}`} hint="no suma al saldo" href="#revision" tone="amber" />
+            <SummaryTile label="En revisión" value={`${disputedItems.length}`} hint={disputedItems.length === 1 ? "producto" : "productos"} href="#revision" tone="amber" />
           )}
         </div>
 
@@ -249,10 +252,6 @@ export default async function SupplierLedgerPage({ params }: { params: Promise<{
                     </li>
                   ))}
                 </ul>
-                <div className="flex items-center justify-between border-t border-neutral-200 bg-neutral-50 px-3 py-2 text-sm">
-                  <span className="text-neutral-600">Total</span>
-                  <span className="font-semibold tabular-nums">{money(pendingReceivedTotal)}</span>
-                </div>
               </div>
 
               {/* Computadora */}
@@ -303,13 +302,6 @@ export default async function SupplierLedgerPage({ params }: { params: Promise<{
                       </tr>
                     ))}
                   </tbody>
-                  <tfoot className="border-t border-neutral-200 bg-neutral-50">
-                    <tr>
-                      <td colSpan={4} className="px-3 py-2 text-right text-xs uppercase tracking-wide text-neutral-500">Total</td>
-                      <td className={`${td} text-right font-semibold tabular-nums`}>{money(pendingReceivedTotal)}</td>
-                      <td colSpan={2} />
-                    </tr>
-                  </tfoot>
                 </table>
               </div>
             </>
@@ -319,7 +311,7 @@ export default async function SupplierLedgerPage({ params }: { params: Promise<{
         {disputedItems.length > 0 && (
           <section id="revision" className="mb-8 scroll-mt-4">
             <SectionTitle count={disputedItems.length}>
-              Mercadería en revisión (incompleta, dañada o distinta) — no se incluye en el saldo hasta resolverse
+              Mercadería en revisión (incompleta, dañada o distinta) — no se incluye en ningún pago hasta resolverse
             </SectionTitle>
             {/* Celular */}
             <ul className="divide-y divide-amber-100 overflow-hidden rounded-xl border border-amber-200 bg-amber-50 shadow-sm md:hidden">
