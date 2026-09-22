@@ -2938,7 +2938,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       // que aprove/route.ts ahora manda en la notificación.
       const purchaseUrgentUnresolvedItem = await getPurchaseUrgentReportsUnresolvedPendingItem("/area/workspace?tab=compras&ptab=urgentes");
       if (purchaseUrgentUnresolvedItem) teamItems.push(purchaseUrgentUnresolvedItem);
-      const purchaseGestionItem = await getPurchaseGestionPendingItem("/area/workspace?tab=egresos&otab=proveedor");
+      const purchaseGestionItem = await getPurchaseGestionPendingItem("/area/workspace?tab=compras&ptab=urgentes");
       if (purchaseGestionItem) teamItems.push(purchaseGestionItem);
     }
     // Confirmado 2026-09-04: quien aprueba compras (hoy Bryan) puede no
@@ -3093,7 +3093,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     if (purchaseCreditsItem) items.push(purchaseCreditsItem);
   }
   if (me.canManagePurchases) {
-    const purchaseGestionItem = await getPurchaseGestionPendingItem("/area/workspace?tab=egresos&otab=proveedor");
+    const purchaseGestionItem = await getPurchaseGestionPendingItem("/area/workspace?tab=compras&ptab=urgentes");
     if (purchaseGestionItem) items.push(purchaseGestionItem);
   }
 

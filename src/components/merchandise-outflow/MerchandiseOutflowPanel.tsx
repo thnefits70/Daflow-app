@@ -7,7 +7,6 @@ import { DeteriorResolutionInbox } from "./DeteriorResolutionInbox";
 import { SupplierExchangeCapture } from "./SupplierExchangeCapture";
 import { SupplierExchangeResolutionInbox } from "./SupplierExchangeResolutionInbox";
 import { SupplierExchangeMyResolutions } from "./SupplierExchangeMyResolutions";
-import { PurchaseDeteriorGestionPanel } from "./PurchaseDeteriorGestionPanel";
 import { WriteOffQueue } from "./WriteOffQueue";
 import { HistoryList } from "./HistoryList";
 import { CancelledGuidesPanel } from "@/components/cancelled-guides/CancelledGuidesPanel";
@@ -25,8 +24,6 @@ export function MerchandiseOutflowPanel({
   supplierExchangeMineCount = 0,
   canConfirmFinanceWriteOff = false,
   financeWriteOffPendingCount = 0,
-  canManagePurchaseGestion = false,
-  purchaseGestionPendingCount = 0,
   canSubmitCancelledGuide = false,
   canManageCancelledGuideBatches = false,
   canConfirmCancelledGuideFulfillmentRemoval = false,
@@ -78,14 +75,6 @@ export function MerchandiseOutflowPanel({
   // supplierExchangeMineCount, aunque no tenga ningún otro acceso al módulo.
   canConfirmFinanceWriteOff?: boolean;
   financeWriteOffPendingCount?: number;
-  // Confirmado 2026-09-17, pedido explícito del usuario: quien gestiona
-  // compras (hoy Jariel, vía canManagePurchases) elige el proveedor y ancla
-  // reclamos de DETERIORO escalados (ver DeteriorResolutionInbox más abajo)
-  // a la compra real — un flujo DISTINTO de "Cambio con proveedor" (que ya
-  // conoce el proveedor de antemano). purchaseGestionPendingCount amplía la
-  // visibilidad de esta pestaña igual que supplierExchangeMineCount.
-  canManagePurchaseGestion?: boolean;
-  purchaseGestionPendingCount?: number;
   // Guías Canceladas (Fase 4) — vive como pestaña acá adentro (pedido
   // explícito del usuario), aunque su resultado final sea una entrada, no
   // una salida. Reingresar reusa `canAct` (Daniel exclusivo, ya pasado).
@@ -130,7 +119,7 @@ export function MerchandiseOutflowPanel({
       ? "garantia"
       : canAct
         ? "baja"
-        : supplierExchangeMineCount > 0 || financeWriteOffPendingCount > 0 || purchaseGestionPendingCount > 0
+        : supplierExchangeMineCount > 0 || financeWriteOffPendingCount > 0
           ? "proveedor"
           : canSubmitCancelledGuide || canManageCancelledGuideBatches || canConfirmCancelledGuideFulfillmentRemoval || canAssignCancelledGuideItems
             ? "guias"
@@ -156,7 +145,7 @@ export function MerchandiseOutflowPanel({
   const [proveedorRefreshKey, setProveedorRefreshKey] = useState(0);
   const [deteriorRefreshKey, setDeteriorRefreshKey] = useState(0);
 
-  const canSeeProveedorTab = canAct || canViewSupplierExchangeResolution || supplierExchangeMineCount > 0 || financeWriteOffPendingCount > 0 || canManagePurchaseGestion || purchaseGestionPendingCount > 0;
+  const canSeeProveedorTab = canAct || canViewSupplierExchangeResolution || supplierExchangeMineCount > 0 || financeWriteOffPendingCount > 0;
 
   const tabs: { id: Tab; label: string }[] = [
     // Confirmado 2026-08-31, pedido explícito del usuario: "Despacho" pasa a
@@ -185,9 +174,9 @@ export function MerchandiseOutflowPanel({
             className={`pb-2.5 text-[13.5px] font-semibold cursor-pointer border-b-2 flex items-center gap-1.5 ${tab === t.id ? "border-teal text-ink" : "border-transparent text-steel hover:text-ink"}`}
           >
             {t.label}
-            {t.id === "proveedor" && supplierExchangeMineCount + financeWriteOffPendingCount + purchaseGestionPendingCount > 0 && (
+            {t.id === "proveedor" && supplierExchangeMineCount + financeWriteOffPendingCount > 0 && (
               <span className="font-mono text-[10px] font-semibold bg-red/20 text-red rounded-full px-1.5 py-0.5">
-                {supplierExchangeMineCount + financeWriteOffPendingCount + purchaseGestionPendingCount}
+                {supplierExchangeMineCount + financeWriteOffPendingCount}
               </span>
             )}
           </button>
@@ -241,12 +230,6 @@ export function MerchandiseOutflowPanel({
           </TabGuide>
           <div className="flex flex-col gap-6">
             {canAct && <SupplierExchangeCapture onSent={() => setProveedorRefreshKey((k) => k + 1)} />}
-            {(canManagePurchaseGestion || purchaseGestionPendingCount > 0) && (
-              <div>
-                <div className="font-display font-bold text-[14px] mb-2.5">Deterioro escalado — pendiente de tu gestión</div>
-                <PurchaseDeteriorGestionPanel />
-              </div>
-            )}
             <div>
               <div className="font-display font-bold text-[14px] mb-2.5">Mis solicitudes de gestión pendiente</div>
               <SupplierExchangeMyResolutions />

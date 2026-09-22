@@ -461,7 +461,7 @@ export function DeptWorkspaceTabs({
     if (t.key === "inventario") return canManageInventoryControl;
     if (t.key === "stock-actual") return canManageJustCatalog || canViewStockLevels;
     if (t.key === "reingreso") return canCaptureMerchandiseReentry || canApproveMerchandiseReentry || canCloseMerchandiseReentry;
-    if (t.key === "egresos") return canViewMerchandiseOutflow || canSubmitCancelledGuide || canManageCancelledGuideBatches || canConfirmCancelledGuideFulfillmentRemoval || canAssignCancelledGuideItems || canSubmitFulfillmentRequest || canViewFulfillmentRequests || supplierExchangeMineCount > 0 || financeWriteOffPendingCount > 0 || canManagePurchaseGestion || purchaseGestionPendingCount > 0;
+    if (t.key === "egresos") return canViewMerchandiseOutflow || canSubmitCancelledGuide || canManageCancelledGuideBatches || canConfirmCancelledGuideFulfillmentRemoval || canAssignCancelledGuideItems || canSubmitFulfillmentRequest || canViewFulfillmentRequests || supplierExchangeMineCount > 0 || financeWriteOffPendingCount > 0;
     if (t.key === "ventas-externas") return canViewExternalSales;
     if (t.key === "inventoriokpis") return canViewInventoryKpisPanel;
     if (t.key === "cajachica") return !!(pettyCashData?.principal || pettyCashData?.secundaria);
@@ -571,9 +571,16 @@ export function DeptWorkspaceTabs({
                 {merchandiseReentryPendingCount}
               </span>
             )}
-            {t.key === "egresos" && supplierExchangeMineCount + financeWriteOffPendingCount + purchaseGestionPendingCount > 0 && (
+            {t.key === "egresos" && supplierExchangeMineCount + financeWriteOffPendingCount > 0 && (
               <span className="font-mono text-[10px] font-semibold bg-red/20 text-red rounded-full px-1.5 py-0.5">
-                {supplierExchangeMineCount + financeWriteOffPendingCount + purchaseGestionPendingCount}
+                {supplierExchangeMineCount + financeWriteOffPendingCount}
+              </span>
+            )}
+            {/* Confirmado 2026-09-22: la mercadería en mal estado que Daniel
+                escala ahora vive en Control de Compras → Reportes urgentes. */}
+            {t.key === "compras" && purchaseGestionPendingCount > 0 && (
+              <span className="font-mono text-[10px] font-semibold bg-red/20 text-red rounded-full px-1.5 py-0.5">
+                {purchaseGestionPendingCount}
               </span>
             )}
             {t.key === "proveedores" && canReviewSuppliers && supplierPendingCount > 0 && (
@@ -663,7 +670,7 @@ export function DeptWorkspaceTabs({
           canManageJustCatalog={canManageJustCatalog}
         />
       )}
-      {tab === "egresos" && (canViewMerchandiseOutflow || canSubmitCancelledGuide || canManageCancelledGuideBatches || canConfirmCancelledGuideFulfillmentRemoval || canAssignCancelledGuideItems || canSubmitFulfillmentRequest || canViewFulfillmentRequests || supplierExchangeMineCount > 0 || financeWriteOffPendingCount > 0 || canManagePurchaseGestion || purchaseGestionPendingCount > 0) && (
+      {tab === "egresos" && (canViewMerchandiseOutflow || canSubmitCancelledGuide || canManageCancelledGuideBatches || canConfirmCancelledGuideFulfillmentRemoval || canAssignCancelledGuideItems || canSubmitFulfillmentRequest || canViewFulfillmentRequests || supplierExchangeMineCount > 0 || financeWriteOffPendingCount > 0) && (
         <MerchandiseOutflowPanel
           canCapture={canCaptureMerchandiseOutflow}
           canAct={canActOnMerchandiseOutflow}
@@ -673,8 +680,6 @@ export function DeptWorkspaceTabs({
           supplierExchangeMineCount={supplierExchangeMineCount}
           canConfirmFinanceWriteOff={canConfirmFinanceWriteOff}
           financeWriteOffPendingCount={financeWriteOffPendingCount}
-          canManagePurchaseGestion={canManagePurchaseGestion}
-          purchaseGestionPendingCount={purchaseGestionPendingCount}
           canSubmitCancelledGuide={canSubmitCancelledGuide}
           canManageCancelledGuideBatches={canManageCancelledGuideBatches}
           canConfirmCancelledGuideFulfillmentRemoval={canConfirmCancelledGuideFulfillmentRemoval}

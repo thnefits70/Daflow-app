@@ -13,6 +13,7 @@ import { PurchaseCreditsPanel } from "./PurchaseCreditsPanel";
 import { PurchaseJustaPanel } from "./PurchaseJustaPanel";
 import { SupplierDebtPanel } from "./SupplierDebtPanel";
 import { BuyerDebtConfirmationPanel } from "./BuyerDebtConfirmationPanel";
+import { PurchaseDeteriorGestionPanel } from "@/components/merchandise-outflow/PurchaseDeteriorGestionPanel";
 import { TabGuide } from "@/components/shared/TabGuide";
 
 type Tab = "solicitar" | "mias" | "comparar" | "aprobacion" | "confirmar-credito" | "inventario" | "justa" | "finanzas" | "urgentes" | "creditos" | "proveedores-credito" | "auditoria";
@@ -108,7 +109,7 @@ export function PurchaseControlPanel({
     // reclamo suyo recién cuando algo físico les tocaba verificar; ahora ven
     // el estado completo, incluyendo créditos/reembolsos/pérdidas que nunca
     // generan mercadería que ellos reciban.
-    ...(canSubmit || canReview || canReceive ? [{ key: "urgentes" as Tab, label: "Reportes urgentes" }] : []),
+    ...(canSubmit || canReview || canReceive || canManageGestion ? [{ key: "urgentes" as Tab, label: "Reportes urgentes" }] : []),
     ...(canSubmit || canReview ? [{ key: "creditos" as Tab, label: "Créditos pendientes" }] : []),
     ...(canManageSupplierDebt ? [{ key: "proveedores-credito" as Tab, label: "Proveedores con Crédito" }] : []),
     ...(canReceive ? [{ key: "inventario" as Tab, label: "Inventario" }] : []),
@@ -237,6 +238,17 @@ export function PurchaseControlPanel({
               ? <>Acá resuelves los &quot;informar urgente&quot; que sube Daniel cuando algo llega mal: reparte la cantidad afectada entre crédito, cambio, reembolso o pérdida — nunca a mano, siempre según el costo real de la cotización. El reembolso lo confirma el admin en su banco.</>
               : <>Acá ves en solo lectura el estado de los reclamos de tu equipo con el proveedor: qué sigue sin resolver y cómo se resolvió cada uno (crédito, cambio de mercadería, reembolso o pérdida). Coordinar la solución con el proveedor lo hace Compras, no tú.</>}
           </TabGuide>
+          {/* Confirmado 2026-09-22, pedido explícito de Jariel: todo lo que
+              Daniel reporta como mercadería en mal estado (deterioro
+              escalado) tiene que llegarle acá, junto a los faltantes — antes
+              solo se veía en Registro de Egresos → Cambio con proveedor,
+              aunque la notificación ya apuntaba a esta pestaña. */}
+          {canManageGestion && (
+            <div className="mb-6">
+              <div className="font-display font-bold text-[14px] mb-2.5">Mercadería en mal estado — pendiente de tu gestión</div>
+              <PurchaseDeteriorGestionPanel />
+            </div>
+          )}
           <PurchaseUrgentReportsPanel isAdmin={isAdmin} canAct={canSubmit || canReview} canManageGestion={canManageGestion} canConfirmExcess={canActOnApproval} />
         </>
       )}
