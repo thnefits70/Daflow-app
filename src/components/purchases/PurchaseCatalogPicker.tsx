@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Search, Plus, Camera, AlertTriangle, CheckCircle2, Trash2, Flag, X, Clock } from "lucide-react";
+import { Search, Plus, Camera, AlertTriangle, CheckCircle2, Trash2, Flag, X, Clock, Pencil, BellRing } from "lucide-react";
 import { uploadFile } from "@/lib/uploadFile";
 import { compressImage } from "@/lib/compressImage";
 import { usePasteFile } from "@/lib/usePasteFile";
 import { CompleteCatalogRegistration } from "@/components/shared/CompleteCatalogRegistration";
+import { EditCatalogPhotos } from "@/components/shared/EditCatalogPhotos";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 
 // Confirmado 2026-08-14: bug real reportado por Bryan — mientras se está
@@ -36,6 +37,10 @@ export type CatalogItemDTO = {
   canRequestDelete?: boolean;
   hasPendingDelete?: boolean;
   pendingDeleteRequest?: { id: string; reason: string | null; requestedByName: string | null } | null;
+  // Confirmado 2026-09-22: true si el producto no tiene compras registradas
+  // (cualquiera de Compras puede corregir sus fotos) o si quien mira es
+  // admin (puede corregirlas siempre, bajo su propia responsabilidad).
+  canEditPhotos?: boolean;
 };
 
 // Confirmado 2026-07-30 (boceto aprobado): un nombre por insumo, siempre. El
@@ -75,6 +80,10 @@ export function PurchaseCatalogPicker({
   const [requestedDeleteIds, setRequestedDeleteIds] = useState<string[]>([]);
   const [reviewingId, setReviewingId] = useState<string | null>(null);
   const [completingItem, setCompletingItem] = useState<CatalogItemDTO | null>(null);
+  const [editingItem, setEditingItem] = useState<CatalogItemDTO | null>(null);
+  const [flaggingId, setFlaggingId] = useState<string | null>(null);
+  const [flaggedIds, setFlaggedIds] = useState<string[]>([]);
+  const [flagErr, setFlagErr] = useState<string | null>(null);
 
   const [creating, setCreating] = useState(defaultCreateDraft?.creating ?? false);
   const [newName, setNewName] = useState(defaultCreateDraft?.newName ?? "");
@@ -277,6 +286,28 @@ export function PurchaseCatalogPicker({
     setRequestedDeleteIds((ids) => [...ids, item.id]);
     setRequestingDeleteId(null);
     setRequestDeleteReason("");
+  }
+
+  // Confirmado 2026-09-22: si el producto ya tiene compras registradas, la
+  // edición de fotos queda bloqueada para todos menos el admin (ver
+  // canEditPhotos, calculado server-side) — esto solo le avisa al admin que
+  // hace falta revisarlo, para que entre él mismo bajo su propio usuario.
+  async function flagPhotos(item: CatalogItemDTO, e: React.MouseEvent) {
+    e.stopPropagation();
+    setFlaggingId(item.id);
+    setFlagErr(null);
+    const res = await fetch(`/api/purchase-catalog/${item.id}/flag-photos`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    setFlaggingId(null);
+    if (!res.ok) {
+      const data = await res.json().catch(() => null);
+      setFlagErr(`"${item.name}" — ${data?.error ?? "No se pudo avisar al admin."}`);
+      return;
+    }
+    setFlaggedIds((ids) => [...ids, item.id]);
   }
 
   // Revisión del admin sobre una solicitud de borrado pendiente — aprobar
@@ -491,6 +522,14 @@ export function PurchaseCatalogPicker({
               </button>
             </div>
           )}
+          {flagErr && (
+            <div className="flex items-start justify-between gap-2 px-3 py-2 text-[11.5px] text-red border-b border-rule bg-red/5">
+              <span>{flagErr}</span>
+              <button type="button" className="shrink-0 font-semibold underline cursor-pointer" onClick={() => setFlagErr(null)}>
+                Entendido
+              </button>
+            </div>
+          )}
           {filtered.map((item) => {
             const alreadyRequested = requestedDeleteIds.includes(item.id) || (!!item.hasPendingDelete && !isAdmin);
             return (
@@ -529,6 +568,30 @@ export function PurchaseCatalogPicker({
                       </span>
                     )}
                   </button>
+                  {!item.pendingRegistration && item.canEditPhotos && (
+                    <button
+                      type="button"
+                      title="Editar fotos"
+                      className="px-2.5 py-2 text-steel hover:text-blue cursor-pointer shrink-0"
+                      onClick={(e) => { e.stopPropagation(); setEditingItem(item); }}
+                    >
+                      <Pencil size={13} />
+                    </button>
+                  )}
+                  {!item.pendingRegistration && !item.canEditPhotos && !flaggedIds.includes(item.id) && (
+                    <button
+                      type="button"
+                      title="Ya tiene compras registradas — avisarle al admin para que corrija las fotos"
+                      disabled={flaggingId === item.id}
+                      className="px-2.5 py-2 text-steel hover:text-gold cursor-pointer disabled:opacity-50 shrink-0"
+                      onClick={(e) => flagPhotos(item, e)}
+                    >
+                      {flaggingId === item.id ? <span className="block w-3.5 h-3.5 rounded-full border-2 border-rule border-t-gold animate-spin" /> : <BellRing size={13} />}
+                    </button>
+                  )}
+                  {!item.pendingRegistration && !item.canEditPhotos && flaggedIds.includes(item.id) && (
+                    <span className="px-2.5 text-[10px] text-steel shrink-0">Admin avisado</span>
+                  )}
                   {item.canDelete && (
                     <button
                       type="button"
@@ -631,6 +694,16 @@ export function PurchaseCatalogPicker({
             setResults((rs) => rs.map((r) => (r.id === updated.id ? { ...r, ...updated, pendingRegistration: false } : r)));
             onChange({ ...updated, pendingRegistration: false });
             setOpen(false);
+          }}
+        />
+      )}
+      {editingItem && (
+        <EditCatalogPhotos
+          item={editingItem}
+          onCancel={() => setEditingItem(null)}
+          onDone={(updated) => {
+            setEditingItem(null);
+            setResults((rs) => rs.map((r) => (r.id === updated.id ? { ...r, photos: updated.photos } : r)));
           }}
         />
       )}

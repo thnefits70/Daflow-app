@@ -48,6 +48,18 @@ export async function GET(req: NextRequest) {
     include: { deleteRequest: { include: { requestedBy: { select: { name: true } } } } },
   });
 
+  // Confirmado 2026-09-22: Jariel pidió poder corregir fotos mal cargadas sin
+  // borrar y recrear el producto entero. Mientras el producto no tenga
+  // compras registradas, cualquiera de Compras puede reemplazar sus fotos
+  // (ver PATCH en [id]/route.ts); en cuanto ya tiene compras registradas, el
+  // cambio queda solo para el admin, bajo su propia responsabilidad.
+  const inUseRows = await prisma.purchaseRequest.findMany({
+    where: { catalogItemId: { in: items.map((i) => i.id) } },
+    select: { catalogItemId: true },
+    distinct: ["catalogItemId"],
+  });
+  const inUseSet = new Set(inUseRows.map((r) => r.catalogItemId));
+
   function toDTO(i: (typeof items)[number]) {
     return {
       id: i.id,
@@ -62,6 +74,7 @@ export async function GET(req: NextRequest) {
       hasPendingDelete: !!i.deleteRequest,
       canDelete: canDelete(i),
       canRequestDelete: canRequestDelete(i) && !canDelete(i),
+      canEditPhotos: isAdmin || !inUseSet.has(i.id),
       pendingDeleteRequest: isAdmin && i.deleteRequest
         ? { id: i.deleteRequest.id, reason: i.deleteRequest.reason, requestedByName: actorName(i.deleteRequest.requestedBy?.name) }
         : null,
