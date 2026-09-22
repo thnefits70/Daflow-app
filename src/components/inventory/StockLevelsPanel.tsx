@@ -522,7 +522,7 @@ const FORMULA_EXPLANATIONS: Record<FormulaKey, { title: string; text: string }> 
   },
   b2c1: {
     title: "B2C · 1 unidad",
-    text: "Costo puesto en bodega × 1.06 (6% de seguro) + fulfillment, ÷ (1 − 40%) + $7.50 (flete promedio), redondeado hacia arriba a .99. El 40% es el margen cuando se vende 1 sola unidad. El fulfillment lleva margen encima (igual que el resto del costo); el flete promedio no.",
+    text: "Costo puesto en bodega × 1.06 (6% de seguro) + fulfillment ($0.75 para productos normales, $0.50 para productos pequeños — el valor que Jariel le puso a cada producto en Análisis de Mercado; si un producto todavía no pasó por ahí, se asume $0.75), ÷ (1 − 40%) + $7.50 (flete promedio), redondeado hacia arriba a .99. El 40% es el margen cuando se vende 1 sola unidad. El fulfillment lleva margen encima (igual que el resto del costo); el flete promedio no.",
   },
   b2c2: {
     title: "B2C · 2 a 11 unidades",
