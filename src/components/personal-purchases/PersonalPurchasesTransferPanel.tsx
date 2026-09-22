@@ -13,19 +13,20 @@ type ConfirmOrder = {
   transferAiMatch: boolean | null;
   transferAiNote: string | null;
 };
+type ItemWithPhoto = { confirmedProductName: string | null; employeeProductName: string; quantity: number; livePhotoUrl: string; optionalPhotoUrl: string | null; confirmedCatalogItem: { justCode: string | null } | null };
 type CloseOrder = {
   id: string;
   employee: { name: string };
   totalAmount: number | null;
   transferProofUrl: string | null;
   transferProofName: string | null;
-  items: { confirmedProductName: string | null; employeeProductName: string; quantity: number; confirmedCatalogItem: { justCode: string | null } | null }[];
+  items: ItemWithPhoto[];
 };
 type CashOrder = {
   id: string;
   employee: { name: string };
   totalAmount: number | null;
-  items: { confirmedProductName: string | null; employeeProductName: string; quantity: number; confirmedCatalogItem: { justCode: string | null } | null }[];
+  items: ItemWithPhoto[];
 };
 
 function money(n: number | null) {
@@ -42,6 +43,7 @@ export function PersonalPurchasesTransferPanel({ isAdmin }: { isAdmin: boolean }
   const [cashOrders, setCashOrders] = useState<CashOrder[] | null>(null);
   const [confirming, setConfirming] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [zoomedPhoto, setZoomedPhoto] = useState<string | null>(null);
 
   function load() {
     if (isAdmin) {
@@ -151,15 +153,7 @@ export function PersonalPurchasesTransferPanel({ isAdmin }: { isAdmin: boolean }
                     </button>
                   )}
                 </div>
-                <div className="text-[11.5px] text-steel-dim mb-2">
-                  {o.items.map((it, i) => (
-                    <span key={i} className="inline-flex items-center gap-1">
-                      <CatalogCode code={it.confirmedCatalogItem?.justCode} />
-                      {it.confirmedProductName ?? it.employeeProductName} × {it.quantity}
-                      {i < o.items.length - 1 ? " · " : ""}
-                    </span>
-                  ))}
-                </div>
+                <ItemsWithPhotos items={o.items} onZoom={setZoomedPhoto} />
                 {o.transferProofUrl && <ProofPreview url={o.transferProofUrl} filename={o.transferProofName ?? undefined} />}
               </div>
             ))}
@@ -188,20 +182,54 @@ export function PersonalPurchasesTransferPanel({ isAdmin }: { isAdmin: boolean }
                     </button>
                   )}
                 </div>
-                <div className="text-[11.5px] text-steel-dim">
-                  {o.items.map((it, i) => (
-                    <span key={i} className="inline-flex items-center gap-1">
-                      <CatalogCode code={it.confirmedCatalogItem?.justCode} />
-                      {it.confirmedProductName ?? it.employeeProductName} × {it.quantity}
-                      {i < o.items.length - 1 ? " · " : ""}
-                    </span>
-                  ))}
-                </div>
+                <ItemsWithPhotos items={o.items} onZoom={setZoomedPhoto} />
               </div>
             ))}
           </div>
         </div>
       )}
+      {zoomedPhoto && (
+        <div
+          className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-6 cursor-zoom-out"
+          onClick={() => setZoomedPhoto(null)}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={zoomedPhoto} alt="Foto ampliada" className="max-w-full max-h-full object-contain rounded-md" />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ItemsWithPhotos({ items, onZoom }: { items: ItemWithPhoto[]; onZoom: (url: string) => void }) {
+  return (
+    <div className="flex flex-col gap-1.5 mb-2">
+      {items.map((it, i) => (
+        <div key={i} className="flex items-center gap-2 text-[11.5px] text-steel-dim">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={it.livePhotoUrl}
+            alt="Foto del producto"
+            className="w-10 h-10 object-cover rounded-md border border-rule shrink-0 cursor-zoom-in"
+            onDoubleClick={() => onZoom(it.livePhotoUrl)}
+            onClick={() => onZoom(it.livePhotoUrl)}
+          />
+          {it.optionalPhotoUrl && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={it.optionalPhotoUrl}
+              alt="Foto extra"
+              className="w-10 h-10 object-cover rounded-md border border-rule shrink-0 cursor-zoom-in"
+              onDoubleClick={() => onZoom(it.optionalPhotoUrl!)}
+              onClick={() => onZoom(it.optionalPhotoUrl!)}
+            />
+          )}
+          <span className="inline-flex items-center gap-1 min-w-0">
+            <CatalogCode code={it.confirmedCatalogItem?.justCode} />
+            <span className="truncate">{it.confirmedProductName ?? it.employeeProductName} × {it.quantity}</span>
+          </span>
+        </div>
+      ))}
     </div>
   );
 }

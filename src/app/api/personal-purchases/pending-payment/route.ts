@@ -18,6 +18,17 @@ export async function GET() {
       transferDeadlineAt: true,
       financeConfirmedAt: true,
       employee: { select: { name: true } },
+      items: {
+        select: {
+          id: true,
+          employeeProductName: true,
+          confirmedProductName: true,
+          quantity: true,
+          livePhotoUrl: true,
+          optionalPhotoUrl: true,
+          confirmedCatalogItem: { select: { justCode: true } },
+        },
+      },
     },
     orderBy: { createdAt: "asc" },
   });

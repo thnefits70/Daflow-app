@@ -12,6 +12,8 @@ type Item = {
   costUnitPrice: number | null;
   dropiUnitPrice: number | null;
   itemTotal: number | null;
+  livePhotoUrl: string;
+  optionalPhotoUrl: string | null;
   confirmedCatalogItem: { justCode: string | null } | null;
 };
 type Order = {
@@ -50,6 +52,7 @@ const STATUS_COLOR: Record<string, string> = {
 export function PersonalPurchasesHistoryPanel() {
   const [open, setOpen] = useState(false);
   const [orders, setOrders] = useState<Order[] | null>(null);
+  const [zoomedPhoto, setZoomedPhoto] = useState<string | null>(null);
 
   function toggle() {
     if (!open && orders === null) {
@@ -98,14 +101,32 @@ export function PersonalPurchasesHistoryPanel() {
                   {o.installments > 1 && <span className="text-[11px] text-steel-dim">{o.installments} cuotas</span>}
                 </div>
 
-                <div className="flex flex-col gap-1">
+                <div className="flex flex-col gap-2">
                   {o.items.map((it) => (
-                    <div key={it.id} className="flex items-center justify-between text-[12px]">
-                      <span className="flex items-center gap-1.5">
+                    <div key={it.id} className="flex items-center justify-between gap-2 text-[12px]">
+                      <span className="flex items-center gap-2 min-w-0">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={it.livePhotoUrl}
+                          alt="Foto del producto"
+                          className="w-10 h-10 object-cover rounded-md border border-rule shrink-0 cursor-zoom-in"
+                          onDoubleClick={() => setZoomedPhoto(it.livePhotoUrl)}
+                          onClick={() => setZoomedPhoto(it.livePhotoUrl)}
+                        />
+                        {it.optionalPhotoUrl && (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={it.optionalPhotoUrl}
+                            alt="Foto extra"
+                            className="w-10 h-10 object-cover rounded-md border border-rule shrink-0 cursor-zoom-in"
+                            onDoubleClick={() => setZoomedPhoto(it.optionalPhotoUrl)}
+                            onClick={() => setZoomedPhoto(it.optionalPhotoUrl)}
+                          />
+                        )}
                         <CatalogCode code={it.confirmedCatalogItem?.justCode} />
-                        <span>{it.confirmedProductName ?? it.employeeProductName} × {it.quantity}</span>
+                        <span className="truncate">{it.confirmedProductName ?? it.employeeProductName} × {it.quantity}</span>
                       </span>
-                      <span className="text-steel-dim tabular-nums">
+                      <span className="text-steel-dim tabular-nums shrink-0">
                         {it.costUnitPrice ? `${money(it.costUnitPrice)} costo` : ""}
                         {it.costUnitPrice && it.dropiUnitPrice ? " · " : ""}
                         {it.dropiUnitPrice ? `${money(it.dropiUnitPrice)} Dropi` : ""}
@@ -122,6 +143,15 @@ export function PersonalPurchasesHistoryPanel() {
             ))}
           </div>
         )
+      )}
+      {zoomedPhoto && (
+        <div
+          className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-6 cursor-zoom-out"
+          onClick={() => setZoomedPhoto(null)}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={zoomedPhoto} alt="Foto ampliada" className="max-w-full max-h-full object-contain rounded-md" />
+        </div>
       )}
     </div>
   );

@@ -2,7 +2,17 @@
 
 import { useEffect, useState } from "react";
 import { formatDateTime } from "@/lib/formatDateTime";
+import { CatalogCode } from "@/components/shared/CatalogCode";
 
+type Item = {
+  id: string;
+  employeeProductName: string;
+  confirmedProductName: string | null;
+  quantity: number;
+  livePhotoUrl: string;
+  optionalPhotoUrl: string | null;
+  confirmedCatalogItem: { justCode: string | null } | null;
+};
 type Order = {
   id: string;
   status: "PENDING_PAYMENT_METHOD" | "PENDING_TRANSFER_PROOF";
@@ -10,6 +20,7 @@ type Order = {
   transferDeadlineAt: string | null;
   financeConfirmedAt: string | null;
   employee: { name: string };
+  items: Item[];
 };
 
 function money(n: number | null) {
@@ -34,6 +45,7 @@ export function PersonalPurchasesPaymentWatchPanel({ canReopenPrice = false }: {
   const [orders, setOrders] = useState<Order[] | null>(null);
   const [reopening, setReopening] = useState<string | null>(null);
   const [err, setErr] = useState<Record<string, string>>({});
+  const [zoomedPhoto, setZoomedPhoto] = useState<string | null>(null);
 
   function load() {
     fetch("/api/personal-purchases/pending-payment").then((r) => (r.ok ? r.json() : [])).then(setOrders);
@@ -82,6 +94,34 @@ export function PersonalPurchasesPaymentWatchPanel({ canReopenPrice = false }: {
                     <span className="text-[11px] text-steel-dim">Precio cerrado el {formatDateTime(o.financeConfirmedAt)}</span>
                   )}
                 </div>
+                <div className="flex flex-col gap-2 mt-2.5 pt-2.5 border-t border-rule">
+                  {o.items.map((it) => (
+                    <div key={it.id} className="flex gap-2.5 items-center">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={it.livePhotoUrl}
+                        alt="Foto del producto"
+                        className="w-12 h-12 object-cover rounded-md border border-rule shrink-0 cursor-zoom-in"
+                        onDoubleClick={() => setZoomedPhoto(it.livePhotoUrl)}
+                        onClick={() => setZoomedPhoto(it.livePhotoUrl)}
+                      />
+                      {it.optionalPhotoUrl && (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={it.optionalPhotoUrl}
+                          alt="Foto extra"
+                          className="w-12 h-12 object-cover rounded-md border border-rule shrink-0 cursor-zoom-in"
+                          onDoubleClick={() => setZoomedPhoto(it.optionalPhotoUrl)}
+                          onClick={() => setZoomedPhoto(it.optionalPhotoUrl)}
+                        />
+                      )}
+                      <div className="text-[12px] font-semibold flex items-center gap-1.5 min-w-0">
+                        <CatalogCode code={it.confirmedCatalogItem?.justCode} />
+                        <span className="truncate">{it.confirmedProductName ?? it.employeeProductName} × {it.quantity}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
                 {canReopenPrice && (
                   <div className="mt-2 pt-2 border-t border-rule">
                     <button
@@ -99,6 +139,15 @@ export function PersonalPurchasesPaymentWatchPanel({ canReopenPrice = false }: {
               </div>
             );
           })}
+        </div>
+      )}
+      {zoomedPhoto && (
+        <div
+          className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-6 cursor-zoom-out"
+          onClick={() => setZoomedPhoto(null)}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={zoomedPhoto} alt="Foto ampliada" className="max-w-full max-h-full object-contain rounded-md" />
         </div>
       )}
     </div>

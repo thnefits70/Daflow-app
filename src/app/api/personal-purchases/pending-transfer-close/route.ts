@@ -9,7 +9,7 @@ export async function GET() {
     where: { status: "PENDING_NAIROBY_CLOSE" },
     include: {
       employee: { select: { name: true } },
-      items: { select: { confirmedProductName: true, employeeProductName: true, quantity: true, confirmedCatalogItem: { select: { justCode: true } } } },
+      items: { select: { confirmedProductName: true, employeeProductName: true, quantity: true, livePhotoUrl: true, optionalPhotoUrl: true, confirmedCatalogItem: { select: { justCode: true } } } },
     },
     orderBy: { transferAdminConfirmedAt: "asc" },
   });

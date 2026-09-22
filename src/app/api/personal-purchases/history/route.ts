@@ -21,6 +21,8 @@ export async function GET() {
           costUnitPrice: true,
           dropiUnitPrice: true,
           itemTotal: true,
+          livePhotoUrl: true,
+          optionalPhotoUrl: true,
           confirmedCatalogItem: { select: { justCode: true } },
         },
       },
