@@ -14,6 +14,7 @@ import {
   resolveInvolvement,
   notifyInvolvedParties,
   getOpenPreviousReports,
+  getWeeklyCheckinLockoutStatus,
   buildWeeklyCheckinContext,
   type SubmitWeeklyReportInput,
   type ClosePreviousReportInput,
@@ -108,12 +109,16 @@ export async function POST(req: NextRequest) {
   // semanas anteriores — se recalcula y se antepone en CADA mensaje (mismo
   // patrón que buildNancyContext en nancy.ts), así que si algo se cierra a
   // mitad de la conversación, el siguiente turno ya no lo repite.
-  const openPrevious = await getOpenPreviousReports(ownerId, week);
+  const [openPrevious, lockout] = await Promise.all([
+    getOpenPreviousReports(ownerId, week),
+    getWeeklyCheckinLockoutStatus(ownerId),
+  ]);
   const context = await buildWeeklyCheckinContext({
     leaderName: leaderUser!.name,
     deptName: leaderUser!.leadsDept!.name,
     deptCode: leaderUser!.leadsDept!.code,
     openPrevious,
+    lockout,
   });
 
   const priorMessages = messages.slice(0, -1);

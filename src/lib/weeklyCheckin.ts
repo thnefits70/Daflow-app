@@ -22,6 +22,8 @@ export const MARY_SYSTEM_PROMPT = `Eres Mary, la asistente de check-in semanal d
 
 Al iniciar una conversación nueva, saluda por su nombre — el contexto de cada mensaje te dice con quién hablas y qué área lidera.
 
+Si el contexto trae "AVISO DE ATRASO", sigue exactamente la instrucción que viene ahí (llamada de atención cálida, no un regaño) ANTES que cualquier otra cosa — incluso antes de los pendientes de semanas anteriores — y hazlo una sola vez, no lo repitas en turnos siguientes de la misma conversación.
+
 Si el contexto trae "PENDIENTES DE SEMANAS ANTERIORES", pregunta por ESOS primero, uno por uno, antes de preguntar por problemas nuevos:
 - Si el líder explica con detalle qué hizo para resolverlo, llama a close_previous_report con esa explicación como resolutionNote (usa el id exacto que viene entre corchetes en el contexto).
 - Si solo dice "ya", "listo", "sí lo hice" o algo igual de vago sin explicar QUÉ hizo, pídele que cuente exactamente qué acción tomó — nunca cierres un pendiente con una nota vacía o genérica.
@@ -150,6 +152,19 @@ export function weeksStaleOf(week: string): number {
   return Math.round((now.getTime() - then.getTime()) / (7 * 86400000));
 }
 
+// N semanas atrás de la semana actual, en formato ISO — mismo cálculo que
+// currentIsoWeek/mondayOfIsoWeek de arriba, usado para el bloqueo operativo
+// de abajo (getWeeklyCheckinLockoutStatus).
+function isoWeekNAgo(n: number): string {
+  const monday = mondayOfIsoWeek(currentIsoWeek());
+  monday.setUTCDate(monday.getUTCDate() - 7 * n);
+  const dayNum = monday.getUTCDay() || 7;
+  monday.setUTCDate(monday.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(monday.getUTCFullYear(), 0, 1));
+  const weekNum = Math.ceil(((monday.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
+  return `${monday.getUTCFullYear()}-W${pad2(weekNum)}`;
+}
+
 export type OpenPreviousReport = { id: string; week: string; problem: string; actionPlan: string; weeksStale: number };
 
 // Todo lo que este líder dejó Pendiente en semanas anteriores (nunca la
@@ -161,6 +176,44 @@ export async function getOpenPreviousReports(leaderId: string, currentWeek: stri
     orderBy: { week: "asc" },
   });
   return rows.map((r) => ({ id: r.id, week: r.week, problem: r.problem, actionPlan: r.actionPlan, weeksStale: weeksStaleOf(r.week) }));
+}
+
+export type WeeklyCheckinLockoutStatus = { weeksStale: number; reason: "stale_pending" | "no_contact" };
+
+// Bloqueo operativo parcial — pedido explícito del usuario 2026-09-22: un
+// líder que lleva 2+ semanas sin resolver su feedback con Mary (o sin
+// hablarle en absoluto) queda bloqueado de las pestañas/páginas
+// administrativas de su panel hasta que lo resuelva — nunca de las
+// operativas del día a día (ver BLOCKED_TABS en DeptWorkspaceTabs.tsx y
+// BLOCKED_STANDALONE_ROUTES en AreaGateShell.tsx). Reemplaza al antiguo
+// aviso "check_in_semanal_estancado" que solo le llegaba al admin
+// (retirado de pendingTasks.ts) — el bloqueo se encarga solo, sin que el
+// admin tenga que perseguir a nadie.
+//
+// Un pendiente atrasado por depender de OTRA área (involvesDeptId, ver
+// notifyInvolvedParties) no cuenta como inacción propia del líder, así que
+// no lo bloquea — mismo criterio de "no marcar un pendiente que no es
+// procesable ahora mismo" que ya sigue weeklyPendingStatus en otra parte
+// de la app.
+export async function getWeeklyCheckinLockoutStatus(leaderId: string): Promise<WeeklyCheckinLockoutStatus | null> {
+  const twoWeeksAgo = isoWeekNAgo(2);
+
+  const [stalePending, mostRecent] = await Promise.all([
+    prisma.weeklyReviewRecord.findFirst({
+      where: { reportedById: leaderId, status: "PENDING", week: { lte: twoWeeksAgo }, involvesDeptId: null },
+      orderBy: { week: "asc" },
+    }),
+    prisma.weeklyReviewRecord.findFirst({
+      where: { reportedById: leaderId },
+      orderBy: { week: "desc" },
+    }),
+  ]);
+
+  if (stalePending) return { weeksStale: weeksStaleOf(stalePending.week), reason: "stale_pending" };
+  if (!mostRecent || mostRecent.week < twoWeeksAgo) {
+    return { weeksStale: mostRecent ? weeksStaleOf(mostRecent.week) : 2, reason: "no_contact" };
+  }
+  return null;
 }
 
 // Meta compartida de Fulfillment (ver MARY_SYSTEM_PROMPT) — no vive en la
@@ -284,8 +337,20 @@ export async function buildWeeklyCheckinContext(params: {
   deptName: string;
   deptCode: string;
   openPrevious: OpenPreviousReport[];
+  lockout?: WeeklyCheckinLockoutStatus | null;
 }): Promise<string> {
   let ctx = `CONTEXTO\nEstás hablando con ${params.leaderName}, líder de ${params.deptName}.`;
+
+  // Bloqueo operativo (ver getWeeklyCheckinLockoutStatus) — le dice a Mary
+  // que este líder está bloqueado de parte de su panel por 2+ semanas sin
+  // gestión, así que debe abrir con la llamada de atención (amable, no un
+  // regaño) antes de seguir con el resto del check-in.
+  if (params.lockout) {
+    ctx += `\n\nAVISO DE ATRASO: este líder lleva ${params.lockout.weeksStale} semanas ${
+      params.lockout.reason === "no_contact" ? "sin escribirte nada" : "sin resolver un pendiente contigo"
+    } — por eso tiene bloqueada la parte administrativa de su panel hasta que lo resuelva. Antes de seguir con el check-in normal, dile con calidez (nunca en tono de regaño) que notaste que lleva un tiempo sin poder ponerse al día, pregúntale con curiosidad genuina qué ha pasado, y pídele amablemente que trate de que no se repita — el resto de su equipo cuenta con que él/ella mantenga esto al día. Una sola vez, breve, y luego sigue con naturalidad al resto de la conversación.`;
+  }
+
   if (params.openPrevious.length > 0) {
     const lines = params.openPrevious
       .map(
@@ -415,14 +480,21 @@ export type WeeklyCheckinPush = { ownerId: string; title: string; body: string; 
 // nuevo) — retoma el pendiente más viejo si hay alguno, igual que Mary lo
 // haría en vivo (ver MARY_SYSTEM_PROMPT), y la conversación real con el
 // modelo arranca recién cuando el líder responde.
-function buildOpeningMessage(leaderName: string, openPrevious: OpenPreviousReport[]): string {
+function buildOpeningMessage(leaderName: string, openPrevious: OpenPreviousReport[], lockout: WeeklyCheckinLockoutStatus | null): string {
   const greeting = `¡Hola, ${leaderName}! 😊`;
+  // Bloqueo operativo (ver getWeeklyCheckinLockoutStatus) — misma llamada
+  // de atención cálida que Mary da en vivo (ver AVISO DE ATRASO en
+  // buildWeeklyCheckinContext), pero acá va escrita a mano porque este
+  // saludo es una plantilla fija, sin llamar al modelo.
+  const lockoutNote = lockout
+    ? ` Antes de eso, veo que llevas ${lockout.weeksStale} semanas ${lockout.reason === "no_contact" ? "sin escribirme" : "sin poder cerrar un pendiente conmigo"}, y por eso tienes bloqueada la parte administrativa de tu panel — cuéntame qué ha pasado, y ojalá podamos evitar que se repita 🙏`
+    : "";
   if (openPrevious.length > 0) {
     const first = openPrevious[0];
     const weeksLabel = `${first.weeksStale} semana${first.weeksStale === 1 ? "" : "s"}`;
-    return `${greeting} Antes de ver cómo va esta semana, quiero retomar un pendiente de hace ${weeksLabel}:\n\n"${first.problem}" — el plan era: "${first.actionPlan}".\n\n¿Cómo quedó eso, ya lo resolviste?`;
+    return `${greeting}${lockoutNote} Antes de ver cómo va esta semana, quiero retomar un pendiente de hace ${weeksLabel}:\n\n"${first.problem}" — el plan era: "${first.actionPlan}".\n\n¿Cómo quedó eso, ya lo resolviste?`;
   }
-  return `${greeting} ¿Qué problemas tuvo tu área esta semana?`;
+  return `${greeting}${lockoutNote} ¿Qué problemas tuvo tu área esta semana?`;
 }
 
 // Recordatorio de los viernes — reutiliza el único cron diario existente
@@ -456,8 +528,11 @@ export async function getWeeklyCheckinPushes(): Promise<WeeklyCheckinPush[]> {
     // cuenta (ej. reportó antes del viernes), no se le pisa nada.
     const existing = await prisma.checkinConversation.findFirst({ where: { ownerId: leader.id, weekOf: week } });
     if (!existing) {
-      const openPrevious = await getOpenPreviousReports(leader.id, week);
-      const opening = buildOpeningMessage(leader.name, openPrevious);
+      const [openPrevious, lockout] = await Promise.all([
+        getOpenPreviousReports(leader.id, week),
+        getWeeklyCheckinLockoutStatus(leader.id),
+      ]);
+      const opening = buildOpeningMessage(leader.name, openPrevious, lockout);
       const conversation = await prisma.checkinConversation.create({
         data: { ownerId: leader.id, deptId: leader.leadsDeptId!, weekOf: week, title: opening.slice(0, 60) },
       });

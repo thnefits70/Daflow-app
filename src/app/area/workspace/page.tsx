@@ -10,7 +10,7 @@ import { getPaymentRemindersData } from "@/lib/paymentReminders";
 import { getPeriodicReminders } from "@/lib/periodicReminders";
 import { getSupplierExchangeGestorCount, getPurchaseGestionPendingCount } from "@/lib/pendingTasks";
 import { getStoreFeedbackData, getStoreFeedbackMonthlyAggregates } from "@/lib/storeFeedback";
-import { getReviewsInvolvingUser, weeksStaleOf } from "@/lib/weeklyCheckin";
+import { getReviewsInvolvingUser, weeksStaleOf, getWeeklyCheckinLockoutStatus } from "@/lib/weeklyCheckin";
 import { getInventoryControlData, getInventoryKpisData } from "@/lib/inventoryKpis";
 import { getPettyCashViewerData } from "@/lib/pettyCash";
 import { toSupplierDTO } from "@/lib/suppliers";
@@ -258,6 +258,12 @@ export default async function WorkspacePage() {
   const kpisEditable = !!currentUser?.isLeader && currentUser.leadsDeptId === dept.id;
   const weeklyReviewInvolvingMe =
     kpisEditable && dept.trackWeeklyReview ? await getReviewsInvolvingUser(dept.id) : [];
+  // Bloqueo parcial de Feedback semanal — mismo cálculo que area/layout.tsx
+  // (ver getWeeklyCheckinLockoutStatus), reevaluado acá porque esta página
+  // gatea las pestañas operativas (compras, llegadas, reingreso, egresos,
+  // ventas-externas) que el layout no bloquea por ruta.
+  const weeklyCheckinLockout =
+    kpisEditable && dept.trackWeeklyReview ? await getWeeklyCheckinLockoutStatus(session.user.id) : null;
   const canJustifyFillRateFlag = dept.trackWeeklyMetric ? await checkCanJustifyFillRate() : false;
   // Plan de Mejora y Acompañamiento — confirmado 2026-09-10: mismo criterio
   // "sin dept.code" que Servicio Postventa/Control de Compras, se ve en la
@@ -400,6 +406,7 @@ export default async function WorkspacePage() {
         kpisEditable={kpisEditable}
         unseenFeedbackCount={unseenFeedbackCount}
         currentUserId={session.user.id}
+        weeklyCheckinLockout={weeklyCheckinLockout}
       />
     </div>
   );

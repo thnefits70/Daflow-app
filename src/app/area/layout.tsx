@@ -3,7 +3,6 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { AreaGateShell } from "@/components/dept/AreaGateShell";
 import { MarketingArrivalAlert } from "@/components/marketing/MarketingArrivalAlert";
-import { WeeklyCheckinPanel } from "@/components/shared/WeeklyCheckinPanel";
 import type { ProcessDTO } from "@/components/process/ProcessEditor";
 import type { RecognitionPersonDTO } from "@/components/recognition/RecognitionPanel";
 import {
@@ -12,6 +11,7 @@ import {
   canConfirmPersonalPurchaseInventory,
 } from "@/lib/guards";
 import { getRecognitionLockout } from "@/lib/pendingTasks";
+import { getWeeklyCheckinLockoutStatus } from "@/lib/weeklyCheckin";
 
 export default async function AreaLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
@@ -168,6 +168,13 @@ export default async function AreaLayout({ children }: { children: React.ReactNo
   const showPersonalPurchasesInventory = await canConfirmPersonalPurchaseInventory();
   const myLearningPathCount = await prisma.learningPathAssignment.count({ where: { userId: session.user.id } });
 
+  // Feedback semanal (Mary) — solo el LÍDER de un área con bitácora puede
+  // usarla (mismo criterio que gatea el widget flotante abajo), y solo a él
+  // se le puede bloquear la parte administrativa de su panel si lleva 2+
+  // semanas sin gestión (ver getWeeklyCheckinLockoutStatus).
+  const showWeeklyCheckinPanel = !!(currentUser.isLeader && dept.trackWeeklyReview);
+  const weeklyCheckinLockout = showWeeklyCheckinPanel ? await getWeeklyCheckinLockoutStatus(currentUser.id) : null;
+
   return (
     <AreaGateShell
       deptName={dept.name}
@@ -191,12 +198,13 @@ export default async function AreaLayout({ children }: { children: React.ReactNo
       showNomina={showNomina}
       showMyLearningPath={myLearningPathCount > 0}
       showPersonalPurchasesInventory={showPersonalPurchasesInventory}
+      showWeeklyCheckinPanel={showWeeklyCheckinPanel}
+      weeklyCheckinLockout={weeklyCheckinLockout}
     >
       {children}
       {(currentUser.canConfirmMarketingDesign || currentUser.canConfirmMarketingAdvisor) && (
         <MarketingArrivalAlert canConfirmDesign={currentUser.canConfirmMarketingDesign} canConfirmAdvisor={currentUser.canConfirmMarketingAdvisor} />
       )}
-      {currentUser.isLeader && dept.trackWeeklyReview && <WeeklyCheckinPanel />}
     </AreaGateShell>
   );
 }

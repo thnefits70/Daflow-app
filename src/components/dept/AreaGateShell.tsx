@@ -1,17 +1,19 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { useState } from "react";
 import { LogOut, Menu, X } from "lucide-react";
 import { BrandMark } from "@/components/brand/DaflowMark";
 import { EmployeeSidebar } from "@/components/shell/EmployeeSidebar";
 import { TopBanner } from "@/components/shell/TopBanner";
 import { UpdateGate } from "@/components/dept/UpdateGate";
+import { WeeklyCheckinLockGate } from "@/components/dept/WeeklyCheckinLockGate";
 import { LeaderBanner } from "@/components/dept/LeaderBanner";
 import { BirthdayPopup } from "@/components/birthday/BirthdayPopup";
 import { MonthlyRecognitionPopup } from "@/components/recognition/MonthlyRecognitionPopup";
 import { CeoBonusPopup } from "@/components/shared/CeoBonusPopup";
 import { RecognitionLockGate } from "@/components/recognition/RecognitionLockGate";
+import { WeeklyCheckinPanel } from "@/components/shared/WeeklyCheckinPanel";
 import type { RecognitionPersonDTO } from "@/components/recognition/RecognitionPanel";
 import { signOut } from "next-auth/react";
 import type { ProcessDTO } from "@/components/process/ProcessEditor";
@@ -19,6 +21,31 @@ import { isFutureDate } from "@/lib/time";
 
 type PendingUpdate = { id: string; processId: string; processTitle: string; note: string; createdAt: string };
 type LeaderAlert = { id: string; processTitle: string; pendingCount: number; teamSize: number };
+type WeeklyCheckinLockout = { weeksStale: number; reason: "stale_pending" | "no_contact" };
+
+// Páginas administrativas/documentales que quedan bloqueadas para un líder
+// 2+ semanas atrasado con Mary (ver weeklyCheckinLockout) — pedido explícito
+// del usuario 2026-09-22: bloqueo con excepción operativa, nunca las rutas
+// del trabajo diario (Mi área de trabajo/"/area/workspace" se gatea aparte,
+// por PESTAÑA, en DeptWorkspaceTabs.tsx — no está en esta lista porque ahí
+// viven tareas operativas como despachos y recepción de mercadería que
+// deben seguir funcionando). "/area/reingreso-mercaderia" tampoco está acá
+// por el mismo motivo (operativo).
+const BLOCKED_STANDALONE_ROUTES = [
+  "/area/nomina",
+  "/area/kpis-generales",
+  "/area/colaborador-destacado",
+  "/area/carreras",
+  "/area/leyes",
+  "/area/mi-ruta",
+  "/area/modulos",
+  "/area/documentos-confidenciales",
+  "/area/anticipos",
+  "/area/compras-personales",
+  "/area/compras-personales-inventario",
+  "/area/cambio-proveedor-gestiones",
+  "/area/roles-de-pago",
+];
 
 export function AreaGateShell({
   deptName,
@@ -42,6 +69,8 @@ export function AreaGateShell({
   showNomina = false,
   showMyLearningPath = false,
   showPersonalPurchasesInventory = false,
+  showWeeklyCheckinPanel = false,
+  weeklyCheckinLockout = null,
   children,
 }: {
   deptName: string;
@@ -65,9 +94,12 @@ export function AreaGateShell({
   showNomina?: boolean;
   showMyLearningPath?: boolean;
   showPersonalPurchasesInventory?: boolean;
+  showWeeklyCheckinPanel?: boolean;
+  weeklyCheckinLockout?: WeeklyCheckinLockout | null;
   children: React.ReactNode;
 }) {
   const router = useRouter();
+  const pathname = usePathname();
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
   const [snoozedNow, setSnoozedNow] = useState(false);
   const [gateOpen, setGateOpen] = useState(false);
@@ -75,6 +107,8 @@ export function AreaGateShell({
   const isSnoozed = isFutureDate(snoozeUntil);
   const activeUpdate = pendingUpdates.find((u) => !dismissedIds.has(u.id));
   const showGate = !!activeUpdate && !isSnoozed && !snoozedNow;
+  const showWeeklyCheckinRouteLock =
+    !!weeklyCheckinLockout && BLOCKED_STANDALONE_ROUTES.some((r) => pathname === r || pathname.startsWith(`${r}/`));
 
   // Confirmado 2026-08-07: el bloqueo de Colaborador del mes gana sobre
   // cualquier otro gate — reemplaza TODO el shell, sin importar qué otra
@@ -162,6 +196,36 @@ export function AreaGateShell({
     );
   }
 
+  // Bloqueo parcial de Feedback semanal (ver weeklyCheckinLockout) — solo
+  // reemplaza el contenido de páginas administrativas listadas en
+  // BLOCKED_STANDALONE_ROUTES; el sidebar sigue completo para que el líder
+  // pueda navegar a sus tareas operativas normalmente.
+  if (showWeeklyCheckinRouteLock && weeklyCheckinLockout) {
+    return (
+      <div className="flex flex-col md:flex-row h-screen min-h-0 print:block print:h-auto">
+        <EmployeeSidebar
+          deptName={deptName}
+          userName={userName}
+          userPhotoUrl={userPhotoUrl}
+          logoUrl={logoUrl}
+          unseenFeedbackCount={unseenFeedbackCount}
+          unseenPayStubCount={unseenPayStubCount}
+          showConfidential={showConfidential}
+          unseenConfidentialCount={unseenConfidentialCount}
+          showKpis={showKpis}
+          showRecognition={showRecognition}
+          showNomina={showNomina}
+          showMyLearningPath={showMyLearningPath}
+          showPersonalPurchasesInventory={showPersonalPurchasesInventory}
+        />
+        <main className="flex-1 overflow-y-auto bg-bg p-4 md:p-9 print:overflow-visible print:p-0">
+          <WeeklyCheckinLockGate weeksStale={weeklyCheckinLockout.weeksStale} reason={weeklyCheckinLockout.reason} />
+        </main>
+        {showWeeklyCheckinPanel && <WeeklyCheckinPanel />}
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col md:flex-row h-screen min-h-0 print:block print:h-auto">
       <EmployeeSidebar
@@ -188,6 +252,7 @@ export function AreaGateShell({
         {ledDeptName && <LeaderBanner deptName={ledDeptName} alerts={leaderAlerts} />}
         {children}
       </main>
+      {showWeeklyCheckinPanel && <WeeklyCheckinPanel />}
       <BirthdayPopup />
       <MonthlyRecognitionPopup />
       <CeoBonusPopup />

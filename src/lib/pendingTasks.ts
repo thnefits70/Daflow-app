@@ -388,7 +388,6 @@ export type PendingTasks = { title: string; sub: string; items: PendingItem[] };
 // usado por /api/push/preferences para armar la lista de interruptores.
 export const PENDING_TYPE_CATALOG: Record<string, string> = {
   feedback: "Feedback semanal/mensual de departamentos",
-  check_in_semanal_estancado: "Feedback semanal — líder sin gestión hace 2+ semanas",
   roles_de_pago: "Roles de pago",
   mensajes_nomina_sin_leer: "Mensajes de Nómina (tu conversación)",
   mensajes_nomina_sin_leer_lider: "Mensajes de colaboradores (Nómina)",
@@ -963,80 +962,13 @@ async function getRecognitionAdminPendingItem(href: string): Promise<PendingItem
   return null;
 }
 
-// Confirmado 2026-08-27: pedido explícito del usuario — el check-in semanal
-// (Mary) reemplaza la reunión 1:1, pero si un líder la ignora, alguien tiene
-// que enterarse. Cubre dos casos: (a) reportó algo pero quedó Pendiente 2+
-// semanas sin que Mary lo cerrara (nunca dio una explicación real de qué
-// hizo), o (b) YA le había reportado algo antes, pero lleva las últimas 2
-// semanas sin decirle nada — ni siquiera "sin novedades". Exclusivo de
-// admin — un líder nunca ve esto sobre sí mismo, mismo criterio que
-// getRecognitionAdminPendingItem arriba (nunca se llama desde la rama de
-// líderes de getPendingTasksForActor).
-//
-// Fix confirmado 2026-08-31 (reportado por el usuario, dos rondas del
-// mismo bug real):
-// 1) El item agregaba a TODOS los líderes desde el día 1 de la función,
-//    porque "sin actividad en las últimas 2 semanas" también era cierto
-//    para cualquiera que simplemente nunca hubiera usado a Mary todavía
-//    (el feature es nuevo — nadie tiene historial).
-// 2) Un solo item agregado con un href fijo ("/admin") apuntaba a la MISMA
-//    página del Inicio donde ya vive esta tarjeta — el clic "Ir →" no hacía
-//    nada porque ya estaba ahí. Ahora es un item POR LÍDER/ÁREA (mismo
-//    patrón que getFeedbackPendingItems arriba), cada uno con el href real
-//    de la bitácora de esa área (/admin/dept/[id]).
-// Primer intento del fix (1) exigía `everReported > 0` para contar como
-// "se quedó en silencio" — pero eso abría un hueco permanente: un líder
-// que NUNCA le escribe a Mary jamás cumple esa condición, así que nunca
-// se le marcaría, sin importar cuántas semanas pasen. La base correcta no
-// es el historial de cada quien, sino la fecha en que Mary existe.
-const MARY_LAUNCH_WEEK = "2026-W35"; // semana en que se lanzó el check-in semanal (2026-08-26/27)
-
-async function getWeeklyCheckinStalledPendingItems(): Promise<PendingItem[]> {
-  const twoWeeksAgo = prevIsoWeek(prevIsoWeek(isoWeekOf(nowInEcuador())));
-  // Todavía no han pasado 2 semanas completas desde que Mary existe — nadie
-  // puede considerarse "en silencio" antes de eso, sin importar su historial.
-  if (twoWeeksAgo < MARY_LAUNCH_WEEK) return [];
-
-  const leaders = await prisma.user.findMany({
-    where: { isActive: true, isLeader: true, leadsDept: { trackWeeklyReview: true } },
-    select: { id: true, name: true, leadsDeptId: true, leadsDept: { select: { name: true } } },
-  });
-  if (leaders.length === 0) return [];
-
-  const items: PendingItem[] = [];
-  for (const leader of leaders) {
-    const [stalePending, recentActivity] = await Promise.all([
-      // Confirmado 2026-08-31: pedido explícito del usuario — si el
-      // pendiente depende de otra área (involvesDept, ver
-      // notifyInvolvedParties en weeklyCheckin.ts), el atraso puede no ser
-      // culpa de este líder. Se trae el nombre del área involucrada (la
-      // más vieja primero) para decirlo directo en la misma alerta, en vez
-      // de armar un segundo aviso o adivinar a quién perseguir.
-      prisma.weeklyReviewRecord.findFirst({
-        where: { reportedById: leader.id, status: "PENDING", week: { lte: twoWeeksAgo } },
-        include: { involvesDept: { select: { name: true } } },
-        orderBy: { week: "asc" },
-      }),
-      prisma.weeklyReviewRecord.count({
-        where: { reportedById: leader.id, week: { gte: twoWeeksAgo } },
-      }),
-    ]);
-    if (!stalePending && recentActivity > 0) continue;
-
-    const blockedByDept = stalePending?.involvesDept?.name;
-    items.push({
-      type: "check_in_semanal_estancado",
-      icon: "🕑",
-      label: `Feedback semanal — ${leader.leadsDept!.name}`,
-      meta: blockedByDept
-        ? `${leader.name} · depende de ${blockedByDept} · sin gestión hace 2+ semanas`
-        : `${leader.name} · sin gestión hace 2+ semanas`,
-      overdue: true,
-      href: `/admin/dept/${leader.leadsDeptId}`,
-    });
-  }
-  return items;
-}
+// El aviso "check_in_semanal_estancado" que vivía acá (confirmado
+// 2026-08-27, corregido 2026-08-31) se retiró 2026-09-22: pedido explícito
+// del usuario — un líder 2+ semanas atrasado ahora queda bloqueado de la
+// parte administrativa de su propio panel hasta resolverlo con Mary (ver
+// getWeeklyCheckinLockoutStatus en weeklyCheckin.ts, AreaGateShell.tsx y
+// DeptWorkspaceTabs.tsx), en vez de depender de que admin lo persiga cada
+// vez. El bloqueo se encarga solo.
 
 // Confirmado 2026-08-05: el aviso de saldo bajo le llega tanto a admin como
 // a Nairoby (líder de Finanzas) — cualquiera de los dos puede recargar.
@@ -2842,10 +2774,9 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     // pestaña interna "Pagos" (?etab=pagos, leída por ExternalSalesPanel).
     const mktDept = await prisma.department.findUnique({ where: { code: "MKT" }, select: { id: true } });
     const mktVentasPagosHref = mktDept ? `/admin/dept/${mktDept.id}?tab=ventas-externas&etab=pagos` : "/admin";
-    const [feedbackItems, recognitionItem, weeklyCheckinStalledItems, pettyCashLow, pettyCashUnconfirmed, adminPaymentsItem, purchaseShippingItem, purchaseCreditsItem, purchaseRefundBankConfirmItem, supplierExchangeRejectedItem, overtimeApprovalItem, commissionBonusApprovalItem, salaryAdvanceItem, managementDeductionItem, personalPurchaseFinanceItem, personalPurchaseAwaitingCostItem, personalPurchaseTransferConfirmItem, personalPurchaseTransferCloseItem, personalPurchaseCashConfirmItem, personalPurchasePaymentWatchItem, payrollTransferItem, payrollIessTransferItem, externalSalePaymentConfirmItem, birthdayItems, nichoBackfillItem, monthlyTopMoversItem, improvementPlanClosureItems, purchaseExceptionItem] = await Promise.all([
+    const [feedbackItems, recognitionItem, pettyCashLow, pettyCashUnconfirmed, adminPaymentsItem, purchaseShippingItem, purchaseCreditsItem, purchaseRefundBankConfirmItem, supplierExchangeRejectedItem, overtimeApprovalItem, commissionBonusApprovalItem, salaryAdvanceItem, managementDeductionItem, personalPurchaseFinanceItem, personalPurchaseAwaitingCostItem, personalPurchaseTransferConfirmItem, personalPurchaseTransferCloseItem, personalPurchaseCashConfirmItem, personalPurchasePaymentWatchItem, payrollTransferItem, payrollIessTransferItem, externalSalePaymentConfirmItem, birthdayItems, nichoBackfillItem, monthlyTopMoversItem, improvementPlanClosureItems, purchaseExceptionItem] = await Promise.all([
       getFeedbackPendingItems(),
       getRecognitionAdminPendingItem("/admin/colaborador-destacado"),
-      getWeeklyCheckinStalledPendingItems(),
       getPettyCashLowBalanceItems(financeHref),
       getPettyCashUnconfirmedFunderItems(null, financeHref),
       getAdminPaymentsPendingItem(`${financeHref}?tab=pagosadmin`),
@@ -2876,7 +2807,6 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       ...feedbackItems,
       ...improvementPlanClosureItems,
       ...(recognitionItem ? [recognitionItem] : []),
-      ...weeklyCheckinStalledItems,
       ...pettyCashLow,
       ...pettyCashUnconfirmed,
       ...(adminPaymentsItem ? [adminPaymentsItem] : []),

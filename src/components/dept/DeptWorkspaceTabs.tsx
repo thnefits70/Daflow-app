@@ -37,6 +37,7 @@ import { SuppliersPanel, type SupplierDTO } from "@/components/suppliers/Supplie
 import { ComboSuggestionsPanel } from "@/components/marketanalysis/ComboSuggestionsPanel";
 import { MarketProductPanel } from "@/components/marketanalysis/MarketProductPanel";
 import { ImprovementPlanTeamPanel } from "@/components/improvement-plan/ImprovementPlanTeamPanel";
+import { WeeklyCheckinLockGate } from "@/components/dept/WeeklyCheckinLockGate";
 
 type DocumentDTO = { id: string; title: string; content: string; link: string; fileUrl: string | null; fileName: string | null };
 type ExamSummary = { id: string; title: string; questionCount: number };
@@ -71,6 +72,33 @@ const ALL_TABS = [
 ] as const;
 
 type TabKey = (typeof ALL_TABS)[number]["key"];
+
+// Pestañas que quedan bloqueadas para el líder cuando tiene el feedback
+// semanal atrasado 2+ semanas (ver weeklyCheckinLockout) — pedido explícito
+// del usuario 2026-09-22: bloqueo con excepción operativa. Las que NO están
+// acá (compras, llegadas, reingreso, egresos, ventas-externas) son trabajo
+// operativo del día a día que nunca debe frenarse; "feedback" tampoco se
+// bloquea porque ahí es donde el líder ve su propia bitácora con Mary.
+const BLOCKED_TABS = new Set<TabKey>([
+  "kpis",
+  "pagos",
+  "semanal",
+  "procesos",
+  "proveedores",
+  "inventario",
+  "stock-actual",
+  "inventoriokpis",
+  "cajachica",
+  "pagosadmin",
+  "almuerzos",
+  "postventa",
+  "combos",
+  "analisis-mercado",
+  "plan-mejora",
+  "documentos",
+  "examenes",
+  "recordatorios",
+]);
 
 export function DeptWorkspaceTabs({
   deptId,
@@ -172,6 +200,7 @@ export function DeptWorkspaceTabs({
   kpisEditable,
   unseenFeedbackCount = 0,
   currentUserId = null,
+  weeklyCheckinLockout = null,
 }: {
   deptId: string;
   // Confirmado 2026-09-03: departamento del usuario que está viendo esta
@@ -393,6 +422,9 @@ export function DeptWorkspaceTabs({
   // apertura (ej. Nairoby o el admin prefiriendo otra distinta a "Feedback
   // semanal", que ahora es el default de Finanzas). Null = usar el fallback.
   preferredTab?: string | null;
+  // Bloqueo parcial de Feedback semanal (ver BLOCKED_TABS arriba) — null si
+  // el viewer no es un líder bloqueado (siempre null para admin/no-líderes).
+  weeklyCheckinLockout?: { weeksStale: number; reason: "stale_pending" | "no_contact" } | null;
 }) {
   const router = useRouter();
   // supplierPending incluye rechazadas (para que la pestaña muestre su
@@ -544,6 +576,10 @@ export function DeptWorkspaceTabs({
         )}
       </div>
 
+      {weeklyCheckinLockout && BLOCKED_TABS.has(tab) ? (
+        <WeeklyCheckinLockGate weeksStale={weeklyCheckinLockout.weeksStale} reason={weeklyCheckinLockout.reason} />
+      ) : (
+        <>
       {tab === "procesos" && (
         <ProcessEmbeddedPanel deptId={deptId} process={activeProcess} updates={processUpdates} editable={editable} />
       )}
@@ -725,6 +761,8 @@ export function DeptWorkspaceTabs({
           involvingMe={weeklyReviewInvolvingMe}
           canDelete={isAdmin}
         />
+      )}
+        </>
       )}
     </div>
   );
