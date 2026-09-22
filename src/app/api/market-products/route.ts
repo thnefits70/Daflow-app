@@ -49,6 +49,9 @@ const createSchema = z.object({
   fulfillmentCost: z.number().nonnegative().optional(),
   marginPercent: z.number().min(0).max(99).optional(),
   primarySupplierPrice: supplierPriceSchema,
+  // Confirmado 2026-09-22: si la propuesta viene de "Pasar a Proponer" en
+  // Ganadores no encontrados, ese registro queda marcado como ya propuesto.
+  unfoundWinningProductId: z.string().optional(),
 });
 
 // Confirmado 2026-09-09 (Fase 2, Análisis de Mercado): Jariel propone un
@@ -125,6 +128,13 @@ export async function POST(req: NextRequest) {
     },
     include: { supplierPrices: { include: { supplier: { select: { name: true } } } } },
   });
+
+  if (d.unfoundWinningProductId) {
+    await prisma.unfoundWinningProduct.updateMany({
+      where: { id: d.unfoundWinningProductId, status: { not: "PROPOSED" } },
+      data: { status: "PROPOSED", proposalId: created.id },
+    });
+  }
 
   // Bug reportado por Jariel 2026-09-18: a Bryan nunca le llegaba aviso de
   // que había una propuesta nueva esperando su aprobación — notifyOwner solo

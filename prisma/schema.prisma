@@ -387,6 +387,7 @@ model User {
   marketProductProposalsBranded                    MarketProductProposal[]               @relation("MarketProductProposalBrandedBy")
   marketProductProposalsMarkedReadyToBuy           MarketProductProposal[]               @relation("MarketProductProposalReadyToBuyBy")
   marketProductProposalsKardexReleased             MarketProductProposal[]               @relation("MarketProductProposalKardexReleasedBy")
+  unfoundWinningProductsCreated                    UnfoundWinningProduct[]               @relation("UnfoundWinningProductCreatedBy")
   marketProductPriceChangesMade                    MarketProductPriceChange[]            @relation("MarketProductPriceChangeChangedBy")
   purchaseRequestsPaidBy                           PurchaseRequest[]                     @relation("PurchaseRequestPaidBy")
   purchaseRequestsInvoicedBy                       PurchaseRequest[]                     @relation("PurchaseRequestInvoicedBy")
@@ -1679,6 +1680,7 @@ model Supplier {
   debtPayments                           SupplierDebtPayment[]
   marketProductPrices                    MarketProductSupplierPrice[]
   marketProductProposalsAsChosen         MarketProductProposal[]
+  unfoundWinningProducts                 UnfoundWinningProduct[]
 
   @@index([status])
   @@index([createdByDeptId])
@@ -2138,12 +2140,51 @@ model MarketProductProposal {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  supplierPrices   MarketProductSupplierPrice[]
-  priceChanges     MarketProductPriceChange[]
-  purchaseRequests PurchaseRequest[]
+  supplierPrices         MarketProductSupplierPrice[]
+  priceChanges           MarketProductPriceChange[]
+  purchaseRequests       PurchaseRequest[]
+  unfoundWinningProducts UnfoundWinningProduct[]
 
   @@index([status])
   @@index([proposedById])
+}
+
+// Confirmado 2026-09-22, pedido de Jariel (vía el usuario): "productos
+// ganadores no encontrados" — productos que ve ganando en la competencia pero
+// que todavía ningún proveedor le ofrece. Los anota acá (antes en una hoja
+// de cálculo aparte) para revisarlos después y, cuando un proveedor ya lo
+// tenga, pasarlo a Proponer con los datos precargados.
+enum UnfoundWinningProductStatus {
+  PENDING
+  PROPOSED
+  DISCARDED
+}
+
+model UnfoundWinningProduct {
+  id              String    @id @default(cuid())
+  productName     String
+  imageUrl        String
+  competitorId    String?
+  competitorPrice Float?
+  supplierId      String?
+  supplier        Supplier? @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  notes           String?
+  // Semana ISO (hora Ecuador) del día en que se registró — se autorellena.
+  weekYear        Int
+  weekNumber      Int
+
+  status     UnfoundWinningProductStatus @default(PENDING)
+  // Se llena solo cuando se envía la propuesta desde "Pasar a Proponer".
+  proposalId String?
+  proposal   MarketProductProposal?      @relation(fields: [proposalId], references: [id], onDelete: SetNull)
+
+  createdById String?
+  createdBy   User?    @relation("UnfoundWinningProductCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([status])
+  @@index([weekYear, weekNumber])
 }
 
 model MarketProductSupplierPrice {

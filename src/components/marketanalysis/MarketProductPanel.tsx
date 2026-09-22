@@ -93,7 +93,7 @@ function computeCompetitorComparison(batchCost: number, batchUnits: number, frei
   };
 }
 
-type Tab = "proponer" | "mispropuestas" | "listoparacomprar" | "consulta" | "aprobacion" | "publicar" | "brandear" | "trazabilidad";
+type Tab = "proponer" | "ganadores" | "mispropuestas" | "listoparacomprar" | "consulta" | "aprobacion" | "publicar" | "brandear" | "trazabilidad";
 
 export function MarketProductPanel({
   canPropose,
@@ -116,6 +116,9 @@ export function MarketProductPanel({
 }) {
   const tabs: { key: Tab; label: string }[] = [
     ...(canPropose ? [{ key: "proponer" as Tab, label: "Proponer" }] : []),
+    // Confirmado 2026-09-22, pedido de Jariel: su lista de productos que ve
+    // ganando en la competencia pero que todavía ningún proveedor tiene.
+    ...(canPropose ? [{ key: "ganadores" as Tab, label: "Ganadores no encontrados" }] : []),
     // Confirmado 2026-09-10, pedido de Jariel: seguimiento de sus propios
     // productos propuestos (en qué van, quién los aprobó/rechazó, etc.) —
     // antes GET ?view=mine existía en la API pero ninguna pantalla lo
@@ -138,6 +141,7 @@ export function MarketProductPanel({
     ...(canReview ? [{ key: "trazabilidad" as Tab, label: "Trazabilidad" }] : []),
   ];
   const [tab, setTab] = useState<Tab>(tabs[0]?.key ?? "proponer");
+  const [proposePrefill, setProposePrefill] = useState<ProposePrefill | null>(null);
 
   if (tabs.length === 0) return <div className="text-steel text-[13.5px]">No tienes acceso a Análisis de Mercado.</div>;
 
@@ -155,7 +159,18 @@ export function MarketProductPanel({
           </button>
         ))}
       </div>
-      {tab === "proponer" && <ProposeForm />}
+      {tab === "proponer" && (
+        <ProposeForm
+          key={proposePrefill?.unfoundId ?? "new"}
+          prefill={proposePrefill}
+          onClearPrefill={() => setProposePrefill(null)}
+        />
+      )}
+      {tab === "ganadores" && (
+        <UnfoundWinnersView
+          onPropose={(p) => { setProposePrefill(p); setTab("proponer"); }}
+        />
+      )}
       {tab === "mispropuestas" && <MyProposalsView />}
       {tab === "listoparacomprar" && <ReadyToBuyQueue />}
       {tab === "consulta" && <PricingConsultaTable />}
@@ -253,24 +268,37 @@ function isProposeDraftEmpty(d: ProposeDraftData) {
   );
 }
 
+// Datos que llegan desde "Pasar a Proponer" en Ganadores no encontrados.
+type ProposePrefill = {
+  unfoundId: string;
+  productName: string;
+  imageUrl: string;
+  competitorId: string;
+  competitorPrice: string;
+  supplierId: string;
+};
+
 // ---------------- Paso 1: Proponer (Jariel) ----------------
-function ProposeForm() {
+function ProposeForm({ prefill, onClearPrefill }: { prefill?: ProposePrefill | null; onClearPrefill?: () => void }) {
   const [suppliers, setSuppliers] = useState<SupplierOption[]>([]);
-  const [productName, setProductName] = useState("");
+  // Se apaga al enviar, para que el aviso de "Viene de…" desaparezca sin
+  // desmontar el formulario (y sin perder el mensaje de éxito).
+  const [prefillActive, setPrefillActive] = useState(!!prefill);
+  const [productName, setProductName] = useState(prefill?.productName ?? "");
   const [description, setDescription] = useState("");
-  const [imageUrl, setImageUrl] = useState("");
+  const [imageUrl, setImageUrl] = useState(prefill?.imageUrl ?? "");
   const [uploading, setUploading] = useState(false);
   const [platform, setPlatform] = useState<"DROPI" | "ROCKET" | "BOTH">("DROPI");
-  const [competitorId, setCompetitorId] = useState("");
-  const [competitorPrice, setCompetitorPrice] = useState("");
+  const [competitorId, setCompetitorId] = useState(prefill?.competitorId ?? "");
+  const [competitorPrice, setCompetitorPrice] = useState(prefill?.competitorPrice ?? "");
   const [competitorBodegaName, setCompetitorBodegaName] = useState("");
-  const [competitorProductName, setCompetitorProductName] = useState("");
+  const [competitorProductName, setCompetitorProductName] = useState(prefill?.productName ?? "");
   const [noCompetitorData, setNoCompetitorData] = useState(false);
   const [discoverySourceNote, setDiscoverySourceNote] = useState("");
   const [insurance, setInsurance] = useState("6");
   const [fulfillment, setFulfillment] = useState("0.75");
   const [margin, setMargin] = useState("20");
-  const [primarySupplierId, setPrimarySupplierId] = useState("");
+  const [primarySupplierId, setPrimarySupplierId] = useState(prefill?.supplierId ?? "");
   const [primaryCost, setPrimaryCost] = useState("");
   const [primaryUnits, setPrimaryUnits] = useState("100");
   const [primaryFreight, setPrimaryFreight] = useState("");
@@ -284,7 +312,9 @@ function ProposeForm() {
   // de proponer este producto, al volver encuentra todo lo llenado tal
   // como lo había dejado (nombre, imagen, competencia, calculadora, etc.).
   const { clearDraft: clearProposeDraft } = useFormDraft<ProposeDraftData>(
-    "marketProductPropose:new",
+    // Un borrador aparte por cada producto traído de Ganadores no
+    // encontrados, para no pisar el borrador de una propuesta nueva.
+    prefill ? `marketProductPropose:unfound:${prefill.unfoundId}` : "marketProductPropose:new",
     {
       productName, description, imageUrl, platform,
       competitorId, competitorPrice, competitorBodegaName, competitorProductName,
@@ -370,6 +400,7 @@ function ProposeForm() {
         fulfillmentCost: Number(fulfillment),
         marginPercent: Number(margin),
         primarySupplierPrice: { supplierId: primarySupplierId, batchCost: Number(primaryCost), batchUnits: Number(primaryUnits), freightCost: primaryNoFreight ? 0 : Number(primaryFreight) },
+        unfoundWinningProductId: prefillActive ? prefill?.unfoundId : undefined,
       }),
     });
     setBusy(false);
@@ -379,6 +410,7 @@ function ProposeForm() {
     setNoCompetitorData(false); setDiscoverySourceNote("");
     setPrimarySupplierId(""); setPrimaryCost(""); setPrimaryUnits("100"); setPrimaryFreight(""); setPrimaryNoFreight(false);
     clearProposeDraft();
+    if (prefillActive) { setPrefillActive(false); setOk("Propuesta enviada a Bryan para aprobación. En Ganadores no encontrados ya quedó marcado como propuesto."); }
   }
 
   return (
@@ -386,6 +418,14 @@ function ProposeForm() {
       <TabGuide storageKey="analisismercado-proponer">
         Llena los datos del producto y de tu proveedor — la calculadora de abajo te va sacando el precio de Dropi solo. Cuando pongas el precio de la competencia, te va a salir automáticamente: (1) cuánto más barato o más caro sale tu precio comparado con el de ella, y (2) qué margen te quedaría si vendieras al mismo precio que la competencia (en verde si alcanza tu margen mínimo, en rojo si no). Así ves de una vez si el producto conviene, sin sacar cuentas a mano.
       </TabGuide>
+      {prefill && prefillActive && (
+        <div className="mb-3 flex items-center justify-between gap-2 rounded-md border border-teal bg-teal/5 px-3 py-2 text-[12px] text-ink">
+          <span>Viene de <b>Ganadores no encontrados</b> — completa el costo del proveedor y envíalo.</span>
+          <button type="button" className="text-steel underline decoration-dotted cursor-pointer shrink-0" onClick={() => { clearProposeDraft(); onClearPrefill?.(); }}>
+            Empezar de cero
+          </button>
+        </div>
+      )}
       <div className="mb-3">
         <label className="text-[12px] font-semibold text-steel">Nombre comercial</label>
         <input className="w-full rounded border border-rule px-2.5 py-1.5 text-[13px] mt-1" value={productName} onChange={(e) => setProductName(e.target.value)} />
@@ -1121,6 +1161,322 @@ function TraceabilityView({ canDecidePurchase }: { canDecidePurchase: boolean })
           {p.readyToBuyAt && <div className="text-[12px] text-teal font-semibold">Listo para comprar con {p.chosenSupplier?.name} — {formatDateTime(p.readyToBuyAt)}</div>}
         </div>
       ))}
+    </div>
+  );
+}
+
+// ---------------- Ganadores no encontrados (Jariel) ----------------
+// Confirmado 2026-09-22, pedido de Jariel: productos que ve ganando en la
+// competencia pero que todavía ningún proveedor le ofrece. Antes los llevaba
+// en una hoja de cálculo aparte (imagen, nombre, ID y precio de la
+// competencia, proveedor opcional, semana). Acá quedan guardados para
+// revisarlos después y, cuando un proveedor ya lo tenga, pasarlos a
+// Proponer con todo precargado.
+type UnfoundWinner = {
+  id: string;
+  productName: string;
+  imageUrl: string;
+  competitorId: string | null;
+  competitorPrice: number | null;
+  notes: string | null;
+  weekYear: number;
+  weekNumber: number;
+  status: "PENDING" | "PROPOSED" | "DISCARDED";
+  createdAt: string;
+  supplier: { id: string; name: string } | null;
+  createdBy: { name: string } | null;
+  proposal: { id: string; code: string; status: Proposal["status"] } | null;
+};
+
+type UnfoundDraftData = { productName: string; imageUrl: string; competitorId: string; competitorPrice: string; supplierId: string; notes: string };
+
+const UNFOUND_STATUS_LABEL: Record<UnfoundWinner["status"], { text: string; color: string }> = {
+  PENDING: { text: "Buscando proveedor", color: "text-gold" },
+  PROPOSED: { text: "Ya propuesto", color: "text-teal" },
+  DISCARDED: { text: "Descartado", color: "text-steel" },
+};
+
+function UnfoundWinnersView({ onPropose }: { onPropose: (p: ProposePrefill) => void }) {
+  const [rows, setRows] = useState<UnfoundWinner[] | null>(null);
+  const [suppliers, setSuppliers] = useState<SupplierOption[]>([]);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [productName, setProductName] = useState("");
+  const [imageUrl, setImageUrl] = useState("");
+  const [competitorId, setCompetitorId] = useState("");
+  const [competitorPrice, setCompetitorPrice] = useState("");
+  const [supplierId, setSupplierId] = useState("");
+  const [notes, setNotes] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const [ok, setOk] = useState("");
+  const [filter, setFilter] = useState<"PENDING" | "PROPOSED" | "DISCARDED" | "ALL">("PENDING");
+  const [supplierFilter, setSupplierFilter] = useState("");
+  const [search, setSearch] = useState("");
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [rowBusy, setRowBusy] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  // Guardado automático solo para un registro nuevo — al editar uno ya
+  // guardado, los datos vienen de la base, no de un borrador.
+  const { clearDraft } = useFormDraft<UnfoundDraftData>(
+    editingId ? null : "unfoundWinner:new",
+    { productName, imageUrl, competitorId, competitorPrice, supplierId, notes },
+    (d) => {
+      setProductName(d.productName);
+      setImageUrl(d.imageUrl);
+      setCompetitorId(d.competitorId);
+      setCompetitorPrice(d.competitorPrice);
+      setSupplierId(d.supplierId);
+      setNotes(d.notes);
+    },
+    (d) => !d.productName.trim() && !d.imageUrl && !d.competitorId.trim() && !d.competitorPrice.trim() && !d.supplierId && !d.notes.trim(),
+    "Producto ganador sin terminar de registrar",
+    "/area/workspace?tab=analisis-mercado"
+  );
+
+  function load() {
+    fetch("/api/unfound-winning-products").then((r) => (r.ok ? r.json() : [])).then(setRows).catch(() => setRows([]));
+  }
+
+  useEffect(() => {
+    load();
+    fetch("/api/purchase-suppliers").then((r) => (r.ok ? r.json() : [])).then(setSuppliers).catch(() => setSuppliers([]));
+  }, []);
+
+  async function uploadImage(file: File) {
+    setUploading(true);
+    const compressed = await compressImage(file);
+    const uploaded = await uploadFile(compressed, "market-product-reference");
+    setUploading(false);
+    if (!uploaded.ok) { setErr(uploaded.error); return; }
+    setImageUrl(uploaded.url);
+  }
+
+  const { onPaste, onMouseEnter, onMouseLeave, onDragOver, onDragLeave, onDrop, isDragOver } = usePasteFile((file) => uploadImage(file));
+
+  function resetForm() {
+    setEditingId(null);
+    setProductName(""); setImageUrl(""); setCompetitorId(""); setCompetitorPrice(""); setSupplierId(""); setNotes("");
+  }
+
+  function startEdit(r: UnfoundWinner) {
+    setErr(""); setOk("");
+    setEditingId(r.id);
+    setProductName(r.productName);
+    setImageUrl(r.imageUrl);
+    setCompetitorId(r.competitorId ?? "");
+    setCompetitorPrice(r.competitorPrice !== null ? String(r.competitorPrice) : "");
+    setSupplierId(r.supplier?.id ?? "");
+    setNotes(r.notes ?? "");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  async function submit() {
+    setErr(""); setOk("");
+    if (!productName.trim() || !imageUrl) { setErr("Falta el nombre y la imagen del producto."); return; }
+    setBusy(true);
+    const res = await fetch(editingId ? `/api/unfound-winning-products/${editingId}` : "/api/unfound-winning-products", {
+      method: editingId ? "PATCH" : "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        productName,
+        imageUrl,
+        competitorId: competitorId || undefined,
+        competitorPrice: competitorPrice ? Number(competitorPrice) : undefined,
+        supplierId: supplierId || undefined,
+        notes: notes || undefined,
+      }),
+    });
+    setBusy(false);
+    if (!res.ok) { const d = await res.json().catch(() => ({})); setErr(d.error ?? "No se pudo guardar."); return; }
+    setOk(editingId ? "Cambios guardados." : "Producto registrado.");
+    if (!editingId) clearDraft();
+    resetForm();
+    load();
+  }
+
+  async function setStatus(id: string, status: "PENDING" | "DISCARDED") {
+    setRowBusy(id);
+    const res = await fetch(`/api/unfound-winning-products/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status }) });
+    setRowBusy(null);
+    if (!res.ok) { const d = await res.json().catch(() => ({})); setErr(d.error ?? "No se pudo cambiar."); return; }
+    load();
+  }
+
+  async function remove(id: string) {
+    setRowBusy(id);
+    const res = await fetch(`/api/unfound-winning-products/${id}`, { method: "DELETE" });
+    setRowBusy(null);
+    setConfirmDeleteId(null);
+    if (!res.ok) { const d = await res.json().catch(() => ({})); setErr(d.error ?? "No se pudo borrar."); return; }
+    if (editingId === id) resetForm();
+    load();
+  }
+
+  const q = search.trim().toLowerCase();
+  const visible = (rows ?? []).filter((r) =>
+    (filter === "ALL" || r.status === filter) &&
+    (!supplierFilter || (supplierFilter === "none" ? !r.supplier : r.supplier?.id === supplierFilter)) &&
+    (!q || r.productName.toLowerCase().includes(q) || (r.competitorId ?? "").toLowerCase().includes(q))
+  );
+  const countOf = (s: UnfoundWinner["status"]) => (rows ?? []).filter((r) => r.status === s).length;
+  const suppliersInList = Array.from(new Map((rows ?? []).flatMap((r) => (r.supplier ? [[r.supplier.id, r.supplier.name] as const] : []))).entries())
+    .sort((a, b) => a[1].localeCompare(b[1]));
+
+  return (
+    <div>
+      <TabGuide storageKey="analisismercado-ganadores">
+        Anota aquí los productos que ves ganando en la competencia pero que todavía ningún proveedor te ofrece — la semana se pone sola. Después vuelve a revisar la lista: cuando un proveedor ya lo tenga, dale a &quot;Pasar a Proponer&quot; y se abre la propuesta con la imagen, el nombre y los datos de la competencia ya llenos (solo te falta el costo del proveedor). Si ya no te interesa, márcalo como descartado.
+      </TabGuide>
+
+      <div className="max-w-xl bg-surface border border-rule rounded-md p-3.5 mb-5">
+        <div className="text-[13px] font-semibold text-ink mb-2.5">{editingId ? "Editar producto" : "Registrar producto ganador"}</div>
+        <div className="flex gap-3 mb-2.5">
+          <div className="shrink-0">
+            {imageUrl ? (
+              <div className="flex flex-col items-center gap-1">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={imageUrl} alt="Imagen del producto" className="w-24 h-24 object-cover rounded border border-rule cursor-pointer" />
+                <button type="button" className="text-[11px] text-steel underline decoration-dotted cursor-pointer" onClick={() => setImageUrl("")}>Cambiar</button>
+              </div>
+            ) : (
+              <div
+                tabIndex={0}
+                onPaste={onPaste}
+                onMouseEnter={onMouseEnter}
+                onMouseLeave={onMouseLeave}
+                onDragOver={onDragOver}
+                onDragLeave={onDragLeave}
+                onDrop={onDrop}
+                className={`w-24 h-24 flex flex-col items-center justify-center gap-1 border-[1.5px] border-dashed rounded-md text-[11px] text-steel text-center px-1 cursor-pointer focus:outline-none ${
+                  isDragOver ? "border-teal bg-teal/5" : "border-rule hover:border-teal focus:border-teal"
+                }`}
+                onClick={() => fileRef.current?.click()}
+              >
+                {uploading ? <span className="w-3.5 h-3.5 rounded-full border-2 border-rule border-t-teal animate-spin" /> : <Upload size={14} />}
+                Pega, arrastra o haz clic
+              </div>
+            )}
+            <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && uploadImage(e.target.files[0])} />
+          </div>
+          <div className="flex-1 min-w-0 space-y-2">
+            <input className="w-full rounded border border-rule px-2.5 py-1.5 text-[13px]" placeholder="Nombre del producto" value={productName} onChange={(e) => setProductName(e.target.value)} />
+            <div className="grid grid-cols-2 gap-2">
+              <input className="rounded border border-rule px-2.5 py-1.5 text-[13px] min-w-0" placeholder="ID competencia" value={competitorId} onChange={(e) => setCompetitorId(e.target.value)} />
+              <input className="rounded border border-rule px-2.5 py-1.5 text-[13px] min-w-0" placeholder="Precio ref. competencia" type="number" step="0.01" value={competitorPrice} onChange={(e) => setCompetitorPrice(e.target.value)} />
+            </div>
+          </div>
+        </div>
+        <label className="text-[12px] font-semibold text-steel">Proveedor (opcional)</label>
+        <div className="mt-1">
+          <SupplierSelect suppliers={suppliers} value={supplierId} onChange={setSupplierId} />
+          {supplierId && (
+            <button type="button" className="text-[11px] text-steel underline decoration-dotted cursor-pointer -mt-1 mb-2" onClick={() => setSupplierId("")}>Quitar proveedor</button>
+          )}
+        </div>
+        <textarea className="w-full rounded border border-rule px-2.5 py-1.5 text-[13px] mb-2" rows={2} placeholder="Notas (opcional) — ej. dónde lo viste, qué le falta" value={notes} onChange={(e) => setNotes(e.target.value)} />
+        <div className="flex items-center gap-2">
+          <button type="button" disabled={busy || uploading} className="rounded bg-teal text-white px-3.5 py-1.5 text-[12.5px] font-semibold cursor-pointer disabled:opacity-60" onClick={submit}>
+            {busy ? "Guardando…" : editingId ? "Guardar cambios" : "Registrar"}
+          </button>
+          {editingId && (
+            <button type="button" className="text-[12px] text-steel underline decoration-dotted cursor-pointer" onClick={() => { resetForm(); setErr(""); }}>Cancelar</button>
+          )}
+          {!editingId && <span className="text-[11.5px] text-steel">La semana se pone sola.</span>}
+        </div>
+        {err && <div className="text-[12px] text-red mt-2">{err}</div>}
+        {ok && <div className="text-[12px] text-teal mt-2">{ok}</div>}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2 mb-3">
+        {([
+          ["PENDING", `Buscando proveedor (${countOf("PENDING")})`],
+          ["PROPOSED", `Ya propuestos (${countOf("PROPOSED")})`],
+          ["DISCARDED", `Descartados (${countOf("DISCARDED")})`],
+          ["ALL", `Todos (${rows?.length ?? 0})`],
+        ] as const).map(([key, label]) => (
+          <button key={key} type="button" className={`rounded-full border px-3 py-1 text-[12px] font-semibold cursor-pointer ${filter === key ? "border-teal bg-teal/10 text-teal" : "border-rule text-steel"}`} onClick={() => setFilter(key)}>
+            {label}
+          </button>
+        ))}
+        <select className="rounded border border-rule px-2 py-1 text-[12px] bg-surface" value={supplierFilter} onChange={(e) => setSupplierFilter(e.target.value)}>
+          <option value="">Todos los proveedores</option>
+          <option value="none">Sin proveedor</option>
+          {suppliersInList.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+        </select>
+        <input className="rounded border border-rule px-2.5 py-1 text-[12px] min-w-[180px] flex-1 max-w-xs" placeholder="Buscar por nombre o ID…" value={search} onChange={(e) => setSearch(e.target.value)} />
+      </div>
+
+      {rows === null ? (
+        <div className="text-steel text-[13px]">Cargando…</div>
+      ) : visible.length === 0 ? (
+        <div className="text-steel text-[13.5px]">{rows.length === 0 ? "Todavía no hay productos registrados." : "No hay productos con este filtro."}</div>
+      ) : (
+        <div className="flex flex-col gap-2.5">
+          {visible.map((r) => {
+            const status = UNFOUND_STATUS_LABEL[r.status];
+            return (
+              <div key={r.id} className={`bg-surface border rounded-md p-3 flex items-start gap-3 ${editingId === r.id ? "border-teal" : "border-rule"}`}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={r.imageUrl} alt={r.productName} className="w-20 h-20 object-cover rounded border border-rule shrink-0 cursor-pointer" />
+                <div className="flex-1 min-w-0">
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                    <span className="font-semibold text-[13.5px] text-ink">{r.productName}</span>
+                    <span className={`text-[11px] font-semibold ${status.color}`}>{status.text}</span>
+                    <span className="text-[11px] text-steel">Semana {r.weekNumber}</span>
+                  </div>
+                  <div className="text-[12.5px] text-steel mt-1 flex flex-wrap gap-x-3">
+                    <span>ID competencia: <b className="text-ink">{r.competitorId || "—"}</b></span>
+                    <span>Precio ref.: <b className="text-ink">{r.competitorPrice !== null ? money(r.competitorPrice) : "—"}</b></span>
+                    <span>Proveedor: <b className="text-ink">{r.supplier?.name ?? "—"}</b></span>
+                  </div>
+                  {r.notes && <div className="text-[12px] text-steel mt-1 italic">{r.notes}</div>}
+                  <div className="text-[11px] text-steel mt-1">Registrado por {r.createdBy?.name ?? "admin"} — {formatDateTime(r.createdAt)}</div>
+                  {r.status === "PROPOSED" && r.proposal && (
+                    <div className="text-[12px] text-teal mt-1">Propuesta {r.proposal.code} — {PROPOSAL_STATUS_LABEL[r.proposal.status].text}</div>
+                  )}
+                  {r.status !== "PROPOSED" && (
+                    <div className="flex flex-wrap items-center gap-3 mt-2 text-[12px]">
+                      {r.status === "PENDING" && (
+                        <button
+                          type="button"
+                          className="rounded bg-teal text-white px-2.5 py-1 font-semibold cursor-pointer"
+                          onClick={() => onPropose({
+                            unfoundId: r.id,
+                            productName: r.productName,
+                            imageUrl: r.imageUrl,
+                            competitorId: r.competitorId ?? "",
+                            competitorPrice: r.competitorPrice !== null ? String(r.competitorPrice) : "",
+                            supplierId: r.supplier?.id ?? "",
+                          })}
+                        >
+                          Pasar a Proponer
+                        </button>
+                      )}
+                      <button type="button" className="text-blue font-semibold cursor-pointer" onClick={() => startEdit(r)}>Editar</button>
+                      {r.status === "PENDING" ? (
+                        <button type="button" disabled={rowBusy === r.id} className="text-steel font-semibold cursor-pointer disabled:opacity-60" onClick={() => setStatus(r.id, "DISCARDED")}>Descartar</button>
+                      ) : (
+                        <button type="button" disabled={rowBusy === r.id} className="text-steel font-semibold cursor-pointer disabled:opacity-60" onClick={() => setStatus(r.id, "PENDING")}>Reactivar</button>
+                      )}
+                      {confirmDeleteId === r.id ? (
+                        <span className="text-red">
+                          ¿Borrar para siempre?{" "}
+                          <button type="button" disabled={rowBusy === r.id} className="font-semibold underline cursor-pointer" onClick={() => remove(r.id)}>Sí, borrar</button>{" "}
+                          <button type="button" className="text-steel underline decoration-dotted cursor-pointer" onClick={() => setConfirmDeleteId(null)}>No</button>
+                        </span>
+                      ) : (
+                        <button type="button" className="text-red font-semibold cursor-pointer" onClick={() => setConfirmDeleteId(r.id)}>Borrar</button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
