@@ -79,6 +79,12 @@ type TabKey = (typeof ALL_TABS)[number]["key"];
 // acá (compras, llegadas, reingreso, egresos, ventas-externas) son trabajo
 // operativo del día a día que nunca debe frenarse; "feedback" tampoco se
 // bloquea porque ahí es donde el líder ve su propia bitácora con Mary.
+// "stock-actual" tampoco se bloquea (excepción agregada el mismo día,
+// pedido explícito del usuario): para quien la ve en modo solo lectura
+// (canViewStockLevels, hoy Bryan) es solo mirar precios, no gestión —
+// Daniel/admin, que sí editan ahí, siguen sin poder gestionar el resto de
+// INV/Compras si están atrasados, porque esas otras pestañas sí quedan
+// bloqueadas igual.
 const BLOCKED_TABS = new Set<TabKey>([
   "kpis",
   "pagos",
@@ -86,7 +92,6 @@ const BLOCKED_TABS = new Set<TabKey>([
   "procesos",
   "proveedores",
   "inventario",
-  "stock-actual",
   "inventoriokpis",
   "cajachica",
   "pagosadmin",
