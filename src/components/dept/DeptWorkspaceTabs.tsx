@@ -159,6 +159,7 @@ export function DeptWorkspaceTabs({
   canVerifyDamageDisposal = false,
   canManageJustUpload = false,
   canManageJustCatalog = false,
+  canViewStockLevels = false,
   merchandiseReentryPendingCount = 0,
   canCaptureMerchandiseOutflow = false,
   canActOnMerchandiseOutflow = false,
@@ -331,6 +332,11 @@ export function DeptWorkspaceTabs({
   // guards.ts, que sigue dando esa visibilidad vía canApprove/canClose).
   canManageJustUpload?: boolean;
   canManageJustCatalog?: boolean;
+  // Confirmado 2026-09-22, pedido explícito del usuario: Bryan (líder de
+  // Análisis de Mercado) ve la pestaña "Stock Actual" en modo solo lectura
+  // — canManageJustCatalog (Daniel/admin) sigue siendo el único que edita
+  // la marca ahí (ver canEdit en StockLevelsPanel).
+  canViewStockLevels?: boolean;
   merchandiseReentryPendingCount?: number;
   // Registro de Egresos — mismo patrón sin dept.code que Reingreso
   // (confirmado 2026-08-25): captura (despacho/garantía/deterioro) = equipo
@@ -440,7 +446,7 @@ export function DeptWorkspaceTabs({
     if (t.key === "proveedores") return canAccessSuppliers;
     if (t.key === "llegadas") return canViewMarketingArrivals;
     if (t.key === "inventario") return canManageInventoryControl;
-    if (t.key === "stock-actual") return canManageJustCatalog;
+    if (t.key === "stock-actual") return canManageJustCatalog || canViewStockLevels;
     if (t.key === "reingreso") return canCaptureMerchandiseReentry || canApproveMerchandiseReentry || canCloseMerchandiseReentry;
     if (t.key === "egresos") return canViewMerchandiseOutflow || canSubmitCancelledGuide || canManageCancelledGuideBatches || canConfirmCancelledGuideFulfillmentRemoval || canAssignCancelledGuideItems || canSubmitFulfillmentRequest || canViewFulfillmentRequests || supplierExchangeMineCount > 0 || financeWriteOffPendingCount > 0 || canManagePurchaseGestion || purchaseGestionPendingCount > 0;
     if (t.key === "ventas-externas") return canViewExternalSales;
@@ -631,7 +637,7 @@ export function DeptWorkspaceTabs({
           snapshotPeriods={inventoryControlData.snapshotPeriods}
         />
       )}
-      {tab === "stock-actual" && canManageJustCatalog && <StockLevelsPanel isAdmin={isAdmin} />}
+      {tab === "stock-actual" && (canManageJustCatalog || canViewStockLevels) && <StockLevelsPanel isAdmin={isAdmin} canEdit={canManageJustCatalog} />}
       {tab === "reingreso" && (canCaptureMerchandiseReentry || canApproveMerchandiseReentry || canCloseMerchandiseReentry) && (
         <MerchandiseReentryPanel
           canCapture={canCaptureMerchandiseReentry}

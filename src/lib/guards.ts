@@ -990,6 +990,23 @@ export async function canManageJustCatalog() {
   return !!user.isLeader && user.leadsDept?.code === "INV";
 }
 
+// Confirmado 2026-09-22, pedido explícito del usuario: Bryan Ríos (líder de
+// Análisis de Mercado) puede ver la misma tabla de "Stock Actual" que ya ve
+// Daniel desde su "Mi área de trabajo" — pero solo lectura (sin poder editar
+// la marca ni ninguna de las herramientas de admin de esa pantalla, que
+// siguen exclusivas de canManageJustCatalog/isAdmin). Mismo criterio de "INV
+// o MKT" que canViewInventoryKpisPanel.
+export async function canViewStockLevels() {
+  if (await canManageJustCatalog()) return true;
+  const session = await auth();
+  if (!session) return false;
+  const user = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { isLeader: true, leadsDept: { select: { code: true } } },
+  });
+  return !!user?.isLeader && user.leadsDept?.code === "MKT";
+}
+
 // Visibilidad general del módulo (ítem del sidebar, pestaña Historial) —
 // cualquiera de los tres roles de arriba.
 export async function canViewMerchandiseReentry() {

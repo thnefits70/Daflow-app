@@ -293,7 +293,13 @@ function DeclareCostButton({ catalogItemId, suggestedCost, onDeclared }: { catal
 // marca de cada producto o combo directamente acá — editable solo en esta
 // pantalla, que ya es exclusiva de Daniel/admin (canManageJustCatalog), no
 // desde "Base de datos de productos".
-function MarcaSelect({ value, onChange }: { value: Marca | null; onChange: (v: Marca | null) => void }) {
+// Ampliado 2026-09-22, pedido explícito del usuario: Bryan (Análisis de
+// Mercado) ve esta misma pantalla en modo solo lectura — la marca se
+// muestra como texto plano en vez de un select editable.
+function MarcaSelect({ value, onChange, readOnly = false }: { value: Marca | null; onChange: (v: Marca | null) => void; readOnly?: boolean }) {
+  if (readOnly) {
+    return <span className="w-full text-[11px] text-steel truncate">{value ? MARCA_LABELS[value] : "— Sin marca —"}</span>;
+  }
   return (
     <select
       className="w-full text-[11px] rounded border border-rule bg-transparent px-1 py-1 cursor-pointer text-steel"
@@ -398,7 +404,7 @@ function FormulaInfoButton({ open, onToggle }: { open: boolean; onToggle: () => 
 // momento, el stock de INVESTOCK de todos los productos — no solo los
 // negativos (ya cubiertos en KPIs financieros) ni solo lo de la última
 // semana subida (Control de Inventario).
-export function StockLevelsPanel({ isAdmin = false }: { isAdmin?: boolean }) {
+export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?: boolean; canEdit?: boolean }) {
   const [rows, setRows] = useState<StockRow[] | null>(null);
   const [query, setQuery] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("name");
@@ -1507,7 +1513,7 @@ export function StockLevelsPanel({ isAdmin = false }: { isAdmin?: boolean }) {
                   <CatalogCode code={r.justCode} />
                   <span className="truncate">{r.name}</span>
                 </span>
-                <MarcaSelect value={r.bodega} onChange={(v) => updateProductMarca(r.catalogItemId, v)} />
+                <MarcaSelect value={r.bodega} onChange={(v) => updateProductMarca(r.catalogItemId, v)} readOnly={!canEdit} />
                 <span className={`text-right font-mono text-[12.5px] font-bold ${r.balance < 0 ? "text-red" : "text-ink"}`}>{r.balance}</span>
                 {/* Confirmado 2026-09-17, pedido explícito del usuario: stock
                     de referencia según el último archivo de Just, junto al
@@ -1610,7 +1616,7 @@ export function StockLevelsPanel({ isAdmin = false }: { isAdmin?: boolean }) {
                         <span className="font-mono font-bold text-teal shrink-0">{combo.code}</span>
                         {combo.label && <span className="truncate text-steel">{combo.label}</span>}
                       </span>
-                      <MarcaSelect value={combo.bodega} onChange={(v) => updateComboMarca(combo.id, v)} />
+                      <MarcaSelect value={combo.bodega} onChange={(v) => updateComboMarca(combo.id, v)} readOnly={!canEdit} />
                       <span className="text-right font-mono text-[11px] italic text-steel-dim">combo</span>
                       <span className="text-right font-mono text-[13px] text-steel-dim" title="Just no rastrea combos, solo productos individuales">
                         —

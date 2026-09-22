@@ -3,7 +3,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { TopLine } from "@/components/ui/TopLine";
 import { DeptWorkspaceTabs } from "@/components/dept/DeptWorkspaceTabs";
-import { getUnseenFeedbackCount, canManageStoreFeedback as checkCanManageStoreFeedback, canViewStoreFeedback as checkCanViewStoreFeedback, canSubmitPurchaseRequests, canCreateNewPurchaseRequests, canSubmitEmergencyPurchaseRequest, canApprovePurchaseRequests as checkCanApprovePurchaseRequests, canActOnPurchaseApproval as checkCanActOnPurchaseApproval, canConfirmPurchaseReceiving, canReceivePurchasesTeam, canActOnPurchaseReceiving, canRegisterPurchaseInvoices, canPayMerchandisePurchases, canManageSupplierDebtPayments, canManageInventoryControl as checkCanManageInventoryControl, canViewInventoryKpisPanel as checkCanViewInventoryKpisPanel, canManageAdminPayments as checkCanManageAdminPayments, canRegisterLunchPayments as checkCanRegisterLunchPayments, canViewMarketingArrivals as checkCanViewMarketingArrivals, canConfirmMarketingDesign as checkCanConfirmMarketingDesign, canConfirmMarketingAdvisor as checkCanConfirmMarketingAdvisor, canSyncAtomData as checkCanSyncAtomData, canUploadLowRotationList as checkCanUploadLowRotationList, canApproveComboSuggestions as checkCanApproveComboSuggestions, canActOnComboSuggestions as checkCanActOnComboSuggestions, canMarkComboCreatedInDropi as checkCanMarkComboCreatedInDropi, canProposeMarketProduct, canReviewMarketProduct, canActOnMarketProductReview, canPublishMarketProduct, canBrandMarketProduct, canDecideMarketProductPurchase, canViewB2BPricing, canViewB2CPricing, canCaptureMerchandiseReentry, canApproveMerchandiseReentry, canActOnMerchandiseReentry, canCloseMerchandiseReentry, canVerifyDamageDisposal, canManageJustUpload, canManageJustCatalog, canCaptureMerchandiseOutflow, canActOnMerchandiseOutflow, canViewMerchandiseOutflow, canConfirmSupplierExchangeFinanceWriteOff, canManageOutflowPurchaseGestion, canSubmitCancelledGuide, canManageCancelledGuideBatches, canConfirmCancelledGuideFulfillmentRemoval, canAssignCancelledGuideItems, canSubmitFulfillmentRequest, canViewFulfillmentRequests, canDeclareExternalSales, canReviewExternalSales, canConfirmExternalSalePayment, canInvoiceExternalSale, canAssignExternalSalePack, canPackExternalSale, canCloseExternalSale, canViewExternalSales, getSupplierAccess, canAddSupplierBankAccounts, canJustifyFillRate as checkCanJustifyFillRate, canManageImprovementPlan } from "@/lib/guards";
+import { getUnseenFeedbackCount, canManageStoreFeedback as checkCanManageStoreFeedback, canViewStoreFeedback as checkCanViewStoreFeedback, canSubmitPurchaseRequests, canCreateNewPurchaseRequests, canSubmitEmergencyPurchaseRequest, canApprovePurchaseRequests as checkCanApprovePurchaseRequests, canActOnPurchaseApproval as checkCanActOnPurchaseApproval, canConfirmPurchaseReceiving, canReceivePurchasesTeam, canActOnPurchaseReceiving, canRegisterPurchaseInvoices, canPayMerchandisePurchases, canManageSupplierDebtPayments, canManageInventoryControl as checkCanManageInventoryControl, canViewInventoryKpisPanel as checkCanViewInventoryKpisPanel, canManageAdminPayments as checkCanManageAdminPayments, canRegisterLunchPayments as checkCanRegisterLunchPayments, canViewMarketingArrivals as checkCanViewMarketingArrivals, canConfirmMarketingDesign as checkCanConfirmMarketingDesign, canConfirmMarketingAdvisor as checkCanConfirmMarketingAdvisor, canSyncAtomData as checkCanSyncAtomData, canUploadLowRotationList as checkCanUploadLowRotationList, canApproveComboSuggestions as checkCanApproveComboSuggestions, canActOnComboSuggestions as checkCanActOnComboSuggestions, canMarkComboCreatedInDropi as checkCanMarkComboCreatedInDropi, canProposeMarketProduct, canReviewMarketProduct, canActOnMarketProductReview, canPublishMarketProduct, canBrandMarketProduct, canDecideMarketProductPurchase, canViewB2BPricing, canViewB2CPricing, canCaptureMerchandiseReentry, canApproveMerchandiseReentry, canActOnMerchandiseReentry, canCloseMerchandiseReentry, canVerifyDamageDisposal, canManageJustUpload, canManageJustCatalog, canViewStockLevels, canCaptureMerchandiseOutflow, canActOnMerchandiseOutflow, canViewMerchandiseOutflow, canConfirmSupplierExchangeFinanceWriteOff, canManageOutflowPurchaseGestion, canSubmitCancelledGuide, canManageCancelledGuideBatches, canConfirmCancelledGuideFulfillmentRemoval, canAssignCancelledGuideItems, canSubmitFulfillmentRequest, canViewFulfillmentRequests, canDeclareExternalSales, canReviewExternalSales, canConfirmExternalSalePayment, canInvoiceExternalSale, canAssignExternalSalePack, canPackExternalSale, canCloseExternalSale, canViewExternalSales, getSupplierAccess, canAddSupplierBankAccounts, canJustifyFillRate as checkCanJustifyFillRate, canManageImprovementPlan } from "@/lib/guards";
 import { getFinanceKpiData } from "@/lib/financeKpis";
 import { getDeptProcessDetail } from "@/lib/processDetail";
 import { getPaymentRemindersData } from "@/lib/paymentReminders";
@@ -114,7 +114,7 @@ export default async function WorkspacePage() {
   // Reingreso de Mercadería — movido de su propio ítem de sidebar a esta
   // pestaña (confirmado 2026-08-21), mismo patrón sin dept.code que Control
   // de Inventario.
-  const [canCaptureReentry, canApproveReentry, canActReentry, canCloseReentry, canVerifyReentryDamageDisposal, canManageReentryJustUpload, canManageReentryJustCatalog] = await Promise.all([
+  const [canCaptureReentry, canApproveReentry, canActReentry, canCloseReentry, canVerifyReentryDamageDisposal, canManageReentryJustUpload, canManageReentryJustCatalog, canViewStockLevelsFlag] = await Promise.all([
     canCaptureMerchandiseReentry(),
     canApproveMerchandiseReentry(),
     canActOnMerchandiseReentry(),
@@ -122,6 +122,7 @@ export default async function WorkspacePage() {
     canVerifyDamageDisposal(),
     canManageJustUpload(),
     canManageJustCatalog(),
+    canViewStockLevels(),
   ]);
   let merchandiseReentryPendingCount = 0;
   if (canApproveReentry) {
@@ -357,6 +358,7 @@ export default async function WorkspacePage() {
         canVerifyDamageDisposal={canVerifyReentryDamageDisposal}
         canManageJustUpload={canManageReentryJustUpload}
         canManageJustCatalog={canManageReentryJustCatalog}
+        canViewStockLevels={canViewStockLevelsFlag}
         merchandiseReentryPendingCount={merchandiseReentryPendingCount}
         canCaptureMerchandiseOutflow={canCaptureOutflow}
         canActOnMerchandiseOutflow={canActOutflow}

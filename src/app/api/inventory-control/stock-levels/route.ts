@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { canManageJustCatalog } from "@/lib/guards";
+import { canViewStockLevels } from "@/lib/guards";
 import { getAllCurrentStock } from "@/lib/stockKardex";
 import { getFinanzasDeptId } from "@/lib/inventoryKpis";
 import {
@@ -20,6 +20,10 @@ import {
 // Inventario, + admin), para que ambos vean el saldo de INVESTOCK de todos
 // los productos en cualquier momento, sin depender de la subida semanal de
 // Just.
+// Ampliado 2026-09-22, pedido explícito del usuario: Bryan (líder de
+// Análisis de Mercado) también ve esta tabla — ver canViewStockLevels en
+// guards.ts. Solo lectura: editar la marca sigue siendo exclusivo de
+// canManageJustCatalog (Daniel/admin), ver el PATCH de bodega.
 // Confirmado 2026-09-15, pedido explícito del usuario: además del costo
 // promedio (que ya se veía acá), ahora también trae Benistock/B2B/B2C por
 // producto — mismo criterio de prioridad que la consulta de precios de
@@ -28,7 +32,7 @@ import {
 // pantalla: el costo real ya se mostraba acá tal cual, así que no hay nada
 // más sensible que antes.
 export async function GET() {
-  if (!(await canManageJustCatalog())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+  if (!(await canViewStockLevels())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
   const deptId = await getFinanzasDeptId();
 
