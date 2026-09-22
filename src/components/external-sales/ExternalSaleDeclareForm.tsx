@@ -892,7 +892,7 @@ export function ExternalSaleDeclareForm() {
     "/area/workspace?tab=ventas-externas"
   );
 
-  const canSave = !!client && items.length > 0 && items.every((it) => isValidQty(it.quantity)) && pickupPersonName.trim().length > 0 && isValidFreightCost(freightCost) && (!isContraEntrega || facturaSolicitada !== null) && !saving;
+  const canSave = !!client && items.length > 0 && items.every((it) => isValidQty(it.quantity)) && pickupPersonName.trim().length > 0 && isValidFreightCost(freightCost) && (!canOverrideRecaudo || facturaSolicitada !== null) && !saving;
 
   async function save() {
     if (!client || items.length === 0) return;
@@ -1132,7 +1132,7 @@ export function ExternalSaleDeclareForm() {
               <input type="number" min="0" step="0.01" placeholder="$0.00" className="w-full rounded border border-rule bg-cloud px-2.5 py-1.5 text-[12.5px]" value={freightCost} onChange={(e) => setFreightCost(e.target.value)} />
               <div className="text-[10.5px] text-steel mt-0.5">Se descuenta del total para saber cuánto debe transferir el motorizado.</div>
             </div>
-            {isContraEntrega && (
+            {canOverrideRecaudo && (
               <div>
                 <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">¿El cliente pidió factura?</label>
                 <div className="flex gap-1.5">
@@ -1270,7 +1270,7 @@ export function ExternalSaleDeclareForm() {
                   {!s.isContraEntrega && s.freightCost != null && !s.freightPaidAt && (
                     <div className="text-[10px] text-gold mt-0.5">Flete todavía no pagado al motorizado.</div>
                   )}
-                  {!s.deletedAt && s.isContraEntrega && s.facturaSolicitada === "PENDIENTE" && (
+                  {!s.deletedAt && canOverrideRecaudo && s.facturaSolicitada === "PENDIENTE" && (
                     <div className="mt-1.5">
                       <div className="text-[10px] font-semibold uppercase tracking-wide text-gold mb-1">Falta contestar: ¿el cliente pidió factura?</div>
                       <div className="flex gap-1.5">
@@ -1392,7 +1392,7 @@ export function ExternalSaleDeclareForm() {
                         <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Flete del motorizado (opcional)</label>
                         <input type="number" min="0" step="0.01" placeholder="$0.00" className="w-full rounded border border-rule bg-surface px-2.5 py-1.5 text-[12px]" value={editFreightCost} onChange={(e) => setEditFreightCost(e.target.value)} />
                       </div>
-                      {s.isContraEntrega && (
+                      {canOverrideRecaudo && (
                         <div>
                           <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">¿El cliente pidió factura?</label>
                           <div className="flex gap-1.5">

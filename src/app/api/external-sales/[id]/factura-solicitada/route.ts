@@ -23,12 +23,15 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   const sale = await prisma.externalSale.findUnique({
     where: { id },
-    select: { advisorId: true, deletedAt: true, isContraEntrega: true },
+    select: { advisorId: true, deletedAt: true, advisor: { select: { externalSaleContraEntrega: true } } },
   });
   if (!sale) return NextResponse.json({ error: "No encontrado." }, { status: 404 });
   if (sale.advisorId !== session.user.id && session.user.role !== "admin") return NextResponse.json({ error: "No autorizado." }, { status: 403 });
   if (sale.deletedAt) return NextResponse.json({ error: "Esta venta fue cancelada." }, { status: 409 });
-  if (!sale.isContraEntrega) return NextResponse.json({ error: "Esta venta es pago anticipado, la factura ya es obligatoria." }, { status: 409 });
+  // Confirmado 2026-09-22: depende del perfil del asesor (B2C), no de
+  // isContraEntrega de esta venta puntual — un asesor B2C vendiendo "sin
+  // recaudo" también puede tener clientes que no pidan factura.
+  if (!sale.advisor.externalSaleContraEntrega) return NextResponse.json({ error: "Esta venta es de un asesor B2B, la factura ya es obligatoria." }, { status: 409 });
 
   const updated = await prisma.externalSale.update({ where: { id }, data: { facturaSolicitada: parsed.data.facturaSolicitada } });
   return NextResponse.json(updated);

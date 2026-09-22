@@ -22,7 +22,6 @@ type SaleDTO = {
   code: string;
   items: SaleItemDTO[];
   totalAmount: number;
-  isContraEntrega: boolean;
   facturaSolicitada: FacturaSolicitud;
   paymentProofUrl: string;
   paymentProofName: string | null;
@@ -39,17 +38,20 @@ async function postJson(url: string, body?: unknown) {
   return data;
 }
 
-// Solo contra entrega puede quedar "sin requerir factura" — pago anticipado
-// siempre la necesita, sin importar este campo (ver comentario en el schema).
+// Confirmado 2026-09-22: "NO" es la única señal real de que el cliente no
+// pidió factura — antes se exigía además isContraEntrega, pero un asesor B2C
+// también puede vender "sin recaudo" puntualmente y tener clientes que
+// tampoco la pidan (ver mismo criterio en close/route.ts). Un asesor B2B
+// nunca llega a "NO" — su facturaSolicitada queda fija en PENDIENTE (ver
+// POST/[id] routes), así que esta función sigue siendo correcta para ellos.
 function noRequiereFactura(s: SaleDTO) {
-  return s.isContraEntrega && s.facturaSolicitada === "NO";
+  return s.facturaSolicitada === "NO";
 }
 
 function facturaBadge(s: SaleDTO) {
-  if (!s.isContraEntrega) return null;
   if (s.facturaSolicitada === "SI") return { text: "Factura solicitada", className: "text-red" };
   if (s.facturaSolicitada === "NO") return { text: "No requiere factura", className: "text-steel" };
-  return { text: "Contra entrega — por confirmar", className: "text-blue" };
+  return null;
 }
 
 export function ExternalSaleInvoiceInbox() {

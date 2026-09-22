@@ -26,7 +26,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
       reviewedById: true,
       invoiceUploadedById: true,
       invoiceUploadedAt: true,
-      isContraEntrega: true,
+      facturaSolicitada: true,
       dispatchAssignedToId: true,
       packAssignedToId: true,
       deliveredById: true,
@@ -37,7 +37,12 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   if (!sale.paymentConfirmedAt || !sale.deliveredAt) return NextResponse.json({ error: "Falta confirmar el pago y/o la entrega." }, { status: 409 });
   if (sale.nairobyClosedAt) return NextResponse.json({ error: "Ya fue cerrada." }, { status: 409 });
   if (sale.returnedAt) return NextResponse.json({ error: "El asesor reportó que esta venta fue devuelta — no se puede cerrar." }, { status: 409 });
-  if (!sale.isContraEntrega && !sale.invoiceUploadedAt) return NextResponse.json({ error: "Falta subir la factura." }, { status: 409 });
+  // Confirmado 2026-09-22: facturaSolicitada === "NO" es la señal real de
+  // que el cliente no la pidió (ya sea contra entrega o un asesor B2C
+  // vendiendo sin recaudo) — reemplaza el chequeo anterior por isContraEntrega,
+  // que ya no distinguía bien ambos casos desde que existe el switch
+  // con/sin recaudo por venta.
+  if (sale.facturaSolicitada !== "NO" && !sale.invoiceUploadedAt) return NextResponse.json({ error: "Falta subir la factura." }, { status: 409 });
 
   const updated = await prisma.externalSale.update({
     where: { id },

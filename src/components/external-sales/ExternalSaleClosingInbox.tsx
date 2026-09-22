@@ -22,7 +22,7 @@ type SaleDTO = {
   paymentProofUrl: string | null;
   paymentProofName: string | null;
   deliveryPhotoUrl: string | null;
-  isContraEntrega: boolean;
+  facturaSolicitada: "SI" | "NO" | "PENDIENTE";
   invoiceUploadedAt: string | null;
   advisor: { name: string } | null;
   dispatchAssignedTo: { name: string } | null;
@@ -67,7 +67,7 @@ export function ExternalSaleClosingInbox() {
   return (
     <div className="flex flex-col gap-2.5 max-w-lg">
       {sales.map((s) => {
-        const missingInvoice = !s.isContraEntrega && !s.invoiceUploadedAt;
+        const missingInvoice = s.facturaSolicitada !== "NO" && !s.invoiceUploadedAt;
         return (
         <div key={s.id} className="bg-surface border border-rule rounded-md p-3.5">
           <div className="flex items-center gap-2 mb-1.5">

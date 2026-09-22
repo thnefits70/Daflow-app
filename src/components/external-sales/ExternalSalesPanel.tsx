@@ -105,7 +105,7 @@ export function ExternalSalesPanel({
       )}
       {tab === "facturacion" && canInvoice && (
         <>
-          <TabGuide storageKey="externalsales-facturacion">En pago anticipado, la factura es obligatoria — recién con ella pasa a Inventario. En contra entrega es opcional, solo si el cliente final la pidió.</TabGuide>
+          <TabGuide storageKey="externalsales-facturacion">La factura es obligatoria salvo que el asesor haya marcado que el cliente no la pidió (con o sin recaudo). Ya no bloquea el despacho, solo el cierre de Nairoby.</TabGuide>
           <ExternalSaleInvoiceInbox />
         </>
       )}

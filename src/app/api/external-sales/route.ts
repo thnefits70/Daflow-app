@@ -45,8 +45,9 @@ const schema = z.object({
   courierNote: z.string().trim().optional(),
   clientId: z.string().min(1, "Falta matricular o seleccionar al cliente."),
   freightCost: z.number().min(0).optional(),
-  // Solo tiene efecto real cuando el asesor vende contra entrega — en pago
-  // anticipado la factura es obligatoria sin importar esto.
+  // Solo tiene efecto real para asesores con externalSaleContraEntrega=true
+  // en su perfil (B2C) — con o sin recaudo. Para el resto (B2B) la factura
+  // sigue siendo obligatoria sin importar esto (ver POST abajo).
   facturaSolicitada: z.enum(["SI", "NO", "PENDIENTE"]).optional(),
   // Confirmado 2026-09-16, pedido explícito de Marcos: antes isContraEntrega
   // quedaba fijo según el perfil del asesor (siempre true para él, siempre
@@ -138,7 +139,13 @@ export async function POST(req: NextRequest) {
       clientId: parsed.data.clientId,
       isContraEntrega,
       freightCost: parsed.data.freightCost ?? null,
-      facturaSolicitada: isContraEntrega ? (parsed.data.facturaSolicitada ?? "PENDIENTE") : "PENDIENTE",
+      // Confirmado 2026-09-22, pedido explícito de Marcos: antes esta
+      // pregunta solo salía en contra entrega — pero un asesor B2C también
+      // puede vender "sin recaudo" puntualmente (ver isContraEntrega arriba)
+      // y algunos de esos clientes tampoco piden factura. Por eso se guía por
+      // el perfil del asesor (canOverrideRecaudo), no por isContraEntrega de
+      // esta venta puntual — igual que ya hace resolveItems/priceExternalSaleItems.
+      facturaSolicitada: canOverrideRecaudo ? (parsed.data.facturaSolicitada ?? "PENDIENTE") : "PENDIENTE",
     },
     include: SALE_INCLUDE,
   });

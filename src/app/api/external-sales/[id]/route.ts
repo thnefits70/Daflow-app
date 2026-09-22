@@ -102,7 +102,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         courierNote: parsed.data.courierNote?.trim() || null,
         clientId: parsed.data.clientId,
         freightCost: parsed.data.freightCost ?? null,
-        facturaSolicitada: sale.isContraEntrega ? (parsed.data.facturaSolicitada ?? "PENDIENTE") : "PENDIENTE",
+        // Mismo criterio que en el POST de creación: depende del perfil del
+        // asesor (B2C), no del isContraEntrega de esta venta puntual.
+        facturaSolicitada: sale.advisor.externalSaleContraEntrega ? (parsed.data.facturaSolicitada ?? "PENDIENTE") : "PENDIENTE",
         reviewStatus: "PENDING",
         rejectionReason: null,
         reviewedAt: null,
