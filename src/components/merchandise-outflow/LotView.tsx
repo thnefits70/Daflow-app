@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, ChevronUp, Package, X } from "lucide-react";
+import { ChevronDown, ChevronUp, Package, Printer, X } from "lucide-react";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 import { carrierLabel } from "@/lib/carriers";
 import { sourceLabel, type VariantNote } from "./fulfillmentRequestShared";
@@ -24,6 +24,10 @@ export type CompiledLot = {
   lines: LotLine[];
   warranty: LotWarrantyLine[];
   shortages: LotShortage[];
+  manifestNumber: number | null;
+  printedAt: string | null;
+  printedByName: string | null;
+  viewer?: { canPrint: boolean };
 };
 export type LotListItem = { id: string; day: string; corte: number; status: LotStatus; createdAt: string; sentAt: string | null; uploads: number; guides: number };
 
@@ -52,6 +56,10 @@ function Thumb({ url }: { url: string | undefined }) {
       <Package size={12} />
     </div>
   );
+}
+
+export function manifestCode(n: number): string {
+  return `MF-${String(n).padStart(4, "0")}`;
 }
 
 function warrantyText(w: LotWarrantyLine) {
@@ -92,6 +100,25 @@ export function LotView({
     onChanged();
   }
 
+  // Parte 2 (plan acordado con el usuario): Daniel imprime el corte → queda
+  // registrado como Manifiesto DAFLOW (MF-0001…) y se abre la hoja lista
+  // para imprimir. La ventana se abre antes de llamar al servidor para que
+  // el navegador no la bloquee como ventana emergente.
+  async function print() {
+    setErr("");
+    const win = window.open("about:blank", "_blank");
+    const res = await fetch(`/api/fulfillment-lots/${lot.id}/print`, { method: "POST" });
+    const json = await res.json().catch(() => null);
+    if (!res.ok) {
+      win?.close();
+      setErr(json?.error ?? "No se pudo imprimir.");
+      return;
+    }
+    if (win) win.location.href = `/manifiesto/${lot.id}`;
+    else window.location.href = `/manifiesto/${lot.id}`;
+    if (!lot.manifestNumber) onChanged();
+  }
+
   async function send() {
     setSending(true);
     setErr("");
@@ -113,11 +140,18 @@ export function LotView({
           Corte {lot.corte} · <span className="capitalize">{fmtDay(lot.day)}</span>
         </span>
         <span className={`font-mono text-[9.5px] font-bold uppercase rounded-full px-2 py-0.5 border ${STATUS_STYLE[lot.status]}`}>{STATUS_LABEL[lot.status]}</span>
+        {lot.manifestNumber && <span className="font-mono text-[11px] font-bold">{manifestCode(lot.manifestNumber)}</span>}
+        {lot.status !== "DRAFT" && lot.viewer?.canPrint && (
+          <button type="button" className="ml-auto flex items-center gap-1.5 rounded border border-teal bg-teal px-3 py-1.5 text-[12px] font-bold text-navy cursor-pointer" onClick={print}>
+            <Printer size={13} /> {lot.manifestNumber ? "Reimprimir manifiesto" : "Imprimir manifiesto"}
+          </button>
+        )}
       </div>
       <div className="text-[11.5px] text-steel mb-2">
         {lot.lines.length} productos · {units} unidades
         {lot.warranty.length > 0 ? ` · ${lot.warranty.length} garantía(s)` : ""}
         {lot.sentAt ? ` · enviado ${fmtTime(lot.sentAt)}${lot.sentByName ? ` por ${lot.sentByName}` : ""}` : ""}
+        {lot.printedAt ? ` · impreso ${fmtTime(lot.printedAt)}${lot.printedByName ? ` por ${lot.printedByName}` : ""}` : ""}
       </div>
 
       <div className="flex flex-wrap gap-1.5 mb-3">

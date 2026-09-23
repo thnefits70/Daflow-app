@@ -2606,6 +2606,13 @@ model FulfillmentLot {
   sentAt    DateTime?
   sentById  String?
 
+  // Manifiesto DAFLOW (MF-0001…): el número se asigna la PRIMERA vez que
+  // Daniel imprime el corte y nunca cambia (reimprimir usa el mismo) — así
+  // la hoja que tienen los chicos siempre se puede buscar en la app.
+  manifestNumber Int?      @unique
+  printedAt      DateTime?
+  printedById    String?
+
   batches FulfillmentRequestBatch[]
 
   @@unique([day, corte])

@@ -443,7 +443,8 @@ export async function getCompiledLot(lotId: string) {
     },
   });
   if (!lot) return null;
-  const sentBy = lot.sentById ? await prisma.user.findUnique({ where: { id: lot.sentById }, select: { name: true } }) : null;
+  const people = await prisma.user.findMany({ where: { id: { in: [lot.sentById, lot.printedById].filter((x): x is string => !!x) } }, select: { id: true, name: true } });
+  const nameOf = (id: string | null) => (id ? people.find((p) => p.id === id)?.name ?? "—" : null);
 
   const lines = new Map<string, LotLine & { variantMap: Map<string, number> }>();
   const warranty: LotWarrantyLine[] = [];
@@ -496,7 +497,10 @@ export async function getCompiledLot(lotId: string) {
     corte: lot.corte,
     status: lot.status,
     sentAt: lot.sentAt,
-    sentByName: sentBy?.name ?? (lot.sentById ? "—" : null),
+    sentByName: nameOf(lot.sentById),
+    manifestNumber: lot.manifestNumber,
+    printedAt: lot.printedAt,
+    printedByName: nameOf(lot.printedById),
     carriers: sortCarriers([...carriers]),
     batches: lot.batches.map((b) => ({
       id: b.id,
@@ -579,4 +583,36 @@ export async function sendLotToInventory(lotId: string, userId: string | null): 
     }
   }
   return { ok: true };
+}
+
+// ---- Imprimir el manifiesto (parte 2) -----------------------------------
+
+export function manifestCode(n: number): string {
+  return `MF-${String(n).padStart(4, "0")}`;
+}
+
+// La primera impresión le da al corte su número de Manifiesto DAFLOW
+// (MF-0001, MF-0002…); reimprimir usa el mismo número. Solo cortes ya
+// enviados por Yair — uno en preparación todavía puede cambiar.
+export async function markLotPrinted(lotId: string, userId: string | null): Promise<{ ok: true; manifestNumber: number } | { ok: false; error: string }> {
+  const lot = await prisma.fulfillmentLot.findUnique({ where: { id: lotId }, select: { status: true, manifestNumber: true } });
+  if (!lot) return { ok: false, error: "No encontrado." };
+  if (lot.status === "DRAFT") return { ok: false, error: "Yair todavía no envía este corte a Inventario." };
+  if (lot.manifestNumber) return { ok: true, manifestNumber: lot.manifestNumber };
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const last = await prisma.fulfillmentLot.aggregate({ _max: { manifestNumber: true } });
+    const next = (last._max.manifestNumber ?? 0) + 1;
+    try {
+      const updated = await prisma.fulfillmentLot.updateMany({ where: { id: lotId, manifestNumber: null }, data: { manifestNumber: next, printedAt: new Date(), printedById: userId } });
+      if (updated.count === 0) {
+        const again = await prisma.fulfillmentLot.findUnique({ where: { id: lotId }, select: { manifestNumber: true } });
+        if (again?.manifestNumber) return { ok: true, manifestNumber: again.manifestNumber };
+      } else {
+        return { ok: true, manifestNumber: next };
+      }
+    } catch {
+      // Otro corte tomó ese número al mismo tiempo — se reintenta con el siguiente.
+    }
+  }
+  return { ok: false, error: "No se pudo asignar el número de manifiesto — vuelve a intentar." };
 }

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { canViewFulfillmentRequests } from "@/lib/guards";
+import { canPrintFulfillmentManifest, canViewFulfillmentRequests } from "@/lib/guards";
 import { getCompiledLot } from "@/lib/fulfillmentGuides";
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -7,5 +7,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const { id } = await params;
   const lot = await getCompiledLot(id);
   if (!lot) return NextResponse.json({ error: "No encontrado." }, { status: 404 });
-  return NextResponse.json(lot);
+  // Qué puede hacer quien mira — así la pantalla no necesita recibir
+  // permisos nuevos desde arriba.
+  return NextResponse.json({ ...lot, viewer: { canPrint: await canPrintFulfillmentManifest() } });
 }

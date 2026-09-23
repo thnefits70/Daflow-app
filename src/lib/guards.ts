@@ -1079,6 +1079,17 @@ export async function canViewFulfillmentRequests() {
   return (await canManageJustCatalog()) || (await canSubmitFulfillmentRequest());
 }
 
+// Confirmado 2026-09-23 (plan de cortes acordado con el usuario): imprimir
+// el Manifiesto DAFLOW de un corte es de Daniel (líder de Inventario) — el
+// admin también puede, como respaldo.
+export async function canPrintFulfillmentManifest() {
+  const session = await auth();
+  if (!session) return false;
+  if (session.user.role === "admin") return true;
+  const user = await purchasesUserContext(session.user.id);
+  return !!user?.isLeader && user.leadsDept?.code === "INV";
+}
+
 // Confirmado 2026-08-27, pedido explícito del usuario: cuando un proveedor
 // rechaza un cambio (ni cambia el producto ni da crédito), Nairoby es quien
 // registra la pérdida en la parte financiera — a propósito SIN admin de
