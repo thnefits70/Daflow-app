@@ -69,7 +69,6 @@ export async function POST(req: NextRequest) {
       const line = lines[link.lineIndex];
       if (!line) continue;
       if (link.itemId && !byId.has(link.itemId)) continue;
-      for (const other of lines) if (link.itemId && other.claimId === link.itemId) other.claimId = null;
       line.claimId = link.itemId;
     }
     read = { ...read, lines };

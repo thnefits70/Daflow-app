@@ -147,6 +147,9 @@ export function PurchaseControlPanel({
   // "Solicitud de compra aprobada" que le llega al admin trae ?group=<id>
   // además de ?ptab=finanzas, para que al tocarlo se abra directo el paso
   // de subir el comprobante de esa solicitud, sin tener que buscarla.
+  // Sube cada vez que Jariel resuelve algo en deterioro, para que el
+  // historial de abajo se recargue y muestre lo recién gestionado.
+  const [deteriorRefreshKey, setDeteriorRefreshKey] = useState(0);
   const [focusGroupId] = useState<string | null>(() =>
     typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("group")
   );
@@ -247,7 +250,7 @@ export function PurchaseControlPanel({
           {canManageGestion && (
             <div className="mb-6">
               <div className="font-display font-bold text-[14px] mb-2.5">Mercadería en mal estado — pendiente de tu gestión</div>
-              <PurchaseDeteriorGestionPanel />
+              <PurchaseDeteriorGestionPanel onChanged={() => setDeteriorRefreshKey((k) => k + 1)} />
             </div>
           )}
           {/* Confirmado 2026-09-23, pedido de Daniel: el mismo seguimiento
@@ -256,7 +259,7 @@ export function PurchaseControlPanel({
           {canManageGestion && (
             <details className="mb-6">
               <summary className="font-display font-bold text-[14px] mb-2.5 cursor-pointer">Historial de mercadería en mal estado</summary>
-              <DeteriorTraceList />
+              <DeteriorTraceList defaultFilter="all" refreshKey={deteriorRefreshKey} />
             </details>
           )}
           <PurchaseUrgentReportsPanel isAdmin={isAdmin} canAct={canSubmit || canReview} canManageGestion={canManageGestion} canConfirmExcess={canActOnApproval} />

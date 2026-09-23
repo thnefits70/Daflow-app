@@ -89,7 +89,6 @@ export function SupplierCreditProofDialog({
     for (const [idx, itemId] of Object.entries(lineOverrides)) {
       const line = lines[Number(idx)];
       if (!line) continue;
-      for (const other of lines) if (itemId && other.claimId === itemId) other.claimId = null;
       line.claimId = itemId;
     }
     return { ...data.read, lines };

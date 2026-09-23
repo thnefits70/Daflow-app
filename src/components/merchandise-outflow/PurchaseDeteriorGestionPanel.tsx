@@ -65,7 +65,7 @@ function toClaim(item: ItemDTO): CreditProofClaim {
 // última compra REAL a ese proveedor de ese producto). Si no hay ninguna
 // compra que lo respalde, no se puede cerrar el caso — pasa como excepción
 // a admin (purchase-no-match/route.ts).
-export function PurchaseDeteriorGestionPanel() {
+export function PurchaseDeteriorGestionPanel({ onChanged }: { onChanged?: () => void } = {}) {
   const [items, setItems] = useState<ItemDTO[] | null>(null);
   const [creditDialog, setCreditDialog] = useState<{ supplier: SupplierOption; preselectedIds: string[] } | null>(null);
 
@@ -76,6 +76,11 @@ export function PurchaseDeteriorGestionPanel() {
       .catch(() => setItems([]));
   }
   useEffect(load, []);
+  // Tras cualquier cambio, también se refresca el historial de abajo.
+  function reload() {
+    load();
+    onChanged?.();
+  }
 
   if (items === null) return <div className="text-[13px] text-steel">Cargando…</div>;
   if (items.length === 0) return <div className="text-[13px] text-steel">No hay reclamos de deterioro pendientes de gestionar.</div>;
@@ -114,7 +119,7 @@ export function PurchaseDeteriorGestionPanel() {
         </div>
       ))}
       {items.map((item) => (
-        <GestionCard key={item.id} item={item} onChanged={load} onCredit={isCreditable(item) ? () => openCredit(item.purchaseGestionSupplier!, [item.id]) : undefined} />
+        <GestionCard key={item.id} item={item} onChanged={reload} onCredit={isCreditable(item) ? () => openCredit(item.purchaseGestionSupplier!, [item.id]) : undefined} />
       ))}
       {creditDialog && (
         <SupplierCreditProofDialog
@@ -122,7 +127,7 @@ export function PurchaseDeteriorGestionPanel() {
           claims={(bySupplier.get(creditDialog.supplier.id)?.items ?? []).map(toClaim)}
           preselectedIds={creditDialog.preselectedIds}
           onClose={() => setCreditDialog(null)}
-          onDone={() => { setCreditDialog(null); load(); }}
+          onDone={() => { setCreditDialog(null); reload(); }}
         />
       )}
     </div>

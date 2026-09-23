@@ -77,8 +77,10 @@ export async function readSupplierCreditProof(params: {
       "Provedix (Guayaquil, Ecuador) por mercadería que llegó dañada. Extrae SOLO lo que de verdad está escrito — " +
       "nunca inventes un producto, código, cantidad o monto. Los proveedores casi nunca usan nuestros códigos: " +
       "suelen escribir su propio código o el nombre del producto a su manera. Empareja cada renglón con un reclamo " +
-      "pendiente por nombre, cantidad y monto; si no estás razonablemente seguro, deja claimId vacío. Nunca uses el " +
-      "mismo reclamo para dos renglones. Llama a submit_credit_proof con el resultado — es la única forma de responder.",
+      "pendiente por nombre, cantidad y monto; si no estás razonablemente seguro, deja claimId vacío. Un mismo " +
+      "reclamo PUEDE ocupar varios renglones (el proveedor a veces separa variantes, colores o modelos del mismo " +
+      "producto con códigos distintos) — en ese caso usa el mismo claimId en cada renglón y la suma de cantidades " +
+      "debe acercarse a las unidades del reclamo. Llama a submit_credit_proof con el resultado — es la única forma de responder.",
     tools: [SUBMIT_CREDIT_PROOF_TOOL],
     tool_choice: { type: "tool" as const, name: "submit_credit_proof" },
     messages: [
@@ -147,13 +149,6 @@ export async function readSupplierCreditProof(params: {
       matchedBy: memorizedClaim ? "memoria" : aiClaim ? "ia" : null,
     };
   });
-  // Un reclamo no puede quedar en dos renglones — el primero se lo queda.
-  const used = new Set<string>();
-  for (const l of lines) {
-    if (!l.claimId) continue;
-    if (used.has(l.claimId)) { l.claimId = null; l.matchedBy = null; } else used.add(l.claimId);
-  }
-
   return {
     supplierNameOnDoc: typeof raw.supplierNameOnDoc === "string" && raw.supplierNameOnDoc.trim() ? raw.supplierNameOnDoc.trim() : null,
     supplierMatches: raw.supplierMatches === "si" || raw.supplierMatches === "no" ? raw.supplierMatches : "no_se_ve",

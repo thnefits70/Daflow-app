@@ -193,18 +193,36 @@ function Timeline({ i, canAct, onPack }: { i: TraceItem; canAct: boolean; onPack
 // canAct (Daniel) + onGoToExchange (confirmado 2026-09-23, pedido de
 // Daniel): botón "Armar paquete de cambio" cuando el proveedor ya aceptó el
 // cambio — ver items/[id]/to-exchange/route.ts.
-export function DeteriorTraceList({ canAct = false, onGoToExchange }: { canAct?: boolean; onGoToExchange?: () => void } = {}) {
+// Confirmado 2026-09-23, reporte de Jariel ("no me sale lo que acabo de
+// hacer"): lo que se cierra pasa a "Cerrados", y la lista estaba ordenada
+// por fecha de REPORTE — lo recién gestionado quedaba perdido. Ahora se
+// ordena por el ÚLTIMO movimiento, se recarga cuando cambia refreshKey
+// (Jariel acaba de resolver algo arriba), y Jariel abre en "Todos".
+function lastActivity(i: TraceItem): number {
+  return Math.max(
+    ...[i.batch.submittedAt ?? i.batch.createdAt, i.resolvedAt, i.purchaseNoMatchReportedAt, i.purchaseExceptionDecidedAt, i.purchaseResolvedAt]
+      .filter((d): d is string => !!d)
+      .map((d) => new Date(d).getTime()),
+  );
+}
+
+export function DeteriorTraceList({
+  canAct = false,
+  onGoToExchange,
+  defaultFilter = "open",
+  refreshKey = 0,
+}: { canAct?: boolean; onGoToExchange?: () => void; defaultFilter?: "open" | "closed" | "all"; refreshKey?: number } = {}) {
   const [items, setItems] = useState<TraceItem[] | null>(null);
-  const [filter, setFilter] = useState<"open" | "closed" | "all">("open");
+  const [filter, setFilter] = useState<"open" | "closed" | "all">(defaultFilter);
   const [query, setQuery] = useState("");
   const [expanded, setExpanded] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/merchandise-outflow/deterioro/history")
       .then((r) => (r.ok ? r.json() : []))
-      .then((d) => setItems(Array.isArray(d) ? d : []))
+      .then((d) => setItems(Array.isArray(d) ? [...d].sort((a: TraceItem, b: TraceItem) => lastActivity(b) - lastActivity(a)) : []))
       .catch(() => setItems([]));
-  }, []);
+  }, [refreshKey]);
 
   if (items === null) return <div className="text-[13px] text-steel">Cargando…</div>;
 
