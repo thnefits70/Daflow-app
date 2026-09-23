@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { canDecidePurchaseException, getPurchaseGestionManagerId } from "@/lib/guards";
+import { canDecidePurchaseException, dbUserId, getPurchaseGestionManagerId } from "@/lib/guards";
 import { notifyInventoryLeadDeteriorPurchaseResolved, notifyPurchaseExceptionDecided, outflowItemDisplayName } from "@/lib/merchandiseOutflow";
 
 const schema = z.object({
@@ -44,7 +44,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       purchaseExceptionDecision: parsed.data.decision,
       purchaseExceptionNote: parsed.data.note,
       purchaseExceptionDecidedAt: now,
-      purchaseExceptionDecidedById: session.user.id,
+      // El actor "admin" no existe como fila de User — guardar su id rompía
+      // la llave foránea y la decisión fallaba con un error 500 sin mensaje.
+      purchaseExceptionDecidedById: dbUserId(session.user.id),
       // DATA_CORRECTED reabre el caso para Jariel — limpia el "sin
       // respaldo" para que vuelva a aparecer en su cola de pendientes.
       ...(parsed.data.decision === "DATA_CORRECTED"
@@ -52,7 +54,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         : {}),
       // REJECTED cierra el reclamo de una vez — admin es quien resuelve.
       ...(parsed.data.decision === "REJECTED"
-        ? { purchaseResolution: "REJECTED" as const, purchaseResolutionNote: parsed.data.note, purchaseResolvedAt: now, purchaseResolvedById: session.user.id }
+        ? { purchaseResolution: "REJECTED" as const, purchaseResolutionNote: parsed.data.note, purchaseResolvedAt: now, purchaseResolvedById: dbUserId(session.user.id) }
         : {}),
     },
   });

@@ -22,7 +22,7 @@ type Decision = "DATA_CORRECTED" | "AUTHORIZED" | "REJECTED";
 async function postJson(url: string, body?: unknown) {
   const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
   const data = await res.json().catch(() => null);
-  if (!res.ok) throw new Error(data?.error ?? "Ocurrió un error.");
+  if (!res.ok) throw new Error(data?.error ?? `Falló en el servidor (código ${res.status}). No se guardó nada — intenta de nuevo.`);
   return data;
 }
 
