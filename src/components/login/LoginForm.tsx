@@ -16,6 +16,7 @@ export function LoginForm({ logoUrl }: { logoUrl: string | null }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [err, setErr] = useState("");
+  const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(false);
 
   const [step, setStep] = useState<Step>("credentials");
@@ -30,6 +31,7 @@ export function LoginForm({ logoUrl }: { logoUrl: string | null }) {
 
   const resetTwoFactorState = () => {
     setStep("credentials");
+    setNotice("");
     setTotpCode("");
     setEnrollSecret("");
     setEnrollQrDataUrl("");
@@ -39,10 +41,10 @@ export function LoginForm({ logoUrl }: { logoUrl: string | null }) {
     setSecretCopied(false);
   };
 
-  const finishLogin = async (totp?: string, enrollTokenParam?: string) => {
+  const finishLogin = async (totp?: string, enrollTokenParam?: string, showError = true) => {
     const res = await signIn("credentials", { mode, username, password, totp, enrollToken: enrollTokenParam, redirect: false });
     if (!res || res.error) {
-      setErr(mode === "admin" ? "Código incorrecto." : "Código incorrecto.");
+      if (showError) setErr("Código incorrecto.");
       return false;
     }
     router.replace(mode === "admin" ? "/admin" : "/area");
@@ -112,11 +114,21 @@ export function LoginForm({ logoUrl }: { logoUrl: string | null }) {
     setStep("backup-codes");
   };
 
+  // Si el paso de "continuar" no deja entrar (ej. pasó demasiado tiempo
+  // anotando los códigos), el autenticador YA quedó activado — en vez de un
+  // "Código incorrecto" sin salida, se pasa directo a pedir el código de 6
+  // dígitos que la app autenticadora muestra en ese momento.
   const finishEnrollment = async () => {
     setErr("");
     setLoading(true);
-    await finishLogin(undefined, enrollToken);
+    const ok = await finishLogin(undefined, enrollToken, false);
     setLoading(false);
+    if (!ok) {
+      setEnrollToken("");
+      setTotpCode("");
+      setNotice("Tu autenticador ya quedó activado. Para entrar, escribe el código de 6 dígitos que ves ahora en tu app autenticadora.");
+      setStep("totp");
+    }
   };
 
   const copyBackupCodes = () => {
@@ -231,6 +243,11 @@ export function LoginForm({ logoUrl }: { logoUrl: string | null }) {
               Abre tu app autenticadora (ej. Google Authenticator) e ingresa el código de 6 dígitos. Si perdiste el
               celular, puedes usar uno de tus códigos de respaldo.
             </div>
+            {notice && (
+              <div className="rounded border border-green/40 bg-green/10 px-3 py-2 text-[12.5px] text-ink leading-relaxed mb-3.5">
+                {notice}
+              </div>
+            )}
             <input
               className="w-full rounded border border-rule bg-surface px-2.5 py-2 text-[15px] tracking-widest text-center text-ink outline-none focus:ring-2 focus:ring-blue"
               value={totpCode}

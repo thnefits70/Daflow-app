@@ -70,7 +70,10 @@ export function looksLikeTotpCode(code: string) {
   return /^\d{6}$/.test(code.trim());
 }
 
-const ENROLL_TOKEN_TTL_MS = 5 * 60 * 1000;
+// 30 minutos (antes 5): 2026-09-23 volvió a fallar cuando Daniel le ayudaba
+// a Joao Saltos a configurar su cuenta — anotar los 8 códigos a mano con
+// otra persona al lado puede tomar más de 5 minutos y el token vencía.
+const ENROLL_TOKEN_TTL_MS = 30 * 60 * 1000;
 
 // Token firmado (no requiere guardar nada en la base de datos) que
 // reemplaza pedir un código TOTP nuevo en la pantalla de "guarda tus
@@ -78,7 +81,7 @@ const ENROLL_TOKEN_TTL_MS = 5 * 60 * 1000;
 // /api/auth/2fa-enroll-confirm; reenviar ESE MISMO código para terminar de
 // entrar fallaba con "Código incorrecto" porque para cuando la persona
 // copiaba sus códigos de respaldo y presionaba "continuar" (30-90s+ después)
-// el código ya había vencido. Este token vale 5 minutos y queda atado a esa
+// el código ya había vencido. Este token vale 30 minutos y queda atado a esa
 // cuenta específica, así que cubre ese tramo sin volver a pedirle nada.
 export function generateEnrollToken(mode: "admin" | "team", id: string) {
   const expires = Date.now() + ENROLL_TOKEN_TTL_MS;
