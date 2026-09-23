@@ -198,7 +198,7 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (batchId: string) =
               <span>{d.item.name}</span>
               {d.item.justCode !== r.code && (
                 <span className="text-[10.5px]" style={{ color: "#D9A441" }}>
-                  {d.item.justCode ? `(ya tiene el ID ${d.item.justCode} — se guardará ${r.code} como equivalente)` : `(se le pondrá el ID ${r.code})`}
+                  {d.item.justCode ? `(${r.code} quedará como ID alterno de ${d.item.justCode}, el principal en INVESTOCK)` : `(se le pondrá el ID ${r.code})`}
                 </span>
               )}
               {(res.kind !== "product" || d.item.id !== res.catalogItem.id) && (
@@ -209,7 +209,19 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (batchId: string) =
             </div>
           )}
 
-          {res.kind === "combo" && (
+          {res.kind === "combo" && res.components.length === 1 && res.components[0].quantity === 1 && res.missingIds.length === 0 && (
+            // Confirmado 2026-09-23 por el usuario: Dropi publica el mismo
+            // producto con varios IDs (nombre más bonito para vender), pero en
+            // INVESTOCK existe uno solo — todos apuntan al ID principal.
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="font-mono text-[9.5px] font-bold uppercase text-steel">ID alterno de →</span>
+              <PhotoThumb url={res.components[0].catalogItem.photos[0]} />
+              <CatalogCode code={res.components[0].catalogItem.justCode} />
+              <span>{res.components[0].catalogItem.name}</span>
+            </div>
+          )}
+
+          {res.kind === "combo" && !(res.components.length === 1 && res.components[0].quantity === 1 && res.missingIds.length === 0) && (
             <div className="flex flex-col gap-0.5">
               <span className="font-mono text-[9.5px] font-bold uppercase" style={{ color: "#D9A441" }}>
                 Combo — se abre en:
