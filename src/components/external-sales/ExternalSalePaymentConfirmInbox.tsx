@@ -22,6 +22,7 @@ type SaleDTO = {
   totalAmount: number;
   isContraEntrega: boolean;
   freightCost: number | null;
+  pickupPersonName: string;
   paymentProofUrl: string;
   paymentProofName: string | null;
   paymentProofUploadedAt: string | null;
@@ -128,14 +129,29 @@ export function ExternalSalePaymentConfirmInbox() {
               recaudo el cliente transfiere directo el total completo — nadie
               descuenta el flete en el camino, así que hay que esperar el
               total y pagarle el flete al motorizado aparte (ver Caja Chica). */}
+          {/* Confirmado 2026-09-23, pedido explícito del usuario: el monto a
+              comprobar en el banco va grande y resaltado, junto con el nombre
+              de quién debe aparecer como remitente — con recaudo transfiere el
+              motorizado (pickupPersonName), sin recaudo el cliente directo. */}
+          <div className="rounded-md border-2 border-gold bg-gold/10 px-3 py-2.5 mb-1.5">
+            <div className="text-[10.5px] font-bold uppercase tracking-wide text-gold">Monto a comprobar en el banco</div>
+            <div className="text-[26px] font-extrabold leading-tight text-ink">
+              ${(s.isContraEntrega && s.freightCost != null ? s.totalAmount - s.freightCost : s.totalAmount).toFixed(2)}
+            </div>
+            <div className="text-[10.5px] font-bold uppercase tracking-wide text-gold mt-1.5">Debe venir de</div>
+            <div className="text-[15px] font-bold text-ink">
+              {s.isContraEntrega ? s.pickupPersonName : (s.client?.name ?? "—")}
+              <span className="text-[11px] font-semibold text-steel"> · {s.isContraEntrega ? "motorizado (cobró al cliente)" : "cliente"}</span>
+            </div>
+          </div>
           {s.isContraEntrega && s.freightCost != null && (
             <div className="text-[11px] text-steel mb-1.5">
-              Flete: -${s.freightCost.toFixed(2)} · <span className="font-bold text-ink">Monto esperado a transferir: ${(s.totalAmount - s.freightCost).toFixed(2)}</span>
+              Flete: -${s.freightCost.toFixed(2)} (se lo queda el motorizado)
             </div>
           )}
           {!s.isContraEntrega && (
             <div className="text-[11px] text-steel mb-1.5">
-              <span className="font-bold text-ink">Monto esperado a transferir: ${s.totalAmount.toFixed(2)}</span> (sin recaudo — el cliente paga el total completo)
+              Sin recaudo — el cliente paga el total completo
               {s.freightCost != null && <> · el flete (${s.freightCost.toFixed(2)}) se le paga al motorizado aparte, desde Caja Chica</>}
             </div>
           )}
