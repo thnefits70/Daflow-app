@@ -6,11 +6,11 @@ import { computeMaxPurchasePrices, DROPI_FULFILLMENT_DEFAULT, DROPI_INSURANCE_DE
 const money = (n: number) => `$${n.toFixed(2)}`;
 
 // Confirmado 2026-09-23 (idea de Jariel): precio máximo al que conviene
-// comprar un Ganador no encontrado, en 3 escenarios de flete — ver
-// computeMaxPurchasePrices. Sin precio de la competencia no hay de dónde
-// partir: se avisa en vez de adivinarlo (una IA inventando el precio podría
-// hacer negociar con un número falso).
-export function MaxPurchasePrice({ competitorPrice }: { competitorPrice: number | null }) {
+// comprar un Ganador no encontrado — solo 2 casos: si el proveedor cobra
+// flete o si no lo cobra (ver computeMaxPurchasePrices). Sin precio de la
+// competencia no hay de dónde partir: se avisa en vez de adivinarlo (una IA
+// inventando el precio podría hacer negociar con un número falso).
+export function MaxPurchasePrice({ productName, competitorPrice }: { productName: string; competitorPrice: number | null }) {
   const [open, setOpen] = useState(false);
 
   if (competitorPrice === null || competitorPrice <= 0) {
@@ -28,12 +28,14 @@ export function MaxPurchasePrice({ competitorPrice }: { competitorPrice: number 
 
   return (
     <div className="mt-1.5 rounded border border-rule bg-cloud px-2.5 py-2 text-[12px]">
+      <div className="text-steel mb-1">
+        <b className="text-ink">{productName}</b> — competencia: <b className="text-ink">{money(competitorPrice)}</b>
+      </div>
       <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
         <span className="font-semibold text-ink">Comprar a máximo:</span>
         {scenarios.map((s) => (
           <span key={s.key} className="text-steel">
-            {s.label}{s.freightPercent > 0 ? ` (+${s.freightPercent}%)` : ""}:{" "}
-            <b className={s.key === "normal" ? "text-teal text-[13px]" : "text-ink"}>{s.maxCost !== null ? money(s.maxCost) : "no alcanza"}</b>
+            {s.label}: <b className="text-teal text-[13px]">{s.maxCost !== null ? money(s.maxCost) : "no alcanza"}</b>
           </span>
         ))}
       </div>
@@ -56,7 +58,7 @@ export function MaxPurchasePrice({ competitorPrice }: { competitorPrice: number 
             </div>
           ))}
           <div>
-            El flete sale de nuestras compras reales: cuando el proveedor lo cobra aparte suele ser ~2% del costo, y lo más alto visto fue ~8%. Si no sabes si lo cobrarán, negocia con el de &quot;flete normal&quot;.
+            Si cobra flete se calcula con un flete alto (8% del costo, lo más alto visto en nuestras compras), para ir a lo seguro.
           </div>
         </div>
       )}

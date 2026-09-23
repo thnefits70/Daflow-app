@@ -1607,7 +1607,7 @@ function UnfoundWinnersView({ onPropose }: { onPropose: (p: ProposePrefill) => v
                     <span>Precio ref.: <b className="text-ink">{r.competitorPrice !== null ? money(r.competitorPrice) : "—"}</b></span>
                     <span>Proveedor: <b className="text-ink">{r.supplier?.name ?? "—"}</b></span>
                   </div>
-                  {r.status === "PENDING" && <MaxPurchasePrice competitorPrice={r.competitorPrice} />}
+                  {r.status === "PENDING" && <MaxPurchasePrice productName={r.productName} competitorPrice={r.competitorPrice} />}
                   {r.notes && <div className="text-[12px] text-steel mt-1 italic">{r.notes}</div>}
                   <div className="text-[11px] text-steel mt-1">Registrado por {r.createdBy?.name ?? "admin"} — {formatDateTime(r.createdAt)}</div>
                   {r.status === "PROPOSED" && r.proposal && (

@@ -14,6 +14,21 @@ const INTERVAL_MS = 3000;
 const SLIDE_MS = 700;
 const LIST_URL = "/area/workspace?tab=analisis-mercado&ptab=ganadores";
 
+// Precio máximo de compra en los 2 casos (sin flete / con flete) — el
+// desglose está en la lista completa.
+function maxBuyLabel(competitorPrice: number | null) {
+  if (competitorPrice === null || competitorPrice <= 0) return "Falta precio competencia";
+  const [none, withFreight] = computeMaxPurchasePrices(competitorPrice).scenarios;
+  if (none.maxCost === null) return "No alcanza el margen";
+  const fmt = (n: number | null) => (n !== null ? `$${n.toFixed(2)}` : "—");
+  return (
+    <>
+      <div>Sin flete: máx. <b className="text-ink">{fmt(none.maxCost)}</b></div>
+      <div>Con flete: máx. <b className="text-ink">{fmt(withFreight.maxCost)}</b></div>
+    </>
+  );
+}
+
 // Confirmado 2026-09-23, pedido de Jariel: los "Ganadores no encontrados"
 // que siguen buscando proveedor pasan en carrusel en Inicio (entre el podio
 // y las tarjetas), para tenerlos siempre a la vista sin entrar a la
@@ -23,16 +38,7 @@ const LIST_URL = "/area/workspace?tab=analisis-mercado&ptab=ganadores";
 // y cada tarjeta abre la lista completa. Corregido 2026-09-23 (Jariel: "no
 // se mueve"): ya NO se pausa al pasar el mouse — con el puntero encima (o
 // tras tocarlo en el celular, donde nunca llega el "mouse leave") quedaba
-// quieto. Quien no es de Análisis
-// de Mercado recibe 403 y no ve nada.
-// Precio máximo de compra con flete normal (el escenario seguro para
-// negociar) — el detalle con los 3 escenarios está en la lista completa.
-function maxBuyLabel(competitorPrice: number | null) {
-  if (competitorPrice === null || competitorPrice <= 0) return "Falta precio competencia";
-  const normal = computeMaxPurchasePrices(competitorPrice).scenarios.find((s) => s.key === "normal");
-  return normal?.maxCost != null ? <>Comprar máx. <b className="text-ink">${normal.maxCost.toFixed(2)}</b></> : "No alcanza el margen";
-}
-
+// quieto. Quien no es de Análisis de Mercado recibe 403 y no ve nada.
 export function UnfoundWinnersCarousel() {
   const [items, setItems] = useState<Item[] | null>(null);
   const [index, setIndex] = useState(0);
@@ -152,9 +158,10 @@ export function UnfoundWinnersCarousel() {
               <div className="px-2.5 py-2">
                 <div className="text-[16px] font-bold text-teal leading-tight">
                   {p.competitorPrice !== null ? `$${p.competitorPrice.toFixed(2)}` : "Sin precio"}
+                  {p.competitorPrice !== null && <span className="text-[10.5px] font-semibold text-steel ml-1">competencia</span>}
                 </div>
                 <div className="text-[13px] text-ink leading-snug mt-0.5 line-clamp-2 min-h-[2.5em] first-letter:uppercase">{p.productName}</div>
-                <div className="text-[11px] text-steel mt-1 min-h-[1.4em]">
+                <div className="text-[11px] text-steel mt-1 min-h-[2.8em] leading-snug">
                   {maxBuyLabel(p.competitorPrice)}
                 </div>
               </div>

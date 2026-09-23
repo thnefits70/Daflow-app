@@ -49,11 +49,13 @@ export function computeMarketProductSalePrice(params: {
 //
 // Escenarios de flete (el proveedor puede cobrar el envío aparte) sacados de
 // las compras reales al 2026-09-23: de 162 compras, 32 cobraron flete aparte;
-// mediana 1.8% del costo, p90 2.9%, máximo visto 7.8%.
+// mediana 1.8% del costo, p90 2.9%, máximo visto 7.8%. Cambiado el mismo
+// día (pedido del usuario): solo 2 casos — si el proveedor NO cobra flete,
+// o si SÍ lo cobra (se toma el flete alto, 8%, para ir a lo seguro). Se
+// quitó el "flete normal" intermedio.
 export const UNFOUND_FREIGHT_SCENARIOS = [
-  { key: "none", label: "Sin flete", percent: 0 },
-  { key: "normal", label: "Con flete normal", percent: 2.5 },
-  { key: "high", label: "Con flete alto", percent: 8 },
+  { key: "none", label: "Si no cobra flete", percent: 0 },
+  { key: "withFreight", label: "Si cobra flete", percent: 8 },
 ] as const;
 
 export type MaxPurchaseScenario = {
