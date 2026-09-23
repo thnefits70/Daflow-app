@@ -3,6 +3,7 @@ import { Building2, Package } from "lucide-react";
 import { DailyQuoteBanner } from "./DailyQuoteBanner";
 import { PushOptIn } from "@/components/shared/PushOptIn";
 import { PendingTasksCard } from "./PendingTasksCard";
+import { UnfoundWinnersCarousel } from "./UnfoundWinnersCarousel";
 import { PeriodicRemindersCard } from "./PeriodicRemindersCard";
 import { RecognitionPodium } from "@/components/recognition/RecognitionPodium";
 import { ScoreGauge } from "./ScoreGauge";
@@ -92,6 +93,8 @@ export function Dashboard({
         )}
       </div>
 
+      {/* Mismo carrusel de Inicio de Jariel — pedido del usuario 2026-09-23. */}
+      <UnfoundWinnersCarousel />
       <PushOptIn />
 
       {merchandisePayments && (

@@ -5,14 +5,13 @@ import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { computeMaxPurchasePrices } from "@/lib/dropiPricing";
 
-type Item = { id: string; productName: string; imageUrl: string; competitorPrice: number | null; status: "PENDING" | "PROPOSED" | "DISCARDED"; createdAt: string };
+type Item = { id: string; productName: string; imageUrl: string; competitorPrice: number | null };
 
 const CARD_W = 170;
 const GAP = 12;
 const STEP = CARD_W + GAP;
 const INTERVAL_MS = 3000;
 const SLIDE_MS = 700;
-const LIST_URL = "/area/workspace?tab=analisis-mercado&ptab=ganadores";
 
 // Precio máximo de compra en los 2 casos (sin flete / con flete) — el
 // desglose está en la lista completa.
@@ -38,20 +37,25 @@ function maxBuyLabel(competitorPrice: number | null) {
 // y cada tarjeta abre la lista completa. Corregido 2026-09-23 (Jariel: "no
 // se mueve"): ya NO se pausa al pasar el mouse — con el puntero encima (o
 // tras tocarlo en el celular, donde nunca llega el "mouse leave") quedaba
-// quieto. Quien no es de Análisis de Mercado recibe 403 y no ve nada.
+// quieto. Ampliado 2026-09-23 (pedido del usuario): también lo ven los
+// asesores de Ventas Externas (Marcos, Yair) y admin en su propio Inicio —
+// ver /api/unfound-winning-products/carousel. Quien no puede abrir la lista
+// completa ve las tarjetas sin enlace; el resto recibe 403 y no ve nada.
 export function UnfoundWinnersCarousel() {
   const [items, setItems] = useState<Item[] | null>(null);
+  const [listUrl, setListUrl] = useState<string | null>(null);
   const [index, setIndex] = useState(0);
   const [animate, setAnimate] = useState(true);
   const [width, setWidth] = useState(0);
   const viewportRef = useRef<HTMLDivElement>(null);
 
   function load() {
-    fetch("/api/unfound-winning-products")
-      .then((r) => (r.ok ? r.json() : []))
-      .then((rows: Item[]) => {
-        // Los más nuevos primero.
-        setItems(rows.filter((r) => r.status === "PENDING").sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
+    // Ya vienen solo los pendientes, los más nuevos primero.
+    fetch("/api/unfound-winning-products/carousel")
+      .then((r) => (r.ok ? r.json() : { items: [], listUrl: null }))
+      .then((d: { items: Item[]; listUrl: string | null }) => {
+        setItems(d.items);
+        setListUrl(d.listUrl);
       })
       .catch(() => setItems([]));
   }
@@ -133,7 +137,7 @@ export function UnfoundWinnersCarousel() {
               </button>
             </>
           )}
-          <Link href={LIST_URL} className="text-[11px] font-bold text-blue">Ver todos →</Link>
+          {listUrl && <Link href={listUrl} className="text-[11px] font-bold text-blue">Ver todos →</Link>}
         </div>
       </div>
 
@@ -149,8 +153,8 @@ export function UnfoundWinnersCarousel() {
           {track.map((p, i) => (
             <a
               key={`${p.id}-${i}`}
-              href={LIST_URL}
-              className="shrink-0 rounded-md border border-rule bg-cloud overflow-hidden hover:border-teal"
+              href={listUrl ?? undefined}
+              className={`shrink-0 rounded-md border border-rule bg-cloud overflow-hidden ${listUrl ? "hover:border-teal" : ""}`}
               style={{ width: CARD_W }}
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
