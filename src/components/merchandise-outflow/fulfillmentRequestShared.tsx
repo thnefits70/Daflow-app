@@ -1,14 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { CheckCircle2, ChevronDown, ChevronUp, Package, Pencil, Plus, X } from "lucide-react";
+import { CheckCircle2, Package, Pencil, Plus, X } from "lucide-react";
 import { ExpandableName } from "@/components/ui/ExpandableName";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 
 export type VariantNote = { label: string; quantity: number };
 export type CompiledLine = { catalogItemId: string; name: string; photos: string[]; justCode: string | null; quantity: number; variants: VariantNote[] };
 export type CompiledBatch = { id: string; source: string; requestedAt: string; requestedByName: string; totalRows: number; skippedCount: number; lines: CompiledLine[] };
-export type BatchListItem = { id: string; source: string; requestedAt: string; requestedByName: string; totalRows: number; skippedCount: number; lineCount: number; guideCount: number; day: string };
 
 export function fmt(iso: string) {
   return new Date(iso).toLocaleString("es-EC", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
@@ -164,123 +163,3 @@ export function CompiledResult({ batch, canEditVariants = false }: { batch: Comp
   );
 }
 
-export type DayBatch = { id: string; source: string; requestedAt: string; requestedByName: string; guideCount: number; fileCount: number };
-export type DayLine = {
-  catalogItemId: string;
-  name: string;
-  photos: string[];
-  justCode: string | null;
-  quantity: number;
-  bySource: { DROPI: number; ROCKET: number };
-  variants: VariantNote[];
-};
-export type CompiledDay = { day: string; batches: DayBatch[]; lines: DayLine[] };
-
-export function fmtDay(day: string) {
-  // Mediodía UTC: evita que la zona horaria del navegador corra la fecha un día.
-  return new Date(`${day}T12:00:00Z`).toLocaleDateString("es-EC", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" });
-}
-
-function fmtTime(iso: string) {
-  return new Date(iso).toLocaleTimeString("es-EC", { hour: "2-digit", minute: "2-digit", timeZone: "America/Guayaquil" });
-}
-
-// Confirmado 2026-09-23, pedido de Yair: todo lo que se sube en un mismo
-// día (Dropi y Rocket) forma UN lote — la lista completa de lo que
-// Inventario tiene que entregarle ese día, ya sumada por producto real
-// (ID de Dropi), con su desglose de colores/tallas. Cada subida del día
-// se puede abrir aparte para corregir sus variantes.
-export function DayResult({ data, onOpenBatch }: { data: CompiledDay; onOpenBatch: (id: string) => void }) {
-  const units = data.lines.reduce((s, l) => s + l.quantity, 0);
-  return (
-    <div className="bg-surface border border-rule rounded-md p-4 mb-5">
-      <div className="flex items-center gap-1.5 text-teal text-[13px] font-bold mb-1">
-        <CheckCircle2 size={15} /> Lote del {fmtDay(data.day)}
-      </div>
-      <div className="text-[11.5px] text-steel mb-2">
-        {data.lines.length} productos reales · {units} unidades · {data.batches.length} {data.batches.length === 1 ? "subida" : "subidas"}
-      </div>
-      <div className="flex flex-wrap gap-1.5 mb-3">
-        {data.batches.map((b) => (
-          <button
-            key={b.id}
-            type="button"
-            className="text-[10.5px] rounded-full border border-rule px-2 py-0.5 text-steel hover:text-teal hover:border-teal cursor-pointer"
-            onClick={() => onOpenBatch(b.id)}
-            title="Abrir esta subida (para revisar o corregir variantes)"
-          >
-            {fmtTime(b.requestedAt)} · {sourceLabel(b.source)}
-            {b.guideCount > 0 ? ` · ${b.guideCount} guías` : ""} · {b.requestedByName}
-          </button>
-        ))}
-      </div>
-      <div className="flex flex-col gap-1.5 max-h-[36rem] overflow-y-auto">
-        {data.lines.map((l) => (
-          <div key={l.catalogItemId} className="bg-cloud rounded-md px-3 py-2">
-            <div className="flex items-center gap-2.5">
-              {l.photos[0] ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={l.photos[0]} alt="" className="w-7 h-7 object-cover rounded border border-rule shrink-0" />
-              ) : (
-                <div className="w-7 h-7 rounded border border-dashed border-rule shrink-0 flex items-center justify-center text-steel">
-                  <Package size={12} />
-                </div>
-              )}
-              <CatalogCode code={l.justCode} />
-              <ExpandableName text={l.name} className="text-[12.5px] flex-1" />
-              {l.bySource.DROPI > 0 && l.bySource.ROCKET > 0 && (
-                <span className="text-[10px] text-steel shrink-0">
-                  Dropi {l.bySource.DROPI} · Rocket {l.bySource.ROCKET}
-                </span>
-              )}
-              <span className="font-mono text-[13px] font-bold text-teal shrink-0">{l.quantity}</span>
-            </div>
-            {l.variants.length > 0 && (
-              <div className="mt-1 flex items-center gap-1.5 flex-wrap">
-                {l.variants.map((v) => (
-                  <span key={v.label} className="font-mono text-[10px] bg-navy/5 border border-rule rounded-full px-2 py-0.5">
-                    {v.label}: {v.quantity}
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-export function FulfillmentHistoryList({ history, onViewDay }: { history: BatchListItem[]; onViewDay: (day: string) => void }) {
-  const [show, setShow] = useState(false);
-  if (history.length === 0) return null;
-  const days: { day: string; batches: BatchListItem[] }[] = [];
-  for (const b of history) {
-    const last = days[days.length - 1];
-    if (last && last.day === b.day) last.batches.push(b);
-    else days.push({ day: b.day, batches: [b] });
-  }
-  return (
-    <div>
-      <button type="button" className="flex items-center gap-1 text-[11px] font-semibold text-steel hover:text-teal cursor-pointer" onClick={() => setShow((s) => !s)}>
-        {show ? <ChevronUp size={12} /> : <ChevronDown size={12} />} Lotes por día ({days.length})
-      </button>
-      {show && (
-        <div className="mt-2 flex flex-col gap-1">
-          {days.map((d) => {
-            const dropi = d.batches.filter((b) => b.source !== "ROCKET").length;
-            const rocket = d.batches.length - dropi;
-            return (
-              <button key={d.day} type="button" className="text-left text-[11px] text-steel hover:text-teal cursor-pointer flex flex-wrap items-center gap-x-1.5" onClick={() => onViewDay(d.day)}>
-                <span className="font-semibold capitalize">{fmtDay(d.day)}</span>
-                <span>
-                  — {[dropi > 0 && `Dropi ${dropi}`, rocket > 0 && `Rocket ${rocket}`].filter(Boolean).join(" · ")} {d.batches.length === 1 ? "subida" : "subidas"}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}

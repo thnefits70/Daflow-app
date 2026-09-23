@@ -1,27 +1,24 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ChevronDown, ChevronUp } from "lucide-react";
 import { RocketRequestPanel } from "./RocketRequestPanel";
-import { DropiRequestPanel } from "./DropiRequestPanel";
 import { DropiGuidesPanel } from "./DropiGuidesPanel";
-import { CompiledResult, DayResult, FulfillmentHistoryList, type CompiledBatch, type CompiledDay, type BatchListItem } from "./fulfillmentRequestShared";
+import { CompiledResult, type CompiledBatch } from "./fulfillmentRequestShared";
+import { LotHistoryList, LotView, type CompiledLot, type LotListItem } from "./LotView";
 
-// Ecuador no tiene horario de verano: siempre UTC-5.
-function ecuadorToday() {
-  return new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString().slice(0, 10);
-}
-
+// Confirmado 2026-09-23 (diseño acordado con el usuario): todo se organiza
+// por CORTE — Yair sube los PDF de guías de ese horario, revisa y envía el
+// corte a Inventario con doble confirmación. Se quitó la subida por foto
+// del manifiesto: el usuario pidió que no quede ningún camino alterno.
 export function FulfillmentRequestPanel({ canSubmit }: { canSubmit: boolean }) {
+  const [lot, setLot] = useState<CompiledLot | null>(null);
   const [batch, setBatch] = useState<CompiledBatch | null>(null);
-  const [day, setDay] = useState<CompiledDay | null>(null);
-  const [history, setHistory] = useState<BatchListItem[]>([]);
-  const [showPhotoFlow, setShowPhotoFlow] = useState(false);
+  const [lots, setLots] = useState<LotListItem[]>([]);
 
-  async function showDay(date: string) {
-    const detail = await fetch(`/api/fulfillment-requests/day?date=${date}`).then((r) => (r.ok ? r.json() : null));
+  async function showLot(id: string) {
+    const detail = await fetch(`/api/fulfillment-lots/${id}`).then((r) => (r.ok ? r.json() : null));
     if (detail) {
-      setDay(detail);
+      setLot(detail);
       setBatch(null);
     }
   }
@@ -31,57 +28,45 @@ export function FulfillmentRequestPanel({ canSubmit }: { canSubmit: boolean }) {
     if (detail) setBatch(detail);
   }
 
-  function loadHistory(openToday: boolean) {
-    fetch("/api/fulfillment-requests")
+  function loadLots(openId: string | null) {
+    fetch("/api/fulfillment-lots")
       .then((r) => (r.ok ? r.json() : []))
-      .then((list: BatchListItem[]) => {
-        setHistory(list);
-        // Al entrar, el lote de hoy (si ya hay algo subido) se muestra solo.
-        if (openToday && list[0]?.day === ecuadorToday()) showDay(list[0].day);
+      .then((list: LotListItem[]) => {
+        setLots(list);
+        // Al entrar se abre solo el corte más reciente (el que está en
+        // preparación, o el último enviado).
+        const target = openId ?? list[0]?.id ?? null;
+        if (target) showLot(target);
+        else setLot(null);
       })
-      .catch(() => setHistory([]));
+      .catch(() => setLots([]));
   }
   // eslint-disable-next-line react-hooks/exhaustive-deps -- solo al montar
-  useEffect(() => loadHistory(true), []);
-
-  function handleApplied(batchId: string) {
-    loadHistory(false);
-    showDay(ecuadorToday()).then(() => showBatch(batchId));
-  }
+  useEffect(() => loadLots(null), []);
 
   return (
     <div>
-      {day && <DayResult key={day.day + day.batches.length} data={day} onOpenBatch={showBatch} />}
+      {lot && <LotView key={`${lot.id}-${lot.status}-${lot.batches.length}`} lot={lot} canSubmit={canSubmit} onOpenBatch={showBatch} onChanged={() => loadLots(lot.id)} />}
       {batch && (
         <div className="-mt-3 mb-5">
           <div className="flex items-center justify-between mb-1">
-            <span className="text-[11px] text-steel">Detalle de una subida del lote:</span>
+            <span className="text-[11px] text-steel">Detalle de una subida del corte:</span>
             <button type="button" className="text-[11px] text-steel hover:text-teal cursor-pointer" onClick={() => setBatch(null)}>
               Cerrar
             </button>
           </div>
-          <CompiledResult key={batch.id} batch={batch} canEditVariants={canSubmit} />
+          <CompiledResult key={batch.id} batch={batch} canEditVariants={canSubmit && lot?.status === "DRAFT"} />
         </div>
       )}
 
       {canSubmit && (
         <div className="flex flex-col gap-6 mb-5">
-          <DropiGuidesPanel onApplied={handleApplied} />
-          <RocketRequestPanel onApplied={handleApplied} />
-          <div>
-            <button type="button" className="flex items-center gap-1 text-[11px] font-semibold text-steel hover:text-teal cursor-pointer" onClick={() => setShowPhotoFlow((s) => !s)}>
-              {showPhotoFlow ? <ChevronUp size={12} /> : <ChevronDown size={12} />} ¿No tienes el PDF? Subir captura del manifiesto (método anterior)
-            </button>
-            {showPhotoFlow && (
-              <div className="mt-3">
-                <DropiRequestPanel onApplied={handleApplied} />
-              </div>
-            )}
-          </div>
+          <DropiGuidesPanel onApplied={(lotId) => loadLots(lotId)} />
+          <RocketRequestPanel onApplied={() => loadLots(null)} />
         </div>
       )}
 
-      <FulfillmentHistoryList history={history} onViewDay={showDay} />
+      <LotHistoryList lots={lots} onView={showLot} />
     </div>
   );
 }

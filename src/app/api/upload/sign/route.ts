@@ -173,10 +173,10 @@ export async function POST(req: NextRequest) {
     allowed = await canManageJustCatalog();
   }
   // Confirmado 2026-09-21: Solicitud de Fulfillment — Yair sube el Excel de
-  // Rocket con lo que necesita despachar, o la captura del manifiesto de
-  // Dropi (limpio, antes de que nadie lo resalte con marcador). Desde
-  // 2026-09-23 también el PDF de guías de Dropi (dropi-guides-pdf).
-  if (!allowed && session?.user.role === "employee" && (folder === "rocket-request-import" || folder === "dropi-request-screenshots" || folder === "dropi-guides-pdf")) {
+  // Rocket con lo que necesita despachar. Desde 2026-09-23 Dropi va solo
+  // por PDF de guías (dropi-guides-pdf); la captura del manifiesto se quitó
+  // por pedido del usuario (ningún camino alterno).
+  if (!allowed && session?.user.role === "employee" && (folder === "rocket-request-import" || folder === "dropi-guides-pdf")) {
     allowed = await canSubmitFulfillmentRequest();
   }
   // Comprobante del pago individual a cada colaborador (después de que

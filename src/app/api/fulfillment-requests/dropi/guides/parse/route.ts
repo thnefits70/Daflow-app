@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { canSubmitFulfillmentRequest } from "@/lib/guards";
-import { parseDropiGuidesPdf, type ParsedGuidesLine } from "@/lib/dropiGuidesPdf";
+import { parseDropiGuidesPdf, type ParsedGuidesLine, type ParsedWarrantyLine } from "@/lib/dropiGuidesPdf";
 import { findAlreadyUploadedGuides, resolveGuideLines } from "@/lib/fulfillmentGuides";
+import { getCurrentStockByItemIds } from "@/lib/stockKardex";
 
 // Un PDF de ~280 páginas tarda ~2-3 s en leerse; margen de sobra.
 export const maxDuration = 60;
@@ -27,7 +28,9 @@ export async function POST(req: NextRequest) {
   }
 
   const merged = new Map<string, ParsedGuidesLine>();
-  const guides = new Map<string, string>();
+  const warranty: ParsedWarrantyLine[] = [];
+  const unreadWarranty: string[] = [];
+  const guides = new Map<string, { carrier: string; warranty: boolean }>();
   const repeatedInUpload: string[] = [];
   let manifestDate: string | null = null;
   const emptyFiles: number[] = [];
@@ -41,20 +44,23 @@ export async function POST(req: NextRequest) {
     } catch {
       return NextResponse.json({ error: `El archivo #${idx + 1} no parece un PDF válido.` }, { status: 400 });
     }
-    if (result.lines.length === 0) emptyFiles.push(idx + 1);
+    if (result.lines.length === 0 && result.warranty.length === 0) emptyFiles.push(idx + 1);
     manifestDate = manifestDate ?? result.manifestDate;
     for (const g of result.guides) {
       if (guides.has(g.number)) repeatedInUpload.push(g.number);
-      else guides.set(g.number, g.carrier);
+      else guides.set(g.number, { carrier: g.carrier, warranty: g.warranty });
     }
+    warranty.push(...result.warranty);
+    unreadWarranty.push(...result.unreadWarrantyGuides);
     for (const l of result.lines) {
       const prev = merged.get(l.code);
       if (!prev) {
-        merged.set(l.code, { ...l, variants: [...l.variants] });
+        merged.set(l.code, { ...l, byCarrier: { ...l.byCarrier }, variants: [...l.variants] });
         continue;
       }
       prev.quantity += l.quantity;
       prev.labelUnits += l.labelUnits;
+      for (const [c, q] of Object.entries(l.byCarrier)) prev.byCarrier[c] = (prev.byCarrier[c] ?? 0) + q;
       for (const v of l.variants) {
         const same = prev.variants.find((x) => x.label === v.label);
         if (same) same.quantity += v.quantity;
@@ -77,18 +83,36 @@ export async function POST(req: NextRequest) {
   if (already.length > 0) {
     const when = already[0].requestedAt.toLocaleString("es-EC", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "America/Guayaquil" });
     return NextResponse.json(
-      { error: `${already.length} de estas guías ya se subieron el ${when} (ej. ${already[0].number}) — este PDF ya está en el lote de ese día, no se vuelve a sumar.` },
+      { error: `${already.length} de estas guías ya se subieron el ${when} (ej. ${already[0].number}) — este PDF ya está en un corte, no se vuelve a sumar.` },
       { status: 409 }
     );
   }
 
+  // Un código que solo aparece en una garantía también necesita saber qué
+  // producto es — entra a la lista con cantidad normal 0.
+  for (const w of warranty) {
+    if (!merged.has(w.code)) merged.set(w.code, { code: w.code, name: w.name, quantity: 0, byCarrier: {}, variants: [], labelUnits: 0 });
+  }
+
   const rows = await resolveGuideLines([...merged.values()].sort((a, b) => b.quantity - a.quantity));
-  const carriers = [...new Set(guides.values())].filter(Boolean);
+
+  // Stock actual de INVESTOCK de cada producto real involucrado — para el
+  // aviso temprano (lo que no alcanza sale en rojo antes de enviar).
+  const ids = new Set<string>();
+  for (const r of rows) {
+    if (r.resolution.kind === "product") ids.add(r.resolution.catalogItem.id);
+    if (r.resolution.kind === "combo") for (const c of r.resolution.components) ids.add(c.catalogItem.id);
+    if (r.resolution.kind === "unknown" && r.resolution.suggestion) ids.add(r.resolution.suggestion.id);
+  }
+  const stock = await getCurrentStockByItemIds([...ids]);
 
   return NextResponse.json({
     manifestDate,
-    carriers,
-    guides: [...guides.entries()].map(([number, carrier]) => ({ number, carrier })),
+    carriers: [...new Set([...guides.values()].map((g) => g.carrier))].filter(Boolean),
+    guides: [...guides.entries()].map(([number, g]) => ({ number, carrier: g.carrier, warranty: g.warranty })),
     rows,
+    warranty,
+    unreadWarrantyGuides: unreadWarranty,
+    stockByItem: Object.fromEntries([...ids].map((id) => [id, stock.get(id)?.balance ?? 0])),
   });
 }

@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { normalize, significantWords, findSimilarUnlinkedItem } from "@/lib/justCatalog";
+import { getOrCreateOpenLot } from "@/lib/fulfillmentGuides";
 
 // Confirmado 2026-09-21 — ver memoria project_investock_fulfillment_request_control
 // y el modelo RocketCodeMapping en schema.prisma para el porqué completo.
@@ -162,12 +163,16 @@ export async function applyRocketImport(decisions: RocketApplyDecisions, request
   }
 
   const newMappings = decisions.rows.filter((r) => r.createMapping);
+  // Entra al corte abierto de hoy, igual que Dropi. Sin transportadora por
+  // ahora (el Excel de Rocket no la trae — pendiente de confirmar con Yair).
+  const lot = await getOrCreateOpenLot();
 
   const batch = await prisma.$transaction(async (tx) => {
     const created = await tx.fulfillmentRequestBatch.create({
       data: {
         source: "ROCKET",
         requestedById,
+        lotId: lot.id,
         totalRows: decisions.totalRows,
         skippedCount: decisions.skippedCount,
         items: { create: itemsData },
@@ -238,7 +243,10 @@ export type SaveVariantsResult = { ok: true; variants: VariantNote[] } | { ok: f
 // incremental), y se valida que la suma cuadre con el total real antes de
 // guardar nada, a diferencia del papel donde nadie revisaba la suma.
 export async function saveVariantNotes(batchId: string, catalogItemId: string, variants: VariantNote[], createdById: string | null): Promise<SaveVariantsResult> {
-  const items = await prisma.fulfillmentRequestItem.findMany({ where: { batchId, catalogItemId }, select: { quantity: true } });
+  const lot = await prisma.fulfillmentRequestBatch.findUnique({ where: { id: batchId }, select: { lot: { select: { status: true } } } });
+  if (lot?.lot && lot.lot.status !== "DRAFT") return { ok: false, error: "Este corte ya se envió a Inventario — ya no se puede cambiar." };
+  // Las garantías se marcan aparte (ver fulfillmentGuides) — no cuentan en el desglose de variantes.
+  const items = await prisma.fulfillmentRequestItem.findMany({ where: { batchId, catalogItemId, warrantyGuide: null }, select: { quantity: true } });
   if (items.length === 0) return { ok: false, error: "Ese producto no está en este compendiado." };
   const total = items.reduce((sum, i) => sum + i.quantity, 0);
 

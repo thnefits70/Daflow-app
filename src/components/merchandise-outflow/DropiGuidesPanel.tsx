@@ -7,6 +7,7 @@ import { ProductMatchPicker, type MatchCatalogItem } from "@/components/merchand
 import { CatalogCode } from "@/components/shared/CatalogCode";
 import { ExpandableName } from "@/components/ui/ExpandableName";
 import { RegisterComboForm } from "./RegisterComboForm";
+import { carrierLabel, sortCarriers } from "@/lib/carriers";
 
 type ItemLite = MatchCatalogItem;
 type Resolution =
@@ -15,9 +16,28 @@ type Resolution =
   | { kind: "comboNoRecipe"; comboCode: string }
   | { kind: "ignored"; label: string }
   | { kind: "unknown"; suggestion: ItemLite | null };
-type Row = { code: string; name: string; quantity: number; labelUnits: number; variants: { label: string; quantity: number }[]; resolution: Resolution };
-type ParseResult = { manifestDate: string | null; carriers: string[]; guides: { number: string; carrier: string }[]; rows: Row[] };
+type Row = {
+  code: string;
+  name: string;
+  quantity: number;
+  byCarrier: Record<string, number>;
+  labelUnits: number;
+  variants: { label: string; quantity: number }[];
+  resolution: Resolution;
+};
+type WarrantyLine = { guide: string; carrier: string; code: string; name: string; quantity: number; variant: string | null };
+type ParseResult = {
+  manifestDate: string | null;
+  carriers: string[];
+  guides: { number: string; carrier: string; warranty: boolean }[];
+  rows: Row[];
+  warranty: WarrantyLine[];
+  unreadWarrantyGuides: string[];
+  stockByItem: Record<string, number>;
+};
 type Decision = { kind: "product"; item: ItemLite } | { kind: "combo" } | { kind: "ignore" } | null;
+// Garantía: qué sale de verdad (lo marca Yair, confirmado por el usuario).
+type WarrantyDecision = { mode: "COMPLETE" } | { mode: "PARTIAL"; catalogItemIds: string[] } | { mode: "PIECE"; catalogItemId: string; piece: string } | null;
 
 function initialDecision(r: Row): Decision {
   switch (r.resolution.kind) {
@@ -49,7 +69,7 @@ function PhotoThumb({ url }: { url: string | undefined }) {
 // src/lib/dropiGuidesPdf.ts). Solo pregunta lo que todavía no conoce, UNA
 // vez: un código nuevo (¿qué producto es? / ¿es combo? / ¿no es producto?)
 // y desde ahí queda aprendido para siempre.
-export function DropiGuidesPanel({ onApplied }: { onApplied: (batchId: string) => void }) {
+export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => void }) {
   const [files, setFiles] = useState<{ url: string; name: string }[]>([]);
   const [uploading, setUploading] = useState(false);
   const [phase, setPhase] = useState<"idle" | "reading" | "preview" | "applying">("idle");
@@ -57,6 +77,7 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (batchId: string) =
   const [decisions, setDecisions] = useState<Record<string, Decision>>({});
   const [picking, setPicking] = useState<string | null>(null);
   const [registering, setRegistering] = useState<string | null>(null);
+  const [warrantyDecisions, setWarrantyDecisions] = useState<Record<number, WarrantyDecision>>({});
   const [err, setErr] = useState("");
 
   async function handleFiles(list: FileList) {
@@ -106,6 +127,9 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (batchId: string) =
       }
       return next;
     });
+    // Al volver a leer se conserva lo que Yair ya marcó en cada garantía
+    // (mismo orden de guías → mismo índice).
+    if (!keepDecisions) setWarrantyDecisions({});
     setPicking(null);
     setRegistering(null);
     setPhase("preview");
@@ -115,6 +139,7 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (batchId: string) =
     setFiles([]);
     setData(null);
     setDecisions({});
+    setWarrantyDecisions({});
     setPhase("idle");
     setErr("");
   }
@@ -129,13 +154,34 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (batchId: string) =
   }
 
   const rows = data?.rows ?? [];
+  const warranty = data?.warranty ?? [];
   const pending = rows.filter((r) => !decisions[r.code]);
   const ready = rows.filter((r) => decisions[r.code] && decisions[r.code]!.kind !== "ignore");
   const ignored = rows.filter((r) => decisions[r.code]?.kind === "ignore");
   const totalUnits = rows.reduce((s, r) => s + r.quantity, 0);
+  const rowByCode = new Map(rows.map((r) => [r.code, r]));
+
+  // Productos reales de un código ya resuelto (para garantías y stock).
+  function partsOf(code: string): { item: ItemLite; perUnit: number }[] {
+    const r = rowByCode.get(code);
+    const d = decisions[code];
+    if (!r || !d || d.kind === "ignore") return [];
+    if (d.kind === "product") return [{ item: d.item, perUnit: 1 }];
+    return r.resolution.kind === "combo" ? r.resolution.components.map((c) => ({ item: c.catalogItem, perUnit: c.quantity })) : [];
+  }
+
+  function warrantyReady(i: number, w: WarrantyLine): boolean {
+    if (decisions[w.code]?.kind === "ignore") return true;
+    const wd = warrantyDecisions[i];
+    if (!wd || partsOf(w.code).length === 0) return false;
+    if (wd.mode === "PARTIAL") return wd.catalogItemIds.length > 0;
+    if (wd.mode === "PIECE") return !!wd.catalogItemId && !!wd.piece.trim();
+    return true;
+  }
+  const pendingWarranty = warranty.filter((w, i) => !warrantyReady(i, w)).length;
 
   async function apply() {
-    if (!data || pending.length > 0) return;
+    if (!data || pending.length > 0 || pendingWarranty > 0) return;
     setPhase("applying");
     setErr("");
     const res = await fetch("/api/fulfillment-requests/dropi/guides/apply", {
@@ -144,18 +190,23 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (batchId: string) =
       body: JSON.stringify({
         fileUrls: files.map((f) => f.url),
         manifestDate: data.manifestDate,
-        guides: data.guides,
+        guides: data.guides.map((g) => ({ number: g.number, carrier: g.carrier })),
         rows: rows.map((r) => {
           const d = decisions[r.code]!;
           return {
             code: r.code,
             name: r.name,
             quantity: r.quantity,
+            byCarrier: r.byCarrier,
             labelUnits: r.labelUnits,
             variants: r.variants,
             decision: d.kind === "product" ? { kind: "product", catalogItemId: d.item.id } : { kind: d.kind },
           };
         }),
+        warranty: warranty
+          .map((w, i) => ({ w, wd: warrantyDecisions[i] }))
+          .filter(({ w, wd }) => wd && decisions[w.code]?.kind !== "ignore")
+          .map(({ w, wd }) => ({ guide: w.guide, carrier: w.carrier, code: w.code, quantity: w.quantity, variant: w.variant, decision: wd })),
       }),
     });
     const json = await res.json().catch(() => null);
@@ -165,7 +216,96 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (batchId: string) =
       return;
     }
     reset();
-    onApplied(json.batchId);
+    onApplied(json.lotId);
+  }
+
+  function renderWarranty(w: WarrantyLine, i: number) {
+    const parts = partsOf(w.code);
+    const wd = warrantyDecisions[i] ?? null;
+    const set = (v: WarrantyDecision) => setWarrantyDecisions((p) => ({ ...p, [i]: v }));
+    const isCombo = parts.length > 1;
+    const ok = warrantyReady(i, w);
+    return (
+      <div key={`${w.guide}-${w.code}-${i}`} className={`rounded-md p-2.5 ${ok ? "bg-cloud" : "bg-gold/10 border border-gold/30"}`}>
+        <div className="flex items-center gap-1.5 flex-wrap text-[12px]">
+          <span className="font-mono text-[9.5px] font-bold uppercase rounded-full px-1.5 py-0.5 bg-red/10 text-red border border-red/30">Garantía</span>
+          <span className="text-[10.5px] text-steel">
+            Guía {w.guide} · {carrierLabel(w.carrier)}
+          </span>
+        </div>
+        <div className="flex items-center gap-1.5 flex-wrap text-[12px] mt-1">
+          <CatalogCode code={w.code} />
+          <ExpandableName text={w.name} className="font-semibold flex-1 min-w-0" />
+          {w.variant && <span className="font-mono text-[10px] bg-teal/10 border border-teal/30 rounded-full px-2 py-0.5">{w.variant}</span>}
+          <span className="font-mono text-[13px] font-bold text-teal shrink-0">{w.quantity}</span>
+        </div>
+        {decisions[w.code]?.kind === "ignore" ? (
+          <div className="text-[11px] text-steel mt-1">Marcado como &quot;no es un producto&quot; — no se incluye.</div>
+        ) : parts.length === 0 ? (
+          <div className="text-[11px] mt-1" style={{ color: "#D9A441" }}>
+            Primero indica arriba qué producto es el código {w.code}.
+          </div>
+        ) : (
+          <div className="mt-1.5 text-[11.5px] flex flex-col gap-1">
+            <div className="font-semibold">¿Qué sale de verdad?</div>
+            <label className="flex items-center gap-1.5 cursor-pointer">
+              <input type="radio" checked={wd?.mode === "COMPLETE"} onChange={() => set({ mode: "COMPLETE" })} />
+              Completo{isCombo ? ` (${parts.map((p) => p.item.name).join(" + ")})` : ""}
+            </label>
+            {isCombo && (
+              <label className="flex items-center gap-1.5 cursor-pointer">
+                <input type="radio" checked={wd?.mode === "PARTIAL"} onChange={() => set({ mode: "PARTIAL", catalogItemIds: [] })} />
+                Solo parte del combo
+              </label>
+            )}
+            {wd?.mode === "PARTIAL" && (
+              <div className="pl-5 flex flex-col gap-0.5">
+                {parts.map((p) => (
+                  <label key={p.item.id} className="flex items-center gap-1.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={wd.catalogItemIds.includes(p.item.id)}
+                      onChange={(e) =>
+                        set({ mode: "PARTIAL", catalogItemIds: e.target.checked ? [...wd.catalogItemIds, p.item.id] : wd.catalogItemIds.filter((x) => x !== p.item.id) })
+                      }
+                    />
+                    <CatalogCode code={p.item.justCode} /> {p.item.name}
+                  </label>
+                ))}
+              </div>
+            )}
+            <label className="flex items-center gap-1.5 cursor-pointer">
+              <input type="radio" checked={wd?.mode === "PIECE"} onChange={() => set({ mode: "PIECE", catalogItemId: parts[0].item.id, piece: "" })} />
+              Solo una pieza <span className="text-steel text-[10.5px]">(sale del stock de repuestos, no descuenta el producto)</span>
+            </label>
+            {wd?.mode === "PIECE" && (
+              <div className="pl-5 flex items-center gap-1.5 flex-wrap">
+                {isCombo && (
+                  <select
+                    className="rounded border border-rule bg-surface px-1.5 py-1 text-[11.5px]"
+                    value={wd.catalogItemId}
+                    onChange={(e) => set({ ...wd, catalogItemId: e.target.value })}
+                  >
+                    {parts.map((p) => (
+                      <option key={p.item.id} value={p.item.id}>
+                        {p.item.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+                <input
+                  type="text"
+                  placeholder="¿Qué pieza? Ej. cargador"
+                  className="flex-1 min-w-[10rem] rounded border border-rule bg-surface px-2 py-1 text-[11.5px]"
+                  value={wd.piece}
+                  onChange={(e) => set({ ...wd, piece: e.target.value })}
+                />
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
   }
 
   function renderRow(r: Row) {
@@ -179,6 +319,15 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (batchId: string) =
           <ExpandableName text={r.name} className="font-semibold flex-1 min-w-0" />
           <span className="font-mono text-[13px] font-bold text-teal shrink-0">{r.quantity}</span>
         </div>
+        {r.quantity > 0 ? (
+          <div className="mt-0.5 text-[10.5px] text-steel">
+            {sortCarriers(Object.keys(r.byCarrier))
+              .map((c) => `${carrierLabel(c)} ${r.byCarrier[c]}`)
+              .join(" · ")}
+          </div>
+        ) : (
+          <div className="mt-0.5 text-[10.5px] text-steel">Solo en garantía (abajo)</div>
+        )}
         {r.variants.length > 0 && (
           <div className="mt-1 flex items-center gap-1 flex-wrap">
             {r.variants.map((v) => (
@@ -189,6 +338,19 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (batchId: string) =
             {unread > 0 && <span className="font-mono text-[10px] text-steel">+{unread} sin leer en guías</span>}
           </div>
         )}
+        {partsOf(r.code)
+          // Solo si se conoce su stock (un producto elegido a mano con el
+          // buscador no viene en la lectura — se revisa igual en el corte).
+          .filter((p) => data !== null && p.item.id in data.stockByItem && r.quantity * p.perUnit > data.stockByItem[p.item.id])
+          .map((p) => (
+            // Aviso temprano de stock (confirmado por el usuario 2026-09-23).
+            <div key={p.item.id} className="mt-1 text-[11px] text-red flex items-start gap-1">
+              <AlertTriangle size={12} className="mt-0.5 shrink-0" />
+              <span>
+                Stock insuficiente{partsOf(r.code).length > 1 ? ` de ${p.item.name}` : ""}: piden {r.quantity * p.perUnit}, en INVESTOCK hay {data?.stockByItem[p.item.id] ?? 0}.
+              </span>
+            </div>
+          ))}
 
         <div className="mt-1.5 text-[11.5px]">
           {d?.kind === "product" && (
@@ -316,7 +478,7 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (batchId: string) =
     <div>
       <div className="text-[12.5px] mb-3 bg-teal/10 border border-teal/25 rounded px-2.5 py-2">
         <b>Dropi — PDF de guías:</b> sube el PDF de guías tal como lo descargas de Dropi (puedes subir varios a la vez, uno por transportadora). La app saca sola los
-        productos, las cantidades, los combos y los colores/tallas. Solo te pregunta por los códigos que todavía no conoce.
+        productos (por su ID madre de INVESTOCK), las cantidades por transportadora, los combos, los colores/tallas y las garantías. Solo te pregunta lo que todavía no conoce.
       </div>
 
       {phase === "idle" && (
@@ -360,7 +522,7 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (batchId: string) =
         <div className="bg-surface border border-rule rounded-md p-4 mb-3">
           <div className="font-display font-bold text-[14.5px] mb-1">Revisa antes de guardar</div>
           <div className="text-[11.5px] text-steel mb-3">
-            {data.guides.length} guías{data.carriers.length > 0 ? ` (${data.carriers.join(", ")})` : ""}
+            {data.guides.length} guías{data.carriers.length > 0 ? ` (${sortCarriers(data.carriers).map(carrierLabel).join(", ")})` : ""}
             {data.manifestDate ? ` · manifiesto del ${data.manifestDate.split("-").reverse().join("/")}` : ""} · {rows.length} códigos · {totalUnits} unidades
           </div>
 
@@ -387,14 +549,31 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (batchId: string) =
             </>
           )}
 
+          {(warranty.length > 0 || data.unreadWarrantyGuides.length > 0) && (
+            <>
+              <div className="text-[11px] font-semibold text-steel mb-1.5">
+                Garantías ({warranty.length}) — marca qué sale de verdad en cada una
+              </div>
+              {data.unreadWarrantyGuides.length > 0 && (
+                <div className="text-[11px] text-red mb-1.5 flex items-start gap-1">
+                  <AlertTriangle size={12} className="mt-0.5 shrink-0" />
+                  <span>
+                    No pude leer el producto de estas guías de garantía: {data.unreadWarrantyGuides.join(", ")}. Revísalas en el PDF y avísale a Daniel qué sale.
+                  </span>
+                </div>
+              )}
+              <div className="flex flex-col gap-1.5 mb-3">{warranty.map(renderWarranty)}</div>
+            </>
+          )}
+
           <div className="flex items-center gap-2.5 flex-wrap">
             <button
               type="button"
-              disabled={phase === "applying" || pending.length > 0}
+              disabled={phase === "applying" || pending.length > 0 || pendingWarranty > 0}
               className="rounded border border-teal bg-teal px-3.5 py-2 text-[12.5px] font-bold text-navy cursor-pointer disabled:opacity-60"
               onClick={apply}
             >
-              {phase === "applying" ? "Guardando…" : "Guardar en el lote de hoy"}
+              {phase === "applying" ? "Guardando…" : "Guardar en el corte de hoy"}
             </button>
             <button type="button" className="text-steel text-[12.5px] cursor-pointer" onClick={() => read(true)} disabled={phase === "applying"}>
               Volver a leer
@@ -402,9 +581,9 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (batchId: string) =
             <button type="button" className="text-steel text-[12.5px] cursor-pointer" onClick={reset} disabled={phase === "applying"}>
               Cancelar
             </button>
-            {pending.length > 0 && (
+            {(pending.length > 0 || pendingWarranty > 0) && (
               <span className="text-[11.5px]" style={{ color: "#D9A441" }}>
-                Resuelve los {pending.length} código(s) pendientes antes de guardar.
+                {pending.length > 0 ? `Resuelve los ${pending.length} código(s) pendientes` : `Marca qué sale en ${pendingWarranty} garantía(s)`} antes de guardar.
               </span>
             )}
           </div>

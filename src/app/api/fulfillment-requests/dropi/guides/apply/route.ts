@@ -14,7 +14,8 @@ const schema = z.object({
       z.object({
         code: z.string().trim().min(1).max(30),
         name: z.string().max(200),
-        quantity: z.number().int().positive(),
+        quantity: z.number().int().nonnegative(),
+        byCarrier: z.record(z.string().max(40), z.number().int().nonnegative()),
         labelUnits: z.number().int().nonnegative(),
         variants: z.array(variantSchema).max(50),
         decision: z.discriminatedUnion("kind", [
@@ -26,11 +27,28 @@ const schema = z.object({
     )
     .min(1)
     .max(1000),
+  warranty: z
+    .array(
+      z.object({
+        guide: z.string().trim().min(1).max(40),
+        carrier: z.string().max(40),
+        code: z.string().trim().min(1).max(30),
+        quantity: z.number().int().positive(),
+        variant: z.string().max(120).nullable(),
+        decision: z.discriminatedUnion("mode", [
+          z.object({ mode: z.literal("COMPLETE") }),
+          z.object({ mode: z.literal("PARTIAL"), catalogItemIds: z.array(z.string().min(1)).min(1) }),
+          z.object({ mode: z.literal("PIECE"), catalogItemId: z.string().min(1), piece: z.string().trim().min(1).max(200) }),
+        ]),
+      })
+    )
+    .max(500),
 });
 
-// Guarda la lectura del PDF de guías ya revisada por Yair — y lo que la app
-// "aprende" en el camino (ID de Dropi puesto a un producto que no lo tenía,
-// códigos marcados como "no es producto"). Ver src/lib/fulfillmentGuides.ts.
+// Guarda la lectura del PDF de guías ya revisada por Yair en el corte
+// abierto de hoy — y lo que la app "aprende" en el camino (ID de Dropi
+// puesto a un producto que no lo tenía, IDs alternos, códigos marcados
+// como "no es producto"). Ver src/lib/fulfillmentGuides.ts.
 export async function POST(req: NextRequest) {
   const session = await auth();
   if (!(await canSubmitFulfillmentRequest()) || !session) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
@@ -41,5 +59,5 @@ export async function POST(req: NextRequest) {
 
   const result = await applyGuidesImport(parsed.data, dbUserId(session.user.id));
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
-  return NextResponse.json({ ok: true, batchId: result.batchId });
+  return NextResponse.json({ ok: true, batchId: result.batchId, lotId: result.lotId });
 }

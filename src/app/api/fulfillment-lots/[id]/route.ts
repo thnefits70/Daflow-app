@@ -1,0 +1,11 @@
+import { NextRequest, NextResponse } from "next/server";
+import { canViewFulfillmentRequests } from "@/lib/guards";
+import { getCompiledLot } from "@/lib/fulfillmentGuides";
+
+export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  if (!(await canViewFulfillmentRequests())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+  const { id } = await params;
+  const lot = await getCompiledLot(id);
+  if (!lot) return NextResponse.json({ error: "No encontrado." }, { status: 404 });
+  return NextResponse.json(lot);
+}

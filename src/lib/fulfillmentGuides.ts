@@ -1,14 +1,23 @@
 import { prisma } from "@/lib/prisma";
 import { normalizeName, type ParsedGuidesLine } from "@/lib/dropiGuidesPdf";
 import { findSimilarUnlinkedItem, significantWords } from "@/lib/justCatalog";
+import { getCurrentStockByItemIds } from "@/lib/stockKardex";
+import { notifyOwner } from "@/lib/notifications";
+import { getInventoryLeadId } from "@/lib/guards";
+import { NO_CARRIER, sortCarriers } from "@/lib/carriers";
 
-// Confirmado 2026-09-23, pedido de Yair aprobado por el usuario (opción A:
-// esto sigue siendo SOLO la lista de lo que Fulfillment necesita — no
-// descuenta stock; el descuento real en INVESTOCK lo sigue haciendo Daniel
-// al registrar el despacho). Regla del usuario: para INVESTOCK solo existe
-// el ID de Dropi (justCode del catálogo); un combo siempre se abre en sus
-// productos reales, y cada uno de esos productos tiene que tener su propio
-// ID de Dropi.
+// Confirmado 2026-09-23, diseño acordado con el usuario pregunta por
+// pregunta (ver memoria project_fulfillment_corte_manifest_plan):
+//   1. Yair sube los PDF de guías de cada corte → la app agrupa todo por el
+//      ID MADRE de INVESTOCK (los IDs de Dropi/Rocket son "de promoción" y
+//      apuntan a él), abre los combos, reparte por transportadora y separa
+//      las garantías.
+//   2. Aviso temprano: lo que no alcanza en stock se ve en rojo y, al
+//      enviar, le llega a Bryan Ríos y a Jariel.
+//   3. Yair envía el corte a Inventario con doble confirmación; desde ahí
+//      el lote queda cerrado.
+// Nada de esto mueve el stock: el Kardex se descuenta recién cuando Daniel
+// confirma lo que su equipo de verdad sacó (siguiente parte).
 
 const ITEM_SELECT = { id: true, name: true, photos: true, justCode: true, pendingRegistration: true } as const;
 type ItemLite = { id: string; name: string; photos: string[]; justCode: string | null; pendingRegistration: boolean };
@@ -96,24 +105,6 @@ export async function resolveGuideLines(lines: ParsedGuidesLine[]): Promise<Reso
   });
 }
 
-export type GuidesApplyRow = {
-  code: string;
-  name: string;
-  quantity: number;
-  labelUnits: number;
-  variants: { label: string; quantity: number }[];
-  decision: { kind: "product"; catalogItemId: string } | { kind: "combo" } | { kind: "ignore" };
-};
-
-export type GuidesApplyInput = {
-  fileUrls: string[];
-  manifestDate: string | null;
-  guides: { number: string; carrier: string }[];
-  rows: GuidesApplyRow[];
-};
-
-export type GuidesApplyResult = { ok: true; batchId: string } | { ok: false; error: string };
-
 export async function findAlreadyUploadedGuides(numbers: string[]): Promise<{ number: string; requestedAt: Date }[]> {
   if (numbers.length === 0) return [];
   const found = await prisma.fulfillmentRequestGuide.findMany({
@@ -123,13 +114,73 @@ export async function findAlreadyUploadedGuides(numbers: string[]): Promise<{ nu
   return found.map((f) => ({ number: f.guideNumber, requestedAt: f.batch.requestedAt }));
 }
 
+// ---- Lote por corte -------------------------------------------------------
+
+// Ecuador no tiene horario de verano: siempre UTC-5.
+const EC_OFFSET_MS = 5 * 60 * 60 * 1000;
+
+export function ecuadorDay(d: Date): string {
+  return new Date(d.getTime() - EC_OFFSET_MS).toISOString().slice(0, 10);
+}
+
+// El corte abierto (DRAFT) de hoy. Si no hay (nunca se subió nada hoy, o
+// el último ya se envió), se abre el siguiente: Corte 1, 2, 3…
+export async function getOrCreateOpenLot(): Promise<{ id: string; corte: number }> {
+  const day = ecuadorDay(new Date());
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const open = await prisma.fulfillmentLot.findFirst({ where: { day, status: "DRAFT" }, orderBy: { corte: "desc" }, select: { id: true, corte: true } });
+    if (open) return open;
+    const last = await prisma.fulfillmentLot.findFirst({ where: { day }, orderBy: { corte: "desc" }, select: { corte: true } });
+    try {
+      return await prisma.fulfillmentLot.create({ data: { day, corte: (last?.corte ?? 0) + 1 }, select: { id: true, corte: true } });
+    } catch {
+      // Dos subidas al mismo tiempo: la otra ya creó este corte — se reintenta.
+    }
+  }
+  throw new Error("No se pudo abrir el corte de hoy — vuelve a intentar.");
+}
+
+// ---- Guardar la lectura del PDF -----------------------------------------
+
+type Decision = { kind: "product"; catalogItemId: string } | { kind: "combo" } | { kind: "ignore" };
+
+export type GuidesApplyRow = {
+  code: string;
+  name: string;
+  quantity: number;
+  byCarrier: Record<string, number>;
+  labelUnits: number;
+  variants: { label: string; quantity: number }[];
+  decision: Decision;
+};
+
+export type WarrantyDecision =
+  | { mode: "COMPLETE" }
+  // Solo algunos productos del combo — ids de los que SÍ salen.
+  | { mode: "PARTIAL"; catalogItemIds: string[] }
+  // Solo una pieza: de qué producto es y qué pieza (sale del stock de
+  // repuestos aparte, nunca del Kardex del producto).
+  | { mode: "PIECE"; catalogItemId: string; piece: string };
+
+export type GuidesApplyWarranty = { guide: string; carrier: string; code: string; quantity: number; variant: string | null; decision: WarrantyDecision };
+
+export type GuidesApplyInput = {
+  fileUrls: string[];
+  manifestDate: string | null;
+  guides: { number: string; carrier: string }[];
+  rows: GuidesApplyRow[];
+  warranty: GuidesApplyWarranty[];
+};
+
+export type GuidesApplyResult = { ok: true; batchId: string; lotId: string } | { ok: false; error: string };
+
 // Desglose de variantes de UNA fila del PDF: lo que se leyó en las
 // etiquetas + lo que quedó sin variante + lo que no se alcanzó a leer. Suma
 // siempre exactamente `quantity` (así cuadra con la validación de
 // saveVariantNotes). Vacío si la fila no trae ninguna variante.
 function rowBreakdown(row: GuidesApplyRow): { label: string; quantity: number }[] {
   const variants = row.variants.filter((v) => v.label.trim() && v.quantity > 0);
-  if (variants.length === 0) return [];
+  if (variants.length === 0 || row.quantity === 0) return [];
   const read = variants.reduce((s, v) => s + v.quantity, 0);
   if (read > row.quantity) return [];
   const labeled = Math.min(row.labelUnits, row.quantity);
@@ -142,21 +193,34 @@ function rowBreakdown(row: GuidesApplyRow): { label: string; quantity: number }[
   ];
 }
 
+type ItemRow = {
+  catalogItemId: string;
+  quantity: number;
+  sourceCode: string;
+  fromComboCode: string | null;
+  carrier: string | null;
+  warrantyGuide?: string;
+  warrantyMode?: string;
+  warrantyPiece?: string;
+  breakdown: { label: string; quantity: number }[];
+};
+
 export async function applyGuidesImport(input: GuidesApplyInput, userId: string | null): Promise<GuidesApplyResult> {
   const dup = await findAlreadyUploadedGuides(input.guides.map((g) => g.number));
   if (dup.length > 0) {
-    return { ok: false, error: `${dup.length} guía(s) de este PDF ya se subieron antes (ej. ${dup[0].number}) — no se vuelven a sumar. Revisa el historial del día.` };
+    return { ok: false, error: `${dup.length} guía(s) de este PDF ya se subieron antes (ej. ${dup[0].number}) — no se vuelven a sumar.` };
   }
 
+  const decisionByCode = new Map(input.rows.map((r) => [r.code, r.decision]));
   const productRows = input.rows.filter((r) => r.decision.kind === "product");
-  const comboRows = input.rows.filter((r) => r.decision.kind === "combo");
+  const comboCodes = input.rows.filter((r) => r.decision.kind === "combo").map((r) => r.code);
   const ignoreRows = input.rows.filter((r) => r.decision.kind === "ignore");
 
   const pickedIds = [...new Set(productRows.map((r) => (r.decision as { catalogItemId: string }).catalogItemId))];
   const [pickedItems, combos, codeOwners] = await Promise.all([
     prisma.purchaseCatalogItem.findMany({ where: { id: { in: pickedIds } }, select: { id: true, name: true, justCode: true } }),
     prisma.dropiCombo.findMany({
-      where: { code: { in: comboRows.map((r) => r.code) } },
+      where: { code: { in: comboCodes } },
       select: { code: true, components: { select: { catalogItemId: true, quantity: true, catalogItem: { select: { name: true, justCode: true } } } } },
     }),
     prisma.purchaseCatalogItem.findMany({ where: { justCode: { in: productRows.map((r) => r.code) } }, select: { id: true, name: true, justCode: true } }),
@@ -169,47 +233,103 @@ export async function applyGuidesImport(input: GuidesApplyInput, userId: string 
   const assignCode: { itemId: string; code: string }[] = [];
   const aliasCombos: { code: string; label: string; itemId: string }[] = [];
 
-  type ItemRow = { catalogItemId: string; quantity: number; sourceCode: string; fromComboCode: string | null; breakdown: { label: string; quantity: number }[] };
-  const itemRows: ItemRow[] = [];
-
   for (const row of productRows) {
-    const itemId = (row.decision as { catalogItemId: string }).catalogItemId;
-    const item = itemById.get(itemId);
+    const item = itemById.get((row.decision as { catalogItemId: string }).catalogItemId);
     if (!item) return { ok: false, error: `No se encontró el producto elegido para el código ${row.code}.` };
-    if (item.justCode !== row.code) {
-      const owner = ownerByCode.get(row.code);
-      if (owner && owner.id !== item.id) return { ok: false, error: `El código ${row.code} ya pertenece a "${owner.name}" — elige ese producto.` };
-      if (!item.justCode) {
-        // El producto no tenía ID de Dropi: se le pone este — es lo que la
-        // app "aprende" para no volver a preguntar.
-        assignCode.push({ itemId: item.id, code: row.code });
-      } else {
-        // El producto ya tiene OTRO ID de Dropi (ej. mismo producto
-        // publicado dos veces en Dropi): se guarda como equivalencia 1:1 —
-        // un combo de un solo producto — nunca se pisa el ID existente.
-        aliasCombos.push({ code: row.code, label: row.name, itemId: item.id });
-      }
+    if (item.justCode === row.code) continue;
+    const owner = ownerByCode.get(row.code);
+    if (owner && owner.id !== item.id) return { ok: false, error: `El código ${row.code} ya pertenece a "${owner.name}" — elige ese producto.` };
+    if (!item.justCode) {
+      // El producto no tenía ID de Dropi: se le pone este — es lo que la
+      // app "aprende" para no volver a preguntar.
+      assignCode.push({ itemId: item.id, code: row.code });
+    } else {
+      // Confirmado por el usuario 2026-09-23: Dropi publica el mismo
+      // producto con varios IDs ("de promoción"), pero en INVESTOCK existe
+      // uno solo — se guarda como ID alterno (combo 1:1), nunca se pisa el
+      // ID madre.
+      aliasCombos.push({ code: row.code, label: row.name, itemId: item.id });
     }
-    itemRows.push({ catalogItemId: item.id, quantity: row.quantity, sourceCode: row.code, fromComboCode: null, breakdown: rowBreakdown(row) });
   }
-
   if (new Set(assignCode.map((a) => a.itemId)).size !== assignCode.length) {
     return { ok: false, error: "Elegiste el mismo producto para dos códigos distintos de Dropi — revisa las filas." };
   }
 
-  for (const row of comboRows) {
-    const combo = comboByCode.get(row.code);
-    if (!combo || combo.components.length === 0) return { ok: false, error: `El combo ${row.code} todavía no tiene receta registrada.` };
+  for (const code of comboCodes) {
+    const combo = comboByCode.get(code);
+    if (!combo || combo.components.length === 0) return { ok: false, error: `El combo ${code} todavía no tiene receta registrada.` };
     const missing = combo.components.filter((c) => !c.catalogItem.justCode?.trim()).map((c) => c.catalogItem.name);
-    if (missing.length > 0) return { ok: false, error: `Combo ${row.code}: ${missingDropiIdMessage(missing)}` };
+    if (missing.length > 0) return { ok: false, error: `Combo ${code}: ${missingDropiIdMessage(missing)}` };
+  }
+
+  // Lo que se pide por código, ya en productos reales (ID madre).
+  const expand = (code: string): { catalogItemId: string; perUnit: number; fromCombo: string | null }[] | null => {
+    const d = decisionByCode.get(code);
+    if (!d || d.kind === "ignore") return null;
+    if (d.kind === "product") return [{ catalogItemId: d.catalogItemId, perUnit: 1, fromCombo: null }];
+    return comboByCode.get(code)!.components.map((c) => ({ catalogItemId: c.catalogItemId, perUnit: c.quantity, fromCombo: code }));
+  };
+
+  const itemRows: ItemRow[] = [];
+  for (const row of input.rows) {
+    const parts = expand(row.code);
+    if (!parts || row.quantity === 0) continue;
     const breakdown = rowBreakdown(row);
-    for (const comp of combo.components) {
+    for (const part of parts) {
+      const carriers = Object.entries(row.byCarrier).filter(([, q]) => q > 0);
+      carriers.forEach(([carrier, q], idx) => {
+        itemRows.push({
+          catalogItemId: part.catalogItemId,
+          quantity: q * part.perUnit,
+          sourceCode: row.code,
+          fromComboCode: part.fromCombo,
+          carrier,
+          // El desglose de variantes va una sola vez por producto (en la
+          // primera transportadora) — es del total, no de cada una.
+          breakdown:
+            idx === 0
+              ? breakdown.map((b) => ({ label: part.fromCombo ? `Combo ${part.fromCombo}: ${b.label}` : b.label, quantity: b.quantity * part.perUnit }))
+              : [],
+        });
+      });
+    }
+  }
+
+  // Garantías: Yair ya dijo qué sale de verdad en cada una.
+  for (const w of input.warranty) {
+    const parts = expand(w.code);
+    if (!parts) continue;
+    const d = w.decision;
+    if (d.mode === "PIECE") {
+      if (!parts.some((p) => p.catalogItemId === d.catalogItemId)) return { ok: false, error: `Garantía ${w.guide}: la pieza debe ser de uno de los productos de esa guía.` };
+      if (!d.piece.trim()) return { ok: false, error: `Garantía ${w.guide}: escribe qué pieza sale.` };
       itemRows.push({
-        catalogItemId: comp.catalogItemId,
-        quantity: comp.quantity * row.quantity,
-        sourceCode: row.code,
-        fromComboCode: combo.code,
-        breakdown: breakdown.map((b) => ({ label: `Combo ${combo.code}: ${b.label}`, quantity: b.quantity * comp.quantity })),
+        catalogItemId: d.catalogItemId,
+        quantity: w.quantity,
+        sourceCode: w.code,
+        fromComboCode: parts[0].fromCombo,
+        carrier: w.carrier,
+        warrantyGuide: w.guide,
+        warrantyMode: "PIECE",
+        warrantyPiece: d.piece.trim(),
+        breakdown: [],
+      });
+      continue;
+    }
+    const chosen = d.mode === "PARTIAL" ? parts.filter((p) => d.catalogItemIds.includes(p.catalogItemId)) : parts;
+    if (d.mode === "PARTIAL" && chosen.length === 0) return { ok: false, error: `Garantía ${w.guide}: marca al menos un producto del combo que sale.` };
+    for (const p of chosen) {
+      itemRows.push({
+        catalogItemId: p.catalogItemId,
+        quantity: w.quantity * p.perUnit,
+        sourceCode: w.code,
+        fromComboCode: p.fromCombo,
+        carrier: w.carrier,
+        warrantyGuide: w.guide,
+        warrantyMode: d.mode,
+        // En COMPLETE/PARTIAL este campo guarda el color/talla de la guía.
+        warrantyPiece: w.variant ?? undefined,
+        breakdown: [],
       });
     }
   }
@@ -219,24 +339,36 @@ export async function applyGuidesImport(input: GuidesApplyInput, userId: string 
   // Notas de variante por producto: solo si alguna de sus filas trae
   // variantes; las demás filas del mismo producto entran como "Sin
   // variante" para que la suma cuadre con el total.
+  // Las garantías no entran: se ven aparte, con lo que Yair marcó.
+  const normalRows = itemRows.filter((r) => !r.warrantyGuide);
   const notesByItem = new Map<string, Map<string, number>>();
-  const itemsWithVariants = new Set(itemRows.filter((r) => r.breakdown.length > 0).map((r) => r.catalogItemId));
-  for (const r of itemRows) {
+  const itemsWithVariants = new Set(normalRows.filter((r) => r.breakdown.length > 0).map((r) => r.catalogItemId));
+  const totalByItem = new Map<string, number>();
+  for (const r of normalRows) totalByItem.set(r.catalogItemId, (totalByItem.get(r.catalogItemId) ?? 0) + r.quantity);
+  for (const r of normalRows) {
     if (!itemsWithVariants.has(r.catalogItemId)) continue;
     let m = notesByItem.get(r.catalogItemId);
     if (!m) notesByItem.set(r.catalogItemId, (m = new Map()));
-    const parts = r.breakdown.length > 0 ? r.breakdown : [{ label: "Sin variante", quantity: r.quantity }];
-    for (const p of parts) m.set(p.label, (m.get(p.label) ?? 0) + p.quantity);
+    for (const p of r.breakdown) m.set(p.label, (m.get(p.label) ?? 0) + p.quantity);
   }
+  for (const [itemId, m] of notesByItem) {
+    const noted = [...m.values()].reduce((a, b) => a + b, 0);
+    const total = totalByItem.get(itemId) ?? 0;
+    if (noted < total) m.set("Sin variante", (m.get("Sin variante") ?? 0) + total - noted);
+  }
+
+  const lot = await getOrCreateOpenLot();
 
   try {
     const batch = await prisma.$transaction(async (tx) => {
+      const fresh = await tx.fulfillmentLot.findUnique({ where: { id: lot.id }, select: { status: true } });
+      if (fresh?.status !== "DRAFT") throw new Error("LOT_CLOSED");
       for (const a of assignCode) {
         await tx.purchaseCatalogItem.update({ where: { id: a.itemId }, data: { justCode: a.code } });
       }
       for (const a of aliasCombos) {
         await tx.dropiCombo.create({
-          data: { code: a.code, label: `${a.label} (equivalente)`, createdById: userId, components: { create: [{ catalogItemId: a.itemId, quantity: 1 }] } },
+          data: { code: a.code, label: `${a.label} (ID alterno)`, createdById: userId, components: { create: [{ catalogItemId: a.itemId, quantity: 1 }] } },
         });
       }
       for (const r of ignoreRows) {
@@ -246,11 +378,23 @@ export async function applyGuidesImport(input: GuidesApplyInput, userId: string 
         data: {
           source: "DROPI",
           requestedById: userId,
+          lotId: lot.id,
           totalRows: input.rows.length,
           skippedCount: ignoreRows.length,
           fileUrls: input.fileUrls,
           manifestDate: input.manifestDate,
-          items: { create: itemRows.map((r) => ({ catalogItemId: r.catalogItemId, quantity: r.quantity, sourceCode: r.sourceCode, fromComboCode: r.fromComboCode })) },
+          items: {
+            create: itemRows.map((r) => ({
+              catalogItemId: r.catalogItemId,
+              quantity: r.quantity,
+              sourceCode: r.sourceCode,
+              fromComboCode: r.fromComboCode,
+              carrier: r.carrier,
+              warrantyGuide: r.warrantyGuide ?? null,
+              warrantyMode: r.warrantyMode ?? null,
+              warrantyPiece: r.warrantyPiece ?? null,
+            })),
+          },
           guides: { create: input.guides.map((g) => ({ guideNumber: g.number, carrier: g.carrier })) },
           variantNotes: {
             create: [...notesByItem.entries()].flatMap(([catalogItemId, m]) =>
@@ -260,9 +404,10 @@ export async function applyGuidesImport(input: GuidesApplyInput, userId: string 
         },
       });
     });
-    return { ok: true, batchId: batch.id };
+    return { ok: true, batchId: batch.id, lotId: lot.id };
   } catch (e) {
     const msg = e instanceof Error ? e.message : "";
+    if (msg === "LOT_CLOSED") return { ok: false, error: "El corte se acaba de enviar a Inventario — vuelve a guardar y entrará al corte siguiente." };
     if (msg.includes("Unique constraint")) {
       return { ok: false, error: "Otra persona acaba de subir alguna de estas guías o de registrar uno de estos códigos — vuelve a leer el PDF." };
     }
@@ -270,70 +415,90 @@ export async function applyGuidesImport(input: GuidesApplyInput, userId: string 
   }
 }
 
-// ---- Lote del día --------------------------------------------------------
+// ---- Ver un corte --------------------------------------------------------
 
-// Ecuador no tiene horario de verano: siempre UTC-5.
-const EC_OFFSET_MS = 5 * 60 * 60 * 1000;
+type ItemView = { catalogItemId: string; name: string; photos: string[]; justCode: string | null };
 
-export function ecuadorDay(d: Date): string {
-  return new Date(d.getTime() - EC_OFFSET_MS).toISOString().slice(0, 10);
-}
-
-export type DayLine = {
-  catalogItemId: string;
-  name: string;
-  photos: string[];
-  justCode: string | null;
+export type LotLine = ItemView & {
   quantity: number;
-  bySource: { DROPI: number; ROCKET: number };
+  byCarrier: Record<string, number>;
   variants: { label: string; quantity: number }[];
 };
+export type LotWarrantyLine = ItemView & { guide: string; carrier: string; quantity: number; mode: string; piece: string | null; fromComboCode: string | null };
+export type LotShortage = ItemView & { needed: number; stock: number };
 
-export async function getCompiledDay(day: string) {
-  const start = new Date(new Date(`${day}T00:00:00.000Z`).getTime() + EC_OFFSET_MS);
-  const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
-  const batches = await prisma.fulfillmentRequestBatch.findMany({
-    where: { requestedAt: { gte: start, lt: end } },
-    orderBy: { requestedAt: "asc" },
+export async function getCompiledLot(lotId: string) {
+  const lot = await prisma.fulfillmentLot.findUnique({
+    where: { id: lotId },
     include: {
-      requestedBy: { select: { name: true } },
-      items: { include: { catalogItem: { select: { id: true, name: true, photos: true, justCode: true } } } },
-      variantNotes: { select: { catalogItemId: true, label: true, quantity: true } },
-      _count: { select: { guides: true } },
+      batches: {
+        orderBy: { requestedAt: "asc" },
+        include: {
+          requestedBy: { select: { name: true } },
+          items: { include: { catalogItem: { select: { id: true, name: true, photos: true, justCode: true } } } },
+          variantNotes: { select: { catalogItemId: true, label: true, quantity: true } },
+          _count: { select: { guides: true } },
+        },
+      },
     },
   });
+  if (!lot) return null;
+  const sentBy = lot.sentById ? await prisma.user.findUnique({ where: { id: lot.sentById }, select: { name: true } }) : null;
 
-  const byItem = new Map<string, DayLine & { variantMap: Map<string, number> }>();
-  for (const b of batches) {
-    const src = b.source === "ROCKET" ? "ROCKET" : "DROPI";
+  const lines = new Map<string, LotLine & { variantMap: Map<string, number> }>();
+  const warranty: LotWarrantyLine[] = [];
+  const carriers = new Set<string>();
+  for (const b of lot.batches) {
     for (const it of b.items) {
-      let line = byItem.get(it.catalogItemId);
-      if (!line) {
-        line = { catalogItemId: it.catalogItemId, name: it.catalogItem.name, photos: it.catalogItem.photos, justCode: it.catalogItem.justCode, quantity: 0, bySource: { DROPI: 0, ROCKET: 0 }, variants: [], variantMap: new Map() };
-        byItem.set(it.catalogItemId, line);
+      const view: ItemView = { catalogItemId: it.catalogItemId, name: it.catalogItem.name, photos: it.catalogItem.photos, justCode: it.catalogItem.justCode };
+      if (it.warrantyGuide) {
+        warranty.push({ ...view, guide: it.warrantyGuide, carrier: it.carrier ?? NO_CARRIER, quantity: it.quantity, mode: it.warrantyMode ?? "COMPLETE", piece: it.warrantyPiece, fromComboCode: it.fromComboCode });
+        // (piece = pieza en modo PIECE; en los demás, el color/talla de la guía)
+        continue;
       }
+      const carrier = it.carrier ?? NO_CARRIER;
+      carriers.add(carrier);
+      let line = lines.get(it.catalogItemId);
+      if (!line) lines.set(it.catalogItemId, (line = { ...view, quantity: 0, byCarrier: {}, variants: [], variantMap: new Map() }));
       line.quantity += it.quantity;
-      line.bySource[src] += it.quantity;
+      line.byCarrier[carrier] = (line.byCarrier[carrier] ?? 0) + it.quantity;
     }
     for (const v of b.variantNotes) {
-      const line = byItem.get(v.catalogItemId);
+      const line = lines.get(v.catalogItemId);
       if (line) line.variantMap.set(v.label, (line.variantMap.get(v.label) ?? 0) + v.quantity);
     }
   }
 
-  // Un lote con variantes para un producto + otro lote sin ellas: lo del
-  // otro lote entra como "Sin variante", para que la suma cuadre.
-  const lines: DayLine[] = [...byItem.values()].map(({ variantMap, ...l }) => {
-    if (variantMap.size === 0) return l;
-    const noted = [...variantMap.values()].reduce((a, b) => a + b, 0);
-    const variants = [...variantMap.entries()].map(([label, quantity]) => ({ label, quantity }));
-    if (noted < l.quantity) variants.push({ label: "Sin variante", quantity: l.quantity - noted });
+  const lineList: LotLine[] = [...lines.values()].map(({ variantMap, ...l }) => {
+    const variants = [...variantMap.entries()].filter(([label]) => label !== "Sin variante" || variantMap.size > 1).map(([label, quantity]) => ({ label, quantity }));
     return { ...l, variants: variants.sort((a, b) => b.quantity - a.quantity) };
   });
 
+  // Aviso temprano de stock: lo pedido (normal + garantías que no son
+  // pieza) contra el saldo actual de INVESTOCK.
+  const needed = new Map<string, { view: ItemView; qty: number }>();
+  for (const l of lineList) needed.set(l.catalogItemId, { view: l, qty: l.quantity });
+  for (const w of warranty) {
+    if (w.mode === "PIECE") continue;
+    const cur = needed.get(w.catalogItemId);
+    if (cur) cur.qty += w.quantity;
+    else needed.set(w.catalogItemId, { view: w, qty: w.quantity });
+  }
+  const stock = await getCurrentStockByItemIds([...needed.keys()]);
+  const shortages: LotShortage[] = [...needed.values()]
+    .map(({ view, qty }) => ({ catalogItemId: view.catalogItemId, name: view.name, photos: view.photos, justCode: view.justCode, needed: qty, stock: stock.get(view.catalogItemId)?.balance ?? 0 }))
+    .filter((s) => s.stock < s.needed)
+    .sort((a, b) => b.needed - b.stock - (a.needed - a.stock));
+
   return {
-    day,
-    batches: batches.map((b) => ({
+    id: lot.id,
+    day: lot.day,
+    corte: lot.corte,
+    status: lot.status,
+    sentAt: lot.sentAt,
+    sentByName: sentBy?.name ?? (lot.sentById ? "—" : null),
+    carriers: sortCarriers([...carriers]),
+    batches: lot.batches.map((b) => ({
       id: b.id,
       source: b.source,
       requestedAt: b.requestedAt,
@@ -341,6 +506,77 @@ export async function getCompiledDay(day: string) {
       guideCount: b._count.guides,
       fileCount: b.fileUrls.length,
     })),
-    lines: lines.sort((a, b) => b.quantity - a.quantity),
+    lines: lineList.sort((a, b) => b.quantity - a.quantity),
+    warranty,
+    shortages,
+    stockByItem: Object.fromEntries([...needed.keys()].map((id) => [id, stock.get(id)?.balance ?? 0])),
   };
+}
+
+export type CompiledLot = NonNullable<Awaited<ReturnType<typeof getCompiledLot>>>;
+
+export async function listRecentLots() {
+  const lots = await prisma.fulfillmentLot.findMany({
+    orderBy: [{ day: "desc" }, { corte: "desc" }],
+    take: 60,
+    include: { batches: { select: { _count: { select: { guides: true } } } } },
+  });
+  return lots.map((l) => ({
+    id: l.id,
+    day: l.day,
+    corte: l.corte,
+    status: l.status,
+    createdAt: l.createdAt,
+    sentAt: l.sentAt,
+    uploads: l.batches.length,
+    guides: l.batches.reduce((s, b) => s + b._count.guides, 0),
+  }));
+}
+
+// ---- Enviar a Inventario -------------------------------------------------
+
+const LOT_URL = "/area/workspace?tab=egresos&otab=solicitud";
+
+// Bryan Ríos (aprueba compras) + Jariel (hace las compras, Análisis de
+// Mercado) — por permiso, no por nombre. canManagePurchases solo se toma
+// dentro de MKT porque Nairoby (Finanzas) también lo tiene para facturar, y
+// este aviso no es para ella.
+async function purchaseDeciderIds(): Promise<string[]> {
+  const users = await prisma.user.findMany({
+    where: { isActive: true, OR: [{ canApprovePurchaseRequests: true }, { canManagePurchases: true, purchasingNewRequestsBlocked: false, department: { code: "MKT" } }] },
+    select: { id: true },
+  });
+  return users.map((u) => u.id);
+}
+
+export async function sendLotToInventory(lotId: string, userId: string | null): Promise<{ ok: true } | { ok: false; error: string }> {
+  const lot = await getCompiledLot(lotId);
+  if (!lot) return { ok: false, error: "No encontrado." };
+  if (lot.status !== "DRAFT") return { ok: false, error: "Este corte ya se envió a Inventario." };
+  if (lot.batches.length === 0 || (lot.lines.length === 0 && lot.warranty.length === 0)) return { ok: false, error: "El corte está vacío — sube las guías primero." };
+
+  const updated = await prisma.fulfillmentLot.updateMany({ where: { id: lotId, status: "DRAFT" }, data: { status: "SENT", sentAt: new Date(), sentById: userId } });
+  if (updated.count === 0) return { ok: false, error: "Este corte ya se envió a Inventario." };
+
+  const units = lot.lines.reduce((s, l) => s + l.quantity, 0);
+  const label = `Corte ${lot.corte} del ${lot.day.split("-").reverse().join("/")}`;
+  const danielId = await getInventoryLeadId();
+  if (danielId) {
+    await notifyOwner(danielId, {
+      title: "Nuevo corte de Fulfillment",
+      body: `${label}: ${lot.lines.length} productos, ${units} unidades${lot.warranty.length ? `, ${lot.warranty.length} garantía(s)` : ""}. Revisa e imprime el manifiesto.`,
+      url: LOT_URL,
+    });
+  }
+  if (lot.shortages.length > 0) {
+    const list = lot.shortages
+      .slice(0, 6)
+      .map((s) => `${s.name} (piden ${s.needed}, hay ${s.stock})`)
+      .join("; ");
+    const more = lot.shortages.length > 6 ? ` y ${lot.shortages.length - 6} más` : "";
+    for (const id of await purchaseDeciderIds()) {
+      await notifyOwner(id, { title: "Stock insuficiente para despachar", body: `${label}: ${list}${more}.`, url: LOT_URL });
+    }
+  }
+  return { ok: true };
 }

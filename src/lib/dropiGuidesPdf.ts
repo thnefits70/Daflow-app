@@ -44,10 +44,12 @@ async function extractPages(bytes: Uint8Array): Promise<PdfLine[][]> {
       else rows.push([it]);
     }
     rows.sort((a, b) => b[0].y - a[0].y);
-    pages.push(rows.map((r) => {
-      r.sort((a, b) => a.x - b.x);
-      return { text: joinItems(r), items: r };
-    }));
+    pages.push(
+      rows.map((r) => {
+        r.sort((a, b) => a.x - b.x);
+        return { text: joinItems(r), items: r };
+      })
+    );
     page.cleanup();
   }
   await pdf.cleanup();
@@ -103,10 +105,25 @@ function splitVariant(nameWithVariant: string): { name: string; variant: string 
   return { name: nameWithVariant.slice(0, m.index).trim(), variant: rest.trim() || null };
 }
 
+// "LAARCOURIER"/"LARCOURRIER" → "LAAR", etc. — un solo nombre por
+// transportadora en toda la app.
+export function normalizeCarrier(raw: string): string {
+  const c = raw.toUpperCase().replace(/[^A-Z]/g, "");
+  if (c.startsWith("LAAR") || c.startsWith("LARC")) return "LAAR";
+  if (c.startsWith("SERVI")) return "SERVIENTREGA";
+  if (c.startsWith("GINTRA")) return "GINTRACOM";
+  if (c.startsWith("URBANO")) return "URBANO";
+  if (c.startsWith("VELOCES")) return "VELOCES";
+  return c || "SIN TRANSPORTADORA";
+}
+
 export type ParsedGuidesLine = {
   code: string;
   name: string;
+  // Total de pedidos NORMALES (sin las garantías, que van aparte).
   quantity: number;
+  // Mismo total, repartido por transportadora (VELOCES, URBANO, …).
+  byCarrier: Record<string, number>;
   // Desglose por variante que salió de las etiquetas. Suma ≤ quantity; si
   // falta, el resto se agrega como "Sin leer en guías" al aplicar.
   variants: { label: string; quantity: number }[];
@@ -115,10 +132,21 @@ export type ParsedGuidesLine = {
   labelUnits: number;
 };
 
+// Confirmado 2026-09-23 con un manifiesto real del usuario: una guía de
+// GARANTÍA viene en el mismo PDF con "Tipo de logistica: SIN RECAUDO" (las
+// de Servientrega además empiezan con 745…). Sus productos se sacan de la
+// etiqueta de ESA guía — Yair después indica si sale completo, solo parte
+// del combo o solo una pieza.
+export type ParsedWarrantyLine = { guide: string; carrier: string; code: string; name: string; quantity: number; variant: string | null };
+
 export type ParsedGuidesPdf = {
   manifestDate: string | null;
-  guides: { number: string; carrier: string }[];
+  guides: { number: string; carrier: string; warranty: boolean }[];
   lines: ParsedGuidesLine[];
+  warranty: ParsedWarrantyLine[];
+  // Guías de garantía cuya etiqueta no se pudo leer — se avisa, nunca se
+  // adivina qué producto era.
+  unreadWarrantyGuides: string[];
 };
 
 const SUMMARY_RE = /\(ID:\s*(\d+)\)\s*-\s*\(SKU:[^)]*\)\s*-\s*(.+?)\s+(\d+)\s*$/;
@@ -136,36 +164,32 @@ const URBANO_ROW_RE = /^\s*\d{1,2}\s{2,}(.+?)\s{2,}(\d+)\s*$/;
 // nombre, no una variante.
 const SUMMARY_NAME_CUT = 38;
 
+type LabelHit = { code: string; variant: string | null; qty: number; page: number; line: number };
+
 export async function parseDropiGuidesPdf(bytes: Uint8Array): Promise<ParsedGuidesPdf> {
   const pages = await extractPages(bytes);
 
   let manifestDate: string | null = null;
   let carrier = "";
-  const guides = new Map<string, string>();
-  const summary = new Map<string, { name: string; quantity: number }>();
-  const byLabel = new Map<string, Map<string, number>>(); // code → variant ("" = sin variante) → unidades
-
-  const addLabel = (code: string, variant: string | null, qty: number) => {
-    let m = byLabel.get(code);
-    if (!m) byLabel.set(code, (m = new Map()));
-    const key = variant ? tidyVariantLabel(variant) : "";
-    m.set(key, (m.get(key) ?? 0) + qty);
-  };
+  const guides = new Map<string, { carrier: string; warranty: boolean }>();
+  // code → transportadora → unidades (tal como la tabla resumen, garantías incluidas)
+  const summary = new Map<string, { name: string; byCarrier: Map<string, number> }>();
 
   // Primera pasada: resumen + guías (las etiquetas sin ID se identifican
   // contra los nombres del resumen, así que tiene que existir completo antes).
   for (const lines of pages) {
     for (const l of lines) {
       const c = l.text.match(CARRIER_RE);
-      if (c) carrier = c[1].trim().toUpperCase();
+      if (c) carrier = normalizeCarrier(c[1]);
       const d = l.text.match(DATE_RE);
       if (d && !manifestDate) manifestDate = `${d[3]}-${d[2]}-${d[1]}`;
       const g = l.text.match(GUIDE_RE);
-      if (g) guides.set(g[1].toUpperCase(), carrier);
+      if (g) guides.set(g[1].toUpperCase(), { carrier, warranty: /SIN\s+RECAUDO/i.test(l.text) });
       const s = l.text.match(SUMMARY_RE);
       if (s) {
-        const prev = summary.get(s[1]);
-        summary.set(s[1], { name: prev?.name ?? s[2].trim(), quantity: (prev?.quantity ?? 0) + Number(s[3]) });
+        let row = summary.get(s[1]);
+        if (!row) summary.set(s[1], (row = { name: s[2].trim(), byCarrier: new Map() }));
+        row.byCarrier.set(carrier, (row.byCarrier.get(carrier) ?? 0) + Number(s[3]));
       }
     }
   }
@@ -193,21 +217,33 @@ export async function parseDropiGuidesPdf(bytes: Uint8Array): Promise<ParsedGuid
     return { code: best.code, variant: rest && !best.cut && !truncated && !repeatsName ? rest : null };
   };
 
-  for (const lines of pages) {
+  const hits: LabelHit[] = [];
+  // Dónde aparece cada número de guía FUERA de la tabla resumen — sirve
+  // para saber a qué guía pertenece cada etiqueta (se usa para separar las
+  // garantías). Servientrega/Laar/Urbano/Veloces imprimen el número antes
+  // del producto; Gintracom después — por eso se toma la aparición más
+  // cercana en la misma página, hacia arriba o hacia abajo.
+  const guideSpots: { guide: string; page: number; line: number }[] = [];
+  const guideTokens = [...guides.keys()];
+
+  pages.forEach((lines, p) => {
     for (let i = 0; i < lines.length; i++) {
       const text = lines[i].text;
+      if (GUIDE_RE.test(text)) continue;
+      const compact = text.replace(/[\s*]/g, "").toUpperCase();
+      for (const g of guideTokens) if (compact.includes(g)) guideSpots.push({ guide: g, page: p, line: i });
       if (SUMMARY_RE.test(text) || /\(ID:/.test(text)) continue;
 
       // Servientrega / Laar / Veloces: traen el ID de Dropi.
       const idm = text.match(ID_LABEL_RE);
       if (idm) {
         const { variant } = splitVariant(idm[2]);
-        addLabel(idm[1], variant, Number(idm[3]));
+        hits.push({ code: idm[1], variant, qty: Number(idm[3]), page: p, line: i });
         continue;
       }
 
       // Gintracom: columna derecha "CONTENIDO:" hasta "RECAUDO:".
-      const contItem = lines[i].items.find((it) => /^\s*CONTENIDO:\s*$/.test(it.str) || /^CONTENIDO:$/.test(it.str.trim()));
+      const contItem = lines[i].items.find((it) => it.str.trim() === "CONTENIDO:");
       if (contItem && /DESTINATARIO/i.test(text)) {
         const x0 = contItem.x - 1;
         let buf = "";
@@ -219,7 +255,7 @@ export async function parseDropiGuidesPdf(bytes: Uint8Array): Promise<ParsedGuid
           const pm = part.trim().match(GINTRA_PART_RE);
           if (!pm) continue;
           const hit = matchByName(pm[2]);
-          if (hit) addLabel(hit.code, hit.variant, Number(pm[1]));
+          if (hit) hits.push({ code: hit.code, variant: hit.variant, qty: Number(pm[1]), page: p, line: i });
         }
         continue;
       }
@@ -230,20 +266,67 @@ export async function parseDropiGuidesPdf(bytes: Uint8Array): Promise<ParsedGuid
           const um = lines[j].text.match(URBANO_ROW_RE);
           if (!um) break;
           const hit = matchByName(um[1]);
-          if (hit) addLabel(hit.code, hit.variant, Number(um[2]));
+          if (hit) hits.push({ code: hit.code, variant: hit.variant, qty: Number(um[2]), page: p, line: j });
           i = j;
         }
       }
     }
+  });
+
+  const guideOf = (h: LabelHit): string | null => {
+    let best: { guide: string; dist: number } | null = null;
+    for (const s of guideSpots) {
+      if (s.page !== h.page) continue;
+      const dist = Math.abs(s.line - h.line);
+      if (!best || dist < best.dist) best = { guide: s.guide, dist };
+    }
+    return best?.guide ?? null;
+  };
+
+  const warrantyGuides = new Set([...guides.entries()].filter(([, g]) => g.warranty).map(([n]) => n));
+  const warranty: ParsedWarrantyLine[] = [];
+  const byLabel = new Map<string, Map<string, number>>(); // code → variante ("" = sin variante) → unidades
+  for (const h of hits) {
+    const g = warrantyGuides.size > 0 ? guideOf(h) : null;
+    if (g && warrantyGuides.has(g)) {
+      warranty.push({
+        guide: g,
+        carrier: guides.get(g)!.carrier,
+        code: h.code,
+        name: summary.get(h.code)?.name ?? h.code,
+        quantity: h.qty,
+        variant: h.variant ? tidyVariantLabel(h.variant) : null,
+      });
+      continue;
+    }
+    let m = byLabel.get(h.code);
+    if (!m) byLabel.set(h.code, (m = new Map()));
+    const key = h.variant ? tidyVariantLabel(h.variant) : "";
+    m.set(key, (m.get(key) ?? 0) + h.qty);
   }
 
-  const out: ParsedGuidesLine[] = [];
+  const lines: ParsedGuidesLine[] = [];
   for (const [code, s] of summary) {
+    const byCarrier: Record<string, number> = {};
+    for (const [c, q] of s.byCarrier) {
+      // La tabla resumen incluye las garantías; se restan porque van aparte.
+      const w = warranty.filter((x) => x.code === code && x.carrier === c).reduce((a, x) => a + x.quantity, 0);
+      if (q - w > 0) byCarrier[c] = q - w;
+    }
+    const quantity = Object.values(byCarrier).reduce((a, b) => a + b, 0);
+    if (quantity === 0) continue;
     const labels = byLabel.get(code);
     const labelUnits = labels ? [...labels.values()].reduce((a, b) => a + b, 0) : 0;
-    const variants = labels ? [...labels.entries()].filter(([k]) => k).map(([label, quantity]) => ({ label, quantity })) : [];
-    out.push({ code, name: s.name, quantity: s.quantity, variants: variants.sort((a, b) => b.quantity - a.quantity), labelUnits });
+    const variants = labels ? [...labels.entries()].filter(([k]) => k).map(([label, q]) => ({ label, quantity: q })) : [];
+    lines.push({ code, name: s.name, quantity, byCarrier, variants: variants.sort((a, b) => b.quantity - a.quantity), labelUnits });
   }
 
-  return { manifestDate, guides: [...guides.entries()].map(([number, c]) => ({ number, carrier: c })), lines: out };
+  const readWarranty = new Set(warranty.map((w) => w.guide));
+  return {
+    manifestDate,
+    guides: [...guides.entries()].map(([number, g]) => ({ number, carrier: g.carrier, warranty: g.warranty })),
+    lines,
+    warranty,
+    unreadWarrantyGuides: [...warrantyGuides].filter((g) => !readWarranty.has(g)),
+  };
 }

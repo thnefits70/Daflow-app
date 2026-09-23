@@ -2505,6 +2505,11 @@ model FulfillmentRequestBatch {
   fileUrls     String[] @default([])
   manifestDate String?
 
+  // Confirmado 2026-09-23: cada subida entra al lote (corte) abierto del
+  // día — ver FulfillmentLot. Null solo en subidas anteriores a los cortes.
+  lotId String?
+  lot   FulfillmentLot? @relation(fields: [lotId], references: [id], onDelete: SetNull)
+
   items        FulfillmentRequestItem[]
   variantNotes FulfillmentRequestVariantNote[]
   guides       FulfillmentRequestGuide[]
@@ -2559,8 +2564,52 @@ model FulfillmentRequestItem {
   // Si esta fila vino de un combo, qué código de combo la generó.
   fromComboCode String?
 
+  // Confirmado 2026-09-23: transportadora de estos pedidos (VELOCES,
+  // URBANO, GINTRACOM, LAAR, SERVIENTREGA) — el manifiesto impreso reparte
+  // cada producto por transportadora. Null = no se sabe (Rocket, pendiente).
+  carrier String?
+
+  // Garantía (guía "SIN RECAUDO"): Yair indica qué sale de verdad —
+  // COMPLETE (todo), PARTIAL (solo algunos productos del combo; las filas
+  // de los que NO salen simplemente no se crean) o PIECE (solo una pieza,
+  // descrita en warrantyPiece). Una PIECE sale del stock de repuestos
+  // aparte y NUNCA toca el Kardex del producto (confirmado por el usuario).
+  // En COMPLETE/PARTIAL, warrantyPiece guarda el color/talla de la guía.
+  warrantyGuide String?
+  warrantyMode  String?
+  warrantyPiece String?
+
   @@index([batchId])
   @@index([catalogItemId])
+}
+
+enum FulfillmentLotStatus {
+  DRAFT
+  SENT
+  CLOSED
+}
+
+// Confirmado 2026-09-23, diseño acordado con el usuario: un lote por CORTE
+// (guías de 8:30, 12:00 y 14:00 de lunes a viernes; el sábado uno solo —
+// ver memoria del horario de transportadoras). Todas las subidas de Yair
+// entran al lote abierto (DRAFT) del día; cuando lo envía a Inventario (con
+// doble confirmación) queda SENT y ya no se puede cambiar, y la siguiente
+// subida abre el corte siguiente. CLOSED = Daniel ya confirmó todo.
+model FulfillmentLot {
+  id     String               @id @default(cuid())
+  // Día en hora de Ecuador (YYYY-MM-DD) y número de corte dentro del día.
+  day    String
+  corte  Int
+  status FulfillmentLotStatus @default(DRAFT)
+
+  createdAt DateTime  @default(now())
+  sentAt    DateTime?
+  sentById  String?
+
+  batches FulfillmentRequestBatch[]
+
+  @@unique([day, corte])
+  @@index([status])
 }
 
 // Confirmado 2026-09-21, pedido explícito del usuario: INVESTOCK no maneja
