@@ -415,7 +415,7 @@ export function DocumentCaptureFlow({ reason, canManageJustCatalog = false }: { 
           <Check size={20} className="text-green" />
         </div>
         <div className="font-display font-bold text-[15px] mb-1.5">{sentCode} enviado</div>
-        <p className="text-[12.5px] text-steel mb-4">Va a la cola de &quot;Dar de baja en Just&quot;.</p>
+        <p className="text-[12.5px] text-steel mb-4">Ya se descontó del inventario (INVESTOCK) y quedó en el Historial.</p>
         <button type="button" className="text-[12.5px] font-bold text-teal cursor-pointer" onClick={() => setBatch(null)}>
           Empezar un lote nuevo
         </button>

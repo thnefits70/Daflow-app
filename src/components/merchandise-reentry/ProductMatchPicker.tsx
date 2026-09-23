@@ -171,7 +171,7 @@ export function ProductMatchPicker({
       <input
         type="text"
         autoFocus
-        placeholder="Buscá por nombre o código de Just…"
+        placeholder="Busca por nombre o código…"
         className="w-full rounded border border-rule bg-surface px-2.5 py-2 text-[12.5px]"
         value={query}
         onChange={(e) => setQuery(e.target.value)}

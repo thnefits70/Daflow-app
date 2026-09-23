@@ -25,7 +25,6 @@ import {
   getReadyToBuyPendingProposalIds,
 } from "@/lib/marketProduct";
 import { getAllCurrentStock } from "@/lib/stockKardex";
-import { getFinanzasDeptId } from "@/lib/inventoryKpis";
 import { notifyOwner } from "@/lib/notifications";
 
 const supplierPriceSchema = z.object({
@@ -257,22 +256,13 @@ export async function GET(req: NextRequest) {
     const [canB2B, canB2C] = await Promise.all([canViewB2BPricing(), canViewB2CPricing()]);
     if (!canB2B && !canB2C) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
-    const deptId = await getFinanzasDeptId();
-    const [allStock, proposals, combos, justSnapshots] = await Promise.all([
+    const [allStock, proposals, combos] = await Promise.all([
       getAllCurrentStock(),
       prisma.marketProductProposal.findMany({
         where: { catalogItemId: { not: null } },
         include: { supplierPrices: true },
       }),
       prisma.dropiCombo.findMany({ include: { components: true } }),
-      deptId
-        ? prisma.inventoryProductSnapshot.findMany({
-            where: { deptId },
-            distinct: ["productCode"],
-            orderBy: [{ productCode: "asc" }, { createdAt: "desc" }],
-            select: { productCode: true, avgCost: true },
-          })
-        : Promise.resolve([]),
     ]);
     const proposalByCatalogItemId = new Map(
       proposals
@@ -286,7 +276,6 @@ export async function GET(req: NextRequest) {
         })
     );
     const stockByCatalogItemId = new Map(allStock.map((s) => [s.catalogItemId, s]));
-    const justAvgCostByCode = new Map(justSnapshots.map((s) => [s.productCode.trim(), s.avgCost]));
 
     const catalogItemIds = allStock.map((s) => s.catalogItemId);
     const catalogItems = await prisma.purchaseCatalogItem.findMany({ where: { id: { in: catalogItemIds } }, select: { id: true, name: true, justCode: true, photos: true } });
@@ -294,20 +283,13 @@ export async function GET(req: NextRequest) {
 
     // Confirmado 2026-09-14: mismo default que MarketProductProposal (seguro
     // 6%, fulfillment $0.75) para un producto sin propuesta propia, priceado
-    // a partir de su costo promedio de Kardex. Confirmado 2026-09-17, pedido
-    // explícito del usuario: si tampoco tiene costo de Kardex (INVESTOCK),
-    // respaldo TEMPORAL con el costo promedio del último archivo de Just —
-    // mientras se termina de cargar INVESTOCK para todos los productos.
-    // `costSource` marca cuál se usó, para resaltarlo en el frontend. Un
-    // producto sin ninguno de los tres no tiene nada que calcular.
+    // a partir de su costo promedio de Kardex. `costSource` marca cuál se
+    // usó. Un producto sin ninguno de los dos no tiene nada que calcular.
     function resolveBase(catalogItemId: string) {
       const proposalBase = proposalByCatalogItemId.get(catalogItemId);
       if (proposalBase) return proposalBase;
       const stock = stockByCatalogItemId.get(catalogItemId);
       if (stock && stock.avgCost > 0) return { batchCost: stock.avgCost, batchUnits: 1, freightCost: null, insuranceRatePercent: 6, fulfillmentCost: 0.75, costSource: "kardex" as const };
-      const justCode = catalogItemById.get(catalogItemId)?.justCode;
-      const justAvgCost = justCode ? justAvgCostByCode.get(justCode.trim()) : undefined;
-      if (justAvgCost && justAvgCost > 0) return { batchCost: justAvgCost, batchUnits: 1, freightCost: null, insuranceRatePercent: 6, fulfillmentCost: 0.75, costSource: "just" as const };
       return null;
     }
 
@@ -349,11 +331,7 @@ export async function GET(req: NextRequest) {
         // Si algún componente del combo usa un respaldo menos confiable, el
         // combo entero se marca con ese — no tiene sentido mostrarlo como
         // "real" si una sola pieza viene estimada.
-        const costSource = components.some((c) => c.base!.costSource === "just")
-          ? ("just" as const)
-          : components.some((c) => c.base!.costSource === "kardex")
-            ? ("kardex" as const)
-            : ("proposal" as const);
+        const costSource = components.some((c) => c.base!.costSource === "kardex") ? ("kardex" as const) : ("proposal" as const);
         return {
           id: combo.id,
           name: combo.label ?? combo.code,

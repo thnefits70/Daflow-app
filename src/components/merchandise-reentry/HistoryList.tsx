@@ -60,9 +60,9 @@ export function HistoryList() {
         let closedLabel = "Cerrado";
         let closedDetail = "Finanzas (admin)";
         if (justUploaders.length && writeOffers.length) {
-          closedDetail = `subido a Just por ${justUploaders.join(", ")} y dado de baja por ${writeOffers.join(", ")}`;
+          closedDetail = `reingresado al inventario por ${justUploaders.join(", ")} y dado de baja por ${writeOffers.join(", ")}`;
         } else if (justUploaders.length) {
-          closedLabel = "Cerrado y subido a Just";
+          closedLabel = "Cerrado y reingresado al inventario";
           closedDetail = justUploaders.join(", ");
         } else if (writeOffers.length) {
           closedLabel = "Cerrado y dado de baja";
@@ -105,7 +105,7 @@ export function HistoryList() {
                     <span className="font-semibold text-ink">{itemName(i)}</span>
                     <span>· registrado en DAFLOW {fmt(i.createdAt)}</span>
                     {i.justUploadedAt && (
-                      <span className="text-teal font-semibold">· subido a Just {fmt(i.justUploadedAt)}</span>
+                      <span className="text-teal font-semibold">· reingresado al inventario {fmt(i.justUploadedAt)}</span>
                     )}
                   </div>
                 ))}

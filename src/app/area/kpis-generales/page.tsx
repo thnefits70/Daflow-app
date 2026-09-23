@@ -65,7 +65,7 @@ export default async function AreaKpisGeneralesPage() {
             <PushTypeToggle type="ruptura_stock" />
           </div>
           <TabGuide storageKey="kpis-generales-stock">
-            Cada semana, busca y marca aquí cada producto que se quedó sin stock — el mismo catálogo (con su código de Just) que usan Reingreso, Compras y Ventas Externas, así que ya no hay que escribir el nombre a mano ni el riesgo de duplicarlo por un error de tipeo. Si esa semana no faltó ningún producto, usa el botón &quot;Confirmar: sin productos agotados esa semana&quot; en vez de dejarla en blanco — así el sistema distingue &quot;no hubo ruptura&quot; de &quot;nadie revisó&quot;.
+            Cada semana, busca y marca aquí cada producto que se quedó sin stock — el mismo catálogo (con su código) que usan Reingreso, Compras y Ventas Externas, así que ya no hay que escribir el nombre a mano ni el riesgo de duplicarlo por un error de tipeo. Si esa semana no faltó ningún producto, usa el botón &quot;Confirmar: sin productos agotados esa semana&quot; en vez de dejarla en blanco — así el sistema distingue &quot;no hubo ruptura&quot; de &quot;nadie revisó&quot;.
           </TabGuide>
           <StockoutPanel
             weekRows={stockoutWeekRows}

@@ -46,12 +46,7 @@ export type PriceExternalSaleItemInput = { catalogItemId: string; quantity: numb
 // b2cBreakdown solo viene en ventas contra entrega — pedido explícito de
 // Marcos 2026-09-16 para ver cómo se calculó el precio, no solo el
 // resultado (ver B2CPriceBreakdownNote en ExternalSaleDeclareForm.tsx).
-// costSource "just" (temporal, pedido explícito del usuario 2026-09-17):
-// el producto todavía no tiene ni propuesta de Jariel ni costo real de
-// Kardex (INVESTOCK), así que el precio se calculó con el costo promedio
-// del último archivo de Just como respaldo — ExternalSaleDeclareForm lo
-// marca para que no se confunda con un costo real.
-export type PricedExternalSaleItem = { catalogItemId: string; unitPrice: number; marginPercentUsed: number; b2cBreakdown?: B2CPriceBreakdown; costSource: "proposal" | "kardex" | "just" };
+export type PricedExternalSaleItem = { catalogItemId: string; unitPrice: number; marginPercentUsed: number; b2cBreakdown?: B2CPriceBreakdown; costSource: "proposal" | "kardex" };
 export type PriceExternalSaleItemsResult = { ok: true; items: PricedExternalSaleItem[] } | { ok: false; error: string };
 
 // El array `items` del resultado viene SIEMPRE en el mismo orden que

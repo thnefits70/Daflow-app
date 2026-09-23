@@ -1014,8 +1014,6 @@ function BrandQueue() {
 
 // ---------------- Paso 5: Trazabilidad + decisión de compra (Bryan) ----------------
 
-const JUST_ESTIMATE_TITLE = "Estimado con el costo promedio de Just (temporal) — este producto todavía no tiene costo real en INVESTOCK.";
-
 type ConsultaRow = {
   id: string;
   name: string;
@@ -1026,11 +1024,7 @@ type ConsultaRow = {
   // su propio precio de referencia — se distingue con una etiqueta, ya que
   // no es un producto del catálogo con foto propia.
   isCombo: boolean;
-  // "just" (temporal, pedido explícito del usuario 2026-09-17): el producto
-  // todavía no tiene ni propuesta de Jariel ni costo real de Kardex
-  // (INVESTOCK), así que estos precios se calcularon con el costo promedio
-  // de Just como respaldo — se quita cuando INVESTOCK quede completo.
-  costSource?: "proposal" | "kardex" | "just" | null;
+  costSource?: "proposal" | "kardex" | null;
   benistockPrice?: number;
   b2bPriceDefault?: number;
   b2cPrice1Unit?: number;
@@ -1085,28 +1079,27 @@ function PricingConsultaTable() {
                 </div>
                 {r.justCode && <div className="text-[10.5px] font-mono text-steel">{r.justCode}</div>}
               </div>
-              <div className="text-right shrink-0" title={r.costSource === "just" ? JUST_ESTIMATE_TITLE : undefined}>
+              <div className="text-right shrink-0">
                 {r.benistockPrice != null && (
-                  <div className={`text-[11.5px] ${r.costSource === "just" ? "text-gold" : "text-steel"}`}>
-                    <span className={`font-bold ${r.costSource === "just" ? "text-gold" : "text-ink"}`}>{money(r.benistockPrice)}</span> Benistock (costo, sin ganancia)
+                  <div className="text-[11.5px] text-steel">
+                    <span className="font-bold text-ink">{money(r.benistockPrice)}</span> Benistock (costo, sin ganancia)
                   </div>
                 )}
                 {r.b2bPriceDefault != null && (
-                  <div className={`text-[13px] font-bold ${r.costSource === "just" ? "text-gold" : "text-teal"}`}>
+                  <div className="text-[13px] font-bold text-teal">
                     {money(r.b2bPriceDefault)} <span className="text-[10px] font-normal text-steel">B2B · 20%</span>
                   </div>
                 )}
                 {r.b2cPrice1Unit != null && (
-                  <div className={`text-[11.5px] ${r.costSource === "just" ? "text-gold" : "text-ink"}`}>
+                  <div className="text-[11.5px] text-ink">
                     1 un: <span className="font-bold">{money(r.b2cPrice1Unit)}</span>
                   </div>
                 )}
                 {r.b2cPrice2to11 != null && (
-                  <div className={`text-[11.5px] ${r.costSource === "just" ? "text-gold" : "text-ink"}`}>
+                  <div className="text-[11.5px] text-ink">
                     2-11 un: <span className="font-bold">{money(r.b2cPrice2to11)}</span>
                   </div>
                 )}
-                {r.costSource === "just" && <div className="text-[9.5px] text-gold mt-0.5">Estimado con Just (temporal)</div>}
               </div>
             </div>
           ))}

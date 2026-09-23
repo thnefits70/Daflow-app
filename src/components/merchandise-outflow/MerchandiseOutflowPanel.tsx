@@ -233,9 +233,9 @@ export function MerchandiseOutflowPanel({
         <>
           <TabGuide storageKey="merchoutflow-proveedor">
             {canAct ? (
-              <>Elige el proveedor y agrega todos los productos que le vas a devolver en un mismo paquete — cada uno se cruza solo contra la última compra a ese proveedor para estimar el crédito reclamable. Toma foto de la lista física como evidencia y deja lista la solicitud: sale de Just en ese momento (cae directo en la cola de baja) y te da un código para imprimir la guía y pegarla en el paquete. Quien resuelve cada producto (cambio o crédito) es quien solicitó esa compra originalmente, no tú — abajo ves el estado en modo lectura.</>
+              <>Elige el proveedor y agrega todos los productos que le vas a devolver en un mismo paquete — cada uno se cruza solo contra la última compra a ese proveedor para estimar el crédito reclamable. Toma foto de la lista física como evidencia y deja lista la solicitud: se descuenta de INVESTOCK en ese momento y te da un código para imprimir la guía y pegarla en el paquete. Quien resuelve cada producto (cambio o crédito) es quien solicitó esa compra originalmente, no tú — abajo ves el estado en modo lectura.</>
             ) : canViewSupplierExchangeResolution ? (
-              <>Vista de solo lectura de las solicitudes de cambio con proveedor que arma Daniel. Cada producto lo resuelve (cambio o crédito o rechazo) quien solicitó esa compra originalmente, no Daniel — esa persona gestiona desde acá abajo, en su propia sección. Si un proveedor rechaza todo, acá abajo puedes confirmar la baja en Just.</>
+              <>Vista de solo lectura de las solicitudes de cambio con proveedor que arma Daniel. Cada producto lo resuelve (cambio o crédito o rechazo) quien solicitó esa compra originalmente, no Daniel — esa persona gestiona desde acá abajo, en su propia sección.</>
             ) : canConfirmFinanceWriteOff ? (
               <>Acá abajo aparecen los productos que un proveedor rechazó (ni cambia ni da crédito) y que quedan pendientes de que registres la pérdida en la parte financiera.</>
             ) : (

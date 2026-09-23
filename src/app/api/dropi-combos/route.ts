@@ -56,15 +56,12 @@ export async function GET() {
       // bodega) — para un combo, cada uno es la suma de ese costo × cantidad
       // de todos sus componentes (no hay un solo "precio proveedor" para un
       // combo, así que se suma el total real que cuesta armarlo completo).
-      // Si algún componente usa un respaldo menos confiable (kardex, o el
-      // temporal de Just), el combo entero se marca con ese — no tiene
-      // sentido mostrarlo como "real" si una sola pieza viene estimada.
+      // Si algún componente usa el costo de Kardex (menos detallado que una
+      // propuesta de Jariel), el combo entero se marca con ese.
       const costSource = costBasisList
-        ? costBasisList.some((cb) => cb.costSource === "just")
-          ? ("just" as const)
-          : costBasisList.some((cb) => cb.costSource === "kardex")
-            ? ("kardex" as const)
-            : ("proposal" as const)
+        ? costBasisList.some((cb) => cb.costSource === "kardex")
+          ? ("kardex" as const)
+          : ("proposal" as const)
         : null;
       const prices = componentInputs
         ? {

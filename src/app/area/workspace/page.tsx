@@ -139,15 +139,10 @@ export default async function WorkspacePage() {
       where: { submittedAt: { not: null }, danielApprovedAt: null },
     });
   } else if (canCloseReentry) {
-    const [pendingJust, pendingWriteOff] = await Promise.all([
-      prisma.merchandiseReentryItem.count({
-        where: { goodQty: { gt: 0 }, justUploadedAt: null, batch: { danielApprovedAt: { not: null } } },
-      }),
-      prisma.merchandiseReentryItem.count({
-        where: { damagedQty: { gt: 0 }, damageConfirmed: true, writeOffAt: null, batch: { danielApprovedAt: { not: null } } },
-      }),
-    ]);
-    merchandiseReentryPendingCount = pendingJust + pendingWriteOff;
+    // La parte buena ya no cuenta: entra sola a INVESTOCK al aprobar el lote.
+    merchandiseReentryPendingCount = await prisma.merchandiseReentryItem.count({
+      where: { damagedQty: { gt: 0 }, damageConfirmed: true, writeOffAt: null, batch: { danielApprovedAt: { not: null } } },
+    });
   }
   // Registro de Egresos — mismo patrón sin dept.code que Reingreso
   // (confirmado 2026-08-25).

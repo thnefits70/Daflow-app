@@ -922,7 +922,7 @@ export function ProfileDetail({
               <Truck size={11} /> ¿Carga productos de Guías Canceladas?
             </label>
             <div className="text-[11px] text-steel mb-2">
-              Una vez que Bryan gestiona un lote de guías canceladas con la transportadora/Dropi, esta persona (hoy Heidy) ve esas guías y carga qué productos y cantidades venían en cada una, antes de que Daniel las reingrese a Just.
+              Una vez que Bryan gestiona un lote de guías canceladas con la transportadora/Dropi, esta persona (hoy Heidy) ve esas guías y carga qué productos y cantidades venían en cada una, para que vuelvan solas al inventario.
             </div>
             <PermToggle value={p.canAssignCancelledGuideItems} busy={busy} onChange={(v) => save({ canAssignCancelledGuideItems: v })} />
           </div>

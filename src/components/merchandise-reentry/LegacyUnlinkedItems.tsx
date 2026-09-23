@@ -83,7 +83,7 @@ export function LegacyUnlinkedItems() {
         <AlertTriangle size={14} /> {items.length} producto{items.length === 1 ? "" : "s"} de Reingreso sin conectar al catálogo (de antes del 29 ago)
       </div>
       <div className="text-[11px] text-steel mb-2.5">
-        Se registraron con el nombre escrito a mano, antes de que esto fuera obligatorio. Conéctalos aquí a su producto real para que muestren su código de Just/Dropi — no afecta nada de lo que ya pasó con ellos (aprobación, cierre, envío a Just).
+        Se registraron con el nombre escrito a mano, antes de que esto fuera obligatorio. Conéctalos aquí a su producto real para que muestren su código — no afecta nada de lo que ya pasó con ellos (aprobación, cierre, reingreso al inventario).
       </div>
       <div className="flex flex-col gap-1.5 max-h-[24rem] overflow-y-auto">
         {items.map((item) => (

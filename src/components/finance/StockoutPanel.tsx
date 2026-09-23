@@ -177,7 +177,7 @@ export function StockoutPanel({
         </div>
         {err && <div className="text-red text-[12.5px] mt-2.5">{err}</div>}
         <div className="text-[11px] text-steel mt-2.5">
-          Buscá por nombre o código de Just — el mismo catálogo que usan Reingreso, Compras y Ventas Externas. Si el producto ya se había marcado antes, se reutiliza en vez de crear otro. Para marcar varios productos en la misma semana, repite la búsqueda una por una. El lápiz de cada producto corrige el vínculo en todas las semanas donde aparece.
+          Busca por nombre o código — el mismo catálogo que usan Reingreso, Compras y Ventas Externas. Si el producto ya se había marcado antes, se reutiliza en vez de crear otro. Para marcar varios productos en la misma semana, repite la búsqueda una por una. El lápiz de cada producto corrige el vínculo en todas las semanas donde aparece.
         </div>
 
         <div className="border-t border-rule mt-3.5 pt-3.5">

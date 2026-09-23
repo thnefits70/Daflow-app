@@ -193,7 +193,7 @@ export function SupplierExchangeCapture({ onSent }: { onSent?: () => void }) {
         </div>
         <div className="font-display font-bold text-[15px] mb-1.5">{sentCode} enviado</div>
         <p className="text-[12.5px] text-steel mb-4">
-          Ya cayó en la cola de dar de baja en Just, y cada producto queda pendiente de saber si el proveedor lo cambia o da crédito. Anota <b>{sentCode}</b> en el paquete físico.
+          Ya se descontó de INVESTOCK, y cada producto queda pendiente de saber si el proveedor lo cambia o da crédito. Anota <b>{sentCode}</b> en el paquete físico.
         </p>
         {sentBatchId && (
           <a
@@ -401,7 +401,7 @@ export function SupplierExchangeCapture({ onSent }: { onSent?: () => void }) {
       {confirmingSubmit && (
         <div className="bg-surface border border-rule rounded-md p-4">
           <div className="font-display font-bold text-[14px] mb-3">¿Ya está completa la lista de productos y la foto de evidencia?</div>
-          <p className="text-[11.5px] text-steel mb-3">Esto se registra como que la mercadería YA salió de Just — confirmá que de verdad vas a mandar el paquete.</p>
+          <p className="text-[11.5px] text-steel mb-3">Esto descuenta la mercadería de INVESTOCK en este momento — confirma que de verdad vas a mandar el paquete.</p>
           <div className="flex gap-2">
             <button type="button" className="flex-1 rounded border border-rule px-3 py-2 text-[12.5px] font-semibold cursor-pointer" onClick={() => setConfirmingSubmit(false)}>Revisar de nuevo</button>
             <button type="button" disabled={submitting} className="flex-1 rounded border border-teal bg-teal px-3 py-2 text-[12.5px] font-bold text-navy cursor-pointer disabled:opacity-60" onClick={submitBatch}>

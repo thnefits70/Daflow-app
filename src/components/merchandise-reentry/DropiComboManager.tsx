@@ -167,7 +167,7 @@ export function DropiComboManager() {
         )}
       </div>
       <div className="text-[12px] text-steel mb-3">
-        Un ID de combo de Dropi no es un producto real — por dentro trae varios productos de Just distintos. Registra acá cómo se desglosa cada combo (qué
+        Un ID de combo de Dropi no es un producto real — por dentro trae varios productos distintos del catálogo. Registra acá cómo se desglosa cada combo (qué
         productos reales y en qué cantidad) para que Registro de Egresos lo reconozca solo al leer una hoja de despacho/garantía.
       </div>
 

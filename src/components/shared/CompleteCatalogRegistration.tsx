@@ -88,7 +88,7 @@ export function CompleteCatalogRegistration({
       <div className="bg-surface border border-rule rounded-md p-4 max-w-sm w-full" onClick={(e) => e.stopPropagation()}>
         <div className="font-display font-bold text-[14.5px] mb-1">Matricular producto</div>
         <div className="text-[12.5px] text-steel mb-3">
-          <b className="text-ink">{item.name}</b> viene de la base de datos de Just pero todavía no tiene fotos en DAFLOW — sube mínimo 3 para que todos puedan reconocerlo sin equivocarse.
+          <b className="text-ink">{item.name}</b> ya está en la base de datos de productos pero todavía no tiene fotos en DAFLOW — sube mínimo 3 para que todos puedan reconocerlo sin equivocarse.
         </div>
 
         <label className="block mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-steel">Fotos (mínimo 3)</label>

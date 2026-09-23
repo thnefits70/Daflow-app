@@ -118,7 +118,7 @@ function SnapshotCard({ s, title, tone }: { s: Snapshot; title: string; tone: "r
         {s.photo && <img src={s.photo} alt="" className="w-11 h-11 rounded object-cover border border-rule shrink-0" />}
         <div className="min-w-0">
           <div className="text-[12.5px] font-semibold">{s.name}</div>
-          <div className="text-[11px] font-mono text-steel">{s.justCode ?? "sin código de Just"}</div>
+          <div className="text-[11px] font-mono text-steel">{s.justCode ?? "sin código"}</div>
         </div>
       </div>
       <div className="text-[12px] mt-1.5">

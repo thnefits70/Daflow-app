@@ -53,7 +53,7 @@ type ComboRow = {
   dropiPrice: number | null;
   b2cPrice1Unit: number | null;
   b2cPrice2to11: number | null;
-  costSource?: "proposal" | "kardex" | "just" | null;
+  costSource?: "proposal" | "kardex" | null;
 };
 
 type StockRow = {
@@ -64,8 +64,7 @@ type StockRow = {
   balance: number;
   avgCost: number;
   bodega: Marca | null;
-  justAvgCost?: number | null;
-  costSource?: "proposal" | "kardex" | "just" | null;
+  costSource?: "proposal" | "kardex" | null;
   providerPrice?: number;
   bodegaPrice?: number;
   benistockPrice?: number;
@@ -143,35 +142,21 @@ function CopyableAmount({ value, className, title }: { value: number | null | un
   );
 }
 
-// Confirmado 2026-09-17, pedido explícito del usuario: mientras se termina
-// de cargar INVESTOCK para todos los productos, un producto sin propuesta
-// de Jariel ni costo real de Kardex usa el costo promedio de Just como
-// respaldo TEMPORAL (ver resolveCostBasisForCatalogItems en
-// lib/marketProduct.ts) — estas columnas de costo/precio se resaltan en
-// gold para dejar claro que ese número no viene de INVESTOCK todavía.
-const JUST_ESTIMATE_TITLE = "Estimado con el costo promedio de Just (temporal) — este producto todavía no tiene costo real en INVESTOCK.";
-function withCostSourceColor(base: string, costSource?: "proposal" | "kardex" | "just" | null) {
-  if (costSource !== "just") return base;
-  return base.replace(/text-(teal|ink|blue|steel)\b/g, "text-gold");
-}
-
 // Confirmado 2026-09-21, pedido explícito del usuario (admin): desbloqueo
 // rápido para un producto que ya se movió en INVESTOCK pero cuyo costo
-// sigue en $0 (por eso aparece con el respaldo de Just, costSource="just")
-// — declara a mano el costo real (normalmente el mismo de Just) para poder
-// cotizar hoy mismo. Exclusivo del admin, a propósito: es una decisión
+// sigue en $0 (sale "Sin precio") — declara a mano el costo real para
+// poder cotizar hoy mismo. Exclusivo del admin, a propósito: es una decisión
 // financiera, no un dato operativo del día a día. Queda registrado en el
 // Kardex como su propio tipo de línea (COST_DECLARATION, ver
 // declareManualCost en stockKardex.ts), nunca se confunde con una compra
 // real — el botón desaparece solo cuando entre la compra real de verdad.
-function DeclareCostButton({ catalogItemId, suggestedCost, onDeclared }: { catalogItemId: string; suggestedCost: number; onDeclared: () => void }) {
+function DeclareCostButton({ catalogItemId, onDeclared }: { catalogItemId: string; onDeclared: () => void }) {
   const [editing, setEditing] = useState(false);
-  // Confirmado 2026-09-21, pedido explícito del usuario: el precio de Just
-  // NUNCA trae el flete (es solo el costo del proveedor), así que declarar
-  // ese número tal cual deja el costo corto — se separan los dos campos
-  // para que quede claro qué es cada uno, y el total (lo que de verdad se
+  // Confirmado 2026-09-21, pedido explícito del usuario: el costo del
+  // proveedor NUNCA trae el flete, así que se separan los dos campos para
+  // que quede claro qué es cada uno, y el total (lo que de verdad se
   // declara) sale de sumarlos.
-  const [productCost, setProductCost] = useState(suggestedCost > 0 ? String(suggestedCost) : "");
+  const [productCost, setProductCost] = useState("");
   const [freightCost, setFreightCost] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -228,7 +213,7 @@ function DeclareCostButton({ catalogItemId, suggestedCost, onDeclared }: { catal
           step="0.01"
           min="0.01"
           disabled={busy}
-          title="Costo del producto (sin flete) — el que trae Just"
+          title="Costo del producto (sin flete) — el del proveedor"
           placeholder="Producto"
           className="w-16 rounded border border-teal bg-cloud px-1 py-0.5 text-[11px] font-mono disabled:opacity-60"
           value={productCost}
@@ -514,7 +499,7 @@ export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?
   // Confirmado 2026-09-21, pedido explícito del usuario: ver de un clic qué
   // productos del catálogo (todo lo que ya está registrado en INVESTOCK) se
   // quedaron sin ningún precio real (ni propuesta de Jariel, ni costo de
-  // Kardex, ni siquiera el de Just) o sin stock — mismo patrón de chip que
+  // Kardex) o sin stock — mismo patrón de chip que
   // el filtro de marca, independiente y combinable con él.
   const [sinPrecioFilter, setSinPrecioFilter] = useState(false);
   const [sinStockFilter, setSinStockFilter] = useState(false);
@@ -867,7 +852,7 @@ export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?
               type="button"
               className={`rounded-full px-3 py-1.5 text-[12px] font-semibold cursor-pointer border ${sinPrecioFilter ? "bg-red border-red text-navy" : "border-rule text-red hover:text-red"}`}
               onClick={() => setSinPrecioFilter((v) => !v)}
-              title="Productos sin ninguna base de costo real: ni propuesta de Análisis de Mercado, ni compra en INVESTOCK, ni Just."
+              title="Productos sin ninguna base de costo real: ni propuesta de Análisis de Mercado, ni compra en INVESTOCK."
             >
               Sin precio · {sinPrecioCount}
             </button>
@@ -983,42 +968,35 @@ export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?
                 <span className="flex flex-col items-end gap-0.5 border-l border-rule pl-3">
                   <CopyableAmount
                     value={r.providerPrice}
-                    className={withCostSourceColor("text-right font-mono text-[13px] text-steel", r.costSource)}
-                    title={r.costSource === "just" ? JUST_ESTIMATE_TITLE : undefined}
+                    className={"text-right font-mono text-[13px] text-steel"}
                   />
                   {isAdmin && r.costSource !== "proposal" && r.costSource !== "kardex" && (
-                    <DeclareCostButton catalogItemId={r.catalogItemId} suggestedCost={r.justAvgCost ?? 0} onDeclared={loadRows} />
+                    <DeclareCostButton catalogItemId={r.catalogItemId} onDeclared={loadRows} />
                   )}
                 </span>
                 <CopyableAmount
                   value={r.bodegaPrice}
-                  className={withCostSourceColor("text-right font-mono text-[13px] text-steel", r.costSource)}
-                  title={r.costSource === "just" ? JUST_ESTIMATE_TITLE : undefined}
+                  className={"text-right font-mono text-[13px] text-steel"}
                 />
                 <CopyableAmount
                   value={r.benistockPrice}
-                  className={withCostSourceColor("text-right font-mono text-[13px] text-steel", r.costSource)}
-                  title={r.costSource === "just" ? JUST_ESTIMATE_TITLE : undefined}
+                  className={"text-right font-mono text-[13px] text-steel"}
                 />
                 <CopyableAmount
                   value={r.b2bPriceDefault}
-                  className={withCostSourceColor("text-right font-mono text-[13px] font-bold text-teal border-l border-rule pl-3", r.costSource)}
-                  title={r.costSource === "just" ? JUST_ESTIMATE_TITLE : undefined}
+                  className={"text-right font-mono text-[13px] font-bold text-teal border-l border-rule pl-3"}
                 />
                 <CopyableAmount
                   value={r.dropiPrice}
-                  className={withCostSourceColor("text-right font-mono text-[13px] font-bold text-ink", r.costSource)}
-                  title={r.costSource === "just" ? JUST_ESTIMATE_TITLE : undefined}
+                  className={"text-right font-mono text-[13px] font-bold text-ink"}
                 />
                 <CopyableAmount
                   value={r.b2cPrice1Unit}
-                  className={withCostSourceColor("text-right font-mono text-[13px] font-bold text-blue", r.costSource)}
-                  title={r.costSource === "just" ? JUST_ESTIMATE_TITLE : undefined}
+                  className={"text-right font-mono text-[13px] font-bold text-blue"}
                 />
                 <CopyableAmount
                   value={r.b2cPrice2to11}
-                  className={withCostSourceColor("text-right font-mono text-[13px] font-bold text-blue", r.costSource)}
-                  title={r.costSource === "just" ? JUST_ESTIMATE_TITLE : undefined}
+                  className={"text-right font-mono text-[13px] font-bold text-blue"}
                 />
               </div>
             ))
@@ -1061,38 +1039,31 @@ export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?
                       <span className="text-right font-mono text-[11px] italic text-steel-dim">combo</span>
                       <CopyableAmount
                         value={combo.providerPrice}
-                        className={withCostSourceColor("text-right font-mono text-[13px] text-steel border-l border-rule pl-3", combo.costSource)}
-                        title={combo.costSource === "just" ? JUST_ESTIMATE_TITLE : undefined}
+                        className={"text-right font-mono text-[13px] text-steel border-l border-rule pl-3"}
                       />
                       <CopyableAmount
                         value={combo.bodegaPrice}
-                        className={withCostSourceColor("text-right font-mono text-[13px] text-steel", combo.costSource)}
-                        title={combo.costSource === "just" ? JUST_ESTIMATE_TITLE : undefined}
+                        className={"text-right font-mono text-[13px] text-steel"}
                       />
                       <CopyableAmount
                         value={combo.benistockPrice}
-                        className={withCostSourceColor("text-right font-mono text-[13px] text-steel", combo.costSource)}
-                        title={combo.costSource === "just" ? JUST_ESTIMATE_TITLE : undefined}
+                        className={"text-right font-mono text-[13px] text-steel"}
                       />
                       <CopyableAmount
                         value={combo.b2bPriceDefault}
-                        className={withCostSourceColor("text-right font-mono text-[13px] font-bold text-teal border-l border-rule pl-3", combo.costSource)}
-                        title={combo.costSource === "just" ? JUST_ESTIMATE_TITLE : undefined}
+                        className={"text-right font-mono text-[13px] font-bold text-teal border-l border-rule pl-3"}
                       />
                       <CopyableAmount
                         value={combo.dropiPrice}
-                        className={withCostSourceColor("text-right font-mono text-[13px] font-bold text-ink", combo.costSource)}
-                        title={combo.costSource === "just" ? JUST_ESTIMATE_TITLE : undefined}
+                        className={"text-right font-mono text-[13px] font-bold text-ink"}
                       />
                       <CopyableAmount
                         value={combo.b2cPrice1Unit}
-                        className={withCostSourceColor("text-right font-mono text-[13px] font-bold text-blue", combo.costSource)}
-                        title={combo.costSource === "just" ? JUST_ESTIMATE_TITLE : undefined}
+                        className={"text-right font-mono text-[13px] font-bold text-blue"}
                       />
                       <CopyableAmount
                         value={combo.b2cPrice2to11}
-                        className={withCostSourceColor("text-right font-mono text-[13px] font-bold text-blue", combo.costSource)}
-                        title={combo.costSource === "just" ? JUST_ESTIMATE_TITLE : undefined}
+                        className={"text-right font-mono text-[13px] font-bold text-blue"}
                       />
                     </div>
                     <div className="flex flex-wrap gap-1.5 px-3 pb-2.5 pl-[52px]">
