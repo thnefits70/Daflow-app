@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { CaptureFlow } from "./CaptureFlow";
 import { ReviewInbox } from "./ReviewInbox";
-import { CloseQueues } from "./CloseQueues";
 import { WeeklyDamageControl } from "./WeeklyDamageControl";
 import { HistoryList } from "./HistoryList";
 import { JustCatalogPanel } from "./JustCatalogPanel";
@@ -12,7 +11,7 @@ import { StockLabelsPanel } from "./StockLabelsPanel";
 import { ExpirationLotsPanel } from "./ExpirationLotsPanel";
 import { TabGuide } from "@/components/shared/TabGuide";
 
-type Tab = "capturar" | "revision" | "cierre" | "danos" | "productos" | "historial";
+type Tab = "capturar" | "revision" | "danos" | "productos" | "historial";
 
 export function MerchandiseReentryPanel({
   canCapture,
@@ -20,7 +19,6 @@ export function MerchandiseReentryPanel({
   canAct = false,
   canClose,
   canVerifyDamageDisposal = false,
-  canManageJustUpload = false,
   canManageJustCatalog = false,
 }: {
   canCapture: boolean;
@@ -28,15 +26,12 @@ export function MerchandiseReentryPanel({
   canAct?: boolean;
   canClose: boolean;
   canVerifyDamageDisposal?: boolean;
-  canManageJustUpload?: boolean;
   canManageJustCatalog?: boolean;
 }) {
-  // canApprove (Daniel, líder de Inventario) da visibilidad de solo lectura
-  // a "Cierre" — bloqueado 2026-08-24: podía gestionar el botón "Subido a
-  // Just" desde esa misma mañana, pero se revirtió a exclusivo de Nairoby
-  // (ver canManageJustUpload en guards.ts). Daniel sigue viendo la cola.
-  const canSeeCierre = canClose || canManageJustUpload || canApprove;
-  const defaultTab: Tab = canCapture ? "capturar" : canApprove ? "revision" : canSeeCierre ? "cierre" : "historial";
+  // Confirmado 2026-09-23: ya no existe la pestaña "Cierre" (antes Nairoby
+  // marcaba "Subido a Just") — la parte buena entra sola a INVESTOCK apenas
+  // Daniel aprueba el lote (ver inventoryAutoFlows.ts).
+  const defaultTab: Tab = canCapture ? "capturar" : canApprove ? "revision" : canClose ? "danos" : "historial";
   const [tab, setTab] = useState<Tab>(defaultTab);
 
   // Confirmado 2026-08-19: pedido explícito del usuario — el atajo de
@@ -46,7 +41,6 @@ export function MerchandiseReentryPanel({
   useEffect(() => {
     const t = new URLSearchParams(window.location.search).get("tab") as Tab | null;
     if (t === "revision" && canApprove) setTab("revision");
-    else if (t === "cierre" && canSeeCierre) setTab("cierre");
     else if (t === "danos" && (canApprove || canClose)) setTab("danos");
     else if (t === "productos" && (canApprove || canClose)) setTab("productos");
     else if (t === "capturar" && canCapture) setTab("capturar");
@@ -56,7 +50,6 @@ export function MerchandiseReentryPanel({
   const tabs: { id: Tab; label: string }[] = [
     ...(canCapture ? [{ id: "capturar" as const, label: "Capturar" }] : []),
     ...(canApprove ? [{ id: "revision" as const, label: "Revisión" }] : []),
-    ...(canSeeCierre ? [{ id: "cierre" as const, label: "Cierre" }] : []),
     ...(canApprove || canClose ? [{ id: "danos" as const, label: "Control de Daños" }] : []),
     ...(canApprove || canClose ? [{ id: "productos" as const, label: "Base de datos de productos" }] : []),
     { id: "historial" as const, label: "Historial" },
@@ -100,32 +93,20 @@ export function MerchandiseReentryPanel({
           <ReviewInbox canAct={canAct} />
         </>
       )}
-      {tab === "cierre" && canSeeCierre && (
-        <>
-          <TabGuide storageKey="merchreentry-cierre">
-            {canManageJustUpload ? (
-              <>Acá se agrupan por producto las unidades buenas ya aprobadas. Cuando un producto llega a la cantidad mínima puedes subir su stock a Just — solo en el día habilitado de la semana.</>
-            ) : (
-              <>Vista de solo lectura de las unidades buenas ya aprobadas, agrupadas por producto y listas para subir a Just. Subir el stock es exclusivo de Nairoby.</>
-            )}
-          </TabGuide>
-          <CloseQueues canManage={canManageJustUpload} />
-        </>
-      )}
       {tab === "danos" && (canApprove || canClose) && (
         <>
           <TabGuide storageKey="merchreentry-danos">
             {canAct && !canVerifyDamageDisposal && (
-              <>Cada semana se cierra el sábado con lo dañado que no se pudo solucionar. Te toca darlo de baja en el sistema Just — al confirmar, el lote pasa a Nairoby para la verificación física y la disposición final.</>
+              <>Cada semana se cierra sola el sábado con lo dañado que no se pudo solucionar, y pasa directo a Nairoby para la verificación física y la disposición final. Acá ves cómo va cada semana.</>
             )}
             {canVerifyDamageDisposal && !canAct && (
-              <>Acá verificas físicamente lo que ya se dio de baja en Just, y decides si cada producto se destruye o pasa a la percha de repuestos.</>
+              <>Cada sábado se cierra sola la semana de productos dañados. Acá los verificas físicamente y decides si cada producto se destruye o pasa a la percha de repuestos.</>
             )}
             {canAct && canVerifyDamageDisposal && (
-              <>Ves las dos partes del ciclo semanal: dar de baja en Just lo que no se solucionó, y luego verificar físicamente + decidir destrucción o percha de repuestos.</>
+              <>Cada sábado se cierra sola la semana de productos dañados; después toca verificar físicamente y decidir destrucción o percha de repuestos.</>
             )}
             {!canAct && !canVerifyDamageDisposal && (
-              <>Vista de solo lectura del ciclo semanal de productos dañados: baja en Just (Daniel), verificación física y disposición final (Nairoby).</>
+              <>Vista de solo lectura del ciclo semanal de productos dañados: cierre automático el sábado, verificación física y disposición final (Nairoby).</>
             )}
           </TabGuide>
           <WeeklyDamageControl canAct={canAct} canApprove={canApprove} canClose={canClose} canVerify={canVerifyDamageDisposal} />
@@ -139,9 +120,9 @@ export function MerchandiseReentryPanel({
           <div className="print:hidden">
             <TabGuide storageKey="merchreentry-productos">
               {canManageJustCatalog ? (
-                <>Este es el catálogo maestro sincronizado con Just. Sube acá el archivo exportado de Just para comparar contra lo que ya existe — el sistema te muestra qué cambió antes de aplicar nada.</>
+                <>Este es el catálogo maestro de productos de DAFLOW. Acá corriges códigos y nombres, juntas productos repetidos, armas combos, controlas lotes de caducidad e imprimes etiquetas de percha.</>
               ) : (
-                <>Consulta acá el catálogo de productos sincronizado con Just, en modo lectura. Subir actualizaciones es exclusivo de Daniel o admin.</>
+                <>Consulta acá el catálogo de productos de DAFLOW, en modo lectura. Editarlo es exclusivo de Daniel o admin.</>
               )}
             </TabGuide>
             <JustCatalogPanel canManage={canManageJustCatalog} />

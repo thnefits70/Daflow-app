@@ -25,9 +25,8 @@ const schema = z.discriminatedUnion("resolution", [
 // reclamo ya esté anclado a una compra real (linkedPurchaseRequestId, ver
 // purchase-link/route.ts) — la ÚNICA excepción es que admin ya haya
 // autorizado seguir sin respaldo (purchaseExceptionDecision AUTHORIZED, ver
-// purchase-exception-decide/route.ts). El write-off en Just de este
-// producto ya pasó por la cola normal al enviarse el lote (ver
-// notifyInventoryLeadOutflowPending) — acá no se vuelve a tocar Kardex,
+// purchase-exception-decide/route.ts). Este producto ya se descontó de
+// INVESTOCK al enviarse el lote — acá no se vuelve a tocar Kardex,
 // esto es puramente la parte financiera con el proveedor.
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();

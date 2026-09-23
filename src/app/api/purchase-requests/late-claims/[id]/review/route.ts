@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { canActOnPurchaseReceiving } from "@/lib/guards";
 import { notifyOwner } from "@/lib/notifications";
+import { autoWriteOffApprovedLateClaims } from "@/lib/inventoryAutoFlows";
 
 const schema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("approve") }),
@@ -14,8 +15,9 @@ const schema = z.discriminatedUnion("action", [
 // rechazo — reviewedByLeadAt siempre implicó aprobado), un reclamo posterior
 // al cierre SÍ puede rechazarse, con motivo obligatorio — pedido explícito
 // del usuario para que quede trazado por qué no se recuperó ese dinero,
-// nunca desaparece. Al aprobar, se fija justWriteOffQty = damagedQty, que
-// la confirmación reforzada de Just deberá igualar exactamente.
+// nunca desaparece. Desde 2026-09-23, al aprobar las unidades dañadas salen
+// solas de INVESTOCK y el reclamo pasa directo a gestión con el proveedor
+// (antes Daniel tenía que darlas de baja en Just a mano en un segundo paso).
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!(await canActOnPurchaseReceiving()) || !session) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
@@ -54,7 +56,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ ok: true });
   }
 
-  const updated = await prisma.purchaseRequestUrgentReport.update({
+  await prisma.purchaseRequestUrgentReport.update({
     where: { id },
     data: {
       reviewedByLeadId: isAdmin ? null : session.user.id,
@@ -62,13 +64,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       justWriteOffQty: existing.damagedQty,
     },
   });
+  await autoWriteOffApprovedLateClaims(id);
+  const updated = await prisma.purchaseRequestUrgentReport.findUnique({ where: { id } });
 
   await Promise.all(
     [...notifyTargets].map((ownerId) =>
       notifyOwner(ownerId, {
         title: "✓ Reclamo posterior al cierre aprobado",
-        body: `${existing.request.catalogItem.name} — ${existing.lateClaimCode}: falta darlo de baja en Just.`,
-        url: ownerId === "admin" ? "/admin" : "/area/workspace?tab=compras&ptab=inventario",
+        body: `${existing.request.catalogItem.name} — ${existing.lateClaimCode}: ya se descontó del inventario, listo para gestionar con el proveedor.`,
+        url: ownerId === "admin" ? "/admin" : "/area/workspace?tab=compras&ptab=urgentes",
       })
     )
   );

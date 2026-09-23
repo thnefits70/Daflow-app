@@ -3,6 +3,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { canSubmitPurchaseRequests, canConfirmPurchaseReceiving } from "@/lib/guards";
 import { isWithinCreditClaimWindow, creditClaimDeadline } from "@/lib/purchaseUrgent";
+import { autoWriteOffApprovedLateClaims } from "@/lib/inventoryAutoFlows";
 
 // Admin, o quien tenga delegación de Compras (hoy Bryan), coordina con el
 // proveedor y elige cómo se resuelve cada reporte de Daniel — acciones
@@ -19,14 +20,18 @@ export async function GET(_req: NextRequest) {
     return NextResponse.json({ error: "No autorizado." }, { status: 403 });
   }
 
+  // Cualquier reclamo posterior ya aprobado que siguiera esperando la vieja
+  // "baja en Just" se descuenta de INVESTOCK y se libera acá mismo.
+  await autoWriteOffApprovedLateClaims().catch(() => 0);
+
   const reports = await prisma.purchaseRequestUrgentReport.findMany({
     // Confirmado 2026-08-18: pedido explícito del usuario — un reporte que
     // subió el equipo de Inventario le llega primero a Daniel; Bryan/admin
     // solo ven lo que él ya revisó (ver urgent-reports/[id]/approve).
-    // Confirmado 2026-08-25: un "Reclamo posterior al cierre" (isLateClaim)
-    // pasa además por dar de baja en Just antes de poder gestionarse con el
-    // proveedor — recién visible acá una vez justConfirmedAt (ver
-    // late-claims/[id]/just-confirm). rejectedAt siempre lo excluye.
+    // Un "Reclamo posterior al cierre" (isLateClaim) es visible acá una vez
+    // justConfirmedAt — que desde 2026-09-23 se marca solo al aprobarlo,
+    // junto con la salida de INVESTOCK (ver inventoryAutoFlows.ts).
+    // rejectedAt siempre lo excluye.
     where: {
       rejectedAt: null,
       OR: [

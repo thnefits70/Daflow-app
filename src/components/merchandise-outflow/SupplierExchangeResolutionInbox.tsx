@@ -21,8 +21,6 @@ type ItemDTO = {
   credit: { amount: number } | null;
   financeWriteOffAt: string | null;
   financeWriteOffBy: { name: string } | null;
-  justWriteOffConfirmedAt: string | null;
-  justWriteOffConfirmedBy: { name: string } | null;
   adminReviewedAt: string | null;
   adminReviewedBy: { name: string } | null;
   adminReviewNote: string | null;
@@ -63,11 +61,11 @@ function groupByBatch(items: ItemDTO[]) {
 // "gestionado" (sale de la lista de pendientes y pasa al historial
 // buscable) cuando ya no le falta nada de nadie. REPLACED/CREDIT_ISSUED no
 // tienen cadena posterior, quedan cerrados apenas se resuelven. REJECTED sí
-// tiene cadena (Just + Finanzas) — la revisión del admin es aparte y NUNCA
+// falta la baja financiera de Nairoby — la revisión del admin es aparte y NUNCA
 // bloquea el cierre (puede pasar antes, después o nunca).
 function isFullyClosed(item: ItemDTO): boolean {
   if (item.resolution === null) return false;
-  if (item.resolution === "REJECTED") return !!(item.justWriteOffConfirmedAt && item.financeWriteOffAt);
+  if (item.resolution === "REJECTED") return !!item.financeWriteOffAt;
   return true;
 }
 
@@ -82,7 +80,6 @@ function searchHaystack(item: ItemDTO): string {
     item.gestorName,
     item.resolvedBy?.name,
     item.adminReviewedBy?.name,
-    item.justWriteOffConfirmedBy?.name,
     item.financeWriteOffBy?.name,
   ]
     .filter(Boolean)
@@ -106,20 +103,16 @@ async function postJson(url: string) {
 // Confirmado 2026-08-26/27: vista de SOLO LECTURA sobre la decisión en sí
 // (quién resuelve cada producto es quien pidió la compra, no Daniel ni
 // admin — ver SupplierExchangeMyResolutions). Cuando un ítem queda
-// RECHAZADO hay tres acciones puntuales acá. Confirmado 2026-08-28: Daniel
-// (canConfirmJustWriteOff) y Nairoby (canConfirmFinanceWriteOff) ya NO son
-// independientes — es una cadena: Nairoby ni siquiera ve el botón de
-// confirmar hasta que Daniel ya confirmó la baja en Just (el backend
-// también lo exige, ver finance-writeoff/route.ts). El admin
-// (canReviewAsAdmin) sí sigue aparte de esa cadena: puede revisar y dejar
-// un comentario opcional en cualquier momento, puramente informativo para
-// el historial, sin bloquear ni depender de Daniel/Nairoby.
+// RECHAZADO hay dos acciones puntuales acá: Nairoby
+// (canConfirmFinanceWriteOff) registra la pérdida financiera — desde
+// 2026-09-23 sin esperar a Daniel, porque la mercadería ya se descontó de
+// INVESTOCK al armar el paquete. El admin (canReviewAsAdmin) puede revisar
+// y dejar un comentario opcional en cualquier momento, puramente
+// informativo para el historial, sin bloquear a nadie.
 export function SupplierExchangeResolutionInbox({
-  canConfirmJustWriteOff = false,
   canConfirmFinanceWriteOff = false,
   canReviewAsAdmin = false,
 }: {
-  canConfirmJustWriteOff?: boolean;
   canConfirmFinanceWriteOff?: boolean;
   canReviewAsAdmin?: boolean;
 }) {
@@ -159,19 +152,6 @@ export function SupplierExchangeResolutionInbox({
     setError("");
     try {
       await postJson(`/api/merchandise-outflow/items/${id}/finance-writeoff`);
-      load();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "No se pudo confirmar.");
-    } finally {
-      setConfirming(null);
-    }
-  }
-
-  async function confirmJustWriteOff(id: string) {
-    setConfirming(id);
-    setError("");
-    try {
-      await postJson(`/api/merchandise-outflow/items/${id}/just-writeoff-confirm`);
       load();
     } catch (e) {
       setError(e instanceof Error ? e.message : "No se pudo confirmar.");
@@ -221,7 +201,7 @@ export function SupplierExchangeResolutionInbox({
 
   // Mismo bloque de detalle para un ítem, sin importar si aparece en la
   // lista de pendientes o adentro de una fila ya gestionada expandida —
-  // así la cadena Just/Finanzas y la revisión del admin se ven igual en
+  // así la baja financiera y la revisión del admin se ven igual en
   // los dos lugares, sin duplicar el JSX.
   function renderDetail(item: ItemDTO) {
     if (item.resolution === null) {
@@ -293,21 +273,8 @@ export function SupplierExchangeResolutionInbox({
 
         <div className="flex flex-col gap-1 mt-0.5">
           <div className="flex items-center gap-1.5 text-[11px]">
-            {item.justWriteOffConfirmedAt ? (
-              <span className="flex items-center gap-1 text-green font-semibold"><CheckCircle2 size={11} /> Baja en Just confirmada por {item.justWriteOffConfirmedBy?.name ?? "—"}{item.justWriteOffConfirmedAt ? ` · ${formatDateTime(item.justWriteOffConfirmedAt)}` : ""}</span>
-            ) : canConfirmJustWriteOff ? (
-              <button type="button" disabled={confirming === item.id} className="rounded border border-teal bg-teal px-2 py-1 text-[10.5px] font-bold text-navy cursor-pointer disabled:opacity-40" onClick={() => confirmJustWriteOff(item.id)}>
-                Confirmar baja en Just
-              </button>
-            ) : (
-              <span className="text-steel font-semibold">Falta que Daniel confirme la baja en Just</span>
-            )}
-          </div>
-          <div className="flex items-center gap-1.5 text-[11px]">
             {item.financeWriteOffAt ? (
               <span className="flex items-center gap-1 text-green font-semibold"><CheckCircle2 size={11} /> Baja financiera confirmada por {item.financeWriteOffBy?.name ?? "—"}{item.financeWriteOffAt ? ` · ${formatDateTime(item.financeWriteOffAt)}` : ""}</span>
-            ) : !item.justWriteOffConfirmedAt ? (
-              <span className="text-steel font-semibold">Pendiente — falta que Daniel confirme la baja en Just primero</span>
             ) : canConfirmFinanceWriteOff ? (
               <button type="button" disabled={confirming === item.id} className="rounded border border-teal bg-teal px-2 py-1 text-[10.5px] font-bold text-navy cursor-pointer disabled:opacity-40" onClick={() => confirmFinanceWriteOff(item.id)}>
                 Confirmar baja financiera

@@ -8,13 +8,12 @@ import { DeteriorTraceList } from "./DeteriorTraceList";
 import { SupplierExchangeCapture } from "./SupplierExchangeCapture";
 import { SupplierExchangeResolutionInbox } from "./SupplierExchangeResolutionInbox";
 import { SupplierExchangeMyResolutions } from "./SupplierExchangeMyResolutions";
-import { WriteOffQueue } from "./WriteOffQueue";
 import { HistoryList } from "./HistoryList";
 import { CancelledGuidesPanel } from "@/components/cancelled-guides/CancelledGuidesPanel";
 import { FulfillmentRequestPanel } from "./FulfillmentRequestPanel";
 import { TabGuide } from "@/components/shared/TabGuide";
 
-type Tab = "despacho" | "garantia" | "deterioro" | "seguimiento" | "proveedor" | "guias" | "solicitud" | "baja" | "historial";
+type Tab = "despacho" | "garantia" | "deterioro" | "seguimiento" | "proveedor" | "guias" | "solicitud" | "historial";
 
 export function MerchandiseOutflowPanel({
   canCapture,
@@ -37,14 +36,14 @@ export function MerchandiseOutflowPanel({
   canCapture: boolean;
   canAct?: boolean;
   // Fix confirmado 2026-08-26 (reportado por el usuario: "se le cae" a
-  // Bryan) — "Dar de baja en Just" e "Historial" son de TODOS los motivos
+  // Bryan) — "Historial" es de TODOS los motivos
   // de Egresos, no solo de lo que Bryan puede ver por su acceso a Guías
   // Canceladas. Antes se mostraban sin este gate, y como sus endpoints SÍ
   // exigen canViewMerchandiseOutflow (equipo de Inventario o admin), a
   // Bryan el fetch le devolvía 403 y el componente crasheaba tratando de
-  // hacer `.map()` sobre `{error: "No autorizado."}`. Ahora esas dos
-  // pestañas dependen de este prop, y además WriteOffQueue/HistoryList ya
-  // no crashean ante una respuesta que no sea un arreglo.
+  // hacer `.map()` sobre `{error: "No autorizado."}`. Ahora esa pestaña
+  // depende de este prop, y además HistoryList ya no crashea ante una
+  // respuesta que no sea un arreglo.
   canView?: boolean;
   // Confirmado 2026-08-26 (pedido explícito del usuario): Daniel puede
   // desglosar un combo de Dropi directo desde la lectura del documento
@@ -119,7 +118,7 @@ export function MerchandiseOutflowPanel({
     : canCapture
       ? "garantia"
       : canAct
-        ? "baja"
+        ? "historial"
         : supplierExchangeMineCount > 0 || financeWriteOffPendingCount > 0
           ? "proveedor"
           : canSubmitCancelledGuide || canManageCancelledGuideBatches || canConfirmCancelledGuideFulfillmentRemoval || canAssignCancelledGuideItems
@@ -134,7 +133,7 @@ export function MerchandiseOutflowPanel({
   const [tab, setTab] = useState<Tab>(() => {
     if (typeof window === "undefined") return defaultTab;
     const t = new URLSearchParams(window.location.search).get("otab");
-    if (t === "baja" || t === "deterioro" || t === "seguimiento" || t === "proveedor" || t === "guias") return t;
+    if (t === "deterioro" || t === "seguimiento" || t === "proveedor" || t === "guias") return t;
     return defaultTab;
   });
 
@@ -162,13 +161,15 @@ export function MerchandiseOutflowPanel({
     ...(canSeeProveedorTab ? [{ id: "proveedor" as const, label: "Cambio con proveedor" }] : []),
     ...(canSubmitCancelledGuide || canManageCancelledGuideBatches || canConfirmCancelledGuideFulfillmentRemoval || canAssignCancelledGuideItems || canAct ? [{ id: "guias" as const, label: "Guías canceladas" }] : []),
     ...(canSubmitFulfillmentRequest || canViewFulfillmentRequests ? [{ id: "solicitud" as const, label: "Solicitud Fulfillment" }] : []),
-    ...(canView ? [{ id: "baja" as const, label: "Dar de baja en Just" }, { id: "historial" as const, label: "Historial" }] : []),
+    // Confirmado 2026-09-23: ya no existe "Dar de baja en Just" — cada
+    // salida se descuenta sola de INVESTOCK en el momento en que se envía.
+    ...(canView ? [{ id: "historial" as const, label: "Historial" }] : []),
   ];
 
   return (
     <div>
       <h1 className="font-display text-[22px] font-bold mb-1">Registro de Egresos</h1>
-      <p className="text-[13px] text-steel mb-5">Mercadería que sale del inventario físico por vías que Just no registra solo.</p>
+      <p className="text-[13px] text-steel mb-5">Toda la mercadería que sale de bodega, sin importar el motivo — cada salida se descuenta sola de INVESTOCK.</p>
 
       <div className="flex gap-6 border-b border-rule mb-5">
         {tabs.map((t) => (
@@ -250,7 +251,7 @@ export function MerchandiseOutflowPanel({
             {(canViewSupplierExchangeResolution || canConfirmFinanceWriteOff) && (
               <div>
                 <div className="font-display font-bold text-[14px] mb-2.5">Estado de resolución</div>
-                <SupplierExchangeResolutionInbox key={proveedorRefreshKey} canConfirmJustWriteOff={canAct} canConfirmFinanceWriteOff={canConfirmFinanceWriteOff} canReviewAsAdmin={isAdmin} />
+                <SupplierExchangeResolutionInbox key={proveedorRefreshKey} canConfirmFinanceWriteOff={canConfirmFinanceWriteOff} canReviewAsAdmin={isAdmin} />
               </div>
             )}
           </div>
@@ -259,9 +260,9 @@ export function MerchandiseOutflowPanel({
       {tab === "guias" && (canSubmitCancelledGuide || canManageCancelledGuideBatches || canConfirmCancelledGuideFulfillmentRemoval || canAssignCancelledGuideItems || canAct) && (
         <>
           <TabGuide storageKey="merchoutflow-guias">
-            Aunque el resultado final sea reingresar mercadería a Just (no darla de baja), las guías canceladas viven acá junto a los demás motivos para no saltar entre módulos.
+            Aunque el resultado final sea que la mercadería vuelve al inventario (no se da de baja), las guías canceladas viven acá junto a los demás motivos para no saltar entre módulos. Cuando los tres pasos están listos, vuelve sola a INVESTOCK.
           </TabGuide>
-          <CancelledGuidesPanel canSubmit={canSubmitCancelledGuide} canManageBatches={canManageCancelledGuideBatches} canConfirmFulfillmentRemoval={canConfirmCancelledGuideFulfillmentRemoval} canAssignItems={canAssignCancelledGuideItems} canReingreso={canAct} viewerDeptCode={viewerDeptCode} />
+          <CancelledGuidesPanel canSubmit={canSubmitCancelledGuide} canManageBatches={canManageCancelledGuideBatches} canConfirmFulfillmentRemoval={canConfirmCancelledGuideFulfillmentRemoval} canAssignItems={canAssignCancelledGuideItems} viewerDeptCode={viewerDeptCode} />
         </>
       )}
       {tab === "solicitud" && (canSubmitFulfillmentRequest || canViewFulfillmentRequests) && (
@@ -274,19 +275,9 @@ export function MerchandiseOutflowPanel({
           <FulfillmentRequestPanel canSubmit={canSubmitFulfillmentRequest} />
         </>
       )}
-      {tab === "baja" && canView && (
-        <>
-          <TabGuide storageKey="merchoutflow-baja">
-            {canAct
-              ? "Acá cae TODO lo que está listo para dar de baja en Just, sin importar el motivo — despacho, garantía, deterioro dado de baja, y compras personales (enganche automático). Confirma solo cuando ya lo hayas hecho de verdad en Just."
-              : "Vista de solo lectura de lo pendiente de dar de baja en Just. Confirmar es exclusivo de Daniel."}
-          </TabGuide>
-          <WriteOffQueue canAct={canAct} />
-        </>
-      )}
       {tab === "historial" && canView && (
         <>
-          <TabGuide storageKey="merchoutflow-historial">Consulta acá el registro completo de egresos, con trazabilidad de quién capturó y quién dio de baja.</TabGuide>
+          <TabGuide storageKey="merchoutflow-historial">Consulta acá el registro completo de egresos, con trazabilidad de quién capturó cada uno.</TabGuide>
           <HistoryList />
         </>
       )}

@@ -5,25 +5,22 @@ import { CancelledGuideSubmitForm } from "./CancelledGuideSubmitForm";
 import { CancelledGuideBatchInbox } from "./CancelledGuideBatchInbox";
 import { CancelledGuideFulfillmentRemovalInbox } from "./CancelledGuideFulfillmentRemovalInbox";
 import { CancelledGuideItemAssignmentPanel } from "./CancelledGuideItemAssignmentPanel";
-import { CancelledGuideReingresoQueue } from "./CancelledGuideReingresoQueue";
 import { CancelledGuideHistoryList } from "./CancelledGuideHistoryList";
 import { TabGuide } from "@/components/shared/TabGuide";
 
-type Tab = "reportar" | "lotes" | "salida-fulfillment" | "productos" | "reingreso" | "historial";
+type Tab = "reportar" | "lotes" | "salida-fulfillment" | "productos" | "historial";
 
 export function CancelledGuidesPanel({
   canSubmit,
   canManageBatches,
   canConfirmFulfillmentRemoval,
   canAssignItems,
-  canReingreso,
   viewerDeptCode,
 }: {
   canSubmit: boolean;
   canManageBatches: boolean;
   canConfirmFulfillmentRemoval: boolean;
   canAssignItems: boolean;
-  canReingreso: boolean;
   viewerDeptCode?: string | null;
 }) {
   const defaultTab: Tab = canSubmit
@@ -34,9 +31,7 @@ export function CancelledGuidesPanel({
         ? "salida-fulfillment"
         : canAssignItems
           ? "productos"
-          : canReingreso
-            ? "reingreso"
-            : "historial";
+          : "historial";
   const [tab, setTab] = useState<Tab>(defaultTab);
 
   const tabs: { id: Tab; label: string }[] = [
@@ -44,7 +39,6 @@ export function CancelledGuidesPanel({
     ...(canManageBatches ? [{ id: "lotes" as const, label: "Gestionar lotes" }] : []),
     ...(canConfirmFulfillmentRemoval ? [{ id: "salida-fulfillment" as const, label: "Salida de Fulfillment" }] : []),
     ...(canAssignItems ? [{ id: "productos" as const, label: "Cargar productos" }] : []),
-    ...(canReingreso ? [{ id: "reingreso" as const, label: "Reingresar a Just" }] : []),
     { id: "historial" as const, label: "Historial" },
   ];
 
@@ -85,12 +79,6 @@ export function CancelledGuidesPanel({
         <>
           <TabGuide storageKey="cancelledguides-productos">Cargá qué productos y cantidades venían en cada guía — no hace falta esperar a que Bryan termine de gestionarla con la transportadora, va en paralelo.</TabGuide>
           <CancelledGuideItemAssignmentPanel />
-        </>
-      )}
-      {tab === "reingreso" && canReingreso && (
-        <>
-          <TabGuide storageKey="cancelledguides-reingreso">Guías gestionadas con la transportadora, confirmadas fuera de Fulfillment y con productos cargados — reingresa esa mercadería en Just.</TabGuide>
-          <CancelledGuideReingresoQueue />
         </>
       )}
       {tab === "historial" && (

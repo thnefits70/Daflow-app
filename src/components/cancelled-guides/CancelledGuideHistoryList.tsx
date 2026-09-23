@@ -27,10 +27,10 @@ type ReportDTO = {
 
 // Bryan (batchManagedAt), Yair (fulfillmentRemovedAt, solo después de
 // Bryan) y Heidy (itemsAssignedAt) — los últimos dos corren en paralelo —
-// solo cuando los TRES están listos entra a la cola de Daniel.
+// cuando los TRES están listos vuelve sola a INVESTOCK (inventoryAutoFlows.ts).
 function statusChip(r: ReportDTO): { text: string; color: string } {
-  if (r.reingresadoAt) return { text: `Reingresada a Just · ${formatDateTime(r.reingresadoAt)}`, color: "text-green" };
-  if (r.itemsAssignedAt && r.batchManagedAt && r.fulfillmentRemovedAt) return { text: "Lista — falta reingresar", color: "text-blue" };
+  if (r.reingresadoAt) return { text: `Reingresada al inventario · ${formatDateTime(r.reingresadoAt)}`, color: "text-green" };
+  if (r.itemsAssignedAt && r.batchManagedAt && r.fulfillmentRemovedAt) return { text: "Lista — reingresando al inventario", color: "text-blue" };
   const missing: string[] = [];
   if (!r.batchManagedAt) missing.push("que Bryan gestione con la transportadora");
   if (!r.fulfillmentRemovedAt) missing.push("que Yair confirme la salida de Fulfillment");

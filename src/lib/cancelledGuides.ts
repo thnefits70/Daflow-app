@@ -82,15 +82,3 @@ export async function notifyFulfillmentLeadBatchManaged(batchCode: string, guide
   const body = guideCount === 1 ? `${batchCode} — 1 guía gestionada, confirmá que la sacaste de Fulfillment.` : `${batchCode} — ${guideCount} guías gestionadas, confirmá que las sacaste de Fulfillment.`;
   await notifyOwner(leadId, { title: "Lote gestionado — sacalo de Fulfillment", body, url: `${URL_BASE}&sub=salida-fulfillment` }).catch(() => null);
 }
-
-// Una guía queda lista para Daniel recién cuando los TRES pasos (Bryan
-// gestionó + Yair confirmó que sacó el lote de Fulfillment + productos
-// cargados) están hechos, sin importar cuál terminó primero — se llama
-// desde los lugares donde eso puede completarse.
-export async function notifyInventoryLeadCancelledGuidesReady(codes: string[]): Promise<void> {
-  if (codes.length === 0) return;
-  const leadId = await getInventoryLeadId();
-  if (!leadId) return;
-  const body = codes.length === 1 ? `${codes[0]} — ya tiene los productos cargados.` : `${codes.length} guías listas — ${codes.join(", ")}.`;
-  await notifyOwner(leadId, { title: "Guía cancelada lista — reingresar a Just", body, url: `${URL_BASE}&sub=reingreso` }).catch(() => null);
-}

@@ -44,12 +44,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     },
   });
   if (!report) return NextResponse.json({ error: "No encontrado." }, { status: 404 });
-  // Confirmado 2026-08-25: un "Reclamo posterior al cierre" solo se puede
-  // gestionar con el proveedor después de que Daniel confirmó la baja en
-  // Just — la UI ya no lo ofrece antes de eso (ver el filtro en
-  // urgent-reports/route.ts), esto es la validación real server-side.
+  // Un "Reclamo posterior al cierre" solo se puede gestionar con el
+  // proveedor una vez aprobado y descontado de INVESTOCK (justConfirmedAt,
+  // automático desde 2026-09-23) — la UI ya no lo ofrece antes de eso (ver
+  // el filtro en urgent-reports/route.ts), esto es la validación real.
   if (report.isLateClaim && !report.justConfirmedAt) {
-    return NextResponse.json({ error: "Este reclamo todavía no está confirmado como dado de baja en Just." }, { status: 409 });
+    return NextResponse.json({ error: "Este reclamo todavía no fue aprobado por Daniel." }, { status: 409 });
   }
 
   const remaining = totalReportedQty(report) - claimedQty(report.resolutions);

@@ -4,7 +4,7 @@ import { isFixedHoliday, evaluationDeadline, adminConfirmDeadline, summaryFields
 import { addBusinessHours } from "@/lib/businessHours";
 import { getPettyCashBoxData, getPendingMotorizadoFreights, type PettyCashBoxTypeStr } from "@/lib/pettyCash";
 import { getUpcomingBirthdays } from "@/lib/birthdays";
-import { getFinanzasDeptId, recentInventorySnapshotPeriods, isSnapshotPeriodOverdue, snapshotPeriodLabel } from "@/lib/inventoryKpis";
+import { getFinanzasDeptId } from "@/lib/inventoryKpis";
 import { isEndOfMonthQuincena, monthOfPeriod } from "@/lib/payrollCalc";
 import { getMarketingLeadId } from "@/lib/guards";
 import { NICHO_AUTO_MONTHLY_BUDGET_USD } from "@/lib/nichoAi";
@@ -426,10 +426,7 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   compras_personales_estado: "Tus compras personales — seguimiento del estado (mientras esperás a bodega o Finanzas)",
   compras_personales_pago_seguimiento: "Compras personales — seguimiento de pagos pendientes del colaborador",
   reingreso_mercaderia_revision: "Reingreso de mercadería por revisar",
-  reingreso_mercaderia_baja_just: "Reingreso de mercadería — semana de dañados por dar de baja en Just",
   reingreso_mercaderia_verificacion_semanal: "Reingreso de mercadería — lote semanal de dañados por verificar",
-  guias_canceladas_reingreso: "Guías canceladas — reingresar mercadería a Just",
-  egresos_baja_just: "Registro de Egresos — confirmar baja en Just",
   egresos_deterioro_resolucion: "Deterioro en bodega — falta tu decisión",
   ventas_externas_agrupar: "Ventas Externas — asignar quién agrupa",
   cumpleanos: "Cumpleaños de tu equipo (aviso 1 día antes)",
@@ -441,12 +438,10 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   compras_recepcion: "Control de Compras — confirmar mercadería recibida",
   compras_cambios_verificar: "Control de Compras — verificar cambios de mercadería",
   compras_reclamo_posterior_revision: "Reclamos posteriores al cierre por revisar",
-  compras_reclamo_posterior_just: "Reclamos posteriores al cierre por dar de baja en Just",
   compras_creditos_pendientes: "Créditos pendientes de recuperar",
   deterioro_compras_gestion: "Deterioro escalado — pendiente de gestionar con el proveedor",
   deterioro_compras_excepcion: "Deterioro sin compra que lo respalde — tu decisión",
   control_inventario: "Control de Inventario — captura mensual",
-  control_inventario_semanal: "Control de Inventario — Excel semanal de stock por SKU",
   combo_sugerencias_nicho_backfill: "Sugerencias de Combos — nichos por asignar (tope de gasto alcanzado)",
   monthly_top_movers: "KPIs Generales — productos ganadores del mes por subir",
   plan_mejora_evaluacion_pendiente: "Plan de Mejora — evaluación semanal pendiente",
@@ -1526,12 +1521,12 @@ async function getPurchaseExceptionAdminPendingItem(href: string): Promise<Pendi
 
 // Confirmado 2026-08-27, pedido explícito del usuario: si un proveedor
 // rechaza un cambio (ni cambia el producto ni da crédito), es una pérdida
-// real — admin ve un aviso urgente company-wide mientras falte CUALQUIERA de
-// las dos confirmaciones (baja financiera de Nairoby, baja en Just de
-// Daniel); desaparece solo cuando AMBAS ya están hechas.
+// real — admin ve un aviso urgente company-wide mientras falte la baja
+// financiera de Nairoby (desde 2026-09-23 ya no existe la "baja en Just" de
+// Daniel: la mercadería ya salió de INVESTOCK al armar el paquete).
 async function getSupplierExchangeRejectedAdminPendingItem(href: string): Promise<PendingItem | null> {
   const rows = await prisma.merchandiseOutflowItem.findMany({
-    where: { resolution: "REJECTED", OR: [{ financeWriteOffAt: null }, { justWriteOffConfirmedAt: null }] },
+    where: { resolution: "REJECTED", financeWriteOffAt: null },
     select: { expectedCreditAmount: true },
   });
   if (rows.length === 0) return null;
@@ -1547,29 +1542,13 @@ async function getSupplierExchangeRejectedAdminPendingItem(href: string): Promis
 }
 
 // Tarea puntual de Nairoby: registrar la pérdida en la parte financiera.
-// Confirmado 2026-08-28: solo cuenta una vez que Daniel ya confirmó la baja
-// en Just — antes de eso no le toca a ella todavía.
 async function getSupplierExchangeFinanceWriteOffPendingItem(href: string): Promise<PendingItem | null> {
-  const count = await prisma.merchandiseOutflowItem.count({ where: { resolution: "REJECTED", financeWriteOffAt: null, justWriteOffConfirmedAt: { not: null } } });
+  const count = await prisma.merchandiseOutflowItem.count({ where: { resolution: "REJECTED", financeWriteOffAt: null } });
   if (count === 0) return null;
   return {
     type: "cambio_proveedor_rechazo",
     icon: "⚠️",
     label: "Mercadería rechazada por proveedor — dar de baja financiera",
-    meta: `${count} producto${count === 1 ? "" : "s"} · atrasado`,
-    overdue: true,
-    href,
-  };
-}
-
-// Tarea puntual de Daniel: confirmar la baja en Just.
-async function getSupplierExchangeJustWriteOffPendingItem(href: string): Promise<PendingItem | null> {
-  const count = await prisma.merchandiseOutflowItem.count({ where: { resolution: "REJECTED", justWriteOffConfirmedAt: null } });
-  if (count === 0) return null;
-  return {
-    type: "cambio_proveedor_rechazo",
-    icon: "⚠️",
-    label: "Mercadería rechazada por proveedor — confirmar baja en Just",
     meta: `${count} producto${count === 1 ? "" : "s"} · atrasado`,
     overdue: true,
     href,
@@ -1667,18 +1646,14 @@ async function getPurchaseReplacementVerificationPendingItem(href: string): Prom
 // de quien coordina con el proveedor), pero no tenían ningún aviso de que un
 // reclamo de su propio equipo sigue sin que Compras coordine nada. Mismo
 // criterio de "visible en esa pestaña" que usa api/purchase-requests/
-// urgent-reports/route.ts (ya revisado por Daniel, o ya dado de baja en Just
-// si es reclamo posterior; nunca rechazado), y misma cuenta de "lo faltante"
+// urgent-reports/route.ts (ya revisado por Daniel; nunca rechazado), y misma cuenta de "lo faltante"
 // que openReports en PurchaseUrgentReportsPanel.tsx (lo reclamado en
 // resoluciones no CANCELLED todavía no cubre lo reportado).
 async function getPurchaseUrgentReportsUnresolvedPendingItem(href: string): Promise<PendingItem | null> {
   const rows = await prisma.purchaseRequestUrgentReport.findMany({
     where: {
       rejectedAt: null,
-      OR: [
-        { isLateClaim: false, reviewedByLeadAt: { not: null } },
-        { isLateClaim: true, justConfirmedAt: { not: null } },
-      ],
+      reviewedByLeadAt: { not: null },
     },
     select: {
       damagedQty: true,
@@ -1708,10 +1683,9 @@ async function getPurchaseUrgentReportsUnresolvedPendingItem(href: string): Prom
 }
 
 // Confirmado 2026-08-25: "Reclamo posterior al cierre" — daño descubierto
-// DÍAS después de confirmar recibido. Dos colas propias de Daniel, mismo
+// DÍAS después de confirmar recibido. Cola propia de Daniel, mismo
 // patrón que getPurchaseReceivingPendingItem: reclamos que su equipo subió
-// y todavía no revisó, y reclamos ya aprobados esperando que él confirme la
-// baja en Just.
+// y todavía no revisó (al aprobar, las unidades salen solas de INVESTOCK).
 async function getLateClaimReviewPendingItem(href: string): Promise<PendingItem | null> {
   const rows = await prisma.purchaseRequestUrgentReport.findMany({
     where: { isLateClaim: true, reviewedByLeadAt: null, rejectedAt: null },
@@ -1724,24 +1698,6 @@ async function getLateClaimReviewPendingItem(href: string): Promise<PendingItem 
     type: "compras_reclamo_posterior_revision",
     icon: "📦",
     label: "Reclamos posteriores al cierre por revisar",
-    meta: `${rows.length} reclamo${rows.length === 1 ? "" : "s"}${overdue ? " · atrasado" : ""}`,
-    overdue,
-    href,
-  };
-}
-
-async function getLateClaimJustPendingItem(href: string): Promise<PendingItem | null> {
-  const rows = await prisma.purchaseRequestUrgentReport.findMany({
-    where: { isLateClaim: true, reviewedByLeadAt: { not: null }, rejectedAt: null, justConfirmedAt: null },
-    select: { reviewedByLeadAt: true },
-  });
-  if (rows.length === 0) return null;
-  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
-  const overdue = rows.some((r) => r.reviewedByLeadAt && r.reviewedByLeadAt < cutoff);
-  return {
-    type: "compras_reclamo_posterior_just",
-    icon: "📦",
-    label: "Reclamos posteriores al cierre por dar de baja en Just",
     meta: `${rows.length} reclamo${rows.length === 1 ? "" : "s"}${overdue ? " · atrasado" : ""}`,
     overdue,
     href,
@@ -1829,56 +1785,6 @@ async function getInventoryControlPendingItem(href: string): Promise<PendingItem
     icon: "📋",
     label: "Control de Inventario — captura mensual",
     meta: `${formatMonthLabel(prev)} · atrasado`,
-    overdue: true,
-    href,
-  };
-}
-
-// Confirmado 2026-08-25: pedido explícito de Daniel — le avise cuando ya
-// pasó la fecha límite de una semana (ver snapshotPeriodDeadline en
-// inventoryKpis.ts: último día laborable del bloque, antes de las 12 si cae
-// sábado, antes de las 4pm cualquier otro día) y todavía no subió el Excel
-// de stock por SKU de esa semana.
-//
-// Corregido 2026-09-08: antes juntaba TODAS las semanas atrasadas sin cargar
-// desde que arrancó el proceso semanal, así que una semana vieja saltada
-// (ej. "Agosto (semana 4)") se quedaba marcada "atrasado" para siempre aunque
-// Daniel ya estuviera al día con las semanas recientes — mismo bug de fondo
-// que weeklyPendingStatus (ver feedback_reminder_no_stale_gaps), solo que
-// este aviso no reusaba esa función porque trabaja con "semanas" fijas de
-// mes (recentInventorySnapshotPeriods) en vez de semanas ISO. Ahora sigue el
-// mismo espíritu: si el bloque actual ya tiene Excel, no hay nada que avisar
-// (sin importar huecos viejos); si no, solo se marca atrasado el bloque más
-// reciente que ya venció y sigue vacío — nunca uno más atrás.
-async function getInventoryWeeklySnapshotPendingItem(href: string): Promise<PendingItem | null> {
-  const deptId = await getFinanzasDeptId();
-  if (!deptId) return null;
-
-  const periods = recentInventorySnapshotPeriods(); // más antigua primero
-  const current = periods[periods.length - 1];
-  const prev = periods.length > 1 ? periods[periods.length - 2] : null;
-
-  const toCheck = prev ? [prev, current] : [current];
-  const loaded = await prisma.inventoryProductSnapshot.findMany({
-    where: { deptId, period: { in: toCheck } },
-    select: { period: true },
-    distinct: ["period"],
-  });
-  const loadedSet = new Set(loaded.map((r) => r.period));
-  if (loadedSet.has(current)) return null;
-
-  const target = isSnapshotPeriodOverdue(current)
-    ? current
-    : prev && !loadedSet.has(prev) && isSnapshotPeriodOverdue(prev)
-      ? prev
-      : null;
-  if (!target) return null;
-
-  return {
-    type: "control_inventario_semanal",
-    icon: "📊",
-    label: "Control de Inventario — Excel semanal de stock por SKU",
-    meta: `${snapshotPeriodLabel(target)} · atrasado`,
     overdue: true,
     href,
   };
@@ -2197,64 +2103,6 @@ async function getMerchandiseReentryPendingItem(href: string): Promise<PendingIt
   };
 }
 
-// Confirmado 2026-09-09: pedido explícito de Daniel — antes esto solo le
-// llegaba como una notificación puntual (ver notifyInventoryLeadCancelledGuidesReady
-// en cancelledGuides.ts), que se podía pasar por alto o perder si no la veía
-// justo en ese momento. Una guía está lista para él recién cuando los TRES
-// pasos previos (Bryan gestionó el lote, Yair la sacó de Fulfillment, y
-// Heidy cargó los productos) ya están hechos — ver docblock de
-// CancelledGuideReport en el schema.
-async function getCancelledGuidesReingresoPendingItem(href: string): Promise<PendingItem | null> {
-  const rows = await prisma.cancelledGuideReport.findMany({
-    where: { batchManagedAt: { not: null }, fulfillmentRemovedAt: { not: null }, itemsAssignedAt: { not: null }, reingresadoAt: null },
-    select: { code: true, itemsAssignedAt: true },
-  });
-  if (rows.length === 0) return null;
-
-  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
-  const overdue = rows.some((r) => (r.itemsAssignedAt ?? new Date()) < cutoff);
-  return {
-    type: "guias_canceladas_reingreso",
-    icon: "🚚",
-    label: "Guías canceladas — reingresar a Just",
-    meta: `${rows.length === 1 ? rows[0].code : `${rows.length} guías`}${overdue ? " · atrasado" : ""}`,
-    overdue,
-    href,
-  };
-}
-
-// Confirmado 2026-09-09: pedido explícito de Daniel, mismo hallazgo que las
-// guías canceladas — "Dar de baja en Just" (ver writeoff-queue/route.ts) es
-// la cola maestra de TODO lo que sale de bodega sin importar el motivo
-// (despacho, garantía, deterioro ya resuelto como WRITE_OFF, cambio con
-// proveedor, venta externa, compra personal) y antes solo se avisaba con
-// notifyInventoryLeadOutflowPending (un aviso puntual por lote) sin ninguna
-// tarjeta fija en Inicio — la más grande de las tres colas que faltaban.
-async function getMerchandiseOutflowWriteOffPendingItem(href: string): Promise<PendingItem | null> {
-  const rows = await prisma.merchandiseOutflowBatch.findMany({
-    where: {
-      justWrittenOffAt: null,
-      OR: [
-        { reason: { in: ["DESPACHO", "GARANTIA", "COMPRA_PERSONAL", "CAMBIO_PROVEEDOR", "VENTA_EXTERNA"] }, submittedAt: { not: null } },
-        { reason: "DETERIORO", items: { some: { resolution: "WRITE_OFF" } } },
-      ],
-    },
-    select: { code: true, submittedAt: true, createdAt: true },
-  });
-  if (rows.length === 0) return null;
-
-  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
-  const overdue = rows.some((r) => (r.submittedAt ?? r.createdAt) < cutoff);
-  return {
-    type: "egresos_baja_just",
-    icon: "🗑️",
-    label: "Registro de Egresos — confirmar baja en Just",
-    meta: `${rows.length === 1 ? rows[0].code : `${rows.length} lotes`}${overdue ? " · atrasado" : ""}`,
-    overdue,
-    href,
-  };
-}
-
 // Confirmado 2026-09-09: pedido explícito de Daniel — el reporte de un
 // producto encontrado dañado en bodega (no una devolución) le avisa solo con
 // notifyOwner puntual (ver deterioro/route.ts), pero mientras Daniel no
@@ -2335,26 +2183,6 @@ async function getExternalSaleDispatchPendingItem(href: string): Promise<Pending
   };
 }
 
-// Confirmado 2026-08-21: pedido explícito del usuario — acceso directo para
-// Daniel cuando ya pasó el corte del sábado de una semana y todavía le
-// falta dar de baja en Just el acumulado de productos "no solucionados"
-// (ver damageSolved en MerchandiseReentryItem).
-async function getMerchandiseWeeklyWriteOffJustPendingItem(href: string): Promise<PendingItem | null> {
-  const rows = await prisma.merchandiseWeeklyWriteOffBatch.findMany({
-    where: { justWrittenOffAt: null, weekEnd: { lt: new Date() } },
-    select: { weekStart: true },
-  });
-  if (rows.length === 0) return null;
-  return {
-    type: "reingreso_mercaderia_baja_just",
-    icon: "🗑️",
-    label: "Semana de productos dañados por dar de baja en Just",
-    meta: `${rows.length === 1 ? "1 semana" : `${rows.length} semanas`} · atrasado`,
-    overdue: true,
-    href,
-  };
-}
-
 // Confirmado 2026-09-02: pedido explícito del usuario — el backfill
 // automático de nichos (runNichoAutoBackfill en nichoAi.ts) corre solo todos
 // los días mientras el gasto del mes no llegue al techo; en cuanto lo
@@ -2411,8 +2239,8 @@ async function getMonthlyTopMoversPendingItem(href: string): Promise<PendingItem
 }
 
 // Confirmado 2026-08-21: pedido explícito del usuario — acceso directo con
-// un solo clic para Nairoby cuando Daniel ya dio de baja en Just un lote
-// semanal y le falta a ella la verificación física + doble confirmación.
+// un solo clic para Nairoby cuando ya se cerró un lote semanal (solo, el
+// sábado) y le falta a ella la verificación física + doble confirmación.
 async function getMerchandiseWeeklyWriteOffVerificationPendingItem(href: string): Promise<PendingItem | null> {
   const rows = await prisma.merchandiseWeeklyWriteOffBatch.findMany({
     where: { justWrittenOffAt: { not: null }, nairobyConfirmedAt: null },
@@ -3076,22 +2904,17 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
   }
 
   if (me.leadsDept.code === "INV") {
-    const [stockoutItem, receivingItem, replacementItem, inventoryControlItem, inventoryWeeklySnapshotItem, merchandiseReentryItem, merchandiseWeeklyJustItem, personalPurchaseInventoryItem, lateClaimReviewItem, lateClaimJustItem, urgentUnresolvedItem, nichoBackfillItem, monthlyTopMoversItem, cancelledGuidesReingresoItem, outflowWriteOffItem, deteriorResolutionItem, externalSaleDispatchItem] = await Promise.all([
+    const [stockoutItem, receivingItem, replacementItem, inventoryControlItem, merchandiseReentryItem, personalPurchaseInventoryItem, lateClaimReviewItem, urgentUnresolvedItem, nichoBackfillItem, monthlyTopMoversItem, deteriorResolutionItem, externalSaleDispatchItem] = await Promise.all([
       getStockoutPendingItem("/area/kpis-generales"),
       getPurchaseReceivingPendingItem("/area/workspace?tab=compras&ptab=inventario"),
       getPurchaseReplacementVerificationPendingItem("/area/workspace?tab=compras&ptab=inventario"),
       getInventoryControlPendingItem("/area/workspace?tab=inventario"),
-      getInventoryWeeklySnapshotPendingItem("/area/workspace?tab=inventario"),
       getMerchandiseReentryPendingItem("/area/reingreso-mercaderia?tab=revision"),
-      getMerchandiseWeeklyWriteOffJustPendingItem("/area/reingreso-mercaderia?tab=danos"),
       getPersonalPurchasePendingInventoryItem("/area/compras-personales-inventario"),
       getLateClaimReviewPendingItem("/area/workspace?tab=compras&ptab=inventario"),
-      getLateClaimJustPendingItem("/area/workspace?tab=compras&ptab=inventario"),
       getPurchaseUrgentReportsUnresolvedPendingItem("/area/workspace?tab=compras&ptab=urgentes"),
       getNichoBackfillPendingItem("/area/reingreso-mercaderia?tab=productos"),
       getMonthlyTopMoversPendingItem("/area/kpis-generales"),
-      getCancelledGuidesReingresoPendingItem("/area/workspace?tab=egresos&otab=guias"),
-      getMerchandiseOutflowWriteOffPendingItem("/area/workspace?tab=egresos&otab=baja"),
       getDeteriorResolutionPendingItem("/area/workspace?tab=egresos&otab=deterioro"),
       getExternalSaleDispatchPendingItem("/area/workspace?tab=ventas-externas&etab=despacho"),
     ]);
@@ -3099,22 +2922,14 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     if (receivingItem) items.push(receivingItem);
     if (replacementItem) items.push(replacementItem);
     if (inventoryControlItem) items.push(inventoryControlItem);
-    if (inventoryWeeklySnapshotItem) items.push(inventoryWeeklySnapshotItem);
     if (merchandiseReentryItem) items.push(merchandiseReentryItem);
-    if (merchandiseWeeklyJustItem) items.push(merchandiseWeeklyJustItem);
     if (personalPurchaseInventoryItem) items.push(personalPurchaseInventoryItem);
     if (lateClaimReviewItem) items.push(lateClaimReviewItem);
-    if (lateClaimJustItem) items.push(lateClaimJustItem);
     if (urgentUnresolvedItem) items.push(urgentUnresolvedItem);
     if (nichoBackfillItem) items.push(nichoBackfillItem);
     if (monthlyTopMoversItem) items.push(monthlyTopMoversItem);
-    if (cancelledGuidesReingresoItem) items.push(cancelledGuidesReingresoItem);
-    if (outflowWriteOffItem) items.push(outflowWriteOffItem);
     if (deteriorResolutionItem) items.push(deteriorResolutionItem);
     if (externalSaleDispatchItem) items.push(externalSaleDispatchItem);
-
-    const justWriteOffItem = await getSupplierExchangeJustWriteOffPendingItem("/area/workspace?tab=egresos&otab=proveedor");
-    if (justWriteOffItem) items.push(justWriteOffItem);
   }
 
   if (me.leadsDept.code === "MKT") {
@@ -3243,7 +3058,7 @@ export async function getPossiblePendingTypesForActor(
     }
     if (me.leadsDept.trackWeeklyMetric) types.push("pedidos_despachados", "fillrate_justificacion_pendiente");
     if (me.leadsDept.code === "INV") {
-      types.push("ruptura_stock", "compras_recepcion", "compras_cambios_verificar", "control_inventario", "control_inventario_semanal", "reingreso_mercaderia_revision", "reingreso_mercaderia_baja_just", "compras_personales_confirmar", "compras_reclamo_posterior_revision", "compras_reclamo_posterior_just", "combo_sugerencias_nicho_backfill", "monthly_top_movers", "guias_canceladas_reingreso", "egresos_baja_just", "egresos_deterioro_resolucion", "ventas_externas_agrupar");
+      types.push("ruptura_stock", "compras_recepcion", "compras_cambios_verificar", "control_inventario", "reingreso_mercaderia_revision", "compras_personales_confirmar", "compras_reclamo_posterior_revision", "combo_sugerencias_nicho_backfill", "monthly_top_movers", "egresos_deterioro_resolucion", "ventas_externas_agrupar");
     }
     // Mismo criterio de elegibilidad que canSubmitPurchaseRequests
     // (guards.ts) — delegado vía canManagePurchases, o líder de COM/FIN —

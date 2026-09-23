@@ -1,6 +1,5 @@
 import { prisma } from "@/lib/prisma";
 import { computeDerived, consolidateMonth, workingCapitalDays, type FinanceMonthRaw } from "@/lib/financeKpisCalc";
-import { lastOfficeDayAtOrBefore } from "@/lib/businessHours";
 import { getNegativeStockProducts, getExpiringLots, getInvestockValueByMonthEnd, type ExpiringLot } from "@/lib/stockKardex";
 import {
   gmroi,
@@ -9,6 +8,7 @@ import {
   computeStaleStreaks,
   summarizeStaleStreaks,
   type StaleStreakEntry,
+  type ProductSnapshotRow,
 } from "@/lib/inventoryKpisCalc";
 
 // Igual offset que businessHours.ts/pendingTasks.ts — Ecuador es UTC-5 fijo,
@@ -48,13 +48,8 @@ export function recentInventoryPeriods(): string[] {
   return periods;
 }
 
-const MONTH_NAMES_FULL = [
-  "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
-  "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
-];
-
-// Confirmado 2026-08-25: pedido explícito de Daniel — el Excel de stock por
-// SKU ("Productos sin movimiento") pasa de mensual a semanal para poder
+// Confirmado 2026-08-25: pedido explícito de Daniel — el stock por SKU
+// ("Productos sin movimiento") pasa de mensual a semanal para poder
 // reaccionar más rápido, pero SIGUE etiquetado por mes ("Agosto 2026
 // (semana 2)") para mantener el historial legible en el tiempo. Semanas
 // fijas dentro del mes (no calendario real): semana 1 = días 1-7, semana 2
@@ -73,88 +68,90 @@ export function parseSnapshotPeriod(period: string): SnapshotPeriod {
   return { year: Number(y), month: Number(m), week: Number(w.slice(1)) as 1 | 2 | 3 | 4 };
 }
 
-function snapshotPeriodOfEcuadorDate(ecuadorShifted: Date): SnapshotPeriod {
-  const day = ecuadorShifted.getUTCDate();
-  const week = day <= 7 ? 1 : day <= 14 ? 2 : day <= 21 ? 3 : 4;
-  return { year: ecuadorShifted.getUTCFullYear(), month: ecuadorShifted.getUTCMonth() + 1, week };
-}
-
-function prevSnapshotPeriod(p: SnapshotPeriod): SnapshotPeriod {
-  if (p.week > 1) return { ...p, week: (p.week - 1) as 1 | 2 | 3 | 4 };
-  const d = new Date(Date.UTC(p.year, p.month - 2, 1)); // mes anterior
-  return { year: d.getUTCFullYear(), month: d.getUTCMonth() + 1, week: 4 };
-}
-
-export function currentSnapshotPeriod(): string {
-  const ecuadorShifted = new Date(Date.now() - ECUADOR_OFFSET_MS);
-  return formatSnapshotPeriod(snapshotPeriodOfEcuadorDate(ecuadorShifted));
-}
-
-// Semana en que arrancó la carga semanal del Excel de stock por SKU
-// (confirmado 2026-08-25, ver comentario más arriba). Antes de esa semana
-// el proceso era mensual, así que no existieron "semanas" reales — no tiene
-// sentido listarlas como si Daniel pudiera haberlas cargado.
-const WEEKLY_SNAPSHOT_START = formatSnapshotPeriod({ year: 2026, month: 8, week: 4 });
-
-// Últimas ~12 semanas (≈3 meses) hasta la actual, sin bajar del arranque del
-// proceso semanal (WEEKLY_SNAPSHOT_START) — más que suficiente para que
-// Daniel corrija una semana reciente sin volver la lista eterna (a
-// diferencia de recentInventoryPeriods(), que sí mira 12 meses completos
-// porque el valor mensual se corrige con menos frecuencia).
-export function recentInventorySnapshotPeriods(): string[] {
-  let cur = parseSnapshotPeriod(currentSnapshotPeriod());
-  const out: string[] = [formatSnapshotPeriod(cur)];
-  for (let i = 0; i < 11 && formatSnapshotPeriod(cur) > WEEKLY_SNAPSHOT_START; i++) {
-    cur = prevSnapshotPeriod(cur);
-    out.push(formatSnapshotPeriod(cur));
-  }
-  return out.reverse(); // más antigua primero, igual orden que recentInventoryPeriods()
-}
-
-export function snapshotPeriodLabel(period: string): string {
-  const p = parseSnapshotPeriod(period);
-  return `${MONTH_NAMES_FULL[p.month - 1] ?? p.month} ${p.year} (semana ${p.week})`;
-}
-
 // Último día calendario del bloque de esa semana dentro del mes (7/14/21/
-// fin de mes) — el límite "natural" antes de rodar hacia atrás por domingo
-// u feriado.
+// fin de mes).
 function snapshotPeriodBoundaryDay(p: SnapshotPeriod): number {
   if (p.week < 4) return p.week * 7;
   return new Date(Date.UTC(p.year, p.month, 0)).getUTCDate();
 }
 
-// Fecha límite para cargar el Excel de esa semana — pedido explícito de
-// Daniel (2026-08-25): el último día laborable del bloque, retrocediendo
-// sobre domingos/feriados igual que el resto del sistema (ver
-// lastOfficeDayAtOrBefore en businessHours.ts). Hora de corte: antes de las
-// 12:00 si ese día laborable cae sábado (la oficina solo abre medio día),
-// antes de las 16:00 cualquier otro día (viernes, o el que sea si sábado
-// también es feriado).
-export function snapshotPeriodDeadline(period: string): Date {
+// Confirmado 2026-09-23, pedido explícito del usuario ("ya solo trabajamos
+// con INVESTOCK", "todo automático"): Daniel ya no sube el Excel semanal de
+// Just. Las semanas de antes de esta fecha conservan lo que él subió (es la
+// única historia que existe de esas semanas); desde AUTO_SNAPSHOT_START en
+// adelante, el stock de cada producto al cierre de cada semana se
+// reconstruye solo desde el Kardex, con el mismo formato — así el ranking
+// de "productos sin movimiento" sigue funcionando igual, sin que nadie
+// suba nada. productCode usa el código del producto cuando lo tiene (el
+// mismo que traía el Excel), para que la racha de un producto no se corte
+// al pasar de una fuente a la otra.
+const AUTO_SNAPSHOT_START = "2026-09-W4";
+
+function snapshotPeriodEnd(period: string): Date {
   const p = parseSnapshotPeriod(period);
-  const boundaryDay = snapshotPeriodBoundaryDay(p);
-  // Medianoche real (instante UTC) de ese día calendario en Ecuador —
-  // 00:00 hora Ecuador = 05:00 UTC.
-  const boundaryReal = new Date(Date.UTC(p.year, p.month - 1, boundaryDay, ECUADOR_OFFSET_MS / 3600000, 0, 0));
-  const lastBizDayReal = lastOfficeDayAtOrBefore(boundaryReal);
-  const ecuadorShifted = new Date(lastBizDayReal.getTime() - ECUADOR_OFFSET_MS);
-  const isSaturday = ecuadorShifted.getUTCDay() === 6;
-  const deadlineEcuadorShifted = new Date(ecuadorShifted);
-  deadlineEcuadorShifted.setUTCHours(isSaturday ? 12 : 16, 0, 0, 0);
-  return new Date(deadlineEcuadorShifted.getTime() + ECUADOR_OFFSET_MS);
+  // Último instante (hora Ecuador) del último día del bloque de esa semana.
+  return new Date(Date.UTC(p.year, p.month - 1, snapshotPeriodBoundaryDay(p), 23, 59, 59, 999) + ECUADOR_OFFSET_MS);
 }
 
-export function isSnapshotPeriodOverdue(period: string): boolean {
-  return new Date() >= snapshotPeriodDeadline(period);
+function nextSnapshotPeriod(p: SnapshotPeriod): SnapshotPeriod {
+  if (p.week < 4) return { ...p, week: (p.week + 1) as 1 | 2 | 3 | 4 };
+  return p.month === 12 ? { year: p.year + 1, month: 1, week: 1 } : { year: p.year, month: p.month + 1, week: 1 };
 }
 
-const DEADLINE_FMT_DATE = new Intl.DateTimeFormat("es-EC", { timeZone: "America/Guayaquil", weekday: "short", day: "numeric", month: "short" });
-const DEADLINE_FMT_HOUR = new Intl.DateTimeFormat("es-EC", { timeZone: "America/Guayaquil", hour: "numeric", minute: "2-digit", hour12: true });
+async function getKardexWeeklySnapshotRows(): Promise<ProductSnapshotRow[]> {
+  const now = new Date();
+  const periods: string[] = [];
+  // Solo semanas ya terminadas: una semana a medias haría parecer "sin
+  // movimiento" a un producto que todavía puede venderse antes del cierre.
+  for (let cur = parseSnapshotPeriod(AUTO_SNAPSHOT_START); snapshotPeriodEnd(formatSnapshotPeriod(cur)) < now; cur = nextSnapshotPeriod(cur)) {
+    periods.push(formatSnapshotPeriod(cur));
+  }
+  if (periods.length === 0) return [];
 
-export function snapshotPeriodDeadlineLabel(period: string): string {
-  const d = snapshotPeriodDeadline(period);
-  return `${DEADLINE_FMT_DATE.format(d)}, antes de las ${DEADLINE_FMT_HOUR.format(d)}`;
+  const [entries, items] = await Promise.all([
+    prisma.stockKardexEntry.findMany({
+      where: { occurredAt: { lte: snapshotPeriodEnd(periods[periods.length - 1]) } },
+      orderBy: [{ occurredAt: "asc" }, { createdAt: "asc" }],
+      select: { catalogItemId: true, occurredAt: true, balanceAfter: true, avgCostAfter: true },
+    }),
+    prisma.purchaseCatalogItem.findMany({ select: { id: true, name: true, justCode: true } }),
+  ]);
+  const itemById = new Map(items.map((i) => [i.id, i]));
+
+  const rows: ProductSnapshotRow[] = [];
+  const lastByItem = new Map<string, { balanceAfter: number; avgCostAfter: number }>();
+  let idx = 0;
+  for (const period of periods) {
+    const end = snapshotPeriodEnd(period);
+    while (idx < entries.length && entries[idx].occurredAt <= end) {
+      lastByItem.set(entries[idx].catalogItemId, entries[idx]);
+      idx++;
+    }
+    for (const [catalogItemId, v] of lastByItem) {
+      if (v.balanceAfter <= 0) continue; // sin stock no puede estar "sin movimiento"
+      const item = itemById.get(catalogItemId);
+      rows.push({
+        period,
+        productCode: item?.justCode ?? catalogItemId,
+        description: item?.name ?? "Producto",
+        avgCost: v.avgCostAfter,
+        stock: v.balanceAfter,
+        costTotal: v.balanceAfter * v.avgCostAfter,
+      });
+    }
+  }
+  return rows;
+}
+
+async function getStockSnapshotRows(deptId: string): Promise<ProductSnapshotRow[]> {
+  const [legacy, auto] = await Promise.all([
+    prisma.inventoryProductSnapshot.findMany({ where: { deptId, period: { lt: AUTO_SNAPSHOT_START } }, orderBy: { period: "asc" } }),
+    getKardexWeeklySnapshotRows(),
+  ]);
+  return [
+    ...legacy.map((s) => ({ period: s.period, productCode: s.productCode, description: s.description, avgCost: s.avgCost, stock: s.stock, costTotal: s.costTotal })),
+    ...auto,
+  ].sort((a, b) => a.period.localeCompare(b.period));
 }
 
 export type InventoryControlPeriodDTO = {
@@ -163,21 +160,12 @@ export type InventoryControlPeriodDTO = {
   // Confirmado 2026-09-17, pedido explícito del usuario: este valor ya no
   // lo escribe Daniel a mano — se calcula solo desde INVESTOCK (Kardex
   // real: balance × costo promedio de cada producto, reconstruido al
-  // cierre de ese mes). El archivo de Just queda solo de referencia, igual
-  // que en el resto de la app. "manual" solo aparece en meses de antes de
+  // cierre de ese mes). "manual" solo aparece en meses de antes de
   // que existiera INVESTOCK — se conservan tal cual, sin recalcular.
   source: "auto" | "manual" | null;
   proofUrl: string | null;
   aiMatches: boolean | null;
   hasSnapshot: boolean;
-};
-
-export type InventorySnapshotPeriodDTO = {
-  period: string;
-  label: string;
-  hasSnapshot: boolean;
-  deadlineLabel: string;
-  overdue: boolean;
 };
 
 // Todo lo que necesita la pantalla de Daniel ("Control de Inventario" en Mi
@@ -189,14 +177,11 @@ export async function getInventoryControlData() {
   if (!deptId) return null;
 
   const periods = recentInventoryPeriods();
-  const weeklyPeriods = recentInventorySnapshotPeriods();
-  const [balances, weeklySnapshotRows, autoByMonth] = await Promise.all([
+  const [balances, autoByMonth] = await Promise.all([
     prisma.financeSharedMonthlyBalance.findMany({ where: { deptId, period: { in: periods } } }),
-    prisma.inventoryProductSnapshot.findMany({ where: { deptId, period: { in: weeklyPeriods } }, select: { period: true }, distinct: ["period"] }),
     getInvestockValueByMonthEnd(periods),
   ]);
   const byPeriod = new Map(balances.map((b) => [b.period, b]));
-  const weeklySnapshotSet = new Set(weeklySnapshotRows.map((s) => s.period));
 
   return {
     deptId,
@@ -211,17 +196,6 @@ export async function getInventoryControlData() {
         proofUrl: b?.inventarioProofUrl ?? null,
         aiMatches: b?.inventarioAiMatches ?? null,
         hasSnapshot: auto !== undefined,
-      };
-    }),
-    currentSnapshotPeriod: currentSnapshotPeriod(),
-    snapshotPeriods: weeklyPeriods.map((period): InventorySnapshotPeriodDTO => {
-      const hasSnapshot = weeklySnapshotSet.has(period);
-      return {
-        period,
-        label: snapshotPeriodLabel(period),
-        hasSnapshot,
-        deadlineLabel: snapshotPeriodDeadlineLabel(period),
-        overdue: !hasSnapshot && isSnapshotPeriodOverdue(period),
       };
     }),
   };
@@ -286,7 +260,7 @@ export async function getInventoryKpisData(): Promise<InventoryKpisDataDTO> {
   const [records, balances, snapshots, negativeStockProducts, expiringLots] = await Promise.all([
     prisma.financeKpiRecord.findMany({ where: { deptId }, orderBy: { period: "asc" } }),
     prisma.financeSharedMonthlyBalance.findMany({ where: { deptId }, orderBy: { period: "asc" } }),
-    prisma.inventoryProductSnapshot.findMany({ where: { deptId }, orderBy: { period: "asc" } }),
+    getStockSnapshotRows(deptId),
     getNegativeStockProducts(),
     getExpiringLots(),
   ]);

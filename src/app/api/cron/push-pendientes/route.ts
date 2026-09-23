@@ -13,6 +13,7 @@ import { getExpiringLotPushes } from "@/lib/stockKardex";
 import { sendPushToOwner } from "@/lib/webPush";
 import { sendSupplierShippingDailyReminders } from "@/lib/supplierShippingPush";
 import { runNichoAutoBackfill } from "@/lib/nichoAi";
+import { runInventoryAutoFlows } from "@/lib/inventoryAutoFlows";
 
 // Disparado por Vercel Cron (ver vercel.json) una vez al día. Protegido por
 // CRON_SECRET para que nadie más pueda llamarlo desde afuera y disparar
@@ -30,6 +31,12 @@ export async function GET(req: NextRequest) {
   if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
     return NextResponse.json({ error: "No autorizado." }, { status: 401 });
   }
+
+  // Confirmado 2026-09-23: antes de armar los pendientes, cierra solo todo
+  // lo que ya no necesita a nadie (mercadería que vuelve a INVESTOCK,
+  // semanas de dañados terminadas, reclamos aprobados) — ver
+  // inventoryAutoFlows.ts.
+  await runInventoryAutoFlows();
 
   const actors = await getAllPendingTasksActors();
   let notified = 0;

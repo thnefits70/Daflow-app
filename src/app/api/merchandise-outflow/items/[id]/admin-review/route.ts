@@ -5,7 +5,7 @@ import { canReviewSupplierExchangeRejection } from "@/lib/guards";
 
 // Confirmado 2026-08-28, pedido explícito del usuario: registro de auditoría
 // del admin sobre un rechazo total del proveedor — comentario opcional, no
-// gatea a Nairoby (finance-writeoff) ni a Daniel (just-writeoff-confirm),
+// gatea a Nairoby (finance-writeoff),
 // que siguen pudiendo confirmar su parte antes, después o sin que esto exista.
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();

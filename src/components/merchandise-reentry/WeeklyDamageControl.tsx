@@ -12,12 +12,11 @@ type WeeklyBatchDTO = {
   weekStart: string;
   weekEnd: string;
   justWrittenOffAt: string | null;
-  justWrittenOffByName: string | null;
   nairobyConfirmedAt: string | null;
   nairobyConfirmedByName: string | null;
   groups: GroupDTO[];
 };
-type SummaryDTO = { currentWeek: WeeklyBatchDTO | null; needsJustWriteOff: WeeklyBatchDTO[]; needsNairobyVerification: WeeklyBatchDTO[]; needsDisposalDecision: WeeklyBatchDTO[] };
+type SummaryDTO = { currentWeek: WeeklyBatchDTO | null; needsNairobyVerification: WeeklyBatchDTO[]; needsDisposalDecision: WeeklyBatchDTO[] };
 
 function fmtDay(iso: string) {
   return new Date(iso).toLocaleDateString("es-EC", { day: "2-digit", month: "short" });
@@ -112,58 +111,6 @@ function CurrentWeekCard({ batch }: { batch: WeeklyBatchDTO | null }) {
   );
 }
 
-function JustWriteOffCard({ batch, canAct, onChanged }: { batch: WeeklyBatchDTO; canAct: boolean; onChanged: () => void }) {
-  const [confirming, setConfirming] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-
-  async function submit() {
-    setBusy(true);
-    setError("");
-    try {
-      await postJson(`/api/merchandise-reentry/weekly-writeoff/${batch.id}/just-writeoff`);
-      onChanged();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "No se pudo guardar.");
-      setBusy(false);
-    }
-  }
-
-  return (
-    <div className="bg-surface border border-rule rounded-md p-3.5">
-      <div className="text-[12.5px] font-semibold mb-2">{weekLabel(batch)}</div>
-      <GroupList groups={batch.groups} totalLabel={(g) => `${g.totalDamagedQty} unidades${g.breakdown.length > 1 ? ` · ${g.breakdown.length} lotes` : ""}`} />
-      {!confirming ? (
-        <button
-          type="button"
-          disabled={busy || !canAct}
-          title={!canAct ? "Exclusivo del líder de Inventario" : undefined}
-          className="mt-3 rounded border border-red bg-red px-3 py-1.5 text-[11.5px] font-bold text-white cursor-pointer disabled:opacity-60"
-          onClick={() => setConfirming(true)}
-        >
-          Lote dado de baja por producto dañado
-        </button>
-      ) : (
-        <div className="mt-3 bg-cloud border border-rule rounded-md p-3">
-          <div className="text-[11.5px] mb-2">
-            Confirma que ya diste de baja este listado en el sistema Just. Después de esto, el lote pasa a <b>Nairoby</b>: ella verificará físicamente los productos contra este listado, hará la doble
-            confirmación, y decidirá si se destruyen o pasan a la percha de repuestos. Tu parte termina acá.
-          </div>
-          <div className="flex gap-1.5">
-            <button type="button" disabled={busy} className="rounded border border-red bg-red px-3 py-1.5 text-[11.5px] font-bold text-white cursor-pointer disabled:opacity-60" onClick={submit}>
-              Sí, ya di de baja en Just
-            </button>
-            <button type="button" disabled={busy} className="rounded border border-rule px-3 py-1.5 text-[11.5px] font-semibold cursor-pointer disabled:opacity-60" onClick={() => setConfirming(false)}>
-              Cancelar
-            </button>
-          </div>
-        </div>
-      )}
-      {error && <div className="text-red text-[11px] mt-1.5">{error}</div>}
-    </div>
-  );
-}
-
 function VerificationCard({ batch, canVerify, onChanged }: { batch: WeeklyBatchDTO; canVerify: boolean; onChanged: () => void }) {
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -185,7 +132,7 @@ function VerificationCard({ batch, canVerify, onChanged }: { batch: WeeklyBatchD
     <div className="bg-surface border border-red/40 rounded-md p-3.5">
       <div className="flex items-center justify-between gap-2 mb-2">
         <div className="text-[12.5px] font-semibold">{weekLabel(batch)}</div>
-        <span className="text-[10.5px] text-steel">Daniel dio de baja en Just · {batch.justWrittenOffByName ?? "—"} · {batch.justWrittenOffAt && fmtDateTime(batch.justWrittenOffAt)}</span>
+        <span className="text-[10.5px] text-steel">Semana cerrada · {batch.justWrittenOffAt && fmtDateTime(batch.justWrittenOffAt)}</span>
       </div>
       <GroupList groups={batch.groups} totalLabel={(g) => `${g.totalDamagedQty} unidades${g.breakdown.length > 1 ? ` · ${g.breakdown.length} lotes` : ""}`} />
       <div className="text-[11px] text-steel mt-2">Verifica físicamente estos productos en el área de dañados antes de confirmar.</div>
@@ -204,7 +151,7 @@ function VerificationCard({ batch, canVerify, onChanged }: { batch: WeeklyBatchD
         </button>
       ) : (
         <div className="mt-2.5 bg-cloud border border-rule rounded-md p-3">
-          <div className="text-[11.5px] mb-2">¿Confirmas que estos productos coinciden con lo dado de baja en Just y que efectivamente se dan de baja?</div>
+          <div className="text-[11.5px] mb-2">¿Confirmas que estos productos coinciden con el listado de la semana y que efectivamente se dan de baja?</div>
           <div className="flex gap-1.5">
             <button type="button" disabled={busy} className="rounded border border-teal bg-teal px-3 py-1.5 text-[11.5px] font-bold text-navy cursor-pointer disabled:opacity-60" onClick={submit}>
               Sí, confirmar
@@ -299,8 +246,9 @@ function DisposalCard({ batch, canVerify, onChanged }: { batch: WeeklyBatchDTO; 
 // Control de Daños — ciclo semanal de productos "no solucionados" (ver
 // ReviewInbox.tsx: Daniel decide Solucionado/No solucionado al confirmar
 // el daño). Pedido 2026-08-21: evita el doble proceso reingreso+baja,
-// deja constancia semanal antes de dar de baja en Just, y agrega
-// verificación física + disposición final a cargo de Nairoby.
+// deja constancia semanal (la semana se cierra sola el sábado — ver
+// autoCloseFinishedWeeklyWriteOffBatches), y agrega verificación física +
+// disposición final a cargo de Nairoby.
 export function WeeklyDamageControl({ canAct, canApprove, canClose, canVerify }: { canAct: boolean; canApprove: boolean; canClose: boolean; canVerify: boolean }) {
   const [data, setData] = useState<SummaryDTO | null>(null);
   const [loading, setLoading] = useState(true);
@@ -309,7 +257,7 @@ export function WeeklyDamageControl({ canAct, canApprove, canClose, canVerify }:
     fetch("/api/merchandise-reentry/weekly-writeoff")
       .then((r) => r.json())
       .then(setData)
-      .catch(() => setData({ currentWeek: null, needsJustWriteOff: [], needsNairobyVerification: [], needsDisposalDecision: [] }))
+      .catch(() => setData({ currentWeek: null, needsNairobyVerification: [], needsDisposalDecision: [] }))
       .finally(() => setLoading(false));
   }
 
@@ -320,22 +268,6 @@ export function WeeklyDamageControl({ canAct, canApprove, canClose, canVerify }:
   return (
     <div className="flex flex-col gap-6">
       <CurrentWeekCard batch={data.currentWeek} />
-
-      {(canAct || canApprove) && data.needsJustWriteOff.length > 0 && (
-        <div>
-          <div className="flex items-center gap-2 mb-2.5">
-            <PackageMinus size={15} className="text-red" />
-            <span className="text-[13.5px] font-bold">Semanas cerradas, pendientes de baja en Just</span>
-            <span className="font-mono text-[10px] font-bold text-red bg-red/15 border border-red/40 rounded-full px-2 py-0.5">{data.needsJustWriteOff.length}</span>
-            {!canAct && <span className="font-mono text-[9.5px] text-steel bg-cloud rounded-full px-1.5 py-0.5">solo lectura</span>}
-          </div>
-          <div className="flex flex-col gap-2.5">
-            {data.needsJustWriteOff.map((b) => (
-              <JustWriteOffCard key={b.id} batch={b} canAct={canAct} onChanged={load} />
-            ))}
-          </div>
-        </div>
-      )}
 
       {canClose && data.needsNairobyVerification.length > 0 && (
         <div>

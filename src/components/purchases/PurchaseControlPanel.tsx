@@ -10,14 +10,13 @@ import { PurchasePriceExplorer } from "./PurchasePriceExplorer";
 import { PurchaseUrgentReportsPanel } from "./PurchaseUrgentReportsPanel";
 import { PurchaseAuditPanel } from "./PurchaseAuditPanel";
 import { PurchaseCreditsPanel } from "./PurchaseCreditsPanel";
-import { PurchaseJustaPanel } from "./PurchaseJustaPanel";
 import { SupplierDebtPanel } from "./SupplierDebtPanel";
 import { BuyerDebtConfirmationPanel } from "./BuyerDebtConfirmationPanel";
 import { PurchaseDeteriorGestionPanel } from "@/components/merchandise-outflow/PurchaseDeteriorGestionPanel";
 import { DeteriorTraceList } from "@/components/merchandise-outflow/DeteriorTraceList";
 import { TabGuide } from "@/components/shared/TabGuide";
 
-type Tab = "solicitar" | "mias" | "comparar" | "aprobacion" | "confirmar-credito" | "inventario" | "justa" | "finanzas" | "urgentes" | "creditos" | "proveedores-credito" | "auditoria";
+type Tab = "solicitar" | "mias" | "comparar" | "aprobacion" | "confirmar-credito" | "inventario" | "finanzas" | "urgentes" | "creditos" | "proveedores-credito" | "auditoria";
 
 // Confirmado 2026-07-30: una sola pantalla para todo el módulo — las
 // pestañas que ve cada persona dependen de lo que puede hacer (admin ve
@@ -114,10 +113,6 @@ export function PurchaseControlPanel({
     ...(canSubmit || canReview ? [{ key: "creditos" as Tab, label: "Créditos pendientes" }] : []),
     ...(canManageSupplierDebt ? [{ key: "proveedores-credito" as Tab, label: "Proveedores con Crédito" }] : []),
     ...(canReceive ? [{ key: "inventario" as Tab, label: "Inventario" }] : []),
-    // Confirmado 2026-08-18: pedido explícito del usuario — pestaña propia,
-    // separada de "Inventario", exclusiva de Daniel (canApproveReceiving) —
-    // su checklist personal para pasar lo aprobado al sistema Just.
-    ...(canApproveReceiving ? [{ key: "justa" as Tab, label: "Just" }] : []),
     ...(canInvoice ? [{ key: "finanzas" as Tab, label: "Finanzas" }] : []),
     // Confirmado 2026-08-08 (ampliado 2026-08-12): historial de solo lectura
     // de todo lo confirmado recibido, para auditar sin poder editar nada —
@@ -301,14 +296,6 @@ export function PurchaseControlPanel({
             )}
           </TabGuide>
           <PurchaseReceivingPanel isAdmin={isAdmin} canReceiveTeam={canReceiveTeam} canApprove={canApproveReceiving} />
-        </>
-      )}
-      {tab === "justa" && (
-        <>
-          <TabGuide storageKey="compras-justa">
-            Tu checklist personal: marca acá, uno por uno, lo que ya aprobaste y ya ingresaste al sistema Just. Es solo tuyo, no del equipo.
-          </TabGuide>
-          <PurchaseJustaPanel />
         </>
       )}
       {tab === "finanzas" && (

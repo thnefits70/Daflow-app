@@ -4,7 +4,6 @@ import { canViewMerchandiseOutflow } from "@/lib/guards";
 
 const BATCH_INCLUDE = {
   createdBy: { select: { name: true } },
-  justWrittenOffBy: { select: { name: true } },
   items: {
     include: {
       catalogItem: { select: { name: true, justCode: true } },

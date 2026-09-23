@@ -22,7 +22,7 @@ import { WeeklyReviewPanel, type WeeklyReviewDTO, type InvolvingMeReviewDTO } fr
 import { PurchaseControlPanel } from "@/components/purchases/PurchaseControlPanel";
 import { InventoryControlPanel } from "@/components/inventory/InventoryControlPanel";
 import { InventoryKpisPanel } from "@/components/finance/InventoryKpisPanel";
-import type { InventoryControlPeriodDTO, InventorySnapshotPeriodDTO, InventoryKpisDataDTO } from "@/lib/inventoryKpis";
+import type { InventoryControlPeriodDTO, InventoryKpisDataDTO } from "@/lib/inventoryKpis";
 import { PettyCashPanel } from "@/components/pettycash/PettyCashPanel";
 import { PettyCashExceptionsPanel } from "@/components/pettycash/PettyCashExceptionsPanel";
 import type { PettyCashViewerData } from "@/lib/pettyCash";
@@ -166,7 +166,6 @@ export function DeptWorkspaceTabs({
   canActOnMerchandiseReentry = false,
   canCloseMerchandiseReentry = false,
   canVerifyDamageDisposal = false,
-  canManageJustUpload = false,
   canManageJustCatalog = false,
   canViewStockLevels = false,
   merchandiseReentryPendingCount = 0,
@@ -324,8 +323,6 @@ export function DeptWorkspaceTabs({
   inventoryControlData?: {
     currentPeriod: string;
     periods: InventoryControlPeriodDTO[];
-    currentSnapshotPeriod: string;
-    snapshotPeriods: InventorySnapshotPeriodDTO[];
   } | null;
   // KPIs de inventario completos (no solo la tarjeta de Inicio) — confirmado
   // 2026-08-05: Daniel (INV) y Bryan (MKT) los ven en su propia "Mi área de
@@ -347,10 +344,6 @@ export function DeptWorkspaceTabs({
   // canVerifyDamageDisposal en guards.ts); canCloseMerchandiseReentry
   // sigue dando visibilidad de solo lectura de esas colas.
   canVerifyDamageDisposal?: boolean;
-  // Subir a Just ("Cierre") — exclusivo de Nairoby (FIN); admin y Daniel
-  // solo ven la pestaña en modo lectura (ver canManageJustUpload en
-  // guards.ts, que sigue dando esa visibilidad vía canApprove/canClose).
-  canManageJustUpload?: boolean;
   canManageJustCatalog?: boolean;
   // Confirmado 2026-09-22, pedido explícito del usuario: Bryan (líder de
   // Análisis de Mercado) ve la pestaña "Stock Actual" en modo solo lectura
@@ -661,8 +654,6 @@ export function DeptWorkspaceTabs({
         <InventoryControlPanel
           currentPeriodDefault={inventoryControlData.currentPeriod}
           periods={inventoryControlData.periods}
-          currentSnapshotPeriodDefault={inventoryControlData.currentSnapshotPeriod}
-          snapshotPeriods={inventoryControlData.snapshotPeriods}
         />
       )}
       {/* Bryan (solo lectura) ve las alertas de vencimiento acá — Daniel ya
@@ -676,7 +667,6 @@ export function DeptWorkspaceTabs({
           canAct={canActOnMerchandiseReentry}
           canClose={canCloseMerchandiseReentry}
           canVerifyDamageDisposal={canVerifyDamageDisposal}
-          canManageJustUpload={canManageJustUpload}
           canManageJustCatalog={canManageJustCatalog}
         />
       )}

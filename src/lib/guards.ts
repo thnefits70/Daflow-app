@@ -981,20 +981,6 @@ export async function canVerifyDamageDisposal() {
   return !!user.isLeader && user.leadsDept?.code === "FIN";
 }
 
-// Subir a Just ("Cierre" → Para ingresar a Just) — exclusivo de Nairoby
-// (líder de FIN). Revertido 2026-08-24: se había ampliado a Daniel (INV)
-// el mismo día, pero el usuario pidió bloquearlo de nuevo — Daniel ve la
-// pestaña "Cierre" en modo solo lectura, igual que admin (ver
-// canCloseMerchandiseReentry, que sigue dando visibilidad sin el botón de
-// acción — ver CloseQueues.tsx).
-export async function canManageJustUpload() {
-  const session = await auth();
-  if (!session) return false;
-  const user = await purchasesUserContext(session.user.id);
-  if (!user) return false;
-  return !!user.isLeader && user.leadsDept?.code === "FIN";
-}
-
 // Confirmado 2026-08-21, ampliado 2026-08-23: Daniel (líder de Inventario)
 // y admin pueden subir el export de Just que alimenta la Base de datos de
 // productos. Originalmente era exclusivo de Daniel ("ni siquiera admin",

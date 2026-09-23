@@ -28,7 +28,6 @@ export async function GET() {
         batch: { select: { id: true, code: true, createdAt: true, documentPhotoUrls: true, supplier: { select: { id: true, name: true } } } },
         resolvedBy: { select: { name: true } },
         financeWriteOffBy: { select: { name: true } },
-        justWriteOffConfirmedBy: { select: { name: true } },
         adminReviewedBy: { select: { name: true } },
       },
       orderBy: { createdAt: "asc" },

@@ -1,5 +1,4 @@
 import { prisma } from "@/lib/prisma";
-import { previewCutoverDamageCorrection } from "@/lib/stockKardex";
 import type { Prisma } from "@/generated/prisma/client";
 
 // Confirmado 2026-09-22, pedido explícito del usuario (solo admin): dos
@@ -140,14 +139,6 @@ export async function previewCatalogItemAction(params: { removedId: string; offi
   if (removed.awaitingDropiId) blockers.push(`"${removed.name}" todavía espera su ID real de Dropi (Análisis de Mercado). Termina ese paso primero.`);
   if (official.awaitingDropiId) blockers.push(`"${official.name}" todavía espera su ID real de Dropi (Análisis de Mercado). Termina ese paso primero.`);
   if (removed.hasPendingCountAdjustment) blockers.push(`"${removed.name}" tiene un ajuste por conteo físico pendiente. Apruébalo o recházalo primero.`);
-  // La corrección del corte de Just (botón "Restaurar") revisa la última
-  // línea del Kardex de cada producto — si se juntan antes de aplicarla, el
-  // historial mezclado la confundiría.
-  const damage = await previewCutoverDamageCorrection();
-  const damagedIds = new Set(damage.map((d) => d.catalogItemId));
-  if (damagedIds.has(removed.id) || damagedIds.has(official.id)) {
-    blockers.push("Uno de los dos está en la lista pendiente de \"Restaurar saldo pisado por el corte de Just\" (Stock Actual). Aplica esa corrección primero.");
-  }
 
   const result = {
     balance: official.balance + removed.balance,

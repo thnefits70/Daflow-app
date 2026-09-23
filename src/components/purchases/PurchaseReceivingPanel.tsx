@@ -183,13 +183,6 @@ type LateClaimReview = {
   request: { requestNumber: number | null; unitCost: number; catalogItem: { name: string; photos: string[]; justCode: string | null }; supplier: { name: string } };
 };
 
-type LateClaimJust = {
-  id: string;
-  lateClaimCode: string | null;
-  justWriteOffQty: number | null;
-  request: { catalogItem: { name: string; justCode: string | null }; supplier: { name: string } };
-};
-
 function groupRows(rows: Row[]) {
   const map = new Map<string, Row[]>();
   for (const r of rows) {
@@ -286,7 +279,7 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
   // Confirmado 2026-08-27: pedido explícito del usuario — un solo clic no
   // alcanza para mandar la cantidad faltante a Compras (riesgo de click por
   // error); primero tiene que confirmar ese número específico en una segunda
-  // pantalla, mismo patrón que "Dar de baja en Just" (justDoubleConfirm).
+  // pantalla.
   const [confirmingMissingId, setConfirmingMissingId] = useState<string | null>(null);
   // Confirmado 2026-09-08: pedido explícito de Daniel — camino alterno a
   // "enviar a Compras": si él y su equipo resuelven lo faltante por su
@@ -331,7 +324,6 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
   // ---------------- Reclamo posterior al cierre ----------------
   const [receivedRows, setReceivedRows] = useState<ReceivedRow[]>([]);
   const [lateClaimsReview, setLateClaimsReview] = useState<LateClaimReview[]>([]);
-  const [lateClaimsJust, setLateClaimsJust] = useState<LateClaimJust[]>([]);
 
   const [lateOpenId, setLateOpenId] = useState<string | null>(null); // ReceivedRow.id con el formulario abierto
   const [lateCandidates, setLateCandidates] = useState<LateClaimCandidate[]>([]);
@@ -348,10 +340,6 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
   const [lateRejectId, setLateRejectId] = useState<string | null>(null);
   const [lateRejectReason, setLateRejectReason] = useState("");
 
-  const [justOpenId, setJustOpenId] = useState<string | null>(null);
-  const [justQtyInput, setJustQtyInput] = useState("");
-  const [justAffirmed, setJustAffirmed] = useState(false);
-  const [justDoubleConfirm, setJustDoubleConfirm] = useState(false);
 
   // Guardado automático: si sale a revisar otra solicitud antes de terminar
   // de confirmar la recepción/informar urgente/reclamar un daño, al volver
@@ -414,7 +402,6 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
       fetch("/api/purchase-requests/urgent-reports/pending-review").then((r) => (r.ok ? r.json() : [])).then(setPendingUrgentReports).catch(() => setPendingUrgentReports([]));
       fetch("/api/purchase-requests/urgent-reports/pending-excess-kardex").then((r) => (r.ok ? r.json() : [])).then(setPendingExcessKardex).catch(() => setPendingExcessKardex([]));
       fetch("/api/purchase-requests/late-claims/pending-review").then((r) => (r.ok ? r.json() : [])).then(setLateClaimsReview).catch(() => setLateClaimsReview([]));
-      fetch("/api/purchase-requests/late-claims/pending-just").then((r) => (r.ok ? r.json() : [])).then(setLateClaimsJust).catch(() => setLateClaimsJust([]));
     }
   }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -493,29 +480,6 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
     if (!res.ok) { setErr(data?.error ?? "No se pudo procesar."); return; }
     setLateRejectId(null);
     setLateRejectReason("");
-    load();
-  }
-
-  function openJustConfirm(claim: LateClaimJust) {
-    setJustOpenId(claim.id);
-    setJustQtyInput("");
-    setJustAffirmed(false);
-    setJustDoubleConfirm(false);
-    setErr("");
-  }
-
-  async function submitJustConfirm(id: string) {
-    setBusy(true);
-    setErr("");
-    const res = await fetch(`/api/purchase-requests/late-claims/${id}/just-confirm`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ confirmedQty: Number(justQtyInput) }),
-    });
-    setBusy(false);
-    const data = await res.json().catch(() => null);
-    if (!res.ok) { setErr(data?.error ?? "No se pudo confirmar."); return; }
-    setJustOpenId(null);
     load();
   }
 
@@ -1143,79 +1107,6 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                       ✗ Rechazar
                     </button>
                   </div>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {(canApprove || isAdmin) && lateClaimsJust.length > 0 && (
-        <div className="bg-surface border border-gold/40 rounded-md p-4 mb-1">
-          <div className="flex items-center gap-1.5 text-[12px] font-bold mb-2" style={{ color: "#D9A441" }}>
-            <Package size={14} /> Dar de baja en Just
-          </div>
-          <div className="flex flex-col gap-2.5">
-            {lateClaimsJust.map((c) => (
-              <div key={c.id} className="bg-cloud rounded-md p-3">
-                <div className="flex items-center justify-between gap-2 flex-wrap mb-2">
-                  <div className="text-[13px] font-bold flex items-center gap-1.5">
-                    <CatalogCode code={c.request.catalogItem.justCode} />
-                    <span>{c.request.catalogItem.name}</span>
-                  </div>
-                  <span className="text-[10px] font-mono font-bold" style={{ color: "#D9A441" }}>{c.lateClaimCode}</span>
-                </div>
-                {justOpenId === c.id ? (
-                  <div>
-                    {!justDoubleConfirm ? (
-                      <>
-                        <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">
-                          Confirma cuántas unidades diste de baja en Just
-                        </label>
-                        <input type="number" className="w-full rounded border border-rule px-2.5 py-2 text-[13.5px] mb-2.5" style={{ maxWidth: 160 }} value={justQtyInput} onChange={(e) => setJustQtyInput(e.target.value)} />
-                        <div className="flex items-start gap-2 text-[12px] text-steel mb-2.5">
-                          <input type="checkbox" className="mt-0.5 cursor-pointer" checked={justAffirmed} onChange={(e) => setJustAffirmed(e.target.checked)} />
-                          Confirmo que entré a Just y descarté físicamente estas unidades del inventario disponible
-                        </div>
-                        {justQtyInput !== "" && Number(justQtyInput) !== c.justWriteOffQty && (
-                          <div className="flex items-center gap-1.5 text-[11px] text-red mb-2.5">
-                            <AlertTriangle size={12} /> Debe ser {c.justWriteOffQty} un. — la cantidad aprobada en el reclamo.
-                          </div>
-                        )}
-                        <button
-                          type="button"
-                          disabled={Number(justQtyInput) !== c.justWriteOffQty || !justAffirmed}
-                          className="rounded border border-green bg-green px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-                          onClick={() => setJustDoubleConfirm(true)}
-                        >
-                          Confirmar baja en Just
-                        </button>
-                      </>
-                    ) : (
-                      <div className="bg-navy rounded-md p-3">
-                        <div className="text-[13px] font-bold mb-1.5">¿Seguro?</div>
-                        <div className="text-[12px] text-steel mb-3">Vas a marcar {c.lateClaimCode} como dado de baja en Just — esta acción no se puede deshacer.</div>
-                        {err && <div className="text-red text-[12px] mb-2">{err}</div>}
-                        <div className="flex items-center gap-2">
-                          <button type="button" disabled={busy} className="rounded border border-green bg-green px-3.5 py-1.5 text-[12px] font-semibold text-white cursor-pointer disabled:opacity-60" onClick={() => submitJustConfirm(c.id)}>
-                            Sí, confirmar
-                          </button>
-                          <button type="button" className="text-steel text-[12px] cursor-pointer" onClick={() => setJustDoubleConfirm(false)}>Cancelar</button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <button
-                    type="button"
-                    disabled={!canApprove}
-                    title={!canApprove ? "Exclusivo del líder de Inventario" : undefined}
-                    className="rounded border border-gold/50 px-3.5 py-1.5 text-[12px] font-semibold cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-                    style={{ color: "#D9A441" }}
-                    onClick={() => openJustConfirm(c)}
-                  >
-                    Dar de baja en Just
-                  </button>
                 )}
               </div>
             ))}
@@ -2110,7 +2001,7 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                     <div className="bg-teal/10 border border-teal/30 rounded-md px-3 py-2 text-[11.5px] text-teal">
                       Ya reportado — <span className="font-mono font-bold">{openClaim.lateClaimCode}</span>
                       {" · "}
-                      {openClaim.justConfirmedAt ? "en gestión con el proveedor" : openClaim.reviewedByLeadAt ? "aprobado, pendiente de dar de baja en Just" : "pendiente de revisión de Daniel"}
+                      {openClaim.reviewedByLeadAt ? "en gestión con el proveedor" : "pendiente de revisión de Daniel"}
                     </div>
                   ) : lateOpenId === row.id ? (
                     <div className="mt-2">

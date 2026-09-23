@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { canCaptureMerchandiseOutflow, canActOnMerchandiseOutflow } from "@/lib/guards";
-import { notifyInventoryLeadOutflowPending, notifyInventoryLeadDeteriorReported, notifySupplierExchangeGestors } from "@/lib/merchandiseOutflow";
+import { notifyInventoryLeadDeteriorReported, notifySupplierExchangeGestors } from "@/lib/merchandiseOutflow";
 import { recordKardexEntry } from "@/lib/stockKardex";
 
 // DETERIORO (confirmado 2026-09-21): también exige su única foto compartida
@@ -57,8 +57,6 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
 
   if (updated.reason === "DETERIORO") {
     await notifyInventoryLeadDeteriorReported(updated, batch.items.length, session.user.name ?? "un colaborador");
-  } else {
-    await notifyInventoryLeadOutflowPending(updated);
   }
   if (updated.reason === "CAMBIO_PROVEEDOR") {
     const withDetails = await prisma.merchandiseOutflowBatch.findUnique({

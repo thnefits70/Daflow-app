@@ -156,9 +156,9 @@ export default async function DeptWorkspacePage({ params }: { params: Promise<{ 
         // aprobación/cierre, igual que el resto de esta página de solo
         // oversight. Fix 2026-08-21: aprobar lotes es exclusivo de Daniel
         // (líder de Inventario), ni siquiera admin — mismo criterio que
-        // canApprovePurchaseReceiving arriba. Fix 2026-08-24: subir a Just
-        // quedó exclusivo de Nairoby (canManageJustUpload=false) y
-        // verificar/disponer lo dañado también quedó exclusivo de Nairoby
+        // canApprovePurchaseReceiving arriba. Desde 2026-09-23 la parte
+        // buena entra sola a INVESTOCK al aprobar (ya no hay "subir a
+        // Just"), y verificar/disponer lo dañado quedó exclusivo de Nairoby
         // (canVerifyDamageDisposal=false) — admin ve ambas colas en modo
         // solo lectura vía canCloseMerchandiseReentry.
         canCaptureMerchandiseReentry={false}
@@ -166,7 +166,6 @@ export default async function DeptWorkspacePage({ params }: { params: Promise<{ 
         canActOnMerchandiseReentry={false}
         canCloseMerchandiseReentry={dept.code === "INV"}
         canVerifyDamageDisposal={false}
-        canManageJustUpload={false}
         // Ampliado 2026-08-24: admin ahora también puede subir la base de
         // datos de Just (antes exclusivo de Daniel, ver guards.ts
         // canManageJustCatalog) — la pestaña "Base de datos de productos"

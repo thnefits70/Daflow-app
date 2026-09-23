@@ -2,13 +2,14 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { canConfirmCancelledGuideFulfillmentRemoval, dbUserId } from "@/lib/guards";
-import { notifyInventoryLeadCancelledGuidesReady } from "@/lib/cancelledGuides";
+import { autoReingresoReadyCancelledGuides } from "@/lib/inventoryAutoFlows";
 
 // Agregado 2026-09-03, pedido explícito del usuario: Yair confirma que sacó
 // del área de Fulfillment TODAS las guías gestionadas de este lote — solo
 // se puede confirmar un lote que Bryan ya gestionó (batchManagedAt). Corre
 // en paralelo con Heidy cargando productos: si alguna guía de este lote ya
-// tiene productos cargados, queda lista para Daniel recién ahora.
+// tiene productos cargados, vuelve sola a INVESTOCK recién ahora (ver
+// inventoryAutoFlows.ts — ya no espera a que Daniel la reingrese a mano).
 export async function POST(_req: Request, { params }: { params: Promise<{ batchCode: string }> }) {
   const session = await auth();
   if (!(await canConfirmCancelledGuideFulfillmentRemoval()) || !session) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
@@ -25,7 +26,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ batchC
     data: { fulfillmentRemovedAt: new Date(), fulfillmentRemovedById: dbUserId(session.user.id) },
   });
 
-  const readyCodes = pending.filter((r) => r.itemsAssignedAt).map((r) => r.code);
-  await notifyInventoryLeadCancelledGuidesReady(readyCodes);
+  const readyIds = pending.filter((r) => r.itemsAssignedAt).map((r) => r.id);
+  if (readyIds.length > 0) await autoReingresoReadyCancelledGuides(readyIds);
   return NextResponse.json({ ok: true, count: pending.length });
 }

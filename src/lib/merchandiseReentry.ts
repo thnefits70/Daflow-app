@@ -1,7 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { getFinanceLeadId } from "@/lib/guards";
 import { notifyOwner } from "@/lib/notifications";
-import { isBusinessDay } from "@/lib/recognition";
 
 // Mismo truco de desplazamiento que src/lib/businessHours.ts: restar el
 // offset antes de leer con getUTC* hace que esos getters devuelvan la hora
@@ -40,38 +39,9 @@ export function formatMerchandiseReentryCode(batchNumber: number): string {
   return `RM-${String(batchNumber).padStart(4, "0")}`;
 }
 
-// Confirmado 2026-08-23: para no subir a Just en lotes chicos uno por uno,
-// un producto con MÁS de esta cantidad de unidades buenas se puede subir
-// apenas esté listo; con esta cantidad o menos, espera al último día
-// laboral de la semana (ver isTodayLastBusinessDayOfWeek) para juntarse
-// con el resto de lo chico y subirse todo junto.
-export const JUST_UPLOAD_MIN_QTY = 10;
-
-function todayEcuadorMidnightUTC(): Date {
-  const now = new Date(Date.now() - ECUADOR_OFFSET_MS);
-  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-}
-
-// Semana laboral administrativa lunes-viernes (distinta del horario real de
-// tienda que sí abre el sábado — ver businessHours.ts) para la regla de
-// "subir lo chico a Just una vez por semana". Si el viernes es feriado
-// ecuatoriano, retrocede al día laboral anterior — mismo patrón que
-// celebrationDateFor() en birthdays.ts.
-export function lastBusinessDayOfWeek(d: Date): Date {
-  const daysSinceMonday = (d.getUTCDay() + 6) % 7; // lunes=0 .. domingo=6
-  let friday = new Date(d.getTime() + (4 - daysSinceMonday) * 86400000);
-  while (!isBusinessDay(friday)) friday = new Date(friday.getTime() - 86400000);
-  return friday;
-}
-
-export function isTodayLastBusinessDayOfWeek(): boolean {
-  const today = todayEcuadorMidnightUTC();
-  return lastBusinessDayOfWeek(today).getTime() === today.getTime();
-}
-
 // Bolsa semanal donde caen las unidades "no solucionadas" (ver
 // MerchandiseReentryItem.damageSolved) hasta el corte del sábado. Si la
-// bolsa natural de la semana actual ya fue cerrada por Daniel
+// bolsa natural de la semana actual ya fue cerrada
 // (justWrittenOffAt), no le sigue metiendo ítems nuevos — los manda a la
 // semana siguiente, para no reabrir un lote que Nairoby ya puede estar
 // verificando.
@@ -87,7 +57,7 @@ export async function getOrCreateCurrentWeekWriteOffBatch() {
       if (created) return created;
       continue; // carrera con otro request creando la misma semana — reintenta la lectura
     }
-    // la semana natural ya fue cerrada por Daniel — pasa a la siguiente
+    // la semana natural ya fue cerrada — pasa a la siguiente
     const nextMonday = new Date(weekStart);
     nextMonday.setUTCDate(nextMonday.getUTCDate() + 7);
     ({ weekStart, weekEnd } = getEcuadorWeekBounds(nextMonday));
@@ -116,9 +86,9 @@ export function itemDisplayName(item: { correctedName: string | null; catalogIte
 
 // Una vez que TODOS los items de un lote tienen approvedAt, el lote entero
 // queda aprobado por Daniel — llamar después de cualquier acción que
-// resuelva un item, para saber si hay que marcar danielApprovedAt. Avisa a
-// Nairoby en el momento exacto en que el lote pasa a estar listo para ella,
-// no en cada aprobación individual de item.
+// resuelva un item, para saber si hay que marcar danielApprovedAt. En ese
+// momento exacto (no en cada aprobación individual de item) la parte buena
+// del lote vuelve sola al inventario.
 export async function maybeMarkBatchApproved(batchId: string) {
   const items = await prisma.merchandiseReentryItem.findMany({ where: { batchId }, select: { approvedAt: true } });
   if (items.length === 0 || items.some((i) => !i.approvedAt)) return;
@@ -128,14 +98,12 @@ export async function maybeMarkBatchApproved(batchId: string) {
     .catch(() => null); // ya estaba marcado — no pasa nada
   if (!batch) return;
 
-  const leadId = await getFinanceLeadId();
-  if (leadId) {
-    await notifyOwner(leadId, {
-      title: "Reingreso de mercadería listo para cerrar",
-      body: `${batch.code} — Daniel ya aprobó todo, listo para subir a Just o dar de baja.`,
-      url: "/area/reingreso-mercaderia?tab=cierre",
-    });
-  }
+  // Confirmado 2026-09-23: la parte buena entra sola a INVESTOCK en este
+  // mismo momento (ver inventoryAutoFlows.ts) — Nairoby ya no tiene que
+  // "subirla a Just", así que ya no se le avisa. Import dinámico para no
+  // crear un ciclo (inventoryAutoFlows importa este archivo).
+  const { autoRestockApprovedReentryItems } = await import("@/lib/inventoryAutoFlows");
+  await autoRestockApprovedReentryItems(batchId).catch((err) => console.error("[maybeMarkBatchApproved] No se pudo reingresar al inventario:", err));
 }
 
 export type MerchandiseReentryItemForGrouping = {
@@ -152,30 +120,6 @@ export type MerchandiseReentryItemForGrouping = {
   damageReasonOther: string | null;
   batch: { code: string };
 };
-
-// Nairoby ya no confirma item por item: productos con el mismo nombre final
-// (misma lógica que itemDisplayName, sin importar de qué lote RM vengan) se
-// agrupan en una sola tarjeta con la suma de unidades, para un solo clic en
-// vez de repetir la acción por cada ocurrencia del mismo producto. Orden
-// confirmado 2026-08-23: de mayor a menor cantidad — los lotes grandes (que
-// se pueden subir de inmediato) quedan arriba, los chicos (que esperan al
-// último día laboral) abajo.
-export function groupItemsForJustUpload(items: MerchandiseReentryItemForGrouping[]) {
-  const groups = new Map<
-    string,
-    { name: string; justCode: string | null; totalGoodQty: number; earliestAt: Date; itemIds: string[]; breakdown: { id: string; batchCode: string; goodQty: number; createdAt: Date }[] }
-  >();
-  for (const item of items) {
-    const name = itemDisplayName(item);
-    const g = groups.get(name) ?? { name, justCode: item.catalogItem?.justCode ?? null, totalGoodQty: 0, earliestAt: item.createdAt, itemIds: [], breakdown: [] };
-    g.totalGoodQty += item.goodQty;
-    if (item.createdAt < g.earliestAt) g.earliestAt = item.createdAt;
-    g.itemIds.push(item.id);
-    g.breakdown.push({ id: item.id, batchCode: item.batch.code, goodQty: item.goodQty, createdAt: item.createdAt });
-    groups.set(name, g);
-  }
-  return [...groups.values()].sort((a, b) => b.totalGoodQty - a.totalGoodQty);
-}
 
 export function groupItemsForWriteOff(items: MerchandiseReentryItemForGrouping[]) {
   const groups = new Map<
@@ -205,8 +149,9 @@ export function groupItemsForWriteOff(items: MerchandiseReentryItemForGrouping[]
 }
 
 // Una vez que TODA parte relevante de TODOS los items de un lote está
-// cerrada por Nairoby (buena subida a Just si goodQty>0, dañada dada de
-// baja si quedó damageConfirmed=true), el lote entero se cierra.
+// cerrada (buena ya reingresada a INVESTOCK si goodQty>0 — ver
+// inventoryAutoFlows.ts —, dañada dada de baja si quedó
+// damageConfirmed=true), el lote entero se cierra.
 export async function maybeMarkBatchClosed(batchId: string) {
   const items = await prisma.merchandiseReentryItem.findMany({
     where: { batchId },
@@ -240,14 +185,15 @@ export async function notifyAdminDamageSolved(productName: string, note: string)
   }).catch(() => null);
 }
 
-// Daniel cerró el corte semanal (ya dio de baja en Just) — le toca a
-// Nairoby verificar físicamente y hacer la doble confirmación.
+// El corte semanal se cerró solo al terminar el sábado (ver
+// autoCloseFinishedWeeklyWriteOffBatches) — le toca a Nairoby verificar
+// físicamente y hacer la doble confirmación.
 export async function notifyFinanceLeadWeeklyBatchReady(batch: { id: string; weekStart: Date; weekEnd: Date }) {
   const leadId = await getFinanceLeadId();
   if (!leadId) return;
   await notifyOwner(leadId, {
     title: "Lote semanal de productos dañados listo para verificar",
-    body: `Semana ${fmtShortDate(batch.weekStart)}–${fmtShortDate(batch.weekEnd)} — Daniel ya dio de baja en Just, falta tu verificación.`,
+    body: `Semana ${fmtShortDate(batch.weekStart)}–${fmtShortDate(batch.weekEnd)} — la semana ya cerró, falta tu verificación.`,
     url: "/area/reingreso-mercaderia?tab=danos",
   }).catch(() => null);
 }
