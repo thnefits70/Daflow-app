@@ -19,6 +19,7 @@ type ItemDTO = {
   unitCostAtExchange: number | null;
   expectedCreditAmount: number | null;
   linkedPurchaseRequest: { requestNumber: number | null; requestedAt: string; requestedBy: { name: string } | null } | null;
+  sourceDeteriorItem?: { batch: { code: string } } | null;
 };
 
 type BatchDTO = { id: string; code: string; documentPhotoUrls: string[]; supplier: SupplierOption | null; items: ItemDTO[] };
@@ -313,7 +314,10 @@ export function SupplierExchangeCapture({ onSent }: { onSent?: () => void }) {
                     </div>
                   </div>
                 </div>
-                {item.expectedCreditAmount !== null ? (
+                {item.sourceDeteriorItem && (
+                  <div className="text-[11px] text-green font-semibold mt-1">Viene del deterioro {item.sourceDeteriorItem.batch.code} — el proveedor ya aceptó el cambio.</div>
+                )}
+                {item.sourceDeteriorItem ? null : item.expectedCreditAmount !== null ? (
                   <div className="text-[11px] text-steel mt-1">
                     Costo pagado: <span className="font-semibold text-ink">{money(item.unitCostAtExchange!)}/un.</span> · crédito estimado si no hay cambio:{" "}
                     <span className="font-semibold text-blue">{money(item.expectedCreditAmount)}</span>

@@ -223,9 +223,9 @@ export function MerchandiseOutflowPanel({
       {tab === "seguimiento" && (canCapture || canView) && (
         <>
           <TabGuide storageKey="merchoutflow-seguimiento">
-            Todo lo que se reportó como deterioro y en qué va cada producto: la decisión de Daniel y, si se escaló a Compras, qué proveedor confirmó Jariel y qué respondió el proveedor (cambio, crédito o rechazo). Solo lectura — toca un producto para ver su recorrido completo. Si el proveedor aceptó el cambio, el siguiente paso es armar el paquete en &quot;Cambio con proveedor&quot;.
+            Todo lo que se reportó como deterioro y en qué va cada producto: la decisión de Daniel y, si se escaló a Compras, qué proveedor confirmó Jariel y qué respondió el proveedor (cambio, crédito o rechazo). Solo lectura — toca un producto para ver su recorrido completo. Si el proveedor aceptó el cambio, toca &quot;Armar paquete de cambio&quot; y el producto pasa solo a &quot;Cambio con proveedor&quot; — ahí solo tomas la foto de la lista y lo dejas listo.
           </TabGuide>
-          <DeteriorTraceList />
+          <DeteriorTraceList canAct={canAct} onGoToExchange={() => setTab("proveedor")} />
         </>
       )}
       {tab === "proveedor" && canSeeProveedorTab && (

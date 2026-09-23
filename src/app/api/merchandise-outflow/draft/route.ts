@@ -4,7 +4,11 @@ import { prisma } from "@/lib/prisma";
 import { canCaptureMerchandiseOutflow, canActOnMerchandiseOutflow } from "@/lib/guards";
 import { nextMerchandiseOutflowNumber, formatMerchandiseOutflowCode } from "@/lib/merchandiseOutflow";
 
-const ITEM_INCLUDE = { catalogItem: { select: { name: true, photos: true, justCode: true } }, damageReason: { select: { name: true } } } as const;
+const ITEM_INCLUDE = {
+  catalogItem: { select: { name: true, photos: true, justCode: true } },
+  damageReason: { select: { name: true } },
+  sourceDeteriorItem: { select: { batch: { select: { code: true } } } },
+} as const;
 
 type Reason = "DESPACHO" | "GARANTIA" | "CAMBIO_PROVEEDOR" | "DETERIORO";
 

@@ -20,7 +20,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   if (!session) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
   const { id } = await params;
-  const batch = await prisma.merchandiseOutflowBatch.findUnique({ where: { id }, include: { items: { select: { id: true, catalogItemId: true, quantity: true } } } });
+  const batch = await prisma.merchandiseOutflowBatch.findUnique({ where: { id }, include: { items: { select: { id: true, catalogItemId: true, quantity: true, sourceDeteriorItemId: true } } } });
   if (!batch) return NextResponse.json({ error: "No encontrado." }, { status: 404 });
   const authorized = batch.reason === "CAMBIO_PROVEEDOR" || batch.reason === "DESPACHO" ? await canActOnMerchandiseOutflow() : await canCaptureMerchandiseOutflow();
   if (!authorized) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
@@ -42,6 +42,9 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   // que dejó la anterior del mismo producto.
   for (const item of batch.items) {
     if (!item.catalogItemId) continue;
+    // Confirmado 2026-09-23: un ítem que viene de un deterioro ("Armar
+    // paquete de cambio") ya restó Kardex cuando se reportó el deterioro.
+    if (item.sourceDeteriorItemId) continue;
     await recordKardexEntry({
       catalogItemId: item.catalogItemId,
       type: "OUT",
@@ -62,7 +65,9 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
       where: { id },
       include: {
         supplier: { select: { name: true } },
-        items: { include: { catalogItem: { select: { name: true } }, linkedPurchaseRequest: { select: { requestedById: true } } } },
+        // Los que vienen de un deterioro ya entran resueltos (Jariel ya
+        // negoció el cambio) — no se le avisa a nadie que los gestione.
+        items: { where: { resolution: null }, include: { catalogItem: { select: { name: true } }, linkedPurchaseRequest: { select: { requestedById: true } } } },
       },
     });
     if (withDetails) await notifySupplierExchangeGestors(withDetails);

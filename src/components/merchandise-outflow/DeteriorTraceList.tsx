@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Search } from "lucide-react";
+import { PackagePlus, Search } from "lucide-react";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 import { formatDateTime } from "@/lib/formatDateTime";
 
@@ -35,6 +35,7 @@ type TraceItem = {
   purchaseResolvedAt: string | null;
   purchaseResolvedBy: Named;
   credit: { amount: number } | null;
+  exchangeItem: { batch: { code: string; submittedAt: string | null } } | null;
 };
 
 type Tone = "amber" | "green" | "red" | "steel";
@@ -51,7 +52,11 @@ function statusOf(i: TraceItem): Status {
   if (!i.resolution) return { label: "Esperando decisión de Daniel", tone: "amber", open: true };
   if (i.resolution === "SOLVED_ONSITE") return { label: "Cerrado — solucionado ahí mismo", tone: "green", open: false };
   if (i.resolution === "WRITE_OFF") return { label: "Cerrado — dado de baja", tone: "steel", open: false };
-  if (i.purchaseResolution === "REPLACED") return { label: "Proveedor aceptó el cambio", tone: "green", open: false };
+  if (i.purchaseResolution === "REPLACED") {
+    if (i.exchangeItem?.batch.submittedAt) return { label: `Cambio enviado · ${i.exchangeItem.batch.code}`, tone: "green", open: false };
+    if (i.exchangeItem) return { label: `En paquete ${i.exchangeItem.batch.code} · falta dejarlo listo`, tone: "amber", open: true };
+    return { label: "Proveedor aceptó · falta armar el paquete", tone: "amber", open: true };
+  }
   if (i.purchaseResolution === "CREDIT_ISSUED") return { label: "Proveedor dio crédito", tone: "green", open: false };
   if (i.purchaseResolution === "REJECTED") {
     return { label: i.purchaseExceptionDecision === "REJECTED" ? "Rechazado por admin" : "Proveedor rechazó", tone: "red", open: false };
@@ -79,7 +84,25 @@ function Step({ done, title, when, children }: { done: boolean; title: string; w
 const DECISION_LABEL = { SOLVED_ONSITE: "Solucionado ahí mismo", WRITE_OFF: "Dar de baja", ESCALATED_TO_PURCHASES: "Escalado a Compras (Jariel)" } as const;
 const EXCEPTION_LABEL = { DATA_CORRECTED: "corrigió el dato — Jariel vuelve a intentar", AUTHORIZED: "autorizó seguir sin compra registrada", REJECTED: "rechazó el reclamo" } as const;
 
-function Timeline({ i }: { i: TraceItem }) {
+function Timeline({ i, canAct, onPack }: { i: TraceItem; canAct: boolean; onPack: () => void }) {
+  const [packing, setPacking] = useState(false);
+  const [packError, setPackError] = useState("");
+
+  async function pack() {
+    setPacking(true);
+    setPackError("");
+    try {
+      const res = await fetch(`/api/merchandise-outflow/items/${i.id}/to-exchange`, { method: "POST" });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error ?? "No se pudo armar el paquete.");
+      onPack();
+    } catch (e) {
+      setPackError(e instanceof Error ? e.message : "No se pudo armar el paquete.");
+    } finally {
+      setPacking(false);
+    }
+  }
+
   const escalated = i.resolution === "ESCALATED_TO_PURCHASES";
   const creditAmount = i.credit?.amount ?? null;
   return (
@@ -126,7 +149,35 @@ function Timeline({ i }: { i: TraceItem }) {
             {i.purchaseResolutionNote}
           </Step>
           {i.purchaseResolution === "REPLACED" && (
-            <div className="text-[11px] text-teal font-semibold pl-4">Siguiente paso: arma el paquete en &quot;Cambio con proveedor&quot;.</div>
+            <Step
+              done={!!i.exchangeItem?.batch.submittedAt}
+              title={
+                i.exchangeItem?.batch.submittedAt
+                  ? `Paquete de cambio enviado: ${i.exchangeItem.batch.code}`
+                  : i.exchangeItem
+                    ? `En el paquete ${i.exchangeItem.batch.code} — falta la foto de la lista y dejarlo listo`
+                    : "Pendiente: armar el paquete de cambio"
+              }
+              when={i.exchangeItem?.batch.submittedAt}
+            >
+              {!i.exchangeItem && canAct && (
+                <div className="mt-1.5">
+                  <button
+                    type="button"
+                    disabled={packing}
+                    className="inline-flex items-center gap-1.5 rounded border border-teal bg-teal px-3 py-1.5 text-[12px] font-bold text-navy cursor-pointer disabled:opacity-60"
+                    onClick={pack}
+                  >
+                    <PackagePlus size={13} /> {packing ? "Armando…" : "Armar paquete de cambio"}
+                  </button>
+                  <div className="text-[10.5px] text-steel mt-1">Pasa solo a &quot;Cambio con proveedor&quot; con proveedor, producto y cantidad ya puestos.</div>
+                  {packError && <div className="text-red text-[11px] mt-1">{packError}</div>}
+                </div>
+              )}
+              {i.exchangeItem && !i.exchangeItem.batch.submittedAt && canAct && (
+                <button type="button" className="mt-1 text-[11.5px] font-bold text-teal cursor-pointer" onClick={onPack}>Ir a &quot;Cambio con proveedor&quot; →</button>
+              )}
+            </Step>
           )}
         </>
       )}
@@ -137,7 +188,10 @@ function Timeline({ i }: { i: TraceItem }) {
 // Confirmado 2026-09-23, pedido de Daniel: seguimiento de solo lectura de
 // cada producto reportado como deterioro, de principio a fin — para no
 // tener que preguntar por WhatsApp si el proveedor aprobó el reclamo.
-export function DeteriorTraceList() {
+// canAct (Daniel) + onGoToExchange (confirmado 2026-09-23, pedido de
+// Daniel): botón "Armar paquete de cambio" cuando el proveedor ya aceptó el
+// cambio — ver items/[id]/to-exchange/route.ts.
+export function DeteriorTraceList({ canAct = false, onGoToExchange }: { canAct?: boolean; onGoToExchange?: () => void } = {}) {
   const [items, setItems] = useState<TraceItem[] | null>(null);
   const [filter, setFilter] = useState<"open" | "closed" | "all">("open");
   const [query, setQuery] = useState("");
@@ -209,7 +263,7 @@ export function DeteriorTraceList() {
                   </div>
                   <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10.5px] font-semibold ${TONE_CLASS[s.tone]}`}>{s.label}</span>
                 </button>
-                {isOpen && <Timeline i={i} />}
+                {isOpen && <Timeline i={i} canAct={canAct && !!onGoToExchange} onPack={() => onGoToExchange?.()} />}
               </div>
             );
           })}

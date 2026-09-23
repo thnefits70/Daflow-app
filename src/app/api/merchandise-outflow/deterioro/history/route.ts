@@ -45,6 +45,7 @@ export async function GET() {
       purchaseResolvedAt: true,
       purchaseResolvedBy: { select: { name: true } },
       credit: { select: { amount: true } },
+      exchangeItem: { select: { batch: { select: { code: true, submittedAt: true } } } },
     },
   });
   return NextResponse.json(items);

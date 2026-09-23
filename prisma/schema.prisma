@@ -2232,7 +2232,7 @@ model SupplierStockoutReport {
   resolution     SupplierStockoutResolutionAction?
   resolutionNote String?
   resolvedById   String?
-  resolvedBy     User?     @relation("SupplierStockoutReportResolvedBy", fields: [resolvedById], references: [id], onDelete: SetNull)
+  resolvedBy     User?                             @relation("SupplierStockoutReportResolvedBy", fields: [resolvedById], references: [id], onDelete: SetNull)
   resolvedAt     DateTime?
 
   @@index([resolvedAt])
@@ -5755,6 +5755,18 @@ model MerchandiseOutflowItem {
   purchaseExceptionDecidedAt   DateTime?
   purchaseExceptionDecidedById String?
   purchaseExceptionDecidedBy   User?                      @relation("MerchandiseOutflowItemPurchaseExceptionBy", fields: [purchaseExceptionDecidedById], references: [id], onDelete: SetNull)
+
+  // Confirmado 2026-09-23, pedido de Daniel: botón "Armar paquete de
+  // cambio" en Seguimiento de deterioro — cuando Jariel registra que el
+  // proveedor acepta el cambio (purchaseResolution REPLACED), Daniel pasa el
+  // producto a su solicitud de CAMBIO_PROVEEDOR sin volver a cargarlo. Este
+  // campo vive en el ítem NUEVO (CAMBIO_PROVEEDOR) y apunta al deterioro de
+  // origen — @unique para que un mismo deterioro no se empaque dos veces.
+  // Estos ítems NO vuelven a restar Kardex al enviarse el lote (el deterioro
+  // ya lo restó al reportarse) y entran ya resueltos como REPLACED.
+  sourceDeteriorItemId String?                 @unique
+  sourceDeteriorItem   MerchandiseOutflowItem? @relation("OutflowItemSourceDeterior", fields: [sourceDeteriorItemId], references: [id], onDelete: SetNull)
+  exchangeItem         MerchandiseOutflowItem? @relation("OutflowItemSourceDeterior")
 
   @@index([batchId])
   @@index([resolution])
