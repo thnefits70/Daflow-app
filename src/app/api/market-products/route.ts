@@ -204,6 +204,20 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(rows);
   }
 
+  // Confirmado 2026-09-23, pedido de Heidy: historial de los productos que
+  // ella ya publicó en Dropi — antes, al confirmar el ID, el producto
+  // desaparecía de "Publicar en Dropi" y no quedaba ningún lugar donde
+  // volver a verlo. Admin ve los de todos (no publica él mismo).
+  if (view === "published-history") {
+    if (!(await canPublishMarketProduct())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+    const rows = await prisma.marketProductProposal.findMany({
+      where: isAdmin ? { publishedAt: { not: null } } : { publishedById: session.user.id },
+      include: includeFull,
+      orderBy: { publishedAt: "desc" },
+    });
+    return NextResponse.json(rows);
+  }
+
   if (view === "brand") {
     if (!(await canBrandMarketProduct())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
     const rows = await prisma.marketProductProposal.findMany({

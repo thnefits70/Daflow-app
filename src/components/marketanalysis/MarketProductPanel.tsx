@@ -96,7 +96,7 @@ function computeCompetitorComparison(batchCost: number, batchUnits: number, frei
   };
 }
 
-type Tab = "proponer" | "ganadores" | "sinstock" | "mispropuestas" | "listoparacomprar" | "consulta" | "aprobacion" | "publicar" | "brandear" | "trazabilidad";
+type Tab = "proponer" | "ganadores" | "sinstock" | "mispropuestas" | "listoparacomprar" | "consulta" | "aprobacion" | "publicar" | "mispublicados" | "brandear" | "trazabilidad";
 
 export function MarketProductPanel({
   canPropose,
@@ -152,6 +152,8 @@ export function MarketProductPanel({
     ...(canViewB2BPricing || canViewB2CPricing ? [{ key: "consulta" as Tab, label: "Consulta de precios" }] : []),
     ...(canReview ? [{ key: "aprobacion" as Tab, label: "Aprobación" }] : []),
     ...(canPublish ? [{ key: "publicar" as Tab, label: "Publicar en Dropi" }] : []),
+    // Confirmado 2026-09-23, pedido de Heidy: historial de lo que ya publicó.
+    ...(canPublish ? [{ key: "mispublicados" as Tab, label: "Mis publicados" }] : []),
     ...(canBrand ? [{ key: "brandear" as Tab, label: "Brandear" }] : []),
     ...(canReview ? [{ key: "trazabilidad" as Tab, label: "Trazabilidad" }] : []),
   ];
@@ -201,6 +203,7 @@ export function MarketProductPanel({
       {tab === "consulta" && <PricingConsultaTable />}
       {tab === "aprobacion" && <ReviewQueue canAct={canActOnReview} />}
       {tab === "publicar" && <PublishQueue />}
+      {tab === "mispublicados" && <PublishedHistoryView />}
       {tab === "brandear" && <BrandQueue />}
       {tab === "trazabilidad" && <TraceabilityView canDecidePurchase={canDecidePurchase} />}
     </div>
@@ -882,6 +885,62 @@ function PublishPriceGuide({ p }: { p: Proposal }) {
           <div className="mt-1.5 text-steel">No hay datos del proveedor guardados para mostrar el cálculo.</div>
         )
       )}
+    </div>
+  );
+}
+
+// Confirmado 2026-09-23, pedido de Heidy: al confirmar el ID de Dropi el
+// producto salía de "Publicar en Dropi" y no quedaba dónde volver a verlo.
+// Acá queda su historial, con buscador por nombre/código/ID de Dropi.
+function PublishedHistoryView() {
+  const [rows, setRows] = useState<Proposal[] | null>(null);
+  const [query, setQuery] = useState("");
+
+  useEffect(() => {
+    fetch("/api/market-products?view=published-history").then((r) => (r.ok ? r.json() : [])).then(setRows).catch(() => setRows([]));
+  }, []);
+
+  if (rows === null) return <div className="text-steel text-[13px]">Cargando…</div>;
+  if (rows.length === 0) return <div className="text-steel text-[13.5px]">Todavía no publicaste ningún producto.</div>;
+
+  const q = query.trim().toLowerCase();
+  const filtered = q
+    ? rows.filter((p) => [p.productName, p.code, p.dropiProductId ?? ""].some((s) => s.toLowerCase().includes(q)))
+    : rows;
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center gap-3">
+        <input
+          className="flex-1 rounded border border-rule px-2.5 py-1.5 text-[13px]"
+          placeholder="Buscar por nombre, código o ID de Dropi…"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+        />
+        <span className="text-[12px] text-steel shrink-0">{filtered.length} de {rows.length}</span>
+      </div>
+      {filtered.length === 0 && <div className="text-steel text-[13px]">Sin resultados.</div>}
+      {filtered.map((p) => {
+        const image = p.catalogItem?.photos?.[0] || p.referenceImageUrl;
+        return (
+          <div key={p.id} className="bg-surface border border-rule rounded-md p-3.5 flex items-start gap-3.5">
+            {image && <img src={image} alt={p.productName} className="w-16 h-16 rounded object-cover border border-rule shrink-0" />}
+            <div className="flex-1 min-w-0">
+              <div className="font-semibold text-[13.5px]">{p.code} — {p.productName}</div>
+              <div className="text-[12.5px] text-ink mt-0.5">ID de Dropi: <b>{p.dropiProductId ?? "—"}</b> · Precio de Dropi: <b>{money(p.calculatedSalePrice)}</b></div>
+              <div className="text-[12px] text-steel mt-0.5">
+                Bodega: {BODEGA_LABELS[p.bodega ?? ""] ?? "—"} · {p.isPublic ? "Público" : "Privado"}
+              </div>
+              <div className="text-[12px] text-steel mt-0.5">
+                Publicado {p.publishedBy?.name ? `por ${p.publishedBy.name} ` : ""}— {p.publishedAt ? formatDateTime(p.publishedAt) : "—"}
+              </div>
+              <div className={`text-[12px] mt-0.5 font-semibold ${p.brandedAt ? "text-teal" : "text-steel"}`}>
+                {p.brandedAt ? `Brandeado por ${p.brandedBy?.name ?? "—"} — ${formatDateTime(p.brandedAt)}` : "Esperando brandeo de Robert"}
+              </div>
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
