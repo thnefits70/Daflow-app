@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { GitBranch, FileText, GraduationCap, LineChart, TrendingUp, MessageSquare, CalendarClock, BellRing, Heart, ShoppingCart, Package, Pin, Wallet, BarChart3, Landmark, PackageCheck, PackageOpen, PackageMinus, Truck, HandCoins, Combine, UtensilsCrossed, Layers, UserCog } from "lucide-react";
+import { GitBranch, FileText, GraduationCap, LineChart, TrendingUp, MessageSquare, CalendarClock, BellRing, Heart, ShoppingCart, Package, Pin, Wallet, BarChart3, Landmark, PackageCheck, PackageOpen, PackageMinus, Truck, HandCoins, Combine, UtensilsCrossed, Layers, UserCog, Sparkles } from "lucide-react";
 import { ProcessEmbeddedPanel } from "@/components/process/ProcessEmbeddedPanel";
 import type { ProcessDTO } from "@/components/process/ProcessEditor";
 import type { ProcessUpdateDTO } from "@/components/process/ProcessHistoryPanel";
@@ -29,6 +29,7 @@ import type { PettyCashViewerData } from "@/lib/pettyCash";
 import { AdminPaymentsPanel } from "@/components/finance/AdminPaymentsPanel";
 import { LunchPaymentsPanel } from "@/components/finance/LunchPaymentsPanel";
 import { MarketingArrivalsPanel } from "@/components/marketing/MarketingArrivalsPanel";
+import { NewIdBrandingPanel } from "@/components/marketing/NewIdBrandingPanel";
 import { MerchandiseReentryPanel } from "@/components/merchandise-reentry/MerchandiseReentryPanel";
 import { StockLevelsPanel } from "@/components/inventory/StockLevelsPanel";
 import { ExpirationAlerts } from "@/components/merchandise-reentry/ExpirationAlerts";
@@ -54,6 +55,9 @@ const ALL_TABS = [
   { key: "compras", label: "Control de Compras", icon: ShoppingCart },
   { key: "proveedores", label: "Proveedores", icon: Truck },
   { key: "llegadas", label: "Mercadería recibida", icon: PackageCheck },
+  // Confirmado 2026-09-23, pedido de Robert: el brandeo de IDs nuevos sale de
+  // Mercadería recibida a su propia pestaña (con historial).
+  { key: "nuevos-ids", label: "Nuevos IDs por brandear", icon: Sparkles },
   { key: "inventario", label: "Control de Inventario", icon: Package },
   { key: "stock-actual", label: "Stock actual", icon: Layers },
   { key: "reingreso", label: "Reingreso de Mercadería", icon: PackageOpen },
@@ -195,7 +199,6 @@ export function DeptWorkspaceTabs({
   canManageAdminPayments = false,
   canRegisterLunchPayments = false,
   canViewMarketingArrivals = false,
-  canConfirmMarketingDesign = false,
   canConfirmMarketingAdvisor = false,
   canSyncAtomData = false,
   canUploadLowRotationList = false,
@@ -458,6 +461,7 @@ export function DeptWorkspaceTabs({
     if (t.key === "compras") return canSubmitPurchases || canViewOwnPurchases || canSubmitEmergencyPurchases || canApprovePurchases || canReceivePurchases || canInvoicePurchases;
     if (t.key === "proveedores") return canAccessSuppliers;
     if (t.key === "llegadas") return canViewMarketingArrivals;
+    if (t.key === "nuevos-ids") return canViewMarketingArrivals;
     if (t.key === "inventario") return canManageInventoryControl;
     if (t.key === "stock-actual") return canManageJustCatalog || canViewStockLevels;
     if (t.key === "reingreso") return canCaptureMerchandiseReentry || canApproveMerchandiseReentry || canCloseMerchandiseReentry;
@@ -648,8 +652,9 @@ export function DeptWorkspaceTabs({
         />
       )}
       {tab === "llegadas" && canViewMarketingArrivals && (
-        <MarketingArrivalsPanel canConfirmDesign={canConfirmMarketingDesign} canConfirmAdvisor={canConfirmMarketingAdvisor} />
+        <MarketingArrivalsPanel canConfirmAdvisor={canConfirmMarketingAdvisor} />
       )}
+      {tab === "nuevos-ids" && canViewMarketingArrivals && <NewIdBrandingPanel />}
       {tab === "inventario" && canManageInventoryControl && inventoryControlData && (
         <InventoryControlPanel
           currentPeriodDefault={inventoryControlData.currentPeriod}

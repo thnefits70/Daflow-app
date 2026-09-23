@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Camera, ClipboardCheck, CheckCircle2, Search } from "lucide-react";
+import { ClipboardCheck, CheckCircle2, Search } from "lucide-react";
 import { actorName } from "@/lib/actorName";
 import { TabGuide } from "@/components/shared/TabGuide";
 import { formatDateTime } from "@/lib/formatDateTime";
@@ -69,7 +69,10 @@ function ConfirmButton({ label, icon, onConfirm, busy }: { label: string; icon: 
 // todavía no ha confirmado, ordenado de lo más antiguo a lo más nuevo para
 // priorizar. Sin filtro (Todos), el orden por defecto sigue siendo lo más
 // reciente arriba.
-export function MarketingArrivalsPanel({ canConfirmDesign, canConfirmAdvisor }: { canConfirmDesign: boolean; canConfirmAdvisor: boolean }) {
+// Confirmado 2026-09-23, pedido de Robert: el brandeo (antes "Diseño de marca"
+// acá, una vez por cada llegada) se movió a la pestaña "Nuevos IDs por
+// brandear", una sola vez por producto. Acá queda solo la parte del asesor.
+export function MarketingArrivalsPanel({ canConfirmAdvisor }: { canConfirmAdvisor: boolean }) {
   const [rows, setRows] = useState<Row[] | null>(null);
   const [confirmers, setConfirmers] = useState<Confirmer[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -81,7 +84,7 @@ export function MarketingArrivalsPanel({ canConfirmDesign, canConfirmAdvisor }: 
       .then((r) => (r.ok ? r.json() : { rows: [], confirmers: [] }))
       .then((data) => {
         setRows(data.rows ?? []);
-        setConfirmers(data.confirmers ?? []);
+        setConfirmers((data.confirmers ?? []).filter((c: Confirmer) => c.role === "advisor"));
       })
       .catch(() => {
         setRows([]);
@@ -90,9 +93,9 @@ export function MarketingArrivalsPanel({ canConfirmDesign, canConfirmAdvisor }: 
   }
   useEffect(load, []);
 
-  async function confirm(kind: "design" | "advisor", requestId: string) {
+  async function confirm(requestId: string) {
     setBusyId(requestId);
-    await fetch(`/api/marketing-arrivals/${requestId}/confirm-${kind}`, { method: "POST" }).catch(() => null);
+    await fetch(`/api/marketing-arrivals/${requestId}/confirm-advisor`, { method: "POST" }).catch(() => null);
     setBusyId(null);
     load();
   }
@@ -126,10 +129,10 @@ export function MarketingArrivalsPanel({ canConfirmDesign, canConfirmAdvisor }: 
   return (
     <div className="flex flex-col gap-3">
       <TabGuide storageKey="mercaderia-recibida">
-        {canConfirmDesign || canConfirmAdvisor ? (
-          <>Acá aparece cada producto nuevo que llegó a bodega. Confirma tu parte (diseño o asesor, según te toque) cuando ya la hiciste — el filtro de arriba te muestra solo lo que tienes pendiente.</>
+        {canConfirmAdvisor ? (
+          <>Acá aparece cada producto que llegó a bodega. Confirma tu parte de asesor cuando ya la hiciste — el filtro de arriba te muestra solo lo que tienes pendiente. El brandeo ahora está en la pestaña &quot;Nuevos IDs por brandear&quot;.</>
         ) : (
-          <>Vista de solo lectura de la mercadería nueva que va llegando y en qué paso va: confirmación de diseño y confirmación de asesor.</>
+          <>Vista de solo lectura de la mercadería que va llegando y si el asesor ya la confirmó. El brandeo de productos nuevos está en la pestaña &quot;Nuevos IDs por brandear&quot;.</>
         )}
       </TabGuide>
       <div className="relative" style={{ maxWidth: 320 }}>
@@ -204,23 +207,7 @@ export function MarketingArrivalsPanel({ canConfirmDesign, canConfirmAdvisor }: 
               <PhotoRow label="Llegó así — foto real de esta recepción" urls={r.receipt?.photoUrls ?? []} />
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-3 border-t border-rule">
-              <div>
-                <div className="text-[11px] font-semibold text-ink mb-0.5">Diseño de marca</div>
-                <div className="text-[10.5px] text-steel mb-2">Fotos reales brandeadas + video publicitario en el catálogo de Drive.</div>
-                {fu?.designConfirmedAt ? (
-                  <div className="flex items-center gap-1.5 text-[12px] text-teal">
-                    <CheckCircle2 size={14} /> Confirmado — {actorName(fu.designConfirmedBy?.name)} · {formatDateTime(fu.designConfirmedAt)}
-                  </div>
-                ) : canConfirmDesign ? (
-                  <ConfirmButton label="Confirmar fotos y video subidos" icon={<Camera size={14} />} busy={busyId === r.id} onConfirm={() => confirm("design", r.id)} />
-                ) : (
-                  <div className="flex items-center gap-1.5 text-[12px] text-steel">
-                    <Camera size={14} /> Todavía pendiente
-                  </div>
-                )}
-              </div>
-
+            <div className="pt-3 border-t border-rule">
               <div>
                 <div className="text-[11px] font-semibold text-ink mb-0.5">Asesor de marca</div>
                 <div className="text-[10.5px] text-steel mb-2">Verificar stock, precio de venta, descripción y Dropi.</div>
@@ -229,7 +216,7 @@ export function MarketingArrivalsPanel({ canConfirmDesign, canConfirmAdvisor }: 
                     <CheckCircle2 size={14} /> Confirmado — {actorName(fu.advisorConfirmedBy?.name)}{fu.advisorConfirmedBy?.marketingAdvisorBrand ? ` (${fu.advisorConfirmedBy.marketingAdvisorBrand})` : ""} · {formatDateTime(fu.advisorConfirmedAt)}
                   </div>
                 ) : canConfirmAdvisor ? (
-                  <ConfirmButton label="Confirmar stock, precio, descripción y Dropi" icon={<ClipboardCheck size={14} />} busy={busyId === r.id} onConfirm={() => confirm("advisor", r.id)} />
+                  <ConfirmButton label="Confirmar stock, precio, descripción y Dropi" icon={<ClipboardCheck size={14} />} busy={busyId === r.id} onConfirm={() => confirm(r.id)} />
                 ) : (
                   <div className="flex items-center gap-1.5 text-[12px] text-steel">
                     <ClipboardCheck size={14} /> Todavía pendiente

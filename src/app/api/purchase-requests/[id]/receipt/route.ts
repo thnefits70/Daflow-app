@@ -5,6 +5,7 @@ import { auth } from "@/auth";
 import { canReceivePurchasesTeam, canActOnPurchaseReceiving, getInventoryLeadId } from "@/lib/guards";
 import { notifyOwner } from "@/lib/notifications";
 import { getMarketingArrivalActorIds, getMarketingArrivalDispatchViewerIds } from "@/lib/marketingArrivals";
+import { isCatalogItemBranded, getNewIdBrandingActorIds } from "@/lib/newIdBranding";
 
 const schema = z.object({
   receivedQuantity: z.number().int().nonnegative(),
@@ -146,14 +147,16 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // desde approve-receipt/route.ts (ver comentario arriba) — mismo contenido
   // y destinatarios que antes, solo que ahora sale apenas bodega registra.
   const arrivalBody = `${existing.catalogItem.name} · ${parsed.data.receivedQuantity} un.`;
+  // Confirmado 2026-09-23, pedido de Robert: el brandeo es una sola vez por
+  // producto — si ya se brandeó antes, esta llegada repetida no le pide nada.
   const [designIds, advisorIds, dispatchIds] = await Promise.all([
-    getMarketingArrivalActorIds("design"),
+    isCatalogItemBranded(existing.catalogItemId).then((done) => (done ? [] : getNewIdBrandingActorIds())),
     getMarketingArrivalActorIds("advisor"),
     getMarketingArrivalDispatchViewerIds(),
   ]);
   await Promise.all([
     ...designIds.map((uid) =>
-      notifyOwner(uid, { title: "Llegó mercadería a bodega", body: arrivalBody, url: "/area/workspace?tab=llegadas" })
+      notifyOwner(uid, { title: "Nuevo ID por brandear", body: arrivalBody, url: "/area/workspace?tab=nuevos-ids" })
     ),
     ...advisorIds.map((uid) =>
       notifyOwner(uid, { title: "Llegó mercadería a bodega", body: arrivalBody, url: "/area/workspace?tab=llegadas" })

@@ -9,6 +9,7 @@ import { isEndOfMonthQuincena, monthOfPeriod } from "@/lib/payrollCalc";
 import { getMarketingLeadId } from "@/lib/guards";
 import { NICHO_AUTO_MONTHLY_BUDGET_USD } from "@/lib/nichoAi";
 import { getReadyToBuyPendingProposalIds } from "@/lib/marketProduct";
+import { getNewIdBrandingBoard } from "@/lib/newIdBranding";
 
 // ---------------- Date helpers ----------------
 // Deadline rule confirmed by the user 2026-07-20: work week is Mon-Sat, and
@@ -449,7 +450,7 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   plan_mejora_cierre_aprobacion: "Plan de Mejora — cierre de un líder por aprobar",
   analisis_mercado_aprobacion: "Análisis de Mercado — propuestas por aprobar",
   analisis_mercado_listo_comprar: "Análisis de Mercado — productos listos para comprar",
-  analisis_mercado_brandear: "Análisis de Mercado — productos por brandear",
+  analisis_mercado_brandear: "Nuevos IDs por brandear",
 };
 
 // "colaborador_del_mes" es obligatorio — confirmado 2026-08-05: a diferencia
@@ -1239,19 +1240,19 @@ async function getMarketProductReadyToBuyPendingItem(href: string): Promise<Pend
 // del aviso que le llega a Robert (canBrandMarketProduct) apenas Heidy
 // confirma el ID de Dropi (ver publish/route.ts) — mismo filtro que su
 // pestaña "Brandear" (view=brand en api/market-products/route.ts).
+// Confirmado 2026-09-23: ahora cuenta los "Nuevos IDs por brandear" (propuestas
+// con ID de Dropi + productos que llegan por primera vez), ya no solo las
+// propuestas, y le aparece también a Robert (canConfirmMarketingDesign).
 async function getMarketProductBrandPendingItem(href: string): Promise<PendingItem | null> {
-  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
-  const rows = await prisma.marketProductProposal.findMany({
-    where: { publishedAt: { not: null }, brandedAt: null },
-    select: { publishedAt: true },
-  });
+  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const { pending: rows } = await getNewIdBrandingBoard();
   if (rows.length === 0) return null;
-  const overdue = rows.some((r) => r.publishedAt! < cutoff);
+  const overdue = rows.some((r) => r.since !== "" && r.since < cutoff);
 
   return {
     type: "analisis_mercado_brandear",
     icon: "🎨",
-    label: "Productos por brandear",
+    label: "Nuevos IDs por brandear",
     meta: `${rows.length} producto${rows.length === 1 ? "" : "s"}${overdue ? " · atrasado" : ""}`,
     overdue,
     href,
@@ -2746,6 +2747,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       canManagePurchases: true,
       canApprovePurchaseRequests: true,
       canBrandMarketProduct: true,
+      canConfirmMarketingDesign: true,
       canResolveSupplierStockout: true,
       leadsDept: { select: { code: true, name: true, trackWeeklyMetric: true } },
       department: { select: { code: true } },
@@ -2798,8 +2800,8 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       const marketProductReadyToBuyItem = await getMarketProductReadyToBuyPendingItem("/area/workspace?tab=analisis-mercado");
       if (marketProductReadyToBuyItem) teamItems.push(marketProductReadyToBuyItem);
     }
-    if (me.canBrandMarketProduct) {
-      const marketProductBrandItem = await getMarketProductBrandPendingItem("/area/workspace?tab=analisis-mercado");
+    if (me.canBrandMarketProduct || me.canConfirmMarketingDesign) {
+      const marketProductBrandItem = await getMarketProductBrandPendingItem("/area/workspace?tab=nuevos-ids");
       if (marketProductBrandItem) teamItems.push(marketProductBrandItem);
     }
     // Confirmado 2026-09-23, pedido de Jariel: Heidy resuelve "Sin stock de
@@ -2944,8 +2946,8 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     if (supplierStockoutItem) items.push(supplierStockoutItem);
   }
 
-  if (me.canBrandMarketProduct) {
-    const marketProductBrandItem = await getMarketProductBrandPendingItem("/area/workspace?tab=analisis-mercado");
+  if (me.canBrandMarketProduct || me.canConfirmMarketingDesign) {
+    const marketProductBrandItem = await getMarketProductBrandPendingItem("/area/workspace?tab=nuevos-ids");
     if (marketProductBrandItem) items.push(marketProductBrandItem);
   }
 
@@ -3030,6 +3032,7 @@ export async function getPossiblePendingTypesForActor(
         canManagePurchases: true,
         canApprovePurchaseRequests: true,
         canBrandMarketProduct: true,
+        canConfirmMarketingDesign: true,
         leadsDept: { select: { code: true, trackWeeklyMetric: true } },
         department: { select: { code: true } },
       },
@@ -3047,12 +3050,12 @@ export async function getPossiblePendingTypesForActor(
       // Confirmado 2026-09-18: Jariel es miembro de MKT (canProposeMarketProduct)
       // pero no su líder — mismo criterio que el resto de este bloque.
       if (me.department?.code === "MKT") types.push("analisis_mercado_listo_comprar");
-      if (me.canBrandMarketProduct) types.push("analisis_mercado_brandear");
+      if (me.canBrandMarketProduct || me.canConfirmMarketingDesign) types.push("analisis_mercado_brandear");
       return types.map((type) => ({ type, label: PENDING_TYPE_CATALOG[type] }));
     }
 
     types.push("cumpleanos", "plan_mejora_evaluacion_pendiente", "plan_mejora_etapa_vencida");
-    if (me.canBrandMarketProduct) types.push("analisis_mercado_brandear");
+    if (me.canBrandMarketProduct || me.canConfirmMarketingDesign) types.push("analisis_mercado_brandear");
     if (me.leadsDept.code === "FIN") {
       types.push("roles_de_pago", "tasa_devolucion", "kpi_garantias", "pagos_recordatorios", "servicio_postventa", "caja_chica_saldo", "caja_chica_confirmacion", "descuentos_sin_aceptar", "compras_personales_precio", "compras_personales_cierre", "reingreso_mercaderia_verificacion_semanal", "nomina_transferencia", "iess_transferencia");
     }

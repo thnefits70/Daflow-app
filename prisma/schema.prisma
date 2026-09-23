@@ -394,6 +394,8 @@ model User {
   marketProductProposalsReviewed                   MarketProductProposal[]               @relation("MarketProductProposalReviewedBy")
   marketProductProposalsPublished                  MarketProductProposal[]               @relation("MarketProductProposalPublishedBy")
   marketProductProposalsBranded                    MarketProductProposal[]               @relation("MarketProductProposalBrandedBy")
+  newIdBrandingsBranded                            NewIdBranding[]                       @relation("NewIdBrandingBrandedBy")
+  newIdBrandingsChannelUploaded                    NewIdBranding[]                       @relation("NewIdBrandingChannelUploadedBy")
   marketProductProposalsMarkedReadyToBuy           MarketProductProposal[]               @relation("MarketProductProposalReadyToBuyBy")
   marketProductProposalsKardexReleased             MarketProductProposal[]               @relation("MarketProductProposalKardexReleasedBy")
   unfoundWinningProductsCreated                    UnfoundWinningProduct[]               @relation("UnfoundWinningProductCreatedBy")
@@ -1884,6 +1886,8 @@ model PurchaseCatalogItem {
   // Confirmado 2026-09-23: reportes de Compras de que este producto ya no
   // se consigue con ningún proveedor (ver SupplierStockoutReport).
   supplierStockoutReports        SupplierStockoutReport[]
+  // Confirmado 2026-09-23: brandeo del ID (ver NewIdBranding).
+  newIdBranding                  NewIdBranding?
 }
 
 enum AtomRentabilityStatus {
@@ -2139,6 +2143,7 @@ model MarketProductProposal {
   // descripción, ya no lo crea.
   catalogItemId String?              @unique
   catalogItem   PurchaseCatalogItem? @relation(fields: [catalogItemId], references: [id], onDelete: SetNull)
+  newIdBranding NewIdBranding?
 
   // Confirmado 2026-09-18: liberación final de Bryan — recién acá se le pone
   // el justCode real (el dropiProductId que Heidy confirmó) al catálogo y se
@@ -3071,6 +3076,39 @@ model SupplierDebtTransfer {
 // confirmó (ver src/lib/marketingArrivals.ts), nunca usada para filtrar ni
 // bloquear. Bryan (líder del área) nunca confirma nada acá — solo supervisa
 // viendo el estado de todos.
+// Confirmado 2026-09-23, pedido de Robert: "Nuevos IDs por brandear" es su
+// propia sección, separada de Mercadería recibida — cada producto se brandea
+// UNA sola vez (las llegadas repetidas ya no le piden nada a Robert). Guarda
+// las fotos reales brandeadas + video(s) para el historial, y la casilla de
+// "ya subido al canal de la marca". Un ID es catalogItemId (lo que llegó a
+// bodega) o proposalId (propuesta de Análisis de Mercado con ID de Dropi que
+// todavía no tiene catálogo propio). Productos brandeados ANTES de esta
+// sección (PurchaseReceiptFollowUp.designConfirmedAt / proposal.brandedAt)
+// cuentan como hechos sin fila acá; la fila se crea recién si se marca el
+// canal.
+model NewIdBranding {
+  id String @id @default(cuid())
+
+  catalogItemId String?                @unique
+  catalogItem   PurchaseCatalogItem?   @relation(fields: [catalogItemId], references: [id], onDelete: Cascade)
+  proposalId    String?                @unique
+  proposal      MarketProductProposal? @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+
+  photos    String[]
+  // Videos subidos a DAFLOW o enlaces de Drive (para videos de más de 50MB).
+  videoUrls String[]
+
+  brandedAt   DateTime?
+  brandedById String?
+  brandedBy   User?     @relation("NewIdBrandingBrandedBy", fields: [brandedById], references: [id], onDelete: SetNull)
+
+  channelUploadedAt   DateTime?
+  channelUploadedById String?
+  channelUploadedBy   User?     @relation("NewIdBrandingChannelUploadedBy", fields: [channelUploadedById], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+}
+
 model PurchaseReceiptFollowUp {
   id        String          @id @default(cuid())
   requestId String          @unique

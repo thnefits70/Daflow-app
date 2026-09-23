@@ -57,6 +57,9 @@ function playChime() {
 export function MarketingArrivalAlert({ canConfirmDesign, canConfirmAdvisor }: { canConfirmDesign: boolean; canConfirmAdvisor: boolean }) {
   const router = useRouter();
   const [newCount, setNewCount] = useState(0);
+  // Confirmado 2026-09-23: los "Nuevos IDs por brandear" (claves "c:"/"p:")
+  // llevan a su propia pestaña; el resto sigue yendo a Mercadería recibida.
+  const [newIdCount, setNewIdCount] = useState(0);
   const seenRef = useRef<Set<string> | null>(null);
   const firstPollRef = useRef(true);
 
@@ -68,7 +71,8 @@ export function MarketingArrivalAlert({ canConfirmDesign, canConfirmAdvisor }: {
       const res = await fetch("/api/marketing-arrivals/pending-count").catch(() => null);
       if (!res?.ok) return;
       const data = await res.json().catch(() => null);
-      const ids: string[] = data?.pendingIds ?? [];
+      const newIdIds: string[] = data?.newIdIds ?? [];
+      const ids: string[] = [...(data?.pendingIds ?? []), ...newIdIds];
       const seen = seenRef.current!;
 
       if (firstPollRef.current) {
@@ -84,7 +88,9 @@ export function MarketingArrivalAlert({ canConfirmDesign, canConfirmAdvisor }: {
       if (fresh.length > 0) {
         ids.forEach((id) => seen.add(id));
         saveSeen(seen);
-        setNewCount((n) => n + fresh.length);
+        const freshNewIds = fresh.filter((id) => newIdIds.includes(id)).length;
+        setNewIdCount((n) => n + freshNewIds);
+        setNewCount((n) => n + fresh.length - freshNewIds);
         playChime();
       }
     }
@@ -94,22 +100,26 @@ export function MarketingArrivalAlert({ canConfirmDesign, canConfirmAdvisor }: {
     return () => clearInterval(interval);
   }, [canConfirmDesign, canConfirmAdvisor]);
 
-  if (newCount === 0) return null;
+  if (newCount === 0 && newIdCount === 0) return null;
+  const dismiss = () => { setNewCount(0); setNewIdCount(0); };
+  const goToNewIds = newIdCount > 0 && newCount === 0;
 
   return (
     <div className="fixed bottom-5 right-5 z-50 bg-navy border border-teal/50 rounded-md shadow-lg px-4 py-3 flex items-center gap-3 max-w-xs">
       <PackageCheck size={20} className="text-teal shrink-0" />
       <div className="flex-1 text-[12.5px] text-white">
-        {newCount === 1 ? "Llegó mercadería nueva a bodega" : `Llegaron ${newCount} mercaderías nuevas a bodega`}
+        {goToNewIds
+          ? newIdCount === 1 ? "Hay un nuevo ID por brandear" : `Hay ${newIdCount} nuevos IDs por brandear`
+          : newCount + newIdCount === 1 ? "Llegó mercadería nueva a bodega" : `Llegaron ${newCount + newIdCount} mercaderías nuevas a bodega`}
         <button
           type="button"
           className="block text-teal font-semibold underline cursor-pointer mt-0.5"
-          onClick={() => { setNewCount(0); router.push("/area/workspace?tab=llegadas"); }}
+          onClick={() => { dismiss(); router.push(goToNewIds ? "/area/workspace?tab=nuevos-ids" : "/area/workspace?tab=llegadas"); }}
         >
           Ver detalles
         </button>
       </div>
-      <button type="button" className="text-steel hover:text-white cursor-pointer shrink-0" onClick={() => setNewCount(0)}>
+      <button type="button" className="text-steel hover:text-white cursor-pointer shrink-0" onClick={dismiss}>
         <X size={14} />
       </button>
     </div>

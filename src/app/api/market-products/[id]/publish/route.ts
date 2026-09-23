@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { canPublishMarketProduct } from "@/lib/guards";
 import { notifyOwner } from "@/lib/notifications";
+import { getNewIdBrandingActorIds } from "@/lib/newIdBranding";
 
 const schema = z.object({
   quantity: z.number().int().positive().default(100),
@@ -59,13 +60,16 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // instante (ID ya confirmado por Heidy) Robert se entera de que ya puede
   // brandear — antes solo lo veía si abría la pestaña "Brandear" por su
   // cuenta. Se avisa a todos los que tengan el permiso, no por nombre.
-  const brandUsers = await prisma.user.findMany({ where: { canBrandMarketProduct: true, isActive: true }, select: { id: true } });
+  // Confirmado 2026-09-23: el brandeo ahora vive en "Nuevos IDs por brandear"
+  // y le llega a quien brandea (Robert tiene canConfirmMarketingDesign, no el
+  // flag viejo canBrandMarketProduct, así que antes este aviso no le llegaba).
+  const brandUserIds = await getNewIdBrandingActorIds();
   await Promise.all(
-    brandUsers.map((u) =>
-      notifyOwner(u.id, {
+    brandUserIds.map((uid) =>
+      notifyOwner(uid, {
         title: "Nuevo producto para brandear",
-        body: `${existing.productName} — ID Dropi ${parsed.data.dropiProductId}. Sube las 3 fotos brandeadas.`,
-        url: "/area/workspace?tab=analisis-mercado",
+        body: `${existing.productName} — ID Dropi ${parsed.data.dropiProductId}. Sube las fotos y el video brandeados.`,
+        url: "/area/workspace?tab=nuevos-ids",
       }).catch(() => null)
     )
   );

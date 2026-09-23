@@ -26,6 +26,7 @@ import {
   canBrandMarketProduct,
   canManageOutflowPurchaseGestion,
 } from "@/lib/guards";
+import { canBrandNewIds } from "@/lib/newIdBranding";
 
 // Confirmado 2026-08-03: bug real — ninguna de estas carpetas de Control de
 // Compras (cotización, orden de compra, fotos de catálogo, comprobante de
@@ -199,6 +200,10 @@ export async function POST(req: NextRequest) {
   }
   if (!allowed && session?.user.role === "employee" && folder === "market-product-branding") {
     allowed = await canBrandMarketProduct();
+  }
+  // Confirmado 2026-09-23: fotos y videos brandeados de "Nuevos IDs por brandear".
+  if (!allowed && session?.user.role === "employee" && folder === "new-id-branding") {
+    allowed = await canBrandNewIds();
   }
   // Adjuntos del chat de Roles de pago — cualquier colaborador puede subir
   // aquí; el permiso real (poder escribir en ESE hilo puntual) se valida al
