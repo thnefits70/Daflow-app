@@ -3,7 +3,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { TopLine } from "@/components/ui/TopLine";
 import { DeptWorkspaceTabs } from "@/components/dept/DeptWorkspaceTabs";
-import { getUnseenFeedbackCount, canManageStoreFeedback as checkCanManageStoreFeedback, canViewStoreFeedback as checkCanViewStoreFeedback, canSubmitPurchaseRequests, canViewOwnPurchaseHistory, canCreateNewPurchaseRequests, canSubmitEmergencyPurchaseRequest, canApprovePurchaseRequests as checkCanApprovePurchaseRequests, canActOnPurchaseApproval as checkCanActOnPurchaseApproval, canConfirmPurchaseReceiving, canReceivePurchasesTeam, canActOnPurchaseReceiving, canRegisterPurchaseInvoices, canPayMerchandisePurchases, canManageSupplierDebtPayments, canManageInventoryControl as checkCanManageInventoryControl, canViewInventoryKpisPanel as checkCanViewInventoryKpisPanel, canManageAdminPayments as checkCanManageAdminPayments, canRegisterLunchPayments as checkCanRegisterLunchPayments, canViewMarketingArrivals as checkCanViewMarketingArrivals, canConfirmMarketingDesign as checkCanConfirmMarketingDesign, canConfirmMarketingAdvisor as checkCanConfirmMarketingAdvisor, canSyncAtomData as checkCanSyncAtomData, canUploadLowRotationList as checkCanUploadLowRotationList, canApproveComboSuggestions as checkCanApproveComboSuggestions, canActOnComboSuggestions as checkCanActOnComboSuggestions, canMarkComboCreatedInDropi as checkCanMarkComboCreatedInDropi, canProposeMarketProduct, canReviewMarketProduct, canActOnMarketProductReview, canPublishMarketProduct, canBrandMarketProduct, canDecideMarketProductPurchase, canViewB2BPricing, canViewB2CPricing, canCaptureMerchandiseReentry, canApproveMerchandiseReentry, canActOnMerchandiseReentry, canCloseMerchandiseReentry, canVerifyDamageDisposal, canManageJustUpload, canManageJustCatalog, canViewStockLevels, canCaptureMerchandiseOutflow, canActOnMerchandiseOutflow, canViewMerchandiseOutflow, canConfirmSupplierExchangeFinanceWriteOff, canManageOutflowPurchaseGestion, canSubmitCancelledGuide, canManageCancelledGuideBatches, canConfirmCancelledGuideFulfillmentRemoval, canAssignCancelledGuideItems, canSubmitFulfillmentRequest, canViewFulfillmentRequests, canDeclareExternalSales, canReviewExternalSales, canConfirmExternalSalePayment, canInvoiceExternalSale, canAssignExternalSalePack, canPackExternalSale, canCloseExternalSale, canViewExternalSales, getSupplierAccess, canAddSupplierBankAccounts, canJustifyFillRate as checkCanJustifyFillRate, canManageImprovementPlan } from "@/lib/guards";
+import { getUnseenFeedbackCount, canManageStoreFeedback as checkCanManageStoreFeedback, canViewStoreFeedback as checkCanViewStoreFeedback, canSubmitPurchaseRequests, canViewOwnPurchaseHistory, canCreateNewPurchaseRequests, canSubmitEmergencyPurchaseRequest, canApprovePurchaseRequests as checkCanApprovePurchaseRequests, canActOnPurchaseApproval as checkCanActOnPurchaseApproval, canConfirmPurchaseReceiving, canReceivePurchasesTeam, canActOnPurchaseReceiving, canRegisterPurchaseInvoices, canPayMerchandisePurchases, canManageSupplierDebtPayments, canManageInventoryControl as checkCanManageInventoryControl, canViewInventoryKpisPanel as checkCanViewInventoryKpisPanel, canManageAdminPayments as checkCanManageAdminPayments, canRegisterLunchPayments as checkCanRegisterLunchPayments, canViewMarketingArrivals as checkCanViewMarketingArrivals, canConfirmMarketingDesign as checkCanConfirmMarketingDesign, canConfirmMarketingAdvisor as checkCanConfirmMarketingAdvisor, canSyncAtomData as checkCanSyncAtomData, canUploadLowRotationList as checkCanUploadLowRotationList, canApproveComboSuggestions as checkCanApproveComboSuggestions, canActOnComboSuggestions as checkCanActOnComboSuggestions, canMarkComboCreatedInDropi as checkCanMarkComboCreatedInDropi, canProposeMarketProduct, canReviewMarketProduct, canActOnMarketProductReview, canPublishMarketProduct, canBrandMarketProduct, canDecideMarketProductPurchase, canViewB2BPricing, canViewB2CPricing, canReportSupplierStockout as checkCanReportSupplierStockout, canResolveSupplierStockout as checkCanResolveSupplierStockout, canCaptureMerchandiseReentry, canApproveMerchandiseReentry, canActOnMerchandiseReentry, canCloseMerchandiseReentry, canVerifyDamageDisposal, canManageJustUpload, canManageJustCatalog, canViewStockLevels, canCaptureMerchandiseOutflow, canActOnMerchandiseOutflow, canViewMerchandiseOutflow, canConfirmSupplierExchangeFinanceWriteOff, canManageOutflowPurchaseGestion, canSubmitCancelledGuide, canManageCancelledGuideBatches, canConfirmCancelledGuideFulfillmentRemoval, canAssignCancelledGuideItems, canSubmitFulfillmentRequest, canViewFulfillmentRequests, canDeclareExternalSales, canReviewExternalSales, canConfirmExternalSalePayment, canInvoiceExternalSale, canAssignExternalSalePack, canPackExternalSale, canCloseExternalSale, canViewExternalSales, getSupplierAccess, canAddSupplierBankAccounts, canJustifyFillRate as checkCanJustifyFillRate, canManageImprovementPlan } from "@/lib/guards";
 import { getFinanceKpiData } from "@/lib/financeKpis";
 import { getDeptProcessDetail } from "@/lib/processDetail";
 import { getPaymentRemindersData } from "@/lib/paymentReminders";
@@ -62,6 +62,8 @@ export default async function WorkspacePage() {
     canDecideMarketProductPurchaseFlag,
     canViewB2BPricingFlag,
     canViewB2CPricingFlag,
+    canReportSupplierStockoutFlag,
+    canResolveSupplierStockoutFlag,
   ] = await Promise.all([
     canProposeMarketProduct(),
     canReviewMarketProduct(),
@@ -71,6 +73,8 @@ export default async function WorkspacePage() {
     canDecideMarketProductPurchase(),
     canViewB2BPricing(),
     canViewB2CPricing(),
+    checkCanReportSupplierStockout(),
+    checkCanResolveSupplierStockout(),
   ]);
 
   // Mismo patrón sin dept.code — Control de Compras (confirmado 2026-07-30:
@@ -408,6 +412,8 @@ export default async function WorkspacePage() {
         canDecideMarketProductPurchase={canDecideMarketProductPurchaseFlag}
         canViewB2BPricing={canViewB2BPricingFlag}
         canViewB2CPricing={canViewB2CPricingFlag}
+        canReportSupplierStockout={canReportSupplierStockoutFlag}
+        canResolveSupplierStockout={canResolveSupplierStockoutFlag}
         canManageImprovementPlan={canManageImprovementPlanFlag}
         preferredTab={currentUser?.defaultWorkspaceTab ?? null}
         isAdmin={false}

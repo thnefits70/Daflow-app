@@ -65,6 +65,7 @@ const updateSchema = z.object({
   canMarkComboCreatedInDropi: z.boolean().optional(),
   canPublishMarketProduct: z.boolean().optional(),
   canBrandMarketProduct: z.boolean().optional(),
+  canResolveSupplierStockout: z.boolean().optional(),
   canViewMarketingArrivalsForDispatch: z.boolean().optional(),
   marketingAdvisorBrand: z.string().nullable().optional(),
   canManageStoreFeedback: z.boolean().optional(),
@@ -148,6 +149,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (d.canMarkComboCreatedInDropi !== undefined) data.canMarkComboCreatedInDropi = d.canMarkComboCreatedInDropi;
   if (d.canPublishMarketProduct !== undefined) data.canPublishMarketProduct = d.canPublishMarketProduct;
   if (d.canBrandMarketProduct !== undefined) data.canBrandMarketProduct = d.canBrandMarketProduct;
+  if (d.canResolveSupplierStockout !== undefined) data.canResolveSupplierStockout = d.canResolveSupplierStockout;
   if (d.canViewMarketingArrivalsForDispatch !== undefined) data.canViewMarketingArrivalsForDispatch = d.canViewMarketingArrivalsForDispatch;
   if (d.marketingAdvisorBrand !== undefined) data.marketingAdvisorBrand = d.marketingAdvisorBrand;
   if (d.canManageStoreFeedback !== undefined) data.canManageStoreFeedback = d.canManageStoreFeedback;

@@ -331,6 +331,15 @@ model User {
   canPublishMarketProduct Boolean @default(false)
   canBrandMarketProduct   Boolean @default(false)
 
+  // Confirmado 2026-09-23, pedido de Jariel (vía el usuario): cuando Compras
+  // ya no consigue un producto con ningún proveedor, Jariel lo reporta (ver
+  // SupplierStockoutReport) para que quien decide cerrar el ID en Dropi o
+  // bajar el stock lo resuelva. Mismo patrón delegado y exclusivo que
+  // canPublishMarketProduct/canBrandMarketProduct — hoy Heidy vía este flag,
+  // Bryan entra por ser líder de MKT (sin flag propio, ver
+  // canResolveSupplierStockout en guards.ts). Ni siquiera admin actúa, solo ve.
+  canResolveSupplierStockout Boolean @default(false)
+
   // Confirmado 2026-09-14: pantalla de solo consulta "Consulta de precios" —
   // Jariel/Bryan ya ven B2B por su rol existente en Análisis de Mercado
   // (canProposeMarketProduct/canReviewMarketProduct); estos dos flags cubren
@@ -388,6 +397,8 @@ model User {
   marketProductProposalsMarkedReadyToBuy           MarketProductProposal[]               @relation("MarketProductProposalReadyToBuyBy")
   marketProductProposalsKardexReleased             MarketProductProposal[]               @relation("MarketProductProposalKardexReleasedBy")
   unfoundWinningProductsCreated                    UnfoundWinningProduct[]               @relation("UnfoundWinningProductCreatedBy")
+  supplierStockoutReportsReported                  SupplierStockoutReport[]              @relation("SupplierStockoutReportReportedBy")
+  supplierStockoutReportsResolved                  SupplierStockoutReport[]              @relation("SupplierStockoutReportResolvedBy")
   marketProductPriceChangesMade                    MarketProductPriceChange[]            @relation("MarketProductPriceChangeChangedBy")
   purchaseRequestsPaidBy                           PurchaseRequest[]                     @relation("PurchaseRequestPaidBy")
   purchaseRequestsInvoicedBy                       PurchaseRequest[]                     @relation("PurchaseRequestInvoicedBy")
@@ -1866,6 +1877,9 @@ model PurchaseCatalogItem {
   rocketCodeMappings             RocketCodeMapping[]
   fulfillmentRequestItems        FulfillmentRequestItem[]
   fulfillmentRequestVariantNotes FulfillmentRequestVariantNote[]
+  // Confirmado 2026-09-23: reportes de Compras de que este producto ya no
+  // se consigue con ningún proveedor (ver SupplierStockoutReport).
+  supplierStockoutReports        SupplierStockoutReport[]
 }
 
 enum AtomRentabilityStatus {
@@ -2185,6 +2199,44 @@ model UnfoundWinningProduct {
 
   @@index([status])
   @@index([weekYear, weekNumber])
+}
+
+// Confirmado 2026-09-23, pedido de Jariel (vía el usuario): cuando busca un
+// producto ya registrado y ningún proveedor lo tiene, lo reporta con un
+// clic para que Heidy/Bryan decidan cerrar el ID en Dropi o bajar el stock
+// a 0 — antes esto se avisaba por fuera del sistema (WhatsApp/llamada), sin
+// quedar registro.
+enum SupplierStockoutResolutionAction {
+  CLOSED_DROPI_ID
+  STOCK_ZEROED
+  OTHER
+}
+
+model SupplierStockoutReport {
+  id            String              @id @default(cuid())
+  catalogItemId String
+  catalogItem   PurchaseCatalogItem @relation(fields: [catalogItemId], references: [id], onDelete: Restrict)
+
+  // Mensaje libre de quien reporta (hoy Jariel), indicando a su equipo qué
+  // hacer — ej. "bajen el stock a 0" o "cierren este ID" — pedido explícito
+  // del usuario, no es un campo fijo, lo escribe él mismo al reportar.
+  instructionNote String
+
+  reportedById String
+  reportedBy   User     @relation("SupplierStockoutReportReportedBy", fields: [reportedById], references: [id], onDelete: Restrict)
+  reportedAt   DateTime @default(now())
+
+  // Lista fija (confirmado con el usuario) para poder contar después cuántas
+  // veces se cerró un ID vs. se bajó el stock. resolutionNote es obligatoria
+  // solo cuando resolution = OTHER (validado en el endpoint, no en el schema).
+  resolution     SupplierStockoutResolutionAction?
+  resolutionNote String?
+  resolvedById   String?
+  resolvedBy     User?     @relation("SupplierStockoutReportResolvedBy", fields: [resolvedById], references: [id], onDelete: SetNull)
+  resolvedAt     DateTime?
+
+  @@index([resolvedAt])
+  @@index([catalogItemId])
 }
 
 model MarketProductSupplierPrice {

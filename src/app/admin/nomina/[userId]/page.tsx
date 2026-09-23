@@ -55,6 +55,7 @@ export default async function NominaProfilePage({ params }: { params: Promise<{ 
         canMarkComboCreatedInDropi: user.canMarkComboCreatedInDropi,
         canPublishMarketProduct: user.canPublishMarketProduct,
         canBrandMarketProduct: user.canBrandMarketProduct,
+        canResolveSupplierStockout: user.canResolveSupplierStockout,
         canViewMarketingArrivalsForDispatch: user.canViewMarketingArrivalsForDispatch,
         marketingAdvisorBrand: user.marketingAdvisorBrand,
         canManageStoreFeedback: user.canManageStoreFeedback,

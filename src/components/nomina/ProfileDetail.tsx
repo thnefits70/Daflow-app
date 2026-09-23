@@ -61,6 +61,7 @@ type UserProfile = {
   canMarkComboCreatedInDropi: boolean;
   canPublishMarketProduct: boolean;
   canBrandMarketProduct: boolean;
+  canResolveSupplierStockout: boolean;
   canViewMarketingArrivalsForDispatch: boolean;
   marketingAdvisorBrand: string | null;
   canManageStoreFeedback: boolean;
@@ -954,6 +955,16 @@ export function ProfileDetail({
               Una vez publicado en Dropi, esta persona (hoy Robert) sube las fotos/video reales brandeados y marca el producto como terminado — esto lo matricula en el catálogo real.
             </div>
             <PermToggle value={p.canBrandMarketProduct} busy={busy} onChange={(v) => save({ canBrandMarketProduct: v })} />
+          </div>
+
+          <div className="bg-cloud border border-rule rounded p-3.5 mt-3.5">
+            <label className="flex items-center gap-1 mb-2 text-[10.5px] font-semibold uppercase tracking-wide text-steel">
+              <Truck size={11} /> ¿Resuelve reportes de &quot;Sin stock de proveedor&quot; (Análisis de Mercado)?
+            </label>
+            <div className="text-[11px] text-steel mb-2">
+              Cuando Compras (hoy Jariel) reporta que un producto ya no se consigue con ningún proveedor, esta persona (hoy Heidy) decide cerrar el ID en Dropi o bajar el stock a 0, y lo marca resuelto. Bryan también puede, por ser líder de Análisis de Mercado, sin necesitar este flag.
+            </div>
+            <PermToggle value={p.canResolveSupplierStockout} busy={busy} onChange={(v) => save({ canResolveSupplierStockout: v })} />
           </div>
 
           <div className="bg-cloud border border-rule rounded p-3.5 mt-3.5">

@@ -147,6 +147,8 @@ export function DeptWorkspaceTabs({
   canDecideMarketProductPurchase = false,
   canViewB2BPricing = false,
   canViewB2CPricing = false,
+  canReportSupplierStockout = false,
+  canResolveSupplierStockout = false,
   canAccessSuppliers = false,
   supplierList = [],
   supplierPending = [],
@@ -293,6 +295,10 @@ export function DeptWorkspaceTabs({
   canPublishMarketProduct?: boolean;
   canBrandMarketProduct?: boolean;
   canDecideMarketProductPurchase?: boolean;
+  // Sin stock de proveedor (2026-09-23) — reportar (hoy Jariel) y resolver
+  // (hoy Heidy/Bryan), ver guards.ts.
+  canReportSupplierStockout?: boolean;
+  canResolveSupplierStockout?: boolean;
   // Consulta de precios (2026-09-14) — Heidy/Yair ven B2B, Marcos ve B2C.
   canViewB2BPricing?: boolean;
   canViewB2CPricing?: boolean;
@@ -749,7 +755,14 @@ export function DeptWorkspaceTabs({
           canMarkCreated={canMarkComboCreatedInDropi}
         />
       )}
-      {tab === "analisis-mercado" && (canProposeMarketProduct || canReviewMarketProduct || canPublishMarketProduct || canBrandMarketProduct || canViewB2BPricing || canViewB2CPricing) && (
+      {tab === "analisis-mercado" &&
+        (canProposeMarketProduct ||
+          canReviewMarketProduct ||
+          canPublishMarketProduct ||
+          canBrandMarketProduct ||
+          canViewB2BPricing ||
+          canViewB2CPricing ||
+          canResolveSupplierStockout) && (
         <MarketProductPanel
           canPropose={canProposeMarketProduct}
           canReview={canReviewMarketProduct}
@@ -759,6 +772,8 @@ export function DeptWorkspaceTabs({
           canDecidePurchase={canDecideMarketProductPurchase}
           canViewB2BPricing={canViewB2BPricing}
           canViewB2CPricing={canViewB2CPricing}
+          canReportStockout={canReportSupplierStockout}
+          canResolveStockout={canResolveSupplierStockout}
         />
       )}
       {tab === "plan-mejora" && canManageImprovementPlan && <ImprovementPlanTeamPanel deptId={deptId} isAdmin={isAdmin} />}

@@ -8,6 +8,8 @@ import { usePasteFile } from "@/lib/usePasteFile";
 import { formatDateTime } from "@/lib/formatDateTime";
 import { useFormDraft } from "@/lib/useFormDraft";
 import { TabGuide } from "@/components/shared/TabGuide";
+import { ExpandableName } from "@/components/ui/ExpandableName";
+import { SupplierStockoutPanel } from "@/components/marketanalysis/SupplierStockoutPanel";
 
 type SupplierOption = { id: string; name: string; paymentMode: "PREPAGO" | "CREDITO" };
 
@@ -93,7 +95,7 @@ function computeCompetitorComparison(batchCost: number, batchUnits: number, frei
   };
 }
 
-type Tab = "proponer" | "ganadores" | "mispropuestas" | "listoparacomprar" | "consulta" | "aprobacion" | "publicar" | "brandear" | "trazabilidad";
+type Tab = "proponer" | "ganadores" | "sinstock" | "mispropuestas" | "listoparacomprar" | "consulta" | "aprobacion" | "publicar" | "brandear" | "trazabilidad";
 
 export function MarketProductPanel({
   canPropose,
@@ -104,6 +106,8 @@ export function MarketProductPanel({
   canDecidePurchase,
   canViewB2BPricing,
   canViewB2CPricing,
+  canReportStockout = false,
+  canResolveStockout = false,
 }: {
   canPropose: boolean;
   canReview: boolean;
@@ -113,12 +117,22 @@ export function MarketProductPanel({
   canDecidePurchase: boolean;
   canViewB2BPricing: boolean;
   canViewB2CPricing: boolean;
+  // Confirmado 2026-09-23, pedido de Jariel: reportar (hoy Jariel, vía
+  // canManagePurchases) y resolver (hoy Heidy/Bryan) un producto sin stock
+  // de proveedor — ver SupplierStockoutPanel.
+  canReportStockout?: boolean;
+  canResolveStockout?: boolean;
 }) {
   const tabs: { key: Tab; label: string }[] = [
     ...(canPropose ? [{ key: "proponer" as Tab, label: "Proponer" }] : []),
     // Confirmado 2026-09-22, pedido de Jariel: su lista de productos que ve
     // ganando en la competencia pero que todavía ningún proveedor tiene.
     ...(canPropose ? [{ key: "ganadores" as Tab, label: "Ganadores no encontrados" }] : []),
+    // Confirmado 2026-09-23, pedido de Jariel: lo contrario de "Ganadores" —
+    // un producto que YA se vende pero que dejó de conseguirse con
+    // cualquier proveedor. Visible para todo el equipo (mismo criterio que
+    // Ganadores); reportar/resolver quedan gateados aparte, dentro del panel.
+    ...(canPropose || canResolveStockout ? [{ key: "sinstock" as Tab, label: "Sin stock de proveedor" }] : []),
     // Confirmado 2026-09-10, pedido de Jariel: seguimiento de sus propios
     // productos propuestos (en qué van, quién los aprobó/rechazó, etc.) —
     // antes GET ?view=mine existía en la API pero ninguna pantalla lo
@@ -142,6 +156,15 @@ export function MarketProductPanel({
   ];
   const [tab, setTab] = useState<Tab>(tabs[0]?.key ?? "proponer");
   const [proposePrefill, setProposePrefill] = useState<ProposePrefill | null>(null);
+
+  // Confirmado 2026-09-23: el pendiente de Inicio de "Sin stock de
+  // proveedor" enlaza con ?ptab=sinstock — mismo patrón que ya usa
+  // PurchaseControlPanel para sus links de Pendientes.
+  useEffect(() => {
+    const ptab = new URLSearchParams(window.location.search).get("ptab");
+    if (ptab && tabs.some((t) => t.key === ptab)) setTab(ptab as Tab);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   if (tabs.length === 0) return <div className="text-steel text-[13.5px]">No tienes acceso a Análisis de Mercado.</div>;
 
@@ -171,6 +194,7 @@ export function MarketProductPanel({
           onPropose={(p) => { setProposePrefill(p); setTab("proponer"); }}
         />
       )}
+      {tab === "sinstock" && <SupplierStockoutPanel canReport={canReportStockout} canResolve={canResolveStockout} />}
       {tab === "mispropuestas" && <MyProposalsView />}
       {tab === "listoparacomprar" && <ReadyToBuyQueue />}
       {tab === "consulta" && <PricingConsultaTable />}
@@ -997,7 +1021,7 @@ function PricingConsultaTable() {
                   {r.isCombo && (
                     <span className="text-[9px] font-bold uppercase tracking-wide bg-blue/15 text-blue border border-blue/40 rounded-full px-1.5 py-0.5 shrink-0">Combo</span>
                   )}
-                  <span className="truncate">{r.name}</span>
+                  <ExpandableName text={r.name} />
                 </div>
                 {r.justCode && <div className="text-[10.5px] font-mono text-steel">{r.justCode}</div>}
               </div>

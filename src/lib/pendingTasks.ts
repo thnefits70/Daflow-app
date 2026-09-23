@@ -1476,6 +1476,28 @@ async function getPurchaseGestionPendingItem(href: string): Promise<PendingItem 
   };
 }
 
+// Confirmado 2026-09-23, pedido de Jariel (vía el usuario): productos que
+// Compras ya no consigue con ningún proveedor (ver SupplierStockoutReport),
+// pendientes de que Heidy/Bryan cierren el ID en Dropi o bajen el stock.
+// Company-wide, para quien de verdad pueda resolver (ver
+// canResolveSupplierStockout en guards.ts).
+export async function getSupplierStockoutPendingCount(): Promise<number> {
+  return prisma.supplierStockoutReport.count({ where: { resolvedAt: null } });
+}
+
+async function getSupplierStockoutPendingItem(href: string): Promise<PendingItem | null> {
+  const count = await getSupplierStockoutPendingCount();
+  if (count === 0) return null;
+  return {
+    type: "supplier_stockout_pendiente",
+    icon: "🚫",
+    label: "Producto sin stock de proveedor pendiente de resolver",
+    meta: `${count} producto${count === 1 ? "" : "s"}`,
+    overdue: false,
+    href,
+  };
+}
+
 // Confirmado 2026-09-17, pedido explícito del usuario: si quien gestiona no
 // encuentra ninguna compra real que respalde un reclamo, nunca se cierra
 // solo — pasa a admin como excepción (ver purchase-exception-decide/route.ts).
@@ -2893,6 +2915,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       canManagePurchases: true,
       canApprovePurchaseRequests: true,
       canBrandMarketProduct: true,
+      canResolveSupplierStockout: true,
       leadsDept: { select: { code: true, name: true, trackWeeklyMetric: true } },
       department: { select: { code: true } },
     },
@@ -2947,6 +2970,13 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     if (me.canBrandMarketProduct) {
       const marketProductBrandItem = await getMarketProductBrandPendingItem("/area/workspace?tab=analisis-mercado");
       if (marketProductBrandItem) teamItems.push(marketProductBrandItem);
+    }
+    // Confirmado 2026-09-23, pedido de Jariel: Heidy resuelve "Sin stock de
+    // proveedor" vía este flag delegado sin liderar ningún departamento —
+    // mismo criterio que canBrandMarketProduct arriba.
+    if (me.canResolveSupplierStockout) {
+      const supplierStockoutItem = await getSupplierStockoutPendingItem("/area/workspace?tab=analisis-mercado&ptab=sinstock");
+      if (supplierStockoutItem) teamItems.push(supplierStockoutItem);
     }
     // Confirmado 2026-09-03: Jariel (transición Bryan→Jariel en Compras) es
     // delegado vía canManagePurchases pero no lidera ningún departamento —
@@ -3089,6 +3119,11 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     if (marketProductReviewItem) items.push(marketProductReviewItem);
     const externalSaleReviewItem = await getExternalSaleReviewPendingItem("/area/workspace?tab=ventas-externas&etab=revision");
     if (externalSaleReviewItem) items.push(externalSaleReviewItem);
+    // Confirmado 2026-09-23, pedido de Jariel: Bryan resuelve "Sin stock de
+    // proveedor" por ser líder de MKT (ver canResolveSupplierStockout en
+    // guards.ts, que entra por liderazgo sin necesitar el flag delegado).
+    const supplierStockoutItem = await getSupplierStockoutPendingItem("/area/workspace?tab=analisis-mercado&ptab=sinstock");
+    if (supplierStockoutItem) items.push(supplierStockoutItem);
   }
 
   if (me.canBrandMarketProduct) {

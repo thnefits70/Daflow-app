@@ -251,6 +251,12 @@ export default async function DeptWorkspacePage({ params }: { params: Promise<{ 
         canDecideMarketProductPurchase={false}
         canViewB2BPricing={dept.code === "MKT"}
         canViewB2CPricing={false}
+        // Confirmado 2026-09-23: mismo criterio que canActOnMarketProductReview
+        // arriba — reportar/resolver "Sin stock de proveedor" son delegados y
+        // exclusivos (hoy Jariel/Heidy/Bryan), el admin viendo desde acá solo
+        // ve la pestaña en modo lectura.
+        canReportSupplierStockout={false}
+        canResolveSupplierStockout={false}
         // Plan de Mejora y Acompañamiento — confirmado 2026-09-10: admin
         // siempre puede gestionar cualquier plan de cualquier área (ver
         // canManageImprovementPlan en guards.ts), sin depender de dept.code.

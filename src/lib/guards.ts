@@ -1556,6 +1556,48 @@ export async function canDecideMarketProductPurchase() {
   return canActOnMarketProductReview();
 }
 
+// Confirmado 2026-09-23, pedido de Jariel (vía el usuario): reportar que un
+// producto ya no se consigue con ningún proveedor (ver SupplierStockoutReport)
+// es de quien gestiona Compras — hoy Jariel, mismo flag que
+// getPurchaseGestionManagerId. Admin puede reportar también, como respaldo
+// (a diferencia de la resolución, que sí es exclusiva — ver abajo).
+export async function canReportSupplierStockout() {
+  const session = await auth();
+  if (!session) return false;
+  if (session.user.role === "admin") return true;
+  const user = await prisma.user.findUnique({ where: { id: session.user.id }, select: { canManagePurchases: true } });
+  return !!user?.canManagePurchases;
+}
+
+// Marcar resuelto (cerré el ID en Dropi / bajé el stock) es exclusivo de
+// Heidy y Bryan — mismo patrón delegado y exclusivo que
+// canPublishMarketProduct/canBrandMarketProduct (ni siquiera admin actúa,
+// solo ve). Bryan entra por ser líder de MKT (mismo criterio que
+// canActOnMarketProductReview), Heidy por el flag nuevo.
+export async function canResolveSupplierStockout() {
+  const session = await auth();
+  if (!session) return false;
+  const user = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { isLeader: true, leadsDept: { select: { code: true } }, canResolveSupplierStockout: true },
+  });
+  if (user?.isLeader && user.leadsDept?.code === "MKT") return true;
+  return !!user?.canResolveSupplierStockout;
+}
+
+// A quién avisarle que hay un producto reportado sin stock de proveedor —
+// mismo patrón que getSupplierExchangeGestors (notifyItemAssigneesNewBatch):
+// líder de MKT + todos los que tengan el flag delegado, sin duplicar ids.
+export async function getSupplierStockoutResolverIds(): Promise<string[]> {
+  const [leadId, flagged] = await Promise.all([
+    getMarketingLeadId(),
+    prisma.user.findMany({ where: { canResolveSupplierStockout: true, isActive: true }, select: { id: true } }),
+  ]);
+  const ids = new Set(flagged.map((u) => u.id));
+  if (leadId) ids.add(leadId);
+  return [...ids];
+}
+
 // Confirmado con el usuario en la planificación de esta fase: después de
 // aprobada, solo quien propuso originalmente o admin puede seguir ajustando
 // margen/fulfillment/seguro — nunca el costo de compra en sí.

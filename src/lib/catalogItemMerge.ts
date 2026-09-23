@@ -235,6 +235,7 @@ export async function mergeCatalogItems(params: {
       await tx.expirationCohort.updateMany({ where: { catalogItemId: R }, data: { catalogItemId: O } });
       await tx.rocketCodeMapping.updateMany({ where: { catalogItemId: R }, data: { catalogItemId: O } });
       await tx.atomProductStatus.updateMany({ where: { matchedCatalogItemId: R }, data: { matchedCatalogItemId: O } });
+      await tx.supplierStockoutReport.updateMany({ where: { catalogItemId: R }, data: { catalogItemId: O } });
 
       // Combos: si un mismo combo ya traía los dos productos, se suman las
       // unidades en una sola línea en vez de dejar dos líneas del mismo producto.

@@ -943,17 +943,19 @@ export async function declareManualCost(params: {
 // (quantity 0, costo 0) de la carga inicial de INVESTOCK — esa sí se
 // borra junto con el producto, no cuenta como "rastro real".
 export async function checkCatalogItemDeletable(catalogItemId: string): Promise<{ deletable: true } | { deletable: false; reason: string }> {
-  const [purchaseCount, cohortCount, comboComponentCount, fulfillmentItemCount, kardexEntries] = await Promise.all([
+  const [purchaseCount, cohortCount, comboComponentCount, fulfillmentItemCount, stockoutReportCount, kardexEntries] = await Promise.all([
     prisma.purchaseRequest.count({ where: { catalogItemId } }),
     prisma.expirationCohort.count({ where: { catalogItemId } }),
     prisma.dropiComboComponent.count({ where: { catalogItemId } }),
     prisma.fulfillmentRequestItem.count({ where: { catalogItemId } }),
+    prisma.supplierStockoutReport.count({ where: { catalogItemId } }),
     prisma.stockKardexEntry.findMany({ where: { catalogItemId }, select: { type: true, quantity: true } }),
   ]);
   if (purchaseCount > 0) return { deletable: false, reason: "Este producto ya tiene compras registradas — no se puede eliminar sin perder ese historial." };
   if (cohortCount > 0) return { deletable: false, reason: "Este producto ya tiene lotes de caducidad registrados." };
   if (comboComponentCount > 0) return { deletable: false, reason: "Este producto es componente de un combo registrado." };
   if (fulfillmentItemCount > 0) return { deletable: false, reason: "Este producto ya se pidió en una solicitud de Fulfillment." };
+  if (stockoutReportCount > 0) return { deletable: false, reason: "Este producto ya tiene un reporte de sin stock de proveedor registrado." };
   if (!kardexEntries.every((e) => e.type === "SEED" && e.quantity === 0)) {
     return { deletable: false, reason: "Este producto ya tiene movimiento real en el Kardex." };
   }
@@ -977,17 +979,19 @@ async function findUnusedSkeletonCandidateIds(): Promise<UnusedSkeletonCandidate
   if (skeletons.length === 0) return [];
   const ids = skeletons.map((s) => s.id);
 
-  const [purchases, cohorts, comboComponents, fulfillmentItems, kardexEntries] = await Promise.all([
+  const [purchases, cohorts, comboComponents, fulfillmentItems, stockoutReports, kardexEntries] = await Promise.all([
     prisma.purchaseRequest.findMany({ where: { catalogItemId: { in: ids } }, select: { catalogItemId: true }, distinct: ["catalogItemId"] }),
     prisma.expirationCohort.findMany({ where: { catalogItemId: { in: ids } }, select: { catalogItemId: true }, distinct: ["catalogItemId"] }),
     prisma.dropiComboComponent.findMany({ where: { catalogItemId: { in: ids } }, select: { catalogItemId: true }, distinct: ["catalogItemId"] }),
     prisma.fulfillmentRequestItem.findMany({ where: { catalogItemId: { in: ids } }, select: { catalogItemId: true }, distinct: ["catalogItemId"] }),
+    prisma.supplierStockoutReport.findMany({ where: { catalogItemId: { in: ids } }, select: { catalogItemId: true }, distinct: ["catalogItemId"] }),
     prisma.stockKardexEntry.findMany({ where: { catalogItemId: { in: ids } }, select: { catalogItemId: true, type: true, quantity: true } }),
   ]);
   const purchasedIds = new Set(purchases.map((p) => p.catalogItemId));
   const cohortIds = new Set(cohorts.map((c) => c.catalogItemId));
   const comboIds = new Set(comboComponents.map((c) => c.catalogItemId));
   const fulfillmentIds = new Set(fulfillmentItems.map((f) => f.catalogItemId));
+  const stockoutReportIds = new Set(stockoutReports.map((r) => r.catalogItemId));
   const kardexByItem = new Map<string, { type: string; quantity: number }[]>();
   for (const e of kardexEntries) {
     const arr = kardexByItem.get(e.catalogItemId);
@@ -997,7 +1001,7 @@ async function findUnusedSkeletonCandidateIds(): Promise<UnusedSkeletonCandidate
 
   return skeletons
     .filter((s) => {
-      if (purchasedIds.has(s.id) || cohortIds.has(s.id) || comboIds.has(s.id) || fulfillmentIds.has(s.id)) return false;
+      if (purchasedIds.has(s.id) || cohortIds.has(s.id) || comboIds.has(s.id) || fulfillmentIds.has(s.id) || stockoutReportIds.has(s.id)) return false;
       const entries = kardexByItem.get(s.id) ?? [];
       return entries.every((e) => e.type === "SEED" && e.quantity === 0);
     })
