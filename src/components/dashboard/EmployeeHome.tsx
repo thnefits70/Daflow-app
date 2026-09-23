@@ -4,6 +4,7 @@ import { DailyQuoteBanner } from "./DailyQuoteBanner";
 import { PushOptIn } from "@/components/shared/PushOptIn";
 import { PendingTasksCard } from "./PendingTasksCard";
 import { DraftsPendingCard } from "./DraftsPendingCard";
+import { UnfoundWinnersCarousel } from "./UnfoundWinnersCarousel";
 import { PeriodicRemindersCard } from "./PeriodicRemindersCard";
 import { RecognitionPodium } from "@/components/recognition/RecognitionPodium";
 import { ScoreGauge } from "./ScoreGauge";
@@ -127,6 +128,7 @@ export function EmployeeHome({
         <div />
       </div>
 
+      <UnfoundWinnersCarousel />
       <PushOptIn />
       {showMaryShortcut && (
         <Link
