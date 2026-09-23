@@ -8,6 +8,7 @@ import { getFinanzasDeptId, recentInventorySnapshotPeriods, isSnapshotPeriodOver
 import { isEndOfMonthQuincena, monthOfPeriod } from "@/lib/payrollCalc";
 import { getMarketingLeadId } from "@/lib/guards";
 import { NICHO_AUTO_MONTHLY_BUDGET_USD } from "@/lib/nichoAi";
+import { getReadyToBuyPendingProposalIds } from "@/lib/marketProduct";
 
 // ---------------- Date helpers ----------------
 // Deadline rule confirmed by the user 2026-07-20: work week is Mon-Sat, and
@@ -1220,8 +1221,10 @@ async function getMarketProductReviewPendingItem(href: string): Promise<PendingI
 // compra real generada.
 async function getMarketProductReadyToBuyPendingItem(href: string): Promise<PendingItem | null> {
   const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const pendingIds = await getReadyToBuyPendingProposalIds();
+  if (pendingIds.length === 0) return null;
   const rows = await prisma.marketProductProposal.findMany({
-    where: { readyToBuyAt: { not: null }, purchaseRequests: { none: {} } },
+    where: { id: { in: pendingIds } },
     select: { readyToBuyAt: true },
   });
   if (rows.length === 0) return null;

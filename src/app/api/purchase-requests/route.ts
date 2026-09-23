@@ -3,6 +3,7 @@ import { randomUUID } from "crypto";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
+import { linkReadyToBuyProposalsToGroup } from "@/lib/marketProduct";
 import { canSubmitPurchaseRequests, canViewOwnPurchaseHistory, canCreateNewPurchaseRequests, canSubmitEmergencyPurchaseRequest, canApprovePurchaseRequests, canConfirmPurchaseReceiving, canRegisterPurchaseInvoices, getPurchaseApproverIds } from "@/lib/guards";
 import { checkPurchaseSubmission, purchaseSubmissionSchema, nextPurchaseRequestNumber, purchaseRequestInclude } from "@/lib/purchases";
 import { notifyOwner } from "@/lib/notifications";
@@ -396,6 +397,8 @@ export async function POST(req: NextRequest) {
       })
     )
   );
+
+  await linkReadyToBuyProposalsToGroup(groupId);
 
   const summary = d.items.length === 1 ? check.nameById.get(d.items[0].catalogItemId) : `${d.items.length} productos`;
 

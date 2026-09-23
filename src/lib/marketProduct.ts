@@ -404,3 +404,49 @@ export function computeProposalTraceability(p: {
     totalMinutes,
   };
 }
+
+// Confirmado 2026-09-23, reportado por el usuario: a Jariel le seguía
+// saliendo "Listo para comprar" (bandeja + aviso en Inicio) de productos que
+// ya había comprado (#87, #88, #89). La compra solo quedaba enlazada si se
+// entraba por el botón "Comprar en Control de Compras" SIN un borrador
+// guardado, y aun así solo con UN producto por solicitud. Ahora cuenta como
+// comprado también si existe cualquier solicitud (no rechazada) del mismo
+// artículo creada después de marcarse listo.
+export async function getReadyToBuyPendingProposalIds(): Promise<string[]> {
+  const rows = await prisma.marketProductProposal.findMany({
+    where: { readyToBuyAt: { not: null }, purchaseRequests: { none: {} } },
+    select: { id: true, catalogItemId: true, readyToBuyAt: true },
+  });
+  const catalogItemIds = rows.map((r) => r.catalogItemId).filter((id): id is string => !!id);
+  if (catalogItemIds.length === 0) return rows.map((r) => r.id);
+  const requests = await prisma.purchaseRequest.findMany({
+    where: { catalogItemId: { in: catalogItemIds }, status: { not: "REJECTED" } },
+    select: { catalogItemId: true, createdAt: true },
+  });
+  return rows
+    .filter((r) => !requests.some((pr) => pr.catalogItemId === r.catalogItemId && pr.createdAt >= r.readyToBuyAt!))
+    .map((r) => r.id);
+}
+
+// Mismo pedido: al crear una solicitud de compra, cada línea cuyo artículo
+// esté "listo para comprar" y todavía sin solicitud se enlaza sola a esa
+// propuesta — así la trazabilidad no depende de por dónde entró Jariel.
+export async function linkReadyToBuyProposalsToGroup(groupId: string): Promise<void> {
+  const requests = await prisma.purchaseRequest.findMany({
+    where: { groupId, marketProductProposalId: null },
+    select: { id: true, catalogItemId: true },
+  });
+  if (requests.length === 0) return;
+  const proposals = await prisma.marketProductProposal.findMany({
+    where: {
+      catalogItemId: { in: requests.map((r) => r.catalogItemId) },
+      readyToBuyAt: { not: null },
+      purchaseRequests: { none: {} },
+    },
+    select: { id: true, catalogItemId: true },
+  });
+  for (const p of proposals) {
+    const req = requests.find((r) => r.catalogItemId === p.catalogItemId);
+    if (req) await prisma.purchaseRequest.update({ where: { id: req.id }, data: { marketProductProposalId: p.id } });
+  }
+}
