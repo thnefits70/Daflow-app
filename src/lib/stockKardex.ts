@@ -530,13 +530,30 @@ async function findJustCutoverCandidates(): Promise<JustCutoverSyncRow[]> {
   });
   const latestByItem = new Map(latestPerItem.map((e) => [e.catalogItemId, e]));
 
+  // Corregido 2026-09-23, tercer bug real: un conteo físico
+  // (PHYSICAL_COUNT_ADJUSTMENT) hecho DESPUÉS del archivo de Just también es
+  // dato real y más nuevo — antes no contaba, y al volver a correr el corte
+  // el 23/09 se borraron 7 conteos físicos.
   const latestRealPerItem = await prisma.stockKardexEntry.findMany({
-    where: { catalogItemId: { in: ids }, type: { in: ["IN", "OUT"] }, quantity: { not: 0 } },
+    where: { catalogItemId: { in: ids }, type: { in: ["IN", "OUT", "PHYSICAL_COUNT_ADJUSTMENT"] }, quantity: { not: 0 } },
     distinct: ["catalogItemId"],
     orderBy: [{ catalogItemId: "asc" }, { occurredAt: "desc" }],
     select: { catalogItemId: true, occurredAt: true },
   });
   const latestRealOccurredAtByItem = new Map(latestRealPerItem.map((e) => [e.catalogItemId, e.occurredAt]));
+
+  // Mismo bug del 23/09: un costo declarado a mano (COST_DECLARATION)
+  // después del archivo de Just es más nuevo que el costo de Just — se
+  // borraron 19 costos declarados por Daniel (quedaron en $0). El saldo sí
+  // se sigue tomando de Just (un costo declarado no dice nada de unidades),
+  // pero el costo declarado se respeta.
+  const latestCostDeclPerItem = await prisma.stockKardexEntry.findMany({
+    where: { catalogItemId: { in: ids }, type: "COST_DECLARATION" },
+    distinct: ["catalogItemId"],
+    orderBy: [{ catalogItemId: "asc" }, { occurredAt: "desc" }],
+    select: { catalogItemId: true, occurredAt: true },
+  });
+  const latestCostDeclAtByItem = new Map(latestCostDeclPerItem.map((e) => [e.catalogItemId, e.occurredAt]));
 
   const results: JustCutoverSyncRow[] = [];
   for (const s of snapshots) {
@@ -547,8 +564,10 @@ async function findJustCutoverCandidates(): Promise<JustCutoverSyncRow[]> {
     const latest = latestByItem.get(item.id);
     const oldBalance = latest?.balanceAfter ?? 0;
     const oldAvgCost = latest?.avgCostAfter ?? 0;
-    if (oldBalance === s.stock && oldAvgCost === s.avgCost) continue;
-    results.push({ catalogItemId: item.id, name: item.name, justCode: item.justCode, oldBalance, oldAvgCost, newBalance: s.stock, newAvgCost: s.avgCost });
+    const costDeclAt = latestCostDeclAtByItem.get(item.id);
+    const newAvgCost = costDeclAt && costDeclAt > s.createdAt ? oldAvgCost : s.avgCost;
+    if (oldBalance === s.stock && oldAvgCost === newAvgCost) continue;
+    results.push({ catalogItemId: item.id, name: item.name, justCode: item.justCode, oldBalance, oldAvgCost, newBalance: s.stock, newAvgCost });
   }
   return results.sort((a, b) => a.name.localeCompare(b.name));
 }
@@ -588,9 +607,15 @@ export type CutoverDamageRow = {
   currentAvgCost: number;
   restoreBalance: number;
   restoreAvgCost: number;
-  realMovementType: "IN" | "OUT";
+  realMovementType: CutoverDamagePrevType;
   realMovementAt: string;
 };
+
+// Líneas que cuentan como dato real que el corte pudo pisar: compras/
+// salidas, y también lo corregido a mano (costo declarado, conteo físico)
+// — ver el tercer bug del 23/09 en findJustCutoverCandidates.
+type CutoverDamagePrevType = "IN" | "OUT" | "COST_DECLARATION" | "PHYSICAL_COUNT_ADJUSTMENT";
+const CUTOVER_DAMAGE_PREV_TYPES: readonly string[] = ["IN", "OUT", "COST_DECLARATION", "PHYSICAL_COUNT_ADJUSTMENT"];
 
 // Confirmado 2026-09-22, corrección de un bug real: antes de arreglar
 // findJustCutoverCandidates, ya se habían aplicado 235 líneas
@@ -665,7 +690,10 @@ async function findCutoverDamageCandidates(): Promise<CutoverDamageRow[]> {
     if (!latest || latest.type !== "JUST_CUTOVER_SYNC") continue;
     const idx = entries.length - 1;
     const prev = entries[idx - 1];
-    if (!prev || (prev.type !== "IN" && prev.type !== "OUT") || prev.quantity === 0) continue;
+    if (!prev || !CUTOVER_DAMAGE_PREV_TYPES.includes(prev.type)) continue;
+    // Un costo declarado nunca mueve unidades (quantity 0) — para compras/
+    // salidas/conteos, una línea en 0 no es movimiento real.
+    if (prev.type !== "COST_DECLARATION" && prev.quantity === 0) continue;
 
     const item = itemById.get(catalogItemId);
     if (!item) continue;
@@ -674,15 +702,20 @@ async function findCutoverDamageCandidates(): Promise<CutoverDamageRow[]> {
     // razón y no hay nada que restaurar.
     const snapshotDate = item.justCode ? snapshotDateByCode.get(item.justCode.trim()) : undefined;
     if (snapshotDate && prev.occurredAt <= snapshotDate) continue;
+    // Un costo declarado solo fija el costo, no las unidades — el saldo
+    // que puso el corte (de Just) se queda; solo se devuelve el costo, y
+    // solo si el corte de verdad lo cambió.
+    const costOnly = prev.type === "COST_DECLARATION";
+    if (costOnly && latest.avgCostAfter === prev.avgCostAfter) continue;
     results.push({
       catalogItemId,
       name: item.name,
       justCode: item.justCode,
       currentBalance: latest.balanceAfter,
       currentAvgCost: latest.avgCostAfter,
-      restoreBalance: prev.balanceAfter,
+      restoreBalance: costOnly ? latest.balanceAfter : prev.balanceAfter,
       restoreAvgCost: prev.avgCostAfter,
-      realMovementType: prev.type as "IN" | "OUT",
+      realMovementType: prev.type as CutoverDamagePrevType,
       realMovementAt: prev.occurredAt.toISOString(),
     });
   }
