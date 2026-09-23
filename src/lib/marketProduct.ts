@@ -2,19 +2,12 @@ import { prisma } from "@/lib/prisma";
 import { B2B_MARGIN_OPTIONS, B2B_MARGIN_DEFAULT, B2C_FLETE_PROMEDIO } from "@/lib/externalSalesPricingConstants";
 import { getFinanzasDeptId } from "@/lib/inventoryKpis";
 
+import { DROPI_MARGIN_DEFAULT, DROPI_FULFILLMENT_DEFAULT, bodegaUnitCost, computeMarketProductSalePrice } from "@/lib/dropiPricing";
+
 export { B2B_MARGIN_OPTIONS, B2B_MARGIN_DEFAULT, B2C_FLETE_PROMEDIO };
-
-// Confirmado 2026-09-15/16: mismo default que usa Análisis de Mercado
-// (marginPercent ?? 20) cuando un producto todavía no pasó por la
-// calculadora de Jariel — usado tanto en Stock Actual como en el Precio
-// Dropi de combos.
-export const DROPI_MARGIN_DEFAULT = 20;
-
-// Mismo default de fulfillment ($0.75) que ya usaba Stock Actual para
-// productos sin propuesta de Jariel — movido acá (2026-09-21) para que
-// Compras Personales (precio automático) use exactamente el mismo número,
-// sin duplicarlo.
-export const DROPI_FULFILLMENT_DEFAULT = 0.75;
+// Movidas a dropiPricing.ts (2026-09-23) para poder usarlas desde el
+// navegador (precio máximo de compra de Ganadores no encontrados).
+export { DROPI_MARGIN_DEFAULT, DROPI_FULFILLMENT_DEFAULT, bodegaUnitCost, computeMarketProductSalePrice };
 
 // `costSource` deja rastro de qué respaldo se usó — "just" es TEMPORAL
 // (pedido explícito del usuario 2026-09-17) mientras se termina de cargar
@@ -117,25 +110,6 @@ export async function resolveCostBasisForCatalogItems(catalogItemIds: string[]):
 // unidad. Verificado que el ejemplo real ya validado (resultado 2.395) sigue
 // dando exactamente igual con costo=1 (antes 100) para el mismo lote de 100
 // unidades y flete=10.
-// "Precio puesto en bodega" — proveedor + la parte del flete del lote que le
-// toca a esa unidad. Punto de partida compartido por todos los precios de
-// venta de acá abajo. Exportada (2026-09-15) para poder mostrarla como su
-// propia columna en Stock Actual, sin margen ni seguro encima todavía.
-export function bodegaUnitCost(batchCost: number, freightCost: number | null, batchUnits: number): number {
-  return batchCost + (freightCost ?? 0) / batchUnits;
-}
-
-export function computeMarketProductSalePrice(params: {
-  batchCost: number;
-  batchUnits: number;
-  freightCost: number | null;
-  insuranceRatePercent: number;
-  fulfillmentCost: number;
-  marginPercent: number;
-}): number {
-  const unitCost = bodegaUnitCost(params.batchCost, params.freightCost, params.batchUnits) * (1 + params.insuranceRatePercent / 100);
-  return (unitCost + params.fulfillmentCost) / (1 - params.marginPercent / 100);
-}
 
 // Confirmado 2026-09-14: precios B2B/B2C para Ventas Externas (Heidy/Jariel/
 // Yair venden B2B con pago anticipado; Marcos vende B2C contra entrega o

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { computeMaxPurchasePrices } from "@/lib/dropiPricing";
 
 type Item = { id: string; productName: string; imageUrl: string; competitorPrice: number | null; status: "PENDING" | "PROPOSED" | "DISCARDED"; createdAt: string };
 
@@ -24,6 +25,14 @@ const LIST_URL = "/area/workspace?tab=analisis-mercado&ptab=ganadores";
 // tras tocarlo en el celular, donde nunca llega el "mouse leave") quedaba
 // quieto. Quien no es de Análisis
 // de Mercado recibe 403 y no ve nada.
+// Precio máximo de compra con flete normal (el escenario seguro para
+// negociar) — el detalle con los 3 escenarios está en la lista completa.
+function maxBuyLabel(competitorPrice: number | null) {
+  if (competitorPrice === null || competitorPrice <= 0) return "Falta precio competencia";
+  const normal = computeMaxPurchasePrices(competitorPrice).scenarios.find((s) => s.key === "normal");
+  return normal?.maxCost != null ? <>Comprar máx. <b className="text-ink">${normal.maxCost.toFixed(2)}</b></> : "No alcanza el margen";
+}
+
 export function UnfoundWinnersCarousel() {
   const [items, setItems] = useState<Item[] | null>(null);
   const [index, setIndex] = useState(0);
@@ -145,6 +154,9 @@ export function UnfoundWinnersCarousel() {
                   {p.competitorPrice !== null ? `$${p.competitorPrice.toFixed(2)}` : "Sin precio"}
                 </div>
                 <div className="text-[13px] text-ink leading-snug mt-0.5 line-clamp-2 min-h-[2.5em] first-letter:uppercase">{p.productName}</div>
+                <div className="text-[11px] text-steel mt-1 min-h-[1.4em]">
+                  {maxBuyLabel(p.competitorPrice)}
+                </div>
               </div>
             </a>
           ))}
