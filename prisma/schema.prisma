@@ -2492,10 +2492,46 @@ model FulfillmentRequestBatch {
   // quedan contadas para que el resumen cuadre con totalRows.
   skippedCount Int @default(0)
 
+  // Confirmado 2026-09-23: subida por PDF de guías de Dropi (ver
+  // src/lib/dropiGuidesPdf.ts) — los PDF originales quedan guardados para
+  // poder revisarlos después, y la fecha del manifiesto tal como la imprime
+  // Dropi (YYYY-MM-DD). Vacíos/null en las subidas por foto o Excel.
+  fileUrls     String[] @default([])
+  manifestDate String?
+
   items        FulfillmentRequestItem[]
   variantNotes FulfillmentRequestVariantNote[]
+  guides       FulfillmentRequestGuide[]
 
   @@index([requestedAt])
+}
+
+// Confirmado 2026-09-23: cada número de guía del PDF queda registrado una
+// sola vez en toda la app (@unique) — si Yair sube por error el mismo PDF
+// dos veces (o dos PDF que comparten guías), la segunda subida se detiene
+// antes de duplicar las cantidades del lote del día.
+model FulfillmentRequestGuide {
+  id          String                  @id @default(cuid())
+  batchId     String
+  batch       FulfillmentRequestBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  guideNumber String                  @unique
+  carrier     String
+  createdAt   DateTime                @default(now())
+
+  @@index([batchId])
+}
+
+// Confirmado 2026-09-23: códigos de Dropi que aparecen en el PDF de guías
+// pero NO son un producto físico (ej. 50269 "ENVIO PRIORITARIO + PRODUCTO
+// APARTADO") — Yair lo marca una sola vez y la app lo recuerda. Se muestran
+// siempre en la revisión (con opción de volver a incluirlos) para que un
+// producto real nunca desaparezca en silencio por un clic equivocado.
+model DropiIgnoredCode {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  label       String
+  createdById String?
+  createdAt   DateTime @default(now())
 }
 
 model FulfillmentRequestItem {

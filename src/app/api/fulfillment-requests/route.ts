@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { canViewFulfillmentRequests } from "@/lib/guards";
 import { prisma } from "@/lib/prisma";
+import { ecuadorDay } from "@/lib/fulfillmentGuides";
 
 export async function GET() {
   if (!(await canViewFulfillmentRequests())) {
@@ -9,8 +10,8 @@ export async function GET() {
 
   const batches = await prisma.fulfillmentRequestBatch.findMany({
     orderBy: { requestedAt: "desc" },
-    take: 30,
-    include: { requestedBy: { select: { name: true } }, _count: { select: { items: true } } },
+    take: 120,
+    include: { requestedBy: { select: { name: true } }, _count: { select: { items: true, guides: true } } },
   });
 
   return NextResponse.json(
@@ -22,6 +23,8 @@ export async function GET() {
       totalRows: b.totalRows,
       skippedCount: b.skippedCount,
       lineCount: b._count.items,
+      guideCount: b._count.guides,
+      day: ecuadorDay(b.requestedAt),
     }))
   );
 }

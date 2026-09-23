@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { componentsMissingDropiId, missingDropiIdMessage } from "@/lib/fulfillmentGuides";
 import { canSubmitFulfillmentRequest, canManageJustCatalog, dbUserId } from "@/lib/guards";
 
 const CATALOG_ITEM_SELECT = { id: true, name: true, photos: true, justCode: true } as const;
@@ -25,6 +26,11 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
   const parsed = schema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Datos inválidos." }, { status: 400 });
+
+  // Regla del usuario 2026-09-23: un combo solo lleva productos con su ID
+  // real de Dropi — ver componentsMissingDropiId.
+  const missingIds = await componentsMissingDropiId(parsed.data.components.map((c) => c.catalogItemId));
+  if (missingIds.length > 0) return NextResponse.json({ error: missingDropiIdMessage(missingIds) }, { status: 400 });
 
   const existing = await prisma.dropiCombo.findUnique({ where: { code: parsed.data.code }, include: { components: true } });
   if (existing && existing.components.length > 0) {

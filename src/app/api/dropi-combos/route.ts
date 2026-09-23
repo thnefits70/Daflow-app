@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { componentsMissingDropiId, missingDropiIdMessage } from "@/lib/fulfillmentGuides";
 import { canManageJustCatalog, dbUserId } from "@/lib/guards";
 import {
   resolveCostBasisForCatalogItems,
@@ -99,6 +100,11 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
   const parsed = createSchema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Datos inválidos." }, { status: 400 });
+
+  // Regla del usuario 2026-09-23: un combo solo lleva productos con su ID
+  // real de Dropi — ver componentsMissingDropiId.
+  const missingIds = await componentsMissingDropiId(parsed.data.components.map((c) => c.catalogItemId));
+  if (missingIds.length > 0) return NextResponse.json({ error: missingDropiIdMessage(missingIds) }, { status: 400 });
 
   // Confirmado 2026-08-26 (pedido explícito del usuario): si el código ya
   // existe, se ACTUALIZA en vez de rechazar — Daniel puede darse cuenta a

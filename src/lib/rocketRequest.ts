@@ -197,14 +197,14 @@ export async function applyRocketImport(decisions: RocketApplyDecisions, request
 }
 
 export type VariantNote = { label: string; quantity: number };
-export type CompiledFulfillmentLine = { catalogItemId: string; name: string; photos: string[]; quantity: number; variants: VariantNote[] };
+export type CompiledFulfillmentLine = { catalogItemId: string; name: string; photos: string[]; justCode: string | null; quantity: number; variants: VariantNote[] };
 
 export async function getCompiledBatch(batchId: string): Promise<{ id: string; source: string; requestedAt: Date; requestedByName: string; totalRows: number; skippedCount: number; lines: CompiledFulfillmentLine[] } | null> {
   const batch = await prisma.fulfillmentRequestBatch.findUnique({
     where: { id: batchId },
     include: {
       requestedBy: { select: { name: true } },
-      items: { include: { catalogItem: { select: { id: true, name: true, photos: true } } } },
+      items: { include: { catalogItem: { select: { id: true, name: true, photos: true, justCode: true } } } },
       variantNotes: { select: { catalogItemId: true, label: true, quantity: true } },
     },
   });
@@ -214,7 +214,7 @@ export async function getCompiledBatch(batchId: string): Promise<{ id: string; s
   for (const item of batch.items) {
     const existing = byItem.get(item.catalogItemId);
     if (existing) existing.quantity += item.quantity;
-    else byItem.set(item.catalogItemId, { catalogItemId: item.catalogItemId, name: item.catalogItem.name, photos: item.catalogItem.photos, quantity: item.quantity, variants: [] });
+    else byItem.set(item.catalogItemId, { catalogItemId: item.catalogItemId, name: item.catalogItem.name, photos: item.catalogItem.photos, justCode: item.catalogItem.justCode, quantity: item.quantity, variants: [] });
   }
   for (const v of batch.variantNotes) {
     byItem.get(v.catalogItemId)?.variants.push({ label: v.label, quantity: v.quantity });

@@ -1,0 +1,94 @@
+import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
+import { canSubmitFulfillmentRequest } from "@/lib/guards";
+import { parseDropiGuidesPdf, type ParsedGuidesLine } from "@/lib/dropiGuidesPdf";
+import { findAlreadyUploadedGuides, resolveGuideLines } from "@/lib/fulfillmentGuides";
+
+// Un PDF de ~280 páginas tarda ~2-3 s en leerse; margen de sobra.
+export const maxDuration = 60;
+
+const MAX_FILES = 10;
+const schema = z.object({ fileUrls: z.array(z.string().url()).min(1).max(MAX_FILES) });
+
+// Confirmado 2026-09-23: lectura del PDF de guías de Dropi SIN IA — ver
+// src/lib/dropiGuidesPdf.ts. Solo lee y propone; no guarda nada (eso es
+// ./apply, después de que Yair revisa).
+export async function POST(req: NextRequest) {
+  if (!(await canSubmitFulfillmentRequest())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+
+  const body = await req.json().catch(() => null);
+  const parsed = schema.safeParse(body);
+  if (!parsed.success) return NextResponse.json({ error: `Sube entre 1 y ${MAX_FILES} PDF de guías.` }, { status: 400 });
+
+  // Solo archivos de nuestro propio almacenamiento (subidos con uploadFile).
+  const storageBase = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
+  if (!storageBase || parsed.data.fileUrls.some((u) => !u.startsWith(storageBase))) {
+    return NextResponse.json({ error: "Archivo no válido." }, { status: 400 });
+  }
+
+  const merged = new Map<string, ParsedGuidesLine>();
+  const guides = new Map<string, string>();
+  const repeatedInUpload: string[] = [];
+  let manifestDate: string | null = null;
+  const emptyFiles: number[] = [];
+
+  for (const [idx, url] of parsed.data.fileUrls.entries()) {
+    const res = await fetch(url);
+    if (!res.ok) return NextResponse.json({ error: `No se pudo abrir el PDF #${idx + 1}.` }, { status: 400 });
+    let result;
+    try {
+      result = await parseDropiGuidesPdf(new Uint8Array(await res.arrayBuffer()));
+    } catch {
+      return NextResponse.json({ error: `El archivo #${idx + 1} no parece un PDF válido.` }, { status: 400 });
+    }
+    if (result.lines.length === 0) emptyFiles.push(idx + 1);
+    manifestDate = manifestDate ?? result.manifestDate;
+    for (const g of result.guides) {
+      if (guides.has(g.number)) repeatedInUpload.push(g.number);
+      else guides.set(g.number, g.carrier);
+    }
+    for (const l of result.lines) {
+      const prev = merged.get(l.code);
+      if (!prev) {
+        merged.set(l.code, { ...l, variants: [...l.variants] });
+        continue;
+      }
+      prev.quantity += l.quantity;
+      prev.labelUnits += l.labelUnits;
+      for (const v of l.variants) {
+        const same = prev.variants.find((x) => x.label === v.label);
+        if (same) same.quantity += v.quantity;
+        else prev.variants.push({ ...v });
+      }
+    }
+  }
+
+  if (emptyFiles.length > 0) {
+    return NextResponse.json(
+      { error: `No encontré la lista de productos en el PDF #${emptyFiles.join(", #")}. ¿Es el PDF de guías que descargas de Dropi (con la tabla "PRODUCTOS")?` },
+      { status: 400 }
+    );
+  }
+  if (repeatedInUpload.length > 0) {
+    return NextResponse.json({ error: `Subiste el mismo PDF (o guías repetidas) más de una vez — ej. guía ${repeatedInUpload[0]}. Quita el duplicado.` }, { status: 400 });
+  }
+
+  const already = await findAlreadyUploadedGuides([...guides.keys()]);
+  if (already.length > 0) {
+    const when = already[0].requestedAt.toLocaleString("es-EC", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "America/Guayaquil" });
+    return NextResponse.json(
+      { error: `${already.length} de estas guías ya se subieron el ${when} (ej. ${already[0].number}) — este PDF ya está en el lote de ese día, no se vuelve a sumar.` },
+      { status: 409 }
+    );
+  }
+
+  const rows = await resolveGuideLines([...merged.values()].sort((a, b) => b.quantity - a.quantity));
+  const carriers = [...new Set(guides.values())].filter(Boolean);
+
+  return NextResponse.json({
+    manifestDate,
+    carriers,
+    guides: [...guides.entries()].map(([number, carrier]) => ({ number, carrier })),
+    rows,
+  });
+}
