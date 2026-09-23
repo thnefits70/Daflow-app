@@ -1,0 +1,220 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { Search } from "lucide-react";
+import { CatalogCode } from "@/components/shared/CatalogCode";
+import { formatDateTime } from "@/lib/formatDateTime";
+
+type Named = { name: string } | null;
+
+type TraceItem = {
+  id: string;
+  declaredName: string;
+  quantity: number;
+  photoUrls: string[];
+  damageReasonOther: string | null;
+  damageReason: Named;
+  catalogItem: { name: string; justCode: string | null } | null;
+  batch: { code: string; createdAt: string; submittedAt: string | null; createdBy: Named; supplier: Named; documentPhotoUrls: string[] };
+  resolution: "SOLVED_ONSITE" | "WRITE_OFF" | "ESCALATED_TO_PURCHASES" | null;
+  resolutionNote: string | null;
+  resolvedAt: string | null;
+  resolvedBy: Named;
+  purchaseGestionSupplier: Named;
+  linkedPurchaseRequestId: string | null;
+  expectedCreditAmount: number | null;
+  purchaseNoMatchReportedAt: string | null;
+  purchaseNoMatchNote: string | null;
+  purchaseNoMatchReportedBy: Named;
+  purchaseExceptionDecision: "DATA_CORRECTED" | "AUTHORIZED" | "REJECTED" | null;
+  purchaseExceptionNote: string | null;
+  purchaseExceptionDecidedAt: string | null;
+  purchaseExceptionDecidedBy: Named;
+  purchaseResolution: "REPLACED" | "CREDIT_ISSUED" | "REJECTED" | null;
+  purchaseResolutionNote: string | null;
+  purchaseResolvedAt: string | null;
+  purchaseResolvedBy: Named;
+  credit: { amount: number } | null;
+};
+
+type Tone = "amber" | "green" | "red" | "steel";
+type Status = { label: string; tone: Tone; open: boolean };
+
+const TONE_CLASS: Record<Tone, string> = {
+  amber: "border-gold/40 text-gold",
+  green: "border-green/40 text-green",
+  red: "border-red/40 text-red",
+  steel: "border-rule text-steel",
+};
+
+function statusOf(i: TraceItem): Status {
+  if (!i.resolution) return { label: "Esperando decisión de Daniel", tone: "amber", open: true };
+  if (i.resolution === "SOLVED_ONSITE") return { label: "Cerrado — solucionado ahí mismo", tone: "green", open: false };
+  if (i.resolution === "WRITE_OFF") return { label: "Cerrado — dado de baja", tone: "steel", open: false };
+  if (i.purchaseResolution === "REPLACED") return { label: "Proveedor aceptó el cambio", tone: "green", open: false };
+  if (i.purchaseResolution === "CREDIT_ISSUED") return { label: "Proveedor dio crédito", tone: "green", open: false };
+  if (i.purchaseResolution === "REJECTED") {
+    return { label: i.purchaseExceptionDecision === "REJECTED" ? "Rechazado por admin" : "Proveedor rechazó", tone: "red", open: false };
+  }
+  if (i.purchaseNoMatchReportedAt && !i.purchaseExceptionDecision) return { label: "Esperando decisión del admin", tone: "amber", open: true };
+  if (i.linkedPurchaseRequestId || i.purchaseExceptionDecision === "AUTHORIZED") return { label: "Jariel gestionando con el proveedor", tone: "amber", open: true };
+  return { label: "Esperando que Jariel tome el caso", tone: "amber", open: true };
+}
+
+function Step({ done, title, when, children }: { done: boolean; title: string; when?: string | null; children?: React.ReactNode }) {
+  return (
+    <div className="flex gap-2">
+      <div className={`mt-1 w-2 h-2 rounded-full shrink-0 ${done ? "bg-teal" : "border border-steel"}`} />
+      <div className="min-w-0">
+        <div className={`text-[11.5px] font-semibold ${done ? "text-ink" : "text-steel"}`}>
+          {title}
+          {when && <span className="font-normal text-steel-dim"> · {formatDateTime(when)}</span>}
+        </div>
+        {children && <div className="text-[11px] text-steel">{children}</div>}
+      </div>
+    </div>
+  );
+}
+
+const DECISION_LABEL = { SOLVED_ONSITE: "Solucionado ahí mismo", WRITE_OFF: "Dar de baja", ESCALATED_TO_PURCHASES: "Escalado a Compras (Jariel)" } as const;
+const EXCEPTION_LABEL = { DATA_CORRECTED: "corrigió el dato — Jariel vuelve a intentar", AUTHORIZED: "autorizó seguir sin compra registrada", REJECTED: "rechazó el reclamo" } as const;
+
+function Timeline({ i }: { i: TraceItem }) {
+  const escalated = i.resolution === "ESCALATED_TO_PURCHASES";
+  const creditAmount = i.credit?.amount ?? null;
+  return (
+    <div className="flex flex-col gap-1.5 mt-2.5 pl-1">
+      <Step done title={`Reportado por ${i.batch.createdBy?.name ?? "—"}`} when={i.batch.submittedAt ?? i.batch.createdAt}>
+        {i.quantity} un. · {i.damageReason?.name ?? i.damageReasonOther ?? "Sin motivo"}
+        {i.batch.supplier && <> · proveedor sugerido: {i.batch.supplier.name}</>}
+      </Step>
+      <Step done={!!i.resolution} title={i.resolution ? `Daniel decidió: ${DECISION_LABEL[i.resolution]}` : "Pendiente: decisión de Daniel"} when={i.resolvedAt}>
+        {i.resolutionNote}
+      </Step>
+      {escalated && (
+        <>
+          <Step
+            done={!!i.purchaseGestionSupplier}
+            title={i.purchaseGestionSupplier ? `Jariel confirmó el proveedor: ${i.purchaseGestionSupplier.name}` : "Pendiente: Jariel confirma el proveedor"}
+          >
+            {i.purchaseGestionSupplier && (i.linkedPurchaseRequestId
+              ? <>Compra encontrada{i.expectedCreditAmount != null && <> · crédito estimado ${i.expectedCreditAmount.toFixed(2)}</>}</>
+              : "Sin compra registrada con ese proveedor")}
+          </Step>
+          {(i.purchaseNoMatchReportedAt || i.purchaseExceptionDecision) && (
+            <Step
+              done={!!i.purchaseExceptionDecision}
+              title={i.purchaseExceptionDecision ? `Admin ${EXCEPTION_LABEL[i.purchaseExceptionDecision]}` : `Jariel lo pasó al admin (sin compra que lo respalde)`}
+              when={i.purchaseExceptionDecidedAt ?? i.purchaseNoMatchReportedAt}
+            >
+              {i.purchaseExceptionNote ?? i.purchaseNoMatchNote}
+            </Step>
+          )}
+          <Step
+            done={!!i.purchaseResolution}
+            title={
+              i.purchaseResolution === "REPLACED"
+                ? `Resultado: el proveedor CAMBIA el producto (${i.purchaseResolvedBy?.name ?? "—"})`
+                : i.purchaseResolution === "CREDIT_ISSUED"
+                  ? `Resultado: el proveedor da CRÉDITO${creditAmount != null ? ` de $${creditAmount.toFixed(2)}` : ""} (${i.purchaseResolvedBy?.name ?? "—"})`
+                  : i.purchaseResolution === "REJECTED"
+                    ? `Resultado: RECHAZADO (${i.purchaseResolvedBy?.name ?? "—"})`
+                    : "Pendiente: respuesta del proveedor"
+            }
+            when={i.purchaseResolvedAt}
+          >
+            {i.purchaseResolutionNote}
+          </Step>
+          {i.purchaseResolution === "REPLACED" && (
+            <div className="text-[11px] text-teal font-semibold pl-4">Siguiente paso: arma el paquete en &quot;Cambio con proveedor&quot;.</div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+// Confirmado 2026-09-23, pedido de Daniel: seguimiento de solo lectura de
+// cada producto reportado como deterioro, de principio a fin — para no
+// tener que preguntar por WhatsApp si el proveedor aprobó el reclamo.
+export function DeteriorTraceList() {
+  const [items, setItems] = useState<TraceItem[] | null>(null);
+  const [filter, setFilter] = useState<"open" | "closed" | "all">("open");
+  const [query, setQuery] = useState("");
+  const [expanded, setExpanded] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("/api/merchandise-outflow/deterioro/history")
+      .then((r) => (r.ok ? r.json() : []))
+      .then((d) => setItems(Array.isArray(d) ? d : []))
+      .catch(() => setItems([]));
+  }, []);
+
+  if (items === null) return <div className="text-[13px] text-steel">Cargando…</div>;
+
+  const withStatus = items.map((i) => ({ i, s: statusOf(i) }));
+  const openCount = withStatus.filter((x) => x.s.open).length;
+  const q = query.trim().toLowerCase();
+  const visible = withStatus.filter(({ i, s }) => {
+    if (filter === "open" && !s.open) return false;
+    if (filter === "closed" && s.open) return false;
+    if (!q) return true;
+    const name = (i.catalogItem?.name ?? i.declaredName).toLowerCase();
+    return name.includes(q) || (i.catalogItem?.justCode ?? "").toLowerCase().includes(q) || i.batch.code.toLowerCase().includes(q);
+  });
+
+  const chip = (id: typeof filter, label: string) => (
+    <button
+      type="button"
+      className={`rounded-full border px-3 py-1 text-[11.5px] font-semibold cursor-pointer ${filter === id ? "border-teal bg-teal text-navy" : "border-rule text-steel"}`}
+      onClick={() => setFilter(id)}
+    >
+      {label}
+    </button>
+  );
+
+  return (
+    <div className="max-w-2xl">
+      <div className="flex flex-wrap items-center gap-1.5 mb-2">
+        {chip("open", `En curso · ${openCount}`)}
+        {chip("closed", `Cerrados · ${items.length - openCount}`)}
+        {chip("all", "Todos")}
+      </div>
+      <div className="flex items-center gap-1.5 mb-3 rounded border border-rule px-2.5 py-1.5">
+        <Search size={13} className="text-steel" />
+        <input className="flex-1 text-[13px] outline-none bg-transparent" placeholder="Buscar producto, código o EG-…" value={query} onChange={(e) => setQuery(e.target.value)} />
+      </div>
+      {visible.length === 0 ? (
+        <div className="text-[13px] text-steel">No hay reportes de deterioro en esta vista.</div>
+      ) : (
+        <div className="flex flex-col gap-2">
+          {visible.map(({ i, s }) => {
+            const photo = i.photoUrls[0] ?? i.batch.documentPhotoUrls[0];
+            const isOpen = expanded === i.id;
+            return (
+              <div key={i.id} className="bg-surface border border-rule rounded-md p-3">
+                <button type="button" className="w-full flex items-center gap-3 text-left cursor-pointer" onClick={() => setExpanded(isOpen ? null : i.id)}>
+                  {photo && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={photo} alt={i.catalogItem?.name ?? i.declaredName} className="w-11 h-11 object-cover rounded border border-rule shrink-0" />
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[13px] font-semibold flex items-center gap-1.5 min-w-0">
+                      {i.catalogItem && <CatalogCode code={i.catalogItem.justCode} />}
+                      <span className="truncate">{i.catalogItem?.name ?? i.declaredName}</span>
+                    </div>
+                    <div className="text-[10.5px] text-steel">
+                      {i.batch.code} · {i.quantity} un. · {formatDateTime(i.batch.submittedAt ?? i.batch.createdAt)}
+                    </div>
+                  </div>
+                  <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10.5px] font-semibold ${TONE_CLASS[s.tone]}`}>{s.label}</span>
+                </button>
+                {isOpen && <Timeline i={i} />}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}

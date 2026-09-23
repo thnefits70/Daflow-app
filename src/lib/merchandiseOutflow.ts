@@ -297,3 +297,26 @@ export async function notifyPurchaseExceptionDecided(params: { managerId: string
     url: "/area/workspace?tab=compras&ptab=urgentes",
   }).catch(() => null);
 }
+
+// Confirmado 2026-09-23, pedido de Daniel: cuando un deterioro que él
+// escaló a Compras se cierra con el proveedor (Jariel lo resuelve, o admin
+// rechaza el reclamo sin respaldo), avisarle a él también — antes se
+// enteraba solo preguntando por WhatsApp. Lleva a "Seguimiento de
+// deterioro", donde ve todo el recorrido del producto.
+export async function notifyInventoryLeadDeteriorPurchaseResolved(item: { declaredName: string; quantity: number; resolution: "REPLACED" | "CREDIT_ISSUED" | "REJECTED"; creditAmount?: number | null; byAdmin?: boolean }): Promise<void> {
+  const leadId = await getInventoryLeadId();
+  if (!leadId) return;
+  const outcome =
+    item.resolution === "REPLACED"
+      ? "el proveedor aceptó el CAMBIO — ya puedes armar el paquete en Cambio con proveedor"
+      : item.resolution === "CREDIT_ISSUED"
+        ? `el proveedor dio CRÉDITO${item.creditAmount ? ` de $${item.creditAmount.toFixed(2)}` : ""}`
+        : item.byAdmin
+          ? "admin RECHAZÓ el reclamo (no hay compra que lo respalde)"
+          : "el proveedor RECHAZÓ el reclamo";
+  await notifyOwner(leadId, {
+    title: "Deterioro escalado: ya hay respuesta",
+    body: `${item.declaredName} — ${item.quantity} un.: ${outcome}.`,
+    url: "/area/workspace?tab=egresos&otab=seguimiento",
+  }).catch(() => null);
+}

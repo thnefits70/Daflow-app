@@ -14,6 +14,7 @@ import { PurchaseJustaPanel } from "./PurchaseJustaPanel";
 import { SupplierDebtPanel } from "./SupplierDebtPanel";
 import { BuyerDebtConfirmationPanel } from "./BuyerDebtConfirmationPanel";
 import { PurchaseDeteriorGestionPanel } from "@/components/merchandise-outflow/PurchaseDeteriorGestionPanel";
+import { DeteriorTraceList } from "@/components/merchandise-outflow/DeteriorTraceList";
 import { TabGuide } from "@/components/shared/TabGuide";
 
 type Tab = "solicitar" | "mias" | "comparar" | "aprobacion" | "confirmar-credito" | "inventario" | "justa" | "finanzas" | "urgentes" | "creditos" | "proveedores-credito" | "auditoria";
@@ -248,6 +249,15 @@ export function PurchaseControlPanel({
               <div className="font-display font-bold text-[14px] mb-2.5">Mercadería en mal estado — pendiente de tu gestión</div>
               <PurchaseDeteriorGestionPanel />
             </div>
+          )}
+          {/* Confirmado 2026-09-23, pedido de Daniel: el mismo seguimiento
+              de deterioro que él ve en Registro de Egresos, para que Jariel
+              también tenga el historial de lo que ya gestionó. */}
+          {canManageGestion && (
+            <details className="mb-6">
+              <summary className="font-display font-bold text-[14px] mb-2.5 cursor-pointer">Historial de mercadería en mal estado</summary>
+              <DeteriorTraceList />
+            </details>
           )}
           <PurchaseUrgentReportsPanel isAdmin={isAdmin} canAct={canSubmit || canReview} canManageGestion={canManageGestion} canConfirmExcess={canActOnApproval} />
         </>

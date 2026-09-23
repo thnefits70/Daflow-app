@@ -3,6 +3,7 @@ import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { canManageOutflowPurchaseGestion } from "@/lib/guards";
+import { notifyInventoryLeadDeteriorPurchaseResolved, outflowItemDisplayName } from "@/lib/merchandiseOutflow";
 
 const schema = z.discriminatedUnion("resolution", [
   z.object({ resolution: z.literal("REPLACED"), note: z.string().trim().optional() }),
@@ -39,7 +40,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const item = await prisma.merchandiseOutflowItem.findUnique({
     where: { id },
-    include: { batch: { select: { reason: true } } },
+    include: { batch: { select: { reason: true } }, catalogItem: { select: { name: true } } },
   });
   if (!item) return NextResponse.json({ error: "No encontrado." }, { status: 404 });
   if (item.batch.reason !== "DETERIORO" || item.resolution !== "ESCALATED_TO_PURCHASES") {
@@ -75,6 +76,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         },
       });
     }
+  });
+
+  await notifyInventoryLeadDeteriorPurchaseResolved({
+    declaredName: outflowItemDisplayName(item),
+    quantity: item.quantity,
+    resolution: parsed.data.resolution,
+    creditAmount: parsed.data.resolution === "CREDIT_ISSUED" ? parsed.data.amount : null,
   });
 
   const finalItem = await prisma.merchandiseOutflowItem.findUnique({ where: { id } });

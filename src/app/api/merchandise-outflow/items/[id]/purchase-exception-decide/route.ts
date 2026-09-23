@@ -3,7 +3,7 @@ import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { canDecidePurchaseException, getPurchaseGestionManagerId } from "@/lib/guards";
-import { notifyPurchaseExceptionDecided, outflowItemDisplayName } from "@/lib/merchandiseOutflow";
+import { notifyInventoryLeadDeteriorPurchaseResolved, notifyPurchaseExceptionDecided, outflowItemDisplayName } from "@/lib/merchandiseOutflow";
 
 const schema = z.object({
   decision: z.enum(["DATA_CORRECTED", "AUTHORIZED", "REJECTED"]),
@@ -64,6 +64,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       decision: parsed.data.decision,
       note: parsed.data.note,
     }).catch(() => null);
+  }
+
+  if (parsed.data.decision === "REJECTED") {
+    await notifyInventoryLeadDeteriorPurchaseResolved({ declaredName: outflowItemDisplayName(item), quantity: item.quantity, resolution: "REJECTED", byAdmin: true });
   }
 
   const finalItem = await prisma.merchandiseOutflowItem.findUnique({ where: { id } });

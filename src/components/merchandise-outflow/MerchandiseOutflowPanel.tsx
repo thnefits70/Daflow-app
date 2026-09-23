@@ -4,6 +4,7 @@ import { useState } from "react";
 import { DocumentCaptureFlow } from "./DocumentCaptureFlow";
 import { DeteriorCapture } from "./DeteriorCapture";
 import { DeteriorResolutionInbox } from "./DeteriorResolutionInbox";
+import { DeteriorTraceList } from "./DeteriorTraceList";
 import { SupplierExchangeCapture } from "./SupplierExchangeCapture";
 import { SupplierExchangeResolutionInbox } from "./SupplierExchangeResolutionInbox";
 import { SupplierExchangeMyResolutions } from "./SupplierExchangeMyResolutions";
@@ -13,7 +14,7 @@ import { CancelledGuidesPanel } from "@/components/cancelled-guides/CancelledGui
 import { FulfillmentRequestPanel } from "./FulfillmentRequestPanel";
 import { TabGuide } from "@/components/shared/TabGuide";
 
-type Tab = "despacho" | "garantia" | "deterioro" | "proveedor" | "guias" | "solicitud" | "baja" | "historial";
+type Tab = "despacho" | "garantia" | "deterioro" | "seguimiento" | "proveedor" | "guias" | "solicitud" | "baja" | "historial";
 
 export function MerchandiseOutflowPanel({
   canCapture,
@@ -133,7 +134,7 @@ export function MerchandiseOutflowPanel({
   const [tab, setTab] = useState<Tab>(() => {
     if (typeof window === "undefined") return defaultTab;
     const t = new URLSearchParams(window.location.search).get("otab");
-    if (t === "baja" || t === "deterioro" || t === "proveedor" || t === "guias") return t;
+    if (t === "baja" || t === "deterioro" || t === "seguimiento" || t === "proveedor" || t === "guias") return t;
     return defaultTab;
   });
 
@@ -154,6 +155,10 @@ export function MerchandiseOutflowPanel({
     ...(canCapture && canAct ? [{ id: "despacho" as const, label: "Despacho" }] : []),
     ...(canCapture ? [{ id: "garantia" as const, label: "Garantía" }] : []),
     ...(canCapture ? [{ id: "deterioro" as const, label: "Deterioro" }] : []),
+    // Confirmado 2026-09-23, pedido de Daniel: seguimiento de cada deterioro
+    // de principio a fin (su decisión → gestión de Jariel → respuesta del
+    // proveedor), justo entre Deterioro y Cambio con proveedor.
+    ...(canCapture || canView ? [{ id: "seguimiento" as const, label: "Seguimiento de deterioro" }] : []),
     ...(canSeeProveedorTab ? [{ id: "proveedor" as const, label: "Cambio con proveedor" }] : []),
     ...(canSubmitCancelledGuide || canManageCancelledGuideBatches || canConfirmCancelledGuideFulfillmentRemoval || canAssignCancelledGuideItems || canAct ? [{ id: "guias" as const, label: "Guías canceladas" }] : []),
     ...(canSubmitFulfillmentRequest || canViewFulfillmentRequests ? [{ id: "solicitud" as const, label: "Solicitud Fulfillment" }] : []),
@@ -213,6 +218,14 @@ export function MerchandiseOutflowPanel({
               <DeteriorResolutionInbox key={deteriorRefreshKey} canAct={canAct} />
             </div>
           </div>
+        </>
+      )}
+      {tab === "seguimiento" && (canCapture || canView) && (
+        <>
+          <TabGuide storageKey="merchoutflow-seguimiento">
+            Todo lo que se reportó como deterioro y en qué va cada producto: la decisión de Daniel y, si se escaló a Compras, qué proveedor confirmó Jariel y qué respondió el proveedor (cambio, crédito o rechazo). Solo lectura — toca un producto para ver su recorrido completo. Si el proveedor aceptó el cambio, el siguiente paso es armar el paquete en &quot;Cambio con proveedor&quot;.
+          </TabGuide>
+          <DeteriorTraceList />
         </>
       )}
       {tab === "proveedor" && canSeeProveedorTab && (
