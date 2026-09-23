@@ -6,32 +6,22 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 
 type Item = { id: string; productName: string; imageUrl: string; competitorPrice: number | null; status: "PENDING" | "PROPOSED" | "DISCARDED"; createdAt: string };
 
-const MAX_PER_DAY = 12;
-const CARD_W = 150;
+const CARD_W = 170;
 const GAP = 12;
 const STEP = CARD_W + GAP;
 const INTERVAL_MS = 3000;
 const LIST_URL = "/area/workspace?tab=analisis-mercado&ptab=ganadores";
 
-// Con más de 12 pendientes, cada día sale un grupo distinto de 12 (en
-// orden de registro), así en pocos días se repasan todos y ninguno queda
-// olvidado al fondo de la lista.
-function pickToday(pending: Item[]): Item[] {
-  if (pending.length <= MAX_PER_DAY) return pending;
-  const ecuadorDay = Math.floor((Date.now() - 5 * 3600_000) / 86400_000);
-  const start = (ecuadorDay * MAX_PER_DAY) % pending.length;
-  return Array.from({ length: MAX_PER_DAY }, (_, i) => pending[(start + i) % pending.length]);
-}
-
 // Confirmado 2026-09-23, pedido de Jariel: los "Ganadores no encontrados"
 // que siguen buscando proveedor pasan en carrusel en Inicio (entre el podio
 // y las tarjetas), para tenerlos siempre a la vista sin entrar a la
-// sección. Se mueve solo de derecha a izquierda cada 3 s, se pausa al pasar
+// sección. Pasan TODOS los pendientes en fila (corregido el mismo día,
+// pedido del usuario: nada de "12 distintos por día"), y en pantalla se ven
+// los que entren a lo ancho. Se mueve solo de derecha a izquierda cada 3 s, se pausa al pasar
 // el mouse, y cada tarjeta abre la lista completa. Quien no es de Análisis
 // de Mercado recibe 403 y no ve nada.
 export function UnfoundWinnersCarousel() {
   const [items, setItems] = useState<Item[] | null>(null);
-  const [total, setTotal] = useState(0);
   const [index, setIndex] = useState(0);
   const [animate, setAnimate] = useState(true);
   const [paused, setPaused] = useState(false);
@@ -42,9 +32,8 @@ export function UnfoundWinnersCarousel() {
     fetch("/api/unfound-winning-products")
       .then((r) => (r.ok ? r.json() : []))
       .then((rows: Item[]) => {
-        const pending = rows.filter((r) => r.status === "PENDING").sort((a, b) => a.createdAt.localeCompare(b.createdAt));
-        setTotal(pending.length);
-        setItems(pickToday(pending));
+        // Los más nuevos primero.
+        setItems(rows.filter((r) => r.status === "PENDING").sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
       })
       .catch(() => setItems([]));
   }
@@ -112,7 +101,7 @@ export function UnfoundWinnersCarousel() {
             Ganadores no encontrados
           </div>
           <div className="text-[11px] text-steel">
-            Buscando proveedor{total > n ? ` — hoy ves ${n} de ${total}, mañana salen otros` : ` — ${total} producto${total === 1 ? "" : "s"}`}
+            Buscando proveedor — {n} producto{n === 1 ? "" : "s"}
           </div>
         </div>
         <div className="flex items-center gap-2 shrink-0">
@@ -150,10 +139,10 @@ export function UnfoundWinnersCarousel() {
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={p.imageUrl} alt={p.productName} className="w-full object-cover bg-white" style={{ height: CARD_W }} />
               <div className="px-2.5 py-2">
-                <div className="text-[15px] font-bold text-teal leading-tight">
+                <div className="text-[16px] font-bold text-teal leading-tight">
                   {p.competitorPrice !== null ? `$${p.competitorPrice.toFixed(2)}` : "Sin precio"}
                 </div>
-                <div className="text-[12px] text-ink leading-snug mt-0.5 line-clamp-2 min-h-[2.5em] first-letter:uppercase">{p.productName}</div>
+                <div className="text-[13px] text-ink leading-snug mt-0.5 line-clamp-2 min-h-[2.5em] first-letter:uppercase">{p.productName}</div>
               </div>
             </a>
           ))}
