@@ -152,23 +152,20 @@ export function SupplierShippingPushToggle({ token }: { token: string }) {
     );
   }
 
+  // Ya activado: una sola línea pequeña — lo importante de la página son los
+  // pedidos por enviar, no este aviso (pedido del usuario 2026-09-23).
   if (mode === "on") {
     return (
-      <div className={`${box} flex flex-wrap items-center gap-3`}>
-        <Bell size={18} className="shrink-0 text-emerald-600" />
-        <div className="min-w-[200px] flex-1">
-          <p className="text-sm font-medium">Avisos activados en este dispositivo</p>
-          <p className="text-xs text-neutral-500">Le llegará una notificación con cada pedido nuevo y un recordatorio diario si queda algo por enviar.</p>
-          {err && <p className="mt-1 text-xs text-red-600">{err}</p>}
+      <div className="mb-4">
+        <div className="flex items-center gap-1.5 text-xs text-neutral-500">
+          <Bell size={13} className="shrink-0 text-emerald-600" />
+          <span className="font-medium text-emerald-700">Avisos activados</span>
+          <span aria-hidden>·</span>
+          <button type="button" onClick={deactivate} disabled={busy} className="underline underline-offset-2 hover:text-neutral-700 disabled:opacity-60">
+            {busy ? "Desactivando…" : "Desactivar"}
+          </button>
         </div>
-        <button
-          type="button"
-          onClick={deactivate}
-          disabled={busy}
-          className="rounded-md border border-neutral-300 px-3 py-1.5 text-xs font-medium text-neutral-600 hover:bg-neutral-50 disabled:opacity-60"
-        >
-          {busy ? "Desactivando…" : "Desactivar"}
-        </button>
+        {err && <p className="mt-1 text-xs text-red-600">{err}</p>}
       </div>
     );
   }
