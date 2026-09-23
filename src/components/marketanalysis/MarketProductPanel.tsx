@@ -96,14 +96,13 @@ function computeCompetitorComparison(batchCost: number, batchUnits: number, frei
   };
 }
 
-type Tab = "proponer" | "ganadores" | "sinstock" | "mispropuestas" | "listoparacomprar" | "consulta" | "aprobacion" | "publicar" | "mispublicados" | "brandear" | "trazabilidad";
+type Tab = "proponer" | "ganadores" | "sinstock" | "mispropuestas" | "listoparacomprar" | "consulta" | "aprobacion" | "publicar" | "mispublicados" | "trazabilidad";
 
 export function MarketProductPanel({
   canPropose,
   canReview,
   canActOnReview,
   canPublish,
-  canBrand,
   canDecidePurchase,
   canViewB2BPricing,
   canViewB2CPricing,
@@ -114,7 +113,6 @@ export function MarketProductPanel({
   canReview: boolean;
   canActOnReview: boolean;
   canPublish: boolean;
-  canBrand: boolean;
   canDecidePurchase: boolean;
   canViewB2BPricing: boolean;
   canViewB2CPricing: boolean;
@@ -154,7 +152,6 @@ export function MarketProductPanel({
     ...(canPublish ? [{ key: "publicar" as Tab, label: "Publicar en Dropi" }] : []),
     // Confirmado 2026-09-23, pedido de Heidy: historial de lo que ya publicó.
     ...(canPublish ? [{ key: "mispublicados" as Tab, label: "Mis publicados" }] : []),
-    ...(canBrand ? [{ key: "brandear" as Tab, label: "Brandear" }] : []),
     ...(canReview ? [{ key: "trazabilidad" as Tab, label: "Trazabilidad" }] : []),
   ];
   const [tab, setTab] = useState<Tab>(tabs[0]?.key ?? "proponer");
@@ -204,7 +201,6 @@ export function MarketProductPanel({
       {tab === "aprobacion" && <ReviewQueue canAct={canActOnReview} />}
       {tab === "publicar" && <PublishQueue />}
       {tab === "mispublicados" && <PublishedHistoryView />}
-      {tab === "brandear" && <BrandQueue />}
       {tab === "trazabilidad" && <TraceabilityView canDecidePurchase={canDecidePurchase} />}
     </div>
   );
@@ -945,72 +941,8 @@ function PublishedHistoryView() {
   );
 }
 
-// ---------------- Paso 4: Brandear (Robert) ----------------
-function BrandQueue() {
-  const [rows, setRows] = useState<Proposal[] | null>(null);
-  const [photos, setPhotos] = useState<Record<string, string[]>>({});
-  const [uploading, setUploading] = useState<string | null>(null);
-  const [busy, setBusy] = useState<string | null>(null);
-  const [err, setErr] = useState("");
-  const fileRefs = useRef<Record<string, HTMLInputElement | null>>({});
-
-  function load() {
-    fetch("/api/market-products?view=brand").then((r) => (r.ok ? r.json() : [])).then(setRows).catch(() => setRows([]));
-  }
-  useEffect(load, []);
-
-  async function uploadPhoto(id: string, file: File) {
-    setUploading(id);
-    const compressed = await compressImage(file);
-    const uploaded = await uploadFile(compressed, "market-product-branding");
-    setUploading(null);
-    if (!uploaded.ok) { setErr(uploaded.error); return; }
-    setPhotos((s) => ({ ...s, [id]: [...(s[id] ?? []), uploaded.url].slice(0, 3) }));
-  }
-
-  async function finish(id: string) {
-    const list = photos[id] ?? [];
-    if (list.length < 3) { setErr("Sube las 3 fotos reales antes de terminar."); return; }
-    setErr(""); setBusy(id);
-    const res = await fetch(`/api/market-products/${id}/brand`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ photos: list }),
-    });
-    setBusy(null);
-    if (!res.ok) { const d = await res.json().catch(() => ({})); setErr(d.error ?? "No se pudo terminar."); return; }
-    load();
-  }
-
-  if (rows === null) return <div className="text-steel text-[13px]">Cargando…</div>;
-  if (rows.length === 0) return <div className="text-steel text-[13.5px]">No hay productos publicados esperando brandeo.</div>;
-
-  return (
-    <div className="flex flex-col gap-3">
-      {err && <div className="text-red text-[12.5px]">{err}</div>}
-      {rows.map((p) => {
-        const list = photos[p.id] ?? [];
-        return (
-          <div key={p.id} className="bg-surface border border-rule rounded-md p-3.5">
-            <div className="font-semibold text-[13.5px] mb-1">{p.code} — {p.productName}</div>
-            <div className="text-[12px] text-steel mb-2">Dropi ID: {p.dropiProductId} · Bodega: {BODEGA_LABELS[p.bodega ?? ""] ?? "—"}</div>
-            <div className="flex gap-2 mb-2">
-              {list.map((url, i) => <img key={i} src={url} alt="" className="w-14 h-14 rounded object-cover" />)}
-              {list.length < 3 && (
-                <button type="button" className="w-14 h-14 rounded border-[1.5px] border-dashed border-rule flex items-center justify-center text-steel cursor-pointer hover:border-teal" onClick={() => fileRefs.current[p.id]?.click()}>
-                  {uploading === p.id ? <span className="w-3.5 h-3.5 rounded-full border-2 border-rule border-t-teal animate-spin" /> : <Upload size={14} />}
-                </button>
-              )}
-            </div>
-            <input ref={(el) => { fileRefs.current[p.id] = el; }} type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && uploadPhoto(p.id, e.target.files[0])} />
-            <button type="button" disabled={busy === p.id || list.length < 3} className="rounded border border-teal bg-teal px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer disabled:opacity-60" onClick={() => finish(p.id)}>
-              Terminar brandeo ({list.length}/3)
-            </button>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
+// Paso 4 (Brandear) ya no vive acá: desde 2026-09-23 es la pestaña propia
+// "Nuevos IDs por brandear" (NewIdBrandingPanel), pedido de Robert.
 
 // ---------------- Paso 5: Trazabilidad + decisión de compra (Bryan) ----------------
 

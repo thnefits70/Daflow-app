@@ -6,7 +6,6 @@ import {
   canProposeMarketProduct,
   canReviewMarketProduct,
   canPublishMarketProduct,
-  canBrandMarketProduct,
   canViewB2BPricing,
   canViewB2CPricing,
 } from "@/lib/guards";
@@ -213,16 +212,6 @@ export async function GET(req: NextRequest) {
       where: isAdmin ? { publishedAt: { not: null } } : { publishedById: session.user.id },
       include: includeFull,
       orderBy: { publishedAt: "desc" },
-    });
-    return NextResponse.json(rows);
-  }
-
-  if (view === "brand") {
-    if (!(await canBrandMarketProduct())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
-    const rows = await prisma.marketProductProposal.findMany({
-      where: { publishedAt: { not: null }, brandedAt: null },
-      include: includeFull,
-      orderBy: { publishedAt: "asc" },
     });
     return NextResponse.json(rows);
   }

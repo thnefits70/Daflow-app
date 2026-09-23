@@ -148,7 +148,6 @@ export function DeptWorkspaceTabs({
   canReviewMarketProduct = false,
   canActOnMarketProductReview = false,
   canPublishMarketProduct = false,
-  canBrandMarketProduct = false,
   canDecideMarketProductPurchase = false,
   canViewB2BPricing = false,
   canViewB2CPricing = false,
@@ -472,7 +471,7 @@ export function DeptWorkspaceTabs({
     if (t.key === "postventa") return canManageStoreFeedback || canViewStoreFeedback;
     if (t.key === "combos") return canSyncAtomData || canUploadLowRotationList || canApproveComboSuggestions;
     if (t.key === "analisis-mercado")
-      return canProposeMarketProduct || canReviewMarketProduct || canPublishMarketProduct || canBrandMarketProduct || canViewB2BPricing || canViewB2CPricing;
+      return canProposeMarketProduct || canReviewMarketProduct || canPublishMarketProduct || canViewB2BPricing || canViewB2CPricing;
     if (t.key === "pagosadmin") return canManageAdminPayments;
     if (t.key === "almuerzos") return canRegisterLunchPayments;
     if (t.key === "plan-mejora") return canManageImprovementPlan;
@@ -760,7 +759,6 @@ export function DeptWorkspaceTabs({
         (canProposeMarketProduct ||
           canReviewMarketProduct ||
           canPublishMarketProduct ||
-          canBrandMarketProduct ||
           canViewB2BPricing ||
           canViewB2CPricing ||
           canResolveSupplierStockout) && (
@@ -769,7 +767,6 @@ export function DeptWorkspaceTabs({
           canReview={canReviewMarketProduct}
           canActOnReview={canActOnMarketProductReview}
           canPublish={canPublishMarketProduct}
-          canBrand={canBrandMarketProduct}
           canDecidePurchase={canDecideMarketProductPurchase}
           canViewB2BPricing={canViewB2BPricing}
           canViewB2CPricing={canViewB2CPricing}

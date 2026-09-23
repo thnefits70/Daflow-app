@@ -23,7 +23,6 @@ import {
   canSubmitFulfillmentRequest,
   canEditPayrollRoles,
   canProposeMarketProduct,
-  canBrandMarketProduct,
   canManageOutflowPurchaseGestion,
 } from "@/lib/guards";
 
@@ -197,9 +196,6 @@ export async function POST(req: NextRequest) {
   // por permiso propio.
   if (!allowed && session?.user.role === "employee" && folder === "market-product-reference") {
     allowed = await canProposeMarketProduct();
-  }
-  if (!allowed && session?.user.role === "employee" && folder === "market-product-branding") {
-    allowed = await canBrandMarketProduct();
   }
   // Adjuntos del chat de Roles de pago — cualquier colaborador puede subir
   // aquí; el permiso real (poder escribir en ESE hilo puntual) se valida al
