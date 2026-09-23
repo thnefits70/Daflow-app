@@ -11,6 +11,7 @@ import { getWeeklyCheckinPushes, getMidweekFollowupPushes } from "@/lib/weeklyCh
 import { getDeliveryOverduePushes, getContraEntregaPaymentOverduePushes } from "@/lib/externalSales";
 import { getExpiringLotPushes } from "@/lib/stockKardex";
 import { sendPushToOwner } from "@/lib/webPush";
+import { sendSupplierShippingDailyReminders } from "@/lib/supplierShippingPush";
 import { runNichoAutoBackfill } from "@/lib/nichoAi";
 
 // Disparado por Vercel Cron (ver vercel.json) una vez al día. Protegido por
@@ -133,6 +134,11 @@ export async function GET(req: NextRequest) {
     await sendPushToOwner(r.ownerId, { title: r.title, body: r.body, url: r.url });
     notified++;
   }
+
+  // Equipo de despacho de CHEN (confirmado 2026-09-23) — recordatorio
+  // diario de cuántos pedidos les quedan por enviar, solo si activaron
+  // avisos en el enlace "solo envíos" y queda algo pendiente.
+  notified += await sendSupplierShippingDailyReminders();
 
   // Backfill automático de nichos faltantes (confirmado 2026-09-02) — corre
   // solo mientras el gasto del mes para esta feature no llegue al techo; si

@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { findSupplierByPublicShippingToken, SUPPLIER_PUBLIC_LINK_START } from "@/lib/supplierDebt";
 import { SupplierPendingShipmentsList } from "@/components/supplier-ledger/SupplierPendingShipmentsList";
 import { SupplierShipmentHistoryTable } from "@/components/supplier-ledger/SupplierShipmentHistoryTable";
+import { SupplierShippingPushToggle } from "@/components/supplier-ledger/SupplierShippingPushToggle";
 import { firstName } from "@/lib/actorName";
 
 // Confirmado 2026-09-17, pedido explícito del usuario: segundo enlace,
@@ -14,13 +15,21 @@ import { firstName } from "@/lib/actorName";
 // debe. Valida solo publicShippingToken (findSupplierByPublicShippingToken)
 // — aunque alguien edite esta URL, esta llave nunca abre la página del
 // saldo, porque esa valida un campo distinto (publicLedgerToken).
-export const metadata: Metadata = {
-  title: "Pedidos por enviar",
-  description: "Lista de pedidos pendientes de envío.",
-  icons: {
-    icon: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
-  },
-};
+// Confirmado 2026-09-23: manifest propio por enlace (con su token) para que
+// en iPhone se pueda "Añadir a pantalla de inicio" y así recibir avisos push
+// (ver SupplierShippingPushToggle).
+export async function generateMetadata({ params }: { params: Promise<{ token: string }> }): Promise<Metadata> {
+  const { token } = await params;
+  return {
+    title: "Pedidos por enviar",
+    description: "Lista de pedidos pendientes de envío.",
+    icons: {
+      icon: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+    },
+    manifest: `/proveedor-ledger/envios/${token}/manifest`,
+    appleWebApp: { capable: true, title: "Pedidos", statusBarStyle: "default" },
+  };
+}
 
 export default async function SupplierShippingLedgerPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
@@ -87,6 +96,8 @@ export default async function SupplierShippingLedgerPage({ params }: { params: P
           <h1 className="text-xl font-semibold tracking-tight">Pedidos por enviar</h1>
           <p className="mt-1 text-sm text-neutral-500">Actualizado en tiempo real. Esta página es de solo lectura.</p>
         </header>
+
+        <SupplierShippingPushToggle token={token} />
 
         <section className="mb-8">
           <div className="mb-1 flex items-center gap-2">

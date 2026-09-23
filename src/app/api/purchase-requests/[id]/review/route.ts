@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { notifyOwner } from "@/lib/notifications";
 import { canActOnPurchaseApproval } from "@/lib/guards";
+import { notifySupplierShippingTeamOfNewOrders } from "@/lib/supplierShippingPush";
 
 const schema = z.object({ action: z.enum(["approve", "reject"]), rejectReason: z.string().trim().optional() });
 
@@ -41,6 +42,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       body: `${existing.catalogItem.name} — ${parsed.data.action === "approve" ? "sigue con el pago" : parsed.data.rejectReason || "sin motivo especificado"}`,
       url: "/area/workspace",
     });
+  }
+
+  // Confirmado 2026-09-23 — mismo aviso al equipo de despacho del proveedor
+  // de crédito que en group/[groupId]/review/route.ts (la función ya
+  // ignora proveedores que no son de crédito).
+  if (parsed.data.action === "approve") {
+    await notifySupplierShippingTeamOfNewOrders(existing.supplierId, [
+      { name: existing.catalogItem.name, quantity: existing.quantity },
+    ]);
   }
 
   return NextResponse.json(updated);

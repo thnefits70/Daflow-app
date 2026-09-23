@@ -40,12 +40,15 @@ function ensureVapidConfigured() {
 // Si una suscripción ya expiró o el permiso fue revocado, el navegador
 // responde 404/410 y esa fila se borra sola, para no seguir intentando en
 // cada corrida.
-export async function sendPushToOwner(ownerId: string, payload: PushPayload) {
+// brandIcon: false — confirmado 2026-09-23, para los avisos al equipo de
+// despacho de CHEN (dominio neutral dunxingchen.cc): nunca deben llevar el
+// logo de la empresa.
+export async function sendPushToOwner(ownerId: string, payload: PushPayload, opts: { brandIcon?: boolean } = {}) {
   const subs = await prisma.pushSubscription.findMany({ where: { ownerId } });
   if (subs.length === 0) return;
 
   ensureVapidConfigured();
-  const icon = await getNotificationIcon();
+  const icon = opts.brandIcon === false ? null : await getNotificationIcon();
   const body = JSON.stringify(icon ? { ...payload, icon } : payload);
   await Promise.all(
     subs.map(async (sub) => {
@@ -74,6 +77,8 @@ export async function sendPushToOwner(ownerId: string, payload: PushPayload) {
           const destinatario =
             ownerId === "admin"
               ? "Administrador"
+              : ownerId.startsWith("supplier-shipping:")
+              ? "Equipo de despacho del proveedor (enlace de envíos)"
               : (await prisma.user.findUnique({ where: { id: ownerId }, select: { name: true } }).catch(() => null))?.name ?? ownerId;
           await prisma.notification.create({
             data: {

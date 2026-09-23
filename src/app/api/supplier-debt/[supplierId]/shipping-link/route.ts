@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { prisma } from "@/lib/prisma";
 import { canManageSupplierDebtPayments } from "@/lib/guards";
+import { supplierShippingPushOwnerId } from "@/lib/supplierShippingPush";
 
 // Confirmado 2026-09-17 (pedido explícito del usuario): genera (o regenera,
 // invalidando el anterior) el segundo enlace público — llave aparte de
@@ -22,6 +23,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ sup
     where: { id: supplierId },
     data: { publicShippingToken: token, publicShippingTokenCreatedAt: new Date() },
   });
+
+  // Confirmado 2026-09-23: quien activó avisos con el enlace viejo deja de
+  // recibirlos — tendrán que volver a activarlos desde el enlace nuevo.
+  await prisma.pushSubscription.deleteMany({ where: { ownerId: supplierShippingPushOwnerId(supplierId) } });
 
   return NextResponse.json({ token });
 }

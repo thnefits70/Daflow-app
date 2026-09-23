@@ -6,6 +6,7 @@ import { notifyOwner } from "@/lib/notifications";
 import { releaseCreditsForGroup, getReservedCreditsForGroup, getAvailableCreditsForSupplier } from "@/lib/supplierCredits";
 import { canActOnPurchaseApproval } from "@/lib/guards";
 import { reviewApprovedPurchaseGroup } from "@/lib/purchaseAi";
+import { notifySupplierShippingTeamOfNewOrders } from "@/lib/supplierShippingPush";
 
 const schema = z.object({ action: z.enum(["approve", "reject"]), rejectReason: z.string().trim().optional() });
 
@@ -101,6 +102,16 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ gro
       body: `${names} — ${totalLabel} — lista para pagar`,
       url: `/admin/dept/${rows[0].deptId}?tab=compras&ptab=finanzas&group=${groupId}`,
     });
+  }
+
+  // Confirmado 2026-09-23, pedido explícito del usuario: si es un proveedor
+  // de crédito (hoy CHEN), avisarle a su equipo de despacho (quienes
+  // activaron avisos en el enlace "solo envíos") que hay un pedido nuevo.
+  if (parsed.data.action === "approve" && rows[0].supplier.paymentMode === "CREDITO") {
+    await notifySupplierShippingTeamOfNewOrders(
+      rows[0].supplierId,
+      rows.map((r) => ({ name: r.catalogItem.name, quantity: r.quantity }))
+    );
   }
 
   // Confirmado 2026-09-04: pedido explícito del usuario (admin/Andrés) — en
