@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AlertTriangle, Clock } from "lucide-react";
+import { AlertTriangle, Clock, HelpCircle } from "lucide-react";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 import { formatCalendarDate } from "@/lib/formatDateTime";
 
@@ -28,6 +28,7 @@ function daysUntil(dateIso: string): number {
 // Sin onSelect = solo lectura (Bryan, desde Stock Actual).
 export function ExpirationAlerts({ onSelect }: { onSelect?: (catalogItemId: string) => void }) {
   const [lots, setLots] = useState<AlertLot[] | null>(null);
+  const [showHelp, setShowHelp] = useState(false);
 
   useEffect(() => {
     fetch("/api/purchase-catalog/expiration-alerts")
@@ -63,6 +64,21 @@ export function ExpirationAlerts({ onSelect }: { onSelect?: (catalogItemId: stri
 
   return (
     <div className="flex flex-col gap-2 mb-3">
+      {/* Confirmado 2026-09-23, pedido del usuario: una explicación corta a
+          un clic para quien no sepa qué significa este bloque. */}
+      <div>
+        <button type="button" className="flex items-center gap-1 text-[11.5px] text-blue cursor-pointer" onClick={() => setShowHelp((v) => !v)}>
+          <HelpCircle size={13} /> {showHelp ? "Ocultar explicación" : "¿Qué significa esto?"}
+        </button>
+        {showHelp && (
+          <div className="mt-1.5 rounded-md border border-rule bg-cloud px-3 py-2 text-[12px] text-steel leading-relaxed space-y-1">
+            <p>Aquí aparecen los productos que tienen <b className="text-ink">fecha de caducidad</b> y todavía tienen unidades en bodega. Cada fila es un lote: su código, el nombre, cuántas unidades quedan y cuándo vence.</p>
+            <p><b className="text-red">Ya vencidos:</b> la fecha ya pasó. Esas unidades <b className="text-ink">no se deben despachar</b>: hay que revisarlas en bodega y decidir qué hacer con ellas (darlas de baja por Registro de Egresos o gestionarlas con el proveedor).</p>
+            <p><b className="text-gold">Vencen en 6 meses o menos:</b> todavía se pueden vender, pero hay que <b className="text-ink">darles salida pronto</b> (promocionarlos, meterlos en combos o avisar a ventas) antes de que venzan.</p>
+            <p>{onSelect ? "Toca un producto para abrir sus lotes aquí abajo y revisar o corregir la fecha o la cantidad." : "Esta lista es solo para consultar; Daniel (Inventario) es quien revisa y corrige los lotes."}</p>
+          </div>
+        )}
+      </div>
       {expired.length > 0 && (
         <div className="border border-red/40 rounded-md p-2">
           <div className="flex items-center gap-1.5 text-red text-[12.5px] font-bold mb-1 px-1">
