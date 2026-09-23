@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { CheckCircle2, ChevronDown, ChevronUp, Package, Pencil, Plus, X } from "lucide-react";
+import { ExpandableName } from "@/components/ui/ExpandableName";
 
 export type VariantNote = { label: string; quantity: number };
 export type CompiledLine = { catalogItemId: string; name: string; photos: string[]; quantity: number; variants: VariantNote[] };
@@ -145,7 +146,7 @@ export function CompiledResult({ batch, canEditVariants = false }: { batch: Comp
                   <Package size={12} />
                 </div>
               )}
-              <span className="text-[12.5px] flex-1 min-w-0 truncate">{l.name}</span>
+              <ExpandableName text={l.name} className="text-[12.5px] flex-1" />
               <span className="font-mono text-[13px] font-bold text-teal shrink-0">{l.quantity}</span>
             </div>
             <VariantsBlock

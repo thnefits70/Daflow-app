@@ -201,7 +201,7 @@ export function DeteriorTraceList() {
                   <div className="flex-1 min-w-0">
                     <div className="text-[13px] font-semibold flex items-center gap-1.5 min-w-0">
                       {i.catalogItem && <CatalogCode code={i.catalogItem.justCode} />}
-                      <span className="truncate">{i.catalogItem?.name ?? i.declaredName}</span>
+                      <span className="truncate" title={i.catalogItem?.name ?? i.declaredName}>{i.catalogItem?.name ?? i.declaredName}</span>
                     </div>
                     <div className="text-[10.5px] text-steel">
                       {i.batch.code} · {i.quantity} un. · {formatDateTime(i.batch.submittedAt ?? i.batch.createdAt)}

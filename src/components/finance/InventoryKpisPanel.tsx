@@ -8,6 +8,7 @@ import { TrendSpark } from "@/components/shared/TrendSpark";
 import { KpiInfoTip } from "@/components/shared/KpiInfoTip";
 import { TabGuide } from "@/components/shared/TabGuide";
 import { formatCalendarDate } from "@/lib/formatDateTime";
+import { ExpandableName } from "@/components/ui/ExpandableName";
 
 const BUCKET_STYLE: Record<StaleStreakBucket, { label: string; color: string }> = {
   "1-3": { label: "recién detectado", color: "#92a3c0" },
@@ -284,7 +285,7 @@ export function InventoryKpisPanel({ data }: { data: InventoryKpisDataDTO }) {
                   {i + 1}
                 </span>
                 <div className="flex-1 min-w-0">
-                  <div className="font-semibold truncate">{p.description || p.productCode}</div>
+                  <ExpandableName text={p.description || p.productCode} className="font-semibold" />
                   <div className="text-steel font-mono text-[10px]">{p.productCode}</div>
                 </div>
                 <span
@@ -439,7 +440,7 @@ function AllProductsSnapshotTable({ rows, period }: { rows: SnapshotRow[]; perio
             {filtered.map((r) => (
               <tr key={r.productCode} className="border-t border-rule/50">
                 <td className="py-1.5 pr-2 font-mono text-steel whitespace-nowrap">{r.productCode}</td>
-                <td className="py-1.5 pr-2 font-semibold truncate max-w-64">{r.description}</td>
+                <td className="py-1.5 pr-2 font-semibold max-w-64"><ExpandableName text={r.description} /></td>
                 <td className="py-1.5 pl-3 text-right font-mono whitespace-nowrap">{unitMoney(r.avgCost)}</td>
                 <td className="py-1.5 pl-3 text-right font-mono whitespace-nowrap">{r.stock.toLocaleString("es-MX")}</td>
                 <td className="py-1.5 pl-3 text-right font-mono whitespace-nowrap">{money(r.costTotal)}</td>

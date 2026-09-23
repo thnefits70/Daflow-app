@@ -8,6 +8,7 @@ import { ProductMatchPicker, type ProductMatchResult } from "@/components/mercha
 import { usePasteFile } from "@/lib/usePasteFile";
 import { uploadFile } from "@/lib/uploadFile";
 import { formatDateTime } from "@/lib/formatDateTime";
+import { ExpandableName } from "@/components/ui/ExpandableName";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 import { useFormDraft } from "@/lib/useFormDraft";
 
@@ -364,7 +365,7 @@ export function PersonalPurchasesPanel() {
               <div className="flex items-center gap-2.5 bg-cloud border border-rule rounded-md px-2.5 py-2">
                 <span className="flex-1 min-w-0 text-[13px] font-medium flex items-center gap-1.5">
                   <CatalogCode code={draft.catalogItemJustCode} />
-                  <span className="truncate">{draft.employeeProductName}</span>
+                  <ExpandableName text={draft.employeeProductName} />
                 </span>
                 <button
                   type="button"

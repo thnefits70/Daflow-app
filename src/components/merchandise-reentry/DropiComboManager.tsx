@@ -6,6 +6,7 @@ import { ComboComponentBuilder, type ComboDraftComponent } from "./ComboComponen
 import { formatDateTime } from "@/lib/formatDateTime";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 import { useFormDraft } from "@/lib/useFormDraft";
+import { ExpandableName } from "@/components/ui/ExpandableName";
 
 type CatalogItem = { id: string; name: string; photos: string[]; justCode: string | null };
 type ComboComponent = { id: string; quantity: number; catalogItem: CatalogItem };
@@ -238,7 +239,7 @@ export function DropiComboManager() {
               <div className="flex items-center justify-between gap-2 mb-1.5">
                 <div className="flex items-center gap-2 min-w-0">
                   <span className="font-mono text-[11.5px] font-bold text-teal shrink-0">{combo.code}</span>
-                  {combo.label && <span className="text-[12px] text-steel truncate">{combo.label}</span>}
+                  {combo.label && <ExpandableName text={combo.label} className="text-[12px] text-steel" />}
                 </div>
                 <div className="flex items-center gap-2.5 shrink-0">
                   <button type="button" className="text-steel hover:text-teal cursor-pointer" title="Editar" onClick={() => startEdit(combo)}>

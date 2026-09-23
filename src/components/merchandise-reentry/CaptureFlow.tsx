@@ -6,6 +6,7 @@ import { LiveCameraCapture } from "@/components/shared/LiveCameraCapture";
 import { ProductMatchPicker, type MatchCatalogItem, type ProductMatchResult } from "./ProductMatchPicker";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 import { useFormDraft } from "@/lib/useFormDraft";
+import { ExpandableName } from "@/components/ui/ExpandableName";
 
 const DAMAGE_REASONS = ["Producto roto", "Empaque abierto", "Humedad/manchado", "Golpeado", "Otro"];
 
@@ -247,7 +248,7 @@ export function CaptureFlow() {
                 <div className="flex-1 min-w-0">
                   <div className="text-[12.5px] font-semibold flex items-center gap-1.5 min-w-0">
                     {item.catalogItem && <CatalogCode code={item.catalogItem.justCode} />}
-                    <span className="truncate">{itemName(item)}</span>
+                    <ExpandableName text={itemName(item)} />
                   </div>
                   <div className="text-[11px] text-steel">
                     {item.goodQty > 0 && <span className="text-green font-semibold">{item.goodQty} buenas</span>}
@@ -536,7 +537,7 @@ function AddItemForm({ batchId, onAdded, onCancel }: { batchId: string; onAdded:
               <div className="flex items-center gap-2.5 bg-green/10 border border-green/35 rounded-md p-2.5">
                 <div className="flex-1 min-w-0 text-[12.5px] font-semibold flex items-center gap-1.5">
                   <CatalogCode code={selected.justCode} />
-                  <span className="truncate">{selected.name}</span>
+                  <ExpandableName text={selected.name} />
                 </div>
                 <button type="button" className="shrink-0 text-[11px] font-semibold text-blue cursor-pointer" onClick={() => setSelected(null)}>
                   Cambiar

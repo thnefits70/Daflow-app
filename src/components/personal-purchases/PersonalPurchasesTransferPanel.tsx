@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { ProofPreview } from "@/components/shared/ProofPreview";
 import { CatalogCode } from "@/components/shared/CatalogCode";
+import { ExpandableName } from "@/components/ui/ExpandableName";
 
 type ConfirmOrder = {
   id: string;
@@ -226,7 +227,7 @@ function ItemsWithPhotos({ items, onZoom }: { items: ItemWithPhoto[]; onZoom: (u
           )}
           <span className="inline-flex items-center gap-1 min-w-0">
             <CatalogCode code={it.confirmedCatalogItem?.justCode} />
-            <span className="truncate">{it.confirmedProductName ?? it.employeeProductName} × {it.quantity}</span>
+            <ExpandableName text={`${it.confirmedProductName ?? it.employeeProductName} × ${it.quantity}`} />
           </span>
         </div>
       ))}

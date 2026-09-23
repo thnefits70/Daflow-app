@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { CheckCircle2, Clock, DollarSign, ExternalLink, XCircle, Wallet, AlertTriangle, Search, ChevronDown, ChevronRight } from "lucide-react";
 import { formatDateTime } from "@/lib/formatDateTime";
 import { CatalogCode } from "@/components/shared/CatalogCode";
+import { ExpandableName } from "@/components/ui/ExpandableName";
 
 type ItemDTO = {
   id: string;
@@ -383,7 +384,7 @@ export function SupplierExchangeResolutionInbox({
                     <div className="flex-1 min-w-0">
                       <div className="text-[13px] font-semibold flex items-center gap-1.5 min-w-0">
                         {item.catalogItem && <CatalogCode code={item.catalogItem.justCode} />}
-                        <span className="truncate">{itemName(item)}</span>
+                        <ExpandableName text={itemName(item)} />
                       </div>
                       <div className="text-[11px] text-steel">{item.quantity} un.</div>
                       {item.expectedCreditAmount !== null ? (
@@ -451,7 +452,7 @@ export function SupplierExchangeResolutionInbox({
                     >
                       <span className="font-mono text-[10px] font-bold text-teal shrink-0">{item.batch.code}</span>
                       {item.catalogItem && <CatalogCode code={item.catalogItem.justCode} />}
-                      <span className="text-[12px] font-semibold truncate flex-1 min-w-0">{itemName(item)}</span>
+                      <ExpandableName text={itemName(item)} className="text-[12px] font-semibold flex-1" />
                       <span className={`text-[10.5px] font-semibold shrink-0 ${summary.className}`}>{summary.text}</span>
                       <span className="text-[10px] text-steel-dim shrink-0 hidden sm:inline">{item.resolvedAt ? formatDateTime(item.resolvedAt) : ""}</span>
                       {isOpen ? <ChevronDown size={13} className="text-steel shrink-0" /> : <ChevronRight size={13} className="text-steel shrink-0" />}

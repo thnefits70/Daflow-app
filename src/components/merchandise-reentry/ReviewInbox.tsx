@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { AlertTriangle, Ban, ChevronDown, ChevronUp, Pencil, Trash2, Wrench } from "lucide-react";
 import { ProductMatchPicker, type ProductMatchResult } from "./ProductMatchPicker";
 import { CatalogCode } from "@/components/shared/CatalogCode";
+import { ExpandableName } from "@/components/ui/ExpandableName";
 
 type ItemDTO = {
   id: string;
@@ -321,7 +322,7 @@ function ReadyItemRow({
         )}
         <div className="flex-1 text-[12px] flex items-center gap-1.5 min-w-0">
           {item.catalogItem && <CatalogCode code={item.catalogItem.justCode} />}
-          <span className="truncate">{itemName(item)}</span>
+          <ExpandableName text={itemName(item)} />
           {!item.approvedAt && canAct && !editingProduct && (
             <button type="button" title="Vincular con el producto correcto del catálogo" className="shrink-0 text-steel hover:text-teal cursor-pointer" onClick={() => setEditingProduct(true)}>
               <Pencil size={11} />
@@ -436,7 +437,7 @@ function ReviewItemRow({ item, canAct, onChanged, onExpandPhoto }: { item: ItemD
           ) : (
             <div className="flex items-center gap-1.5">
               {item.catalogItem && <CatalogCode code={item.catalogItem.justCode} />}
-              <div className="text-[12.5px] font-semibold truncate">{itemName(item)}</div>
+              <ExpandableName text={itemName(item)} className="text-[12.5px] font-semibold" />
               {!item.approvedAt && canAct && !editingProduct && (
                 <button type="button" title="Corregir el producto vinculado" className="shrink-0 text-steel hover:text-teal cursor-pointer" onClick={() => setEditingProduct(true)}>
                   <Pencil size={11} />

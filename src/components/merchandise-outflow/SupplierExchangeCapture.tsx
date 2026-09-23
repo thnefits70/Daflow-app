@@ -7,6 +7,7 @@ import { ProductMatchPicker, type MatchCatalogItem, type ProductMatchResult } fr
 import { compressImage } from "@/lib/compressImage";
 import { uploadFile } from "@/lib/uploadFile";
 import { CatalogCode } from "@/components/shared/CatalogCode";
+import { ExpandableName } from "@/components/ui/ExpandableName";
 
 type SupplierOption = { id: string; name: string };
 
@@ -302,7 +303,7 @@ export function SupplierExchangeCapture({ onSent }: { onSent?: () => void }) {
                   <div className="flex-1 min-w-0 flex items-center justify-between gap-2">
                     <span className="text-[12.5px] font-semibold flex items-center gap-1.5 min-w-0">
                       {item.catalogItem && <CatalogCode code={item.catalogItem.justCode} />}
-                      <span className="truncate">{itemName(item)}</span>
+                      <ExpandableName text={itemName(item)} />
                     </span>
                     <div className="flex items-center gap-2 shrink-0">
                       <span className="font-mono text-[11px] text-steel">{item.quantity} un.</span>
@@ -453,7 +454,7 @@ function AddItemForm({ batchId, onAdded, onCancel }: { batchId: string; onAdded:
             )}
             <div className="flex-1 min-w-0 text-[12.5px] font-semibold flex items-center gap-1.5">
               <CatalogCode code={selected.justCode} />
-              <span className="truncate">{selected.name}</span>
+              <ExpandableName text={selected.name} />
             </div>
             <button type="button" className="shrink-0 text-[11px] font-semibold text-blue cursor-pointer" onClick={() => setSelected(null)}>Cambiar</button>
           </div>

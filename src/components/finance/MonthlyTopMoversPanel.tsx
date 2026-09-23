@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Upload, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { uploadFile } from "@/lib/uploadFile";
+import { ExpandableName } from "@/components/ui/ExpandableName";
 
 const MONTH_NAMES_FULL = [
   "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
@@ -204,7 +205,7 @@ export function MonthlyTopMoversPanel() {
               <tbody>
                 {preview.rows.map((r) => (
                   <tr key={r.catalogItemId} className="border-t border-rule/50">
-                    <td className="py-1.5 font-semibold truncate max-w-96">{r.catalogItemName}</td>
+                    <td className="py-1.5 font-semibold max-w-96"><ExpandableName text={r.catalogItemName} /></td>
                     <td className="py-1.5 text-right font-mono">{r.unitsMoved.toLocaleString("es-MX")}</td>
                   </tr>
                 ))}

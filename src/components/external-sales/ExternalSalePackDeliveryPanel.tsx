@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Camera, Check } from "lucide-react";
 import { LiveCameraCapture } from "@/components/shared/LiveCameraCapture";
 import { CatalogCode } from "@/components/shared/CatalogCode";
+import { ExpandableName } from "@/components/ui/ExpandableName";
 
 type SaleItemDTO = {
   id: string;
@@ -86,7 +87,7 @@ export function ExternalSalePackDeliveryPanel() {
                     <div className="flex-1 min-w-0">
                       <div className="text-[13px] font-semibold flex items-center gap-1.5 min-w-0">
                         {it.catalogItem && <CatalogCode code={it.catalogItem.justCode} />}
-                        <span className="truncate">{it.catalogItem?.name ?? it.declaredProductName}</span>
+                        <ExpandableName text={it.catalogItem?.name ?? it.declaredProductName} />
                       </div>
                       <div className="text-[11.5px] text-steel">{it.quantity} un.</div>
                       {isReference && <div className="text-[10.5px] text-gold">Foto de referencia del asesor — producto sin matricular</div>}

@@ -191,7 +191,7 @@ export function ProductMatchPicker({
               )}
               <span className="text-[12.5px] font-medium flex-1 flex items-center gap-1.5 flex-wrap min-w-0">
                 <CatalogCode code={c.justCode} />
-                <span className="truncate">{c.name}</span>
+                <span className="truncate" title={c.name}>{c.name}</span>
               </span>
               {c.pendingRegistration && (
                 <span className="shrink-0 font-mono text-[9px] font-bold uppercase rounded-full px-1.5 py-0.5 bg-gold/15 border border-gold/40" style={{ color: "#D9A441" }}>

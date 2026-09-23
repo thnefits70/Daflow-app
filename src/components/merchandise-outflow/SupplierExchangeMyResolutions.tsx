@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { CheckCircle2, DollarSign, ExternalLink, Upload, XCircle, Wallet, Lock, Pencil } from "lucide-react";
 import { uploadFile } from "@/lib/uploadFile";
 import { CatalogCode } from "@/components/shared/CatalogCode";
+import { ExpandableName } from "@/components/ui/ExpandableName";
 
 type ItemDTO = {
   id: string;
@@ -237,7 +238,7 @@ export function SupplierExchangeMyResolutions() {
                   <div className="flex-1 min-w-0">
                     <div className="text-[13px] font-semibold flex items-center gap-1.5 min-w-0">
                       {item.catalogItem && <CatalogCode code={item.catalogItem.justCode} />}
-                      <span className="truncate">{itemName(item)}</span>
+                      <ExpandableName text={itemName(item)} />
                     </div>
                     <div className="text-[11px] text-steel">{item.quantity} un.</div>
                     {item.expectedCreditAmount !== null ? (

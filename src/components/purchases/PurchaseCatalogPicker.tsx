@@ -553,7 +553,7 @@ export function PurchaseCatalogPicker({
                       <CheckCircle2 size={13} className="text-teal shrink-0" />
                     )}
                     <CatalogCode code={item.justCode} />
-                    <span className="truncate">{item.name}</span>
+                    <span className="truncate" title={item.name}>{item.name}</span>
                     {item.pendingRegistration && (
                       <span className="shrink-0 font-mono text-[9px] font-bold uppercase rounded-full px-1.5 py-0.5 bg-gold/15 border border-gold/40" style={{ color: "#D9A441" }}>
                         Sin fotos — matricular

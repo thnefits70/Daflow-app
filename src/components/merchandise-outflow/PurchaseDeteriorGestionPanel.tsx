@@ -6,6 +6,7 @@ import { CatalogCode } from "@/components/shared/CatalogCode";
 import { formatDateTime } from "@/lib/formatDateTime";
 import { compressImage } from "@/lib/compressImage";
 import { uploadFile } from "@/lib/uploadFile";
+import { ExpandableName } from "@/components/ui/ExpandableName";
 
 type SupplierOption = { id: string; name: string };
 type ItemDTO = {
@@ -174,7 +175,7 @@ function GestionCard({ item, onChanged }: { item: ItemDTO; onChanged: () => void
         <div className="flex-1 min-w-0">
           <div className="text-[13px] font-semibold flex items-center gap-1.5 min-w-0">
             {item.catalogItem && <CatalogCode code={item.catalogItem.justCode} />}
-            <span className="truncate">{itemName(item)}</span>
+            <ExpandableName text={itemName(item)} />
           </div>
           <div className="text-[11px] text-steel">{item.quantity} un. · {item.damageReason?.name ?? item.damageReasonOther ?? "Sin motivo"} · {item.batch.code}</div>
         </div>

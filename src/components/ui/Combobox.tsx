@@ -69,6 +69,7 @@ export function Combobox({
                 <button
                   type="button"
                   className="flex-1 min-w-0 text-left px-2.5 py-1.5 text-[12.5px] cursor-pointer truncate"
+                  title={opt.name}
                   onClick={() => {
                     onChange(opt.name);
                     setOpen(false);

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Search, X, ChevronDown, Award, FileText } from "lucide-react";
 import { CombinedPriceChart } from "./PriceTrendChart";
 import type { SupplierPriceHistory } from "@/lib/purchases";
+import { ExpandableName } from "@/components/ui/ExpandableName";
 
 type CatalogItem = { id: string; name: string; photos: string[]; description?: string | null; code?: string | null; justCode?: string | null };
 
@@ -92,7 +93,7 @@ function ProductComparisonCard({ item, onRemove }: { item: CatalogItem; onRemove
         {item.photos[0] && <img src={item.photos[0]} alt="" className="w-10 h-10 rounded object-cover border border-rule shrink-0" />}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5">
-            <div className="text-[14.5px] font-bold truncate">{item.name}</div>
+            <ExpandableName text={item.name} className="text-[14.5px] font-bold" />
             {(item.code || item.justCode) && (
               <span className="text-[10.5px] text-steel font-mono shrink-0">#{item.code || item.justCode}</span>
             )}
@@ -252,7 +253,7 @@ export function PurchasePriceExplorer() {
                 onClick={() => select(item)}
               >
                 {item.photos[0] && <img src={item.photos[0]} alt="" className="w-7 h-7 rounded object-cover shrink-0" />}
-                <span className="truncate flex-1">{item.name}</span>
+                <ExpandableName text={item.name} className="flex-1" />
                 {(item.code || item.justCode) && (
                   <span className="text-[10.5px] text-steel shrink-0 font-mono">{item.code || item.justCode}</span>
                 )}

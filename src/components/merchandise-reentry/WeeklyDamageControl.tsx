@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { CalendarClock, CheckCircle2, ChevronDown, ChevronUp, Flame, PackageMinus, ShieldCheck, Wrench } from "lucide-react";
 import { CatalogCode } from "@/components/shared/CatalogCode";
+import { ExpandableName } from "@/components/ui/ExpandableName";
 
 type BreakdownRow = { id: string; batchCode: string; damagedQty: number; createdAt: string; disposalDecision: boolean | null };
 type GroupDTO = { name: string; justCode: string | null; totalDamagedQty: number; damageReasonLabel: string | null; photoUrl: string | null; itemIds: string[]; breakdown: BreakdownRow[] };
@@ -51,7 +52,7 @@ function GroupList({ groups, totalLabel }: { groups: GroupDTO[]; totalLabel: (g:
             <div className="flex-1 min-w-0">
               <div className="text-[12px] flex items-center gap-1.5 min-w-0">
                 <CatalogCode code={g.justCode} />
-                <span className="truncate">{g.name}</span>
+                <ExpandableName text={g.name} />
               </div>
               <div className="flex items-center gap-1.5">
                 <span className="text-[11px] text-red font-semibold">{totalLabel(g)}</span>
@@ -257,7 +258,7 @@ function DisposalCard({ batch, canVerify, onChanged }: { batch: WeeklyBatchDTO; 
                 <div className="flex-1 min-w-0">
                   <div className="text-[12px] flex items-center gap-1.5 min-w-0">
                     <CatalogCode code={g.justCode} />
-                    <span className="truncate">{g.name}</span>
+                    <ExpandableName text={g.name} />
                   </div>
                   <span className="text-[11px] text-red font-semibold">{g.totalDamagedQty} unidades</span>
                 </div>

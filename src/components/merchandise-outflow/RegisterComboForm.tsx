@@ -4,6 +4,7 @@ import { useState } from "react";
 import { AlertTriangle, Clock } from "lucide-react";
 import { ComboComponentBuilder, type ComboDraftComponent } from "@/components/merchandise-reentry/ComboComponentBuilder";
 import { CatalogCode } from "@/components/shared/CatalogCode";
+import { ExpandableName } from "@/components/ui/ExpandableName";
 
 export type RegisteredCombo = { id: string; code: string; label: string | null; componentsCount: number };
 
@@ -67,7 +68,7 @@ export function RegisterComboForm({
                   <Clock size={12} />
                 </div>
               )}
-              <span className="flex-1 min-w-0 text-[11.5px] truncate">{c.catalogItem.name}</span>
+              <ExpandableName text={c.catalogItem.name} className="flex-1 text-[11.5px]" />
               <span className="font-mono text-[12px] font-bold text-teal shrink-0">{c.quantity}×</span>
             </div>
           ))}

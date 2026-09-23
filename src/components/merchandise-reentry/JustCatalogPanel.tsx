@@ -6,6 +6,7 @@ import { uploadFile } from "@/lib/uploadFile";
 import { CatalogCode, CopyCodeButton } from "@/components/shared/CatalogCode";
 import { LegacyUnlinkedItems } from "./LegacyUnlinkedItems";
 import { CatalogItemMergeTool } from "./CatalogItemMergeTool";
+import { ExpandableName } from "@/components/ui/ExpandableName";
 
 type CatalogItemDTO = { id: string; name: string; justCode: string | null; photos: string[]; pendingRegistration: boolean };
 type ImportDTO = {
@@ -198,7 +199,7 @@ function RenameCatalogItem({ item, onRenamed }: { item: CatalogItemDTO; onRename
   if (!editing) {
     return (
       <>
-        <span className="text-[12.5px] flex-1 min-w-0 truncate">{item.name}</span>
+        <ExpandableName text={item.name} className="text-[12.5px] flex-1" />
         <button type="button" title="Corregir nombre" className="shrink-0 text-steel hover:text-teal cursor-pointer" onClick={() => setEditing(true)}>
           <Pencil size={12} />
         </button>
@@ -811,7 +812,7 @@ export function JustCatalogPanel({ canManage }: { canManage: boolean }) {
                 onRenamed={(name) => setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, name } : i)))}
               />
             ) : (
-              <span className="text-[12.5px] flex-1 min-w-0 truncate">{item.name}</span>
+              <ExpandableName text={item.name} className="text-[12.5px] flex-1" />
             )}
             {item.pendingRegistration && (
               <span className="shrink-0 font-mono text-[9px] font-bold uppercase rounded-full px-1.5 py-0.5 bg-gold/15 border border-gold/40" style={{ color: "#D9A441" }}>

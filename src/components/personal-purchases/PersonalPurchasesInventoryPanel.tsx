@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { ProductMatchPicker, type MatchCatalogItem, type ProductMatchResult } from "@/components/merchandise-reentry/ProductMatchPicker";
 import { CatalogCode } from "@/components/shared/CatalogCode";
+import { ExpandableName } from "@/components/ui/ExpandableName";
 
 type Item = {
   id: string;
@@ -178,7 +179,7 @@ export function PersonalPurchasesInventoryPanel() {
                         <div className="flex items-center gap-2 bg-green/10 border border-green/35 rounded-md px-2 py-1.5 mb-1.5">
                           <div className="flex-1 min-w-0 text-[12.5px] font-semibold flex items-center gap-1.5">
                             <CatalogCode code={confirmed[it.id]!.justCode} />
-                            <span className="truncate">{confirmed[it.id]!.name}</span>
+                            <ExpandableName text={confirmed[it.id]!.name} />
                           </div>
                           <button type="button" className="shrink-0 text-[11px] font-semibold text-blue cursor-pointer" onClick={() => { setConfirmed((n) => ({ ...n, [it.id]: null })); setCooldowns((c) => { const n = { ...c }; delete n[it.id]; return n; }); }}>
                             Cambiar

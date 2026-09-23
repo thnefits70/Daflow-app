@@ -9,6 +9,7 @@ import { ComboComponentBuilder, type ComboDraftComponent } from "@/components/me
 import { CatalogCode } from "@/components/shared/CatalogCode";
 import { useFormDraft } from "@/lib/useFormDraft";
 import { formatCalendarDate } from "@/lib/formatDateTime";
+import { ExpandableName } from "@/components/ui/ExpandableName";
 
 type ItemDTO = { id: string; declaredName: string; quantity: number; catalogItem: { name: string; photos: string[]; justCode: string | null } | null };
 type BatchDTO = { id: string; code: string; documentPhotoUrls: string[]; items: ItemDTO[] };
@@ -477,7 +478,7 @@ export function DocumentCaptureFlow({ reason, canManageJustCatalog = false }: { 
               <div key={item.id} className="bg-surface border border-rule rounded-md p-2.5 flex items-center justify-between gap-2">
                 <span className="text-[12.5px] font-semibold flex items-center gap-1.5 min-w-0">
                   {item.catalogItem && <CatalogCode code={item.catalogItem.justCode} />}
-                  <span className="truncate">{itemName(item)}</span>
+                  <ExpandableName text={itemName(item)} />
                 </span>
                 <div className="flex items-center gap-2 shrink-0">
                   <span className="font-mono text-[11px] text-steel">{item.quantity} un.</span>
@@ -685,7 +686,7 @@ export function DocumentCaptureFlow({ reason, canManageJustCatalog = false }: { 
                     <div className="flex items-center gap-2.5 bg-green/10 border border-green/35 rounded-md p-2">
                       <div className="flex-1 min-w-0 text-[12px] font-semibold flex items-center gap-1.5">
                         <CatalogCode code={row.selected.justCode} />
-                        <span className="truncate">{row.selected.name}</span>
+                        <ExpandableName text={row.selected.name} />
                       </div>
                       <button type="button" className="text-[11px] font-semibold text-blue cursor-pointer" onClick={() => setRows((rs) => rs.map((r, j) => (j === i ? { ...r, selected: null } : r)))}>
                         Cambiar
@@ -770,7 +771,7 @@ export function DocumentCaptureFlow({ reason, canManageJustCatalog = false }: { 
               <div className="flex items-center gap-2.5 bg-green/10 border border-green/35 rounded-md p-2">
                 <div className="flex-1 min-w-0 text-[12px] font-semibold flex items-center gap-1.5">
                   <CatalogCode code={manualSelected.justCode} />
-                  <span className="truncate">{manualSelected.name}</span>
+                  <ExpandableName text={manualSelected.name} />
                 </div>
                 <button type="button" className="text-[11px] font-semibold text-blue cursor-pointer" onClick={() => setManualSelected(null)}>Cambiar</button>
               </div>

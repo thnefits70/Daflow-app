@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Clock, X } from "lucide-react";
 import type { MatchCatalogItem } from "./ProductMatchPicker";
 import { CatalogCode } from "@/components/shared/CatalogCode";
+import { ExpandableName } from "@/components/ui/ExpandableName";
 
 export type ComboDraftComponent = { catalogItem: MatchCatalogItem; quantity: number };
 
@@ -75,7 +76,7 @@ export function ComboComponentBuilder({
               )}
               <span className="flex-1 min-w-0 text-[12px] font-medium flex items-center gap-1.5">
                 <CatalogCode code={c.catalogItem.justCode} />
-                <span className="truncate">{c.catalogItem.name}</span>
+                <ExpandableName text={c.catalogItem.name} />
               </span>
               <input
                 type="number"
@@ -112,7 +113,7 @@ export function ComboComponentBuilder({
                   <Clock size={14} />
                 </div>
               )}
-              <span className="flex-1 min-w-0 text-[12px] font-medium truncate">{c.name}</span>
+              <ExpandableName text={c.name} className="flex-1 text-[12px] font-medium" />
               <CatalogCode code={c.justCode} />
             </button>
           ))}

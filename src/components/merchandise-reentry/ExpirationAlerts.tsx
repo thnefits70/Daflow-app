@@ -50,7 +50,7 @@ export function ExpirationAlerts({ onSelect }: { onSelect: (catalogItemId: strin
         onClick={() => onSelect(l.catalogItem.id)}
       >
         <CatalogCode code={l.catalogItem.justCode} />
-        <span className="flex-1 min-w-0 truncate">{l.catalogItem.name}</span>
+        <span className="flex-1 min-w-0 truncate" title={l.catalogItem.name}>{l.catalogItem.name}</span>
         <span className="text-steel shrink-0">{l.quantityRemaining} un.</span>
         <span className={`shrink-0 font-semibold ${isExpired ? "text-red" : "text-gold"}`}>
           {isExpired ? `venció ${formatCalendarDate(l.expirationDate)}` : `${formatCalendarDate(l.expirationDate)} · ${days === 0 ? "vence hoy" : `faltan ${days} días`}`}

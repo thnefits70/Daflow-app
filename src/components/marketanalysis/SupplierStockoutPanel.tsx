@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { formatDateTime } from "@/lib/formatDateTime";
 import { TabGuide } from "@/components/shared/TabGuide";
 import { CatalogCode } from "@/components/shared/CatalogCode";
+import { ExpandableName } from "@/components/ui/ExpandableName";
 import { ProductMatchPicker, type MatchCatalogItem } from "@/components/merchandise-reentry/ProductMatchPicker";
 
 type ResolutionAction = "CLOSED_DROPI_ID" | "STOCK_ZEROED" | "OTHER";
@@ -161,7 +162,7 @@ export function SupplierStockoutPanel({ canReport, canResolve }: { canReport: bo
                     ) : null}
                     <span className="text-[12.5px] font-semibold flex items-center gap-1.5 flex-wrap min-w-0">
                       <CatalogCode code={selected.justCode} />
-                      <span className="truncate">{selected.name}</span>
+                      <ExpandableName text={selected.name} />
                     </span>
                     <button type="button" className="text-[11px] text-blue font-semibold cursor-pointer ml-auto shrink-0" onClick={() => setSelected(null)}>
                       Cambiar
@@ -211,7 +212,7 @@ export function SupplierStockoutPanel({ canReport, canResolve }: { canReport: bo
                 ) : null}
                 <div className="text-[13px] font-semibold flex items-center gap-1.5 flex-wrap min-w-0">
                   <CatalogCode code={r.catalogItem.justCode} />
-                  <span className="truncate">{r.catalogItem.name}</span>
+                  <ExpandableName text={r.catalogItem.name} />
                 </div>
               </div>
               <div className="text-[12.5px] text-ink mb-1.5">{r.instructionNote}</div>
@@ -276,7 +277,7 @@ export function SupplierStockoutPanel({ canReport, canResolve }: { canReport: bo
             <div key={r.id} className="bg-cloud border border-rule rounded-md p-3.5 opacity-80">
               <div className="text-[13px] font-semibold flex items-center gap-1.5 flex-wrap mb-1">
                 <CatalogCode code={r.catalogItem.justCode} />
-                <span className="truncate">{r.catalogItem.name}</span>
+                <ExpandableName text={r.catalogItem.name} />
               </div>
               <div className="text-[12px] text-steel mb-1">{r.instructionNote}</div>
               <div className="text-[11.5px] text-teal font-semibold">

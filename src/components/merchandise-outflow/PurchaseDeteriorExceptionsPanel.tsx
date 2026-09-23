@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 import { formatDateTime } from "@/lib/formatDateTime";
+import { ExpandableName } from "@/components/ui/ExpandableName";
 
 type ItemDTO = {
   id: string;
@@ -85,7 +86,7 @@ export function PurchaseDeteriorExceptionsPanel() {
             <div className="flex-1 min-w-0">
               <div className="text-[13px] font-semibold flex items-center gap-1.5 min-w-0">
                 {item.catalogItem && <CatalogCode code={item.catalogItem.justCode} />}
-                <span className="truncate">{itemName(item)}</span>
+                <ExpandableName text={itemName(item)} />
               </div>
               <div className="text-[11px] text-steel">{item.quantity} un. · {item.batch.code} · proveedor elegido: {item.purchaseGestionSupplier?.name ?? "—"}</div>
             </div>

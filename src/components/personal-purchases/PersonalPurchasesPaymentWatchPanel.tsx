@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { formatDateTime } from "@/lib/formatDateTime";
 import { CatalogCode } from "@/components/shared/CatalogCode";
+import { ExpandableName } from "@/components/ui/ExpandableName";
 
 type Item = {
   id: string;
@@ -117,7 +118,7 @@ export function PersonalPurchasesPaymentWatchPanel({ canReopenPrice = false }: {
                       )}
                       <div className="text-[12px] font-semibold flex items-center gap-1.5 min-w-0">
                         <CatalogCode code={it.confirmedCatalogItem?.justCode} />
-                        <span className="truncate">{it.confirmedProductName ?? it.employeeProductName} × {it.quantity}</span>
+                        <ExpandableName text={`${it.confirmedProductName ?? it.employeeProductName} × ${it.quantity}`} />
                       </div>
                     </div>
                   ))}

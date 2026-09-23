@@ -6,6 +6,7 @@ import { CheckCircle2, Upload, AlertTriangle, TrendingDown, Minus, PlayCircle } 
 import type { InventoryControlPeriodDTO, InventorySnapshotPeriodDTO } from "@/lib/inventoryKpis";
 import { uploadFile } from "@/lib/uploadFile";
 import { TabGuide } from "@/components/shared/TabGuide";
+import { ExpandableName } from "@/components/ui/ExpandableName";
 
 const MONTH_NAMES = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
 function monthLabel(period: string) {
@@ -338,7 +339,7 @@ export function InventoryControlPanel({
                   {snapPreview.rows.map((r) => (
                     <tr key={r.productCode} className="border-t border-rule/50">
                       <td className="py-1.5 font-mono text-steel">{r.productCode}</td>
-                      <td className="py-1.5 font-semibold truncate max-w-56">{r.description}</td>
+                      <td className="py-1.5 font-semibold max-w-56"><ExpandableName text={r.description} /></td>
                       <td className="py-1.5 text-right font-mono">{money(r.avgCost)}</td>
                       <td className="py-1.5 text-right font-mono">{r.stock}</td>
                       <td className="py-1.5 text-right font-mono text-steel">{r.previousStock !== null ? r.previousStock : "—"}</td>
