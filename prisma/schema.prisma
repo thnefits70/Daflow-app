@@ -431,6 +431,7 @@ model User {
   fulfillmentRequestBatchesRequested               FulfillmentRequestBatch[]             @relation("FulfillmentRequestBatchRequestedBy")
   fulfillmentRequestVariantNotesCreated            FulfillmentRequestVariantNote[]       @relation("FulfillmentRequestVariantNoteCreatedBy")
   supplierCreditsCreated                           SupplierCredit[]                      @relation("SupplierCreditCreatedBy")
+  supplierProductCodesCreated                      SupplierProductCode[]                 @relation("SupplierProductCodeCreatedBy")
   urgentResolutionsCreated                         PurchaseUrgentResolution[]            @relation("UrgentResolutionCreatedBy")
   urgentResolutionsReplacementSubmitted            PurchaseUrgentResolution[]            @relation("UrgentResolutionReplacementSubmittedBy")
   urgentResolutionsReplacementVerified             PurchaseUrgentResolution[]            @relation("UrgentResolutionReplacementVerifiedBy")
@@ -1661,6 +1662,8 @@ model Supplier {
   category                     String?
   notes                        String?
 
+  productCodes SupplierProductCode[]
+
   email String?
 
   status       SupplierStatus @default(PENDING)
@@ -1782,6 +1785,7 @@ model PurchaseCatalogItem {
   // datos de productos" importada desde el export de Just (ver
   // JustCatalogImport). Único porque en Just cada código es un producto.
   justCode String? @unique
+  supplierProductCodes SupplierProductCode[]
 
   // true SOLO en los renglones "esqueleto" que crea la importación de Just
   // para un producto que todavía no existe en DAFLOW (código+nombre
@@ -3386,6 +3390,19 @@ model SupplierCredit {
   proofUrl  String?
   proofName String?
 
+  // Confirmado 2026-09-23, pedido explícito del usuario (Jariel con Zheng
+  // wu): un solo crédito del proveedor puede cubrir VARIOS reclamos de
+  // deterioro escalado a la vez (groupedOutflowItems) — outflowItemId queda
+  // solo para el caso de un único reclamo. proofHash = sha256 del archivo
+  // del comprobante, para avisar si la MISMA imagen se vuelve a subir.
+  // proofAiCheck = lo que la IA leyó del comprobante (proveedor, productos,
+  // montos, total) y proofMismatchNote = la explicación que Jariel tuvo que
+  // escribir si algo no cuadraba (se le avisa a admin).
+  groupedOutflowItems MerchandiseOutflowItem[] @relation("OutflowItemGroupedSupplierCredit")
+  proofHash           String?
+  proofAiCheck        Json?
+  proofMismatchNote   String?
+
   status SupplierCreditStatus @default(AVAILABLE)
 
   // Confirmado 2026-08-12: se llena apenas se marca este crédito al
@@ -3405,6 +3422,29 @@ model SupplierCredit {
   @@index([supplierId])
   @@index([status])
   @@index([reservedForGroupId])
+  @@index([proofHash])
+}
+
+// Confirmado 2026-09-23, pedido explícito del usuario: el código con el que
+// un proveedor identifica un producto en SUS comprobantes (ej. "ZW-881" de
+// Zheng wu) — se repite en créditos futuros, así que NUNCA sirve para
+// bloquear repetidos, solo para reconocer el producto. Jariel lo confirma
+// una sola vez y la app lo recuerda para ese proveedor (mismo criterio que
+// RocketCodeMapping). Cada proveedor tiene su propia lista: el mismo código
+// en dos proveedores distintos son cosas distintas.
+model SupplierProductCode {
+  id            String              @id @default(cuid())
+  supplierId    String
+  supplier      Supplier            @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  code          String
+  catalogItemId String
+  catalogItem   PurchaseCatalogItem @relation(fields: [catalogItemId], references: [id], onDelete: Cascade)
+  createdById   String?
+  createdBy     User?               @relation("SupplierProductCodeCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+
+  @@unique([supplierId, code])
 }
 
 // Comprobante de pago (PDF o imagen) de un empleado para un mes/año — solo lo
@@ -5676,6 +5716,10 @@ model MerchandiseOutflowItem {
   // Fase 2 — CAMBIO_PROVEEDOR resuelto como CREDIT_ISSUED: el crédito
   // creado con el proveedor por este item.
   credit SupplierCredit?
+  // Confirmado 2026-09-23: crédito compartido con otros reclamos del mismo
+  // proveedor (ver SupplierCredit.groupedOutflowItems).
+  groupedSupplierCreditId String?
+  groupedSupplierCredit   SupplierCredit? @relation("OutflowItemGroupedSupplierCredit", fields: [groupedSupplierCreditId], references: [id], onDelete: SetNull)
 
   // CAMBIO_PROVEEDOR (multi-producto, confirmado 2026-08-26): al agregar el
   // producto se busca sola la última compra REAL (ver PRICED_STATUSES en

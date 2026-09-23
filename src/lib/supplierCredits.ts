@@ -114,6 +114,7 @@ export type PendingCreditDTO = {
   createdAt: string;
   proofUrl: string | null;
   proofName: string | null;
+  proofMismatchNote: string | null;
   isManual: boolean;
   supplier: { id: string; name: string };
   createdBy: { name: string } | null;
@@ -150,6 +151,7 @@ export async function getAllPendingCredits(): Promise<PendingCreditDTO[]> {
     createdAt: c.createdAt.toISOString(),
     proofUrl: c.proofUrl,
     proofName: c.proofName,
+    proofMismatchNote: c.proofMismatchNote,
     isManual: !c.urgentResolutionId,
     supplier: c.supplier,
     createdBy: c.createdBy,
@@ -178,24 +180,28 @@ export type SupplierExchangeCreditTotal = {
 // proveedor ya lo confirmó", no si todavía se puede gastar.
 export async function getConfirmedSupplierExchangeCreditTotals(): Promise<SupplierExchangeCreditTotal[]> {
   const credits = await prisma.supplierCredit.findMany({
-    where: { outflowItemId: { not: null } },
+    // Confirmado 2026-09-23: también los créditos que cubren VARIOS
+    // reclamos de deterioro a la vez (groupedOutflowItems).
+    where: { OR: [{ outflowItemId: { not: null } }, { groupedOutflowItems: { some: {} } }] },
     include: {
       supplier: { select: { id: true, name: true } },
       outflowItem: { select: { declaredName: true, catalogItem: { select: { name: true } }, batch: { select: { code: true } } } },
+      groupedOutflowItems: { select: { declaredName: true, catalogItem: { select: { name: true } }, batch: { select: { code: true } } } },
     },
     orderBy: { createdAt: "asc" },
   });
 
   const bySupplier = new Map<string, SupplierExchangeCreditTotal>();
   for (const c of credits) {
-    if (!c.outflowItem) continue;
+    const items = c.outflowItem ? [c.outflowItem] : c.groupedOutflowItems;
+    if (items.length === 0) continue;
     const entry = bySupplier.get(c.supplierId) ?? { supplierId: c.supplierId, supplierName: c.supplier.name, total: 0, credits: [] };
     entry.total += c.amount;
     entry.credits.push({
       id: c.id,
       amount: c.amount,
-      batchCode: c.outflowItem.batch.code,
-      itemName: c.outflowItem.catalogItem?.name ?? c.outflowItem.declaredName,
+      batchCode: [...new Set(items.map((i) => i.batch.code))].join(", "),
+      itemName: items.map((i) => i.catalogItem?.name ?? i.declaredName).join(" + "),
       createdAt: c.createdAt.toISOString(),
     });
     bySupplier.set(c.supplierId, entry);

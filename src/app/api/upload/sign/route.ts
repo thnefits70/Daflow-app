@@ -24,6 +24,7 @@ import {
   canEditPayrollRoles,
   canProposeMarketProduct,
   canBrandMarketProduct,
+  canManageOutflowPurchaseGestion,
 } from "@/lib/guards";
 
 // Confirmado 2026-08-03: bug real — ninguna de estas carpetas de Control de
@@ -137,8 +138,12 @@ export async function POST(req: NextRequest) {
   if (!allowed && session?.user.role === "employee" && folder === "merchandise-reentry-photos") {
     allowed = await canCaptureMerchandiseReentry();
   }
+  // Confirmado 2026-09-23: quien gestiona deterioro escalado con el
+  // proveedor (Jariel, canManagePurchases) también sube acá el comprobante
+  // del crédito — no es del equipo de Inventario, así que antes recibía
+  // "No autorizado" al subirlo.
   if (!allowed && session?.user.role === "employee" && folder === "merchandise-outflow-photos") {
-    allowed = await canCaptureMerchandiseOutflow();
+    allowed = (await canCaptureMerchandiseOutflow()) || (await canManageOutflowPurchaseGestion());
   }
   if (!allowed && session?.user.role === "employee" && folder === "external-sale-payment-proofs") {
     allowed = await canDeclareExternalSales();

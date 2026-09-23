@@ -45,6 +45,7 @@ export async function GET() {
       purchaseResolvedAt: true,
       purchaseResolvedBy: { select: { name: true } },
       credit: { select: { amount: true } },
+      groupedSupplierCredit: { select: { amount: true, _count: { select: { groupedOutflowItems: true } } } },
       exchangeItem: { select: { batch: { select: { code: true, submittedAt: true } } } },
     },
   });

@@ -14,6 +14,7 @@ type PendingCredit = {
   createdAt: string;
   proofUrl: string | null;
   proofName: string | null;
+  proofMismatchNote?: string | null;
   isManual: boolean;
   supplier: { id: string; name: string };
   createdBy: { name: string } | null;
@@ -87,6 +88,12 @@ export function PurchaseCreditsPanel() {
                   {c.isManual ? `Registrado por ${actorName(c.createdBy?.name)}` : "Automático — reporte urgente resuelto"} · {formatDateTime(c.createdAt)}
                 </span>
               </div>
+              {c.proofMismatchNote && (
+                <div className="mt-2.5 bg-red/10 border border-red/40 rounded-md p-2.5 text-[11.5px] whitespace-pre-line">
+                  <span className="font-semibold text-red">El comprobante no cuadraba: </span>
+                  {c.proofMismatchNote}
+                </div>
+              )}
               {c.proofUrl && (
                 <div className="mt-2.5">
                   <ProofPreview url={c.proofUrl} filename={c.proofName ?? undefined} size={48} />

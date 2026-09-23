@@ -35,6 +35,7 @@ type TraceItem = {
   purchaseResolvedAt: string | null;
   purchaseResolvedBy: Named;
   credit: { amount: number } | null;
+  groupedSupplierCredit: { amount: number; _count: { groupedOutflowItems: number } } | null;
   exchangeItem: { batch: { code: string; submittedAt: string | null } } | null;
 };
 
@@ -104,7 +105,8 @@ function Timeline({ i, canAct, onPack }: { i: TraceItem; canAct: boolean; onPack
   }
 
   const escalated = i.resolution === "ESCALATED_TO_PURCHASES";
-  const creditAmount = i.credit?.amount ?? null;
+  const creditAmount = i.credit?.amount ?? i.groupedSupplierCredit?.amount ?? null;
+  const creditSharedWith = (i.groupedSupplierCredit?._count.groupedOutflowItems ?? 1) - 1;
   return (
     <div className="flex flex-col gap-1.5 mt-2.5 pl-1">
       <Step done title={`Reportado por ${i.batch.createdBy?.name ?? "—"}`} when={i.batch.submittedAt ?? i.batch.createdAt}>
@@ -139,7 +141,7 @@ function Timeline({ i, canAct, onPack }: { i: TraceItem; canAct: boolean; onPack
               i.purchaseResolution === "REPLACED"
                 ? `Resultado: el proveedor CAMBIA el producto (${i.purchaseResolvedBy?.name ?? "—"})`
                 : i.purchaseResolution === "CREDIT_ISSUED"
-                  ? `Resultado: el proveedor da CRÉDITO${creditAmount != null ? ` de $${creditAmount.toFixed(2)}` : ""} (${i.purchaseResolvedBy?.name ?? "—"})`
+                  ? `Resultado: el proveedor da CRÉDITO${creditAmount != null ? ` de $${creditAmount.toFixed(2)}${creditSharedWith > 0 ? ` junto con ${creditSharedWith} producto(s) más` : ""}` : ""} (${i.purchaseResolvedBy?.name ?? "—"})`
                   : i.purchaseResolution === "REJECTED"
                     ? `Resultado: RECHAZADO (${i.purchaseResolvedBy?.name ?? "—"})`
                     : "Pendiente: respuesta del proveedor"

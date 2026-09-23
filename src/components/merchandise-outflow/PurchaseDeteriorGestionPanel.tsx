@@ -7,11 +7,14 @@ import { formatDateTime } from "@/lib/formatDateTime";
 import { compressImage } from "@/lib/compressImage";
 import { uploadFile } from "@/lib/uploadFile";
 import { ExpandableName } from "@/components/ui/ExpandableName";
+import { SupplierCreditProofDialog } from "@/components/merchandise-outflow/SupplierCreditProofDialog";
+import type { CreditProofClaim } from "@/lib/supplierCreditProofShared";
 
 type SupplierOption = { id: string; name: string };
 type ItemDTO = {
   id: string;
   declaredName: string;
+  catalogItemId: string | null;
   quantity: number;
   catalogItem: { name: string; photos: string[]; justCode: string | null } | null;
   damageReason: { name: string } | null;
@@ -40,6 +43,21 @@ function money(n: number) {
   return `$${n.toFixed(2)}`;
 }
 
+function isCreditable(item: ItemDTO) {
+  return !!item.purchaseGestionSupplier && (!!item.linkedPurchaseRequest || item.purchaseExceptionDecision === "AUTHORIZED");
+}
+
+function toClaim(item: ItemDTO): CreditProofClaim {
+  return {
+    id: item.id,
+    catalogItemId: item.catalogItemId,
+    name: itemName(item),
+    justCode: item.catalogItem?.justCode ?? null,
+    quantity: item.quantity,
+    expectedCredit: item.expectedCreditAmount,
+  };
+}
+
 // Confirmado 2026-09-17, pedido explícito del usuario: quien gestiona
 // compras (hoy Jariel) elige el proveedor A MANO para cada reclamo de
 // deterioro escalado — nunca se ancla solo, para no acusar a un proveedor
@@ -49,6 +67,7 @@ function money(n: number) {
 // a admin (purchase-no-match/route.ts).
 export function PurchaseDeteriorGestionPanel() {
   const [items, setItems] = useState<ItemDTO[] | null>(null);
+  const [creditDialog, setCreditDialog] = useState<{ supplier: SupplierOption; preselectedIds: string[] } | null>(null);
 
   function load() {
     fetch("/api/merchandise-outflow/purchase-gestion")
@@ -61,16 +80,56 @@ export function PurchaseDeteriorGestionPanel() {
   if (items === null) return <div className="text-[13px] text-steel">Cargando…</div>;
   if (items.length === 0) return <div className="text-[13px] text-steel">No hay reclamos de deterioro pendientes de gestionar.</div>;
 
+  // Confirmado 2026-09-23, pedido de Jariel: si el mismo proveedor tiene 2+
+  // reclamos listos, se puede dar UN crédito por todos con un solo
+  // comprobante (ver SupplierCreditProofDialog).
+  const bySupplier = new Map<string, { supplier: SupplierOption; items: ItemDTO[] }>();
+  for (const item of items.filter(isCreditable)) {
+    const sup = item.purchaseGestionSupplier!;
+    const entry = bySupplier.get(sup.id) ?? { supplier: sup, items: [] };
+    entry.items.push(item);
+    bySupplier.set(sup.id, entry);
+  }
+  const groups = [...bySupplier.values()].filter((g) => g.items.length >= 2);
+
+  function openCredit(supplier: SupplierOption, preselectedIds: string[]) {
+    setCreditDialog({ supplier, preselectedIds });
+  }
+
   return (
     <div className="flex flex-col gap-3 max-w-lg">
-      {items.map((item) => (
-        <GestionCard key={item.id} item={item} onChanged={load} />
+      {groups.map((g) => (
+        <div key={g.supplier.id} className="flex items-center gap-2.5 bg-blue/10 border border-blue/35 rounded-md p-2.5">
+          <div className="flex-1 min-w-0 text-[12.5px]">
+            <span className="font-semibold">{g.supplier.name}</span> tiene {g.items.length} reclamos listos · estimado{" "}
+            {money(g.items.reduce((s, i) => s + (i.expectedCreditAmount ?? 0), 0))}
+          </div>
+          <button
+            type="button"
+            className="shrink-0 flex items-center gap-1 text-[11.5px] font-bold border border-blue/40 text-blue rounded-full px-2.5 py-1 cursor-pointer"
+            onClick={() => openCredit(g.supplier, g.items.map((i) => i.id))}
+          >
+            <DollarSign size={12} /> Dar crédito junto
+          </button>
+        </div>
       ))}
+      {items.map((item) => (
+        <GestionCard key={item.id} item={item} onChanged={load} onCredit={isCreditable(item) ? () => openCredit(item.purchaseGestionSupplier!, [item.id]) : undefined} />
+      ))}
+      {creditDialog && (
+        <SupplierCreditProofDialog
+          supplier={creditDialog.supplier}
+          claims={(bySupplier.get(creditDialog.supplier.id)?.items ?? []).map(toClaim)}
+          preselectedIds={creditDialog.preselectedIds}
+          onClose={() => setCreditDialog(null)}
+          onDone={() => { setCreditDialog(null); load(); }}
+        />
+      )}
     </div>
   );
 }
 
-function GestionCard({ item, onChanged }: { item: ItemDTO; onChanged: () => void }) {
+function GestionCard({ item, onChanged, onCredit }: { item: ItemDTO; onChanged: () => void; onCredit?: () => void }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SupplierOption[]>([]);
   const [linking, setLinking] = useState(false);
@@ -297,7 +356,7 @@ function GestionCard({ item, onChanged }: { item: ItemDTO; onChanged: () => void
           <button type="button" className="flex items-center gap-1 text-[11.5px] font-semibold border border-green/40 text-green rounded-full px-2.5 py-1 cursor-pointer" onClick={() => setResolving("REPLACED")}>
             <PackageCheck size={12} /> Mandó reemplazo
           </button>
-          <button type="button" className="flex items-center gap-1 text-[11.5px] font-semibold border border-blue/40 text-blue rounded-full px-2.5 py-1 cursor-pointer" onClick={() => setResolving("CREDIT_ISSUED")}>
+          <button type="button" className="flex items-center gap-1 text-[11.5px] font-semibold border border-blue/40 text-blue rounded-full px-2.5 py-1 cursor-pointer" onClick={() => (onCredit ? onCredit() : setResolving("CREDIT_ISSUED"))}>
             <DollarSign size={12} /> Dio crédito
           </button>
           <button type="button" className="flex items-center gap-1 text-[11.5px] font-semibold border border-red/40 text-red rounded-full px-2.5 py-1 cursor-pointer" onClick={() => setResolving("REJECTED")}>
