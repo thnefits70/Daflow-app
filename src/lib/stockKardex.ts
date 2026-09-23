@@ -600,6 +600,16 @@ export type CutoverDamageRow = {
 // reciente vino justo después de una línea IN/OUT real en el Kardex — y
 // calcula qué haría falta para restaurar el saldo/costo real que tenía
 // antes de que el corte lo pisara.
+// Corregido 2026-09-23, segundo bug real encontrado por el usuario: esta
+// función restauraba CUALQUIER producto con un IN/OUT real justo antes del
+// corte, sin revisar si ese movimiento real era más viejo o más nuevo que
+// el archivo de Just usado — a diferencia de findJustCutoverCandidates, que
+// sí lo revisa. Resultado: 52 de los 78 productos "restaurados" en realidad
+// tenían un archivo de Just MÁS reciente que su última compra/salida real
+// (ej. compra del 18/09 vs archivo de Just del 19/09) — el corte original
+// tenía razón, y "Restaurar" los pisó de vuelta al número viejo sin
+// necesidad. Ahora usa la misma regla que el corte: solo es daño real si el
+// movimiento real es más nuevo que el archivo de Just de ese producto.
 async function findCutoverDamageCandidates(): Promise<CutoverDamageRow[]> {
   const cutoverEntries = await prisma.stockKardexEntry.findMany({
     where: { type: "JUST_CUTOVER_SYNC" },
@@ -620,6 +630,18 @@ async function findCutoverDamageCandidates(): Promise<CutoverDamageRow[]> {
     select: { id: true, name: true, justCode: true },
   });
   const itemById = new Map(items.map((i) => [i.id, i]));
+
+  const dept = await prisma.department.findUnique({ where: { code: "FIN" }, select: { id: true } });
+  const justCodes = items.map((i) => i.justCode).filter((c): c is string => !!c);
+  const snapshots = dept
+    ? await prisma.inventoryProductSnapshot.findMany({
+        where: { deptId: dept.id, productCode: { in: justCodes } },
+        distinct: ["productCode"],
+        orderBy: [{ productCode: "asc" }, { createdAt: "desc" }],
+        select: { productCode: true, createdAt: true },
+      })
+    : [];
+  const snapshotDateByCode = new Map(snapshots.map((s) => [s.productCode.trim(), s.createdAt]));
 
   const allEntries = await prisma.stockKardexEntry.findMany({
     where: { catalogItemId: { in: catalogItemIds } },
@@ -647,6 +669,11 @@ async function findCutoverDamageCandidates(): Promise<CutoverDamageRow[]> {
 
     const item = itemById.get(catalogItemId);
     if (!item) continue;
+    // Solo es daño real si el movimiento real es MÁS NUEVO que el archivo
+    // de Just de este producto — si Just era más nuevo, el corte tenía
+    // razón y no hay nada que restaurar.
+    const snapshotDate = item.justCode ? snapshotDateByCode.get(item.justCode.trim()) : undefined;
+    if (snapshotDate && prev.occurredAt <= snapshotDate) continue;
     results.push({
       catalogItemId,
       name: item.name,
