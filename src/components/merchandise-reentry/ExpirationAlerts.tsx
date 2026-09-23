@@ -25,7 +25,8 @@ function daysUntil(dateIso: string): number {
 // Confirmado 2026-09-23, pedido de Daniel: alerta visible de lotes ya
 // vencidos y de los que vencen en 6 meses o menos, arriba de "Lotes de
 // caducidad". Tocar un producto lo abre para revisar/borrar su lote.
-export function ExpirationAlerts({ onSelect }: { onSelect: (catalogItemId: string) => void }) {
+// Sin onSelect = solo lectura (Bryan, desde Stock Actual).
+export function ExpirationAlerts({ onSelect }: { onSelect?: (catalogItemId: string) => void }) {
   const [lots, setLots] = useState<AlertLot[] | null>(null);
 
   useEffect(() => {
@@ -40,14 +41,15 @@ export function ExpirationAlerts({ onSelect }: { onSelect: (catalogItemId: strin
   const expired = lots.filter((l) => daysUntil(l.expirationDate) < 0);
   const soon = lots.filter((l) => daysUntil(l.expirationDate) >= 0);
 
+  const Row = onSelect ? "button" : "div";
   const row = (l: AlertLot, isExpired: boolean) => {
     const days = daysUntil(l.expirationDate);
     return (
-      <button
+      <Row
         key={l.id}
-        type="button"
-        className="w-full text-left flex items-center gap-2 text-[12px] px-2 py-1.5 rounded hover:bg-cloud cursor-pointer"
-        onClick={() => onSelect(l.catalogItem.id)}
+        type={onSelect ? "button" : undefined}
+        className={`w-full text-left flex items-center gap-2 text-[12px] px-2 py-1.5 rounded ${onSelect ? "hover:bg-cloud cursor-pointer" : ""}`}
+        onClick={onSelect ? () => onSelect(l.catalogItem.id) : undefined}
       >
         <CatalogCode code={l.catalogItem.justCode} />
         <span className="flex-1 min-w-0 truncate" title={l.catalogItem.name}>{l.catalogItem.name}</span>
@@ -55,7 +57,7 @@ export function ExpirationAlerts({ onSelect }: { onSelect: (catalogItemId: strin
         <span className={`shrink-0 font-semibold ${isExpired ? "text-red" : "text-gold"}`}>
           {isExpired ? `venció ${formatCalendarDate(l.expirationDate)}` : `${formatCalendarDate(l.expirationDate)} · ${days === 0 ? "vence hoy" : `faltan ${days} días`}`}
         </span>
-      </button>
+      </Row>
     );
   };
 

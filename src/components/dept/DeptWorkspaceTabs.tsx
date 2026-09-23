@@ -31,6 +31,7 @@ import { LunchPaymentsPanel } from "@/components/finance/LunchPaymentsPanel";
 import { MarketingArrivalsPanel } from "@/components/marketing/MarketingArrivalsPanel";
 import { MerchandiseReentryPanel } from "@/components/merchandise-reentry/MerchandiseReentryPanel";
 import { StockLevelsPanel } from "@/components/inventory/StockLevelsPanel";
+import { ExpirationAlerts } from "@/components/merchandise-reentry/ExpirationAlerts";
 import { MerchandiseOutflowPanel } from "@/components/merchandise-outflow/MerchandiseOutflowPanel";
 import { ExternalSalesPanel } from "@/components/external-sales/ExternalSalesPanel";
 import { SuppliersPanel, type SupplierDTO } from "@/components/suppliers/SuppliersPanel";
@@ -664,6 +665,9 @@ export function DeptWorkspaceTabs({
           snapshotPeriods={inventoryControlData.snapshotPeriods}
         />
       )}
+      {/* Bryan (solo lectura) ve las alertas de vencimiento acá — Daniel ya
+          las tiene arriba de "Lotes de caducidad". Pedido de Daniel 2026-09-23. */}
+      {tab === "stock-actual" && canViewStockLevels && !canManageJustCatalog && <ExpirationAlerts />}
       {tab === "stock-actual" && (canManageJustCatalog || canViewStockLevels) && <StockLevelsPanel isAdmin={isAdmin} canEdit={canManageJustCatalog} />}
       {tab === "reingreso" && (canCaptureMerchandiseReentry || canApproveMerchandiseReentry || canCloseMerchandiseReentry) && (
         <MerchandiseReentryPanel
