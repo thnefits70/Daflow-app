@@ -615,7 +615,6 @@ export type CutoverDamageRow = {
 // salidas, y también lo corregido a mano (costo declarado, conteo físico)
 // — ver el tercer bug del 23/09 en findJustCutoverCandidates.
 type CutoverDamagePrevType = "IN" | "OUT" | "COST_DECLARATION" | "PHYSICAL_COUNT_ADJUSTMENT";
-const CUTOVER_DAMAGE_PREV_TYPES: readonly string[] = ["IN", "OUT", "COST_DECLARATION", "PHYSICAL_COUNT_ADJUSTMENT"];
 
 // Confirmado 2026-09-22, corrección de un bug real: antes de arreglar
 // findJustCutoverCandidates, ya se habían aplicado 235 líneas
@@ -635,6 +634,16 @@ const CUTOVER_DAMAGE_PREV_TYPES: readonly string[] = ["IN", "OUT", "COST_DECLARA
 // tenía razón, y "Restaurar" los pisó de vuelta al número viejo sin
 // necesidad. Ahora usa la misma regla que el corte: solo es daño real si el
 // movimiento real es más nuevo que el archivo de Just de ese producto.
+// Corregido 2026-09-23, cuarto bug real (121965, 66501): esta función solo
+// miraba la línea INMEDIATAMENTE anterior al corte. Si esa línea era un
+// conteo físico que confirmó 0 unidades (quantity 0, no cambia el saldo),
+// se saltaba el producto entero — y con eso, un costo declarado más atrás
+// en el historial (ej. $6, $10.99) nunca se restauraba, aunque el corte sí
+// lo había borrado a $0. Ahora balance y costo se revisan por separado,
+// igual que ya hace findJustCutoverCandidates: el saldo se restaura si hay
+// un IN/OUT/conteo real más nuevo que el archivo de Just, y el costo se
+// restaura si hay un COST_DECLARATION real más nuevo, sin importar qué
+// línea quedó justo pegada al corte.
 async function findCutoverDamageCandidates(): Promise<CutoverDamageRow[]> {
   const cutoverEntries = await prisma.stockKardexEntry.findMany({
     where: { type: "JUST_CUTOVER_SYNC" },
@@ -688,35 +697,46 @@ async function findCutoverDamageCandidates(): Promise<CutoverDamageRow[]> {
     // nada que restaurar: lo más reciente ya es lo correcto.
     const latest = entries[entries.length - 1];
     if (!latest || latest.type !== "JUST_CUTOVER_SYNC") continue;
-    const idx = entries.length - 1;
-    const prev = entries[idx - 1];
-    if (!prev || !CUTOVER_DAMAGE_PREV_TYPES.includes(prev.type)) continue;
-    // Un costo declarado nunca mueve unidades (quantity 0) — para compras/
-    // salidas/conteos, una línea en 0 no es movimiento real.
-    if (prev.type !== "COST_DECLARATION" && prev.quantity === 0) continue;
 
     const item = itemById.get(catalogItemId);
     if (!item) continue;
-    // Solo es daño real si el movimiento real es MÁS NUEVO que el archivo
-    // de Just de este producto — si Just era más nuevo, el corte tenía
-    // razón y no hay nada que restaurar.
     const snapshotDate = item.justCode ? snapshotDateByCode.get(item.justCode.trim()) : undefined;
-    if (snapshotDate && prev.occurredAt <= snapshotDate) continue;
-    // Un costo declarado solo fija el costo, no las unidades — el saldo
-    // que puso el corte (de Just) se queda; solo se devuelve el costo, y
-    // solo si el corte de verdad lo cambió.
-    const costOnly = prev.type === "COST_DECLARATION";
-    if (costOnly && latest.avgCostAfter === prev.avgCostAfter) continue;
+
+    // Saldo: el movimiento real (IN/OUT/conteo, con cambio de cantidad) más
+    // nuevo que el archivo de Just, en cualquier parte del historial previo
+    // al corte — no solo la línea pegada al corte.
+    let balanceMove: (typeof entries)[number] | undefined;
+    for (let i = entries.length - 2; i >= 0; i--) {
+      const e = entries[i];
+      if (e.type === "JUST_CUTOVER_SYNC" || e.type === "CUTOVER_CORRECTION") continue;
+      if ((e.type === "IN" || e.type === "OUT" || e.type === "PHYSICAL_COUNT_ADJUSTMENT") && e.quantity !== 0) {
+        balanceMove = e;
+        break;
+      }
+    }
+    const balanceIsReal = !!balanceMove && (!snapshotDate || balanceMove.occurredAt > snapshotDate);
+
+    // Costo: el último COST_DECLARATION real, en cualquier parte del
+    // historial — un conteo físico en 0 no lo tapa.
+    const lastCostDecl = [...entries].reverse().find((e) => e.type === "COST_DECLARATION");
+    const costIsReal = !!lastCostDecl && (!snapshotDate || lastCostDecl.occurredAt > snapshotDate);
+
+    const restoreBalance = balanceIsReal && balanceMove ? balanceMove.balanceAfter : latest.balanceAfter;
+    const restoreAvgCost = costIsReal && lastCostDecl ? lastCostDecl.avgCostAfter : latest.avgCostAfter;
+    if (restoreBalance === latest.balanceAfter && restoreAvgCost === latest.avgCostAfter) continue;
+
+    const realMovementType: CutoverDamagePrevType = balanceIsReal && balanceMove ? (balanceMove.type as CutoverDamagePrevType) : "COST_DECLARATION";
+    const realMovementAt = balanceIsReal && balanceMove ? balanceMove.occurredAt : (lastCostDecl?.occurredAt ?? latest.occurredAt);
     results.push({
       catalogItemId,
       name: item.name,
       justCode: item.justCode,
       currentBalance: latest.balanceAfter,
       currentAvgCost: latest.avgCostAfter,
-      restoreBalance: costOnly ? latest.balanceAfter : prev.balanceAfter,
-      restoreAvgCost: prev.avgCostAfter,
-      realMovementType: prev.type as CutoverDamagePrevType,
-      realMovementAt: prev.occurredAt.toISOString(),
+      restoreBalance,
+      restoreAvgCost,
+      realMovementType,
+      realMovementAt: realMovementAt.toISOString(),
     });
   }
   return results.sort((a, b) => a.name.localeCompare(b.name));
