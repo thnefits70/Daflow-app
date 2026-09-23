@@ -661,9 +661,11 @@ export function DeptWorkspaceTabs({
           periods={inventoryControlData.periods}
         />
       )}
-      {/* Bryan (solo lectura) ve las alertas de vencimiento acá — Daniel ya
-          las tiene arriba de "Lotes de caducidad". Pedido de Daniel 2026-09-23. */}
-      {tab === "stock-actual" && canViewStockLevels && !canManageJustCatalog && <ExpirationAlerts />}
+      {/* Alertas de vencimiento (solo lectura) para TODOS los que tienen
+          acceso a Stock Actual — pedido del usuario 2026-09-23 (antes solo
+          quien no era Daniel/admin; ellos además las tienen, con clic, arriba
+          de "Lotes de caducidad"). */}
+      {tab === "stock-actual" && (canManageJustCatalog || canViewStockLevels) && <ExpirationAlerts />}
       {tab === "stock-actual" && (canManageJustCatalog || canViewStockLevels) && <StockLevelsPanel isAdmin={isAdmin} canEdit={canManageJustCatalog} />}
       {tab === "reingreso" && (canCaptureMerchandiseReentry || canApproveMerchandiseReentry || canCloseMerchandiseReentry) && (
         <MerchandiseReentryPanel

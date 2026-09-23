@@ -75,7 +75,7 @@ export function ExpirationAlerts({ onSelect }: { onSelect?: (catalogItemId: stri
             <p>Aquí aparecen los productos que tienen <b className="text-ink">fecha de caducidad</b> y todavía tienen unidades en bodega. Cada fila es un lote: su código, el nombre, cuántas unidades quedan y cuándo vence.</p>
             <p><b className="text-red">Ya vencidos:</b> la fecha ya pasó. Esas unidades <b className="text-ink">no se deben despachar</b>: hay que revisarlas en bodega y decidir qué hacer con ellas (darlas de baja por Registro de Egresos o gestionarlas con el proveedor).</p>
             <p><b className="text-gold">Vencen en 6 meses o menos:</b> todavía se pueden vender, pero hay que <b className="text-ink">darles salida pronto</b> (promocionarlos, meterlos en combos o avisar a ventas) antes de que venzan.</p>
-            <p>{onSelect ? "Toca un producto para abrir sus lotes aquí abajo y revisar o corregir la fecha o la cantidad." : "Esta lista es solo para consultar; Daniel (Inventario) es quien revisa y corrige los lotes."}</p>
+            <p>{onSelect ? "Toca un producto para abrir sus lotes aquí abajo y revisar o corregir la fecha o la cantidad." : "Aquí es solo para consultar. Los lotes se revisan y corrigen en “Lotes de caducidad” (Inventario — Daniel)."}</p>
           </div>
         )}
       </div>
