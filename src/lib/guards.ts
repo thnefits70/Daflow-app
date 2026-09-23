@@ -950,12 +950,15 @@ export async function canManageJustCatalog() {
 // Daniel desde su "Mi área de trabajo" — pero solo lectura (sin poder editar
 // la marca ni ninguna de las herramientas de admin de esa pantalla, que
 // siguen exclusivas de canManageJustCatalog/isAdmin). Mismo criterio de "INV
-// o MKT" que canViewInventoryKpisPanel.
+// o MKT" que canViewInventoryKpisPanel. Ampliado 2026-09-23: cualquier
+// colaborador con el flag canViewStockLevels (hoy Heidy, Jariel, Robert,
+// Marcos) ve lo mismo, también solo lectura.
 export async function canViewStockLevels() {
   if (await canManageJustCatalog()) return true;
   const session = await auth();
   if (!session) return false;
   const user = await getGuardUser(session.user.id);
+  if (user?.canViewStockLevels) return true;
   return !!user?.isLeader && user.leadsDept?.code === "MKT";
 }
 

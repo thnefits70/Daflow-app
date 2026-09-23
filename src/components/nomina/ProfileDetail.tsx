@@ -62,6 +62,7 @@ type UserProfile = {
   canPublishMarketProduct: boolean;
   canBrandMarketProduct: boolean;
   canResolveSupplierStockout: boolean;
+  canViewStockLevels: boolean;
   canViewMarketingArrivalsForDispatch: boolean;
   marketingAdvisorBrand: string | null;
   canManageStoreFeedback: boolean;
@@ -965,6 +966,16 @@ export function ProfileDetail({
               Cuando Compras (hoy Jariel) reporta que un producto ya no se consigue con ningún proveedor, esta persona (hoy Heidy) decide cerrar el ID en Dropi o bajar el stock a 0, y lo marca resuelto. Bryan también puede, por ser líder de Análisis de Mercado, sin necesitar este flag.
             </div>
             <PermToggle value={p.canResolveSupplierStockout} busy={busy} onChange={(v) => save({ canResolveSupplierStockout: v })} />
+          </div>
+
+          <div className="bg-cloud border border-rule rounded p-3.5 mt-3.5">
+            <label className="flex items-center gap-1 mb-2 text-[10.5px] font-semibold uppercase tracking-wide text-steel">
+              <Truck size={11} /> ¿Ve Stock Actual del Kardex (solo lectura)?
+            </label>
+            <div className="text-[11px] text-steel mb-2">
+              Ve la tabla de &quot;Stock Actual&quot; (stock INVESTOCK, costos y precios de venta) en su propia &quot;Mi área de trabajo&quot;, igual que Bryan. Solo mirar: no puede cambiar marcas ni ajustar el conteo.
+            </div>
+            <PermToggle value={p.canViewStockLevels} busy={busy} onChange={(v) => save({ canViewStockLevels: v })} />
           </div>
 
           <div className="bg-cloud border border-rule rounded p-3.5 mt-3.5">

@@ -340,6 +340,12 @@ model User {
   // canResolveSupplierStockout en guards.ts). Ni siquiera admin actúa, solo ve.
   canResolveSupplierStockout Boolean @default(false)
 
+  // Confirmado 2026-09-23, pedido explícito del usuario: ver la tabla de
+  // "Stock Actual" (Kardex/INVESTOCK) en solo lectura, igual que Bryan, sin
+  // ser líder de INV/MKT — hoy Heidy, Jariel, Robert y Marcos. Ver
+  // canViewStockLevels en guards.ts. Nunca edita marca ni ajusta conteo.
+  canViewStockLevels Boolean @default(false)
+
   // Confirmado 2026-09-14: pantalla de solo consulta "Consulta de precios" —
   // Jariel/Bryan ya ven B2B por su rol existente en Análisis de Mercado
   // (canProposeMarketProduct/canReviewMarketProduct); estos dos flags cubren
