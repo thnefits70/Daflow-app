@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { CheckCircle2, Clock, DollarSign, ExternalLink, XCircle, Wallet, AlertTriangle, Search, ChevronDown, ChevronRight } from "lucide-react";
+import { CheckCircle2, Clock, DollarSign, ExternalLink, XCircle, Wallet, AlertTriangle, Search, ChevronDown, ChevronRight, Trash2 } from "lucide-react";
 import { formatDateTime } from "@/lib/formatDateTime";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 import { ExpandableName } from "@/components/ui/ExpandableName";
@@ -199,6 +199,21 @@ export function SupplierExchangeResolutionInbox({
       load();
     } catch (e) {
       setError(e instanceof Error ? e.message : "No se pudo confirmar.");
+    } finally {
+      setConfirming(null);
+    }
+  }
+
+  // Solo admin — ver items/[id]/admin-delete/route.ts.
+  async function adminDelete(item: ItemDTO) {
+    if (!confirm(`¿Eliminar "${itemName(item)}" de ${item.batch.code}? No se puede deshacer.`)) return;
+    setConfirming(item.id);
+    setError("");
+    try {
+      await postJson(`/api/merchandise-outflow/items/${item.id}/admin-delete`);
+      load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "No se pudo eliminar.");
     } finally {
       setConfirming(null);
     }
@@ -461,6 +476,16 @@ export function SupplierExchangeResolutionInbox({
                       <div className="border border-t-0 border-rule rounded-b-md px-3 py-2.5 bg-surface">
                         <div className="text-[11px] text-steel mb-1.5">{item.batch.supplier?.name ?? "—"} · {item.quantity} un.</div>
                         {renderDetail(item)}
+                        {canReviewAsAdmin && !item.credit && (
+                          <button
+                            type="button"
+                            disabled={confirming === item.id}
+                            className="mt-2 inline-flex items-center gap-1 text-[10.5px] font-semibold text-red cursor-pointer disabled:opacity-40"
+                            onClick={() => adminDelete(item)}
+                          >
+                            <Trash2 size={11} /> Eliminar (era una prueba)
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>
