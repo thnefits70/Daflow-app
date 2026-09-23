@@ -33,7 +33,26 @@ export async function readAdminPaymentDeclaration(params: {
 
   const response = await client.messages.create({
     model: ADMIN_PAYMENT_AI_MODEL,
-    max_tokens: 512,
+    // Confirmado 2026-09-23 (bug real, factura de almuerzos de Nairoby): con
+    // 512 tokens, el razonamiento previo del modelo a veces se comía todo el
+    // límite y la respuesta llegaba cortada → "La IA no devolvió un JSON
+    // reconocible". Más margen + salida estructurada garantiza un JSON válido.
+    max_tokens: 4096,
+    output_config: {
+      format: {
+        type: "json_schema",
+        schema: {
+          type: "object",
+          properties: {
+            readAmount: { type: ["number", "null"] },
+            matches: { type: "boolean" },
+            note: { type: "string" },
+          },
+          required: ["readAmount", "matches", "note"],
+          additionalProperties: false,
+        },
+      },
+    },
     system:
       "Lees documentos de soporte de pagos administrativos (planillas del IESS, contratos de arriendo, roles, etc.) " +
       "para Provedix (Guayaquil, Ecuador). Extrae SOLO el monto que de verdad muestra el documento — nunca inventes " +
@@ -62,6 +81,7 @@ export async function readAdminPaymentDeclaration(params: {
     outputTokens: response.usage.output_tokens,
   });
 
+  if (response.stop_reason === "max_tokens") throw new Error("La IA no terminó de leer el documento. Intenta de nuevo.");
   const textBlock = response.content.find((b) => b.type === "text");
   if (!textBlock || textBlock.type !== "text") throw new Error("La IA no devolvió contenido de texto.");
   return extractJson<AdminPaymentDeclarationResult>(textBlock.text);
