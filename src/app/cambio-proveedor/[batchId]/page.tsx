@@ -61,7 +61,7 @@ export default async function CambioProveedorGuiaPage({ params }: { params: Prom
       <div className="max-w-2xl mx-auto">
         <div className="text-center mb-6">
           <div className="text-[11px] tracking-[0.2em] font-bold text-gray-500 uppercase">Provedix</div>
-          <div className="text-[20px] font-bold mt-1">Guía de cambio con proveedor</div>
+          <div className="text-[20px] font-bold mt-1">Guía de mercadería devuelta al proveedor</div>
           <div className="text-[24px] font-mono font-black tracking-wide mt-2 border-2 border-black inline-block px-4 py-1">{batch.code}</div>
         </div>
 

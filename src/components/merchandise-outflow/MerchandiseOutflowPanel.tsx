@@ -158,7 +158,7 @@ export function MerchandiseOutflowPanel({
     // de principio a fin (su decisión → gestión de Jariel → respuesta del
     // proveedor), justo entre Deterioro y Cambio con proveedor.
     ...(canCapture || canView ? [{ id: "seguimiento" as const, label: "Seguimiento de deterioro" }] : []),
-    ...(canSeeProveedorTab ? [{ id: "proveedor" as const, label: "Cambio con proveedor" }] : []),
+    ...(canSeeProveedorTab ? [{ id: "proveedor" as const, label: "Mercadería devuelta al proveedor" }] : []),
     ...(canSubmitCancelledGuide || canManageCancelledGuideBatches || canConfirmCancelledGuideFulfillmentRemoval || canAssignCancelledGuideItems || canAct ? [{ id: "guias" as const, label: "Guías canceladas" }] : []),
     ...(canSubmitFulfillmentRequest || canViewFulfillmentRequests ? [{ id: "solicitud" as const, label: "Solicitud Fulfillment" }] : []),
     // Confirmado 2026-09-23: ya no existe "Dar de baja en Just" — cada
@@ -224,7 +224,7 @@ export function MerchandiseOutflowPanel({
       {tab === "seguimiento" && (canCapture || canView) && (
         <>
           <TabGuide storageKey="merchoutflow-seguimiento">
-            Todo lo que se reportó como deterioro y en qué va cada producto: la decisión de Daniel y, si se escaló a Compras, qué proveedor confirmó Jariel y qué respondió el proveedor (cambio, crédito o rechazo). Solo lectura — toca un producto para ver su recorrido completo. Si el proveedor aceptó el cambio, toca &quot;Armar paquete de cambio&quot; y el producto pasa solo a &quot;Cambio con proveedor&quot; — ahí solo tomas la foto de la lista y lo dejas listo.
+            Todo lo que se reportó como deterioro y en qué va cada producto: la decisión de Daniel y, si se escaló a Compras, qué proveedor confirmó Jariel y qué respondió el proveedor (cambio, crédito o rechazo). Solo lectura — toca un producto para ver su recorrido completo. Si el proveedor aceptó (cambio o saldo a favor), toca &quot;Armar paquete de devolución&quot; y el producto pasa solo a &quot;Mercadería devuelta al proveedor&quot; — ahí solo tomas la foto de la lista y lo dejas listo.
           </TabGuide>
           <DeteriorTraceList canAct={canAct} onGoToExchange={() => setTab("proveedor")} />
         </>
@@ -235,7 +235,7 @@ export function MerchandiseOutflowPanel({
             {canAct ? (
               <>Elige el proveedor y agrega todos los productos que le vas a devolver en un mismo paquete — cada uno se cruza solo contra la última compra a ese proveedor para estimar el crédito reclamable. Toma foto de la lista física como evidencia y deja lista la solicitud: se descuenta de INVESTOCK en ese momento y te da un código para imprimir la guía y pegarla en el paquete. Quien resuelve cada producto (cambio o crédito) es quien solicitó esa compra originalmente, no tú — abajo ves el estado en modo lectura.</>
             ) : canViewSupplierExchangeResolution ? (
-              <>Vista de solo lectura de las solicitudes de cambio con proveedor que arma Daniel. Cada producto lo resuelve (cambio o crédito o rechazo) quien solicitó esa compra originalmente, no Daniel — esa persona gestiona desde acá abajo, en su propia sección.</>
+              <>Vista de solo lectura de la mercadería que Daniel le devuelve al proveedor. Cada producto lo resuelve (cambio o crédito o rechazo) quien solicitó esa compra originalmente, no Daniel — esa persona gestiona desde acá abajo, en su propia sección.</>
             ) : canConfirmFinanceWriteOff ? (
               <>Acá abajo aparecen los productos que un proveedor rechazó (ni cambia ni da crédito) y que quedan pendientes de que registres la pérdida en la parte financiera.</>
             ) : (

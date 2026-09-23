@@ -19,6 +19,7 @@ type ItemDTO = {
   resolvedBy: { name: string } | null;
   gestorName: string | null;
   credit: { amount: number } | null;
+  fromDeterioro?: boolean;
   financeWriteOffAt: string | null;
   financeWriteOffBy: { name: string } | null;
   adminReviewedAt: string | null;
@@ -224,7 +225,7 @@ export function SupplierExchangeResolutionInbox({
           <div className="flex items-center gap-1.5 text-[11.5px] font-semibold text-blue">
             <DollarSign size={12} /> Crédito de {item.credit ? money(item.credit.amount) : "—"} — gestionado por {item.resolvedBy?.name ?? "—"}{item.resolvedAt ? ` · ${formatDateTime(item.resolvedAt)}` : ""}
           </div>
-          {item.credit && item.expectedCreditAmount !== null && item.credit.amount !== item.expectedCreditAmount && (
+          {item.credit && !item.fromDeterioro && item.expectedCreditAmount !== null && item.credit.amount !== item.expectedCreditAmount && (
             <div className="flex items-center gap-1.5 text-[10.5px] font-semibold text-gold" style={{ color: "#D9A441" }}>
               <AlertTriangle size={11} /> Distinto a lo pagado ({money(item.expectedCreditAmount)}) — revisar
             </div>
@@ -310,7 +311,7 @@ export function SupplierExchangeResolutionInbox({
   }, [closedItems, query, dateFrom, dateTo]);
 
   if (items === null) return <div className="text-[13px] text-steel">Cargando…</div>;
-  if (items.length === 0) return <div className="text-[13px] text-steel">No hay solicitudes de cambio con proveedor todavía.</div>;
+  if (items.length === 0) return <div className="text-[13px] text-steel">No hay mercadería devuelta al proveedor todavía.</div>;
 
   const pendingItems = items.filter((i) => !isFullyClosed(i));
   const pendingGroups = groupByBatch(pendingItems);

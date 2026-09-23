@@ -1438,7 +1438,7 @@ async function getSupplierExchangeGestorPendingItem(userId: string, href: string
   return {
     type: "cambio_proveedor_gestion",
     icon: "🔁",
-    label: "Cambio con proveedor pendiente de tu gestión",
+    label: "Mercadería devuelta al proveedor pendiente de tu gestión",
     meta: `${count} producto${count === 1 ? "" : "s"}`,
     overdue: false,
     href,

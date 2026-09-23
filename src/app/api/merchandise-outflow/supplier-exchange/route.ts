@@ -7,6 +7,7 @@ const ITEM_INCLUDE = {
   catalogItem: { select: { name: true, photos: true, justCode: true } },
   linkedPurchaseRequest: { select: { requestNumber: true, requestedAt: true, requestedBy: { select: { name: true } } } },
   credit: { select: { amount: true } },
+  sourceDeteriorItem: { select: { credit: { select: { amount: true } }, groupedSupplierCredit: { select: { amount: true } } } },
 } as const;
 
 // Confirmado 2026-08-26: vista de SOLO LECTURA para Daniel/admin — quien
@@ -36,8 +37,12 @@ export async function GET() {
   ]);
   const marketingLead = marketingLeadId ? await prisma.user.findUnique({ where: { id: marketingLeadId }, select: { name: true } }) : null;
 
-  const withGestor = items.map((item) => ({
+  // Un producto que vino de un deterioro con crédito no tiene SupplierCredit
+  // propio (no se duplica el saldo a favor) — se muestra el del deterioro.
+  const withGestor = items.map(({ sourceDeteriorItem, ...item }) => ({
     ...item,
+    credit: item.credit ?? sourceDeteriorItem?.credit ?? sourceDeteriorItem?.groupedSupplierCredit ?? null,
+    fromDeterioro: !!sourceDeteriorItem,
     gestorName: item.linkedPurchaseRequest?.requestedBy?.name ?? marketingLead?.name ?? null,
   }));
   return NextResponse.json(withGestor);

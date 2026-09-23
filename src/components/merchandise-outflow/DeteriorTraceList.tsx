@@ -53,12 +53,14 @@ function statusOf(i: TraceItem): Status {
   if (!i.resolution) return { label: "Esperando decisión de Daniel", tone: "amber", open: true };
   if (i.resolution === "SOLVED_ONSITE") return { label: "Cerrado — solucionado ahí mismo", tone: "green", open: false };
   if (i.resolution === "WRITE_OFF") return { label: "Cerrado — dado de baja", tone: "steel", open: false };
-  if (i.purchaseResolution === "REPLACED") {
-    if (i.exchangeItem?.batch.submittedAt) return { label: `Cambio enviado · ${i.exchangeItem.batch.code}`, tone: "green", open: false };
+  // Cambio o crédito: en los dos casos hay que devolverle la mercadería al
+  // proveedor (sin eso no da el saldo a favor) — pedido de Daniel 2026-09-23.
+  if (i.purchaseResolution === "REPLACED" || i.purchaseResolution === "CREDIT_ISSUED") {
+    const what = i.purchaseResolution === "REPLACED" ? "cambio" : "crédito";
+    if (i.exchangeItem?.batch.submittedAt) return { label: `Devuelto al proveedor (${what}) · ${i.exchangeItem.batch.code}`, tone: "green", open: false };
     if (i.exchangeItem) return { label: `En paquete ${i.exchangeItem.batch.code} · falta dejarlo listo`, tone: "amber", open: true };
-    return { label: "Proveedor aceptó · falta armar el paquete", tone: "amber", open: true };
+    return { label: `Proveedor aceptó (${what}) · falta armar el paquete`, tone: "amber", open: true };
   }
-  if (i.purchaseResolution === "CREDIT_ISSUED") return { label: "Proveedor dio crédito", tone: "green", open: false };
   if (i.purchaseResolution === "REJECTED") {
     return { label: i.purchaseExceptionDecision === "REJECTED" ? "Rechazado por admin" : "Proveedor rechazó", tone: "red", open: false };
   }
@@ -150,15 +152,15 @@ function Timeline({ i, canAct, onPack }: { i: TraceItem; canAct: boolean; onPack
           >
             {i.purchaseResolutionNote}
           </Step>
-          {i.purchaseResolution === "REPLACED" && (
+          {(i.purchaseResolution === "REPLACED" || i.purchaseResolution === "CREDIT_ISSUED") && (
             <Step
               done={!!i.exchangeItem?.batch.submittedAt}
               title={
                 i.exchangeItem?.batch.submittedAt
-                  ? `Paquete de cambio enviado: ${i.exchangeItem.batch.code}`
+                  ? `Mercadería devuelta al proveedor: ${i.exchangeItem.batch.code}`
                   : i.exchangeItem
                     ? `En el paquete ${i.exchangeItem.batch.code} — falta la foto de la lista y dejarlo listo`
-                    : "Pendiente: armar el paquete de cambio"
+                    : "Pendiente: armar el paquete de devolución"
               }
               when={i.exchangeItem?.batch.submittedAt}
             >
@@ -170,14 +172,14 @@ function Timeline({ i, canAct, onPack }: { i: TraceItem; canAct: boolean; onPack
                     className="inline-flex items-center gap-1.5 rounded border border-teal bg-teal px-3 py-1.5 text-[12px] font-bold text-navy cursor-pointer disabled:opacity-60"
                     onClick={pack}
                   >
-                    <PackagePlus size={13} /> {packing ? "Armando…" : "Armar paquete de cambio"}
+                    <PackagePlus size={13} /> {packing ? "Armando…" : "Armar paquete de devolución"}
                   </button>
-                  <div className="text-[10.5px] text-steel mt-1">Pasa solo a &quot;Cambio con proveedor&quot; con proveedor, producto y cantidad ya puestos.</div>
+                  <div className="text-[10.5px] text-steel mt-1">Pasa solo a &quot;Mercadería devuelta al proveedor&quot; con proveedor, producto y cantidad ya puestos.</div>
                   {packError && <div className="text-red text-[11px] mt-1">{packError}</div>}
                 </div>
               )}
               {i.exchangeItem && !i.exchangeItem.batch.submittedAt && canAct && (
-                <button type="button" className="mt-1 text-[11.5px] font-bold text-teal cursor-pointer" onClick={onPack}>Ir a &quot;Cambio con proveedor&quot; →</button>
+                <button type="button" className="mt-1 text-[11.5px] font-bold text-teal cursor-pointer" onClick={onPack}>Ir a &quot;Mercadería devuelta al proveedor&quot; →</button>
               )}
             </Step>
           )}

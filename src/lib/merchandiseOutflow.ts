@@ -147,7 +147,7 @@ export async function notifySupplierExchangeGestors(batch: {
   await Promise.all(
     Array.from(byGestor.entries()).map(([gestorId, count]) =>
       notifyOwner(gestorId, {
-        title: "Cambio con proveedor pendiente de tu gestión",
+        title: "Mercadería devuelta al proveedor pendiente de tu gestión",
         body: `${batch.code} — ${count} producto(s) de ${batch.supplier?.name ?? "un proveedor"} esperan que negocies el cambio o crédito.`,
         url: "/area/workspace?tab=egresos&otab=proveedor",
       }).catch(() => null)
@@ -266,9 +266,9 @@ export async function notifyInventoryLeadDeteriorPurchaseResolved(item: { declar
   if (!leadId) return;
   const outcome =
     item.resolution === "REPLACED"
-      ? "el proveedor aceptó el CAMBIO — ya puedes armar el paquete en Cambio con proveedor"
+      ? "el proveedor aceptó el CAMBIO — ya puedes armar el paquete de devolución"
       : item.resolution === "CREDIT_ISSUED"
-        ? `el proveedor dio CRÉDITO${item.creditAmount ? ` de $${item.creditAmount.toFixed(2)}` : ""}`
+        ? `el proveedor dio CRÉDITO${item.creditAmount ? ` de $${item.creditAmount.toFixed(2)}` : ""} — ya puedes armar el paquete de devolución`
         : item.byAdmin
           ? "admin RECHAZÓ el reclamo (no hay compra que lo respalde)"
           : "el proveedor RECHAZÓ el reclamo";

@@ -182,7 +182,7 @@ export function SupplierExchangeMyResolutions() {
   }
 
   if (items === null) return <div className="text-[13px] text-steel">Cargando…</div>;
-  if (items.length === 0) return <div className="text-[13px] text-steel">No tienes cambios con proveedor pendientes de gestionar.</div>;
+  if (items.length === 0) return <div className="text-[13px] text-steel">No tienes mercadería devuelta al proveedor pendiente de gestionar.</div>;
 
   const groups = groupByBatch(items);
   const relevantSupplierIds = new Set(items.map((i) => i.batch.supplier?.id).filter((x): x is string => !!x));
