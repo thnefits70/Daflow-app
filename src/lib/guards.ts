@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 
@@ -14,6 +15,27 @@ export function dbUserId(id: string): string | null {
   return id === "admin" ? null : id;
 }
 
+// Confirmado 2026-09-23 ("Mi área de trabajo" tardaba mucho, sobre todo en
+// el celular): cada permiso de este archivo leía por su cuenta la fila de la
+// persona — una sola visita a Mi área de trabajo hacía ~60 lecturas del
+// MISMO usuario, una detrás de otra (el pool de prisma.ts es de 1 conexión a
+// propósito). Ahora se lee una sola vez por pedido y todos los permisos la
+// reusan (cache() de React dura solo ese pedido — nunca se comparte entre
+// personas ni entre visitas). Trae la fila completa + los únicos datos
+// relacionados que miran los permisos; ninguna regla cambió. Fuera de una
+// página del servidor (ej. rutas /api) cache() no guarda nada y cada llamada
+// consulta igual que antes.
+const getGuardUser = cache((id: string) =>
+  prisma.user.findUnique({
+    where: { id },
+    include: {
+      department: { select: { code: true } },
+      leadsDept: { select: { code: true } },
+      payrollProfile: { select: { canLogOvertimeHours: true } },
+    },
+  })
+);
+
 export async function requireAdminSession() {
   const session = await auth();
   if (!session || session.user.role !== "admin") return null;
@@ -27,10 +49,7 @@ export async function canEditDeptKpis(deptId: string) {
   if (!session) return false;
   if (session.user.role === "admin") return true;
   if (session.user.role === "employee" && session.user.deptId === deptId) {
-    const user = await prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: { isLeader: true, leadsDeptId: true },
-    });
+    const user = await getGuardUser(session.user.id);
     return !!user?.isLeader && user.leadsDeptId === deptId;
   }
   return false;
@@ -65,10 +84,7 @@ export async function canWriteLaws() {
   const session = await auth();
   if (!session) return false;
   if (session.user.role === "admin") return true;
-  const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    select: { canManageLaws: true },
-  });
+  const user = await getGuardUser(session.user.id);
   return !!user?.canManageLaws;
 }
 
@@ -87,10 +103,7 @@ export async function getSupplierAccess() {
   if (!session) return { canView: false, canAdd: false, isLeader: false, leadsDeptId: null as string | null };
   if (session.user.role === "admin") return { canView: true, canAdd: true, isLeader: false, leadsDeptId: null };
 
-  const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    select: { canAddSuppliers: true, isLeader: true, leadsDeptId: true, department: { select: { code: true } } },
-  });
+  const user = await getGuardUser(session.user.id);
   if (!user) return { canView: false, canAdd: false, isLeader: false, leadsDeptId: null };
 
   // Directorio access is Compras/Análisis de Mercado (or whoever was granted
@@ -142,7 +155,7 @@ export async function canAddSupplierBankAccounts() {
   const session = await auth();
   if (!session) return false;
   if (session.user.role === "admin") return true;
-  const user = await prisma.user.findUnique({ where: { id: session.user.id }, select: { canAddSupplierBankAccounts: true } });
+  const user = await getGuardUser(session.user.id);
   return !!user?.canAddSupplierBankAccounts;
 }
 
@@ -153,10 +166,7 @@ export async function canReviewSupplier(createdByDeptId: string | null) {
   if (!session) return false;
   if (session.user.role === "admin") return true;
   if (!createdByDeptId) return false;
-  const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    select: { isLeader: true, leadsDeptId: true },
-  });
+  const user = await getGuardUser(session.user.id);
   return !!user?.isLeader && user.leadsDeptId === createdByDeptId;
 }
 
@@ -166,10 +176,7 @@ export async function canReviewSupplier(createdByDeptId: string | null) {
 export async function getUnseenFeedbackCount() {
   const session = await auth();
   if (!session || session.user.role !== "employee") return 0;
-  const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    select: { isLeader: true, leadsDeptId: true, lastSeenFeedbackAt: true },
-  });
+  const user = await getGuardUser(session.user.id);
   if (!user?.isLeader || !user.leadsDeptId) return 0;
   return prisma.weeklyReviewRecord.count({
     where: { deptId: user.leadsDeptId, updatedAt: { gt: user.lastSeenFeedbackAt ?? new Date(0) } },
@@ -182,10 +189,7 @@ export async function canManagePayroll() {
   const session = await auth();
   if (!session) return false;
   if (session.user.role === "admin") return true;
-  const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    select: { isLeader: true, leadsDept: { select: { code: true } } },
-  });
+  const user = await getGuardUser(session.user.id);
   return !!user?.isLeader && user.leadsDept?.code === "FIN";
 }
 
@@ -199,10 +203,7 @@ export async function canManagePayroll() {
 export async function canEditPayrollRoles() {
   const session = await auth();
   if (!session) return false;
-  const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    select: { isLeader: true, leadsDept: { select: { code: true } } },
-  });
+  const user = await getGuardUser(session.user.id);
   return !!user?.isLeader && user.leadsDept?.code === "FIN";
 }
 
@@ -235,10 +236,7 @@ export async function canLogOvertimeHours() {
   const session = await auth();
   if (!session) return false;
   if (session.user.role === "admin") return false;
-  const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    select: { isLeader: true, payrollProfile: { select: { canLogOvertimeHours: true } } },
-  });
+  const user = await getGuardUser(session.user.id);
   return !!user?.isLeader && !!user.payrollProfile?.canLogOvertimeHours;
 }
 
@@ -319,10 +317,7 @@ export async function canConfirmPersonalPurchaseFinance() {
 export async function canSetPersonalPurchasePrice() {
   const session = await auth();
   if (!session) return false;
-  const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    select: { isLeader: true, leadsDept: { select: { code: true } } },
-  });
+  const user = await getGuardUser(session.user.id);
   return !!user?.isLeader && user.leadsDept?.code === "FIN";
 }
 
@@ -344,10 +339,7 @@ export async function canConfirmPersonalPurchaseTransfer() {
 export async function canClosePersonalPurchaseTransfer() {
   const session = await auth();
   if (!session) return false;
-  const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    select: { isLeader: true, leadsDept: { select: { code: true } } },
-  });
+  const user = await getGuardUser(session.user.id);
   return !!user?.isLeader && user.leadsDept?.code === "FIN";
 }
 
@@ -366,10 +358,7 @@ export async function canViewSalaryAdvancesHistory() {
   const session = await auth();
   if (!session) return false;
   if (session.user.role === "admin") return true;
-  const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    select: { isLeader: true, leadsDept: { select: { code: true } } },
-  });
+  const user = await getGuardUser(session.user.id);
   return !!user?.isLeader && user.leadsDept?.code === "FIN";
 }
 
@@ -392,10 +381,7 @@ export async function canSendPayrollMessage(employeeId: string) {
   const session = await auth();
   if (!session) return false;
   if (session.user.id === employeeId) return true;
-  const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    select: { isLeader: true, leadsDept: { select: { code: true } } },
-  });
+  const user = await getGuardUser(session.user.id);
   return !!user?.isLeader && user.leadsDept?.code === "FIN";
 }
 
@@ -414,10 +400,7 @@ export async function canManageWarranties() {
   const session = await auth();
   if (!session) return false;
   if (session.user.role === "admin") return true;
-  const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    select: { isLeader: true, leadsDept: { select: { code: true } } },
-  });
+  const user = await getGuardUser(session.user.id);
   return !!user?.isLeader && user.leadsDept?.code === "FIN";
 }
 
@@ -428,10 +411,7 @@ export async function canManageReturnRate() {
   const session = await auth();
   if (!session) return false;
   if (session.user.role === "admin") return true;
-  const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    select: { isLeader: true, leadsDept: { select: { code: true } } },
-  });
+  const user = await getGuardUser(session.user.id);
   return !!user?.isLeader && user.leadsDept?.code === "FIN";
 }
 
@@ -444,10 +424,7 @@ export async function canManageNomina() {
   const session = await auth();
   if (!session) return false;
   if (session.user.role === "admin") return true;
-  const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    select: { isLeader: true, leadsDept: { select: { code: true } } },
-  });
+  const user = await getGuardUser(session.user.id);
   return !!user?.isLeader && user.leadsDept?.code === "FIN";
 }
 
@@ -456,10 +433,7 @@ export async function canManageStockouts() {
   const session = await auth();
   if (!session) return false;
   if (session.user.role === "admin") return true;
-  const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    select: { isLeader: true, leadsDept: { select: { code: true } } },
-  });
+  const user = await getGuardUser(session.user.id);
   return !!user?.isLeader && user.leadsDept?.code === "INV";
 }
 
@@ -473,10 +447,7 @@ export async function canManageInventoryControl() {
   const session = await auth();
   if (!session) return false;
   if (session.user.role === "admin") return true;
-  const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    select: { isLeader: true, leadsDept: { select: { code: true } }, canManageInventoryControl: true },
-  });
+  const user = await getGuardUser(session.user.id);
   if (user?.canManageInventoryControl) return true;
   return !!user?.isLeader && user.leadsDept?.code === "INV";
 }
@@ -490,10 +461,7 @@ export async function canViewInventoryKpisHome() {
   const session = await auth();
   if (!session) return false;
   if (session.user.role === "admin") return true;
-  const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    select: { isLeader: true, leadsDept: { select: { code: true } } },
-  });
+  const user = await getGuardUser(session.user.id);
   const code = user?.leadsDept?.code;
   return !!user?.isLeader && (code === "INV" || code === "MKT" || code === "FIN");
 }
@@ -508,10 +476,7 @@ export async function canViewInventoryKpisHome() {
 export async function canViewInventoryKpisPanel() {
   const session = await auth();
   if (!session || session.user.role === "admin") return false;
-  const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    select: { isLeader: true, leadsDept: { select: { code: true } } },
-  });
+  const user = await getGuardUser(session.user.id);
   const code = user?.leadsDept?.code;
   return !!user?.isLeader && (code === "INV" || code === "MKT");
 }
@@ -523,10 +488,7 @@ export async function canManagePettyCashPrincipal() {
   const session = await auth();
   if (!session) return false;
   if (session.user.role === "admin") return true;
-  const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    select: { isLeader: true, leadsDept: { select: { code: true } } },
-  });
+  const user = await getGuardUser(session.user.id);
   return !!user?.isLeader && user.leadsDept?.code === "FIN";
 }
 
@@ -538,10 +500,7 @@ export async function canManagePettyCashSecundaria() {
   const session = await auth();
   if (!session) return false;
   if (session.user.role === "admin") return true;
-  const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    select: { canManagePettyCashSecundaria: true },
-  });
+  const user = await getGuardUser(session.user.id);
   return !!user?.canManagePettyCashSecundaria;
 }
 
@@ -567,10 +526,7 @@ export async function canViewPettyCashSecundaria() {
 export async function canManageStoreFeedback() {
   const session = await auth();
   if (!session) return false;
-  const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    select: { canManageStoreFeedback: true },
-  });
+  const user = await getGuardUser(session.user.id);
   return !!user?.canManageStoreFeedback;
 }
 
@@ -583,10 +539,7 @@ export async function canViewStoreFeedback() {
   if (!session) return false;
   if (session.user.role === "admin") return true;
   if (await canManageStoreFeedback()) return true;
-  const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    select: { canViewStoreFeedback: true },
-  });
+  const user = await getGuardUser(session.user.id);
   return !!user?.canViewStoreFeedback;
 }
 
@@ -761,7 +714,7 @@ export async function canManageOutflowPurchaseGestion() {
   const session = await auth();
   if (!session) return false;
   if (session.user.role === "admin") return true;
-  const user = await prisma.user.findUnique({ where: { id: session.user.id }, select: { canManagePurchases: true, isActive: true } });
+  const user = await getGuardUser(session.user.id);
   return !!user?.isActive && !!user.canManagePurchases;
 }
 
@@ -850,10 +803,7 @@ export async function getFulfilmentLeadId(): Promise<string | null> {
 export async function canJustifyFillRate() {
   const session = await auth();
   if (!session || session.user.role !== "employee") return false;
-  const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    select: { isLeader: true, leadsDept: { select: { code: true } } },
-  });
+  const user = await getGuardUser(session.user.id);
   return !!user?.isLeader && user.leadsDept?.code === "FUL";
 }
 
@@ -1005,10 +955,7 @@ export async function canViewStockLevels() {
   if (await canManageJustCatalog()) return true;
   const session = await auth();
   if (!session) return false;
-  const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    select: { isLeader: true, leadsDept: { select: { code: true } } },
-  });
+  const user = await getGuardUser(session.user.id);
   return !!user?.isLeader && user.leadsDept?.code === "MKT";
 }
 
@@ -1054,10 +1001,7 @@ export async function getLeadIdOfUsersDept(userId: string): Promise<string | nul
 export async function canUseWeeklyCheckin() {
   const session = await auth();
   if (!session || session.user.role !== "employee") return false;
-  const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    select: { isLeader: true, leadsDeptId: true },
-  });
+  const user = await getGuardUser(session.user.id);
   return !!user?.isLeader && !!user.leadsDeptId;
 }
 
@@ -1185,14 +1129,14 @@ export async function canDeclareExternalSales() {
   const session = await auth();
   if (!session) return false;
   if (session.user.role === "admin") return true;
-  const user = await prisma.user.findUnique({ where: { id: session.user.id }, select: { canDeclareExternalSales: true } });
+  const user = await getGuardUser(session.user.id);
   return !!user?.canDeclareExternalSales;
 }
 
 export async function canReviewExternalSales() {
   const session = await auth();
   if (!session) return false;
-  const user = await prisma.user.findUnique({ where: { id: session.user.id }, select: { isLeader: true, leadsDept: { select: { code: true } } } });
+  const user = await getGuardUser(session.user.id);
   return !!user?.isLeader && user.leadsDept?.code === "MKT";
 }
 
@@ -1207,7 +1151,7 @@ export async function canInvoiceExternalSale() {
   const session = await auth();
   if (!session) return false;
   if (session.user.role === "admin") return true;
-  const user = await prisma.user.findUnique({ where: { id: session.user.id }, select: { isLeader: true, leadsDept: { select: { code: true } } } });
+  const user = await getGuardUser(session.user.id);
   return !!user?.isLeader && user.leadsDept?.code === "FIN";
 }
 
@@ -1236,7 +1180,7 @@ export async function canCloseExternalSale() {
   const session = await auth();
   if (!session) return false;
   if (session.user.role === "admin") return true;
-  const user = await prisma.user.findUnique({ where: { id: session.user.id }, select: { isLeader: true, leadsDept: { select: { code: true } } } });
+  const user = await getGuardUser(session.user.id);
   return !!user?.isLeader && user.leadsDept?.code === "FIN";
 }
 
@@ -1303,7 +1247,7 @@ export async function canConfirmCancelledGuideFulfillmentRemoval() {
 export async function canAssignCancelledGuideItems() {
   const session = await auth();
   if (!session || session.user.role === "admin") return false;
-  const user = await prisma.user.findUnique({ where: { id: session.user.id }, select: { canAssignCancelledGuideItems: true } });
+  const user = await getGuardUser(session.user.id);
   return !!user?.canAssignCancelledGuideItems;
 }
 
@@ -1353,10 +1297,7 @@ export async function canManageAdminPayments() {
   const session = await auth();
   if (!session) return false;
   if (session.user.role === "admin") return true;
-  const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    select: { canManageAdminPayments: true, isLeader: true, leadsDept: { select: { code: true } } },
-  });
+  const user = await getGuardUser(session.user.id);
   if (!user) return false;
   if (user.canManageAdminPayments) return true;
   return !!user.isLeader && user.leadsDept?.code === "FIN";
@@ -1370,7 +1311,7 @@ export async function canRegisterLunchPayments() {
   const session = await auth();
   if (!session) return false;
   if (session.user.role === "admin") return true;
-  const user = await prisma.user.findUnique({ where: { id: session.user.id }, select: { canRegisterLunchPayments: true } });
+  const user = await getGuardUser(session.user.id);
   return !!user?.canRegisterLunchPayments;
 }
 
@@ -1384,10 +1325,7 @@ export async function canViewMarketingArrivals() {
   const session = await auth();
   if (!session) return false;
   if (session.user.role === "admin") return true;
-  const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    select: { department: { select: { code: true } }, canViewMarketingArrivalsForDispatch: true },
-  });
+  const user = await getGuardUser(session.user.id);
   if (user?.canViewMarketingArrivalsForDispatch) return true;
   return user?.department?.code === "MKT";
 }
@@ -1399,14 +1337,14 @@ export async function canViewMarketingArrivals() {
 export async function canConfirmMarketingDesign() {
   const session = await auth();
   if (!session || session.user.role === "admin") return false;
-  const user = await prisma.user.findUnique({ where: { id: session.user.id }, select: { canConfirmMarketingDesign: true } });
+  const user = await getGuardUser(session.user.id);
   return !!user?.canConfirmMarketingDesign;
 }
 
 export async function canConfirmMarketingAdvisor() {
   const session = await auth();
   if (!session || session.user.role === "admin") return false;
-  const user = await prisma.user.findUnique({ where: { id: session.user.id }, select: { canConfirmMarketingAdvisor: true } });
+  const user = await getGuardUser(session.user.id);
   return !!user?.canConfirmMarketingAdvisor;
 }
 
@@ -1422,7 +1360,7 @@ export async function canViewComboSuggestions() {
   const session = await auth();
   if (!session) return false;
   if (session.user.role === "admin") return true;
-  const user = await prisma.user.findUnique({ where: { id: session.user.id }, select: { department: { select: { code: true } } } });
+  const user = await getGuardUser(session.user.id);
   return user?.department?.code === "MKT";
 }
 
@@ -1430,10 +1368,7 @@ export async function canApproveComboSuggestions() {
   const session = await auth();
   if (!session) return false;
   if (session.user.role === "admin") return true;
-  const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    select: { isLeader: true, leadsDept: { select: { code: true } } },
-  });
+  const user = await getGuardUser(session.user.id);
   return !!user?.isLeader && user.leadsDept?.code === "MKT";
 }
 
@@ -1445,10 +1380,7 @@ export async function canApproveComboSuggestions() {
 export async function canActOnComboSuggestions() {
   const session = await auth();
   if (!session) return false;
-  const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    select: { isLeader: true, leadsDept: { select: { code: true } } },
-  });
+  const user = await getGuardUser(session.user.id);
   return !!user?.isLeader && user.leadsDept?.code === "MKT";
 }
 
@@ -1458,10 +1390,7 @@ export async function canUploadLowRotationList() {
   const session = await auth();
   if (!session) return false;
   if (session.user.role === "admin") return true;
-  const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    select: { isLeader: true, leadsDept: { select: { code: true } } },
-  });
+  const user = await getGuardUser(session.user.id);
   return !!user?.isLeader && user.leadsDept?.code === "INV";
 }
 
@@ -1479,7 +1408,7 @@ export async function canSyncAtomData() {
 export async function canMarkComboCreatedInDropi() {
   const session = await auth();
   if (!session || session.user.role === "admin") return false;
-  const user = await prisma.user.findUnique({ where: { id: session.user.id }, select: { canMarkComboCreatedInDropi: true } });
+  const user = await getGuardUser(session.user.id);
   return !!user?.canMarkComboCreatedInDropi;
 }
 
@@ -1491,7 +1420,7 @@ export async function canProposeMarketProduct() {
   const session = await auth();
   if (!session) return false;
   if (session.user.role === "admin") return true;
-  const user = await prisma.user.findUnique({ where: { id: session.user.id }, select: { department: { select: { code: true } } } });
+  const user = await getGuardUser(session.user.id);
   return user?.department?.code === "MKT";
 }
 
@@ -1499,20 +1428,14 @@ export async function canReviewMarketProduct() {
   const session = await auth();
   if (!session) return false;
   if (session.user.role === "admin") return true;
-  const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    select: { isLeader: true, leadsDept: { select: { code: true } } },
-  });
+  const user = await getGuardUser(session.user.id);
   return !!user?.isLeader && user.leadsDept?.code === "MKT";
 }
 
 export async function canActOnMarketProductReview() {
   const session = await auth();
   if (!session) return false;
-  const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    select: { isLeader: true, leadsDept: { select: { code: true } } },
-  });
+  const user = await getGuardUser(session.user.id);
   return !!user?.isLeader && user.leadsDept?.code === "MKT";
 }
 
@@ -1522,7 +1445,7 @@ export async function canActOnMarketProductReview() {
 export async function canPublishMarketProduct() {
   const session = await auth();
   if (!session || session.user.role === "admin") return false;
-  const user = await prisma.user.findUnique({ where: { id: session.user.id }, select: { canPublishMarketProduct: true } });
+  const user = await getGuardUser(session.user.id);
   return !!user?.canPublishMarketProduct;
 }
 
@@ -1531,7 +1454,7 @@ export async function canPublishMarketProduct() {
 export async function canBrandMarketProduct() {
   const session = await auth();
   if (!session || session.user.role === "admin") return false;
-  const user = await prisma.user.findUnique({ where: { id: session.user.id }, select: { canBrandMarketProduct: true } });
+  const user = await getGuardUser(session.user.id);
   return !!user?.canBrandMarketProduct;
 }
 
@@ -1551,7 +1474,7 @@ export async function canReportSupplierStockout() {
   const session = await auth();
   if (!session) return false;
   if (session.user.role === "admin") return true;
-  const user = await prisma.user.findUnique({ where: { id: session.user.id }, select: { canManagePurchases: true } });
+  const user = await getGuardUser(session.user.id);
   return !!user?.canManagePurchases;
 }
 
@@ -1563,10 +1486,7 @@ export async function canReportSupplierStockout() {
 export async function canResolveSupplierStockout() {
   const session = await auth();
   if (!session) return false;
-  const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    select: { isLeader: true, leadsDept: { select: { code: true } }, canResolveSupplierStockout: true },
-  });
+  const user = await getGuardUser(session.user.id);
   if (user?.isLeader && user.leadsDept?.code === "MKT") return true;
   return !!user?.canResolveSupplierStockout;
 }
@@ -1604,7 +1524,7 @@ export async function canViewB2BPricing() {
   if (session.user.role === "admin") return true;
   if (await canProposeMarketProduct()) return true;
   if (await canReviewMarketProduct()) return true;
-  const user = await prisma.user.findUnique({ where: { id: session.user.id }, select: { canViewB2BPricing: true } });
+  const user = await getGuardUser(session.user.id);
   return !!user?.canViewB2BPricing;
 }
 
@@ -1614,7 +1534,7 @@ export async function canViewB2CPricing() {
   const session = await auth();
   if (!session) return false;
   if (session.user.role === "admin") return true;
-  const user = await prisma.user.findUnique({ where: { id: session.user.id }, select: { canViewB2CPricing: true } });
+  const user = await getGuardUser(session.user.id);
   return !!user?.canViewB2CPricing;
 }
 
@@ -1627,10 +1547,7 @@ export async function canViewMarketProductPricing() {
 export async function getUnseenPayStubCount() {
   const session = await auth();
   if (!session || session.user.role !== "employee") return 0;
-  const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    select: { lastSeenPayStubAt: true },
-  });
+  const user = await getGuardUser(session.user.id);
   if (!user) return 0;
   return prisma.payStub.count({
     where: { userId: session.user.id, updatedAt: { gt: user.lastSeenPayStubAt ?? new Date(0) } },
@@ -1661,7 +1578,7 @@ export async function canAccessRecognition() {
   const session = await auth();
   if (!session) return false;
   if (session.user.role === "admin") return true;
-  const user = await prisma.user.findUnique({ where: { id: session.user.id }, select: { isLeader: true } });
+  const user = await getGuardUser(session.user.id);
   return !!user?.isLeader;
 }
 
@@ -1681,10 +1598,7 @@ export async function canEvaluateUser(evaluateeId: string) {
   if (session.user.role === "admin") return true;
   if (evaluatee.isLeader) return false;
 
-  const me = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    select: { isLeader: true, leadsDeptId: true },
-  });
+  const me = await getGuardUser(session.user.id);
   return !!me?.isLeader && me.leadsDeptId === evaluatee.deptId;
 }
 
@@ -1699,7 +1613,7 @@ export async function canRateLeaderLeadership(leaderId: string) {
   const leader = await prisma.user.findUnique({ where: { id: leaderId }, select: { isLeader: true, leadsDeptId: true } });
   if (!leader?.isLeader) return false;
 
-  const me = await prisma.user.findUnique({ where: { id: session.user.id }, select: { isLeader: true, deptId: true } });
+  const me = await getGuardUser(session.user.id);
   return !!me && !me.isLeader && me.deptId === leader.leadsDeptId;
 }
 
@@ -1710,7 +1624,7 @@ export async function canObserveLeader(leaderId: string) {
   const leader = await prisma.user.findUnique({ where: { id: leaderId }, select: { isLeader: true, leadsDeptId: true } });
   if (!leader?.isLeader) return false;
 
-  const me = await prisma.user.findUnique({ where: { id: session.user.id }, select: { isLeader: true, deptId: true } });
+  const me = await getGuardUser(session.user.id);
   return !!me && !me.isLeader && me.deptId !== leader.leadsDeptId;
 }
 
@@ -1722,10 +1636,7 @@ export async function canManageImprovementPlan(deptId: string) {
   if (!session) return false;
   if (session.user.role === "admin") return true;
   if (session.user.role === "employee" && session.user.deptId === deptId) {
-    const user = await prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: { isLeader: true, leadsDeptId: true },
-    });
+    const user = await getGuardUser(session.user.id);
     return !!user?.isLeader && user.leadsDeptId === deptId;
   }
   return false;
@@ -1754,10 +1665,7 @@ export async function canActOnImprovementPlan(plan: { deptId: string; leaderId: 
   if (!session) return false;
   if (session.user.role === "admin") return plan.leaderId === null;
   if (session.user.role === "employee" && session.user.deptId === plan.deptId) {
-    const user = await prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: { isLeader: true, leadsDeptId: true },
-    });
+    const user = await getGuardUser(session.user.id);
     return !!user?.isLeader && user.leadsDeptId === plan.deptId;
   }
   return false;
