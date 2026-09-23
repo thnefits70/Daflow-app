@@ -3094,10 +3094,18 @@ model NewIdBranding {
   proposalId    String?                @unique
   proposal      MarketProductProposal? @relation(fields: [proposalId], references: [id], onDelete: Cascade)
 
-  photos    String[]
-  // Videos subidos a DAFLOW o enlaces de Drive (para videos de más de 50MB).
-  videoUrls String[]
+  // Corregido 2026-09-23 (aclaración del usuario): el brandeo se hace FUERA
+  // de DAFLOW (imágenes e información en Dropi, videos en Google Drive) — acá
+  // solo se registra cada paso hecho, quién y cuándo, para que el flujo sepa
+  // en qué va. Nada de fotos ni videos se sube a DAFLOW.
+  dropiImagesAt   DateTime?
+  dropiImagesById String?
+  dropiInfoAt     DateTime?
+  dropiInfoById   String?
+  driveVideoAt    DateTime?
+  driveVideoById  String?
 
+  // Se completa cuando los 3 pasos de arriba están marcados.
   brandedAt   DateTime?
   brandedById String?
   brandedBy   User?     @relation("NewIdBrandingBrandedBy", fields: [brandedById], references: [id], onDelete: SetNull)

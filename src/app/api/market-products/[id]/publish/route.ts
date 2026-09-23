@@ -68,7 +68,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     brandUserIds.map((uid) =>
       notifyOwner(uid, {
         title: "Nuevo producto para brandear",
-        body: `${existing.productName} — ID Dropi ${parsed.data.dropiProductId}. Sube las fotos y el video brandeados.`,
+        body: `${existing.productName} — ID Dropi ${parsed.data.dropiProductId}. Brandéalo en Dropi y el Drive, y marca los pasos en DAFLOW.`,
         url: "/area/workspace?tab=nuevos-ids",
       }).catch(() => null)
     )

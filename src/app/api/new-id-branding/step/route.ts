@@ -9,26 +9,35 @@ const schema = z
   .object({
     catalogItemId: z.string().min(1).nullable().optional(),
     proposalId: z.string().min(1).nullable().optional(),
-    photos: z.array(z.string().url()).min(1, "Sube al menos 1 foto real brandeada.").max(10),
-    videoUrls: z.array(z.string().url()).min(1, "Sube el video o pega el enlace de Drive.").max(5),
+    step: z.enum(["dropiImages", "dropiInfo", "driveVideo", "channel"]),
+    done: z.boolean(),
   })
   .refine((d) => d.catalogItemId || d.proposalId, { message: "Falta el producto." });
 
-const proposalSelect = { id: true, productName: true, description: true, brandedAt: true, catalogItemId: true } as const;
+const STEP_FIELDS = {
+  dropiImages: ["dropiImagesAt", "dropiImagesById"],
+  dropiInfo: ["dropiInfoAt", "dropiInfoById"],
+  driveVideo: ["driveVideoAt", "driveVideoById"],
+  channel: ["channelUploadedAt", "channelUploadedById"],
+} as const;
 
-// Confirmado 2026-09-23, pedido de Robert: terminar el brandeo de un ID nuevo
-// (una sola vez por producto). Reemplaza tanto el botón "Confirmar fotos y
-// video subidos" de Mercadería recibida como la vieja pestaña "Brandear" de
-// Análisis de Mercado, por eso también marca esas dos cosas como hechas.
+// Confirmado 2026-09-23, pedido de Robert (corregido el mismo día): el
+// brandeo se hace fuera de DAFLOW — imágenes brandeadas e información en
+// Dropi, videos en Google Drive. Acá Robert solo marca cada paso hecho para
+// que el resto del flujo sepa en qué va. Con los 3 pasos marcados el producto
+// queda brandeado (pasa al historial) y recién ahí se puede marcar "subido
+// al canal de la marca". Un paso se puede desmarcar mientras el brandeo no
+// esté completo; el del canal, siempre.
 export async function POST(req: NextRequest) {
   const session = await auth();
   if (!session || !(await canBrandNewIds())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
   const parsed = schema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Datos inválidos." }, { status: 400 });
-  const { photos, videoUrls } = parsed.data;
+  const { step, done } = parsed.data;
 
   let catalogItemId = parsed.data.catalogItemId ?? null;
+  const proposalSelect = { id: true, productName: true, brandedAt: true, catalogItemId: true } as const;
   let proposal = parsed.data.proposalId
     ? await prisma.marketProductProposal.findUnique({ where: { id: parsed.data.proposalId }, select: proposalSelect })
     : null;
@@ -37,33 +46,39 @@ export async function POST(req: NextRequest) {
   if (catalogItemId && !proposal) {
     proposal = await prisma.marketProductProposal.findUnique({ where: { catalogItemId }, select: proposalSelect });
   }
-  if (catalogItemId) {
-    const item = await prisma.purchaseCatalogItem.findUnique({ where: { id: catalogItemId }, select: { id: true } });
-    if (!item) return NextResponse.json({ error: "Producto no encontrado." }, { status: 404 });
-  }
 
-  const existing = await prisma.newIdBranding.findFirst({
+  let row = await prisma.newIdBranding.findFirst({
     where: { OR: [...(catalogItemId ? [{ catalogItemId }] : []), ...(proposal ? [{ proposalId: proposal.id }] : [])] },
   });
   const legacyDone = catalogItemId
-    ? await prisma.purchaseReceiptFollowUp.findFirst({ where: { designConfirmedAt: { not: null }, request: { catalogItemId } }, select: { id: true } })
-    : null;
-  if (existing?.brandedAt || legacyDone || proposal?.brandedAt) return NextResponse.json({ error: "Este producto ya está brandeado." }, { status: 409 });
+    ? !!(await prisma.purchaseReceiptFollowUp.findFirst({ where: { designConfirmedAt: { not: null }, request: { catalogItemId } }, select: { id: true } }))
+    : false;
+  const alreadyBranded = !!row?.brandedAt || legacyDone || !!proposal?.brandedAt;
 
+  if (step === "channel" && !alreadyBranded) return NextResponse.json({ error: "Primero termina los pasos del brandeo." }, { status: 409 });
+  if (step !== "channel" && alreadyBranded) return NextResponse.json({ error: "Este producto ya está brandeado." }, { status: 409 });
+
+  const [atField, byField] = STEP_FIELDS[step];
   const now = new Date();
   const userId = session.user.id;
-  const data = { photos, videoUrls, brandedAt: now, brandedById: userId };
+  const stepData = done ? { [atField]: now, [byField]: userId } : { [atField]: null, [byField]: null };
+
+  row = row
+    ? await prisma.newIdBranding.update({
+        where: { id: row.id },
+        data: { ...stepData, catalogItemId: row.catalogItemId ?? catalogItemId, proposalId: row.proposalId ?? proposal?.id ?? null },
+      })
+    : await prisma.newIdBranding.create({ data: { ...stepData, catalogItemId, proposalId: proposal?.id ?? null } });
+
+  if (step === "channel" || !row.dropiImagesAt || !row.dropiInfoAt || !row.driveVideoAt) {
+    return NextResponse.json({ ok: true, branded: false });
+  }
+
+  // Los 3 pasos listos: queda brandeado. Todas las llegadas de este producto
+  // quedan con el diseño confirmado (así el aviso en pantalla no las sigue
+  // contando) y la propuesta de Análisis de Mercado, si hay, queda brandeada.
   await prisma.$transaction(async (tx) => {
-    if (existing) {
-      await tx.newIdBranding.update({
-        where: { id: existing.id },
-        data: { ...data, catalogItemId: existing.catalogItemId ?? catalogItemId, proposalId: existing.proposalId ?? proposal?.id ?? null },
-      });
-    } else {
-      await tx.newIdBranding.create({ data: { ...data, catalogItemId, proposalId: proposal?.id ?? null } });
-    }
-    // Todas las llegadas de este producto quedan con el diseño confirmado,
-    // así el aviso en pantalla de Mercadería recibida no las sigue contando.
+    await tx.newIdBranding.update({ where: { id: row!.id }, data: { brandedAt: now, brandedById: userId } });
     if (catalogItemId) {
       const requests = await tx.purchaseRequest.findMany({
         where: { catalogItemId, status: { in: ["RECEIVED_PENDING_REVIEW", "RECEIVED"] } },
@@ -79,15 +94,6 @@ export async function POST(req: NextRequest) {
     }
     if (proposal) {
       await tx.marketProductProposal.update({ where: { id: proposal.id }, data: { brandedAt: now, brandedById: userId } });
-      // Igual que la vieja pestaña "Brandear": el catálogo de una propuesta
-      // nace con la foto de referencia de la competencia, se reemplaza por
-      // las fotos reales brandeadas.
-      if (catalogItemId && proposal.catalogItemId === catalogItemId) {
-        await tx.purchaseCatalogItem.update({
-          where: { id: catalogItemId },
-          data: { photos, ...(proposal.description ? { description: proposal.description } : {}) },
-        });
-      }
     }
   });
 
@@ -102,5 +108,5 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, branded: true });
 }

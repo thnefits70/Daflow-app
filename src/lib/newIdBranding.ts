@@ -3,9 +3,10 @@ import { auth } from "@/auth";
 
 // Confirmado 2026-09-23, pedido de Robert: "Nuevos IDs por brandear" sale de
 // Mercadería recibida a su propia pestaña. Cada producto aparece UNA sola vez
-// (no una vez por cada llegada) y, una vez brandeado, pasa al historial con
-// sus fotos reales brandeadas, video(s) y la casilla "ya subido al canal de
-// la marca". También absorbe la antigua pestaña "Brandear" de Análisis de
+// (no una vez por cada llegada). El brandeo se hace fuera de DAFLOW
+// (imágenes e información en Dropi, videos en Google Drive): acá Robert solo
+// marca cada paso hecho; con los 3 pasos pasa al historial, donde queda la
+// casilla "ya subido al canal de la marca". También absorbe la antigua pestaña "Brandear" de Análisis de
 // Mercado: una propuesta con ID de Dropi confirmado por Heidy aparece acá
 // aunque todavía no haya llegado a bodega.
 
@@ -29,6 +30,10 @@ export async function getNewIdBrandingActorIds(): Promise<string[]> {
   return users.map((u) => u.id);
 }
 
+export const BRAND_STEPS = ["dropiImages", "dropiInfo", "driveVideo"] as const;
+export type BrandStep = (typeof BRAND_STEPS)[number];
+type Mark = { at: string; by: string | null };
+
 export type NewIdEntry = {
   key: string; // "c:<catalogItemId>" o "p:<proposalId>"
   catalogItemId: string | null;
@@ -42,12 +47,13 @@ export type NewIdEntry = {
   dropiPublishedAt: string | null;
   // Fecha desde la que está esperando brandeo (para ordenar lo más antiguo primero).
   since: string;
+  // Pasos que Robert hace FUERA de DAFLOW (Dropi y Google Drive); acá solo
+  // queda marcado quién y cuándo.
+  steps: Record<BrandStep, Mark | null>;
   branded: {
     at: string | null;
     by: string | null;
-    photos: string[];
-    videoUrls: string[];
-    legacy: boolean; // brandeado antes de que existiera esta sección, sin fotos guardadas
+    legacy: boolean; // confirmado antes de que existiera esta sección, sin pasos detallados
   } | null;
   channel: { at: string; by: string | null } | null;
 };
@@ -83,6 +89,10 @@ export async function getNewIdBrandingBoard(): Promise<{ pending: NewIdEntry[]; 
     }),
   ]);
 
+  const stepUserIds = [...new Set(rows.flatMap((r) => [r.dropiImagesById, r.dropiInfoById, r.driveVideoById]).filter((x): x is string => !!x))];
+  const userNames = new Map(
+    (stepUserIds.length ? await prisma.user.findMany({ where: { id: { in: stepUserIds } }, select: { id: true, name: true } }) : []).map((u) => [u.id, u.name])
+  );
   const rowByCatalog = new Map(rows.filter((r) => r.catalogItemId).map((r) => [r.catalogItemId!, r]));
   const rowByProposal = new Map(rows.filter((r) => r.proposalId).map((r) => [r.proposalId!, r]));
   const proposalByCatalog = new Map(proposals.filter((p) => p.catalogItemId).map((p) => [p.catalogItemId!, p]));
@@ -108,6 +118,7 @@ export async function getNewIdBrandingBoard(): Promise<{ pending: NewIdEntry[]; 
         arrivals: 0,
         dropiPublishedAt: prop?.publishedAt?.toISOString() ?? null,
         since: "",
+        steps: { dropiImages: null, dropiInfo: null, driveVideo: null },
         branded: null,
         channel: null,
       };
@@ -121,7 +132,7 @@ export async function getNewIdBrandingBoard(): Promise<{ pending: NewIdEntry[]; 
     }
     const fu = a.marketingFollowUp;
     if (fu?.designConfirmedAt && (!e.branded || (e.branded.at && fu.designConfirmedAt.toISOString() < e.branded.at))) {
-      e.branded = { at: fu.designConfirmedAt.toISOString(), by: fu.designConfirmedBy?.name ?? null, photos: [], videoUrls: [], legacy: true };
+      e.branded = { at: fu.designConfirmedAt.toISOString(), by: fu.designConfirmedBy?.name ?? null, legacy: true };
     }
   }
 
@@ -157,21 +168,30 @@ export async function getNewIdBrandingBoard(): Promise<{ pending: NewIdEntry[]; 
         arrivals: 0,
         dropiPublishedAt: p.publishedAt.toISOString(),
         since: "",
+        steps: { dropiImages: null, dropiInfo: null, driveVideo: null },
         branded: null,
         channel: null,
       };
       entries.set(key, e);
     }
     if (p.brandedAt && !e.branded) {
-      e.branded = { at: p.brandedAt.toISOString(), by: p.brandedBy?.name ?? null, photos: [], videoUrls: [], legacy: true };
+      e.branded = { at: p.brandedAt.toISOString(), by: p.brandedBy?.name ?? null, legacy: true };
     }
   }
 
   // 3) Lo guardado en esta sección manda sobre lo viejo.
   for (const e of entries.values()) {
     const row = (e.catalogItemId && rowByCatalog.get(e.catalogItemId)) || (e.proposalId && rowByProposal.get(e.proposalId)) || null;
+    if (row) {
+      const mark = (at: Date | null, byId: string | null): Mark | null => (at ? { at: at.toISOString(), by: (byId && userNames.get(byId)) || null } : null);
+      e.steps = {
+        dropiImages: mark(row.dropiImagesAt, row.dropiImagesById),
+        dropiInfo: mark(row.dropiInfoAt, row.dropiInfoById),
+        driveVideo: mark(row.driveVideoAt, row.driveVideoById),
+      };
+    }
     if (row?.brandedAt) {
-      e.branded = { at: row.brandedAt.toISOString(), by: row.brandedBy?.name ?? null, photos: row.photos, videoUrls: row.videoUrls, legacy: false };
+      e.branded = { at: row.brandedAt.toISOString(), by: row.brandedBy?.name ?? null, legacy: false };
     }
     if (row?.channelUploadedAt) e.channel = { at: row.channelUploadedAt.toISOString(), by: row.channelUploadedBy?.name ?? null };
     e.since = e.dropiPublishedAt && (!e.arrivedAt || e.dropiPublishedAt < e.arrivedAt) ? e.dropiPublishedAt : e.arrivedAt ?? e.dropiPublishedAt ?? "";
