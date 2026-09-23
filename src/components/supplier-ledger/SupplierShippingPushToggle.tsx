@@ -120,12 +120,12 @@ export function SupplierShippingPushToggle({ token }: { token: string }) {
           <Bell size={18} className="mt-0.5 shrink-0 text-neutral-500" />
           <div>
             <p className="text-sm font-medium">Reciba un aviso en su iPhone cada vez que le pedimos algo</p>
-            <p className="mt-0.5 text-xs text-neutral-500">En iPhone hay que hacer esto una sola vez, desde Safari:</p>
+            <p className="mt-0.5 text-xs text-neutral-500">En iPhone hay que hacer esto una sola vez (sirve desde Safari o Chrome):</p>
           </div>
         </div>
         <div className="mt-3 flex flex-col gap-2 sm:flex-row">
           <div className="flex flex-1 items-center gap-2 rounded-md bg-neutral-100 px-3 py-2 text-xs">
-            <Share size={14} className="shrink-0 text-neutral-600" /> Toque compartir <ChevronRight size={12} className="shrink-0 text-neutral-400" />
+            <Share size={14} className="shrink-0 text-neutral-600" /> Toque compartir (el cuadrito con la flecha ⬆) <ChevronRight size={12} className="shrink-0 text-neutral-400" />
           </div>
           <div className="flex flex-1 items-center gap-2 rounded-md bg-neutral-100 px-3 py-2 text-xs">
             <SquarePlus size={14} className="shrink-0 text-neutral-600" /> “Añadir a pantalla de inicio” <ChevronRight size={12} className="shrink-0 text-neutral-400" />
