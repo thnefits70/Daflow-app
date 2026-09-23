@@ -147,6 +147,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
       reviewedById: true,
       invoiceUploadedById: true,
       dispatchAssignedToId: true,
+      prepReadyAt: true,
       packAssignedToId: true,
       deliveredById: true,
     },
@@ -170,6 +171,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
       reviewedById: sale.reviewedById,
       invoiceUploadedById: sale.invoiceUploadedById,
       dispatchAssignedToId: sale.dispatchAssignedToId,
+      prepReadyAt: sale.prepReadyAt,
       packAssignedToId: sale.packAssignedToId,
       deliveredById: sale.deliveredById,
     });

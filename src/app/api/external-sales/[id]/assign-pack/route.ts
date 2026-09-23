@@ -3,7 +3,7 @@ import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { canAssignExternalSalePack, dbUserId } from "@/lib/guards";
-import { notifyColaboradorPackAssigned, saleItemsSummary } from "@/lib/externalSales";
+import { notifyColaboradorPackAssigned, notifyGrouperPackAssigned, saleItemsSummary } from "@/lib/externalSales";
 
 const schema = z.object({ colaboradorId: z.string().min(1) });
 
@@ -18,13 +18,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const sale = await prisma.externalSale.findUnique({
     where: { id },
-    select: { prepReadyAt: true, packAssignedToId: true, code: true, items: { select: { declaredProductName: true, catalogItem: { select: { name: true } } } } },
+    select: { prepReadyAt: true, packAssignedToId: true, dispatchAssignedToId: true, code: true, items: { select: { declaredProductName: true, catalogItem: { select: { name: true } } } } },
   });
   if (!sale) return NextResponse.json({ error: "No encontrado." }, { status: 404 });
   if (!sale.prepReadyAt) return NextResponse.json({ error: "Inventario todavía no la deja lista." }, { status: 409 });
   if (sale.packAssignedToId) return NextResponse.json({ error: "Ya fue asignada." }, { status: 409 });
 
-  const colaborador = await prisma.user.findFirst({ where: { id: parsed.data.colaboradorId, department: { code: "FUL" }, isActive: true }, select: { id: true } });
+  const colaborador = await prisma.user.findFirst({ where: { id: parsed.data.colaboradorId, department: { code: "FUL" }, isActive: true }, select: { id: true, name: true } });
   if (!colaborador) return NextResponse.json({ error: "Colaborador no encontrado en Fulfilment." }, { status: 404 });
 
   const updated = await prisma.externalSale.update({
@@ -33,5 +33,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   });
 
   await notifyColaboradorPackAssigned(colaborador.id, sale.code, saleItemsSummary(sale.items));
+  if (sale.dispatchAssignedToId) await notifyGrouperPackAssigned(sale.dispatchAssignedToId, sale.code, saleItemsSummary(sale.items), colaborador.name);
   return NextResponse.json(updated);
 }

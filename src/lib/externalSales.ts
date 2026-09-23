@@ -168,6 +168,13 @@ export async function notifyColaboradorPackAssigned(colaboradorId: string, code:
   await notifyOwner(colaboradorId, { title: "📦 Embalaje asignado", body: `${code} — ${productName}. Embala y entrega al motorizado con foto en vivo.`, url: `${URL_BASE}&etab=entregas` }).catch(() => null);
 }
 
+// Confirmado 2026-09-23, pedido de Joel: quien agrupó se entera a quién de
+// Fulfilment se le asignó embalar su venta, para que el equipo de
+// Inventario sepa cómo sigue el proceso después de ellos.
+export async function notifyGrouperPackAssigned(grouperId: string, code: string, productName: string, packerName: string): Promise<void> {
+  await notifyOwner(grouperId, { title: "📦 Embalaje asignado", body: `${code} — ${productName}. Se le asignó a ${packerName} para embalar y entregar.`, url: `${URL_BASE}&etab=historial` }).catch(() => null);
+}
+
 export async function notifyFinanceLeadExternalSaleReadyToClose(code: string): Promise<void> {
   const leadId = await getFinanceLeadId();
   if (!leadId) return;
@@ -183,8 +190,16 @@ type InvolvedSale = {
   deliveredById: string | null;
 };
 
-function involvedRecipientIds(sale: InvolvedSale): string[] {
-  return [...new Set([sale.advisorId, sale.reviewedById, sale.invoiceUploadedById, sale.dispatchAssignedToId, sale.packAssignedToId, sale.deliveredById].filter((id): id is string => !!id))];
+// Confirmado 2026-09-23, pedido de Joel (aprobado por el usuario): al
+// colaborador de Inventario que agrupa (dispatchAssignedToId) le llegaban
+// avisos que no le tocan (cerrada, devuelta, verificar entrega, falta
+// comprobante). Solo debe recibir 2: "Preparación asignada" (agrupar) y a
+// quién se le asignó embalar (notifyGrouperPackAssigned) — por eso queda
+// fuera de los involucrados salvo que se pida explícitamente. Si esa misma
+// persona tiene otro rol en la venta, sigue recibiendo por ese rol.
+function involvedRecipientIds(sale: InvolvedSale, opts: { includeGrouper?: boolean } = {}): string[] {
+  const grouperId = opts.includeGrouper ? sale.dispatchAssignedToId : null;
+  return [...new Set([sale.advisorId, sale.reviewedById, sale.invoiceUploadedById, grouperId, sale.packAssignedToId, sale.deliveredById].filter((id): id is string => !!id))];
 }
 
 // Confirmado 2026-08-25: pedido explícito del usuario — al cerrar, TODOS los
@@ -256,10 +271,12 @@ export async function notifyEveryoneExternalSaleReturnConfirmed(sale: { code: st
 // api/external-sales/[id]/route.ts, que ya bloquea si outflowBatchId
 // existe). A diferencia de cancelar en PENDING (nadie más se enteró todavía),
 // acá Inventario/Fulfilment puede estar en medio de agruparla o embalarla —
-// se les avisa para que dejen de prepararla.
-export async function notifyEveryoneExternalSaleCancelled(sale: { code: string } & InvolvedSale): Promise<void> {
+// se les avisa para que dejen de prepararla. Quien agrupa solo recibe este
+// aviso si todavía no terminó de agrupar (prepReadyAt vacío) — ahí sí le
+// toca detenerse; después ya no es trabajo suyo.
+export async function notifyEveryoneExternalSaleCancelled(sale: { code: string; prepReadyAt: Date | null } & InvolvedSale): Promise<void> {
   await Promise.all(
-    involvedRecipientIds(sale).map((id) =>
+    involvedRecipientIds(sale, { includeGrouper: !sale.prepReadyAt }).map((id) =>
       notifyOwner(id, { title: "🚫 Venta externa cancelada", body: `${sale.code} — el asesor la canceló, el cliente no la quiso. Detén cualquier preparación en curso.`, url: `${URL_BASE}&etab=historial` }).catch(() => null)
     )
   );
