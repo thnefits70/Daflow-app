@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Search, PackageCheck, DollarSign, XCircle, AlertTriangle } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Search, ChevronDown, PackageCheck, DollarSign, XCircle, AlertTriangle } from "lucide-react";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 import { formatDateTime } from "@/lib/formatDateTime";
 import { compressImage } from "@/lib/compressImage";
@@ -83,6 +83,16 @@ function GestionCard({ item, onChanged }: { item: ItemDTO; onChanged: () => void
   const [proofUrl, setProofUrl] = useState<string | null>(null);
   const [uploadingProof, setUploadingProof] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const pickerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function onClickOutside(e: MouseEvent) {
+      if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) setPickerOpen(false);
+    }
+    document.addEventListener("mousedown", onClickOutside);
+    return () => document.removeEventListener("mousedown", onClickOutside);
+  }, []);
 
   useEffect(() => {
     if (item.purchaseGestionSupplier && !pickingAgain) return;
@@ -200,19 +210,35 @@ function GestionCard({ item, onChanged }: { item: ItemDTO; onChanged: () => void
               </button>
             </div>
           )}
-          <div className="flex items-center gap-1.5 rounded border border-rule bg-surface px-2.5 py-2">
-            <Search size={13} className="text-steel" />
-            <input type="text" placeholder="Buscá el proveedor…" className="flex-1 text-[12.5px] outline-none bg-transparent" value={query} onChange={(e) => setQuery(e.target.value)} />
-          </div>
-          {results.length > 0 && (
-            <div className="flex flex-col gap-1 mt-1.5 border border-rule rounded-md overflow-hidden">
-              {results.map((s) => (
-                <button key={s.id} type="button" disabled={linking} className="text-left p-2 text-[12.5px] font-medium hover:bg-surface cursor-pointer disabled:opacity-50" onClick={() => linkSupplier(s)}>
-                  {s.name}
-                </button>
-              ))}
+          <div ref={pickerRef} className="relative">
+            <div className="flex items-center gap-1.5 rounded border border-rule bg-surface px-2.5 py-2">
+              <Search size={13} className="text-steel" />
+              <input
+                type="text"
+                placeholder="Buscá el proveedor…"
+                className="flex-1 text-[12.5px] outline-none bg-transparent"
+                value={query}
+                onChange={(e) => { setQuery(e.target.value); setPickerOpen(true); }}
+                onFocus={() => setPickerOpen(true)}
+              />
+              <button type="button" aria-label={pickerOpen ? "Cerrar lista" : "Abrir lista"} className="text-steel cursor-pointer" onClick={() => setPickerOpen((o) => !o)}>
+                <ChevronDown size={14} className={`transition-transform ${pickerOpen ? "rotate-180" : ""}`} />
+              </button>
             </div>
-          )}
+            {pickerOpen && (
+              <div className="absolute z-20 mt-1 w-full max-h-56 overflow-y-auto bg-surface border border-rule rounded-md shadow-lg">
+                {results.length === 0 ? (
+                  <div className="p-2 text-[12px] text-steel">Sin resultados.</div>
+                ) : (
+                  results.map((s) => (
+                    <button key={s.id} type="button" disabled={linking} className="block w-full text-left px-2.5 py-2 text-[12.5px] font-medium border-b border-rule last:border-b-0 hover:bg-cloud cursor-pointer disabled:opacity-50" onClick={() => { setPickerOpen(false); linkSupplier(s); }}>
+                      {s.name}
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
