@@ -1,27 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Search, ArrowUpDown, Info, X, Wrench, Check, Trash2, RefreshCw, ClipboardCheck } from "lucide-react";
+import { Search, ArrowUpDown, Info, X, Wrench, Check, Trash2, ClipboardCheck } from "lucide-react";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 import { TabGuide } from "@/components/shared/TabGuide";
+import { ExpandableName } from "@/components/ui/ExpandableName";
 import { formatDateTime } from "@/lib/formatDateTime";
 
 type FreightRecomputeRow = { catalogItemId: string; name: string; entriesChanged: number; oldAvgCost: number; newAvgCost: number };
 type PersonalPurchaseBackfillRow = { catalogItemId: string; name: string; missingCount: number; missingUnits: number; oldBalance: number; newBalance: number };
-type JustCostDeclarationRow = { catalogItemId: string; name: string; justCode: string | null; suggestedCost: number };
 type UnregisteredSkeletonRow = { catalogItemId: string; name: string; justCode: string | null };
-type CutoverSyncRow = { catalogItemId: string; name: string; justCode: string | null; oldBalance: number; newBalance: number; oldAvgCost: number; newAvgCost: number };
-type CutoverDamageRow = {
-  catalogItemId: string;
-  name: string;
-  justCode: string | null;
-  currentBalance: number;
-  currentAvgCost: number;
-  restoreBalance: number;
-  restoreAvgCost: number;
-  realMovementType: "IN" | "OUT";
-  realMovementAt: string;
-};
 type PendingAdjustmentRow = {
   id: string;
   catalogItemId: string;
@@ -80,8 +68,6 @@ type StockRow = {
   avgCost: number;
   bodega: Marca | null;
   justAvgCost?: number | null;
-  justStock?: number | null;
-  justStockUploadedAt?: string | null;
   costSource?: "proposal" | "kardex" | "just" | null;
   providerPrice?: number;
   bodegaPrice?: number;
@@ -92,7 +78,7 @@ type StockRow = {
   b2cPrice2to11?: number;
   pendingAdjustmentQuantity?: number | null;
 };
-type SortKey = "name" | "balance" | "proveedor" | "just" | "bodega" | "benistock" | "b2b" | "dropi" | "b2c1" | "b2c2";
+type SortKey = "name" | "balance" | "proveedor" | "bodega" | "benistock" | "b2b" | "dropi" | "b2c1" | "b2c2";
 // Confirmado 2026-09-21, pedido explícito del usuario: además de ordenar
 // por nombre/stock, poder ordenar de mayor a menor por cualquier columna de
 // costo o precio de venta (ej. "puesto en bodega") — se guarda solo el
@@ -102,8 +88,6 @@ function priceForSort(r: StockRow, key: SortKey): number {
   switch (key) {
     case "proveedor":
       return r.providerPrice ?? -1;
-    case "just":
-      return r.justAvgCost ?? -1;
     case "bodega":
       return r.bodegaPrice ?? -1;
     case "benistock":
@@ -125,7 +109,6 @@ const SORT_OPTIONS: { key: SortKey; label: string }[] = [
   { key: "balance", label: "Stock (menor a mayor)" },
   { key: "bodega", label: "Puesto en bodega (mayor a menor)" },
   { key: "proveedor", label: "Proveedor (mayor a menor)" },
-  { key: "just", label: "Just (mayor a menor)" },
   { key: "benistock", label: "Benistock (mayor a menor)" },
   { key: "b2b", label: "B2B (mayor a menor)" },
   { key: "dropi", label: "Dropi (mayor a menor)" },
@@ -135,25 +118,10 @@ const SORT_OPTIONS: { key: SortKey; label: string }[] = [
 // Confirmado 2026-09-16, pedido explícito del usuario: poder ver solo los
 // productos reales, solo los combos, o ambos juntos, con un clic.
 type ViewMode = "all" | "products" | "combos";
-type FormulaKey = "stock" | "stockJust" | "proveedor" | "just" | "bodega" | "benistock" | "b2b" | "dropi" | "b2c1" | "b2c2";
+type FormulaKey = "stock" | "proveedor" | "bodega" | "benistock" | "b2b" | "dropi" | "b2c1" | "b2c2";
 
 function money(v: number) {
   return "$" + v.toLocaleString("es-EC", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-
-// Confirmado 2026-09-17, pedido explícito del usuario: el stock de Just
-// queda "congelado" desde la subida que lo trajo hasta la siguiente — y
-// mientras Just siga siendo una referencia manual (hasta que INVESTOCK sea
-// la única fuente real, sin depender de subir archivos), quiere ver el
-// día/mes/año y la hora exacta en que Daniel subió ese archivo, no solo la
-// semana. Esta es la versión compacta que cabe en cada fila; la fecha
-// completa (con año) se muestra una sola vez arriba de la tabla
-// (lastJustUploadAt) y también en el title (tooltip) de cada número.
-function compactDateTime(iso: string) {
-  const d = new Date(iso);
-  const day = d.toLocaleDateString("es-EC", { day: "2-digit", month: "2-digit" });
-  const time = d.toLocaleTimeString("es-EC", { hour: "2-digit", minute: "2-digit" });
-  return `${day} ${time}`;
 }
 
 // Confirmado 2026-09-16, pedido explícito del usuario: poder copiar
@@ -492,17 +460,9 @@ const FORMULA_EXPLANATIONS: Record<FormulaKey, { title: string; text: string }> 
     title: "Stock",
     text: "El saldo real de INVESTOCK (el Kardex propio de DAFLOW) en este momento — se calcula solo, sumando lo que ha entrado en Compras y restando lo que ha salido en Egresos. Se actualiza automáticamente, sin que nadie tenga que subir ningún archivo.",
   },
-  stockJust: {
-    title: "Stock Just",
-    text: "El stock tal cual venía en el último archivo semanal que subió Daniel — a diferencia de \"Stock\" (que se actualiza solo, en tiempo real), este número se queda igual (\"congelado\") hasta que Daniel suba un archivo nuevo, por eso también se ve la fecha y hora de esa subida. Es solo para comparar los dos a simple vista, nunca reemplaza al stock real de INVESTOCK.",
-  },
   proveedor: {
     title: "Precio proveedor",
     text: "Lo que cobra el proveedor por una unidad, tal cual — sin sumarle flete ni nada más. Es el mismo costo real que ya usa el Kardex de INVESTOCK (el promedio ponderado de todas las compras).",
-  },
-  just: {
-    title: "Just",
-    text: "El costo promedio tal cual viene del último archivo semanal que subió Daniel en Control de Inventario — un dato externo, de referencia, nunca se calcula ni se guarda en ningún otro lado. No afecta ni reemplaza el costo real de INVESTOCK.",
   },
   bodega: {
     title: "Puesto en bodega",
@@ -572,36 +532,6 @@ export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?
   const [pendingAdjustmentsError, setPendingAdjustmentsError] = useState("");
   const [reviewingAdjustmentId, setReviewingAdjustmentId] = useState<string | null>(null);
 
-  // Confirmado 2026-09-22, bug real reportado por el usuario (caso 172320):
-  // el corte con Just de abajo pisó 59 productos que ya tenían una compra
-  // o salida real más nueva que el archivo usado (Daniel/Bryan habían
-  // confirmado esas compras el 21/09, el archivo de Just era del 19/09).
-  // Restaura el saldo/costo real de esos 59 — ver findCutoverDamageCandidates
-  // en stockKardex.ts. El bug de origen ya está arreglado, esto solo repara
-  // el daño que ya se había hecho.
-  const [damageOpen, setDamageOpen] = useState(false);
-  const [damageLoading, setDamageLoading] = useState(false);
-  const [damagePreview, setDamagePreview] = useState<CutoverDamageRow[] | null>(null);
-  const [damageConfirming, setDamageConfirming] = useState(false);
-  const [damageApplying, setDamageApplying] = useState(false);
-  const [damageResult, setDamageResult] = useState<{ restoredCount: number } | null>(null);
-  const [damageError, setDamageError] = useState("");
-
-  // Confirmado 2026-09-22, pedido explícito del usuario (admin): corte único
-  // — "de ahora en adelante ya solo trabajaremos con INVESTOCK". Pone el
-  // stock y costo del último archivo de Just como nuevo punto de partida,
-  // incluso en productos con historial real (a diferencia de "Cargar saldo
-  // inicial" en Control de Inventario, que solo toca productos sin ningún
-  // movimiento) — decisión explícita del usuario después de ver que 230 de
-  // 400 productos con movimiento real no coincidían con Just.
-  const [cutoverOpen, setCutoverOpen] = useState(false);
-  const [cutoverLoading, setCutoverLoading] = useState(false);
-  const [cutoverPreview, setCutoverPreview] = useState<CutoverSyncRow[] | null>(null);
-  const [cutoverConfirming, setCutoverConfirming] = useState(false);
-  const [cutoverApplying, setCutoverApplying] = useState(false);
-  const [cutoverResult, setCutoverResult] = useState<{ syncedCount: number } | null>(null);
-  const [cutoverError, setCutoverError] = useState("");
-
   // Confirmado 2026-09-16, pedido explícito del usuario: corrección única del
   // historial de Kardex para que "Costo Prom." incluya el flete real de
   // compras viejas, no solo de las nuevas (ver applyKardexFreightRecompute
@@ -627,18 +557,6 @@ export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?
   const [backfillApplying, setBackfillApplying] = useState(false);
   const [backfillResult, setBackfillResult] = useState<{ itemsChanged: number; entriesInserted: number } | null>(null);
   const [backfillError, setBackfillError] = useState("");
-  // Confirmado 2026-09-21, pedido explícito del usuario (admin): versión
-  // masiva del botón "Declarar costo" — declara de una vez el precio de
-  // Just (sin flete, no se conoce por producto) para todos los que siguen
-  // en $0 real, en vez de entrar uno por uno. Mismo patrón de vista previa
-  // + confirmación explícita que los dos botones de arriba.
-  const [bulkDeclareOpen, setBulkDeclareOpen] = useState(false);
-  const [bulkDeclareLoading, setBulkDeclareLoading] = useState(false);
-  const [bulkDeclarePreview, setBulkDeclarePreview] = useState<JustCostDeclarationRow[] | null>(null);
-  const [bulkDeclareConfirming, setBulkDeclareConfirming] = useState(false);
-  const [bulkDeclareApplying, setBulkDeclareApplying] = useState(false);
-  const [bulkDeclareResult, setBulkDeclareResult] = useState<{ declaredCount: number; totalCandidates: number } | null>(null);
-  const [bulkDeclareError, setBulkDeclareError] = useState("");
   // Confirmado 2026-09-21, pedido explícito del usuario (admin): borrar de
   // verdad los productos "esqueleto" que crea la importación de Just
   // (código+nombre nada más, nunca matriculados, nunca comprados) — mismo
@@ -661,19 +579,10 @@ export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?
   const [cleanupResult, setCleanupResult] = useState<{ deletedCount: number; totalRequested: number } | null>(null);
   const [cleanupError, setCleanupError] = useState("");
   const [combos, setCombos] = useState<ComboRow[]>([]);
-  // Confirmado 2026-09-17, pedido explícito del usuario: fecha/hora exacta
-  // del último archivo de Just que subió Daniel en general, para mostrarla
-  // una sola vez arriba de la tabla (referencia mientras Just siga siendo
-  // manual, antes de depender solo de INVESTOCK en tiempo real).
-  const [lastJustUploadAt, setLastJustUploadAt] = useState<string | null>(null);
-
   function loadRows() {
     fetch("/api/inventory-control/stock-levels")
-      .then((r) => (r.ok ? r.json() : { rows: [], lastJustUploadAt: null }))
-      .then((data) => {
-        setRows(data.rows);
-        setLastJustUploadAt(data.lastJustUploadAt);
-      })
+      .then((r) => (r.ok ? r.json() : { rows: [] }))
+      .then((data) => setRows(data.rows))
       .catch(() => setRows([]));
   }
 
@@ -738,60 +647,6 @@ export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?
     loadRows();
   }
 
-  function loadDamagePreview() {
-    setDamageLoading(true);
-    setDamageError("");
-    setDamageResult(null);
-    fetch("/api/inventory-control/cutover-damage-correction")
-      .then((r) => (r.ok ? r.json() : Promise.reject()))
-      .then(setDamagePreview)
-      .catch(() => setDamageError("No se pudo cargar la vista previa."))
-      .finally(() => setDamageLoading(false));
-  }
-
-  async function applyDamageCorrection() {
-    setDamageApplying(true);
-    setDamageError("");
-    const res = await fetch("/api/inventory-control/cutover-damage-correction", { method: "POST" });
-    setDamageApplying(false);
-    setDamageConfirming(false);
-    if (!res.ok) {
-      setDamageError("No se pudo restaurar.");
-      return;
-    }
-    const data = await res.json();
-    setDamageResult(data);
-    setDamagePreview(null);
-    loadRows();
-  }
-
-  function loadCutoverPreview() {
-    setCutoverLoading(true);
-    setCutoverError("");
-    setCutoverResult(null);
-    fetch("/api/inventory-control/just-cutover-sync")
-      .then((r) => (r.ok ? r.json() : Promise.reject()))
-      .then(setCutoverPreview)
-      .catch(() => setCutoverError("No se pudo cargar la vista previa."))
-      .finally(() => setCutoverLoading(false));
-  }
-
-  async function applyCutover() {
-    setCutoverApplying(true);
-    setCutoverError("");
-    const res = await fetch("/api/inventory-control/just-cutover-sync", { method: "POST" });
-    setCutoverApplying(false);
-    setCutoverConfirming(false);
-    if (!res.ok) {
-      setCutoverError("No se pudo sincronizar.");
-      return;
-    }
-    const data = await res.json();
-    setCutoverResult(data);
-    setCutoverPreview(null);
-    loadRows();
-  }
-
   function loadFreightPreview() {
     setFreightLoading(true);
     setFreightError("");
@@ -843,33 +698,6 @@ export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?
     const data = await res.json();
     setBackfillResult(data);
     setBackfillPreview(null);
-    loadRows();
-  }
-
-  function loadBulkDeclarePreview() {
-    setBulkDeclareLoading(true);
-    setBulkDeclareError("");
-    setBulkDeclareResult(null);
-    fetch("/api/inventory-control/declare-just-costs")
-      .then((r) => (r.ok ? r.json() : Promise.reject()))
-      .then(setBulkDeclarePreview)
-      .catch(() => setBulkDeclareError("No se pudo cargar la vista previa."))
-      .finally(() => setBulkDeclareLoading(false));
-  }
-
-  async function applyBulkDeclare() {
-    setBulkDeclareApplying(true);
-    setBulkDeclareError("");
-    const res = await fetch("/api/inventory-control/declare-just-costs", { method: "POST" });
-    setBulkDeclareApplying(false);
-    setBulkDeclareConfirming(false);
-    if (!res.ok) {
-      setBulkDeclareError("No se pudo declarar el costo.");
-      return;
-    }
-    const data = await res.json();
-    setBulkDeclareResult(data);
-    setBulkDeclarePreview(null);
     loadRows();
   }
 
@@ -1004,37 +832,23 @@ export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?
   // Se extrae acá para reusarlo también arriba de los combos.
   const columnsHeader = (
     <>
-      <div className="grid grid-cols-[auto_minmax(200px,1fr)_110px_90px_90px_100px_90px_110px_110px_100px_100px_110px_110px] gap-3 px-3 pt-2 min-w-[1560px]">
+      <div className="grid grid-cols-[auto_minmax(200px,1fr)_110px_90px_100px_110px_110px_100px_100px_110px_110px] gap-3 px-3 pt-2 min-w-[1380px]">
         <span></span>
         <span></span>
         <span></span>
         <span></span>
-        <span></span>
-        <span className="col-span-4 text-center text-[10px] font-bold uppercase tracking-wide text-steel border-b border-rule pb-1">Costo</span>
+        <span className="col-span-3 text-center text-[10px] font-bold uppercase tracking-wide text-steel border-b border-rule pb-1">Costo</span>
         <span className="col-span-4 text-center text-[10px] font-bold uppercase tracking-wide text-blue border-b border-rule pb-1">Precios de venta</span>
       </div>
-      <div className="grid grid-cols-[auto_minmax(200px,1fr)_110px_90px_90px_100px_90px_110px_110px_100px_100px_110px_110px] gap-3 px-3 py-2 bg-cloud text-[11px] font-semibold uppercase tracking-wide text-steel min-w-[1560px]">
+      <div className="grid grid-cols-[auto_minmax(200px,1fr)_110px_90px_100px_110px_110px_100px_100px_110px_110px] gap-3 px-3 py-2 bg-cloud text-[11px] font-semibold uppercase tracking-wide text-steel min-w-[1380px]">
         <span></span>
         <span>Producto</span>
         <span>Marca</span>
         <span className="flex items-center justify-end gap-1">
           Stock INVESTOCK <FormulaInfoButton open={openFormula === "stock"} onToggle={() => setOpenFormula((k) => (k === "stock" ? null : "stock"))} />
         </span>
-        <span className="flex flex-col items-end text-right text-gold leading-tight">
-          <span className="flex items-center gap-1">
-            Stock Just <FormulaInfoButton open={openFormula === "stockJust"} onToggle={() => setOpenFormula((k) => (k === "stockJust" ? null : "stockJust"))} />
-          </span>
-          {lastJustUploadAt && (
-            <span className="text-[9px] font-normal normal-case text-steel-dim">
-              últ. subida: {formatDateTime(lastJustUploadAt)}
-            </span>
-          )}
-        </span>
         <span className="flex items-center justify-end gap-1 border-l border-rule pl-3">
           Proveedor <FormulaInfoButton open={openFormula === "proveedor"} onToggle={() => setOpenFormula((k) => (k === "proveedor" ? null : "proveedor"))} />
-        </span>
-        <span className="flex items-center justify-end gap-1">
-          Just <FormulaInfoButton open={openFormula === "just"} onToggle={() => setOpenFormula((k) => (k === "just" ? null : "just"))} />
         </span>
         <span className="flex items-center justify-end gap-1">
           Puesto en bodega <FormulaInfoButton open={openFormula === "bodega"} onToggle={() => setOpenFormula((k) => (k === "bodega" ? null : "bodega"))} />
@@ -1056,7 +870,7 @@ export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?
         </span>
       </div>
       {openFormula && (
-        <div className="flex items-start justify-between gap-3 bg-navy border-b border-rule px-3 py-2.5 min-w-[1560px]">
+        <div className="flex items-start justify-between gap-3 bg-navy border-b border-rule px-3 py-2.5 min-w-[1380px]">
           <div className="text-[12px]">
             <span className="font-bold text-ink">{FORMULA_EXPLANATIONS[openFormula].title}: </span>
             <span className="text-steel">{FORMULA_EXPLANATIONS[openFormula].text}</span>
@@ -1147,158 +961,6 @@ export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?
       )}
 
       {isAdmin && (
-        <div className="border border-red rounded-md mb-3">
-          <button
-            type="button"
-            className="w-full flex items-center gap-2 px-3 py-2 text-[12px] font-semibold text-red hover:text-red cursor-pointer"
-            onClick={() => {
-              setDamageOpen((v) => !v);
-              if (!damageOpen && damagePreview === null && !damageResult) loadDamagePreview();
-            }}
-          >
-            <RefreshCw size={13} /> Restaurar compras/salidas reales que el corte con Just pisó por error
-          </button>
-          {damageOpen && (
-            <div className="px-3 pb-3 text-[12px]">
-              <p className="text-steel mb-2">
-                El corte con Just de abajo usó el archivo del 19/9 sin revisar si algún producto ya tenía una compra o salida real MÁS NUEVA que ese archivo — en 59 productos sí la tenía (ej. una compra que Daniel y Bryan ya habían confirmado el 21/9), y el corte la pisó con el número viejo de Just. <span className="text-red font-semibold">Esto restaura el saldo y costo real que tenía cada producto justo antes de ese error.</span> El bug de origen ya está arreglado — esto solo repara lo que ya se pisó.
-              </p>
-              {damageError && <div className="text-red mb-2">{damageError}</div>}
-              {damageLoading && <div className="text-steel">Calculando vista previa…</div>}
-              {damageResult && (
-                <div className="text-teal font-semibold mb-2">
-                  ✓ Restaurados: {damageResult.restoredCount} producto{damageResult.restoredCount === 1 ? "" : "s"}.
-                </div>
-              )}
-              {!damageLoading && damagePreview && (
-                <>
-                  {damagePreview.length === 0 ? (
-                    <div className="text-steel">Nada por restaurar — no hay daño pendiente del corte con Just.</div>
-                  ) : (
-                    <>
-                      <div className="text-steel mb-1.5">{damagePreview.length} producto(s) se restaurarían:</div>
-                      <div className="max-h-64 overflow-y-auto flex flex-col gap-1 mb-2.5 border border-rule rounded-md p-1.5">
-                        {damagePreview.map((r) => (
-                          <div key={r.catalogItemId} className="flex items-center justify-between gap-2 text-[11.5px] px-1.5 py-1">
-                            <span className="truncate flex-1 flex items-center gap-1.5">
-                              <CatalogCode code={r.justCode} size="text-[10px]" /> {r.name}
-                            </span>
-                            <span className="font-mono text-steel shrink-0">
-                              stock {r.currentBalance}→<span className="font-bold text-teal">{r.restoreBalance}</span> · costo {money(r.currentAvgCost)}→<span className="font-bold text-teal">{money(r.restoreAvgCost)}</span>
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                      {damageConfirming ? (
-                        <div className="flex items-center gap-2">
-                          <span className="text-steel">¿Restaurar estos {damagePreview.length} productos a su número real?</span>
-                          <button
-                            type="button"
-                            disabled={damageApplying}
-                            className="font-bold text-teal cursor-pointer disabled:opacity-50"
-                            onClick={applyDamageCorrection}
-                          >
-                            {damageApplying ? "Restaurando…" : "Sí, restaurar"}
-                          </button>
-                          <button type="button" className="text-steel cursor-pointer" onClick={() => setDamageConfirming(false)}>
-                            Cancelar
-                          </button>
-                        </div>
-                      ) : (
-                        <button
-                          type="button"
-                          className="rounded border border-teal bg-teal px-3 py-1.5 text-[12px] font-bold text-navy cursor-pointer"
-                          onClick={() => setDamageConfirming(true)}
-                        >
-                          Restaurar todos
-                        </button>
-                      )}
-                    </>
-                  )}
-                </>
-              )}
-            </div>
-          )}
-        </div>
-      )}
-
-      {isAdmin && (
-        <div className="border border-gold/40 rounded-md mb-3">
-          <button
-            type="button"
-            className="w-full flex items-center gap-2 px-3 py-2 text-[12px] font-semibold text-gold hover:text-gold cursor-pointer"
-            onClick={() => {
-              setCutoverOpen((v) => !v);
-              if (!cutoverOpen && cutoverPreview === null && !cutoverResult) loadCutoverPreview();
-            }}
-          >
-            <RefreshCw size={13} /> Sincronizar INVESTOCK con el último archivo de Just (corte único)
-          </button>
-          {cutoverOpen && (
-            <div className="px-3 pb-3 text-[12px]">
-              <p className="text-steel mb-2">
-                Pone el stock y costo del último archivo que subió Daniel como el nuevo punto de partida de cada producto — incluso en los que ya tienen compras/salidas reales registradas. <span className="text-gold font-semibold">De ahora en adelante, INVESTOCK deja de compararse con Just</span>: todo lo que pase después de esto son movimientos reales (compras/egresos), no más archivos de Just. Seguro de correr más de una vez — solo lista productos donde el número realmente cambiaría.
-              </p>
-              {cutoverError && <div className="text-red mb-2">{cutoverError}</div>}
-              {cutoverLoading && <div className="text-steel">Calculando vista previa…</div>}
-              {cutoverResult && (
-                <div className="text-teal font-semibold mb-2">
-                  ✓ Sincronizados: {cutoverResult.syncedCount} producto{cutoverResult.syncedCount === 1 ? "" : "s"}.
-                </div>
-              )}
-              {!cutoverLoading && cutoverPreview && (
-                <>
-                  {cutoverPreview.length === 0 ? (
-                    <div className="text-steel">Nada por sincronizar — INVESTOCK ya coincide con el último archivo de Just en todo.</div>
-                  ) : (
-                    <>
-                      <div className="text-steel mb-1.5">{cutoverPreview.length} producto(s) cambiarían:</div>
-                      <div className="max-h-64 overflow-y-auto flex flex-col gap-1 mb-2.5 border border-rule rounded-md p-1.5">
-                        {cutoverPreview.map((r) => (
-                          <div key={r.catalogItemId} className="flex items-center justify-between gap-2 text-[11.5px] px-1.5 py-1">
-                            <span className="truncate flex-1 flex items-center gap-1.5">
-                              <CatalogCode code={r.justCode} size="text-[10px]" /> {r.name}
-                            </span>
-                            <span className="font-mono text-steel shrink-0">
-                              stock {r.oldBalance}→<span className="font-bold text-ink">{r.newBalance}</span> · costo {money(r.oldAvgCost)}→<span className="font-bold text-ink">{money(r.newAvgCost)}</span>
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                      {cutoverConfirming ? (
-                        <div className="flex items-center gap-2">
-                          <span className="text-steel">¿Sincronizar estos {cutoverPreview.length} productos con Just ahora?</span>
-                          <button
-                            type="button"
-                            disabled={cutoverApplying}
-                            className="font-bold text-red cursor-pointer disabled:opacity-50"
-                            onClick={applyCutover}
-                          >
-                            {cutoverApplying ? "Sincronizando…" : "Sí, sincronizar"}
-                          </button>
-                          <button type="button" className="text-steel cursor-pointer" onClick={() => setCutoverConfirming(false)}>
-                            Cancelar
-                          </button>
-                        </div>
-                      ) : (
-                        <button
-                          type="button"
-                          className="rounded border border-gold bg-gold px-3 py-1.5 text-[12px] font-bold text-navy cursor-pointer"
-                          onClick={() => setCutoverConfirming(true)}
-                        >
-                          Sincronizar todos
-                        </button>
-                      )}
-                    </>
-                  )}
-                </>
-              )}
-            </div>
-          )}
-        </div>
-      )}
-
-      {isAdmin && (
         <div className="border border-rule rounded-md mb-3">
           <button
             type="button"
@@ -1332,7 +994,7 @@ export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?
                       <div className="max-h-52 overflow-y-auto flex flex-col gap-1 mb-2.5 border border-rule rounded-md p-1.5">
                         {freightPreview.map((r) => (
                           <div key={r.catalogItemId} className="flex items-center justify-between gap-2 text-[11.5px] px-1.5 py-1">
-                            <span className="truncate flex-1">{r.name}</span>
+                            <ExpandableName text={r.name} className="flex-1" />
                             <span className="font-mono text-steel shrink-0">
                               {money(r.oldAvgCost)} → <span className="font-bold text-ink">{money(r.newAvgCost)}</span>
                             </span>
@@ -1406,7 +1068,10 @@ export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?
                       <div className="max-h-52 overflow-y-auto flex flex-col gap-1 mb-2.5 border border-rule rounded-md p-1.5">
                         {backfillPreview.map((r) => (
                           <div key={r.catalogItemId} className="flex items-center justify-between gap-2 text-[11.5px] px-1.5 py-1">
-                            <span className="truncate flex-1">{r.name} <span className="text-steel">({r.missingCount} compra{r.missingCount === 1 ? "" : "s"}, {r.missingUnits} unidad{r.missingUnits === 1 ? "" : "es"})</span></span>
+                            <span className="flex-1 flex items-center gap-1 min-w-0">
+                              <ExpandableName text={r.name} />
+                              <span className="text-steel shrink-0">({r.missingCount} compra{r.missingCount === 1 ? "" : "s"}, {r.missingUnits} unidad{r.missingUnits === 1 ? "" : "es"})</span>
+                            </span>
                             <span className="font-mono text-steel shrink-0">
                               {r.oldBalance} → <span className="font-bold text-ink">{r.newBalance}</span>
                             </span>
@@ -1435,80 +1100,6 @@ export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?
                           onClick={() => setBackfillConfirming(true)}
                         >
                           Aplicar corrección
-                        </button>
-                      )}
-                    </>
-                  )}
-                </>
-              )}
-            </div>
-          )}
-        </div>
-      )}
-
-      {isAdmin && (
-        <div className="border border-rule rounded-md mb-3">
-          <button
-            type="button"
-            className="w-full flex items-center gap-2 px-3 py-2 text-[12px] font-semibold text-steel hover:text-ink cursor-pointer"
-            onClick={() => {
-              setBulkDeclareOpen((v) => !v);
-              if (!bulkDeclareOpen && bulkDeclarePreview === null && !bulkDeclareResult) loadBulkDeclarePreview();
-            }}
-          >
-            <Wrench size={13} /> Declarar costo estimado (precio de Just) para todos los que siguen en $0
-          </button>
-          {bulkDeclareOpen && (
-            <div className="px-3 pb-3 text-[12px]">
-              <p className="text-steel mb-2">
-                Declara de una sola vez el precio de Just como costo estimado de todo producto que ya se movió pero sigue en $0 en INVESTOCK — mismo criterio que el botón &quot;Declarar costo&quot; de cada fila, pero para todos a la vez. <span className="text-gold font-semibold">Ojo: acá NO se suma flete</span> (no se conoce por producto en un lote) — si sabes el flete de alguno en particular, mejor decláralo aparte con su propio botón en la fila. Nunca pisa un producto que ya tenga costo real. Es seguro correr esto más de una vez.
-              </p>
-              {bulkDeclareError && <div className="text-red mb-2">{bulkDeclareError}</div>}
-              {bulkDeclareLoading && <div className="text-steel">Calculando vista previa…</div>}
-              {bulkDeclareResult && (
-                <div className="text-teal font-semibold mb-2">
-                  ✓ Declarado: {bulkDeclareResult.declaredCount} de {bulkDeclareResult.totalCandidates} producto{bulkDeclareResult.totalCandidates === 1 ? "" : "s"}.
-                </div>
-              )}
-              {!bulkDeclareLoading && bulkDeclarePreview && (
-                <>
-                  {bulkDeclarePreview.length === 0 ? (
-                    <div className="text-steel">Nada pendiente — ningún producto sigue en $0 con precio de Just disponible.</div>
-                  ) : (
-                    <>
-                      <div className="text-steel mb-1.5">{bulkDeclarePreview.length} producto(s) recibirían un costo declarado:</div>
-                      <div className="max-h-52 overflow-y-auto flex flex-col gap-1 mb-2.5 border border-rule rounded-md p-1.5">
-                        {bulkDeclarePreview.map((r) => (
-                          <div key={r.catalogItemId} className="flex items-center justify-between gap-2 text-[11.5px] px-1.5 py-1">
-                            <span className="truncate flex-1">
-                              <CatalogCode code={r.justCode} size="text-[10px]" /> {r.name}
-                            </span>
-                            <span className="font-mono font-bold text-gold shrink-0">{money(r.suggestedCost)}</span>
-                          </div>
-                        ))}
-                      </div>
-                      {bulkDeclareConfirming ? (
-                        <div className="flex items-center gap-2">
-                          <span className="text-steel">¿Declarar el costo de estos {bulkDeclarePreview.length} productos?</span>
-                          <button
-                            type="button"
-                            disabled={bulkDeclareApplying}
-                            className="font-bold text-red cursor-pointer disabled:opacity-50"
-                            onClick={applyBulkDeclare}
-                          >
-                            {bulkDeclareApplying ? "Declarando…" : "Sí, declarar"}
-                          </button>
-                          <button type="button" className="text-steel cursor-pointer" onClick={() => setBulkDeclareConfirming(false)}>
-                            Cancelar
-                          </button>
-                        </div>
-                      ) : (
-                        <button
-                          type="button"
-                          className="rounded border border-teal bg-teal px-3 py-1.5 text-[12px] font-bold text-navy cursor-pointer"
-                          onClick={() => setBulkDeclareConfirming(true)}
-                        >
-                          Declarar todos
                         </button>
                       )}
                     </>
@@ -1572,7 +1163,7 @@ export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?
                               checked={cleanupSelected.has(r.catalogItemId)}
                               onChange={() => toggleCleanupSelected(r.catalogItemId)}
                             />
-                            <CatalogCode code={r.justCode} size="text-[10px]" /> <span className="truncate">{r.name}</span>
+                            <CatalogCode code={r.justCode} size="text-[10px]" /> <ExpandableName text={r.name} />
                           </label>
                         ))}
                       </div>
@@ -1737,7 +1328,7 @@ export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?
           tiene un ancho fijo — se reparten parejo por toda la fila. */}
       <div className="border border-rule rounded-md overflow-x-auto">
         {columnsHeader}
-        <div className="max-h-[70vh] overflow-y-auto min-w-[1560px]">
+        <div className="max-h-[70vh] overflow-y-auto min-w-[1380px]">
           {sorted.length === 0 ? (
             <div className="px-3 py-4 text-[12.5px] text-steel">Sin resultados.</div>
           ) : (
@@ -1749,7 +1340,7 @@ export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?
             sorted.map((r, i) => (
               <div
                 key={r.catalogItemId}
-                className={`grid grid-cols-[auto_minmax(200px,1fr)_110px_90px_90px_100px_90px_110px_110px_100px_100px_110px_110px] gap-3 px-3 py-2.5 border-t border-rule items-center ${i % 2 === 1 ? "bg-cloud/40" : ""}`}
+                className={`grid grid-cols-[auto_minmax(200px,1fr)_110px_90px_100px_110px_110px_100px_100px_110px_110px] gap-3 px-3 py-2.5 border-t border-rule items-center ${i % 2 === 1 ? "bg-cloud/40" : ""}`}
               >
                 {r.photos[0] ? (
                   // Confirmado 2026-09-15 (pedido de Daniel): foto real del
@@ -1762,7 +1353,7 @@ export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?
                 )}
                 <span className="text-[12.5px] flex items-center gap-1.5 min-w-0">
                   <CatalogCode code={r.justCode} />
-                  <span className="truncate">{r.name}</span>
+                  <ExpandableName text={r.name} />
                 </span>
                 <MarcaSelect value={r.bodega} onChange={(v) => updateProductMarca(r.catalogItemId, v)} readOnly={!canEdit} />
                 <span className="flex flex-col items-end gap-0.5">
@@ -1777,29 +1368,6 @@ export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?
                     />
                   )}
                 </span>
-                {/* Confirmado 2026-09-17, pedido explícito del usuario: stock
-                    de referencia según el último archivo de Just, junto al
-                    stock real de INVESTOCK — resaltado en gold cuando no
-                    coinciden, para que el desfase salte a la vista sin tener
-                    que restar los dos números a mano. La fecha/hora debajo es
-                    de qué subida salió ese número (día/mes/hora, el tooltip
-                    trae el año completo) — se queda "congelado" tal cual
-                    hasta que Daniel suba el siguiente archivo. */}
-                <span className="flex flex-col items-end leading-tight">
-                  <span
-                    className={`font-mono text-[12.5px] ${
-                      r.justStock == null ? "text-steel-dim" : r.justStock !== r.balance ? "font-bold text-gold" : "text-steel"
-                    }`}
-                    title={r.justStockUploadedAt ? `Archivo de Just subido: ${formatDateTime(r.justStockUploadedAt)}` : "Stock del último archivo de Just — solo referencia."}
-                  >
-                    {r.justStock == null ? "—" : r.justStock}
-                  </span>
-                  {r.justStockUploadedAt && (
-                    <span className="text-[9px] text-steel-dim" title={`Archivo de Just subido: ${formatDateTime(r.justStockUploadedAt)}`}>
-                      {compactDateTime(r.justStockUploadedAt)}
-                    </span>
-                  )}
-                </span>
                 <span className="flex flex-col items-end gap-0.5 border-l border-rule pl-3">
                   <CopyableAmount
                     value={r.providerPrice}
@@ -1810,7 +1378,6 @@ export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?
                     <DeclareCostButton catalogItemId={r.catalogItemId} suggestedCost={r.justAvgCost ?? 0} onDeclared={loadRows} />
                   )}
                 </span>
-                <CopyableAmount value={r.justAvgCost} className="text-right font-mono text-[13px] text-gold" />
                 <CopyableAmount
                   value={r.bodegaPrice}
                   className={withCostSourceColor("text-right font-mono text-[13px] text-steel", r.costSource)}
@@ -1865,32 +1432,26 @@ export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?
           </div>
           <div className="border border-rule rounded-md overflow-x-auto">
             {columnsHeader}
-            <div className="min-w-[1560px]">
+            <div className="min-w-[1380px]">
               {[...filteredCombos]
                 .sort((a, b) => Number(a.bodega != null) - Number(b.bodega != null) || a.code.localeCompare(b.code))
                 .map((combo, i) => (
                   <div key={combo.id} className={`border-t first:border-t-0 border-rule ${i % 2 === 1 ? "bg-cloud/40" : ""}`}>
-                    <div className="grid grid-cols-[auto_minmax(200px,1fr)_110px_90px_90px_100px_90px_110px_110px_100px_100px_110px_110px] gap-3 px-3 py-2.5 items-center">
+                    <div className="grid grid-cols-[auto_minmax(200px,1fr)_110px_90px_100px_110px_110px_100px_100px_110px_110px] gap-3 px-3 py-2.5 items-center">
                       <div className="w-8 h-8 rounded border border-dashed border-rule shrink-0 flex items-center justify-center text-steel-dim">
                         <Wrench size={12} />
                       </div>
                       <span className="text-[12.5px] flex items-center gap-1.5 min-w-0">
                         <span className="font-mono font-bold text-teal shrink-0">{combo.code}</span>
-                        {combo.label && <span className="truncate text-steel">{combo.label}</span>}
+                        {combo.label && <ExpandableName text={combo.label} className="text-steel" />}
                       </span>
                       <MarcaSelect value={combo.bodega} onChange={(v) => updateComboMarca(combo.id, v)} readOnly={!canEdit} />
                       <span className="text-right font-mono text-[11px] italic text-steel-dim">combo</span>
-                      <span className="text-right font-mono text-[13px] text-steel-dim" title="Just no rastrea combos, solo productos individuales">
-                        —
-                      </span>
                       <CopyableAmount
                         value={combo.providerPrice}
                         className={withCostSourceColor("text-right font-mono text-[13px] text-steel border-l border-rule pl-3", combo.costSource)}
                         title={combo.costSource === "just" ? JUST_ESTIMATE_TITLE : undefined}
                       />
-                      <span className="text-right font-mono text-[13px] text-steel-dim" title="Just no rastrea combos, solo productos individuales">
-                        —
-                      </span>
                       <CopyableAmount
                         value={combo.bodegaPrice}
                         className={withCostSourceColor("text-right font-mono text-[13px] text-steel", combo.costSource)}
