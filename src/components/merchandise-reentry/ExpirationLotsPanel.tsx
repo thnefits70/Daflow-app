@@ -129,8 +129,16 @@ export function ExpirationLotsPanel() {
     setItems((prev) => prev.map((i) => (i.id === selected.id ? { ...i, hasExpiration: true } : i)));
   }
 
+  // Confirmado 2026-09-23, reporte de Daniel (PINK STUFF salió dos veces):
+  // Enter en "Cantidad" llama declare() directo, sin pasar por el botón
+  // deshabilitado — dos Enter seguidos (o Enter + clic) mandaban dos
+  // lotes antes de que `busy` alcanzara a actualizarse. El ref sí frena
+  // el segundo al instante.
+  const submittingRef = useRef(false);
+
   async function declare() {
-    if (!selected || !expirationDate || Number(quantity) <= 0) return;
+    if (!selected || !expirationDate || Number(quantity) <= 0 || submittingRef.current) return;
+    submittingRef.current = true;
     setBusy(true);
     setErr("");
     setOk("");
@@ -138,8 +146,13 @@ export function ExpirationLotsPanel() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ manufactureDate: manufactureDate || null, expirationDate, quantity: Number(quantity) }),
-    });
+    }).catch(() => null);
+    submittingRef.current = false;
     setBusy(false);
+    if (!res) {
+      setErr("No se pudo declarar el lote. Revisa tu conexión.");
+      return;
+    }
     const data = await res.json().catch(() => null);
     if (!res.ok) {
       setErr(data?.error ?? "No se pudo declarar el lote.");
@@ -168,7 +181,13 @@ export function ExpirationLotsPanel() {
 
       <div className="flex items-center gap-1.5 mb-2 rounded border border-rule px-2.5 py-1.5">
         <Search size={13} className="text-steel" />
-        <input className="flex-1 text-[13px] outline-none bg-transparent" placeholder="Buscar producto o código…" value={query} onChange={(e) => setQuery(e.target.value)} />
+        <input className="flex-1 text-[13px] outline-none bg-transparent" placeholder="Buscar producto o código…" value={query} onChange={(e) => {
+          // Pedido de Daniel 2026-09-23: escribir en el buscador con un
+          // producto abierto debe volver a la lista, sin tener que apretar
+          // "Cambiar producto" primero.
+          setQuery(e.target.value);
+          if (selectedId) setSelectedId(null);
+        }} />
       </div>
 
       {!selected && ok && (

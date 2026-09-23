@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/auth";
 import { canManageJustCatalog } from "@/lib/guards";
+import { prisma } from "@/lib/prisma";
 import { declareExpirationLot, deleteExpirationLot, getActiveExpirationLots, getAllExpirationLots, setHasExpiration } from "@/lib/stockKardex";
 
 // Confirmado 2026-09-10 (pedido de Daniel): declarar el lote de un producto
@@ -23,10 +24,27 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Datos inválidos." }, { status: 400 });
 
   const isAdmin = session.user.role === "admin";
+  const manufactureDate = parsed.data.manufactureDate ? new Date(parsed.data.manufactureDate) : null;
+  const expirationDate = new Date(parsed.data.expirationDate);
+
+  // Confirmado 2026-09-23 (PINK STUFF salió dos veces): el mismo lote
+  // exacto llegando dos veces en menos de un minuto es un doble envío, no
+  // un lote nuevo — se devuelve el que ya existe en vez de duplicarlo.
+  const duplicate = await prisma.expirationCohort.findFirst({
+    where: {
+      catalogItemId: id,
+      manufactureDate,
+      expirationDate,
+      quantityReceived: parsed.data.quantity,
+      declaredAt: { gte: new Date(Date.now() - 60_000) },
+    },
+  });
+  if (duplicate) return NextResponse.json(duplicate, { status: 200 });
+
   const cohort = await declareExpirationLot({
     catalogItemId: id,
-    manufactureDate: parsed.data.manufactureDate ? new Date(parsed.data.manufactureDate) : null,
-    expirationDate: new Date(parsed.data.expirationDate),
+    manufactureDate,
+    expirationDate,
     quantity: parsed.data.quantity,
     declaredById: isAdmin ? null : session.user.id,
   });
