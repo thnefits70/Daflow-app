@@ -308,10 +308,13 @@ export async function getExpiringLotPushes(monthsAhead = 6): Promise<ExpiringLot
 
   return rows.map((r) => {
     const dateLabel = r.expirationDate.toLocaleDateString("es-EC", { day: "2-digit", month: "short", year: "numeric" });
+    // Confirmado 2026-09-23: un lote que ya se declara vencido (ej. Cepillo
+    // Shaped, venció 25/03/2025) no debe decir "próximo a vencer".
+    const alreadyExpired = r.expirationDate.getTime() < Date.now();
     return {
       ownerId: leadId,
-      title: "⏰ Producto próximo a vencer",
-      body: `${r.catalogItem.name} — ${r.quantityRemaining} un. vencen el ${dateLabel}.`,
+      title: alreadyExpired ? "🚨 Producto YA VENCIDO en bodega" : "⏰ Producto próximo a vencer",
+      body: `${r.catalogItem.name} — ${r.quantityRemaining} un. ${alreadyExpired ? "vencieron el" : "vencen el"} ${dateLabel}.`,
       url: "/area/workspace?tab=reingreso",
     };
   });

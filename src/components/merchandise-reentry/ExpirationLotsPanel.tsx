@@ -5,6 +5,7 @@ import { Search, CalendarClock, CheckCircle2, Trash2 } from "lucide-react";
 import { formatDateTime, formatCalendarDate } from "@/lib/formatDateTime";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 import { useFormDraft } from "@/lib/useFormDraft";
+import { ExpirationAlerts } from "./ExpirationAlerts";
 
 type CatalogItem = { id: string; name: string; justCode: string | null; hasExpiration: boolean };
 type LotRow = { id: string; manufactureDate: string | null; expirationDate: string; quantityReceived: number; quantityRemaining: number; declaredAt: string };
@@ -32,6 +33,7 @@ export function ExpirationLotsPanel() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [markingExpiration, setMarkingExpiration] = useState(false);
+  const [alertsKey, setAlertsKey] = useState(0);
 
   // Confirmado 2026-09-11, pedido de Daniel: poder hacer todo el formulario
   // con Enter, sin tocar el mouse — de un campo salta al siguiente, y desde
@@ -105,6 +107,7 @@ export function ExpirationLotsPanel() {
       return;
     }
     setLots((prev) => prev.filter((l) => l.id !== lotId));
+    setAlertsKey((k) => k + 1);
     setItems((prev) => prev.map((i) => (i.id === selected.id && lots.length <= 1 ? { ...i, hasExpiration: false } : i)));
   }
 
@@ -159,6 +162,7 @@ export function ExpirationLotsPanel() {
       return;
     }
     clearDraft();
+    setAlertsKey((k) => k + 1);
     setManufactureDate("");
     setExpirationDate("");
     setQuantity("");
@@ -178,6 +182,8 @@ export function ExpirationLotsPanel() {
       <p className="text-[12px] text-steel mb-3">
         Declara el lote de un producto que ya está en percha (fecha de elaboración opcional, vencimiento y cantidad obligatorios) — no hace falta esperar a la próxima compra. Una vez declarado, el producto queda marcado para siempre: la próxima compra ya pide las fechas directo.
       </p>
+
+      <ExpirationAlerts key={alertsKey} onSelect={selectItem} />
 
       <div className="flex items-center gap-1.5 mb-2 rounded border border-rule px-2.5 py-1.5">
         <Search size={13} className="text-steel" />
