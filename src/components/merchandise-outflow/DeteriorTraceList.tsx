@@ -247,21 +247,22 @@ export function DeteriorTraceList({ canAct = false, onGoToExchange }: { canAct?:
             const isOpen = expanded === i.id;
             return (
               <div key={i.id} className="bg-surface border border-rule rounded-md p-3">
-                <button type="button" className="w-full flex items-center gap-3 text-left cursor-pointer" onClick={() => setExpanded(isOpen ? null : i.id)}>
+                {/* Nombre completo + estado debajo (no al costado): en celular
+                    el estado a la derecha dejaba el nombre cortado a 1 letra
+                    — pedido de Daniel 2026-09-23. */}
+                <button type="button" className="w-full flex items-start gap-3 text-left cursor-pointer" onClick={() => setExpanded(isOpen ? null : i.id)}>
                   {photo && (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={photo} alt={i.catalogItem?.name ?? i.declaredName} className="w-11 h-11 object-cover rounded border border-rule shrink-0" />
                   )}
                   <div className="flex-1 min-w-0">
-                    <div className="text-[13px] font-semibold flex items-center gap-1.5 min-w-0">
-                      {i.catalogItem && <CatalogCode code={i.catalogItem.justCode} />}
-                      <span className="truncate" title={i.catalogItem?.name ?? i.declaredName}>{i.catalogItem?.name ?? i.declaredName}</span>
-                    </div>
+                    {i.catalogItem && <CatalogCode code={i.catalogItem.justCode} />}
+                    <div className="text-[13px] font-semibold break-words">{i.catalogItem?.name ?? i.declaredName}</div>
                     <div className="text-[10.5px] text-steel">
                       {i.batch.code} · {i.quantity} un. · {formatDateTime(i.batch.submittedAt ?? i.batch.createdAt)}
                     </div>
+                    <span className={`inline-block mt-1.5 rounded-full border px-2 py-0.5 text-[10.5px] font-semibold ${TONE_CLASS[s.tone]}`}>{s.label}</span>
                   </div>
-                  <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10.5px] font-semibold ${TONE_CLASS[s.tone]}`}>{s.label}</span>
                 </button>
                 {isOpen && <Timeline i={i} canAct={canAct && !!onGoToExchange} onPack={() => onGoToExchange?.()} />}
               </div>
