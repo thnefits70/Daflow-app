@@ -276,6 +276,12 @@ export function LotView({
 
       {err && <div className="text-red text-[12px] mb-2">{err}</div>}
 
+      {lot.status === "DRAFT" && !canSubmit && (
+        <div className="text-[12px] bg-gold/15 border border-gold/40 rounded-md p-2.5 mb-3">
+          Yair todavía está armando este corte. El escáner aparece cuando lo envíe a Inventario. Los cortes anteriores están en &quot;Cortes por día&quot;, abajo.
+        </div>
+      )}
+
       {lot.status !== "DRAFT" && <PickingPanel lot={lot} onChanged={onChanged} />}
 
       {editable && !confirming && (
