@@ -1672,6 +1672,7 @@ model Supplier {
   publicSheetTokenCreatedAt    DateTime?
   sheetTabs                    SupplierSheetTab[]
   sheetEmails                  SupplierSheetEmail[]
+  sheetNotes                   SupplierSheetNote[]
   location                     String?
   // Pin exacto marcado en el mapa (OpenStreetMap), opcional — más confiable que
   // una dirección escrita para que alguien nuevo pueda llegar.
@@ -3069,6 +3070,7 @@ model PurchaseRequest {
   urgentReports        PurchaseRequestUrgentReport[]
   marketingFollowUp    PurchaseReceiptFollowUp?
   linkedByOutflowItems MerchandiseOutflowItem[]      @relation("OutflowItemLinkedPurchase")
+  supplierSheetNotes   SupplierSheetNote[]
 
   @@index([deptId])
   @@index([status])
@@ -6712,23 +6714,24 @@ model ImprovementPlanReview {
 // una fila de SupplierSheetCell — se guarda celda por celda para que varias
 // personas del equipo puedan escribir a la vez sin pisarse lo de otros.
 model SupplierSheetTab {
-  id            String                 @id @default(cuid())
+  id            String                      @id @default(cuid())
   supplierId    String
-  supplier      Supplier               @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  supplier      Supplier                    @relation(fields: [supplierId], references: [id], onDelete: Cascade)
   name          String
-  position      Int                    @default(0)
+  position      Int                         @default(0)
   // Ancho de cada columna que alguien cambió arrastrando el borde: { "0": 180 }.
   colWidths     Json?
   // Confirmado 2026-09-24, pedido explícito del usuario: hoja con candado —
   // la llena DAFLOW sola con nuestra operación; el equipo de CHEN la ve pero
   // nunca la puede editar (se valida en la API, no solo en pantalla).
-  locked        Boolean                @default(false)
+  locked        Boolean                     @default(false)
   // Qué lado creó la hoja: solo ese lado la renombra o la elimina, y nunca
   // si tiene celdas escritas por el otro lado.
   createdBySide SupplierSheetSide?
   logs          SupplierSheetCellLog[]
-  createdAt     DateTime               @default(now())
-  updatedAt     DateTime               @updatedAt
+  anchoredCells SupplierSheetAnchoredCell[]
+  createdAt     DateTime                    @default(now())
+  updatedAt     DateTime                    @updatedAt
   cells         SupplierSheetCell[]
 
   @@index([supplierId])
@@ -6814,6 +6817,8 @@ model SupplierSheetCellLog {
   tab       SupplierSheetTab  @relation(fields: [tabId], references: [id], onDelete: Cascade)
   row       Int
   col       Int
+  // En las pestañas automáticas de pedidos: a qué pedido/pago estaba pegada la celda.
+  rowKey    String?
   oldValue  String?
   newValue  String?
   oldStyle  Json?
@@ -6823,4 +6828,57 @@ model SupplierSheetCellLog {
   createdAt DateTime          @default(now())
 
   @@index([tabId, row, col])
+}
+
+// Confirmado 2026-09-24, pedido explícito del usuario: en las pestañas
+// "Pedidos <mes>" de la hoja de CHEN, lo que escribe CHEN queda amarrado al
+// PEDIDO (o pago) de esa fila, nunca al número de fila — si un pedido se
+// anula o se reordena, la nota sigue al lado del pedido correcto.
+// rowKey: "h" encabezado · "r:<purchaseRequestId>" pedido · "ph"/"ph2"
+// títulos de pagos · "t:<supplierDebtTransferId>" · "pt:<supplierDebtPaymentId>".
+model SupplierSheetAnchoredCell {
+  id          String             @id @default(cuid())
+  tabId       String
+  tab         SupplierSheetTab   @relation(fields: [tabId], references: [id], onDelete: Cascade)
+  rowKey      String
+  col         Int
+  value       String             @default("")
+  style       Json?
+  authorSide  SupplierSheetSide?
+  authorEmail String?
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  @@unique([tabId, rowKey, col])
+}
+
+// Confirmado 2026-09-24, pedido explícito del usuario: cada nota que escribe
+// la gente de CHEN en la hoja aparece dentro de DAFLOW (Control de Compras →
+// "Notas de Chen") y le avisa SOLO a quien le corresponde según la etapa del
+// pedido; la IA decide únicamente cuando eso no alcanza (nota de pago/precio
+// que no coincide con la etapa, o nota fuera de un pedido).
+model SupplierSheetNote {
+  id             String           @id @default(cuid())
+  // Una nota por celda: "<tabId>|<rowKey o pos:fila>|<col>".
+  noteKey        String           @unique
+  supplierId     String
+  supplier       Supplier         @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  tabId          String
+  tabName        String
+  requestId      String?
+  request        PurchaseRequest? @relation(fields: [requestId], references: [id], onDelete: SetNull)
+  debtPaymentId  String?
+  text           String
+  authorEmail    String
+  // Ids de usuario a quienes se avisó ("admin" = el administrador).
+  notifiedTo     String[]
+  // "etapa" | "ia" | "respaldo" (la IA falló → etapa + admin)
+  routeMethod    String?
+  routeReason    String?
+  lastNotifiedAt DateTime?
+  clearedAt      DateTime?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  @@index([supplierId, updatedAt])
 }

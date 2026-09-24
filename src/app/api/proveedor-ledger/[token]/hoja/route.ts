@@ -1,11 +1,12 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/generated/prisma/client";
 import { findSupplierByPublicSheetToken } from "@/lib/supplierDebt";
 import { getSheetViewer } from "@/lib/supplierSheetAccess";
 import { SHEET_MAX_COLS, SHEET_MAX_ROWS } from "@/lib/supplierSheet";
-import { AUTO_ORDERS_COLS, ensureAutoOrdersTabs, isAutoOrdersTabId, mergeAutoOrders } from "@/lib/supplierSheetAuto";
+import { AUTO_ORDERS_COLS, autoTabRowKeys, ensureAutoOrdersTabs, isAutoOrdersTabId, mergeAutoOrders } from "@/lib/supplierSheetAuto";
+import { recordSupplierSheetNote } from "@/lib/supplierSheetNotes";
 
 // Confirmado 2026-09-24, pedido explícito del usuario: la hoja de cálculo en
 // línea del equipo de CHEN. Sin auth() a propósito (no tienen cuenta) — el
@@ -45,6 +46,8 @@ const opSchema = z.discriminatedUnion("t", [
     c: z.number().int().min(0).max(SHEET_MAX_COLS - 1),
     v: z.string().max(10000),
     s: styleSchema,
+    // Pestañas automáticas: a qué pedido/pago pertenece la fila (rowKey).
+    k: z.string().max(80).optional(),
   }),
   z.object({ t: z.literal("addTab"), name: z.string().trim().min(1).max(60) }),
   z.object({ t: z.literal("renameTab"), tabId: z.string().min(1), name: z.string().trim().min(1).max(60) }),
@@ -55,10 +58,14 @@ const opSchema = z.discriminatedUnion("t", [
 const bodySchema = z.object({ ops: z.array(opSchema).min(1).max(5000) });
 
 const AUTO_MSG = "Esa información se carga automáticamente — no se puede cambiar ni borrar.";
+const NO_ROW_MSG = "En esta hoja se escribe al lado de un pedido o de un pago. Para notas generales usa la hoja libre.";
 const SIDE_LABEL = { SUPPLIER: "el equipo del proveedor", OWN: "nuestro equipo" } as const;
 
 async function loadSheet(supplierId: string) {
-  const include = { cells: { select: { row: true, col: true, value: true, style: true, authorSide: true, authorEmail: true } } } as const;
+  const include = {
+    cells: { select: { row: true, col: true, value: true, style: true, authorSide: true, authorEmail: true } },
+    anchoredCells: { select: { rowKey: true, col: true, value: true, style: true, authorSide: true, authorEmail: true } },
+  } as const;
   const orderBy = [{ position: "asc" as const }, { createdAt: "asc" as const }];
   let tabs = await prisma.supplierSheetTab.findMany({ where: { supplierId }, orderBy, include });
   if (tabs.length === 0) {
@@ -79,7 +86,11 @@ async function loadSheet(supplierId: string) {
     createdBySide: t.createdBySide,
     cells: t.cells.map((c) => ({ r: c.row, c: c.col, v: c.value, s: c.style ?? null, a: c.authorSide, e: c.authorEmail })),
   }));
-  return Promise.all(mapped.map((t) => (isAutoOrdersTabId(t.id) ? mergeAutoOrders(supplierId, t) : t)));
+  return Promise.all(
+    mapped.map((t, i) =>
+      isAutoOrdersTabId(t.id) ? mergeAutoOrders(supplierId, { ...t, cells: [] }, tabs[i].anchoredCells) : t,
+    ),
+  );
 }
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ token: string }> }) {
@@ -113,8 +124,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
 
   const allTabs = await prisma.supplierSheetTab.findMany({
     where: { supplierId: supplier.id },
-    select: { id: true, position: true, locked: true, createdBySide: true },
+    select: { id: true, name: true, position: true, locked: true, createdBySide: true },
   });
+  const tabNames = new Map(allTabs.map((t) => [t.id, t.name]));
   // Solo las hojas libres se pueden tocar desde el enlace.
   const freeTabs = new Map(allTabs.filter((t) => !t.locked).map((t) => [t.id, t]));
   let nextPosition = allTabs.reduce((m, t) => Math.max(m, t.position), -1) + 1;
@@ -122,6 +134,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
   const rejected: string[] = [];
   // Celdas que carga DAFLOW sola (pestaña "Pedidos"): no las cambia nadie.
   let rejectedAuto = 0;
+  let rejectedNoRow = 0;
+  // Notas de CHEN para avisar a quien corresponda (después de responder).
+  const notes: { tabId: string; rowKey: string | null; row: number; col: number; text: string }[] = [];
 
   // Estado actual de las celdas que se van a tocar (quién las escribió).
   const touchedTabIds = [...new Set(parsed.data.ops.flatMap((o) => (o.t === "set" ? [o.tabId] : [])))].filter((id) => freeTabs.has(id));
@@ -132,6 +147,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
       })
     : [];
   const existing = new Map(existingRows.map((c) => [`${c.tabId}:${c.row}:${c.col}`, c]));
+  // Pestañas automáticas: lo escrito va amarrado al pedido/pago (rowKey).
+  const autoTabIds = touchedTabIds.filter(isAutoOrdersTabId);
+  const anchoredRows = autoTabIds.length
+    ? await prisma.supplierSheetAnchoredCell.findMany({
+        where: { tabId: { in: autoTabIds } },
+        select: { tabId: true, rowKey: true, col: true, value: true, style: true, authorSide: true },
+      })
+    : [];
+  const anchored = new Map(anchoredRows.map((c) => [`${c.tabId}|${c.rowKey}|${c.col}`, c]));
+  const validRowKeys = new Map<string, Set<string>>();
+  for (const id of autoTabIds) validRowKeys.set(id, await autoTabRowKeys(supplier.id, id));
   const logs: Prisma.SupplierSheetCellLogCreateManyInput[] = [];
 
   for (const op of parsed.data.ops) {
@@ -139,7 +165,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
       const tab = await prisma.supplierSheetTab.create({
         data: { supplierId: supplier.id, name: op.name, position: nextPosition++, createdBySide: viewer.side },
       });
-      freeTabs.set(tab.id, { id: tab.id, position: tab.position, locked: false, createdBySide: viewer.side });
+      freeTabs.set(tab.id, { id: tab.id, name: tab.name, position: tab.position, locked: false, createdBySide: viewer.side });
+      tabNames.set(tab.id, tab.name);
       createdTabIds.push(tab.id);
       continue;
     }
@@ -150,6 +177,47 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
       const key = `${op.tabId}:${op.r}:${op.c}`;
       if (isAutoOrdersTabId(op.tabId) && AUTO_ORDERS_COLS.includes(op.c)) {
         rejectedAuto++;
+        continue;
+      }
+      if (isAutoOrdersTabId(op.tabId)) {
+        if (!op.k || !validRowKeys.get(op.tabId)?.has(op.k)) {
+          rejectedNoRow++;
+          continue;
+        }
+        const akey = `${op.tabId}|${op.k}|${op.c}`;
+        const acur = anchored.get(akey);
+        if (acur?.authorSide && acur.authorSide !== viewer.side) {
+          rejected.push(akey);
+          continue;
+        }
+        const astyle = op.s && Object.keys(op.s).length > 0 ? op.s : null;
+        const aempty = op.v === "" && !astyle;
+        if (acur && acur.value === op.v && JSON.stringify(acur.style ?? null) === JSON.stringify(astyle)) continue;
+        if (!acur && aempty) continue;
+        if (aempty) {
+          await prisma.supplierSheetAnchoredCell.deleteMany({ where: { tabId: op.tabId, rowKey: op.k, col: op.c } });
+          anchored.delete(akey);
+        } else {
+          await prisma.supplierSheetAnchoredCell.upsert({
+            where: { tabId_rowKey_col: { tabId: op.tabId, rowKey: op.k, col: op.c } },
+            create: { tabId: op.tabId, rowKey: op.k, col: op.c, value: op.v, style: astyle ?? undefined, authorSide: viewer.side, authorEmail: viewer.email },
+            update: { value: op.v, style: astyle ?? Prisma.DbNull, authorSide: viewer.side, authorEmail: viewer.email },
+          });
+          anchored.set(akey, { tabId: op.tabId, rowKey: op.k, col: op.c, value: op.v, style: astyle as Prisma.JsonValue, authorSide: viewer.side });
+        }
+        logs.push({
+          tabId: op.tabId,
+          row: op.r,
+          col: op.c,
+          rowKey: op.k,
+          oldValue: acur?.value ?? null,
+          newValue: aempty ? null : op.v,
+          oldStyle: (acur?.style as Prisma.InputJsonValue | null) ?? Prisma.DbNull,
+          newStyle: (astyle as Prisma.InputJsonValue | null) ?? Prisma.DbNull,
+          email: viewer.email,
+          side: viewer.side,
+        });
+        if (viewer.side === "SUPPLIER" && (acur?.value ?? "") !== op.v) notes.push({ tabId: op.tabId, rowKey: op.k, row: op.r, col: op.c, text: op.v });
         continue;
       }
       const cur = existing.get(key);
@@ -183,6 +251,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
         email: viewer.email,
         side: viewer.side,
       });
+      if (viewer.side === "SUPPLIER" && (cur?.value ?? "") !== op.v) notes.push({ tabId: op.tabId, rowKey: null, row: op.r, col: op.c, text: op.v });
     } else if (op.t === "renameTab" || op.t === "deleteTab") {
       // La pestaña "Pedidos" (automática) no se renombra ni se elimina.
       if (isAutoOrdersTabId(op.tabId)) {
@@ -217,13 +286,28 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
 
   if (logs.length) await prisma.supplierSheetCellLog.createMany({ data: logs });
 
+  // Confirmado 2026-09-24: cada nota de CHEN aparece en DAFLOW ("Notas de
+  // Chen") y avisa a quien corresponde — después de responder, para que la
+  // hoja no espere (la IA, cuando hace falta, puede tardar unos segundos).
+  if (notes.length) {
+    after(async () => {
+      for (const n of notes) {
+        await recordSupplierSheetNote({ supplierId: supplier.id, tabName: tabNames.get(n.tabId) ?? "Hoja", authorEmail: viewer.email, ...n }).catch((e) =>
+          console.error("No se pudo registrar la nota de CHEN:", e),
+        );
+      }
+    });
+  }
+
   return NextResponse.json({
     ok: true,
     createdTabIds,
-    rejected: rejectedAuto ? [...rejected, "auto"] : rejected,
+    rejected: rejectedAuto || rejectedNoRow ? [...rejected, "auto"] : rejected,
     rejectedMessage: rejectedAuto
       ? AUTO_MSG
-      : rejected.length
+      : rejectedNoRow
+        ? NO_ROW_MSG
+        : rejected.length
         ? `No se puede cambiar lo que escribió ${SIDE_LABEL[viewer.side === "OWN" ? "SUPPLIER" : "OWN"]}.`
         : undefined,
   });

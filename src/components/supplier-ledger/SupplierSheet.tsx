@@ -29,24 +29,27 @@ import { type Cell, type CellStyle, type SheetSide, SHEET_MAX_COLS, SHEET_MAX_RO
 // guarda solo (celda por celda) y cada pocos segundos se trae lo que
 // escribieron los demás.
 
-type Tab = { id: string; name: string; colWidths: Record<string, number>; rowHeights: Record<string, number>; autoCols: number[]; locked: boolean; createdBySide: SheetSide | null; cells: Record<string, Cell> };
+// rowKeys (solo pestañas automáticas): fila → pedido/pago al que pertenece; lo
+// que CHEN escribe se guarda amarrado a ese pedido, nunca al número de fila.
+type Tab = { id: string; name: string; colWidths: Record<string, number>; rowHeights: Record<string, number>; rowKeys: Record<string, string>; autoCols: number[]; locked: boolean; createdBySide: SheetSide | null; cells: Record<string, Cell> };
 type ServerTab = {
   id: string;
   name: string;
   colWidths: Record<string, number>;
   rowHeights?: Record<string, number>;
+  rowKeys?: Record<string, string>;
   autoCols?: number[];
   locked?: boolean;
   createdBySide?: SheetSide | null;
   cells: { r: number; c: number; v: string; s: CellStyle | null; a?: SheetSide | null; e?: string | null }[];
 };
 type Op =
-  | { t: "set"; tabId: string; r: number; c: number; v: string; s: CellStyle | null }
+  | { t: "set"; tabId: string; r: number; c: number; v: string; s: CellStyle | null; k?: string }
   | { t: "addTab"; name: string }
   | { t: "renameTab"; tabId: string; name: string }
   | { t: "deleteTab"; tabId: string }
   | { t: "colWidth"; tabId: string; c: number; w: number };
-type Change = { tabId: string; r: number; c: number; before: Cell; after: Cell };
+type Change = { tabId: string; r: number; c: number; k?: string; before: Cell; after: Cell };
 type Pos = { r: number; c: number };
 
 const DEFAULT_COL_W = 100;
@@ -59,7 +62,7 @@ function fromServer(tabs: ServerTab[]): Tab[] {
   return tabs.map((t) => {
     const cells: Record<string, Cell> = {};
     for (const c of t.cells) cells[`${c.r}:${c.c}`] = { v: c.v, s: c.s, a: c.a ?? null, e: c.e ?? null };
-    return { id: t.id, name: t.name, colWidths: t.colWidths ?? {}, rowHeights: t.rowHeights ?? {}, autoCols: t.autoCols ?? [], locked: !!t.locked, createdBySide: t.createdBySide ?? null, cells };
+    return { id: t.id, name: t.name, colWidths: t.colWidths ?? {}, rowHeights: t.rowHeights ?? {}, rowKeys: t.rowKeys ?? {}, autoCols: t.autoCols ?? [], locked: !!t.locked, createdBySide: t.createdBySide ?? null, cells };
   });
 }
 
@@ -92,6 +95,7 @@ export function SupplierSheet({ token, email, canWrite, side }: { token: string;
   // Confirmado 2026-09-24: el aviso de lo automático sale SOLO cuando alguien
   // intenta cambiar una de esas celdas (la API también lo frena).
   const autoMsg = "Esa información se carga automáticamente — no se puede cambiar ni borrar.";
+  const noRowMsg = "En esta hoja se escribe al lado de un pedido o de un pago. Para notas generales usa la hoja libre.";
   const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const showNotice = useCallback((msg: string) => {
     setNotice(msg);
@@ -269,7 +273,7 @@ export function SupplierSheet({ token, email, canWrite, side }: { token: string;
             })
           : prev,
       );
-      enqueue(changes.map((ch) => ({ t: "set", tabId: ch.tabId, r: ch.r, c: ch.c, v: ch[which].v, s: ch[which].s })));
+      enqueue(changes.map((ch) => ({ t: "set", tabId: ch.tabId, r: ch.r, c: ch.c, v: ch[which].v, s: ch[which].s, k: ch.k })));
     },
     [enqueue],
   );
@@ -281,10 +285,17 @@ export function SupplierSheet({ token, email, canWrite, side }: { token: string;
       const changes: Change[] = [];
       let blocked = 0;
       let blockedAuto = 0;
+      let blockedNoRow = 0;
+      const isAutoTab = t.autoCols.length > 0;
       for (const { r, c, next } of cells) {
         if (r < 0 || c < 0 || r >= SHEET_MAX_ROWS || c >= SHEET_MAX_COLS) continue;
         if (t.autoCols.includes(c)) {
           blockedAuto++;
+          continue;
+        }
+        const k = isAutoTab ? t.rowKeys[r] : undefined;
+        if (isAutoTab && !k) {
+          blockedNoRow++;
           continue;
         }
         const before = getCell(t, r, c);
@@ -295,9 +306,10 @@ export function SupplierSheet({ token, email, canWrite, side }: { token: string;
         const raw = next(before);
         const after: Cell = { v: raw.v, s: cleanStyle(raw.s), a: side, e: email };
         if (before.v === after.v && JSON.stringify(before.s) === JSON.stringify(after.s)) continue;
-        changes.push({ tabId: t.id, r, c, before, after });
+        changes.push({ tabId: t.id, r, c, k, before, after });
       }
       if (blockedAuto) showNotice(autoMsg);
+      else if (blockedNoRow) showNotice(noRowMsg);
       else if (blocked) showNotice(otherSideMsg);
       if (!changes.length) return;
       undoStack.current.push(changes);
@@ -305,7 +317,7 @@ export function SupplierSheet({ token, email, canWrite, side }: { token: string;
       redoStack.current = [];
       applyChanges(changes, "after");
     },
-    [activeId, applyChanges, getCell, side, email, showNotice, otherSideMsg, autoMsg],
+    [activeId, applyChanges, getCell, side, email, showNotice, otherSideMsg, autoMsg, noRowMsg],
   );
 
   function undo() {
@@ -366,8 +378,13 @@ export function SupplierSheet({ token, email, canWrite, side }: { token: string;
 
   function startEdit(initial?: string, source: "cell" | "bar" = "cell") {
     if (readOnly) return;
+    if (tab?.autoCols.length && !tab.autoCols.includes(sel.c) && !tab.rowKeys[sel.r]) {
+      showNotice(noRowMsg);
+      return;
+    }
     if (tab?.autoCols.includes(sel.c)) {
-      showNotice(autoMsg);
+      // Doble clic sobre una foto: la amplía (GlobalImageZoom), sin aviso.
+      if (!imageUrlOf(getCell(tab, sel.r, sel.c).v)) showNotice(autoMsg);
       return;
     }
     const cur = getCell(tab, sel.r, sel.c);

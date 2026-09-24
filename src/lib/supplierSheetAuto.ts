@@ -1,31 +1,50 @@
 import { prisma } from "@/lib/prisma";
-import { SUPPLIER_PUBLIC_LINK_START } from "@/lib/supplierDebt";
+import { SUPPLIER_PUBLIC_LINK_START, isReportBlockingDebtPayment } from "@/lib/supplierDebt";
 
-// Confirmado 2026-09-24, pedido explícito del usuario: pestaña "Pedidos" de
-// la hoja de CHEN — A1 "Imagen del producto" y abajo, una fila por cada
-// pedido que Compras le hizo a este proveedor desde el lunes 21-sep-2026
-// (SUPPLIER_PUBLIC_LINK_START), ordenados por fecha, con la foto del
-// producto en cada celda.
-// Corregido 2026-09-24, pedido explícito del usuario: la pestaña NO va con
-// candado entero — la gente de CHEN escribe lo que quiera en el resto de las
-// celdas; solo las columnas que carga DAFLOW (AUTO_ORDERS_COLS) no las cambia
-// nadie (la API lo rechaza y ahí recién sale el aviso).
-// Confirmado 2026-09-24, pedido explícito del usuario: una pestaña POR MES —
-// "Pedidos septiembre 2026" (desde el 21-sep) y, al empezar cada mes nuevo,
-// aparece sola "Pedidos octubre 2026", etc., con las mismas columnas en el
-// mismo orden. El mes se cuenta en hora de Guayaquil (UTC-5).
-// Lo automático no se guarda en la base: se arma en cada carga (siempre al
-// día) encima de la pestaña real, que sí guarda lo que escribe la gente.
-// Mismo criterio que el enlace de envíos: solo pedidos ya aprobados por
-// Bryan (sin PENDING_APPROVAL ni REJECTED); la foto es la última subida al
-// matricular el producto (catalogItem.photos), igual que allá.
+// Confirmado 2026-09-24, pedido explícito del usuario: pestañas "Pedidos
+// <mes> <año>" de la hoja de CHEN — una por mes, desde septiembre 2026 (a
+// partir del 21-sep, SUPPLIER_PUBLIC_LINK_START). Al empezar un mes nuevo
+// aparece sola, con las mismas columnas y el mismo orden. El mes se cuenta en
+// hora de Guayaquil (UTC-5).
+//
+// Todo lo automático sale de lo que ya existe en DAFLOW y se arma en cada
+// carga (siempre al día), nunca se guarda como celda:
+//   Arriba — un pedido por fila (solo aprobados por Bryan):
+//     Imagen · Producto · Unidades pedidas · Precio (el acordado en la
+//     solicitud de Jariel) · Fecha del pedido · Estado (bien / dañadas /
+//     faltantes / por reponer / repuestas / de más / en camino) · Llegó a
+//     bodega (cuando los chicos la recibieron y revisaron, NO la aprobación
+//     de Daniel) · ¿Completo? · Unidades buenas · Total (buenas × precio,
+//     incluye las de más) · Pago (Pagado — Pago N / en proceso / Pendiente).
+//   Abajo — los pagos (tandas) de esos pedidos: una fila por comprobante con
+//     número, fecha, monto y la foto; y el total de CADA pago. Nunca la suma de
+//     lo pendiente (ver memoria: el enlace de CHEN nunca muestra deuda total).
+// CHEN nunca devuelve dinero ni da descuento: lo dañado o faltante lo repone
+// con mercadería, así que no hay columna de descuento.
+//
+// Las columnas AUTO_ORDERS_COLS no las cambia nadie (la API lo rechaza). Lo
+// que CHEN escribe en las columnas de la derecha queda amarrado al PEDIDO o
+// pago de esa fila (rowKey), nunca al número de fila — ver
+// SupplierSheetAnchoredCell.
 
-export const AUTO_ORDERS_COLS = [0];
+export const AUTO_ORDERS_COLS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 const IMAGE_ROW_H = 90;
+const PROOF_ROW_H = 90;
 const GYE_OFFSET_HOURS = 5; // Guayaquil = UTC-5, sin horario de verano
 const MONTHS = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
-// Primer mes con pestaña (el 21-sep-2026 cae en septiembre de 2026).
 const FIRST_MONTH = { y: 2026, m: 8 };
+
+const COL_WIDTHS: Record<string, number> = {
+  "0": 145, "1": 240, "2": 125, "3": 85, "4": 130, "5": 290, "6": 120, "7": 135, "8": 125, "9": 100, "10": 185,
+  // Primeras columnas libres para las notas de CHEN.
+  "11": 240, "12": 200, "13": 200,
+};
+
+// Colores (fondo, letra) — verde bien, ámbar pendiente/problema, gris en espera.
+const GREEN = { bg: "#e6f4ea", fc: "#137333" };
+const AMBER = { bg: "#fef7e0", fc: "#b06000" };
+const GRAY = { bg: "#f1f3f4", fc: "#5f6368" };
+const HEADER = { b: true, al: "center" as const, bg: "#e8eaed" };
 
 type YearMonth = { y: number; m: number }; // m: 0 = enero
 
@@ -33,8 +52,7 @@ function ymKey({ y, m }: YearMonth) {
   return `${y}-${String(m + 1).padStart(2, "0")}`;
 }
 
-// Septiembre 2026 conserva el id de la pestaña "Pedidos" original, para que
-// no se pierda nada de lo que CHEN ya haya escrito ahí.
+// Septiembre 2026 conserva el id de la pestaña "Pedidos" original.
 export function autoOrdersTabId(supplierId: string, ym: YearMonth) {
   const key = ymKey(ym);
   return key === ymKey(FIRST_MONTH) ? `auto-pedidos-${supplierId}` : `auto-pedidos-${supplierId}-${key}`;
@@ -53,30 +71,44 @@ function monthStartUtc({ y, m }: YearMonth) {
   return new Date(Date.UTC(y, m, 1, GYE_OFFSET_HOURS));
 }
 
+function nextMonth({ y, m }: YearMonth): YearMonth {
+  return m === 11 ? { y: y + 1, m: 0 } : { y, m: m + 1 };
+}
+
 function currentMonthGye(): YearMonth {
   const now = new Date(Date.now() - GYE_OFFSET_HOURS * 60 * 60 * 1000);
   return { y: now.getUTCFullYear(), m: now.getUTCMonth() };
 }
 
-// Todos los meses desde septiembre 2026 hasta el mes actual (Guayaquil).
 function monthsSoFar(): YearMonth[] {
   const out: YearMonth[] = [];
   const end = currentMonthGye();
-  let cur = { ...FIRST_MONTH };
-  while (cur.y < end.y || (cur.y === end.y && cur.m <= end.m)) {
-    out.push(cur);
-    cur = cur.m === 11 ? { y: cur.y + 1, m: 0 } : { y: cur.y, m: cur.m + 1 };
-  }
+  for (let cur = { ...FIRST_MONTH }; cur.y < end.y || (cur.y === end.y && cur.m <= end.m); cur = nextMonth(cur)) out.push(cur);
   return out;
+}
+
+function fmtDate(d: Date | null | undefined) {
+  if (!d) return "";
+  const g = new Date(d.getTime() - GYE_OFFSET_HOURS * 60 * 60 * 1000);
+  return `${String(g.getUTCDate()).padStart(2, "0")}/${String(g.getUTCMonth() + 1).padStart(2, "0")}/${g.getUTCFullYear()}`;
+}
+
+function money(n: number) {
+  return String(Math.round(n * 100) / 100);
+}
+
+// "TND-0003" → "Pago 3"
+export function paymentLabel(code: string) {
+  const n = Number(/(\d+)\s*$/.exec(code)?.[1] ?? NaN);
+  return Number.isFinite(n) ? `Pago ${n}` : code;
 }
 
 // Crea (o corrige el nombre de) la pestaña de cada mes que falte. Van primero,
 // en orden de mes; las hojas libres de CHEN quedan después.
 export async function ensureAutoOrdersTabs(supplierId: string, existing: { id: string; name: string }[]) {
-  const months = monthsSoFar();
   const byId = new Map(existing.map((t) => [t.id, t.name]));
   let changed = false;
-  for (const [i, ym] of months.entries()) {
+  for (const [i, ym] of monthsSoFar().entries()) {
     const id = autoOrdersTabId(supplierId, ym);
     const name = `Pedidos ${MONTHS[ym.m]} ${ym.y}`;
     if (byId.get(id) === name) continue;
@@ -90,37 +122,289 @@ export async function ensureAutoOrdersTabs(supplierId: string, existing: { id: s
   return changed;
 }
 
-type SheetCell = { r: number; c: number; v: string; s: unknown; a: string | null; e: string | null };
+// ---------- Estado de cada pedido ----------
 
-export async function mergeAutoOrders<T extends { id: string; colWidths: Record<string, number>; cells: SheetCell[] }>(supplierId: string, tab: T) {
-  const ym = monthOfTabId(tab.id);
-  const start = monthStartUtc(ym);
-  const next = monthStartUtc(ym.m === 11 ? { y: ym.y + 1, m: 0 } : { y: ym.y, m: ym.m + 1 });
-  const requests = await prisma.purchaseRequest.findMany({
-    where: {
-      supplierId,
-      status: { notIn: ["PENDING_APPROVAL", "REJECTED"] },
-      requestedAt: { gte: start > SUPPLIER_PUBLIC_LINK_START ? start : SUPPLIER_PUBLIC_LINK_START, lt: next },
+const requestInclude = {
+  catalogItem: { select: { name: true, photos: true } },
+  receipt: { select: { receivedQuantity: true, confirmedAt: true } },
+  debtPayment: { select: { id: true, code: true, closedAt: true } },
+  urgentReports: {
+    include: {
+      resolutions: {
+        select: {
+          type: true,
+          quantity: true,
+          status: true,
+          credit: { select: { id: true, amount: true, status: true, appliedToGroupId: true } },
+          replacementReceivedQty: true,
+          replacementArrivedAt: true,
+          replacementSubmittedAt: true,
+          replacementDueDate: true,
+          supplierShippedAt: true,
+        },
+      },
+      excessDebtPayment: { select: { id: true, code: true, closedAt: true } },
     },
-    select: { catalogItem: { select: { photos: true } } },
+    orderBy: { reportedAt: "asc" as const },
+  },
+} as const;
+
+type RequestRow = Awaited<ReturnType<typeof loadRequests>>[number];
+
+async function loadRequests(where: { supplierId: string; requestedAt?: { gte: Date; lt: Date }; id?: string }) {
+  return prisma.purchaseRequest.findMany({
+    where: { ...where, status: { notIn: ["PENDING_APPROVAL", "REJECTED"] } },
+    include: requestInclude,
     orderBy: [{ requestedAt: "asc" }, { id: "asc" }],
   });
+}
 
-  const cells: SheetCell[] = [
-    ...tab.cells.filter((c) => !AUTO_ORDERS_COLS.includes(c.c)),
-    { r: 0, c: 0, v: "Imagen del producto", s: { b: true, al: "center" }, a: null, e: null },
-  ];
-  const rowHeights: Record<string, number> = {};
-  requests.forEach((req, i) => {
-    const r = i + 1;
-    const url = req.catalogItem.photos.at(-1);
-    if (url && /^https:\/\//i.test(url)) {
-      cells.push({ r, c: 0, v: `=IMAGEN("${url.replace(/"/g, "")}")`, s: null, a: null, e: null });
-      rowHeights[r] = IMAGE_ROW_H;
+// En qué etapa está un pedido — la usa también el aviso de notas de CHEN.
+export type OrderStage = "en_camino" | "reposicion" | "por_pagar" | "pago_en_proceso" | "pagado";
+
+export type OrderSummary = {
+  requestId: string;
+  deptId: string;
+  requestedById: string | null;
+  requestNumber: number | null;
+  productName: string;
+  photoUrl: string | null;
+  quantity: number;
+  unitCost: number;
+  requestedAt: Date;
+  arrivedAt: Date | null;
+  goodQty: number;
+  total: number;
+  stage: OrderStage;
+  statusText: string;
+  statusTone: "green" | "amber" | "gray";
+  complete: "Sí" | "No" | "—";
+  paymentText: string;
+  paymentTone: "green" | "amber" | "gray";
+  paymentIds: string[];
+};
+
+function summarize(r: RequestRow): OrderSummary {
+  const reports = r.urgentReports.filter((u) => !u.rejectedAt);
+  const onArrivalReports = reports.filter((u) => !u.isLateClaim);
+  const blocking = reports.filter((u) => isReportBlockingDebtPayment(u));
+  const firstReportAt = onArrivalReports[0]?.reportedAt ?? null;
+  const arrivedAt = [r.receipt?.confirmedAt ?? null, firstReportAt].filter((d): d is Date => !!d).sort((a, b) => a.getTime() - b.getTime())[0] ?? null;
+
+  const replacementsDone = reports.flatMap((u) => u.resolutions).filter((res) => res.type === "REPLACEMENT" && res.status === "COMPLETED");
+  const replacedQty = replacementsDone.reduce((s, res) => s + (res.replacementReceivedQty ?? res.quantity), 0);
+  const excessQty = reports.filter((u) => u.excessConfirmedAt && u.excessQty > 0).reduce((s, u) => s + u.excessQty, 0);
+  const receiptQty = Math.min(r.receipt?.receivedQuantity ?? 0, r.quantity);
+  const goodQty = arrivedAt ? receiptQty + replacedQty + excessQty : 0;
+  const total = Math.round(goodQty * r.unitCost * 100) / 100;
+
+  // Pago: el de la solicitud y, si hubo, el de las unidades de más.
+  const payments = [r.debtPayment, ...reports.map((u) => u.excessDebtPayment)].filter((p): p is { id: string; code: string; closedAt: Date | null } => !!p);
+  const uniquePayments = [...new Map(payments.map((p) => [p.id, p])).values()];
+  let paymentText = "Pendiente";
+  let paymentTone: OrderSummary["paymentTone"] = "gray";
+  if (r.debtPayment) {
+    const labels = uniquePayments.map((p) => paymentLabel(p.code)).join(", ");
+    if (r.debtPayment.closedAt) {
+      paymentText = `Pagado — ${labels}`;
+      paymentTone = "green";
     } else {
-      cells.push({ r, c: 0, v: "Sin foto", s: { al: "center" }, a: null, e: null });
+      paymentText = `Pago en proceso — ${labels}`;
+      paymentTone = "amber";
     }
-  });
+  }
 
-  return { ...tab, colWidths: { "0": 150, ...tab.colWidths }, rowHeights, autoCols: AUTO_ORDERS_COLS, cells };
+  let statusText: string;
+  let statusTone: OrderSummary["statusTone"];
+  let stage: OrderStage;
+  let complete: OrderSummary["complete"];
+  if (!arrivedAt) {
+    statusText = r.supplierShippingConfirmedAt ? `Enviado por ustedes el ${fmtDate(r.supplierShippingConfirmedAt)} — en camino` : "En camino";
+    statusTone = "gray";
+    stage = "en_camino";
+    complete = "—";
+  } else if (blocking.length > 0) {
+    const sum = (k: "damagedQty" | "missingQty" | "incompleteQty" | "differentQty") => blocking.reduce((s, u) => s + u[k], 0);
+    const parts = [
+      sum("damagedQty") ? `${sum("damagedQty")} dañadas` : "",
+      sum("missingQty") ? `faltan ${sum("missingQty")}` : "",
+      sum("incompleteQty") ? `${sum("incompleteQty")} incompletas` : "",
+      sum("differentQty") ? `${sum("differentQty")} distintas` : "",
+    ].filter(Boolean);
+    const pendingRepl = blocking.flatMap((u) => u.resolutions).filter((res) => res.type === "REPLACEMENT" && res.status === "PENDING");
+    let step = "por reponer";
+    if (blocking.some((u) => !u.reviewedByLeadAt)) step = "en revisión en bodega";
+    else if (pendingRepl.some((res) => res.replacementSubmittedAt)) step = "reposición recibida, en revisión";
+    else if (pendingRepl.some((res) => res.supplierShippedAt)) step = "reposición enviada por ustedes";
+    else {
+      const due = pendingRepl.map((res) => res.replacementDueDate).filter((d): d is Date => !!d).sort((a, b) => a.getTime() - b.getTime())[0];
+      if (due) step = `por reponer hasta el ${fmtDate(due)}`;
+    }
+    statusText = `${parts.join(", ") || "Con novedad"} — ${step}`;
+    statusTone = "amber";
+    stage = "reposicion";
+    complete = "No";
+  } else {
+    const parts = ["Bien"];
+    if (replacementsDone.length) {
+      const lastDone = replacementsDone.map((res) => res.replacementArrivedAt).filter((d): d is Date => !!d).sort((a, b) => b.getTime() - a.getTime())[0];
+      parts.push(`${replacedQty} repuestas${lastDone ? ` el ${fmtDate(lastDone)}` : ""} ✓`);
+    }
+    if (excessQty) parts.push(`llegaron ${excessQty} de más`);
+    statusText = parts.join(" — ");
+    statusTone = "green";
+    complete = "Sí";
+    stage = !r.debtPayment ? "por_pagar" : r.debtPayment.closedAt ? "pagado" : "pago_en_proceso";
+  }
+
+  return {
+    requestId: r.id,
+    deptId: r.deptId,
+    requestedById: r.requestedById,
+    requestNumber: r.requestNumber,
+    productName: r.catalogItem.name,
+    photoUrl: r.catalogItem.photos.at(-1) ?? null,
+    quantity: r.quantity,
+    unitCost: r.unitCost,
+    requestedAt: r.requestedAt,
+    arrivedAt,
+    goodQty,
+    total,
+    stage,
+    statusText,
+    statusTone,
+    complete,
+    paymentText,
+    paymentTone,
+    paymentIds: uniquePayments.map((p) => p.id),
+  };
+}
+
+export async function getOrderSummary(supplierId: string, requestId: string): Promise<OrderSummary | null> {
+  const [row] = await loadRequests({ supplierId, id: requestId });
+  return row ? summarize(row) : null;
+}
+
+// ---------- Armado de la pestaña del mes ----------
+
+type SheetStyle = Record<string, unknown> | null;
+type LayoutCell = { c: number; v: string; s: SheetStyle };
+type LayoutRow = { key: string | null; cells: LayoutCell[]; height?: number };
+
+const tone = (t: "green" | "amber" | "gray") => (t === "green" ? GREEN : t === "amber" ? AMBER : GRAY);
+const imageFormula = (url: string | null | undefined) => (url && /^https:\/\//i.test(url) ? `=IMAGEN("${url.replace(/"/g, "")}")` : null);
+
+export async function buildMonthLayout(supplierId: string, tabId: string): Promise<LayoutRow[]> {
+  const ym = monthOfTabId(tabId);
+  const start = monthStartUtc(ym);
+  const end = monthStartUtc(nextMonth(ym));
+  const requests = await loadRequests({ supplierId, requestedAt: { gte: start > SUPPLIER_PUBLIC_LINK_START ? start : SUPPLIER_PUBLIC_LINK_START, lt: end } });
+  const orders = requests.map(summarize);
+
+  const rows: LayoutRow[] = [];
+  const headers = ["Imagen del producto", "Producto", "Unidades pedidas", "Precio", "Fecha del pedido", "Estado en que llegó", "Llegó a bodega", "¿Pedido completo?", "Unidades buenas", "Total", "Pago"];
+  rows.push({ key: "h", cells: headers.map((v, c) => ({ c, v, s: HEADER })) });
+
+  for (const o of orders) {
+    const img = imageFormula(o.photoUrl);
+    const st = tone(o.statusTone);
+    const pt = tone(o.paymentTone);
+    rows.push({
+      key: `r:${o.requestId}`,
+      height: img ? IMAGE_ROW_H : undefined,
+      cells: [
+        { c: 0, v: img ?? "Sin foto", s: img ? null : { al: "center" } },
+        { c: 1, v: o.productName, s: null },
+        { c: 2, v: String(o.quantity), s: { al: "center" } },
+        { c: 3, v: money(o.unitCost), s: { fmt: "currency", dp: 2 } },
+        { c: 4, v: fmtDate(o.requestedAt), s: { al: "center" } },
+        { c: 5, v: o.statusText, s: { bg: st.bg, fc: st.fc } },
+        { c: 6, v: o.arrivedAt ? fmtDate(o.arrivedAt) : "—", s: { al: "center" } },
+        { c: 7, v: o.complete, s: { al: "center", b: true, fc: o.complete === "Sí" ? GREEN.fc : o.complete === "No" ? AMBER.fc : GRAY.fc } },
+        { c: 8, v: o.arrivedAt ? String(o.goodQty) : "—", s: { al: "center" } },
+        { c: 9, v: o.arrivedAt ? money(o.total) : "—", s: o.arrivedAt ? { fmt: "currency", dp: 2, b: true } : { al: "center" } },
+        { c: 10, v: o.paymentText, s: { bg: pt.bg, fc: pt.fc } },
+      ],
+    });
+  }
+
+  // Pagos (tandas) de estos pedidos, con cada comprobante y su foto.
+  const paymentIds = [...new Set(orders.flatMap((o) => o.paymentIds))];
+  if (paymentIds.length) {
+    const payments = await prisma.supplierDebtPayment.findMany({
+      where: { id: { in: paymentIds } },
+      include: { transfers: { orderBy: { transferDate: "asc" } } },
+      orderBy: { createdAt: "asc" },
+    });
+    rows.push({ key: null, cells: [] });
+    rows.push({ key: "ph", cells: [{ c: 0, v: "PAGOS DE ESTOS PEDIDOS", s: { b: true, fs: 11 } }] });
+    rows.push({ key: "ph2", cells: ["Pago", "N° de comprobante", "Fecha", "Monto", "Comprobante"].map((v, c) => ({ c, v, s: HEADER })) });
+    for (const p of payments) {
+      const label = paymentLabel(p.code);
+      p.transfers.forEach((t, i) => {
+        const img = imageFormula(t.proofUrl);
+        rows.push({
+          key: `t:${t.id}`,
+          height: img ? PROOF_ROW_H : undefined,
+          cells: [
+            { c: 0, v: i === 0 ? label : "", s: { b: true } },
+            { c: 1, v: t.comprobanteNumber, s: null },
+            { c: 2, v: fmtDate(t.transferDate), s: { al: "center" } },
+            { c: 3, v: money(t.amount), s: { fmt: "currency", dp: 2 } },
+            { c: 4, v: img ?? "", s: null },
+          ],
+        });
+      });
+      const paid = Math.round(p.transfers.reduce((s, t) => s + t.amount, 0) * 100) / 100;
+      const closed = !!p.closedAt;
+      rows.push({
+        key: `pt:${p.id}`,
+        cells: [
+          { c: 0, v: `Total ${label}`, s: { b: true } },
+          { c: 1, v: closed ? "Pagado ✓" : p.transfers.length ? "Pago en proceso" : "Pago en preparación", s: { b: true, ...(closed ? GREEN : AMBER) } },
+          { c: 3, v: money(paid), s: { fmt: "currency", dp: 2, b: true } },
+        ],
+      });
+    }
+  }
+  return rows;
+}
+
+type SheetCell = { r: number; c: number; v: string; s: unknown; a: string | null; e: string | null };
+type Anchored = { rowKey: string; col: number; value: string; style: unknown; authorSide: string | null; authorEmail: string | null };
+
+// Arma la pestaña final: lo automático + lo que CHEN escribió, cada cosa en
+// la fila de SU pedido/pago. Devuelve también rowKeys (fila → pedido/pago)
+// para que la hoja mande a qué pedido pertenece cada celda que se escribe.
+export async function mergeAutoOrders<T extends { id: string; colWidths: Record<string, number>; cells: SheetCell[] }>(
+  supplierId: string,
+  tab: T,
+  anchored: Anchored[],
+) {
+  const layout = await buildMonthLayout(supplierId, tab.id);
+  const rowOfKey = new Map<string, number>();
+  const cells: SheetCell[] = [];
+  const rowHeights: Record<string, number> = {};
+  const rowKeys: Record<string, string> = {};
+  layout.forEach((row, r) => {
+    if (row.key) {
+      rowOfKey.set(row.key, r);
+      rowKeys[r] = row.key;
+    }
+    if (row.height) rowHeights[r] = row.height;
+    for (const cell of row.cells) cells.push({ r, c: cell.c, v: cell.v, s: cell.s, a: null, e: null });
+  });
+  for (const a of anchored) {
+    const r = rowOfKey.get(a.rowKey);
+    if (r === undefined || AUTO_ORDERS_COLS.includes(a.col)) continue;
+    cells.push({ r, c: a.col, v: a.value, s: a.style ?? null, a: a.authorSide, e: a.authorEmail });
+  }
+  return { ...tab, colWidths: { ...COL_WIDTHS, ...tab.colWidths }, rowHeights, rowKeys, autoCols: AUTO_ORDERS_COLS, cells };
+}
+
+// Filas válidas (con pedido/pago) de una pestaña automática — para validar
+// dónde se puede escribir.
+export async function autoTabRowKeys(supplierId: string, tabId: string) {
+  const layout = await buildMonthLayout(supplierId, tabId);
+  return new Set(layout.map((row) => row.key).filter((k): k is string => !!k));
 }

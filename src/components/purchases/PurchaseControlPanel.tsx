@@ -15,8 +15,9 @@ import { BuyerDebtConfirmationPanel } from "./BuyerDebtConfirmationPanel";
 import { PurchaseDeteriorGestionPanel } from "@/components/merchandise-outflow/PurchaseDeteriorGestionPanel";
 import { DeteriorTraceList } from "@/components/merchandise-outflow/DeteriorTraceList";
 import { TabGuide } from "@/components/shared/TabGuide";
+import { SupplierSheetNotesPanel } from "./SupplierSheetNotesPanel";
 
-type Tab = "solicitar" | "mias" | "comparar" | "aprobacion" | "confirmar-credito" | "inventario" | "finanzas" | "urgentes" | "creditos" | "proveedores-credito" | "auditoria";
+type Tab = "solicitar" | "mias" | "comparar" | "aprobacion" | "confirmar-credito" | "inventario" | "finanzas" | "urgentes" | "creditos" | "proveedores-credito" | "notas-chen" | "auditoria";
 
 // Confirmado 2026-07-30: una sola pantalla para todo el módulo — las
 // pestañas que ve cada persona dependen de lo que puede hacer (admin ve
@@ -112,6 +113,10 @@ export function PurchaseControlPanel({
     ...(canSubmit || canReview || canReceive || canManageGestion ? [{ key: "urgentes" as Tab, label: "Reportes urgentes" }] : []),
     ...(canSubmit || canReview ? [{ key: "creditos" as Tab, label: "Créditos pendientes" }] : []),
     ...(canManageSupplierDebt ? [{ key: "proveedores-credito" as Tab, label: "Proveedores con Crédito" }] : []),
+    // Confirmado 2026-09-24, pedido explícito del usuario: lo que anota la
+    // gente de CHEN en su hoja, pegado a cada pedido — para Compras,
+    // Inventario, quien aprueba y el admin (a cada uno le avisa solo lo suyo).
+    ...(isAdmin || canSubmit || canReview || canReceive || canManageGestion ? [{ key: "notas-chen" as Tab, label: "Notas de Chen" }] : []),
     ...(canReceive ? [{ key: "inventario" as Tab, label: "Inventario" }] : []),
     ...(canInvoice ? [{ key: "finanzas" as Tab, label: "Finanzas" }] : []),
     // Confirmado 2026-08-08 (ampliado 2026-08-12): historial de solo lectura
@@ -274,6 +279,14 @@ export function PurchaseControlPanel({
             Acá ves el saldo que le debes a un proveedor de crédito (hoy solo CHEN) — solo cuenta lo que Daniel ya confirmó completo y en buen estado, Y que quien aprueba compras ya confirmó que sí autorizó (ver pestaña &quot;Confirmar deuda a crédito&quot;). Arma tandas de pago, registra las transferencias, y genera el enlace de solo lectura para que el proveedor vea su propio saldo.
           </TabGuide>
           <SupplierDebtPanel />
+        </>
+      )}
+      {tab === "notas-chen" && (
+        <>
+          <TabGuide storageKey="compras-notas-chen">
+            Acá aparece lo que la gente de Chen escribe en su hoja de cálculo, cada nota pegada al pedido del que habla (producto, cantidad y estado actual). Te llega aviso solo de las que te tocan según la etapa del pedido; en &quot;Todas&quot; ves las de todos.
+          </TabGuide>
+          <SupplierSheetNotesPanel />
         </>
       )}
       {tab === "inventario" && (
