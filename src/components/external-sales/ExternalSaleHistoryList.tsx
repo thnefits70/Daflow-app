@@ -36,6 +36,9 @@ type SaleDTO = {
   invoiceUploadedAt: string | null;
   invoiceUploadedBy: { name: string } | null;
   nairobyClosedAt: string | null;
+  closeReceivedAmount: number | null;
+  closeDifferenceReason: "FLETE_MOTORIZADO" | "OTRO" | null;
+  closeDifferenceNote: string | null;
   createdAt: string;
   advisor: { name: string } | null;
   reviewedAt: string | null;
@@ -101,6 +104,13 @@ function SaleDetail({ s, canPrintGuide }: { s: SaleDTO; canPrintGuide: boolean }
       )}
       {!s.isContraEntrega && s.freightCost != null && (
         <div className="text-[10.5px] text-steel">Monto a transferir: ${s.totalAmount.toFixed(2)} (sin recaudo) · flete (${s.freightCost.toFixed(2)}) pagado aparte al motorizado</div>
+      )}
+      {s.closeReceivedAmount != null && (
+        <div className="text-[10.5px] text-gold">
+          Llegó ${s.closeReceivedAmount.toFixed(2)} · diferencia ${(s.totalAmount - s.closeReceivedAmount).toFixed(2)} justificada al cerrar:{" "}
+          {s.closeDifferenceReason === "FLETE_MOTORIZADO" ? "flete del motorizado" : "otro motivo"}
+          {s.closeDifferenceNote ? ` — ${s.closeDifferenceNote}` : ""}
+        </div>
       )}
       <div className="text-[10.5px] text-steel">Entrega a: {s.pickupPersonName}{s.courierNote ? ` · Transportadora: ${s.courierNote}` : ""}</div>
       {s.client && (

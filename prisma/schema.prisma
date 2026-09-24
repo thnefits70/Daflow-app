@@ -6311,6 +6311,15 @@ model ExternalSale {
   nairobyClosedById String?
   nairobyClosedBy   User?     @relation("ExternalSaleNairobyClosedBy", fields: [nairobyClosedById], references: [id], onDelete: SetNull)
 
+  // Confirmado 2026-09-24, pedido de Nairoby (caso VE-0006: total $16.99,
+  // el motorizado transfirió $7.99 y se quedó $9 de flete): al cerrar puede
+  // justificar por qué lo que llegó no es el total. Solo registro/rastro —
+  // no toca freightCost ni Caja Chica. Null = cerró sin diferencia.
+  // closeDifferenceReason: "FLETE_MOTORIZADO" | "OTRO".
+  closeReceivedAmount   Float?
+  closeDifferenceReason String?
+  closeDifferenceNote   String?
+
   // Enganche automático a Registro de Egresos — se crea apenas el
   // colaborador confirma la entrega (ahí es cuando el stock sale de verdad).
   outflowBatchId String?                  @unique
