@@ -2,10 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
-import { canReceivePurchasesTeam, canActOnPurchaseReceiving, getInventoryLeadId } from "@/lib/guards";
-import { notifyOwner } from "@/lib/notifications";
-import { getMarketingArrivalActorIds, getMarketingArrivalDispatchViewerIds } from "@/lib/marketingArrivals";
-import { isCatalogItemBranded, getNewIdBrandingActorIds } from "@/lib/newIdBranding";
+import { canReceivePurchasesTeam, canActOnPurchaseReceiving } from "@/lib/guards";
+import { notifyReceiptRegistered } from "@/lib/purchaseReceiptFromReport";
 
 const schema = z.object({
   receivedQuantity: z.number().int().nonnegative(),
@@ -128,43 +126,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     prisma.purchaseReceiptFollowUp.create({ data: { requestId: id } }),
   ]);
 
-  const leadId = await getInventoryLeadId();
-  if (leadId) {
-    // Confirmado 2026-09-09: pedido explícito de Daniel — antes esto era solo
-    // sendPushToOwner (push al dispositivo), que se pierde en silencio si el
-    // permiso está revocado o la suscripción venció ("a veces sí llega, a
-    // veces no"). notifyOwner además deja constancia en la campanita, así
-    // que toda mercadería que llega físicamente a bodega queda visible ahí
-    // aunque el push falle.
-    await notifyOwner(leadId, {
-      title: "Recepción pendiente de tu aprobación",
-      body: `${existing.catalogItem.name} — ${parsed.data.receivedQuantity} un. recibidas por el equipo, esperando que apruebes.`,
-      url: "/area/workspace?tab=compras&ptab=inventario",
-    });
-  }
-
-  // Confirmado 2026-09-16: aviso a Análisis de Mercado y despacho, movido acá
-  // desde approve-receipt/route.ts (ver comentario arriba) — mismo contenido
-  // y destinatarios que antes, solo que ahora sale apenas bodega registra.
-  const arrivalBody = `${existing.catalogItem.name} · ${parsed.data.receivedQuantity} un.`;
-  // Confirmado 2026-09-23, pedido de Robert: el brandeo es una sola vez por
-  // producto — si ya se brandeó antes, esta llegada repetida no le pide nada.
-  const [designIds, advisorIds, dispatchIds] = await Promise.all([
-    isCatalogItemBranded(existing.catalogItemId).then((done) => (done ? [] : getNewIdBrandingActorIds())),
-    getMarketingArrivalActorIds("advisor"),
-    getMarketingArrivalDispatchViewerIds(),
-  ]);
-  await Promise.all([
-    ...designIds.map((uid) =>
-      notifyOwner(uid, { title: "Nuevo ID por brandear", body: arrivalBody, url: "/area/workspace?tab=nuevos-ids" })
-    ),
-    ...advisorIds.map((uid) =>
-      notifyOwner(uid, { title: "Llegó mercadería a bodega", body: arrivalBody, url: "/area/workspace?tab=llegadas" })
-    ),
-    ...dispatchIds.map((uid) =>
-      notifyOwner(uid, { title: "Llegó mercadería a bodega", body: `${arrivalBody} — ya puedes ir organizando el despacho.`, url: "/area/workspace?tab=llegadas" })
-    ),
-  ]);
+  await notifyReceiptRegistered({ catalogItemId: existing.catalogItemId, itemName: existing.catalogItem.name, quantity: parsed.data.receivedQuantity });
 
   return NextResponse.json(updated);
 }

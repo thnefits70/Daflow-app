@@ -79,6 +79,7 @@ type Row = {
     description: string;
     reportedAt: string;
     reportedBy: { name: string } | null;
+    reviewedByLeadAt: string | null;
     resolvedInternallyAt: string | null;
     resolvedInternallyNote: string | null;
     resolvedInternallyBy: { name: string } | null;
@@ -620,6 +621,24 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
       return next;
     });
     setConfirmingMissingId(null);
+    // Al aprobar, la parte buena se registra sola (ver
+    // registerGoodUnitsFromUrgentReport) — recargar para que la fila cambie.
+    load();
+    router.refresh();
+  }
+
+  async function registerGoodFromReport(reportId: string) {
+    setBusy(true);
+    setErr("");
+    const res = await fetch(`/api/purchase-requests/urgent-reports/${reportId}/register-good`, { method: "POST" });
+    setBusy(false);
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      setErr(data?.error ?? "No se pudo registrar.");
+      return;
+    }
+    load();
+    router.refresh();
   }
 
   async function receiveExcessKardex(id: string) {
@@ -1706,15 +1725,37 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                                 🚨 Informar urgente
                               </button>
                             )}
-                            <button
-                              type="button"
-                              disabled={!canReceiveTeam}
-                              title={!canReceiveTeam ? "Exclusivo del equipo de Inventario" : undefined}
-                              className="rounded border border-green bg-green px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-                              onClick={() => { setOpenId(r.id); setReceivedPhotoUrls([]); setReceivedVideoUrls([]); setAiResult(null); setMinorDifferenceConfirmed(false); setReceivedQty(r.urgentReports.length > 0 ? String(goodQuantity(r)) : ""); setComment(""); setErr(""); }}
-                            >
-                              {r.urgentReports.length > 0 ? `✓ Confirmar ${goodQuantity(r)} un. buenas` : "✓ Confirmar que llegó"}
-                            </button>
+                            {/* Confirmado 2026-09-24, pedido de Daniel: con reporte urgente
+                                ya no se vuelve a confirmar lo bueno con fotos — se registra
+                                solo cuando Daniel aprueba el reporte, con la evidencia del
+                                reporte. Solo queda un botón de respaldo para él en los
+                                reportes que aprobó antes de este cambio. */}
+                            {r.urgentReports.length === 0 ? (
+                              <button
+                                type="button"
+                                disabled={!canReceiveTeam}
+                                title={!canReceiveTeam ? "Exclusivo del equipo de Inventario" : undefined}
+                                className="rounded border border-green bg-green px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                                onClick={() => { setOpenId(r.id); setReceivedPhotoUrls([]); setReceivedVideoUrls([]); setAiResult(null); setMinorDifferenceConfirmed(false); setReceivedQty(""); setComment(""); setErr(""); }}
+                              >
+                                ✓ Confirmar que llegó
+                              </button>
+                            ) : r.urgentReports.some((rep) => !rep.reviewedByLeadAt) ? (
+                              <span className="text-[11.5px] text-steel">
+                                {canApprove ? "Revisa el reporte arriba — al aprobarlo, lo bueno queda registrado solo." : "Esperando que Daniel revise el reporte — no hace falta confirmar nada más."}
+                              </span>
+                            ) : goodQuantity(r) <= 0 ? null : canApprove ? (
+                              <button
+                                type="button"
+                                disabled={busy}
+                                className="rounded border border-green bg-green px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer disabled:opacity-60"
+                                onClick={() => registerGoodFromReport(r.urgentReports[0].id)}
+                              >
+                                ✓ Registrar las {goodQuantity(r)} buenas con lo del reporte
+                              </button>
+                            ) : (
+                              <span className="text-[11.5px] text-steel">Daniel registra lo bueno con lo del reporte — no hace falta confirmar nada más.</span>
+                            )}
                           </div>
                         </div>
                       )}

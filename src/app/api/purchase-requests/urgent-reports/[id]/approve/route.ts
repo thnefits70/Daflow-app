@@ -5,6 +5,7 @@ import { auth } from "@/auth";
 import { canActOnPurchaseReceiving } from "@/lib/guards";
 import { notifyOwner } from "@/lib/notifications";
 import { isWithinCreditClaimWindow } from "@/lib/purchaseUrgent";
+import { registerGoodUnitsFromUrgentReport } from "@/lib/purchaseReceiptFromReport";
 
 const schema = z.object({
   // Confirmado 2026-08-27: pedido explícito del usuario — el equipo que
@@ -87,6 +88,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       url: "/area/workspace?tab=compras&ptab=urgentes",
     }).catch(() => null);
   }
+
+  // Confirmado 2026-09-24, pedido de Daniel: la parte buena queda registrada
+  // sola con la evidencia del reporte — el equipo ya no la vuelve a confirmar
+  // (ver registerGoodUnitsFromUrgentReport). Si falla, no rompe la aprobación:
+  // queda el botón de respaldo en la pestaña (urgent-reports/[id]/register-good).
+  await registerGoodUnitsFromUrgentReport(existing.requestId, { id: session.user.id, isAdmin, isLead: !isAdmin }).catch((err) =>
+    console.error("[urgent-report approve] No se pudo registrar la parte buena:", err)
+  );
 
   return NextResponse.json(updated);
 }
