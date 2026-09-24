@@ -353,7 +353,7 @@ export default async function SupplierLedgerPage({ params }: { params: Promise<{
               estado: el pago de cada uno de estos pedidos queda pendiente hasta que CHEN envíe el reemplazo de lo que llegó mal y la
               bodega TBS lo confirme.
             </p>
-            <SupplierDisputedItemsTable items={disputedItems} showValue token={token} />
+            <SupplierDisputedItemsTable items={disputedItems} showValue={false} token={token} />
           </section>
         )}
 
