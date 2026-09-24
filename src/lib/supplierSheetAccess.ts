@@ -40,7 +40,11 @@ export async function getSheetViewer(supplierId: string): Promise<SheetViewer | 
   if (!last || Date.now() - last.getTime() > 5 * 60 * 1000) {
     await prisma.supplierSheetEmail.update({ where: { id: session.emailId }, data: { lastAccessAt: new Date() } }).catch(() => {});
   }
-  return { emailId: session.emailId, email: session.sheetEmail.email, canWrite: session.sheetEmail.canWrite, side: session.sheetEmail.side };
+  // Confirmado 2026-09-24, pedido explícito del usuario: nuestro equipo NO
+  // anota nada en la hoja (lo nuestro lo carga DAFLOW sola) — solo mira. Solo
+  // la gente de CHEN escribe. La API de la hoja usa este mismo canWrite.
+  const canWrite = session.sheetEmail.canWrite && session.sheetEmail.side === "SUPPLIER";
+  return { emailId: session.emailId, email: session.sheetEmail.email, canWrite, side: session.sheetEmail.side };
 }
 
 // El correo sale desde el dominio de CHEN, nunca con el nombre de DAFLOW —

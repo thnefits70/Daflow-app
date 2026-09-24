@@ -152,7 +152,9 @@ export function SupplierSheet({ token, email, canWrite, side }: { token: string;
       }
     }
     setTabs(incoming);
-    setActiveId((cur) => (cur && incoming.some((t) => t.id === cur) ? cur : incoming[0]?.id ?? null));
+    // Al abrir, se muestra la pestaña de pedidos del mes más reciente.
+    const latestMonth = [...incoming].reverse().find((t) => t.id.startsWith("auto-pedidos-"));
+    setActiveId((cur) => (cur && incoming.some((t) => t.id === cur) ? cur : (latestMonth ?? incoming[0])?.id ?? null));
   }, []);
 
   const load = useCallback(async () => {

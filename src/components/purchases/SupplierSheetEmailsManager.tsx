@@ -82,9 +82,10 @@ export function SupplierSheetEmailsManager({ supplierId }: { supplierId: string 
             Un correo que no sea Gmail (ej. Hotmail) siempre entra con el código.
           </div>
           <div>
-            <span className="font-semibold text-ink">Los equipos protegen la información:</span>{" "}lo que escribe alguien de
-            &quot;Equipo Chen&quot;, nadie de &quot;Nuestro equipo&quot; lo puede cambiar ni borrar, y al revés. Lo que DAFLOW llena sola
-            no lo puede cambiar nadie. Cada cambio queda guardado (quién, cuándo, antes y después).
+            <span className="font-semibold text-ink">Quién escribe:</span>{" "}solo la gente de &quot;Equipo Chen&quot; anota en la
+            hoja. &quot;Nuestro equipo&quot; solo la ve: lo nuestro lo carga DAFLOW sola (una pestaña &quot;Pedidos&quot; por mes, que
+            aparece sola al empezar cada mes) y eso no lo puede cambiar nadie. Cada cambio queda guardado (quién, cuándo, antes y
+            después).
           </div>
           <div>
             <span className="font-semibold text-ink">Para quitarle el acceso:</span>{" "}aprieta el basurero de su fila. Deja de poder
@@ -136,8 +137,10 @@ export function SupplierSheetEmailsManager({ supplierId }: { supplierId: string 
               </select>
               <select
                 className="rounded border border-rule bg-cloud px-1.5 py-0.5 text-ink"
-                value={r.canWrite ? "write" : "read"}
-                disabled={busy}
+                // Nuestro equipo siempre solo ve la hoja (no anota nada ahí).
+                value={r.canWrite && r.side === "SUPPLIER" ? "write" : "read"}
+                disabled={busy || r.side === "OWN"}
+                title={r.side === "OWN" ? "Nuestro equipo solo ve la hoja: lo nuestro se carga solo" : undefined}
                 onChange={(e) =>
                   void send({ method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: r.id, canWrite: e.target.value === "write" }) })
                 }

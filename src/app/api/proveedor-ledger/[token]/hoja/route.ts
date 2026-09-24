@@ -5,7 +5,7 @@ import { Prisma } from "@/generated/prisma/client";
 import { findSupplierByPublicSheetToken } from "@/lib/supplierDebt";
 import { getSheetViewer } from "@/lib/supplierSheetAccess";
 import { SHEET_MAX_COLS, SHEET_MAX_ROWS } from "@/lib/supplierSheet";
-import { AUTO_ORDERS_COLS, ensureAutoOrdersTab, isAutoOrdersTabId, mergeAutoOrders } from "@/lib/supplierSheetAuto";
+import { AUTO_ORDERS_COLS, ensureAutoOrdersTabs, isAutoOrdersTabId, mergeAutoOrders } from "@/lib/supplierSheetAuto";
 
 // Confirmado 2026-09-24, pedido explícito del usuario: la hoja de cálculo en
 // línea del equipo de CHEN. Sin auth() a propósito (no tienen cuenta) — el
@@ -65,10 +65,10 @@ async function loadSheet(supplierId: string) {
     await prisma.supplierSheetTab.create({ data: { supplierId, name: "Hoja 1", position: 0 } });
     tabs = await prisma.supplierSheetTab.findMany({ where: { supplierId }, orderBy, include });
   }
-  // Confirmado 2026-09-24: pestaña "Pedidos" (ver supplierSheetAuto.ts),
-  // siempre primera; lo automático se pone encima en cada carga.
-  if (!tabs.some((t) => isAutoOrdersTabId(t.id))) {
-    await ensureAutoOrdersTab(supplierId);
+  // Confirmado 2026-09-24: una pestaña "Pedidos <mes> <año>" por mes (ver
+  // supplierSheetAuto.ts), siempre primero; al empezar un mes nuevo aparece
+  // sola. Lo automático se pone encima en cada carga.
+  if (await ensureAutoOrdersTabs(supplierId, tabs)) {
     tabs = await prisma.supplierSheetTab.findMany({ where: { supplierId }, orderBy, include });
   }
   const mapped = tabs.map((t) => ({
