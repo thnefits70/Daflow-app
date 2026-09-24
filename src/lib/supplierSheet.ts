@@ -19,7 +19,9 @@ export type CellStyle = {
   dp?: number; // decimales
 };
 
-export type Cell = { v: string; s: CellStyle | null };
+// a/e: de qué lado es y qué correo la escribió (antifraude, ver la API).
+export type SheetSide = "SUPPLIER" | "OWN";
+export type Cell = { v: string; s: CellStyle | null; a?: SheetSide | null; e?: string | null };
 
 export function colName(c: number) {
   let n = c + 1;

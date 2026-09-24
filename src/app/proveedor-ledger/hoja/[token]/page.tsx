@@ -28,5 +28,5 @@ export default async function SupplierSheetPage({ params }: { params: Promise<{ 
 
   const viewer = await getSheetViewer(supplier.id);
   if (!viewer) return <SupplierSheetLogin token={token} />;
-  return <SupplierSheet token={token} email={viewer.email} canWrite={viewer.canWrite} />;
+  return <SupplierSheet token={token} email={viewer.email} canWrite={viewer.canWrite} side={viewer.side} />;
 }

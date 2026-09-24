@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Trash2 } from "lucide-react";
 import { formatDateTime } from "@/lib/formatDateTime";
 
-type Row = { id: string; email: string; canWrite: boolean; createdAt: string; lastAccessAt: string | null };
+type Row = { id: string; email: string; canWrite: boolean; side: "SUPPLIER" | "OWN"; createdAt: string; lastAccessAt: string | null };
 
 // Confirmado 2026-09-24, pedido explícito del usuario: lista de correos que
 // pueden abrir la hoja de cálculo de CHEN — solo el admin la ve y la cambia.
@@ -54,7 +54,10 @@ export function SupplierSheetEmailsManager({ supplierId }: { supplierId: string 
   return (
     <div className="mt-2 rounded border border-rule bg-surface px-3 py-2.5 text-[12px]">
       <div className="mb-1.5 font-semibold text-ink">Correos con acceso a la hoja</div>
-      <p className="mb-2 text-steel">Solo estos correos pueden abrirla, aunque otra persona tenga el enlace. Puedes pegar varios juntos.</p>
+      <p className="mb-2 text-steel">
+        Solo estos correos pueden abrirla, aunque otra persona tenga el enlace. Puedes pegar varios juntos. Marca bien el equipo de cada
+        correo: lo que escribe un equipo, el otro nunca lo puede cambiar ni borrar.
+      </p>
       <div className="mb-2 flex gap-2">
         <textarea
           rows={1}
@@ -83,6 +86,16 @@ export function SupplierSheetEmailsManager({ supplierId }: { supplierId: string 
             <div key={r.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-1.5">
               <span className="min-w-0 flex-1 break-all font-medium text-ink">{r.email}</span>
               <span className="text-steel">{r.lastAccessAt ? `Último ingreso ${formatDateTime(r.lastAccessAt)}` : "Nunca entró"}</span>
+              {/* Confirmado 2026-09-24 (antifraude): de qué lado es cada correo. */}
+              <select
+                className={`rounded border px-1.5 py-0.5 ${r.side === "OWN" ? "border-blue/50 bg-blue/10 text-ink" : "border-rule bg-cloud text-ink"}`}
+                value={r.side}
+                disabled={busy}
+                onChange={(e) => void send({ method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: r.id, side: e.target.value }) })}
+              >
+                <option value="SUPPLIER">Equipo Chen</option>
+                <option value="OWN">Nuestro equipo</option>
+              </select>
               <select
                 className="rounded border border-rule bg-cloud px-1.5 py-0.5 text-ink"
                 value={r.canWrite ? "write" : "read"}

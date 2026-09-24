@@ -6695,34 +6695,42 @@ model ImprovementPlanReview {
 // una fila de SupplierSheetCell — se guarda celda por celda para que varias
 // personas del equipo puedan escribir a la vez sin pisarse lo de otros.
 model SupplierSheetTab {
-  id         String              @id @default(cuid())
-  supplierId String
-  supplier   Supplier            @relation(fields: [supplierId], references: [id], onDelete: Cascade)
-  name       String
-  position   Int                 @default(0)
+  id            String                 @id @default(cuid())
+  supplierId    String
+  supplier      Supplier               @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  name          String
+  position      Int                    @default(0)
   // Ancho de cada columna que alguien cambió arrastrando el borde: { "0": 180 }.
-  colWidths  Json?
+  colWidths     Json?
   // Confirmado 2026-09-24, pedido explícito del usuario: hoja con candado —
   // la llena DAFLOW sola con nuestra operación; el equipo de CHEN la ve pero
   // nunca la puede editar (se valida en la API, no solo en pantalla).
-  locked     Boolean             @default(false)
-  createdAt  DateTime            @default(now())
-  updatedAt  DateTime            @updatedAt
-  cells      SupplierSheetCell[]
+  locked        Boolean                @default(false)
+  // Qué lado creó la hoja: solo ese lado la renombra o la elimina, y nunca
+  // si tiene celdas escritas por el otro lado.
+  createdBySide SupplierSheetSide?
+  logs          SupplierSheetCellLog[]
+  createdAt     DateTime               @default(now())
+  updatedAt     DateTime               @updatedAt
+  cells         SupplierSheetCell[]
 
   @@index([supplierId])
 }
 
 model SupplierSheetCell {
-  id        String           @id @default(cuid())
-  tabId     String
-  tab       SupplierSheetTab @relation(fields: [tabId], references: [id], onDelete: Cascade)
-  row       Int
-  col       Int
-  value     String           @default("")
+  id          String             @id @default(cuid())
+  tabId       String
+  tab         SupplierSheetTab   @relation(fields: [tabId], references: [id], onDelete: Cascade)
+  row         Int
+  col         Int
+  value       String             @default("")
   // Formato de la celda: negrita, cursiva, colores, alineación, tamaño, etc.
-  style     Json?
-  updatedAt DateTime         @updatedAt
+  style       Json?
+  // Confirmado 2026-09-24 (antifraude): quién la escribió. null = la llenó
+  // DAFLOW sola (hojas con candado) o es anterior a este cambio.
+  authorSide  SupplierSheetSide?
+  authorEmail String?
+  updatedAt   DateTime           @updatedAt
 
   @@unique([tabId, row, col])
 }
@@ -6739,6 +6747,10 @@ model SupplierSheetEmail {
   // false = solo puede ver (como "Lector" en Google); true = también escribe
   // en las hojas libres. Las hojas con candado nunca las edita nadie de CHEN.
   canWrite     Boolean                  @default(true)
+  // Confirmado 2026-09-24, pedido explícito del usuario (antifraude): de
+  // qué lado es este correo. Una celda que escribió un lado NUNCA la puede
+  // cambiar, borrar ni reformatear el otro lado (se valida en la API).
+  side         SupplierSheetSide        @default(SUPPLIER)
   createdAt    DateTime                 @default(now())
   lastAccessAt DateTime?
   loginCodes   SupplierSheetLoginCode[]
@@ -6769,4 +6781,29 @@ model SupplierSheetSession {
   createdAt  DateTime           @default(now())
 
   @@index([emailId])
+}
+
+enum SupplierSheetSide {
+  SUPPLIER // equipo del proveedor (CHEN)
+  OWN // nuestro equipo
+}
+
+// Confirmado 2026-09-24, pedido explícito del usuario (antifraude): cada
+// cambio aceptado en una celda de la hoja de CHEN queda registrado — quién,
+// cuándo, qué decía antes y qué dice después. Nunca se edita ni se borra.
+model SupplierSheetCellLog {
+  id        String            @id @default(cuid())
+  tabId     String
+  tab       SupplierSheetTab  @relation(fields: [tabId], references: [id], onDelete: Cascade)
+  row       Int
+  col       Int
+  oldValue  String?
+  newValue  String?
+  oldStyle  Json?
+  newStyle  Json?
+  email     String
+  side      SupplierSheetSide
+  createdAt DateTime          @default(now())
+
+  @@index([tabId, row, col])
 }

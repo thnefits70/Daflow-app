@@ -53,26 +53,23 @@ const opSchema = z.discriminatedUnion("t", [
 
 const bodySchema = z.object({ ops: z.array(opSchema).min(1).max(5000) });
 
+const SIDE_LABEL = { SUPPLIER: "el equipo del proveedor", OWN: "nuestro equipo" } as const;
+
 async function loadSheet(supplierId: string) {
-  let tabs = await prisma.supplierSheetTab.findMany({
-    where: { supplierId },
-    orderBy: [{ position: "asc" }, { createdAt: "asc" }],
-    include: { cells: { select: { row: true, col: true, value: true, style: true } } },
-  });
+  const include = { cells: { select: { row: true, col: true, value: true, style: true, authorSide: true, authorEmail: true } } } as const;
+  const orderBy = [{ position: "asc" as const }, { createdAt: "asc" as const }];
+  let tabs = await prisma.supplierSheetTab.findMany({ where: { supplierId }, orderBy, include });
   if (tabs.length === 0) {
     await prisma.supplierSheetTab.create({ data: { supplierId, name: "Hoja 1", position: 0 } });
-    tabs = await prisma.supplierSheetTab.findMany({
-      where: { supplierId },
-      orderBy: [{ position: "asc" }, { createdAt: "asc" }],
-      include: { cells: { select: { row: true, col: true, value: true, style: true } } },
-    });
+    tabs = await prisma.supplierSheetTab.findMany({ where: { supplierId }, orderBy, include });
   }
   return tabs.map((t) => ({
     id: t.id,
     name: t.name,
     colWidths: (t.colWidths as Record<string, number> | null) ?? {},
     locked: t.locked,
-    cells: t.cells.map((c) => ({ r: c.row, c: c.col, v: c.value, s: c.style ?? null })),
+    createdBySide: t.createdBySide,
+    cells: t.cells.map((c) => ({ r: c.row, c: c.col, v: c.value, s: c.style ?? null, a: c.authorSide, e: c.authorEmail })),
   }));
 }
 
@@ -82,9 +79,18 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ tok
   if (!supplier) return NextResponse.json({ error: "No encontrado." }, { status: 404 });
   const viewer = await getSheetViewer(supplier.id);
   if (!viewer) return NextResponse.json({ error: "Tu sesión terminó. Vuelve a entrar con tu correo." }, { status: 401 });
-  return NextResponse.json({ tabs: await loadSheet(supplier.id), canWrite: viewer.canWrite }, { headers: { "Cache-Control": "no-store" } });
+  return NextResponse.json(
+    { tabs: await loadSheet(supplier.id), canWrite: viewer.canWrite, side: viewer.side },
+    { headers: { "Cache-Control": "no-store" } },
+  );
 }
 
+// Confirmado 2026-09-24, pedido explícito del usuario (antifraude): una celda
+// escrita por un lado (equipo del proveedor / nuestro equipo) NUNCA la puede
+// cambiar, borrar ni reformatear el otro lado — ej. si quedó "100 almohadas a
+// $3", nadie del otro lado la puede pasar a $5. Las hojas con candado no las
+// toca nadie desde el enlace. Cada cambio aceptado queda en
+// SupplierSheetCellLog (quién, cuándo, antes y después).
 export async function POST(req: NextRequest, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
   const supplier = await resolveSupplier(token);
@@ -96,46 +102,105 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
   const parsed = bodySchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Datos inválidos." }, { status: 400 });
 
-  const ownTabs = await prisma.supplierSheetTab.findMany({ where: { supplierId: supplier.id }, select: { id: true, position: true, locked: true } });
+  const allTabs = await prisma.supplierSheetTab.findMany({
+    where: { supplierId: supplier.id },
+    select: { id: true, position: true, locked: true, createdBySide: true },
+  });
   // Solo las hojas libres se pueden tocar desde el enlace.
-  const ownTabIds = new Set(ownTabs.filter((t) => !t.locked).map((t) => t.id));
-  let nextPosition = ownTabs.reduce((m, t) => Math.max(m, t.position), -1) + 1;
+  const freeTabs = new Map(allTabs.filter((t) => !t.locked).map((t) => [t.id, t]));
+  let nextPosition = allTabs.reduce((m, t) => Math.max(m, t.position), -1) + 1;
   const createdTabIds: string[] = [];
+  const rejected: string[] = [];
+
+  // Estado actual de las celdas que se van a tocar (quién las escribió).
+  const touchedTabIds = [...new Set(parsed.data.ops.flatMap((o) => (o.t === "set" ? [o.tabId] : [])))].filter((id) => freeTabs.has(id));
+  const existingRows = touchedTabIds.length
+    ? await prisma.supplierSheetCell.findMany({
+        where: { tabId: { in: touchedTabIds } },
+        select: { tabId: true, row: true, col: true, value: true, style: true, authorSide: true },
+      })
+    : [];
+  const existing = new Map(existingRows.map((c) => [`${c.tabId}:${c.row}:${c.col}`, c]));
+  const logs: Prisma.SupplierSheetCellLogCreateManyInput[] = [];
 
   for (const op of parsed.data.ops) {
     if (op.t === "addTab") {
-      const tab = await prisma.supplierSheetTab.create({ data: { supplierId: supplier.id, name: op.name, position: nextPosition++ } });
-      ownTabIds.add(tab.id);
+      const tab = await prisma.supplierSheetTab.create({
+        data: { supplierId: supplier.id, name: op.name, position: nextPosition++, createdBySide: viewer.side },
+      });
+      freeTabs.set(tab.id, { id: tab.id, position: tab.position, locked: false, createdBySide: viewer.side });
       createdTabIds.push(tab.id);
       continue;
     }
-    if (!ownTabIds.has(op.tabId)) continue;
+    const tab = freeTabs.get(op.tabId);
+    if (!tab) continue;
 
     if (op.t === "set") {
-      const empty = op.v === "" && (!op.s || Object.keys(op.s).length === 0);
+      const key = `${op.tabId}:${op.r}:${op.c}`;
+      const cur = existing.get(key);
+      if (cur?.authorSide && cur.authorSide !== viewer.side) {
+        rejected.push(key);
+        continue;
+      }
+      const style = op.s && Object.keys(op.s).length > 0 ? op.s : null;
+      const empty = op.v === "" && !style;
+      if (cur && cur.value === op.v && JSON.stringify(cur.style ?? null) === JSON.stringify(style)) continue;
+      if (!cur && empty) continue;
       if (empty) {
         await prisma.supplierSheetCell.deleteMany({ where: { tabId: op.tabId, row: op.r, col: op.c } });
+        existing.delete(key);
       } else {
-        const style = op.s && Object.keys(op.s).length > 0 ? op.s : undefined;
         await prisma.supplierSheetCell.upsert({
           where: { tabId_row_col: { tabId: op.tabId, row: op.r, col: op.c } },
-          create: { tabId: op.tabId, row: op.r, col: op.c, value: op.v, style },
-          update: { value: op.v, style: style ?? Prisma.DbNull },
+          create: { tabId: op.tabId, row: op.r, col: op.c, value: op.v, style: style ?? undefined, authorSide: viewer.side, authorEmail: viewer.email },
+          update: { value: op.v, style: style ?? Prisma.DbNull, authorSide: viewer.side, authorEmail: viewer.email },
         });
+        existing.set(key, { tabId: op.tabId, row: op.r, col: op.c, value: op.v, style: style as Prisma.JsonValue, authorSide: viewer.side });
       }
-    } else if (op.t === "renameTab") {
-      await prisma.supplierSheetTab.update({ where: { id: op.tabId }, data: { name: op.name } });
-    } else if (op.t === "deleteTab") {
-      // Siempre queda al menos una hoja.
-      if (ownTabIds.size <= 1) continue;
-      await prisma.supplierSheetTab.delete({ where: { id: op.tabId } });
-      ownTabIds.delete(op.tabId);
+      logs.push({
+        tabId: op.tabId,
+        row: op.r,
+        col: op.c,
+        oldValue: cur?.value ?? null,
+        newValue: empty ? null : op.v,
+        oldStyle: (cur?.style as Prisma.InputJsonValue | null) ?? Prisma.DbNull,
+        newStyle: (style as Prisma.InputJsonValue | null) ?? Prisma.DbNull,
+        email: viewer.email,
+        side: viewer.side,
+      });
+    } else if (op.t === "renameTab" || op.t === "deleteTab") {
+      // Solo el lado que creó la hoja la renombra o elimina (null = anterior
+      // a este cambio, cualquiera). Nunca se elimina si tiene celdas del otro lado.
+      if (tab.createdBySide && tab.createdBySide !== viewer.side) {
+        rejected.push(`tab:${op.tabId}`);
+        continue;
+      }
+      if (op.t === "renameTab") {
+        await prisma.supplierSheetTab.update({ where: { id: op.tabId }, data: { name: op.name } });
+      } else {
+        // Siempre queda al menos una hoja libre.
+        if (freeTabs.size <= 1) continue;
+        const otherSide = await prisma.supplierSheetCell.count({ where: { tabId: op.tabId, authorSide: { not: viewer.side } } });
+        if (otherSide > 0) {
+          rejected.push(`tab:${op.tabId}`);
+          continue;
+        }
+        await prisma.supplierSheetTab.delete({ where: { id: op.tabId } });
+        freeTabs.delete(op.tabId);
+      }
     } else if (op.t === "colWidth") {
-      const tab = await prisma.supplierSheetTab.findUnique({ where: { id: op.tabId }, select: { colWidths: true } });
-      const widths = { ...((tab?.colWidths as Record<string, number> | null) ?? {}), [String(op.c)]: op.w };
+      const cur = await prisma.supplierSheetTab.findUnique({ where: { id: op.tabId }, select: { colWidths: true } });
+      const widths = { ...((cur?.colWidths as Record<string, number> | null) ?? {}), [String(op.c)]: op.w };
       await prisma.supplierSheetTab.update({ where: { id: op.tabId }, data: { colWidths: widths } });
     }
   }
 
-  return NextResponse.json({ ok: true, createdTabIds });
+  if (logs.length) await prisma.supplierSheetCellLog.createMany({ data: logs });
+
+  return NextResponse.json({
+    ok: true,
+    createdTabIds,
+    rejected,
+    rejectedMessage: rejected.length ? `No se puede cambiar lo que escribió ${SIDE_LABEL[viewer.side === "OWN" ? "SUPPLIER" : "OWN"]}.` : undefined,
+  });
 }

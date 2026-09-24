@@ -17,7 +17,7 @@ async function guard(supplierId: string) {
 
 async function list(supplierId: string) {
   const rows = await prisma.supplierSheetEmail.findMany({ where: { supplierId }, orderBy: { createdAt: "asc" } });
-  return rows.map((r) => ({ id: r.id, email: r.email, canWrite: r.canWrite, createdAt: r.createdAt, lastAccessAt: r.lastAccessAt }));
+  return rows.map((r) => ({ id: r.id, email: r.email, canWrite: r.canWrite, side: r.side, createdAt: r.createdAt, lastAccessAt: r.lastAccessAt }));
 }
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ supplierId: string }> }) {
@@ -53,9 +53,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ su
   const denied = await guard(supplierId);
   if (denied) return denied;
 
-  const body = z.object({ id: z.string().min(1), canWrite: z.boolean() }).safeParse(await req.json().catch(() => null));
+  const body = z.object({ id: z.string().min(1), canWrite: z.boolean().optional(), side: z.enum(["SUPPLIER", "OWN"]).optional() }).safeParse(await req.json().catch(() => null));
   if (!body.success) return NextResponse.json({ error: "Datos inválidos." }, { status: 400 });
-  await prisma.supplierSheetEmail.updateMany({ where: { id: body.data.id, supplierId }, data: { canWrite: body.data.canWrite } });
+  await prisma.supplierSheetEmail.updateMany({ where: { id: body.data.id, supplierId }, data: { canWrite: body.data.canWrite, side: body.data.side } });
   return NextResponse.json(await list(supplierId));
 }
 

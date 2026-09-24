@@ -21,7 +21,7 @@ export function sha256(s: string) {
   return crypto.createHash("sha256").update(s).digest("hex");
 }
 
-export type SheetViewer = { emailId: string; email: string; canWrite: boolean };
+export type SheetViewer = { emailId: string; email: string; canWrite: boolean; side: "SUPPLIER" | "OWN" };
 
 // Quién está viendo la hoja de ESTE proveedor — null si no hay sesión válida,
 // si venció, o si el admin ya quitó su correo de la lista (al borrar el
@@ -39,7 +39,7 @@ export async function getSheetViewer(supplierId: string): Promise<SheetViewer | 
   if (!last || Date.now() - last.getTime() > 5 * 60 * 1000) {
     await prisma.supplierSheetEmail.update({ where: { id: session.emailId }, data: { lastAccessAt: new Date() } }).catch(() => {});
   }
-  return { emailId: session.emailId, email: session.sheetEmail.email, canWrite: session.sheetEmail.canWrite };
+  return { emailId: session.emailId, email: session.sheetEmail.email, canWrite: session.sheetEmail.canWrite, side: session.sheetEmail.side };
 }
 
 // El correo sale desde el dominio de CHEN, nunca con el nombre de DAFLOW —

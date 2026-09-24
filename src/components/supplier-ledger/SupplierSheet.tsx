@@ -21,7 +21,7 @@ import {
   Underline,
   Undo2,
 } from "lucide-react";
-import { type Cell, type CellStyle, SHEET_MAX_COLS, SHEET_MAX_ROWS, cellName, colName, formatValue, makeEvaluator } from "@/lib/supplierSheet";
+import { type Cell, type CellStyle, type SheetSide, SHEET_MAX_COLS, SHEET_MAX_ROWS, cellName, colName, formatValue, makeEvaluator } from "@/lib/supplierSheet";
 
 // Confirmado 2026-09-24, pedido explícito del usuario: el enlace de la hoja
 // de CHEN se ve y se usa como una hoja de Excel/Google Sheets en línea — un
@@ -29,8 +29,15 @@ import { type Cell, type CellStyle, SHEET_MAX_COLS, SHEET_MAX_ROWS, cellName, co
 // guarda solo (celda por celda) y cada pocos segundos se trae lo que
 // escribieron los demás.
 
-type Tab = { id: string; name: string; colWidths: Record<string, number>; locked: boolean; cells: Record<string, Cell> };
-type ServerTab = { id: string; name: string; colWidths: Record<string, number>; locked?: boolean; cells: { r: number; c: number; v: string; s: CellStyle | null }[] };
+type Tab = { id: string; name: string; colWidths: Record<string, number>; locked: boolean; createdBySide: SheetSide | null; cells: Record<string, Cell> };
+type ServerTab = {
+  id: string;
+  name: string;
+  colWidths: Record<string, number>;
+  locked?: boolean;
+  createdBySide?: SheetSide | null;
+  cells: { r: number; c: number; v: string; s: CellStyle | null; a?: SheetSide | null; e?: string | null }[];
+};
 type Op =
   | { t: "set"; tabId: string; r: number; c: number; v: string; s: CellStyle | null }
   | { t: "addTab"; name: string }
@@ -49,8 +56,8 @@ const FONT_SIZES = [8, 9, 10, 11, 12, 14, 18, 24, 36];
 function fromServer(tabs: ServerTab[]): Tab[] {
   return tabs.map((t) => {
     const cells: Record<string, Cell> = {};
-    for (const c of t.cells) cells[`${c.r}:${c.c}`] = { v: c.v, s: c.s };
-    return { id: t.id, name: t.name, colWidths: t.colWidths ?? {}, locked: !!t.locked, cells };
+    for (const c of t.cells) cells[`${c.r}:${c.c}`] = { v: c.v, s: c.s, a: c.a ?? null, e: c.e ?? null };
+    return { id: t.id, name: t.name, colWidths: t.colWidths ?? {}, locked: !!t.locked, createdBySide: t.createdBySide ?? null, cells };
   });
 }
 
@@ -64,7 +71,9 @@ function cleanStyle(s: CellStyle | null): CellStyle | null {
 // Confirmado 2026-09-24: solo entra un correo de la lista del admin (ver
 // supplierSheetAccess.ts). canWrite=false → solo ve; las hojas con candado
 // (las llena DAFLOW sola) nunca se editan desde acá — la API también lo frena.
-export function SupplierSheet({ token, email, canWrite }: { token: string; email: string; canWrite: boolean }) {
+// Confirmado 2026-09-24 (antifraude): una celda escrita por el otro lado
+// (side) no se puede cambiar — la API lo rechaza igual; acá solo se avisa.
+export function SupplierSheet({ token, email, canWrite, side }: { token: string; email: string; canWrite: boolean; side: SheetSide }) {
   const api = `/api/proveedor-ledger/${token}/hoja`;
   const [tabs, setTabs] = useState<Tab[] | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -76,6 +85,14 @@ export function SupplierSheet({ token, email, canWrite }: { token: string; email
   const [extraRows, setExtraRows] = useState(0);
   const [tabMenu, setTabMenu] = useState<string | null>(null);
   const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null);
+  const [notice, setNotice] = useState("");
+  const otherSideMsg = "Esa celda la escribió el otro equipo — no se puede cambiar ni borrar.";
+  const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const showNotice = useCallback((msg: string) => {
+    setNotice(msg);
+    if (noticeTimer.current) clearTimeout(noticeTimer.current);
+    noticeTimer.current = setTimeout(() => setNotice(""), 5000);
+  }, []);
 
   const tabsRef = useRef<Tab[] | null>(null);
   useLayoutEffect(() => {
@@ -158,7 +175,7 @@ export function SupplierSheet({ token, email, canWrite }: { token: string; email
       const res = await fetch(api, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ops: batch }) });
       if (res.status === 401) { window.location.reload(); return null; }
       if (!res.ok) throw new Error();
-      const data = (await res.json()) as { createdTabIds?: string[] };
+      const data = (await res.json()) as { createdTabIds?: string[]; rejected?: string[]; rejectedMessage?: string };
       for (const op of batch) {
         if (op.t !== "set") continue;
         const key = `${op.tabId}:${op.r}:${op.c}`;
@@ -167,6 +184,10 @@ export function SupplierSheet({ token, email, canWrite }: { token: string; email
         else pendingKeys.current.set(key, n);
       }
       flushing.current = false;
+      if (data.rejected?.length) {
+        showNotice(data.rejectedMessage ?? "Ese cambio no se permite.");
+        void load();
+      }
       if (queue.current.length) void flushRef.current();
       else setStatus("saved");
       return data.createdTabIds ?? [];
@@ -178,7 +199,7 @@ export function SupplierSheet({ token, email, canWrite }: { token: string; email
       flushTimer.current = setTimeout(() => void flushRef.current(), 3000);
       return null;
     }
-  }, [api]);
+  }, [api, load, showNotice]);
   useLayoutEffect(() => {
     flushRef.current = flush;
   }, [flush]);
@@ -251,21 +272,27 @@ export function SupplierSheet({ token, email, canWrite }: { token: string; email
       const t = tabsRef.current?.find((x) => x.id === (activeId ?? tabsRef.current?.[0]?.id));
       if (!t || t.locked || readOnlyRef.current) return;
       const changes: Change[] = [];
+      let blocked = 0;
       for (const { r, c, next } of cells) {
         if (r < 0 || c < 0 || r >= SHEET_MAX_ROWS || c >= SHEET_MAX_COLS) continue;
         const before = getCell(t, r, c);
+        if (before.a && before.a !== side) {
+          blocked++;
+          continue;
+        }
         const raw = next(before);
-        const after = { v: raw.v, s: cleanStyle(raw.s) };
+        const after: Cell = { v: raw.v, s: cleanStyle(raw.s), a: side, e: email };
         if (before.v === after.v && JSON.stringify(before.s) === JSON.stringify(after.s)) continue;
         changes.push({ tabId: t.id, r, c, before, after });
       }
+      if (blocked) showNotice(otherSideMsg);
       if (!changes.length) return;
       undoStack.current.push(changes);
       if (undoStack.current.length > 200) undoStack.current.shift();
       redoStack.current = [];
       applyChanges(changes, "after");
     },
-    [activeId, applyChanges, getCell],
+    [activeId, applyChanges, getCell, side, email, showNotice, otherSideMsg],
   );
 
   function undo() {
@@ -326,6 +353,11 @@ export function SupplierSheet({ token, email, canWrite }: { token: string; email
 
   function startEdit(initial?: string, source: "cell" | "bar" = "cell") {
     if (readOnly) return;
+    const cur = getCell(tab, sel.r, sel.c);
+    if (cur.a && cur.a !== side) {
+      showNotice(otherSideMsg);
+      return;
+    }
     setEditing({ r: sel.r, c: sel.c, value: initial ?? getCell(tab, sel.r, sel.c).v, source });
   }
 
@@ -525,7 +557,8 @@ export function SupplierSheet({ token, email, canWrite }: { token: string; email
 
   const cols = Array.from({ length: SHEET_MAX_COLS }, (_, c) => c);
   const rows = Array.from({ length: rowCount }, (_, r) => r);
-  const selRaw = getCell(tab, sel.r, sel.c).v;
+  const selCell = getCell(tab, sel.r, sel.c);
+  const selRaw = selCell.v;
   const barValue = editing && editing.r === sel.r && editing.c === sel.c ? editing.value : selRaw;
   const rangeLabel = range.r1 === range.r2 && range.c1 === range.c2 ? cellName(sel.r, sel.c) : `${cellName(range.r1, range.c1)}:${cellName(range.r2, range.c2)}`;
 
@@ -627,6 +660,11 @@ export function SupplierSheet({ token, email, canWrite }: { token: string; email
           onKeyDown={onEditKey}
           onBlur={() => { if (editingRef.current?.source === "bar") finishEdit(); }}
         />
+        {selCell.e && (
+          <div className="hidden shrink-0 truncate px-2 text-[11.5px] text-neutral-500 sm:block" title="Quién escribió esta celda">
+            Escrito por {selCell.e}
+          </div>
+        )}
       </div>
 
       {/* Cuadrícula */}
@@ -782,6 +820,10 @@ export function SupplierSheet({ token, email, canWrite }: { token: string; email
         )}
       </div>
 
+      {notice && (
+        <div className="pointer-events-none fixed bottom-14 left-1/2 z-50 -translate-x-1/2 rounded-md bg-neutral-900 px-4 py-2 text-[13px] text-white shadow-lg">{notice}</div>
+      )}
+
       {/* Pestañas de hojas */}
       <div className="flex items-center gap-1 border-t border-neutral-200 bg-[#f9fbfd] px-2 py-1 text-[13px]">
         {canWrite && <button type="button" className={tb} title="Agregar hoja" onClick={() => void addTab()}><Plus size={17} /></button>}
@@ -804,13 +846,13 @@ export function SupplierSheet({ token, email, canWrite }: { token: string; email
                     type="button"
                     className="cursor-pointer"
                     onClick={() => { if (editing) finishEdit(); setActiveId(t.id); select({ r: 0, c: 0 }); undoStack.current = []; redoStack.current = []; }}
-                    onDoubleClick={() => { if (canWrite && !t.locked) setRenaming({ id: t.id, name: t.name }); }}
+                    onDoubleClick={() => { if (canWrite && !t.locked && (!t.createdBySide || t.createdBySide === side)) setRenaming({ id: t.id, name: t.name }); }}
                   >
                     {t.locked && <Lock size={11} className="mr-1 inline -mt-0.5" />}
                     {t.name}
                   </button>
                 )}
-                {canWrite && !t.locked && (<button
+                {canWrite && !t.locked && (!t.createdBySide || t.createdBySide === side) && (<button
                   type="button"
                   className="ml-1 rounded p-0.5 hover:bg-black/10"
                   title="Opciones de la hoja"
