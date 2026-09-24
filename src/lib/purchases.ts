@@ -431,9 +431,31 @@ export type PurchaseSubmissionCheck =
     }
   | { ok: false; error: string; status: number };
 
+// Confirmado 2026-09-23, revisión anti-fraude pedida por el usuario: el
+// transportista tiene que ser un transportista registrado, o el MISMO
+// proveedor de la compra ("el flete lo cobra el mismo proveedor" — antes no
+// existía esa opción y había que inventar un transportista con la cuenta del
+// proveedor, caso "Ting (NO)" en SC-067). La cuenta del flete tiene que ser
+// de ese transportista/proveedor.
+export async function checkCarrierChoice(p: { supplierId: string; carrierId: string; carrierBankAccountId: string | null }): Promise<string | null> {
+  if (p.carrierId !== p.supplierId) {
+    const carrier = await prisma.supplier.findUnique({ where: { id: p.carrierId }, select: { type: true } });
+    if (!carrier || carrier.type !== "CARRIER") return "El transportista elegido no es válido.";
+  }
+  if (p.carrierBankAccountId) {
+    const account = await prisma.supplierBankAccount.findUnique({ where: { id: p.carrierBankAccountId }, select: { supplierId: true } });
+    if (!account || account.supplierId !== p.carrierId) return "La cuenta del flete no es de ese transportista.";
+  }
+  return null;
+}
+
 export async function checkPurchaseSubmission(d: PurchaseSubmissionData): Promise<PurchaseSubmissionCheck> {
   if (!d.shippingIncluded && !d.carrierId && !d.shippingCarrierPending) {
     return { ok: false, status: 400, error: "Falta el transportista, ya que el envío no está incluido." };
+  }
+  if (!d.shippingIncluded && !d.shippingCarrierPending && d.carrierId) {
+    const carrierError = await checkCarrierChoice({ supplierId: d.supplierId, carrierId: d.carrierId, carrierBankAccountId: d.carrierBankAccountId ?? null });
+    if (carrierError) return { ok: false, status: 400, error: carrierError };
   }
 
   // Confirmado 2026-09-14, pedido explícito de Jariel/del usuario: un

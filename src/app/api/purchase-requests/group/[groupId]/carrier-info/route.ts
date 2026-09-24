@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { canSubmitPurchaseRequests } from "@/lib/guards";
+import { checkCarrierChoice } from "@/lib/purchases";
 
 const schema = z.object({
   carrierId: z.string().min(1),
@@ -40,6 +41,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ gro
   if (rows[0].shippingPaidAt) {
     return NextResponse.json({ error: "El flete ya está pagado — ya no se puede corregir." }, { status: 409 });
   }
+  const carrierError = await checkCarrierChoice({ supplierId: rows[0].supplierId, carrierId: parsed.data.carrierId, carrierBankAccountId: parsed.data.carrierBankAccountId ?? null });
+  if (carrierError) return NextResponse.json({ error: carrierError }, { status: 400 });
 
   const totalQty = rows.reduce((s, r) => s + r.quantity, 0);
   await prisma.$transaction(

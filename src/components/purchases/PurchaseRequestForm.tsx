@@ -215,6 +215,10 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
   const [shippingCarrierPending, setShippingCarrierPending] = useState(false);
   const [carrier, setCarrier] = useState<PurchaseSupplierDTO | null>(null);
   const [carrierBankAccountId, setCarrierBankAccountId] = useState<string | null>(null);
+  // Confirmado 2026-09-23: "el flete lo cobra el mismo proveedor" = el
+  // transportista ES el proveedor y se le paga a la misma cuenta elegida
+  // para la compra (antes había que inventar un transportista con su cuenta).
+  const shippingBySupplier = !!carrier && !!supplier && carrier.id === supplier.id;
   const [shippingCostTotal, setShippingCostTotal] = useState("");
   const [shippingPaymentMethod, setShippingPaymentMethod] = useState<"TRANSFER" | "PETTY_CASH">("TRANSFER");
   // Confirmado 2026-09-04: pedido explícito del usuario — a Jariel se le
@@ -796,7 +800,7 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
       shippingCostTotal: shippingIncluded ? null : Number(shippingCostTotal) || null,
       shippingPaymentMethod: shippingIncluded ? null : shippingPaymentMethod,
       shippingPaymentTiming: shippingIncluded ? null : shippingPaymentTiming,
-      carrierBankAccountId: shippingIncluded ? null : carrierBankAccountId,
+      carrierBankAccountId: shippingIncluded ? null : shippingBySupplier ? bankAccountId : carrierBankAccountId,
       appliedCreditIds: selectedCreditIds,
       creditSkipJustification: needsCreditJustification ? creditSkipJustification.trim() : null,
       isEmergency: emergencyOnly,
@@ -986,7 +990,12 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
         <PurchaseSupplierPicker
           type="SUPPLIER"
           value={supplier}
-          onChange={(s) => { setSupplier(s); if (!s) setBankAccountId(null); }}
+          onChange={(s) => {
+            // Si el flete lo cobraba el proveedor anterior, se desmarca al cambiar de proveedor.
+            if (carrier && supplier && carrier.id === supplier.id) { setCarrier(null); setCarrierBankAccountId(null); }
+            setSupplier(s);
+            if (!s) setBankAccountId(null);
+          }}
           label="Buscar o registrar proveedor"
           isAdmin={isAdmin}
           selectedBankAccountId={bankAccountId}
@@ -1283,12 +1292,32 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
             Todavía no sé el transportista ni el costo del flete — lo completo después
           </div>
 
+          {!shippingCarrierPending && supplier && (
+            <div className="flex items-center gap-2 mb-3 text-[12px] text-steel">
+              <input
+                type="checkbox"
+                checked={shippingBySupplier}
+                onChange={(e) => {
+                  if (e.target.checked) { setCarrier(supplier); setCarrierBankAccountId(null); }
+                  else { setCarrier(null); setCarrierBankAccountId(null); }
+                }}
+                className="w-auto cursor-pointer"
+              />
+              El flete lo cobra el mismo proveedor ({supplier.name})
+            </div>
+          )}
+
           {shippingCarrierPending ? (
             <div className="text-[11.5px] text-steel bg-cloud border border-dashed border-rule rounded-md p-3">
               Va a quedar pendiente en &quot;Mis solicitudes&quot; hasta que completes el transportista y el costo real — el pago del flete se hace cuando llegue la mercadería.
             </div>
           ) : (
             <>
+              {shippingBySupplier ? (
+                <div className="text-[11.5px] text-steel bg-cloud border border-rule rounded-md p-3">
+                  El flete se paga a la misma cuenta del proveedor que elegiste arriba — no hace falta registrar un transportista.
+                </div>
+              ) : (
               <PurchaseSupplierPicker
                 type="CARRIER"
                 value={carrier}
@@ -1298,7 +1327,8 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
                 selectedBankAccountId={carrierBankAccountId}
                 onSelectBankAccount={setCarrierBankAccountId}
               />
-              {carrier && (carrier.bankAccounts ?? []).length === 0 && (
+              )}
+              {carrier && !shippingBySupplier && (carrier.bankAccounts ?? []).length === 0 && (
                 <div className="text-[10.5px] text-steel mt-1.5">
                   Todavía sin cuenta bancaria registrada — normal si el transportista solo la da al entregar. Se puede agregar después.
                 </div>
