@@ -53,6 +53,16 @@ function suggestedReceived(s: SaleDTO): number {
   return s.totalAmount;
 }
 
+// Confirmado 2026-09-24, pedido de Nairoby: si el asesor ya declaró el flete
+// del motorizado (con recaudo) y el comprobante no dice otra cosa, ella no
+// digita nada — solo confirma "Total − flete = lo que llegó".
+function declaredFreightExpected(s: SaleDTO): number | null {
+  if (!s.isContraEntrega || !s.freightCost || s.freightCost <= 0 || s.freightCost >= s.totalAmount) return null;
+  const expected = s.totalAmount - s.freightCost;
+  if (s.paymentProofAiReadAmount != null && Math.abs(s.paymentProofAiReadAmount - expected) > 0.009) return null;
+  return expected;
+}
+
 export function ExternalSaleClosingInbox() {
   const [sales, setSales] = useState<SaleDTO[] | null>(null);
   const [closingId, setClosingId] = useState<string | null>(null);
@@ -64,6 +74,7 @@ export function ExternalSaleClosingInbox() {
   const [received, setReceived] = useState("");
   const [reason, setReason] = useState<DifferenceReason>("FLETE_MOTORIZADO");
   const [note, setNote] = useState("");
+  const [manualEdit, setManualEdit] = useState(false);
 
   function load() {
     fetch("/api/external-sales/pending-close").then((r) => r.json()).then(setSales).catch(() => setSales([]));
@@ -79,6 +90,7 @@ export function ExternalSaleClosingInbox() {
     setReason("FLETE_MOTORIZADO");
     setNote("");
     setError("");
+    setManualEdit(declaredFreightExpected(s) == null);
   }
 
   async function close(s: SaleDTO) {
@@ -108,7 +120,9 @@ export function ExternalSaleClosingInbox() {
         const receivedNum = Number(received);
         const receivedValid = received.trim() !== "" && Number.isFinite(receivedNum) && receivedNum >= 0 && receivedNum < s.totalAmount;
         const differenceAmount = receivedValid ? s.totalAmount - receivedNum : null;
-        const canConfirm = !hasDifference || (receivedValid && (reason !== "OTRO" || note.trim().length >= 3));
+        const freightExpected = declaredFreightExpected(s);
+        const quickConfirm = freightExpected != null && !manualEdit;
+        const canConfirm = quickConfirm || !hasDifference || (receivedValid && (reason !== "OTRO" || note.trim().length >= 3));
         return (
         <div key={s.id} className="bg-surface border border-rule rounded-md p-3.5">
           <div className="flex items-center gap-2 mb-1.5">
@@ -143,6 +157,19 @@ export function ExternalSaleClosingInbox() {
             <div className="text-[11.5px] font-semibold text-gold">Falta subir la factura para poder cerrar (pestaña Facturación).</div>
           ) : closingId === s.id ? (
             <div className="bg-cloud rounded-md p-2.5">
+              {quickConfirm ? (
+                <div className="flex flex-col gap-1 mb-2.5 border-l-2 border-teal pl-2.5 text-[12px]">
+                  <div className="flex justify-between gap-2"><span className="text-steel">Total de la venta</span><span className="font-semibold">${s.totalAmount.toFixed(2)}</span></div>
+                  <div className="flex justify-between gap-2"><span className="text-steel">Flete del motorizado (lo declaró {s.advisor?.name ?? "el asesor"})</span><span className="font-semibold">-${(s.freightCost ?? 0).toFixed(2)}</span></div>
+                  <div className="flex justify-between gap-2 border-t border-rule pt-1"><span className="font-bold">Debió llegar</span><span className="font-bold text-teal">${(freightExpected ?? 0).toFixed(2)}</span></div>
+                  {s.paymentProofAiReadAmount != null && (
+                    <div className="text-[11px] text-teal">✓ El comprobante dice ${s.paymentProofAiReadAmount.toFixed(2)} — coincide.</div>
+                  )}
+                  <button type="button" className="self-start text-[11px] text-steel underline cursor-pointer mt-0.5" onClick={() => setManualEdit(true)}>
+                    No coincide con el comprobante — corregir
+                  </button>
+                </div>
+              ) : (<>
               <label className="flex items-center gap-2 text-[12px] font-semibold mb-2 cursor-pointer">
                 <input
                   type="checkbox"
@@ -206,13 +233,14 @@ export function ExternalSaleClosingInbox() {
                   />
                 </div>
               )}
+              </>)}
 
-              <div className="text-[12px] font-semibold mb-2">¿Confirmás registrar esta venta como cerrada?</div>
+              <div className="text-[12px] font-semibold mb-2">{quickConfirm ? "¿Está correcto? Se cierra la venta con el flete ya descontado." : "¿Confirmás registrar esta venta como cerrada?"}</div>
               {error && <div className="text-red text-[11px] mb-1.5">{error}</div>}
               <div className="flex gap-2">
                 <button type="button" className="flex-1 rounded border border-rule px-2.5 py-1.5 text-[11.5px] font-semibold cursor-pointer" onClick={() => setClosingId(null)}>Cancelar</button>
                 <button type="button" disabled={saving || !canConfirm} className="flex-1 rounded border border-teal bg-teal px-2.5 py-1.5 text-[11.5px] font-bold text-navy cursor-pointer disabled:opacity-60" onClick={() => close(s)}>
-                  {saving ? "Cerrando…" : "Sí, cerrar"}
+                  {saving ? "Cerrando…" : quickConfirm ? "Sí, es correcto — cerrar" : "Sí, cerrar"}
                 </button>
               </div>
             </div>
