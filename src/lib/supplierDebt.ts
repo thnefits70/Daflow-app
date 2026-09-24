@@ -354,6 +354,9 @@ export type SupplierDebtDisputedItem = {
   // confirma el daño. Ahora se muestra aparte quién reportó y quién (Daniel)
   // confirmó el daño — o "pendiente" si todavía no lo revisa.
   reportedByName: string | null;
+  // Confirmado 2026-09-24, pedido explícito del usuario: en "Detalle" va el
+  // motivo que escribieron al reportar (qué daño se vio), no texto de pago.
+  damageDescriptions: string[];
   damageConfirmedByName: string | null;
   damageConfirmPending: boolean;
   // Confirmado 2026-09-22: true cuando la parte buena ya se recibió
@@ -438,6 +441,7 @@ export async function getSupplierDebtDisputedItems(supplierId: string): Promise<
         reviewedByName: r.receipt?.confirmedBy?.name ?? null,
         missingQty,
         reportedByName: r.urgentReports[0]?.reportedBy?.name ?? null,
+        damageDescriptions: r.urgentReports.map((u) => u.description.trim()).filter(Boolean),
         damageConfirmedByName,
         damageConfirmPending,
         paymentOnHold: r.status === "RECEIVED",

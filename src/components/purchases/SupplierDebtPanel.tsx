@@ -50,6 +50,7 @@ type DisputedItem = {
   approvedByName: string | null;
   reviewedByName: string | null;
   reportedByName: string | null;
+  damageDescriptions: string[];
   damageConfirmedByName: string | null;
   damageConfirmPending: boolean;
   paymentOnHold: boolean;
@@ -632,6 +633,11 @@ export function SupplierDebtPanel() {
                           proveedor reponga (o acepte descontar) lo que llegó mal. */}
                       {i.paymentOnHold && " — la parte buena ya llegó; pago retenido hasta que el proveedor reponga lo que llegó mal"}
                     </div>
+                    {i.damageDescriptions.map((d, idx) => (
+                      <div key={idx} className="text-[12px] text-ink mt-0.5 whitespace-pre-line">
+                        Motivo: {d}
+                      </div>
+                    ))}
                     <div className="text-[11.5px] text-steel mt-0.5">
                       Compra aprobada por {i.approvedByName ?? "—"} · Recibió {i.reviewedByName ?? "—"} · Reportó {i.reportedByName ?? "—"} · Daño
                       confirmado por:{" "}

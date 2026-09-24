@@ -358,9 +358,13 @@ export default async function SupplierLedgerPage({ params }: { params: Promise<{
                     <span className="shrink-0 text-sm font-semibold tabular-nums">{money(i.wouldBeValue)}</span>
                   </div>
                   <p className="mt-0.5 text-xs text-amber-800">
-                    {i.quantity} uds · {disputeDetail(i)}
+                    {i.quantity} uds{disputeDetail(i) && ` · ${disputeDetail(i)}`}
                   </p>
-                  <p className="text-xs font-medium text-amber-900">{holdNote(i)}</p>
+                  {i.damageDescriptions.map((d, idx) => (
+                    <p key={idx} className="text-xs font-medium text-amber-900">
+                      {d}
+                    </p>
+                  ))}
                   <p className="text-xs text-amber-700">
                     {SHORT_DATE_FMT.format(i.requestedAt)} · Compra aprobada por {firstName(i.approvedByName) || "—"} · Recibió{" "}
                     {firstName(i.reviewedByName) || "—"}
@@ -391,8 +395,13 @@ export default async function SupplierLedgerPage({ params }: { params: Promise<{
                       <td className="px-3 py-2 text-amber-900">{i.productName}</td>
                       <td className={`${td} text-right tabular-nums text-amber-800`}>{i.quantity}</td>
                       <td className="px-3 py-2 text-amber-800">
-                        {disputeDetail(i)}
-                        <span className="block text-xs font-medium text-amber-900">{holdNote(i)}</span>
+                        {disputeDetail(i) && <span className="block text-xs font-semibold text-amber-900">{disputeDetail(i)}</span>}
+                        {i.damageDescriptions.map((d, idx) => (
+                          <span key={idx} className="block whitespace-pre-line">
+                            {d}
+                          </span>
+                        ))}
+                        {!disputeDetail(i) && i.damageDescriptions.length === 0 && "—"}
                       </td>
                       <td className={`${td} text-right tabular-nums text-amber-800`}>{money(i.wouldBeValue)}</td>
                       <td className={`${td} text-amber-800`}>{firstName(i.approvedByName) || "—"}</td>
@@ -516,12 +525,6 @@ export default async function SupplierLedgerPage({ params }: { params: Promise<{
 
 function discountNote(i: { grossCost: number; creditDeduction: number }) {
   return `Valor del pedido ${money(i.grossCost)} menos ${money(i.creditDeduction)} de descuento por mercadería dañada`;
-}
-
-function holdNote(i: { paymentOnHold: boolean }) {
-  return i.paymentOnHold
-    ? "La parte buena ya llegó — el pago de este pedido queda pendiente hasta que se reponga lo que llegó mal."
-    : "Pendiente de pago hasta que se resuelva.";
 }
 
 function damageConfirmedLabel(i: { damageConfirmPending: boolean; damageConfirmedByName: string | null }) {
