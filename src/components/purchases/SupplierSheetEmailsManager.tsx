@@ -58,6 +58,44 @@ export function SupplierSheetEmailsManager({ supplierId }: { supplierId: string 
         Solo estos correos pueden abrirla, aunque otra persona tenga el enlace. Puedes pegar varios juntos. Marca bien el equipo de cada
         correo: lo que escribe un equipo, el otro nunca lo puede cambiar ni borrar.
       </p>
+      {/* Confirmado 2026-09-24, pedido explícito del usuario: la explicación
+          vive acá mismo, para no tener que acordarse de memoria. */}
+      <details className="mb-2 rounded border border-rule bg-cloud px-2.5 py-1.5 text-[12px] text-ink">
+        <summary className="cursor-pointer font-semibold text-blue">¿Cómo funciona? (léelo si te olvidas)</summary>
+        <div className="mt-2 flex flex-col gap-2 text-steel">
+          <div>
+            <span className="font-semibold text-ink">Para dar acceso a alguien nuevo:</span>
+            <ol className="ml-4 mt-0.5 list-decimal">
+              <li>Escribe su correo arriba y aprieta &quot;Agregar&quot;.</li>
+              <li>
+                Elige su equipo <span className="font-semibold text-ink">antes</span>{" "}de que escriba algo en la hoja: &quot;Equipo Chen&quot;
+                o &quot;Nuestro equipo&quot;.
+              </li>
+              <li>Elige si &quot;Puede escribir&quot; o &quot;Solo ver&quot;.</li>
+            </ol>
+            Con eso ya puede entrar: escribe su correo en la hoja y le llega un código de 6 números.
+          </div>
+          <div>
+            <span className="font-semibold text-ink">Botón &quot;Entrar con Google&quot; (opcional):</span>{" "}para que un Gmail pueda usar
+            ese botón sin código, también hay que anotarlo en Google Cloud → proyecto &quot;PEDIDOS IMPORTADORA CHEN - TBS&quot; →
+            Google Auth Platform → Público → Usuarios de prueba → &quot;+ Add users&quot;. Si no lo anotas allá, igual entra con el código.
+            Un correo que no sea Gmail (ej. Hotmail) siempre entra con el código.
+          </div>
+          <div>
+            <span className="font-semibold text-ink">Los equipos protegen la información:</span>{" "}lo que escribe alguien de
+            &quot;Equipo Chen&quot;, nadie de &quot;Nuestro equipo&quot; lo puede cambiar ni borrar, y al revés. Lo que DAFLOW llena sola
+            no lo puede cambiar nadie. Cada cambio queda guardado (quién, cuándo, antes y después).
+          </div>
+          <div>
+            <span className="font-semibold text-ink">Para quitarle el acceso:</span>{" "}aprieta el basurero de su fila. Deja de poder
+            abrir la hoja al instante, aunque tenga el enlace.
+          </div>
+          <div>
+            <span className="font-semibold text-ink">&quot;regenerar&quot; el enlace:</span>{" "}cambia el link (el viejo deja de
+            funcionar) pero no borra nada de lo escrito ni la lista de correos. Úsalo solo si el link se filtró.
+          </div>
+        </div>
+      </details>
       <div className="mb-2 flex gap-2">
         <textarea
           rows={1}
