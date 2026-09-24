@@ -155,12 +155,14 @@ export function groupItemsForWriteOff(items: MerchandiseReentryItemForGrouping[]
 export async function maybeMarkBatchClosed(batchId: string) {
   const items = await prisma.merchandiseReentryItem.findMany({
     where: { batchId },
-    select: { goodQty: true, damagedQty: true, damageConfirmed: true, justUploadedAt: true, writeOffAt: true },
+    select: { goodQty: true, damagedQty: true, damageConfirmed: true, justUploadedAt: true, writeOffAt: true, supplierClaimAt: true },
   });
   if (items.length === 0) return;
   const allClosed = items.every((i) => {
     const goodDone = i.goodQty <= 0 || !!i.justUploadedAt;
-    const damagedDone = !(i.damagedQty > 0 && i.damageConfirmed === true) || !!i.writeOffAt;
+    // Pasada a reclamo con proveedor (ver reentrySupplierClaim.ts) también
+    // cierra la parte dañada acá — el seguimiento sigue en Registro de Egresos.
+    const damagedDone = !(i.damagedQty > 0 && i.damageConfirmed === true) || !!i.writeOffAt || !!i.supplierClaimAt;
     return goodDone && damagedDone;
   });
   if (!allClosed) return;

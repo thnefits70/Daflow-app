@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AlertTriangle, Ban, ChevronDown, ChevronUp, Pencil, Trash2, Wrench } from "lucide-react";
+import { AlertTriangle, Ban, ChevronDown, ChevronUp, Pencil, Trash2, Undo2, Wrench } from "lucide-react";
 import { ProductMatchPicker, type ProductMatchResult } from "./ProductMatchPicker";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 import { ExpandableName } from "@/components/ui/ExpandableName";
@@ -377,6 +377,11 @@ function ReviewItemRow({ item, canAct, onChanged, onExpandPhoto }: { item: ItemD
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [solving, setSolving] = useState(false);
+  // Confirmado 2026-09-24, pedido de Nairoby: cuarta salida — dañado, pero
+  // se devuelve al proveedor (reposición o saldo a favor), no es baja.
+  const [claiming, setClaiming] = useState(false);
+  const [claimCandidates, setClaimCandidates] = useState<{ id: string; code: string; quantity: number; reportedByName: string; stockWasSubtracted: boolean }[] | null>(null);
+  const [claimChoice, setClaimChoice] = useState("new");
   const [solutionNote, setSolutionNote] = useState("");
   // Daniel puede abrir esto para corregir un producto que Inventario ya
   // vinculó (bien o mal) — pedido explícito del usuario: "Daniel conoce
@@ -404,11 +409,28 @@ function ReviewItemRow({ item, canAct, onChanged, onExpandPhoto }: { item: ItemD
     }
   }
 
-  async function resolveDamage(outcome: "not_damaged" | "solved" | "unsolved") {
+  function startClaim() {
+    setClaiming(true);
+    setClaimCandidates(null);
+    fetch(`/api/merchandise-reentry/items/${item.id}/supplier-claim`)
+      .then((r) => r.json())
+      .then((d) => {
+        const list = Array.isArray(d?.candidates) ? d.candidates : [];
+        setClaimCandidates(list);
+        setClaimChoice(list[0]?.id ?? "new");
+      })
+      .catch(() => setClaimCandidates([]));
+  }
+
+  async function resolveDamage(outcome: "not_damaged" | "solved" | "unsolved" | "supplier_claim") {
     setBusy(true);
     setError("");
     try {
-      await postJson(`/api/merchandise-reentry/items/${item.id}/resolve-damage`, { outcome, solutionNote: outcome === "solved" ? solutionNote.trim() : undefined });
+      await postJson(`/api/merchandise-reentry/items/${item.id}/resolve-damage`, {
+        outcome,
+        solutionNote: outcome === "solved" || outcome === "supplier_claim" ? solutionNote.trim() || undefined : undefined,
+        linkOutflowItemId: outcome === "supplier_claim" && claimChoice !== "new" ? claimChoice : undefined,
+      });
       onChanged();
     } catch (e) {
       setError(e instanceof Error ? e.message : "No se pudo guardar.");
@@ -473,7 +495,7 @@ function ReviewItemRow({ item, canAct, onChanged, onExpandPhoto }: { item: ItemD
         </div>
         {item.goodQty > 0 && <span className="text-[11.5px] text-green font-semibold shrink-0">{item.goodQty} buenas</span>}
 
-        {damageNeedsReview && !solving && (
+        {damageNeedsReview && !solving && !claiming && (
           <div className="shrink-0 flex gap-1.5">
             <button
               type="button"
@@ -496,6 +518,16 @@ function ReviewItemRow({ item, canAct, onChanged, onExpandPhoto }: { item: ItemD
             <button
               type="button"
               disabled={busy || !canAct}
+              title={!canAct ? "Exclusivo del líder de Inventario" : "Se devuelve al proveedor para que mande otro en buen estado o dé saldo a favor — no es baja"}
+              className="rounded border px-2.5 py-1.5 text-[11px] font-semibold cursor-pointer disabled:opacity-50 flex items-center gap-1"
+              style={{ borderColor: "#D9A441", color: "#D9A441" }}
+              onClick={startClaim}
+            >
+              <Undo2 size={11} /> Devolver al proveedor
+            </button>
+            <button
+              type="button"
+              disabled={busy || !canAct}
               title={!canAct ? "Exclusivo del líder de Inventario" : "Se mantiene dañado, entra al acumulado semanal de baja"}
               className="rounded border border-red bg-red px-2.5 py-1.5 text-[11px] font-bold text-white cursor-pointer disabled:opacity-50"
               onClick={() => resolveDamage("unsolved")}
@@ -505,6 +537,53 @@ function ReviewItemRow({ item, canAct, onChanged, onExpandPhoto }: { item: ItemD
           </div>
         )}
       </div>
+      {damageNeedsReview && claiming && (
+        <div className="mt-2 pl-[52px] flex flex-col gap-1.5">
+          <div className="text-[10.5px] text-steel">No se da de baja: se reclama al proveedor (cambio o saldo a favor). Jariel lo gestiona y el caso se cierra cuando confirmes con foto que llegó el reemplazo.</div>
+          {claimCandidates === null ? (
+            <div className="text-[11px] text-steel">Buscando si ya lo registraste como deterioro…</div>
+          ) : (
+            claimCandidates.length > 0 && (
+              <div className="flex flex-col gap-1">
+                {claimCandidates.map((c) => (
+                  <label key={c.id} className="flex items-start gap-2 text-[11px] cursor-pointer">
+                    <input type="radio" name={`claim-${item.id}`} checked={claimChoice === c.id} onChange={() => setClaimChoice(c.id)} className="mt-0.5" />
+                    <span>
+                      Es lo mismo que ya reporté en <b className="font-mono text-teal">{c.code}</b> ({c.quantity} un., {c.reportedByName}) — unirlos.
+                      {c.stockWasSubtracted && <span className="text-steel"> Se devuelve al stock lo que se restó dos veces.</span>}
+                    </span>
+                  </label>
+                ))}
+                <label className="flex items-start gap-2 text-[11px] cursor-pointer">
+                  <input type="radio" name={`claim-${item.id}`} checked={claimChoice === "new"} onChange={() => setClaimChoice("new")} className="mt-0.5" />
+                  <span>No es ninguno — crear reclamo nuevo.</span>
+                </label>
+              </div>
+            )
+          )}
+          <textarea
+            disabled={busy || !canAct}
+            className="w-full rounded border border-rule bg-surface px-2.5 py-1.5 text-[12px] disabled:opacity-60"
+            rows={2}
+            placeholder="Nota opcional (ej. a qué proveedor se devuelve)"
+            value={solutionNote}
+            onChange={(e) => setSolutionNote(e.target.value)}
+          />
+          <div className="flex gap-1.5">
+            <button
+              type="button"
+              disabled={busy || !canAct || claimCandidates === null}
+              className="rounded border border-teal bg-teal px-3 py-1.5 text-[11.5px] font-bold text-navy cursor-pointer disabled:opacity-50"
+              onClick={() => resolveDamage("supplier_claim")}
+            >
+              Confirmar: se devuelve al proveedor
+            </button>
+            <button type="button" disabled={busy} className="rounded border border-rule px-3 py-1.5 text-[11.5px] font-semibold cursor-pointer disabled:opacity-50" onClick={() => setClaiming(false)}>
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
       {damageNeedsReview && solving && (
         <div className="mt-2 pl-[52px] flex flex-col gap-1.5">
           <div className="text-[10.5px] text-steel">¿Qué se hizo para volver a habilitar el producto? El admin verá esta explicación.</div>

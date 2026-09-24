@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { canCaptureMerchandiseOutflow, canActOnMerchandiseOutflow } from "@/lib/guards";
 import { notifyInventoryLeadDeteriorReported, notifySupplierExchangeGestors } from "@/lib/merchandiseOutflow";
 import { recordKardexEntry } from "@/lib/stockKardex";
+import { notifyPossibleDoubleRegistration } from "@/lib/reentrySupplierClaim";
 
 // DETERIORO (confirmado 2026-09-21): también exige su única foto compartida
 // antes de poder enviar el reporte — ver MAX_PHOTOS_BY_REASON en
@@ -57,6 +58,10 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
 
   if (updated.reason === "DETERIORO") {
     await notifyInventoryLeadDeteriorReported(updated, batch.items.length, session.user.name ?? "un colaborador");
+    // Confirmado 2026-09-24, pedido de Nairoby: el mismo producto dañado ya
+    // estaba en la lista de devoluciones (caso Exprimidor RM-0027/EG-0075) —
+    // avisa a ella y a Daniel en el momento, antes de que pase la baja.
+    await notifyPossibleDoubleRegistration(batch.items.map((i) => i.catalogItemId).filter((x): x is string => !!x)).catch(() => null);
   }
   if (updated.reason === "CAMBIO_PROVEEDOR") {
     const withDetails = await prisma.merchandiseOutflowBatch.findUnique({

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CalendarClock, CheckCircle2, ChevronDown, ChevronUp, Flame, PackageMinus, ShieldCheck, Wrench } from "lucide-react";
+import { CalendarClock, CheckCircle2, ChevronDown, ChevronUp, Flame, PackageMinus, ShieldCheck, Undo2, Wrench } from "lucide-react";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 import { ExpandableName } from "@/components/ui/ExpandableName";
 
@@ -46,11 +46,96 @@ async function postJson(url: string, body?: unknown) {
   return data;
 }
 
+type LinkCandidate = { id: string; code: string; quantity: number; reportedAt: string | null; reportedByName: string; stockWasSubtracted: boolean };
+
+// Confirmado 2026-09-24, pedido de Nairoby: Daniel aclara cuál es el
+// proceso real — si la devolución dañada se devolvió al proveedor para
+// reposición, no es baja. Si ya lo había registrado como deterioro (caso
+// Exprimidor RM-0027 / EG-0075), lo une a ese reporte y se devuelve el
+// stock que se restó dos veces; si no, crea el reclamo para Jariel.
+function ClaimToSupplierButton({ row, onChanged }: { row: BreakdownRow; onChanged: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [candidates, setCandidates] = useState<LinkCandidate[] | null>(null);
+  const [choice, setChoice] = useState<string>("new");
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  function start() {
+    setOpen(true);
+    setError("");
+    fetch(`/api/merchandise-reentry/items/${row.id}/supplier-claim`)
+      .then((r) => r.json())
+      .then((d) => {
+        const list: LinkCandidate[] = Array.isArray(d?.candidates) ? d.candidates : [];
+        setCandidates(list);
+        if (list.length > 0) setChoice(list[0].id);
+      })
+      .catch(() => setCandidates([]));
+  }
+
+  async function submit() {
+    setBusy(true);
+    setError("");
+    try {
+      await postJson(`/api/merchandise-reentry/items/${row.id}/supplier-claim`, { linkOutflowItemId: choice === "new" ? null : choice, note: note.trim() || undefined });
+      onChanged();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "No se pudo guardar.");
+      setBusy(false);
+    }
+  }
+
+  if (!open) {
+    return (
+      <button type="button" className="self-start inline-flex items-center gap-1.5 rounded border border-gold/60 px-2.5 py-1 text-[11px] font-bold cursor-pointer hover:bg-gold/10" style={{ color: "#D9A441" }} onClick={start}>
+        <Undo2 size={12} /> No es baja: se devolvió al proveedor
+      </button>
+    );
+  }
+  return (
+    <div className="bg-cloud border border-rule rounded-md p-2.5 flex flex-col gap-2">
+      <div className="text-[11.5px] font-semibold">¿Estas {row.damagedQty} un. se devolvieron al proveedor para que mande otras en buen estado (o dé saldo a favor)?</div>
+      {candidates === null ? (
+        <div className="text-[11px] text-steel">Buscando si ya lo registraste como deterioro…</div>
+      ) : (
+        <div className="flex flex-col gap-1.5">
+          {candidates.map((c) => (
+            <label key={c.id} className="flex items-start gap-2 text-[11px] cursor-pointer">
+              <input type="radio" name={`claim-${row.id}`} checked={choice === c.id} onChange={() => setChoice(c.id)} className="mt-0.5" />
+              <span>
+                Es la misma mercadería que ya reporté en <span className="font-mono font-bold text-teal">{c.code}</span> ({c.quantity} un., {c.reportedByName}
+                {c.reportedAt ? `, ${fmtDateTime(c.reportedAt)}` : ""}) — unirlos.
+                {c.stockWasSubtracted && <span className="text-steel"> Se devuelven {row.damagedQty} un. al stock (se habían restado dos veces).</span>}
+              </span>
+            </label>
+          ))}
+          <label className="flex items-start gap-2 text-[11px] cursor-pointer">
+            <input type="radio" name={`claim-${row.id}`} checked={choice === "new"} onChange={() => setChoice("new")} className="mt-0.5" />
+            <span>{candidates.length > 0 ? "No es ninguno de esos — " : ""}crear el reclamo nuevo para Jariel (no vuelve a restar stock).</span>
+          </label>
+        </div>
+      )}
+      <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} placeholder="Nota opcional (ej. a qué proveedor se devolvió)" className="w-full rounded border border-rule bg-transparent px-2 py-1 text-[11px] resize-none" />
+      <div className="text-[10.5px] text-steel">Sale de la lista de bajas de Nairoby. El caso sigue en Registro de Egresos → Seguimiento de deterioro y se cierra cuando confirmes con foto que llegó el reemplazo.</div>
+      <div className="flex gap-1.5">
+        <button type="button" disabled={busy || candidates === null} className="rounded border border-teal bg-teal px-3 py-1.5 text-[11.5px] font-bold text-navy cursor-pointer disabled:opacity-60" onClick={submit}>
+          {busy ? "Guardando…" : "Sí, es reclamo al proveedor"}
+        </button>
+        <button type="button" disabled={busy} className="rounded border border-rule px-3 py-1.5 text-[11.5px] font-semibold cursor-pointer" onClick={() => setOpen(false)}>
+          Cancelar
+        </button>
+      </div>
+      {error && <div className="text-red text-[11px]">{error}</div>}
+    </div>
+  );
+}
+
 // Confirmado 2026-09-24, pedido de Nairoby: el respaldo de cada unidad
 // antes de confirmar la baja — que es una devolución de cliente (no una
 // compra), de qué lote, quién la recibió, quién confirmó el daño y las
 // fotos tomadas al recibirla.
-function OriginProof({ rows }: { rows: BreakdownRow[] }) {
+function OriginProof({ rows, onClaimChanged }: { rows: BreakdownRow[]; onClaimChanged?: () => void }) {
   return (
     <div className="bg-surface border-t border-rule p-2.5 flex flex-col gap-2">
       {rows.map((b) => (
@@ -77,13 +162,14 @@ function OriginProof({ rows }: { rows: BreakdownRow[] }) {
           ) : (
             <div className="text-gold">Sin foto registrada al recibirlo.</div>
           )}
+          {onClaimChanged && b.disposalDecision === null && <ClaimToSupplierButton row={b} onChanged={onClaimChanged} />}
         </div>
       ))}
     </div>
   );
 }
 
-function GroupList({ groups, totalLabel, showOrigin = false }: { groups: GroupDTO[]; totalLabel: (g: GroupDTO) => string; showOrigin?: boolean }) {
+function GroupList({ groups, totalLabel, showOrigin = false, onClaimChanged }: { groups: GroupDTO[]; totalLabel: (g: GroupDTO) => string; showOrigin?: boolean; onClaimChanged?: () => void }) {
   const [expanded, setExpanded] = useState<string | null>(null);
   return (
     <div className="flex flex-col gap-2">
@@ -117,7 +203,7 @@ function GroupList({ groups, totalLabel, showOrigin = false }: { groups: GroupDT
               </button>
             )}
           </div>
-          {showOrigin && <OriginProof rows={g.breakdown} />}
+          {showOrigin && <OriginProof rows={g.breakdown} onClaimChanged={onClaimChanged} />}
           {!showOrigin && expanded === g.name && (
             <div className="bg-surface border-t border-rule p-2.5 flex flex-col gap-1">
               {g.breakdown.map((b) => (
@@ -140,7 +226,7 @@ function GroupList({ groups, totalLabel, showOrigin = false }: { groups: GroupDT
   );
 }
 
-function CurrentWeekCard({ batch }: { batch: WeeklyBatchDTO | null }) {
+function CurrentWeekCard({ batch, onClaimChanged }: { batch: WeeklyBatchDTO | null; onClaimChanged?: () => void }) {
   return (
     <div>
       <div className="flex items-center gap-2 mb-2.5">
@@ -153,14 +239,14 @@ function CurrentWeekCard({ batch }: { batch: WeeklyBatchDTO | null }) {
       ) : (
         <div>
           <div className="text-[11px] text-steel mb-2">{weekLabel(batch)} · corte el sábado</div>
-          <GroupList groups={batch.groups} totalLabel={(g) => `${g.totalDamagedQty} unidades${g.breakdown.length > 1 ? ` · ${g.breakdown.length} lotes` : ""}`} />
+          <GroupList showOrigin={!!onClaimChanged} onClaimChanged={onClaimChanged} groups={batch.groups} totalLabel={(g) => `${g.totalDamagedQty} unidades${g.breakdown.length > 1 ? ` · ${g.breakdown.length} lotes` : ""}`} />
         </div>
       )}
     </div>
   );
 }
 
-function VerificationCard({ batch, canVerify, onChanged }: { batch: WeeklyBatchDTO; canVerify: boolean; onChanged: () => void }) {
+function VerificationCard({ batch, canVerify, canClaim, onChanged }: { batch: WeeklyBatchDTO; canVerify: boolean; canClaim: boolean; onChanged: () => void }) {
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -184,7 +270,7 @@ function VerificationCard({ batch, canVerify, onChanged }: { batch: WeeklyBatchD
         <span className="text-[10.5px] text-steel">Semana cerrada · {batch.justWrittenOffAt && fmtDateTime(batch.justWrittenOffAt)}</span>
       </div>
       <div className="text-[11px] text-steel mb-2">Estos productos no vienen de Compras: son pedidos que el cliente no recibió o devolvió, y regresaron dañados a bodega. Debajo de cada uno ves el respaldo.</div>
-      <GroupList showOrigin groups={batch.groups} totalLabel={(g) => `${g.totalDamagedQty} unidades${g.breakdown.length > 1 ? ` · ${g.breakdown.length} lotes` : ""}`} />
+      <GroupList showOrigin onClaimChanged={canClaim ? onChanged : undefined} groups={batch.groups} totalLabel={(g) => `${g.totalDamagedQty} unidades${g.breakdown.length > 1 ? ` · ${g.breakdown.length} lotes` : ""}`} />
       <div className="text-[11px] text-steel mt-2">Revisa las fotos y, si puedes, verifica físicamente estos productos en el área de dañados antes de confirmar.</div>
       {!confirming ? (
         <button
@@ -317,25 +403,25 @@ export function WeeklyDamageControl({ canAct, canApprove, canClose, canVerify }:
 
   return (
     <div className="flex flex-col gap-6">
-      <CurrentWeekCard batch={data.currentWeek} />
+      <CurrentWeekCard batch={data.currentWeek} onClaimChanged={canAct ? load : undefined} />
 
-      {canClose && data.needsNairobyVerification.length > 0 && (
+      {(canClose || canAct) && data.needsNairobyVerification.length > 0 && (
         <div>
           <div className="flex items-center gap-2 mb-2.5">
             <ShieldCheck size={15} className="text-red" />
-            <span className="text-[13.5px] font-bold">Pendiente de tu verificación</span>
+            <span className="text-[13.5px] font-bold">{canVerify ? "Pendiente de tu verificación" : "Pendiente de verificación de Nairoby"}</span>
             <span className="font-mono text-[10px] font-bold text-red bg-red/15 border border-red/40 rounded-full px-2 py-0.5">{data.needsNairobyVerification.length}</span>
             {!canVerify && <span className="font-mono text-[9.5px] text-steel bg-cloud rounded-full px-1.5 py-0.5">solo lectura</span>}
           </div>
           <div className="flex flex-col gap-2.5">
             {data.needsNairobyVerification.map((b) => (
-              <VerificationCard key={b.id} batch={b} canVerify={canVerify} onChanged={load} />
+              <VerificationCard key={b.id} batch={b} canVerify={canVerify} canClaim={canAct} onChanged={load} />
             ))}
           </div>
         </div>
       )}
 
-      {canClose && data.needsDisposalDecision.length > 0 && (
+      {(canClose || canAct) && data.needsDisposalDecision.length > 0 && (
         <div>
           <div className="flex items-center gap-2 mb-2.5">
             <Flame size={15} className="text-red" />

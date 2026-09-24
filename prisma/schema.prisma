@@ -528,6 +528,8 @@ model User {
   merchandiseReentryItemsDamageConfirmed  MerchandiseReentryItem[]         @relation("MerchandiseReentryItemDamageConfirmedBy")
   merchandiseReentryItemsJustUploaded     MerchandiseReentryItem[]         @relation("MerchandiseReentryItemJustUploadedBy")
   merchandiseReentryItemsWrittenOff       MerchandiseReentryItem[]         @relation("MerchandiseReentryItemWriteOffBy")
+  merchandiseReentryItemsSupplierClaim    MerchandiseReentryItem[]         @relation("MerchandiseReentryItemSupplierClaimBy")
+  merchandiseReplacementReceipts          MerchandiseReplacementReceipt[]
   merchandiseReentryItemsDamageSolved     MerchandiseReentryItem[]         @relation("MerchandiseReentryItemDamageSolvedBy")
   merchandiseReentryItemsDisposalDecided  MerchandiseReentryItem[]         @relation("MerchandiseReentryItemDisposalDecidedBy")
   merchandiseWeeklyWriteOffBatchesJust    MerchandiseWeeklyWriteOffBatch[] @relation("MerchandiseWeeklyWriteOffBatchJustBy")
@@ -5775,6 +5777,16 @@ model MerchandiseReentryItem {
   writeOffById String?
   writeOffBy   User?     @relation("MerchandiseReentryItemWriteOffBy", fields: [writeOffById], references: [id], onDelete: SetNull)
 
+  // Confirmado 2026-09-24, pedido de Nairoby: una devolución dañada que en
+  // vez de darse de baja se reclama al proveedor (cambio o saldo a favor).
+  // Sale del lote semanal de bajas y queda enlazada al reclamo de deterioro
+  // (MerchandiseOutflowItem.sourceReentryItemId). supplierClaimAt cierra la
+  // parte dañada del reingreso igual que writeOffAt.
+  supplierClaimAt   DateTime?
+  supplierClaimById String?
+  supplierClaimBy   User?                   @relation("MerchandiseReentryItemSupplierClaimBy", fields: [supplierClaimById], references: [id], onDelete: SetNull)
+  supplierClaim     MerchandiseOutflowItem? @relation("OutflowItemSourceReentry")
+
   createdAt DateTime @default(now())
 
   @@index([batchId])
@@ -6036,6 +6048,21 @@ model MerchandiseOutflowItem {
   sourceDeteriorItemId String?                 @unique
   sourceDeteriorItem   MerchandiseOutflowItem? @relation("OutflowItemSourceDeterior", fields: [sourceDeteriorItemId], references: [id], onDelete: SetNull)
   exchangeItem         MerchandiseOutflowItem? @relation("OutflowItemSourceDeterior")
+
+  // Confirmado 2026-09-24, pedido de Nairoby: el reclamo nace de una
+  // devolución de cliente dañada (Reingreso), no de bodega. Esas unidades
+  // nunca volvieron a sumar en INVESTOCK, así que este reclamo NO resta
+  // Kardex (si ya se había restado por error al reportarlo como deterioro,
+  // se devuelve al enlazarlo — ver lib/reentrySupplierClaim.ts).
+  sourceReentryItemId String?                 @unique
+  sourceReentryItem   MerchandiseReentryItem? @relation("OutflowItemSourceReentry", fields: [sourceReentryItemId], references: [id], onDelete: SetNull)
+
+  // Confirmado 2026-09-24, pedido de Nairoby: un cambio (REPLACED) no se
+  // cierra cuando el proveedor dice que sí, sino cuando Daniel confirma con
+  // foto que llegó el reemplazo en buen estado — cada llegada suma al
+  // Kardex. replacementReceivedAt se llena cuando ya llegó TODA la cantidad.
+  replacementReceipts   MerchandiseReplacementReceipt[]
+  replacementReceivedAt DateTime?
 
   @@index([batchId])
   @@index([resolution])
@@ -6828,6 +6855,23 @@ model SupplierSheetCellLog {
   createdAt DateTime          @default(now())
 
   @@index([tabId, row, col])
+}
+
+// Confirmado 2026-09-24, pedido de Nairoby: cada llegada física del
+// reemplazo que manda el proveedor, confirmada por Daniel con foto. Puede
+// llegar en partes — el ítem se cierra cuando la suma cubre la cantidad.
+model MerchandiseReplacementReceipt {
+  id            String                 @id @default(cuid())
+  outflowItemId String
+  outflowItem   MerchandiseOutflowItem @relation(fields: [outflowItemId], references: [id], onDelete: Cascade)
+  quantity      Int
+  photoUrls     String[]
+  note          String?
+  receivedById  String?
+  receivedBy    User?                  @relation(fields: [receivedById], references: [id], onDelete: SetNull)
+  receivedAt    DateTime               @default(now())
+
+  @@index([outflowItemId])
 }
 
 // Confirmado 2026-09-24, pedido explícito del usuario: en las pestañas

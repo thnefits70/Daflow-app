@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { canManageOutflowPurchaseGestion, canViewMerchandiseOutflow } from "@/lib/guards";
+import { canConfirmSupplierExchangeFinanceWriteOff, canManageOutflowPurchaseGestion, canViewMerchandiseOutflow } from "@/lib/guards";
 
 // Confirmado 2026-09-23, pedido de Daniel: seguimiento completo de cada
 // producto reportado como deterioro — desde el reporte, su decisión, hasta
@@ -10,7 +10,8 @@ import { canManageOutflowPurchaseGestion, canViewMerchandiseOutflow } from "@/li
 // (Registro de Egresos) y quien gestiona con proveedores (Jariel, desde
 // Compras → Reportes urgentes).
 export async function GET() {
-  if (!(await canViewMerchandiseOutflow()) && !(await canManageOutflowPurchaseGestion())) {
+  // Nairoby (2026-09-24) también, solo lectura — ve los reclamos trabados.
+  if (!(await canViewMerchandiseOutflow()) && !(await canManageOutflowPurchaseGestion()) && !(await canConfirmSupplierExchangeFinanceWriteOff())) {
     return NextResponse.json({ error: "No autorizado." }, { status: 403 });
   }
   const items = await prisma.merchandiseOutflowItem.findMany({
@@ -47,7 +48,17 @@ export async function GET() {
       purchaseResolvedBy: { select: { name: true } },
       credit: { select: { amount: true } },
       groupedSupplierCredit: { select: { amount: true, _count: { select: { groupedOutflowItems: true } } } },
-      exchangeItem: { select: { batch: { select: { code: true, submittedAt: true } } } },
+      exchangeItem: {
+        select: {
+          quantity: true,
+          resolution: true,
+          replacementReceivedAt: true,
+          replacementReceipts: { select: { quantity: true, receivedAt: true, photoUrls: true, note: true, receivedBy: { select: { name: true } } }, orderBy: { receivedAt: "asc" } },
+          batch: { select: { code: true, submittedAt: true } },
+        },
+      },
+      // Confirmado 2026-09-24: el reclamo nació de una devolución de cliente.
+      sourceReentryItem: { select: { batch: { select: { code: true } } } },
     },
   });
   return NextResponse.json(items);

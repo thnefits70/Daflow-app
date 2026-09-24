@@ -115,7 +115,7 @@ export function MerchandiseOutflowPanel({
       ? "deterioro"
       : canAct
         ? "historial"
-        : supplierExchangeMineCount > 0 || financeWriteOffPendingCount > 0
+        : supplierExchangeMineCount > 0 || financeWriteOffPendingCount > 0 || canConfirmFinanceWriteOff
           ? "proveedor"
           : canSubmitCancelledGuide || canManageCancelledGuideBatches || canConfirmCancelledGuideFulfillmentRemoval || canAssignCancelledGuideItems
             ? "guias"
@@ -143,7 +143,11 @@ export function MerchandiseOutflowPanel({
   const [proveedorRefreshKey, setProveedorRefreshKey] = useState(0);
   const [deteriorRefreshKey, setDeteriorRefreshKey] = useState(0);
 
-  const canSeeProveedorTab = canAct || canViewSupplierExchangeResolution || supplierExchangeMineCount > 0 || financeWriteOffPendingCount > 0;
+  // Confirmado 2026-09-24, pedido de Nairoby: ella recibe avisos cuando un
+  // reclamo al proveedor se traba — necesita ver Seguimiento y esta pestaña
+  // siempre (solo lectura), no solo cuando tiene una baja financiera.
+  const canSeeProveedorTab = canAct || canViewSupplierExchangeResolution || supplierExchangeMineCount > 0 || financeWriteOffPendingCount > 0 || canConfirmFinanceWriteOff;
+  const canSeeSeguimientoTab = canCapture || canView || canConfirmFinanceWriteOff;
 
   const tabs: { id: Tab; label: string }[] = [
     // Confirmado 2026-09-23: se quitaron las pestañas "Despacho" y
@@ -155,7 +159,7 @@ export function MerchandiseOutflowPanel({
     // Confirmado 2026-09-23, pedido de Daniel: seguimiento de cada deterioro
     // de principio a fin (su decisión → gestión de Jariel → respuesta del
     // proveedor), justo entre Deterioro y Cambio con proveedor.
-    ...(canCapture || canView ? [{ id: "seguimiento" as const, label: "Seguimiento de deterioro" }] : []),
+    ...(canSeeSeguimientoTab ? [{ id: "seguimiento" as const, label: "Seguimiento de deterioro" }] : []),
     ...(canSeeProveedorTab ? [{ id: "proveedor" as const, label: "Mercadería devuelta al proveedor" }] : []),
     ...(canSubmitCancelledGuide || canManageCancelledGuideBatches || canConfirmCancelledGuideFulfillmentRemoval || canAssignCancelledGuideItems || canAct ? [{ id: "guias" as const, label: "Guías canceladas" }] : []),
     // Confirmado 2026-09-23: ya no existe "Dar de baja en Just" — cada
@@ -202,7 +206,7 @@ export function MerchandiseOutflowPanel({
           </div>
         </>
       )}
-      {tab === "seguimiento" && (canCapture || canView) && (
+      {tab === "seguimiento" && canSeeSeguimientoTab && (
         <>
           <TabGuide storageKey="merchoutflow-seguimiento">
             Todo lo que se reportó como deterioro y en qué va cada producto: la decisión de Daniel y, si se escaló a Compras, qué proveedor confirmó Jariel y qué respondió el proveedor (cambio, crédito o rechazo). Solo lectura — toca un producto para ver su recorrido completo. Si el proveedor aceptó (cambio o saldo a favor), toca &quot;Armar paquete de devolución&quot; y el producto pasa solo a &quot;Mercadería devuelta al proveedor&quot; — ahí solo tomas la foto de la lista y lo dejas listo.
@@ -218,7 +222,7 @@ export function MerchandiseOutflowPanel({
             ) : canViewSupplierExchangeResolution ? (
               <>Vista de solo lectura de la mercadería que Daniel le devuelve al proveedor. Cada producto lo resuelve (cambio o crédito o rechazo) quien solicitó esa compra originalmente, no Daniel — esa persona gestiona desde acá abajo, en su propia sección.</>
             ) : canConfirmFinanceWriteOff ? (
-              <>Acá abajo aparecen los productos que un proveedor rechazó (ni cambia ni da crédito) y que quedan pendientes de que registres la pérdida en la parte financiera.</>
+              <>Acá abajo ves todo lo que se devolvió a un proveedor y en qué va. Un cambio queda abierto hasta que Daniel confirma con foto que llegó el reemplazo en buen estado. Si el proveedor rechazó (ni cambia ni da crédito), te toca registrar la pérdida en la parte financiera.</>
             ) : (
               <>Acá abajo están los productos que Inventario está devolviendo a un proveedor y que te toca gestionar a ti (porque pediste originalmente esa compra, o no tenía compra vinculada). Contacta al proveedor y registra si aceptó cambiarlo, dio crédito, o rechazó todo.</>
             )}
@@ -232,7 +236,7 @@ export function MerchandiseOutflowPanel({
             {(canViewSupplierExchangeResolution || canConfirmFinanceWriteOff) && (
               <div>
                 <div className="font-display font-bold text-[14px] mb-2.5">Estado de resolución</div>
-                <SupplierExchangeResolutionInbox key={proveedorRefreshKey} canConfirmFinanceWriteOff={canConfirmFinanceWriteOff} canReviewAsAdmin={isAdmin} />
+                <SupplierExchangeResolutionInbox key={proveedorRefreshKey} canConfirmFinanceWriteOff={canConfirmFinanceWriteOff} canReviewAsAdmin={isAdmin} canConfirmReplacementArrival={canAct} />
               </div>
             )}
           </div>

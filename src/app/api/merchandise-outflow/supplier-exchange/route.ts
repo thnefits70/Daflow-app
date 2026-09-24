@@ -8,6 +8,7 @@ const ITEM_INCLUDE = {
   linkedPurchaseRequest: { select: { requestNumber: true, requestedAt: true, requestedBy: { select: { name: true } } } },
   credit: { select: { amount: true } },
   sourceDeteriorItem: { select: { credit: { select: { amount: true } }, groupedSupplierCredit: { select: { amount: true } } } },
+  replacementReceipts: { select: { id: true, quantity: true, photoUrls: true, note: true, receivedAt: true, receivedBy: { select: { name: true } } }, orderBy: { receivedAt: "asc" as const } },
 } as const;
 
 // Confirmado 2026-08-26: vista de SOLO LECTURA para Daniel/admin — quien

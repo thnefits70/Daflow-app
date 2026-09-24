@@ -464,7 +464,7 @@ export function DeptWorkspaceTabs({
     if (t.key === "inventario") return canManageInventoryControl;
     if (t.key === "stock-actual") return canManageJustCatalog || canViewStockLevels;
     if (t.key === "reingreso") return canCaptureMerchandiseReentry || canApproveMerchandiseReentry || canCloseMerchandiseReentry;
-    if (t.key === "egresos") return canViewMerchandiseOutflow || canSubmitCancelledGuide || canManageCancelledGuideBatches || canConfirmCancelledGuideFulfillmentRemoval || canAssignCancelledGuideItems || canSubmitFulfillmentRequest || canViewFulfillmentRequests || supplierExchangeMineCount > 0 || financeWriteOffPendingCount > 0;
+    if (t.key === "egresos") return canViewMerchandiseOutflow || canSubmitCancelledGuide || canManageCancelledGuideBatches || canConfirmCancelledGuideFulfillmentRemoval || canAssignCancelledGuideItems || canSubmitFulfillmentRequest || canViewFulfillmentRequests || supplierExchangeMineCount > 0 || financeWriteOffPendingCount > 0 || canConfirmFinanceWriteOff;
     if (t.key === "ventas-externas") return canViewExternalSales;
     if (t.key === "inventoriokpis") return canViewInventoryKpisPanel;
     if (t.key === "cajachica") return !!(pettyCashData?.principal || pettyCashData?.secundaria);
@@ -676,7 +676,7 @@ export function DeptWorkspaceTabs({
           canManageJustCatalog={canManageJustCatalog}
         />
       )}
-      {tab === "egresos" && (canViewMerchandiseOutflow || canSubmitCancelledGuide || canManageCancelledGuideBatches || canConfirmCancelledGuideFulfillmentRemoval || canAssignCancelledGuideItems || canSubmitFulfillmentRequest || canViewFulfillmentRequests || supplierExchangeMineCount > 0 || financeWriteOffPendingCount > 0) && (
+      {tab === "egresos" && (canViewMerchandiseOutflow || canSubmitCancelledGuide || canManageCancelledGuideBatches || canConfirmCancelledGuideFulfillmentRemoval || canAssignCancelledGuideItems || canSubmitFulfillmentRequest || canViewFulfillmentRequests || supplierExchangeMineCount > 0 || financeWriteOffPendingCount > 0 || canConfirmFinanceWriteOff) && (
         <MerchandiseOutflowPanel
           canCapture={canCaptureMerchandiseOutflow}
           canAct={canActOnMerchandiseOutflow}

@@ -10,6 +10,7 @@ import { getMarketingLeadId } from "@/lib/guards";
 import { NICHO_AUTO_MONTHLY_BUDGET_USD } from "@/lib/nichoAi";
 import { getReadyToBuyPendingProposalIds } from "@/lib/marketProduct";
 import { getNewIdBrandingBoard } from "@/lib/newIdBranding";
+import { CLAIM_GAP_DAYS, findPossibleDoubleRegistrations, getSupplierClaimGaps } from "@/lib/reentrySupplierClaim";
 
 // ---------------- Date helpers ----------------
 // Deadline rule confirmed by the user 2026-07-20: work week is Mon-Sat, and
@@ -429,6 +430,8 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   reingreso_mercaderia_revision: "Reingreso de mercadería por revisar",
   reingreso_mercaderia_verificacion_semanal: "Reingreso de mercadería — lote semanal de dañados por verificar",
   egresos_deterioro_resolucion: "Deterioro en bodega — falta tu decisión",
+  reclamos_proveedor_atrasados: "Reclamos al proveedor trabados o pasados por alto",
+  danados_doble_registro: "Producto dañado registrado dos veces (devolución + deterioro)",
   ventas_externas_agrupar: "Ventas Externas — asignar quién agrupa",
   cumpleanos: "Cumpleaños de tu equipo (aviso 1 día antes)",
   compras_pendientes_aprobacion: "Solicitudes de compra por aprobar",
@@ -2282,12 +2285,43 @@ async function getMonthlyTopMoversPendingItem(href: string): Promise<PendingItem
   };
 }
 
+// Confirmado 2026-09-24, pedido de Nairoby: "que me notifique cuando un
+// proceso no se cumpla o se pase por alto". Un solo pendiente que resume
+// cada reclamo al proveedor trabado (ver getSupplierClaimGaps) — sigue
+// apareciendo (y llegando en el aviso de las 8:00) mientras no se destrabe.
+async function getSupplierClaimGapsPendingItem(href: string): Promise<PendingItem | null> {
+  const g = await getSupplierClaimGaps();
+  const parts: string[] = [];
+  if (g.noGestion > 0) parts.push(`${g.noGestion} sin gestión del proveedor (+${CLAIM_GAP_DAYS.gestion} días)`);
+  if (g.noPackage > 0) parts.push(`${g.noPackage} aceptado(s) sin paquete armado (+${CLAIM_GAP_DAYS.package} días)`);
+  if (g.notArrived > 0) parts.push(`${g.notArrived} reemplazo(s) que no llegan (+${CLAIM_GAP_DAYS.arrival} días)`);
+  if (g.doubles.length > 0) parts.push(`${g.doubles.length} posible(s) doble registro`);
+  if (parts.length === 0) return null;
+  return { type: "reclamos_proveedor_atrasados", icon: "⚠️", label: "Reclamos al proveedor trabados", meta: parts.join(" · "), overdue: true, href };
+}
+
+// Para Daniel: el mismo producto dañado está en la lista de devoluciones y
+// en un deterioro sin unir — él es quien lo aclara (ver
+// WeeklyDamageControl → "No es baja: se devolvió al proveedor").
+async function getDamagedDoubleRegistrationPendingItem(href: string): Promise<PendingItem | null> {
+  const pairs = await findPossibleDoubleRegistrations();
+  if (pairs.length === 0) return null;
+  return {
+    type: "danados_doble_registro",
+    icon: "⚠️",
+    label: "Producto dañado registrado dos veces",
+    meta: pairs.map((p) => `${p.name} (${p.reentryCode} y ${p.deteriorCode})`).join(" · "),
+    overdue: true,
+    href,
+  };
+}
+
 // Confirmado 2026-08-21: pedido explícito del usuario — acceso directo con
 // un solo clic para Nairoby cuando ya se cerró un lote semanal (solo, el
 // sábado) y le falta a ella la verificación física + doble confirmación.
 async function getMerchandiseWeeklyWriteOffVerificationPendingItem(href: string): Promise<PendingItem | null> {
   const rows = await prisma.merchandiseWeeklyWriteOffBatch.findMany({
-    where: { justWrittenOffAt: { not: null }, nairobyConfirmedAt: null },
+    where: { justWrittenOffAt: { not: null }, nairobyConfirmedAt: null, items: { some: {} } },
     select: { justWrittenOffAt: true },
   });
   if (rows.length === 0) return null;
@@ -2935,6 +2969,8 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     if (personalPurchaseTransferCloseItem) items.push(personalPurchaseTransferCloseItem);
     if (personalPurchaseCashConfirmItem) items.push(personalPurchaseCashConfirmItem);
     if (merchandiseWeeklyVerificationItem) items.push(merchandiseWeeklyVerificationItem);
+    const claimGapsItem = await getSupplierClaimGapsPendingItem("/area/workspace?tab=egresos&otab=seguimiento").catch(() => null);
+    if (claimGapsItem) items.push(claimGapsItem);
     if (payrollTransferItem) items.push(payrollTransferItem);
     if (payrollIessTransferItem) items.push(payrollIessTransferItem);
 
@@ -2978,6 +3014,8 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     if (nichoBackfillItem) items.push(nichoBackfillItem);
     if (monthlyTopMoversItem) items.push(monthlyTopMoversItem);
     if (deteriorResolutionItem) items.push(deteriorResolutionItem);
+    const doubleRegItem = await getDamagedDoubleRegistrationPendingItem("/area/reingreso-mercaderia?tab=danos").catch(() => null);
+    if (doubleRegItem) items.push(doubleRegItem);
     if (externalSaleDispatchItem) items.push(externalSaleDispatchItem);
     const excessKardexItem = await getPurchaseExcessPendingItem("kardex", "/area/workspace?tab=compras&ptab=inventario");
     if (excessKardexItem) items.push(excessKardexItem);
@@ -3110,11 +3148,11 @@ export async function getPossiblePendingTypesForActor(
     types.push("cumpleanos", "plan_mejora_evaluacion_pendiente", "plan_mejora_etapa_vencida");
     if (me.canBrandMarketProduct || me.canConfirmMarketingDesign) types.push("analisis_mercado_brandear");
     if (me.leadsDept.code === "FIN") {
-      types.push("roles_de_pago", "tasa_devolucion", "kpi_garantias", "pagos_recordatorios", "servicio_postventa", "caja_chica_saldo", "caja_chica_confirmacion", "descuentos_sin_aceptar", "compras_personales_precio", "compras_personales_cierre", "reingreso_mercaderia_verificacion_semanal", "nomina_transferencia", "iess_transferencia");
+      types.push("roles_de_pago", "tasa_devolucion", "kpi_garantias", "pagos_recordatorios", "servicio_postventa", "caja_chica_saldo", "caja_chica_confirmacion", "descuentos_sin_aceptar", "compras_personales_precio", "compras_personales_cierre", "reingreso_mercaderia_verificacion_semanal", "nomina_transferencia", "iess_transferencia", "reclamos_proveedor_atrasados");
     }
     if (me.leadsDept.trackWeeklyMetric) types.push("pedidos_despachados", "fillrate_justificacion_pendiente");
     if (me.leadsDept.code === "INV") {
-      types.push("ruptura_stock", "compras_recepcion", "compras_cambios_verificar", "control_inventario", "reingreso_mercaderia_revision", "compras_personales_confirmar", "compras_reclamo_posterior_revision", "combo_sugerencias_nicho_backfill", "monthly_top_movers", "egresos_deterioro_resolucion", "ventas_externas_agrupar", "compras_excedente_kardex");
+      types.push("ruptura_stock", "compras_recepcion", "compras_cambios_verificar", "control_inventario", "reingreso_mercaderia_revision", "compras_personales_confirmar", "compras_reclamo_posterior_revision", "combo_sugerencias_nicho_backfill", "monthly_top_movers", "egresos_deterioro_resolucion", "ventas_externas_agrupar", "compras_excedente_kardex", "danados_doble_registro");
     }
     // Mismo criterio de elegibilidad que canSubmitPurchaseRequests
     // (guards.ts) — delegado vía canManagePurchases, o líder de COM/FIN —

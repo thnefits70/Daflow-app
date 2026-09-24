@@ -78,12 +78,16 @@ export async function GET() {
   })) as unknown as BatchWithItems[];
 
   const currentWeek = batches.find((b) => b.weekStart.getTime() === currentWeekStart.getTime()) ?? null;
-  const needsNairobyVerification = batches.filter((b) => b.justWrittenOffAt && !b.nairobyConfirmedAt);
+  // Una semana que quedó vacía (Daniel pasó todo a reclamo con proveedor,
+  // ver reentrySupplierClaim.ts) ya no tiene nada que verificar.
+  const needsNairobyVerification = batches.filter((b) => b.justWrittenOffAt && !b.nairobyConfirmedAt && b.items.length > 0);
   const needsDisposalDecision = batches.filter((b) => b.nairobyConfirmedAt && b.items.some((i) => i.disposalDecision === null));
 
   return NextResponse.json({
     currentWeek: currentWeek && currentWeek.items.length > 0 ? serialize(currentWeek) : null,
-    needsNairobyVerification: canClose ? needsNairobyVerification.map(serialize) : [],
-    needsDisposalDecision: canClose ? needsDisposalDecision.map(serialize) : [],
+    // Daniel (canAct) también las ve desde 2026-09-24: puede aclarar que un
+    // producto no es baja sino reclamo al proveedor, hasta que Nairoby decida.
+    needsNairobyVerification: canClose || canAct ? needsNairobyVerification.map(serialize) : [],
+    needsDisposalDecision: canClose || canAct ? needsDisposalDecision.map(serialize) : [],
   });
 }

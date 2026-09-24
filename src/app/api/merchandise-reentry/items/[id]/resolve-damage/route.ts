@@ -4,10 +4,14 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { canActOnMerchandiseReentry } from "@/lib/guards";
 import { itemDisplayName, maybeMarkBatchApproved, notifyAdminDamageSolved, getOrCreateCurrentWeekWriteOffBatch } from "@/lib/merchandiseReentry";
+import { claimReentryDamageToSupplier, ReentryClaimError } from "@/lib/reentrySupplierClaim";
 
 const schema = z.object({
-  outcome: z.enum(["not_damaged", "solved", "unsolved"]),
+  // supplier_claim (confirmado 2026-09-24, pedido de Nairoby): dañado, pero
+  // no se da de baja — se reclama al proveedor (cambio o saldo a favor).
+  outcome: z.enum(["not_damaged", "solved", "unsolved", "supplier_claim"]),
   solutionNote: z.string().trim().min(1).max(2000).optional(),
+  linkOutflowItemId: z.string().nullable().optional(),
 });
 
 // Daniel verifica físicamente si de verdad está dañado y, si lo está, si se
@@ -70,9 +74,24 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       ...(parsed.data.outcome === "unsolved"
         ? { damageSolved: false, damageSolvedAt: now, damageSolvedById: actorId, weeklyWriteOffBatchId: weeklyBatchId }
         : {}),
+      ...(parsed.data.outcome === "supplier_claim" ? { damageSolved: false, damageSolvedAt: now, damageSolvedById: actorId } : {}),
       ...approveFields,
     },
   });
+
+  if (parsed.data.outcome === "supplier_claim") {
+    try {
+      await claimReentryDamageToSupplier({ reentryItemId: id, actorId, actorName: session.user.name ?? "Daniel", linkOutflowItemId: parsed.data.linkOutflowItemId ?? null, note: parsed.data.solutionNote ?? null });
+    } catch (e) {
+      // El daño ya quedó confirmado; si el reclamo falla, cae a la lista
+      // semanal para que nunca quede sin camino — Daniel puede pasarlo a
+      // reclamo desde ahí con el mismo botón.
+      await prisma.merchandiseReentryItem.update({ where: { id }, data: { weeklyWriteOffBatchId: (await getOrCreateCurrentWeekWriteOffBatch()).id } });
+      await maybeMarkBatchApproved(item.batchId);
+      const msg = e instanceof ReentryClaimError ? e.message : "No se pudo crear el reclamo.";
+      return NextResponse.json({ error: `${msg} Quedó en la lista semanal de dañados; pásalo a reclamo desde Control de Daños.` }, { status: 409 });
+    }
+  }
 
   await maybeMarkBatchApproved(item.batchId);
   if (parsed.data.outcome === "solved") {

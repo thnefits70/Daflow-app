@@ -37,8 +37,19 @@ type TraceItem = {
   purchaseResolvedBy: Named;
   credit: { amount: number } | null;
   groupedSupplierCredit: { amount: number; _count: { groupedOutflowItems: number } } | null;
-  exchangeItem: { batch: { code: string; submittedAt: string | null } } | null;
+  exchangeItem: {
+    quantity: number;
+    resolution: string | null;
+    replacementReceivedAt: string | null;
+    replacementReceipts: { quantity: number; receivedAt: string; photoUrls: string[]; note: string | null; receivedBy: Named }[];
+    batch: { code: string; submittedAt: string | null };
+  } | null;
+  sourceReentryItem: { batch: { code: string } } | null;
 };
+
+function receivedQty(i: TraceItem): number {
+  return (i.exchangeItem?.replacementReceipts ?? []).reduce((s, r) => s + r.quantity, 0);
+}
 
 type Tone = "amber" | "green" | "red" | "steel";
 type Status = { label: string; tone: Tone; open: boolean };
@@ -58,6 +69,12 @@ function statusOf(i: TraceItem): Status {
   // proveedor (sin eso no da el saldo a favor) — pedido de Daniel 2026-09-23.
   if (i.purchaseResolution === "REPLACED" || i.purchaseResolution === "CREDIT_ISSUED") {
     const what = i.purchaseResolution === "REPLACED" ? "cambio" : "crédito";
+    // Confirmado 2026-09-24, pedido de Nairoby: un cambio no se cierra hasta
+    // que Daniel confirma con foto que llegó el reemplazo.
+    if (i.exchangeItem?.batch.submittedAt && i.purchaseResolution === "REPLACED" && !i.exchangeItem.replacementReceivedAt) {
+      return { label: `Devuelto (${i.exchangeItem.batch.code}) · esperando el reemplazo (${receivedQty(i)} de ${i.exchangeItem.quantity})`, tone: "amber", open: true };
+    }
+    if (i.exchangeItem?.batch.submittedAt && i.purchaseResolution === "REPLACED") return { label: `Reemplazo recibido · ${i.exchangeItem.batch.code}`, tone: "green", open: false };
     if (i.exchangeItem?.batch.submittedAt) return { label: `Devuelto al proveedor (${what}) · ${i.exchangeItem.batch.code}`, tone: "green", open: false };
     if (i.exchangeItem) return { label: `En paquete ${i.exchangeItem.batch.code} · falta dejarlo listo`, tone: "amber", open: true };
     return { label: `Proveedor aceptó (${what}) · falta armar el paquete`, tone: "amber", open: true };
@@ -115,6 +132,7 @@ function Timeline({ i, canAct, onPack }: { i: TraceItem; canAct: boolean; onPack
       <Step done title={`Reportado por ${i.batch.createdBy?.name ?? "—"}`} when={i.batch.submittedAt ?? i.batch.createdAt}>
         {i.quantity} un. · {i.damageReason?.name ?? i.damageReasonOther ?? "Sin motivo"}
         {i.batch.supplier && <> · proveedor sugerido: {i.batch.supplier.name}</>}
+        {i.sourceReentryItem && <> · viene de la devolución de cliente {i.sourceReentryItem.batch.code}</>}
       </Step>
       <Step done={!!i.resolution} title={i.resolution ? `Daniel decidió: ${DECISION_LABEL[i.resolution]}` : "Pendiente: decisión de Daniel"} when={i.resolvedAt}>
         {i.resolutionNote}
@@ -187,6 +205,35 @@ function Timeline({ i, canAct, onPack }: { i: TraceItem; canAct: boolean; onPack
               )}
             </Step>
           )}
+          {i.purchaseResolution === "REPLACED" && i.exchangeItem?.batch.submittedAt && (
+            <Step
+              done={!!i.exchangeItem.replacementReceivedAt}
+              title={
+                i.exchangeItem.replacementReceivedAt
+                  ? "Llegó el reemplazo en buen estado — sumado al stock"
+                  : `Pendiente: que llegue el reemplazo (${receivedQty(i)} de ${i.exchangeItem.quantity} recibidas)`
+              }
+              when={i.exchangeItem.replacementReceivedAt}
+            >
+              {i.exchangeItem.replacementReceipts.map((r, idx) => (
+                <div key={idx} className="mt-1">
+                  {r.quantity} un. confirmadas por {r.receivedBy?.name ?? "—"} · {formatDateTime(r.receivedAt)}
+                  {r.note && <> — &quot;{r.note}&quot;</>}
+                  <div className="flex gap-1 mt-1">
+                    {r.photoUrls.map((u) => (
+                      <a key={u} href={u} target="_blank" rel="noreferrer">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={u} alt="Reemplazo recibido" className="w-12 h-12 object-cover rounded border border-rule" />
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              ))}
+              {!i.exchangeItem.replacementReceivedAt && canAct && (
+                <button type="button" className="mt-1 text-[11.5px] font-bold text-teal cursor-pointer" onClick={onPack}>Confirmar llegada en &quot;Mercadería devuelta al proveedor&quot; →</button>
+              )}
+            </Step>
+          )}
         </>
       )}
     </div>
@@ -206,7 +253,7 @@ function Timeline({ i, canAct, onPack }: { i: TraceItem; canAct: boolean; onPack
 // (Jariel acaba de resolver algo arriba), y Jariel abre en "Todos".
 function lastActivity(i: TraceItem): number {
   return Math.max(
-    ...[i.batch.submittedAt ?? i.batch.createdAt, i.resolvedAt, i.purchaseNoMatchReportedAt, i.purchaseExceptionDecidedAt, i.purchaseResolvedAt]
+    ...[i.batch.submittedAt ?? i.batch.createdAt, i.resolvedAt, i.purchaseNoMatchReportedAt, i.purchaseExceptionDecidedAt, i.purchaseResolvedAt, i.exchangeItem?.replacementReceivedAt]
       .filter((d): d is string => !!d)
       .map((d) => new Date(d).getTime()),
   );

@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { CheckCircle2, Clock, DollarSign, ExternalLink, XCircle, Wallet, AlertTriangle, Search, ChevronDown, ChevronRight, Trash2, Printer } from "lucide-react";
+import { CheckCircle2, Clock, DollarSign, ExternalLink, XCircle, Wallet, AlertTriangle, Search, ChevronDown, ChevronRight, Trash2, Printer, Camera, PackageCheck, X } from "lucide-react";
+import { LiveCameraCapture } from "@/components/shared/LiveCameraCapture";
 import { formatDateTime } from "@/lib/formatDateTime";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 import { ExpandableName } from "@/components/ui/ExpandableName";
@@ -25,6 +26,8 @@ type ItemDTO = {
   adminReviewedAt: string | null;
   adminReviewedBy: { name: string } | null;
   adminReviewNote: string | null;
+  replacementReceivedAt: string | null;
+  replacementReceipts: { id: string; quantity: number; photoUrls: string[]; note: string | null; receivedAt: string; receivedBy: { name: string } | null }[];
   batch: { id: string; code: string; createdAt: string; documentPhotoUrls: string[]; supplier: { id: string; name: string } | null };
 };
 
@@ -64,10 +67,113 @@ function groupByBatch(items: ItemDTO[]) {
 // tienen cadena posterior, quedan cerrados apenas se resuelven. REJECTED sí
 // falta la baja financiera de Nairoby — la revisión del admin es aparte y NUNCA
 // bloquea el cierre (puede pasar antes, después o nunca).
+// Confirmado 2026-09-24, pedido de Nairoby: un cambio (REPLACED) ya no
+// queda cerrado cuando el proveedor dice que sí — recién cuando Daniel
+// confirma con foto que llegó el reemplazo en buen estado.
 function isFullyClosed(item: ItemDTO): boolean {
   if (item.resolution === null) return false;
   if (item.resolution === "REJECTED") return !!item.financeWriteOffAt;
+  if (item.resolution === "REPLACED") return !!item.replacementReceivedAt;
   return true;
+}
+
+function receivedQty(item: ItemDTO): number {
+  return item.replacementReceipts.reduce((s, r) => s + r.quantity, 0);
+}
+
+// Daniel confirma la llegada del reemplazo: cuántas llegaron en buen
+// estado + foto en vivo. Si llegan menos, pide explicar (avisa a Nairoby y
+// Jariel) y el resto sigue pendiente — ver replacement-received/route.ts.
+function ReplacementArrivalForm({ item, onDone }: { item: ItemDTO; onDone: () => void }) {
+  const missing = item.quantity - receivedQty(item);
+  const [open, setOpen] = useState(false);
+  const [qty, setQty] = useState(String(missing));
+  const [photos, setPhotos] = useState<string[]>([]);
+  const [taking, setTaking] = useState(false);
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const n = Number(qty);
+  const partial = Number.isInteger(n) && n > 0 && n < missing;
+
+  async function submit() {
+    setBusy(true);
+    setError("");
+    try {
+      const res = await fetch(`/api/merchandise-outflow/items/${item.id}/replacement-received`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ quantity: n, photoUrls: photos, note: note.trim() || undefined }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error ?? "No se pudo guardar.");
+      onDone();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "No se pudo guardar.");
+      setBusy(false);
+    }
+  }
+
+  if (!open) {
+    return (
+      <button type="button" className="mt-1.5 self-start inline-flex items-center gap-1.5 rounded border border-teal bg-teal px-3 py-1.5 text-[11.5px] font-bold text-navy cursor-pointer" onClick={() => setOpen(true)}>
+        <PackageCheck size={13} /> Llegó el reemplazo
+      </button>
+    );
+  }
+  return (
+    <div className="mt-1.5 bg-cloud border border-rule rounded-md p-2.5 flex flex-col gap-2">
+      <label className="text-[11px] text-steel flex items-center gap-2">
+        ¿Cuántas llegaron en buen estado? (faltan {missing})
+        <input type="number" min={1} max={missing} value={qty} onChange={(e) => setQty(e.target.value)} className="w-16 rounded border border-rule bg-transparent px-2 py-1 text-[12px]" />
+      </label>
+      {photos.length > 0 && (
+        <div className="flex gap-1.5 flex-wrap">
+          {photos.map((p, idx) => (
+            <div key={p} className="relative">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={p} alt={`Foto ${idx + 1}`} className="w-14 h-14 object-cover rounded border border-rule" />
+              <button type="button" title="Quitar" className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-red text-white flex items-center justify-center cursor-pointer" onClick={() => setPhotos(photos.filter((x) => x !== p))}>
+                <X size={10} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      {taking ? (
+        <LiveCameraCapture
+          folder="merchandise-outflow-photos"
+          onCaptured={(url) => {
+            setPhotos((prev) => [...prev, url]);
+            setTaking(false);
+          }}
+          onCancel={() => setTaking(false)}
+        />
+      ) : photos.length < 4 ? (
+        <button type="button" className="self-start inline-flex items-center gap-1.5 rounded border border-rule px-3 py-1.5 text-[11.5px] font-semibold cursor-pointer" onClick={() => setTaking(true)}>
+          <Camera size={12} /> {photos.length === 0 ? "Tomar foto del reemplazo" : "Otra foto"}
+        </button>
+      ) : null}
+      {partial && (
+        <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} placeholder="Llegaron menos: ¿qué dijo el proveedor del resto?" className="w-full rounded border border-rule bg-transparent px-2 py-1 text-[11px] resize-none" />
+      )}
+      <div className="text-[10.5px] text-steel">Cuenta solo las que llegaron en buen estado. Al confirmar, esas unidades se suman al stock.</div>
+      <div className="flex gap-1.5">
+        <button
+          type="button"
+          disabled={busy || photos.length === 0 || !Number.isInteger(n) || n < 1 || n > missing || (partial && !note.trim())}
+          className="rounded border border-teal bg-teal px-3 py-1.5 text-[11.5px] font-bold text-navy cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+          onClick={submit}
+        >
+          {busy ? "Guardando…" : "Confirmar llegada"}
+        </button>
+        <button type="button" disabled={busy} className="rounded border border-rule px-3 py-1.5 text-[11.5px] font-semibold cursor-pointer" onClick={() => setOpen(false)}>
+          Cancelar
+        </button>
+      </div>
+      {error && <div className="text-red text-[11px]">{error}</div>}
+    </div>
+  );
 }
 
 function searchHaystack(item: ItemDTO): string {
@@ -89,7 +195,7 @@ function searchHaystack(item: ItemDTO): string {
 }
 
 function closedSummary(item: ItemDTO): { text: string; className: string } {
-  if (item.resolution === "REPLACED") return { text: "Cambiado por el proveedor", className: "text-green" };
+  if (item.resolution === "REPLACED") return { text: "Reemplazo recibido", className: "text-green" };
   if (item.resolution === "CREDIT_ISSUED") return { text: `Crédito de ${item.credit ? money(item.credit.amount) : "—"}`, className: "text-blue" };
   return { text: "Rechazado — ya dado de baja", className: "text-red" };
 }
@@ -113,9 +219,12 @@ async function postJson(url: string) {
 export function SupplierExchangeResolutionInbox({
   canConfirmFinanceWriteOff = false,
   canReviewAsAdmin = false,
+  canConfirmReplacementArrival = false,
 }: {
   canConfirmFinanceWriteOff?: boolean;
   canReviewAsAdmin?: boolean;
+  // Confirmado 2026-09-24: Daniel (canActOnMerchandiseOutflow).
+  canConfirmReplacementArrival?: boolean;
 }) {
   const [items, setItems] = useState<ItemDTO[] | null>(null);
   const [creditTotals, setCreditTotals] = useState<CreditTotal[]>([]);
@@ -214,8 +323,36 @@ export function SupplierExchangeResolutionInbox({
     }
     if (item.resolution === "REPLACED") {
       return (
-        <div className="flex items-center gap-1.5 text-[11.5px] font-semibold text-green">
-          <CheckCircle2 size={12} /> El proveedor cambió el producto — resuelto por {item.resolvedBy?.name ?? "—"}{item.resolvedAt ? ` · ${formatDateTime(item.resolvedAt)}` : ""}
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-1.5 text-[11.5px] font-semibold text-green">
+            <CheckCircle2 size={12} /> El proveedor aceptó cambiar el producto — registrado por {item.resolvedBy?.name ?? "—"}{item.resolvedAt ? ` · ${formatDateTime(item.resolvedAt)}` : ""}
+          </div>
+          {item.replacementReceipts.map((r) => (
+            <div key={r.id} className="text-[11px]">
+              <span className="text-green font-semibold">✓ Llegaron {r.quantity} un. en buen estado</span> — confirmado por {r.receivedBy?.name ?? "—"} · {formatDateTime(r.receivedAt)}
+              {r.note && <span className="text-steel"> — &quot;{r.note}&quot;</span>}
+              <div className="flex gap-1 mt-1">
+                {r.photoUrls.map((u) => (
+                  <a key={u} href={u} target="_blank" rel="noreferrer">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={u} alt="Reemplazo recibido" className="w-12 h-12 object-cover rounded border border-rule" />
+                  </a>
+                ))}
+              </div>
+            </div>
+          ))}
+          {!item.replacementReceivedAt && (
+            <>
+              <div className="flex items-center gap-1.5 text-[11.5px] font-semibold" style={{ color: "#D9A441" }}>
+                <Clock size={12} /> Esperando que llegue el reemplazo ({receivedQty(item)} de {item.quantity} recibidas)
+              </div>
+              {canConfirmReplacementArrival ? (
+                <ReplacementArrivalForm item={item} onDone={load} />
+              ) : (
+                <span className="text-[11px] text-steel">Daniel confirma con foto cuando llegue — recién ahí se cierra y se suma al stock.</span>
+              )}
+            </>
+          )}
         </div>
       );
     }
