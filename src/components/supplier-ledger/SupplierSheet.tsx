@@ -10,6 +10,8 @@ import {
   ChevronDown,
   DollarSign,
   Italic,
+  Lock,
+  LogOut,
   PaintBucket,
   Percent,
   Plus,
@@ -27,8 +29,8 @@ import { type Cell, type CellStyle, SHEET_MAX_COLS, SHEET_MAX_ROWS, cellName, co
 // guarda solo (celda por celda) y cada pocos segundos se trae lo que
 // escribieron los demás.
 
-type Tab = { id: string; name: string; colWidths: Record<string, number>; cells: Record<string, Cell> };
-type ServerTab = { id: string; name: string; colWidths: Record<string, number>; cells: { r: number; c: number; v: string; s: CellStyle | null }[] };
+type Tab = { id: string; name: string; colWidths: Record<string, number>; locked: boolean; cells: Record<string, Cell> };
+type ServerTab = { id: string; name: string; colWidths: Record<string, number>; locked?: boolean; cells: { r: number; c: number; v: string; s: CellStyle | null }[] };
 type Op =
   | { t: "set"; tabId: string; r: number; c: number; v: string; s: CellStyle | null }
   | { t: "addTab"; name: string }
@@ -48,7 +50,7 @@ function fromServer(tabs: ServerTab[]): Tab[] {
   return tabs.map((t) => {
     const cells: Record<string, Cell> = {};
     for (const c of t.cells) cells[`${c.r}:${c.c}`] = { v: c.v, s: c.s };
-    return { id: t.id, name: t.name, colWidths: t.colWidths ?? {}, cells };
+    return { id: t.id, name: t.name, colWidths: t.colWidths ?? {}, locked: !!t.locked, cells };
   });
 }
 
@@ -59,7 +61,10 @@ function cleanStyle(s: CellStyle | null): CellStyle | null {
   return Object.keys(out).length ? out : null;
 }
 
-export function SupplierSheet({ token }: { token: string }) {
+// Confirmado 2026-09-24: solo entra un correo de la lista del admin (ver
+// supplierSheetAccess.ts). canWrite=false → solo ve; las hojas con candado
+// (las llena DAFLOW sola) nunca se editan desde acá — la API también lo frena.
+export function SupplierSheet({ token, email, canWrite }: { token: string; email: string; canWrite: boolean }) {
   const api = `/api/proveedor-ledger/${token}/hoja`;
   const [tabs, setTabs] = useState<Tab[] | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -98,6 +103,11 @@ export function SupplierSheet({ token }: { token: string }) {
   }, [editing]);
 
   const tab = tabs?.find((t) => t.id === activeId) ?? tabs?.[0] ?? null;
+  const readOnly = !canWrite || !!tab?.locked;
+  const readOnlyRef = useRef(readOnly);
+  useLayoutEffect(() => {
+    readOnlyRef.current = readOnly;
+  }, [readOnly]);
 
   // ---------- Carga y sincronización ----------
 
@@ -126,6 +136,7 @@ export function SupplierSheet({ token }: { token: string }) {
   const load = useCallback(async () => {
     try {
       const res = await fetch(api, { cache: "no-store" });
+      if (res.status === 401) { window.location.reload(); return null; }
       if (!res.ok) throw new Error();
       const data = (await res.json()) as { tabs: ServerTab[] };
       applyServer(data.tabs);
@@ -145,6 +156,7 @@ export function SupplierSheet({ token }: { token: string }) {
     setStatus("saving");
     try {
       const res = await fetch(api, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ops: batch }) });
+      if (res.status === 401) { window.location.reload(); return null; }
       if (!res.ok) throw new Error();
       const data = (await res.json()) as { createdTabIds?: string[] };
       for (const op of batch) {
@@ -237,7 +249,7 @@ export function SupplierSheet({ token }: { token: string }) {
   const commit = useCallback(
     (cells: { r: number; c: number; next: (old: Cell) => Cell }[]) => {
       const t = tabsRef.current?.find((x) => x.id === (activeId ?? tabsRef.current?.[0]?.id));
-      if (!t) return;
+      if (!t || t.locked || readOnlyRef.current) return;
       const changes: Change[] = [];
       for (const { r, c, next } of cells) {
         if (r < 0 || c < 0 || r >= SHEET_MAX_ROWS || c >= SHEET_MAX_COLS) continue;
@@ -313,6 +325,7 @@ export function SupplierSheet({ token }: { token: string }) {
   // ---------- Edición ----------
 
   function startEdit(initial?: string, source: "cell" | "bar" = "cell") {
+    if (readOnly) return;
     setEditing({ r: sel.r, c: sel.c, value: initial ?? getCell(tab, sel.r, sel.c).v, source });
   }
 
@@ -492,7 +505,7 @@ export function SupplierSheet({ token }: { token: string }) {
 
   function deleteTab(id: string) {
     setTabMenu(null);
-    if (!tabs || tabs.length <= 1) return;
+    if (!tabs || tabs.filter((x) => !x.locked).length <= 1) return;
     const t = tabs.find((x) => x.id === id);
     if (!window.confirm(`¿Eliminar la hoja "${t?.name}"? Se borra todo lo que tiene escrito, para todos.`)) return;
     const rest = tabs.filter((x) => x.id !== id);
@@ -530,15 +543,37 @@ export function SupplierSheet({ token }: { token: string }) {
         </div>
         <div className="min-w-0 flex-1">
           <div className="truncate text-[17px] leading-tight">Hoja de cálculo del equipo</div>
-          <div className="truncate text-[11.5px] text-neutral-500">Todo lo que escriban se guarda solo y lo ve todo el equipo que tiene este enlace.</div>
+          <div className="truncate text-[11.5px] text-neutral-500">
+            {canWrite ? "Todo lo que escriban se guarda solo y lo ve todo el equipo autorizado." : "Tu correo tiene permiso solo para ver."}
+          </div>
         </div>
         <div className="shrink-0 text-[12px] text-neutral-500">
           {status === "saving" ? "Guardando…" : status === "offline" ? <span className="text-red-600">Sin conexión — reintentando…</span> : "Todo guardado"}
         </div>
+        <div className="flex shrink-0 items-center gap-2 border-l border-neutral-200 pl-3 text-[12px] text-neutral-600">
+          <span className="hidden max-w-[200px] truncate sm:inline" title={email}>{email}</span>
+          <button
+            type="button"
+            className="flex items-center gap-1 rounded px-1.5 py-1 hover:bg-neutral-100"
+            title="Salir"
+            onClick={async () => {
+              await fetch(`/api/proveedor-ledger/${token}/hoja/logout`, { method: "POST" }).catch(() => {});
+              window.location.reload();
+            }}
+          >
+            <LogOut size={14} /> <span className="hidden sm:inline">Salir</span>
+          </button>
+        </div>
       </div>
 
+      {tab.locked && (
+        <div className="flex items-center gap-2 border-b border-amber-200 bg-amber-50 px-3 py-1.5 text-[12.5px] text-amber-900">
+          <Lock size={13} className="shrink-0" /> Esta hoja se llena sola con la información de la operación. Pueden verla y copiarla, pero no modificarla.
+        </div>
+      )}
+
       {/* Barra de herramientas */}
-      <div className="flex items-center gap-0.5 overflow-x-auto border-b border-neutral-200 bg-[#f9fbfd] px-2 py-1 text-[13px]" onPointerDown={(e) => e.preventDefault()}>
+      <div className={`flex items-center gap-0.5 overflow-x-auto border-b border-neutral-200 bg-[#f9fbfd] px-2 py-1 text-[13px] ${readOnly ? "pointer-events-none opacity-40" : ""}`} onPointerDown={(e) => e.preventDefault()}>
         <button type="button" className={tb} title="Deshacer (Ctrl+Z)" onClick={undo}><Undo2 size={16} /></button>
         <button type="button" className={tb} title="Rehacer (Ctrl+Y)" onClick={redo}><Redo2 size={16} /></button>
         <span className="mx-1 h-5 w-px shrink-0 bg-neutral-300" />
@@ -585,6 +620,7 @@ export function SupplierSheet({ token }: { token: string }) {
         <div className="px-2 italic text-neutral-400">fx</div>
         <input
           className="min-w-0 flex-1 px-1 py-1 outline-none select-text"
+          readOnly={readOnly}
           value={barValue}
           onFocus={() => { if (!editing) startEdit(undefined, "bar"); }}
           onChange={(e) => setEditing({ r: sel.r, c: sel.c, value: e.target.value, source: "bar" })}
@@ -748,7 +784,7 @@ export function SupplierSheet({ token }: { token: string }) {
 
       {/* Pestañas de hojas */}
       <div className="flex items-center gap-1 border-t border-neutral-200 bg-[#f9fbfd] px-2 py-1 text-[13px]">
-        <button type="button" className={tb} title="Agregar hoja" onClick={() => void addTab()}><Plus size={17} /></button>
+        {canWrite && <button type="button" className={tb} title="Agregar hoja" onClick={() => void addTab()}><Plus size={17} /></button>}
         <div className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto">
           {tabs.map((t) => {
             const on = t.id === tab.id;
@@ -768,12 +804,13 @@ export function SupplierSheet({ token }: { token: string }) {
                     type="button"
                     className="cursor-pointer"
                     onClick={() => { if (editing) finishEdit(); setActiveId(t.id); select({ r: 0, c: 0 }); undoStack.current = []; redoStack.current = []; }}
-                    onDoubleClick={() => setRenaming({ id: t.id, name: t.name })}
+                    onDoubleClick={() => { if (canWrite && !t.locked) setRenaming({ id: t.id, name: t.name }); }}
                   >
+                    {t.locked && <Lock size={11} className="mr-1 inline -mt-0.5" />}
                     {t.name}
                   </button>
                 )}
-                <button
+                {canWrite && !t.locked && (<button
                   type="button"
                   className="ml-1 rounded p-0.5 hover:bg-black/10"
                   title="Opciones de la hoja"
@@ -781,7 +818,7 @@ export function SupplierSheet({ token }: { token: string }) {
                   onClick={() => setTabMenu(tabMenu === t.id ? null : t.id)}
                 >
                   <ChevronDown size={13} />
-                </button>
+                </button>)}
                 {tabMenu === t.id && (
                   <div className="absolute bottom-full left-0 z-40 mb-1 w-40 rounded border border-neutral-200 bg-white py-1 shadow-lg" onPointerDown={(e) => e.stopPropagation()}>
                     <button type="button" className="block w-full px-3 py-1.5 text-left hover:bg-neutral-100" onClick={() => { setTabMenu(null); setRenaming({ id: t.id, name: t.name }); }}>
@@ -790,7 +827,7 @@ export function SupplierSheet({ token }: { token: string }) {
                     <button
                       type="button"
                       className="block w-full px-3 py-1.5 text-left text-red-600 hover:bg-neutral-100 disabled:text-neutral-400"
-                      disabled={tabs.length <= 1}
+                      disabled={tabs.filter((x) => !x.locked).length <= 1}
                       onClick={() => deleteTab(t.id)}
                     >
                       Eliminar

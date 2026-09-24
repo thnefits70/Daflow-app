@@ -1634,15 +1634,15 @@ enum SupplierPaymentMode {
 }
 
 model Supplier {
-  id                           String              @id @default(cuid())
+  id                           String               @id @default(cuid())
   // Confirmado 2026-07-30: los transportistas de Control de Compras viven en
   // esta MISMA tabla (type=CARRIER) en vez de un catálogo aparte, para que
   // "se sincroniza con Proveedores" sea automático (una sola fila, nunca dos
   // registros del mismo contacto) — se distinguen y filtran por type, y un
   // transportista simplemente no pide location (no tiene local fijo).
-  type                         SupplierType        @default(SUPPLIER)
+  type                         SupplierType         @default(SUPPLIER)
   name                         String
-  paymentMode                  SupplierPaymentMode @default(PREPAGO)
+  paymentMode                  SupplierPaymentMode  @default(PREPAGO)
   // Confirmado 2026-09-08: enlace público de solo lectura para un proveedor
   // con crédito (CHEN). Diseño original: solo se guardaba el hash (igual que
   // PasswordResetToken), el token crudo nunca se persistía.
@@ -1653,8 +1653,8 @@ model Supplier {
   // cuenta de ese proveedor, nada más. publicLedgerTokenHash se conserva
   // nada más para que un enlace generado ANTES de este cambio siga
   // funcionando sin que nadie tenga que regenerarlo.
-  publicLedgerToken            String?             @unique
-  publicLedgerTokenHash        String?             @unique
+  publicLedgerToken            String?              @unique
+  publicLedgerTokenHash        String?              @unique
   publicLedgerTokenCreatedAt   DateTime?
   // Confirmado 2026-09-17, pedido explícito del usuario: un segundo enlace,
   // independiente del de arriba, para que el proveedor de crédito se lo
@@ -1662,15 +1662,16 @@ model Supplier {
   // faltan enviar (producto/cantidad), nunca el saldo/deuda. Es una llave
   // aparte a propósito: si alguien edita la URL de este enlace no puede
   // llegar a la página del saldo, porque esa valida un token distinto.
-  publicShippingToken          String?             @unique
+  publicShippingToken          String?              @unique
   publicShippingTokenCreatedAt DateTime?
   // Confirmado 2026-09-24, pedido explícito del usuario: tercer enlace, un
   // solo enlace para TODO el equipo de CHEN — una hoja de cálculo en línea
   // (estilo Excel/Google Sheets) donde ellos escriben lo que quieran. Llave
   // aparte a propósito: nunca abre el saldo ni la lista de envíos.
-  publicSheetToken             String?             @unique
+  publicSheetToken             String?              @unique
   publicSheetTokenCreatedAt    DateTime?
   sheetTabs                    SupplierSheetTab[]
+  sheetEmails                  SupplierSheetEmail[]
   location                     String?
   // Pin exacto marcado en el mapa (OpenStreetMap), opcional — más confiable que
   // una dirección escrita para que alguien nuevo pueda llegar.
@@ -6696,6 +6697,10 @@ model SupplierSheetTab {
   position   Int                 @default(0)
   // Ancho de cada columna que alguien cambió arrastrando el borde: { "0": 180 }.
   colWidths  Json?
+  // Confirmado 2026-09-24, pedido explícito del usuario: hoja con candado —
+  // la llena DAFLOW sola con nuestra operación; el equipo de CHEN la ve pero
+  // nunca la puede editar (se valida en la API, no solo en pantalla).
+  locked     Boolean             @default(false)
   createdAt  DateTime            @default(now())
   updatedAt  DateTime            @updatedAt
   cells      SupplierSheetCell[]
@@ -6715,4 +6720,48 @@ model SupplierSheetCell {
   updatedAt DateTime         @updatedAt
 
   @@unique([tabId, row, col])
+}
+
+// Confirmado 2026-09-24, pedido explícito del usuario: la hoja de CHEN solo
+// se abre con un correo de esta lista, aunque alguien tenga el enlace. Solo
+// el admin agrega/quita correos. Para entrar: escribe su correo → le llega
+// un código de 6 dígitos → queda con sesión abierta en ese dispositivo.
+model SupplierSheetEmail {
+  id           String                   @id @default(cuid())
+  supplierId   String
+  supplier     Supplier                 @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  email        String
+  // false = solo puede ver (como "Lector" en Google); true = también escribe
+  // en las hojas libres. Las hojas con candado nunca las edita nadie de CHEN.
+  canWrite     Boolean                  @default(true)
+  createdAt    DateTime                 @default(now())
+  lastAccessAt DateTime?
+  loginCodes   SupplierSheetLoginCode[]
+  sessions     SupplierSheetSession[]
+
+  @@unique([supplierId, email])
+}
+
+model SupplierSheetLoginCode {
+  id         String             @id @default(cuid())
+  emailId    String
+  sheetEmail SupplierSheetEmail @relation(fields: [emailId], references: [id], onDelete: Cascade)
+  codeHash   String
+  expiresAt  DateTime
+  attempts   Int                @default(0)
+  usedAt     DateTime?
+  createdAt  DateTime           @default(now())
+
+  @@index([emailId])
+}
+
+model SupplierSheetSession {
+  id         String             @id @default(cuid())
+  emailId    String
+  sheetEmail SupplierSheetEmail @relation(fields: [emailId], references: [id], onDelete: Cascade)
+  tokenHash  String             @unique
+  expiresAt  DateTime
+  createdAt  DateTime           @default(now())
+
+  @@index([emailId])
 }

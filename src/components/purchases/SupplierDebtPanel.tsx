@@ -6,6 +6,7 @@ import { uploadFile } from "@/lib/uploadFile";
 import { compressImage } from "@/lib/compressImage";
 import { formatDateTime } from "@/lib/formatDateTime";
 import { useFormDraft, clearFormDraft } from "@/lib/useFormDraft";
+import { SupplierSheetEmailsManager } from "@/components/purchases/SupplierSheetEmailsManager";
 
 type SupplierOption = { id: string; name: string; paymentMode: "PREPAGO" | "CREDITO" };
 
@@ -563,6 +564,7 @@ export function SupplierDebtPanel() {
                   <button type="button" className="underline decoration-dotted cursor-pointer mt-1" onClick={generateSheetLink} disabled={busy}>
                     regenerar (invalida este enlace)
                   </button>
+                  <SupplierSheetEmailsManager supplierId={summary.supplier.id} />
                 </div>
               ) : (
                 <button

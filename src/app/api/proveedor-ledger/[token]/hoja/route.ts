@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/generated/prisma/client";
 import { findSupplierByPublicSheetToken } from "@/lib/supplierDebt";
+import { getSheetViewer } from "@/lib/supplierSheetAccess";
 import { SHEET_MAX_COLS, SHEET_MAX_ROWS } from "@/lib/supplierSheet";
 
 // Confirmado 2026-09-24, pedido explícito del usuario: la hoja de cálculo en
@@ -10,6 +11,9 @@ import { SHEET_MAX_COLS, SHEET_MAX_ROWS } from "@/lib/supplierSheet";
 // acceso es SOLO por el token de la hoja (publicSheetToken), que nunca abre
 // el saldo ni los envíos. Se guarda celda por celda (no la hoja entera) para
 // que dos personas escribiendo a la vez no se borren lo del otro.
+// Confirmado 2026-09-24: además del token, exige sesión de un correo de la
+// lista del admin (getSheetViewer). Las hojas con candado (locked) las llena
+// DAFLOW sola — nadie de CHEN las puede cambiar, renombrar ni borrar.
 
 async function resolveSupplier(token: string) {
   const supplier = await findSupplierByPublicSheetToken(token);
@@ -67,6 +71,7 @@ async function loadSheet(supplierId: string) {
     id: t.id,
     name: t.name,
     colWidths: (t.colWidths as Record<string, number> | null) ?? {},
+    locked: t.locked,
     cells: t.cells.map((c) => ({ r: c.row, c: c.col, v: c.value, s: c.style ?? null })),
   }));
 }
@@ -75,19 +80,25 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ tok
   const { token } = await params;
   const supplier = await resolveSupplier(token);
   if (!supplier) return NextResponse.json({ error: "No encontrado." }, { status: 404 });
-  return NextResponse.json({ tabs: await loadSheet(supplier.id) }, { headers: { "Cache-Control": "no-store" } });
+  const viewer = await getSheetViewer(supplier.id);
+  if (!viewer) return NextResponse.json({ error: "Tu sesión terminó. Vuelve a entrar con tu correo." }, { status: 401 });
+  return NextResponse.json({ tabs: await loadSheet(supplier.id), canWrite: viewer.canWrite }, { headers: { "Cache-Control": "no-store" } });
 }
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
   const supplier = await resolveSupplier(token);
   if (!supplier) return NextResponse.json({ error: "No encontrado." }, { status: 404 });
+  const viewer = await getSheetViewer(supplier.id);
+  if (!viewer) return NextResponse.json({ error: "Tu sesión terminó. Vuelve a entrar con tu correo." }, { status: 401 });
+  if (!viewer.canWrite) return NextResponse.json({ error: "Tu correo solo tiene permiso para ver." }, { status: 403 });
 
   const parsed = bodySchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Datos inválidos." }, { status: 400 });
 
-  const ownTabs = await prisma.supplierSheetTab.findMany({ where: { supplierId: supplier.id }, select: { id: true, position: true, colWidths: true } });
-  const ownTabIds = new Set(ownTabs.map((t) => t.id));
+  const ownTabs = await prisma.supplierSheetTab.findMany({ where: { supplierId: supplier.id }, select: { id: true, position: true, locked: true } });
+  // Solo las hojas libres se pueden tocar desde el enlace.
+  const ownTabIds = new Set(ownTabs.filter((t) => !t.locked).map((t) => t.id));
   let nextPosition = ownTabs.reduce((m, t) => Math.max(m, t.position), -1) + 1;
   const createdTabIds: string[] = [];
 
