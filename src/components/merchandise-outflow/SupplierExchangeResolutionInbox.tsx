@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { CheckCircle2, Clock, DollarSign, ExternalLink, XCircle, Wallet, AlertTriangle, Search, ChevronDown, ChevronRight, Trash2 } from "lucide-react";
+import { CheckCircle2, Clock, DollarSign, ExternalLink, XCircle, Wallet, AlertTriangle, Search, ChevronDown, ChevronRight, Trash2, Printer } from "lucide-react";
 import { formatDateTime } from "@/lib/formatDateTime";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 import { ExpandableName } from "@/components/ui/ExpandableName";
@@ -444,6 +444,11 @@ export function SupplierExchangeResolutionInbox({
                       <div className="border border-t-0 border-rule rounded-b-md px-3 py-2.5 bg-surface">
                         <div className="text-[11px] text-steel mb-1.5">{item.batch.supplier?.name ?? "—"} · {item.quantity} un.</div>
                         {renderDetail(item)}
+                        {/* Confirmado 2026-09-24, pedido de Nairoby: volver a imprimir la
+                            guía de un paquete ya gestionado, por si hace falta. */}
+                        <a href={`/cambio-proveedor/${item.batch.id}`} target="_blank" rel="noopener noreferrer" className="mt-2 inline-flex items-center gap-1 text-[10.5px] font-semibold text-blue cursor-pointer">
+                          <Printer size={11} /> Ver / imprimir guía {item.batch.code}
+                        </a>
                         {canReviewAsAdmin && !item.credit && (
                           <button
                             type="button"

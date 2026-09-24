@@ -1,7 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { canActOnMerchandiseOutflow } from "@/lib/guards";
+import { canActOnMerchandiseOutflow, canConfirmSupplierExchangeFinanceWriteOff } from "@/lib/guards";
 import { resolveOutflowItemGestorId } from "@/lib/merchandiseOutflow";
 import { PrintButton } from "@/app/rol-del-mes/[id]/PrintButton";
 
@@ -54,7 +54,10 @@ export default async function CambioProveedorGuiaPage({ params }: { params: Prom
   // negociar con el proveedor, no solo Daniel/admin.
   const gestorIds = await Promise.all(batch.items.map((i) => resolveOutflowItemGestorId(i)));
   const isGestor = gestorIds.includes(session.user.id);
-  const canView = session.user.role === "admin" || (await canActOnMerchandiseOutflow()) || isGestor;
+  // Confirmado 2026-09-24, pedido de Nairoby: también la puede volver a
+  // abrir/imprimir desde "Gestionados" (Estado de resolución), donde ella ya
+  // ve estas devoluciones con su permiso de Finanzas.
+  const canView = session.user.role === "admin" || (await canActOnMerchandiseOutflow()) || isGestor || (await canConfirmSupplierExchangeFinanceWriteOff());
   if (!canView) redirect("/area/workspace");
 
   // Fix 2026-09-24 (reportado por Daniel con EG-0074): los productos
