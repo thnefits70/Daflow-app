@@ -1,7 +1,8 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
-import { findSupplierByPublicShippingToken, SUPPLIER_PUBLIC_LINK_START } from "@/lib/supplierDebt";
+import { findSupplierByPublicShippingToken, getSupplierDebtDisputedItems, SUPPLIER_PUBLIC_LINK_START } from "@/lib/supplierDebt";
+import { SupplierDisputedItemsTable } from "@/components/supplier-ledger/SupplierDisputedItemsTable";
 import { SupplierPendingShipmentsList } from "@/components/supplier-ledger/SupplierPendingShipmentsList";
 import { SupplierShipmentHistoryTable } from "@/components/supplier-ledger/SupplierShipmentHistoryTable";
 import { SupplierShippingPushToggle } from "@/components/supplier-ledger/SupplierShippingPushToggle";
@@ -55,7 +56,7 @@ export default async function SupplierShippingLedgerPage({ params }: { params: P
   // principal, el equipo de CHEN solo ve solicitudes hechas desde el
   // 21-sep-2026 (SUPPLIER_PUBLIC_LINK_START).
   const since = SUPPLIER_PUBLIC_LINK_START;
-  const [pendingShipments, confirmedShipments] = await Promise.all([
+  const [pendingShipments, confirmedShipments, allDisputedItems] = await Promise.all([
     // Corregido 2026-09-17: antes exigía status "APPROVED" — así que si
     // Daniel recibía la mercadería ANTES de que el equipo de CHEN entrara a
     // apretar "Ya lo enviamos", el pedido desaparecía de esta lista sin que
@@ -87,7 +88,12 @@ export default async function SupplierShippingLedgerPage({ params }: { params: P
       include,
       orderBy: { supplierShippingConfirmedAt: "desc" },
     }),
+    // Confirmado 2026-09-24, pedido explícito del usuario: el equipo de
+    // despacho también ve lo que llegó mal (con el motivo reportado), para
+    // saber qué reemplazo les falta enviar — sin el valor en $.
+    getSupplierDebtDisputedItems(supplier.id),
   ]);
+  const disputedItems = allDisputedItems.filter((i) => i.requestedAt >= since);
 
   return (
     <div className="min-h-screen bg-neutral-50 text-neutral-900">
@@ -122,6 +128,20 @@ export default async function SupplierShippingLedgerPage({ params }: { params: P
             }))}
           />
         </section>
+
+        {disputedItems.length > 0 && (
+          <section className="mb-8">
+            <div className="mb-1 flex items-center gap-2">
+              <h2 className="text-sm font-medium text-neutral-700">Mercadería en revisión (incompleta, dañada o distinta)</h2>
+              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium tabular-nums text-amber-800">{disputedItems.length}</span>
+            </div>
+            <p className="mb-3 text-xs text-neutral-500">
+              Estos pedidos llegaron incompletos, dañados o distintos a lo pedido. En “Detalle” está lo que encontró la bodega TBS — hace
+              falta enviar el reemplazo de lo que llegó mal.
+            </p>
+            <SupplierDisputedItemsTable items={disputedItems} showValue={false} />
+          </section>
+        )}
 
         <section>
           <h2 className="mb-3 text-sm font-medium text-neutral-700">Historial de lo que ya se despachó a la bodega TBS</h2>
