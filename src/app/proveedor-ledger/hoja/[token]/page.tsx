@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { findSupplierByPublicSheetToken } from "@/lib/supplierDebt";
-import { getSheetViewer } from "@/lib/supplierSheetAccess";
+import { getSheetViewer, googleSheetLoginEnabled } from "@/lib/supplierSheetAccess";
 import { SupplierSheet } from "@/components/supplier-ledger/SupplierSheet";
 import { SupplierSheetLogin } from "@/components/supplier-ledger/SupplierSheetLogin";
 
@@ -21,12 +21,19 @@ export const metadata: Metadata = {
   },
 };
 
-export default async function SupplierSheetPage({ params }: { params: Promise<{ token: string }> }) {
+export default async function SupplierSheetPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ token: string }>;
+  searchParams: Promise<{ error?: string }>;
+}) {
   const { token } = await params;
+  const { error } = await searchParams;
   const supplier = await findSupplierByPublicSheetToken(token);
   if (!supplier || supplier.paymentMode !== "CREDITO") notFound();
 
   const viewer = await getSheetViewer(supplier.id);
-  if (!viewer) return <SupplierSheetLogin token={token} />;
+  if (!viewer) return <SupplierSheetLogin token={token} googleEnabled={googleSheetLoginEnabled()} error={error} />;
   return <SupplierSheet token={token} email={viewer.email} canWrite={viewer.canWrite} side={viewer.side} />;
 }

@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import { cookies } from "next/headers";
+import type { NextResponse } from "next/server";
 import { Resend } from "resend";
 import { prisma } from "@/lib/prisma";
 
@@ -71,3 +72,31 @@ export async function sendSheetLoginCode(to: string, code: string) {
   }
   return { ok: true };
 }
+
+// Abre la sesión de un correo de la lista (tras el código o tras Google) y
+// deja la cookie en la respuesta. Usado por login/verify y por el regreso de Google.
+export async function startSheetSession(res: NextResponse, emailId: string) {
+  const sessionToken = crypto.randomBytes(32).toString("hex");
+  const expiresAt = new Date(Date.now() + SHEET_SESSION_DAYS * 24 * 60 * 60 * 1000);
+  await prisma.$transaction([
+    prisma.supplierSheetSession.create({ data: { emailId, tokenHash: sha256(sessionToken), expiresAt } }),
+    prisma.supplierSheetEmail.update({ where: { id: emailId }, data: { lastAccessAt: new Date() } }),
+  ]);
+  res.cookies.set(SHEET_SESSION_COOKIE, sessionToken, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+    expires: expiresAt,
+  });
+  return res;
+}
+
+// Confirmado 2026-09-24, pedido explícito del usuario: "Entrar con Google"
+// (gratis) para los correos Gmail de la lista; el código sigue como opción
+// para quien no tenga Gmail. Solo se muestra si las dos claves están en Vercel.
+export function googleSheetLoginEnabled() {
+  return !!process.env.GOOGLE_SHEET_CLIENT_ID && !!process.env.GOOGLE_SHEET_CLIENT_SECRET;
+}
+export const GOOGLE_SHEET_CALLBACK_PATH = "/api/proveedor-ledger/hoja-google/callback";
+export const GOOGLE_SHEET_STATE_COOKIE = "hoja_google_estado";
