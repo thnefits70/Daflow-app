@@ -1664,6 +1664,13 @@ model Supplier {
   // llegar a la página del saldo, porque esa valida un token distinto.
   publicShippingToken          String?             @unique
   publicShippingTokenCreatedAt DateTime?
+  // Confirmado 2026-09-24, pedido explícito del usuario: tercer enlace, un
+  // solo enlace para TODO el equipo de CHEN — una hoja de cálculo en línea
+  // (estilo Excel/Google Sheets) donde ellos escriben lo que quieran. Llave
+  // aparte a propósito: nunca abre el saldo ni la lista de envíos.
+  publicSheetToken             String?             @unique
+  publicSheetTokenCreatedAt    DateTime?
+  sheetTabs                    SupplierSheetTab[]
   location                     String?
   // Pin exacto marcado en el mapa (OpenStreetMap), opcional — más confiable que
   // una dirección escrita para que alguien nuevo pueda llegar.
@@ -1803,7 +1810,7 @@ model PurchaseCatalogItem {
   // de `code`, que es el SKU del proveedor) — clave real de la "Base de
   // datos de productos" importada desde el export de Just (ver
   // JustCatalogImport). Único porque en Just cada código es un producto.
-  justCode String? @unique
+  justCode             String?               @unique
   supplierProductCodes SupplierProductCode[]
 
   // true SOLO en los renglones "esqueleto" que crea la importación de Just
@@ -2586,9 +2593,9 @@ model FulfillmentRequestItem {
   // descrita en warrantyPiece). Una PIECE sale del stock de repuestos
   // aparte y NUNCA toca el Kardex del producto (confirmado por el usuario).
   // En COMPLETE/PARTIAL, warrantyPiece guarda el color/talla de la guía.
-  warrantyGuide String?
-  warrantyMode  String?
-  warrantyPiece String?
+  warrantyGuide      String?
+  warrantyMode       String?
+  warrantyPiece      String?
   // Garantía de solo una pieza: Daniel confirma que salió (no se escanea ni
   // toca el Kardex — sale del stock de repuestos).
   pieceConfirmedAt   DateTime?
@@ -2610,9 +2617,9 @@ model FulfillmentLotPick {
   lot           FulfillmentLot @relation(fields: [lotId], references: [id], onDelete: Cascade)
   catalogItemId String
 
-  pickedQty   Int
-  pickedById  String?
-  pickedAt    DateTime @default(now())
+  pickedQty  Int
+  pickedById String?
+  pickedAt   DateTime @default(now())
 
   confirmedQty  Int?
   confirmedAt   DateTime?
@@ -5913,14 +5920,14 @@ model MerchandiseOutflowItem {
 
   // Fase 2 — CAMBIO_PROVEEDOR resuelto como CREDIT_ISSUED: el crédito
   // creado con el proveedor por este item.
-  credit SupplierCredit?
+  credit                  SupplierCredit?
   // Confirmado 2026-09-23: crédito compartido con otros reclamos del mismo
   // proveedor (ver SupplierCredit.groupedOutflowItems).
   groupedSupplierCreditId String?
   // Confirmado 2026-09-23, revisión anti-fraude pedida por el usuario: cuando
   // el proveedor RECHAZA el reclamo (deterioro o cambio con proveedor), quien
   // gestiona tiene que subir la captura donde lo dice — antes bastaba una nota.
-  rejectionProofUrl String?
+  rejectionProofUrl       String?
   groupedSupplierCredit   SupplierCredit? @relation("OutflowItemGroupedSupplierCredit", fields: [groupedSupplierCreditId], references: [id], onDelete: SetNull)
 
   // CAMBIO_PROVEEDOR (multi-producto, confirmado 2026-08-26): al agregar el
@@ -6674,4 +6681,38 @@ model ImprovementPlanReview {
 
   @@index([planId])
   @@index([weekOf])
+}
+
+// Confirmado 2026-09-24, pedido explícito del usuario: la hoja de cálculo en
+// línea del enlace de CHEN (/proveedor-ledger/hoja/[token]). Cada pestaña de
+// abajo ("Hoja 1", "Hoja 2"...) es una fila; cada celda con algo escrito es
+// una fila de SupplierSheetCell — se guarda celda por celda para que varias
+// personas del equipo puedan escribir a la vez sin pisarse lo de otros.
+model SupplierSheetTab {
+  id         String              @id @default(cuid())
+  supplierId String
+  supplier   Supplier            @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  name       String
+  position   Int                 @default(0)
+  // Ancho de cada columna que alguien cambió arrastrando el borde: { "0": 180 }.
+  colWidths  Json?
+  createdAt  DateTime            @default(now())
+  updatedAt  DateTime            @updatedAt
+  cells      SupplierSheetCell[]
+
+  @@index([supplierId])
+}
+
+model SupplierSheetCell {
+  id        String           @id @default(cuid())
+  tabId     String
+  tab       SupplierSheetTab @relation(fields: [tabId], references: [id], onDelete: Cascade)
+  row       Int
+  col       Int
+  value     String           @default("")
+  // Formato de la celda: negrita, cursiva, colores, alineación, tamaño, etc.
+  style     Json?
+  updatedAt DateTime         @updatedAt
+
+  @@unique([tabId, row, col])
 }

@@ -91,6 +91,8 @@ type Summary = {
     publicLedgerTokenCreatedAt: string | null;
     publicShippingToken: string | null;
     publicShippingTokenCreatedAt: string | null;
+    publicSheetToken: string | null;
+    publicSheetTokenCreatedAt: string | null;
     bankAccounts: { id: string; bankName: string; bankAccountNumber: string; bankAccountHolder: string }[];
   };
   balance: number;
@@ -145,6 +147,7 @@ export function SupplierDebtPanel() {
   const [busy, setBusy] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const [copiedShippingLink, setCopiedShippingLink] = useState(false);
+  const [copiedSheetLink, setCopiedSheetLink] = useState(false);
   const [transferForms, setTransferForms] = useState<Record<string, { amount: string; transferDate: string; bankNameDestino: string; accountDestino: string; bankNameOrigen: string; accountOrigen: string; comprobanteNumber: string; transactionCost: string; iva: string; proofUrl: string }>>({});
   const [uploadingProof, setUploadingProof] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -332,6 +335,28 @@ export function SupplierDebtPanel() {
     return `${origin}/proveedor-ledger/envios/${token}`;
   }
 
+  // Confirmado 2026-09-24: tercer enlace, mismo dominio de CHEN — la hoja de
+  // cálculo en línea para todo su equipo.
+  function sheetUrl(token: string) {
+    const origin = process.env.NEXT_PUBLIC_SUPPLIER_LEDGER_DOMAIN
+      ? `https://${process.env.NEXT_PUBLIC_SUPPLIER_LEDGER_DOMAIN}`
+      : window.location.origin;
+    return `${origin}/proveedor-ledger/hoja/${token}`;
+  }
+
+  async function generateSheetLink() {
+    if (!supplierId) return;
+    setErr("");
+    setBusy(true);
+    const res = await fetch(`/api/supplier-debt/${supplierId}/sheet-link`, { method: "POST" });
+    setBusy(false);
+    if (!res.ok) {
+      setErr("No se pudo generar el enlace.");
+      return;
+    }
+    load();
+  }
+
   async function generateLink() {
     if (!supplierId) return;
     setErr("");
@@ -362,10 +387,13 @@ export function SupplierDebtPanel() {
     load();
   }
 
-  async function copyLink(url: string, which: "ledger" | "shipping" = "ledger") {
+  async function copyLink(url: string, which: "ledger" | "shipping" | "sheet" = "ledger") {
     try {
       await navigator.clipboard.writeText(url);
-      if (which === "shipping") {
+      if (which === "sheet") {
+        setCopiedSheetLink(true);
+        setTimeout(() => setCopiedSheetLink(false), 2000);
+      } else if (which === "shipping") {
         setCopiedShippingLink(true);
         setTimeout(() => setCopiedShippingLink(false), 2000);
       } else {
@@ -504,6 +532,46 @@ export function SupplierDebtPanel() {
                   disabled={busy}
                 >
                   <Link2 size={13} /> Generar enlace "solo envíos" para el equipo de {summary.supplier.name}
+                </button>
+              )}
+            </div>
+            <div>
+              {/* Confirmado 2026-09-24, pedido explícito del usuario: tercer
+                  enlace, uno solo para todo el equipo del proveedor — una hoja
+                  de cálculo en línea (tipo Excel) donde escriben lo que
+                  quieran. Regenerar cambia la llave, no borra lo escrito. */}
+              {summary.supplier.publicSheetToken ? (
+                <div className="text-[12px] text-steel">
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <Link2 size={12} />
+                    <span>
+                      Enlace hoja de cálculo (todo el equipo de {summary.supplier.name})
+                      {summary.supplier.publicSheetTokenCreatedAt && ` — generado ${formatDateTime(summary.supplier.publicSheetTokenCreatedAt)}`}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 rounded border border-rule bg-cloud px-2.5 py-1.5">
+                    <span className="font-mono text-[11.5px] text-ink break-all">{sheetUrl(summary.supplier.publicSheetToken)}</span>
+                    <button
+                      type="button"
+                      className="shrink-0 flex items-center gap-1 text-blue cursor-pointer"
+                      onClick={() => copyLink(sheetUrl(summary.supplier.publicSheetToken!), "sheet")}
+                      title="Copiar enlace"
+                    >
+                      {copiedSheetLink ? <Check size={13} /> : <Copy size={13} />}
+                    </button>
+                  </div>
+                  <button type="button" className="underline decoration-dotted cursor-pointer mt-1" onClick={generateSheetLink} disabled={busy}>
+                    regenerar (invalida este enlace)
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  className="flex items-center gap-1.5 rounded border border-rule bg-surface px-3 py-1.5 text-[12.5px] font-semibold text-ink cursor-pointer disabled:opacity-60"
+                  onClick={generateSheetLink}
+                  disabled={busy}
+                >
+                  <Link2 size={13} /> Generar enlace &quot;hoja de cálculo&quot; para el equipo de {summary.supplier.name}
                 </button>
               )}
             </div>

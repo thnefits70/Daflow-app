@@ -25,6 +25,13 @@ export async function findSupplierByPublicShippingToken(token: string) {
   return prisma.supplier.findFirst({ where: { publicShippingToken: token } });
 }
 
+// Confirmado 2026-09-24, pedido explícito del usuario: tercer enlace — la
+// hoja de cálculo en línea para todo el equipo de CHEN. Llave propia, sin
+// fallback a las otras dos: nunca abre el saldo ni la lista de envíos.
+export async function findSupplierByPublicSheetToken(token: string) {
+  return prisma.supplier.findFirst({ where: { publicSheetToken: token } });
+}
+
 // Usado solo por las rutas de subida de foto de envío (upload-sign y
 // requests/[id]/photo) — ahí sí da igual con cuál de los dos enlaces entró
 // el proveedor, porque subir una foto de lo que está enviando no expone

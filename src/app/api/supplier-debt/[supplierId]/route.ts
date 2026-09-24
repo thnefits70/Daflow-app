@@ -110,6 +110,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ supp
       // pensado para que el proveedor se lo pase a su propio equipo.
       publicShippingToken: supplier.publicShippingToken,
       publicShippingTokenCreatedAt: supplier.publicShippingTokenCreatedAt,
+      // Confirmado 2026-09-24: tercer enlace, la hoja de cálculo de CHEN.
+      publicSheetToken: supplier.publicSheetToken,
+      publicSheetTokenCreatedAt: supplier.publicSheetTokenCreatedAt,
       bankAccounts: supplier.bankAccounts.map((b) => ({
         id: b.id,
         bankName: b.bankName,
