@@ -345,8 +345,17 @@ export type SupplierDebtDisputedItem = {
   incompleteQty: number;
   differentQty: number;
   requestedAt: Date;
+  missingQty: number;
   approvedByName: string | null;
   reviewedByName: string | null;
+  // Confirmado 2026-09-24, pedido explícito del usuario: "Aprobado por" y
+  // "Revisado por" salían los dos como Bryan (aprobó la compra y también
+  // recibió físicamente) y nunca aparecía Daniel, que es el líder que
+  // confirma el daño. Ahora se muestra aparte quién reportó y quién (Daniel)
+  // confirmó el daño — o "pendiente" si todavía no lo revisa.
+  reportedByName: string | null;
+  damageConfirmedByName: string | null;
+  damageConfirmPending: boolean;
   // Confirmado 2026-09-22: true cuando la parte buena ya se recibió
   // (RECEIVED) pero el pago del pedido entero queda retenido hasta que se
   // resuelva el reporte (ver isReportBlockingDebtPayment).
@@ -384,7 +393,10 @@ export async function getSupplierDebtDisputedItems(supplierId: string): Promise<
     },
     include: {
       catalogItem: { select: { name: true } },
-      urgentReports: { include: reportDebtInclude },
+      urgentReports: {
+        include: { ...reportDebtInclude, reportedBy: { select: { name: true } }, reviewedByLead: { select: { name: true } } },
+        orderBy: { reportedAt: "asc" },
+      },
       reviewedBy: { select: { name: true } },
       // Confirmado 2026-09-15: un pedido en disputa todavía no llegó a
       // RECEIVED (la aprobación final de Daniel es justo lo que falta), pero
@@ -406,6 +418,12 @@ export async function getSupplierDebtDisputedItems(supplierId: string): Promise<
       const damagedQty = r.urgentReports.reduce((s, u) => s + u.damagedQty, 0);
       const incompleteQty = r.urgentReports.reduce((s, u) => s + u.incompleteQty, 0);
       const differentQty = r.urgentReports.reduce((s, u) => s + u.differentQty, 0);
+      const missingQty = r.urgentReports.reduce((s, u) => s + u.missingQty, 0);
+      const damageConfirmPending = r.urgentReports.some((u) => !u.reviewedByLeadAt);
+      // reviewedByLeadId queda null cuando lo aprobó un admin (ver
+      // urgent-reports/[id]/approve) — ahí se muestra "Administración".
+      const confirmedReport = r.urgentReports.find((u) => u.reviewedByLeadAt);
+      const damageConfirmedByName = damageConfirmPending ? null : (confirmedReport?.reviewedByLead?.name ?? "Administración");
       return {
         id: r.id,
         requestNumber: r.requestNumber,
@@ -418,6 +436,10 @@ export async function getSupplierDebtDisputedItems(supplierId: string): Promise<
         requestedAt: r.requestedAt,
         approvedByName: r.reviewedBy?.name ?? null,
         reviewedByName: r.receipt?.confirmedBy?.name ?? null,
+        missingQty,
+        reportedByName: r.urgentReports[0]?.reportedBy?.name ?? null,
+        damageConfirmedByName,
+        damageConfirmPending,
         paymentOnHold: r.status === "RECEIVED",
       };
     });

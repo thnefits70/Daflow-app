@@ -362,8 +362,10 @@ export default async function SupplierLedgerPage({ params }: { params: Promise<{
                   </p>
                   <p className="text-xs font-medium text-amber-900">{holdNote(i)}</p>
                   <p className="text-xs text-amber-700">
-                    {SHORT_DATE_FMT.format(i.requestedAt)} · Aprobó {firstName(i.approvedByName) || "—"} · Revisó {firstName(i.reviewedByName) || "—"}
+                    {SHORT_DATE_FMT.format(i.requestedAt)} · Compra aprobada por {firstName(i.approvedByName) || "—"} · Recibió{" "}
+                    {firstName(i.reviewedByName) || "—"}
                   </p>
+                  <p className="text-xs text-amber-700">Daño confirmado por: {damageConfirmedLabel(i)}</p>
                 </li>
               ))}
             </ul>
@@ -377,8 +379,9 @@ export default async function SupplierLedgerPage({ params }: { params: Promise<{
                     <th className={`${th} text-right`}>Cant.</th>
                     <th className="px-3 py-2">Detalle</th>
                     <th className={`${th} text-right`}>Valor si se resuelve</th>
-                    <th className={th}>Aprobado por</th>
-                    <th className={th}>Revisado por</th>
+                    <th className={th}>Compra aprobada por</th>
+                    <th className={th}>Recibido por</th>
+                    <th className={th}>Daño confirmado por</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-amber-100">
@@ -394,6 +397,7 @@ export default async function SupplierLedgerPage({ params }: { params: Promise<{
                       <td className={`${td} text-right tabular-nums text-amber-800`}>{money(i.wouldBeValue)}</td>
                       <td className={`${td} text-amber-800`}>{firstName(i.approvedByName) || "—"}</td>
                       <td className={`${td} text-amber-800`}>{firstName(i.reviewedByName) || "—"}</td>
+                      <td className={`${td} ${i.damageConfirmPending ? "italic text-amber-600" : "font-medium text-amber-900"}`}>{damageConfirmedLabel(i)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -520,8 +524,15 @@ function holdNote(i: { paymentOnHold: boolean }) {
     : "Pendiente de pago hasta que se resuelva.";
 }
 
-function disputeDetail(i: { damagedQty: number; incompleteQty: number; differentQty: number }) {
+function damageConfirmedLabel(i: { damageConfirmPending: boolean; damageConfirmedByName: string | null }) {
+  return i.damageConfirmPending ? "Pendiente del líder de bodega" : firstName(i.damageConfirmedByName) || "—";
+}
+
+// Confirmado 2026-09-24: faltaba "faltantes" (missingQty) — un reporte con
+// solo faltante dejaba la columna Detalle vacía.
+function disputeDetail(i: { damagedQty: number; incompleteQty: number; differentQty: number; missingQty: number }) {
   return [
+    i.missingQty > 0 ? `${i.missingQty} faltantes` : null,
     i.damagedQty > 0 ? `${i.damagedQty} dañadas` : null,
     i.incompleteQty > 0 ? `${i.incompleteQty} incompletas` : null,
     i.differentQty > 0 ? `${i.differentQty} distintas` : null,

@@ -45,7 +45,13 @@ type DisputedItem = {
   damagedQty: number;
   incompleteQty: number;
   differentQty: number;
+  missingQty: number;
   requestedAt: string;
+  approvedByName: string | null;
+  reviewedByName: string | null;
+  reportedByName: string | null;
+  damageConfirmedByName: string | null;
+  damageConfirmPending: boolean;
   paymentOnHold: boolean;
 };
 type Transfer = {
@@ -618,13 +624,22 @@ export function SupplierDebtPanel() {
                       <span className="font-semibold tabular-nums text-steel">{money(i.wouldBeValue)} si se resuelve</span>
                     </div>
                     <div className="text-[11.5px] text-steel mt-0.5">
-                      {[i.damagedQty > 0 ? `${i.damagedQty} dañadas` : null, i.incompleteQty > 0 ? `${i.incompleteQty} incompletas` : null, i.differentQty > 0 ? `${i.differentQty} distintas` : null]
+                      {[i.missingQty > 0 ? `${i.missingQty} faltantes` : null, i.damagedQty > 0 ? `${i.damagedQty} dañadas` : null, i.incompleteQty > 0 ? `${i.incompleteQty} incompletas` : null, i.differentQty > 0 ? `${i.differentQty} distintas` : null]
                         .filter(Boolean)
                         .join(", ")}
                       {/* Confirmado 2026-09-22: la parte buena ya entró a bodega,
                           pero se retiene el pago del pedido entero hasta que el
                           proveedor reponga (o acepte descontar) lo que llegó mal. */}
                       {i.paymentOnHold && " — la parte buena ya llegó; pago retenido hasta que el proveedor reponga lo que llegó mal"}
+                    </div>
+                    <div className="text-[11.5px] text-steel mt-0.5">
+                      Compra aprobada por {i.approvedByName ?? "—"} · Recibió {i.reviewedByName ?? "—"} · Reportó {i.reportedByName ?? "—"} · Daño
+                      confirmado por:{" "}
+                      {i.damageConfirmPending ? (
+                        <span className="font-medium text-gold">pendiente de Daniel</span>
+                      ) : (
+                        <span className="font-medium text-ink">{i.damageConfirmedByName}</span>
+                      )}
                     </div>
                   </div>
                 ))}
