@@ -14,6 +14,7 @@ import {
   LogOut,
   PaintBucket,
   Percent,
+  Minus,
   Plus,
   Redo2,
   RemoveFormatting,
@@ -57,6 +58,19 @@ const ROW_H = 21;
 const HEADER_W = 46;
 const EMPTY: Cell = { v: "", s: null };
 const FONT_SIZES = [8, 9, 10, 11, 12, 14, 18, 24, 36];
+// Confirmado 2026-09-24, pedido explícito del usuario: zoom como en Excel
+// (achicar para ver más a simple vista). Se guarda solo en el navegador de
+// cada persona — no le cambia la vista a nadie más.
+const ZOOM_LEVELS = [50, 60, 75, 90, 100, 110, 125, 150, 175, 200];
+const ZOOM_KEY = "hoja-zoom";
+function readZoom() {
+  try {
+    const z = Number(typeof window !== "undefined" ? window.localStorage.getItem(ZOOM_KEY) : null);
+    return z >= 50 && z <= 200 ? z : 100;
+  } catch {
+    return 100;
+  }
+}
 
 function fromServer(tabs: ServerTab[]): Tab[] {
   return tabs.map((t) => {
@@ -88,6 +102,26 @@ export function SupplierSheet({ token, email, canWrite, side }: { token: string;
   const [status, setStatus] = useState<"saved" | "saving" | "offline">("saved");
   const [loadErr, setLoadErr] = useState(false);
   const [extraRows, setExtraRows] = useState(0);
+  const [zoom, setZoomState] = useState(readZoom);
+  const zoomRef = useRef(zoom);
+  useLayoutEffect(() => {
+    zoomRef.current = zoom;
+  }, [zoom]);
+  const setZoom = useCallback((z: number) => {
+    const next = Math.max(50, Math.min(200, Math.round(z)));
+    setZoomState(next);
+    try {
+      window.localStorage.setItem(ZOOM_KEY, String(next));
+    } catch {}
+  }, []);
+  const zoomStep = useCallback(
+    (dir: 1 | -1) => {
+      const cur = zoomRef.current;
+      const next = dir > 0 ? ZOOM_LEVELS.find((z) => z > cur) : [...ZOOM_LEVELS].reverse().find((z) => z < cur);
+      if (next) setZoom(next);
+    },
+    [setZoom],
+  );
   const [tabMenu, setTabMenu] = useState<string | null>(null);
   const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null);
   const [notice, setNotice] = useState("");
@@ -365,6 +399,19 @@ export function SupplierSheet({ token, email, canWrite, side }: { token: string;
     el?.scrollIntoView({ block: "nearest", inline: "nearest" });
   }, [sel]);
 
+  const hasGrid = !!tabs;
+  useEffect(() => {
+    const el = gridRef.current;
+    if (!el) return;
+    function onWheel(e: WheelEvent) {
+      if (!e.ctrlKey && !e.metaKey) return;
+      e.preventDefault();
+      zoomStep(e.deltaY < 0 ? 1 : -1);
+    }
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [hasGrid, zoomStep]);
+
   function focusGrid() {
     keyInputRef.current?.focus({ preventScroll: true });
   }
@@ -519,7 +566,7 @@ export function SupplierSheet({ token, email, canWrite, side }: { token: string;
     function move(e: PointerEvent) {
       const rz = resizing.current;
       if (!rz) return;
-      setLiveWidth({ c: rz.c, w: Math.max(30, Math.min(800, Math.round(rz.startW + e.clientX - rz.startX))) });
+      setLiveWidth({ c: rz.c, w: Math.max(30, Math.min(800, Math.round(rz.startW + (e.clientX - rz.startX) / (zoomRef.current / 100)))) });
     }
     function up() {
       dragging.current = false;
@@ -720,7 +767,7 @@ export function SupplierSheet({ token, email, canWrite, side }: { token: string;
           onCompositionStart={() => { composing.current = true; }}
           onCompositionEnd={(e) => { composing.current = false; onKeyInput(e); }}
         />
-        <table className="border-separate border-spacing-0 text-[13px]" style={{ tableLayout: "fixed", width: HEADER_W + cols.reduce((a, c) => a + colW(c), 0) }}>
+        <table className="border-separate border-spacing-0 text-[13px]" style={{ tableLayout: "fixed", width: HEADER_W + cols.reduce((a, c) => a + colW(c), 0), zoom: zoom / 100 }}>
           <colgroup>
             <col style={{ width: HEADER_W }} />
             {cols.map((c) => <col key={c} style={{ width: colW(c) }} />)}
@@ -851,7 +898,7 @@ export function SupplierSheet({ token, email, canWrite, side }: { token: string;
           </tbody>
         </table>
         {rowCount < SHEET_MAX_ROWS && (
-          <div className="sticky left-0 px-3 py-3 text-[12.5px] text-neutral-600">
+          <div className="sticky left-0 px-3 py-3 text-[12.5px] text-neutral-600" style={{ zoom: zoom / 100 }}>
             <button type="button" className="rounded border border-neutral-300 bg-white px-3 py-1 hover:bg-neutral-100" onClick={() => setExtraRows((n) => n + 100)}>
               Agregar 100 filas más
             </button>
@@ -918,6 +965,28 @@ export function SupplierSheet({ token, email, canWrite, side }: { token: string;
               </div>
             );
           })}
+        </div>
+        {/* Zoom, como en Excel: − 100% + */}
+        <div className="flex shrink-0 items-center gap-0.5 pl-2 text-[12px] text-neutral-700">
+          <button type="button" className={tb} title="Alejar (Ctrl + rueda del mouse)" disabled={zoom <= 50} onClick={() => zoomStep(-1)}>
+            <Minus size={14} />
+          </button>
+          <select
+            className="h-7 rounded border border-neutral-300 bg-white px-1 text-[12px] text-neutral-800"
+            title="Zoom"
+            value={ZOOM_LEVELS.includes(zoom) ? zoom : ""}
+            onChange={(e) => setZoom(Number(e.target.value))}
+          >
+            {!ZOOM_LEVELS.includes(zoom) && <option value="">{zoom}%</option>}
+            {ZOOM_LEVELS.map((z) => (
+              <option key={z} value={z}>
+                {z}%
+              </option>
+            ))}
+          </select>
+          <button type="button" className={tb} title="Acercar (Ctrl + rueda del mouse)" disabled={zoom >= 200} onClick={() => zoomStep(1)}>
+            <Plus size={14} />
+          </button>
         </div>
       </div>
     </div>

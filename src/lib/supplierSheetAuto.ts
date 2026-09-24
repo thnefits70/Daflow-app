@@ -318,14 +318,14 @@ export async function buildMonthLayout(supplierId: string, tabId: string): Promi
         { c: 0, v: img ?? "Sin foto", s: img ? null : { al: "center" } },
         { c: 1, v: o.productName, s: { wr: true } },
         { c: 2, v: String(o.quantity), s: { al: "center" } },
-        { c: 3, v: money(o.unitCost), s: { fmt: "currency", dp: 2 } },
+        { c: 3, v: money(o.unitCost), s: { fmt: "currency", dp: 2, al: "center" } },
         { c: 4, v: fmtDate(o.requestedAt), s: { al: "center" } },
-        { c: 5, v: o.statusText, s: { bg: st.bg, fc: st.fc, wr: true } },
+        { c: 5, v: o.statusText, s: { bg: st.bg, fc: st.fc, wr: true, al: "center" } },
         { c: 6, v: o.arrivedAt ? fmtDate(o.arrivedAt) : "—", s: { al: "center" } },
         { c: 7, v: o.complete, s: { al: "center", b: true, fc: o.complete === "Sí" ? GREEN.fc : o.complete === "No" ? AMBER.fc : GRAY.fc } },
         { c: 8, v: o.arrivedAt ? String(o.goodQty) : "—", s: { al: "center" } },
-        { c: 9, v: o.arrivedAt ? money(o.total) : "—", s: o.arrivedAt ? { fmt: "currency", dp: 2, b: true } : { al: "center" } },
-        { c: 10, v: o.paymentText, s: { bg: pt.bg, fc: pt.fc, wr: true } },
+        { c: 9, v: o.arrivedAt ? money(o.total) : "—", s: o.arrivedAt ? { fmt: "currency", dp: 2, b: true, al: "center" } : { al: "center" } },
+        { c: 10, v: o.paymentText, s: { bg: pt.bg, fc: pt.fc, wr: true, al: "center" } },
       ],
     });
   }
@@ -350,9 +350,9 @@ export async function buildMonthLayout(supplierId: string, tabId: string): Promi
           height: img ? PROOF_ROW_H : undefined,
           cells: [
             { c: 0, v: i === 0 ? label : "", s: { b: true } },
-            { c: 1, v: t.comprobanteNumber, s: null },
+            { c: 1, v: t.comprobanteNumber, s: { al: "center" } },
             { c: 2, v: fmtDate(t.transferDate), s: { al: "center" } },
-            { c: 3, v: money(t.amount), s: { fmt: "currency", dp: 2 } },
+            { c: 3, v: money(t.amount), s: { fmt: "currency", dp: 2, al: "center" } },
             { c: 4, v: img ?? "", s: null },
           ],
         });
@@ -364,12 +364,39 @@ export async function buildMonthLayout(supplierId: string, tabId: string): Promi
         cells: [
           { c: 0, v: `Total ${label}`, s: { b: true } },
           { c: 1, v: closed ? "Pagado ✓" : p.transfers.length ? "Pago en proceso" : "Pago en preparación", s: { b: true, ...(closed ? GREEN : AMBER) } },
-          { c: 3, v: money(paid), s: { fmt: "currency", dp: 2, b: true } },
+          { c: 3, v: money(paid), s: { fmt: "currency", dp: 2, b: true, al: "center" } },
         ],
       });
     }
   }
   return rows;
+}
+
+// Confirmado 2026-09-24, pedido explícito del usuario: sin espacio de más —
+// cada columna automática mide lo justo para su texto más largo de ESTE mes
+// (si todos dicen "Bien", Estado queda angosta; si aparece un texto largo, se
+// ensancha sola hasta un tope y baja a dos líneas). Los títulos bajan a dos
+// líneas, así que cuentan por su palabra más larga.
+const WRAP_CAP: Record<number, number> = { 1: 190, 5: 200, 10: 150 };
+function textWidth(text: string, bold: boolean) {
+  return Math.ceil(text.length * (bold ? 7.3 : 6.7)) + 14;
+}
+function fitWidths(layout: LayoutRow[]): Record<string, number> {
+  const widths: Record<string, number> = { ...COL_WIDTHS };
+  for (const c of AUTO_ORDERS_COLS) {
+    if (c === 0) continue; // fotos: ancho fijo
+    let w = 44;
+    for (const row of layout) {
+      const cell = row.cells.find((x) => x.c === c);
+      if (!cell || cell.v.startsWith("=")) continue;
+      const style = (cell.s ?? {}) as { b?: boolean; fmt?: string };
+      const shown = style.fmt === "currency" ? `${Number(cell.v).toFixed(2)}` : cell.v;
+      const text = row.key === "h" || row.key === "ph2" ? shown.split(" ").reduce((a, b) => (b.length > a.length ? b : a), "") : shown;
+      w = Math.max(w, textWidth(text, !!style.b));
+    }
+    widths[String(c)] = WRAP_CAP[c] ? Math.min(w, WRAP_CAP[c]) : w;
+  }
+  return widths;
 }
 
 type SheetCell = { r: number; c: number; v: string; s: unknown; a: string | null; e: string | null };
@@ -401,7 +428,7 @@ export async function mergeAutoOrders<T extends { id: string; colWidths: Record<
     if (r === undefined || AUTO_ORDERS_COLS.includes(a.col)) continue;
     cells.push({ r, c: a.col, v: a.value, s: a.style ?? null, a: a.authorSide, e: a.authorEmail });
   }
-  return { ...tab, colWidths: { ...COL_WIDTHS, ...tab.colWidths }, rowHeights, rowKeys, autoCols: AUTO_ORDERS_COLS, cells };
+  return { ...tab, colWidths: { ...fitWidths(layout), ...tab.colWidths }, rowHeights, rowKeys, autoCols: AUTO_ORDERS_COLS, cells };
 }
 
 // Filas válidas (con pedido/pago) de una pestaña automática — para validar
