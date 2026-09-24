@@ -45,7 +45,7 @@ export function ProofPreview({ url, filename, size = 56 }: { url: string; filena
   }
 
   return (
-    <div className={isPdf ? "w-full" : undefined}>
+    <div className={isPdf ? "w-full" : "shrink-0"}>
       <div className="flex items-center gap-2.5">
         {isPdf ? (
           <button
@@ -58,12 +58,14 @@ export function ProofPreview({ url, filename, size = 56 }: { url: string; filena
             <FileText size={size * 0.4} className="text-steel" />
           </button>
         ) : (
-          <a href={url} target="_blank" rel="noopener noreferrer" title="Clic derecho para copiar la imagen · clic para verla completa">
+          // shrink-0 + maxWidth "none": junto a un texto largo en celular, la
+          // fila aplastaba la miniatura a lo ancho (se veía como una tira fina).
+          <a href={url} target="_blank" rel="noopener noreferrer" className="shrink-0" title="Clic derecho para copiar la imagen · clic para verla completa">
             <img
               src={url}
               alt="Comprobante"
               className="rounded object-cover border border-rule cursor-pointer"
-              style={{ width: size, height: size }}
+              style={{ width: size, height: size, maxWidth: "none" }}
             />
           </a>
         )}
