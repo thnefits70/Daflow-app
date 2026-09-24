@@ -93,6 +93,49 @@ type Draft = {
 // así que se descarta en vez de restaurarse.
 export const DRAFT_KEY = "daflow.purchaseRequestDraft.v4";
 
+// Confirmado 2026-09-24, pedido de Nairoby: Jariel/Bryan saben al comprar
+// si el proveedor entrega factura — lo marcan acá (Sí/No, una vez por
+// proveedor) y Nairoby lo ve en Registrar factura para buscar en el SRI
+// solo lo que sí va a tener. Se guarda al tocar, no depende de enviar la
+// solicitud.
+function SupplierGivesInvoiceToggle({ supplier, onSaved }: { supplier: PurchaseSupplierDTO; onSaved: (value: boolean) => void }) {
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const value = supplier.givesInvoice ?? null;
+
+  async function save(next: boolean) {
+    if (next === value) return;
+    setSaving(true);
+    setError("");
+    try {
+      const res = await fetch(`/api/purchase-suppliers/${supplier.id}/gives-invoice`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ givesInvoice: next }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error ?? "No se pudo guardar.");
+      onSaved(next);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "No se pudo guardar.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const btn = (active: boolean) =>
+    `rounded border px-2.5 py-1 text-[11.5px] font-semibold cursor-pointer disabled:opacity-50 ${active ? "border-teal bg-teal text-navy" : "border-rule text-steel"}`;
+  return (
+    <div className="mt-2 flex items-center gap-2 flex-wrap text-[12px]">
+      <span className="text-steel">¿Este proveedor da factura?</span>
+      <button type="button" disabled={saving} className={btn(value === true)} onClick={() => save(true)}>Sí</button>
+      <button type="button" disabled={saving} className={btn(value === false)} onClick={() => save(false)}>No</button>
+      {value === null && <span className="text-[11px] text-gold">Sin marcar — ayuda a Finanzas marcarlo</span>}
+      {error && <span className="text-[11px] text-red">{error}</span>}
+    </div>
+  );
+}
+
 function normalizeSupplier(s: PurchaseSupplierDTO | null | undefined): PurchaseSupplierDTO | null {
   if (!s) return null;
   return {
@@ -1001,6 +1044,7 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
           selectedBankAccountId={bankAccountId}
           onSelectBankAccount={setBankAccountId}
         />
+        {supplier && <SupplierGivesInvoiceToggle supplier={supplier} onSaved={(givesInvoice) => setSupplier({ ...supplier, givesInvoice })} />}
       </div>
 
       {supplier && (

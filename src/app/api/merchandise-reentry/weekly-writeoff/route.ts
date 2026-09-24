@@ -4,7 +4,12 @@ import { canActOnMerchandiseReentry, canApproveMerchandiseReentry, canCloseMerch
 import { getEcuadorWeekBounds, groupItemsForWriteOff, type MerchandiseReentryItemForGrouping } from "@/lib/merchandiseReentry";
 import { autoCloseFinishedWeeklyWriteOffBatches } from "@/lib/inventoryAutoFlows";
 
-const ITEM_INCLUDE = { catalogItem: { select: { name: true, justCode: true } }, damageReason: { select: { name: true } }, batch: { select: { code: true } } } as const;
+const ITEM_INCLUDE = {
+  catalogItem: { select: { name: true, justCode: true } },
+  damageReason: { select: { name: true } },
+  batch: { select: { code: true, createdAt: true, createdBy: { select: { name: true } } } },
+  damageConfirmedBy: { select: { name: true } },
+} as const;
 
 type BatchWithItems = {
   id: string;
@@ -13,7 +18,12 @@ type BatchWithItems = {
   justWrittenOffAt: Date | null;
   nairobyConfirmedAt: Date | null;
   nairobyConfirmedBy: { name: string } | null;
-  items: (MerchandiseReentryItemForGrouping & { disposalDecision: boolean | null })[];
+  items: (MerchandiseReentryItemForGrouping & {
+    disposalDecision: boolean | null;
+    damageConfirmedAt: Date | null;
+    damageConfirmedBy: { name: string } | null;
+    batch: { code: string; createdAt: Date; createdBy: { name: string } };
+  })[];
 };
 
 function serialize(b: BatchWithItems) {
@@ -26,7 +36,22 @@ function serialize(b: BatchWithItems) {
     nairobyConfirmedByName: b.nairobyConfirmedBy?.name ?? null,
     groups: groupItemsForWriteOff(b.items).map((g) => ({
       ...g,
-      breakdown: g.breakdown.map((row) => ({ ...row, disposalDecision: b.items.find((i) => i.id === row.id)?.disposalDecision ?? null })),
+      // Confirmado 2026-09-24, pedido de Nairoby: para confirmar la baja
+      // necesita ver de dónde salió cada unidad (devolución, lote, quién la
+      // recibió, quién confirmó el daño) y las fotos — antes solo veía
+      // nombre y cantidad y no tenía cómo comprobarlo.
+      breakdown: g.breakdown.map((row) => {
+        const item = b.items.find((i) => i.id === row.id);
+        return {
+          ...row,
+          disposalDecision: item?.disposalDecision ?? null,
+          receivedByName: item?.batch.createdBy.name ?? null,
+          receivedAt: item?.batch.createdAt ?? null,
+          damageConfirmedByName: item?.damageConfirmedBy?.name ?? null,
+          damageConfirmedAt: item?.damageConfirmedAt ?? null,
+          photoUrls: item?.photoUrls ?? [],
+        };
+      }),
     })),
   };
 }

@@ -23,6 +23,8 @@ export type PurchaseSupplierDTO = {
   // faltar en resultados viejos de búsqueda que no lo seleccionan explícito,
   // por eso opcional.
   paymentMode?: "PREPAGO" | "CREDITO";
+  // Confirmado 2026-09-24 (Supplier.givesInvoice) — null = sin marcar.
+  givesInvoice?: boolean | null;
   bankAccounts: BankAccountDTO[];
   contacts: { label: string; whatsapp: string }[];
 };

@@ -5,7 +5,18 @@ import { CalendarClock, CheckCircle2, ChevronDown, ChevronUp, Flame, PackageMinu
 import { CatalogCode } from "@/components/shared/CatalogCode";
 import { ExpandableName } from "@/components/ui/ExpandableName";
 
-type BreakdownRow = { id: string; batchCode: string; damagedQty: number; createdAt: string; disposalDecision: boolean | null };
+type BreakdownRow = {
+  id: string;
+  batchCode: string;
+  damagedQty: number;
+  createdAt: string;
+  disposalDecision: boolean | null;
+  receivedByName: string | null;
+  receivedAt: string | null;
+  damageConfirmedByName: string | null;
+  damageConfirmedAt: string | null;
+  photoUrls: string[];
+};
 type GroupDTO = { name: string; justCode: string | null; totalDamagedQty: number; damageReasonLabel: string | null; photoUrl: string | null; itemIds: string[]; breakdown: BreakdownRow[] };
 type WeeklyBatchDTO = {
   id: string;
@@ -35,7 +46,44 @@ async function postJson(url: string, body?: unknown) {
   return data;
 }
 
-function GroupList({ groups, totalLabel }: { groups: GroupDTO[]; totalLabel: (g: GroupDTO) => string }) {
+// Confirmado 2026-09-24, pedido de Nairoby: el respaldo de cada unidad
+// antes de confirmar la baja — que es una devolución de cliente (no una
+// compra), de qué lote, quién la recibió, quién confirmó el daño y las
+// fotos tomadas al recibirla.
+function OriginProof({ rows }: { rows: BreakdownRow[] }) {
+  return (
+    <div className="bg-surface border-t border-rule p-2.5 flex flex-col gap-2">
+      {rows.map((b) => (
+        <div key={b.id} className="text-[11px] flex flex-col gap-1">
+          <div>
+            <span className="font-semibold">↩ Devolución de cliente</span> — reingreso <span className="font-mono font-bold text-teal">{b.batchCode}</span>
+            {b.receivedByName ? `, recibido por ${b.receivedByName}` : ""}
+            {b.receivedAt ? ` el ${fmtDateTime(b.receivedAt)}` : ""} · <span className="text-red font-semibold">{b.damagedQty} dañadas</span>
+          </div>
+          <div className="text-steel">
+            {b.damageConfirmedByName
+              ? `✓ ${b.damageConfirmedByName} revisó físicamente, confirmó el daño y no se pudo reparar${b.damageConfirmedAt ? ` (${fmtDateTime(b.damageConfirmedAt)})` : ""}`
+              : "Daño confirmado por el líder de bodega"}
+          </div>
+          {b.photoUrls.length > 0 ? (
+            <div className="flex gap-1.5 flex-wrap">
+              {b.photoUrls.map((url) => (
+                <a key={url} href={url} target="_blank" rel="noreferrer" title="Ver foto en grande">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={url} alt="Foto al recibir la devolución" className="w-16 h-16 object-cover rounded border border-rule" />
+                </a>
+              ))}
+            </div>
+          ) : (
+            <div className="text-gold">Sin foto registrada al recibirlo.</div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function GroupList({ groups, totalLabel, showOrigin = false }: { groups: GroupDTO[]; totalLabel: (g: GroupDTO) => string; showOrigin?: boolean }) {
   const [expanded, setExpanded] = useState<string | null>(null);
   return (
     <div className="flex flex-col gap-2">
@@ -58,7 +106,7 @@ function GroupList({ groups, totalLabel }: { groups: GroupDTO[]; totalLabel: (g:
                 {g.damageReasonLabel && <span className="font-mono text-[9px] text-steel bg-surface rounded-full px-1.5 py-0.5">{g.damageReasonLabel}</span>}
               </div>
             </div>
-            {g.breakdown.length > 1 && (
+            {!showOrigin && g.breakdown.length > 1 && (
               <button
                 type="button"
                 title="Ver desglose por lote"
@@ -69,7 +117,8 @@ function GroupList({ groups, totalLabel }: { groups: GroupDTO[]; totalLabel: (g:
               </button>
             )}
           </div>
-          {expanded === g.name && (
+          {showOrigin && <OriginProof rows={g.breakdown} />}
+          {!showOrigin && expanded === g.name && (
             <div className="bg-surface border-t border-rule p-2.5 flex flex-col gap-1">
               {g.breakdown.map((b) => (
                 <div key={b.id} className="flex items-center gap-2 text-[11px]">
@@ -134,8 +183,9 @@ function VerificationCard({ batch, canVerify, onChanged }: { batch: WeeklyBatchD
         <div className="text-[12.5px] font-semibold">{weekLabel(batch)}</div>
         <span className="text-[10.5px] text-steel">Semana cerrada · {batch.justWrittenOffAt && fmtDateTime(batch.justWrittenOffAt)}</span>
       </div>
-      <GroupList groups={batch.groups} totalLabel={(g) => `${g.totalDamagedQty} unidades${g.breakdown.length > 1 ? ` · ${g.breakdown.length} lotes` : ""}`} />
-      <div className="text-[11px] text-steel mt-2">Verifica físicamente estos productos en el área de dañados antes de confirmar.</div>
+      <div className="text-[11px] text-steel mb-2">Estos productos no vienen de Compras: son pedidos que el cliente no recibió o devolvió, y regresaron dañados a bodega. Debajo de cada uno ves el respaldo.</div>
+      <GroupList showOrigin groups={batch.groups} totalLabel={(g) => `${g.totalDamagedQty} unidades${g.breakdown.length > 1 ? ` · ${g.breakdown.length} lotes` : ""}`} />
+      <div className="text-[11px] text-steel mt-2">Revisa las fotos y, si puedes, verifica físicamente estos productos en el área de dañados antes de confirmar.</div>
       {!confirming ? (
         <button
           type="button"
@@ -151,7 +201,7 @@ function VerificationCard({ batch, canVerify, onChanged }: { batch: WeeklyBatchD
         </button>
       ) : (
         <div className="mt-2.5 bg-cloud border border-rule rounded-md p-3">
-          <div className="text-[11.5px] mb-2">¿Confirmas que estos productos coinciden con el listado de la semana y que efectivamente se dan de baja?</div>
+          <div className="text-[11.5px] mb-2">¿Confirmas que esta mercadería regresó por devolución, llegó dañada (según las fotos y la revisión de bodega) y se da de baja?</div>
           <div className="flex gap-1.5">
             <button type="button" disabled={busy} className="rounded border border-teal bg-teal px-3 py-1.5 text-[11.5px] font-bold text-navy cursor-pointer disabled:opacity-60" onClick={submit}>
               Sí, confirmar

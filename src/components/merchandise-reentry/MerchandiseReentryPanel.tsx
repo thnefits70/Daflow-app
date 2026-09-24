@@ -100,7 +100,7 @@ export function MerchandiseReentryPanel({
               <>Cada semana se cierra sola el sábado con lo dañado que no se pudo solucionar, y pasa directo a Nairoby para la verificación física y la disposición final. Acá ves cómo va cada semana.</>
             )}
             {canVerifyDamageDisposal && !canAct && (
-              <>Cada sábado se cierra sola la semana de productos dañados. Acá los verificas físicamente y decides si cada producto se destruye o pasa a la percha de repuestos.</>
+              <>Acá llegan los productos de pedidos que el cliente no recibió o devolvió, y que regresaron dañados (no vienen de Compras ni de Reportes urgentes). Cada sábado se cierra sola la semana. Revisas el respaldo de cada uno (lote, quién lo recibió, confirmación de Daniel y fotos), confirmas la baja y decides si se destruye o pasa a la percha de repuestos.</>
             )}
             {canAct && canVerifyDamageDisposal && (
               <>Cada sábado se cierra sola la semana de productos dañados; después toca verificar físicamente y decidir destrucción o percha de repuestos.</>

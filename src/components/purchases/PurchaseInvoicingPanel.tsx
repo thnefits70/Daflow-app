@@ -42,7 +42,7 @@ type Row = {
   aiInvoiceReviewSummary: string | null;
   aiInvoiceReviewOk: boolean | null;
   catalogItem: { name: string; photos: string[]; justCode: string | null };
-  supplier: { id: string; name: string; paymentMode?: "PREPAGO" | "CREDITO" };
+  supplier: { id: string; name: string; paymentMode?: "PREPAGO" | "CREDITO"; givesInvoice?: boolean | null; givesInvoiceSetBy?: string | null };
   bankAccount: {
     bankName: string;
     bankAccountType: string;
@@ -209,6 +209,46 @@ const ADMIN_LOCK_TITLE = "Exclusivo de Nairoby (líder de Finanzas)";
 // registrar factura, pagar flete y marcar para revisar, que siguen
 // exclusivos de Nairoby. Por defecto sigue igual que antes (bloqueado
 // cuando isAdmin) para no romper algún caller que no pase el prop nuevo.
+// Confirmado 2026-09-24, pedido de Nairoby: marca fija por proveedor
+// (Supplier.givesInvoice) — Sí/No, sin "parcial". Se marca una vez y vale
+// para todas sus compras.
+function GivesInvoiceBadge({
+  supplier,
+  canEdit,
+  saving,
+  onSet,
+}: {
+  supplier: Row["supplier"];
+  canEdit: boolean;
+  saving: boolean;
+  onSet: (value: boolean) => void;
+}) {
+  const value = supplier.givesInvoice ?? null;
+  const btn = "rounded border px-1.5 py-0.5 text-[10px] font-semibold cursor-pointer disabled:opacity-50";
+  return (
+    <div className="flex items-center gap-1.5 flex-wrap text-[10.5px] my-0.5">
+      {value === true && <span className="font-mono font-bold text-teal bg-teal/15 border border-teal/40 rounded-full px-1.5 py-0.5">Da factura</span>}
+      {value === false && <span className="font-mono font-bold text-steel bg-cloud border border-rule rounded-full px-1.5 py-0.5">No da factura</span>}
+      {value === null && <span className="font-mono font-bold text-gold bg-gold/15 border border-gold/40 rounded-full px-1.5 py-0.5">Proveedor sin marcar</span>}
+      {value !== null && supplier.givesInvoiceSetBy && <span className="text-steel-dim">marcó {supplier.givesInvoiceSetBy}</span>}
+      {canEdit && (
+        <>
+          {value !== true && (
+            <button type="button" disabled={saving} className={`${btn} border-teal text-teal`} onClick={() => onSet(true)}>
+              {value === null ? "Sí da factura" : "Cambiar a: sí da"}
+            </button>
+          )}
+          {value !== false && (
+            <button type="button" disabled={saving} className={`${btn} border-rule text-steel`} onClick={() => onSet(false)}>
+              {value === null ? "No da factura" : "Cambiar a: no da"}
+            </button>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 export function PurchaseInvoicingPanel({
   isAdmin = false,
   canPayMerchandise,
@@ -256,6 +296,11 @@ export function PurchaseInvoicingPanel({
   const [dateTo, setDateTo] = useState("");
   const [monthFilter, setMonthFilter] = useState("");
   const [query, setQuery] = useState("");
+  // Confirmado 2026-09-24, pedido de Nairoby: filtrar por la marca fija del
+  // proveedor (ver Supplier.givesInvoice) para buscar en el SRI solo lo que
+  // de verdad va a tener factura.
+  const [invoiceFilter, setInvoiceFilter] = useState<"" | "YES" | "NO" | "UNSET">("");
+  const [savingGivesInvoice, setSavingGivesInvoice] = useState<string | null>(null);
   const [urgentReports, setUrgentReports] = useState<UrgentReportSummary[]>([]);
   const [flagOpenGroupId, setFlagOpenGroupId] = useState<string | null>(null);
   const [flagNote, setFlagNote] = useState("");
@@ -414,6 +459,24 @@ export function PurchaseInvoicingPanel({
       const completed = rep.resolutions.filter((res) => res.status === "COMPLETED").reduce((s, res) => s + res.quantity, 0);
       return completed < total;
     });
+  }
+
+  async function setGivesInvoice(supplierId: string, givesInvoice: boolean) {
+    setSavingGivesInvoice(supplierId);
+    try {
+      const res = await fetch(`/api/purchase-suppliers/${supplierId}/gives-invoice`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ givesInvoice }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error ?? "No se pudo guardar.");
+      setRows((prev) => prev?.map((r) => (r.supplier.id === supplierId ? { ...r, supplier: { ...r.supplier, givesInvoice: data.givesInvoice, givesInvoiceSetBy: data.givesInvoiceSetBy } } : r)) ?? prev);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "No se pudo guardar.");
+    } finally {
+      setSavingGivesInvoice(null);
+    }
   }
 
   async function saveFinanceFlag(groupId: string, note: string | null) {
@@ -715,8 +778,12 @@ export function PurchaseInvoicingPanel({
   // impreso en cada tarjeta ("Pagado ... · fecha"), así el filtro coincide
   // con lo que la persona está mirando.
   const q = query.trim().toLowerCase();
-  const restGroups = (dateFrom || dateTo || q)
+  const restGroups = (dateFrom || dateTo || q || invoiceFilter)
     ? restGroupsAll.filter((g) => {
+        const gives = g[0].supplier.givesInvoice ?? null;
+        if (invoiceFilter === "YES" && gives !== true) return false;
+        if (invoiceFilter === "NO" && gives !== false) return false;
+        if (invoiceFilter === "UNSET" && gives !== null) return false;
         const d = g[0].paidAt?.slice(0, 10);
         if ((dateFrom || dateTo) && d) {
           if (dateFrom && d < dateFrom) return false;
@@ -1257,8 +1324,18 @@ export function PurchaseInvoicingPanel({
           Hasta
           <input type="date" className="rounded border border-rule bg-cloud px-2 py-1.5" value={dateTo} onChange={(e) => { setDateTo(e.target.value); setMonthFilter(""); }} />
         </label>
-        {(dateFrom || dateTo || query) && (
-          <button type="button" className="text-steel underline cursor-pointer" onClick={() => { clearDateFilter(); setQuery(""); }}>Limpiar</button>
+        <select
+          className="rounded border border-rule bg-cloud px-2 py-1.5"
+          value={invoiceFilter}
+          onChange={(e) => setInvoiceFilter(e.target.value as "" | "YES" | "NO" | "UNSET")}
+        >
+          <option value="">Todos los proveedores</option>
+          <option value="YES">Solo los que dan factura</option>
+          <option value="NO">Solo los que no dan factura</option>
+          <option value="UNSET">Proveedores sin marcar</option>
+        </select>
+        {(dateFrom || dateTo || query || invoiceFilter) && (
+          <button type="button" className="text-steel underline cursor-pointer" onClick={() => { clearDateFilter(); setQuery(""); setInvoiceFilter(""); }}>Limpiar</button>
         )}
       </div>
       {restGroups.length === 0 && <div className="border-[1.5px] border-dashed border-rule rounded-md p-6 text-center text-steel text-[13px]">{restGroupsAll.length === 0 ? "Nada por aquí todavía." : "Nada en ese rango de fechas."}</div>}
@@ -1313,6 +1390,12 @@ export function PurchaseInvoicingPanel({
                   })()}{" "}
                   {r0.paidAt ? `· ${formatDateTime(r0.paidAt)}` : ""}
                 </div>
+                <GivesInvoiceBadge
+                  supplier={r0.supplier}
+                  canEdit={!isAdmin}
+                  saving={savingGivesInvoice === r0.supplier.id}
+                  onSet={(value) => setGivesInvoice(r0.supplier.id, value)}
+                />
                 <div className="text-[10px] text-steel-dim">
                   Solicitada por {actorName(r0.requestedBy?.name)} · Pagada por {actorName(r0.paidBy?.name)}
                   {r0.invoiceStatus === "PENDING" && r0.paidAt && (

@@ -1680,6 +1680,14 @@ model Supplier {
   category                     String?
   notes                        String?
 
+  // Confirmado 2026-09-24, pedido de Nairoby: marca fija por proveedor de si
+  // da factura (Sí/No, sin "parcial"), para que en el SRI busque solo las
+  // compras de los que sí dan. La ponen Nairoby, Jariel o Bryan (al hacer
+  // la compra). Null = todavía nadie la marcó.
+  givesInvoice      Boolean?
+  givesInvoiceSetAt DateTime?
+  givesInvoiceSetBy String? // nombre, solo rastro
+
   productCodes SupplierProductCode[]
 
   email String?
