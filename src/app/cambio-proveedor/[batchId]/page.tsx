@@ -5,6 +5,8 @@ import { canActOnMerchandiseOutflow } from "@/lib/guards";
 import { resolveOutflowItemGestorId } from "@/lib/merchandiseOutflow";
 import { PrintButton } from "@/app/rol-del-mes/[id]/PrintButton";
 
+const CREDIT_SELECT = { amount: true, groupedOutflowItems: { select: { expectedCreditAmount: true } } } as const;
+
 function money(n: number) {
   return `$${n.toFixed(2)}`;
 }
@@ -35,6 +37,9 @@ export default async function CambioProveedorGuiaPage({ params }: { params: Prom
         include: {
           catalogItem: { select: { name: true } },
           linkedPurchaseRequest: { select: { requestNumber: true, requestedAt: true, requestedById: true, requestedBy: { select: { name: true } } } },
+          credit: { select: CREDIT_SELECT },
+          groupedSupplierCredit: { select: CREDIT_SELECT },
+          sourceDeteriorItem: { select: { credit: { select: CREDIT_SELECT }, groupedSupplierCredit: { select: CREDIT_SELECT } } },
         },
         orderBy: { createdAt: "asc" },
       },
@@ -52,8 +57,37 @@ export default async function CambioProveedorGuiaPage({ params }: { params: Prom
   const canView = session.user.role === "admin" || (await canActOnMerchandiseOutflow()) || isGestor;
   if (!canView) redirect("/area/workspace");
 
-  const itemsWithCost = batch.items.filter((i) => i.expectedCreditAmount !== null);
-  const totalCredit = itemsWithCost.reduce((sum, i) => sum + (i.expectedCreditAmount ?? 0), 0);
+  // Fix 2026-09-24 (reportado por Daniel con EG-0074): los productos
+  // comprados antes de DAFLOW no tienen compra vinculada, así que quedaban
+  // en "—" y el total salía $106.50 aunque el proveedor ya había dado
+  // $136.50. Si no hay costo de la última compra, se usa en este orden:
+  //  1) el crédito REAL ya registrado por el proveedor (del ítem o del
+  //     deterioro del que viene). Si es un crédito compartido, a este
+  //     producto le toca lo que sobra después de restar los productos que sí
+  //     tienen costo — solo si es el único sin costo en ese crédito;
+  //  2) el costo promedio de INVESTOCK (último movimiento de Kardex).
+  const lines = await Promise.all(
+    batch.items.map(async (item): Promise<{ unit: number | null; total: number | null; source: "compra" | "credito" | "promedio" | null }> => {
+      if (item.expectedCreditAmount !== null) return { unit: item.unitCostAtExchange, total: item.expectedCreditAmount, source: "compra" };
+      const single = item.credit ?? item.sourceDeteriorItem?.credit ?? null;
+      if (single) return { unit: single.amount / item.quantity, total: single.amount, source: "credito" };
+      const grouped = item.groupedSupplierCredit ?? item.sourceDeteriorItem?.groupedSupplierCredit ?? null;
+      if (grouped) {
+        const withoutCost = grouped.groupedOutflowItems.filter((g) => g.expectedCreditAmount === null);
+        const remainder = grouped.amount - grouped.groupedOutflowItems.reduce((s, g) => s + (g.expectedCreditAmount ?? 0), 0);
+        if (withoutCost.length === 1 && remainder > 0.004) return { unit: remainder / item.quantity, total: remainder, source: "credito" };
+      }
+      if (item.catalogItemId) {
+        const last = await prisma.stockKardexEntry.findFirst({ where: { catalogItemId: item.catalogItemId }, orderBy: { createdAt: "desc" }, select: { avgCostAfter: true } });
+        if (last && last.avgCostAfter > 0) return { unit: last.avgCostAfter, total: last.avgCostAfter * item.quantity, source: "promedio" };
+      }
+      return { unit: null, total: null, source: null };
+    }),
+  );
+  const totalCredit = lines.reduce((sum, l) => sum + (l.total ?? 0), 0);
+  const missingCount = lines.filter((l) => l.total === null).length;
+  const hasCreditLine = lines.some((l) => l.source === "credito");
+  const hasAvgLine = lines.some((l) => l.source === "promedio");
 
   return (
     <div className="min-h-screen bg-white text-black py-12 px-6 print:p-0">
@@ -87,12 +121,16 @@ export default async function CambioProveedorGuiaPage({ params }: { params: Prom
             </tr>
           </thead>
           <tbody>
-            {batch.items.map((item) => (
+            {batch.items.map((item, idx) => (
               <tr key={item.id} className="border-b border-gray-200">
-                <td className="py-2 pr-2 font-medium">{item.catalogItem?.name ?? item.declaredName}</td>
+                <td className="py-2 pr-2 font-medium">
+                  {item.catalogItem?.name ?? item.declaredName}
+                  {lines[idx].source === "credito" && <div className="text-[10px] font-normal text-gray-500">según crédito dado por el proveedor</div>}
+                  {lines[idx].source === "promedio" && <div className="text-[10px] font-normal text-gray-500">costo promedio de INVESTOCK</div>}
+                </td>
                 <td className="py-2 px-2 text-right">{item.quantity}</td>
-                <td className="py-2 px-2 text-right">{item.unitCostAtExchange !== null ? money(item.unitCostAtExchange) : "—"}</td>
-                <td className="py-2 px-2 text-right font-semibold">{item.expectedCreditAmount !== null ? money(item.expectedCreditAmount) : "—"}</td>
+                <td className="py-2 px-2 text-right">{lines[idx].unit !== null ? money(lines[idx].unit) : "—"}</td>
+                <td className="py-2 px-2 text-right font-semibold">{lines[idx].total !== null ? money(lines[idx].total) : "—"}</td>
                 <td className="py-2 pl-2 text-gray-600">
                   {item.linkedPurchaseRequest ? (
                     <>
@@ -114,9 +152,11 @@ export default async function CambioProveedorGuiaPage({ params }: { params: Prom
             </tr>
           </tfoot>
         </table>
-        {itemsWithCost.length < batch.items.length && (
+        {(missingCount > 0 || hasCreditLine || hasAvgLine) && (
           <p className="text-[10.5px] text-gray-500 mb-6">
-            El total solo suma los productos con historial de compra a este proveedor — los marcados &quot;—&quot; no tienen costo de referencia registrado.
+            {hasCreditLine && "Los productos sin compra registrada en DAFLOW toman el valor del crédito que el proveedor ya dio. "}
+            {hasAvgLine && "Los que no tienen compra ni crédito usan el costo promedio de INVESTOCK. "}
+            {missingCount > 0 && "Los marcados \"—\" no tienen ningún costo de referencia y no suman al total."}
           </p>
         )}
 
