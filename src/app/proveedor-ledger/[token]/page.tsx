@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import {
   getSupplierDebtDisputedItems,
+  getSupplierReplacementHistory,
   getSupplierDebtPendingItems,
   getSupplierDebtPendingExcessItems,
   findSupplierByPublicLedgerToken,
@@ -14,6 +15,7 @@ import { formatPurchaseRequestCode } from "@/lib/purchases";
 import { SupplierPendingShipmentsList, ProductThumb } from "@/components/supplier-ledger/SupplierPendingShipmentsList";
 import { SupplierShipmentHistoryTable } from "@/components/supplier-ledger/SupplierShipmentHistoryTable";
 import { SupplierDisputedItemsTable } from "@/components/supplier-ledger/SupplierDisputedItemsTable";
+import { SupplierReplacementHistoryTable } from "@/components/supplier-ledger/SupplierReplacementHistoryTable";
 import { firstName } from "@/lib/actorName";
 
 // Confirmado 2026-09-08 (Fase 1, proveedores con crédito): página pública,
@@ -79,7 +81,7 @@ export default async function SupplierLedgerPage({ params }: { params: Promise<{
   // TODAS las secciones, incluidas las tandas pagadas (se oculta cualquier
   // tanda que incluya algo anterior). El panel interno sigue viendo todo.
   const since = SUPPLIER_PUBLIC_LINK_START;
-  const [allDisputedItems, allPendingDebtItems, allPendingExcessItems, closedPayments, pendingShipments, confirmedShipments] = await Promise.all([
+  const [allDisputedItems, allPendingDebtItems, allPendingExcessItems, closedPayments, pendingShipments, confirmedShipments, replacementHistory] = await Promise.all([
     getSupplierDebtDisputedItems(supplier.id),
     // Confirmado 2026-09-17, pedido explícito del usuario: mostrarle a CHEN
     // lo que Inventario ya recibió y confirmó (cargado al Kardex de
@@ -153,6 +155,7 @@ export default async function SupplierLedgerPage({ params }: { params: Promise<{
       include: shipmentInclude,
       orderBy: { supplierShippingConfirmedAt: "desc" },
     }),
+    getSupplierReplacementHistory(supplier.id),
   ]);
 
   const disputedItems = allDisputedItems.filter((i) => i.requestedAt >= since);
@@ -353,6 +356,12 @@ export default async function SupplierLedgerPage({ params }: { params: Promise<{
             <SupplierDisputedItemsTable items={disputedItems} showValue token={token} />
           </section>
         )}
+
+        <section className="mb-8">
+          <SectionTitle count={replacementHistory.length}>Historial de faltantes y cambios ya repuestos</SectionTitle>
+          <p className="mb-3 text-xs text-neutral-500">Lo que ustedes repusieron y la bodega TBS ya recibió y aprobó.</p>
+          <SupplierReplacementHistoryTable items={replacementHistory} />
+        </section>
 
         <section>
           <SectionTitle count={closedPayments.length}>Historial de tandas pagadas</SectionTitle>

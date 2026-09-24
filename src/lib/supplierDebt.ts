@@ -502,6 +502,47 @@ export async function getSupplierDebtDisputedItems(supplierId: string): Promise<
     });
 }
 
+export type SupplierReplacementHistoryItem = {
+  id: string;
+  productName: string;
+  quantity: number;
+  isMissingDelivery: boolean;
+  supplierShippedAt: Date | null;
+  arrivedAt: Date | null;
+  completedAt: Date | null;
+  completedByName: string | null;
+};
+
+// Confirmado 2026-09-24, pedido explícito del usuario: cuando una reposición
+// ya llegó y Daniel la aprobó (COMPLETED), la fila sale de "Mercadería en
+// revisión" — acá queda el historial de solo lectura para CHEN, igual que
+// "lo que ya se despachó". replacementArrivedAt se llena justo en esa
+// aprobación (ver urgent-resolutions/[id]/approve-replacement).
+export async function getSupplierReplacementHistory(supplierId: string): Promise<SupplierReplacementHistoryItem[]> {
+  const rows = await prisma.purchaseUrgentResolution.findMany({
+    where: {
+      type: "REPLACEMENT",
+      status: "COMPLETED",
+      report: { request: { supplierId, requestedAt: sinceTrackingStart } },
+    },
+    include: {
+      replacementVerifiedBy: { select: { name: true } },
+      report: { select: { request: { select: { catalogItem: { select: { name: true } } } } } },
+    },
+    orderBy: { replacementArrivedAt: "desc" },
+  });
+  return rows.map((r) => ({
+    id: r.id,
+    productName: r.report.request.catalogItem.name,
+    quantity: r.quantity,
+    isMissingDelivery: r.replacementIsMissingDelivery,
+    supplierShippedAt: r.supplierShippedAt,
+    arrivedAt: r.replacementSubmittedAt,
+    completedAt: r.replacementArrivedAt,
+    completedByName: r.replacementVerifiedBy?.name ?? (r.replacementArrivedAt ? "Administración" : null),
+  }));
+}
+
 export type SupplierDebtInTransitItem = {
   id: string;
   requestNumber: number | null;

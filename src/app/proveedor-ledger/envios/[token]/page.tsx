@@ -1,7 +1,8 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
-import { findSupplierByPublicShippingToken, getSupplierDebtDisputedItems, SUPPLIER_PUBLIC_LINK_START } from "@/lib/supplierDebt";
+import { findSupplierByPublicShippingToken, getSupplierDebtDisputedItems, getSupplierReplacementHistory, SUPPLIER_PUBLIC_LINK_START } from "@/lib/supplierDebt";
+import { SupplierReplacementHistoryTable } from "@/components/supplier-ledger/SupplierReplacementHistoryTable";
 import { SupplierDisputedItemsTable } from "@/components/supplier-ledger/SupplierDisputedItemsTable";
 import { SupplierPendingShipmentsList } from "@/components/supplier-ledger/SupplierPendingShipmentsList";
 import { SupplierShipmentHistoryTable } from "@/components/supplier-ledger/SupplierShipmentHistoryTable";
@@ -56,7 +57,7 @@ export default async function SupplierShippingLedgerPage({ params }: { params: P
   // principal, el equipo de CHEN solo ve solicitudes hechas desde el
   // 21-sep-2026 (SUPPLIER_PUBLIC_LINK_START).
   const since = SUPPLIER_PUBLIC_LINK_START;
-  const [pendingShipments, confirmedShipments, allDisputedItems] = await Promise.all([
+  const [pendingShipments, confirmedShipments, allDisputedItems, replacementHistory] = await Promise.all([
     // Corregido 2026-09-17: antes exigía status "APPROVED" — así que si
     // Daniel recibía la mercadería ANTES de que el equipo de CHEN entrara a
     // apretar "Ya lo enviamos", el pedido desaparecía de esta lista sin que
@@ -92,6 +93,7 @@ export default async function SupplierShippingLedgerPage({ params }: { params: P
     // despacho también ve lo que llegó mal (con el motivo reportado), para
     // saber qué reemplazo les falta enviar — sin el valor en $.
     getSupplierDebtDisputedItems(supplier.id),
+    getSupplierReplacementHistory(supplier.id),
   ]);
   const disputedItems = allDisputedItems.filter((i) => i.requestedAt >= since);
 
@@ -142,6 +144,12 @@ export default async function SupplierShippingLedgerPage({ params }: { params: P
             <SupplierDisputedItemsTable items={disputedItems} showValue={false} token={token} />
           </section>
         )}
+
+        <section className="mb-8">
+          <h2 className="mb-1 text-sm font-medium text-neutral-700">Historial de faltantes y cambios ya repuestos</h2>
+          <p className="mb-3 text-xs text-neutral-500">Lo que ustedes repusieron y la bodega TBS ya recibió y aprobó.</p>
+          <SupplierReplacementHistoryTable items={replacementHistory} />
+        </section>
 
         <section>
           <h2 className="mb-3 text-sm font-medium text-neutral-700">Historial de lo que ya se despachó a la bodega TBS</h2>
