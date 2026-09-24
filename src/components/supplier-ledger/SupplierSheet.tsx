@@ -21,7 +21,7 @@ import {
   Underline,
   Undo2,
 } from "lucide-react";
-import { type Cell, type CellStyle, type SheetSide, SHEET_MAX_COLS, SHEET_MAX_ROWS, cellName, colName, formatValue, makeEvaluator } from "@/lib/supplierSheet";
+import { type Cell, type CellStyle, type SheetSide, SHEET_MAX_COLS, SHEET_MAX_ROWS, cellName, colName, formatValue, imageUrlOf, makeEvaluator } from "@/lib/supplierSheet";
 
 // Confirmado 2026-09-24, pedido explícito del usuario: el enlace de la hoja
 // de CHEN se ve y se usa como una hoja de Excel/Google Sheets en línea — un
@@ -29,11 +29,12 @@ import { type Cell, type CellStyle, type SheetSide, SHEET_MAX_COLS, SHEET_MAX_RO
 // guarda solo (celda por celda) y cada pocos segundos se trae lo que
 // escribieron los demás.
 
-type Tab = { id: string; name: string; colWidths: Record<string, number>; locked: boolean; createdBySide: SheetSide | null; cells: Record<string, Cell> };
+type Tab = { id: string; name: string; colWidths: Record<string, number>; rowHeights: Record<string, number>; locked: boolean; createdBySide: SheetSide | null; cells: Record<string, Cell> };
 type ServerTab = {
   id: string;
   name: string;
   colWidths: Record<string, number>;
+  rowHeights?: Record<string, number>;
   locked?: boolean;
   createdBySide?: SheetSide | null;
   cells: { r: number; c: number; v: string; s: CellStyle | null; a?: SheetSide | null; e?: string | null }[];
@@ -57,7 +58,7 @@ function fromServer(tabs: ServerTab[]): Tab[] {
   return tabs.map((t) => {
     const cells: Record<string, Cell> = {};
     for (const c of t.cells) cells[`${c.r}:${c.c}`] = { v: c.v, s: c.s, a: c.a ?? null, e: c.e ?? null };
-    return { id: t.id, name: t.name, colWidths: t.colWidths ?? {}, locked: !!t.locked, createdBySide: t.createdBySide ?? null, cells };
+    return { id: t.id, name: t.name, colWidths: t.colWidths ?? {}, rowHeights: t.rowHeights ?? {}, locked: !!t.locked, createdBySide: t.createdBySide ?? null, cells };
   });
 }
 
@@ -728,11 +729,12 @@ export function SupplierSheet({ token, email, canWrite, side }: { token: string;
           <tbody>
             {rows.map((r) => {
               const rowOn = r >= range.r1 && r <= range.r2;
+              const rowH = tab.rowHeights[r] ?? ROW_H;
               return (
                 <tr key={r}>
                   <th
                     className={`sticky left-0 z-10 border-b border-r border-neutral-300 text-[11px] font-normal ${rowOn ? "bg-[#d3e3fd] text-[#0b57d0] font-medium" : "bg-[#f8f9fa] text-neutral-600"}`}
-                    style={{ height: ROW_H }}
+                    style={{ height: rowH }}
                     onPointerDown={(e) => {
                       if (editing) finishEdit();
                       setAnchor({ r: e.shiftKey ? anchor.r : r, c: 0 });
@@ -753,6 +755,7 @@ export function SupplierSheet({ token, email, canWrite, side }: { token: string;
                     const shown = cell ? formatValue(val, s) : "";
                     const isNum = typeof val === "number";
                     const align = s?.al ?? (isNum ? "right" : typeof val === "boolean" || typeof val === "object" ? "center" : "left");
+                    const img = cell ? imageUrlOf(cell.v) : null;
                     const deco = [s?.u ? "underline" : "", s?.st ? "line-through" : ""].filter(Boolean).join(" ");
                     return (
                       <td
@@ -760,7 +763,7 @@ export function SupplierSheet({ token, email, canWrite, side }: { token: string;
                         data-cell={`${r}:${c}`}
                         className="relative overflow-hidden whitespace-nowrap border-b border-r border-[#e2e3e3] px-[3px] leading-none"
                         style={{
-                          height: ROW_H,
+                          height: rowH,
                           background: inRange && multi && !isSel ? "rgba(11,87,208,0.1)" : s?.bg,
                           color: typeof val === "object" ? "#d93025" : s?.fc,
                           fontWeight: s?.b ? 700 : undefined,
@@ -799,6 +802,9 @@ export function SupplierSheet({ token, email, canWrite, side }: { token: string;
                             onKeyDown={onEditKey}
                             onBlur={() => { if (editingRef.current?.source === "cell") finishEdit(); }}
                           />
+                        ) : img ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={img} alt="" loading="lazy" draggable={false} className="mx-auto block w-full object-contain" style={{ height: rowH - 6 }} />
                         ) : (
                           shown
                         )}

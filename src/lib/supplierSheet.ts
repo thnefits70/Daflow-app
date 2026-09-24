@@ -23,6 +23,12 @@ export type CellStyle = {
 export type SheetSide = "SUPPLIER" | "OWN";
 export type Cell = { v: string; s: CellStyle | null; a?: SheetSide | null; e?: string | null };
 
+// Si la celda es =IMAGEN("https://…") devuelve el enlace de la foto.
+export function imageUrlOf(v: string): string | null {
+  const m = /^=\s*IMAGEN?\s*\(\s*"(https:\/\/[^"]+)"\s*\)\s*$/i.exec(v);
+  return m ? m[1] : null;
+}
+
 export function colName(c: number) {
   let n = c + 1;
   let s = "";
@@ -157,6 +163,9 @@ function evaluate(src: string, get: Getter): Val {
       case "ABS": return Math.abs(toNum(args[0]?.[0] ?? 0));
       case "IF": case "SI": { const c = args[0]?.[0]; const ok = typeof c === "boolean" ? c : toNum(c ?? 0) !== 0; return ok ? (args[1]?.[0] ?? true) : (args[2]?.[0] ?? false); }
       case "CONCAT": case "CONCATENAR": return flat.map(toStr).join("");
+      // Confirmado 2026-09-24: =IMAGEN("https://…") muestra la foto en la
+      // celda (como IMAGE de Google Sheets); como valor devuelve el enlace.
+      case "IMAGE": case "IMAGEN": return toStr(args[0]?.[0] ?? "");
       case "TRUE": case "VERDADERO": return true;
       case "FALSE": case "FALSO": return false;
       default: throw new FormulaError("#NOMBRE?");

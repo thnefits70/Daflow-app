@@ -5,6 +5,7 @@ import { Prisma } from "@/generated/prisma/client";
 import { findSupplierByPublicSheetToken } from "@/lib/supplierDebt";
 import { getSheetViewer } from "@/lib/supplierSheetAccess";
 import { SHEET_MAX_COLS, SHEET_MAX_ROWS } from "@/lib/supplierSheet";
+import { loadAutoOrdersTab } from "@/lib/supplierSheetAuto";
 
 // Confirmado 2026-09-24, pedido explícito del usuario: la hoja de cálculo en
 // línea del equipo de CHEN. Sin auth() a propósito (no tienen cuenta) — el
@@ -80,7 +81,9 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ tok
   const viewer = await getSheetViewer(supplier.id);
   if (!viewer) return NextResponse.json({ error: "Tu sesión terminó. Vuelve a entrar con tu correo." }, { status: 401 });
   return NextResponse.json(
-    { tabs: await loadSheet(supplier.id), canWrite: viewer.canWrite, side: viewer.side },
+    // Confirmado 2026-09-24: la hoja "Pedidos" (fotos de lo pedido, la llena
+    // DAFLOW sola, ver supplierSheetAuto.ts) va primero, con candado.
+    { tabs: [await loadAutoOrdersTab(supplier.id), ...(await loadSheet(supplier.id))], canWrite: viewer.canWrite, side: viewer.side },
     { headers: { "Cache-Control": "no-store" } },
   );
 }
