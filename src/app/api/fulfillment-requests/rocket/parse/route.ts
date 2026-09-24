@@ -52,9 +52,13 @@ export async function POST(req: NextRequest) {
   if (rawRows.length === 0) return NextResponse.json({ error: "El archivo no tiene filas de datos." }, { status: 400 });
 
   const columnKeys = Object.keys(rawRows[0]);
-  let codeKey = findColumn(columnKeys, ["codigo", "codig", "sku"]);
+  // Confirmado 2026-09-23 con el archivo real de Yair (informe_picking_tanda_*.xlsx):
+  // columnas "ID, Producto, SKU, Proveedor, Almacén, Ubicación, Uds. a pickear".
+  // El código es la columna "ID" exacta (antes que SKU) y la cantidad es
+  // "Uds. a pickear" — antes este archivo no se reconocía.
+  let codeKey = findColumn(columnKeys, ["codigo", "codig"]) ?? columnKeys.find((k) => normalizeKey(k) === "id") ?? findColumn(columnKeys, ["sku"]);
   let nameKey = findColumn(columnKeys, ["descripcion", "nombre", "producto", "articulo", "detalle"]);
-  let qtyKey = findColumn(columnKeys, ["cantidad", "cant", "unidades", "und", "qty"]);
+  let qtyKey = findColumn(columnKeys, ["cantidad", "cant", "unidades", "und", "uds", "pickear", "qty"]);
 
   // Si falta exactamente una columna y solo queda una sin identificar entre
   // las 3, es esa — mismo criterio de tolerancia que just-catalog/parse.

@@ -73,6 +73,10 @@ export function RocketRequestPanel({ onApplied }: { onApplied: (batchId: string)
   const [err, setErr] = useState("");
   const [dragOver, setDragOver] = useState(false);
   const [registeringFor, setRegisteringFor] = useState<string | null>(null);
+  // Confirmado 2026-09-23: Rocket es una plataforma (no transportadora) y
+  // su Excel no dice por cuál sale cada pedido — Yair la elige con un clic
+  // por subida (Rocket despacha por Servientrega o Gintracom).
+  const [carrier, setCarrier] = useState<"SERVIENTREGA" | "GINTRACOM" | null>(null);
 
   function onComboRegistered(code: string, combo: RegisteredCombo) {
     const target: Candidate = { type: "combo", id: combo.id, name: combo.label ?? combo.code, componentsCount: combo.componentsCount, comboCode: combo.code };
@@ -130,7 +134,7 @@ export function RocketRequestPanel({ onApplied }: { onApplied: (batchId: string)
       : 0) + brokenReadyCount;
 
   async function confirmApply() {
-    if (!preview) return;
+    if (!preview || !carrier) return;
     setPhase("applying");
     setErr("");
     const rows: { code: string; name: string; quantity: number; targetType: "product" | "combo"; targetId: string; createMapping: boolean }[] = [];
@@ -151,7 +155,7 @@ export function RocketRequestPanel({ onApplied }: { onApplied: (batchId: string)
     const res = await fetch("/api/fulfillment-requests/rocket/apply", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ totalRows: preview.totalRows, rows, skippedCount }),
+      body: JSON.stringify({ totalRows: preview.totalRows, rows, skippedCount, carrier }),
     });
     const json = await res.json().catch(() => null);
     if (!res.ok) {
@@ -160,6 +164,7 @@ export function RocketRequestPanel({ onApplied }: { onApplied: (batchId: string)
       return;
     }
     setPreview(null);
+    setCarrier(null);
     setPhase("idle");
     onApplied(json.batchId);
   }
@@ -171,7 +176,7 @@ export function RocketRequestPanel({ onApplied }: { onApplied: (batchId: string)
   return (
     <div>
       <div className="text-[12.5px] mb-3 bg-teal/10 border border-teal/25 rounded px-2.5 py-2">
-        <b>Rocket:</b> descarga de Rocket el Excel con lo que hay que despachar (código, producto y cantidad) y súbelo abajo. DAFLOW reconoce solo los códigos que ya vinculaste antes; los nuevos te los muestra para que confirmes a qué producto o combo corresponden — la próxima vez ya no te pregunta por ese mismo código.
+        <b>Rocket:</b> descarga de Rocket el informe de picking (Excel con ID, producto y unidades a pickear) y súbelo abajo; al final eliges por qué transportadora sale. DAFLOW reconoce solo los códigos que ya vinculaste antes; los nuevos te los muestra para que confirmes a qué producto o combo corresponden — la próxima vez ya no te pregunta por ese mismo código.
       </div>
 
       {phase === "idle" && (
@@ -362,21 +367,35 @@ export function RocketRequestPanel({ onApplied }: { onApplied: (batchId: string)
             }
           )}
 
+          <div className="flex items-center gap-2 flex-wrap mt-2 mb-1 text-[12px]">
+            <span className="font-semibold">¿Por qué transportadora sale esta subida?</span>
+            {(["SERVIENTREGA", "GINTRACOM"] as const).map((c) => (
+              <button
+                key={c}
+                type="button"
+                className={`rounded-full border px-3 py-1 cursor-pointer ${carrier === c ? "border-teal bg-teal text-navy font-bold" : "border-rule"}`}
+                onClick={() => setCarrier(c)}
+              >
+                {c === "SERVIENTREGA" ? "Servientrega" : "Gintracom"}
+              </button>
+            ))}
+          </div>
+
           <div className="flex items-center gap-2.5 mt-2">
             <button
               type="button"
-              disabled={phase === "applying" || pendingCount > 0}
+              disabled={phase === "applying" || pendingCount > 0 || !carrier}
               className="rounded border border-teal bg-teal px-3.5 py-2 text-[12.5px] font-bold text-navy cursor-pointer disabled:opacity-60"
               onClick={confirmApply}
             >
-              {phase === "applying" ? "Aplicando…" : "Confirmar y compendiar"}
+              {phase === "applying" ? "Guardando…" : "Guardar en el corte de hoy"}
             </button>
             <button type="button" className="text-steel text-[12.5px] cursor-pointer" onClick={cancelPreview}>
               Cancelar
             </button>
-            {pendingCount > 0 && (
+            {(pendingCount > 0 || !carrier) && (
               <span className="text-[11.5px]" style={{ color: "#D9A441" }}>
-                Resuelve las {pendingCount} fila(s) pendientes antes de aplicar.
+                {pendingCount > 0 ? `Resuelve las ${pendingCount} fila(s) pendientes antes de aplicar.` : "Elige la transportadora antes de aplicar."}
               </span>
             )}
           </div>

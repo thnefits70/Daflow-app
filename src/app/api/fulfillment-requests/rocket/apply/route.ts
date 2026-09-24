@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/auth";
-import { canSubmitFulfillmentRequest } from "@/lib/guards";
+import { canSubmitFulfillmentRequest, dbUserId } from "@/lib/guards";
 import { applyRocketImport } from "@/lib/rocketRequest";
 
 const schema = z.object({
@@ -17,6 +17,8 @@ const schema = z.object({
     })
   ),
   skippedCount: z.number().int().nonnegative(),
+  // Rocket despacha por Servientrega o Gintracom — Yair elige por subida.
+  carrier: z.enum(["SERVIENTREGA", "GINTRACOM"]),
 });
 
 export async function POST(req: NextRequest) {
@@ -30,7 +32,7 @@ export async function POST(req: NextRequest) {
   if (!parsed.success) return NextResponse.json({ error: "Datos inválidos." }, { status: 400 });
   if (parsed.data.rows.length === 0) return NextResponse.json({ error: "No hay ninguna fila lista para aplicar." }, { status: 400 });
 
-  const result = await applyRocketImport(parsed.data, session.user.id);
+  const result = await applyRocketImport(parsed.data, dbUserId(session.user.id));
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
 
   return NextResponse.json(result);

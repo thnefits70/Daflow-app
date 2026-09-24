@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { normalize, significantWords, findSimilarUnlinkedItem } from "@/lib/justCatalog";
-import { getOrCreateOpenLot } from "@/lib/fulfillmentGuides";
+import { getOrCreateOpenLot, missingDropiIdMessage } from "@/lib/fulfillmentGuides";
 
 // Confirmado 2026-09-21 — ver memoria project_investock_fulfillment_request_control
 // y el modelo RocketCodeMapping en schema.prisma para el porqué completo.
@@ -126,6 +126,7 @@ export type RocketApplyDecisions = {
   totalRows: number;
   rows: RocketApplyRow[];
   skippedCount: number;
+  carrier: string;
 };
 
 export type RocketApplyResult =
@@ -136,7 +137,7 @@ export async function applyRocketImport(decisions: RocketApplyDecisions, request
   const comboIds = [...new Set(decisions.rows.filter((r) => r.targetType === "combo").map((r) => r.targetId))];
   const combos =
     comboIds.length > 0
-      ? await prisma.dropiCombo.findMany({ where: { id: { in: comboIds } }, select: { id: true, code: true, label: true, components: { select: { catalogItemId: true, quantity: true } } } })
+      ? await prisma.dropiCombo.findMany({ where: { id: { in: comboIds } }, select: { id: true, code: true, label: true, components: { select: { catalogItemId: true, quantity: true, catalogItem: { select: { name: true, justCode: true } } } } } })
       : [];
   const comboById = new Map(combos.map((c) => [c.id, c]));
 
@@ -150,15 +151,20 @@ export async function applyRocketImport(decisions: RocketApplyDecisions, request
     return { ok: false, error: `Estos combos no tienen receta registrada todavía, así que no se puede calcular la cantidad real: ${names.join(", ")}. Pide que registren la receta en "Base de datos de productos" antes de subir este archivo.` };
   }
 
-  const itemsData: { catalogItemId: string; quantity: number; sourceCode: string; fromComboCode: string | null }[] = [];
+  // Regla del usuario 2026-09-23: un combo solo se abre en productos con su
+  // ID real de Dropi (el ID madre de INVESTOCK).
+  const missingIds = [...new Set(combos.flatMap((c) => c.components.filter((x) => !x.catalogItem.justCode?.trim()).map((x) => x.catalogItem.name)))];
+  if (missingIds.length > 0) return { ok: false, error: missingDropiIdMessage(missingIds) };
+
+  const itemsData: { catalogItemId: string; quantity: number; sourceCode: string; fromComboCode: string | null; carrier: string }[] = [];
   for (const row of decisions.rows) {
     if (row.targetType === "product") {
-      itemsData.push({ catalogItemId: row.targetId, quantity: row.quantity, sourceCode: row.code, fromComboCode: null });
+      itemsData.push({ catalogItemId: row.targetId, quantity: row.quantity, sourceCode: row.code, fromComboCode: null, carrier: decisions.carrier });
       continue;
     }
     const combo = comboById.get(row.targetId)!;
     for (const comp of combo.components) {
-      itemsData.push({ catalogItemId: comp.catalogItemId, quantity: comp.quantity * row.quantity, sourceCode: row.code, fromComboCode: combo.code });
+      itemsData.push({ catalogItemId: comp.catalogItemId, quantity: comp.quantity * row.quantity, sourceCode: row.code, fromComboCode: combo.code, carrier: decisions.carrier });
     }
   }
 
