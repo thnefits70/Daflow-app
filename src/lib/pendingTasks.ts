@@ -441,6 +441,9 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   compras_reclamo_posterior_revision: "Reclamos posteriores al cierre por revisar",
   compras_creditos_pendientes: "Créditos pendientes de recuperar",
   deterioro_compras_gestion: "Deterioro escalado — pendiente de gestionar con el proveedor",
+  compras_excedente_gestion: "Excedente de mercadería — pendiente de gestionar con el proveedor",
+  compras_excedente_confirmar: "Excedente de mercadería — pendiente de tu confirmación",
+  compras_excedente_kardex: "Excedente de mercadería — confirmado, falta ingresarlo al Kardex",
   deterioro_compras_excepcion: "Deterioro sin compra que lo respalde — tu decisión",
   control_inventario: "Control de Inventario — captura mensual",
   combo_sugerencias_nicho_backfill: "Sugerencias de Combos — nichos por asignar (tope de gasto alcanzado)",
@@ -1470,6 +1473,46 @@ async function getPurchaseGestionPendingItem(href: string): Promise<PendingItem 
     icon: "🔧",
     label: "Deterioro escalado pendiente de gestión con el proveedor",
     meta: `${count} reclamo${count === 1 ? "" : "s"}`,
+    overdue: false,
+    href,
+  };
+}
+
+// Confirmado 2026-09-24, reportado por Daniel: los excedentes (llegó más de
+// lo pedido, ver urgent-report/route.ts) solo avisaban UNA vez por push/
+// campanita en cada paso — si nadie lo veía, quedaban trabados sin que
+// nadie supiera (SC-082: 40 un. esperando a Bryan desde el 22/9). Ahora cada
+// paso queda en Inicio de quien le toca hasta que lo haga: gestionar con el
+// proveedor (Compras) → confirmar (quien aprueba compras) → ingresar al
+// Kardex (Daniel).
+const EXCESS_STEPS = {
+  gestion: {
+    type: "compras_excedente_gestion",
+    label: "Excedente de mercadería por gestionar con el proveedor",
+    where: { excessQty: { gt: 0 }, reviewedByLeadAt: { not: null }, excessGestionAt: null },
+  },
+  confirmar: {
+    type: "compras_excedente_confirmar",
+    label: "Excedente de mercadería esperando tu confirmación",
+    where: { excessQty: { gt: 0 }, excessGestionAt: { not: null }, excessConfirmedAt: null },
+  },
+  kardex: {
+    type: "compras_excedente_kardex",
+    label: "Excedente confirmado — falta ingresarlo al Kardex",
+    where: { excessQty: { gt: 0 }, excessConfirmedAt: { not: null }, excessKardexRecordedAt: null },
+  },
+} as const;
+
+async function getPurchaseExcessPendingItem(step: keyof typeof EXCESS_STEPS, href: string): Promise<PendingItem | null> {
+  const cfg = EXCESS_STEPS[step];
+  const rows = await prisma.purchaseRequestUrgentReport.findMany({ where: cfg.where, select: { excessQty: true } });
+  if (rows.length === 0) return null;
+  const units = rows.reduce((s, r) => s + r.excessQty, 0);
+  return {
+    type: cfg.type,
+    icon: "📦",
+    label: cfg.label,
+    meta: `${rows.length} excedente${rows.length === 1 ? "" : "s"} · ${units} un.`,
     overdue: false,
     href,
   };
@@ -2832,6 +2875,8 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       if (purchaseUrgentUnresolvedItem) teamItems.push(purchaseUrgentUnresolvedItem);
       const purchaseGestionItem = await getPurchaseGestionPendingItem("/area/workspace?tab=compras&ptab=urgentes");
       if (purchaseGestionItem) teamItems.push(purchaseGestionItem);
+      const excessGestionItem = await getPurchaseExcessPendingItem("gestion", "/area/workspace?tab=compras&ptab=urgentes");
+      if (excessGestionItem) teamItems.push(excessGestionItem);
     }
     // Confirmado 2026-09-04: quien aprueba compras (hoy Bryan) puede no
     // liderar ningún departamento — mismo patrón que canManagePurchases
@@ -2839,6 +2884,8 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     if (me.canApprovePurchaseRequests) {
       const purchaseApprovalItem = await getPurchaseApprovalPendingItem("/area/workspace?tab=compras&ptab=aprobacion");
       if (purchaseApprovalItem) teamItems.push(purchaseApprovalItem);
+      const excessConfirmItem = await getPurchaseExcessPendingItem("confirmar", "/area/workspace?tab=compras&ptab=urgentes");
+      if (excessConfirmItem) teamItems.push(excessConfirmItem);
     }
     if (teamItems.length === 0) return null;
     return { title: "Pendientes de esta semana", sub: me.department?.code === "INV" ? "En Inventario" : "Para ti", items: teamItems };
@@ -2932,6 +2979,8 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     if (monthlyTopMoversItem) items.push(monthlyTopMoversItem);
     if (deteriorResolutionItem) items.push(deteriorResolutionItem);
     if (externalSaleDispatchItem) items.push(externalSaleDispatchItem);
+    const excessKardexItem = await getPurchaseExcessPendingItem("kardex", "/area/workspace?tab=compras&ptab=inventario");
+    if (excessKardexItem) items.push(excessKardexItem);
   }
 
   if (me.leadsDept.code === "MKT") {
@@ -2984,6 +3033,8 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
   if (me.canManagePurchases) {
     const purchaseGestionItem = await getPurchaseGestionPendingItem("/area/workspace?tab=compras&ptab=urgentes");
     if (purchaseGestionItem) items.push(purchaseGestionItem);
+    const excessGestionItem = await getPurchaseExcessPendingItem("gestion", "/area/workspace?tab=compras&ptab=urgentes");
+    if (excessGestionItem) items.push(excessGestionItem);
   }
 
   // Confirmado 2026-09-04: pedido explícito del usuario — quien aprueba
@@ -2994,6 +3045,8 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
   if (me.canApprovePurchaseRequests) {
     const purchaseApprovalItem = await getPurchaseApprovalPendingItem("/area/workspace?tab=compras&ptab=aprobacion");
     if (purchaseApprovalItem) items.push(purchaseApprovalItem);
+    const excessConfirmItem = await getPurchaseExcessPendingItem("confirmar", "/area/workspace?tab=compras&ptab=urgentes");
+    if (excessConfirmItem) items.push(excessConfirmItem);
   }
 
   if (items.length === 0) return null;
@@ -3044,9 +3097,9 @@ export async function getPossiblePendingTypesForActor(
       // abajo, pero sin nada del resto (KPIs, roles de pago, etc.) que sigue
       // siendo exclusivo de líderes.
       if (me.canManagePurchases) {
-        types.push("compras_rechazadas", "compras_transportista", "compras_cuenta_bancaria", "compras_creditos_pendientes", "deterioro_compras_gestion");
+        types.push("compras_rechazadas", "compras_transportista", "compras_cuenta_bancaria", "compras_creditos_pendientes", "deterioro_compras_gestion", "compras_excedente_gestion");
       }
-      if (me.canApprovePurchaseRequests) types.push("compras_pendientes_aprobacion");
+      if (me.canApprovePurchaseRequests) types.push("compras_pendientes_aprobacion", "compras_excedente_confirmar");
       // Confirmado 2026-09-18: Jariel es miembro de MKT (canProposeMarketProduct)
       // pero no su líder — mismo criterio que el resto de este bloque.
       if (me.department?.code === "MKT") types.push("analisis_mercado_listo_comprar");
@@ -3061,7 +3114,7 @@ export async function getPossiblePendingTypesForActor(
     }
     if (me.leadsDept.trackWeeklyMetric) types.push("pedidos_despachados", "fillrate_justificacion_pendiente");
     if (me.leadsDept.code === "INV") {
-      types.push("ruptura_stock", "compras_recepcion", "compras_cambios_verificar", "control_inventario", "reingreso_mercaderia_revision", "compras_personales_confirmar", "compras_reclamo_posterior_revision", "combo_sugerencias_nicho_backfill", "monthly_top_movers", "egresos_deterioro_resolucion", "ventas_externas_agrupar");
+      types.push("ruptura_stock", "compras_recepcion", "compras_cambios_verificar", "control_inventario", "reingreso_mercaderia_revision", "compras_personales_confirmar", "compras_reclamo_posterior_revision", "combo_sugerencias_nicho_backfill", "monthly_top_movers", "egresos_deterioro_resolucion", "ventas_externas_agrupar", "compras_excedente_kardex");
     }
     // Mismo criterio de elegibilidad que canSubmitPurchaseRequests
     // (guards.ts) — delegado vía canManagePurchases, o líder de COM/FIN —
@@ -3070,8 +3123,8 @@ export async function getPossiblePendingTypesForActor(
     if (me.canManagePurchases || ["COM", "FIN"].includes(me.leadsDept.code)) {
       types.push("compras_rechazadas", "compras_transportista", "compras_cuenta_bancaria", "compras_creditos_pendientes");
     }
-    if (me.canManagePurchases) types.push("deterioro_compras_gestion");
-    if (me.canApprovePurchaseRequests) types.push("compras_pendientes_aprobacion");
+    if (me.canManagePurchases) types.push("deterioro_compras_gestion", "compras_excedente_gestion");
+    if (me.canApprovePurchaseRequests) types.push("compras_pendientes_aprobacion", "compras_excedente_confirmar");
     if (me.leadsDept.code === "MKT") types.push("analisis_mercado_aprobacion", "ventas_externas_revisar");
   }
 
