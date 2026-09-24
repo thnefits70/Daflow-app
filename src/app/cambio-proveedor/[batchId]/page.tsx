@@ -5,21 +5,15 @@ import { canActOnMerchandiseOutflow, canConfirmSupplierExchangeFinanceWriteOff }
 import { resolveOutflowItemGestorId } from "@/lib/merchandiseOutflow";
 import { PrintButton } from "@/app/rol-del-mes/[id]/PrintButton";
 
-const CREDIT_SELECT = { amount: true, groupedOutflowItems: { select: { expectedCreditAmount: true } } } as const;
-
-function money(n: number) {
-  return `$${n.toFixed(2)}`;
-}
-
 const DATE_FMT = new Intl.DateTimeFormat("es-EC", { timeZone: "America/Guayaquil", day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
 
 // Confirmado 2026-08-26: pedido explícito del usuario — al dejar lista una
 // solicitud de "Cambio con proveedor" (Registro de Egresos), esta guía se
 // imprime y se pega junto con el paquete físico donde van agrupados todos
 // los productos, para que quede organizado tanto en papel como en bodega.
-// Muestra el costo pagado por producto (de la última compra vinculada a ese
-// proveedor), quién solicitó originalmente esa compra, quién agrupó esta
-// solicitud, y quién es el líder responsable (hoy siempre la misma persona,
+// Muestra qué productos van y cuántos (sin precios ni quién pidió cada
+// compra, ver abajo), quién agrupó esta solicitud, y quién es el líder
+// responsable (hoy siempre la misma persona,
 // Daniel, porque canActOnMerchandiseOutflow es exclusivo del líder de
 // Inventario — se listan como campos separados igual, para la trazabilidad
 // que pidió el usuario).
@@ -36,10 +30,7 @@ export default async function CambioProveedorGuiaPage({ params }: { params: Prom
       items: {
         include: {
           catalogItem: { select: { name: true } },
-          linkedPurchaseRequest: { select: { requestNumber: true, requestedAt: true, requestedById: true, requestedBy: { select: { name: true } } } },
-          credit: { select: CREDIT_SELECT },
-          groupedSupplierCredit: { select: CREDIT_SELECT },
-          sourceDeteriorItem: { select: { credit: { select: CREDIT_SELECT }, groupedSupplierCredit: { select: CREDIT_SELECT } } },
+          linkedPurchaseRequest: { select: { requestedById: true } },
         },
         orderBy: { createdAt: "asc" },
       },
@@ -60,38 +51,11 @@ export default async function CambioProveedorGuiaPage({ params }: { params: Prom
   const canView = session.user.role === "admin" || (await canActOnMerchandiseOutflow()) || isGestor || (await canConfirmSupplierExchangeFinanceWriteOff());
   if (!canView) redirect("/area/workspace");
 
-  // Fix 2026-09-24 (reportado por Daniel con EG-0074): los productos
-  // comprados antes de DAFLOW no tienen compra vinculada, así que quedaban
-  // en "—" y el total salía $106.50 aunque el proveedor ya había dado
-  // $136.50. Si no hay costo de la última compra, se usa en este orden:
-  //  1) el crédito REAL ya registrado por el proveedor (del ítem o del
-  //     deterioro del que viene). Si es un crédito compartido, a este
-  //     producto le toca lo que sobra después de restar los productos que sí
-  //     tienen costo — solo si es el único sin costo en ese crédito;
-  //  2) el costo promedio de INVESTOCK (último movimiento de Kardex).
-  const lines = await Promise.all(
-    batch.items.map(async (item): Promise<{ unit: number | null; total: number | null; source: "compra" | "credito" | "promedio" | null }> => {
-      if (item.expectedCreditAmount !== null) return { unit: item.unitCostAtExchange, total: item.expectedCreditAmount, source: "compra" };
-      const single = item.credit ?? item.sourceDeteriorItem?.credit ?? null;
-      if (single) return { unit: single.amount / item.quantity, total: single.amount, source: "credito" };
-      const grouped = item.groupedSupplierCredit ?? item.sourceDeteriorItem?.groupedSupplierCredit ?? null;
-      if (grouped) {
-        const withoutCost = grouped.groupedOutflowItems.filter((g) => g.expectedCreditAmount === null);
-        const remainder = grouped.amount - grouped.groupedOutflowItems.reduce((s, g) => s + (g.expectedCreditAmount ?? 0), 0);
-        if (withoutCost.length === 1 && remainder > 0.004) return { unit: remainder / item.quantity, total: remainder, source: "credito" };
-      }
-      if (item.catalogItemId) {
-        const last = await prisma.stockKardexEntry.findFirst({ where: { catalogItemId: item.catalogItemId }, orderBy: { createdAt: "desc" }, select: { avgCostAfter: true } });
-        if (last && last.avgCostAfter > 0) return { unit: last.avgCostAfter, total: last.avgCostAfter * item.quantity, source: "promedio" };
-      }
-      return { unit: null, total: null, source: null };
-    }),
-  );
-  const totalCredit = lines.reduce((sum, l) => sum + (l.total ?? 0), 0);
-  const missingCount = lines.filter((l) => l.total === null).length;
-  const hasCreditLine = lines.some((l) => l.source === "credito");
-  const hasAvgLine = lines.some((l) => l.source === "promedio");
-
+  // Confirmado 2026-09-24, pedido de Daniel: la guía que se imprime y va con
+  // el paquete al proveedor ya no muestra precios (costo, total, crédito
+  // estimado) ni los nombres de quién pidió cada compra — solo qué productos
+  // van, cuántos, y las firmas de quien entrega y quien recibe. Los montos
+  // siguen viéndose dentro de DAFLOW (Estado de resolución, Mis solicitudes).
   return (
     <div className="min-h-screen bg-white text-black py-12 px-6 print:p-0">
       <PrintButton />
@@ -118,50 +82,17 @@ export default async function CambioProveedorGuiaPage({ params }: { params: Prom
             <tr className="border-b-2 border-black text-left text-[10.5px] uppercase tracking-wide text-gray-500">
               <th className="py-1.5 pr-2">Producto</th>
               <th className="py-1.5 px-2 text-right">Cant.</th>
-              <th className="py-1.5 px-2 text-right">Costo un.</th>
-              <th className="py-1.5 px-2 text-right">Total</th>
-              <th className="py-1.5 pl-2">Solicitado originalmente por</th>
             </tr>
           </thead>
           <tbody>
-            {batch.items.map((item, idx) => (
+            {batch.items.map((item) => (
               <tr key={item.id} className="border-b border-gray-200">
-                <td className="py-2 pr-2 font-medium">
-                  {item.catalogItem?.name ?? item.declaredName}
-                  {lines[idx].source === "credito" && <div className="text-[10px] font-normal text-gray-500">según crédito dado por el proveedor</div>}
-                  {lines[idx].source === "promedio" && <div className="text-[10px] font-normal text-gray-500">costo promedio de INVESTOCK</div>}
-                </td>
+                <td className="py-2 pr-2 font-medium">{item.catalogItem?.name ?? item.declaredName}</td>
                 <td className="py-2 px-2 text-right">{item.quantity}</td>
-                <td className="py-2 px-2 text-right">{lines[idx].unit !== null ? money(lines[idx].unit) : "—"}</td>
-                <td className="py-2 px-2 text-right font-semibold">{lines[idx].total !== null ? money(lines[idx].total) : "—"}</td>
-                <td className="py-2 pl-2 text-gray-600">
-                  {item.linkedPurchaseRequest ? (
-                    <>
-                      {item.linkedPurchaseRequest.requestedBy?.name ?? "—"}
-                      {item.linkedPurchaseRequest.requestNumber ? ` (SC-${String(item.linkedPurchaseRequest.requestNumber).padStart(3, "0")})` : ""}
-                    </>
-                  ) : (
-                    "sin compra vinculada"
-                  )}
-                </td>
               </tr>
             ))}
           </tbody>
-          <tfoot>
-            <tr>
-              <td colSpan={3} className="py-3 font-bold">Total crédito estimado</td>
-              <td className="py-3 text-right font-bold text-[15px]">{money(totalCredit)}</td>
-              <td />
-            </tr>
-          </tfoot>
         </table>
-        {(missingCount > 0 || hasCreditLine || hasAvgLine) && (
-          <p className="text-[10.5px] text-gray-500 mb-6">
-            {hasCreditLine && "Los productos sin compra registrada en DAFLOW toman el valor del crédito que el proveedor ya dio. "}
-            {hasAvgLine && "Los que no tienen compra ni crédito usan el costo promedio de INVESTOCK. "}
-            {missingCount > 0 && "Los marcados \"—\" no tienen ningún costo de referencia y no suman al total."}
-          </p>
-        )}
 
         <div className="mt-10 pt-6 border-t border-gray-300 flex justify-between gap-8 text-[11.5px]">
           <div className="flex-1 text-center">
