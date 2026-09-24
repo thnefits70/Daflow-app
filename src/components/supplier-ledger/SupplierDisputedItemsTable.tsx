@@ -1,5 +1,6 @@
 import { firstName } from "@/lib/actorName";
 import type { SupplierDebtDisputedItem } from "@/lib/supplierDebt";
+import { SupplierShipmentConfirmButton } from "@/components/supplier-ledger/SupplierShipmentConfirmButton";
 
 // Confirmado 2026-09-24, pedido explícito del usuario: la misma sección de
 // "Mercadería en revisión" se muestra en el enlace del saldo y en el de
@@ -17,6 +18,47 @@ const DATE_FMT = new Intl.DateTimeFormat("es-EC", {
   minute: "2-digit",
 });
 const SHORT_DATE_FMT = new Intl.DateTimeFormat("es-EC", { timeZone: "America/Guayaquil", weekday: "short", day: "2-digit", month: "short" });
+
+const DAY_FMT = new Intl.DateTimeFormat("es-EC", { timeZone: "America/Guayaquil", weekday: "short", day: "2-digit", month: "short" });
+
+// Confirmado 2026-09-24, pedido explícito del usuario: CHEN ve en qué paso va
+// cada fila, siempre según la operación real — si nunca aprietan "ya lo
+// enviamos" pero Inventario ya lo recibió, igual pasa a "ya llegó", y con la
+// aprobación de Daniel la fila desaparece (ver getSupplierDebtDisputedItems).
+function DisputeStatus({ item, token }: { item: SupplierDebtDisputedItem; token: string }) {
+  if (item.damageConfirmPending) return <span className="text-amber-700">La bodega TBS está revisando lo que llegó.</span>;
+  if (item.awaitingCoordination) return <span className="text-amber-700">TBS está coordinando con ustedes cómo se resuelve.</span>;
+  return (
+    <div className="flex flex-col gap-2">
+      {item.replacements.map((r) => {
+        const what = r.isMissingDelivery ? "faltantes" : "de cambio";
+        if (r.arrivedAt) {
+          return (
+            <span key={r.id} className="font-medium text-emerald-700">
+              Ya llegó a la bodega TBS ({r.quantity} un., {DAY_FMT.format(r.arrivedAt)}) — en revisión final.
+            </span>
+          );
+        }
+        if (r.supplierShippedAt) {
+          return (
+            <span key={r.id} className="text-sky-700">
+              Ustedes marcaron enviado ({r.quantity} un., {DAY_FMT.format(r.supplierShippedAt)}). Esperando que llegue a la bodega TBS.
+            </span>
+          );
+        }
+        return (
+          <div key={r.id} className="flex flex-col items-start gap-1">
+            <span className="font-semibold text-amber-900">
+              Enviar {r.quantity} un. {what}
+              {r.dueDate && ` hasta el ${DAY_FMT.format(r.dueDate)}`}
+            </span>
+            <SupplierShipmentConfirmButton token={token} requestId={r.id} kind="resolution" label="Ya lo enviamos" />
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 function money(n: number) {
   return `$${n.toLocaleString("es-EC", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -39,7 +81,7 @@ function disputeDetail(i: { damagedQty: number; incompleteQty: number; different
     .join(", ");
 }
 
-export function SupplierDisputedItemsTable({ items, showValue }: { items: SupplierDebtDisputedItem[]; showValue: boolean }) {
+export function SupplierDisputedItemsTable({ items, showValue, token }: { items: SupplierDebtDisputedItem[]; showValue: boolean; token: string }) {
   const th = "px-3 py-2 whitespace-nowrap";
   const td = "px-3 py-2 whitespace-nowrap";
   return (
@@ -65,6 +107,9 @@ export function SupplierDisputedItemsTable({ items, showValue }: { items: Suppli
               {firstName(i.reviewedByName) || "—"}
             </p>
             <p className="text-xs text-amber-700">Daño confirmado por: {damageConfirmedLabel(i)}</p>
+            <div className="mt-2 rounded-lg border border-amber-200 bg-white/60 px-2.5 py-2 text-xs">
+              <DisputeStatus item={i} token={token} />
+            </div>
           </li>
         ))}
       </ul>
@@ -81,6 +126,7 @@ export function SupplierDisputedItemsTable({ items, showValue }: { items: Suppli
               <th className={th}>Compra aprobada por</th>
               <th className={th}>Recibido por</th>
               <th className={th}>Daño confirmado por</th>
+              <th className="px-3 py-2 min-w-[220px]">Estado</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-amber-100">
@@ -102,6 +148,9 @@ export function SupplierDisputedItemsTable({ items, showValue }: { items: Suppli
                 <td className={`${td} text-amber-800`}>{firstName(i.approvedByName) || "—"}</td>
                 <td className={`${td} text-amber-800`}>{firstName(i.reviewedByName) || "—"}</td>
                 <td className={`${td} ${i.damageConfirmPending ? "italic text-amber-600" : "font-medium text-amber-900"}`}>{damageConfirmedLabel(i)}</td>
+                <td className="px-3 py-2 text-xs">
+                  <DisputeStatus item={i} token={token} />
+                </td>
               </tr>
             ))}
           </tbody>

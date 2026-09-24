@@ -370,6 +370,24 @@ export type SupplierDebtDisputedItem = {
   // (RECEIVED) pero el pago del pedido entero queda retenido hasta que se
   // resuelva el reporte (ver isReportBlockingDebtPayment).
   paymentOnHold: boolean;
+  // Confirmado 2026-09-24, pedido explícito del usuario: CHEN ve en qué paso
+  // va cada faltante/cambio. Jariel (quien compró) coordina con CHEN y deja
+  // la conclusión como resolución REPLACEMENT ("el proveedor envía lo
+  // faltante") — recién ahí CHEN ve "enviar X" con su botón, e Inventario lo
+  // tiene como pendiente de llegar. arrivedAt = Inventario ya lo recibió
+  // (falta la aprobación de Daniel); con esa aprobación la resolución pasa a
+  // COMPLETED y, si cubre todo lo reportado, la fila desaparece sola.
+  replacements: {
+    id: string;
+    quantity: number;
+    dueDate: Date | null;
+    isMissingDelivery: boolean;
+    supplierShippedAt: Date | null;
+    arrivedAt: Date | null;
+  }[];
+  // Daniel ya confirmó, pero Jariel todavía no dejó ninguna conclusión
+  // pendiente con el proveedor.
+  awaitingCoordination: boolean;
 };
 
 // Confirmado 2026-09-08: pedido explícito del usuario — lo incompleto,
@@ -404,7 +422,20 @@ export async function getSupplierDebtDisputedItems(supplierId: string): Promise<
     include: {
       catalogItem: { select: { name: true } },
       urgentReports: {
-        include: { ...reportDebtInclude, reportedBy: { select: { name: true } }, reviewedByLead: { select: { name: true } } },
+        include: {
+          reportedBy: { select: { name: true } },
+          reviewedByLead: { select: { name: true } },
+          resolutions: {
+            select: {
+              ...reportDebtInclude.resolutions.select,
+              id: true,
+              replacementDueDate: true,
+              replacementIsMissingDelivery: true,
+              replacementSubmittedAt: true,
+              supplierShippedAt: true,
+            },
+          },
+        },
         orderBy: { reportedAt: "asc" },
       },
       reviewedBy: { select: { name: true } },
@@ -419,9 +450,11 @@ export async function getSupplierDebtDisputedItems(supplierId: string): Promise<
   return rows
     .map((r) => ({
       ...r,
-      urgentReports: r.urgentReports.filter((u) =>
-        r.status === "RECEIVED" ? isReportBlockingDebtPayment(u) : u.resolvedInternallyAt === null && u.rejectedAt === null
-      ),
+      // Corregido 2026-09-24: antes, en pedidos todavía no RECEIVED, el
+      // reporte seguía acá aunque la reposición ya hubiera llegado y Daniel
+      // la hubiera aprobado (COMPLETED) — la fila quedaba pegada con
+      // información vieja. Ahora el mismo criterio para todos los estados.
+      urgentReports: r.urgentReports.filter((u) => isReportBlockingDebtPayment(u)),
     }))
     .filter((r) => r.urgentReports.length > 0)
     .map((r) => {
@@ -434,6 +467,17 @@ export async function getSupplierDebtDisputedItems(supplierId: string): Promise<
       // urgent-reports/[id]/approve) — ahí se muestra "Administración".
       const confirmedReport = r.urgentReports.find((u) => u.reviewedByLeadAt);
       const damageConfirmedByName = damageConfirmPending ? null : (confirmedReport?.reviewedByLead?.name ?? "Administración");
+      const replacements = r.urgentReports
+        .flatMap((u) => u.resolutions)
+        .filter((res) => res.type === "REPLACEMENT" && res.status === "PENDING")
+        .map((res) => ({
+          id: res.id,
+          quantity: res.quantity,
+          dueDate: res.replacementDueDate,
+          isMissingDelivery: res.replacementIsMissingDelivery,
+          supplierShippedAt: res.supplierShippedAt,
+          arrivedAt: res.replacementSubmittedAt,
+        }));
       return {
         id: r.id,
         requestNumber: r.requestNumber,
@@ -452,6 +496,8 @@ export async function getSupplierDebtDisputedItems(supplierId: string): Promise<
         damageConfirmedByName,
         damageConfirmPending,
         paymentOnHold: r.status === "RECEIVED",
+        replacements,
+        awaitingCoordination: !damageConfirmPending && replacements.length === 0,
       };
     });
 }

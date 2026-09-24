@@ -129,6 +129,7 @@ type PendingReplacement = {
   quantity: number;
   replacementDueDate: string | null;
   replacementIsMissingDelivery: boolean;
+  supplierShippedAt: string | null;
   // Confirmado 2026-08-18: pedido explícito del usuario — mismo patrón de
   // equipo/Daniel que la recepción normal. Mientras replacementSubmittedAt
   // sea null, falta que el equipo suba fotos; con valor, falta que Daniel
@@ -1131,6 +1132,10 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                   {(canApprove || isAdmin) && ` — ${pr.quantity} un.`}
                   {" "}· llega hasta {pr.replacementDueDate ? new Date(pr.replacementDueDate).toLocaleDateString("es-MX") : "—"}
                 </div>
+                {/* Confirmado 2026-09-24: el proveedor lo marcó enviado desde su enlace — solo aviso. */}
+                {pr.supplierShippedAt && (
+                  <div className="text-[11.5px] font-medium text-teal mb-2">🚚 El proveedor dice que ya lo envió · {formatDateTime(pr.supplierShippedAt)}</div>
+                )}
                 {openReplacementId === pr.id ? (
                   <div>
                     <div className="mb-2.5">

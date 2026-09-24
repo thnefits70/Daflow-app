@@ -139,7 +139,7 @@ export default async function SupplierShippingLedgerPage({ params }: { params: P
               Estos pedidos llegaron incompletos, dañados o distintos a lo pedido. En “Detalle” está lo que encontró la bodega TBS — hace
               falta enviar el reemplazo de lo que llegó mal.
             </p>
-            <SupplierDisputedItemsTable items={disputedItems} showValue={false} />
+            <SupplierDisputedItemsTable items={disputedItems} showValue={false} token={token} />
           </section>
         )}
 

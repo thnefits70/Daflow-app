@@ -3489,6 +3489,11 @@ model PurchaseUrgentResolution {
   // cómo se rotula en pantalla.
   replacementIsMissingDelivery Boolean   @default(false)
   replacementDueDate           DateTime?
+  // Confirmado 2026-09-24, pedido explícito del usuario: el proveedor de
+  // crédito (CHEN) marca desde su enlace "ya enviamos el faltante" — solo
+  // aviso, nunca reemplaza la recepción de Inventario ni la aprobación de
+  // Daniel. Si nunca lo marca, igual avanza con la recepción real.
+  supplierShippedAt            DateTime?
   replacementSubmittedById     String?
   replacementSubmittedBy       User?     @relation("UrgentResolutionReplacementSubmittedBy", fields: [replacementSubmittedById], references: [id], onDelete: SetNull)
   replacementSubmittedAt       DateTime?

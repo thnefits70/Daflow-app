@@ -7,6 +7,10 @@ import { CheckCircle2, X } from "lucide-react";
 type Props = {
   token: string;
   requestId: string;
+  // Confirmado 2026-09-24: el mismo botón sirve para "ya enviamos el
+  // faltante/cambio" de una reposición (resolutions/[id]/confirm-shipped).
+  kind?: "request" | "resolution";
+  label?: string;
 };
 
 // Confirmado 2026-09-17, pedido explícito del usuario: el equipo de
@@ -22,7 +26,7 @@ type Props = {
 // del otro (ver captura real del usuario), un clic accidental en el botón
 // equivocado es fácil. El primer clic solo abre un paso intermedio
 // ("¿Seguro?") que hay que confirmar aparte.
-export function SupplierShipmentConfirmButton({ token, requestId }: Props) {
+export function SupplierShipmentConfirmButton({ token, requestId, kind = "request", label = "Ya lo enviamos" }: Props) {
   const router = useRouter();
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -31,7 +35,7 @@ export function SupplierShipmentConfirmButton({ token, requestId }: Props) {
   async function handleConfirm() {
     setBusy(true);
     setErr("");
-    const res = await fetch(`/api/proveedor-ledger/${token}/requests/${requestId}/confirm-shipped`, { method: "POST" });
+    const res = await fetch(`/api/proveedor-ledger/${token}/${kind === "resolution" ? "resolutions" : "requests"}/${requestId}/confirm-shipped`, { method: "POST" });
     if (!res.ok) {
       setBusy(false);
       setErr("No se pudo confirmar. Intenta de nuevo.");
@@ -73,7 +77,7 @@ export function SupplierShipmentConfirmButton({ token, requestId }: Props) {
       className="flex items-center gap-1.5 text-[12px] font-medium text-emerald-700 border border-emerald-300 bg-emerald-50 rounded-md px-3 py-1.5 cursor-pointer hover:bg-emerald-100"
       onClick={() => setConfirming(true)}
     >
-      <CheckCircle2 size={13} /> Ya lo enviamos
+      <CheckCircle2 size={13} /> {label}
     </button>
   );
 }
