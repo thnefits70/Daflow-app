@@ -1076,7 +1076,29 @@ export async function canViewFulfillmentRequests() {
   const session = await auth();
   if (!session) return false;
   if (session.user.role === "admin") return true;
-  return (await canManageJustCatalog()) || (await canSubmitFulfillmentRequest());
+  return (await canManageJustCatalog()) || (await canSubmitFulfillmentRequest()) || (await canPickFulfillmentLot());
+}
+
+// Confirmado 2026-09-23 (plan de cortes acordado con el usuario): Joel y
+// Scott (Bryan Franco) sacan la mercadería escaneando el QR de la percha —
+// por departamento Inventario, no por nombre, para que alguien nuevo en el
+// equipo pueda hacerlo sin tocar nada. Daniel (el líder) también puede.
+export async function canPickFulfillmentLot() {
+  const session = await auth();
+  if (!session || session.user.role === "admin") return false;
+  const user = await purchasesUserContext(session.user.id);
+  if (!user) return false;
+  return isInventoryTeamMember(user);
+}
+
+// La confirmación final (la que descuenta el Kardex) es exclusiva de
+// Daniel — el admin la ve pero no la hace, mismo criterio que el resto de
+// movimientos de stock de Inventario.
+export async function canConfirmFulfillmentLot() {
+  const session = await auth();
+  if (!session || session.user.role === "admin") return false;
+  const user = await purchasesUserContext(session.user.id);
+  return !!user?.isLeader && user.leadsDept?.code === "INV";
 }
 
 // Confirmado 2026-09-23 (plan de cortes acordado con el usuario): imprimir

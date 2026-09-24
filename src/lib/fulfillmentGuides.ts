@@ -424,8 +424,31 @@ export type LotLine = ItemView & {
   byCarrier: Record<string, number>;
   variants: { label: string; quantity: number }[];
 };
-export type LotWarrantyLine = ItemView & { guide: string; carrier: string; quantity: number; mode: string; piece: string | null; fromComboCode: string | null };
+export type LotWarrantyLine = ItemView & {
+  itemId: string;
+  guide: string;
+  carrier: string;
+  quantity: number;
+  mode: string;
+  piece: string | null;
+  fromComboCode: string | null;
+  pieceConfirmedAt: Date | null;
+};
 export type LotShortage = ItemView & { needed: number; stock: number };
+// Parte 3: por cada producto real del corte, lo pedido (normal + garantías
+// que no son pieza) vs lo que el equipo registró al escanear y lo que
+// Daniel confirmó.
+export type LotPickLine = ItemView & {
+  needed: number;
+  normalNeeded: number;
+  warrantyNeeded: number;
+  picked: number | null;
+  pickedByName: string | null;
+  pickedAt: Date | null;
+  confirmedQty: number | null;
+  confirmedAt: Date | null;
+  confirmedByName: string | null;
+};
 
 export async function getCompiledLot(lotId: string) {
   const lot = await prisma.fulfillmentLot.findUnique({
@@ -440,10 +463,12 @@ export async function getCompiledLot(lotId: string) {
           _count: { select: { guides: true } },
         },
       },
+      picks: true,
     },
   });
   if (!lot) return null;
-  const people = await prisma.user.findMany({ where: { id: { in: [lot.sentById, lot.printedById].filter((x): x is string => !!x) } }, select: { id: true, name: true } });
+  const personIds = [lot.sentById, lot.printedById, ...lot.picks.flatMap((p) => [p.pickedById, p.confirmedById])].filter((x): x is string => !!x);
+  const people = await prisma.user.findMany({ where: { id: { in: [...new Set(personIds)] } }, select: { id: true, name: true } });
   const nameOf = (id: string | null) => (id ? people.find((p) => p.id === id)?.name ?? "—" : null);
 
   const lines = new Map<string, LotLine & { variantMap: Map<string, number> }>();
@@ -453,7 +478,17 @@ export async function getCompiledLot(lotId: string) {
     for (const it of b.items) {
       const view: ItemView = { catalogItemId: it.catalogItemId, name: it.catalogItem.name, photos: it.catalogItem.photos, justCode: it.catalogItem.justCode };
       if (it.warrantyGuide) {
-        warranty.push({ ...view, guide: it.warrantyGuide, carrier: it.carrier ?? NO_CARRIER, quantity: it.quantity, mode: it.warrantyMode ?? "COMPLETE", piece: it.warrantyPiece, fromComboCode: it.fromComboCode });
+        warranty.push({
+          ...view,
+          itemId: it.id,
+          guide: it.warrantyGuide,
+          carrier: it.carrier ?? NO_CARRIER,
+          quantity: it.quantity,
+          mode: it.warrantyMode ?? "COMPLETE",
+          piece: it.warrantyPiece,
+          fromComboCode: it.fromComboCode,
+          pieceConfirmedAt: it.pieceConfirmedAt,
+        });
         // (piece = pieza en modo PIECE; en los demás, el color/talla de la guía)
         continue;
       }
@@ -477,14 +512,35 @@ export async function getCompiledLot(lotId: string) {
 
   // Aviso temprano de stock: lo pedido (normal + garantías que no son
   // pieza) contra el saldo actual de INVESTOCK.
-  const needed = new Map<string, { view: ItemView; qty: number }>();
-  for (const l of lineList) needed.set(l.catalogItemId, { view: l, qty: l.quantity });
+  const needed = new Map<string, { view: ItemView; qty: number; normal: number; warranty: number }>();
+  for (const l of lineList) needed.set(l.catalogItemId, { view: l, qty: l.quantity, normal: l.quantity, warranty: 0 });
   for (const w of warranty) {
     if (w.mode === "PIECE") continue;
     const cur = needed.get(w.catalogItemId);
-    if (cur) cur.qty += w.quantity;
-    else needed.set(w.catalogItemId, { view: w, qty: w.quantity });
+    if (cur) {
+      cur.qty += w.quantity;
+      cur.warranty += w.quantity;
+    } else needed.set(w.catalogItemId, { view: w, qty: w.quantity, normal: 0, warranty: w.quantity });
   }
+  const pickByItem = new Map(lot.picks.map((p) => [p.catalogItemId, p]));
+  const picking: LotPickLine[] = [...needed.values()].map(({ view, qty, normal, warranty: w }) => {
+    const p = pickByItem.get(view.catalogItemId);
+    return {
+      catalogItemId: view.catalogItemId,
+      name: view.name,
+      photos: view.photos,
+      justCode: view.justCode,
+      needed: qty,
+      normalNeeded: normal,
+      warrantyNeeded: w,
+      picked: p?.pickedQty ?? null,
+      pickedByName: nameOf(p?.pickedById ?? null),
+      pickedAt: p?.pickedAt ?? null,
+      confirmedQty: p?.confirmedQty ?? null,
+      confirmedAt: p?.confirmedAt ?? null,
+      confirmedByName: nameOf(p?.confirmedById ?? null),
+    };
+  });
   const stock = await getCurrentStockByItemIds([...needed.keys()]);
   const shortages: LotShortage[] = [...needed.values()]
     .map(({ view, qty }) => ({ catalogItemId: view.catalogItemId, name: view.name, photos: view.photos, justCode: view.justCode, needed: qty, stock: stock.get(view.catalogItemId)?.balance ?? 0 }))
@@ -501,6 +557,7 @@ export async function getCompiledLot(lotId: string) {
     manifestNumber: lot.manifestNumber,
     printedAt: lot.printedAt,
     printedByName: nameOf(lot.printedById),
+    closedAt: lot.closedAt,
     carriers: sortCarriers([...carriers]),
     batches: lot.batches.map((b) => ({
       id: b.id,
@@ -513,6 +570,7 @@ export async function getCompiledLot(lotId: string) {
     lines: lineList.sort((a, b) => b.quantity - a.quantity),
     warranty,
     shortages,
+    picking: picking.sort((a, b) => b.needed - a.needed),
     stockByItem: Object.fromEntries([...needed.keys()].map((id) => [id, stock.get(id)?.balance ?? 0])),
   };
 }

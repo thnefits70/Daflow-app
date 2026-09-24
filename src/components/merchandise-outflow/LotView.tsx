@@ -5,10 +5,31 @@ import { ChevronDown, ChevronUp, Package, Printer, X } from "lucide-react";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 import { carrierLabel } from "@/lib/carriers";
 import { sourceLabel, type VariantNote } from "./fulfillmentRequestShared";
+import { PickingPanel } from "./PickingPanel";
 
 type ItemView = { catalogItemId: string; name: string; photos: string[]; justCode: string | null };
 export type LotLine = ItemView & { quantity: number; byCarrier: Record<string, number>; variants: VariantNote[] };
-export type LotWarrantyLine = ItemView & { guide: string; carrier: string; quantity: number; mode: string; piece: string | null; fromComboCode: string | null };
+export type LotWarrantyLine = ItemView & {
+  itemId: string;
+  guide: string;
+  carrier: string;
+  quantity: number;
+  mode: string;
+  piece: string | null;
+  fromComboCode: string | null;
+  pieceConfirmedAt: string | null;
+};
+export type LotPickLine = ItemView & {
+  needed: number;
+  normalNeeded: number;
+  warrantyNeeded: number;
+  picked: number | null;
+  pickedByName: string | null;
+  pickedAt: string | null;
+  confirmedQty: number | null;
+  confirmedAt: string | null;
+  confirmedByName: string | null;
+};
 export type LotShortage = ItemView & { needed: number; stock: number };
 export type LotBatch = { id: string; source: string; requestedAt: string; requestedByName: string; guideCount: number; fileCount: number };
 export type LotStatus = "DRAFT" | "SENT" | "CLOSED";
@@ -27,7 +48,9 @@ export type CompiledLot = {
   manifestNumber: number | null;
   printedAt: string | null;
   printedByName: string | null;
-  viewer?: { canPrint: boolean };
+  closedAt: string | null;
+  picking: LotPickLine[];
+  viewer?: { canPrint: boolean; canPick: boolean; canConfirm: boolean };
 };
 export type LotListItem = { id: string; day: string; corte: number; status: LotStatus; createdAt: string; sentAt: string | null; uploads: number; guides: number };
 
@@ -252,6 +275,8 @@ export function LotView({
       )}
 
       {err && <div className="text-red text-[12px] mb-2">{err}</div>}
+
+      {lot.status !== "DRAFT" && <PickingPanel lot={lot} onChanged={onChanged} />}
 
       {editable && !confirming && (
         <button
