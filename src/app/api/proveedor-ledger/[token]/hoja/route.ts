@@ -5,7 +5,7 @@ import { Prisma } from "@/generated/prisma/client";
 import { findSupplierByPublicSheetToken } from "@/lib/supplierDebt";
 import { getSheetViewer } from "@/lib/supplierSheetAccess";
 import { SHEET_MAX_COLS, SHEET_MAX_ROWS } from "@/lib/supplierSheet";
-import { loadAutoOrdersTab } from "@/lib/supplierSheetAuto";
+import { AUTO_ORDERS_COLS, ensureAutoOrdersTab, isAutoOrdersTabId, mergeAutoOrders } from "@/lib/supplierSheetAuto";
 
 // Confirmado 2026-09-24, pedido explícito del usuario: la hoja de cálculo en
 // línea del equipo de CHEN. Sin auth() a propósito (no tienen cuenta) — el
@@ -54,6 +54,7 @@ const opSchema = z.discriminatedUnion("t", [
 
 const bodySchema = z.object({ ops: z.array(opSchema).min(1).max(5000) });
 
+const AUTO_MSG = "Esa información se carga automáticamente — no se puede cambiar ni borrar.";
 const SIDE_LABEL = { SUPPLIER: "el equipo del proveedor", OWN: "nuestro equipo" } as const;
 
 async function loadSheet(supplierId: string) {
@@ -64,7 +65,13 @@ async function loadSheet(supplierId: string) {
     await prisma.supplierSheetTab.create({ data: { supplierId, name: "Hoja 1", position: 0 } });
     tabs = await prisma.supplierSheetTab.findMany({ where: { supplierId }, orderBy, include });
   }
-  return tabs.map((t) => ({
+  // Confirmado 2026-09-24: pestaña "Pedidos" (ver supplierSheetAuto.ts),
+  // siempre primera; lo automático se pone encima en cada carga.
+  if (!tabs.some((t) => isAutoOrdersTabId(t.id))) {
+    await ensureAutoOrdersTab(supplierId);
+    tabs = await prisma.supplierSheetTab.findMany({ where: { supplierId }, orderBy, include });
+  }
+  const mapped = tabs.map((t) => ({
     id: t.id,
     name: t.name,
     colWidths: (t.colWidths as Record<string, number> | null) ?? {},
@@ -72,6 +79,7 @@ async function loadSheet(supplierId: string) {
     createdBySide: t.createdBySide,
     cells: t.cells.map((c) => ({ r: c.row, c: c.col, v: c.value, s: c.style ?? null, a: c.authorSide, e: c.authorEmail })),
   }));
+  return Promise.all(mapped.map((t) => (isAutoOrdersTabId(t.id) ? mergeAutoOrders(supplierId, t) : t)));
 }
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ token: string }> }) {
@@ -81,9 +89,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ tok
   const viewer = await getSheetViewer(supplier.id);
   if (!viewer) return NextResponse.json({ error: "Tu sesión terminó. Vuelve a entrar con tu correo." }, { status: 401 });
   return NextResponse.json(
-    // Confirmado 2026-09-24: la hoja "Pedidos" (fotos de lo pedido, la llena
-    // DAFLOW sola, ver supplierSheetAuto.ts) va primero, con candado.
-    { tabs: [await loadAutoOrdersTab(supplier.id), ...(await loadSheet(supplier.id))], canWrite: viewer.canWrite, side: viewer.side },
+    { tabs: await loadSheet(supplier.id), canWrite: viewer.canWrite, side: viewer.side },
     { headers: { "Cache-Control": "no-store" } },
   );
 }
@@ -114,6 +120,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
   let nextPosition = allTabs.reduce((m, t) => Math.max(m, t.position), -1) + 1;
   const createdTabIds: string[] = [];
   const rejected: string[] = [];
+  // Celdas que carga DAFLOW sola (pestaña "Pedidos"): no las cambia nadie.
+  let rejectedAuto = 0;
 
   // Estado actual de las celdas que se van a tocar (quién las escribió).
   const touchedTabIds = [...new Set(parsed.data.ops.flatMap((o) => (o.t === "set" ? [o.tabId] : [])))].filter((id) => freeTabs.has(id));
@@ -140,6 +148,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
 
     if (op.t === "set") {
       const key = `${op.tabId}:${op.r}:${op.c}`;
+      if (isAutoOrdersTabId(op.tabId) && AUTO_ORDERS_COLS.includes(op.c)) {
+        rejectedAuto++;
+        continue;
+      }
       const cur = existing.get(key);
       if (cur?.authorSide && cur.authorSide !== viewer.side) {
         rejected.push(key);
@@ -172,6 +184,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
         side: viewer.side,
       });
     } else if (op.t === "renameTab" || op.t === "deleteTab") {
+      // La pestaña "Pedidos" (automática) no se renombra ni se elimina.
+      if (isAutoOrdersTabId(op.tabId)) {
+        rejected.push(`tab:${op.tabId}`);
+        continue;
+      }
       // Solo el lado que creó la hoja la renombra o elimina (null = anterior
       // a este cambio, cualquiera). Nunca se elimina si tiene celdas del otro lado.
       if (tab.createdBySide && tab.createdBySide !== viewer.side) {
@@ -203,7 +220,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
   return NextResponse.json({
     ok: true,
     createdTabIds,
-    rejected,
-    rejectedMessage: rejected.length ? `No se puede cambiar lo que escribió ${SIDE_LABEL[viewer.side === "OWN" ? "SUPPLIER" : "OWN"]}.` : undefined,
+    rejected: rejectedAuto ? [...rejected, "auto"] : rejected,
+    rejectedMessage: rejectedAuto
+      ? AUTO_MSG
+      : rejected.length
+        ? `No se puede cambiar lo que escribió ${SIDE_LABEL[viewer.side === "OWN" ? "SUPPLIER" : "OWN"]}.`
+        : undefined,
   });
 }

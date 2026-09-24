@@ -29,12 +29,13 @@ import { type Cell, type CellStyle, type SheetSide, SHEET_MAX_COLS, SHEET_MAX_RO
 // guarda solo (celda por celda) y cada pocos segundos se trae lo que
 // escribieron los demás.
 
-type Tab = { id: string; name: string; colWidths: Record<string, number>; rowHeights: Record<string, number>; locked: boolean; createdBySide: SheetSide | null; cells: Record<string, Cell> };
+type Tab = { id: string; name: string; colWidths: Record<string, number>; rowHeights: Record<string, number>; autoCols: number[]; locked: boolean; createdBySide: SheetSide | null; cells: Record<string, Cell> };
 type ServerTab = {
   id: string;
   name: string;
   colWidths: Record<string, number>;
   rowHeights?: Record<string, number>;
+  autoCols?: number[];
   locked?: boolean;
   createdBySide?: SheetSide | null;
   cells: { r: number; c: number; v: string; s: CellStyle | null; a?: SheetSide | null; e?: string | null }[];
@@ -58,7 +59,7 @@ function fromServer(tabs: ServerTab[]): Tab[] {
   return tabs.map((t) => {
     const cells: Record<string, Cell> = {};
     for (const c of t.cells) cells[`${c.r}:${c.c}`] = { v: c.v, s: c.s, a: c.a ?? null, e: c.e ?? null };
-    return { id: t.id, name: t.name, colWidths: t.colWidths ?? {}, rowHeights: t.rowHeights ?? {}, locked: !!t.locked, createdBySide: t.createdBySide ?? null, cells };
+    return { id: t.id, name: t.name, colWidths: t.colWidths ?? {}, rowHeights: t.rowHeights ?? {}, autoCols: t.autoCols ?? [], locked: !!t.locked, createdBySide: t.createdBySide ?? null, cells };
   });
 }
 
@@ -88,6 +89,9 @@ export function SupplierSheet({ token, email, canWrite, side }: { token: string;
   const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null);
   const [notice, setNotice] = useState("");
   const otherSideMsg = "Esa celda la escribió el otro equipo — no se puede cambiar ni borrar.";
+  // Confirmado 2026-09-24: el aviso de lo automático sale SOLO cuando alguien
+  // intenta cambiar una de esas celdas (la API también lo frena).
+  const autoMsg = "Esa información se carga automáticamente — no se puede cambiar ni borrar.";
   const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const showNotice = useCallback((msg: string) => {
     setNotice(msg);
@@ -274,8 +278,13 @@ export function SupplierSheet({ token, email, canWrite, side }: { token: string;
       if (!t || t.locked || readOnlyRef.current) return;
       const changes: Change[] = [];
       let blocked = 0;
+      let blockedAuto = 0;
       for (const { r, c, next } of cells) {
         if (r < 0 || c < 0 || r >= SHEET_MAX_ROWS || c >= SHEET_MAX_COLS) continue;
+        if (t.autoCols.includes(c)) {
+          blockedAuto++;
+          continue;
+        }
         const before = getCell(t, r, c);
         if (before.a && before.a !== side) {
           blocked++;
@@ -286,14 +295,15 @@ export function SupplierSheet({ token, email, canWrite, side }: { token: string;
         if (before.v === after.v && JSON.stringify(before.s) === JSON.stringify(after.s)) continue;
         changes.push({ tabId: t.id, r, c, before, after });
       }
-      if (blocked) showNotice(otherSideMsg);
+      if (blockedAuto) showNotice(autoMsg);
+      else if (blocked) showNotice(otherSideMsg);
       if (!changes.length) return;
       undoStack.current.push(changes);
       if (undoStack.current.length > 200) undoStack.current.shift();
       redoStack.current = [];
       applyChanges(changes, "after");
     },
-    [activeId, applyChanges, getCell, side, email, showNotice, otherSideMsg],
+    [activeId, applyChanges, getCell, side, email, showNotice, otherSideMsg, autoMsg],
   );
 
   function undo() {
@@ -354,6 +364,10 @@ export function SupplierSheet({ token, email, canWrite, side }: { token: string;
 
   function startEdit(initial?: string, source: "cell" | "bar" = "cell") {
     if (readOnly) return;
+    if (tab?.autoCols.includes(sel.c)) {
+      showNotice(autoMsg);
+      return;
+    }
     const cur = getCell(tab, sel.r, sel.c);
     if (cur.a && cur.a !== side) {
       showNotice(otherSideMsg);
@@ -852,13 +866,13 @@ export function SupplierSheet({ token, email, canWrite, side }: { token: string;
                     type="button"
                     className="cursor-pointer"
                     onClick={() => { if (editing) finishEdit(); setActiveId(t.id); select({ r: 0, c: 0 }); undoStack.current = []; redoStack.current = []; }}
-                    onDoubleClick={() => { if (canWrite && !t.locked && (!t.createdBySide || t.createdBySide === side)) setRenaming({ id: t.id, name: t.name }); }}
+                    onDoubleClick={() => { if (canWrite && !t.locked && !t.autoCols.length && (!t.createdBySide || t.createdBySide === side)) setRenaming({ id: t.id, name: t.name }); }}
                   >
                     {t.locked && <Lock size={11} className="mr-1 inline -mt-0.5" />}
                     {t.name}
                   </button>
                 )}
-                {canWrite && !t.locked && (!t.createdBySide || t.createdBySide === side) && (<button
+                {canWrite && !t.locked && !t.autoCols.length && (!t.createdBySide || t.createdBySide === side) && (<button
                   type="button"
                   className="ml-1 rounded p-0.5 hover:bg-black/10"
                   title="Opciones de la hoja"
