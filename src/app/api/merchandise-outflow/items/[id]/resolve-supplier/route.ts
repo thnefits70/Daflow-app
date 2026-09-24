@@ -3,6 +3,7 @@ import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { outflowItemDisplayName, resolveOutflowItemGestorId, notifySupplierExchangeRejected } from "@/lib/merchandiseOutflow";
+import { notifyOwner } from "@/lib/notifications";
 
 const schema = z.discriminatedUnion("resolution", [
   z.object({ resolution: z.literal("REPLACED"), quantity: z.number().int().positive().optional(), note: z.string().trim().optional() }),
@@ -18,7 +19,8 @@ const schema = z.discriminatedUnion("resolution", [
     resolution: z.literal("REJECTED"),
     quantity: z.number().int().positive().optional(),
     note: z.string().trim().min(1, "Cuenta qué te dijo el proveedor — esto dispara avisos urgentes."),
-    proofUrl: z.string().url().optional(),
+    // Confirmado 2026-09-23, revisión anti-fraude: antes era opcional.
+    proofUrl: z.string().url({ message: "Sube la captura donde el proveedor rechaza el reclamo." }),
     proofName: z.string().trim().optional(),
   }),
 ]);
@@ -72,6 +74,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const note = "note" in parsed.data ? parsed.data.note?.trim() || null : null;
   const now = new Date();
 
+  // Confirmado 2026-09-23, revisión anti-fraude: un crédito menor que lo que
+  // se pagó por esa mercadería necesita explicación y se le avisa al admin.
+  const expectedForQty = proportionalCredit(resolveQty);
+  const creditBelowExpected = parsed.data.resolution === "CREDIT_ISSUED" && expectedForQty != null && parsed.data.amount < expectedForQty - 0.01;
+  if (creditBelowExpected && !note) {
+    return NextResponse.json({ error: `El crédito es menor que lo que se pagó ($${expectedForQty!.toFixed(2)}) — explica por qué en la nota.` }, { status: 400 });
+  }
+
   const resolvedItemId = await prisma.$transaction(async (tx) => {
     let targetId = id;
     if (isPartial) {
@@ -95,7 +105,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     await tx.merchandiseOutflowItem.update({
       where: { id: targetId },
-      data: { resolution: parsed.data.resolution, resolutionNote: note, resolvedAt: now, resolvedById: session.user.id },
+      data: {
+        resolution: parsed.data.resolution,
+        resolutionNote: note,
+        resolvedAt: now,
+        resolvedById: session.user.id,
+        rejectionProofUrl: parsed.data.resolution === "REJECTED" ? parsed.data.proofUrl : null,
+      },
     });
 
     if (parsed.data.resolution === "CREDIT_ISSUED") {
@@ -122,6 +138,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       declaredName: item.declaredName,
       catalogItem: item.catalogItem,
       batch: { code: item.batch.code, supplier: item.batch.supplier },
+    }).catch(() => null);
+  }
+
+  if (creditBelowExpected) {
+    await notifyOwner("admin", {
+      title: "⚠️ Crédito menor a lo pagado",
+      body: `${outflowItemDisplayName(item)} (${item.batch.code}) — crédito $${(parsed.data as { amount: number }).amount.toFixed(2)} vs pagado $${expectedForQty!.toFixed(2)}: ${note}`,
+      url: "/area/workspace?tab=egresos&otab=proveedor",
     }).catch(() => null);
   }
 

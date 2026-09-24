@@ -22,6 +22,7 @@ export type SupplierBankAccountDTO = {
   holderIdNumber: string | null;
   createdByName: string | null;
   createdAt: string;
+  verifiedAt: string | null;
 };
 export type SupplierDTO = {
   id: string;
@@ -390,6 +391,16 @@ export function SuppliersPanel({
   // aquí). Reusa el mismo endpoint que ya usa el picker de Control de
   // Compras, porque ambas pantallas leen/escriben la misma tabla de
   // proveedores y cuentas bancarias.
+  // Confirmado 2026-09-23, revisión anti-fraude: una cuenta que agregó
+  // alguien de Compras no se puede pagar hasta que el admin la verifica.
+  const [verifyingAccountId, setVerifyingAccountId] = useState<string | null>(null);
+  const verifyBankAccount = async (supplierId: string, accountId: string) => {
+    setVerifyingAccountId(accountId);
+    await fetch(`/api/purchase-suppliers/${supplierId}/bank-accounts/${accountId}/verify`, { method: "POST" }).catch(() => null);
+    setVerifyingAccountId(null);
+    router.refresh();
+  };
+
   const addBankAccount = async (supplierId: string) => {
     if (!accountForm.bankName.trim() || !accountForm.bankAccountType.trim() || !accountForm.bankAccountNumber.trim() || !accountForm.bankAccountHolder.trim() || !accountForm.holderIdType || !accountForm.holderIdNumber.trim()) {
       setAccountErr("Completa todos los campos.");
@@ -662,7 +673,7 @@ export function SuppliersPanel({
                         {s.bankAccounts.map((b) => {
                           const revealed = revealedAccountIds.has(b.id);
                           return (
-                            <div key={b.id} className="bg-cloud border border-rule rounded px-3 py-2.5">
+                            <div key={b.id} className={`bg-cloud border rounded px-3 py-2.5 ${b.verifiedAt ? "border-rule" : "border-red/50"}`}>
                               <div className="flex items-center justify-between gap-2">
                                 <span className="text-[12.5px] font-semibold text-ink">
                                   {b.bankName} · {b.bankAccountType}
@@ -685,6 +696,21 @@ export function SuppliersPanel({
                               <div className="text-[10.5px] text-steel-dim mt-1">
                                 Agregada por {b.createdByName ?? "—"} · {formatDateTime(b.createdAt)}
                               </div>
+                              {b.verifiedAt ? (
+                                <div className="text-[10.5px] text-green mt-1">✓ Verificada · {formatDateTime(b.verifiedAt)}</div>
+                              ) : (
+                                <div className="flex items-center justify-between gap-2 mt-2 bg-red/10 border border-red/40 rounded px-2.5 py-1.5">
+                                  <span className="text-[11px] text-red font-semibold">Por verificar — no se le puede transferir todavía. Confirma con el proveedor que la cuenta es suya.</span>
+                                  <button
+                                    type="button"
+                                    disabled={verifyingAccountId === b.id}
+                                    className="shrink-0 rounded border border-teal bg-teal px-2.5 py-1 text-[11px] font-bold text-navy cursor-pointer disabled:opacity-60"
+                                    onClick={() => verifyBankAccount(s.id, b.id)}
+                                  >
+                                    {verifyingAccountId === b.id ? "…" : "Es del proveedor"}
+                                  </button>
+                                </div>
+                              )}
                             </div>
                           );
                         })}

@@ -42,6 +42,7 @@ export async function GET() {
       purchaseExceptionDecidedBy: { select: { name: true } },
       purchaseResolution: true,
       purchaseResolutionNote: true,
+      rejectionProofUrl: true,
       purchaseResolvedAt: true,
       purchaseResolvedBy: { select: { name: true } },
       credit: { select: { amount: true } },

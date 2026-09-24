@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { canSubmitPurchaseRequests } from "@/lib/guards";
+import { notifyOwner } from "@/lib/notifications";
 
 const createSchema = z.object({
   bankName: z.string().trim().min(1, "Falta el banco."),
@@ -44,7 +45,18 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       holderIdType: parsed.data.holderIdType,
       holderIdNumber: parsed.data.holderIdNumber,
       createdById: isAdmin ? null : session.user.id,
+      // Confirmado 2026-09-23, revisión anti-fraude: si no la agrega el
+      // admin, queda por verificar — no se le puede transferir hasta que el
+      // admin confirme con el proveedor que la cuenta es suya.
+      verifiedAt: isAdmin ? new Date() : null,
     },
   });
+  if (!isAdmin) {
+    await notifyOwner("admin", {
+      title: "🏦 Cuenta bancaria nueva por verificar",
+      body: `${supplier.name} — titular ${account.bankAccountHolder}, ${account.bankName} …${account.bankAccountNumber.slice(-4)}. La agregó ${session.user.name ?? "alguien de Compras"}. Confírmala con el proveedor antes de pagarle.`,
+      url: "/admin/proveedores",
+    }).catch(() => null);
+  }
   return NextResponse.json(account, { status: 201 });
 }

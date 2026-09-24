@@ -221,7 +221,9 @@ function GestionCard({ item, onChanged, onCredit }: { item: ItemDTO; onChanged: 
       const body =
         resolving === "CREDIT_ISSUED"
           ? { resolution: "CREDIT_ISSUED", amount: Number(amount), proofUrl, note: note.trim() || undefined }
-          : { resolution: resolving, note: note.trim() || undefined };
+          : resolving === "REJECTED"
+            ? { resolution: "REJECTED", note: note.trim() || undefined, proofUrl }
+            : { resolution: resolving, note: note.trim() || undefined };
       await postJson(`/api/merchandise-outflow/items/${item.id}/purchase-resolve`, body);
       setResolving(null);
       setNote("");
@@ -375,6 +377,17 @@ function GestionCard({ item, onChanged, onCredit }: { item: ItemDTO; onChanged: 
           <div className="text-[12px] font-semibold mb-1.5">
             {resolving === "REPLACED" ? "¿Confirmar que el proveedor mandó reemplazo?" : resolving === "CREDIT_ISSUED" ? "Registrar el crédito que dio el proveedor" : "Explica qué te dijo el proveedor"}
           </div>
+          {resolving === "REJECTED" && (
+            proofUrl ? (
+              <div className="text-[11.5px] text-green font-semibold mb-2">Captura subida.</div>
+            ) : (
+              <label className="block mb-2 text-[11.5px] font-semibold text-blue cursor-pointer">
+                {uploadingProof ? "Subiendo…" : "Subir captura donde el proveedor rechaza (obligatoria)"}
+                <input type="file" accept="image/*" className="hidden" disabled={uploadingProof} onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadProofFile(f); e.target.value = ""; }} />
+              </label>
+            )
+          )}
+          {resolving === "REJECTED" && <div className="text-[11px] text-red mb-2">Esto le avisa al admin.</div>}
           {resolving === "CREDIT_ISSUED" && (
             <>
               <input type="number" min={0} step="0.01" placeholder="Monto del crédito" className="w-full rounded border border-rule bg-surface px-2.5 py-1.5 text-[12.5px] mb-2" value={amount} onChange={(e) => setAmount(e.target.value)} />
@@ -397,7 +410,7 @@ function GestionCard({ item, onChanged, onCredit }: { item: ItemDTO; onChanged: 
             </button>
             <button
               type="button"
-              disabled={saving || (resolving === "CREDIT_ISSUED" && (!Number(amount) || !proofUrl)) || (resolving === "REJECTED" && !note.trim())}
+              disabled={saving || (resolving === "CREDIT_ISSUED" && (!Number(amount) || !proofUrl)) || (resolving === "REJECTED" && (!note.trim() || !proofUrl))}
               className="flex-1 rounded border border-teal bg-teal px-2.5 py-1.5 text-[11.5px] font-bold text-navy cursor-pointer disabled:opacity-40"
               onClick={submitResolve}
             >

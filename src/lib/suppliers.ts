@@ -11,6 +11,7 @@ type BankAccountRow = {
   createdAt: Date;
   createdById: string | null;
   createdBy: { name: string } | null;
+  verifiedAt: Date | null;
 };
 
 type SupplierRow = {
@@ -80,6 +81,7 @@ export function toSupplierDTO(s: SupplierRow, includeBankAccounts = false, inclu
             holderIdNumber: b.holderIdNumber,
             createdByName: b.createdBy?.name ?? (b.createdById === null ? "Administrador" : null),
             createdAt: b.createdAt.toISOString(),
+            verifiedAt: b.verifiedAt ? b.verifiedAt.toISOString() : null,
           }))
         : undefined,
     hasBankAccount: (includeBankAccounts || includeHasBankAccount) && bankAccountsCount !== undefined ? bankAccountsCount > 0 : undefined,

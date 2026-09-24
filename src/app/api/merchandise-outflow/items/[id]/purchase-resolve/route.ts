@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { canManageOutflowPurchaseGestion } from "@/lib/guards";
 import { notifyInventoryLeadDeteriorPurchaseResolved, outflowItemDisplayName } from "@/lib/merchandiseOutflow";
+import { notifyOwner } from "@/lib/notifications";
 
 const schema = z.discriminatedUnion("resolution", [
   z.object({ resolution: z.literal("REPLACED"), note: z.string().trim().optional() }),
@@ -14,7 +15,14 @@ const schema = z.discriminatedUnion("resolution", [
     proofName: z.string().trim().optional(),
     note: z.string().trim().optional(),
   }),
-  z.object({ resolution: z.literal("REJECTED"), note: z.string().trim().min(1, "Cuenta qué te dijo el proveedor.") }),
+  // Confirmado 2026-09-23, revisión anti-fraude pedida por el usuario: un
+  // rechazo ya no se cierra solo con una nota — hace falta la captura del
+  // proveedor, y se le avisa al admin.
+  z.object({
+    resolution: z.literal("REJECTED"),
+    note: z.string().trim().min(1, "Cuenta qué te dijo el proveedor."),
+    proofUrl: z.string().url({ message: "Sube la captura donde el proveedor rechaza el reclamo." }),
+  }),
 ]);
 
 // Confirmado 2026-09-17, pedido explícito del usuario: Jariel registra el
@@ -53,10 +61,24 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const note = "note" in parsed.data ? parsed.data.note?.trim() || null : null;
   const now = new Date();
 
+  // Confirmado 2026-09-23, revisión anti-fraude: un crédito menor que lo que
+  // se pagó por esa mercadería necesita explicación y se le avisa al admin.
+  const creditBelowExpected =
+    parsed.data.resolution === "CREDIT_ISSUED" && item.expectedCreditAmount != null && parsed.data.amount < item.expectedCreditAmount - 0.01;
+  if (creditBelowExpected && !note) {
+    return NextResponse.json({ error: `El crédito es menor que lo que se pagó ($${item.expectedCreditAmount!.toFixed(2)}) — explica por qué en la nota.` }, { status: 400 });
+  }
+
   await prisma.$transaction(async (tx) => {
     await tx.merchandiseOutflowItem.update({
       where: { id },
-      data: { purchaseResolution: parsed.data.resolution, purchaseResolutionNote: note, purchaseResolvedAt: now, purchaseResolvedById: session.user.id },
+      data: {
+        purchaseResolution: parsed.data.resolution,
+        purchaseResolutionNote: note,
+        purchaseResolvedAt: now,
+        purchaseResolvedById: session.user.id,
+        rejectionProofUrl: parsed.data.resolution === "REJECTED" ? parsed.data.proofUrl : null,
+      },
     });
 
     if (parsed.data.resolution === "CREDIT_ISSUED") {
@@ -83,6 +105,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     resolution: parsed.data.resolution,
     creditAmount: parsed.data.resolution === "CREDIT_ISSUED" ? parsed.data.amount : null,
   });
+
+  if (parsed.data.resolution === "REJECTED" || creditBelowExpected) {
+    await notifyOwner("admin", {
+      title: parsed.data.resolution === "REJECTED" ? "⚠️ Proveedor rechazó un reclamo de deterioro" : "⚠️ Crédito menor a lo pagado",
+      body:
+        parsed.data.resolution === "REJECTED"
+          ? `${outflowItemDisplayName(item)} — ${item.quantity} un.${item.expectedCreditAmount != null ? ` ($${item.expectedCreditAmount.toFixed(2)})` : ""}: ${note}`
+          : `${outflowItemDisplayName(item)} — crédito $${(parsed.data as { amount: number }).amount.toFixed(2)} vs pagado $${item.expectedCreditAmount!.toFixed(2)}: ${note}`,
+      url: "/area/workspace?tab=compras&ptab=urgentes",
+    }).catch(() => null);
+  }
 
   const finalItem = await prisma.merchandiseOutflowItem.findUnique({ where: { id } });
   return NextResponse.json(finalItem);

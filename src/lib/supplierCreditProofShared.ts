@@ -36,7 +36,7 @@ export type CreditDuplicateWarning = { creditId: string; createdAt: string; amou
 export function computeCreditProofWarnings(params: {
   read: CreditProofRead | null;
   supplierName: string;
-  selectedClaims: { id: string; name: string }[];
+  selectedClaims: { id: string; name: string; expectedCredit?: number | null }[];
   amount: number;
   duplicates: CreditDuplicateWarning[];
 }): string[] {
@@ -54,6 +54,13 @@ export function computeCreditProofWarnings(params: {
     const selectedIds = new Set(params.selectedClaims.map((c) => c.id));
     const extra = read.lines.filter((l) => !l.claimId || !selectedIds.has(l.claimId));
     if (extra.length) w.push(`El comprobante trae renglones que no están marcados: ${extra.map((l) => l.code ?? l.description).join(", ")}.`);
+  }
+  // Confirmado 2026-09-23, revisión anti-fraude: el comprobante y el monto
+  // los trae la misma persona — si los dos dicen menos de lo que de verdad se
+  // pagó por esa mercadería, igual tiene que saltar.
+  const expected = params.selectedClaims.reduce((s, c) => s + (c.expectedCredit ?? 0), 0);
+  if (expected > 0 && params.amount < expected - 0.01) {
+    w.push(`El crédito ($${params.amount.toFixed(2)}) es menor que lo que se pagó por esa mercadería ($${expected.toFixed(2)}).`);
   }
   for (const d of params.duplicates) {
     w.push(

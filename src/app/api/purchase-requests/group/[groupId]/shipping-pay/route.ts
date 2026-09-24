@@ -22,7 +22,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ gro
   const parsed = schema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: "Datos inválidos." }, { status: 400 });
 
-  const rows = await prisma.purchaseRequest.findMany({ where: { groupId }, include: { catalogItem: { select: { name: true } } } });
+  const rows = await prisma.purchaseRequest.findMany({ where: { groupId }, include: { catalogItem: { select: { name: true } }, carrierBankAccount: { select: { verifiedAt: true } } } });
   if (rows.length === 0) return NextResponse.json({ error: "No encontrada." }, { status: 404 });
   // Confirmado 2026-08-14: guarda extra contra pagar el mismo flete dos
   // veces — complementa el checkFreightAlreadyPaid del lado de Caja Chica
@@ -30,6 +30,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ gro
   // de verdad sin importar el canal.
   if (rows[0].shippingPaidAt) {
     return NextResponse.json({ error: "El flete ya está pagado." }, { status: 409 });
+  }
+  // Confirmado 2026-09-23, revisión anti-fraude: igual que al pagar la mercadería.
+  if (rows[0].carrierBankAccount && !rows[0].carrierBankAccount.verifiedAt) {
+    return NextResponse.json({ error: "La cuenta del transportista es nueva y el admin todavía no la verificó." }, { status: 409 });
   }
 
   const dup = await findDuplicatePaymentProofUse(parsed.data.proofReceiptNumber, groupId);

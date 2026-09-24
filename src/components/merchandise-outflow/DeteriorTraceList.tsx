@@ -32,6 +32,7 @@ type TraceItem = {
   purchaseExceptionDecidedBy: Named;
   purchaseResolution: "REPLACED" | "CREDIT_ISSUED" | "REJECTED" | null;
   purchaseResolutionNote: string | null;
+  rejectionProofUrl?: string | null;
   purchaseResolvedAt: string | null;
   purchaseResolvedBy: Named;
   credit: { amount: number } | null;
@@ -151,6 +152,9 @@ function Timeline({ i, canAct, onPack }: { i: TraceItem; canAct: boolean; onPack
             when={i.purchaseResolvedAt}
           >
             {i.purchaseResolutionNote}
+            {i.rejectionProofUrl && (
+              <a href={i.rejectionProofUrl} target="_blank" rel="noopener noreferrer" className="ml-1.5 text-blue font-semibold">Ver captura del rechazo</a>
+            )}
           </Step>
           {(i.purchaseResolution === "REPLACED" || i.purchaseResolution === "CREDIT_ISSUED") && (
             <Step

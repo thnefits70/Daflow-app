@@ -17,6 +17,9 @@ const schema = z.object({
   // cliente — se manda tal cual (mismo patrón que aiPhotoMatch en receipt/
   // route.ts), nunca se re-lee server-side.
   paymentProofReceiptNumber: z.string().trim().nullable().optional(),
+  // Confirmado 2026-09-23: quien paga confirma a propósito que revisó una
+  // cuenta cambiada después de aprobar (ver bankAccountChangedAfterApprovalAt).
+  confirmAccountChange: z.boolean().optional(),
 });
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ groupId: string }> }) {
@@ -30,7 +33,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ gro
 
   const rows = await prisma.purchaseRequest.findMany({
     where: { groupId },
-    include: { catalogItem: { select: { name: true } }, supplier: { select: { paymentMode: true } } },
+    include: { catalogItem: { select: { name: true } }, supplier: { select: { paymentMode: true } }, bankAccount: { select: { verifiedAt: true } } },
   });
   if (rows.length === 0) return NextResponse.json({ error: "No encontrada." }, { status: 404 });
   if (rows.some((r) => r.status !== "APPROVED")) {
@@ -69,6 +72,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ gro
   const allCreditIdsToApply = [...reservedIds, ...appliedCreditIds];
   const total = rows.reduce((s, r) => s + r.totalCost, 0);
   const netAmount = Math.max(0, total - reservedTotal - appliedTotal);
+  // Confirmado 2026-09-23, revisión anti-fraude pedida por el usuario: no se
+  // transfiere a una cuenta que el admin todavía no verificó, y una cuenta
+  // cambiada después de aprobar se tiene que confirmar a propósito.
+  if (netAmount > 0) {
+    if (rows[0].bankAccount && !rows[0].bankAccount.verifiedAt) {
+      return NextResponse.json({ error: "La cuenta del proveedor es nueva y el admin todavía no la verificó — confírmala con el proveedor antes de transferir." }, { status: 409 });
+    }
+    if (rows[0].bankAccountChangedAfterApprovalAt && !parsed.data.confirmAccountChange) {
+      return NextResponse.json({ error: "La cuenta se cambió después de aprobar — confirma que la revisaste antes de pagar." }, { status: 409 });
+    }
+  }
   if (netAmount > 0 && !parsed.data.paymentProofUrl) {
     return NextResponse.json({ error: "Falta el comprobante de lo que se transfirió." }, { status: 400 });
   }

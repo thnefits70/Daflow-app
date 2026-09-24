@@ -598,7 +598,7 @@ export async function checkPurchaseSubmission(d: PurchaseSubmissionData): Promis
   return { ok: true, resolvedBankAccountId, anyOverThreshold, anySupplierNotCheapest, creditSkipJustification, nameById, groupTotal, lineShippingByIndex, justificationByIndex };
 }
 
-const bankAccountSelect = { id: true, bankName: true, bankAccountType: true, bankAccountNumber: true, bankAccountHolder: true, holderIdType: true, holderIdNumber: true };
+const bankAccountSelect = { id: true, supplierId: true, bankName: true, bankAccountType: true, bankAccountNumber: true, bankAccountHolder: true, holderIdType: true, holderIdNumber: true, verifiedAt: true, createdAt: true, createdBy: { select: { name: true } } };
 
 // Include compartido por las rutas de solicitudes de compra (listar,
 // aprobar, recibir, facturar, auditar, corregir) — un solo lugar para no
@@ -610,6 +610,7 @@ export const purchaseRequestInclude = {
   bankAccount: { select: bankAccountSelect },
   carrierBankAccount: { select: bankAccountSelect },
   bankAccountChangeRequestedBy: { select: { name: true } },
+  bankAccountChangedAfterApprovalBy: { select: { name: true } },
   requestedBy: { select: { name: true } },
   reviewedBy: { select: { name: true } },
   paidBy: { select: { name: true } },

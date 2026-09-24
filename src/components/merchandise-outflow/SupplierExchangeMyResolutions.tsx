@@ -164,11 +164,12 @@ export function SupplierExchangeMyResolutions() {
         });
       } else {
         if (!note.trim()) throw new Error("Cuenta qué te dijo el proveedor — esto avisa urgente a admin, Nairoby y Daniel.");
+        if (!proofUrl) throw new Error("Sube la captura donde el proveedor rechaza el reclamo.");
         await postJson(`/api/merchandise-outflow/items/${choosing.id}/resolve-supplier`, {
           resolution: "REJECTED",
           quantity,
           note: note.trim(),
-          proofUrl: proofUrl ?? undefined,
+          proofUrl,
           proofName: proofName ?? undefined,
         });
       }
@@ -287,7 +288,13 @@ export function SupplierExchangeMyResolutions() {
                         {item.unitCostAtExchange === null && (
                           <div className="text-[10.5px] text-green mb-2">No hay compra anterior registrada con este proveedor para este producto — escribe el monto exacto que te confirme.</div>
                         )}
-                        <div className="text-[12px] font-semibold mb-1.5">Comprobante</div>
+                      </>
+                    )}
+                    {(choosing.choice === "CREDIT_ISSUED" || choosing.choice === "REJECTED") && (
+                      <>
+                        <div className="text-[12px] font-semibold mb-1.5">
+                          {choosing.choice === "REJECTED" ? "Captura donde el proveedor rechaza (obligatoria)" : "Comprobante"}
+                        </div>
                         {proofUrl ? (
                           <div className="flex items-center gap-2 mb-2 text-[11.5px] text-green font-semibold">
                             <CheckCircle2 size={13} /> {proofName ?? "Comprobante subido"}

@@ -50,7 +50,14 @@ type Row = {
     bankAccountHolder: string;
     holderIdType: string | null;
     holderIdNumber: string | null;
+    id?: string;
+    supplierId?: string;
+    verifiedAt?: string | null;
+    createdAt?: string;
+    createdBy?: { name: string } | null;
   } | null;
+  bankAccountChangedAfterApprovalAt?: string | null;
+  bankAccountChangedAfterApprovalBy?: { name: string } | null;
   shippingIncluded: boolean;
   shippingPaymentTiming: "WITH_PURCHASE" | "ON_DELIVERY" | null;
   shippingPaymentMethod: "TRANSFER" | "PETTY_CASH" | null;
@@ -63,6 +70,11 @@ type Row = {
     bankAccountHolder: string;
     holderIdType: string | null;
     holderIdNumber: string | null;
+    id?: string;
+    supplierId?: string;
+    verifiedAt?: string | null;
+    createdAt?: string;
+    createdBy?: { name: string } | null;
   } | null;
   shippingPaymentRequestedAt: string | null;
   shippingPaymentRequestedBy: { name: string } | null;
@@ -223,6 +235,9 @@ export function PurchaseInvoicingPanel({
   const [showInvoicing, setShowInvoicing] = useState(!isAdmin);
   const [pettyCash, setPettyCash] = useState<{ count: number; total: number } | null>(null);
   const [payingGroup, setPayingGroup] = useState<string | null>(null);
+  // Confirmado 2026-09-23, revisión anti-fraude: quien paga marca a propósito
+  // que revisó una cuenta cambiada después de aprobar.
+  const [accountChangeConfirmed, setAccountChangeConfirmed] = useState(false);
   const [proofUrl, setProofUrl] = useState<string | null>(null);
   const [uploadingProof, setUploadingProof] = useState(false);
   const [proofVerifying, setProofVerifying] = useState(false);
@@ -507,7 +522,7 @@ export function PurchaseInvoicingPanel({
     const res = await fetch(`/api/purchase-requests/group/${groupId}/pay`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ paymentProofUrl: proofUrl ?? undefined, paymentProofReceiptNumber: proofVerifyResult?.receiptNumber ?? null, appliedCreditIds: selectedCreditIds }),
+      body: JSON.stringify({ paymentProofUrl: proofUrl ?? undefined, paymentProofReceiptNumber: proofVerifyResult?.receiptNumber ?? null, appliedCreditIds: selectedCreditIds, confirmAccountChange: accountChangeConfirmed }),
     });
     setBusyGroup(null);
     const data = await res.json().catch(() => null);
@@ -520,6 +535,7 @@ export function PurchaseInvoicingPanel({
     setProofVerifyResult(null);
     setSelectedCreditIds([]);
     setReservedCredits([]);
+    setAccountChangeConfirmed(false);
     load();
     router.refresh();
   }
@@ -905,6 +921,17 @@ export function PurchaseInvoicingPanel({
                     ) : (
                       <div className="text-[11.5px] text-red">Falta registrar la cuenta bancaria del proveedor.</div>
                     )}
+                    {g[0].bankAccount && (
+                      <AccountRiskNotes
+                        account={g[0].bankAccount}
+                        changedAfterApprovalAt={g[0].bankAccountChangedAfterApprovalAt ?? null}
+                        changedAfterApprovalBy={g[0].bankAccountChangedAfterApprovalBy?.name ?? null}
+                        canVerify={isAdmin}
+                        confirmed={accountChangeConfirmed}
+                        onConfirmedChange={setAccountChangeConfirmed}
+                        onVerified={() => { load(); router.refresh(); }}
+                      />
+                    )}
                   </div>
                   {payingGroup === groupId ? (
                     <div>
@@ -991,7 +1018,16 @@ export function PurchaseInvoicingPanel({
                       <div className="flex items-center gap-2">
                         <button
                           type="button"
-                          disabled={payLocked || busyGroup === groupId || (netAmountFor(groupId) > 0 && (!proofUrl || proofVerifying || !proofVerifyResult?.matches))}
+                          disabled={
+                            payLocked ||
+                            busyGroup === groupId ||
+                            (netAmountFor(groupId) > 0 &&
+                              (!proofUrl ||
+                                proofVerifying ||
+                                !proofVerifyResult?.matches ||
+                                (!!g[0].bankAccount && !g[0].bankAccount.verifiedAt) ||
+                                (!!g[0].bankAccountChangedAfterApprovalAt && !accountChangeConfirmed)))
+                          }
                           title={payLocked ? ADMIN_LOCK_TITLE : undefined}
                           className="rounded border border-blue bg-blue px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer disabled:opacity-60"
                           onClick={() => pay(groupId)}
@@ -1094,6 +1130,9 @@ export function PurchaseInvoicingPanel({
                       </>
                     ) : (
                       <div className="text-[11.5px] text-red">Falta registrar la cuenta bancaria del transportista.</div>
+                    )}
+                    {r0.carrierBankAccount && (
+                      <AccountRiskNotes account={r0.carrierBankAccount} canVerify={isAdmin} onVerified={() => { load(); router.refresh(); }} />
                     )}
                   </div>
                   {payingShippingGroup === groupId ? (
@@ -1615,6 +1654,82 @@ export function PurchaseInvoicingPanel({
               </>
             )}
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Confirmado 2026-09-23, revisión anti-fraude pedida por el usuario: una
+// cuenta que agregó alguien de Compras queda por verificar (no se le puede
+// transferir hasta que el admin confirme con el proveedor), y una cuenta
+// cambiada DESPUÉS de aprobar sale en rojo — quien aprobó nunca la vio.
+function AccountRiskNotes({
+  account,
+  changedAfterApprovalAt = null,
+  changedAfterApprovalBy = null,
+  canVerify,
+  confirmed,
+  onConfirmedChange,
+  onVerified,
+}: {
+  account: { id?: string; supplierId?: string; verifiedAt?: string | null; createdAt?: string; createdBy?: { name: string } | null };
+  changedAfterApprovalAt?: string | null;
+  changedAfterApprovalBy?: string | null;
+  canVerify: boolean;
+  confirmed?: boolean;
+  onConfirmedChange?: (v: boolean) => void;
+  onVerified: () => void;
+}) {
+  const [verifying, setVerifying] = useState(false);
+  const [error, setError] = useState("");
+  const unverified = account.verifiedAt === null;
+
+  async function verify() {
+    if (!account.id || !account.supplierId) return;
+    setVerifying(true);
+    setError("");
+    const res = await fetch(`/api/purchase-suppliers/${account.supplierId}/bank-accounts/${account.id}/verify`, { method: "POST" }).catch(() => null);
+    setVerifying(false);
+    if (!res?.ok) {
+      setError("No se pudo verificar.");
+      return;
+    }
+    onVerified();
+  }
+
+  if (!unverified && !changedAfterApprovalAt) return null;
+  return (
+    <div className="flex flex-col gap-1.5 mt-2">
+      {unverified && (
+        <div className="bg-red/10 border border-red/40 rounded-md px-2.5 py-2 text-[11.5px]">
+          <div className="font-semibold text-red">Cuenta nueva, sin verificar</div>
+          <div className="text-steel">
+            La agregó {account.createdBy?.name ?? "alguien de Compras"}
+            {account.createdAt ? ` el ${formatDateTime(account.createdAt)}` : ""}. Confirma con el proveedor (por su número de siempre) que la cuenta es suya antes de transferir.
+          </div>
+          {canVerify ? (
+            <button type="button" disabled={verifying} className="mt-1.5 rounded border border-teal bg-teal px-2.5 py-1 text-[11px] font-bold text-navy cursor-pointer disabled:opacity-60" onClick={verify}>
+              {verifying ? "Verificando…" : "Ya confirmé, es del proveedor"}
+            </button>
+          ) : (
+            <div className="text-steel mt-1">Solo el admin puede verificarla.</div>
+          )}
+          {error && <div className="text-red mt-1">{error}</div>}
+        </div>
+      )}
+      {changedAfterApprovalAt && (
+        <div className="bg-red/10 border border-red/40 rounded-md px-2.5 py-2 text-[11.5px]">
+          <div className="font-semibold text-red">Cuenta cambiada después de aprobar</div>
+          <div className="text-steel">
+            {changedAfterApprovalBy ?? "Alguien"} la cambió el {formatDateTime(changedAfterApprovalAt)}, cuando la compra ya estaba aprobada — quien aprobó no vio esta cuenta.
+          </div>
+          {onConfirmedChange && (
+            <label className="flex items-center gap-1.5 mt-1.5 cursor-pointer">
+              <input type="checkbox" checked={!!confirmed} onChange={(e) => onConfirmedChange(e.target.checked)} />
+              <span className="font-semibold">Revisé esta cuenta y es correcta</span>
+            </label>
+          )}
         </div>
       )}
     </div>

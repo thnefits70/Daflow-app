@@ -440,6 +440,8 @@ model User {
   fulfillmentRequestVariantNotesCreated            FulfillmentRequestVariantNote[]       @relation("FulfillmentRequestVariantNoteCreatedBy")
   supplierCreditsCreated                           SupplierCredit[]                      @relation("SupplierCreditCreatedBy")
   supplierProductCodesCreated                      SupplierProductCode[]                 @relation("SupplierProductCodeCreatedBy")
+  supplierBankAccountsVerified                     SupplierBankAccount[]                 @relation("SupplierBankAccountVerifiedBy")
+  purchaseBankAccountChangesAfterApproval          PurchaseRequest[]                     @relation("PurchaseRequestBankAccountChangedAfterApprovalBy")
   urgentResolutionsCreated                         PurchaseUrgentResolution[]            @relation("UrgentResolutionCreatedBy")
   urgentResolutionsReplacementSubmitted            PurchaseUrgentResolution[]            @relation("UrgentResolutionReplacementSubmittedBy")
   urgentResolutionsReplacementVerified             PurchaseUrgentResolution[]            @relation("UrgentResolutionReplacementVerifiedBy")
@@ -1734,6 +1736,15 @@ model SupplierBankAccount {
   createdBy   User?    @relation("SupplierBankAccountCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   createdAt   DateTime @default(now())
 
+  // Confirmado 2026-09-23, revisión anti-fraude pedida por el usuario: una
+  // cuenta que agrega alguien que no es admin (quien compra) queda "por
+  // verificar" — no se le puede transferir hasta que el admin confirme con
+  // el proveedor que es suya. Al crear este campo se dieron por verificadas
+  // las que agregó el admin o que ya se habían usado en alguna compra.
+  verifiedAt   DateTime?
+  verifiedById String?
+  verifiedBy   User?     @relation("SupplierBankAccountVerifiedBy", fields: [verifiedById], references: [id], onDelete: SetNull)
+
   purchaseRequests                 PurchaseRequest[]
   purchaseRequestsAsCarrierAccount PurchaseRequest[] @relation("PurchaseRequestCarrierBankAccount")
 
@@ -2825,6 +2836,13 @@ model PurchaseRequest {
   bankAccountChangeNote          String?
   bankAccountChangeRequestedById String?
   bankAccountChangeRequestedBy   User?     @relation("PurchaseRequestBankAccountChangeRequestedBy", fields: [bankAccountChangeRequestedById], references: [id], onDelete: SetNull)
+
+  // Confirmado 2026-09-23, revisión anti-fraude: la cuenta se cambió DESPUÉS
+  // de que se aprobó la solicitud — quien aprobó nunca vio la cuenta nueva.
+  // Al pagar sale en rojo y hay que confirmar a propósito.
+  bankAccountChangedAfterApprovalAt   DateTime?
+  bankAccountChangedAfterApprovalById String?
+  bankAccountChangedAfterApprovalBy   User?     @relation("PurchaseRequestBankAccountChangedAfterApprovalBy", fields: [bankAccountChangedAfterApprovalById], references: [id], onDelete: SetNull)
 
   quantity  Int
   unitCost  Float
@@ -5899,6 +5917,10 @@ model MerchandiseOutflowItem {
   // Confirmado 2026-09-23: crédito compartido con otros reclamos del mismo
   // proveedor (ver SupplierCredit.groupedOutflowItems).
   groupedSupplierCreditId String?
+  // Confirmado 2026-09-23, revisión anti-fraude pedida por el usuario: cuando
+  // el proveedor RECHAZA el reclamo (deterioro o cambio con proveedor), quien
+  // gestiona tiene que subir la captura donde lo dice — antes bastaba una nota.
+  rejectionProofUrl String?
   groupedSupplierCredit   SupplierCredit? @relation("OutflowItemGroupedSupplierCredit", fields: [groupedSupplierCreditId], references: [id], onDelete: SetNull)
 
   // CAMBIO_PROVEEDOR (multi-producto, confirmado 2026-08-26): al agregar el

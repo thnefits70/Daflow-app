@@ -52,7 +52,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         transferDate: t.transferDate.toISOString(),
       })),
       transfersTotal: payment.transfers.reduce((s, t) => s + t.amount, 0),
-      registeredBankAccounts: payment.supplier.bankAccounts.map((b) => ({
+      // Confirmado 2026-09-23, revisión anti-fraude: solo cuentas que el
+      // admin ya verificó cuentan como "reales" del proveedor.
+      registeredBankAccounts: payment.supplier.bankAccounts.filter((b) => b.verifiedAt).map((b) => ({
         bankName: b.bankName,
         bankAccountNumber: b.bankAccountNumber,
         bankAccountHolder: b.bankAccountHolder,

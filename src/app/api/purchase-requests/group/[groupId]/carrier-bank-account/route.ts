@@ -16,8 +16,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ gro
   const parsed = schema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: "Datos inválidos." }, { status: 400 });
 
-  const count = await prisma.purchaseRequest.count({ where: { groupId } });
-  if (count === 0) return NextResponse.json({ error: "No encontrada." }, { status: 404 });
+  const existing = await prisma.purchaseRequest.findFirst({ where: { groupId }, select: { carrierId: true, shippingPaidAt: true } });
+  if (!existing) return NextResponse.json({ error: "No encontrada." }, { status: 404 });
+  // Confirmado 2026-09-23, revisión anti-fraude: la cuenta tiene que ser del
+  // transportista de esta solicitud, y una vez pagado el flete ya no se cambia.
+  const account = await prisma.supplierBankAccount.findUnique({ where: { id: parsed.data.carrierBankAccountId }, select: { supplierId: true } });
+  if (!account || !existing.carrierId || account.supplierId !== existing.carrierId) {
+    return NextResponse.json({ error: "Esa cuenta no es del transportista de esta solicitud." }, { status: 400 });
+  }
+  if (existing.shippingPaidAt) return NextResponse.json({ error: "El flete ya se pagó — la cuenta ya no se puede cambiar." }, { status: 409 });
 
   await prisma.purchaseRequest.updateMany({
     where: { groupId },
