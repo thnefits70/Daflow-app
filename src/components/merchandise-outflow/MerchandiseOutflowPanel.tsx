@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { DocumentCaptureFlow } from "./DocumentCaptureFlow";
 import { DeteriorCapture } from "./DeteriorCapture";
 import { DeteriorResolutionInbox } from "./DeteriorResolutionInbox";
 import { DeteriorTraceList } from "./DeteriorTraceList";
@@ -13,13 +12,12 @@ import { CancelledGuidesPanel } from "@/components/cancelled-guides/CancelledGui
 import { FulfillmentRequestPanel } from "./FulfillmentRequestPanel";
 import { TabGuide } from "@/components/shared/TabGuide";
 
-type Tab = "despacho" | "garantia" | "deterioro" | "seguimiento" | "proveedor" | "guias" | "solicitud" | "historial";
+type Tab = "deterioro" | "seguimiento" | "proveedor" | "guias" | "solicitud" | "historial";
 
 export function MerchandiseOutflowPanel({
   canCapture,
   canAct = false,
   canView = false,
-  canManageJustCatalog = false,
   canViewSupplierExchangeResolution = false,
   supplierExchangeMineCount = 0,
   canConfirmFinanceWriteOff = false,
@@ -45,11 +43,8 @@ export function MerchandiseOutflowPanel({
   // depende de este prop, y además HistoryList ya no crashea ante una
   // respuesta que no sea un arreglo.
   canView?: boolean;
-  // Confirmado 2026-08-26 (pedido explícito del usuario): Daniel puede
-  // desglosar un combo de Dropi directo desde la lectura del documento
-  // (ver DocumentCaptureFlow) — mismo gate que gestionar combos en Base de
-  // datos de productos (canManageJustCatalog), para que un colaborador de
-  // Inventario que no sea Daniel/admin no pueda inventar un desglose.
+  // Ya no se usa desde que se quitó la foto del manifiesto (2026-09-23) —
+  // se deja en el tipo para no romper a quien todavía lo pasa.
   canManageJustCatalog?: boolean;
   // Confirmado 2026-08-26: pedido explícito del usuario — quien resuelve
   // cada producto de "Cambio con proveedor" (cambio o crédito) ya NO es
@@ -110,13 +105,14 @@ export function MerchandiseOutflowPanel({
   // cuanto alguien (ej. Bryan) tiene algo propio pendiente de gestionar ahí
   // — antes "guias" siempre ganaba primero para cualquiera de MKT/FUL, así
   // que un pendiente urgente de proveedor quedaba escondido detrás.
-  // Confirmado 2026-08-31: "despacho" solo puede ganar si además de capturar
-  // el usuario puede actuar (Daniel) — el resto del equipo de Inventario ya
-  // no tiene esa pestaña, así que su default cae en "garantia".
-  const defaultTab: Tab = canCapture && canAct
-    ? "despacho"
+  // Confirmado 2026-09-23 (plan de cortes acordado con el usuario): los
+  // despachos y garantías ya no se fotografían — llegan como cortes desde
+  // Fulfillment (pestaña "Solicitud Fulfillment"), que pasa a ser la
+  // pestaña principal para Inventario y Fulfillment.
+  const defaultTab: Tab = canSubmitFulfillmentRequest || canViewFulfillmentRequests
+    ? "solicitud"
     : canCapture
-      ? "garantia"
+      ? "deterioro"
       : canAct
         ? "historial"
         : supplierExchangeMineCount > 0 || financeWriteOffPendingCount > 0
@@ -134,6 +130,8 @@ export function MerchandiseOutflowPanel({
     if (typeof window === "undefined") return defaultTab;
     const t = new URLSearchParams(window.location.search).get("otab");
     if (t === "deterioro" || t === "seguimiento" || t === "proveedor" || t === "guias") return t;
+    // Avisos de cortes (Yair envió / faltaron productos) llegan con otab=solicitud.
+    if (t === "solicitud" && (canSubmitFulfillmentRequest || canViewFulfillmentRequests)) return t;
     return defaultTab;
   });
 
@@ -148,11 +146,11 @@ export function MerchandiseOutflowPanel({
   const canSeeProveedorTab = canAct || canViewSupplierExchangeResolution || supplierExchangeMineCount > 0 || financeWriteOffPendingCount > 0;
 
   const tabs: { id: Tab; label: string }[] = [
-    // Confirmado 2026-08-31, pedido explícito del usuario: "Despacho" pasa a
-    // ser exclusivo de Daniel (canAct) — el resto del equipo de Inventario ya
-    // no ve ni gestiona la hoja de despacho diaria, solo garantía/deterioro.
-    ...(canCapture && canAct ? [{ id: "despacho" as const, label: "Despacho" }] : []),
-    ...(canCapture ? [{ id: "garantia" as const, label: "Garantía" }] : []),
+    // Confirmado 2026-09-23: se quitaron las pestañas "Despacho" y
+    // "Garantía" (foto del manifiesto + IA) — pedido explícito del usuario,
+    // sin camino alterno. Ahora todo despacho y garantía llega como corte
+    // en "Solicitud Fulfillment", primera pestaña.
+    ...(canSubmitFulfillmentRequest || canViewFulfillmentRequests ? [{ id: "solicitud" as const, label: "Solicitud Fulfillment" }] : []),
     ...(canCapture ? [{ id: "deterioro" as const, label: "Deterioro" }] : []),
     // Confirmado 2026-09-23, pedido de Daniel: seguimiento de cada deterioro
     // de principio a fin (su decisión → gestión de Jariel → respuesta del
@@ -160,7 +158,6 @@ export function MerchandiseOutflowPanel({
     ...(canCapture || canView ? [{ id: "seguimiento" as const, label: "Seguimiento de deterioro" }] : []),
     ...(canSeeProveedorTab ? [{ id: "proveedor" as const, label: "Mercadería devuelta al proveedor" }] : []),
     ...(canSubmitCancelledGuide || canManageCancelledGuideBatches || canConfirmCancelledGuideFulfillmentRemoval || canAssignCancelledGuideItems || canAct ? [{ id: "guias" as const, label: "Guías canceladas" }] : []),
-    ...(canSubmitFulfillmentRequest || canViewFulfillmentRequests ? [{ id: "solicitud" as const, label: "Solicitud Fulfillment" }] : []),
     // Confirmado 2026-09-23: ya no existe "Dar de baja en Just" — cada
     // salida se descuenta sola de INVESTOCK en el momento en que se envía.
     ...(canView ? [{ id: "historial" as const, label: "Historial" }] : []),
@@ -189,22 +186,6 @@ export function MerchandiseOutflowPanel({
         ))}
       </div>
 
-      {tab === "despacho" && canCapture && canAct && (
-        <>
-          <TabGuide storageKey="merchoutflow-despacho">
-            Fotografía la hoja física de despacho — la IA lee cada renglón (producto + cantidad) y arma un consolidado editable. Confirma cada fila contra el catálogo antes de enviar el lote.
-          </TabGuide>
-          <DocumentCaptureFlow reason="DESPACHO" canManageJustCatalog={canManageJustCatalog} />
-        </>
-      )}
-      {tab === "garantia" && canCapture && (
-        <>
-          <TabGuide storageKey="merchoutflow-garantia">
-            Fotografía el manifiesto de garantía que genera Fulfillment — mismo mecanismo que despacho, la IA arma el consolidado y confirmas cada renglón.
-          </TabGuide>
-          <DocumentCaptureFlow reason="GARANTIA" canManageJustCatalog={canManageJustCatalog} />
-        </>
-      )}
       {tab === "deterioro" && canCapture && (
         <>
           <TabGuide storageKey="merchoutflow-deterioro">
