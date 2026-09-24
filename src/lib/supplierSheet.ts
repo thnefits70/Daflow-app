@@ -17,6 +17,7 @@ export type CellStyle = {
   fs?: number; // tamaño de letra
   fmt?: "currency" | "percent" | "number";
   dp?: number; // decimales
+  wr?: boolean; // el texto baja a otra línea si no cabe (solo lo automático)
 };
 
 // a/e: de qué lado es y qué correo la escribió (antifraude, ver la API).

@@ -794,7 +794,7 @@ export function SupplierSheet({ token, email, canWrite, side }: { token: string;
                       <td
                         key={c}
                         data-cell={`${r}:${c}`}
-                        className="relative overflow-hidden whitespace-nowrap border-b border-r border-[#e2e3e3] px-[3px] leading-none"
+                        className={`relative overflow-hidden border-b border-r border-[#e2e3e3] px-[3px] ${s?.wr ? "whitespace-normal break-words leading-tight" : "whitespace-nowrap leading-none"}`}
                         style={{
                           height: rowH,
                           background: inRange && multi && !isSel ? "rgba(11,87,208,0.1)" : s?.bg,

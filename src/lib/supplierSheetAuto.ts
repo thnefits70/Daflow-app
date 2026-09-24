@@ -28,23 +28,25 @@ import { SUPPLIER_PUBLIC_LINK_START, isReportBlockingDebtPayment } from "@/lib/s
 // SupplierSheetAnchoredCell.
 
 export const AUTO_ORDERS_COLS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
-const IMAGE_ROW_H = 90;
-const PROOF_ROW_H = 90;
+// Compacto (pedido explícito del usuario 2026-09-24): miniaturas; doble clic
+// sobre la foto la amplía.
+const IMAGE_ROW_H = 46;
+const PROOF_ROW_H = 60;
 const GYE_OFFSET_HOURS = 5; // Guayaquil = UTC-5, sin horario de verano
 const MONTHS = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
 const FIRST_MONTH = { y: 2026, m: 8 };
 
 const COL_WIDTHS: Record<string, number> = {
-  "0": 145, "1": 240, "2": 125, "3": 85, "4": 130, "5": 290, "6": 120, "7": 135, "8": 125, "9": 100, "10": 185,
+  "0": 58, "1": 190, "2": 62, "3": 64, "4": 82, "5": 190, "6": 82, "7": 86, "8": 60, "9": 80, "10": 140,
   // Primeras columnas libres para las notas de CHEN.
-  "11": 240, "12": 200, "13": 200,
+  "11": 220, "12": 180, "13": 180,
 };
 
 // Colores (fondo, letra) — verde bien, ámbar pendiente/problema, gris en espera.
 const GREEN = { bg: "#e6f4ea", fc: "#137333" };
 const AMBER = { bg: "#fef7e0", fc: "#b06000" };
 const GRAY = { bg: "#f1f3f4", fc: "#5f6368" };
-const HEADER = { b: true, al: "center" as const, bg: "#e8eaed" };
+const HEADER = { b: true, al: "center" as const, bg: "#e8eaed", wr: true };
 
 type YearMonth = { y: number; m: number }; // m: 0 = enero
 
@@ -302,8 +304,8 @@ export async function buildMonthLayout(supplierId: string, tabId: string): Promi
   const orders = requests.map(summarize);
 
   const rows: LayoutRow[] = [];
-  const headers = ["Imagen del producto", "Producto", "Unidades pedidas", "Precio", "Fecha del pedido", "Estado en que llegó", "Llegó a bodega", "¿Pedido completo?", "Unidades buenas", "Total", "Pago"];
-  rows.push({ key: "h", cells: headers.map((v, c) => ({ c, v, s: HEADER })) });
+  const headers = ["Imagen", "Producto", "Pedidas", "Precio", "Fecha pedido", "Estado", "Llegó a bodega", "¿Completo?", "Buenas", "Total", "Pago"];
+  rows.push({ key: "h", height: 30, cells: headers.map((v, c) => ({ c, v, s: HEADER })) });
 
   for (const o of orders) {
     const img = imageFormula(o.photoUrl);
@@ -311,19 +313,19 @@ export async function buildMonthLayout(supplierId: string, tabId: string): Promi
     const pt = tone(o.paymentTone);
     rows.push({
       key: `r:${o.requestId}`,
-      height: img ? IMAGE_ROW_H : undefined,
+      height: img ? IMAGE_ROW_H : o.productName.length > 30 || o.statusText.length > 30 ? 34 : undefined,
       cells: [
         { c: 0, v: img ?? "Sin foto", s: img ? null : { al: "center" } },
-        { c: 1, v: o.productName, s: null },
+        { c: 1, v: o.productName, s: { wr: true } },
         { c: 2, v: String(o.quantity), s: { al: "center" } },
         { c: 3, v: money(o.unitCost), s: { fmt: "currency", dp: 2 } },
         { c: 4, v: fmtDate(o.requestedAt), s: { al: "center" } },
-        { c: 5, v: o.statusText, s: { bg: st.bg, fc: st.fc } },
+        { c: 5, v: o.statusText, s: { bg: st.bg, fc: st.fc, wr: true } },
         { c: 6, v: o.arrivedAt ? fmtDate(o.arrivedAt) : "—", s: { al: "center" } },
         { c: 7, v: o.complete, s: { al: "center", b: true, fc: o.complete === "Sí" ? GREEN.fc : o.complete === "No" ? AMBER.fc : GRAY.fc } },
         { c: 8, v: o.arrivedAt ? String(o.goodQty) : "—", s: { al: "center" } },
         { c: 9, v: o.arrivedAt ? money(o.total) : "—", s: o.arrivedAt ? { fmt: "currency", dp: 2, b: true } : { al: "center" } },
-        { c: 10, v: o.paymentText, s: { bg: pt.bg, fc: pt.fc } },
+        { c: 10, v: o.paymentText, s: { bg: pt.bg, fc: pt.fc, wr: true } },
       ],
     });
   }
@@ -338,7 +340,7 @@ export async function buildMonthLayout(supplierId: string, tabId: string): Promi
     });
     rows.push({ key: null, cells: [] });
     rows.push({ key: "ph", cells: [{ c: 0, v: "PAGOS DE ESTOS PEDIDOS", s: { b: true, fs: 11 } }] });
-    rows.push({ key: "ph2", cells: ["Pago", "N° de comprobante", "Fecha", "Monto", "Comprobante"].map((v, c) => ({ c, v, s: HEADER })) });
+    rows.push({ key: "ph2", cells: ["Pago", "N° comprobante", "Fecha", "Monto", "Foto"].map((v, c) => ({ c, v, s: HEADER })) });
     for (const p of payments) {
       const label = paymentLabel(p.code);
       p.transfers.forEach((t, i) => {
