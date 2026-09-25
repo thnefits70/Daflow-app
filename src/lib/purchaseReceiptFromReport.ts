@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { getInventoryLeadId } from "@/lib/guards";
 import { notifyOwner } from "@/lib/notifications";
 import { getMarketingArrivalActorIds, getMarketingArrivalDispatchViewerIds } from "@/lib/marketingArrivals";
-import { isCatalogItemBranded, getNewIdBrandingActorIds } from "@/lib/newIdBranding";
+import { isCatalogItemBranded, catalogItemNeedsRealPhotos, getNewIdBrandingActorIds } from "@/lib/newIdBranding";
 
 // Avisos que salen apenas bodega deja registrada una recepción (antes vivían
 // solo en [id]/receipt/route.ts — se comparten con el registro automático
@@ -29,14 +29,20 @@ export async function notifyReceiptRegistered(params: { catalogItemId: string; i
   const arrivalBody = `${params.itemName} · ${params.quantity} un.`;
   // Confirmado 2026-09-23, pedido de Robert: el brandeo es una sola vez por
   // producto — si ya se brandeó antes, esta llegada repetida no le pide nada.
-  const [designIds, advisorIds, dispatchIds] = await Promise.all([
+  // Confirmado 2026-09-25, pedido de Robert: si ya estaba brandeado pero le
+  // faltan las fotos reales, esta llegada es la señal para tomarlas.
+  const [designIds, realPhotoIds, advisorIds, dispatchIds] = await Promise.all([
     isCatalogItemBranded(params.catalogItemId).then((done) => (done ? [] : getNewIdBrandingActorIds())),
+    catalogItemNeedsRealPhotos(params.catalogItemId).then((need) => (need ? getNewIdBrandingActorIds() : [])),
     getMarketingArrivalActorIds("advisor"),
     getMarketingArrivalDispatchViewerIds(),
   ]);
   await Promise.all([
     ...designIds.map((uid) =>
       notifyOwner(uid, { title: "Nuevo ID por brandear", body: arrivalBody, url: "/area/workspace?tab=nuevos-ids" })
+    ),
+    ...realPhotoIds.map((uid) =>
+      notifyOwner(uid, { title: "Ya llegó — toma las imágenes reales", body: arrivalBody, url: "/area/workspace?tab=nuevos-ids" })
     ),
     ...advisorIds.map((uid) =>
       notifyOwner(uid, { title: "Llegó mercadería a bodega", body: arrivalBody, url: "/area/workspace?tab=llegadas" })

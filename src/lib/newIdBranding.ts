@@ -30,6 +30,11 @@ export async function getNewIdBrandingActorIds(): Promise<string[]> {
   return users.map((u) => u.id);
 }
 
+// Lo brandeado antes de que existiera "Imágenes reales" (2026-09-25, medianoche
+// de Guayaquil) y que ya llegó a bodega sigue directo en el historial, como
+// antes — así Robert no tiene que marcar ~100 productos viejos uno por uno.
+export const REAL_PHOTOS_SINCE = "2026-09-25T05:00:00.000Z";
+
 export const BRAND_STEPS = ["dropiImages", "dropiInfo", "driveVideo"] as const;
 export type BrandStep = (typeof BRAND_STEPS)[number];
 type Mark = { at: string; by: string | null };
@@ -55,12 +60,21 @@ export type NewIdEntry = {
     by: string | null;
     legacy: boolean; // confirmado antes de que existiera esta sección, sin pasos detallados
   } | null;
+  // Fotos reales tomadas cuando el producto ya está en bodega (paso entre
+  // el brandeo y el canal de la marca).
+  realPhotos: Mark | null;
   channel: { at: string; by: string | null } | null;
 };
 
 const ARRIVED = ["RECEIVED_PENDING_REVIEW", "RECEIVED"] as const;
 
-export async function getNewIdBrandingBoard(): Promise<{ pending: NewIdEntry[]; done: NewIdEntry[] }> {
+// Confirmado 2026-09-25, pedido de Robert: 3 secciones en orden —
+// Por brandear → Imágenes reales → Historial. Un producto brandeado que
+// todavía no tiene fotos reales (porque no ha llegado o no se le han tomado)
+// espera en "Imágenes reales"; al historial solo pasa lo que ya está listo
+// para subir al canal. Lo que ya se marcó como subido al canal antes de
+// este cambio cuenta como listo aunque no tenga la casilla de fotos reales.
+export async function getNewIdBrandingBoard(): Promise<{ pending: NewIdEntry[]; realPhotos: NewIdEntry[]; done: NewIdEntry[] }> {
   const [arrivals, proposals, rows] = await Promise.all([
     prisma.purchaseRequest.findMany({
       where: { status: { in: [...ARRIVED] } },
@@ -89,7 +103,7 @@ export async function getNewIdBrandingBoard(): Promise<{ pending: NewIdEntry[]; 
     }),
   ]);
 
-  const stepUserIds = [...new Set(rows.flatMap((r) => [r.dropiImagesById, r.dropiInfoById, r.driveVideoById]).filter((x): x is string => !!x))];
+  const stepUserIds = [...new Set(rows.flatMap((r) => [r.dropiImagesById, r.dropiInfoById, r.driveVideoById, r.realPhotosById]).filter((x): x is string => !!x))];
   const userNames = new Map(
     (stepUserIds.length ? await prisma.user.findMany({ where: { id: { in: stepUserIds } }, select: { id: true, name: true } }) : []).map((u) => [u.id, u.name])
   );
@@ -120,6 +134,7 @@ export async function getNewIdBrandingBoard(): Promise<{ pending: NewIdEntry[]; 
         since: "",
         steps: { dropiImages: null, dropiInfo: null, driveVideo: null },
         branded: null,
+        realPhotos: null,
         channel: null,
       };
       entries.set(key, e);
@@ -170,6 +185,7 @@ export async function getNewIdBrandingBoard(): Promise<{ pending: NewIdEntry[]; 
         since: "",
         steps: { dropiImages: null, dropiInfo: null, driveVideo: null },
         branded: null,
+        realPhotos: null,
         channel: null,
       };
       entries.set(key, e);
@@ -180,10 +196,11 @@ export async function getNewIdBrandingBoard(): Promise<{ pending: NewIdEntry[]; 
   }
 
   // 3) Lo guardado en esta sección manda sobre lo viejo.
+  const mark = (at: Date | null, byId: string | null): Mark | null => (at ? { at: at.toISOString(), by: (byId && userNames.get(byId)) || null } : null);
   for (const e of entries.values()) {
     const row = (e.catalogItemId && rowByCatalog.get(e.catalogItemId)) || (e.proposalId && rowByProposal.get(e.proposalId)) || null;
     if (row) {
-      const mark = (at: Date | null, byId: string | null): Mark | null => (at ? { at: at.toISOString(), by: (byId && userNames.get(byId)) || null } : null);
+      e.realPhotos = mark(row.realPhotosAt, row.realPhotosById);
       e.steps = {
         dropiImages: mark(row.dropiImagesAt, row.dropiImagesById),
         dropiInfo: mark(row.dropiInfoAt, row.dropiInfoById),
@@ -205,10 +222,25 @@ export async function getNewIdBrandingBoard(): Promise<{ pending: NewIdEntry[]; 
   const pending = all
     .filter((e) => !e.branded && !waitingDropi.has(e.key))
     .sort((a, b) => a.since.localeCompare(b.since)); // lo más antiguo primero
+  const readyForChannel = (e: NewIdEntry) =>
+    !!(e.realPhotos || e.channel || (e.arrivedAt && (e.branded?.at ?? "") < REAL_PHOTOS_SINCE));
+  // Lo que ya llegó (se le pueden tomar fotos) primero, lo más antiguo arriba;
+  // lo que todavía no llega, al final.
+  const realPhotos = all
+    .filter((e) => e.branded && !readyForChannel(e))
+    .sort((a, b) => (a.arrivedAt ? 0 : 1) - (b.arrivedAt ? 0 : 1) || (a.arrivedAt ?? a.since).localeCompare(b.arrivedAt ?? b.since));
   const done = all
-    .filter((e) => e.branded)
-    .sort((a, b) => (b.branded!.at ?? "").localeCompare(a.branded!.at ?? "")); // lo más reciente primero
-  return { pending, done };
+    .filter((e) => e.branded && readyForChannel(e))
+    .sort((a, b) => (b.realPhotos?.at ?? b.branded!.at ?? "").localeCompare(a.realPhotos?.at ?? a.branded!.at ?? "")); // lo más reciente primero
+  return { pending, realPhotos, done };
+}
+
+// ¿Ya está brandeado pero todavía le faltan las fotos reales? Usado al
+// registrar una llegada para avisarle a Robert que ya puede tomarlas.
+export async function catalogItemNeedsRealPhotos(catalogItemId: string): Promise<boolean> {
+  const row = await prisma.newIdBranding.findUnique({ where: { catalogItemId }, select: { realPhotosAt: true, channelUploadedAt: true } });
+  if (row?.realPhotosAt || row?.channelUploadedAt) return false;
+  return isCatalogItemBranded(catalogItemId);
 }
 
 // ¿Este producto ya fue brandeado alguna vez? Usado por receipt/route.ts para

@@ -1251,15 +1251,22 @@ async function getMarketProductReadyToBuyPendingItem(href: string): Promise<Pend
 // propuestas, y le aparece también a Robert (canConfirmMarketingDesign).
 async function getMarketProductBrandPendingItem(href: string): Promise<PendingItem | null> {
   const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-  const { pending: rows } = await getNewIdBrandingBoard();
-  if (rows.length === 0) return null;
+  // Confirmado 2026-09-25: también cuenta los ya brandeados que llegaron a
+  // bodega y esperan sus imágenes reales (los que no han llegado no piden nada).
+  const { pending: rows, realPhotos } = await getNewIdBrandingBoard();
+  const photoRows = realPhotos.filter((r) => r.arrivedAt);
+  if (rows.length === 0 && photoRows.length === 0) return null;
   const overdue = rows.some((r) => r.since !== "" && r.since < cutoff);
+  const parts = [
+    rows.length > 0 ? `${rows.length} por brandear` : "",
+    photoRows.length > 0 ? `${photoRows.length} para imágenes reales` : "",
+  ].filter(Boolean);
 
   return {
     type: "analisis_mercado_brandear",
     icon: "🎨",
     label: "Nuevos IDs por brandear",
-    meta: `${rows.length} producto${rows.length === 1 ? "" : "s"}${overdue ? " · atrasado" : ""}`,
+    meta: `${parts.join(" · ")}${overdue ? " · atrasado" : ""}`,
     overdue,
     href,
   };

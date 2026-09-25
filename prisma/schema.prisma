@@ -3282,6 +3282,12 @@ model NewIdBranding {
   brandedById String?
   brandedBy   User?     @relation("NewIdBrandingBrandedBy", fields: [brandedById], references: [id], onDelete: SetNull)
 
+  // Confirmado 2026-09-25, pedido de Robert: después del brandeo el producto
+  // espera en "Imágenes reales" hasta que llega a bodega y se le toman fotos
+  // reales. Recién con eso pasa al historial (listo para subir al canal).
+  realPhotosAt   DateTime?
+  realPhotosById String?
+
   channelUploadedAt   DateTime?
   channelUploadedById String?
   channelUploadedBy   User?     @relation("NewIdBrandingChannelUploadedBy", fields: [channelUploadedById], references: [id], onDelete: SetNull)

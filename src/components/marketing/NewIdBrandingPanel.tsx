@@ -1,14 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CheckCircle2, Search } from "lucide-react";
+import { CheckCircle2, Clock, Search } from "lucide-react";
 import { TabGuide } from "@/components/shared/TabGuide";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 import { formatDateTime } from "@/lib/formatDateTime";
 import { actorName } from "@/lib/actorName";
 
 type Mark = { at: string; by: string | null };
-type StepKey = "dropiImages" | "dropiInfo" | "driveVideo" | "channel";
+type StepKey = "dropiImages" | "dropiInfo" | "driveVideo" | "realPhotos" | "channel";
+type Board = { pending: Entry[]; realPhotos: Entry[]; done: Entry[]; canAct: boolean };
+type View = "pending" | "realPhotos" | "done";
 
 type Entry = {
   key: string;
@@ -24,6 +26,7 @@ type Entry = {
   since: string;
   steps: Record<"dropiImages" | "dropiInfo" | "driveVideo", Mark | null>;
   branded: { at: string | null; by: string | null; legacy: boolean } | null;
+  realPhotos: Mark | null;
   channel: Mark | null;
 };
 
@@ -104,17 +107,20 @@ function StepCheck({ label, mark, canToggle, onToggle }: { label: string; mark: 
 // una sola vez. El brandeo se hace en Dropi y Google Drive; acá Robert marca
 // cada paso para que todo el flujo sepa en qué va. Con los 3 pasos pasa al
 // historial, donde queda la casilla "subido al canal de la marca".
+// Confirmado 2026-09-25, pedido de Robert: entre el brandeo y el historial va
+// "Imágenes reales" — el producto espera ahí hasta que llega a bodega y se le
+// toman fotos reales; recién ahí pasa al historial, listo para el canal.
 export function NewIdBrandingPanel() {
-  const [data, setData] = useState<{ pending: Entry[]; done: Entry[]; canAct: boolean } | null>(null);
-  const [view, setView] = useState<"pending" | "done">("pending");
+  const [data, setData] = useState<Board | null>(null);
+  const [view, setView] = useState<View>("pending");
   const [search, setSearch] = useState("");
   const [err, setErr] = useState("");
 
   function load() {
     fetch("/api/new-id-branding")
-      .then((r) => (r.ok ? r.json() : { pending: [], done: [], canAct: false }))
+      .then((r) => (r.ok ? r.json() : { pending: [], realPhotos: [], done: [], canAct: false }))
       .then(setData)
-      .catch(() => setData({ pending: [], done: [], canAct: false }));
+      .catch(() => setData({ pending: [], realPhotos: [], done: [], canAct: false }));
   }
   useEffect(load, []);
 
@@ -135,10 +141,11 @@ export function NewIdBrandingPanel() {
   if (!data) return <div className="text-steel text-[13px]">Cargando…</div>;
 
   const query = search.trim().toLowerCase();
-  const list = (view === "pending" ? data.pending : data.done).filter(
+  const list = data[view].filter(
     (e) => !query || e.name.toLowerCase().includes(query) || e.code?.toLowerCase().includes(query)
   );
   const notOnChannel = data.done.filter((e) => !e.channel).length;
+  const arrivedForPhotos = data.realPhotos.filter((e) => e.arrivedAt).length;
 
   const pill = (active: boolean) =>
     `rounded-full border px-3 py-1 text-[11.5px] font-semibold cursor-pointer transition-colors ${active ? "border-blue bg-blue text-white" : "border-rule text-steel hover:border-blue/50"}`;
@@ -147,15 +154,18 @@ export function NewIdBrandingPanel() {
     <div className="flex flex-col gap-3">
       <TabGuide storageKey="nuevos-ids-brandear">
         {data.canAct ? (
-          <>Acá aparece cada producto nuevo <b>una sola vez</b>: cuando llega a bodega por primera vez o cuando Heidy confirma su ID de Dropi. El brandeo lo haces como siempre en Dropi y en el Drive — acá solo marca cada paso cuando ya lo hiciste. Con los 3 pasos marcados pasa al Historial, donde marcas cuando ya lo subiste al canal de la marca.</>
+          <>Acá aparece cada producto nuevo <b>una sola vez</b>: cuando llega a bodega por primera vez o cuando Heidy confirma su ID de Dropi. El brandeo lo haces como siempre en Dropi y en el Drive — acá solo marca cada paso cuando ya lo hiciste. Con los 3 pasos marcados pasa a <b>Imágenes reales</b>: ahí espera hasta que el producto llegue a bodega y le tomes las fotos reales. Cuando marcas las imágenes reales pasa al <b>Historial</b>, donde marcas cuando ya lo subiste al canal de la marca.</>
         ) : (
-          <>Vista de solo lectura: qué productos nuevos faltan por brandear, en qué paso va cada uno, y el historial de los ya brandeados.</>
+          <>Vista de solo lectura: qué productos nuevos faltan por brandear, cuáles esperan sus imágenes reales, y el historial de los que ya están listos para el canal.</>
         )}
       </TabGuide>
 
       <div className="flex flex-wrap items-center gap-2">
         <button type="button" className={pill(view === "pending")} onClick={() => setView("pending")}>
           Por brandear ({data.pending.length})
+        </button>
+        <button type="button" className={pill(view === "realPhotos")} onClick={() => setView("realPhotos")}>
+          Imágenes reales ({data.realPhotos.length}){arrivedForPhotos > 0 ? ` · ${arrivedForPhotos} ya en bodega` : ""}
         </button>
         <button type="button" className={pill(view === "done")} onClick={() => setView("done")}>
           Historial ({data.done.length}){notOnChannel > 0 ? ` · ${notOnChannel} sin subir al canal` : ""}
@@ -176,7 +186,7 @@ export function NewIdBrandingPanel() {
 
       {list.length === 0 && (
         <div className="border-[1.5px] border-dashed border-rule rounded-md p-8 text-center text-steel text-[13.5px]">
-          {query ? <>No se encontró ningún producto con &quot;{search.trim()}&quot;.</> : view === "pending" ? "No hay IDs nuevos por brandear." : "Todavía no hay IDs brandeados."}
+          {query ? <>No se encontró ningún producto con &quot;{search.trim()}&quot;.</> : view === "pending" ? "No hay IDs nuevos por brandear." : view === "realPhotos" ? "No hay productos esperando imágenes reales." : "Todavía no hay productos listos para el canal."}
         </div>
       )}
 
@@ -206,6 +216,21 @@ export function NewIdBrandingPanel() {
                   ))}
                 </div>
               </>
+            ) : view === "realPhotos" ? (
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center gap-1.5 text-[12px] text-teal">
+                  <CheckCircle2 size={14} /> Brandeado — {actorName(e.branded?.by ?? null)}{e.branded?.at ? ` · ${formatDateTime(e.branded.at)}` : ""}
+                </div>
+                <div className="pt-2.5 border-t border-rule">
+                  {e.arrivedAt ? (
+                    <StepCheck label="Imágenes reales tomadas" mark={e.realPhotos} canToggle={data.canAct} onToggle={(done) => toggle(e, "realPhotos", done)} />
+                  ) : (
+                    <div className="flex items-center gap-2 text-[12.5px] text-steel">
+                      <Clock size={14} /> Esperando que llegue a bodega para tomar las imágenes reales.
+                    </div>
+                  )}
+                </div>
+              </div>
             ) : (
               <div className="flex flex-col gap-2">
                 <div className="flex items-center gap-1.5 text-[12px] text-teal">
@@ -219,6 +244,9 @@ export function NewIdBrandingPanel() {
                       <StepCheck key={s.key} label={s.label} mark={e.steps[s.key]} canToggle={false} onToggle={async () => {}} />
                     ))}
                   </div>
+                )}
+                {e.realPhotos && (
+                  <StepCheck label="Imágenes reales tomadas" mark={e.realPhotos} canToggle={data.canAct && !e.channel} onToggle={(done) => toggle(e, "realPhotos", done)} />
                 )}
                 <div className="pt-2.5 border-t border-rule">
                   <StepCheck label="Subido al canal de la marca" mark={e.channel} canToggle={data.canAct} onToggle={(done) => toggle(e, "channel", done)} />

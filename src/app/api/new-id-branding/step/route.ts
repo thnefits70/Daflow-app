@@ -3,13 +3,13 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { notifyOwner } from "@/lib/notifications";
-import { canBrandNewIds } from "@/lib/newIdBranding";
+import { canBrandNewIds, REAL_PHOTOS_SINCE } from "@/lib/newIdBranding";
 
 const schema = z
   .object({
     catalogItemId: z.string().min(1).nullable().optional(),
     proposalId: z.string().min(1).nullable().optional(),
-    step: z.enum(["dropiImages", "dropiInfo", "driveVideo", "channel"]),
+    step: z.enum(["dropiImages", "dropiInfo", "driveVideo", "realPhotos", "channel"]),
     done: z.boolean(),
   })
   .refine((d) => d.catalogItemId || d.proposalId, { message: "Falta el producto." });
@@ -18,6 +18,7 @@ const STEP_FIELDS = {
   dropiImages: ["dropiImagesAt", "dropiImagesById"],
   dropiInfo: ["dropiInfoAt", "dropiInfoById"],
   driveVideo: ["driveVideoAt", "driveVideoById"],
+  realPhotos: ["realPhotosAt", "realPhotosById"],
   channel: ["channelUploadedAt", "channelUploadedById"],
 } as const;
 
@@ -55,8 +56,29 @@ export async function POST(req: NextRequest) {
     : false;
   const alreadyBranded = !!row?.brandedAt || legacyDone || !!proposal?.brandedAt;
 
-  if (step === "channel" && !alreadyBranded) return NextResponse.json({ error: "Primero termina los pasos del brandeo." }, { status: 409 });
-  if (step !== "channel" && alreadyBranded) return NextResponse.json({ error: "Este producto ya está brandeado." }, { status: 409 });
+  const afterBranding = step === "realPhotos" || step === "channel";
+  if (afterBranding && !alreadyBranded) return NextResponse.json({ error: "Primero termina los pasos del brandeo." }, { status: 409 });
+  if (!afterBranding && alreadyBranded) return NextResponse.json({ error: "Este producto ya está brandeado." }, { status: 409 });
+
+  // Confirmado 2026-09-25, pedido de Robert: las fotos reales solo se pueden
+  // tomar cuando el producto ya está físicamente en bodega, y recién con
+  // ellas se sube al canal. Lo ya marcado en el canal antes de este cambio
+  // sigue valiendo (se puede desmarcar sin pedir fotos reales).
+  const arrived =
+    afterBranding && done && catalogItemId
+      ? !!(await prisma.purchaseRequest.findFirst({ where: { catalogItemId, status: { in: ["RECEIVED_PENDING_REVIEW", "RECEIVED"] } }, select: { id: true } }))
+      : false;
+  if (step === "realPhotos" && done && !arrived) {
+    return NextResponse.json({ error: "Este producto todavía no llega a bodega." }, { status: 409 });
+  }
+  if (step === "realPhotos" && !done && row?.channelUploadedAt) {
+    return NextResponse.json({ error: "Primero desmarca \"Subido al canal de la marca\"." }, { status: 409 });
+  }
+  // Brandeado antes de este cambio y ya en bodega: sigue como antes (ver REAL_PHOTOS_SINCE).
+  const legacyReady = arrived && (!row?.brandedAt || row.brandedAt.toISOString() < REAL_PHOTOS_SINCE);
+  if (step === "channel" && done && !row?.realPhotosAt && !legacyReady) {
+    return NextResponse.json({ error: "Primero marca las imágenes reales." }, { status: 409 });
+  }
 
   const [atField, byField] = STEP_FIELDS[step];
   const now = new Date();
@@ -70,7 +92,7 @@ export async function POST(req: NextRequest) {
       })
     : await prisma.newIdBranding.create({ data: { ...stepData, catalogItemId, proposalId: proposal?.id ?? null } });
 
-  if (step === "channel" || !row.dropiImagesAt || !row.dropiInfoAt || !row.driveVideoAt) {
+  if (afterBranding || !row.dropiImagesAt || !row.dropiInfoAt || !row.driveVideoAt) {
     return NextResponse.json({ ok: true, branded: false });
   }
 
