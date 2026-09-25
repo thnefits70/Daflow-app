@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { canAssignExternalSalePack } from "@/lib/guards";
 import { formatDateTime } from "@/lib/formatDateTime";
 import { PrintButton } from "@/app/rol-del-mes/[id]/PrintButton";
+import { PrintedAt } from "./PrintedAt";
 
 // Confirmado 2026-09-16, pedido explícito del usuario: esta hoja la ve el
 // motorizado/cliente al recibir el pedido, así que no debe llevar nada
@@ -70,6 +71,7 @@ export default async function ExternalSaleGuidePage({ params }: { params: Promis
         <div className="text-center mb-6 print:mb-[2mm]">
           <div className="text-[11px] tracking-[0.2em] font-bold text-gray-500 uppercase print:text-[1.8mm]">Guía de salida</div>
           <div className="text-[20px] font-bold mt-1 print:text-[4.5mm] print:mt-0">{sale.code}</div>
+          <PrintedAt />
         </div>
 
         <div className={`border-2 rounded-md py-3 px-4 mb-6 text-center print:py-[1.5mm] print:px-[2mm] print:mb-[2mm] print:rounded-none ${sale.isContraEntrega ? "border-black" : "border-gray-400"}`}>
