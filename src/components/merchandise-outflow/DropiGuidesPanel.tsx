@@ -33,6 +33,8 @@ type ParseResult = {
   rows: Row[];
   warranty: WarrantyLine[];
   unreadWarrantyGuides: string[];
+  uncertainWarrantyGuides: string[];
+  warnings: string[];
   stockByItem: Record<string, number>;
 };
 type ComboPart = { catalogItem: ItemLite; quantity: number };
@@ -157,6 +159,46 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
     setErr("");
   }
 
+  // Confirmado 2026-09-25: en Gintracom/Laar/Urbano todavía no sabemos cómo
+  // viene una garantía — "SIN RECAUDO" puede ser pago anticipado (el cliente
+  // ya pagó, solo se entrega). Yair lo corrige acá y queda anotado en los
+  // avisos guardados para afinar la regla.
+  function toPrepaid(i: number) {
+    if (!data) return;
+    const w = data.warranty[i];
+    const rows = data.rows.map((r) =>
+      r.code === w.code
+        ? {
+            ...r,
+            quantity: r.quantity + w.quantity,
+            labelUnits: r.labelUnits + w.quantity,
+            byCarrier: { ...r.byCarrier, [w.carrier]: (r.byCarrier[w.carrier] ?? 0) + w.quantity },
+            variants: w.variant
+              ? r.variants.some((v) => v.label === w.variant)
+                ? r.variants.map((v) => (v.label === w.variant ? { ...v, quantity: v.quantity + w.quantity } : v))
+                : [...r.variants, { label: w.variant, quantity: w.quantity }]
+              : r.variants,
+          }
+        : r
+    );
+    setData({
+      ...data,
+      rows,
+      warranty: data.warranty.filter((_, idx) => idx !== i),
+      guides: data.guides.map((g) => (g.number === w.guide ? { ...g, warranty: false } : g)),
+      warnings: [...data.warnings, `Yair marcó la guía ${w.guide} (${carrierLabel(w.carrier)}, SIN RECAUDO) como pago anticipado, no garantía.`],
+    });
+    setWarrantyDecisions((prev) => {
+      const next: Record<number, WarrantyDecision> = {};
+      for (const [k, v] of Object.entries(prev)) {
+        const n = Number(k);
+        if (n < i) next[n] = v;
+        else if (n > i) next[n - 1] = v;
+      }
+      return next;
+    });
+  }
+
   async function includeAgain(r: Row) {
     if (r.resolution.kind === "ignored") {
       await fetch(`/api/fulfillment-requests/ignored-codes/${encodeURIComponent(r.code)}`, { method: "DELETE" });
@@ -203,6 +245,7 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
       body: JSON.stringify({
         fileUrls: files.map((f) => f.url),
         manifestDate: data.manifestDate,
+        parseWarnings: data.warnings,
         guides: data.guides.map((g) => ({ number: g.number, carrier: g.carrier })),
         rows: rows.map((r) => {
           const d = decisions[r.code]!;
@@ -252,6 +295,16 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
           {w.variant && <span className="font-mono text-[10px] bg-teal/10 border border-teal/30 rounded-full px-2 py-0.5">{w.variant}</span>}
           <span className="font-mono text-[13px] font-bold text-teal shrink-0">{w.quantity}</span>
         </div>
+        {data?.uncertainWarrantyGuides.includes(w.guide) && (
+          <div className="mt-1 text-[11px] flex items-center gap-2 flex-wrap" style={{ color: "#D9A441" }}>
+            <span>
+              Dice &quot;SIN RECAUDO&quot;, pero todavía no conozco cómo vienen las garantías de {carrierLabel(w.carrier)} — puede ser un pago anticipado.
+            </span>
+            <button type="button" className="font-semibold text-teal cursor-pointer" onClick={() => toPrepaid(i)}>
+              Es pago anticipado (no garantía)
+            </button>
+          </div>
+        )}
         {decisions[w.code]?.kind === "ignore" ? (
           <div className="text-[11px] text-steel mt-1">Marcado como &quot;no es un producto&quot; — no se incluye.</div>
         ) : parts.length === 0 ? (
@@ -574,6 +627,22 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
             {data.guides.length} guías{data.carriers.length > 0 ? ` (${sortCarriers(data.carriers).map(carrierLabel).join(", ")})` : ""}
             {data.manifestDate ? ` · manifiesto del ${data.manifestDate.split("-").reverse().join("/")}` : ""} · {rows.length} códigos · {totalUnits} unidades
           </div>
+
+          {data.warnings.length > 0 && (
+            // Pedido del usuario 2026-09-25: explicarle a Yair qué no se pudo
+            // leer bien, para ir ajustando la lectura en el camino.
+            <div className="text-[11.5px] bg-gold/10 border border-gold/40 rounded-md p-2.5 mb-3">
+              <div className="font-semibold mb-1 flex items-center gap-1.5" style={{ color: "#D9A441" }}>
+                <AlertTriangle size={13} /> Cosas que no pude leer bien
+              </div>
+              <ul className="list-disc pl-4 flex flex-col gap-0.5">
+                {data.warnings.map((w, i) => (
+                  <li key={i}>{w}</li>
+                ))}
+              </ul>
+              <div className="text-[10.5px] text-steel mt-1">Puedes guardar igual. Quedan anotados para que el administrador ajuste la lectura; si se repiten, avísale.</div>
+            </div>
+          )}
 
           {pending.length > 0 ? (
             <>

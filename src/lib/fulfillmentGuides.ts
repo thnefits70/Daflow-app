@@ -185,6 +185,8 @@ export type GuidesApplyWarranty = { guide: string; carrier: string; code: string
 
 export type GuidesApplyInput = {
   fileUrls: string[];
+  // Lo que no se pudo leer bien (se le mostró a Yair) — queda guardado.
+  parseWarnings?: string[];
   manifestDate: string | null;
   guides: { number: string; carrier: string }[];
   rows: GuidesApplyRow[];
@@ -426,6 +428,7 @@ export async function applyGuidesImport(input: GuidesApplyInput, userId: string 
           skippedCount: ignoreRows.length,
           fileUrls: input.fileUrls,
           manifestDate: input.manifestDate,
+          parseWarnings: input.parseWarnings ?? [],
           items: {
             create: itemRows.map((r) => ({
               catalogItemId: r.catalogItemId,

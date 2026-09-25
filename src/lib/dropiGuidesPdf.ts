@@ -147,6 +147,13 @@ export type ParsedGuidesPdf = {
   // Guías de garantía cuya etiqueta no se pudo leer — se avisa, nunca se
   // adivina qué producto era.
   unreadWarrantyGuides: string[];
+  // Garantías marcadas solo por "SIN RECAUDO" en transportadoras de las que
+  // todavía no tenemos ejemplo — podrían ser pago anticipado; Yair decide.
+  uncertainWarrantyGuides: string[];
+  // Confirmado 2026-09-25, pedido del usuario: todo lo que la app no pudo
+  // leer bien se le explica a Yair en la misma pantalla (y queda guardado)
+  // para ir ajustando la lectura en el camino.
+  warnings: string[];
 };
 
 const SUMMARY_RE = /\(ID:\s*(\d+)\)\s*-\s*\(SKU:[^)]*\)\s*-\s*(.+?)\s+(\d+)\s*$/;
@@ -260,12 +267,23 @@ function parseRocketPages(pages: PdfLine[][]): ParsedGuidesPdf {
     }
   };
 
-  for (const lines of pages) {
+  const warnings: string[] = [];
+  const pagesWithoutGuide: number[] = [];
+  const guidesWithoutProducts: string[] = [];
+  // Rocket todavía no ha mandado ninguna garantía (confirmado 2026-09-25):
+  // "SIN RECAUDO" se toma como posible garantía y Yair confirma. Una
+  // etiqueta sin bloque de RECAUDO es PAGO ANTICIPADO (el cliente ya pagó),
+  // no garantía — sale como pedido normal.
+  const uncertain = new Set<string>();
+
+  for (const [pageIdx, lines] of pages.entries()) {
     const text = lines.map((l) => l.text).join("\n");
     const isWarranty = /SIN\s+RECAUDO/i.test(text);
 
     const gin = gintracomRocketLabel(lines);
     if (gin) {
+      if (isWarranty) uncertain.add(gin.guide);
+      if (gin.products.length === 0) guidesWithoutProducts.push(gin.guide);
       guides.set(gin.guide, { carrier: carrierFromGuide(gin.guide), warranty: isWarranty });
       for (const p of gin.products) {
         const known = idByName.get(normalizeName(splitVariant(p.name).name));
@@ -275,10 +293,15 @@ function parseRocketPages(pages: PdfLine[][]): ParsedGuidesPdf {
     }
 
     const g = text.match(BARCODE_GUIDE_RE);
-    if (!g) continue;
+    if (!g) {
+      if (text.trim()) pagesWithoutGuide.push(pageIdx + 1);
+      continue;
+    }
     const guide = g[1].toUpperCase();
     const carrier = carrierFromGuide(guide);
     guides.set(guide, { carrier, warranty: isWarranty });
+    if (isWarranty) uncertain.add(guide);
+    let productsHere = 0;
     const d = text.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})\s*\|/);
     if (d && !manifestDate) manifestDate = `${d[3]}-${d[1].padStart(2, "0")}-${d[2].padStart(2, "0")}`;
 
@@ -292,7 +315,20 @@ function parseRocketPages(pages: PdfLine[][]): ParsedGuidesPdf {
       const m = l.text.match(ROCKET_PRODUCT_RE);
       if (!m) continue;
       add(`${ROCKET_PREFIX}${m[1]}`, m[2], Number(m[3]), guide, carrier, isWarranty);
+      productsHere++;
     }
+    if (productsHere === 0) guidesWithoutProducts.push(guide);
+  }
+
+  if (pagesWithoutGuide.length > 0) {
+    warnings.push(`En ${pagesWithoutGuide.length} página(s) no encontré el número de guía (página ${pagesWithoutGuide.slice(0, 5).join(", ")}) — esas etiquetas no se sumaron.`);
+  }
+  if (guidesWithoutProducts.length > 0) {
+    warnings.push(`En ${guidesWithoutProducts.length} guía(s) no pude leer los productos (ej. ${guidesWithoutProducts.slice(0, 3).join(", ")}) — no se sumaron.`);
+  }
+  const noCarrier = [...guides.entries()].filter(([, v]) => v.carrier === "SIN TRANSPORTADORA").map(([n]) => n);
+  if (noCarrier.length > 0) {
+    warnings.push(`No reconocí la transportadora de ${noCarrier.length} guía(s) por su número (ej. ${noCarrier.slice(0, 3).join(", ")}).`);
   }
 
   const lines: ParsedGuidesLine[] = [...normal.entries()].map(([code, r]) => ({
@@ -309,6 +345,8 @@ function parseRocketPages(pages: PdfLine[][]): ParsedGuidesPdf {
     lines,
     warranty,
     unreadWarrantyGuides: [...guides.entries()].filter(([n, v]) => v.warranty && !warranty.some((w) => w.guide === n)).map(([n]) => n),
+    uncertainWarrantyGuides: [...uncertain],
+    warnings,
   };
 }
 
@@ -331,7 +369,7 @@ function parseDropiPages(pages: PdfLine[][]): ParsedGuidesPdf {
 
   let manifestDate: string | null = null;
   let carrier = "";
-  const guides = new Map<string, { carrier: string; warranty: boolean }>();
+  const guides = new Map<string, { carrier: string; warranty: boolean; sinRecaudo: boolean }>();
   // code → transportadora → unidades (tal como la tabla resumen, garantías incluidas)
   const summary = new Map<string, { name: string; byCarrier: Map<string, number> }>();
 
@@ -344,7 +382,7 @@ function parseDropiPages(pages: PdfLine[][]): ParsedGuidesPdf {
       const d = l.text.match(DATE_RE);
       if (d && !manifestDate) manifestDate = `${d[3]}-${d[2]}-${d[1]}`;
       const g = l.text.match(GUIDE_RE);
-      if (g) guides.set(g[1].toUpperCase(), { carrier, warranty: /SIN\s+RECAUDO/i.test(l.text) });
+      if (g) guides.set(g[1].toUpperCase(), { carrier, warranty: false, sinRecaudo: /SIN\s+RECAUDO/i.test(l.text) });
       const s = l.text.match(SUMMARY_RE);
       if (s) {
         let row = summary.get(s[1]);
@@ -385,6 +423,9 @@ function parseDropiPages(pages: PdfLine[][]): ParsedGuidesPdf {
   // cercana en la misma página, hacia arriba o hacia abajo.
   const guideSpots: { guide: string; page: number; line: number }[] = [];
   const guideTokens = [...guides.keys()];
+  // Veloces imprime en la etiqueta "Esta orden de garantia se genero a
+  // través de la guia original #…" (ejemplo real 2026-09-25).
+  const garantiaSpots: { page: number; line: number }[] = [];
 
   pages.forEach((lines, p) => {
     for (let i = 0; i < lines.length; i++) {
@@ -392,6 +433,7 @@ function parseDropiPages(pages: PdfLine[][]): ParsedGuidesPdf {
       if (GUIDE_RE.test(text)) continue;
       const compact = text.replace(/[\s*]/g, "").toUpperCase();
       for (const g of guideTokens) if (compact.includes(g)) guideSpots.push({ guide: g, page: p, line: i });
+      if (/orden\s+de\s+garant/i.test(text)) garantiaSpots.push({ page: p, line: i });
       if (SUMMARY_RE.test(text) || /\(ID:/.test(text)) continue;
 
       // Servientrega / Laar / Veloces: traen el ID de Dropi.
@@ -443,6 +485,26 @@ function parseDropiPages(pages: PdfLine[][]): ParsedGuidesPdf {
     return best?.guide ?? null;
   };
 
+  // Garantía en Dropi (confirmado con Yair 2026-09-25):
+  //   - Servientrega: el número de guía empieza con 7.
+  //   - Veloces: la etiqueta dice "orden de garantía … guía original".
+  //   - "SIN RECAUDO" sin esas señales = PAGO ANTICIPADO → pedido normal.
+  //   - Gintracom/Laar/Urbano: todavía sin ejemplo — "SIN RECAUDO" queda
+  //     como POSIBLE garantía y Yair confirma o la pasa a pago anticipado.
+  const garantiaGuides = new Set<string>();
+  for (const spot of garantiaSpots) {
+    const g = guideOf({ code: "", variant: null, qty: 0, page: spot.page, line: spot.line });
+    if (g) garantiaGuides.add(g);
+  }
+  const uncertainWarrantyGuides: string[] = [];
+  for (const [n, g] of guides) {
+    if (g.carrier === "SERVIENTREGA") g.warranty = n.startsWith("7");
+    else if (garantiaGuides.has(n)) g.warranty = true;
+    else if (g.carrier !== "VELOCES" && g.sinRecaudo) {
+      g.warranty = true;
+      uncertainWarrantyGuides.push(n);
+    }
+  }
   const warrantyGuides = new Set([...guides.entries()].filter(([, g]) => g.warranty).map(([n]) => n));
   const warranty: ParsedWarrantyLine[] = [];
   const byLabel = new Map<string, Map<string, number>>(); // code → variante ("" = sin variante) → unidades
@@ -482,11 +544,28 @@ function parseDropiPages(pages: PdfLine[][]): ParsedGuidesPdf {
   }
 
   const readWarranty = new Set(warranty.map((w) => w.guide));
+
+  const warnings: string[] = [];
+  const incomplete = lines.filter((l) => l.labelUnits < l.quantity);
+  if (incomplete.length > 0) {
+    const units = incomplete.reduce((a, l) => a + (l.quantity - l.labelUnits), 0);
+    warnings.push(
+      `En ${incomplete.length} producto(s) no pude leer todas las etiquetas (${units} unidad(es)) — el total está bien porque sale de la tabla, pero sus colores/tallas pueden salir incompletos. Ej: ${incomplete
+        .slice(0, 3)
+        .map((l) => l.name)
+        .join(", ")}.`
+    );
+  }
+  const noCarrier = [...guides.entries()].filter(([, v]) => !v.carrier || v.carrier === "SIN TRANSPORTADORA").map(([n]) => n);
+  if (noCarrier.length > 0) warnings.push(`No reconocí la transportadora de ${noCarrier.length} guía(s) (ej. ${noCarrier.slice(0, 3).join(", ")}).`);
+
   return {
     manifestDate,
     guides: [...guides.entries()].map(([number, g]) => ({ number, carrier: g.carrier, warranty: g.warranty })),
     lines,
     warranty,
     unreadWarrantyGuides: [...warrantyGuides].filter((g) => !readWarranty.has(g)),
+    uncertainWarrantyGuides,
+    warnings,
   };
 }

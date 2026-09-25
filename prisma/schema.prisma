@@ -2534,6 +2534,10 @@ model FulfillmentRequestBatch {
   // Dropi (YYYY-MM-DD). Vacíos/null en las subidas por foto o Excel.
   fileUrls     String[] @default([])
   manifestDate String?
+  // Confirmado 2026-09-25, pedido del usuario: lo que la app no pudo leer
+  // bien del PDF (se le mostró a Yair) queda guardado para revisar y ajustar
+  // la lectura en el camino.
+  parseWarnings String[] @default([])
 
   // Confirmado 2026-09-23: cada subida entra al lote (corte) abierto del
   // día — ver FulfillmentLot. Null solo en subidas anteriores a los cortes.

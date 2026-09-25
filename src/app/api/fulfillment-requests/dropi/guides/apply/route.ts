@@ -8,6 +8,7 @@ const variantSchema = z.object({ label: z.string().trim().min(1).max(120), quant
 const schema = z.object({
   fileUrls: z.array(z.string().url()).min(1).max(10),
   manifestDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable(),
+  parseWarnings: z.array(z.string().max(1000)).max(100).optional(),
   guides: z.array(z.object({ number: z.string().trim().min(1).max(40), carrier: z.string().max(40) })).max(3000),
   rows: z
     .array(

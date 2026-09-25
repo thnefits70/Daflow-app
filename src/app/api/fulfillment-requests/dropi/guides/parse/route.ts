@@ -30,6 +30,8 @@ export async function POST(req: NextRequest) {
   const merged = new Map<string, ParsedGuidesLine>();
   const warranty: ParsedWarrantyLine[] = [];
   const unreadWarranty: string[] = [];
+  const uncertainWarranty: string[] = [];
+  const warnings: string[] = [];
   const guides = new Map<string, { carrier: string; warranty: boolean }>();
   const repeatedInUpload: string[] = [];
   let manifestDate: string | null = null;
@@ -54,6 +56,9 @@ export async function POST(req: NextRequest) {
     }
     warranty.push(...result.warranty);
     unreadWarranty.push(...result.unreadWarrantyGuides);
+    uncertainWarranty.push(...result.uncertainWarrantyGuides);
+    const label = parsed.data.fileUrls.length > 1 ? `PDF #${idx + 1}: ` : "";
+    warnings.push(...result.warnings.map((w) => label + w));
     for (const l of result.lines) {
       const prev = merged.get(l.code);
       if (!prev) {
@@ -115,6 +120,8 @@ export async function POST(req: NextRequest) {
     rows,
     warranty,
     unreadWarrantyGuides: unreadWarranty,
+    uncertainWarrantyGuides: uncertainWarranty,
+    warnings,
     stockByItem: Object.fromEntries([...ids].map((id) => [id, stock.get(id)?.balance ?? 0])),
   });
 }
