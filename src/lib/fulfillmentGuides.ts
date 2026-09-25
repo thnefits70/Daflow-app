@@ -468,6 +468,9 @@ type ItemView = { catalogItemId: string; name: string; photos: string[]; justCod
 export type LotLine = ItemView & {
   quantity: number;
   byCarrier: Record<string, number>;
+  // 2026-09-25: de qué combos salen estas unidades, para que Yair vea si una
+  // receta mal armada le está sumando de más.
+  fromCombos: { code: string; quantity: number }[];
   variants: { label: string; quantity: number }[];
 };
 export type LotWarrantyLine = ItemView & {
@@ -577,8 +580,13 @@ export async function getCompiledLot(lotId: string) {
       const carrier = it.carrier ?? NO_CARRIER;
       carriers.add(carrier);
       let line = lines.get(it.catalogItemId);
-      if (!line) lines.set(it.catalogItemId, (line = { ...view, quantity: 0, byCarrier: {}, variants: [], variantMap: new Map() }));
+      if (!line) lines.set(it.catalogItemId, (line = { ...view, quantity: 0, byCarrier: {}, fromCombos: [], variants: [], variantMap: new Map() }));
       line.quantity += it.quantity;
+      if (it.fromComboCode) {
+        const fc = line.fromCombos.find((c) => c.code === it.fromComboCode);
+        if (fc) fc.quantity += it.quantity;
+        else line.fromCombos.push({ code: it.fromComboCode, quantity: it.quantity });
+      }
       line.byCarrier[carrier] = (line.byCarrier[carrier] ?? 0) + it.quantity;
     }
     for (const v of b.variantNotes) {
@@ -623,6 +631,8 @@ export async function getCompiledLot(lotId: string) {
       confirmedByName: nameOf(p?.confirmedById ?? null),
     };
   });
+  const comboCodes = [...new Set(lot.batches.flatMap((b) => b.items.map((i) => i.fromComboCode)).filter((c): c is string => !!c))];
+  const combos = await getComboRecipes(comboCodes);
   const stock = await getCurrentStockByItemIds([...needed.keys()]);
   const short = [...needed.values()].filter(({ view, qty }) => (stock.get(view.catalogItemId)?.balance ?? 0) < qty);
   const pending = await pendingReturnsByItem(short.map(({ view }) => view.catalogItemId));
@@ -666,6 +676,7 @@ export async function getCompiledLot(lotId: string) {
     })),
     lines: lineList.sort((a, b) => b.quantity - a.quantity),
     warranty,
+    combos,
     shortages,
     picking: picking.sort((a, b) => b.needed - a.needed),
     stockByItem: Object.fromEntries([...needed.keys()].map((id) => [id, stock.get(id)?.balance ?? 0])),
@@ -787,4 +798,149 @@ export async function markLotPrinted(lotId: string, userId: string | null): Prom
     }
   }
   return { ok: false, error: "No se pudo asignar el número de manifiesto — vuelve a intentar." };
+}
+
+// ---- Corregir la receta de un combo desde el corte ----------------------
+
+export type ComboRecipe = { id: string; code: string; label: string | null; components: (ItemView & { quantity: number })[] };
+
+export async function getComboRecipes(codes: string[]): Promise<ComboRecipe[]> {
+  if (codes.length === 0) return [];
+  const combos = await prisma.dropiCombo.findMany({
+    where: { code: { in: codes } },
+    select: { id: true, code: true, label: true, components: { select: { quantity: true, catalogItem: { select: { id: true, name: true, photos: true, justCode: true } } } } },
+  });
+  return combos.map((c) => ({
+    id: c.id,
+    code: c.code,
+    label: c.label,
+    components: c.components.map((k) => ({ catalogItemId: k.catalogItem.id, name: k.catalogItem.name, photos: k.catalogItem.photos, justCode: k.catalogItem.justCode, quantity: k.quantity })),
+  }));
+}
+
+const recipeText = (parts: { name: string; justCode: string | null; quantity: number }[]) =>
+  parts.map((p) => `${p.quantity}× ${p.name}${p.justCode ? ` (${p.justCode})` : ""}`).join(" + ");
+
+// Pedido del usuario 2026-09-25 (caso real: Yair armó el combo 157246
+// "Ventilador Humidif y Almohada Ergonómica" con la ALMOHADA SELLADA AL
+// VACÍO y le sumó 1 de más al corte): Yair puede corregir él mismo una
+// receta que se usa en su corte en preparación, viendo cómo estaba. La
+// receta es la misma que usa el despacho real, así que a Daniel le llega
+// un aviso con el antes y el después. Los cortes que siguen "En
+// preparación" se recalculan con la receta nueva; los ya enviados a
+// Inventario no se tocan.
+export async function correctComboRecipeFromLot(params: {
+  lotId: string;
+  code: string;
+  components: { catalogItemId: string; quantity: number }[];
+  actorName: string;
+}): Promise<{ ok: true; warning?: string } | { ok: false; error: string }> {
+  const lot = await prisma.fulfillmentLot.findUnique({ where: { id: params.lotId }, select: { status: true } });
+  if (!lot) return { ok: false, error: "No encontrado." };
+  if (lot.status !== "DRAFT") return { ok: false, error: "Este corte ya se envió a Inventario — pídele a Daniel que corrija la receta." };
+  const used = await prisma.fulfillmentRequestItem.count({ where: { fromComboCode: params.code, batch: { lotId: params.lotId } } });
+  if (used === 0) return { ok: false, error: "Ese combo no está en este corte." };
+  const ids = params.components.map((c) => c.catalogItemId);
+  if (new Set(ids).size !== ids.length) return { ok: false, error: "Pusiste el mismo producto dos veces — junta la cantidad en una sola fila." };
+  const missing = await componentsMissingDropiId(ids);
+  if (missing.length > 0) return { ok: false, error: missingDropiIdMessage(missing) };
+
+  const [before] = await getComboRecipes([params.code]);
+  if (!before) return { ok: false, error: "No se encontró la receta de ese combo." };
+  const oldPerUnit = new Map(before.components.map((c) => [c.catalogItemId, c.quantity]));
+  const newItems = await prisma.purchaseCatalogItem.findMany({ where: { id: { in: ids } }, select: { id: true, name: true, justCode: true } });
+  const itemById = new Map(newItems.map((i) => [i.id, i]));
+  const afterText = recipeText(params.components.map((c) => ({ name: itemById.get(c.catalogItemId)?.name ?? "—", justCode: itemById.get(c.catalogItemId)?.justCode ?? null, quantity: c.quantity })));
+  const beforeText = recipeText(before.components);
+  if (beforeText === afterText) return { ok: false, error: "La receta quedó igual que antes — no hay nada que corregir." };
+
+  let skippedWarranty = 0;
+  await prisma.$transaction(async (tx) => {
+    await tx.dropiComboComponent.deleteMany({ where: { comboId: before.id } });
+    await tx.dropiComboComponent.createMany({ data: params.components.map((c) => ({ comboId: before.id, catalogItemId: c.catalogItemId, quantity: c.quantity })) });
+
+    const items = await tx.fulfillmentRequestItem.findMany({
+      where: { fromComboCode: params.code, batch: { lot: { status: "DRAFT" } } },
+      select: { id: true, batchId: true, catalogItemId: true, quantity: true, sourceCode: true, carrier: true, warrantyGuide: true, warrantyMode: true, warrantyPiece: true },
+    });
+    // Cuántos pedidos del combo hay en cada grupo (subida + código +
+    // transportadora [+ guía de garantía]): se saca de cualquier producto de
+    // la receta vieja. Garantías de "solo parte" o "pieza" no se tocan — ahí
+    // Yair eligió productos puntuales de la receta vieja.
+    const groups = new Map<string, typeof items>();
+    for (const it of items) {
+      if (it.warrantyGuide && it.warrantyMode !== "COMPLETE") {
+        skippedWarranty++;
+        continue;
+      }
+      const key = [it.batchId, it.sourceCode, it.carrier ?? "", it.warrantyGuide ?? ""].join("|");
+      groups.set(key, [...(groups.get(key) ?? []), it]);
+    }
+    const touchedBatches = new Set<string>();
+    for (const group of groups.values()) {
+      const ref = group.find((g) => oldPerUnit.has(g.catalogItemId));
+      if (!ref) continue;
+      const orders = Math.round(ref.quantity / oldPerUnit.get(ref.catalogItemId)!);
+      const first = group[0];
+      await tx.fulfillmentRequestItem.deleteMany({ where: { id: { in: group.map((g) => g.id) } } });
+      await tx.fulfillmentRequestItem.createMany({
+        data: params.components.map((c) => ({
+          batchId: first.batchId,
+          catalogItemId: c.catalogItemId,
+          quantity: orders * c.quantity,
+          sourceCode: first.sourceCode,
+          fromComboCode: params.code,
+          carrier: first.carrier,
+          warrantyGuide: first.warrantyGuide,
+          warrantyMode: first.warrantyMode,
+          warrantyPiece: first.warrantyPiece,
+        })),
+      });
+      if (!first.warrantyGuide) touchedBatches.add(first.batchId);
+    }
+
+    // Variantes: las notas "Combo X: …" eran por producto de la receta vieja
+    // — se pasan a pedidos y se rearman con la nueva; luego se recalcula el
+    // relleno "Sin variante" de cada producto para que la suma cuadre.
+    const prefix = `Combo ${params.code}: `;
+    const affected = [...new Set([...before.components.map((c) => c.catalogItemId), ...ids])];
+    for (const batchId of touchedBatches) {
+      const notes = await tx.fulfillmentRequestVariantNote.findMany({ where: { batchId, label: { startsWith: prefix } } });
+      const perLabel = new Map<string, number>();
+      for (const n of notes) {
+        const per = oldPerUnit.get(n.catalogItemId);
+        if (per && !perLabel.has(n.label)) perLabel.set(n.label, Math.round(n.quantity / per));
+      }
+      await tx.fulfillmentRequestVariantNote.deleteMany({ where: { id: { in: notes.map((n) => n.id) } } });
+      if (perLabel.size > 0) {
+        await tx.fulfillmentRequestVariantNote.createMany({
+          data: params.components.flatMap((c) => [...perLabel.entries()].map(([label, orders]) => ({ batchId, catalogItemId: c.catalogItemId, label, quantity: orders * c.quantity }))),
+        });
+      }
+      for (const catalogItemId of affected) {
+        const [total, allNotes] = await Promise.all([
+          tx.fulfillmentRequestItem.aggregate({ where: { batchId, catalogItemId, warrantyGuide: null }, _sum: { quantity: true } }),
+          tx.fulfillmentRequestVariantNote.findMany({ where: { batchId, catalogItemId } }),
+        ]);
+        const filler = allNotes.filter((n) => n.label === "Sin variante");
+        const noted = allNotes.filter((n) => n.label !== "Sin variante").reduce((a, n) => a + n.quantity, 0);
+        await tx.fulfillmentRequestVariantNote.deleteMany({ where: { id: { in: filler.map((f) => f.id) } } });
+        const gap = (total._sum.quantity ?? 0) - noted;
+        if (noted > 0 && gap > 0) await tx.fulfillmentRequestVariantNote.create({ data: { batchId, catalogItemId, label: "Sin variante", quantity: gap } });
+      }
+    }
+  });
+
+  const danielId = await getInventoryLeadId();
+  if (danielId) {
+    await notifyOwner(danielId, {
+      title: `${params.actorName} corrigió la receta de un combo`,
+      body: `Combo ${params.code}${before.label ? ` (${before.label})` : ""}. Antes: ${beforeText}. Ahora: ${afterText}.`,
+      url: LOT_URL,
+    }).catch(() => null);
+  }
+  return {
+    ok: true,
+    warning: skippedWarranty > 0 ? `${skippedWarranty} garantía(s) de este combo marcadas como "solo parte" o "pieza" no se cambiaron — revísalas.` : undefined,
+  };
 }

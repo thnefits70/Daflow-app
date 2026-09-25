@@ -6,9 +6,10 @@ import { CatalogCode } from "@/components/shared/CatalogCode";
 import { carrierLabel } from "@/lib/carriers";
 import { sourceLabel, type VariantNote } from "./fulfillmentRequestShared";
 import { PickingPanel } from "./PickingPanel";
+import { LotComboRecipe, type LotComboRecipe as ComboRecipe } from "./LotComboRecipe";
 
 type ItemView = { catalogItemId: string; name: string; photos: string[]; justCode: string | null };
-export type LotLine = ItemView & { quantity: number; byCarrier: Record<string, number>; variants: VariantNote[] };
+export type LotLine = ItemView & { quantity: number; byCarrier: Record<string, number>; fromCombos: { code: string; quantity: number }[]; variants: VariantNote[] };
 export type LotWarrantyLine = ItemView & {
   itemId: string;
   guide: string;
@@ -44,6 +45,7 @@ export type CompiledLot = {
   batches: LotBatch[];
   lines: LotLine[];
   warranty: LotWarrantyLine[];
+  combos: ComboRecipe[];
   shortages: LotShortage[];
   manifestNumber: number | null;
   printedAt: string | null;
@@ -111,6 +113,8 @@ export function LotView({
   const [confirming, setConfirming] = useState(false);
   const [sending, setSending] = useState(false);
   const [err, setErr] = useState("");
+  const [openCombo, setOpenCombo] = useState<string | null>(null);
+  const shownCombo = lot.combos.find((c) => c.code === openCombo) ?? null;
   const units = lot.lines.reduce((s, l) => s + l.quantity, 0);
   const perCarrier = lot.carriers.map((c) => ({ c, q: lot.lines.reduce((s, l) => s + (l.byCarrier[c] ?? 0), 0) }));
   const editable = lot.status === "DRAFT" && canSubmit;
@@ -245,6 +249,21 @@ export function LotView({
                       <div className="min-w-0">
                         <div>{l.name}</div>
                         {l.variants.length > 0 && <div className="text-[10.5px] text-steel">{l.variants.map((v) => `${v.label} ${v.quantity}`).join(" · ")}</div>}
+                        {l.fromCombos.length > 0 && (
+                          // Toca un combo para ver (y corregir) su receta.
+                          <div className="text-[10.5px] text-steel flex flex-wrap gap-x-2">
+                            <span>Sale de:</span>
+                            {l.fromCombos.map((fc) => {
+                              const c = lot.combos.find((x) => x.code === fc.code);
+                              return (
+                                <button key={fc.code} type="button" className="underline decoration-dotted hover:text-teal cursor-pointer text-left" onClick={() => setOpenCombo(fc.code)}>
+                                  combo {fc.code}
+                                  {c?.label ? ` ${c.label}` : ""} ({fc.quantity})
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
                     </div>
                   </td>
@@ -259,6 +278,20 @@ export function LotView({
             </tbody>
           </table>
         </div>
+      )}
+
+      {shownCombo && (
+        <LotComboRecipe
+          key={shownCombo.code}
+          lotId={lot.id}
+          combo={shownCombo}
+          editable={editable}
+          onClose={() => setOpenCombo(null)}
+          onSaved={() => {
+            setOpenCombo(null);
+            onChanged();
+          }}
+        />
       )}
 
       {lot.warranty.length > 0 && (
