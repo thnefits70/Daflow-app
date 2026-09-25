@@ -65,6 +65,10 @@ type Row = {
     quantityCorrectedAt: string | null;
     quantityCorrectionNote: string | null;
     quantityCorrectedBy: { name: string } | null;
+    expirationDeclared: boolean | null;
+    lotManufactureDate: string | null;
+    lotExpirationDate: string | null;
+    lotQuantity: number | null;
   } | null;
   // Fix confirmado 2026-08-11: reportado por el usuario — sin esto, el
   // botón "Informar urgente" volvía a mostrar el formulario vacío como si
@@ -210,6 +214,16 @@ function toDocRow(r: Row): OperationDocRow {
   };
 }
 
+// Las fechas del lote se guardan como medianoche UTC del día elegido — se
+// leen del texto ISO para no correr un día por la zona horaria de Ecuador.
+function dateInputValue(iso: string) {
+  return iso.slice(0, 10);
+}
+function dateOnly(iso: string) {
+  const [y, m, d] = iso.slice(0, 10).split("-");
+  return `${d}/${m}/${y}`;
+}
+
 function isVideoUrl(url: string) {
   return /\.(mp4|mov|webm|avi|m4v)($|\?)/i.test(url);
 }
@@ -305,7 +319,9 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
   // caducidad — si dice que sí, o si ya estaba marcado, pide fecha de
   // elaboración (opcional) + vencimiento (obligatoria) + cantidad.
   const [expirationAnswer, setExpirationAnswer] = useState<Record<string, "yes" | "no">>({});
-  const [expirationForm, setExpirationForm] = useState<Record<string, { manufactureDate: string; expirationDate: string; quantity: string }>>({});
+  // quantity queda sin definir hasta que la editan a mano — mientras tanto
+  // se usa la cantidad recibida.
+  const [expirationForm, setExpirationForm] = useState<Record<string, { manufactureDate: string; expirationDate: string; quantity?: string }>>({});
 
   // Informar urgente — cantidad contada + desglose por tipo + evidencia.
   const [urgentCountedQty, setUrgentCountedQty] = useState("");
@@ -529,11 +545,18 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
     if (res.ok) setAiResult(data);
   }
 
-  async function confirmReceipt(id: string) {
+  async function confirmReceipt(id: string, item: { hasExpiration: boolean; awaitingDropiId: boolean }) {
     if (receivedPhotoUrls.length < 2 || !receivedQty) {
       setErr("Falta la cantidad recibida y al menos 2 fotos.");
       return;
     }
+    const asksExpiration = !item.awaitingDropiId;
+    if (asksExpiration && expirationLotMissing(id, item.hasExpiration, receivedQty)) {
+      setErr(item.hasExpiration || expirationAnswer[id] === "yes" ? "Falta la fecha de vencimiento y la cantidad del lote." : "Responde si el producto tiene fecha de caducidad.");
+      return;
+    }
+    const hasExpiration = asksExpiration && (item.hasExpiration || expirationAnswer[id] === "yes");
+    const lot = expirationForm[id];
     setBusy(true);
     setErr("");
     const res = await fetch(`/api/purchase-requests/${id}/receipt`, {
@@ -548,6 +571,10 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
         aiPhotoNote: aiResult?.note ?? null,
         minorDifferenceOnly: aiResult?.minorDifferenceOnly ?? null,
         minorDifferenceConfirmed,
+        hasExpiration: asksExpiration ? hasExpiration : undefined,
+        expirationLot: hasExpiration
+          ? { manufactureDate: lot?.manufactureDate || null, expirationDate: lot?.expirationDate ?? "", quantity: Number(lot?.quantity ?? receivedQty) }
+          : undefined,
       }),
     });
     setBusy(false);
@@ -556,6 +583,8 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
       setErr(data?.error ?? "No se pudo confirmar.");
       return;
     }
+    setExpirationAnswer((m) => { const next = { ...m }; delete next[id]; return next; });
+    setExpirationForm((m) => { const next = { ...m }; delete next[id]; return next; });
     clearReceiptDraft();
     setOpenId(null);
     setReceivedQty("");
@@ -571,10 +600,18 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
   // Confirmado 2026-08-18: pedido explícito del usuario — aprobación final
   // de Daniel sobre una recepción que ya hizo su equipo, recién acá pasa a
   // RECEIVED de verdad.
-  async function approveReceipt(id: string) {
+  // Si Daniel no abrió el formulario del lote, se aprueba con lo que declaró
+  // quien recibió (el servidor lo toma de la recepción).
+  function approvalNeedsLot(r: Row) {
+    if (r.catalogItem.awaitingDropiId || !r.receipt) return false;
+    if (r.receipt.expirationDeclared === false) return expirationAnswer[r.id] === "yes";
+    return r.catalogItem.hasExpiration || r.receipt.expirationDeclared === true || expirationAnswer[r.id] === "yes";
+  }
+
+  async function approveReceipt(id: string, sendLot: boolean, receivedQuantity: number) {
     setBusy(true);
     setErr("");
-    const lot = expirationForm[id];
+    const lot = sendLot ? expirationForm[id] : undefined;
     const res = await fetch(`/api/purchase-requests/${id}/approve-receipt`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -583,7 +620,7 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
             expirationLot: {
               manufactureDate: lot.manufactureDate || null,
               expirationDate: lot.expirationDate,
-              quantity: Number(lot.quantity),
+              quantity: Number(lot.quantity ?? receivedQuantity),
             },
           })
         : undefined,
@@ -598,6 +635,93 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
     setExpirationForm((m) => { const next = { ...m }; delete next[id]; return next; });
     load();
     router.refresh();
+  }
+
+  // Confirmado 2026-09-25, pedido explícito del usuario: los campos del lote
+  // se usan en "Confirmar que llegó" (el equipo de Inventario los llena con el
+  // producto en la mano) y en "Aprobar recepción" (Daniel los ve ya llenos y
+  // puede corregirlos).
+  function expirationLotMissing(id: string, hasExpiration: boolean, defaultQty: string) {
+    if (!hasExpiration && expirationAnswer[id] === undefined) return true;
+    if (!(hasExpiration || expirationAnswer[id] === "yes")) return false;
+    return !(expirationForm[id]?.expirationDate && Number(expirationForm[id]?.quantity ?? defaultQty) > 0);
+  }
+
+  function renderExpirationBlock(id: string, hasExpiration: boolean, defaultQty: string) {
+    const setField = (field: "manufactureDate" | "expirationDate" | "quantity", value: string) =>
+      setExpirationForm((m) => ({
+        ...m,
+        [id]: {
+          manufactureDate: m[id]?.manufactureDate ?? "",
+          expirationDate: m[id]?.expirationDate ?? "",
+          quantity: m[id]?.quantity,
+          [field]: value,
+        },
+      }));
+    if (hasExpiration || expirationAnswer[id] === "yes") {
+      return (
+        <div className="bg-cloud rounded-md p-2.5 mb-2">
+          <div className="flex items-center justify-between gap-2 mb-1.5">
+            <div className="text-[11px] font-semibold text-steel">Este producto tiene caducidad — declara el lote:</div>
+            {!hasExpiration && (
+              <button type="button" className="text-[11px] text-steel underline cursor-pointer" onClick={() => setExpirationAnswer((m) => ({ ...m, [id]: "no" }))}>
+                No tiene
+              </button>
+            )}
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            <div>
+              <label className="block text-[10px] text-steel mb-0.5">Elaboración (opcional)</label>
+              <input
+                type="date"
+                className="w-full rounded border border-rule bg-surface px-2 py-1.5 text-[12px]"
+                value={expirationForm[id]?.manufactureDate ?? ""}
+                onChange={(e) => setField("manufactureDate", e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] text-steel mb-0.5">Vencimiento</label>
+              <input
+                type="date"
+                className="w-full rounded border border-rule bg-surface px-2 py-1.5 text-[12px]"
+                value={expirationForm[id]?.expirationDate ?? ""}
+                onChange={(e) => setField("expirationDate", e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] text-steel mb-0.5">Cantidad</label>
+              <input
+                type="number"
+                min={1}
+                className="w-full rounded border border-rule bg-surface px-2 py-1.5 text-[12px]"
+                value={expirationForm[id]?.quantity ?? defaultQty}
+                onChange={(e) => setField("quantity", e.target.value)}
+              />
+            </div>
+          </div>
+        </div>
+      );
+    }
+    return (
+      <div className="bg-cloud rounded-md p-2.5 mb-2 flex items-center justify-between gap-2">
+        <span className="text-[12px] text-ink">
+          ¿Este producto tiene fecha de caducidad?
+          {expirationAnswer[id] === "no" && <span className="text-steel"> — respondiste: No</span>}
+        </span>
+        <div className="flex gap-2 shrink-0">
+          <button type="button" className="text-[11.5px] font-bold text-teal cursor-pointer" onClick={() => setExpirationAnswer((m) => ({ ...m, [id]: "yes" }))}>
+            Sí
+          </button>
+          <button
+            type="button"
+            className={`text-[11.5px] font-bold cursor-pointer ${expirationAnswer[id] === "no" ? "text-ink underline" : "text-steel"}`}
+            onClick={() => setExpirationAnswer((m) => ({ ...m, [id]: "no" }))}
+          >
+            No
+          </button>
+        </div>
+      </div>
+    );
   }
 
   async function approveUrgentReport(id: string, missingQty: number) {
@@ -1527,6 +1651,10 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                             </div>
                           )}
 
+                          {/* Confirmado 2026-09-25, pedido explícito del usuario: el
+                              lote de caducidad lo declara quien recibe, antes de
+                              confirmar — Daniel lo revisa al aprobar. */}
+                          {!r.catalogItem.awaitingDropiId && renderExpirationBlock(r.id, r.catalogItem.hasExpiration, receivedQty)}
                           <textarea className="w-full rounded border border-rule px-2.5 py-2 text-[12.5px] mb-2.5" rows={2} placeholder="Comentario breve (opcional)" value={comment} onChange={(e) => setComment(e.target.value)} />
                           {err && <div className="text-red text-[12px] mb-2">{err}</div>}
                           <div className="flex items-center gap-2">
@@ -1537,12 +1665,13 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                                 aiChecking ||
                                 receivedPhotoUrls.length < 2 ||
                                 !receivedQty ||
+                                (!r.catalogItem.awaitingDropiId && expirationLotMissing(r.id, r.catalogItem.hasExpiration, receivedQty)) ||
                                 Number(receivedQty) !== (r.urgentReports.length > 0 ? goodQuantity(r) : r.quantity) ||
                                 (aiResult?.likelyMatch === false && !(aiResult.minorDifferenceOnly && minorDifferenceConfirmed))
                               }
                               title={aiChecking ? "Espera a que la IA termine de comparar las fotos" : undefined}
                               className="rounded border border-green bg-green px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer disabled:opacity-60"
-                              onClick={() => confirmReceipt(r.id)}
+                              onClick={() => confirmReceipt(r.id, r.catalogItem)}
                             >
                               {aiChecking ? "Verificando fotos…" : "✓ Confirmar que llegó"}
                             </button>
@@ -1911,85 +2040,73 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                           Producto nuevo pendiente de ID de Dropi — al aprobar, queda RECIBIDO pero no se suma a INVESTOCK todavía. Entra al Kardex cuando Heidy confirme el ID y Bryan lo libere.
                         </div>
                       )}
-                      {r.catalogItem.awaitingDropiId ? null : r.catalogItem.hasExpiration || expirationAnswer[r.id] === "yes" ? (
-                        <div className="bg-cloud rounded-md p-2.5 mb-2">
-                          <div className="text-[11px] font-semibold text-steel mb-1.5">Este producto tiene caducidad — declara el lote:</div>
-                          <div className="grid grid-cols-3 gap-2">
-                            <div>
-                              <label className="block text-[10px] text-steel mb-0.5">Elaboración (opcional)</label>
-                              <input
-                                type="date"
-                                className="w-full rounded border border-rule bg-surface px-2 py-1.5 text-[12px]"
-                                value={expirationForm[r.id]?.manufactureDate ?? ""}
-                                onChange={(e) =>
-                                  setExpirationForm((m) => ({
-                                    ...m,
-                                    [r.id]: { manufactureDate: e.target.value, expirationDate: m[r.id]?.expirationDate ?? "", quantity: m[r.id]?.quantity ?? String(r.receipt!.receivedQuantity) },
-                                  }))
-                                }
-                              />
+                      {/* Confirmado 2026-09-25, pedido explícito del usuario: el lote
+                          ya lo declaró quien recibió (Joel/Scott) en "Confirmar que
+                          llegó" — Daniel lo ve acá y puede corregirlo. Las
+                          recepciones sin esa respuesta (viejas, o creadas desde un
+                          reporte urgente) siguen pidiéndolo acá, solo a Daniel. */}
+                      {r.catalogItem.awaitingDropiId ? null : (() => {
+                        const rc = r.receipt!;
+                        const editing = expirationForm[r.id] !== undefined || (rc.expirationDeclared === null && expirationAnswer[r.id] !== undefined) || (rc.expirationDeclared === false && expirationAnswer[r.id] === "yes");
+                        const canEdit = canApprove || isAdmin;
+                        if (rc.expirationDeclared !== null && !editing) {
+                          return (
+                            <div className="bg-cloud rounded-md p-2.5 mb-2 flex items-center justify-between gap-2">
+                              <span className="text-[12px] text-ink">
+                                {rc.expirationDeclared && rc.lotExpirationDate ? (
+                                  <>
+                                    Lote declarado por {actorName(rc.confirmedBy?.name)}: vence <b>{dateOnly(rc.lotExpirationDate)}</b>
+                                    {rc.lotManufactureDate && <> · elaboración {dateOnly(rc.lotManufactureDate)}</>} · {rc.lotQuantity} un.
+                                  </>
+                                ) : (
+                                  <>{actorName(rc.confirmedBy?.name)} indicó que este producto no tiene fecha de caducidad.</>
+                                )}
+                              </span>
+                              {canEdit && (
+                                <button
+                                  type="button"
+                                  className="text-[11.5px] font-bold text-teal cursor-pointer shrink-0"
+                                  onClick={() => {
+                                    if (rc.expirationDeclared && rc.lotExpirationDate) {
+                                      setExpirationForm((m) => ({
+                                        ...m,
+                                        [r.id]: {
+                                          manufactureDate: rc.lotManufactureDate ? dateInputValue(rc.lotManufactureDate) : "",
+                                          expirationDate: dateInputValue(rc.lotExpirationDate!),
+                                          quantity: String(rc.lotQuantity ?? rc.receivedQuantity),
+                                        },
+                                      }));
+                                    } else {
+                                      setExpirationAnswer((m) => ({ ...m, [r.id]: "yes" }));
+                                    }
+                                  }}
+                                >
+                                  {rc.expirationDeclared ? "Corregir" : "Sí tiene"}
+                                </button>
+                              )}
                             </div>
-                            <div>
-                              <label className="block text-[10px] text-steel mb-0.5">Vencimiento</label>
-                              <input
-                                type="date"
-                                className="w-full rounded border border-rule bg-surface px-2 py-1.5 text-[12px]"
-                                value={expirationForm[r.id]?.expirationDate ?? ""}
-                                onChange={(e) =>
-                                  setExpirationForm((m) => ({
-                                    ...m,
-                                    [r.id]: { manufactureDate: m[r.id]?.manufactureDate ?? "", expirationDate: e.target.value, quantity: m[r.id]?.quantity ?? String(r.receipt!.receivedQuantity) },
-                                  }))
-                                }
-                              />
-                            </div>
-                            <div>
-                              <label className="block text-[10px] text-steel mb-0.5">Cantidad</label>
-                              <input
-                                type="number"
-                                min={1}
-                                className="w-full rounded border border-rule bg-surface px-2 py-1.5 text-[12px]"
-                                value={expirationForm[r.id]?.quantity ?? String(r.receipt!.receivedQuantity)}
-                                onChange={(e) =>
-                                  setExpirationForm((m) => ({
-                                    ...m,
-                                    [r.id]: { manufactureDate: m[r.id]?.manufactureDate ?? "", expirationDate: m[r.id]?.expirationDate ?? "", quantity: e.target.value },
-                                  }))
-                                }
-                              />
-                            </div>
-                          </div>
-                        </div>
-                      ) : expirationAnswer[r.id] !== "no" ? (
-                        <div className="bg-cloud rounded-md p-2.5 mb-2 flex items-center justify-between gap-2">
-                          <span className="text-[12px] text-ink">¿Este producto tiene fecha de caducidad?</span>
-                          <div className="flex gap-2 shrink-0">
-                            <button
-                              type="button"
-                              className="text-[11.5px] font-bold text-teal cursor-pointer"
-                              onClick={() =>
-                                setExpirationAnswer((m) => ({ ...m, [r.id]: "yes" }))
-                              }
-                            >
-                              Sí
-                            </button>
-                            <button type="button" className="text-[11.5px] font-bold text-steel cursor-pointer" onClick={() => setExpirationAnswer((m) => ({ ...m, [r.id]: "no" }))}>
-                              No
-                            </button>
-                          </div>
-                        </div>
-                      ) : null}
+                          );
+                        }
+                        if (!canEdit) {
+                          return rc.expirationDeclared === null && (r.catalogItem.hasExpiration || expirationAnswer[r.id] === undefined) ? (
+                            <div className="text-[11.5px] text-steel mb-2">Daniel declara la caducidad de esta recepción al aprobarla.</div>
+                          ) : null;
+                        }
+                        return renderExpirationBlock(r.id, r.catalogItem.hasExpiration || rc.expirationDeclared === true, String(rc.receivedQuantity));
+                      })()}
                       <button
                         type="button"
                         disabled={
                           !canApprove ||
                           busy ||
-                          ((r.catalogItem.hasExpiration || expirationAnswer[r.id] === "yes") &&
-                            !(expirationForm[r.id]?.expirationDate && Number(expirationForm[r.id]?.quantity) > 0))
+                          (approvalNeedsLot(r) &&
+                            (expirationForm[r.id] !== undefined
+                              ? !(expirationForm[r.id]?.expirationDate && Number(expirationForm[r.id]?.quantity ?? r.receipt.receivedQuantity) > 0)
+                              : !(r.receipt.expirationDeclared && r.receipt.lotExpirationDate)))
                         }
                         title={!canApprove ? "Exclusivo del líder de Inventario" : undefined}
                         className="rounded border border-teal bg-teal px-3.5 py-1.5 text-[12.5px] font-bold text-navy cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-                        onClick={() => approveReceipt(r.id)}
+                        onClick={() => approveReceipt(r.id, approvalNeedsLot(r) && expirationForm[r.id] !== undefined, r.receipt!.receivedQuantity)}
                       >
                         ✓ Aprobar recepción
                       </button>

@@ -46,7 +46,19 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (existing.status !== "RECEIVED_PENDING_REVIEW" || !existing.receipt) {
     return NextResponse.json({ error: "No hay una recepción del equipo pendiente de aprobar." }, { status: 409 });
   }
-  if (existing.catalogItem.hasExpiration && !parsedLot?.success) {
+  // Confirmado 2026-09-25, pedido explícito del usuario: el lote ya lo
+  // declaró el equipo de Inventario al confirmar que llegó (receipt/route.ts).
+  // Si Daniel no manda uno corregido, se usa ese tal cual.
+  const lotData = parsedLot?.success
+    ? parsedLot.data
+    : existing.receipt.expirationDeclared && existing.receipt.lotExpirationDate && existing.receipt.lotQuantity
+      ? {
+          manufactureDate: existing.receipt.lotManufactureDate?.toISOString() ?? null,
+          expirationDate: existing.receipt.lotExpirationDate.toISOString(),
+          quantity: existing.receipt.lotQuantity,
+        }
+      : null;
+  if (existing.catalogItem.hasExpiration && !lotData) {
     return NextResponse.json({ error: "Este producto tiene caducidad — falta declarar el lote (fecha de vencimiento y cantidad)." }, { status: 409 });
   }
   // Confirmado 2026-09-18: un producto nuevo pendiente de ID Dropi todavía no
@@ -112,12 +124,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       }),
       occurredAt: new Date(),
       purchaseRequestReceiptId: existing.receipt.id,
-      newExpirationLot: parsedLot?.success
+      newExpirationLot: lotData
         ? {
-            manufactureDate: parsedLot.data.manufactureDate ? new Date(parsedLot.data.manufactureDate) : null,
-            expirationDate: new Date(parsedLot.data.expirationDate),
-            quantity: parsedLot.data.quantity,
-            declaredById: isAdmin ? null : session.user.id,
+            manufactureDate: lotData.manufactureDate ? new Date(lotData.manufactureDate) : null,
+            expirationDate: new Date(lotData.expirationDate),
+            quantity: lotData.quantity,
+            // Si Daniel no corrigió nada, el lote lo declaró quien recibió.
+            declaredById: parsedLot?.success ? (isAdmin ? null : session.user.id) : existing.receipt.confirmedById,
           }
         : undefined,
     }).catch((err) => console.error("[approve-receipt] No se pudo registrar la entrada de Kardex:", err));
@@ -126,7 +139,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     // marcado todavía y sí se declaró lote, queda marcado para siempre —
     // la próxima compra de este producto ya pide las fechas directo, sin
     // volver a preguntar "¿tiene o no tiene?".
-    if (parsedLot?.success && !existing.catalogItem.hasExpiration) {
+    if (lotData && !existing.catalogItem.hasExpiration) {
       await prisma.purchaseCatalogItem.update({ where: { id: existing.catalogItemId }, data: { hasExpiration: true } }).catch((err) =>
         console.error("[approve-receipt] No se pudo marcar hasExpiration:", err)
       );

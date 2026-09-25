@@ -22,6 +22,18 @@ const schema = z.object({
   // antes.
   minorDifferenceOnly: z.boolean().nullable().optional(),
   minorDifferenceConfirmed: z.boolean().optional(),
+  // Confirmado 2026-09-25, pedido explícito del usuario: el equipo de
+  // Inventario declara el lote de caducidad al confirmar que llegó (antes se
+  // preguntaba recién en la aprobación de Daniel). hasExpiration: la
+  // respuesta a "¿tiene fecha de caducidad?" — si es true, va el lote.
+  hasExpiration: z.boolean().optional(),
+  expirationLot: z
+    .object({
+      manufactureDate: z.string().trim().min(1).nullable().optional(),
+      expirationDate: z.string().trim().min(1),
+      quantity: z.number().int().positive(),
+    })
+    .optional(),
 });
 
 // Confirmado 2026-08-18: pedido explícito del usuario — cualquiera del
@@ -46,7 +58,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const existing = await prisma.purchaseRequest.findUnique({
     where: { id },
     include: {
-      catalogItem: { select: { name: true } },
+      catalogItem: { select: { name: true, hasExpiration: true, awaitingDropiId: true } },
       urgentReports: true,
       supplier: { select: { paymentMode: true } },
     },
@@ -96,6 +108,21 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: msg }, { status: 409 });
   }
 
+  // Un producto pendiente de ID Dropi declara su lote después, al liberarse
+  // al Kardex (ver approve-receipt/route.ts) — acá no se pide.
+  const asksExpiration = !existing.catalogItem.awaitingDropiId;
+  const hasExpiration = asksExpiration && (existing.catalogItem.hasExpiration || parsed.data.hasExpiration === true);
+  const lot = hasExpiration ? parsed.data.expirationLot : undefined;
+  if (asksExpiration && !existing.catalogItem.hasExpiration && parsed.data.hasExpiration === undefined) {
+    return NextResponse.json({ error: "Falta responder si el producto tiene fecha de caducidad." }, { status: 400 });
+  }
+  if (hasExpiration && !lot) {
+    return NextResponse.json({ error: "Este producto tiene caducidad — falta la fecha de vencimiento y la cantidad del lote." }, { status: 400 });
+  }
+  if (lot && lot.quantity > parsed.data.receivedQuantity) {
+    return NextResponse.json({ error: "La cantidad del lote no puede ser mayor a la cantidad recibida." }, { status: 400 });
+  }
+
   const [, updated] = await prisma.$transaction([
     prisma.purchaseRequestReceipt.create({
       data: {
@@ -108,6 +135,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         aiPhotoNote: parsed.data.aiPhotoNote ?? null,
         minorDifferenceConfirmed: minorDifferenceOverride,
         confirmedById: isAdmin ? null : session.user.id,
+        expirationDeclared: asksExpiration ? hasExpiration : null,
+        lotManufactureDate: lot?.manufactureDate ? new Date(lot.manufactureDate) : null,
+        lotExpirationDate: lot ? new Date(lot.expirationDate) : null,
+        lotQuantity: lot?.quantity ?? null,
       },
     }),
     // Confirmado 2026-08-18: pedido explícito del usuario — todavía no es

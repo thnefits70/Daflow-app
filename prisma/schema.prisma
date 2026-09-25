@@ -3125,6 +3125,18 @@ model PurchaseRequestReceipt {
   // (false) — este campo es el registro de que se confirmó a pesar de eso.
   minorDifferenceConfirmed Boolean  @default(false)
 
+  // Confirmado 2026-09-25, pedido explícito del usuario: el lote de caducidad
+  // lo declara el equipo de Inventario (Joel/Scott) al confirmar que llegó,
+  // con el producto en la mano — antes se preguntaba recién en "Aprobar
+  // recepción" (Daniel). Queda guardado acá hasta que Daniel aprueba; ahí
+  // se usa para crear el lote real (ver approve-receipt/route.ts).
+  // expirationDeclared: null = no se preguntó (recepciones viejas o creadas
+  // desde un reporte urgente), true = tiene caducidad, false = no tiene.
+  expirationDeclared    Boolean?
+  lotManufactureDate    DateTime?
+  lotExpirationDate     DateTime?
+  lotQuantity           Int?
+
   // Confirmado 2026-08-18: pedido explícito del usuario — quien de verdad
   // recibió la mercadería físicamente (cualquiera del equipo de Inventario,
   // ya no exclusivo de Daniel).
