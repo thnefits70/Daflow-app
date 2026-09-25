@@ -110,7 +110,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   // Un producto pendiente de ID Dropi declara su lote después, al liberarse
   // al Kardex (ver approve-receipt/route.ts) — acá no se pide.
-  const asksExpiration = !existing.catalogItem.awaitingDropiId;
+  // Fix 2026-09-25 (Scott quedó bloqueado): un celular con la pantalla vieja
+  // abierta (cargada antes de este cambio) no muestra la pregunta ni manda
+  // hasExpiration — ahí no se bloquea: queda sin declarar (null) y Daniel
+  // lo declara al aprobar, como antes.
+  const clientAsks = parsed.data.hasExpiration !== undefined || parsed.data.expirationLot !== undefined;
+  const asksExpiration = clientAsks && !existing.catalogItem.awaitingDropiId;
   const hasExpiration = asksExpiration && (existing.catalogItem.hasExpiration || parsed.data.hasExpiration === true);
   const lot = hasExpiration ? parsed.data.expirationLot : undefined;
   if (asksExpiration && !existing.catalogItem.hasExpiration && parsed.data.hasExpiration === undefined) {
