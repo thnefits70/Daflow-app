@@ -74,8 +74,23 @@ function joinItems(items: PdfItem[]): string {
   return out.replace(/[ \t]+$/g, "");
 }
 
+// Urbano imprime tildes rotas: "ergonómica" sale "ergonÃ³mica" (UTF-8 leído
+// como Latin-1). Se reparan esos pares antes de comparar nombres; si un
+// pedazo no es UTF-8 válido, se deja como estaba.
+export function fixBrokenAccents(s: string): string {
+  if (!/[Â-ô][\u0080-¿]/.test(s)) return s;
+  const decoder = new TextDecoder("utf-8", { fatal: true });
+  return s.replace(/[Â-ô][\u0080-¿]+/g, (seq) => {
+    try {
+      return decoder.decode(Uint8Array.from(seq, (ch) => ch.charCodeAt(0)));
+    } catch {
+      return seq;
+    }
+  });
+}
+
 export function normalizeName(s: string): string {
-  return s
+  return fixBrokenAccents(s)
     .normalize("NFD")
     .replace(/[̀-ͯ]/g, "")
     .replace(/[^\x00-\x7F]/g, "")
@@ -467,7 +482,7 @@ function parseDropiPages(pages: PdfLine[][]): ParsedGuidesPdf {
         for (let j = i + 1; j < lines.length; j++) {
           const um = lines[j].text.match(URBANO_ROW_RE);
           if (!um) break;
-          const hit = matchByName(um[1]);
+          const hit = matchByName(fixBrokenAccents(um[1]));
           if (hit) hits.push({ code: hit.code, variant: hit.variant, qty: Number(um[2]), page: p, line: j });
           i = j;
         }
